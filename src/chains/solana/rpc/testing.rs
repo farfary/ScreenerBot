@@ -93,7 +93,14 @@ pub async fn test_rpc_endpoint(url: &str) -> RpcEndpointTestResult {
             );
         }
         Err(error) => {
-            return failed_result(url, &display_url, latency_ms, &error, None, is_premium);
+            return failed_result(
+                url,
+                &display_url,
+                latency_ms,
+                &error.to_string(),
+                None,
+                is_premium,
+            );
         }
     }
 
@@ -149,7 +156,9 @@ async fn rpc_request(
     client: &reqwest::Client,
     url: &str,
     method: &str,
-) -> Result<serde_json::Value, String> {
+) -> crate::chains::solana::Result<serde_json::Value> {
+    use crate::chains::solana::Error;
+
     let response = client
         .post(url)
         .header("Content-Type", "application/json")
@@ -161,26 +170,39 @@ async fn rpc_request(
         .send()
         .await
         .map_err(|error| {
-            if error.is_timeout() {
+            let detail = if error.is_timeout() {
                 "RPC request timed out".to_owned()
             } else if error.is_connect() {
                 "Could not connect to the RPC endpoint".to_owned()
             } else {
                 "RPC request failed".to_owned()
+            };
+            Error::Rpc {
+                operation: "test_request",
+                detail,
             }
         })?;
 
     if !response.status().is_success() {
-        return Err(format!("HTTP status: {}", response.status()));
+        return Err(Error::Rpc {
+            operation: "test_request",
+            detail: format!("HTTP status: {}", response.status()),
+        });
     }
 
     let body = response
         .json::<serde_json::Value>()
         .await
-        .map_err(|_| "RPC endpoint returned an invalid JSON response".to_owned())?;
+        .map_err(|_| Error::Rpc {
+            operation: "test_request",
+            detail: "RPC endpoint returned an invalid JSON response".to_owned(),
+        })?;
 
     if body.get("error").is_some() {
-        return Err("RPC endpoint returned an error response".to_owned());
+        return Err(Error::Rpc {
+            operation: "test_request",
+            detail: "RPC endpoint returned an error response".to_owned(),
+        });
     }
 
     Ok(body)
@@ -214,26 +236,39 @@ pub async fn test_rpc_endpoints(urls: &[String]) -> Vec<RpcEndpointTestResult> {
 }
 
 /// Validate that an endpoint is on Solana mainnet.
-pub async fn validate_mainnet(url: &str) -> Result<bool, String> {
+pub async fn validate_mainnet(url: &str) -> crate::chains::solana::Result<bool> {
+    use crate::chains::solana::Error;
+
     let client = crate::net::client_builder()
         .timeout(Duration::from_secs(5))
         .build()
-        .map_err(|error| format!("Failed to create client: {error}"))?;
+        .map_err(|error| Error::Rpc {
+            operation: "create_client",
+            detail: error.to_string(),
+        })?;
     let body = rpc_request(&client, url, "getGenesisHash").await?;
     let genesis_hash = body
         .get("result")
         .and_then(|result| result.as_str())
-        .ok_or("Missing genesis hash in response")?;
+        .ok_or_else(|| Error::Decode {
+            payload: "rpc response",
+            detail: "missing genesis hash in response".to_owned(),
+        })?;
 
     Ok(genesis_hash == MAINNET_GENESIS_HASH)
 }
 
 /// Get the version of an RPC node.
-pub async fn get_rpc_version(url: &str) -> Result<String, String> {
+pub async fn get_rpc_version(url: &str) -> crate::chains::solana::Result<String> {
+    use crate::chains::solana::Error;
+
     let client = crate::net::client_builder()
         .timeout(Duration::from_secs(5))
         .build()
-        .map_err(|error| format!("Failed to create client: {error}"))?;
+        .map_err(|error| Error::Rpc {
+            operation: "create_client",
+            detail: error.to_string(),
+        })?;
     let body = rpc_request(&client, url, "getVersion").await?;
 
     Ok(body

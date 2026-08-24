@@ -12,5 +12,6 @@
 /// - `Ok(String)` - Base58 encoded public key
 /// - `Err(String)` - No wallet configured, or decryption failed
 pub fn get_wallet_pubkey_string() -> Result<String, String> {
-    crate::chains::solana::accounts::configured_address()
+    // SEAM: config still returns String errors; removed when it migrates.
+    crate::chains::solana::accounts::configured_address().map_err(|e| e.to_string())
 }

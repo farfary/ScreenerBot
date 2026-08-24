@@ -92,7 +92,7 @@ impl TransactionFetcher {
         &self,
         wallet_pubkey: Pubkey,
         limit: usize,
-    ) -> Result<Vec<String>, String> {
+    ) -> crate::chains::solana::Result<Vec<String>> {
         let start_time = Instant::now();
 
         logger::debug(
@@ -134,7 +134,7 @@ impl TransactionFetcher {
         limit: usize,
         before: Option<&str>,
         until: Option<&str>,
-    ) -> Result<Vec<String>, String> {
+    ) -> crate::chains::solana::Result<Vec<String>> {
         let mut attempts = 0;
         let mut delay = self.config.retry_base_delay_ms;
 
@@ -159,10 +159,10 @@ impl TransactionFetcher {
                 Err(e) => {
                     attempts += 1;
                     if attempts >= self.config.max_retries {
-                        return Err(format!(
-                            "Failed to fetch signatures after {} attempts: {}",
-                            attempts, e
-                        ));
+                        return Err(crate::chains::solana::Error::Rpc {
+                            operation: "fetch_signatures",
+                            detail: format!("failed after {attempts} attempts: {e}"),
+                        });
                     }
 
                     logger::info(
@@ -188,12 +188,15 @@ impl TransactionFetcher {
         limit: usize,
         before: Option<&str>,
         until: Option<&str>,
-    ) -> Result<Vec<String>, String> {
+    ) -> crate::chains::solana::Result<Vec<String>> {
         // Use the existing RPC client method
         let sig_infos = rpc_client
             .get_wallet_signatures_main_rpc(&wallet_pubkey, limit, before, until)
             .await
-            .map_err(|e| format!("RPC signature fetch failed: {e}"))?;
+            .map_err(|e| crate::chains::solana::Error::Rpc {
+                operation: "get_wallet_signatures_main_rpc",
+                detail: e.to_string(),
+            })?;
 
         let signatures: Vec<String> = sig_infos
             .into_iter()
@@ -214,7 +217,7 @@ impl TransactionFetcher {
         limit: usize,
         before: Option<&str>,
         until: Option<&str>,
-    ) -> Result<Vec<String>, String> {
+    ) -> crate::chains::solana::Result<Vec<String>> {
         let start_time = Instant::now();
 
         logger::debug(
@@ -259,7 +262,7 @@ impl TransactionFetcher {
     pub async fn fetch_transaction_details(
         &self,
         signature: &str,
-    ) -> Result<crate::chains::solana::rpc::TransactionDetails, String> {
+    ) -> crate::chains::solana::Result<crate::chains::solana::rpc::TransactionDetails> {
         let start_time = Instant::now();
 
         let details = self.fetch_transaction_details_with_retry(signature).await?;
@@ -286,7 +289,7 @@ impl TransactionFetcher {
     async fn fetch_transaction_details_with_retry(
         &self,
         signature: &str,
-    ) -> Result<crate::chains::solana::rpc::TransactionDetails, String> {
+    ) -> crate::chains::solana::Result<crate::chains::solana::rpc::TransactionDetails> {
         let mut attempts = 0;
         let mut delay = self.config.retry_base_delay_ms;
         let mut indexing_delay_attempts = 0;
@@ -307,16 +310,23 @@ impl TransactionFetcher {
                     return Ok(details);
                 }
                 Err(e) => {
-                    // Check if this is an RPC indexing delay (temporary, needs longer wait)
-                    if crate::errors::is_rpc_indexing_delay(&e) {
+                    use crate::chains::{solana::Error as SolanaError, ExecutionFailure};
+                    use crate::errors::ErrorClass;
+
+                    // Check if this is an RPC indexing delay (temporary, needs longer wait) --
+                    // detected structurally from the "not found" classification the RPC layer
+                    // already gives a null `getTransaction` response, not from message text.
+                    if matches!(
+                        &e,
+                        SolanaError::Execution(ExecutionFailure::NotFound { .. })
+                    ) {
                         indexing_delay_attempts += 1;
 
                         if indexing_delay_attempts >= MAX_INDEXING_DELAY_ATTEMPTS {
                             // After 5 attempts with indexing delays, return special error for deferral
-                            return Err(format!(
-                                "RPC indexing delay after {} attempts - transaction likely needs deferral: {}",
-                                indexing_delay_attempts, e
-                            ));
+                            return Err(SolanaError::Execution(ExecutionFailure::IndexingDelay {
+                                reference: signature.to_owned(),
+                            }));
                         }
 
                         // Use longer delays for indexing: 2s, 4s, 8s, 16s, 32s
@@ -335,14 +345,15 @@ impl TransactionFetcher {
                         continue;
                     }
 
-                    // Check if this is a transient RPC error (network, rate limit, etc)
-                    if crate::errors::is_transient_rpc_error(&e) {
+                    // Check if this is a transient RPC error (network, rate limit, etc) --
+                    // read from the RPC layer's own typed retry classification.
+                    if e.is_retryable() {
                         attempts += 1;
                         if attempts >= self.config.max_retries {
-                            return Err(format!(
-                                "Failed to fetch transaction details after {} attempts: {}",
-                                attempts, e
-                            ));
+                            return Err(SolanaError::Rpc {
+                                operation: "fetch_transaction_details",
+                                detail: format!("failed after {attempts} attempts: {e}"),
+                            });
                         }
 
                         logger::info(
@@ -358,18 +369,13 @@ impl TransactionFetcher {
                         continue;
                     }
 
-                    // For genuine "not found" or other permanent errors, fail immediately
-                    if e.contains("no longer available") || e.contains("too old") {
-                        return Err(e);
-                    }
-
                     // Default retry logic for other errors
                     attempts += 1;
                     if attempts >= self.config.max_retries {
-                        return Err(format!(
-                            "Failed to fetch transaction details after {} attempts: {}",
-                            attempts, e
-                        ));
+                        return Err(SolanaError::Rpc {
+                            operation: "fetch_transaction_details",
+                            detail: format!("failed after {attempts} attempts: {e}"),
+                        });
                     }
 
                     logger::info(
@@ -391,21 +397,42 @@ impl TransactionFetcher {
     async fn fetch_single_transaction_details(
         &self,
         signature: &str,
-    ) -> Result<crate::chains::solana::rpc::TransactionDetails, String> {
+    ) -> crate::chains::solana::Result<crate::chains::solana::rpc::TransactionDetails> {
         let rpc_client = get_rpc_client();
 
         // Use existing RPC client method
         rpc_client
             .get_transaction_details(signature)
             .await
-            .map_err(|e| format!("Failed to fetch transaction details: {e}"))
+            .map_err(|e| match &e {
+                // The RPC layer already signals "not found" structurally: a null
+                // `getTransaction` response is parsed into this exact tagged
+                // `DataError::ParseError` at the call site that owns it
+                // (`rpc/client/methods_impl.rs`). Recognize the tag, not the text.
+                crate::Error::Data(crate::errors::DataError::ParseError { data_type, .. })
+                    if data_type == "transaction" =>
+                {
+                    crate::chains::solana::Error::Execution(
+                        crate::chains::ExecutionFailure::NotFound {
+                            reference: signature.to_owned(),
+                        },
+                    )
+                }
+                _ => crate::chains::solana::Error::Rpc {
+                    operation: "get_transaction_details",
+                    detail: e.to_string(),
+                },
+            })
     }
 
     /// Fetch multiple transaction details concurrently with rate limiting
     pub async fn fetch_multiple_transaction_details(
         &self,
         signatures: Vec<String>,
-    ) -> HashMap<String, Result<crate::chains::solana::rpc::TransactionDetails, String>> {
+    ) -> HashMap<
+        String,
+        crate::chains::solana::Result<crate::chains::solana::rpc::TransactionDetails>,
+    > {
         let start_time = Instant::now();
         let total_count = signatures.len();
 
@@ -603,7 +630,7 @@ impl BatchSignatureFetcher {
         &self,
         wallet_pubkey: Pubkey,
         max_signatures: Option<usize>,
-    ) -> Result<Vec<String>, String> {
+    ) -> crate::chains::solana::Result<Vec<String>> {
         let mut all_signatures = Vec::new();
         let mut before: Option<String> = None;
         let limit = max_signatures.unwrap_or(usize::MAX);

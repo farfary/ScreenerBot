@@ -15,6 +15,7 @@ use tokio::sync::RwLock;
 
 use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 use crate::chains::solana::solana_sdk::signature::{Keypair, Signer};
+use crate::chains::solana::{Error, Result};
 
 use super::keypair::decrypt_to_keypair;
 
@@ -26,8 +27,10 @@ struct CachedMainKeypair {
 static MAIN_KEYPAIR_CACHE: LazyLock<RwLock<Option<CachedMainKeypair>>> =
     LazyLock::new(|| RwLock::new(None));
 
-fn clone_keypair(keypair: &Keypair) -> Result<Keypair, String> {
-    Keypair::from_bytes(&keypair.to_bytes()).map_err(|e| format!("Failed to clone keypair: {e}"))
+fn clone_keypair(keypair: &Keypair) -> Result<Keypair> {
+    Keypair::from_bytes(&keypair.to_bytes()).map_err(|e| Error::InvalidKeypair {
+        detail: format!("failed to clone keypair: {e}"),
+    })
 }
 
 /// Drop the cached main-wallet keypair. Called by `crate::wallets::manager`
@@ -41,7 +44,7 @@ pub async fn invalidate_main_wallet_cache() {
 /// The main wallet's keypair, decrypted on first use and cached until the
 /// next mutation. Every caller gets its own clone; nothing outside this
 /// module ever holds the cached original.
-pub async fn main_keypair() -> Result<Keypair, String> {
+pub async fn main_keypair() -> Result<Keypair> {
     {
         let cache = MAIN_KEYPAIR_CACHE.read().await;
         if let Some(cached) = cache.as_ref() {
@@ -49,11 +52,14 @@ pub async fn main_keypair() -> Result<Keypair, String> {
         }
     }
 
-    // SEAM: chains still returns String errors; removed when it migrates.
     let (wallet_id, ciphertext, nonce) = crate::wallets::get_main_wallet_encrypted_key()
         .await
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| "No main wallet configured".to_owned())?;
+        .map_err(|e| Error::KeypairUnavailable {
+            detail: e.to_string(),
+        })?
+        .ok_or_else(|| Error::KeypairUnavailable {
+            detail: "no main wallet configured".to_owned(),
+        })?;
 
     let keypair = decrypt_to_keypair(&ciphertext, &nonce)?;
     let clone = clone_keypair(&keypair)?;
@@ -74,18 +80,19 @@ pub async fn cached_main_wallet_id() -> Option<i64> {
 
 /// Decrypt a specific wallet's keypair by its database ID. Not cached — used
 /// by one-shot multi-wallet tooling, never on the per-trade hot path.
-pub async fn keypair_for_wallet(wallet_id: i64) -> Result<Keypair, String> {
-    // SEAM: chains still returns String errors; removed when it migrates.
+pub async fn keypair_for_wallet(wallet_id: i64) -> Result<Keypair> {
     let (ciphertext, nonce) = crate::wallets::get_wallet_encrypted_key(wallet_id)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| Error::KeypairUnavailable {
+            detail: e.to_string(),
+        })?;
     decrypt_to_keypair(&ciphertext, &nonce)
 }
 
 /// Sign an arbitrary text message with the main wallet. The one place the
 /// bot signs something that is not a transaction: proving wallet ownership
 /// to screenerbot.io during account sign-in.
-pub async fn sign_message_with_main_wallet(message: &str) -> Result<String, String> {
+pub async fn sign_message_with_main_wallet(message: &str) -> Result<String> {
     let keypair = main_keypair().await?;
     Ok(keypair.sign_message(message.as_bytes()).to_string())
 }
@@ -96,11 +103,13 @@ pub async fn sign_message_with_main_wallet(message: &str) -> Result<String, Stri
 /// key fails to decrypt is skipped (and logged), not fatal to the batch.
 pub async fn sign_message_for_active_wallets(
     message_for: impl Fn(&str) -> String,
-) -> Result<Vec<(String, String)>, String> {
-    // SEAM: chains still returns String errors; removed when it migrates.
-    let wallets = crate::wallets::list_active_wallets()
-        .await
-        .map_err(|e| e.to_string())?;
+) -> Result<Vec<(String, String)>> {
+    let wallets =
+        crate::wallets::list_active_wallets()
+            .await
+            .map_err(|e| Error::KeypairUnavailable {
+                detail: e.to_string(),
+            })?;
     let mut signed = Vec::with_capacity(wallets.len());
 
     for wallet in wallets {
@@ -133,7 +142,7 @@ pub async fn sign_message_for_active_wallets(
 
 /// Async form of [`configured_keypair`], for callers already running on an
 /// executor. Prefer this over the sync bridge when the caller is `async fn`.
-pub async fn configured_keypair_async() -> Result<Keypair, String> {
+pub async fn configured_keypair_async() -> Result<Keypair> {
     if crate::wallets::is_initialized().await {
         return main_keypair().await;
     }
@@ -147,12 +156,13 @@ pub async fn configured_keypair_async() -> Result<Keypair, String> {
 /// wants an address (dashboard, wallet-monitor snapshots/metrics) should
 /// prefer this over `configured_pubkey`/`configured_keypair`, which force a
 /// decrypt.
-pub async fn configured_address_async() -> Result<String, String> {
+pub async fn configured_address_async() -> Result<String> {
     if crate::wallets::is_initialized().await {
-        // SEAM: chains still returns String errors; removed when it migrates.
         return crate::wallets::get_main_address()
             .await
-            .map_err(|e| e.to_string());
+            .map_err(|e| Error::KeypairUnavailable {
+                detail: e.to_string(),
+            });
     }
     configured_keypair_from_legacy_config().map(|kp| kp.pubkey().to_string())
 }
@@ -173,17 +183,18 @@ pub async fn configured_address_async() -> Result<String, String> {
 /// current thread could poll. Rather than gamble on that never happening,
 /// a current-thread caller gets a clear error telling it to use
 /// `configured_keypair_async()` instead — never a hang.
-pub fn configured_keypair() -> Result<Keypair, String> {
+pub fn configured_keypair() -> Result<Keypair> {
     match tokio::runtime::Handle::try_current() {
         Ok(handle) => match handle.runtime_flavor() {
             tokio::runtime::RuntimeFlavor::MultiThread => tokio::task::block_in_place(|| {
                 futures::executor::block_on(configured_keypair_async())
             }),
-            _ => Err(
-                "configured_keypair() cannot run synchronously on a current-thread Tokio \
-                 runtime (would risk a deadlock) - call configured_keypair_async() instead"
+            _ => Err(Error::KeypairUnavailable {
+                detail: "configured_keypair() cannot run synchronously on a current-thread \
+                    Tokio runtime (would risk a deadlock) - call configured_keypair_async() \
+                    instead"
                     .to_owned(),
-            ),
+            }),
         },
         Err(_) => configured_keypair_from_legacy_config(),
     }
@@ -191,10 +202,12 @@ pub fn configured_keypair() -> Result<Keypair, String> {
 
 /// Legacy fallback: decrypt the single wallet stored directly in
 /// `config.toml`, used only before the multi-wallet database initializes.
-fn configured_keypair_from_legacy_config() -> Result<Keypair, String> {
+fn configured_keypair_from_legacy_config() -> Result<Keypair> {
     crate::config::with_config(|cfg| {
         if cfg.wallet_encrypted.is_empty() || cfg.wallet_nonce.is_empty() {
-            return Err("Wallet not configured - encrypted private key is missing".to_owned());
+            return Err(Error::KeypairUnavailable {
+                detail: "wallet not configured - encrypted private key is missing".to_owned(),
+            });
         }
 
         let encrypted = crate::secure_storage::EncryptedData {
@@ -202,8 +215,11 @@ fn configured_keypair_from_legacy_config() -> Result<Keypair, String> {
             nonce: cfg.wallet_nonce.clone(),
         };
 
-        let private_key = crate::secure_storage::decrypt_private_key(&encrypted)
-            .map_err(|e| format!("Failed to decrypt wallet: {e}"))?;
+        let private_key = crate::secure_storage::decrypt_private_key(&encrypted).map_err(|e| {
+            Error::KeypairUnavailable {
+                detail: format!("failed to decrypt wallet: {e}"),
+            }
+        })?;
 
         super::keypair::parse_private_key(&private_key)
     })
@@ -212,11 +228,14 @@ fn configured_keypair_from_legacy_config() -> Result<Keypair, String> {
 /// The configured trading wallet's public key, parsed from
 /// [`configured_address`] — never decrypts a keypair merely to derive a
 /// public key that is already recoverable from the stored address string.
-pub fn configured_pubkey() -> Result<Pubkey, String> {
+pub fn configured_pubkey() -> Result<Pubkey> {
     use std::str::FromStr;
 
     let address = configured_address()?;
-    Pubkey::from_str(&address).map_err(|e| format!("Invalid configured wallet address: {e}"))
+    Pubkey::from_str(&address).map_err(|_| Error::InvalidAddress {
+        kind: "wallet",
+        value: address,
+    })
 }
 
 /// The configured trading wallet's address as a base58 string — the only
@@ -226,17 +245,18 @@ pub fn configured_pubkey() -> Result<Pubkey, String> {
 /// Key-free once the multi-wallet database is initialized (see
 /// `configured_address_async`); only the legacy pre-multi-wallet fallback
 /// decrypts. Same runtime-flavor bridging as `configured_keypair`.
-pub fn configured_address() -> Result<String, String> {
+pub fn configured_address() -> Result<String> {
     match tokio::runtime::Handle::try_current() {
         Ok(handle) => match handle.runtime_flavor() {
             tokio::runtime::RuntimeFlavor::MultiThread => tokio::task::block_in_place(|| {
                 futures::executor::block_on(configured_address_async())
             }),
-            _ => Err(
-                "configured_address() cannot run synchronously on a current-thread Tokio \
-                 runtime (would risk a deadlock) - call configured_address_async() instead"
+            _ => Err(Error::KeypairUnavailable {
+                detail: "configured_address() cannot run synchronously on a current-thread \
+                    Tokio runtime (would risk a deadlock) - call configured_address_async() \
+                    instead"
                     .to_owned(),
-            ),
+            }),
         },
         Err(_) => configured_keypair_from_legacy_config().map(|kp| kp.pubkey().to_string()),
     }

@@ -261,10 +261,13 @@ pub async fn reprocess_transaction(signature: &str) -> Result<Option<Transaction
             match processor.process_transaction(signature).await {
                 Ok(tx) => return Ok(Some(tx)),
                 Err(e) => {
-                    let el = e.to_lowercase();
-                    let indexing_delay = el.contains("not yet indexed")
-                        || el.contains("not found")
-                        || el.contains("transaction not available");
+                    let indexing_delay = matches!(
+                        &e,
+                        crate::chains::solana::Error::Execution(
+                            crate::chains::ExecutionFailure::NotFound { .. }
+                                | crate::chains::ExecutionFailure::IndexingDelay { .. }
+                        )
+                    );
                     if indexing_delay && attempts < max_attempts - 1 {
                         tokio::time::sleep(Duration::from_millis(delay_ms)).await;
                         attempts += 1;
@@ -273,7 +276,7 @@ pub async fn reprocess_transaction(signature: &str) -> Result<Option<Transaction
                     }
                     return Err(Error::VerificationFailed {
                         signature: signature.to_owned(),
-                        detail: e,
+                        detail: e.to_string(),
                     });
                 }
             }
@@ -311,10 +314,13 @@ pub async fn get_transaction(signature: &str) -> Result<Option<Transaction>, Err
                     return Ok(Some(tx));
                 }
                 Err(e) => {
-                    let el = e.to_lowercase();
-                    let indexing_delay = el.contains("not yet indexed")
-                        || el.contains("not found")
-                        || el.contains("transaction not available");
+                    let indexing_delay = matches!(
+                        &e,
+                        crate::chains::solana::Error::Execution(
+                            crate::chains::ExecutionFailure::NotFound { .. }
+                                | crate::chains::ExecutionFailure::IndexingDelay { .. }
+                        )
+                    );
 
                     if indexing_delay && attempts < max_attempts - 1 {
                         tokio::time::sleep(Duration::from_millis(delay_ms)).await;

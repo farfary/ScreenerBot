@@ -7,12 +7,14 @@
 
 mod adapter;
 mod error;
+mod execution;
 mod registry;
 pub mod solana;
 mod types;
 
 pub use adapter::{adapter, ChainAdapter};
-pub use error::ChainError;
+pub use error::{Error, Result};
+pub use execution::ExecutionFailure;
 pub use registry::ChainRegistry;
 pub use types::{AccountId, AssetId, ChainId, ChainMetadata, NativeAsset, PoolId, TransactionId};
 

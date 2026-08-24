@@ -25,29 +25,37 @@ impl TransactionProcessor {
         &self,
         database: &crate::transactions::database::TransactionDatabase,
         signature: &str,
-    ) -> Result<Option<crate::chains::solana::rpc::TransactionDetails>, String> {
-        // SEAM: chains still returns String errors; removed when it migrates.
+    ) -> crate::chains::solana::Result<Option<crate::chains::solana::rpc::TransactionDetails>> {
         let Some(value) = database
             .get_raw_transaction_json(signature)
             .await
-            .map_err(|e| e.to_string())?
+            .map_err(|e| crate::chains::solana::Error::Decode {
+                payload: "cached raw transaction lookup",
+                detail: e.to_string(),
+            })?
         else {
             return Ok(None);
         };
-        serde_json::from_value(value).map(Some).map_err(|e| {
-            format!("Failed to deserialize cached raw transaction for {signature}: {e}")
-        })
+        serde_json::from_value(value)
+            .map(Some)
+            .map_err(|e| crate::chains::solana::Error::Decode {
+                payload: "cached raw transaction",
+                detail: format!("{signature}: {e}"),
+            })
     }
 
     /// Fetch transaction data with cache-first strategy
     pub(super) async fn fetch_transaction_data(
         &self,
         signature: &str,
-    ) -> Result<crate::chains::solana::rpc::TransactionDetails, String> {
+    ) -> crate::chains::solana::Result<crate::chains::solana::rpc::TransactionDetails> {
         // Import the global database (avoiding multiple instances for now)
         let database = crate::transactions::database::get_transaction_database()
             .await
-            .ok_or_else(|| "Transaction database not initialized".to_owned())?;
+            .ok_or_else(|| crate::chains::solana::Error::Rpc {
+                operation: "fetch_transaction_data",
+                detail: "transaction database not initialized".to_owned(),
+            })?;
 
         // Step 1: Handle cache-only mode - only try cache, never fetch from RPC
         if self.cache_only {
@@ -66,9 +74,10 @@ impl TransactionProcessor {
                 }
                 return Ok(cached_details);
             } else {
-                return Err(format!(
-                    "Transaction {} not found in cache (cache-only mode)",
-                    signature
+                return Err(crate::chains::solana::Error::Execution(
+                    crate::chains::ExecutionFailure::NotFound {
+                        reference: signature.to_owned(),
+                    },
                 ));
             }
         }
@@ -116,10 +125,12 @@ impl TransactionProcessor {
             // save by caching it.
             let mut temp_transaction = Transaction::new(signature.to_string());
             temp_transaction.raw_transaction_data = if self.retain_raw_json {
-                Some(
-                    serde_json::to_value(&tx_details)
-                        .map_err(|e| format!("Failed to serialize transaction details: {e}"))?,
-                )
+                Some(serde_json::to_value(&tx_details).map_err(|e| {
+                    crate::chains::solana::Error::Decode {
+                        payload: "transaction details",
+                        detail: e.to_string(),
+                    }
+                })?)
             } else {
                 None
             };
@@ -171,14 +182,16 @@ impl TransactionProcessor {
         &self,
         signature: &str,
         tx_data: &crate::chains::solana::rpc::TransactionDetails,
-    ) -> Result<Transaction, String> {
+    ) -> crate::chains::solana::Result<Transaction> {
         let mut transaction = Transaction::new(signature.to_string());
 
         // Store raw transaction data for future reference
-        transaction.raw_transaction_data = Some(
-            serde_json::to_value(tx_data)
-                .map_err(|e| format!("Failed to serialize transaction data: {e}"))?,
-        );
+        transaction.raw_transaction_data = Some(serde_json::to_value(tx_data).map_err(|e| {
+            crate::chains::solana::Error::Decode {
+                payload: "transaction data",
+                detail: e.to_string(),
+            }
+        })?);
 
         // Add comprehensive debug logging for transaction structure
         if self.debug_enabled {

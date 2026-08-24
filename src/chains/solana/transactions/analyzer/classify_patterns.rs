@@ -17,7 +17,7 @@ pub(super) async fn detect_flow_patterns(
     flow_analysis: &FlowAnalysis,
     tx_data: &crate::chains::solana::rpc::TransactionDetails,
     dex_analysis: &DexAnalysis,
-) -> Result<Vec<FlowPattern>, String> {
+) -> crate::chains::solana::Result<Vec<FlowPattern>> {
     let mut patterns = Vec::new();
     let has_dex_program = dex_analysis.program_ids.iter().any(|id| {
         crate::chains::solana::transactions::program_ids::detect_router_from_program_id(id)
@@ -190,7 +190,7 @@ pub(super) async fn detect_flow_patterns(
 async fn detect_swap_patterns(
     flow_analysis: &FlowAnalysis,
     has_dex_program: bool,
-) -> Result<Vec<FlowPattern>, String> {
+) -> crate::chains::solana::Result<Vec<FlowPattern>> {
     let mut patterns = Vec::new();
     if !has_dex_program {
         return Ok(patterns);
@@ -236,7 +236,7 @@ async fn detect_swap_patterns(
 /// Detect transfer patterns (simple movements)
 async fn detect_transfer_patterns(
     flow_analysis: &FlowAnalysis,
-) -> Result<Vec<FlowPattern>, String> {
+) -> crate::chains::solana::Result<Vec<FlowPattern>> {
     let mut patterns = Vec::new();
 
     // Look for edges that represent pure transfers
@@ -264,7 +264,7 @@ async fn detect_transfer_patterns(
 /// Detect liquidity provision/removal patterns
 async fn detect_liquidity_patterns(
     flow_analysis: &FlowAnalysis,
-) -> Result<Vec<FlowPattern>, String> {
+) -> crate::chains::solana::Result<Vec<FlowPattern>> {
     let mut patterns = Vec::new();
 
     // Look for nodes with multiple token changes (LP operations)
@@ -311,15 +311,12 @@ async fn detect_liquidity_patterns(
 pub(super) async fn classify_from_patterns(
     patterns: &[FlowPattern],
     dex_analysis: &DexAnalysis,
-) -> Result<
-    (
-        ClassifiedType,
-        Option<SwapDirection>,
-        Option<String>,
-        Option<String>,
-    ),
-    String,
-> {
+) -> crate::chains::solana::Result<(
+    ClassifiedType,
+    Option<SwapDirection>,
+    Option<String>,
+    Option<String>,
+)> {
     if patterns.is_empty() {
         return Ok((ClassifiedType::Unknown, None, None, None));
     }

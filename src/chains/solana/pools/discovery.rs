@@ -202,7 +202,7 @@ impl PoolDiscovery {
         _operations: &Arc<std::sync::atomic::AtomicU64>,
         _errors: &Arc<std::sync::atomic::AtomicU64>,
         _pools_discovered: &Arc<std::sync::atomic::AtomicU64>,
-    ) -> Result<usize, String> {
+    ) -> crate::chains::solana::Result<usize> {
         let tick_start = Instant::now();
 
         let (dex_enabled, gecko_enabled, raydium_enabled) = with_config(|cfg| {
@@ -553,7 +553,10 @@ impl PoolDiscovery {
                 LogTag::PoolDiscovery,
                 "Analyzer not initialized; cannot stream discovered pools",
             );
-            Err("Analyzer not initialized".to_owned())
+            Err(crate::chains::solana::Error::Rpc {
+                operation: "batched_discovery_tick",
+                detail: "analyzer not initialized".to_owned(),
+            })
         }
     }
 

@@ -432,29 +432,43 @@ impl MeteoraDlmmDecoder {
     }
 
     /// Decode token account amount from token account data
-    fn decode_token_account_amount(data: &[u8]) -> Result<u64, String> {
+    fn decode_token_account_amount(data: &[u8]) -> crate::chains::solana::Result<u64> {
         if data.len() < 72 {
-            return Err("Token account data too short".to_owned());
+            return Err(crate::chains::solana::Error::Decode {
+                payload: "pool vault token account",
+                detail: "token account data too short".to_owned(),
+            });
         }
 
         // Amount is stored at offset 64 as little-endian u64
-        let amount_bytes: [u8; 8] = data[64..72]
-            .try_into()
-            .map_err(|_| "Failed to extract amount bytes".to_owned())?;
+        let amount_bytes: [u8; 8] =
+            data[64..72]
+                .try_into()
+                .map_err(|_| crate::chains::solana::Error::Decode {
+                    payload: "pool vault token account amount",
+                    detail: "failed to extract amount bytes".to_owned(),
+                })?;
 
         Ok(u64::from_le_bytes(amount_bytes))
     }
 
     /// Decode token account mint from token account data
-    fn decode_token_account_mint(data: &[u8]) -> Result<String, String> {
+    fn decode_token_account_mint(data: &[u8]) -> crate::chains::solana::Result<String> {
         if data.len() < 32 {
-            return Err("Token account data too short for mint".to_owned());
+            return Err(crate::chains::solana::Error::Decode {
+                payload: "pool vault token account mint",
+                detail: "token account data too short for mint".to_owned(),
+            });
         }
 
         // Mint is stored at offset 0 as 32-byte pubkey
-        let mint_bytes: [u8; 32] = data[0..32]
-            .try_into()
-            .map_err(|_| "Failed to extract mint bytes".to_owned())?;
+        let mint_bytes: [u8; 32] =
+            data[0..32]
+                .try_into()
+                .map_err(|_| crate::chains::solana::Error::Decode {
+                    payload: "pool vault token account mint",
+                    detail: "failed to extract mint bytes".to_owned(),
+                })?;
 
         let mint = Pubkey::new_from_array(mint_bytes);
         Ok(mint.to_string())

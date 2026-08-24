@@ -81,7 +81,7 @@ pub fn get_token_pools(mint: &str) -> Vec<PoolDescriptor> {
 /// Initialize the concrete Solana pool runtime components (discovery, analyzer,
 /// fetcher, calculator) and store them in global state. Returns the RPC provider
 /// count for logging/event purposes.
-pub async fn initialize_components() -> Result<u32, String> {
+pub async fn initialize_components() -> crate::chains::solana::Result<u32> {
     logger::debug(
         LogTag::PoolService,
         "Initializing Solana pool runtime components...",

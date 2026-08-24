@@ -5,7 +5,7 @@ use crate::chains::{
     solana::constants::{
         LAMPORTS_PER_SOL, SOL_DECIMALS, SOL_MINT, SYSTEM_PROGRAM_ID, USDC_MINT, USDT_MINT,
     },
-    ChainError, ChainId, ChainMetadata,
+    ChainId, ChainMetadata, Error as ChainError,
 };
 
 /// The base58 alphabet (Bitcoin/Solana variant): excludes `0`, `O`, `I`, `l`.

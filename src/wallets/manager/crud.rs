@@ -31,7 +31,9 @@ pub async fn create_wallet(request: CreateWalletRequest) -> Result<Wallet, Error
     // Generate new wallet material (address + encrypted key) without ever
     // holding the intermediate keypair here.
     let (address, encrypted) =
-        generate_wallet_material().map_err(|reason| Error::InvalidPrivateKey { reason })?;
+        generate_wallet_material().map_err(|reason| Error::InvalidPrivateKey {
+            reason: reason.to_string(),
+        })?;
 
     // Determine role
     let role = if request.set_as_main {
@@ -95,8 +97,11 @@ pub async fn import_wallet(request: ImportWalletRequest) -> Result<Wallet, Error
     let db = db_guard.as_ref().ok_or_else(db_not_initialized)?;
 
     // Parse and encrypt the private key
-    let (address, encrypted) = import_wallet_material(&request.private_key)
-        .map_err(|reason| Error::InvalidPrivateKey { reason })?;
+    let (address, encrypted) = import_wallet_material(&request.private_key).map_err(|reason| {
+        Error::InvalidPrivateKey {
+            reason: reason.to_string(),
+        }
+    })?;
 
     // Check if wallet already exists
     if db.wallet_exists(&address)? {
@@ -175,7 +180,9 @@ pub async fn export_wallet(wallet_id: i64) -> Result<ExportWalletResponse, Error
             })?;
 
     let private_key = crate::chains::solana::accounts::export_private_key(&encrypted, &nonce)
-        .map_err(|reason| Error::InvalidPrivateKey { reason })?;
+        .map_err(|reason| Error::InvalidPrivateKey {
+            reason: reason.to_string(),
+        })?;
 
     logger::warning(
         LogTag::Wallet,

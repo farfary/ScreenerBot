@@ -117,7 +117,7 @@ pub async fn calculate_pnl(
     balance_analysis: &BalanceAnalysis,
     classification: &TransactionClass,
     ata_analysis: &AtaAnalysis,
-) -> Result<PnLAnalysis, String> {
+) -> crate::chains::solana::Result<PnLAnalysis> {
     logger::debug(
         LogTag::Transactions,
         &format!("Calculating P&L for tx: {}", transaction.signature),
@@ -157,7 +157,7 @@ async fn calculate_fee_breakdown(
     tx_data: &crate::chains::solana::rpc::TransactionDetails,
     balance_analysis: &BalanceAnalysis,
     ata_analysis: &AtaAnalysis,
-) -> Result<FeeBreakdown, String> {
+) -> crate::chains::solana::Result<FeeBreakdown> {
     // Base signature fee and priority fee split from meta.fee, with override from ComputeBudget parsing
     let (mut base_fee, mut priority_fee) = if let Some(meta) = &tx_data.meta {
         const SIGNATURE_FEE_LAMPORTS: u64 = 5_000; // per-signature base fee
@@ -363,7 +363,7 @@ fn detect_mev_tips_from_instructions(
 async fn estimate_swap_fees(
     balance_analysis: &BalanceAnalysis,
     _tx_data: &crate::chains::solana::rpc::TransactionDetails,
-) -> Result<f64, String> {
+) -> crate::chains::solana::Result<f64> {
     // This would implement DEX-specific fee calculation
     // For now, return a reasonable estimate based on transfer amounts
 
@@ -386,7 +386,7 @@ async fn calculate_main_swap_pnl(
     balance_analysis: &BalanceAnalysis,
     classification: &TransactionClass,
     fee_breakdown: &FeeBreakdown,
-) -> Result<Option<SwapPnL>, String> {
+) -> crate::chains::solana::Result<Option<SwapPnL>> {
     // Only calculate P&L for swap-type transactions
     if !matches!(
         classification.transaction_type,
@@ -395,14 +395,20 @@ async fn calculate_main_swap_pnl(
         return Ok(None);
     }
 
-    let direction = classification
-        .direction
-        .as_ref()
-        .ok_or("Missing swap direction")?;
-    let token_mint = classification
-        .primary_token
-        .as_ref()
-        .ok_or("Missing primary token")?;
+    let direction =
+        classification
+            .direction
+            .as_ref()
+            .ok_or_else(|| crate::chains::solana::Error::Decode {
+                payload: "swap direction",
+                detail: "missing swap direction".to_owned(),
+            })?;
+    let token_mint = classification.primary_token.as_ref().ok_or_else(|| {
+        crate::chains::solana::Error::Decode {
+            payload: "swap primary token",
+            detail: "missing primary token".to_owned(),
+        }
+    })?;
 
     // Find the largest token change for this mint
     let token_change = find_largest_token_change(balance_analysis, token_mint)?;
@@ -448,7 +454,7 @@ async fn calculate_main_swap_pnl(
 fn find_largest_token_change(
     balance_analysis: &BalanceAnalysis,
     target_mint: &str,
-) -> Result<TokenBalanceChange, String> {
+) -> crate::chains::solana::Result<TokenBalanceChange> {
     let mut largest_change: Option<TokenBalanceChange> = None;
     let mut largest_amount = 0.0;
 
@@ -461,14 +467,17 @@ fn find_largest_token_change(
         }
     }
 
-    largest_change.ok_or_else(|| format!("No token changes found for mint: {target_mint}"))
+    largest_change.ok_or_else(|| crate::chains::solana::Error::Decode {
+        payload: "token balance changes",
+        detail: format!("no token changes found for mint: {target_mint}"),
+    })
 }
 
 /// Find the SOL change that corresponds to a token swap
 fn find_corresponding_sol_change(
     balance_analysis: &BalanceAnalysis,
     _token_change: &TokenBalanceChange,
-) -> Result<f64, String> {
+) -> crate::chains::solana::Result<f64> {
     // Pick the largest SOL change by magnitude, EXCLUDING rent amounts (e.g. an
     // ATA close reclaims ~0.00204 SOL). Rent movements are not swap value; counting
     // them as proceeds reports wildly wrong P&L. Note: the authoritative swap amount
@@ -488,7 +497,10 @@ fn find_corresponding_sol_change(
                 .unwrap_or(std::cmp::Ordering::Equal)
         })
         .map(|c| c.change)
-        .ok_or_else(|| "No SOL changes found".to_owned())
+        .ok_or_else(|| crate::chains::solana::Error::Decode {
+            payload: "sol balance changes",
+            detail: "no sol changes found".to_owned(),
+        })
 }
 
 // =============================================================================
@@ -499,7 +511,7 @@ fn find_corresponding_sol_change(
 async fn extract_swap_components(
     _balance_analysis: &BalanceAnalysis,
     classification: &TransactionClass,
-) -> Result<Vec<SwapComponent>, String> {
+) -> crate::chains::solana::Result<Vec<SwapComponent>> {
     let mut components = Vec::new();
 
     // For simple swaps, create a single component

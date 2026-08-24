@@ -101,12 +101,17 @@ pub async fn verify_transaction_for_position(
                 verification_type: VerificationType::GeneralVerification,
                 confidence_score: 0.0,
                 issues: vec![VerificationIssue {
-                    issue_type: if e.contains("not found") {
+                    issue_type: if matches!(
+                        &e,
+                        crate::chains::solana::Error::Execution(
+                            crate::chains::ExecutionFailure::NotFound { .. }
+                        )
+                    ) {
                         IssueType::TransactionNotFound
                     } else {
                         IssueType::InsufficientData
                     },
-                    description: e,
+                    description: e.to_string(),
                     severity: IssueSeverity::Critical,
                 }],
                 verification_timestamp: Utc::now(),

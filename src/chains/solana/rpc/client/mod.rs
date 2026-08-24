@@ -126,7 +126,10 @@ impl RpcClient {
     }
 
     /// Force circuit breaker reset for a specific provider
-    pub async fn reset_circuit_breaker(&self, provider_id: &str) -> Result<(), String> {
+    pub async fn reset_circuit_breaker(
+        &self,
+        provider_id: &str,
+    ) -> crate::chains::solana::Result<()> {
         let breaker = self
             .manager
             .circuit_breakers()

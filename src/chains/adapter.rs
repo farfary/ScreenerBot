@@ -6,7 +6,7 @@
 //! one supported chain this always resolves to the Solana adapter; a second
 //! chain adds a match arm here, not a call-site branch.
 
-use crate::chains::{active_chain, ChainError, ChainId, ChainMetadata};
+use crate::chains::{active_chain, ChainId, ChainMetadata, Error as ChainError};
 
 /// Chain-specific behaviour behind a single object-safe trait.
 pub trait ChainAdapter: Send + Sync + 'static {

@@ -166,7 +166,9 @@ pub async fn perform_initial_transaction_bootstrap(
         let signatures = fetcher
             .fetch_signatures_page(wallet_pubkey, batch_limit, before.as_deref(), None)
             .await
-            .map_err(|e| Error::Bootstrap { detail: e })?;
+            .map_err(|e| Error::Bootstrap {
+                detail: e.to_string(),
+            })?;
 
         if signatures.is_empty() {
             reached_chain_end = true;
@@ -344,7 +346,7 @@ pub async fn perform_initial_transaction_bootstrap(
     let mut processed_count = 0;
     let mut newly_processed = 0;
     let mut errors = 0;
-    let mut failed_signatures: Vec<(String, String)> = Vec::new(); // (signature, error_reason)
+    let mut failed_signatures: Vec<(String, crate::chains::solana::Error)> = Vec::new(); // (signature, error_reason)
 
     // Split into batches and process in parallel
     for batch_start in (0..signatures_to_process.len()).step_by(CONCURRENT_BATCH_SIZE) {
@@ -368,9 +370,11 @@ pub async fn perform_initial_transaction_bootstrap(
                     Ok(inner_result) => (sig.clone(), inner_result),
                     Err(_) => (
                         sig.clone(),
-                        Err(format!(
-                            "Transaction processing timed out after {}s",
-                            TRANSACTION_TIMEOUT_SECS
+                        Err(crate::chains::solana::Error::Execution(
+                            crate::chains::ExecutionFailure::ConfirmationTimeout {
+                                reference: sig.clone(),
+                                waited_ms: TRANSACTION_TIMEOUT_SECS * 1000,
+                            },
                         )),
                     ),
                 }
@@ -485,7 +489,7 @@ pub async fn perform_initial_transaction_bootstrap(
                 sleep(Duration::from_secs(delay_secs)).await;
             }
 
-            let mut still_failed: Vec<(String, String)> = Vec::new();
+            let mut still_failed: Vec<(String, crate::chains::solana::Error)> = Vec::new();
 
             // Process failed signatures in batches
             for batch_start in (0..failed_signatures.len()).step_by(CONCURRENT_BATCH_SIZE) {
@@ -508,9 +512,11 @@ pub async fn perform_initial_transaction_bootstrap(
                             Ok(inner_result) => (sig.clone(), inner_result),
                             Err(_) => (
                                 sig.clone(),
-                                Err(format!(
-                                    "Transaction processing timed out after {}s",
-                                    TRANSACTION_TIMEOUT_SECS
+                                Err(crate::chains::solana::Error::Execution(
+                                    crate::chains::ExecutionFailure::ConfirmationTimeout {
+                                        reference: sig.clone(),
+                                        waited_ms: TRANSACTION_TIMEOUT_SECS * 1000,
+                                    },
                                 )),
                             ),
                         }

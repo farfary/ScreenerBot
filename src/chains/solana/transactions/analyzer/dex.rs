@@ -56,7 +56,6 @@ pub enum DetectedDex {
     Serum,
     OpenBook,
     Phoenix,
-    Unknown(String), // Program ID for unknown DEXes
 }
 
 /// Method used for DEX detection
@@ -164,7 +163,7 @@ pub async fn detect_dex_interactions(
     transaction: &Transaction,
     tx_data: &crate::chains::solana::rpc::TransactionDetails,
     balance_analysis: &BalanceAnalysis,
-) -> Result<DexAnalysis, String> {
+) -> crate::chains::solana::Result<DexAnalysis> {
     detect_dex_and_router(transaction, tx_data, balance_analysis).await
 }
 
@@ -173,7 +172,7 @@ pub async fn detect_dex_and_router(
     transaction: &Transaction,
     tx_data: &crate::chains::solana::rpc::TransactionDetails,
     _balance_analysis: &BalanceAnalysis,
-) -> Result<DexAnalysis, String> {
+) -> crate::chains::solana::Result<DexAnalysis> {
     logger::debug(
         LogTag::Transactions,
         &format!("Detecting DEX/router for tx: {}", transaction.signature),
@@ -218,7 +217,7 @@ pub async fn detect_dex_and_router(
 pub async fn quick_dex_detection(
     _transaction: &Transaction,
     tx_data: &crate::chains::solana::rpc::TransactionDetails,
-) -> Result<DexAnalysis, String> {
+) -> crate::chains::solana::Result<DexAnalysis> {
     // Lightweight detection - just program ID matching
     let program_ids = extract_program_ids(tx_data)?;
     let (detected_dex, confidence) = detect_by_program_id(&program_ids);
@@ -259,7 +258,7 @@ fn detect_by_program_id(program_ids: &[String]) -> (Option<DetectedDex>, f64) {
 /// Detect DEX by parsing transaction logs
 fn detect_by_log_parsing(
     tx_data: &crate::chains::solana::rpc::TransactionDetails,
-) -> Result<(Option<DetectedDex>, f64), String> {
+) -> crate::chains::solana::Result<(Option<DetectedDex>, f64)> {
     let log_patterns = get_log_patterns();
 
     let empty_logs = Vec::new();
@@ -283,7 +282,7 @@ fn detect_by_log_parsing(
 /// Detect DEX by recognizing known pool addresses
 fn detect_by_pool_address(
     tx_data: &crate::chains::solana::rpc::TransactionDetails,
-) -> Result<(Option<DetectedDex>, Option<String>, f64), String> {
+) -> crate::chains::solana::Result<(Option<DetectedDex>, Option<String>, f64)> {
     // This would be expanded with a database of known pool addresses
     // For now, we'll use heuristics based on account patterns
 
@@ -352,7 +351,7 @@ fn combine_detection_results(
 /// Extract all program IDs from transaction instructions
 pub(crate) fn extract_program_ids(
     tx_data: &crate::chains::solana::rpc::TransactionDetails,
-) -> Result<Vec<String>, String> {
+) -> crate::chains::solana::Result<Vec<String>> {
     let mut program_ids = Vec::new();
 
     let message = &tx_data.transaction.message;
@@ -484,7 +483,7 @@ fn is_orca_pool_pattern(account: &str) -> bool {
 fn extract_dex_metadata(
     _tx_data: &crate::chains::solana::rpc::TransactionDetails,
     detected_dex: &Option<DetectedDex>,
-) -> Result<HashMap<String, String>, String> {
+) -> crate::chains::solana::Result<HashMap<String, String>> {
     let mut metadata = HashMap::new();
 
     if let Some(dex) = detected_dex {

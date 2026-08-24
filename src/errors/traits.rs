@@ -263,6 +263,8 @@ impl ErrorClass for Error {
             Error::Trader(e) => e.is_retryable(),
             Error::Wallets(e) => e.is_retryable(),
             Error::Tools(e) => e.is_retryable(),
+            Error::Chains(e) => e.is_retryable(),
+            Error::Solana(e) => e.is_retryable(),
             Error::Account(e) => e.is_retryable(),
             Error::Network(e) => e.is_retryable(),
             Error::Database(e) => e.is_retryable(),
@@ -271,13 +273,12 @@ impl ErrorClass for Error {
             Error::Internal(e) => e.is_retryable(),
             Error::Configuration(e) => e.is_retryable(),
             Error::Data(e) => e.is_retryable(),
-            // `BlockchainError`, `RpcError` and `RpcProviderError` do not
-            // implement `ErrorClass` yet — they are owned by later
-            // migration tasks (the chain-execution split and the RPC
-            // provider retirement). Treat them as not-automatically-
-            // retryable until that classification exists; see the T0
-            // report for this limitation.
-            Error::Blockchain(_) | Error::Rpc(_) | Error::RpcProvider(_) => false,
+            // `RpcError` and `RpcProviderError` do not implement
+            // `ErrorClass` yet — owned by the RPC provider retirement.
+            // Treat them as not-automatically-retryable until that
+            // classification exists; see the T0 report for this
+            // limitation.
+            Error::Rpc(_) | Error::RpcProvider(_) => false,
         }
     }
 
@@ -288,6 +289,8 @@ impl ErrorClass for Error {
             Error::Trader(e) => e.retry_after(),
             Error::Wallets(e) => e.retry_after(),
             Error::Tools(e) => e.retry_after(),
+            Error::Chains(e) => e.retry_after(),
+            Error::Solana(e) => e.retry_after(),
             Error::Account(e) => e.retry_after(),
             Error::Network(e) => e.retry_after(),
             Error::Database(e) => e.retry_after(),
@@ -296,7 +299,7 @@ impl ErrorClass for Error {
             Error::Internal(e) => e.retry_after(),
             Error::Configuration(e) => e.retry_after(),
             Error::Data(e) => e.retry_after(),
-            Error::Blockchain(_) | Error::Rpc(_) | Error::RpcProvider(_) => None,
+            Error::Rpc(_) | Error::RpcProvider(_) => None,
         }
     }
 
@@ -307,6 +310,8 @@ impl ErrorClass for Error {
             Error::Trader(e) => e.severity(),
             Error::Wallets(e) => e.severity(),
             Error::Tools(e) => e.severity(),
+            Error::Chains(e) => e.severity(),
+            Error::Solana(e) => e.severity(),
             Error::Account(e) => e.severity(),
             Error::Network(e) => e.severity(),
             Error::Database(e) => e.severity(),
@@ -316,7 +321,7 @@ impl ErrorClass for Error {
             Error::Configuration(e) => e.severity(),
             Error::Data(e) => e.severity(),
             // Coarse pending the same later-task classification noted above.
-            Error::Blockchain(_) | Error::Rpc(_) | Error::RpcProvider(_) => Severity::Error,
+            Error::Rpc(_) | Error::RpcProvider(_) => Severity::Error,
         }
     }
 
@@ -327,6 +332,8 @@ impl ErrorClass for Error {
             Error::Trader(e) => e.http_status(),
             Error::Wallets(e) => e.http_status(),
             Error::Tools(e) => e.http_status(),
+            Error::Chains(e) => e.http_status(),
+            Error::Solana(e) => e.http_status(),
             Error::Account(e) => e.http_status(),
             Error::Network(e) => e.http_status(),
             Error::Database(e) => e.http_status(),
@@ -335,7 +342,7 @@ impl ErrorClass for Error {
             Error::Internal(e) => e.http_status(),
             Error::Configuration(e) => e.http_status(),
             Error::Data(e) => e.http_status(),
-            Error::Blockchain(_) | Error::Rpc(_) | Error::RpcProvider(_) => 502,
+            Error::Rpc(_) | Error::RpcProvider(_) => 502,
         }
     }
 }

@@ -8,6 +8,7 @@ use std::str::FromStr;
 
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::chains::solana::solana_sdk::pubkey::Pubkey;
+use crate::chains::solana::{Error, Result};
 use crate::wallets::TokenBalance;
 
 /// Fetch a wallet's SOL balance (in SOL, not lamports). Returns 0.0 on any
@@ -25,14 +26,19 @@ pub async fn fetch_wallet_sol_balance(address: &str) -> f64 {
 pub async fn fetch_wallet_token_balances(
     wallet_id: i64,
     address: &str,
-) -> Result<Vec<TokenBalance>, String> {
-    let wallet_pubkey =
-        Pubkey::from_str(address).map_err(|e| format!("Invalid wallet address: {e}"))?;
+) -> Result<Vec<TokenBalance>> {
+    let wallet_pubkey = Pubkey::from_str(address).map_err(|_| Error::InvalidAddress {
+        kind: "wallet",
+        value: address.to_owned(),
+    })?;
 
     let token_accounts = get_rpc_client()
         .get_all_token_accounts(&wallet_pubkey)
         .await
-        .map_err(|e| format!("Failed to fetch token accounts: {e}"))?;
+        .map_err(|e| Error::Rpc {
+            operation: "get_all_token_accounts",
+            detail: e.to_string(),
+        })?;
 
     let now = chrono::Utc::now();
     Ok(token_accounts

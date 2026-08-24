@@ -291,7 +291,10 @@ pub async fn get_token_decimals_from_chain(chain: ChainId, mint: &str) -> Result
         return Ok(crate::chains::adapter().native_asset_decimals());
     }
 
-    let mint_data = crate::chains::solana::assets::mint::fetch_mint_account(mint).await?;
+    // SEAM: tokens still returns String errors; removed when it migrates.
+    let mint_data = crate::chains::solana::assets::mint::fetch_mint_account(mint)
+        .await
+        .map_err(|e| e.to_string())?;
 
     // Cache authority data as a side effect of the fetch we already paid for
     // (zero extra RPC cost).

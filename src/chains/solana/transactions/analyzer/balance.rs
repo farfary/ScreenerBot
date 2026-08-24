@@ -85,7 +85,7 @@ const MAX_TIP_AMOUNT: f64 = 0.01; // 0.01 SOL
 pub async fn analyze_balance_changes(
     transaction: &Transaction,
     tx_data: &crate::chains::solana::rpc::TransactionDetails,
-) -> Result<BalanceAnalysis, String> {
+) -> crate::chains::solana::Result<BalanceAnalysis> {
     logger::debug(
         LogTag::Transactions,
         &format!(
@@ -125,7 +125,7 @@ pub async fn analyze_balance_changes(
 pub async fn extract_balance_changes(
     transaction: &Transaction,
     tx_data: &crate::chains::solana::rpc::TransactionDetails,
-) -> Result<BalanceAnalysis, String> {
+) -> crate::chains::solana::Result<BalanceAnalysis> {
     logger::debug(
         LogTag::Transactions,
         &format!(
@@ -160,7 +160,7 @@ pub async fn extract_balance_changes(
 pub async fn extract_basic_changes(
     transaction: &Transaction,
     tx_data: &crate::chains::solana::rpc::TransactionDetails,
-) -> Result<BalanceAnalysis, String> {
+) -> crate::chains::solana::Result<BalanceAnalysis> {
     // Lightweight version - just raw changes without deep filtering
     let sol_changes = extract_sol_balance_changes(transaction, tx_data).await?;
     let token_changes = extract_token_balance_changes(transaction, tx_data).await?;
@@ -183,7 +183,7 @@ pub async fn extract_basic_changes(
 async fn extract_sol_balance_changes(
     _transaction: &Transaction,
     tx_data: &crate::chains::solana::rpc::TransactionDetails,
-) -> Result<HashMap<String, SolBalanceChange>, String> {
+) -> crate::chains::solana::Result<HashMap<String, SolBalanceChange>> {
     let mut sol_changes = HashMap::new();
 
     let message = &tx_data.transaction.message;
@@ -199,13 +199,19 @@ async fn extract_sol_balance_changes(
         .meta
         .as_ref()
         .map(|m| m.pre_balances.as_ref())
-        .ok_or("Missing pre_balances in transaction meta")?;
+        .ok_or_else(|| crate::chains::solana::Error::Decode {
+            payload: "transaction meta",
+            detail: "missing pre_balances".to_owned(),
+        })?;
 
     let post_balances: &Vec<u64> = tx_data
         .meta
         .as_ref()
         .map(|m| m.post_balances.as_ref())
-        .ok_or("Missing post_balances in transaction meta")?;
+        .ok_or_else(|| crate::chains::solana::Error::Decode {
+            payload: "transaction meta",
+            detail: "missing post_balances".to_owned(),
+        })?;
 
     if account_keys.len() != pre_balances.len() || account_keys.len() != post_balances.len() {
         logger::debug(
@@ -257,10 +263,16 @@ async fn extract_sol_balance_changes(
 async fn extract_token_balance_changes(
     _transaction: &Transaction,
     tx_data: &crate::chains::solana::rpc::TransactionDetails,
-) -> Result<HashMap<String, Vec<TokenBalanceChange>>, String> {
+) -> crate::chains::solana::Result<HashMap<String, Vec<TokenBalanceChange>>> {
     let mut token_changes: HashMap<String, Vec<TokenBalanceChange>> = HashMap::new();
 
-    let meta = tx_data.meta.as_ref().ok_or("Missing transaction meta")?;
+    let meta = tx_data
+        .meta
+        .as_ref()
+        .ok_or_else(|| crate::chains::solana::Error::Decode {
+            payload: "transaction meta",
+            detail: "missing transaction meta".to_owned(),
+        })?;
 
     // Process pre/post token balances
     let empty_pre_balances = Vec::new();
@@ -379,7 +391,7 @@ async fn extract_token_balance_changes(
 async fn filter_noise_transfers(
     sol_changes: &HashMap<String, SolBalanceChange>,
     token_changes: &HashMap<String, Vec<TokenBalanceChange>>,
-) -> Result<(Vec<CleanTransfer>, f64, f64), String> {
+) -> crate::chains::solana::Result<(Vec<CleanTransfer>, f64, f64)> {
     let mut clean_transfers = Vec::new();
     let mut total_tips = 0.0;
     let mut total_rent = 0.0;

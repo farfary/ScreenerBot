@@ -138,7 +138,7 @@ const MAX_EXPECTED_RENT: u64 = 10_000_000_000;
 pub async fn analyze_ata_operations(
     transaction: &Transaction,
     tx_data: &crate::chains::solana::rpc::TransactionDetails,
-) -> Result<AtaAnalysis, String> {
+) -> crate::chains::solana::Result<AtaAnalysis> {
     logger::debug(
         LogTag::Transactions,
         &format!("Analyzing ATA operations for tx: {}", transaction.signature),
@@ -172,7 +172,7 @@ pub async fn analyze_ata_operations(
 async fn extract_ata_operations(
     transaction: &Transaction,
     tx_data: &crate::chains::solana::rpc::TransactionDetails,
-) -> Result<Vec<AtaOperation>, String> {
+) -> crate::chains::solana::Result<Vec<AtaOperation>> {
     let mut operations = Vec::new();
 
     // Extract from balance changes (rent payments/recoveries)
@@ -191,7 +191,7 @@ async fn extract_ata_operations(
 async fn extract_from_balance_changes(
     _transaction: &Transaction,
     tx_data: &crate::chains::solana::rpc::TransactionDetails,
-) -> Result<Vec<AtaOperation>, String> {
+) -> crate::chains::solana::Result<Vec<AtaOperation>> {
     let mut operations = Vec::new();
 
     // Get balance changes
@@ -282,7 +282,7 @@ async fn extract_from_balance_changes(
 /// Extract ATA operations from instruction analysis
 async fn extract_from_instructions(
     tx_data: &crate::chains::solana::rpc::TransactionDetails,
-) -> Result<Vec<AtaOperation>, String> {
+) -> crate::chains::solana::Result<Vec<AtaOperation>> {
     let mut operations = Vec::new();
 
     let message = &tx_data.transaction.message;
@@ -325,7 +325,7 @@ async fn extract_from_instructions(
 async fn analyze_instruction_for_ata(
     instruction: &Value,
     account_keys: &[String],
-) -> Result<Option<AtaOperation>, String> {
+) -> crate::chains::solana::Result<Option<AtaOperation>> {
     let program_id_index = instruction
         .get("programIdIndex")
         .and_then(|v| v.as_u64())
@@ -357,7 +357,7 @@ async fn analyze_instruction_for_ata(
 async fn parse_token_instruction(
     _instruction: &Value,
     _account_keys: &[String],
-) -> Result<Option<AtaOperation>, String> {
+) -> crate::chains::solana::Result<Option<AtaOperation>> {
     // This would implement detailed Token program instruction parsing
     // For now, return a placeholder
     Ok(None)
@@ -457,7 +457,7 @@ fn identify_rent_pattern(lamports: u64) -> Option<&'static str> {
 async fn track_account_lifecycle(
     operations: &[AtaOperation],
     _tx_data: &crate::chains::solana::rpc::TransactionDetails,
-) -> Result<AccountLifecycle, String> {
+) -> crate::chains::solana::Result<AccountLifecycle> {
     let mut created_accounts = Vec::new();
     let mut closed_accounts = Vec::new();
     let mut modified_accounts = Vec::new();

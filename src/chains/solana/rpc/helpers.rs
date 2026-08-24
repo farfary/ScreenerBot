@@ -3,7 +3,7 @@
 /// Parse pubkey helper (delegate to `chains::solana::accounts`)
 pub fn parse_pubkey(
     address: &str,
-) -> Result<crate::chains::solana::solana_sdk::pubkey::Pubkey, String> {
+) -> crate::chains::solana::Result<crate::chains::solana::solana_sdk::pubkey::Pubkey> {
     crate::chains::solana::accounts::parse_pubkey_safe(address)
 }
 

@@ -33,8 +33,11 @@ pub(super) async fn migrate_from_config() -> Result<(), Error> {
     }
 
     // Decrypt to get address (the key material itself is re-stored encrypted, unchanged)
-    let address = address_from_encrypted_key(&encrypted, &nonce)
-        .map_err(|reason| Error::InvalidPrivateKey { reason })?;
+    let address = address_from_encrypted_key(&encrypted, &nonce).map_err(|reason| {
+        Error::InvalidPrivateKey {
+            reason: reason.to_string(),
+        }
+    })?;
 
     // Insert as main wallet
     db.insert_wallet(

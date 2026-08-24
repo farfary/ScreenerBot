@@ -1,8 +1,8 @@
 //! Top-level Error enum — unifies all domain-specific error types.
 
 use super::{
-    AccountError, BlockchainError, ConfigurationError, DataError, DatabaseError, InternalError,
-    IoError, NetworkError, RpcProviderError, ServiceError,
+    AccountError, ConfigurationError, DataError, DatabaseError, InternalError, IoError,
+    NetworkError, RpcProviderError, ServiceError,
 };
 use crate::rpc::errors::RpcError;
 
@@ -31,13 +31,17 @@ pub enum Error {
     #[error(transparent)]
     Tools(#[from] crate::tools::Error),
 
+    /// Chain-neutral identity/execution errors.
+    #[error(transparent)]
+    Chains(#[from] crate::chains::Error),
+
+    /// Solana chain adapter errors.
+    #[error(transparent)]
+    Solana(#[from] crate::chains::solana::Error),
+
     /// ScreenerBot account / sign-in errors.
     #[error(transparent)]
     Account(#[from] AccountError),
-
-    /// Blockchain & Solana specific errors.
-    #[error(transparent)]
-    Blockchain(#[from] BlockchainError),
 
     /// Network connectivity errors.
     #[error(transparent)]
@@ -150,16 +154,6 @@ impl Error {
         })
     }
 
-    /// Create a signing error.
-    pub fn signing_error(message: impl Into<String>) -> Self {
-        Error::Blockchain(BlockchainError::TransactionDropped {
-            signature: "unknown".to_owned(),
-            reason: format!("Signing error: {}", message.into()),
-            fee_paid: None,
-            attempts: 1,
-        })
-    }
-
     /// Create an API/provider error.
     pub fn api_error(message: impl Into<String>) -> Self {
         Error::RpcProvider(RpcProviderError::Generic {
@@ -197,16 +191,6 @@ impl Error {
             field: "slippage".to_owned(),
             value: "exceeded".to_owned(),
             reason: message.into(),
-        })
-    }
-
-    /// Create an insufficient balance error.
-    pub fn insufficient_balance(message: impl Into<String>) -> Self {
-        Error::Blockchain(BlockchainError::InsufficientBalance {
-            pubkey: "unknown".to_owned(),
-            required_lamports: 0,
-            available_lamports: 0,
-            operation: message.into(),
         })
     }
 

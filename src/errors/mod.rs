@@ -5,8 +5,6 @@
 //! - `crate::Result<T>` / `crate::errors::Result<T>`
 
 mod account;
-pub mod blockchain;
-mod blockchain_parser;
 
 mod configuration;
 mod data;
@@ -21,8 +19,6 @@ mod startup;
 mod traits;
 
 pub use account::*;
-pub use blockchain::*;
-pub use blockchain_parser::*;
 pub use configuration::*;
 pub use data::*;
 pub use database::*;

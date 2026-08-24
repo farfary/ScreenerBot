@@ -195,20 +195,33 @@ impl AccountFetcher {
     }
 
     /// Public interface: Request fetching of accounts for a pool
-    pub fn request_pool_fetch(&self, pool_id: Pubkey, accounts: Vec<Pubkey>) -> Result<(), String> {
+    pub fn request_pool_fetch(
+        &self,
+        pool_id: Pubkey,
+        accounts: Vec<Pubkey>,
+    ) -> crate::chains::solana::Result<()> {
         let message = FetcherMessage::FetchPool { pool_id, accounts };
         self.fetcher_tx
             .send(message)
-            .map_err(|e| format!("Failed to send fetch request: {e}"))?;
+            .map_err(|e| crate::chains::solana::Error::Rpc {
+                operation: "request_pool_fetch",
+                detail: e.to_string(),
+            })?;
         Ok(())
     }
 
     /// Public interface: Request fetching of specific accounts
-    pub fn request_accounts_fetch(&self, accounts: Vec<Pubkey>) -> Result<(), String> {
+    pub fn request_accounts_fetch(
+        &self,
+        accounts: Vec<Pubkey>,
+    ) -> crate::chains::solana::Result<()> {
         let message = FetcherMessage::FetchAccounts { accounts };
         self.fetcher_tx
             .send(message)
-            .map_err(|e| format!("Failed to send fetch request: {e}"))?;
+            .map_err(|e| crate::chains::solana::Error::Rpc {
+                operation: "request_accounts_fetch",
+                detail: e.to_string(),
+            })?;
         Ok(())
     }
 

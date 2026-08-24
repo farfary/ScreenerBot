@@ -77,9 +77,9 @@ impl WalletWatchRuntime for SolanaWalletWatchRuntime {
         TransactionFetcher::new()
             .fetch_signatures_page(pubkey, page_size, before, until)
             .await
-            .map_err(|detail| Error::ChainRuntime {
+            .map_err(|e| Error::ChainRuntime {
                 operation: "fetch_signatures_page",
-                detail,
+                detail: e.to_string(),
             })
     }
 
@@ -98,9 +98,18 @@ impl WalletWatchRuntime for SolanaWalletWatchRuntime {
         processor
             .decode(signature)
             .await
-            .map_err(|detail| Error::ChainRuntime {
-                operation: "decode_transaction",
-                detail,
+            .map_err(|e| match e.classify() {
+                // A deferral cause travels as the typed neutral classification so the
+                // wallet-watch funnel branches on the variant, never on message text
+                // or a coded operation string.
+                Some(
+                    failure @ (crate::chains::ExecutionFailure::IndexingDelay { .. }
+                    | crate::chains::ExecutionFailure::NotFound { .. }),
+                ) => Error::ChainExecution(failure),
+                _ => Error::ChainRuntime {
+                    operation: "decode_transaction",
+                    detail: e.to_string(),
+                },
             })
     }
 

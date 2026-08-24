@@ -73,6 +73,11 @@ pub enum Error {
         operation: &'static str,
         detail: String,
     },
+    /// The chain reported a classified execution outcome (for example the node
+    /// has not indexed a signature yet). Carried as a typed value so callers
+    /// branch on the variant instead of on a coded operation string.
+    #[error(transparent)]
+    ChainExecution(#[from] crate::chains::ExecutionFailure),
     /// A cross-cutting dependency this module reads from (config, chain
     /// accounts, ...) failed (no fitting variant above: this names WHICH
     /// dependency failed, distinguishable from wallets' own database or
@@ -107,7 +112,7 @@ impl ErrorClass for Error {
             Error::SnapshotMaintenance { .. } => true,
             Error::DashboardPayload { .. } => false,
             Error::BalanceUpdate { .. } => true,
-            Error::ChainRuntime { .. } => true,
+            Error::ChainRuntime { .. } | Error::ChainExecution(_) => true,
             Error::Dependency { .. } => true,
         }
     }
@@ -120,7 +125,9 @@ impl ErrorClass for Error {
             Error::Transactions(e) => e.retry_after(),
             Error::SnapshotMaintenance { .. } => Some(Duration::from_secs(2)),
             Error::BalanceUpdate { .. } => Some(Duration::from_millis(500)),
-            Error::ChainRuntime { .. } => Some(Duration::from_millis(500)),
+            Error::ChainRuntime { .. } | Error::ChainExecution(_) => {
+                Some(Duration::from_millis(500))
+            }
             Error::Dependency { .. } => Some(Duration::from_millis(500)),
             _ => None,
         }
@@ -145,7 +152,7 @@ impl ErrorClass for Error {
             Error::SnapshotMaintenance { .. } => Severity::Warning,
             Error::DashboardPayload { .. } => Severity::Error,
             Error::BalanceUpdate { .. } => Severity::Warning,
-            Error::ChainRuntime { .. } => Severity::Warning,
+            Error::ChainRuntime { .. } | Error::ChainExecution(_) => Severity::Warning,
             Error::Dependency { .. } => Severity::Warning,
         }
     }
@@ -169,7 +176,7 @@ impl ErrorClass for Error {
             Error::SnapshotMaintenance { .. } => 500,
             Error::DashboardPayload { .. } => 500,
             Error::BalanceUpdate { .. } => 503,
-            Error::ChainRuntime { .. } => 503,
+            Error::ChainRuntime { .. } | Error::ChainExecution(_) => 503,
             Error::Dependency { .. } => 503,
         }
     }

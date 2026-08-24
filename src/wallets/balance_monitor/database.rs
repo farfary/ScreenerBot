@@ -104,7 +104,7 @@ impl WalletDatabase {
             .await
             .map_err(|e| Error::Dependency {
                 dependency: "accounts",
-                detail: e,
+                detail: e.to_string(),
             })?;
 
         let mut db = WalletDatabase {
@@ -133,7 +133,7 @@ impl WalletDatabase {
             .await
             .map_err(|e| Error::Dependency {
                 dependency: "accounts",
-                detail: e,
+                detail: e.to_string(),
             })?;
         Ok(())
     }

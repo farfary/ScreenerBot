@@ -4,7 +4,7 @@ use std::{fmt, str::FromStr};
 
 use serde::{Deserialize, Serialize};
 
-use crate::chains::ChainError;
+use crate::chains::Error as ChainError;
 
 /// A blockchain supported by this build.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

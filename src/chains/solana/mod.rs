@@ -17,11 +17,14 @@ pub mod accounts;
 pub mod adapter;
 pub mod assets;
 pub mod constants;
+mod error;
 pub mod pools;
 pub mod rpc;
 pub mod swaps;
 pub mod transactions;
 pub mod wallets;
+
+pub use error::{Error, Result};
 
 use self::constants::{SOL_DECIMALS, SOL_MINT};
 use super::{ChainId, ChainMetadata, NativeAsset};

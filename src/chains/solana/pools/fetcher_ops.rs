@@ -383,7 +383,7 @@ impl AccountFetcher {
                         None,
                         serde_json::json!({
                             "batch_size": batch.len(),
-                            "error": e,
+                            "error": e.to_string(),
                             "duration_ms": batch_duration.as_millis(),
                             "accounts": batch.iter().map(|p| p.to_string()).collect::<Vec<_>>()
                         }),
@@ -582,7 +582,7 @@ impl AccountFetcher {
     /// Fetch a batch of accounts
     pub(crate) async fn fetch_account_batch(
         accounts: &[Pubkey],
-    ) -> Result<(Vec<AccountData>, Vec<Pubkey>), String> {
+    ) -> crate::chains::solana::Result<(Vec<AccountData>, Vec<Pubkey>)> {
         // Check connectivity before RPC batch fetch - graceful degradation
         if let Some(unhealthy) = crate::connectivity::check_endpoints_healthy(&["rpc"]).await {
             logger::debug(
@@ -645,7 +645,10 @@ impl AccountFetcher {
                 ))
                 .await;
 
-                return Err(e.to_string());
+                return Err(crate::chains::solana::Error::Rpc {
+                    operation: "get_multiple_accounts",
+                    detail: e.to_string(),
+                });
             }
         };
 

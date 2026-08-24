@@ -284,9 +284,13 @@ async fn process_signature(
     {
         Ok(tx) => tx,
         Err(e) => {
-            let e_str = e.to_string();
-            if crate::errors::is_rpc_indexing_delay(&e_str) || e_str.contains("RPC indexing delay")
-            {
+            if matches!(
+                &e,
+                crate::wallets::Error::ChainExecution(
+                    crate::chains::ExecutionFailure::IndexingDelay { .. }
+                        | crate::chains::ExecutionFailure::NotFound { .. }
+                )
+            ) {
                 // Keep both pending records intact. A completed poll range stays in
                 // memory and is replayed next cadence; a WS-first notification is
                 // picked up by the baseline poll. The durable cursor remains behind

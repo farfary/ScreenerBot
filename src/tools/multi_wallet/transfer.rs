@@ -49,7 +49,7 @@ pub async fn fund_wallets(targets: Vec<(String, f64)>, concurrency: usize) -> Ve
         .map(|(address, amount)| async move {
             match transfer_sol_from_main(&address, amount).await {
                 Ok(sig) => WalletOpResult::success(0, address, sig, amount, None),
-                Err(e) => WalletOpResult::failure(0, address, e),
+                Err(e) => WalletOpResult::failure(0, address, e.to_string()),
             }
         })
         .buffer_unordered(concurrency)
@@ -163,7 +163,11 @@ pub async fn collect_sol(
                 ));
             }
             Err(e) => {
-                results.push(WalletOpResult::failure(wallet_id, wallet_address, e));
+                results.push(WalletOpResult::failure(
+                    wallet_id,
+                    wallet_address,
+                    e.to_string(),
+                ));
             }
         }
 

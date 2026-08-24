@@ -472,9 +472,7 @@ impl SwapRouter for GmgnRouter {
             )));
         }
 
-        let keypair = crate::chains::solana::accounts::keypair_for_wallet(wallet_id)
-            .await
-            .map_err(|e| Error::internal_error(e))?;
+        let keypair = crate::chains::solana::accounts::keypair_for_wallet(wallet_id).await?;
         let rpc_client = crate::chains::solana::rpc::get_rpc_client();
         let signature = rpc_client
             .sign_send_and_confirm_with_keypair(&swap_data.raw_tx.swap_transaction, &keypair)

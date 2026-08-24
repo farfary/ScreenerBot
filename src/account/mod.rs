@@ -421,9 +421,7 @@ pub async fn sign_in_with_wallet(create: bool) -> Result<()> {
     // in as many words, and this is the only place the bot ever signs anything
     // that is not a trade.
     let signature =
-        crate::chains::solana::accounts::sign_message_with_main_wallet(&challenge.message)
-            .await
-            .map_err(|message| Error::Account(AccountError::Generic { message }))?;
+        crate::chains::solana::accounts::sign_message_with_main_wallet(&challenge.message).await?;
 
     let tokens =
         client::sign_in_with_wallet(&address, &signature, &challenge.message, create).await?;

@@ -24,7 +24,7 @@ pub async fn update_wallet_balances(wallet_id: i64) -> Result<usize, Error> {
         .await
         .map_err(|detail| Error::BalanceUpdate {
             address: wallet.address.clone(),
-            detail,
+            detail: detail.to_string(),
         })?;
     let count = balances.len();
 

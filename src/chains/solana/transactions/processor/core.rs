@@ -12,7 +12,7 @@ use std::time::Instant;
 use crate::chains::solana::transactions::{
     analyzer::TransactionAnalyzer, fetcher::TransactionFetcher,
 };
-use crate::chains::ChainError;
+use crate::chains::Error as ChainError;
 use crate::logger::{self, LogTag};
 use crate::transactions::types::*;
 
@@ -111,7 +111,7 @@ impl TransactionProcessor {
     /// without landing in our own history. Own-wallet processors cache the raw RPC
     /// response; `new_for_watch_target` retains it on the returned decoded value for
     /// classification but does not persist the JSON blob (see `extraction.rs`).
-    pub async fn decode(&self, signature: &str) -> Result<Transaction, String> {
+    pub async fn decode(&self, signature: &str) -> crate::chains::solana::Result<Transaction> {
         let start_time = Instant::now();
 
         if self.debug_enabled {
@@ -166,7 +166,10 @@ impl TransactionProcessor {
     ///
     /// This is the own-wallet path: decode, record the processing event, store the
     /// processed row.
-    pub async fn process_transaction(&self, signature: &str) -> Result<Transaction, String> {
+    pub async fn process_transaction(
+        &self,
+        signature: &str,
+    ) -> crate::chains::solana::Result<Transaction> {
         let transaction = self.decode(signature).await?;
 
         // Record processing event
@@ -223,7 +226,7 @@ impl TransactionProcessor {
     pub async fn process_transactions_batch(
         &self,
         signatures: Vec<String>,
-    ) -> HashMap<String, Result<Transaction, String>> {
+    ) -> HashMap<String, crate::chains::solana::Result<Transaction>> {
         let mut results = HashMap::new();
 
         // Simple sequential processing for now

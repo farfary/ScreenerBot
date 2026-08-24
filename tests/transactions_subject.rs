@@ -4,7 +4,7 @@ mod common;
 
 use screenerbot::chains::solana::solana_sdk::pubkey::Pubkey;
 use screenerbot::chains::solana::transactions::subject as solana_subject;
-use screenerbot::chains::{AccountId, ChainError, ChainId};
+use screenerbot::chains::{AccountId, ChainId, Error as ChainError};
 use screenerbot::transactions::deltas::{DeltaKind, SubjectAssetDelta, NATIVE_SOL_SENTINEL};
 use screenerbot::transactions::Subject;
 

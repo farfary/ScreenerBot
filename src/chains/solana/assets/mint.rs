@@ -14,6 +14,8 @@ use crate::chains::solana::solana_program::program_pack::Pack;
 use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 use crate::chains::solana::spl_token::state::Mint as SplMint;
 use crate::chains::solana::spl_token_2022::state::Mint as Mint2022;
+use crate::chains::solana::{Error, Result};
+use crate::rpc::errors::RpcError;
 
 /// Decimals, mint/freeze authority and supply read directly from a mint account.
 #[derive(Debug, Clone)]
@@ -25,30 +27,42 @@ pub struct MintAccountData {
 }
 
 /// Fetch and decode a mint account, auto-detecting SPL Token vs Token-2022.
-pub async fn fetch_mint_account(mint: &str) -> Result<MintAccountData, String> {
-    let mint_pubkey = Pubkey::from_str(mint).map_err(|e| format!("Invalid mint address: {e}"))?;
+pub async fn fetch_mint_account(mint: &str) -> Result<MintAccountData> {
+    let mint_pubkey = Pubkey::from_str(mint).map_err(|_| Error::InvalidAddress {
+        kind: "mint",
+        value: mint.to_owned(),
+    })?;
     let rpc_client = get_rpc_client();
 
     let account_opt = rpc_client.get_account(&mint_pubkey).await.map_err(|e| {
-        let e_str = e.to_string();
-        if e_str.contains("could not find account") || e_str.contains("Account not found") {
-            "Account not found".to_owned()
-        } else if e_str.contains("429") || e_str.to_lowercase().contains("rate limit") {
-            format!("Rate limited: {e_str}")
+        if matches!(&e, crate::Error::Rpc(RpcError::AccountNotFound { .. })) {
+            Error::AccountNotFound {
+                address: mint.to_owned(),
+            }
         } else {
-            format!("Failed to fetch account: {e_str}")
+            Error::Rpc {
+                operation: "get_account",
+                detail: e.to_string(),
+            }
         }
     })?;
 
-    let account = account_opt.ok_or_else(|| "Account not found".to_owned())?;
+    let account = account_opt.ok_or_else(|| Error::AccountNotFound {
+        address: mint.to_owned(),
+    })?;
 
     if account.data.is_empty() {
-        return Err("Account data is empty".to_owned());
+        return Err(Error::Decode {
+            payload: "mint account",
+            detail: "account data is empty".to_owned(),
+        });
     }
 
     if account.owner == crate::chains::solana::spl_token::id() {
-        let mint_data = SplMint::unpack(&account.data)
-            .map_err(|e| format!("Failed to unpack SPL Token mint: {e}"))?;
+        let mint_data = SplMint::unpack(&account.data).map_err(|e| Error::Decode {
+            payload: "spl token mint",
+            detail: e.to_string(),
+        })?;
         return Ok(from_spl_mint(&mint_data));
     }
 
@@ -62,14 +76,17 @@ pub async fn fetch_mint_account(mint: &str) -> Result<MintAccountData, String> {
         let state = crate::chains::solana::spl_token_2022::extension::StateWithExtensionsOwned::<
             Mint2022,
         >::unpack(account.data.clone())
-        .map_err(|e| format!("Failed to unpack Token-2022 mint with extensions: {e}"))?;
+        .map_err(|e| Error::Decode {
+            payload: "token-2022 mint with extensions",
+            detail: e.to_string(),
+        })?;
         return Ok(from_2022_mint(&state.base));
     }
 
-    Err(format!(
-        "Account owner is not a supported token program: {}",
-        account.owner
-    ))
+    Err(Error::Decode {
+        payload: "mint account owner",
+        detail: format!("owner {} is not a supported token program", account.owner),
+    })
 }
 
 fn from_spl_mint(mint_data: &SplMint) -> MintAccountData {
@@ -100,15 +117,23 @@ fn coption_to_string(value: COption<Pubkey>) -> Option<String> {
 /// Is this mint owned by the Token-2022 program? A single account fetch, no
 /// decoding — callers that already need the full mint should prefer
 /// [`fetch_mint_account`] instead of fetching the account twice.
-pub async fn is_token_2022_mint(mint: &str) -> Result<bool, String> {
-    let mint_pubkey = Pubkey::from_str(mint).map_err(|e| format!("Invalid mint address: {e}"))?;
+pub async fn is_token_2022_mint(mint: &str) -> Result<bool> {
+    let mint_pubkey = Pubkey::from_str(mint).map_err(|_| Error::InvalidAddress {
+        kind: "mint",
+        value: mint.to_owned(),
+    })?;
     let rpc_client = get_rpc_client();
 
     let account = rpc_client
         .get_account(&mint_pubkey)
         .await
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| "Account not found".to_owned())?;
+        .map_err(|e| Error::Rpc {
+            operation: "get_account",
+            detail: e.to_string(),
+        })?
+        .ok_or_else(|| Error::AccountNotFound {
+            address: mint.to_owned(),
+        })?;
 
     Ok(account.owner.to_string() == TOKEN_2022_PROGRAM_ID)
 }

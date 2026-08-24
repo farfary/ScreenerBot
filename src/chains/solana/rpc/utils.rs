@@ -12,15 +12,18 @@ use std::time::{Duration, Instant};
 /// Parse a pubkey from string safely
 ///
 /// Wrapper around `Pubkey::from_str` with better error messages.
-pub fn parse_pubkey_string(s: &str) -> Result<Pubkey, String> {
-    Pubkey::from_str(s).map_err(|e| format!("Invalid pubkey '{s}': {e}"))
+pub fn parse_pubkey_string(s: &str) -> crate::chains::solana::Result<Pubkey> {
+    Pubkey::from_str(s).map_err(|_| crate::chains::solana::Error::InvalidAddress {
+        kind: "pubkey",
+        value: s.to_owned(),
+    })
 }
 
 /// Get minimum rent for ATA from chain with caching
 ///
 /// Uses a 10-second cache to avoid excessive RPC calls.
 /// Falls back to default ATA rent (2039280 lamports) on errors.
-pub async fn get_ata_rent_from_chain() -> Result<u64, String> {
+pub async fn get_ata_rent_from_chain() -> crate::chains::solana::Result<u64> {
     use crate::chains::solana::rpc::global::get_rpc_client;
     use crate::chains::solana::rpc::RpcClientMethods;
 
@@ -31,7 +34,10 @@ pub async fn get_ata_rent_from_chain() -> Result<u64, String> {
     client
         .get_minimum_balance_for_rent_exemption(165)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|e| crate::chains::solana::Error::Rpc {
+            operation: "get_minimum_balance_for_rent_exemption",
+            detail: e.to_string(),
+        })
 }
 
 /// Cached ATA rent information

@@ -13,7 +13,7 @@
 // - TransactionAnalyzer::analyze_transaction() -> CompleteAnalysis (full 6-step pipeline)
 // - TransactionAnalyzer::quick_classify() -> TransactionClass (lightweight for high-frequency)
 //
-// All analysis returns Result<T, String> with structured logging via LogTag.
+// All analysis returns crate::chains::solana::Result<T> with structured logging via LogTag.
 // Confidence scoring ranges from Unknown (<0.4) to High (≥0.8).
 
 pub mod ata;
@@ -97,7 +97,7 @@ impl TransactionAnalyzer {
         &self,
         transaction: &Transaction,
         tx_data: &crate::chains::solana::rpc::TransactionDetails,
-    ) -> Result<CompleteAnalysis, String> {
+    ) -> crate::chains::solana::Result<CompleteAnalysis> {
         if self.debug_enabled {
             logger::debug(
                 LogTag::Transactions,
@@ -209,7 +209,7 @@ impl TransactionAnalyzer {
         &self,
         transaction: &Transaction,
         tx_data: &crate::chains::solana::rpc::TransactionDetails,
-    ) -> Result<classify::TransactionClass, String> {
+    ) -> crate::chains::solana::Result<classify::TransactionClass> {
         // Lightweight analysis for basic classification only
         let balance_changes = balance::extract_balance_changes(transaction, tx_data).await?;
         let dex_detection =

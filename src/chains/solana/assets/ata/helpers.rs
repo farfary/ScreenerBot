@@ -170,12 +170,9 @@ async fn build_and_send_close_instruction(
             &owner_pubkey,
             &[],
         )
-        .map_err(|e| {
-            Error::Blockchain(crate::errors::BlockchainError::InvalidInstruction {
-                signature: "unknown".to_owned(),
-                instruction_index: 0,
-                reason: format!("Failed to build close instruction: {e}"),
-            })
+        .map_err(|e| crate::chains::solana::Error::InstructionBuild {
+            instruction: "close_account",
+            detail: e.to_string(),
         })?
     };
 
@@ -266,12 +263,7 @@ async fn build_and_send_close_instruction(
             );
         }
         Err(e) => {
-            let blockchain_error =
-                crate::errors::parse_solana_error(&e.to_string(), None, "create_ata_transaction");
-            logger::debug(
-                LogTag::Wallet,
-                &format!("ATA_TRANSACTION_FAILED: {blockchain_error}"),
-            );
+            logger::debug(LogTag::Wallet, &format!("ATA_TRANSACTION_FAILED: {e}"));
         }
     }
 
@@ -285,13 +277,11 @@ fn build_token_2022_close_instruction(
 ) -> Result<Instruction> {
     // Token-2022 uses the same close account instruction format as SPL Token
     // but with different program ID
-    let token_2022_program_id = Pubkey::from_str(TOKEN_2022_PROGRAM_ID).map_err(|_e| {
-        Error::Blockchain(crate::errors::BlockchainError::InvalidAccountData {
-            signature: "unknown".to_owned(),
-            account: TOKEN_2022_PROGRAM_ID.to_string(),
-            expected_owner: "Program ID".to_owned(),
-            actual_owner: None,
-        })
+    let token_2022_program_id = Pubkey::from_str(TOKEN_2022_PROGRAM_ID).map_err(|e| {
+        crate::chains::solana::Error::Decode {
+            payload: "token-2022 program id",
+            detail: e.to_string(),
+        }
     })?;
 
     // Manually build the close account instruction for Token-2022

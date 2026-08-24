@@ -135,7 +135,7 @@ pub async fn debug_transaction(
         .await
         .map_err(|e| Error::VerificationFailed {
             signature: signature.to_owned(),
-            detail: e,
+            detail: e.to_string(),
         })?;
     let processing_duration = step_start.elapsed();
 

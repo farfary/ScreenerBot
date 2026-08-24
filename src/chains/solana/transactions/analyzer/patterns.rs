@@ -175,7 +175,7 @@ pub async fn detect_patterns(
     balance_analysis: &BalanceAnalysis,
     dex_analysis: &DexAnalysis,
     classification: &TransactionClass,
-) -> Result<PatternAnalysis, String> {
+) -> crate::chains::solana::Result<PatternAnalysis> {
     logger::debug(
         LogTag::Transactions,
         &format!("Detecting patterns for tx: {}", transaction.signature),
@@ -221,7 +221,7 @@ async fn detect_specific_patterns(
     balance_analysis: &BalanceAnalysis,
     dex_analysis: &DexAnalysis,
     _classification: &TransactionClass,
-) -> Result<Vec<DetectedPattern>, String> {
+) -> crate::chains::solana::Result<Vec<DetectedPattern>> {
     let mut patterns = Vec::new();
 
     // Check for MEV activity
@@ -258,7 +258,7 @@ async fn detect_mev_patterns(
     _transaction: &Transaction,
     balance_analysis: &BalanceAnalysis,
     dex_analysis: &DexAnalysis,
-) -> Result<Vec<DetectedPattern>, String> {
+) -> crate::chains::solana::Result<Vec<DetectedPattern>> {
     let mut patterns = Vec::new();
 
     // Check for high MEV tips
@@ -299,7 +299,7 @@ async fn detect_mev_patterns(
 async fn detect_wash_trading(
     _transaction: &Transaction,
     balance_analysis: &BalanceAnalysis,
-) -> Result<Vec<DetectedPattern>, String> {
+) -> crate::chains::solana::Result<Vec<DetectedPattern>> {
     let mut patterns = Vec::new();
 
     // Look for circular token flows (simplified heuristic)
@@ -330,7 +330,7 @@ async fn detect_wash_trading(
 async fn detect_fee_anomalies(
     tx_data: &crate::chains::solana::rpc::TransactionDetails,
     balance_analysis: &BalanceAnalysis,
-) -> Result<Vec<DetectedPattern>, String> {
+) -> crate::chains::solana::Result<Vec<DetectedPattern>> {
     let mut patterns = Vec::new();
 
     let base_fee = tx_data
@@ -383,7 +383,7 @@ async fn detect_fee_anomalies(
 /// Detect whale activity
 async fn detect_whale_activity(
     balance_analysis: &BalanceAnalysis,
-) -> Result<Vec<DetectedPattern>, String> {
+) -> crate::chains::solana::Result<Vec<DetectedPattern>> {
     let mut patterns = Vec::new();
 
     // Check for large SOL amounts
@@ -409,7 +409,7 @@ async fn detect_whale_activity(
 async fn detect_arbitrage_patterns(
     balance_analysis: &BalanceAnalysis,
     dex_analysis: &DexAnalysis,
-) -> Result<Vec<DetectedPattern>, String> {
+) -> crate::chains::solana::Result<Vec<DetectedPattern>> {
     let mut patterns = Vec::new();
 
     // Arbitrage often involves multiple DEXes
@@ -440,7 +440,7 @@ async fn detect_arbitrage_patterns(
 async fn assess_risk(
     patterns: &[DetectedPattern],
     balance_analysis: &BalanceAnalysis,
-) -> Result<RiskAssessment, String> {
+) -> crate::chains::solana::Result<RiskAssessment> {
     let mut risk_score = 0.0;
     let mut risk_factors = Vec::new();
     let mut recommendations = Vec::new();
@@ -515,7 +515,7 @@ async fn analyze_trading_behavior(
     balance_analysis: &BalanceAnalysis,
     dex_analysis: &DexAnalysis,
     classification: &TransactionClass,
-) -> Result<TradingBehavior, String> {
+) -> crate::chains::solana::Result<TradingBehavior> {
     // Determine trader type
     let trader_type = determine_trader_type(balance_analysis, dex_analysis).await?;
 
@@ -543,7 +543,7 @@ async fn analyze_trading_behavior(
 async fn determine_trader_type(
     balance_analysis: &BalanceAnalysis,
     dex_analysis: &DexAnalysis,
-) -> Result<TraderType, String> {
+) -> crate::chains::solana::Result<TraderType> {
     let total_sol_volume: f64 = balance_analysis
         .sol_changes
         .values()
@@ -594,7 +594,7 @@ fn categorize_transaction_size(balance_analysis: &BalanceAnalysis) -> SizeCatego
 async fn assess_sophistication(
     dex_analysis: &DexAnalysis,
     classification: &TransactionClass,
-) -> Result<SophisticationLevel, String> {
+) -> crate::chains::solana::Result<SophisticationLevel> {
     // Multiple DEXes + complex classification = expert
     if dex_analysis.program_ids.len() > 2 {
         return Ok(SophisticationLevel::Expert);

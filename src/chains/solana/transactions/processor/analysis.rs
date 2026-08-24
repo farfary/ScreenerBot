@@ -24,7 +24,7 @@ impl TransactionProcessor {
         transaction: &mut Transaction,
         analysis: &crate::chains::solana::transactions::analyzer::CompleteAnalysis,
         tx_data: &crate::chains::solana::rpc::TransactionDetails,
-    ) -> Result<(), String> {
+    ) -> crate::chains::solana::Result<()> {
         // Map classification results
         transaction.transaction_type = match analysis.classification.transaction_type {
             crate::chains::solana::transactions::analyzer::classify::ClassifiedType::Buy => TransactionType::Buy,

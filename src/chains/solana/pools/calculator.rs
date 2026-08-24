@@ -476,7 +476,7 @@ impl PriceCalculator {
         pool_id: Pubkey,
         pool_descriptor: PoolDescriptor,
         account_bundle: PoolAccountBundle,
-    ) -> Result<(), String> {
+    ) -> crate::chains::solana::Result<()> {
         let message = CalculatorMessage::CalculatePool {
             pool_id,
             pool_descriptor,
@@ -485,7 +485,10 @@ impl PriceCalculator {
 
         self.calculator_tx
             .send(message)
-            .map_err(|e| format!("Failed to send calculation request: {e}"))?;
+            .map_err(|e| crate::chains::solana::Error::Rpc {
+                operation: "request_calculation",
+                detail: e.to_string(),
+            })?;
 
         Ok(())
     }

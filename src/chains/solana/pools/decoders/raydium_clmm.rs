@@ -606,15 +606,22 @@ impl RaydiumClmmDecoder {
     }
 
     /// Decode token account amount from token account data
-    fn decode_token_account_amount(data: &[u8]) -> Result<u64, String> {
+    fn decode_token_account_amount(data: &[u8]) -> crate::chains::solana::Result<u64> {
         if data.len() < 72 {
-            return Err("Token account data too short".to_owned());
+            return Err(crate::chains::solana::Error::Decode {
+                payload: "pool vault token account",
+                detail: "token account data too short".to_owned(),
+            });
         }
 
         // Token account amount is at offset 64 (8 bytes, little-endian)
-        let amount_bytes: [u8; 8] = data[64..72]
-            .try_into()
-            .map_err(|_| "Failed to read amount bytes".to_owned())?;
+        let amount_bytes: [u8; 8] =
+            data[64..72]
+                .try_into()
+                .map_err(|_| crate::chains::solana::Error::Decode {
+                    payload: "pool vault token account amount",
+                    detail: "failed to read amount bytes".to_owned(),
+                })?;
 
         Ok(u64::from_le_bytes(amount_bytes))
     }

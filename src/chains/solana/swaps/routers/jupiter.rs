@@ -607,9 +607,7 @@ impl SwapRouter for JupiterRouter {
     async fn execute_swap_for_wallet(&self, quote: &Quote, wallet_id: i64) -> Result<SwapResult> {
         self.accept_own_quote(quote)?;
         let start = Instant::now();
-        let keypair = crate::chains::solana::accounts::keypair_for_wallet(wallet_id)
-            .await
-            .map_err(|e| Error::internal_error(e))?;
+        let keypair = crate::chains::solana::accounts::keypair_for_wallet(wallet_id).await?;
         let signature = execute_with_keypair(quote, &keypair).await?;
         Ok(SwapResult {
             success: true,

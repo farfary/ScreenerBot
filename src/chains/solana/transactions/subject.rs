@@ -3,7 +3,7 @@
 use std::str::FromStr;
 
 use crate::chains::solana::solana_sdk::pubkey::Pubkey;
-use crate::chains::{AccountId, ChainError, ChainId};
+use crate::chains::{AccountId, ChainId, Error as ChainError};
 use crate::transactions::Subject;
 
 /// Builds a shared subject from a Solana public key.

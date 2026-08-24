@@ -197,7 +197,11 @@ async fn transfer_token_to_main(
             0.0, // No SOL spent
             Some(balance as f64),
         )),
-        Err(e) => Some(WalletOpResult::failure(wallet_id, wallet_address, e)),
+        Err(e) => Some(WalletOpResult::failure(
+            wallet_id,
+            wallet_address,
+            e.to_string(),
+        )),
     }
 }
 

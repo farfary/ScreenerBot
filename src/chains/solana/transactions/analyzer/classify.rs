@@ -156,7 +156,7 @@ pub async fn classify_transaction(
     tx_data: &crate::chains::solana::rpc::TransactionDetails,
     balance_analysis: &BalanceAnalysis,
     dex_analysis: &DexAnalysis,
-) -> Result<TransactionClass, String> {
+) -> crate::chains::solana::Result<TransactionClass> {
     logger::debug(
         LogTag::Transactions,
         &format!("Classifying transaction: {}", transaction.signature),
@@ -219,7 +219,7 @@ pub async fn classify_transaction(
 async fn build_flow_graph(
     balance_analysis: &BalanceAnalysis,
     dex_analysis: &DexAnalysis,
-) -> Result<FlowAnalysis, String> {
+) -> crate::chains::solana::Result<FlowAnalysis> {
     let mut nodes = Vec::new();
     let mut edges = Vec::new();
 

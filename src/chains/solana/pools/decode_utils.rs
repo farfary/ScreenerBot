@@ -7,25 +7,24 @@
 //! `crate::pools::utils`.
 
 use crate::chains::solana::solana_sdk::pubkey::Pubkey;
+use crate::chains::solana::{Error, Result};
 
 /// Read a pubkey from data at given offset, advancing the offset
-pub fn read_pubkey_at_offset(data: &[u8], offset: &mut usize) -> Result<String, String> {
+pub fn read_pubkey_at_offset(data: &[u8], offset: &mut usize) -> Result<String> {
     if *offset + 32 > data.len() {
-        return Err(format!(
-            "Offset {} + 32 exceeds data length {}",
-            *offset,
-            data.len()
-        ));
+        return Err(Error::Decode {
+            payload: "pool account pubkey",
+            detail: format!("offset {} + 32 exceeds data length {}", *offset, data.len()),
+        });
     }
 
     let pubkey_bytes = &data[*offset..*offset + 32];
     *offset += 32;
 
-    let pubkey = Pubkey::new_from_array(
-        pubkey_bytes
-            .try_into()
-            .map_err(|_| "Invalid pubkey bytes".to_owned())?,
-    );
+    let pubkey = Pubkey::new_from_array(pubkey_bytes.try_into().map_err(|_| Error::Decode {
+        payload: "pool account pubkey",
+        detail: "invalid pubkey bytes".to_owned(),
+    })?);
 
     Ok(pubkey.to_string())
 }
@@ -43,7 +42,7 @@ pub fn read_pubkey_at(data: &[u8], offset: usize) -> Option<String> {
 pub fn read_pubkey_struct_at_offset(
     data: &[u8],
     offset: &mut usize,
-) -> Result<Pubkey, &'static str> {
+) -> std::result::Result<Pubkey, &'static str> {
     if data.len() < *offset + 32 {
         return Err("Insufficient data for pubkey");
     }
