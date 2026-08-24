@@ -1007,9 +1007,16 @@ fn migrated_modules_never_return_string_errors() {
     );
 }
 
-/// Exact current violators of [`error_types_live_in_their_module`], scanned by
-/// hand against today's tree. Entries are removed as each module migrates to
-/// its own `src/<module>/error.rs`; this list may only ever shrink.
+/// Exact current violators of [`error_types_live_in_their_module`], scanned
+/// against today's tree. Entries are removed as each module moves its error type
+/// into an `error.rs`. The list shrinks as that work lands; it grows only when
+/// the guard itself is tightened and reveals debt an earlier, looser rule had
+/// been hiding — never to make a new violation pass.
+///
+/// The three `chains/solana` entries are exactly that case: the rule used to
+/// exempt everything under `src/chains/` wholesale, so these were never
+/// reported. They are misfiled by the same standard that put `ApiError` inside
+/// `tokens/types.rs`, and they must reach zero with the rest.
 const PENDING_RELOCATION: &[&str] = &[
     "pools/types.rs",
     "apis/llm/types.rs",
@@ -1017,12 +1024,18 @@ const PENDING_RELOCATION: &[&str] = &[
     "ai/types.rs",
     "rpc/errors.rs",
     "tokens/types.rs",
+    "chains/solana/swaps/types.rs",
+    "chains/solana/assets/metaplex.rs",
+    "chains/solana/pools/reserve_accounts.rs",
 ];
 
 /// A `pub enum <Something>Error` (or `pub enum Error`) may only be declared in
-/// `src/errors/*.rs`, in a file named `error.rs` directly inside a top-level
-/// module directory (`src/<module>/error.rs`), or anywhere under
-/// `src/chains/` (the chain-execution split owns its own vocabulary).
+/// `src/errors/*.rs` or in a file named `error.rs` beside the code it describes
+/// — at any depth, so a submodule with a genuinely separate failure domain
+/// (`apis/llm/error.rs`, `chains/solana/error.rs`) owns its own vocabulary
+/// without a special case. The rule is "errors live in an `error.rs`"; anything
+/// else means the type is filed under an unrelated subject, which is how
+/// `ApiError` ended up inside `tokens/types.rs`.
 #[test]
 fn error_types_live_in_their_module() {
     fn is_allowed_location(relative: &Path) -> bool {
@@ -1034,13 +1047,10 @@ fn error_types_live_in_their_module() {
         if first == "errors" {
             return true;
         }
-        if first == "chains" {
+        if relative.file_name().and_then(|n| n.to_str()) == Some("error.rs") {
             return true;
         }
-        // src/<module>/error.rs — exactly one path segment after the
-        // top-level module directory, and it must be named `error.rs`.
-        let rest: Vec<_> = components.collect();
-        rest.len() == 1 && rest[0].as_os_str() == "error.rs"
+        false
     }
 
     let mut violations = Vec::new();
@@ -1063,10 +1073,10 @@ fn error_types_live_in_their_module() {
                     continue;
                 }
                 violations.push(format!(
-                    "src/{path_str}:{}: {} — error enums may only live in src/errors/*.rs, \
-                     src/<module>/error.rs, or src/chains/; add this exact path to \
-                     PENDING_RELOCATION only if it is a pre-existing violation being tracked \
-                     for a later migration task",
+                    "src/{path_str}:{}: {} — error enums may only live in src/errors/*.rs or in an \
+                     error.rs beside the code they describe; move the type into one rather \
+                     than adding a path here — PENDING_RELOCATION tracks pre-existing debt \
+                     only and must reach zero",
                     idx + 1,
                     trimmed
                 ));
