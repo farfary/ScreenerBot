@@ -936,6 +936,7 @@ const MIGRATED_TO_TYPED_ERRORS: &[&str] = &[
     "wallets",
     "tools",
     "chains",
+    "apis",
 ];
 
 /// True when `line` declares a two-parameter `Result<_, String>` — a signature

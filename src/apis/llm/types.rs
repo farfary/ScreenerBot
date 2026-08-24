@@ -287,6 +287,12 @@ pub enum LlmError {
 
     /// Provider disabled in config
     ProviderDisabled { provider: String },
+
+    /// The provider's API key was empty when the client was constructed.
+    MissingApiKey { provider: String },
+
+    /// The global LLM manager was initialized more than once.
+    AlreadyInitialized,
 }
 
 impl fmt::Display for LlmError {
@@ -330,15 +336,65 @@ impl fmt::Display for LlmError {
             LlmError::ProviderDisabled { provider } => {
                 write!(f, "[{provider}] Provider disabled in config")
             }
+            LlmError::MissingApiKey { provider } => {
+                write!(f, "[{provider}] API key cannot be empty")
+            }
+            LlmError::AlreadyInitialized => {
+                write!(f, "LLM manager already initialized")
+            }
         }
     }
 }
 
 impl std::error::Error for LlmError {}
 
-// Convert to String for compatibility with Result<T, String>
-impl From<LlmError> for String {
-    fn from(err: LlmError) -> String {
-        err.to_string()
+impl crate::errors::ErrorClass for LlmError {
+    fn is_retryable(&self) -> bool {
+        matches!(
+            self,
+            LlmError::RateLimited { .. } | LlmError::Timeout { .. } | LlmError::NetworkError { .. }
+        )
+    }
+
+    fn retry_after(&self) -> Option<std::time::Duration> {
+        match self {
+            LlmError::RateLimited { retry_after_ms, .. } => Some(
+                retry_after_ms
+                    .map(std::time::Duration::from_millis)
+                    .unwrap_or(std::time::Duration::from_secs(5)),
+            ),
+            LlmError::Timeout { .. } => Some(std::time::Duration::from_secs(1)),
+            LlmError::NetworkError { .. } => Some(std::time::Duration::from_millis(500)),
+            _ => None,
+        }
+    }
+
+    fn severity(&self) -> crate::errors::Severity {
+        use crate::errors::Severity;
+        match self {
+            LlmError::AuthError { .. } | LlmError::MissingApiKey { .. } => Severity::Critical,
+            LlmError::AlreadyInitialized => Severity::Critical,
+            LlmError::RateLimited { .. }
+            | LlmError::Timeout { .. }
+            | LlmError::NetworkError { .. }
+            | LlmError::ParseError { .. }
+            | LlmError::ApiError { .. } => Severity::Warning,
+            LlmError::InvalidResponse { .. } => Severity::Error,
+            LlmError::ProviderDisabled { .. } => Severity::Info,
+        }
+    }
+
+    fn http_status(&self) -> u16 {
+        match self {
+            LlmError::AuthError { .. } => 401,
+            LlmError::MissingApiKey { .. } => 400,
+            LlmError::RateLimited { .. } => 429,
+            LlmError::Timeout { .. } => 504,
+            LlmError::NetworkError { .. } => 502,
+            LlmError::ParseError { .. } | LlmError::InvalidResponse { .. } => 502,
+            LlmError::ApiError { status_code, .. } => *status_code,
+            LlmError::ProviderDisabled { .. } => 503,
+            LlmError::AlreadyInitialized => 500,
+        }
     }
 }

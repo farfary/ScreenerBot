@@ -83,7 +83,11 @@ pub(crate) async fn initialize_ai_runtime_if_enabled() -> Result<(), StartupErro
     }
 
     if crate::apis::llm::try_get_llm_manager().is_none() {
-        crate::apis::llm::init::init_providers_from_config().await?;
+        // SEAM: run/bootstrap still returns String errors via StartupError's
+        // From<String>; removed when this module migrates.
+        crate::apis::llm::init::init_providers_from_config()
+            .await
+            .map_err(|e| e.to_string())?;
     }
 
     Ok(())

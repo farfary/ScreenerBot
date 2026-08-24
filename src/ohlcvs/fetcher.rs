@@ -5,8 +5,9 @@
 //! 1. SolanaTracker — uses token address, credit-based, high quality
 //! 2. GeckoTerminal — uses pool address, rate-limited 30/min, free
 
-use crate::apis::{get_api_manager, ApiManager};
+use crate::apis::{get_api_manager, ApiManager, Error as ApiError};
 use crate::config::with_config;
+use crate::errors::NetworkError;
 use crate::events::{record_ohlcv_event, Severity};
 use crate::ohlcvs::types::{Candle, OhlcvError, OhlcvResult, Priority, Timeframe};
 use serde_json::json;
@@ -183,15 +184,18 @@ impl OhlcvFetcher {
                 Ok(data_points)
             }
             Err(err) => {
-                let lowered = err.to_lowercase();
-                let error_type = if lowered.contains("429") || lowered.contains("too many requests")
-                {
+                let is_rate_limited =
+                    matches!(&err, ApiError::Network(NetworkError::RateLimited { .. }));
+                let is_not_found = matches!(&err, ApiError::NotFound { .. })
+                    || matches!(&err, ApiError::Network(NetworkError::HttpStatus { status, .. }) if *status == 404);
+                let error_type = if is_rate_limited {
                     "rate_limit"
-                } else if lowered.contains("404") || lowered.contains("not found") {
+                } else if is_not_found {
                     "pool_not_found"
                 } else {
                     "api_error"
                 };
+                let err_str = err.to_string();
 
                 record_ohlcv_event(
                     "fetch_aggregate_error",
@@ -203,17 +207,17 @@ impl OhlcvFetcher {
                         "api_endpoint": api_endpoint,
                         "aggregate": aggregate,
                         "error_type": error_type,
-                        "error": err,
+                        "error": err_str,
                     }),
                 )
                 .await;
 
-                if lowered.contains("429") || lowered.contains("too many requests") {
+                if is_rate_limited {
                     Err(OhlcvError::RateLimitExceeded)
-                } else if lowered.contains("404") || lowered.contains("not found") {
+                } else if is_not_found {
                     Err(OhlcvError::PoolNotFound(pool_address.to_string()))
                 } else {
-                    Err(OhlcvError::ApiError(err))
+                    Err(OhlcvError::ApiError(err_str))
                 }
             }
         }
@@ -320,13 +324,13 @@ impl OhlcvFetcher {
                     json!({
                         "mint": mint,
                         "interval": interval,
-                        "error": &err,
+                        "error": err.to_string(),
                         "latency_ms": latency,
                     }),
                 )
                 .await;
 
-                Err(OhlcvError::ApiError(err))
+                Err(OhlcvError::ApiError(err.to_string()))
             }
         }
     }
@@ -540,19 +544,18 @@ impl OhlcvFetcher {
                 Ok(data_points)
             }
             Err(err) => {
-                let lowered = err.to_lowercase();
-
-                let error_type = if lowered.contains("429") || lowered.contains("too many requests")
-                {
+                let is_rate_limited =
+                    matches!(&err, ApiError::Network(NetworkError::RateLimited { .. }));
+                let is_not_found = matches!(&err, ApiError::NotFound { .. })
+                    || matches!(&err, ApiError::Network(NetworkError::HttpStatus { status, .. }) if *status == 404);
+                let error_type = if is_rate_limited {
                     "rate_limit"
-                } else if lowered.contains("404")
-                    || lowered.contains("not found")
-                    || lowered.contains("no pool data returned")
-                {
+                } else if is_not_found {
                     "pool_not_found"
                 } else {
                     "api_error"
                 };
+                let err_str = err.to_string();
 
                 // ERROR: Record fetch failure
                 record_ohlcv_event(
@@ -564,21 +567,18 @@ impl OhlcvFetcher {
                         "pool_address": pool_address,
                         "timeframe": timeframe.to_string(),
                         "error_type": error_type,
-                        "error": err,
+                        "error": err_str,
                         "before_timestamp": before_timestamp,
                     }),
                 )
                 .await;
 
-                if lowered.contains("429") || lowered.contains("too many requests") {
+                if is_rate_limited {
                     Err(OhlcvError::RateLimitExceeded)
-                } else if lowered.contains("404")
-                    || lowered.contains("not found")
-                    || lowered.contains("no pool data returned")
-                {
+                } else if is_not_found {
                     Err(OhlcvError::PoolNotFound(pool_address.to_string()))
                 } else {
-                    Err(OhlcvError::ApiError(err))
+                    Err(OhlcvError::ApiError(err_str))
                 }
             }
         }

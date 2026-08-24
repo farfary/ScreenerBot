@@ -3,7 +3,7 @@
 use crate::logger::{self, LogTag};
 
 /// Initialize LLM providers based on configuration.
-pub async fn init_providers_from_config() -> Result<(), String> {
+pub async fn init_providers_from_config() -> crate::apis::Result<()> {
     use crate::apis::llm::{init_llm_manager, LlmManager};
     use crate::config::with_config;
 
@@ -210,9 +210,7 @@ pub async fn init_providers_from_config() -> Result<(), String> {
         }
     });
 
-    init_llm_manager(llm_manager)
-        .await
-        .map_err(|e| format!("Failed to initialize LLM manager: {e}"))?;
+    init_llm_manager(llm_manager).await?;
 
     if enabled_providers.is_empty() {
         logger::info(

@@ -54,7 +54,11 @@ pub(super) async fn fetch_dexscreener_profiles(
         .acquire_dexscreener_profiles()
         .await
         .map_err(|e| e.to_string())?;
-    let profiles = api.dexscreener.get_latest_profiles().await?;
+    let profiles = api
+        .dexscreener
+        .get_latest_profiles()
+        .await
+        .map_err(|e| e.to_string())?;
     permit.forget();
 
     Ok(profiles
@@ -86,7 +90,11 @@ pub(super) async fn fetch_dexscreener_latest_boosts(
         .acquire_dexscreener_boosts()
         .await
         .map_err(|e| e.to_string())?;
-    let boosts = api.dexscreener.get_latest_boosted_tokens().await?;
+    let boosts = api
+        .dexscreener
+        .get_latest_boosted_tokens()
+        .await
+        .map_err(|e| e.to_string())?;
     permit.forget();
 
     Ok(boosts
@@ -117,7 +125,8 @@ pub(super) async fn fetch_dexscreener_top_boosts(
     let boosts = api
         .dexscreener
         .get_top_boosted_tokens(Some(crate::chains::adapter().market_data_network()))
-        .await?;
+        .await
+        .map_err(|e| e.to_string())?;
     permit.forget();
 
     Ok(boosts
@@ -148,7 +157,8 @@ pub(super) async fn fetch_gecko_new_pools(
             None,
             Some(1),
         )
-        .await?;
+        .await
+        .map_err(|e| e.to_string())?;
     permit.forget();
 
     let mut records = Vec::new();
@@ -177,7 +187,8 @@ pub(super) async fn fetch_gecko_recent_updates(
     let response = api
         .geckoterminal
         .fetch_recently_updated_tokens(None, Some(crate::chains::adapter().market_data_network()))
-        .await?;
+        .await
+        .map_err(|e| e.to_string())?;
     permit.forget();
 
     Ok(response
@@ -208,7 +219,8 @@ pub(super) async fn fetch_gecko_trending(
             None,
             None,
         )
-        .await?;
+        .await
+        .map_err(|e| e.to_string())?;
     permit.forget();
 
     let mut records = Vec::new();

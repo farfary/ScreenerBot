@@ -10,7 +10,8 @@ pub mod types;
 use self::types::CoinGeckoCoin;
 use crate::apis::client::HttpClient;
 use crate::apis::stats::ApiStatsTracker;
-use crate::tokens::types::ApiError;
+use crate::apis::Error;
+use crate::errors::{DataError, NetworkError};
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -40,7 +41,7 @@ pub struct CoinGeckoClient {
 
 impl CoinGeckoClient {
     /// Create a new CoinGecko API client
-    pub fn new(enabled: bool) -> Result<Self, String> {
+    pub fn new(enabled: bool) -> Result<Self, Error> {
         let http_client = HttpClient::new(TIMEOUT_SECS)?;
         let stats = Arc::new(ApiStatsTracker::new());
 
@@ -63,9 +64,11 @@ impl CoinGeckoClient {
 
     /// Fetch all coins with platform addresses
     /// Returns coins that have Solana addresses in their platforms
-    pub async fn fetch_coins_list(&self) -> Result<Vec<CoinGeckoCoin>, ApiError> {
+    pub async fn fetch_coins_list(&self) -> Result<Vec<CoinGeckoCoin>, Error> {
         if !self.enabled {
-            return Err(ApiError::Disabled);
+            return Err(Error::Disabled {
+                provider: "CoinGecko".to_owned(),
+            });
         }
 
         let start = Instant::now();
@@ -80,7 +83,11 @@ impl CoinGeckoClient {
             .send()
             .await
             .map_err(|e| {
-                let error = ApiError::NetworkError(e.to_string());
+                let error: Error = NetworkError::RequestFailed {
+                    endpoint: url.clone(),
+                    detail: e.to_string(),
+                }
+                .into();
                 self.stats.record_cache_miss();
                 error
             })?;
@@ -89,17 +96,23 @@ impl CoinGeckoClient {
 
         if !response.status().is_success() {
             self.stats.record_request(false, elapsed).await;
-            return Err(ApiError::InvalidResponse(format!(
-                "HTTP {}",
-                response.status()
-            )));
+            return Err(NetworkError::HttpStatus {
+                endpoint: url.clone(),
+                status: response.status().as_u16(),
+                body: None,
+            }
+            .into());
         }
 
         let coins: Vec<CoinGeckoCoin> = match response.json().await {
             Ok(parsed) => parsed,
             Err(e) => {
                 self.stats.record_request(false, elapsed).await;
-                return Err(ApiError::InvalidResponse(e.to_string()));
+                return Err(DataError::ParseError {
+                    data_type: url.clone(),
+                    error: e.to_string(),
+                }
+                .into());
             }
         };
 

@@ -62,9 +62,11 @@ impl TogetherClient {
     /// * `api_key` - Together AI API key (from https://api.together.xyz/settings/api-keys)
     /// * `model` - Optional model override (defaults to "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo")
     /// * `enabled` - Whether the client is enabled
-    pub fn new(api_key: String, model: Option<String>, enabled: bool) -> Result<Self, String> {
+    pub fn new(api_key: String, model: Option<String>, enabled: bool) -> Result<Self, LlmError> {
         if api_key.trim().is_empty() {
-            return Err("Together AI API key cannot be empty".to_owned());
+            return Err(LlmError::MissingApiKey {
+                provider: "together".to_owned(),
+            });
         }
 
         Ok(Self {

@@ -55,9 +55,11 @@ impl GeminiClient {
     /// * `api_key` - Gemini API key (from https://aistudio.google.com/app/apikey)
     /// * `model` - Optional model override (defaults to "gemini-1.5-flash")
     /// * `enabled` - Whether the client is enabled
-    pub fn new(api_key: String, model: Option<String>, enabled: bool) -> Result<Self, String> {
+    pub fn new(api_key: String, model: Option<String>, enabled: bool) -> Result<Self, LlmError> {
         if api_key.trim().is_empty() {
-            return Err("Gemini API key cannot be empty".to_owned());
+            return Err(LlmError::MissingApiKey {
+                provider: "gemini".to_owned(),
+            });
         }
 
         Ok(Self {

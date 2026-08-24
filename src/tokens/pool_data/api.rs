@@ -52,7 +52,7 @@ pub async fn fetch_from_sources(
                             .await
                             .map_err(|e| TokenError::Api {
                                 source: "DexScreener".to_owned(),
-                                message: e,
+                                message: e.to_string(),
                             });
                         // Only forget permit if API call succeeded
                         if result.is_ok() {
@@ -90,7 +90,7 @@ pub async fn fetch_from_sources(
                         let result = api.geckoterminal.fetch_pools(&mint).await.map_err(|e| {
                             TokenError::Api {
                                 source: "GeckoTerminal".to_owned(),
-                                message: e,
+                                message: e.to_string(),
                             }
                         });
                         // Only forget permit if API call succeeded

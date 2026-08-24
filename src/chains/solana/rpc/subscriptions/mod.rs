@@ -45,8 +45,9 @@ pub async fn subscribe_logs_mentions(address: &str) -> crate::Result<LogsSubscri
             .is_err()
         {
             return Err(crate::Error::Network(
-                crate::errors::NetworkError::Generic {
-                    message: "Subscription transport unavailable".to_owned(),
+                crate::errors::NetworkError::RequestFailed {
+                    endpoint: "solana log subscription".to_owned(),
+                    detail: "subscription transport unavailable".to_owned(),
                 },
             ));
         }

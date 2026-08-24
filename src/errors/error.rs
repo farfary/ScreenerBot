@@ -39,6 +39,10 @@ pub enum Error {
     #[error(transparent)]
     Solana(#[from] crate::chains::solana::Error),
 
+    /// External API client errors (HTTP data sources, LLM providers).
+    #[error(transparent)]
+    Apis(#[from] crate::apis::Error),
+
     /// ScreenerBot account / sign-in errors.
     #[error(transparent)]
     Account(#[from] AccountError),
@@ -89,8 +93,13 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 impl From<reqwest::Error> for Error {
     fn from(err: reqwest::Error) -> Self {
-        Error::Network(NetworkError::Generic {
-            message: format!("HTTP request failed: {err}"),
+        let endpoint = err
+            .url()
+            .map(|u| u.as_str().to_owned())
+            .unwrap_or_else(|| "unknown".to_owned());
+        Error::Network(NetworkError::RequestFailed {
+            endpoint,
+            detail: err.to_string(),
         })
     }
 }
@@ -149,8 +158,9 @@ impl Error {
 
     /// Create a network error.
     pub fn network_error(message: impl Into<String>) -> Self {
-        Error::Network(NetworkError::Generic {
-            message: message.into(),
+        Error::Network(NetworkError::RequestFailed {
+            endpoint: "unknown".to_owned(),
+            detail: message.into(),
         })
     }
 
@@ -164,8 +174,9 @@ impl Error {
 
     /// Create a connectivity error for endpoint health issues.
     pub fn connectivity_error(message: impl Into<String>) -> Self {
-        Error::Network(NetworkError::Generic {
-            message: format!("Connectivity issue: {}", message.into()),
+        Error::Network(NetworkError::RequestFailed {
+            endpoint: "connectivity".to_owned(),
+            detail: message.into(),
         })
     }
 

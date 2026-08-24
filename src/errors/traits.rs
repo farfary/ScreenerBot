@@ -77,14 +77,29 @@ impl ErrorClass for AccountError {
 
 impl ErrorClass for NetworkError {
     fn is_retryable(&self) -> bool {
-        // NetworkError has a single surviving variant (`Generic`) after the
-        // T0 purge — every other variant had zero construction sites. HTTP
-        // transport failures are retryable by default.
-        true
+        match self {
+            NetworkError::RequestFailed { .. } | NetworkError::Timeout { .. } => true,
+            // A non-success status is only worth retrying unchanged when the
+            // server signalled a transient condition (5xx) or explicit
+            // throttling (429); any other status is a deterministic verdict.
+            NetworkError::HttpStatus { status, .. } => {
+                *status == 429 || (500..600).contains(status)
+            }
+            NetworkError::RateLimited { .. } => true,
+        }
     }
 
     fn retry_after(&self) -> Option<Duration> {
-        Some(Duration::from_millis(500))
+        match self {
+            NetworkError::RequestFailed { .. } => Some(Duration::from_millis(500)),
+            NetworkError::Timeout { .. } => Some(Duration::from_secs(1)),
+            NetworkError::HttpStatus { .. } => Some(Duration::from_secs(2)),
+            NetworkError::RateLimited { retry_after_ms, .. } => Some(
+                retry_after_ms
+                    .map(Duration::from_millis)
+                    .unwrap_or(Duration::from_secs(5)),
+            ),
+        }
     }
 
     fn severity(&self) -> Severity {
@@ -92,7 +107,12 @@ impl ErrorClass for NetworkError {
     }
 
     fn http_status(&self) -> u16 {
-        503
+        match self {
+            NetworkError::RequestFailed { .. } => 502,
+            NetworkError::Timeout { .. } => 504,
+            NetworkError::HttpStatus { status, .. } => *status,
+            NetworkError::RateLimited { .. } => 429,
+        }
     }
 }
 
@@ -265,6 +285,7 @@ impl ErrorClass for Error {
             Error::Tools(e) => e.is_retryable(),
             Error::Chains(e) => e.is_retryable(),
             Error::Solana(e) => e.is_retryable(),
+            Error::Apis(e) => e.is_retryable(),
             Error::Account(e) => e.is_retryable(),
             Error::Network(e) => e.is_retryable(),
             Error::Database(e) => e.is_retryable(),
@@ -291,6 +312,7 @@ impl ErrorClass for Error {
             Error::Tools(e) => e.retry_after(),
             Error::Chains(e) => e.retry_after(),
             Error::Solana(e) => e.retry_after(),
+            Error::Apis(e) => e.retry_after(),
             Error::Account(e) => e.retry_after(),
             Error::Network(e) => e.retry_after(),
             Error::Database(e) => e.retry_after(),
@@ -312,6 +334,7 @@ impl ErrorClass for Error {
             Error::Tools(e) => e.severity(),
             Error::Chains(e) => e.severity(),
             Error::Solana(e) => e.severity(),
+            Error::Apis(e) => e.severity(),
             Error::Account(e) => e.severity(),
             Error::Network(e) => e.severity(),
             Error::Database(e) => e.severity(),
@@ -334,6 +357,7 @@ impl ErrorClass for Error {
             Error::Tools(e) => e.http_status(),
             Error::Chains(e) => e.http_status(),
             Error::Solana(e) => e.http_status(),
+            Error::Apis(e) => e.http_status(),
             Error::Account(e) => e.http_status(),
             Error::Network(e) => e.http_status(),
             Error::Database(e) => e.http_status(),

@@ -11,7 +11,8 @@ pub mod types;
 use self::types::{DefiLlamaPriceResponse, DefiLlamaProtocol};
 use crate::apis::client::HttpClient;
 use crate::apis::stats::ApiStatsTracker;
-use crate::tokens::types::ApiError;
+use crate::apis::Error;
+use crate::errors::{DataError, NetworkError};
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -37,7 +38,7 @@ pub struct DefiLlamaClient {
 
 impl DefiLlamaClient {
     /// Create a new DefiLlama API client
-    pub fn new(enabled: bool) -> Result<Self, String> {
+    pub fn new(enabled: bool) -> Result<Self, Error> {
         let http_client = HttpClient::new(TIMEOUT_SECS)?;
         let stats = Arc::new(ApiStatsTracker::new());
 
@@ -59,9 +60,11 @@ impl DefiLlamaClient {
     }
 
     /// Fetch all DeFi protocols
-    pub async fn fetch_protocols(&self) -> Result<Vec<DefiLlamaProtocol>, ApiError> {
+    pub async fn fetch_protocols(&self) -> Result<Vec<DefiLlamaProtocol>, Error> {
         if !self.enabled {
-            return Err(ApiError::Disabled);
+            return Err(Error::Disabled {
+                provider: "DeFiLlama".to_owned(),
+            });
         }
 
         let start = Instant::now();
@@ -75,7 +78,11 @@ impl DefiLlamaClient {
             .send()
             .await
             .map_err(|e| {
-                let error = ApiError::NetworkError(e.to_string());
+                let error: Error = NetworkError::RequestFailed {
+                    endpoint: url.clone(),
+                    detail: e.to_string(),
+                }
+                .into();
                 self.stats.record_cache_miss();
                 error
             })?;
@@ -84,17 +91,23 @@ impl DefiLlamaClient {
 
         if !response.status().is_success() {
             self.stats.record_request(false, elapsed).await;
-            return Err(ApiError::InvalidResponse(format!(
-                "HTTP {}",
-                response.status()
-            )));
+            return Err(NetworkError::HttpStatus {
+                endpoint: url.clone(),
+                status: response.status().as_u16(),
+                body: None,
+            }
+            .into());
         }
 
         let protocols: Vec<DefiLlamaProtocol> = match response.json().await {
             Ok(parsed) => parsed,
             Err(e) => {
                 self.stats.record_request(false, elapsed).await;
-                return Err(ApiError::InvalidResponse(e.to_string()));
+                return Err(DataError::ParseError {
+                    data_type: url.clone(),
+                    error: e.to_string(),
+                }
+                .into());
             }
         };
 
@@ -107,9 +120,11 @@ impl DefiLlamaClient {
     ///
     /// # Arguments
     /// * `mint` - Solana token mint address
-    pub async fn fetch_token_price(&self, mint: &str) -> Result<f64, ApiError> {
+    pub async fn fetch_token_price(&self, mint: &str) -> Result<f64, Error> {
         if !self.enabled {
-            return Err(ApiError::Disabled);
+            return Err(Error::Disabled {
+                provider: "DeFiLlama".to_owned(),
+            });
         }
 
         let start = Instant::now();
@@ -123,7 +138,11 @@ impl DefiLlamaClient {
             .send()
             .await
             .map_err(|e| {
-                let error = ApiError::NetworkError(e.to_string());
+                let error: Error = NetworkError::RequestFailed {
+                    endpoint: url.clone(),
+                    detail: e.to_string(),
+                }
+                .into();
                 self.stats.record_cache_miss();
                 error
             })?;
@@ -132,17 +151,23 @@ impl DefiLlamaClient {
 
         if !response.status().is_success() {
             self.stats.record_request(false, elapsed).await;
-            return Err(ApiError::InvalidResponse(format!(
-                "HTTP {}",
-                response.status()
-            )));
+            return Err(NetworkError::HttpStatus {
+                endpoint: url.clone(),
+                status: response.status().as_u16(),
+                body: None,
+            }
+            .into());
         }
 
         let price_response: DefiLlamaPriceResponse = match response.json().await {
             Ok(parsed) => parsed,
             Err(e) => {
                 self.stats.record_request(false, elapsed).await;
-                return Err(ApiError::InvalidResponse(e.to_string()));
+                return Err(DataError::ParseError {
+                    data_type: url.clone(),
+                    error: e.to_string(),
+                }
+                .into());
             }
         };
 
@@ -154,7 +179,10 @@ impl DefiLlamaClient {
             .coins
             .get(&price_key)
             .map(|p| p.price)
-            .ok_or_else(|| ApiError::NotFound)
+            .ok_or_else(|| Error::NotFound {
+                provider: "DeFiLlama".to_owned(),
+                resource: price_key,
+            })
     }
 
     /// Extract Solana token addresses from protocols

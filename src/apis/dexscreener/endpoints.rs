@@ -5,6 +5,8 @@ use super::types::{
     TokenBoostTop, TokenInfo, TokenOrder, TokenProfile,
 };
 use super::{default_chain_id, DexScreenerClient, DEXSCREENER_BASE_URL, MAX_TOKENS_PER_REQUEST};
+use crate::apis::Error;
+use crate::errors::{DataError, NetworkError};
 use crate::logger::{self, LogTag};
 use reqwest::StatusCode;
 use std::time::Duration;
@@ -26,7 +28,7 @@ impl DexScreenerClient {
         &self,
         token_address: &str,
         chain_id: Option<&str>,
-    ) -> Result<Vec<DexScreenerPool>, String> {
+    ) -> Result<Vec<DexScreenerPool>, Error> {
         let chain = chain_id.unwrap_or_else(|| default_chain_id());
         let endpoint = format!("token-pairs/v1/{chain}/{token_address}");
         let url = format!("{DEXSCREENER_BASE_URL}/{endpoint}");
@@ -62,17 +64,18 @@ impl DexScreenerClient {
         &self,
         addresses: &[String],
         chain_id: Option<&str>,
-    ) -> Result<Vec<DexScreenerPool>, String> {
+    ) -> Result<Vec<DexScreenerPool>, Error> {
         if addresses.is_empty() {
             return Ok(Vec::new());
         }
 
         if addresses.len() > MAX_TOKENS_PER_REQUEST {
-            return Err(format!(
-                "Too many addresses: {} (max {})",
-                addresses.len(),
-                MAX_TOKENS_PER_REQUEST
-            ));
+            return Err(DataError::ValidationError {
+                field: "addresses".to_owned(),
+                value: addresses.len().to_string(),
+                reason: format!("max {MAX_TOKENS_PER_REQUEST}"),
+            }
+            .into());
         }
 
         let chain = chain_id.unwrap_or_else(|| default_chain_id());
@@ -104,7 +107,7 @@ impl DexScreenerClient {
         &self,
         chain_id: &str,
         pair_address: &str,
-    ) -> Result<Option<DexScreenerPool>, String> {
+    ) -> Result<Option<DexScreenerPool>, Error> {
         let endpoint = format!("latest/dex/pairs/{chain_id}/{pair_address}");
         let url = format!("{DEXSCREENER_BASE_URL}/{endpoint}");
 
@@ -129,9 +132,14 @@ impl DexScreenerClient {
     ///
     /// # Returns
     /// Vec of matching pairs
-    pub async fn search(&self, query: &str) -> Result<Vec<DexScreenerPool>, String> {
+    pub async fn search(&self, query: &str) -> Result<Vec<DexScreenerPool>, Error> {
         if query.trim().is_empty() {
-            return Err("Query cannot be empty".to_owned());
+            return Err(DataError::ValidationError {
+                field: "query".to_owned(),
+                value: String::new(),
+                reason: "cannot be empty".to_owned(),
+            }
+            .into());
         }
 
         let endpoint = "latest/dex/search";
@@ -151,7 +159,7 @@ impl DexScreenerClient {
     }
 
     /// Get latest token profiles (newest listings)
-    pub async fn get_latest_profiles(&self) -> Result<Vec<TokenProfile>, String> {
+    pub async fn get_latest_profiles(&self) -> Result<Vec<TokenProfile>, Error> {
         let endpoint = "token-profiles/latest/v1";
         let url = format!("{DEXSCREENER_BASE_URL}/{endpoint}");
 
@@ -175,8 +183,18 @@ impl DexScreenerClient {
             // Simple 429 backoff to avoid hammering when rate limited
             if status.as_u16() == 429 {
                 tokio::time::sleep(Duration::from_secs(5)).await;
+                return Err(NetworkError::RateLimited {
+                    endpoint: endpoint.to_owned(),
+                    retry_after_ms: Some(5000),
+                }
+                .into());
             }
-            return Err(format!("DexScreener API error {status}: {body}"));
+            return Err(NetworkError::HttpStatus {
+                endpoint: endpoint.to_owned(),
+                status: status.as_u16(),
+                body: Some(body),
+            }
+            .into());
         }
 
         let raw: serde_json::Value = match response.json().await {
@@ -186,7 +204,11 @@ impl DexScreenerClient {
                 self.stats
                     .record_error_with_event("DexScreener", endpoint, format!("Parse error: {err}"))
                     .await;
-                return Err(format!("Failed to parse response: {err}"));
+                return Err(DataError::ParseError {
+                    data_type: endpoint.to_owned(),
+                    error: err.to_string(),
+                }
+                .into());
             }
         };
 
@@ -204,7 +226,11 @@ impl DexScreenerClient {
                         format!("Conversion error: {err}"),
                     )
                     .await;
-                Err(format!("Failed to decode token profiles: {err}"))
+                Err(DataError::ParseError {
+                    data_type: "token profiles".to_owned(),
+                    error: err.to_string(),
+                }
+                .into())
             }
         }
     }
@@ -220,7 +246,7 @@ impl DexScreenerClient {
     pub async fn get_top_boosted_tokens(
         &self,
         chain_id: Option<&str>,
-    ) -> Result<Vec<TokenBoostTop>, String> {
+    ) -> Result<Vec<TokenBoostTop>, Error> {
         let endpoint = "token-boosts/top/v1";
         let url = format!("{DEXSCREENER_BASE_URL}/{endpoint}");
         let builder = if let Some(chain) = chain_id {
@@ -240,7 +266,7 @@ impl DexScreenerClient {
     ///
     /// # Returns
     /// Vec<TokenBoostLatest> - Latest boosted tokens
-    pub async fn get_latest_boosted_tokens(&self) -> Result<Vec<TokenBoostLatest>, String> {
+    pub async fn get_latest_boosted_tokens(&self) -> Result<Vec<TokenBoostLatest>, Error> {
         let endpoint = "token-boosts/latest/v1";
         let url = format!("{DEXSCREENER_BASE_URL}/{endpoint}");
 
@@ -261,7 +287,7 @@ impl DexScreenerClient {
         chain_id: Option<&str>,
         sort_by: Option<&str>,
         order: Option<&str>,
-    ) -> Result<Vec<DexScreenerPool>, String> {
+    ) -> Result<Vec<DexScreenerPool>, Error> {
         let endpoint = "token-profiles/latest/v1";
         let url = format!("{DEXSCREENER_BASE_URL}/{endpoint}");
         let mut query_params: Vec<(String, String)> = Vec::new();
@@ -303,8 +329,18 @@ impl DexScreenerClient {
             // Simple 429 backoff to avoid hammering when rate limited
             if status.as_u16() == 429 {
                 tokio::time::sleep(Duration::from_secs(5)).await;
+                return Err(NetworkError::RateLimited {
+                    endpoint: endpoint.to_owned(),
+                    retry_after_ms: Some(5000),
+                }
+                .into());
             }
-            return Err(format!("DexScreener API error {status}: {body}"));
+            return Err(NetworkError::HttpStatus {
+                endpoint: endpoint.to_owned(),
+                status: status.as_u16(),
+                body: Some(body),
+            }
+            .into());
         }
 
         match response.json::<serde_json::Value>().await {
@@ -319,7 +355,11 @@ impl DexScreenerClient {
                 self.stats
                     .record_error_with_event("DexScreener", endpoint, format!("Parse error: {err}"))
                     .await;
-                Err(format!("Failed to parse response: {err}"))
+                Err(DataError::ParseError {
+                    data_type: endpoint.to_owned(),
+                    error: err.to_string(),
+                }
+                .into())
             }
         }
     }
@@ -328,7 +368,7 @@ impl DexScreenerClient {
     ///
     /// # Arguments
     /// * `address` - Token address
-    pub async fn get_token_info(&self, address: &str) -> Result<Option<TokenInfo>, String> {
+    pub async fn get_token_info(&self, address: &str) -> Result<Option<TokenInfo>, Error> {
         let endpoint = format!("token-profiles/{address}");
         let url = format!("{DEXSCREENER_BASE_URL}/{endpoint}");
 
@@ -355,8 +395,18 @@ impl DexScreenerClient {
             // Simple 429 backoff to avoid hammering when rate limited
             if status.as_u16() == 429 {
                 tokio::time::sleep(Duration::from_secs(5)).await;
+                return Err(NetworkError::RateLimited {
+                    endpoint: endpoint.to_owned(),
+                    retry_after_ms: Some(5000),
+                }
+                .into());
             }
-            return Err(format!("DexScreener API error {status}: {body}"));
+            return Err(NetworkError::HttpStatus {
+                endpoint: endpoint.to_owned(),
+                status: status.as_u16(),
+                body: Some(body),
+            }
+            .into());
         }
 
         match response.json::<TokenInfo>().await {
@@ -373,7 +423,11 @@ impl DexScreenerClient {
                         format!("Parse error: {err}"),
                     )
                     .await;
-                Err(format!("Failed to parse response: {err}"))
+                Err(DataError::ParseError {
+                    data_type: endpoint.to_owned(),
+                    error: err.to_string(),
+                }
+                .into())
             }
         }
     }
@@ -388,7 +442,7 @@ impl DexScreenerClient {
         &self,
         token_address: &str,
         chain_id: Option<&str>,
-    ) -> Result<Vec<TokenOrder>, String> {
+    ) -> Result<Vec<TokenOrder>, Error> {
         let chain = chain_id.unwrap_or_else(|| default_chain_id());
         let endpoint = format!("orders/v1/{chain}/{token_address}");
         let url = format!("{DEXSCREENER_BASE_URL}/{endpoint}");
@@ -406,7 +460,7 @@ impl DexScreenerClient {
     }
 
     /// Get supported chains
-    pub async fn get_supported_chains(&self) -> Result<Vec<ChainInfo>, String> {
+    pub async fn get_supported_chains(&self) -> Result<Vec<ChainInfo>, Error> {
         let endpoint = "chains/v1";
         let url = format!("{DEXSCREENER_BASE_URL}/{endpoint}");
 
@@ -421,7 +475,7 @@ impl DexScreenerClient {
     }
 
     /// Legacy method for backward compatibility - redirects to fetch_token_pools
-    pub async fn fetch_pools(&self, mint: &str) -> Result<Vec<DexScreenerPool>, String> {
+    pub async fn fetch_pools(&self, mint: &str) -> Result<Vec<DexScreenerPool>, Error> {
         self.fetch_token_pools(mint, None).await
     }
 }

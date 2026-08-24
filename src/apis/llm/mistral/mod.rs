@@ -60,9 +60,11 @@ impl MistralClient {
     /// * `api_key` - Mistral AI API key (from https://console.mistral.ai/)
     /// * `model` - Optional model override (defaults to "mistral-small-latest")
     /// * `enabled` - Whether the client is enabled
-    pub fn new(api_key: String, model: Option<String>, enabled: bool) -> Result<Self, String> {
+    pub fn new(api_key: String, model: Option<String>, enabled: bool) -> Result<Self, LlmError> {
         if api_key.trim().is_empty() {
-            return Err("Mistral AI API key cannot be empty".to_owned());
+            return Err(LlmError::MissingApiKey {
+                provider: "mistral".to_owned(),
+            });
         }
 
         Ok(Self {

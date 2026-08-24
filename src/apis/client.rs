@@ -1,5 +1,7 @@
 //! Base HTTP client with rate limiting
 
+use crate::apis::Error;
+use crate::errors::NetworkError;
 use reqwest::Client;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -31,13 +33,15 @@ impl RateLimiter {
     }
 
     /// Wait until we can make a request (respects rate limits)
-    pub async fn acquire(&self) -> Result<RateLimitGuard, String> {
-        let permit = self
-            .semaphore
-            .clone()
-            .acquire_owned()
-            .await
-            .map_err(|e| format!("Failed to acquire rate limiter permit: {e}"))?;
+    pub async fn acquire(&self) -> Result<RateLimitGuard, Error> {
+        let permit =
+            self.semaphore
+                .clone()
+                .acquire_owned()
+                .await
+                .map_err(|e| Error::RateLimiter {
+                    detail: format!("failed to acquire rate limiter permit: {e}"),
+                })?;
 
         if !self.min_interval.is_zero() {
             let mut last = self.last_request.lock().await;
@@ -86,11 +90,14 @@ pub struct HttpClient {
 
 impl HttpClient {
     /// Create a new HTTP client with the given timeout in seconds
-    pub fn new(timeout_secs: u64) -> Result<Self, String> {
+    pub fn new(timeout_secs: u64) -> Result<Self, Error> {
         let client = crate::net::apply_proxy(Client::builder())
             .timeout(Duration::from_secs(timeout_secs))
             .build()
-            .map_err(|e| format!("Failed to create HTTP client: {e}"))?;
+            .map_err(|e| NetworkError::RequestFailed {
+                endpoint: "http client build".to_owned(),
+                detail: e.to_string(),
+            })?;
 
         Ok(Self {
             client,

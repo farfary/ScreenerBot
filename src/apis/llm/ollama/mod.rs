@@ -53,7 +53,7 @@ impl OllamaClient {
         base_url: Option<String>,
         model: Option<String>,
         enabled: bool,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, LlmError> {
         Ok(Self {
             base_url: base_url.unwrap_or_else(|| DEFAULT_BASE_URL.to_string()),
             client: crate::net::client(),

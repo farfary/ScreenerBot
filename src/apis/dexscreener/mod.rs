@@ -23,6 +23,8 @@ pub use self::types::{
 
 use crate::apis::client::RateLimiter;
 use crate::apis::stats::ApiStatsTracker;
+use crate::apis::Error;
+use crate::errors::{DataError, NetworkError};
 use reqwest::Client;
 use serde::de::DeserializeOwned;
 use std::sync::Arc;
@@ -80,9 +82,14 @@ pub struct DexScreenerClient {
 }
 
 impl DexScreenerClient {
-    pub fn new(enabled: bool, timeout_seconds: u64) -> Result<Self, String> {
+    pub fn new(enabled: bool, timeout_seconds: u64) -> Result<Self, Error> {
         if timeout_seconds == 0 {
-            return Err("Timeout must be greater than zero".to_owned());
+            return Err(DataError::ValidationError {
+                field: "timeout_seconds".to_owned(),
+                value: "0".to_owned(),
+                reason: "must be greater than zero".to_owned(),
+            }
+            .into());
         }
 
         Ok(Self {
@@ -112,14 +119,13 @@ impl DexScreenerClient {
         self.stats.get_stats().await
     }
 
-    fn ensure_enabled(&self, endpoint: &str) -> Result<(), String> {
+    fn ensure_enabled(&self, _endpoint: &str) -> Result<(), Error> {
         if self.enabled {
             Ok(())
         } else {
-            Err(format!(
-                "DexScreener client disabled via configuration (endpoint={})",
-                endpoint
-            ))
+            Err(Error::Disabled {
+                provider: "DexScreener".to_owned(),
+            })
         }
     }
 
@@ -128,13 +134,10 @@ impl DexScreenerClient {
         endpoint: &str,
         builder: reqwest::RequestBuilder,
         limiter: &RateLimiter,
-    ) -> Result<(reqwest::Response, f64), String> {
+    ) -> Result<(reqwest::Response, f64), Error> {
         self.ensure_enabled(endpoint)?;
 
-        let guard = limiter
-            .acquire()
-            .await
-            .map_err(|e| format!("Rate limiter error: {e}"))?;
+        let guard = limiter.acquire().await?;
 
         let start = Instant::now();
         let response_result = builder.timeout(self.timeout).send().await;
@@ -152,7 +155,11 @@ impl DexScreenerClient {
                         format!("Request failed: {err}"),
                     )
                     .await;
-                Err(format!("Request failed: {err}"))
+                Err(NetworkError::RequestFailed {
+                    endpoint: endpoint.to_owned(),
+                    detail: err.to_string(),
+                }
+                .into())
             }
         }
     }
@@ -162,7 +169,7 @@ impl DexScreenerClient {
         endpoint: &str,
         builder: reqwest::RequestBuilder,
         limiter: &RateLimiter,
-    ) -> Result<T, String>
+    ) -> Result<T, Error>
     where
         T: DeserializeOwned,
     {
@@ -178,8 +185,18 @@ impl DexScreenerClient {
             // Simple 429 backoff to avoid hammering when rate limited
             if status.as_u16() == 429 {
                 tokio::time::sleep(Duration::from_secs(5)).await;
+                return Err(NetworkError::RateLimited {
+                    endpoint: endpoint.to_owned(),
+                    retry_after_ms: Some(5000),
+                }
+                .into());
             }
-            return Err(format!("DexScreener API error {status}: {body}"));
+            return Err(NetworkError::HttpStatus {
+                endpoint: endpoint.to_owned(),
+                status: status.as_u16(),
+                body: Some(body),
+            }
+            .into());
         }
 
         match response.json::<T>().await {
@@ -192,7 +209,11 @@ impl DexScreenerClient {
                 self.stats
                     .record_error_with_event("DexScreener", endpoint, format!("Parse error: {err}"))
                     .await;
-                Err(format!("Failed to parse response: {err}"))
+                Err(DataError::ParseError {
+                    data_type: endpoint.to_owned(),
+                    error: err.to_string(),
+                }
+                .into())
             }
         }
     }

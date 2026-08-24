@@ -321,42 +321,6 @@ pub struct SocialLink {
 }
 
 // ============================================================================
-// API ERROR TYPES
-// ============================================================================
-
-/// API error types
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum ApiError {
-    NetworkError(String),
-    RateLimitExceeded,
-    InvalidResponse(String),
-    NotFound,
-    Timeout,
-    Disabled,
-}
-
-impl std::fmt::Display for ApiError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ApiError::NetworkError(msg) => write!(f, "Network error: {msg}"),
-            ApiError::RateLimitExceeded => write!(f, "Rate limit exceeded"),
-            ApiError::InvalidResponse(msg) => write!(f, "Invalid response: {msg}"),
-            ApiError::NotFound => write!(f, "Not found"),
-            ApiError::Timeout => write!(f, "Request timeout"),
-            ApiError::Disabled => write!(f, "API disabled"),
-        }
-    }
-}
-
-impl std::error::Error for ApiError {}
-
-impl From<ApiError> for String {
-    fn from(err: ApiError) -> String {
-        err.to_string()
-    }
-}
-
-// ============================================================================
 // MARKET DATA TYPES (per source)
 // ============================================================================
 

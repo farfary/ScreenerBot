@@ -12,6 +12,8 @@ pub mod types;
 
 use crate::apis::client::RateLimiter;
 use crate::apis::stats::ApiStatsTracker;
+use crate::apis::Error;
+use crate::errors::{DataError, NetworkError};
 use reqwest::Client;
 use serde::de::DeserializeOwned;
 use std::sync::atomic::{AtomicI64, Ordering};
@@ -41,7 +43,7 @@ impl SolanaTrackerClient {
         api_key: String,
         rate_limit: usize,
         timeout_seconds: u64,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, Error> {
         Self::with_base_url(
             enabled,
             api_key,
@@ -59,9 +61,14 @@ impl SolanaTrackerClient {
         rate_limit: usize,
         timeout_seconds: u64,
         base_url: String,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, Error> {
         if timeout_seconds == 0 {
-            return Err("Timeout must be greater than zero".to_owned());
+            return Err(DataError::ValidationError {
+                field: "timeout_seconds".to_owned(),
+                value: "0".to_owned(),
+                reason: "must be greater than zero".to_owned(),
+            }
+            .into());
         }
 
         let url = if base_url.is_empty() {
@@ -94,32 +101,26 @@ impl SolanaTrackerClient {
         self.stats.get_stats().await
     }
 
-    fn ensure_enabled(&self, endpoint: &str) -> Result<(), String> {
+    fn ensure_enabled(&self, _endpoint: &str) -> Result<(), Error> {
         if !self.enabled {
-            return Err(format!(
-                "SolanaTracker client disabled (endpoint={})",
-                endpoint
-            ));
+            return Err(Error::Disabled {
+                provider: "SolanaTracker".to_owned(),
+            });
         }
         // Check if we know credits are exhausted
         let credits = self.remaining_credits.load(Ordering::Relaxed);
         if credits == 0 {
-            return Err(format!(
-                "SolanaTracker credits exhausted (endpoint={})",
-                endpoint
-            ));
+            return Err(Error::CreditsExhausted {
+                provider: "SolanaTracker".to_owned(),
+            });
         }
         Ok(())
     }
 
-    async fn get_json<T: DeserializeOwned>(&self, endpoint: &str, path: &str) -> Result<T, String> {
+    async fn get_json<T: DeserializeOwned>(&self, endpoint: &str, path: &str) -> Result<T, Error> {
         self.ensure_enabled(endpoint)?;
 
-        let guard = self
-            .rate_limiter
-            .acquire()
-            .await
-            .map_err(|e| format!("Rate limiter error: {e}"))?;
+        let guard = self.rate_limiter.acquire().await?;
 
         let url = format!("{}{}", self.base_url, path);
         let start = Instant::now();
@@ -146,7 +147,11 @@ impl SolanaTrackerClient {
                         format!("Request failed: {err}"),
                     )
                     .await;
-                return Err(format!("Request failed: {err}"));
+                return Err(NetworkError::RequestFailed {
+                    endpoint: endpoint.to_owned(),
+                    detail: err.to_string(),
+                }
+                .into());
             }
         };
 
@@ -180,7 +185,19 @@ impl SolanaTrackerClient {
                     format!("HTTP {status}: {body}"),
                 )
                 .await;
-            return Err(format!("SolanaTracker API error {status}: {body}"));
+            if status.as_u16() == 429 {
+                return Err(NetworkError::RateLimited {
+                    endpoint: endpoint.to_owned(),
+                    retry_after_ms: None,
+                }
+                .into());
+            }
+            return Err(NetworkError::HttpStatus {
+                endpoint: endpoint.to_owned(),
+                status: status.as_u16(),
+                body: Some(body),
+            }
+            .into());
         }
 
         match response.json::<T>().await {
@@ -197,7 +214,11 @@ impl SolanaTrackerClient {
                         format!("Parse error: {err}"),
                     )
                     .await;
-                Err(format!("Failed to parse response: {err}"))
+                Err(DataError::ParseError {
+                    data_type: endpoint.to_owned(),
+                    error: err.to_string(),
+                }
+                .into())
             }
         }
     }
@@ -213,7 +234,7 @@ impl SolanaTrackerClient {
         currency: &str,
         time_from: Option<i64>,
         time_to: Option<i64>,
-    ) -> Result<types::OhlcvResponse, String> {
+    ) -> Result<types::OhlcvResponse, Error> {
         let mut path = format!(
             "/chart/{}?type={}&currency={}",
             token_address, interval, currency
@@ -232,14 +253,14 @@ impl SolanaTrackerClient {
     pub async fn fetch_token_info(
         &self,
         token_address: &str,
-    ) -> Result<types::TokenInfoResponse, String> {
+    ) -> Result<types::TokenInfoResponse, Error> {
         let path = format!("/tokens/{}", token_address);
         self.get_json("token_info", &path).await
     }
 
     /// Check remaining API credits and cache the result.
-    pub async fn fetch_credits(&self) -> Result<types::CreditsResponse, String> {
-        let result: Result<types::CreditsResponse, String> =
+    pub async fn fetch_credits(&self) -> Result<types::CreditsResponse, Error> {
+        let result: Result<types::CreditsResponse, Error> =
             self.get_json("credits", "/credits").await;
         if let Ok(ref credits) = result {
             self.remaining_credits
@@ -249,11 +270,15 @@ impl SolanaTrackerClient {
     }
 
     /// Search tokens by name, symbol, or mint address.
-    pub async fn search_tokens(&self, query: &str) -> Result<Vec<types::SearchResult>, String> {
+    pub async fn search_tokens(&self, query: &str) -> Result<Vec<types::SearchResult>, Error> {
         // Build URL via reqwest::Url to get proper query-parameter encoding
         let base = format!("{}/search", self.base_url);
-        let url = reqwest::Url::parse_with_params(&base, &[("query", query)])
-            .map_err(|e| format!("Failed to build search URL: {e}"))?;
+        let url = reqwest::Url::parse_with_params(&base, &[("query", query)]).map_err(|e| {
+            DataError::ParseError {
+                data_type: "search URL".to_owned(),
+                error: e.to_string(),
+            }
+        })?;
         // get_json expects a path (with query string), so extract it from the parsed URL
         let path = format!("{}?{}", url.path(), url.query().unwrap_or_default());
         self.get_json("search", &path).await

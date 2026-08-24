@@ -63,9 +63,11 @@ impl AnthropicClient {
     /// * `api_key` - Anthropic API key (from https://console.anthropic.com/settings/keys)
     /// * `model` - Optional model override (defaults to "claude-3-haiku-20240307")
     /// * `enabled` - Whether the client is enabled
-    pub fn new(api_key: String, model: Option<String>, enabled: bool) -> Result<Self, String> {
+    pub fn new(api_key: String, model: Option<String>, enabled: bool) -> Result<Self, LlmError> {
         if api_key.trim().is_empty() {
-            return Err("Anthropic API key cannot be empty".to_owned());
+            return Err(LlmError::MissingApiKey {
+                provider: "anthropic".to_owned(),
+            });
         }
 
         Ok(Self {

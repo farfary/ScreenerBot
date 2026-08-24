@@ -74,9 +74,11 @@ impl OpenRouterClient {
         enabled: bool,
         site_url: Option<String>,
         site_name: Option<String>,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, LlmError> {
         if api_key.trim().is_empty() {
-            return Err("OpenRouter API key cannot be empty".to_owned());
+            return Err(LlmError::MissingApiKey {
+                provider: "openrouter".to_owned(),
+            });
         }
 
         Ok(Self {

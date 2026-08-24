@@ -19,6 +19,8 @@
 //! - Graceful shutdown handling
 //! - Thread-safe price access for concurrent operations
 
+use crate::apis::Error;
+use crate::errors::{DataError, InternalError, NetworkError};
 use crate::logger::{self, LogTag};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -198,7 +200,7 @@ pub fn is_sol_price_service_running() -> bool {
 
 /// Manually fetch and cache SOL price (useful for debug tools)
 /// Returns the fetched price on success
-pub async fn fetch_and_cache_sol_price() -> Result<f64, String> {
+pub async fn fetch_and_cache_sol_price() -> Result<f64, Error> {
     let (price, source) = fetch_sol_price().await?;
 
     // Update cache
@@ -214,7 +216,10 @@ pub async fn fetch_and_cache_sol_price() -> Result<f64, String> {
             };
             Ok(price)
         }
-        Err(e) => Err(format!("Failed to update cache: {e}")),
+        Err(e) => Err(InternalError::InvariantViolation {
+            message: format!("SOL price cache lock poisoned: {e}"),
+        }
+        .into()),
     }
 }
 
@@ -228,7 +233,7 @@ pub async fn fetch_and_cache_sol_price() -> Result<f64, String> {
 pub async fn start_sol_price_service(
     shutdown: Arc<Notify>,
     monitor: tokio_metrics::TaskMonitor,
-) -> Result<tokio::task::JoinHandle<()>, String> {
+) -> Result<tokio::task::JoinHandle<()>, Error> {
     logger::info(LogTag::SolPrice, "Starting SOL price service");
 
     // Mark service as running
@@ -365,7 +370,7 @@ async fn fetch_and_update_sol_price(consecutive_errors: &mut u32) {
 /// Fetch SOL/USD using the source cascade: DexScreener -> GeckoTerminal -> Jupiter.
 /// Returns `(price_usd, source_label)`. Each source is tried in order; on failure
 /// the next is used so a single provider's outage/rate-limit never blocks trading.
-async fn fetch_sol_price() -> Result<(f64, &'static str), String> {
+async fn fetch_sol_price() -> Result<(f64, &'static str), Error> {
     let mut errors: Vec<String> = Vec::new();
 
     match fetch_from_dexscreener().await {
@@ -401,36 +406,47 @@ async fn fetch_sol_price() -> Result<(f64, &'static str), String> {
         Err(e) => errors.push(format!("jupiter: {e}")),
     }
 
-    Err(format!(
-        "All SOL price sources failed: {}",
-        errors.join("; ")
-    ))
+    Err(Error::SourcesExhausted {
+        resource: "SOL price".to_owned(),
+        detail: errors.join("; "),
+    })
 }
 
 /// PRIMARY: fetch SOL/USD from DexScreener — the `priceUsd` of the highest-liquidity
 /// pair whose BASE token is WSOL (so the price is SOL's, not the quote token's).
-async fn fetch_from_dexscreener() -> Result<f64, String> {
+async fn fetch_from_dexscreener() -> Result<f64, Error> {
     let client = crate::net::client();
     let response = client
         .get(dexscreener_sol_url())
         .timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS))
         .send()
         .await
-        .map_err(|e| format!("Request failed: {e}"))?;
+        .map_err(|e| NetworkError::RequestFailed {
+            endpoint: "dexscreener sol price".to_owned(),
+            detail: e.to_string(),
+        })?;
 
     if !response.status().is_success() {
-        return Err(format!("HTTP error: {}", response.status()));
+        return Err(NetworkError::HttpStatus {
+            endpoint: "dexscreener sol price".to_owned(),
+            status: response.status().as_u16(),
+            body: None,
+        }
+        .into());
     }
 
-    let json: serde_json::Value = response
-        .json()
-        .await
-        .map_err(|e| format!("JSON parsing failed: {e}"))?;
+    let json: serde_json::Value = response.json().await.map_err(|e| DataError::ParseError {
+        data_type: "dexscreener sol price".to_owned(),
+        error: e.to_string(),
+    })?;
 
     let pairs = json
         .get("pairs")
         .and_then(|p| p.as_array())
-        .ok_or("no pairs in response")?;
+        .ok_or_else(|| DataError::InvalidFormat {
+            expected: "pairs array".to_owned(),
+            received: "no pairs in response".to_owned(),
+        })?;
 
     let mut best: Option<(f64, f64)> = None; // (price_usd, liquidity_usd)
     for pair in pairs {
@@ -460,49 +476,73 @@ async fn fetch_from_dexscreener() -> Result<f64, String> {
 
     match best {
         Some((price, _)) => Ok(price),
-        None => Err("no valid WSOL pair price".to_owned()),
+        None => Err(DataError::InvalidFormat {
+            expected: "a WSOL pair with a valid price".to_owned(),
+            received: "no valid WSOL pair price".to_owned(),
+        }
+        .into()),
     }
 }
 
 /// SECONDARY: fetch SOL/USD from GeckoTerminal's simple token-price endpoint.
-async fn fetch_from_geckoterminal() -> Result<f64, String> {
+async fn fetch_from_geckoterminal() -> Result<f64, Error> {
     let client = crate::net::client();
     let response = client
         .get(geckoterminal_sol_url())
         .timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS))
         .send()
         .await
-        .map_err(|e| format!("Request failed: {e}"))?;
+        .map_err(|e| NetworkError::RequestFailed {
+            endpoint: "geckoterminal sol price".to_owned(),
+            detail: e.to_string(),
+        })?;
 
     if !response.status().is_success() {
-        return Err(format!("HTTP error: {}", response.status()));
+        return Err(NetworkError::HttpStatus {
+            endpoint: "geckoterminal sol price".to_owned(),
+            status: response.status().as_u16(),
+            body: None,
+        }
+        .into());
     }
 
-    let json: serde_json::Value = response
-        .json()
-        .await
-        .map_err(|e| format!("JSON parsing failed: {e}"))?;
+    let json: serde_json::Value = response.json().await.map_err(|e| DataError::ParseError {
+        data_type: "geckoterminal sol price".to_owned(),
+        error: e.to_string(),
+    })?;
 
     let price_str = json
         .pointer("/data/attributes/token_prices")
         .and_then(|m| m.as_object())
         .and_then(|m| m.values().next())
         .and_then(|v| v.as_str())
-        .ok_or("no token price in response")?;
+        .ok_or_else(|| DataError::InvalidFormat {
+            expected: "a token price".to_owned(),
+            received: "no token price in response".to_owned(),
+        })?;
 
-    let price: f64 = price_str
-        .parse()
-        .map_err(|e| format!("price parse failed: {e}"))?;
+    let price: f64 =
+        price_str
+            .parse()
+            .map_err(|e: std::num::ParseFloatError| DataError::ParseError {
+                data_type: "geckoterminal sol price".to_owned(),
+                error: e.to_string(),
+            })?;
 
     if price > 0.0 && price.is_finite() {
         Ok(price)
     } else {
-        Err(format!("invalid price: {price}"))
+        Err(DataError::ValidationError {
+            field: "price".to_owned(),
+            value: price.to_string(),
+            reason: "not a positive finite value".to_owned(),
+        }
+        .into())
     }
 }
 
 /// LAST-RESORT: fetch SOL price from Jupiter API
-async fn fetch_sol_price_from_jupiter() -> Result<f64, String> {
+async fn fetch_sol_price_from_jupiter() -> Result<f64, Error> {
     // Yield to in-flight swaps and space against other background Jupiter calls
     // so price polling never starves the swap rate budget (lite-api is per-IP).
     crate::apis::jupiter::throttle::acquire_background().await;
@@ -514,29 +554,46 @@ async fn fetch_sol_price_from_jupiter() -> Result<f64, String> {
         .timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS))
         .send()
         .await
-        .map_err(|e| format!("Request failed: {e}"))?;
+        .map_err(|e| NetworkError::RequestFailed {
+            endpoint: "jupiter sol price".to_owned(),
+            detail: e.to_string(),
+        })?;
 
     if !response.status().is_success() {
-        return Err(format!("HTTP error: {}", response.status()));
+        return Err(NetworkError::HttpStatus {
+            endpoint: "jupiter sol price".to_owned(),
+            status: response.status().as_u16(),
+            body: None,
+        }
+        .into());
     }
 
-    let price_response: JupiterPriceResponse = response
-        .json()
-        .await
-        .map_err(|e| format!("JSON parsing failed: {e}"))?;
+    let price_response: JupiterPriceResponse =
+        response.json().await.map_err(|e| DataError::ParseError {
+            data_type: "jupiter sol price".to_owned(),
+            error: e.to_string(),
+        })?;
 
     // Extract the native asset's price from the response, keyed by mint. A
     // missing key gets the same error-propagation treatment as any other parse
     // failure on this path — no unwrap/panic and no silent zero substitution.
     let sol_price = price_response
         .get(crate::chains::adapter().native_asset_address())
-        .ok_or_else(|| "native asset price missing from Jupiter response".to_owned())?
+        .ok_or_else(|| DataError::InvalidFormat {
+            expected: "native asset price".to_owned(),
+            received: "missing from Jupiter response".to_owned(),
+        })?
         .usd_price;
 
     if sol_price > 0.0 && sol_price.is_finite() {
         Ok(sol_price)
     } else {
-        Err(format!("Invalid SOL price: {sol_price}"))
+        Err(DataError::ValidationError {
+            field: "sol_price".to_owned(),
+            value: sol_price.to_string(),
+            reason: "not a positive finite value".to_owned(),
+        }
+        .into())
     }
 }
 
@@ -619,7 +676,7 @@ pub fn get_sol_price_stats() -> String {
 }
 
 /// Force refresh SOL price (for manual testing)
-pub async fn force_refresh_sol_price() -> Result<f64, String> {
+pub async fn force_refresh_sol_price() -> Result<f64, Error> {
     logger::info(LogTag::SolPrice, "Force refreshing SOL price");
 
     let mut consecutive_errors = 0u32;
@@ -629,6 +686,9 @@ pub async fn force_refresh_sol_price() -> Result<f64, String> {
     if price > 0.0 {
         Ok(price)
     } else {
-        Err("Failed to refresh SOL price".to_owned())
+        Err(Error::SourcesExhausted {
+            resource: "SOL price".to_owned(),
+            detail: "refresh did not produce a valid price".to_owned(),
+        })
     }
 }

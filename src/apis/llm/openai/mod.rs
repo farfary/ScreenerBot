@@ -53,9 +53,11 @@ impl OpenAiClient {
     /// * `api_key` - OpenAI API key (from https://platform.openai.com/api-keys)
     /// * `model` - Optional model override (defaults to "gpt-4o-mini")
     /// * `enabled` - Whether the client is enabled
-    pub fn new(api_key: String, model: Option<String>, enabled: bool) -> Result<Self, String> {
+    pub fn new(api_key: String, model: Option<String>, enabled: bool) -> Result<Self, LlmError> {
         if api_key.trim().is_empty() {
-            return Err("OpenAI API key cannot be empty".to_owned());
+            return Err(LlmError::MissingApiKey {
+                provider: "openai".to_owned(),
+            });
         }
 
         Ok(Self {

@@ -68,9 +68,11 @@ impl DeepSeekClient {
     /// * `api_key` - DeepSeek API key (from https://platform.deepseek.com/api-keys)
     /// * `model` - Optional model override (defaults to "deepseek-chat")
     /// * `enabled` - Whether the client is enabled
-    pub fn new(api_key: String, model: Option<String>, enabled: bool) -> Result<Self, String> {
+    pub fn new(api_key: String, model: Option<String>, enabled: bool) -> Result<Self, LlmError> {
         if api_key.trim().is_empty() {
-            return Err("DeepSeek API key cannot be empty".to_owned());
+            return Err(LlmError::MissingApiKey {
+                provider: "deepseek".to_owned(),
+            });
         }
 
         Ok(Self {

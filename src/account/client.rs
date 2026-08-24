@@ -81,8 +81,9 @@ fn client() -> Result<reqwest::Client> {
         // password crosses this connection.
         .build()
         .map_err(|e| {
-            Error::Network(NetworkError::Generic {
-                message: format!("could not build HTTP client: {e}"),
+            Error::Network(NetworkError::RequestFailed {
+                endpoint: "account http client".to_owned(),
+                detail: e.to_string(),
             })
         })
 }
@@ -159,8 +160,9 @@ async fn post_token(body: serde_json::Value) -> Result<TokenResponse> {
         .send()
         .await
         .map_err(|e| {
-            Error::Network(NetworkError::Generic {
-                message: format!("could not reach screenerbot.io: {e}"),
+            Error::Network(NetworkError::RequestFailed {
+                endpoint: "screenerbot.io".to_owned(),
+                detail: e.to_string(),
             })
         })?;
 
@@ -234,8 +236,9 @@ pub async fn wallet_challenge(wallet: &str) -> Result<WalletChallenge> {
         .send()
         .await
         .map_err(|e| {
-            Error::Network(NetworkError::Generic {
-                message: format!("could not reach screenerbot.io: {e}"),
+            Error::Network(NetworkError::RequestFailed {
+                endpoint: "screenerbot.io".to_owned(),
+                detail: e.to_string(),
             })
         })?;
 
@@ -288,8 +291,9 @@ pub async fn start_device_flow() -> Result<DeviceCodeResponse> {
         .send()
         .await
         .map_err(|e| {
-            Error::Network(NetworkError::Generic {
-                message: format!("could not reach screenerbot.io: {e}"),
+            Error::Network(NetworkError::RequestFailed {
+                endpoint: "screenerbot.io".to_owned(),
+                detail: e.to_string(),
             })
         })?;
 
@@ -333,8 +337,9 @@ pub async fn fetch_profile(access_token: &str) -> Result<AccountProfile> {
         .send()
         .await
         .map_err(|e| {
-            Error::Network(NetworkError::Generic {
-                message: format!("could not reach screenerbot.io: {e}"),
+            Error::Network(NetworkError::RequestFailed {
+                endpoint: "screenerbot.io".to_owned(),
+                detail: e.to_string(),
             })
         })?;
 

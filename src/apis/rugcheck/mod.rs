@@ -18,7 +18,8 @@ pub use self::types::{
 
 use crate::apis::client::{HttpClient, RateLimiter};
 use crate::apis::stats::ApiStatsTracker;
-use crate::tokens::types::ApiError;
+use crate::apis::Error;
+use crate::errors::{DataError, NetworkError};
 use reqwest::StatusCode;
 use serde::de::DeserializeOwned;
 use std::sync::Arc;
@@ -53,7 +54,7 @@ impl RugcheckClient {
         enabled: bool,
         rate_limit_per_minute: usize,
         timeout_secs: u64,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, Error> {
         let http_client = HttpClient::new(timeout_secs)?;
         let rate_limiter = RateLimiter::new(rate_limit_per_minute);
         let stats = Arc::new(ApiStatsTracker::new());
@@ -78,9 +79,11 @@ impl RugcheckClient {
         &self,
         url: &str,
         endpoint: &str,
-    ) -> Result<(reqwest::Response, f64), ApiError> {
+    ) -> Result<(reqwest::Response, f64), Error> {
         if !self.enabled {
-            return Err(ApiError::Disabled);
+            return Err(Error::Disabled {
+                provider: "Rugcheck".to_owned(),
+            });
         }
 
         let guard = match self.rate_limiter.acquire().await {
@@ -93,7 +96,7 @@ impl RugcheckClient {
                         format!("Rate limiter acquire failed: {err}"),
                     )
                     .await;
-                return Err(ApiError::RateLimitExceeded);
+                return Err(err);
             }
         };
 
@@ -110,12 +113,16 @@ impl RugcheckClient {
                 self.stats
                     .record_error_with_event("Rugcheck", endpoint, format!("Request failed: {err}"))
                     .await;
-                Err(ApiError::NetworkError(err.to_string()))
+                Err(NetworkError::RequestFailed {
+                    endpoint: endpoint.to_owned(),
+                    detail: err.to_string(),
+                }
+                .into())
             }
         }
     }
 
-    async fn parse_json<T>(&self, url: &str, endpoint: &str) -> Result<T, ApiError>
+    async fn parse_json<T>(&self, url: &str, endpoint: &str) -> Result<T, Error>
     where
         T: DeserializeOwned,
     {
@@ -131,18 +138,26 @@ impl RugcheckClient {
 
             // Check for 404 Not Found
             if status == StatusCode::NOT_FOUND {
-                return Err(ApiError::NotFound);
+                return Err(Error::NotFound {
+                    provider: "Rugcheck".to_owned(),
+                    resource: endpoint.to_owned(),
+                });
             }
 
             // Check for 400 Bad Request with "not found" in body (Rugcheck returns this for unanalyzed tokens)
             if status == StatusCode::BAD_REQUEST && body.contains("not found") {
-                return Err(ApiError::NotFound);
+                return Err(Error::NotFound {
+                    provider: "Rugcheck".to_owned(),
+                    resource: endpoint.to_owned(),
+                });
             }
 
-            return Err(ApiError::InvalidResponse(format!(
-                "HTTP {}: {}",
-                status, body
-            )));
+            return Err(NetworkError::HttpStatus {
+                endpoint: endpoint.to_owned(),
+                status: status.as_u16(),
+                body: Some(body),
+            }
+            .into());
         }
 
         match response.json::<T>().await {
@@ -155,7 +170,11 @@ impl RugcheckClient {
                 self.stats
                     .record_error_with_event("Rugcheck", endpoint, format!("Parse error: {err}"))
                     .await;
-                Err(ApiError::InvalidResponse(err.to_string()))
+                Err(DataError::ParseError {
+                    data_type: endpoint.to_owned(),
+                    error: err.to_string(),
+                }
+                .into())
             }
         }
     }
@@ -177,7 +196,7 @@ impl RugcheckClient {
     /// - 404 errors → Return Ok(None) (token not analyzed yet)
     /// - Decoding errors → Should never occur with flexible deserializers
     /// - Network errors → Propagated as ApiError for retry logic
-    pub async fn fetch_report(&self, mint: &str) -> Result<RugcheckInfo, ApiError> {
+    pub async fn fetch_report(&self, mint: &str) -> Result<RugcheckInfo, Error> {
         let url = format!("{RUGCHECK_BASE_URL}/{mint}/report");
         let api_response: RugcheckResponse = self.parse_json(&url, "rugcheck.report").await?;
         Ok(RugcheckInfo::from_response(api_response))
@@ -188,25 +207,25 @@ impl RugcheckClient {
     // ========================================================================
 
     /// Fetch new tokens from /v1/stats/new_tokens
-    pub async fn fetch_new_tokens(&self) -> Result<Vec<RugcheckNewToken>, ApiError> {
+    pub async fn fetch_new_tokens(&self) -> Result<Vec<RugcheckNewToken>, Error> {
         let url = format!("{RUGCHECK_STATS_BASE_URL}/new_tokens");
         self.parse_json(&url, "rugcheck.stats.new_tokens").await
     }
 
     /// Fetch most viewed tokens from /v1/stats/recent
-    pub async fn fetch_recent_tokens(&self) -> Result<Vec<RugcheckRecentToken>, ApiError> {
+    pub async fn fetch_recent_tokens(&self) -> Result<Vec<RugcheckRecentToken>, Error> {
         let url = format!("{RUGCHECK_STATS_BASE_URL}/recent");
         self.parse_json(&url, "rugcheck.stats.recent").await
     }
 
     /// Fetch trending tokens from /v1/stats/trending
-    pub async fn fetch_trending_tokens(&self) -> Result<Vec<RugcheckTrendingToken>, ApiError> {
+    pub async fn fetch_trending_tokens(&self) -> Result<Vec<RugcheckTrendingToken>, Error> {
         let url = format!("{RUGCHECK_STATS_BASE_URL}/trending");
         self.parse_json(&url, "rugcheck.stats.trending").await
     }
 
     /// Fetch verified tokens from /v1/stats/verified
-    pub async fn fetch_verified_tokens(&self) -> Result<Vec<RugcheckVerifiedToken>, ApiError> {
+    pub async fn fetch_verified_tokens(&self) -> Result<Vec<RugcheckVerifiedToken>, Error> {
         let url = format!("{RUGCHECK_STATS_BASE_URL}/verified");
         self.parse_json(&url, "rugcheck.stats.verified").await
     }

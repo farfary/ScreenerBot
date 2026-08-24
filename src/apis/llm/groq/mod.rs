@@ -65,9 +65,11 @@ impl GroqClient {
     /// * `api_key` - Groq API key (from https://console.groq.com/keys)
     /// * `model` - Optional model override (defaults to "llama-3.1-8b-instant")
     /// * `enabled` - Whether the client is enabled
-    pub fn new(api_key: String, model: Option<String>, enabled: bool) -> Result<Self, String> {
+    pub fn new(api_key: String, model: Option<String>, enabled: bool) -> Result<Self, LlmError> {
         if api_key.trim().is_empty() {
-            return Err("Groq API key cannot be empty".to_owned());
+            return Err(LlmError::MissingApiKey {
+                provider: "groq".to_owned(),
+            });
         }
 
         Ok(Self {

@@ -309,10 +309,10 @@ static LLM_MANAGER: OnceCell<Arc<LlmManager>> = OnceCell::const_new();
 /// Initialize the global LLM manager
 ///
 /// Should be called once at startup with configured provider clients.
-pub async fn init_llm_manager(manager: LlmManager) -> Result<(), String> {
+pub async fn init_llm_manager(manager: LlmManager) -> Result<(), LlmError> {
     LLM_MANAGER
         .set(Arc::new(manager))
-        .map_err(|_| "LLM manager already initialized".to_owned())
+        .map_err(|_| LlmError::AlreadyInitialized)
 }
 
 /// Get the global LLM manager

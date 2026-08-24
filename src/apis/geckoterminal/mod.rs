@@ -28,6 +28,8 @@ pub use self::types::{
 
 use crate::apis::client::RateLimiter;
 use crate::apis::stats::ApiStatsTracker;
+use crate::apis::Error;
+use crate::errors::{DataError, NetworkError};
 use reqwest::Client;
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
@@ -79,7 +81,7 @@ pub struct GeckoTerminalClient {
 }
 
 impl GeckoTerminalClient {
-    pub fn new(enabled: bool, rate_limit: usize, timeout_seconds: u64) -> Result<Self, String> {
+    pub fn new(enabled: bool, rate_limit: usize, timeout_seconds: u64) -> Result<Self, Error> {
         Self::with_base_url(
             enabled,
             rate_limit,
@@ -95,9 +97,14 @@ impl GeckoTerminalClient {
         rate_limit: usize,
         timeout_seconds: u64,
         base_url: String,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, Error> {
         if timeout_seconds == 0 {
-            return Err("Timeout must be greater than zero".to_owned());
+            return Err(DataError::ValidationError {
+                field: "timeout_seconds".to_owned(),
+                value: "0".to_owned(),
+                reason: "must be greater than zero".to_owned(),
+            }
+            .into());
         }
 
         let url = if base_url.is_empty() {
@@ -126,14 +133,13 @@ impl GeckoTerminalClient {
         self.stats.get_stats().await
     }
 
-    fn ensure_enabled(&self, endpoint: &str) -> Result<(), String> {
+    fn ensure_enabled(&self, _endpoint: &str) -> Result<(), Error> {
         if self.enabled {
             Ok(())
         } else {
-            Err(format!(
-                "GeckoTerminal client disabled via configuration (endpoint={})",
-                endpoint
-            ))
+            Err(Error::Disabled {
+                provider: "GeckoTerminal".to_owned(),
+            })
         }
     }
 
@@ -141,14 +147,10 @@ impl GeckoTerminalClient {
         &self,
         endpoint: &str,
         builder: reqwest::RequestBuilder,
-    ) -> Result<(reqwest::Response, f64), String> {
+    ) -> Result<(reqwest::Response, f64), Error> {
         self.ensure_enabled(endpoint)?;
 
-        let guard = self
-            .rate_limiter
-            .acquire()
-            .await
-            .map_err(|e| format!("Rate limiter error: {e}"))?;
+        let guard = self.rate_limiter.acquire().await?;
 
         // Honor any active 429 penalty BEFORE sending, while still holding the
         // limiter guard so every caller serializes behind the backoff window.
@@ -178,7 +180,11 @@ impl GeckoTerminalClient {
                         format!("Request failed: {err}"),
                     )
                     .await;
-                Err(format!("Request failed: {err}"))
+                Err(NetworkError::RequestFailed {
+                    endpoint: endpoint.to_owned(),
+                    detail: err.to_string(),
+                }
+                .into())
             }
         }
     }
@@ -187,7 +193,7 @@ impl GeckoTerminalClient {
         &self,
         endpoint: &str,
         builder: reqwest::RequestBuilder,
-    ) -> Result<T, String>
+    ) -> Result<T, Error>
     where
         T: DeserializeOwned,
     {
@@ -217,7 +223,19 @@ impl GeckoTerminalClient {
                     *penalty = Some(until);
                 }
             }
-            return Err(format!("GeckoTerminal API error {status}: {body}"));
+            if status.as_u16() == 429 {
+                return Err(NetworkError::RateLimited {
+                    endpoint: endpoint.to_owned(),
+                    retry_after_ms: None,
+                }
+                .into());
+            }
+            return Err(NetworkError::HttpStatus {
+                endpoint: endpoint.to_owned(),
+                status: status.as_u16(),
+                body: Some(body),
+            }
+            .into());
         }
 
         match response.json::<T>().await {
@@ -236,7 +254,11 @@ impl GeckoTerminalClient {
                         format!("Parse error: {err}"),
                     )
                     .await;
-                Err(format!("Failed to parse response: {err}"))
+                Err(DataError::ParseError {
+                    data_type: endpoint.to_owned(),
+                    error: err.to_string(),
+                }
+                .into())
             }
         }
     }

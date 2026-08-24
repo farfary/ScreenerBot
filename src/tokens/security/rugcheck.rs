@@ -194,17 +194,20 @@ pub async fn fetch_rugcheck_data(
             let api_manager = crate::apis::manager::get_api_manager();
             match api_manager.rugcheck.fetch_report(mint).await {
                 Ok(info) => info,
+                // Rugcheck has not analysed this mint yet. Matched on the variant,
+                // never on rendered text: this branch decides whether a token is
+                // simply unanalysed or genuinely failed, and a `Debug` scan for
+                // "NotFound" would silently change that the moment a variant is
+                // renamed.
+                Err(crate::apis::Error::NotFound { .. }) => return Ok(None),
+                Err(crate::apis::Error::Network(crate::errors::NetworkError::HttpStatus {
+                    status: 404,
+                    ..
+                })) => return Ok(None),
                 Err(e) => {
-                    // Check if it's a "not found" error (token not analyzed yet)
-                    let err_str = format!("{:?}", e);
-                    if err_str.contains("404") || err_str.contains("NotFound") {
-                        return Ok(None);
-                    }
-
-                    // Other errors
                     return Err(TokenError::Api {
                         source: "Rugcheck".to_owned(),
-                        message: err_str,
+                        message: e.to_string(),
                     });
                 }
             }

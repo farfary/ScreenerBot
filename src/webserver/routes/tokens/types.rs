@@ -816,7 +816,13 @@ pub(super) async fn fetch_and_add_token_from_external(mint: &str) -> Option<crat
             apis.dexscreener.fetch_token_pools(mint, None),
         )
         .await
-        .unwrap_or_else(|_| Err("provider fetch timed out".to_owned()));
+        .unwrap_or_else(|_| {
+            Err(crate::errors::NetworkError::Timeout {
+                endpoint: "token provider".to_owned(),
+                timeout_ms: EXTERNAL_FETCH_TIMEOUT.as_millis() as u64,
+            }
+            .into())
+        });
         match dex_fetch {
             Ok(pools) => {
                 if let Some(pool) = pools.first() {
@@ -900,7 +906,13 @@ pub(super) async fn fetch_and_add_token_from_external(mint: &str) -> Option<crat
         let gecko_fetch =
             tokio::time::timeout(EXTERNAL_FETCH_TIMEOUT, apis.geckoterminal.fetch_pools(mint))
                 .await
-                .unwrap_or_else(|_| Err("provider fetch timed out".to_owned()));
+                .unwrap_or_else(|_| {
+                    Err(crate::errors::NetworkError::Timeout {
+                        endpoint: "geckoterminal".to_owned(),
+                        timeout_ms: EXTERNAL_FETCH_TIMEOUT.as_millis() as u64,
+                    }
+                    .into())
+                });
         match gecko_fetch {
             Ok(pools) => {
                 if let Some(pool) = pools.first() {

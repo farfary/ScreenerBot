@@ -7,6 +7,8 @@ use super::types::{
 };
 use super::{default_network, MAX_TRENDING_PAGE};
 use super::{GeckoTerminalClient, OhlcvResponse, TokenInfo};
+use crate::apis::Error;
+use crate::errors::DataError;
 use crate::logger::{self, LogTag};
 use serde::Deserialize;
 
@@ -38,7 +40,7 @@ struct OhlcvMeta {
 
 impl GeckoTerminalClient {
     /// Fetch all pools for a single token address
-    pub async fn fetch_pools(&self, mint: &str) -> Result<Vec<GeckoTerminalPool>, String> {
+    pub async fn fetch_pools(&self, mint: &str) -> Result<Vec<GeckoTerminalPool>, Error> {
         self.fetch_pools_on_network(mint, None).await
     }
 
@@ -47,7 +49,7 @@ impl GeckoTerminalClient {
         &self,
         mint: &str,
         network: Option<&str>,
-    ) -> Result<Vec<GeckoTerminalPool>, String> {
+    ) -> Result<Vec<GeckoTerminalPool>, Error> {
         let network_id = network.unwrap_or_else(|| default_network());
         let endpoint = format!("networks/{network_id}/tokens/{mint}/pools");
         let url = format!("{}/{endpoint}", self.base_url);
@@ -78,7 +80,7 @@ impl GeckoTerminalClient {
         include: Option<&str>,
         page: Option<u32>,
         sort: Option<&str>,
-    ) -> Result<Vec<GeckoTerminalPool>, String> {
+    ) -> Result<Vec<GeckoTerminalPool>, Error> {
         let endpoint = format!("networks/{network}/tokens/{token_address}/pools");
         let url = format!("{}/{endpoint}", self.base_url);
 
@@ -123,7 +125,7 @@ impl GeckoTerminalClient {
         page: Option<u32>,
         duration: Option<&str>,
         include: Option<Vec<&str>>,
-    ) -> Result<Vec<GeckoTerminalPool>, String> {
+    ) -> Result<Vec<GeckoTerminalPool>, Error> {
         let network_id = network.unwrap_or_else(|| default_network());
         let endpoint = format!("networks/{network_id}/trending_pools");
         let url = format!("{}/{endpoint}", self.base_url);
@@ -171,7 +173,7 @@ impl GeckoTerminalClient {
         include: Option<Vec<&str>>,
         page: Option<u32>,
         sort: Option<&str>,
-    ) -> Result<Vec<GeckoTerminalPool>, String> {
+    ) -> Result<Vec<GeckoTerminalPool>, Error> {
         let network_id = network.unwrap_or_else(|| default_network());
         let endpoint = format!("networks/{network_id}/pools");
         let url = format!("{}/{endpoint}", self.base_url);
@@ -221,7 +223,7 @@ impl GeckoTerminalClient {
         include: Option<Vec<&str>>,
         include_volume_breakdown: bool,
         include_composition: bool,
-    ) -> Result<GeckoTerminalPool, String> {
+    ) -> Result<GeckoTerminalPool, Error> {
         let network_id = network.unwrap_or_else(|| default_network());
         let endpoint = format!("networks/{network_id}/pools/{pool_address}");
         let url = format!("{}/{endpoint}", self.base_url);
@@ -260,7 +262,10 @@ impl GeckoTerminalClient {
             .into_iter()
             .next()
             .map(|p| p.to_pool(pool_address))
-            .ok_or_else(|| "No pool data returned".to_owned())
+            .ok_or_else(|| Error::NotFound {
+                provider: "GeckoTerminal".to_owned(),
+                resource: "pool".to_owned(),
+            })
     }
 
     /// Fetch multiple pools in one call (max 30 pool addresses)
@@ -271,12 +276,22 @@ impl GeckoTerminalClient {
         include: Option<Vec<&str>>,
         include_volume_breakdown: bool,
         include_composition: bool,
-    ) -> Result<Vec<GeckoTerminalPool>, String> {
+    ) -> Result<Vec<GeckoTerminalPool>, Error> {
         if addresses.is_empty() {
-            return Err("At least one address is required".to_owned());
+            return Err(DataError::ValidationError {
+                field: "addresses".to_owned(),
+                value: String::new(),
+                reason: "at least one address is required".to_owned(),
+            }
+            .into());
         }
         if addresses.len() > 30 {
-            return Err("Maximum 30 addresses allowed".to_owned());
+            return Err(DataError::ValidationError {
+                field: "addresses".to_owned(),
+                value: addresses.len().to_string(),
+                reason: "maximum 30 addresses allowed".to_owned(),
+            }
+            .into());
         }
 
         let network_id = network.unwrap_or_else(|| default_network());
@@ -332,7 +347,7 @@ impl GeckoTerminalClient {
         currency: Option<&str>,
         before_timestamp: Option<i64>,
         token: Option<&str>,
-    ) -> Result<OhlcvResponse, String> {
+    ) -> Result<OhlcvResponse, Error> {
         let endpoint = format!(
             "networks/{}/pools/{}/ohlcv/{}",
             network, pool_address, timeframe
@@ -384,7 +399,7 @@ impl GeckoTerminalClient {
         &self,
         network: &str,
         page: Option<u32>,
-    ) -> Result<Vec<(String, String)>, String> {
+    ) -> Result<Vec<(String, String)>, Error> {
         let endpoint = format!("networks/{network}/dexes");
         let url = format!("{}/{endpoint}", self.base_url);
 
@@ -419,7 +434,7 @@ impl GeckoTerminalClient {
         network: &str,
         include: Option<&str>,
         page: Option<u32>,
-    ) -> Result<Vec<GeckoTerminalPool>, String> {
+    ) -> Result<Vec<GeckoTerminalPool>, Error> {
         let endpoint = format!("networks/{network}/new_pools");
         let url = format!("{}/{endpoint}", self.base_url);
 
@@ -461,7 +476,7 @@ impl GeckoTerminalClient {
         addresses: &str,
         include: Option<&str>,
         include_composition: Option<bool>,
-    ) -> Result<GeckoTerminalTokensMultiResponse, String> {
+    ) -> Result<GeckoTerminalTokensMultiResponse, Error> {
         let endpoint = format!("networks/{network}/tokens/multi/{addresses}");
         let url = format!("{}/{endpoint}", self.base_url);
 
@@ -496,7 +511,7 @@ impl GeckoTerminalClient {
         &self,
         network: &str,
         address: &str,
-    ) -> Result<GeckoTerminalTokenInfoResponse, String> {
+    ) -> Result<GeckoTerminalTokenInfoResponse, Error> {
         let endpoint = format!("networks/{network}/tokens/{address}/info");
         let url = format!("{}/{endpoint}", self.base_url);
 
@@ -516,7 +531,7 @@ impl GeckoTerminalClient {
         &self,
         include: Option<&str>,
         network: Option<&str>,
-    ) -> Result<GeckoTerminalRecentlyUpdatedResponse, String> {
+    ) -> Result<GeckoTerminalRecentlyUpdatedResponse, Error> {
         let endpoint = "tokens/info_recently_updated";
         let url = format!("{}/{endpoint}", self.base_url);
 
@@ -552,7 +567,7 @@ impl GeckoTerminalClient {
         pool_address: &str,
         trade_volume_in_usd_greater_than: Option<f64>,
         token: Option<&str>,
-    ) -> Result<GeckoTerminalTradesResponse, String> {
+    ) -> Result<GeckoTerminalTradesResponse, Error> {
         let endpoint = format!("networks/{network}/pools/{pool_address}/trades");
         let url = format!("{}/{endpoint}", self.base_url);
 

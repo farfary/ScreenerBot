@@ -15,8 +15,11 @@
 
 // Base utilities
 pub mod client;
+mod error;
 pub mod manager;
 pub mod stats;
+
+pub use error::{Error, Result};
 
 // API client modules (each in its own subdirectory)
 pub mod coingecko;
