@@ -20,6 +20,7 @@ pub mod database;
 pub mod decimals;
 pub mod discovery;
 mod discovery_sources;
+mod error;
 pub mod events;
 pub mod favorites;
 pub mod filtered;
@@ -84,10 +85,11 @@ pub use market::{dexscreener, geckoterminal};
 pub use security::rugcheck;
 
 // Domain types from types.rs
+pub use error::{Error, Result};
 pub use types::{
     DataSource, DexScreenerData, GeckoTerminalData, MarketDataBundle, RugcheckData, SecurityBundle,
-    SecurityLevel, SecurityRisk, SecurityScore, SocialLink, Token, TokenError, TokenHolder,
-    TokenMetadata, TokenResult, UpdateTrackingInfo, WebsiteLink,
+    SecurityLevel, SecurityRisk, SecurityScore, SocialLink, Token, TokenHolder, TokenMetadata,
+    TokenResult, UpdateTrackingInfo, WebsiteLink,
 };
 
 // API parsing types from api modules (now in crate::apis)
@@ -164,11 +166,13 @@ pub use favorites::{
 /// }
 /// ```
 pub async fn request_immediate_update(mint: &str) -> TokenResult<UpdateResult> {
-    let db = get_global_database()
-        .ok_or_else(|| TokenError::Database("Token database not initialized".to_owned()))?;
+    let db = get_global_database().ok_or_else(|| Error::NotInitialized {
+        resource: "Token database not initialized".to_owned(),
+    })?;
 
-    let coordinator = service::get_rate_coordinator()
-        .ok_or_else(|| TokenError::Database("Rate limit coordinator not available".to_owned()))?;
+    let coordinator = service::get_rate_coordinator().ok_or_else(|| Error::NotInitialized {
+        resource: "Rate limit coordinator not available".to_owned(),
+    })?;
 
     updates::force_update_token(mint, db, coordinator).await
 }
@@ -186,8 +190,9 @@ pub async fn request_immediate_update(mint: &str) -> TokenResult<UpdateResult> {
 pub async fn ensure_token_available(mint: &str) -> TokenResult<Token> {
     // Fast path: token already known (discovered, has market data) — covers
     // not-pool-tracked and filter-failed tokens shown in the dashboard.
-    let db = get_global_database()
-        .ok_or_else(|| TokenError::Database("Token database not initialized".to_owned()))?;
+    let db = get_global_database().ok_or_else(|| Error::NotInitialized {
+        resource: "Token database not initialized".to_owned(),
+    })?;
     let chain = db.chain();
     if let Some(token) = store::get_full_token_async(chain, mint).await? {
         return Ok(token);
@@ -217,9 +222,7 @@ pub async fn ensure_token_available(mint: &str) -> TokenResult<Token> {
     // Retry assembly now that market data may exist.
     store::get_full_token_async(chain, mint)
         .await?
-        .ok_or_else(|| {
-            TokenError::Database(format!(
-                "Token {mint} has no market data available (cannot price/swap)"
-            ))
+        .ok_or_else(|| Error::NoMarketData {
+            mint: mint.to_owned(),
         })
 }

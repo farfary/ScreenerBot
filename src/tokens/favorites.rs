@@ -1,11 +1,13 @@
 //! Token favorites system
 //! Allows users to save tokens to a favorites list with optional notes
 
+use crate::errors::{DatabaseError, InternalError};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
 use crate::tokens::database::get_global_database;
-use crate::tokens::types::{TokenError, TokenResult};
+use crate::tokens::types::TokenResult;
+use crate::tokens::Error;
 
 // =============================================================================
 // TYPES
@@ -55,7 +57,9 @@ pub fn add_favorite(
     // Reject blank mints up front — an empty-mint favorite is unaddressable (it
     // can never map to a real token and can't be deleted by mint afterwards).
     if request.mint.trim().is_empty() {
-        return Err(TokenError::InvalidMint(request.mint.clone()));
+        return Err(Error::InvalidMint {
+            value: request.mint.clone(),
+        });
     }
 
     conn.execute(
@@ -77,11 +81,14 @@ pub fn add_favorite(
             request.notes
         ],
     )
-    .map_err(|e| TokenError::Database(format!("Failed to add favorite: {e}")))?;
+    .map_err(|e| Error::Database(DatabaseError::Query { operation: "Failed to add favorite".to_owned(), message: e.to_string() }))?;
 
     // Fetch the newly created/updated favorite
-    get_favorite_internal(&conn, chain_id, &request.mint)?
-        .ok_or_else(|| TokenError::Database("Failed to retrieve favorite after insert".to_owned()))
+    get_favorite_internal(&conn, chain_id, &request.mint)?.ok_or_else(|| {
+        Error::Internal(InternalError::InvariantViolation {
+            message: "favorite row missing immediately after insert".to_owned(),
+        })
+    })
 }
 
 /// Remove a token from favorites
@@ -91,7 +98,12 @@ pub fn remove_favorite(conn: &Connection, chain_id: &str, mint: &str) -> TokenRe
             "DELETE FROM token_favorites WHERE chain_id = ?1 AND mint = ?2",
             params![chain_id, mint],
         )
-        .map_err(|e| TokenError::Database(format!("Failed to remove favorite: {e}")))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Failed to remove favorite".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
     Ok(rows_affected > 0)
 }
@@ -114,7 +126,12 @@ pub fn get_favorites(conn: &Connection, chain_id: &str) -> TokenResult<Vec<Favor
             ORDER BY created_at DESC
             "#,
         )
-        .map_err(|e| TokenError::Database(format!("Failed to prepare query: {e}")))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Failed to prepare query".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
     let favorites = stmt
         .query_map(params![chain_id], |row| {
@@ -129,9 +146,19 @@ pub fn get_favorites(conn: &Connection, chain_id: &str) -> TokenResult<Vec<Favor
                 updated_at: row.get(7)?,
             })
         })
-        .map_err(|e| TokenError::Database(format!("Failed to query favorites: {e}")))?
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Failed to query favorites".to_owned(),
+                message: e.to_string(),
+            })
+        })?
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| TokenError::Database(format!("Failed to collect favorites: {e}")))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Failed to collect favorites".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
     Ok(favorites)
 }
@@ -150,7 +177,12 @@ fn get_favorite_internal(
             WHERE chain_id = ?1 AND mint = ?2
             "#,
         )
-        .map_err(|e| TokenError::Database(format!("Failed to prepare query: {e}")))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Failed to prepare query".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
     let favorite = stmt
         .query_row(params![chain_id, mint], |row| {
@@ -166,7 +198,12 @@ fn get_favorite_internal(
             })
         })
         .optional()
-        .map_err(|e| TokenError::Database(format!("Failed to query favorite: {e}")))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Failed to query favorite".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
     Ok(favorite)
 }
@@ -220,8 +257,12 @@ pub fn update_favorite(
 
     let params: Vec<&dyn rusqlite::ToSql> = values.iter().map(|v| v.as_ref()).collect();
 
-    conn.execute(&sql, params.as_slice())
-        .map_err(|e| TokenError::Database(format!("Failed to update favorite: {e}")))?;
+    conn.execute(&sql, params.as_slice()).map_err(|e| {
+        Error::Database(DatabaseError::Query {
+            operation: "Failed to update favorite".to_owned(),
+            message: e.to_string(),
+        })
+    })?;
 
     get_favorite_internal(&conn, chain_id, mint)
 }
@@ -244,7 +285,12 @@ pub fn get_favorites_count(conn: &Connection, chain_id: &str) -> TokenResult<usi
             params![chain_id],
             |row| row.get(0),
         )
-        .map_err(|e| TokenError::Database(format!("Failed to count favorites: {e}")))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Failed to count favorites".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
     Ok(count as usize)
 }
@@ -255,54 +301,58 @@ pub fn get_favorites_count(conn: &Connection, chain_id: &str) -> TokenResult<usi
 
 /// Add a favorite (async wrapper)
 pub async fn add_favorite_async(request: AddFavoriteRequest) -> TokenResult<FavoriteToken> {
-    let db = get_global_database()
-        .ok_or_else(|| TokenError::Database("Token database not initialized".to_owned()))?;
+    let db = get_global_database().ok_or_else(|| Error::NotInitialized {
+        resource: "Token database not initialized".to_owned(),
+    })?;
 
     tokio::task::spawn_blocking(move || {
         let conn = db.conn()?;
         add_favorite(&conn, db.chain_id(), &request)
     })
     .await
-    .map_err(|e| TokenError::Database(format!("Task join error: {e}")))?
+    .map_err(|e| Error::Internal(InternalError::from(e)))?
 }
 
 /// Remove a favorite (async wrapper)
 pub async fn remove_favorite_async(mint: String) -> TokenResult<bool> {
-    let db = get_global_database()
-        .ok_or_else(|| TokenError::Database("Token database not initialized".to_owned()))?;
+    let db = get_global_database().ok_or_else(|| Error::NotInitialized {
+        resource: "Token database not initialized".to_owned(),
+    })?;
 
     tokio::task::spawn_blocking(move || {
         let conn = db.conn()?;
         remove_favorite(&conn, db.chain_id(), &mint)
     })
     .await
-    .map_err(|e| TokenError::Database(format!("Task join error: {e}")))?
+    .map_err(|e| Error::Internal(InternalError::from(e)))?
 }
 
 /// Get all favorites (async wrapper)
 pub async fn get_favorites_async() -> TokenResult<Vec<FavoriteToken>> {
-    let db = get_global_database()
-        .ok_or_else(|| TokenError::Database("Token database not initialized".to_owned()))?;
+    let db = get_global_database().ok_or_else(|| Error::NotInitialized {
+        resource: "Token database not initialized".to_owned(),
+    })?;
 
     tokio::task::spawn_blocking(move || {
         let conn = db.conn()?;
         get_favorites(&conn, db.chain_id())
     })
     .await
-    .map_err(|e| TokenError::Database(format!("Task join error: {e}")))?
+    .map_err(|e| Error::Internal(InternalError::from(e)))?
 }
 
 /// Get a single favorite (async wrapper)
 pub async fn get_favorite_async(mint: String) -> TokenResult<Option<FavoriteToken>> {
-    let db = get_global_database()
-        .ok_or_else(|| TokenError::Database("Token database not initialized".to_owned()))?;
+    let db = get_global_database().ok_or_else(|| Error::NotInitialized {
+        resource: "Token database not initialized".to_owned(),
+    })?;
 
     tokio::task::spawn_blocking(move || {
         let conn = db.conn()?;
         get_favorite(&conn, db.chain_id(), &mint)
     })
     .await
-    .map_err(|e| TokenError::Database(format!("Task join error: {e}")))?
+    .map_err(|e| Error::Internal(InternalError::from(e)))?
 }
 
 /// Update a favorite (async wrapper)
@@ -310,15 +360,16 @@ pub async fn update_favorite_async(
     mint: String,
     request: UpdateFavoriteRequest,
 ) -> TokenResult<Option<FavoriteToken>> {
-    let db = get_global_database()
-        .ok_or_else(|| TokenError::Database("Token database not initialized".to_owned()))?;
+    let db = get_global_database().ok_or_else(|| Error::NotInitialized {
+        resource: "Token database not initialized".to_owned(),
+    })?;
 
     tokio::task::spawn_blocking(move || {
         let conn = db.conn()?;
         update_favorite(&conn, db.chain_id(), &mint, &request)
     })
     .await
-    .map_err(|e| TokenError::Database(format!("Task join error: {e}")))?
+    .map_err(|e| Error::Internal(InternalError::from(e)))?
 }
 
 /// Check if a token is in favorites (async wrapper)
@@ -337,13 +388,14 @@ pub async fn is_favorite_async(mint: String) -> bool {
 
 /// Get count of favorites (async wrapper)
 pub async fn get_favorites_count_async() -> TokenResult<usize> {
-    let db = get_global_database()
-        .ok_or_else(|| TokenError::Database("Token database not initialized".to_owned()))?;
+    let db = get_global_database().ok_or_else(|| Error::NotInitialized {
+        resource: "Token database not initialized".to_owned(),
+    })?;
 
     tokio::task::spawn_blocking(move || {
         let conn = db.conn()?;
         get_favorites_count(&conn, db.chain_id())
     })
     .await
-    .map_err(|e| TokenError::Database(format!("Task join error: {e}")))?
+    .map_err(|e| Error::Internal(InternalError::from(e)))?
 }

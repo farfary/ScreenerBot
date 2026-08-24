@@ -1,11 +1,11 @@
 //! Token assembly — reconstructs full Token structs from database rows.
 
+use crate::errors::DatabaseError;
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Row};
 
-use crate::tokens::types::{
-    DataSource, Priority, SecurityRisk, Token, TokenError, TokenHolder, TokenResult,
-};
+use crate::tokens::types::{DataSource, Priority, SecurityRisk, Token, TokenHolder, TokenResult};
+use crate::tokens::Error;
 
 use super::helpers::{assemble_token, MarketDataType};
 use super::TokenDatabase;
@@ -316,9 +316,12 @@ impl TokenDatabase {
             )
         };
 
-        let mut stmt = conn
-            .prepare(&query)
-            .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
+        let mut stmt = conn.prepare(&query).map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Failed to prepare".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         // Parse row data
         let tokens_iter = stmt
@@ -484,7 +487,12 @@ impl TokenDatabase {
                     security,
                 ))
             })
-            .map_err(|e| TokenError::Database(format!("Query failed: {e}")))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "Query failed".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         let mut tokens = Vec::new();
         for row_result in tokens_iter {
@@ -559,7 +567,9 @@ impl TokenDatabase {
                 update_authority,
                 is_mutable,
                 security,
-            ) = row_result.map_err(|e| TokenError::Database(format!("Row parse failed: {e}")))?;
+            ) = row_result.map_err(|e| Error::RowDecode {
+                detail: e.to_string(),
+            })?;
 
             // Parse all timestamps
             let first_discovered_dt =

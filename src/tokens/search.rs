@@ -126,10 +126,15 @@ async fn persist_token_to_database(result: &TokenSearchResult) -> bool {
 /// - If query looks like a mint address, fetch token data directly by mint
 /// - Otherwise, use DexScreener's search endpoint
 /// - Deduplicate results by mint address, preferring DexScreener data
-pub async fn search_tokens(query: &str, limit: Option<usize>) -> Result<SearchResults, String> {
+pub async fn search_tokens(
+    query: &str,
+    limit: Option<usize>,
+) -> crate::tokens::Result<SearchResults> {
     let query = query.trim();
     if query.is_empty() {
-        return Err("Search query cannot be empty".to_owned());
+        return Err(crate::tokens::Error::InvalidSearchQuery {
+            reason: "the query is empty".to_owned(),
+        });
     }
 
     let max_results = limit.unwrap_or(20).min(50);

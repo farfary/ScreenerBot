@@ -937,6 +937,8 @@ const MIGRATED_TO_TYPED_ERRORS: &[&str] = &[
     "tools",
     "chains",
     "apis",
+    "pools",
+    "tokens",
 ];
 
 /// True when `line` declares a two-parameter `Result<_, String>` — a signature
@@ -1019,12 +1021,10 @@ fn migrated_modules_never_return_string_errors() {
 /// reported. They are misfiled by the same standard that put `ApiError` inside
 /// `tokens/types.rs`, and they must reach zero with the rest.
 const PENDING_RELOCATION: &[&str] = &[
-    "pools/types.rs",
     "apis/llm/types.rs",
     "ohlcvs/types.rs",
     "ai/types.rs",
     "rpc/errors.rs",
-    "tokens/types.rs",
     "chains/solana/swaps/types.rs",
     "chains/solana/assets/metaplex.rs",
     "chains/solana/pools/reserve_accounts.rs",

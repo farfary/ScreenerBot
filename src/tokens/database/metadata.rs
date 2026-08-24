@@ -1,10 +1,12 @@
 //! Token metadata storage — persists name, symbol, decimals, and URI information.
 
+use crate::errors::DatabaseError;
 use chrono::Utc;
 use rusqlite::{params, params_from_iter};
 use std::collections::HashMap;
 
-use crate::tokens::types::{TokenError, TokenMetadata, TokenResult};
+use crate::tokens::types::{TokenMetadata, TokenResult};
+use crate::tokens::Error;
 
 use super::TokenDatabase;
 
@@ -36,14 +38,19 @@ impl TokenDatabase {
                 decimals_last_fetched_at = CASE WHEN ?5 IS NOT NULL THEN ?6 ELSE decimals_last_fetched_at END",
             params![self.chain_id(), mint, symbol, name, decimals.map(|d| d as i64), now],
         )
-        .map_err(|e| TokenError::Database(format!("Failed to upsert token: {e}")))?;
+        .map_err(|e| Error::Database(DatabaseError::Query { operation: "Failed to upsert token".to_owned(), message: e.to_string() }))?;
 
         // Ensure tracking entry exists
         conn.execute(
             "INSERT OR IGNORE INTO update_tracking (chain_id, mint, priority) VALUES (?1, ?2, 10)",
             params![self.chain_id(), mint],
         )
-        .map_err(|e| TokenError::Database(format!("Failed to create tracking: {e}")))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Failed to create tracking".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         // CRITICAL: Update in-memory cache immediately after successful DB write
         // This ensures the cache stays synchronized with the database
@@ -63,7 +70,7 @@ impl TokenDatabase {
 
         let mut stmt = conn.prepare(
             "SELECT mint, symbol, name, decimals, first_discovered_at, metadata_last_fetched_at FROM tokens WHERE chain_id = ?1 AND mint = ?2"
-        ).map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
+        ).map_err(|e| Error::Database(DatabaseError::Query { operation: "Failed to prepare".to_owned(), message: e.to_string() }))?;
 
         let result = stmt.query_row(params![self.chain_id(), mint], |row| {
             Ok(TokenMetadata {
@@ -79,7 +86,10 @@ impl TokenDatabase {
         match result {
             Ok(token) => Ok(Some(token)),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(TokenError::Database(format!("Query failed: {e}"))),
+            Err(e) => Err(Error::Database(DatabaseError::Query {
+                operation: "Query failed".to_owned(),
+                message: e.to_string(),
+            })),
         }
     }
 
@@ -99,7 +109,7 @@ impl TokenDatabase {
              ORDER BY metadata_last_fetched_at DESC 
              LIMIT ?2",
             )
-            .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
+            .map_err(|e| Error::Database(DatabaseError::Query { operation: "Failed to prepare".to_owned(), message: e.to_string() }))?;
 
         let tokens = stmt
             .query_map(params![self.chain_id(), limit], |row| {
@@ -112,11 +122,19 @@ impl TokenDatabase {
                     metadata_last_fetched_at: row.get(5)?,
                 })
             })
-            .map_err(|e| TokenError::Database(format!("Query failed: {e}")))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "Query failed".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
-        tokens
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| TokenError::Database(format!("Failed to collect: {e}")))
+        tokens.collect::<Result<Vec<_>, _>>().map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Failed to collect".to_owned(),
+                message: e.to_string(),
+            })
+        })
     }
 
     /// Get tokens with valid decimals for cache preloading, most important LAST.
@@ -151,7 +169,7 @@ impl TokenDatabase {
                  )
                  ORDER BY pooled ASC, refreshed ASC",
             )
-            .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
+            .map_err(|e| Error::Database(DatabaseError::Query { operation: "Failed to prepare".to_owned(), message: e.to_string() }))?;
 
         let rows = stmt
             .query_map(
@@ -166,11 +184,19 @@ impl TokenDatabase {
                     Ok((mint, decimals as u8))
                 },
             )
-            .map_err(|e| TokenError::Database(format!("Query failed: {e}")))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "Query failed".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
-        let result = rows
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| TokenError::Database(format!("Failed to collect: {e}")))?;
+        let result = rows.collect::<Result<Vec<_>, _>>().map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Failed to collect".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         crate::logger::debug(
             crate::logger::LogTag::Tokens,
@@ -217,7 +243,10 @@ impl TokenDatabase {
         );
 
         let mut stmt = conn.prepare(&query).map_err(|e| {
-            TokenError::Database(format!("Failed to prepare batch image query: {e}"))
+            Error::Database(DatabaseError::Query {
+                operation: "Failed to prepare batch image query".to_owned(),
+                message: e.to_string(),
+            })
         })?;
 
         // Build params: mints repeated 3 times for the 3 IN clauses
@@ -235,12 +264,18 @@ impl TokenDatabase {
                 let image_url: String = row.get(1)?;
                 Ok((mint, image_url))
             })
-            .map_err(|e| TokenError::Database(format!("Batch image query failed: {e}")))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "Batch image query failed".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         let mut result = HashMap::with_capacity(mints.len());
         for row in rows {
-            let (mint, image_url) =
-                row.map_err(|e| TokenError::Database(format!("Row parse failed: {e}")))?;
+            let (mint, image_url) = row.map_err(|e| Error::RowDecode {
+                detail: e.to_string(),
+            })?;
             result.insert(mint, image_url);
         }
 
@@ -262,7 +297,10 @@ impl TokenDatabase {
         );
 
         let mut stmt = conn.prepare(&query).map_err(|e| {
-            TokenError::Database(format!("Failed to prepare batch decimals query: {e}"))
+            Error::Database(DatabaseError::Query {
+                operation: "Failed to prepare batch decimals query".to_owned(),
+                message: e.to_string(),
+            })
         })?;
 
         let mint_refs: Vec<&str> = std::iter::once(self.chain_id())
@@ -274,12 +312,18 @@ impl TokenDatabase {
                 let decimals: u8 = row.get(1)?;
                 Ok((mint, decimals))
             })
-            .map_err(|e| TokenError::Database(format!("Batch decimals query failed: {e}")))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "Batch decimals query failed".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         let mut result = HashMap::with_capacity(mints.len());
         for row in rows {
-            let (mint, decimals) =
-                row.map_err(|e| TokenError::Database(format!("Row parse failed: {e}")))?;
+            let (mint, decimals) = row.map_err(|e| Error::RowDecode {
+                detail: e.to_string(),
+            })?;
             result.insert(mint, decimals);
         }
 
@@ -318,7 +362,10 @@ impl TokenDatabase {
         );
 
         let mut stmt = conn.prepare(&query).map_err(|e| {
-            TokenError::Database(format!("Failed to prepare batch token info query: {e}"))
+            Error::Database(DatabaseError::Query {
+                operation: "Failed to prepare batch token info query".to_owned(),
+                message: e.to_string(),
+            })
         })?;
 
         let mint_refs: Vec<&str> = std::iter::once(self.chain_id())
@@ -333,12 +380,18 @@ impl TokenDatabase {
                 let image_url: Option<String> = row.get(3)?;
                 Ok((mint, symbol, name, image_url))
             })
-            .map_err(|e| TokenError::Database(format!("Batch token info query failed: {e}")))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "Batch token info query failed".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         let mut result = HashMap::with_capacity(mints.len());
         for row in rows {
-            let (mint, symbol, name, image_url) =
-                row.map_err(|e| TokenError::Database(format!("Row parse failed: {e}")))?;
+            let (mint, symbol, name, image_url) = row.map_err(|e| Error::RowDecode {
+                detail: e.to_string(),
+            })?;
             result.insert(mint, (symbol, name, image_url));
         }
 

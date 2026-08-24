@@ -5,8 +5,10 @@
 // Supports the auto-discovery system: persists reputation scores,
 // loads blocked authorities on startup, and upserts from analysis tasks.
 
+use crate::errors::DatabaseError;
 use crate::tokens::database::TokenDatabase;
-use crate::tokens::types::{TokenError, TokenResult};
+use crate::tokens::types::TokenResult;
+use crate::tokens::Error;
 
 impl TokenDatabase {
     /// Load all blocked authority addresses from the database.
@@ -18,13 +20,23 @@ impl TokenDatabase {
             .prepare(
                 "SELECT address FROM authority_reputation WHERE chain_id = ?1 AND is_blocked = 1",
             )
-            .map_err(|e| TokenError::Database(format!("Prepare error: {e}")))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "Prepare error".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         let rows = stmt
             .query_map(rusqlite::params![self.chain_id()], |row| {
                 row.get::<_, String>(0)
             })
-            .map_err(|e| TokenError::Database(format!("Query error: {e}")))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "Query error".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         let mut addresses = Vec::new();
         for row in rows {
@@ -91,9 +103,12 @@ impl TokenDatabase {
             HAVING total_tokens >= ?2
         "#;
 
-        let mut stmt = conn
-            .prepare(sql)
-            .map_err(|e| TokenError::Database(format!("Prepare discovery SQL error: {e}")))?;
+        let mut stmt = conn.prepare(sql).map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Prepare discovery SQL error".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         let rows = stmt
             .query_map(rusqlite::params![self.chain_id(), min_tokens], |row| {
@@ -104,7 +119,12 @@ impl TokenDatabase {
                     row.get::<_, u32>(3)?,    // flagged_tokens
                 ))
             })
-            .map_err(|e| TokenError::Database(format!("Query discovery error: {e}")))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "Query discovery error".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         for row in rows {
             if let Ok((authority, authority_type, total, flagged)) = row {
@@ -137,7 +157,7 @@ impl TokenDatabase {
                         now,
                     ],
                 )
-                .map_err(|e| TokenError::Database(format!("Upsert discovery error: {e}")))?;
+                .map_err(|e| Error::Database(DatabaseError::Query { operation: "Upsert discovery error".to_owned(), message: e.to_string() }))?;
 
                 if should_block {
                     newly_blocked += 1;

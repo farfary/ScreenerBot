@@ -1,9 +1,11 @@
 //! Token tracking database — stores discovery timestamps and processing state.
 
+use crate::errors::DatabaseError;
 use chrono::{DateTime, Utc};
 use rusqlite::params;
 
-use crate::tokens::types::{TokenError, TokenResult, UpdateTrackingInfo};
+use crate::tokens::types::{TokenResult, UpdateTrackingInfo};
+use crate::tokens::Error;
 
 use super::TokenDatabase;
 
@@ -22,7 +24,12 @@ impl TokenDatabase {
              WHERE chain_id = ?3 AND mint = ?4",
             params![now, pool_address, self.chain_id(), mint],
         )
-        .map_err(|e| TokenError::Database(format!("Failed to mark pool price calculated: {e}")))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Failed to mark pool price calculated".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         Ok(())
     }
@@ -41,7 +48,12 @@ impl TokenDatabase {
                 params![self.chain_id()],
                 |row| row.get(0),
             )
-            .map_err(|e| TokenError::Database(format!("Failed to count tokens: {e}")))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "Failed to count tokens".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         Ok(count.max(0) as u64)
     }
@@ -56,7 +68,12 @@ impl TokenDatabase {
                 params![self.chain_id()],
                 |row| row.get(0),
             )
-            .map_err(|e| TokenError::Database(format!("Failed to count tracked tokens: {e}")))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "Failed to count tracked tokens".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         Ok(count.max(0) as u64)
     }
@@ -72,7 +89,10 @@ impl TokenDatabase {
                 |row| row.get(0),
             )
             .map_err(|e| {
-                TokenError::Database(format!("Failed to count blacklisted tokens: {e}"))
+                Error::Database(DatabaseError::Query {
+                    operation: "Failed to count blacklisted tokens".to_owned(),
+                    message: e.to_string(),
+                })
             })?;
 
         Ok(count.max(0) as u64)
@@ -94,14 +114,22 @@ impl TokenDatabase {
                  FROM update_tracking
                  WHERE chain_id = ?1 AND mint = ?2",
             )
-            .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "Failed to prepare".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         let result = stmt.query_row(params![self.chain_id(), mint], |row| map_tracking_row(row));
 
         match result {
             Ok(info) => Ok(Some(info)),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(TokenError::Database(format!("Query failed: {e}"))),
+            Err(e) => Err(Error::Database(DatabaseError::Query {
+                operation: "Query failed".to_owned(),
+                message: e.to_string(),
+            })),
         }
     }
 
@@ -129,16 +157,29 @@ impl TokenDatabase {
                      ORDER BY COALESCE(market_data_last_updated_at, 0) ASC, mint ASC
                      LIMIT ?3",
                 )
-                .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
+                .map_err(|e| {
+                    Error::Database(DatabaseError::Query {
+                        operation: "Failed to prepare".to_owned(),
+                        message: e.to_string(),
+                    })
+                })?;
 
             let rows = stmt
                 .query_map(params![self.chain_id(), priority, limit as i64], |row| {
                     map_tracking_row(row)
                 })
-                .map_err(|e| TokenError::Database(format!("Query failed: {e}")))?;
+                .map_err(|e| {
+                    Error::Database(DatabaseError::Query {
+                        operation: "Query failed".to_owned(),
+                        message: e.to_string(),
+                    })
+                })?;
 
             rows.collect::<Result<Vec<_>, _>>().map_err(|e| {
-                TokenError::Database(format!("Failed to collect tracking entries: {e}"))
+                Error::Database(DatabaseError::Query {
+                    operation: "Failed to collect tracking entries".to_owned(),
+                    message: e.to_string(),
+                })
             })?
         } else {
             let mut stmt = conn
@@ -155,16 +196,24 @@ impl TokenDatabase {
                      ORDER BY priority DESC, COALESCE(market_data_last_updated_at, 0) ASC, mint ASC
                      LIMIT ?2",
                 )
-                .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
+                .map_err(|e| Error::Database(DatabaseError::Query { operation: "Failed to prepare".to_owned(), message: e.to_string() }))?;
 
             let rows = stmt
                 .query_map(params![self.chain_id(), limit as i64], |row| {
                     map_tracking_row(row)
                 })
-                .map_err(|e| TokenError::Database(format!("Query failed: {e}")))?;
+                .map_err(|e| {
+                    Error::Database(DatabaseError::Query {
+                        operation: "Query failed".to_owned(),
+                        message: e.to_string(),
+                    })
+                })?;
 
             rows.collect::<Result<Vec<_>, _>>().map_err(|e| {
-                TokenError::Database(format!("Failed to collect tracking entries: {e}"))
+                Error::Database(DatabaseError::Query {
+                    operation: "Failed to collect tracking entries".to_owned(),
+                    message: e.to_string(),
+                })
             })?
         };
 

@@ -285,16 +285,16 @@ pub async fn get(chain: ChainId, mint: &str) -> Option<u8> {
 }
 
 /// Fetch token decimals directly from Solana blockchain (public for debug bins)
-pub async fn get_token_decimals_from_chain(chain: ChainId, mint: &str) -> Result<u8, String> {
+pub async fn get_token_decimals_from_chain(
+    chain: ChainId,
+    mint: &str,
+) -> crate::tokens::Result<u8> {
     // SOL always has 9 decimals
     if crate::chains::adapter().is_native_asset(mint) {
         return Ok(crate::chains::adapter().native_asset_decimals());
     }
 
-    // SEAM: tokens still returns String errors; removed when it migrates.
-    let mint_data = crate::chains::solana::assets::mint::fetch_mint_account(mint)
-        .await
-        .map_err(|e| e.to_string())?;
+    let mint_data = crate::chains::solana::assets::mint::fetch_mint_account(mint).await?;
 
     // Cache authority data as a side effect of the fetch we already paid for
     // (zero extra RPC cost).
@@ -436,23 +436,25 @@ async fn get_from_rugcheck(chain: ChainId, mint: &str) -> Option<u8> {
 ///
 /// NOTE: This calls upsert_token() which will ALSO update the cache automatically.
 /// This ensures cache and DB stay synchronized.
-async fn persist_to_db(chain: ChainId, mint: &str, decimals: u8) -> Result<(), String> {
+async fn persist_to_db(chain: ChainId, mint: &str, decimals: u8) -> crate::tokens::Result<()> {
     use crate::tokens::database::get_global_database;
 
-    let db = get_global_database().ok_or("Database not initialized")?;
+    let db = get_global_database().ok_or_else(|| crate::tokens::Error::NotInitialized {
+        resource: "token database".to_owned(),
+    })?;
     if db.chain() != chain {
-        return Err(format!(
-            "Token database is scoped to {}, not {chain}",
-            db.chain()
-        ));
+        return Err(crate::tokens::Error::ChainMismatch {
+            expected: db.chain().to_string(),
+            actual: chain.to_string(),
+        });
     }
     let mint = mint.to_string();
 
     // Use spawn_blocking for synchronous database access
     tokio::task::spawn_blocking(move || db.upsert_token(&mint, None, None, Some(decimals)))
         .await
-        .map_err(|e| format!("Task join error: {e}"))?
-        .map_err(|e| format!("Database error: {e}"))
+        .map_err(crate::errors::InternalError::from)??;
+    Ok(())
 }
 
 fn fetch_lock_for(chain: ChainId, mint: &str) -> Arc<AsyncMutex<()>> {

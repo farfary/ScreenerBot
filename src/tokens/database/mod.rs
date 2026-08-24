@@ -25,21 +25,26 @@ mod rejections;
 mod security;
 mod tracking;
 
+use crate::errors::DatabaseError;
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
 use std::sync::{Arc, Mutex};
 
 use crate::chains::ChainId;
-use crate::tokens::types::{TokenError, TokenResult};
+use crate::tokens::types::TokenResult;
+use crate::tokens::Error;
 
 // Global database instance for easy access
 static GLOBAL_DB: Mutex<Option<Arc<TokenDatabase>>> = Mutex::new(None);
 
 /// Initialize global database (called by service)
-pub fn init_global_database(db: Arc<TokenDatabase>) -> Result<(), String> {
-    let mut guard = GLOBAL_DB
-        .lock()
-        .map_err(|e| format!("Lock poisoned: {e}"))?;
+pub fn init_global_database(db: Arc<TokenDatabase>) -> crate::tokens::Result<()> {
+    let mut guard =
+        GLOBAL_DB
+            .lock()
+            .map_err(|e| crate::errors::InternalError::InvariantViolation {
+                message: format!("the global token database lock is poisoned: {e}"),
+            })?;
     *guard = Some(db);
     Ok(())
 }
@@ -94,13 +99,18 @@ impl TokenDatabase {
             .idle_timeout(None)
             .max_lifetime(None)
             .build(manager)
-            .map_err(|e| TokenError::Database(format!("Failed to create database pool: {e}")))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "Failed to create database pool".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         let db = Self { pool, chain };
 
         // Initialize schema
         let conn = db.conn()?;
-        crate::tokens::schema::initialize_schema(&conn).map_err(TokenError::Database)?;
+        crate::tokens::schema::initialize_schema(&conn)?;
         drop(conn);
 
         Ok(db)
@@ -108,9 +118,12 @@ impl TokenDatabase {
 
     /// Check out a connection from the pool.
     pub(super) fn conn(&self) -> TokenResult<PooledConnection<SqliteConnectionManager>> {
-        self.pool
-            .get()
-            .map_err(|e| TokenError::Database(format!("Failed to get connection: {e}")))
+        self.pool.get().map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Failed to get connection".to_owned(),
+                message: e.to_string(),
+            })
+        })
     }
 
     /// The explicit canonical chain scope for every operation issued by this repository.

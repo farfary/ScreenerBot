@@ -2,6 +2,8 @@
 
 use super::operations::PoolsDatabase;
 use super::types::{BlacklistedAccountRecord, BlacklistedPoolRecord};
+use crate::errors::{DatabaseError, InternalError};
+use crate::pools::Error;
 
 use rusqlite::params;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -19,7 +21,7 @@ impl PoolsDatabase {
         source: Option<&str>,
         pool_id: Option<&str>,
         token_mint: Option<&str>,
-    ) -> Result<(), String> {
+    ) -> Result<(), Error> {
         let account_key = account_pubkey.to_string();
         let reason_str = reason.to_string();
         let source_str = source.map(|s| s.to_string());
@@ -36,7 +38,7 @@ impl PoolsDatabase {
         tokio::task::spawn_blocking(move || {
       let conn_guard = conn_arc
         .lock()
-        .map_err(|e| format!("Failed to lock connection: {e}"))?;
+        .map_err(|e| DatabaseError::Query { operation: "lock connection".to_owned(), message: e.to_string() })?;
 
       if let Some(ref conn) = *conn_guard {
         let now = SystemTime::now()
@@ -61,7 +63,7 @@ impl PoolsDatabase {
              WHERE chain_id = ?2 AND account_pubkey = ?3",
             params![now, &chain_id, &account_key],
           )
-          .map_err(|e| format!("Failed to update blacklist_accounts: {e}"))?;
+          .map_err(|e| DatabaseError::Query { operation: "update blacklist_accounts".to_owned(), message: e.to_string() })?;
         } else {
           // Insert new entry
           conn.execute(
@@ -70,20 +72,20 @@ impl PoolsDatabase {
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, 1, ?7, ?7, ?7)",
             params![&chain_id, &account_key, &reason_str, source_str.as_deref(), pool_id_str.as_deref(), token_mint_str.as_deref(), now],
           )
-          .map_err(|e| format!("Failed to insert into blacklist_accounts: {e}"))?;
+          .map_err(|e| DatabaseError::Query { operation: "insert into blacklist_accounts".to_owned(), message: e.to_string() })?;
         }
 
         Ok(())
       } else {
-        Err("Database connection not available".to_owned())
+        Err(Error::NotInitialized)
       }
     })
     .await
-    .map_err(|e| format!("Blocking task failed: {e}"))?
+    .map_err(InternalError::from)?
     }
 
     /// Check if account is blacklisted
-    pub async fn is_account_blacklisted(&self, account_pubkey: &str) -> Result<bool, String> {
+    pub async fn is_account_blacklisted(&self, account_pubkey: &str) -> Result<bool, Error> {
         // Hot path: memory only
         let set = self.blacklisted_accounts.read().unwrap();
         Ok(set.contains(account_pubkey))
@@ -96,7 +98,7 @@ impl PoolsDatabase {
         reason: &str,
         token_mint: Option<&str>,
         program_id: Option<&str>,
-    ) -> Result<(), String> {
+    ) -> Result<(), Error> {
         let pool_id_str = pool_id.to_string();
         let reason_str = reason.to_string();
         let token_mint_str = token_mint.map(|s| s.to_string());
@@ -112,7 +114,7 @@ impl PoolsDatabase {
         tokio::task::spawn_blocking(move || {
       let conn_guard = conn_arc
         .lock()
-        .map_err(|e| format!("Failed to lock connection: {e}"))?;
+        .map_err(|e| DatabaseError::Query { operation: "lock connection".to_owned(), message: e.to_string() })?;
 
       if let Some(ref conn) = *conn_guard {
         let now = SystemTime::now()
@@ -137,7 +139,7 @@ impl PoolsDatabase {
              WHERE chain_id = ?2 AND pool_id = ?3",
             params![now, &chain_id, &pool_id_str],
           )
-          .map_err(|e| format!("Failed to update blacklist_pools: {e}"))?;
+          .map_err(|e| DatabaseError::Query { operation: "update blacklist_pools".to_owned(), message: e.to_string() })?;
         } else {
           // Insert new entry
           conn.execute(
@@ -146,27 +148,27 @@ impl PoolsDatabase {
              VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, ?6, ?6)",
             params![&chain_id, &pool_id_str, &reason_str, token_mint_str.as_deref(), program_id_str.as_deref(), now],
           )
-          .map_err(|e| format!("Failed to insert into blacklist_pools: {e}"))?;
+          .map_err(|e| DatabaseError::Query { operation: "insert into blacklist_pools".to_owned(), message: e.to_string() })?;
         }
 
         Ok(())
       } else {
-        Err("Database connection not available".to_owned())
+        Err(Error::NotInitialized)
       }
     })
     .await
-    .map_err(|e| format!("Blocking task failed: {e}"))?
+    .map_err(InternalError::from)?
     }
 
     /// Check if pool is blacklisted
-    pub async fn is_pool_blacklisted(&self, pool_id: &str) -> Result<bool, String> {
+    pub async fn is_pool_blacklisted(&self, pool_id: &str) -> Result<bool, Error> {
         // Hot path: memory only
         let set = self.blacklisted_pools.read().unwrap();
         Ok(set.contains(pool_id))
     }
 
     /// Remove account from blacklist
-    pub async fn remove_account_from_blacklist(&self, account_pubkey: &str) -> Result<(), String> {
+    pub async fn remove_account_from_blacklist(&self, account_pubkey: &str) -> Result<(), Error> {
         // Update memory immediately
         {
             let mut set = self.blacklisted_accounts.write().unwrap();
@@ -177,26 +179,30 @@ impl PoolsDatabase {
         let conn_arc = self.connection.clone();
         let chain_id = self.chain_id;
         tokio::task::spawn_blocking(move || {
-            let conn_guard = conn_arc
-                .lock()
-                .map_err(|e| format!("Failed to lock connection: {e}"))?;
+            let conn_guard = conn_arc.lock().map_err(|e| DatabaseError::Query {
+                operation: "lock connection".to_owned(),
+                message: e.to_string(),
+            })?;
             if let Some(ref conn) = *conn_guard {
                 conn.execute(
                     "DELETE FROM blacklist_accounts WHERE chain_id = ?1 AND account_pubkey = ?2",
                     params![chain_id.as_str(), &account_key],
                 )
-                .map_err(|e| format!("Failed to remove from blacklist_accounts: {e}"))?;
+                .map_err(|e| DatabaseError::Query {
+                    operation: "remove from blacklist_accounts".to_owned(),
+                    message: e.to_string(),
+                })?;
                 Ok(())
             } else {
-                Err("Database connection not available".to_owned())
+                Err(Error::NotInitialized)
             }
         })
         .await
-        .map_err(|e| format!("Blocking task failed: {e}"))?
+        .map_err(InternalError::from)?
     }
 
     /// Remove pool from blacklist
-    pub async fn remove_pool_from_blacklist(&self, pool_id: &str) -> Result<(), String> {
+    pub async fn remove_pool_from_blacklist(&self, pool_id: &str) -> Result<(), Error> {
         // Update memory immediately
         {
             let mut set = self.blacklisted_pools.write().unwrap();
@@ -207,26 +213,30 @@ impl PoolsDatabase {
         let conn_arc = self.connection.clone();
         let chain_id = self.chain_id;
         tokio::task::spawn_blocking(move || {
-            let conn_guard = conn_arc
-                .lock()
-                .map_err(|e| format!("Failed to lock connection: {e}"))?;
+            let conn_guard = conn_arc.lock().map_err(|e| DatabaseError::Query {
+                operation: "lock connection".to_owned(),
+                message: e.to_string(),
+            })?;
             if let Some(ref conn) = *conn_guard {
                 conn.execute(
                     "DELETE FROM blacklist_pools WHERE chain_id = ?1 AND pool_id = ?2",
                     params![chain_id.as_str(), &pool_key],
                 )
-                .map_err(|e| format!("Failed to remove from blacklist_pools: {e}"))?;
+                .map_err(|e| DatabaseError::Query {
+                    operation: "remove from blacklist_pools".to_owned(),
+                    message: e.to_string(),
+                })?;
                 Ok(())
             } else {
-                Err("Database connection not available".to_owned())
+                Err(Error::NotInitialized)
             }
         })
         .await
-        .map_err(|e| format!("Blocking task failed: {e}"))?
+        .map_err(InternalError::from)?
     }
 
     /// Get blacklist statistics
-    pub async fn get_blacklist_stats(&self) -> Result<(usize, usize), String> {
+    pub async fn get_blacklist_stats(&self) -> Result<(usize, usize), Error> {
         let accounts = self.blacklisted_accounts.read().unwrap().len();
         let pools = self.blacklisted_pools.read().unwrap().len();
         Ok((accounts, pools))
@@ -236,17 +246,17 @@ impl PoolsDatabase {
     pub async fn list_blacklisted_accounts(
         &self,
         limit: Option<usize>,
-    ) -> Result<Vec<BlacklistedAccountRecord>, String> {
+    ) -> Result<Vec<BlacklistedAccountRecord>, Error> {
         let conn_arc = self.connection.clone();
         let chain_id = self.chain_id;
         tokio::task::spawn_blocking(move || {
       let connection_guard = conn_arc
         .lock()
-        .map_err(|e| format!("Failed to lock connection: {e}"))?;
+        .map_err(|e| DatabaseError::Query { operation: "lock connection".to_owned(), message: e.to_string() })?;
 
       let conn = connection_guard
         .as_ref()
-        .ok_or_else(|| "Database not initialized".to_owned())?;
+        .ok_or_else(|| Error::NotInitialized)?;
 
       let mut records = Vec::new();
 
@@ -258,7 +268,7 @@ impl PoolsDatabase {
              ORDER BY last_failed_at DESC \
              LIMIT ?",
           )
-          .map_err(|e| format!("Failed to prepare blacklist_accounts query: {e}"))?;
+          .map_err(|e| DatabaseError::Query { operation: "prepare blacklist_accounts query".to_owned(), message: e.to_string() })?;
 
         let rows = stmt
           .query_map(params![chain_id.as_str(), limit_value], |row| {
@@ -275,10 +285,10 @@ impl PoolsDatabase {
               added_at: row.get(8)?,
             })
           })
-          .map_err(|e| format!("Failed to query blacklist_accounts: {e}"))?;
+          .map_err(|e| DatabaseError::Query { operation: "query blacklist_accounts".to_owned(), message: e.to_string() })?;
 
         for row in rows {
-          records.push(row.map_err(|e| format!("Failed to read blacklist_accounts row: {e}"))?);
+          records.push(row.map_err(|e| DatabaseError::Query { operation: "read blacklist_accounts row".to_owned(), message: e.to_string() })?);
         }
       } else {
         let mut stmt = conn
@@ -287,7 +297,7 @@ impl PoolsDatabase {
              FROM blacklist_accounts WHERE chain_id = ? \
              ORDER BY last_failed_at DESC",
           )
-          .map_err(|e| format!("Failed to prepare blacklist_accounts query: {e}"))?;
+          .map_err(|e| DatabaseError::Query { operation: "prepare blacklist_accounts query".to_owned(), message: e.to_string() })?;
 
         let rows = stmt
           .query_map([chain_id.as_str()], |row| {
@@ -304,34 +314,34 @@ impl PoolsDatabase {
               added_at: row.get(8)?,
             })
           })
-          .map_err(|e| format!("Failed to query blacklist_accounts: {e}"))?;
+          .map_err(|e| DatabaseError::Query { operation: "query blacklist_accounts".to_owned(), message: e.to_string() })?;
 
         for row in rows {
-          records.push(row.map_err(|e| format!("Failed to read blacklist_accounts row: {e}"))?);
+          records.push(row.map_err(|e| DatabaseError::Query { operation: "read blacklist_accounts row".to_owned(), message: e.to_string() })?);
         }
       }
 
-      Ok::<_, String>(records)
+      Ok::<_, Error>(records)
     })
     .await
-    .map_err(|e| format!("Blocking task failed: {e}"))?
+    .map_err(InternalError::from)?
     }
 
     /// List blacklisted pools with optional limit, ordered by most recent first
     pub async fn list_blacklisted_pools(
         &self,
         limit: Option<usize>,
-    ) -> Result<Vec<BlacklistedPoolRecord>, String> {
+    ) -> Result<Vec<BlacklistedPoolRecord>, Error> {
         let conn_arc = self.connection.clone();
         let chain_id = self.chain_id;
         tokio::task::spawn_blocking(move || {
       let connection_guard = conn_arc
         .lock()
-        .map_err(|e| format!("Failed to lock connection: {e}"))?;
+        .map_err(|e| DatabaseError::Query { operation: "lock connection".to_owned(), message: e.to_string() })?;
 
       let conn = connection_guard
         .as_ref()
-        .ok_or_else(|| "Database not initialized".to_owned())?;
+        .ok_or_else(|| Error::NotInitialized)?;
 
       let mut records = Vec::new();
 
@@ -343,7 +353,7 @@ impl PoolsDatabase {
              ORDER BY last_failed_at DESC \
              LIMIT ?",
           )
-          .map_err(|e| format!("Failed to prepare blacklist_pools query: {e}"))?;
+          .map_err(|e| DatabaseError::Query { operation: "prepare blacklist_pools query".to_owned(), message: e.to_string() })?;
 
         let rows = stmt
           .query_map(params![chain_id.as_str(), limit_value], |row| {
@@ -359,10 +369,10 @@ impl PoolsDatabase {
               added_at: row.get(7)?,
             })
           })
-          .map_err(|e| format!("Failed to query blacklist_pools: {e}"))?;
+          .map_err(|e| DatabaseError::Query { operation: "query blacklist_pools".to_owned(), message: e.to_string() })?;
 
         for row in rows {
-          records.push(row.map_err(|e| format!("Failed to read blacklist_pools row: {e}"))?);
+          records.push(row.map_err(|e| DatabaseError::Query { operation: "read blacklist_pools row".to_owned(), message: e.to_string() })?);
         }
       } else {
         let mut stmt = conn
@@ -371,7 +381,7 @@ impl PoolsDatabase {
              FROM blacklist_pools WHERE chain_id = ? \
              ORDER BY last_failed_at DESC",
           )
-          .map_err(|e| format!("Failed to prepare blacklist_pools query: {e}"))?;
+          .map_err(|e| DatabaseError::Query { operation: "prepare blacklist_pools query".to_owned(), message: e.to_string() })?;
 
         let rows = stmt
           .query_map([chain_id.as_str()], |row| {
@@ -387,16 +397,16 @@ impl PoolsDatabase {
               added_at: row.get(7)?,
             })
           })
-          .map_err(|e| format!("Failed to query blacklist_pools: {e}"))?;
+          .map_err(|e| DatabaseError::Query { operation: "query blacklist_pools".to_owned(), message: e.to_string() })?;
 
         for row in rows {
-          records.push(row.map_err(|e| format!("Failed to read blacklist_pools row: {e}"))?);
+          records.push(row.map_err(|e| DatabaseError::Query { operation: "read blacklist_pools row".to_owned(), message: e.to_string() })?);
         }
       }
 
-      Ok::<_, String>(records)
+      Ok::<_, Error>(records)
     })
     .await
-    .map_err(|e| format!("Blocking task failed: {e}"))?
+    .map_err(InternalError::from)?
     }
 }

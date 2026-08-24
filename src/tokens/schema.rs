@@ -9,7 +9,9 @@
 
 use super::migrations;
 use crate::database;
+use crate::errors::DatabaseError;
 use crate::logger::{self, LogTag};
+use crate::tokens::Error;
 use rusqlite::{Connection, OptionalExtension};
 
 /// Current tokens.db schema version recorded in `PRAGMA user_version`.
@@ -350,10 +352,14 @@ pub const CREATE_INDEXES: &[&str] = &[
 /// rebuild and additive column steps each inspect on-disk shape before touching
 /// anything: `user_version` is recorded after success, never used as the only
 /// signal that a required structural change is already present.
-pub fn initialize_schema(conn: &Connection) -> Result<(), String> {
+pub fn initialize_schema(conn: &Connection) -> Result<(), Error> {
     // Apply centralized PRAGMA configuration
-    database::configure_connection(conn, database::TOKENS_DB)
-        .map_err(|e| format!("Failed to configure connection: {e}"))?;
+    database::configure_connection(conn, database::TOKENS_DB).map_err(|e| {
+        DatabaseError::Query {
+            operation: "configure connection".to_owned(),
+            message: e.to_string(),
+        }
+    })?;
 
     // The chain rebuild copies every token table row-by-row. On a mature
     // database that is minutes of silent work between "starting" and the next
@@ -377,27 +383,45 @@ pub fn initialize_schema(conn: &Connection) -> Result<(), String> {
 
     for statement in CREATE_TABLES {
         conn.execute(statement, [])
-            .map_err(|e| format!("Failed to create table: {e}"))?;
+            .map_err(|e| DatabaseError::Query {
+                operation: "create table".to_owned(),
+                message: e.to_string(),
+            })?;
     }
 
     migrations::apply_additive_migrations(conn)?;
 
     for statement in CREATE_INDEXES {
         conn.execute(statement, [])
-            .map_err(|e| format!("Failed to create index: {e}"))?;
+            .map_err(|e| DatabaseError::Query {
+                operation: "create index".to_owned(),
+                message: e.to_string(),
+            })?;
     }
 
     if conn
         .query_row("PRAGMA foreign_key_check", [], |_| Ok(()))
         .optional()
-        .map_err(|error| format!("Failed to validate tokens foreign keys: {error}"))?
+        .map_err(|error| DatabaseError::Query {
+            operation: "validate tokens foreign keys".to_owned(),
+            message: error.to_string(),
+        })?
         .is_some()
     {
-        return Err("Tokens schema initialization failed foreign-key validation".to_owned());
+        return Err(Error::MigrationIntegrity {
+            table: "tokens".to_owned(),
+            detail: "foreign-key validation failed".to_owned(),
+        });
     }
 
     conn.pragma_update(None, "user_version", SCHEMA_VERSION)
-        .map_err(|error| format!("Failed to record tokens schema version: {error}"))
+        .map_err(|error| {
+            DatabaseError::Query {
+                operation: "record tokens schema version".to_owned(),
+                message: error.to_string(),
+            }
+            .into()
+        })
 }
 
 /// Check if database is initialized

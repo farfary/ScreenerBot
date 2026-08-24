@@ -436,9 +436,9 @@ pub(super) async fn execute_blacklist(
                         &db,
                     )
                 } else {
-                    Err(crate::tokens::TokenError::Database(
-                        "Database not available".to_owned(),
-                    ))
+                    Err(crate::tokens::Error::NotInitialized {
+                        resource: "token database".to_owned(),
+                    })
                 }
             })
             .await;

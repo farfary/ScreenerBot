@@ -43,6 +43,10 @@ pub enum Error {
     #[error(transparent)]
     Apis(#[from] crate::apis::Error),
 
+    /// Pool pricing, persistence and blacklist errors.
+    #[error(transparent)]
+    Pools(#[from] crate::pools::Error),
+
     /// ScreenerBot account / sign-in errors.
     #[error(transparent)]
     Account(#[from] AccountError),

@@ -7,6 +7,8 @@ use crate::logger::{self, LogTag};
 
 use crate::chains::ChainId;
 use crate::database;
+use crate::errors::{DatabaseError, InternalError};
+use crate::pools::Error;
 use rusqlite::{params, Connection};
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -73,14 +75,20 @@ impl PoolsDatabase {
     }
 
     /// Initialize database and create tables
-    pub async fn initialize(&mut self) -> Result<(), String> {
+    pub async fn initialize(&mut self) -> Result<(), Error> {
         // Create database connection
-        let mut conn = Connection::open(&self.db_path)
-            .map_err(|e| format!("Failed to open pools database: {e}"))?;
+        let mut conn = Connection::open(&self.db_path).map_err(|e| DatabaseError::Query {
+            operation: "open pools database".to_owned(),
+            message: e.to_string(),
+        })?;
 
         // Apply shared SQLite configuration
-        database::configure_connection(&conn, database::POOLS_DB)
-            .map_err(|e| format!("Failed to configure pools database: {e}"))?;
+        database::configure_connection(&conn, database::POOLS_DB).map_err(|e| {
+            DatabaseError::Query {
+                operation: "configure pools database".to_owned(),
+                message: e.to_string(),
+            }
+        })?;
 
         migrate_schema(&mut conn)?;
 
@@ -192,13 +200,16 @@ impl PoolsDatabase {
     }
 
     /// Queue a price result for async storage (non-blocking)
-    pub async fn queue_price_for_storage(&self, price: PriceResult) -> Result<(), String> {
+    pub async fn queue_price_for_storage(&self, price: PriceResult) -> Result<(), Error> {
         if let Some(ref tx) = self.write_queue {
-            tx.send(price)
-                .map_err(|e| format!("Failed to queue price for storage: {e}"))?;
+            tx.send(price).map_err(|e| Error::QueueUnavailable {
+                detail: format!("failed to queue price for storage: {e}"),
+            })?;
             Ok(())
         } else {
-            Err("Write queue not initialized".to_owned())
+            Err(Error::QueueUnavailable {
+                detail: "write queue not initialized".to_owned(),
+            })
         }
     }
 
@@ -207,7 +218,7 @@ impl PoolsDatabase {
         &self,
         mint: &str,
         limit: usize,
-    ) -> Result<Vec<PriceResult>, String> {
+    ) -> Result<Vec<PriceResult>, Error> {
         let mint_str = mint.to_string();
         let conn_arc = self.connection.clone();
         let chain_id = self.chain_id.as_str().to_owned();
@@ -215,11 +226,11 @@ impl PoolsDatabase {
         tokio::task::spawn_blocking(move || {
             let connection_guard = conn_arc
                 .lock()
-                .map_err(|e| format!("Failed to lock connection: {e}"))?;
+                .map_err(|e| DatabaseError::Query { operation: "lock connection".to_owned(), message: e.to_string() })?;
 
             let conn = connection_guard
                 .as_ref()
-                .ok_or_else(|| "Database not initialized".to_owned())?;
+                .ok_or_else(|| Error::NotInitialized)?;
 
             let mut stmt = conn
                 .prepare(
@@ -230,25 +241,25 @@ impl PoolsDatabase {
          ORDER BY timestamp_unix DESC
          LIMIT ?",
                 )
-                .map_err(|e| format!("Failed to prepare query: {e}"))?;
+                .map_err(|e| DatabaseError::Query { operation: "prepare query".to_owned(), message: e.to_string() })?;
 
             let rows = stmt
                 .query_map(params![chain_id, mint_str, limit], |row| DbPriceResult::from_row(row))
-                .map_err(|e| format!("Failed to query price history: {e}"))?;
+                .map_err(|e| DatabaseError::Query { operation: "query price history".to_owned(), message: e.to_string() })?;
 
             let mut results = Vec::new();
             for row in rows {
-                let db_price = row.map_err(|e| format!("Failed to read row: {e}"))?;
+                let db_price = row.map_err(|e| DatabaseError::Query { operation: "read row".to_owned(), message: e.to_string() })?;
                 results.push(db_price.to_price_result());
             }
 
             // Reverse so oldest comes first
             results.reverse();
 
-            Ok::<_, String>(results)
+            Ok::<_, Error>(results)
         })
         .await
-        .map_err(|e| format!("Blocking task failed: {e}"))?
+        .map_err(InternalError::from)?
     }
 
     /// Get price history with optional filtering
@@ -257,7 +268,7 @@ impl PoolsDatabase {
         mint: &str,
         limit: Option<usize>,
         since_timestamp: Option<i64>,
-    ) -> Result<Vec<PriceResult>, String> {
+    ) -> Result<Vec<PriceResult>, Error> {
         let mint_str = mint.to_string();
         let conn_arc = self.connection.clone();
         let chain_id = self.chain_id.as_str().to_owned();
@@ -266,11 +277,11 @@ impl PoolsDatabase {
         tokio::task::spawn_blocking(move || {
             let connection_guard = conn_arc
                 .lock()
-                .map_err(|e| format!("Failed to lock connection: {e}"))?;
+                .map_err(|e| DatabaseError::Query { operation: "lock connection".to_owned(), message: e.to_string() })?;
 
             let conn = connection_guard
                 .as_ref()
-                .ok_or_else(|| "Database not initialized".to_owned())?;
+                .ok_or_else(|| Error::NotInitialized)?;
 
             let mut results = Vec::new();
 
@@ -286,14 +297,14 @@ impl PoolsDatabase {
 
                 let mut stmt = conn
                     .prepare(&query)
-                    .map_err(|e| format!("Failed to prepare query: {e}"))?;
+                    .map_err(|e| DatabaseError::Query { operation: "prepare query".to_owned(), message: e.to_string() })?;
 
                 let rows = stmt
                     .query_map(params![chain_id, mint_str, ts], |row| DbPriceResult::from_row(row))
-                    .map_err(|e| format!("Failed to query price history: {e}"))?;
+                    .map_err(|e| DatabaseError::Query { operation: "query price history".to_owned(), message: e.to_string() })?;
 
                 for row in rows {
-                    let db_price = row.map_err(|e| format!("Failed to read row: {e}"))?;
+                    let db_price = row.map_err(|e| DatabaseError::Query { operation: "read row".to_owned(), message: e.to_string() })?;
                     results.push(db_price.to_price_result());
                 }
             } else {
@@ -308,14 +319,14 @@ impl PoolsDatabase {
 
                 let mut stmt = conn
                     .prepare(&query)
-                    .map_err(|e| format!("Failed to prepare query: {e}"))?;
+                    .map_err(|e| DatabaseError::Query { operation: "prepare query".to_owned(), message: e.to_string() })?;
 
                 let rows = stmt
                     .query_map(params![chain_id, mint_str], |row| DbPriceResult::from_row(row))
-                    .map_err(|e| format!("Failed to query price history: {e}"))?;
+                    .map_err(|e| DatabaseError::Query { operation: "query price history".to_owned(), message: e.to_string() })?;
 
                 for row in rows {
-                    let db_price = row.map_err(|e| format!("Failed to read row: {e}"))?;
+                    let db_price = row.map_err(|e| DatabaseError::Query { operation: "read row".to_owned(), message: e.to_string() })?;
                     results.push(db_price.to_price_result());
                 }
             }
@@ -323,25 +334,26 @@ impl PoolsDatabase {
             // Reverse so oldest comes first
             results.reverse();
 
-            Ok::<_, String>(results)
+            Ok::<_, Error>(results)
         })
         .await
-        .map_err(|e| format!("Blocking task failed: {e}"))?
+        .map_err(InternalError::from)?
     }
 
     /// Cleanup old database entries beyond retention period
-    pub async fn cleanup_old_entries(&self) -> Result<usize, String> {
+    pub async fn cleanup_old_entries(&self) -> Result<usize, Error> {
         let conn_arc = self.connection.clone();
         let chain_id = self.chain_id.as_str().to_owned();
 
         tokio::task::spawn_blocking(move || {
-            let connection_guard = conn_arc
-                .lock()
-                .map_err(|e| format!("Failed to lock connection: {e}"))?;
+            let connection_guard = conn_arc.lock().map_err(|e| DatabaseError::Query {
+                operation: "lock connection".to_owned(),
+                message: e.to_string(),
+            })?;
 
             let conn = connection_guard
                 .as_ref()
-                .ok_or_else(|| "Database not initialized".to_owned())?;
+                .ok_or_else(|| Error::NotInitialized)?;
 
             // Calculate cutoff date
             let cutoff_date =
@@ -353,17 +365,20 @@ impl PoolsDatabase {
                     "DELETE FROM price_history WHERE chain_id = ? AND created_at < ?",
                     params![chain_id, cutoff_str],
                 )
-                .map_err(|e| format!("Failed to cleanup old entries: {e}"))?;
+                .map_err(|e| DatabaseError::Query {
+                    operation: "cleanup old entries".to_owned(),
+                    message: e.to_string(),
+                })?;
 
-            Ok::<_, String>(deleted)
+            Ok::<_, Error>(deleted)
         })
         .await
-        .map_err(|e| format!("Blocking task failed: {e}"))?
+        .map_err(InternalError::from)?
     }
 
     /// Cleanup gapped data for a specific token
     /// Removes price history entries older than the first significant gap
-    pub async fn cleanup_gapped_data_for_token(&self, mint: &str) -> Result<usize, String> {
+    pub async fn cleanup_gapped_data_for_token(&self, mint: &str) -> Result<usize, Error> {
         // Find the cutoff point (first gap > 1 minute)
         let cutoff_timestamp = match self.find_first_price_gap(mint).await? {
             Some(ts) => ts,
@@ -378,40 +393,41 @@ impl PoolsDatabase {
         tokio::task::spawn_blocking(move || {
             let connection_guard = conn_arc
                 .lock()
-                .map_err(|e| format!("Failed to lock connection: {e}"))?;
+                .map_err(|e| DatabaseError::Query { operation: "lock connection".to_owned(), message: e.to_string() })?;
 
             let conn = connection_guard
                 .as_ref()
-                .ok_or_else(|| "Database not initialized".to_owned())?;
+                .ok_or_else(|| Error::NotInitialized)?;
 
             let deleted = conn
                 .execute(
                     "DELETE FROM price_history WHERE chain_id = ? AND mint = ? AND timestamp_unix <= ?",
                     params![chain_id, mint_str, cutoff_timestamp],
                 )
-                .map_err(|e| format!("Failed to delete gapped data: {e}"))?;
+                .map_err(|e| DatabaseError::Query { operation: "delete gapped data".to_owned(), message: e.to_string() })?;
 
-            Ok::<_, String>(deleted)
+            Ok::<_, Error>(deleted)
         })
         .await
-        .map_err(|e| format!("Blocking task failed: {e}"))?
+        .map_err(InternalError::from)?
     }
 
     /// Find the first significant gap in price data for a token
     /// Returns the timestamp of the older entry at the gap point
-    async fn find_first_price_gap(&self, mint: &str) -> Result<Option<i64>, String> {
+    async fn find_first_price_gap(&self, mint: &str) -> Result<Option<i64>, Error> {
         let mint_str = mint.to_string();
         let conn_arc = self.connection.clone();
         let chain_id = self.chain_id.as_str().to_owned();
 
         let timestamps = tokio::task::spawn_blocking(move || {
-            let connection_guard = conn_arc
-                .lock()
-                .map_err(|e| format!("Failed to lock connection: {e}"))?;
+            let connection_guard = conn_arc.lock().map_err(|e| DatabaseError::Query {
+                operation: "lock connection".to_owned(),
+                message: e.to_string(),
+            })?;
 
             let conn = connection_guard
                 .as_ref()
-                .ok_or_else(|| "Database not initialized".to_owned())?;
+                .ok_or_else(|| Error::NotInitialized)?;
 
             let mut stmt = conn
                 .prepare(
@@ -420,21 +436,30 @@ impl PoolsDatabase {
            WHERE chain_id = ? AND mint = ?
            ORDER BY timestamp_unix DESC",
                 )
-                .map_err(|e| format!("Failed to prepare gap query: {e}"))?;
+                .map_err(|e| DatabaseError::Query {
+                    operation: "prepare gap query".to_owned(),
+                    message: e.to_string(),
+                })?;
 
             let rows = stmt
                 .query_map(params![chain_id, mint_str], |row| row.get::<_, i64>(0))
-                .map_err(|e| format!("Failed to query timestamps: {e}"))?;
+                .map_err(|e| DatabaseError::Query {
+                    operation: "query timestamps".to_owned(),
+                    message: e.to_string(),
+                })?;
 
             let mut timestamps = Vec::new();
             for row in rows {
-                timestamps.push(row.map_err(|e| format!("Failed to read timestamp: {e}"))?);
+                timestamps.push(row.map_err(|e| DatabaseError::Query {
+                    operation: "read timestamp".to_owned(),
+                    message: e.to_string(),
+                })?);
             }
 
-            Ok::<_, String>(timestamps)
+            Ok::<_, Error>(timestamps)
         })
         .await
-        .map_err(|e| format!("Blocking task failed: {e}"))??;
+        .map_err(InternalError::from)??;
 
         if timestamps.len() < 2 {
             return Ok(None); // Not enough data to find a gap
@@ -457,37 +482,47 @@ impl PoolsDatabase {
     }
 
     /// Cleanup gapped data for all tokens
-    pub async fn cleanup_all_gapped_data(&self) -> Result<usize, String> {
+    pub async fn cleanup_all_gapped_data(&self) -> Result<usize, Error> {
         let conn_arc = self.connection.clone();
         let chain_id = self.chain_id.as_str().to_owned();
 
         // Get all unique tokens in the database
         let tokens = tokio::task::spawn_blocking(move || {
-            let connection_guard = conn_arc
-                .lock()
-                .map_err(|e| format!("Failed to lock connection: {e}"))?;
+            let connection_guard = conn_arc.lock().map_err(|e| DatabaseError::Query {
+                operation: "lock connection".to_owned(),
+                message: e.to_string(),
+            })?;
 
             let conn = connection_guard
                 .as_ref()
-                .ok_or_else(|| "Database not initialized".to_owned())?;
+                .ok_or_else(|| Error::NotInitialized)?;
 
             let mut stmt = conn
                 .prepare("SELECT DISTINCT mint FROM price_history WHERE chain_id = ?")
-                .map_err(|e| format!("Failed to prepare token list query: {e}"))?;
+                .map_err(|e| DatabaseError::Query {
+                    operation: "prepare token list query".to_owned(),
+                    message: e.to_string(),
+                })?;
 
             let rows = stmt
                 .query_map([chain_id], |row| Ok(row.get::<_, String>("mint")?))
-                .map_err(|e| format!("Failed to execute token list query: {e}"))?;
+                .map_err(|e| DatabaseError::Query {
+                    operation: "execute token list query".to_owned(),
+                    message: e.to_string(),
+                })?;
 
             let mut tokens = Vec::new();
             for row in rows {
-                tokens.push(row.map_err(|e| format!("Failed to parse token mint: {e}"))?);
+                tokens.push(row.map_err(|e| DatabaseError::Query {
+                    operation: "parse token mint".to_owned(),
+                    message: e.to_string(),
+                })?);
             }
 
-            Ok::<_, String>(tokens)
+            Ok::<_, Error>(tokens)
         })
         .await
-        .map_err(|e| format!("Blocking task failed: {e}"))??;
+        .map_err(InternalError::from)??;
 
         // Clean up gapped data for each token
         let mut total_deleted = 0;

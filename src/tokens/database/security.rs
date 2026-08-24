@@ -1,10 +1,12 @@
 //! Token security data storage — persists rugcheck scores and safety analysis.
 
+use crate::errors::DatabaseError;
 use chrono::{DateTime, Utc};
 use rusqlite::params;
 
 use crate::tokens::store;
-use crate::tokens::types::{RugcheckData, SecurityRisk, TokenError, TokenHolder, TokenResult};
+use crate::tokens::types::{RugcheckData, SecurityRisk, TokenHolder, TokenResult};
+use crate::tokens::Error;
 
 use super::TokenDatabase;
 
@@ -13,16 +15,29 @@ impl TokenDatabase {
     pub fn upsert_rugcheck_data(&self, mint: &str, data: &RugcheckData) -> TokenResult<()> {
         let conn = self.conn()?;
 
-        let risks_json = serde_json::to_string(&data.risks)
-            .map_err(|e| TokenError::Database(format!("Failed to serialize risks: {e}")))?;
-        let holders_json = serde_json::to_string(&data.top_holders)
-            .map_err(|e| TokenError::Database(format!("Failed to serialize holders: {e}")))?;
+        let risks_json = serde_json::to_string(&data.risks).map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Failed to serialize risks".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
+        let holders_json = serde_json::to_string(&data.top_holders).map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Failed to serialize holders".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
         let markets_json = data
             .markets
             .as_ref()
             .map(|m| serde_json::to_string(m))
             .transpose()
-            .map_err(|e| TokenError::Database(format!("Failed to serialize markets: {e}")))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "Failed to serialize markets".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         let rugged_flag = if data.rugged { 1 } else { 0 };
 
@@ -143,7 +158,12 @@ impl TokenDatabase {
                 first_fetched_ts,
             ],
         )
-        .map_err(|e| TokenError::Database(format!("Failed to upsert Rugcheck data: {e}")))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Failed to upsert Rugcheck data".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         // Update in-memory cache
         store::store_rugcheck(self.chain(), mint, data);
@@ -186,7 +206,12 @@ impl TokenDatabase {
                     is_mutable
                  FROM security_rugcheck WHERE chain_id = ?1 AND mint = ?2",
             )
-            .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "Failed to prepare".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         let result = stmt.query_row(params![self.chain_id(), mint], |row| {
             let risks_json: String = row.get(19)?;
@@ -242,7 +267,10 @@ impl TokenDatabase {
         match result {
             Ok(data) => Ok(Some(data)),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(TokenError::Database(format!("Query failed: {e}"))),
+            Err(e) => Err(Error::Database(DatabaseError::Query {
+                operation: "Query failed".to_owned(),
+                message: e.to_string(),
+            })),
         }
     }
 
@@ -287,15 +315,23 @@ impl TokenDatabase {
                  t.first_discovered_at ASC
              LIMIT ?3",
             )
-            .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
+            .map_err(|e| Error::Database(DatabaseError::Query { operation: "Failed to prepare".to_owned(), message: e.to_string() }))?;
 
         let mints = stmt
             .query_map(params![self.chain_id(), now, limit], |row| row.get(0))
-            .map_err(|e| TokenError::Database(format!("Query failed: {e}")))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "Query failed".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
-        mints
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| TokenError::Database(format!("Failed to collect: {e}")))
+        mints.collect::<Result<Vec<_>, _>>().map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Failed to collect".to_owned(),
+                message: e.to_string(),
+            })
+        })
     }
 
     /// Record a failed market update attempt with error type tracking
@@ -324,7 +360,12 @@ impl TokenDatabase {
              WHERE chain_id = ?4 AND mint = ?5",
             params![message, now, error_type, self.chain_id(), mint],
         )
-        .map_err(|e| TokenError::Database(format!("Failed to record security error: {e}")))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Failed to record security error".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         Ok(())
     }
@@ -342,7 +383,12 @@ impl TokenDatabase {
              WHERE chain_id = ?1 AND mint = ?2",
             params![self.chain_id(), mint],
         )
-        .map_err(|e| TokenError::Database(format!("Failed to clear security error: {e}")))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Failed to clear security error".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         Ok(())
     }

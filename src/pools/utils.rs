@@ -8,6 +8,7 @@
 
 use super::types::{PoolMintVaultInfo, TokenPairInfo};
 use crate::logger::{self, LogTag};
+use crate::pools::Error;
 
 impl TokenPairInfo {
     /// Create a new TokenPairInfo for invalid pairs (non-SOL)
@@ -134,9 +135,12 @@ pub fn analyze_token_pair(pool_info: PoolMintVaultInfo) -> TokenPairInfo {
 /// These functions provide centralized, safe data extraction with proper bounds checking
 
 /// Read a u8 value from data at given offset, advancing the offset
-pub fn read_u8_at_offset(data: &[u8], offset: &mut usize) -> Result<u8, String> {
+pub fn read_u8_at_offset(data: &[u8], offset: &mut usize) -> Result<u8, Error> {
     if *offset >= data.len() {
-        return Err("Insufficient data for u8".to_owned());
+        return Err(Error::Decode {
+            field: "u8",
+            detail: "insufficient data".to_owned(),
+        });
     }
 
     let value = data[*offset];
@@ -145,73 +149,84 @@ pub fn read_u8_at_offset(data: &[u8], offset: &mut usize) -> Result<u8, String> 
 }
 
 /// Read a u16 value from data at given offset, advancing the offset
-pub fn read_u16_at_offset(data: &[u8], offset: &mut usize) -> Result<u16, String> {
+pub fn read_u16_at_offset(data: &[u8], offset: &mut usize) -> Result<u16, Error> {
     if *offset + 2 > data.len() {
-        return Err("Insufficient data for u16".to_owned());
+        return Err(Error::Decode {
+            field: "u16",
+            detail: "insufficient data".to_owned(),
+        });
     }
 
     let value_bytes = &data[*offset..*offset + 2];
     *offset += 2;
-    let value = u16::from_le_bytes(
-        value_bytes
-            .try_into()
-            .map_err(|_| "Failed to parse u16".to_owned())?,
-    );
+    let value = u16::from_le_bytes(value_bytes.try_into().map_err(|_| Error::Decode {
+        field: "u16",
+        detail: "byte slice has the wrong length".to_owned(),
+    })?);
     Ok(value)
 }
 
 /// Read a u32 value from data at given offset, advancing the offset
-pub fn read_u32_at_offset(data: &[u8], offset: &mut usize) -> Result<u32, String> {
+pub fn read_u32_at_offset(data: &[u8], offset: &mut usize) -> Result<u32, Error> {
     if *offset + 4 > data.len() {
-        return Err("Insufficient data for u32".to_owned());
+        return Err(Error::Decode {
+            field: "u32",
+            detail: "insufficient data".to_owned(),
+        });
     }
 
     let value_bytes = &data[*offset..*offset + 4];
     *offset += 4;
-    let value = u32::from_le_bytes(
-        value_bytes
-            .try_into()
-            .map_err(|_| "Failed to parse u32".to_owned())?,
-    );
+    let value = u32::from_le_bytes(value_bytes.try_into().map_err(|_| Error::Decode {
+        field: "u32",
+        detail: "byte slice has the wrong length".to_owned(),
+    })?);
     Ok(value)
 }
 
 /// Read a u64 value from data at given offset, advancing the offset
-pub fn read_u64_at_offset(data: &[u8], offset: &mut usize) -> Result<u64, String> {
+pub fn read_u64_at_offset(data: &[u8], offset: &mut usize) -> Result<u64, Error> {
     if *offset + 8 > data.len() {
-        return Err("Insufficient data for u64".to_owned());
+        return Err(Error::Decode {
+            field: "u64",
+            detail: "insufficient data".to_owned(),
+        });
     }
 
     let value_bytes = &data[*offset..*offset + 8];
     *offset += 8;
-    let value = u64::from_le_bytes(
-        value_bytes
-            .try_into()
-            .map_err(|_| "Failed to parse u64".to_owned())?,
-    );
+    let value = u64::from_le_bytes(value_bytes.try_into().map_err(|_| Error::Decode {
+        field: "u64",
+        detail: "byte slice has the wrong length".to_owned(),
+    })?);
     Ok(value)
 }
 
 /// Read a u128 value from data at given offset, advancing the offset
-pub fn read_u128_at_offset(data: &[u8], offset: &mut usize) -> Result<u128, String> {
+pub fn read_u128_at_offset(data: &[u8], offset: &mut usize) -> Result<u128, Error> {
     if *offset + 16 > data.len() {
-        return Err("Insufficient data for u128".to_owned());
+        return Err(Error::Decode {
+            field: "u128",
+            detail: "insufficient data".to_owned(),
+        });
     }
 
     let value_bytes = &data[*offset..*offset + 16];
     *offset += 16;
-    let value = u128::from_le_bytes(
-        value_bytes
-            .try_into()
-            .map_err(|_| "Failed to parse u128".to_owned())?,
-    );
+    let value = u128::from_le_bytes(value_bytes.try_into().map_err(|_| Error::Decode {
+        field: "u128",
+        detail: "byte slice has the wrong length".to_owned(),
+    })?);
     Ok(value)
 }
 
 /// Read a bool value from data at given offset, advancing the offset
-pub fn read_bool_at_offset(data: &[u8], offset: &mut usize) -> Result<bool, String> {
+pub fn read_bool_at_offset(data: &[u8], offset: &mut usize) -> Result<bool, Error> {
     if *offset >= data.len() {
-        return Err("Insufficient data for bool".to_owned());
+        return Err(Error::Decode {
+            field: "bool",
+            detail: "insufficient data".to_owned(),
+        });
     }
 
     let value = data[*offset] != 0;
@@ -248,11 +263,13 @@ pub fn get_analyzer_vault_order(pool_info: PoolMintVaultInfo) -> Vec<String> {
 /// Validate that a pool contains SOL and return normalized token pair
 ///
 /// This is the main validation function that both analyzer and decoder should use
-pub fn validate_sol_pool(pool_info: PoolMintVaultInfo) -> Result<TokenPairInfo, String> {
+pub fn validate_sol_pool(pool_info: PoolMintVaultInfo) -> Result<TokenPairInfo, Error> {
     let pair_info = analyze_token_pair(pool_info);
 
     if !pair_info.is_sol_pair {
-        Err("Pool does not contain SOL as base or quote".to_owned())
+        Err(Error::InvalidPool {
+            reason: "pool does not contain SOL as base or quote".to_owned(),
+        })
     } else {
         Ok(pair_info)
     }

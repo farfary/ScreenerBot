@@ -33,18 +33,17 @@ impl Service for PoolsService {
 
         // Initialize all pool components (database, cache, RPC, components),
         // selecting the Solana runtime as the concrete implementation.
-        // SEAM: crate::pools still constrains this closure to Result<u32,
-        // String>; removed when it migrates.
-        crate::pools::initialize_pool_components(|| async {
+        // `initialize_pool_components` is generic over the chain adapter's own
+        // error type (pools stays chain-neutral and never names it) so the
+        // Solana result is passed straight through.
+        crate::pools::initialize_pool_components(|| {
             crate::chains::solana::pools::service::initialize_components()
-                .await
-                .map_err(|e| e.to_string())
         })
         .await
         .map_err(|e| {
             crate::Error::Service(crate::errors::ServiceError::Initialize {
                 service: "pools".to_owned(),
-                message: format!("Failed to initialize pool components: {:?}", e),
+                message: format!("Failed to initialize pool components: {e}"),
             })
         })?;
 

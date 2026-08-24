@@ -1,13 +1,15 @@
 //! Token assembly helpers — free functions for constructing Token structs from components.
 
+use crate::errors::DatabaseError;
 use chrono::{DateTime, Utc};
 use rusqlite::{types::FromSql, Row};
 
 use crate::chains::ChainId;
 use crate::tokens::types::{
-    DataSource, DexScreenerData, GeckoTerminalData, Priority, RugcheckData, Token, TokenError,
-    TokenMetadata, TokenResult,
+    DataSource, DexScreenerData, GeckoTerminalData, Priority, RugcheckData, Token, TokenMetadata,
+    TokenResult,
 };
+use crate::tokens::Error;
 
 pub(super) enum MarketDataType {
     DexScreener(DexScreenerData),
@@ -273,8 +275,12 @@ pub(super) fn read_row_value<T: FromSql>(
     index: usize,
     field: &str,
 ) -> TokenResult<T> {
-    row.get(index)
-        .map_err(|e| TokenError::Database(format!("Failed to read {field}: {e}")))
+    row.get(index).map_err(|e| {
+        Error::Database(DatabaseError::Query {
+            operation: "Failed to read {field}".to_owned(),
+            message: e.to_string(),
+        })
+    })
 }
 
 pub(super) fn assemble_token_without_market_data(

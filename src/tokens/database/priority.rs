@@ -1,10 +1,12 @@
 //! Token priority database — stores and queries token processing priority levels.
 
+use crate::errors::DatabaseError;
 use rusqlite::{params, params_from_iter};
 use std::collections::HashMap;
 
 use crate::logger::{self, LogTag};
-use crate::tokens::types::{Priority, TokenError, TokenResult};
+use crate::tokens::types::{Priority, TokenResult};
+use crate::tokens::Error;
 
 use super::TokenDatabase;
 use crate::database::WriteTransaction;
@@ -23,15 +25,28 @@ impl TokenDatabase {
                  ORDER BY market_data_last_updated_at ASC NULLS FIRST 
                  LIMIT ?3",
             )
-            .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "Failed to prepare".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         let mints = stmt
             .query_map(params![self.chain_id(), priority, limit], |row| row.get(0))
-            .map_err(|e| TokenError::Database(format!("Query failed: {e}")))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "Query failed".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
-        mints
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| TokenError::Database(format!("Failed to collect: {e}")))
+        mints.collect::<Result<Vec<_>, _>>().map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Failed to collect".to_owned(),
+                message: e.to_string(),
+            })
+        })
     }
 
     /// Get oldest non-blacklisted tokens (excludes permanently failed market data tokens)
@@ -49,15 +64,28 @@ impl TokenDatabase {
              ORDER BY COALESCE(u.market_data_last_updated_at, 0) ASC
              LIMIT ?2",
             )
-            .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "Failed to prepare".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         let mints = stmt
             .query_map(params![self.chain_id(), limit], |row| row.get(0))
-            .map_err(|e| TokenError::Database(format!("Query failed: {e}")))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "Query failed".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
-        mints
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| TokenError::Database(format!("Failed to collect: {e}")))
+        mints.collect::<Result<Vec<_>, _>>().map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Failed to collect".to_owned(),
+                message: e.to_string(),
+            })
+        })
     }
 
     /// Update priority for a token
@@ -66,10 +94,7 @@ impl TokenDatabase {
         // Validate priority value (Bug #29 fix)
         let valid_priorities = [10, 25, 40, 55, 60, 75, 100];
         if !valid_priorities.contains(&priority) {
-            return Err(TokenError::Database(format!(
-                "Invalid priority value: {}. Must be one of: 10, 25, 40, 55, 60, 75, 100",
-                priority
-            )));
+            return Err(Error::InvalidPriority { value: priority });
         }
 
         let conn = self.conn()?;
@@ -78,7 +103,12 @@ impl TokenDatabase {
             "UPDATE update_tracking SET priority = ?1 WHERE chain_id = ?2 AND mint = ?3",
             params![priority, self.chain_id(), mint],
         )
-        .map_err(|e| TokenError::Database(format!("Failed to update priority: {e}")))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Failed to update priority".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         Ok(())
     }
@@ -92,17 +122,17 @@ impl TokenDatabase {
         // Validate priority value (Bug #29 fix)
         let valid_priorities = [10, 25, 40, 55, 60, 75, 100];
         if !valid_priorities.contains(&priority) {
-            return Err(TokenError::Database(format!(
-                "Invalid priority value: {}. Must be one of: 10, 25, 40, 55, 60, 75, 100",
-                priority
-            )));
+            return Err(Error::InvalidPriority { value: priority });
         }
 
         let mut conn = self.conn()?;
 
-        let tx = conn
-            .write_tx()
-            .map_err(|e| TokenError::Database(format!("Transaction start failed: {e}")))?;
+        let tx = conn.write_tx().map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Transaction start failed".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         let mut updated = 0;
         {
@@ -110,7 +140,12 @@ impl TokenDatabase {
                 .prepare_cached(
                     "UPDATE update_tracking SET priority = ?1 WHERE chain_id = ?2 AND mint = ?3",
                 )
-                .map_err(|e| TokenError::Database(format!("Prepare failed: {e}")))?;
+                .map_err(|e| {
+                    Error::Database(DatabaseError::Query {
+                        operation: "Prepare failed".to_owned(),
+                        message: e.to_string(),
+                    })
+                })?;
 
             for mint in mints {
                 match stmt.execute(params![priority, self.chain_id(), mint]) {
@@ -125,8 +160,12 @@ impl TokenDatabase {
             }
         }
 
-        tx.commit()
-            .map_err(|e| TokenError::Database(format!("Transaction commit failed: {e}")))?;
+        tx.commit().map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Transaction commit failed".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         Ok(updated)
     }
@@ -158,9 +197,12 @@ impl TokenDatabase {
             .chain(mints.iter().map(String::as_str))
             .collect();
 
-        let mut stmt = conn
-            .prepare(&query)
-            .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
+        let mut stmt = conn.prepare(&query).map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Failed to prepare".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         let rows = stmt
             .query_map(params_from_iter(mint_refs.into_iter()), |row| {
@@ -168,12 +210,18 @@ impl TokenDatabase {
                 let priority: i32 = row.get(1)?;
                 Ok((mint, priority))
             })
-            .map_err(|e| TokenError::Database(format!("Query failed: {e}")))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "Query failed".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         let mut result = HashMap::new();
         for row in rows {
-            let (mint, priority) =
-                row.map_err(|e| TokenError::Database(format!("Row parse failed: {e}")))?;
+            let (mint, priority) = row.map_err(|e| Error::RowDecode {
+                detail: e.to_string(),
+            })?;
             result.insert(mint, priority);
         }
 
@@ -188,7 +236,7 @@ impl TokenDatabase {
             .prepare(
                 "SELECT priority, COUNT(*) FROM update_tracking WHERE chain_id = ?1 GROUP BY priority ORDER BY priority DESC",
             )
-            .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
+            .map_err(|e| Error::Database(DatabaseError::Query { operation: "Failed to prepare".to_owned(), message: e.to_string() }))?;
 
         let rows = stmt
             .query_map(params![self.chain_id()], |row| {
@@ -196,10 +244,19 @@ impl TokenDatabase {
                 let count: i64 = row.get(1)?;
                 Ok((priority, count.max(0) as u64))
             })
-            .map_err(|e| TokenError::Database(format!("Query failed: {e}")))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "Query failed".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
-        rows.collect::<Result<Vec<_>, _>>()
-            .map_err(|e| TokenError::Database(format!("Failed to collect priority summary: {e}")))
+        rows.collect::<Result<Vec<_>, _>>().map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Failed to collect priority summary".to_owned(),
+                message: e.to_string(),
+            })
+        })
     }
 
     /// Get the current priority level for a specific token
@@ -208,7 +265,12 @@ impl TokenDatabase {
 
         let mut stmt = conn
             .prepare("SELECT priority FROM update_tracking WHERE chain_id = ?1 AND mint = ?2")
-            .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "Failed to prepare".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         let priority: i32 = stmt
             .query_row(params![self.chain_id(), mint], |row| row.get(0))

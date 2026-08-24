@@ -4,8 +4,9 @@ use crate::apis::manager::get_api_manager;
 use crate::events::{record_token_event, Severity};
 use crate::logger::{self, LogTag};
 use crate::sol_price::get_sol_price;
-use crate::tokens::types::{TokenError, TokenPoolInfo, TokenResult};
+use crate::tokens::types::{TokenPoolInfo, TokenResult};
 use crate::tokens::updates::RateLimitCoordinator;
+use crate::tokens::Error;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -50,8 +51,8 @@ pub async fn fetch_from_sources(
                             .dexscreener
                             .fetch_token_pools(&mint, None)
                             .await
-                            .map_err(|e| TokenError::Api {
-                                source: "DexScreener".to_owned(),
+                            .map_err(|e| Error::Api {
+                                provider: "DexScreener".to_owned(),
                                 message: e.to_string(),
                             });
                         // Only forget permit if API call succeeded
@@ -61,8 +62,8 @@ pub async fn fetch_from_sources(
                         result
                     }
                     Ok(Err(e)) => Err(e),
-                    Err(_) => Err(TokenError::RateLimit {
-                        source: "DexScreener".to_owned(),
+                    Err(_) => Err(Error::RateLimit {
+                        provider: "DexScreener".to_owned(),
                         message: "Rate limit acquisition timed out".to_owned(),
                     }),
                 }
@@ -72,44 +73,45 @@ pub async fn fetch_from_sources(
         }
     };
 
-    let gecko_future = {
-        let api = api.clone();
-        let coordinator = coordinator.clone();
-        let mint = mint_owned.clone();
-        async move {
-            if should_fetch_gecko {
-                // Use timeout to prevent indefinite blocking on rate limit
-                match tokio::time::timeout(
-                    RATE_LIMIT_ACQUIRE_TIMEOUT,
-                    coordinator.acquire_geckoterminal(),
-                )
-                .await
-                {
-                    Ok(Ok(permit)) => {
-                        // Got permit, proceed with fetch
-                        let result = api.geckoterminal.fetch_pools(&mint).await.map_err(|e| {
-                            TokenError::Api {
-                                source: "GeckoTerminal".to_owned(),
-                                message: e.to_string(),
+    let gecko_future =
+        {
+            let api = api.clone();
+            let coordinator = coordinator.clone();
+            let mint = mint_owned.clone();
+            async move {
+                if should_fetch_gecko {
+                    // Use timeout to prevent indefinite blocking on rate limit
+                    match tokio::time::timeout(
+                        RATE_LIMIT_ACQUIRE_TIMEOUT,
+                        coordinator.acquire_geckoterminal(),
+                    )
+                    .await
+                    {
+                        Ok(Ok(permit)) => {
+                            // Got permit, proceed with fetch
+                            let result = api.geckoterminal.fetch_pools(&mint).await.map_err(|e| {
+                                Error::Api {
+                                    provider: "GeckoTerminal".to_owned(),
+                                    message: e.to_string(),
+                                }
+                            });
+                            // Only forget permit if API call succeeded
+                            if result.is_ok() {
+                                permit.forget();
                             }
-                        });
-                        // Only forget permit if API call succeeded
-                        if result.is_ok() {
-                            permit.forget();
+                            result
                         }
-                        result
+                        Ok(Err(e)) => Err(e),
+                        Err(_) => Err(Error::RateLimit {
+                            provider: "GeckoTerminal".to_owned(),
+                            message: "Rate limit acquisition timed out".to_owned(),
+                        }),
                     }
-                    Ok(Err(e)) => Err(e),
-                    Err(_) => Err(TokenError::RateLimit {
-                        source: "GeckoTerminal".to_owned(),
-                        message: "Rate limit acquisition timed out".to_owned(),
-                    }),
+                } else {
+                    Ok(Vec::new())
                 }
-            } else {
-                Ok(Vec::new())
             }
-        }
-    };
+        };
 
     // The self-hosted server is the PRIMARY, central pool registry: fetch it
     // alongside the direct providers and ingest it FIRST so its pools seed the
@@ -243,8 +245,8 @@ pub async fn fetch_from_sources(
             }),
         )
         .await;
-        return Err(TokenError::Api {
-            source: "TokenPools".to_owned(),
+        return Err(Error::Api {
+            provider: "TokenPools".to_owned(),
             message: combined,
         });
     }

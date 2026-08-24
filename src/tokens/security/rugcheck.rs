@@ -8,7 +8,8 @@ use crate::events::record_security_event;
 use crate::logger::{self, LogTag};
 use crate::tokens::database::TokenDatabase;
 use crate::tokens::store::{self, CacheMetrics};
-use crate::tokens::types::{RugcheckData, TokenError, TokenResult};
+use crate::tokens::types::{RugcheckData, TokenResult};
+use crate::tokens::Error;
 use chrono::Utc;
 
 /// Convert API rugcheck info to our RugcheckData type
@@ -205,8 +206,8 @@ pub async fn fetch_rugcheck_data(
                     ..
                 })) => return Ok(None),
                 Err(e) => {
-                    return Err(TokenError::Api {
-                        source: "Rugcheck".to_owned(),
+                    return Err(Error::Api {
+                        provider: "Rugcheck".to_owned(),
                         message: e.to_string(),
                     });
                 }

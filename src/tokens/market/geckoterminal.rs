@@ -11,7 +11,8 @@
 use crate::logger::{self, LogTag};
 use crate::tokens::database::TokenDatabase;
 use crate::tokens::store::{self, CacheMetrics};
-use crate::tokens::types::{GeckoTerminalData, TokenError, TokenResult};
+use crate::tokens::types::{GeckoTerminalData, TokenResult};
+use crate::tokens::Error;
 use chrono::Utc;
 use std::collections::HashMap;
 
@@ -97,8 +98,8 @@ pub async fn fetch_geckoterminal_data_batch(
             None,
         )
         .await
-        .map_err(|e| TokenError::Api {
-            source: "GeckoTerminal".to_owned(),
+        .map_err(|e| Error::Api {
+            provider: "GeckoTerminal".to_owned(),
             message: format!("{:?}", e),
         })?;
 

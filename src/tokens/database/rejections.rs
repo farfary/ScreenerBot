@@ -1,9 +1,11 @@
 //! Token rejection storage — records why tokens were filtered out with timestamps.
 
+use crate::errors::DatabaseError;
 use rusqlite::params;
 
 use crate::logger::{self, LogTag};
-use crate::tokens::types::{TokenError, TokenResult};
+use crate::tokens::types::TokenResult;
+use crate::tokens::Error;
 
 use super::TokenDatabase;
 use crate::database::WriteTransaction;
@@ -27,7 +29,12 @@ impl TokenDatabase {
              WHERE chain_id = ?4 AND mint = ?5",
             params![reason, source, rejected_at, self.chain_id(), mint],
         )
-        .map_err(|e| TokenError::Database(format!("Failed to update rejection status: {e}")))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Failed to update rejection status".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         Ok(())
     }
@@ -44,7 +51,12 @@ impl TokenDatabase {
              WHERE chain_id = ?1 AND mint = ?2",
             params![self.chain_id(), mint],
         )
-        .map_err(|e| TokenError::Database(format!("Failed to clear rejection status: {e}")))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Failed to clear rejection status".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         Ok(())
     }
@@ -59,9 +71,12 @@ impl TokenDatabase {
 
         let mut conn = self.conn()?;
 
-        let tx = conn
-            .write_tx()
-            .map_err(|e| TokenError::Database(format!("Transaction start failed: {e}")))?;
+        let tx = conn.write_tx().map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Transaction start failed".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         let mut updated = 0;
         {
@@ -73,7 +88,12 @@ impl TokenDatabase {
                         last_rejection_at = NULL 
                      WHERE chain_id = ?1 AND mint = ?2",
                 )
-                .map_err(|e| TokenError::Database(format!("Prepare failed: {e}")))?;
+                .map_err(|e| {
+                    Error::Database(DatabaseError::Query {
+                        operation: "Prepare failed".to_owned(),
+                        message: e.to_string(),
+                    })
+                })?;
 
             for mint in mints {
                 match stmt.execute(params![self.chain_id(), mint]) {
@@ -89,8 +109,12 @@ impl TokenDatabase {
             }
         }
 
-        tx.commit()
-            .map_err(|e| TokenError::Database(format!("Transaction commit failed: {e}")))?;
+        tx.commit().map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Transaction commit failed".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         Ok(updated)
     }
@@ -108,9 +132,12 @@ impl TokenDatabase {
 
         let mut conn = self.conn()?;
 
-        let tx = conn
-            .write_tx()
-            .map_err(|e| TokenError::Database(format!("Transaction start failed: {e}")))?;
+        let tx = conn.write_tx().map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Transaction start failed".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         let mut updated = 0;
         {
@@ -122,7 +149,12 @@ impl TokenDatabase {
                         last_rejection_at = ?3 
                      WHERE chain_id = ?4 AND mint = ?5",
                 )
-                .map_err(|e| TokenError::Database(format!("Prepare failed: {e}")))?;
+                .map_err(|e| {
+                    Error::Database(DatabaseError::Query {
+                        operation: "Prepare failed".to_owned(),
+                        message: e.to_string(),
+                    })
+                })?;
 
             for (mint, reason, source, rejected_at) in updates {
                 match stmt.execute(params![reason, source, rejected_at, self.chain_id(), mint]) {
@@ -137,8 +169,12 @@ impl TokenDatabase {
             }
         }
 
-        tx.commit()
-            .map_err(|e| TokenError::Database(format!("Transaction commit failed: {e}")))?;
+        tx.commit().map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Transaction commit failed".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         Ok(updated)
     }
@@ -155,9 +191,12 @@ impl TokenDatabase {
 
         let mut conn = self.conn()?;
 
-        let tx = conn
-            .write_tx()
-            .map_err(|e| TokenError::Database(format!("Transaction start failed: {e}")))?;
+        let tx = conn.write_tx().map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Transaction start failed".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         let mut updated = 0;
         {
@@ -169,7 +208,7 @@ impl TokenDatabase {
                          rejection_count = rejection_count + 1,
                          last_seen = ?5",
                 )
-                .map_err(|e| TokenError::Database(format!("Prepare failed: {e}")))?;
+                .map_err(|e| Error::Database(DatabaseError::Query { operation: "Prepare failed".to_owned(), message: e.to_string() }))?;
 
             for (reason, source, timestamp) in stats {
                 // Round timestamp to hour bucket
@@ -192,8 +231,12 @@ impl TokenDatabase {
             }
         }
 
-        tx.commit()
-            .map_err(|e| TokenError::Database(format!("Transaction commit failed: {e}")))?;
+        tx.commit().map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Transaction commit failed".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         Ok(updated)
     }
@@ -234,9 +277,12 @@ impl TokenDatabase {
         query
             .push_str(" GROUP BY last_rejection_reason, last_rejection_source ORDER BY count DESC");
 
-        let mut stmt = conn
-            .prepare(&query)
-            .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
+        let mut stmt = conn.prepare(&query).map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Failed to prepare".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         // Bind parameters
         let chain_id = self.chain_id();
@@ -256,7 +302,12 @@ impl TokenDatabase {
                     row.get::<_, i64>(2)?,
                 ))
             })
-            .map_err(|e| TokenError::Database(format!("Query failed: {e}")))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "Query failed".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         let mut results = Vec::new();
         for row in rows {
@@ -297,9 +348,12 @@ impl TokenDatabase {
                      WHERE ut.chain_id = ?1 AND ut.last_rejection_reason IS NOT NULL
                      ORDER BY ut.last_rejection_at DESC LIMIT ?2";
 
-        let mut stmt = conn
-            .prepare(query)
-            .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
+        let mut stmt = conn.prepare(query).map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Failed to prepare".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         let chain_id = self.chain_id();
         let limit_i64 = limit as i64;
@@ -315,11 +369,18 @@ impl TokenDatabase {
                     row.get::<_, Option<String>>(6)?,
                 ))
             })
-            .map_err(|e| TokenError::Database(format!("Query failed: {e}")))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "Query failed".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         let mut results = Vec::new();
         for row in rows {
-            results.push(row.map_err(|e| TokenError::Database(format!("Row failed: {e}")))?);
+            results.push(row.map_err(|e| Error::RowDecode {
+                detail: e.to_string(),
+            })?);
         }
 
         Ok(results)
@@ -376,9 +437,12 @@ impl TokenDatabase {
             " ORDER BY last_rejection_at DESC LIMIT :limit OFFSET :offset"
         });
 
-        let mut stmt = conn
-            .prepare(&query)
-            .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
+        let mut stmt = conn.prepare(&query).map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Failed to prepare".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         // Build params dynamically - only include params that are in the query
         let chain_id = self.chain_id();
@@ -410,7 +474,12 @@ impl TokenDatabase {
                     row.get::<_, Option<i64>>(3)?.unwrap_or_default(),
                 ))
             })
-            .map_err(|e| TokenError::Database(format!("Query failed: {e}")))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "Query failed".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         let mut results = Vec::new();
         for row in rows {
@@ -437,7 +506,7 @@ impl TokenDatabase {
             "INSERT INTO rejection_history (chain_id, mint, reason, source, rejected_at) VALUES (?1, ?2, ?3, ?4, ?5)",
             params![self.chain_id(), mint, reason, source, rejected_at],
         )
-        .map_err(|e| TokenError::Database(format!("Failed to insert rejection history: {e}")))?;
+        .map_err(|e| Error::Database(DatabaseError::Query { operation: "Failed to insert rejection history".to_owned(), message: e.to_string() }))?;
 
         Ok(())
     }
@@ -469,9 +538,12 @@ impl TokenDatabase {
 
         query.push_str(" GROUP BY reason, source ORDER BY count DESC");
 
-        let mut stmt = conn
-            .prepare(&query)
-            .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
+        let mut stmt = conn.prepare(&query).map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Failed to prepare".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         let chain_id = self.chain_id();
         let mut params: Vec<(&str, &dyn rusqlite::ToSql)> = vec![(":chain_id", &chain_id)];
@@ -490,7 +562,12 @@ impl TokenDatabase {
                     row.get::<_, i64>(2)?,
                 ))
             })
-            .map_err(|e| TokenError::Database(format!("Query failed: {e}")))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "Query failed".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         let mut results = Vec::new();
         for row in rows {
@@ -516,7 +593,10 @@ impl TokenDatabase {
                 params![self.chain_id(), cutoff],
             )
             .map_err(|e| {
-                TokenError::Database(format!("Failed to cleanup rejection history: {e}"))
+                Error::Database(DatabaseError::Query {
+                    operation: "Failed to cleanup rejection history".to_owned(),
+                    message: e.to_string(),
+                })
             })?;
 
         Ok(deleted)
@@ -544,7 +624,7 @@ impl TokenDatabase {
                  last_seen = ?5",
             params![self.chain_id(), bucket_hour, reason, source, timestamp],
         )
-        .map_err(|e| TokenError::Database(format!("Upsert rejection stat failed: {e}")))?;
+        .map_err(|e| Error::Database(DatabaseError::Query { operation: "Upsert rejection stat failed".to_owned(), message: e.to_string() }))?;
 
         Ok(())
     }
@@ -571,9 +651,12 @@ impl TokenDatabase {
 
         query.push_str(" GROUP BY reason, source ORDER BY total DESC");
 
-        let mut stmt = conn
-            .prepare(&query)
-            .map_err(|e| TokenError::Database(format!("Prepare failed: {e}")))?;
+        let mut stmt = conn.prepare(&query).map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Prepare failed".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         let chain_id = self.chain_id();
         let mut params: Vec<(&str, &dyn rusqlite::ToSql)> = vec![(":chain_id", &chain_id)];
@@ -592,7 +675,12 @@ impl TokenDatabase {
                     row.get::<_, i64>(2)?,
                 ))
             })
-            .map_err(|e| TokenError::Database(format!("Query failed: {e}")))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "Query failed".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         let mut results = Vec::new();
         for row in rows {
@@ -615,7 +703,12 @@ impl TokenDatabase {
                 "DELETE FROM rejection_stats WHERE chain_id = ?1 AND bucket_hour < ?2",
                 params![self.chain_id(), cutoff],
             )
-            .map_err(|e| TokenError::Database(format!("Delete rejection stats failed: {e}")))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "Delete rejection stats failed".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         Ok(deleted)
     }

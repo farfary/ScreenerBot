@@ -194,25 +194,6 @@ mod instant_serde {
     }
 }
 
-/// Pool service error types
-#[derive(Debug, thiserror::Error)]
-pub enum PoolError {
-    #[error("Pool service initialization failed: {0}")]
-    InitializationFailed(String),
-
-    #[error("Pool service not running")]
-    ServiceNotRunning,
-
-    #[error("Price not available for token: {0}")]
-    PriceNotAvailable(String),
-
-    #[error("RPC error: {0}")]
-    RpcError(String),
-
-    #[error("Decode error: {0}")]
-    DecodeError(String),
-}
-
 /// Pool descriptor containing metadata about a discovered pool.
 ///
 /// Chain-neutral: identities are typed `chains::types` value objects, not

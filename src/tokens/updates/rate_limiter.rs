@@ -9,7 +9,7 @@ use crate::apis::dexscreener::{
 use crate::apis::geckoterminal::RATE_LIMIT_PER_MINUTE as GECKO_DEFAULT_PER_MINUTE;
 use crate::apis::rugcheck::RATE_LIMIT_PER_MINUTE as RUG_DEFAULT_PER_MINUTE;
 use crate::config::with_config;
-use crate::tokens::types::TokenError;
+use crate::tokens::Error;
 use std::sync::Arc;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
@@ -82,76 +82,76 @@ impl RateLimitCoordinator {
 
     /// Acquire permit for DexScreener token batch API call (market data updates)
     /// Rate limit: 300/min
-    pub async fn acquire_dexscreener_batch(&self) -> Result<OwnedSemaphorePermit, TokenError> {
+    pub async fn acquire_dexscreener_batch(&self) -> Result<OwnedSemaphorePermit, Error> {
         self.dexscreener_batch_sem
             .clone()
             .acquire_owned()
             .await
-            .map_err(|e| TokenError::RateLimit {
-                source: "DexScreener-Batch".to_owned(),
+            .map_err(|e| Error::RateLimit {
+                provider: "DexScreener-Batch".to_owned(),
                 message: format!("Failed to acquire permit: {e}"),
             })
     }
 
     /// Acquire permit for DexScreener profiles API call (discovery)
     /// Rate limit: 60/min
-    pub async fn acquire_dexscreener_profiles(&self) -> Result<OwnedSemaphorePermit, TokenError> {
+    pub async fn acquire_dexscreener_profiles(&self) -> Result<OwnedSemaphorePermit, Error> {
         self.dexscreener_profiles_sem
             .clone()
             .acquire_owned()
             .await
-            .map_err(|e| TokenError::RateLimit {
-                source: "DexScreener-Profiles".to_owned(),
+            .map_err(|e| Error::RateLimit {
+                provider: "DexScreener-Profiles".to_owned(),
                 message: format!("Failed to acquire permit: {e}"),
             })
     }
 
     /// Acquire permit for DexScreener boosts API call (discovery)
     /// Rate limit: 60/min
-    pub async fn acquire_dexscreener_boosts(&self) -> Result<OwnedSemaphorePermit, TokenError> {
+    pub async fn acquire_dexscreener_boosts(&self) -> Result<OwnedSemaphorePermit, Error> {
         self.dexscreener_boosts_sem
             .clone()
             .acquire_owned()
             .await
-            .map_err(|e| TokenError::RateLimit {
-                source: "DexScreener-Boosts".to_owned(),
+            .map_err(|e| Error::RateLimit {
+                provider: "DexScreener-Boosts".to_owned(),
                 message: format!("Failed to acquire permit: {e}"),
             })
     }
 
     /// Acquire permit for DexScreener full pool fetch API call
     /// Rate limit: 300/min
-    pub async fn acquire_dexscreener_pools(&self) -> Result<OwnedSemaphorePermit, TokenError> {
+    pub async fn acquire_dexscreener_pools(&self) -> Result<OwnedSemaphorePermit, Error> {
         self.dexscreener_pools_sem
             .clone()
             .acquire_owned()
             .await
-            .map_err(|e| TokenError::RateLimit {
-                source: "DexScreener-Pools".to_owned(),
+            .map_err(|e| Error::RateLimit {
+                provider: "DexScreener-Pools".to_owned(),
                 message: format!("Failed to acquire permit: {e}"),
             })
     }
 
     /// Acquire permit for GeckoTerminal API call
-    pub async fn acquire_geckoterminal(&self) -> Result<OwnedSemaphorePermit, TokenError> {
+    pub async fn acquire_geckoterminal(&self) -> Result<OwnedSemaphorePermit, Error> {
         self.geckoterminal_sem
             .clone()
             .acquire_owned()
             .await
-            .map_err(|e| TokenError::RateLimit {
-                source: "GeckoTerminal".to_owned(),
+            .map_err(|e| Error::RateLimit {
+                provider: "GeckoTerminal".to_owned(),
                 message: format!("Failed to acquire permit: {e}"),
             })
     }
 
     /// Acquire permit for Rugcheck API call
-    pub async fn acquire_rugcheck(&self) -> Result<OwnedSemaphorePermit, TokenError> {
+    pub async fn acquire_rugcheck(&self) -> Result<OwnedSemaphorePermit, Error> {
         self.rugcheck_sem
             .clone()
             .acquire_owned()
             .await
-            .map_err(|e| TokenError::RateLimit {
-                source: "Rugcheck".to_owned(),
+            .map_err(|e| Error::RateLimit {
+                provider: "Rugcheck".to_owned(),
                 message: format!("Failed to acquire permit: {e}"),
             })
     }

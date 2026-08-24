@@ -173,7 +173,7 @@ pub fn start_discovery_loop(
 pub async fn run_discovery_once(
     db: &TokenDatabase,
     coordinator: Arc<RateLimitCoordinator>,
-) -> Result<DiscoveryStats, String> {
+) -> crate::tokens::Result<DiscoveryStats> {
     // Check if tools are running - skip discovery to reduce RPC contention
     if crate::global::are_tools_active() {
         return Ok(DiscoveryStats::skipped(
@@ -439,12 +439,12 @@ pub async fn run_discovery_once(
     stats.unique_mints = candidates.len();
 
     for (mint, aggregate) in candidates {
-        if db.is_blacklisted(&mint).map_err(|e| e.to_string())? {
+        if db.is_blacklisted(&mint)? {
             stats.blacklisted += 1;
             continue;
         }
 
-        if db.token_exists(&mint).map_err(|e| e.to_string())? {
+        if db.token_exists(&mint)? {
             stats.already_known += 1;
             continue;
         }
@@ -454,8 +454,7 @@ pub async fn run_discovery_once(
             aggregate.symbol.as_deref(),
             aggregate.name.as_deref(),
             aggregate.decimals,
-        )
-        .map_err(|e| e.to_string())?;
+        )?;
 
         if let Err(err) = db.update_priority(&mint, Priority::FilterPassed.to_value()) {
             logger::error(
@@ -501,7 +500,7 @@ pub async fn run_discovery_once(
     Ok(stats)
 }
 
-type DiscoveryFetchOutcome = (String, Result<Vec<DiscoveryRecord>, String>);
+type DiscoveryFetchOutcome = (String, crate::tokens::Result<Vec<DiscoveryRecord>>);
 
 #[derive(Debug, Clone)]
 pub(super) struct DiscoveryRecord {

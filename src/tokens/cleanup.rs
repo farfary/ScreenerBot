@@ -7,10 +7,12 @@
 //! NOTE: Liquidity and security scores are FILTERING criteria, not blacklist criteria.
 //! Blacklist is for tokens that should NEVER be traded due to fundamental risks.
 
+use crate::errors::DatabaseError;
 use crate::events::{record_token_event, Severity};
 use crate::logger::{self, LogTag};
 use crate::tokens::database::TokenDatabase;
-use crate::tokens::types::{TokenError, TokenResult};
+use crate::tokens::types::TokenResult;
+use crate::tokens::Error;
 use crate::utils::{check_shutdown_or_delay, run_or_shutdown};
 use rusqlite::params;
 use std::collections::HashMap;
@@ -238,7 +240,12 @@ pub fn get_blacklist_summary(db: &TokenDatabase) -> TokenResult<BlacklistSummary
 
     let mut stmt = conn
         .prepare("SELECT reason, source FROM blacklist WHERE chain_id = ?1")
-        .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Failed to prepare".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
     let reasons = stmt
         .query_map(params![db.chain_id()], |row| {
@@ -246,7 +253,12 @@ pub fn get_blacklist_summary(db: &TokenDatabase) -> TokenResult<BlacklistSummary
             let source: String = row.get(1)?;
             Ok((reason, source))
         })
-        .map_err(|e| TokenError::Database(format!("Query failed: {e}")))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Query failed".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
     for reason_result in reasons {
         if let Ok((reason, source)) = reason_result {

@@ -5,6 +5,7 @@
 
 use crate::apis::ApiManager;
 use crate::tokens::updates::RateLimitCoordinator;
+use crate::tokens::Error;
 use std::sync::Arc;
 
 use super::discovery::DiscoveryRecord;
@@ -48,17 +49,17 @@ fn collect_pool_tokens(pool: &crate::apis::geckoterminal::types::GeckoTerminalPo
 pub(super) async fn fetch_dexscreener_profiles(
     api: &Arc<ApiManager>,
     coordinator: Arc<RateLimitCoordinator>,
-) -> Result<Vec<DiscoveryRecord>, String> {
+) -> crate::tokens::Result<Vec<DiscoveryRecord>> {
     // Use profiles-specific rate limit (60/min, separate from market data updates)
-    let permit = coordinator
-        .acquire_dexscreener_profiles()
-        .await
-        .map_err(|e| e.to_string())?;
+    let permit = coordinator.acquire_dexscreener_profiles().await?;
     let profiles = api
         .dexscreener
         .get_latest_profiles()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| Error::Api {
+            provider: "DexScreener".to_owned(),
+            message: e.to_string(),
+        })?;
     permit.forget();
 
     Ok(profiles
@@ -84,17 +85,17 @@ pub(super) async fn fetch_dexscreener_profiles(
 pub(super) async fn fetch_dexscreener_latest_boosts(
     api: &Arc<ApiManager>,
     coordinator: Arc<RateLimitCoordinator>,
-) -> Result<Vec<DiscoveryRecord>, String> {
+) -> crate::tokens::Result<Vec<DiscoveryRecord>> {
     // Use boosts-specific rate limit (60/min, separate from market data updates)
-    let permit = coordinator
-        .acquire_dexscreener_boosts()
-        .await
-        .map_err(|e| e.to_string())?;
+    let permit = coordinator.acquire_dexscreener_boosts().await?;
     let boosts = api
         .dexscreener
         .get_latest_boosted_tokens()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| Error::Api {
+            provider: "DexScreener".to_owned(),
+            message: e.to_string(),
+        })?;
     permit.forget();
 
     Ok(boosts
@@ -116,17 +117,17 @@ pub(super) async fn fetch_dexscreener_latest_boosts(
 pub(super) async fn fetch_dexscreener_top_boosts(
     api: &Arc<ApiManager>,
     coordinator: Arc<RateLimitCoordinator>,
-) -> Result<Vec<DiscoveryRecord>, String> {
+) -> crate::tokens::Result<Vec<DiscoveryRecord>> {
     // Use boosts-specific rate limit (60/min, separate from market data updates)
-    let permit = coordinator
-        .acquire_dexscreener_boosts()
-        .await
-        .map_err(|e| e.to_string())?;
+    let permit = coordinator.acquire_dexscreener_boosts().await?;
     let boosts = api
         .dexscreener
         .get_top_boosted_tokens(Some(crate::chains::adapter().market_data_network()))
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| Error::Api {
+            provider: "DexScreener".to_owned(),
+            message: e.to_string(),
+        })?;
     permit.forget();
 
     Ok(boosts
@@ -145,11 +146,8 @@ pub(super) async fn fetch_dexscreener_top_boosts(
 pub(super) async fn fetch_gecko_new_pools(
     api: &Arc<ApiManager>,
     coordinator: Arc<RateLimitCoordinator>,
-) -> Result<Vec<DiscoveryRecord>, String> {
-    let permit = coordinator
-        .acquire_geckoterminal()
-        .await
-        .map_err(|e| e.to_string())?;
+) -> crate::tokens::Result<Vec<DiscoveryRecord>> {
+    let permit = coordinator.acquire_geckoterminal().await?;
     let pools = api
         .geckoterminal
         .fetch_new_pools_by_network(
@@ -158,7 +156,10 @@ pub(super) async fn fetch_gecko_new_pools(
             Some(1),
         )
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| Error::Api {
+            provider: "GeckoTerminal".to_owned(),
+            message: e.to_string(),
+        })?;
     permit.forget();
 
     let mut records = Vec::new();
@@ -179,16 +180,16 @@ pub(super) async fn fetch_gecko_new_pools(
 pub(super) async fn fetch_gecko_recent_updates(
     api: &Arc<ApiManager>,
     coordinator: Arc<RateLimitCoordinator>,
-) -> Result<Vec<DiscoveryRecord>, String> {
-    let permit = coordinator
-        .acquire_geckoterminal()
-        .await
-        .map_err(|e| e.to_string())?;
+) -> crate::tokens::Result<Vec<DiscoveryRecord>> {
+    let permit = coordinator.acquire_geckoterminal().await?;
     let response = api
         .geckoterminal
         .fetch_recently_updated_tokens(None, Some(crate::chains::adapter().market_data_network()))
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| Error::Api {
+            provider: "GeckoTerminal".to_owned(),
+            message: e.to_string(),
+        })?;
     permit.forget();
 
     Ok(response
@@ -206,11 +207,8 @@ pub(super) async fn fetch_gecko_recent_updates(
 pub(super) async fn fetch_gecko_trending(
     api: &Arc<ApiManager>,
     coordinator: Arc<RateLimitCoordinator>,
-) -> Result<Vec<DiscoveryRecord>, String> {
-    let permit = coordinator
-        .acquire_geckoterminal()
-        .await
-        .map_err(|e| e.to_string())?;
+) -> crate::tokens::Result<Vec<DiscoveryRecord>> {
+    let permit = coordinator.acquire_geckoterminal().await?;
     let pools = api
         .geckoterminal
         .fetch_trending_pools_by_network(
@@ -220,7 +218,10 @@ pub(super) async fn fetch_gecko_trending(
             None,
         )
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| Error::Api {
+            provider: "GeckoTerminal".to_owned(),
+            message: e.to_string(),
+        })?;
     permit.forget();
 
     let mut records = Vec::new();
@@ -243,16 +244,16 @@ pub(super) async fn fetch_gecko_trending(
 pub(super) async fn fetch_rugcheck_new_tokens(
     api: &Arc<ApiManager>,
     coordinator: Arc<RateLimitCoordinator>,
-) -> Result<Vec<DiscoveryRecord>, String> {
-    let permit = coordinator
-        .acquire_rugcheck()
-        .await
-        .map_err(|e| e.to_string())?;
+) -> crate::tokens::Result<Vec<DiscoveryRecord>> {
+    let permit = coordinator.acquire_rugcheck().await?;
     let tokens = api
         .rugcheck
         .fetch_new_tokens()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| Error::Api {
+            provider: "Rugcheck".to_owned(),
+            message: e.to_string(),
+        })?;
     permit.forget();
 
     Ok(tokens
@@ -269,16 +270,16 @@ pub(super) async fn fetch_rugcheck_new_tokens(
 pub(super) async fn fetch_rugcheck_recent_tokens(
     api: &Arc<ApiManager>,
     coordinator: Arc<RateLimitCoordinator>,
-) -> Result<Vec<DiscoveryRecord>, String> {
-    let permit = coordinator
-        .acquire_rugcheck()
-        .await
-        .map_err(|e| e.to_string())?;
+) -> crate::tokens::Result<Vec<DiscoveryRecord>> {
+    let permit = coordinator.acquire_rugcheck().await?;
     let tokens = api
         .rugcheck
         .fetch_recent_tokens()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| Error::Api {
+            provider: "Rugcheck".to_owned(),
+            message: e.to_string(),
+        })?;
     permit.forget();
 
     Ok(tokens
@@ -298,16 +299,16 @@ pub(super) async fn fetch_rugcheck_recent_tokens(
 pub(super) async fn fetch_rugcheck_trending_tokens(
     api: &Arc<ApiManager>,
     coordinator: Arc<RateLimitCoordinator>,
-) -> Result<Vec<DiscoveryRecord>, String> {
-    let permit = coordinator
-        .acquire_rugcheck()
-        .await
-        .map_err(|e| e.to_string())?;
+) -> crate::tokens::Result<Vec<DiscoveryRecord>> {
+    let permit = coordinator.acquire_rugcheck().await?;
     let tokens = api
         .rugcheck
         .fetch_trending_tokens()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| Error::Api {
+            provider: "Rugcheck".to_owned(),
+            message: e.to_string(),
+        })?;
     permit.forget();
 
     Ok(tokens
@@ -324,16 +325,16 @@ pub(super) async fn fetch_rugcheck_trending_tokens(
 pub(super) async fn fetch_rugcheck_verified_tokens(
     api: &Arc<ApiManager>,
     coordinator: Arc<RateLimitCoordinator>,
-) -> Result<Vec<DiscoveryRecord>, String> {
-    let permit = coordinator
-        .acquire_rugcheck()
-        .await
-        .map_err(|e| e.to_string())?;
+) -> crate::tokens::Result<Vec<DiscoveryRecord>> {
+    let permit = coordinator.acquire_rugcheck().await?;
     let tokens = api
         .rugcheck
         .fetch_verified_tokens()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| Error::Api {
+            provider: "Rugcheck".to_owned(),
+            message: e.to_string(),
+        })?;
     permit.forget();
 
     Ok(tokens
@@ -351,12 +352,15 @@ pub(super) async fn fetch_rugcheck_verified_tokens(
 
 pub(super) async fn fetch_jupiter_recent(
     api: &Arc<ApiManager>,
-) -> Result<Vec<DiscoveryRecord>, String> {
+) -> crate::tokens::Result<Vec<DiscoveryRecord>> {
     let tokens = api
         .jupiter
         .fetch_recent_tokens()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| Error::Api {
+            provider: "Jupiter".to_owned(),
+            message: e.to_string(),
+        })?;
 
     Ok(tokens
         .into_iter()
@@ -371,12 +375,15 @@ pub(super) async fn fetch_jupiter_recent(
 
 pub(super) async fn fetch_jupiter_top_organic(
     api: &Arc<ApiManager>,
-) -> Result<Vec<DiscoveryRecord>, String> {
+) -> crate::tokens::Result<Vec<DiscoveryRecord>> {
     let tokens = api
         .jupiter
         .fetch_top_organic_score("1h", None)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| Error::Api {
+            provider: "Jupiter".to_owned(),
+            message: e.to_string(),
+        })?;
 
     Ok(tokens
         .into_iter()
@@ -391,12 +398,15 @@ pub(super) async fn fetch_jupiter_top_organic(
 
 pub(super) async fn fetch_jupiter_top_traded(
     api: &Arc<ApiManager>,
-) -> Result<Vec<DiscoveryRecord>, String> {
+) -> crate::tokens::Result<Vec<DiscoveryRecord>> {
     let tokens = api
         .jupiter
         .fetch_top_traded("1h", None)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| Error::Api {
+            provider: "Jupiter".to_owned(),
+            message: e.to_string(),
+        })?;
 
     Ok(tokens
         .into_iter()
@@ -411,12 +421,15 @@ pub(super) async fn fetch_jupiter_top_traded(
 
 pub(super) async fn fetch_jupiter_top_trending(
     api: &Arc<ApiManager>,
-) -> Result<Vec<DiscoveryRecord>, String> {
+) -> crate::tokens::Result<Vec<DiscoveryRecord>> {
     let tokens = api
         .jupiter
         .fetch_top_trending("1h", None)
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| Error::Api {
+            provider: "Jupiter".to_owned(),
+            message: e.to_string(),
+        })?;
 
     Ok(tokens
         .into_iter()
@@ -433,12 +446,15 @@ pub(super) async fn fetch_jupiter_top_trending(
 
 pub(super) async fn fetch_coingecko_markets(
     api: &Arc<ApiManager>,
-) -> Result<Vec<DiscoveryRecord>, String> {
+) -> crate::tokens::Result<Vec<DiscoveryRecord>> {
     let coins = api
         .coingecko
         .fetch_coins_list()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| Error::Api {
+            provider: "CoinGecko".to_owned(),
+            message: e.to_string(),
+        })?;
 
     let entries =
         crate::apis::coingecko::CoinGeckoClient::extract_solana_addresses_with_names(&coins);
@@ -458,12 +474,15 @@ pub(super) async fn fetch_coingecko_markets(
 
 pub(super) async fn fetch_defillama_protocols(
     api: &Arc<ApiManager>,
-) -> Result<Vec<DiscoveryRecord>, String> {
+) -> crate::tokens::Result<Vec<DiscoveryRecord>> {
     let protocols = api
         .defillama
         .fetch_protocols()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| Error::Api {
+            provider: "DefiLlama".to_owned(),
+            message: e.to_string(),
+        })?;
 
     let entries =
         crate::apis::defillama::DefiLlamaClient::extract_solana_addresses_with_names(&protocols);

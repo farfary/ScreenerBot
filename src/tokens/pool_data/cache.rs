@@ -5,7 +5,8 @@ use crate::events::{record_token_event, Severity};
 use crate::logger::{self, LogTag};
 use crate::tokens::database;
 use crate::tokens::service::get_rate_coordinator;
-use crate::tokens::types::{TokenError, TokenPoolInfo, TokenPoolsSnapshot, TokenResult};
+use crate::tokens::types::{TokenPoolInfo, TokenPoolsSnapshot, TokenResult};
+use crate::tokens::Error;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::array;
@@ -344,9 +345,9 @@ async fn refresh_token_pools_and_cache(
 ) -> TokenResult<Option<TokenPoolsSnapshot>> {
     let mint_trimmed = mint.trim();
     if mint_trimmed.is_empty() {
-        return Err(TokenError::InvalidMint(
-            "Mint address cannot be empty".to_owned(),
-        ));
+        return Err(Error::InvalidMint {
+            value: "Mint address cannot be empty".to_owned(),
+        });
     }
 
     // Fast path: use cached snapshot if already loaded and fresh
@@ -380,8 +381,9 @@ async fn refresh_token_pools_and_cache(
         return Ok(None);
     }
 
-    let coordinator = get_rate_coordinator()
-        .ok_or_else(|| TokenError::Database("Rate limit coordinator not initialized".to_owned()))?;
+    let coordinator = get_rate_coordinator().ok_or_else(|| Error::NotInitialized {
+        resource: "Rate limit coordinator not initialized".to_owned(),
+    })?;
 
     let (pools_map, success_sources) = match api::fetch_from_sources(mint_trimmed, coordinator)
         .await
@@ -565,9 +567,9 @@ async fn get_snapshot_internal(
 ) -> TokenResult<Option<TokenPoolsSnapshot>> {
     let trimmed = mint.trim();
     if trimmed.is_empty() {
-        return Err(TokenError::InvalidMint(
-            "Mint address cannot be empty".to_owned(),
-        ));
+        return Err(Error::InvalidMint {
+            value: "Mint address cannot be empty".to_owned(),
+        });
     }
 
     if let Some(snapshot) = get_cached_pool_snapshot(chain, trimmed) {
@@ -686,9 +688,9 @@ pub async fn fetch_immediate(
 ) -> TokenResult<Option<TokenPoolsSnapshot>> {
     let trimmed = mint.trim();
     if trimmed.is_empty() {
-        return Err(TokenError::InvalidMint(
-            "Mint address cannot be empty".to_owned(),
-        ));
+        return Err(Error::InvalidMint {
+            value: "Mint address cannot be empty".to_owned(),
+        });
     }
 
     // Check if fresh cache exists - return immediately

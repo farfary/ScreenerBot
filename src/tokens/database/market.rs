@@ -1,13 +1,14 @@
 //! Token market data storage — persists price, volume, and market cap from APIs.
 
+use crate::errors::DatabaseError;
 use chrono::{DateTime, Utc};
 use rusqlite::params;
 
 use crate::tokens::store;
 use crate::tokens::types::{
-    DexScreenerData, GeckoTerminalData, Priority, RugcheckData, Token, TokenError, TokenMetadata,
-    TokenResult,
+    DexScreenerData, GeckoTerminalData, Priority, RugcheckData, Token, TokenMetadata, TokenResult,
 };
+use crate::tokens::Error;
 
 use super::helpers::assemble_token_without_market_data;
 use super::TokenDatabase;
@@ -26,7 +27,12 @@ impl TokenDatabase {
                 params![self.chain_id()],
                 |row| row.get(0),
             )
-            .map_err(|e| TokenError::Database(format!("Count no-market failed: {e}")))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "Count no-market failed".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         Ok(count)
     }
@@ -92,9 +98,12 @@ impl TokenDatabase {
             )
         };
 
-        let mut stmt = conn
-            .prepare(&query)
-            .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
+        let mut stmt = conn.prepare(&query).map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Failed to prepare".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         let rows = stmt
             .query_map(params![self.chain_id()], |row| {
@@ -136,7 +145,12 @@ impl TokenDatabase {
                     last_rejection_at,
                 ))
             })
-            .map_err(|e| TokenError::Database(format!("Query no-market failed: {e}")))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "Query no-market failed".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         let mut tokens = Vec::new();
         for row in rows {
@@ -152,7 +166,9 @@ impl TokenDatabase {
                 last_rejection_reason,
                 last_rejection_source,
                 last_rejection_at,
-            ) = row.map_err(|e| TokenError::Database(format!("Row parse failed: {e}")))?;
+            ) = row.map_err(|e| Error::RowDecode {
+                detail: e.to_string(),
+            })?;
 
             // Parse rejection timestamp
             let last_rejection_at_dt =
@@ -292,7 +308,7 @@ impl TokenDatabase {
                 now_ts,
                 first_fetched_ts,
             ],
-        ).map_err(|e| TokenError::Database(format!("Failed to upsert DexScreener data: {e}")))?;
+        ).map_err(|e| Error::Database(DatabaseError::Query { operation: "Failed to upsert DexScreener data".to_owned(), message: e.to_string() }))?;
 
         // Update in-memory cache
         store::store_dexscreener(self.chain(), mint, data);
@@ -316,7 +332,7 @@ impl TokenDatabase {
                     market_data_last_fetched_at, market_data_first_fetched_at
              FROM market_dexscreener WHERE chain_id = ?1 AND mint = ?2",
             )
-            .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
+            .map_err(|e| Error::Database(DatabaseError::Query { operation: "Failed to prepare".to_owned(), message: e.to_string() }))?;
 
         let result = stmt.query_row(params![self.chain_id(), mint], |row| {
             let txns_5m_buys: Option<i64> = row.get(14)?;
@@ -373,7 +389,10 @@ impl TokenDatabase {
         match result {
             Ok(data) => Ok(Some(data)),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(TokenError::Database(format!("Query failed: {e}"))),
+            Err(e) => Err(Error::Database(DatabaseError::Query {
+                operation: "Query failed".to_owned(),
+                message: e.to_string(),
+            })),
         }
     }
 
@@ -441,7 +460,10 @@ impl TokenDatabase {
         );
 
         insert_result.map_err(|e| {
-            TokenError::Database(format!("Failed to upsert GeckoTerminal data: {e}"))
+            Error::Database(DatabaseError::Query {
+                operation: "Failed to upsert GeckoTerminal data".to_owned(),
+                message: e.to_string(),
+            })
         })?;
 
         // Update in-memory cache
@@ -464,7 +486,12 @@ impl TokenDatabase {
                     market_data_last_fetched_at, market_data_first_fetched_at
              FROM market_geckoterminal WHERE chain_id = ?1 AND mint = ?2",
             )
-            .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "Failed to prepare".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         let result = stmt.query_row(params![self.chain_id(), mint], |row| {
             let last_fetched_ts: i64 = row.get(18)?;
@@ -502,7 +529,10 @@ impl TokenDatabase {
         match result {
             Ok(data) => Ok(Some(data)),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(TokenError::Database(format!("Query failed: {e}"))),
+            Err(e) => Err(Error::Database(DatabaseError::Query {
+                operation: "Query failed".to_owned(),
+                message: e.to_string(),
+            })),
         }
     }
 
@@ -516,7 +546,7 @@ impl TokenDatabase {
 
         let mut stmt = conn
             .prepare("SELECT market_data_last_updated_at FROM update_tracking WHERE chain_id = ?1 AND mint = ?2")
-            .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
+            .map_err(|e| Error::Database(DatabaseError::Query { operation: "Failed to prepare".to_owned(), message: e.to_string() }))?;
 
         let result: Result<i64, rusqlite::Error> =
             stmt.query_row(params![self.chain_id(), mint], |row| row.get(0));
@@ -528,7 +558,10 @@ impl TokenDatabase {
                 Ok(age > threshold_seconds)
             }
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(true), // No update tracking = stale
-            Err(e) => Err(TokenError::Database(format!("Query failed: {e}"))),
+            Err(e) => Err(Error::Database(DatabaseError::Query {
+                operation: "Query failed".to_owned(),
+                message: e.to_string(),
+            })),
         }
     }
 
@@ -550,15 +583,28 @@ impl TokenDatabase {
                  ORDER BY u.priority DESC, t.first_discovered_at ASC
                  LIMIT ?2",
             )
-            .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "Failed to prepare".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         let mints = stmt
             .query_map(params![self.chain_id(), limit], |row| row.get(0))
-            .map_err(|e| TokenError::Database(format!("Query failed: {e}")))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "Query failed".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
-        mints
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| TokenError::Database(format!("Failed to collect: {e}")))
+        mints.collect::<Result<Vec<_>, _>>().map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Failed to collect".to_owned(),
+                message: e.to_string(),
+            })
+        })
     }
 
     /// Count tokens with permanent market data failure (not listed on any exchange)
@@ -572,7 +618,7 @@ impl TokenDatabase {
                 params![self.chain_id()],
                 |row| row.get(0),
             )
-            .map_err(|e| TokenError::Database(format!("Failed to count: {e}")))?;
+            .map_err(|e| Error::Database(DatabaseError::Query { operation: "Failed to count".to_owned(), message: e.to_string() }))?;
 
         Ok(count as u64)
     }
@@ -598,7 +644,12 @@ impl TokenDatabase {
              WHERE chain_id = ?4 AND mint = ?5",
             params![message, now, error_type, self.chain_id(), mint],
         )
-        .map_err(|e| TokenError::Database(format!("Failed to record market error: {e}")))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Failed to record market error".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         // Get the new error count
         let error_count: u32 = conn
@@ -622,7 +673,7 @@ impl TokenDatabase {
             "UPDATE update_tracking SET market_error_type = 'permanent' WHERE chain_id = ?1 AND mint = ?2",
             params![self.chain_id(), mint],
         )
-        .map_err(|e| TokenError::Database(format!("Failed to mark market permanent: {e}")))?;
+        .map_err(|e| Error::Database(DatabaseError::Query { operation: "Failed to mark market permanent".to_owned(), message: e.to_string() }))?;
 
         Ok(())
     }
@@ -645,7 +696,12 @@ impl TokenDatabase {
              WHERE chain_id = ?2 AND mint = ?3",
             params![now, self.chain_id(), mint],
         )
-        .map_err(|e| TokenError::Database(format!("Failed to mark market data updated: {e}")))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Failed to mark market data updated".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         Ok(())
     }

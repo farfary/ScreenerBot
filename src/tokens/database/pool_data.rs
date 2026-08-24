@@ -1,13 +1,13 @@
 //! Token pool data storage — persists liquidity pool information and reserves.
 
+use crate::errors::DatabaseError;
 use chrono::{DateTime, Utc};
 use rusqlite::params;
 use std::collections::HashMap;
 
 use crate::tokens::pools;
-use crate::tokens::types::{
-    TokenError, TokenPoolInfo, TokenPoolSources, TokenPoolsSnapshot, TokenResult,
-};
+use crate::tokens::types::{TokenPoolInfo, TokenPoolSources, TokenPoolsSnapshot, TokenResult};
+use crate::tokens::Error;
 
 use super::helpers::read_row_value;
 use super::TokenDatabase;
@@ -18,9 +18,12 @@ impl TokenDatabase {
     pub fn replace_token_pools(&self, snapshot: &TokenPoolsSnapshot) -> TokenResult<()> {
         let mut conn = self.conn()?;
 
-        let tx = conn
-            .write_tx()
-            .map_err(|e| TokenError::Database(format!("Failed to start transaction: {e}")))?;
+        let tx = conn.write_tx().map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Failed to start transaction".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         // Query existing first_seen_ts values BEFORE delete to preserve them
         let mut existing_first_seen: HashMap<String, i64> = HashMap::new();
@@ -29,14 +32,17 @@ impl TokenDatabase {
                 .prepare(
                     "SELECT pool_address, pool_data_first_seen_at FROM token_pools WHERE chain_id = ?1 AND mint = ?2",
                 )
-                .map_err(|e| TokenError::Database(format!("Failed to prepare query: {e}")))?;
+                .map_err(|e| Error::Database(DatabaseError::Query { operation: "Failed to prepare query".to_owned(), message: e.to_string() }))?;
 
             let rows = stmt
                 .query_map(params![self.chain_id(), &snapshot.mint], |row| {
                     Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
                 })
                 .map_err(|e| {
-                    TokenError::Database(format!("Failed to query existing pools: {e}"))
+                    Error::Database(DatabaseError::Query {
+                        operation: "Failed to query existing pools".to_owned(),
+                        message: e.to_string(),
+                    })
                 })?;
 
             for row in rows {
@@ -50,11 +56,19 @@ impl TokenDatabase {
             "DELETE FROM token_pools WHERE chain_id = ?1 AND mint = ?2",
             params![self.chain_id(), &snapshot.mint],
         )
-        .map_err(|e| TokenError::Database(format!("Failed to clear token pools: {e}")))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Failed to clear token pools".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         for pool in snapshot.pools.iter() {
             let sources_json = serde_json::to_string(&pool.sources).map_err(|e| {
-                TokenError::Database(format!("Failed to serialize pool sources: {e}"))
+                Error::Database(DatabaseError::Query {
+                    operation: "Failed to serialize pool sources".to_owned(),
+                    message: e.to_string(),
+                })
             })?;
 
             // Use preserved first_seen_ts or fall back to current timestamp
@@ -89,11 +103,15 @@ impl TokenDatabase {
                     first_seen_ts,
                 ],
             )
-            .map_err(|e| TokenError::Database(format!("Failed to insert token pool: {e}")))?;
+            .map_err(|e| Error::Database(DatabaseError::Query { operation: "Failed to insert token pool".to_owned(), message: e.to_string() }))?;
         }
 
-        tx.commit()
-            .map_err(|e| TokenError::Database(format!("Failed to commit pool transaction: {e}")))?;
+        tx.commit().map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Failed to commit pool transaction".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         Ok(())
     }
@@ -110,18 +128,28 @@ impl TokenDatabase {
                         pool_data_last_fetched_at, pool_data_first_seen_at
                  FROM token_pools WHERE chain_id = ?1 AND mint = ?2",
             )
-            .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "Failed to prepare".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
-        let mut rows = stmt
-            .query(params![self.chain_id(), mint])
-            .map_err(|e| TokenError::Database(format!("Failed to query pools: {e}")))?;
+        let mut rows = stmt.query(params![self.chain_id(), mint]).map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Failed to query pools".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         let mut pools: Vec<TokenPoolInfo> = Vec::new();
 
-        while let Some(row) = rows
-            .next()
-            .map_err(|e| TokenError::Database(format!("Failed to read row: {e}")))?
-        {
+        while let Some(row) = rows.next().map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Failed to read row".to_owned(),
+                message: e.to_string(),
+            })
+        })? {
             let sources_json: Option<String> = read_row_value(&row, 12, "sources_json")?;
             let sources = match sources_json {
                 Some(json) if !json.is_empty() => {

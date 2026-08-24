@@ -9,7 +9,7 @@
 //! functions in here, so this module never imports `crate::chains::solana`.
 
 use super::types::max_watched_tokens;
-use super::{cache, db, PoolError};
+use super::{cache, db, Error};
 use crate::chains::active_chain;
 use crate::config::with_config;
 use crate::events::{record_safe, Event, EventCategory};
@@ -43,10 +43,11 @@ static DEBUG_TOKEN_OVERRIDE: LazyLock<RwLock<Option<Vec<String>>>> =
 /// runtime for whichever chain the composition root selected.
 ///
 /// Returns an error if already initialized or if initialization fails.
-pub async fn initialize_pool_components<F, Fut>(init_chain_components: F) -> Result<(), PoolError>
+pub async fn initialize_pool_components<F, Fut, E>(init_chain_components: F) -> Result<(), Error>
 where
     F: FnOnce() -> Fut,
-    Fut: Future<Output = Result<u32, String>>,
+    Fut: Future<Output = Result<u32, E>>,
+    E: std::fmt::Display,
 {
     let (single_pool_mode, dexscreener_enabled, fetch_interval_ms) = with_config(|cfg| {
         (
@@ -90,9 +91,7 @@ where
         ))
         .await;
 
-        return Err(PoolError::InitializationFailed(
-            "Service already running".to_owned(),
-        ));
+        return Err(Error::AlreadyRunning);
     }
 
     logger::info(LogTag::PoolService, "Starting pool service...");
@@ -111,17 +110,14 @@ where
             None,
             None,
             serde_json::json!({
-              "error": e,
+              "error": e.to_string(),
               "component": "database",
               "action": "initialize"
             }),
         ))
         .await;
 
-        return Err(PoolError::InitializationFailed(format!(
-            "Database initialization failed: {}",
-            e
-        )));
+        return Err(e);
     }
 
     // Initialize cache system after database
@@ -179,17 +175,16 @@ where
                 None,
                 None,
                 serde_json::json!({
-                  "error": e,
+                  "error": e.to_string(),
                   "component": "service_components",
                   "action": "initialize"
                 }),
             ))
             .await;
 
-            return Err(PoolError::InitializationFailed(format!(
-                "Component initialization failed: {}",
-                e
-            )));
+            return Err(Error::ComponentInit {
+                detail: e.to_string(),
+            });
         }
     }
 
@@ -238,7 +233,7 @@ where
 pub async fn stop_pool_service<F>(
     timeout_seconds: u64,
     clear_chain_components: F,
-) -> Result<(), PoolError>
+) -> Result<(), Error>
 where
     F: FnOnce(),
 {
@@ -332,9 +327,7 @@ where
             ))
             .await;
 
-            Err(PoolError::InitializationFailed(
-                "Shutdown timeout".to_owned(),
-            ))
+            Err(Error::ShutdownTimeout { timeout_seconds })
         }
     }
 }

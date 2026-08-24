@@ -10,7 +10,8 @@ use crate::tokens::database::TokenDatabase;
 use crate::tokens::market::{dexscreener, geckoterminal};
 use crate::tokens::priorities::Priority;
 use crate::tokens::security::rugcheck;
-use crate::tokens::types::{TokenError, TokenResult};
+use crate::tokens::types::TokenResult;
+use crate::tokens::Error;
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
@@ -386,8 +387,8 @@ pub async fn update_tokens_batch(
             }
             result
         }
-        Err(e) => Err(TokenError::RateLimit {
-            source: "DexScreener-Batch".to_owned(),
+        Err(e) => Err(Error::RateLimit {
+            provider: "DexScreener-Batch".to_owned(),
             message: e.to_string(),
         }),
     };
@@ -605,8 +606,8 @@ where
 {
     match tokio::time::timeout(ON_DEMAND_FETCH_TIMEOUT, fut).await {
         Ok(result) => result,
-        Err(_) => Err(TokenError::Api {
-            source: source.to_owned(),
+        Err(_) => Err(Error::Api {
+            provider: source.to_owned(),
             message: format!(
                 "on-demand fetch timed out after {}s",
                 ON_DEMAND_FETCH_TIMEOUT.as_secs()

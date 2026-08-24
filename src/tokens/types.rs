@@ -574,66 +574,6 @@ pub struct UpdateTrackingInfo {
 // ERROR TYPES
 // ============================================================================
 
-#[derive(Debug)]
-pub enum TokenError {
-    Database(String),
-    Api {
-        source: String,
-        message: String,
-    },
-    RateLimit {
-        source: String,
-        message: String,
-    },
-    NotFound(String),
-    InvalidMint(String),
-    Blacklisted {
-        mint: String,
-        reason: String,
-    },
-    RateLimitExceeded {
-        source: String,
-    },
-    PartialFailure {
-        successful: usize,
-        failed: usize,
-        details: Vec<String>,
-    },
-}
-
-impl std::fmt::Display for TokenError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            TokenError::Database(msg) => write!(f, "Database error: {msg}"),
-            TokenError::Api { source, message } => write!(f, "API error ({source}): {message}"),
-            TokenError::RateLimit { source, message } => {
-                write!(f, "Rate limit ({source}): {message}")
-            }
-            TokenError::NotFound(mint) => write!(f, "Token not found: {mint}"),
-            TokenError::InvalidMint(mint) => write!(f, "Invalid mint address: {mint}"),
-            TokenError::Blacklisted { mint, reason } => {
-                write!(f, "Blacklisted {mint}: {reason}")
-            }
-            TokenError::RateLimitExceeded { source } => {
-                write!(f, "Rate limit exceeded for {source}")
-            }
-            TokenError::PartialFailure {
-                successful,
-                failed,
-                details,
-            } => {
-                write!(
-                    f,
-                    "Partial failure: {} succeeded, {} failed. Details: {}",
-                    successful,
-                    failed,
-                    details.join("; ")
-                )
-            }
-        }
-    }
-}
-
-impl std::error::Error for TokenError {}
-
-pub type TokenResult<T> = Result<T, TokenError>;
+/// Legacy alias kept so the module's ~150 existing call sites do not need a
+/// mechanical rename; the single source of truth is `tokens::error::Error`.
+pub type TokenResult<T> = crate::tokens::error::Result<T>;

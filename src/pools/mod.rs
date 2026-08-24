@@ -27,6 +27,7 @@
 
 mod api;
 pub(crate) mod cache;
+mod error;
 
 // Re-export db types for blacklist API
 pub mod database;
@@ -37,8 +38,9 @@ pub mod types;
 pub mod utils;
 
 pub use api::{get_available_tokens, get_cache_stats, get_pool_price, get_price_history};
+pub use error::{Error, Result};
 pub use service::{
     get_debug_token_override, initialize_pool_components, is_pool_service_running,
     is_single_pool_mode_enabled, set_debug_token_override, start_helper_tasks, stop_pool_service,
 };
-pub use types::{CacheStats, PoolError, PoolMintVaultInfo, PriceResult, TokenPairInfo};
+pub use types::{CacheStats, PoolMintVaultInfo, PriceResult, TokenPairInfo};

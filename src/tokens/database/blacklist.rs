@@ -1,9 +1,11 @@
 //! Token blacklist database — persists permanently blocked token addresses.
 
+use crate::errors::DatabaseError;
 use chrono::Utc;
 use rusqlite::params;
 
-use crate::tokens::types::{TokenError, TokenResult};
+use crate::tokens::types::TokenResult;
+use crate::tokens::Error;
 
 use super::{TokenBlacklistRecord, TokenDatabase};
 
@@ -19,7 +21,12 @@ impl TokenDatabase {
              VALUES (?1, ?2, ?3, ?4, ?5)",
             params![self.chain_id(), mint, reason, source, now],
         )
-        .map_err(|e| TokenError::Database(format!("Failed to add to blacklist: {e}")))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Failed to add to blacklist".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         Ok(())
     }
@@ -34,7 +41,12 @@ impl TokenDatabase {
                  FROM blacklist WHERE chain_id = ?1 \
                  ORDER BY added_at DESC",
             )
-            .map_err(|e| TokenError::Database(format!("Failed to prepare blacklist query: {e}")))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "Failed to prepare blacklist query".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         let rows = stmt
             .query_map(params![self.chain_id()], |row| {
@@ -45,15 +57,21 @@ impl TokenDatabase {
                     added_at: row.get(3)?,
                 })
             })
-            .map_err(|e| TokenError::Database(format!("Failed to query blacklist: {e}")))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "Failed to query blacklist".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         let mut records = Vec::new();
         for row in rows {
-            records.push(
-                row.map_err(|e| {
-                    TokenError::Database(format!("Failed to read blacklist row: {e}"))
-                })?,
-            );
+            records.push(row.map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "Failed to read blacklist row".to_owned(),
+                    message: e.to_string(),
+                })
+            })?);
         }
 
         Ok(records)
@@ -65,11 +83,19 @@ impl TokenDatabase {
 
         let mut stmt = conn
             .prepare("SELECT 1 FROM blacklist WHERE chain_id = ?1 AND mint = ?2")
-            .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "Failed to prepare".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
-        let exists = stmt
-            .exists(params![self.chain_id(), mint])
-            .map_err(|e| TokenError::Database(format!("Query failed: {e}")))?;
+        let exists = stmt.exists(params![self.chain_id(), mint]).map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Query failed".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         Ok(exists)
     }
@@ -82,7 +108,12 @@ impl TokenDatabase {
             "DELETE FROM blacklist WHERE chain_id = ?1 AND mint = ?2",
             params![self.chain_id(), mint],
         )
-        .map_err(|e| TokenError::Database(format!("Failed to remove from blacklist: {e}")))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "Failed to remove from blacklist".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         Ok(())
     }
@@ -93,7 +124,12 @@ impl TokenDatabase {
 
         let mut stmt = conn
             .prepare("SELECT reason, source FROM blacklist WHERE chain_id = ?1 AND mint = ?2")
-            .map_err(|e| TokenError::Database(format!("Failed to prepare: {e}")))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "Failed to prepare".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         let result = stmt.query_row(params![self.chain_id(), mint], |row| {
             Ok((row.get(0)?, row.get(1)?))
@@ -102,7 +138,10 @@ impl TokenDatabase {
         match result {
             Ok(data) => Ok(Some(data)),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(TokenError::Database(format!("Query failed: {e}"))),
+            Err(e) => Err(Error::Database(DatabaseError::Query {
+                operation: "Query failed".to_owned(),
+                message: e.to_string(),
+            })),
         }
     }
 }

@@ -399,9 +399,9 @@ pub(super) async fn execute_token_blacklist(
         if let Some(db) = crate::tokens::get_global_database() {
             crate::tokens::cleanup::blacklist_token(&mint_clone, "Blacklisted via Telegram", &db)
         } else {
-            Err(crate::tokens::TokenError::Database(
-                "Database not available".to_owned(),
-            ))
+            Err(crate::tokens::Error::NotInitialized {
+                resource: "token database".to_owned(),
+            })
         }
     })
     .await;

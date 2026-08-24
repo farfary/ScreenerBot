@@ -211,7 +211,7 @@ pub async fn search_tokens(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({
                   "success": false,
-                  "error": err
+                  "error": err.to_string()
                 })),
             ))
         }
