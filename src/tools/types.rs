@@ -2,8 +2,10 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::tools::Error;
+
 /// Result type for tool operations
-pub type ToolResult<T> = Result<T, String>;
+pub type ToolResult<T> = Result<T, Error>;
 
 /// Status of a tool execution
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -187,20 +189,26 @@ impl SizingConfig {
     }
 
     /// Validate the sizing configuration
-    pub fn validate(&self) -> Result<(), String> {
+    pub fn validate(&self) -> Result<(), Error> {
         match self {
             SizingConfig::Fixed { amount_sol } => {
                 if *amount_sol < 0.001 {
-                    return Err("Amount must be at least 0.001 SOL".to_owned());
+                    return Err(Error::InvalidConfig {
+                        detail: "amount must be at least 0.001 SOL".to_owned(),
+                    });
                 }
                 Ok(())
             }
             SizingConfig::Random { min_sol, max_sol } => {
                 if *min_sol < 0.001 {
-                    return Err("Minimum amount must be at least 0.001 SOL".to_owned());
+                    return Err(Error::InvalidConfig {
+                        detail: "minimum amount must be at least 0.001 SOL".to_owned(),
+                    });
                 }
                 if *max_sol < *min_sol {
-                    return Err("Maximum amount must be >= minimum amount".to_owned());
+                    return Err(Error::InvalidConfig {
+                        detail: "maximum amount must be >= minimum amount".to_owned(),
+                    });
                 }
                 Ok(())
             }

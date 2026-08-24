@@ -11,6 +11,7 @@ use uuid::Uuid;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::logger::{self, LogTag};
 use crate::tools::swap_executor::tool_buy;
+use crate::tools::Error;
 use crate::wallets::{self, Wallet, WalletRole};
 
 use super::transfer::fund_wallets;
@@ -23,7 +24,7 @@ use super::types::{MultiBuyConfig, SessionResult, WalletOpResult, WalletPlan};
 ///
 /// # Returns
 /// Session result with all operation outcomes
-pub async fn execute_multi_buy(config: MultiBuyConfig) -> Result<SessionResult, String> {
+pub async fn execute_multi_buy(config: MultiBuyConfig) -> Result<SessionResult, Error> {
     // Validate configuration
     config.validate()?;
 
@@ -43,13 +44,17 @@ pub async fn execute_multi_buy(config: MultiBuyConfig) -> Result<SessionResult, 
     // Load and prepare wallets
     let wallets = load_wallets_for_buy(&config).await?;
     if wallets.is_empty() {
-        return Err("No wallets available for multi-buy".to_owned());
+        return Err(Error::InvalidConfig {
+            detail: "no wallets available for multi-buy".to_owned(),
+        });
     }
 
     // Create execution plans
     let plans = create_buy_plans(&config, &wallets).await?;
     if plans.is_empty() {
-        return Err("No valid buy plans could be created".to_owned());
+        return Err(Error::InvalidConfig {
+            detail: "no valid buy plans could be created".to_owned(),
+        });
     }
 
     logger::info(
@@ -143,7 +148,7 @@ pub async fn execute_multi_buy(config: MultiBuyConfig) -> Result<SessionResult, 
 }
 
 /// Load wallets for multi-buy operation
-async fn load_wallets_for_buy(config: &MultiBuyConfig) -> Result<Vec<Wallet>, String> {
+async fn load_wallets_for_buy(config: &MultiBuyConfig) -> Result<Vec<Wallet>, Error> {
     let all_wallets = wallets::list_active_wallets().await?;
 
     // Filter to secondary wallets only
@@ -154,7 +159,9 @@ async fn load_wallets_for_buy(config: &MultiBuyConfig) -> Result<Vec<Wallet>, St
         .collect();
 
     if secondary_wallets.is_empty() {
-        return Err("No secondary wallets available. Create sub-wallets first.".to_owned());
+        return Err(Error::InvalidConfig {
+            detail: "no secondary wallets available; create sub-wallets first".to_owned(),
+        });
     }
 
     Ok(secondary_wallets)
@@ -164,7 +171,7 @@ async fn load_wallets_for_buy(config: &MultiBuyConfig) -> Result<Vec<Wallet>, St
 async fn create_buy_plans(
     config: &MultiBuyConfig,
     wallets: &[Wallet],
-) -> Result<Vec<WalletPlan>, String> {
+) -> Result<Vec<WalletPlan>, Error> {
     let rpc_client = get_rpc_client();
     let mut plans = Vec::new();
 

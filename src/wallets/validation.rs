@@ -1,7 +1,9 @@
 //! Wallet validation — input validation for addresses, keypairs, and wallet names.
 
+use crate::errors::DatabaseError;
 use crate::paths;
 use crate::utils::get_wallet_address;
+use crate::wallets::Error;
 use rusqlite::{Connection, OptionalExtension};
 
 #[derive(Debug, Clone)]
@@ -22,9 +24,11 @@ pub struct WalletValidator;
 
 impl WalletValidator {
     /// Check if wallet changed across all systems
-    pub async fn validate_wallet_consistency() -> Result<WalletValidationResult, String> {
-        let current_wallet = get_wallet_address()
-            .map_err(|e| format!("Failed to get current wallet address: {e}"))?;
+    pub async fn validate_wallet_consistency() -> Result<WalletValidationResult, Error> {
+        let current_wallet = get_wallet_address().map_err(|e| Error::Dependency {
+            dependency: "config",
+            detail: e.to_string(),
+        })?;
 
         let mut mismatches: Vec<(String, String)> = Vec::new();
 
@@ -83,9 +87,8 @@ impl WalletValidator {
     }
 
     /// Get stored wallet address from database metadata table
-    fn get_stored_wallet(db_path: &str, metadata_table: &str) -> Result<Option<String>, String> {
-        let conn =
-            Connection::open(db_path).map_err(|e| format!("Failed to open {db_path}: {e}"))?;
+    fn get_stored_wallet(db_path: &str, metadata_table: &str) -> Result<Option<String>, Error> {
+        let conn = Connection::open(db_path).map_err(DatabaseError::from)?;
 
         // Note: We don't configure PRAGMAs here since this is a short-lived read-only validation
         // operation. For better performance in future, consider using the database pool instead.
@@ -98,7 +101,7 @@ impl WalletValidator {
         let wallet: Option<String> = conn
             .query_row(&query, [], |row| row.get(0))
             .optional()
-            .map_err(|e| format!("Failed to query current_wallet from {db_path}: {e}"))?;
+            .map_err(DatabaseError::from)?;
 
         Ok(wallet.filter(|w| !w.is_empty()))
     }

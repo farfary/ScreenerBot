@@ -46,7 +46,7 @@ impl Service for WalletWatchService {
         let handle = crate::wallets::watch::start(shutdown).await.map_err(|e| {
             crate::Error::Service(crate::errors::ServiceError::Start {
                 service: "wallet_watch".to_owned(),
-                message: e,
+                message: e.to_string(),
             })
         })?;
 

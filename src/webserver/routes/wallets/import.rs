@@ -153,7 +153,7 @@ pub async fn import_preview(mut multipart: Multipart) -> Response {
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "DATABASE_ERROR",
                 "Failed to check existing wallets",
-                Some(&e),
+                Some(&e.to_string()),
             );
         }
     };
@@ -236,7 +236,7 @@ pub async fn import_execute(Json(request): Json<ImportExecuteRequest>) -> Respon
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "DATABASE_ERROR",
                 "Failed to check existing wallets",
-                Some(&e),
+                Some(&e.to_string()),
             );
         }
     };

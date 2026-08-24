@@ -4,13 +4,13 @@ use crate::chains::adapter;
 use crate::chains::solana::assets::ata::get_total_token_balance;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::logger::{self, LogTag};
-use crate::positions::error::{Error, Result};
 use crate::positions::queue::{enqueue_verification, VerificationItem};
 use crate::positions::state::{
     acquire_position_lock, add_signature_to_index, clear_pending_partial_exit,
     register_pending_partial_exit,
 };
 use crate::positions::types::PendingPartialExit;
+use crate::positions::{Error, Result};
 use crate::swaps::{
     calculate_partial_amount, execute_swap_with_fallback, get_best_quote, QuoteRequest, SwapMode,
 };

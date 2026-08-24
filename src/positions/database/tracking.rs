@@ -5,7 +5,7 @@ use rusqlite::{params, OptionalExtension};
 
 use crate::errors::DatabaseError;
 use crate::logger::{self, LogTag};
-use crate::positions::error::{Error, Result};
+use crate::positions::{Error, Result};
 
 use super::types::*;
 

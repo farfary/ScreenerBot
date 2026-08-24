@@ -12,6 +12,7 @@ use crate::logger::{self, LogTag};
 use crate::tools::database::{
     get_failed_atas_for_wallet, is_ata_failed, remove_failed_ata, upsert_failed_ata,
 };
+use crate::tools::Error;
 use crate::utils::get_wallet_address;
 
 use super::types::{AtaCleanupResult, AtaCleanupStats, AtaInfo};
@@ -23,10 +24,13 @@ use super::types::{AtaCleanupResult, AtaCleanupStats, AtaInfo};
 /// Scan wallet for all ATAs
 ///
 /// Returns a list of all Associated Token Accounts for the wallet
-pub async fn scan_wallet_atas(wallet_address: &str) -> Result<Vec<AtaInfo>, String> {
+pub async fn scan_wallet_atas(wallet_address: &str) -> Result<Vec<AtaInfo>, Error> {
     let token_accounts = crate::chains::solana::assets::ata::get_all_token_accounts(wallet_address)
         .await
-        .map_err(|e| format!("Failed to get token accounts: {e}"))?;
+        .map_err(|e| Error::Dependency {
+            dependency: "chains",
+            detail: e.to_string(),
+        })?;
 
     let atas: Vec<AtaInfo> = token_accounts.iter().map(AtaInfo::from).collect();
 
@@ -45,7 +49,7 @@ pub async fn scan_wallet_atas(wallet_address: &str) -> Result<Vec<AtaInfo>, Stri
 /// Scan wallet for empty ATAs only
 ///
 /// Returns a list of empty ATAs that can be closed to reclaim rent
-pub async fn scan_empty_atas(wallet_address: &str) -> Result<Vec<AtaInfo>, String> {
+pub async fn scan_empty_atas(wallet_address: &str) -> Result<Vec<AtaInfo>, Error> {
     let all_atas = scan_wallet_atas(wallet_address).await?;
     let empty_atas: Vec<AtaInfo> = all_atas.into_iter().filter(|ata| ata.is_empty()).collect();
 
@@ -62,7 +66,7 @@ pub async fn scan_empty_atas(wallet_address: &str) -> Result<Vec<AtaInfo>, Strin
 }
 
 /// Scan empty ATAs excluding failed ones from cache
-pub async fn scan_closeable_atas(wallet_address: &str) -> Result<Vec<AtaInfo>, String> {
+pub async fn scan_closeable_atas(wallet_address: &str) -> Result<Vec<AtaInfo>, Error> {
     let empty_atas = scan_empty_atas(wallet_address).await?;
 
     // Get failed ATAs from database
@@ -98,7 +102,7 @@ pub async fn scan_closeable_atas(wallet_address: &str) -> Result<Vec<AtaInfo>, S
 /// Close a single ATA
 ///
 /// Returns the transaction signature if successful
-pub async fn close_ata(wallet_address: &str, ata: &AtaInfo) -> Result<String, String> {
+pub async fn close_ata(wallet_address: &str, ata: &AtaInfo) -> Result<String, Error> {
     logger::debug(
         LogTag::Wallet,
         &format!(
@@ -150,7 +154,10 @@ pub async fn close_ata(wallet_address: &str, ata: &AtaInfo) -> Result<String, St
                     error_msg
                 ),
             );
-            Err(error_msg)
+            Err(Error::Dependency {
+                dependency: "chains",
+                detail: error_msg,
+            })
         }
     }
 }
@@ -162,7 +169,7 @@ pub async fn close_ata(wallet_address: &str, ata: &AtaInfo) -> Result<String, St
 /// 2. Filters out failed ATAs from cache
 /// 3. Closes each empty ATA
 /// 4. Returns cleanup statistics
-pub async fn cleanup_empty_atas(wallet_address: &str) -> Result<AtaCleanupResult, String> {
+pub async fn cleanup_empty_atas(wallet_address: &str) -> Result<AtaCleanupResult, Error> {
     logger::info(LogTag::Wallet, "Starting ATA cleanup...");
 
     // Get closeable ATAs (empty, not in failed cache)
@@ -241,10 +248,8 @@ pub async fn clear_failed_ata_cache() -> Result<(), Box<dyn std::error::Error + 
     let wallet_address = get_wallet_address()
         .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
 
-    let failed_atas = get_failed_atas_for_wallet(&wallet_address).map_err(|e| {
-        Box::new(std::io::Error::new(std::io::ErrorKind::Other, e))
-            as Box<dyn std::error::Error + Send + Sync>
-    })?;
+    let failed_atas = get_failed_atas_for_wallet(&wallet_address)
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
 
     let count = failed_atas.len();
 
@@ -292,8 +297,11 @@ pub fn get_cleanup_stats() -> AtaCleanupStats {
 }
 
 /// Get comprehensive ATA status for the wallet
-pub async fn get_ata_status() -> Result<String, String> {
-    let wallet_address = get_wallet_address().map_err(|e| e.to_string())?;
+pub async fn get_ata_status() -> Result<String, Error> {
+    let wallet_address = get_wallet_address().map_err(|e| Error::Dependency {
+        dependency: "config",
+        detail: e.to_string(),
+    })?;
 
     let all_atas = scan_wallet_atas(&wallet_address).await?;
     let empty_count = all_atas.iter().filter(|ata| ata.is_empty()).count();

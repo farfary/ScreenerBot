@@ -49,8 +49,10 @@ pub async fn main_keypair() -> Result<Keypair, String> {
         }
     }
 
+    // SEAM: chains still returns String errors; removed when it migrates.
     let (wallet_id, ciphertext, nonce) = crate::wallets::get_main_wallet_encrypted_key()
-        .await?
+        .await
+        .map_err(|e| e.to_string())?
         .ok_or_else(|| "No main wallet configured".to_owned())?;
 
     let keypair = decrypt_to_keypair(&ciphertext, &nonce)?;
@@ -73,7 +75,10 @@ pub async fn cached_main_wallet_id() -> Option<i64> {
 /// Decrypt a specific wallet's keypair by its database ID. Not cached — used
 /// by one-shot multi-wallet tooling, never on the per-trade hot path.
 pub async fn keypair_for_wallet(wallet_id: i64) -> Result<Keypair, String> {
-    let (ciphertext, nonce) = crate::wallets::get_wallet_encrypted_key(wallet_id).await?;
+    // SEAM: chains still returns String errors; removed when it migrates.
+    let (ciphertext, nonce) = crate::wallets::get_wallet_encrypted_key(wallet_id)
+        .await
+        .map_err(|e| e.to_string())?;
     decrypt_to_keypair(&ciphertext, &nonce)
 }
 
@@ -92,7 +97,10 @@ pub async fn sign_message_with_main_wallet(message: &str) -> Result<String, Stri
 pub async fn sign_message_for_active_wallets(
     message_for: impl Fn(&str) -> String,
 ) -> Result<Vec<(String, String)>, String> {
-    let wallets = crate::wallets::list_active_wallets().await?;
+    // SEAM: chains still returns String errors; removed when it migrates.
+    let wallets = crate::wallets::list_active_wallets()
+        .await
+        .map_err(|e| e.to_string())?;
     let mut signed = Vec::with_capacity(wallets.len());
 
     for wallet in wallets {
@@ -141,7 +149,10 @@ pub async fn configured_keypair_async() -> Result<Keypair, String> {
 /// decrypt.
 pub async fn configured_address_async() -> Result<String, String> {
     if crate::wallets::is_initialized().await {
-        return crate::wallets::get_main_address().await;
+        // SEAM: chains still returns String errors; removed when it migrates.
+        return crate::wallets::get_main_address()
+            .await
+            .map_err(|e| e.to_string());
     }
     configured_keypair_from_legacy_config().map(|kp| kp.pubkey().to_string())
 }

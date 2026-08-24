@@ -57,7 +57,7 @@ pub async fn preview_multi_sell(Json(request): Json<MultiSellPreviewRequest>) ->
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "WALLET_ERROR",
                 "Failed to get wallets",
-                Some(&e),
+                Some(&e.to_string()),
             );
         }
     };
@@ -225,7 +225,12 @@ pub async fn start_multi_sell(Json(request): Json<MultiSellStartRequest>) -> Res
 
     // Validate config
     if let Err(e) = config.validate() {
-        return error_response(StatusCode::BAD_REQUEST, "INVALID_CONFIG", &e, None);
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "INVALID_CONFIG",
+            &e.to_string(),
+            None,
+        );
     }
 
     // Create session entry
@@ -268,7 +273,7 @@ pub async fn start_multi_sell(Json(request): Json<MultiSellStartRequest>) -> Res
                         session.status = SessionStatus::Completed;
                     }
                     Err(e) => {
-                        session.result.error = Some(e.clone());
+                        session.result.error = Some(e.to_string());
                         session.result.success = false;
                         session.status = SessionStatus::Failed;
                         logger::error(

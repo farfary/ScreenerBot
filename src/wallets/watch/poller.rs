@@ -7,6 +7,7 @@
 //! skip signatures.
 
 use super::runtime::WalletWatchRuntime;
+use crate::wallets::Error;
 
 /// Signatures per RPC page.
 pub const PAGE_SIZE: usize = 100;
@@ -110,7 +111,7 @@ pub(super) async fn advance_catch_up(
     runtime: &dyn WalletWatchRuntime,
     address: &str,
     state: &mut CatchUpState,
-) -> Result<Option<CompletedCatchUp>, String> {
+) -> Result<Option<CompletedCatchUp>, Error> {
     if state.is_complete() {
         return Ok(state.completed());
     }

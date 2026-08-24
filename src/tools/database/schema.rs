@@ -9,8 +9,10 @@ use std::sync::LazyLock;
 use std::time::Duration;
 
 use crate::database;
+use crate::errors::DatabaseError;
 use crate::logger::{self, LogTag};
 use crate::paths::get_tools_db_path;
+use crate::tools::Error;
 
 // =============================================================================
 // CONSTANTS
@@ -289,10 +291,8 @@ static DB_POOL: LazyLock<Pool<SqliteConnectionManager>> = LazyLock::new(|| {
 });
 
 /// Get a connection from the pool
-pub(crate) fn get_connection() -> Result<PooledConnection<SqliteConnectionManager>, String> {
-    DB_POOL
-        .get()
-        .map_err(|e| format!("Failed to get tools database connection: {e}"))
+pub(crate) fn get_connection() -> Result<PooledConnection<SqliteConnectionManager>, Error> {
+    DB_POOL.get().map_err(|e| DatabaseError::from(e).into())
 }
 
 // =============================================================================
@@ -300,16 +300,21 @@ pub(crate) fn get_connection() -> Result<PooledConnection<SqliteConnectionManage
 // =============================================================================
 
 /// Initialize the tools database with all schemas
-pub fn init_tools_db() -> Result<(), String> {
+pub fn init_tools_db() -> Result<(), Error> {
     if TOOLS_DB_INITIALIZED.load(Ordering::Relaxed) {
         return Ok(());
     }
 
     let conn = get_connection()?;
 
+    let migration_step = |step: &str, e: rusqlite::Error| Error::Migration {
+        step: step.to_owned(),
+        detail: e.to_string(),
+    };
+
     // Create version table first
     conn.execute_batch(SCHEMA_VERSION_TABLE)
-        .map_err(|e| format!("Failed to create version table: {e}"))?;
+        .map_err(|e| migration_step("create version table", e))?;
 
     // Check current schema version
     let current_version: Option<u32> = conn
@@ -319,37 +324,37 @@ pub fn init_tools_db() -> Result<(), String> {
             |row| row.get(0),
         )
         .optional()
-        .map_err(|e| format!("Failed to check schema version: {e}"))?;
+        .map_err(|e| migration_step("check schema version", e))?;
 
     if current_version.unwrap_or(0) < TOOLS_SCHEMA_VERSION {
         // Create all tables
         conn.execute_batch(SCHEMA_ATA_SESSIONS)
-            .map_err(|e| format!("Failed to create ata_sessions table: {e}"))?;
+            .map_err(|e| migration_step("create ata_sessions table", e))?;
 
         conn.execute_batch(SCHEMA_ATA_CLOSURES)
-            .map_err(|e| format!("Failed to create ata_closures table: {e}"))?;
+            .map_err(|e| migration_step("create ata_closures table", e))?;
 
         conn.execute_batch(SCHEMA_ATA_FAILED_CACHE)
-            .map_err(|e| format!("Failed to create ata_failed_cache table: {e}"))?;
+            .map_err(|e| migration_step("create ata_failed_cache table", e))?;
 
         conn.execute_batch(SCHEMA_TOOL_FAVORITES)
-            .map_err(|e| format!("Failed to create tool_favorites table: {e}"))?;
+            .map_err(|e| migration_step("create tool_favorites table", e))?;
 
         conn.execute_batch(SCHEMA_MW_SESSIONS)
-            .map_err(|e| format!("Failed to create mw_sessions table: {e}"))?;
+            .map_err(|e| migration_step("create mw_sessions table", e))?;
 
         conn.execute_batch(SCHEMA_MW_WALLET_OPS)
-            .map_err(|e| format!("Failed to create mw_wallet_ops table: {e}"))?;
+            .map_err(|e| migration_step("create mw_wallet_ops table", e))?;
 
         conn.execute_batch(SCHEMA_WATCHED_TOKENS)
-            .map_err(|e| format!("Failed to create watched_tokens table: {e}"))?;
+            .map_err(|e| migration_step("create watched_tokens table", e))?;
 
         // Update version
         conn.execute(
             "INSERT INTO schema_version (version, applied_at) VALUES (?1, ?2)",
             params![TOOLS_SCHEMA_VERSION, Utc::now().to_rfc3339()],
         )
-        .map_err(|e| format!("Failed to update schema version: {e}"))?;
+        .map_err(|e| migration_step("update schema version", e))?;
 
         logger::info(
             LogTag::System,

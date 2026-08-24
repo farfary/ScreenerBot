@@ -4,7 +4,7 @@ use std::sync::{Arc, LazyLock};
 use tokio::sync::Mutex;
 
 use crate::logger::{self, LogTag};
-use crate::positions::error::{Error, Result};
+use crate::positions::{Error, Result};
 
 use super::types::PositionsDatabase;
 

@@ -12,8 +12,10 @@
 use std::fs;
 use std::path::PathBuf;
 
+use crate::errors::IoError;
 use crate::logger::{self, LogTag};
 use crate::paths;
+use crate::wallets::Error;
 
 /// The wallet-scoped databases that must be cleared on a wallet change.
 ///
@@ -33,18 +35,13 @@ fn wallet_scoped_db_paths() -> Vec<PathBuf> {
 /// caller can report it to the user. Backing up is best-effort per file but the
 /// delete only proceeds for files that were successfully backed up, so a partial
 /// failure never destroys un-backed-up data.
-pub fn backup_and_clean_wallet_data() -> Result<PathBuf, String> {
+pub fn backup_and_clean_wallet_data() -> Result<PathBuf, Error> {
     let timestamp = chrono::Local::now().format("%Y%m%d-%H%M%S");
     let backup_dir = paths::get_data_directory()
         .join("backups")
         .join(format!("wallet-reset-{timestamp}"));
 
-    fs::create_dir_all(&backup_dir).map_err(|e| {
-        format!(
-            "Failed to create backup directory {}: {e}",
-            backup_dir.display()
-        )
-    })?;
+    fs::create_dir_all(&backup_dir).map_err(IoError::from)?;
 
     logger::info(
         LogTag::System,

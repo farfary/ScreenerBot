@@ -5,13 +5,15 @@ use rusqlite::params;
 
 use super::schema::get_connection;
 use super::types::{WatchedToken, WatchedTokenConfig};
+use crate::errors::DatabaseError;
+use crate::tools::Error;
 
 // =============================================================================
 // WATCHED TOKENS OPERATIONS
 // =============================================================================
 
 /// Add a new watched token
-pub fn add_watched_token(config: &WatchedTokenConfig) -> Result<i64, String> {
+pub fn add_watched_token(config: &WatchedTokenConfig) -> Result<i64, Error> {
     let conn = get_connection()?;
 
     conn.execute(
@@ -35,13 +37,13 @@ pub fn add_watched_token(config: &WatchedTokenConfig) -> Result<i64, String> {
             config.slippage_bps.unwrap_or(500),
         ],
     )
-    .map_err(|e| format!("Failed to add watched token: {e}"))?;
+    .map_err(DatabaseError::from)?;
 
     Ok(conn.last_insert_rowid())
 }
 
 /// Get all watched tokens
-pub fn get_watched_tokens() -> Result<Vec<WatchedToken>, String> {
+pub fn get_watched_tokens() -> Result<Vec<WatchedToken>, Error> {
     let conn = get_connection()?;
 
     let mut stmt = conn
@@ -55,18 +57,18 @@ pub fn get_watched_tokens() -> Result<Vec<WatchedToken>, String> {
             ORDER BY created_at DESC
             "#,
         )
-        .map_err(|e| format!("Failed to prepare statement: {e}"))?;
+        .map_err(DatabaseError::from)?;
 
     let rows = stmt
         .query_map([], |row| Ok(WatchedToken::from_row(row)))
-        .map_err(|e| format!("Failed to query watched tokens: {e}"))?;
+        .map_err(DatabaseError::from)?;
 
     let mut tokens = Vec::new();
     for row in rows {
         match row {
             Ok(Ok(token)) => tokens.push(token),
             Ok(Err(e)) => return Err(e),
-            Err(e) => return Err(format!("Failed to read row: {e}")),
+            Err(e) => return Err(DatabaseError::from(e).into()),
         }
     }
 
@@ -74,7 +76,7 @@ pub fn get_watched_tokens() -> Result<Vec<WatchedToken>, String> {
 }
 
 /// Get active watched tokens only
-pub fn get_active_watched_tokens() -> Result<Vec<WatchedToken>, String> {
+pub fn get_active_watched_tokens() -> Result<Vec<WatchedToken>, Error> {
     let conn = get_connection()?;
 
     let mut stmt = conn
@@ -89,18 +91,18 @@ pub fn get_active_watched_tokens() -> Result<Vec<WatchedToken>, String> {
             ORDER BY created_at DESC
             "#,
         )
-        .map_err(|e| format!("Failed to prepare statement: {e}"))?;
+        .map_err(DatabaseError::from)?;
 
     let rows = stmt
         .query_map([], |row| Ok(WatchedToken::from_row(row)))
-        .map_err(|e| format!("Failed to query active watched tokens: {e}"))?;
+        .map_err(DatabaseError::from)?;
 
     let mut tokens = Vec::new();
     for row in rows {
         match row {
             Ok(Ok(token)) => tokens.push(token),
             Ok(Err(e)) => return Err(e),
-            Err(e) => return Err(format!("Failed to read row: {e}")),
+            Err(e) => return Err(DatabaseError::from(e).into()),
         }
     }
 
@@ -108,7 +110,7 @@ pub fn get_active_watched_tokens() -> Result<Vec<WatchedToken>, String> {
 }
 
 /// Update watched token active status
-pub fn update_watched_token_status(id: i64, is_active: bool) -> Result<(), String> {
+pub fn update_watched_token_status(id: i64, is_active: bool) -> Result<(), Error> {
     let conn = get_connection()?;
     let now = Utc::now().to_rfc3339();
 
@@ -116,17 +118,17 @@ pub fn update_watched_token_status(id: i64, is_active: bool) -> Result<(), Strin
         "UPDATE watched_tokens SET is_active = ?1, updated_at = ?2 WHERE id = ?3",
         params![is_active as i32, now, id],
     )
-    .map_err(|e| format!("Failed to update watched token status: {e}"))?;
+    .map_err(DatabaseError::from)?;
 
     Ok(())
 }
 
 /// Delete a watched token by ID
-pub fn delete_watched_token(id: i64) -> Result<(), String> {
+pub fn delete_watched_token(id: i64) -> Result<(), Error> {
     let conn = get_connection()?;
 
     conn.execute("DELETE FROM watched_tokens WHERE id = ?1", params![id])
-        .map_err(|e| format!("Failed to delete watched token: {e}"))?;
+        .map_err(DatabaseError::from)?;
 
     Ok(())
 }
@@ -138,7 +140,7 @@ pub fn update_watched_token_tracking(
     last_trade_signature: Option<&str>,
     trades_detected: Option<i32>,
     actions_triggered: Option<i32>,
-) -> Result<(), String> {
+) -> Result<(), Error> {
     let conn = get_connection()?;
     let now = Utc::now().to_rfc3339();
 
@@ -161,7 +163,7 @@ pub fn update_watched_token_tracking(
             id
         ],
     )
-    .map_err(|e| format!("Failed to update watched token tracking: {e}"))?;
+    .map_err(DatabaseError::from)?;
 
     Ok(())
 }

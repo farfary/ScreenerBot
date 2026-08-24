@@ -158,7 +158,7 @@ async fn process_activity(
         .await
         .map_err(|e| crate::trader::Error::Dependency {
             dependency: "wallets",
-            detail: e,
+            detail: e.to_string(),
         })?
         .into_iter()
         .map(|wallet| wallet.address)
@@ -369,7 +369,7 @@ async fn apply_latency_kill_switch(
                     .await
                     .map_err(|e| crate::trader::Error::Dependency {
                         dependency: "wallets",
-                        detail: e,
+                        detail: e.to_string(),
                     })?;
             }
             let mint = match &activity.kind {

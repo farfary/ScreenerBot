@@ -402,9 +402,11 @@ pub async fn wallet_has_account() -> bool {
 /// it without being asked is exactly the behaviour a hostile fork of this
 /// open-source bot would add.
 pub async fn sign_in_with_wallet(create: bool) -> Result<()> {
-    let address = crate::wallets::get_main_address()
-        .await
-        .map_err(|message| Error::Account(AccountError::Generic { message }))?;
+    let address = crate::wallets::get_main_address().await.map_err(|e| {
+        Error::Account(AccountError::Generic {
+            message: e.to_string(),
+        })
+    })?;
 
     let challenge = client::wallet_challenge(&address).await?;
 

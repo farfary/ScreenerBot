@@ -6,6 +6,8 @@ use std::collections::HashMap;
 
 use super::super::types::TokenBalance;
 use super::WalletsDatabase;
+use crate::errors::DatabaseError;
+use crate::wallets::Error;
 
 impl WalletsDatabase {
     /// Upsert a single token balance
@@ -19,7 +21,7 @@ impl WalletsDatabase {
         symbol: Option<&str>,
         name: Option<&str>,
         is_token_2022: bool,
-    ) -> Result<(), String> {
+    ) -> Result<(), Error> {
         let conn = self.conn()?;
         let now = Utc::now().to_rfc3339();
 
@@ -49,13 +51,13 @@ impl WalletsDatabase {
                 now,
             ],
         )
-        .map_err(|e| format!("Failed to upsert token balance: {e}"))?;
+        .map_err(DatabaseError::from)?;
 
         Ok(())
     }
 
     /// Get all token balances for a wallet
-    pub fn get_token_balances(&self, wallet_id: i64) -> Result<Vec<TokenBalance>, String> {
+    pub fn get_token_balances(&self, wallet_id: i64) -> Result<Vec<TokenBalance>, Error> {
         let conn = self.conn()?;
 
         let mut stmt = conn
@@ -67,19 +69,19 @@ impl WalletsDatabase {
                 ORDER BY ui_amount DESC
                 "#,
             )
-            .map_err(|e| format!("Failed to prepare statement: {e}"))?;
+            .map_err(DatabaseError::from)?;
 
         let balances = stmt
             .query_map(params![wallet_id], |row| Self::row_to_token_balance(row))
-            .map_err(|e| format!("Failed to query token balances: {e}"))?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| format!("Failed to collect token balances: {e}"))?;
+            .map_err(DatabaseError::from)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(DatabaseError::from)?;
 
         Ok(balances)
     }
 
     /// Get all token balances for all wallets
-    pub fn get_all_token_balances(&self) -> Result<HashMap<i64, Vec<TokenBalance>>, String> {
+    pub fn get_all_token_balances(&self) -> Result<HashMap<i64, Vec<TokenBalance>>, Error> {
         let conn = self.conn()?;
 
         let mut stmt = conn
@@ -90,16 +92,16 @@ impl WalletsDatabase {
                 ORDER BY wallet_id, ui_amount DESC
                 "#,
             )
-            .map_err(|e| format!("Failed to prepare statement: {e}"))?;
+            .map_err(DatabaseError::from)?;
 
         let mut balances_map: HashMap<i64, Vec<TokenBalance>> = HashMap::new();
 
         let rows = stmt
             .query_map([], |row| Self::row_to_token_balance(row))
-            .map_err(|e| format!("Failed to query all token balances: {e}"))?;
+            .map_err(DatabaseError::from)?;
 
         for row in rows {
-            let balance = row.map_err(|e| format!("Failed to parse token balance: {e}"))?;
+            let balance = row.map_err(DatabaseError::from)?;
             balances_map
                 .entry(balance.wallet_id)
                 .or_default()
@@ -110,7 +112,7 @@ impl WalletsDatabase {
     }
 
     /// Clear all token balances for a wallet
-    pub fn clear_token_balances(&self, wallet_id: i64) -> Result<u64, String> {
+    pub fn clear_token_balances(&self, wallet_id: i64) -> Result<u64, Error> {
         let conn = self.conn()?;
 
         let deleted = conn
@@ -118,7 +120,7 @@ impl WalletsDatabase {
                 "DELETE FROM wallet_token_balances WHERE wallet_id = ?1",
                 params![wallet_id],
             )
-            .map_err(|e| format!("Failed to clear token balances: {e}"))?;
+            .map_err(DatabaseError::from)?;
 
         Ok(deleted as u64)
     }
@@ -128,13 +130,13 @@ impl WalletsDatabase {
         &self,
         wallet_id: i64,
         balances: &[TokenBalance],
-    ) -> Result<(), String> {
+    ) -> Result<(), Error> {
         let conn = self.conn()?;
         let now = Utc::now().to_rfc3339();
 
         // Use a transaction for atomicity
         conn.execute("BEGIN IMMEDIATE", [])
-            .map_err(|e| format!("Failed to begin transaction: {e}"))?;
+            .map_err(DatabaseError::from)?;
 
         // Clear existing balances for this wallet
         if let Err(e) = conn.execute(
@@ -142,7 +144,7 @@ impl WalletsDatabase {
             params![wallet_id],
         ) {
             let _ = conn.execute("ROLLBACK", []);
-            return Err(format!("Failed to clear existing balances: {e}"));
+            return Err(DatabaseError::from(e).into());
         }
 
         // Insert new balances
@@ -166,12 +168,11 @@ impl WalletsDatabase {
                 ],
             ) {
                 let _ = conn.execute("ROLLBACK", []);
-                return Err(format!("Failed to insert token balance: {e}"));
+                return Err(DatabaseError::from(e).into());
             }
         }
 
-        conn.execute("COMMIT", [])
-            .map_err(|e| format!("Failed to commit transaction: {e}"))?;
+        conn.execute("COMMIT", []).map_err(DatabaseError::from)?;
 
         Ok(())
     }

@@ -8,6 +8,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use crate::tools::types::DelayConfig;
+use crate::tools::Error;
 
 // =============================================================================
 // CONFIGURATION TYPES
@@ -61,27 +62,41 @@ impl Default for MultiBuyConfig {
 
 impl MultiBuyConfig {
     /// Validate the configuration
-    pub fn validate(&self) -> Result<(), String> {
+    pub fn validate(&self) -> Result<(), Error> {
         if self.token_mint.is_empty() {
-            return Err("Token mint is required".to_owned());
+            return Err(Error::InvalidConfig {
+                detail: "token mint is required".to_owned(),
+            });
         }
         if self.wallet_count == 0 {
-            return Err("Wallet count must be at least 1".to_owned());
+            return Err(Error::InvalidConfig {
+                detail: "wallet count must be at least 1".to_owned(),
+            });
         }
         if self.min_amount_sol < 0.001 {
-            return Err("Minimum amount must be at least 0.001 SOL".to_owned());
+            return Err(Error::InvalidConfig {
+                detail: "minimum amount must be at least 0.001 SOL".to_owned(),
+            });
         }
         if self.max_amount_sol < self.min_amount_sol {
-            return Err("Maximum amount must be >= minimum amount".to_owned());
+            return Err(Error::InvalidConfig {
+                detail: "maximum amount must be >= minimum amount".to_owned(),
+            });
         }
         if self.sol_buffer < 0.005 {
-            return Err("SOL buffer must be at least 0.005 SOL".to_owned());
+            return Err(Error::InvalidConfig {
+                detail: "SOL buffer must be at least 0.005 SOL".to_owned(),
+            });
         }
         if self.concurrency == 0 {
-            return Err("Concurrency must be at least 1".to_owned());
+            return Err(Error::InvalidConfig {
+                detail: "concurrency must be at least 1".to_owned(),
+            });
         }
         if self.slippage_bps > 5000 {
-            return Err("Slippage cannot exceed 50% (5000 bps)".to_owned());
+            return Err(Error::InvalidConfig {
+                detail: "slippage cannot exceed 50% (5000 bps)".to_owned(),
+            });
         }
         Ok(())
     }
@@ -138,21 +153,31 @@ impl Default for MultiSellConfig {
 
 impl MultiSellConfig {
     /// Validate the configuration
-    pub fn validate(&self) -> Result<(), String> {
+    pub fn validate(&self) -> Result<(), Error> {
         if self.token_mint.is_empty() {
-            return Err("Token mint is required".to_owned());
+            return Err(Error::InvalidConfig {
+                detail: "token mint is required".to_owned(),
+            });
         }
         if self.sell_percentage <= 0.0 || self.sell_percentage > 100.0 {
-            return Err("Sell percentage must be between 0 and 100".to_owned());
+            return Err(Error::InvalidConfig {
+                detail: "sell percentage must be between 0 and 100".to_owned(),
+            });
         }
         if self.min_sol_for_fee < 0.005 {
-            return Err("Minimum SOL for fee must be at least 0.005 SOL".to_owned());
+            return Err(Error::InvalidConfig {
+                detail: "minimum SOL for fee must be at least 0.005 SOL".to_owned(),
+            });
         }
         if self.concurrency == 0 {
-            return Err("Concurrency must be at least 1".to_owned());
+            return Err(Error::InvalidConfig {
+                detail: "concurrency must be at least 1".to_owned(),
+            });
         }
         if self.slippage_bps > 5000 {
-            return Err("Slippage cannot exceed 50% (5000 bps)".to_owned());
+            return Err(Error::InvalidConfig {
+                detail: "slippage cannot exceed 50% (5000 bps)".to_owned(),
+            });
         }
         Ok(())
     }
@@ -190,10 +215,12 @@ impl Default for ConsolidateConfig {
 
 impl ConsolidateConfig {
     /// Validate the configuration
-    pub fn validate(&self) -> Result<(), String> {
+    pub fn validate(&self) -> Result<(), Error> {
         // At least one operation should be enabled
         if !self.transfer_sol && self.transfer_tokens.is_none() && !self.close_atas {
-            return Err("At least one consolidation operation must be enabled".to_owned());
+            return Err(Error::InvalidConfig {
+                detail: "at least one consolidation operation must be enabled".to_owned(),
+            });
         }
         Ok(())
     }

@@ -4,8 +4,8 @@ use chrono::{DateTime, Utc};
 use rusqlite::{params, OptionalExtension};
 
 use crate::errors::DatabaseError;
-use crate::positions::error::{Error, Result};
 use crate::positions::types::Position;
+use crate::positions::{Error, Result};
 
 use super::types::*;
 

@@ -2,14 +2,16 @@
 
 use crate::logger::{self, LogTag};
 
+use super::super::error::Error;
 use super::super::types::{WalletRole, WalletType};
+use super::db_not_initialized;
 use super::WALLETS_DB;
 use crate::chains::solana::accounts::address_from_encrypted_key;
 
 /// Migrate existing wallet from config.toml to wallets database
-pub(super) async fn migrate_from_config() -> Result<(), String> {
+pub(super) async fn migrate_from_config() -> Result<(), Error> {
     let db_guard = WALLETS_DB.read().await;
-    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
+    let db = db_guard.as_ref().ok_or_else(db_not_initialized)?;
 
     // Check if we already have wallets
     let (total, _) = db.get_wallet_counts()?;
@@ -32,7 +34,7 @@ pub(super) async fn migrate_from_config() -> Result<(), String> {
 
     // Decrypt to get address (the key material itself is re-stored encrypted, unchanged)
     let address = address_from_encrypted_key(&encrypted, &nonce)
-        .map_err(|e| format!("Failed to decrypt config wallet: {e}"))?;
+        .map_err(|reason| Error::InvalidPrivateKey { reason })?;
 
     // Insert as main wallet
     db.insert_wallet(

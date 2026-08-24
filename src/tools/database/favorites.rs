@@ -5,6 +5,8 @@ use rusqlite::params;
 
 use super::schema::get_connection;
 use super::types::ToolFavoriteRow;
+use crate::errors::DatabaseError;
+use crate::tools::Error;
 
 // =============================================================================
 // TOOL FAVORITES OPERATIONS
@@ -20,7 +22,7 @@ pub fn upsert_tool_favorite(
     config_json: Option<&str>,
     label: Option<&str>,
     notes: Option<&str>,
-) -> Result<i64, String> {
+) -> Result<i64, Error> {
     let conn = get_connection()?;
     let now = Utc::now().to_rfc3339();
 
@@ -39,7 +41,7 @@ pub fn upsert_tool_favorite(
         "#,
         params![mint, symbol, name, logo_url, tool_type, config_json, label, notes, now],
     )
-    .map_err(|e| format!("Failed to upsert tool favorite: {e}"))?;
+    .map_err(DatabaseError::from)?;
 
     // Get the ID (either inserted or existing)
     conn.query_row(
@@ -47,11 +49,11 @@ pub fn upsert_tool_favorite(
         params![mint, tool_type],
         |row| row.get(0),
     )
-    .map_err(|e| format!("Failed to get favorite ID: {e}"))
+    .map_err(|e| DatabaseError::from(e).into())
 }
 
 /// Get all tool favorites, optionally filtered by tool type
-pub fn get_tool_favorites(tool_type: Option<&str>) -> Result<Vec<ToolFavoriteRow>, String> {
+pub fn get_tool_favorites(tool_type: Option<&str>) -> Result<Vec<ToolFavoriteRow>, Error> {
     let conn = get_connection()?;
 
     let mut favorites = Vec::new();
@@ -67,17 +69,17 @@ pub fn get_tool_favorites(tool_type: Option<&str>) -> Result<Vec<ToolFavoriteRow
                 ORDER BY use_count DESC, updated_at DESC
                 "#,
             )
-            .map_err(|e| format!("Failed to prepare statement: {e}"))?;
+            .map_err(DatabaseError::from)?;
 
         let rows = stmt
             .query_map(params![tt], |row| Ok(ToolFavoriteRow::from_row(row)))
-            .map_err(|e| format!("Failed to query favorites: {e}"))?;
+            .map_err(DatabaseError::from)?;
 
         for row in rows {
             match row {
                 Ok(Ok(fav)) => favorites.push(fav),
                 Ok(Err(e)) => return Err(e),
-                Err(e) => return Err(format!("Failed to read row: {e}")),
+                Err(e) => return Err(DatabaseError::from(e).into()),
             }
         }
     } else {
@@ -90,17 +92,17 @@ pub fn get_tool_favorites(tool_type: Option<&str>) -> Result<Vec<ToolFavoriteRow
                 ORDER BY use_count DESC, updated_at DESC
                 "#,
             )
-            .map_err(|e| format!("Failed to prepare statement: {e}"))?;
+            .map_err(DatabaseError::from)?;
 
         let rows = stmt
             .query_map([], |row| Ok(ToolFavoriteRow::from_row(row)))
-            .map_err(|e| format!("Failed to query favorites: {e}"))?;
+            .map_err(DatabaseError::from)?;
 
         for row in rows {
             match row {
                 Ok(Ok(fav)) => favorites.push(fav),
                 Ok(Err(e)) => return Err(e),
-                Err(e) => return Err(format!("Failed to read row: {e}")),
+                Err(e) => return Err(DatabaseError::from(e).into()),
             }
         }
     }
@@ -109,18 +111,18 @@ pub fn get_tool_favorites(tool_type: Option<&str>) -> Result<Vec<ToolFavoriteRow
 }
 
 /// Remove a tool favorite by ID
-pub fn remove_tool_favorite(id: i64) -> Result<bool, String> {
+pub fn remove_tool_favorite(id: i64) -> Result<bool, Error> {
     let conn = get_connection()?;
 
     let rows = conn
         .execute("DELETE FROM tool_favorites WHERE id = ?1", params![id])
-        .map_err(|e| format!("Failed to remove tool favorite: {e}"))?;
+        .map_err(DatabaseError::from)?;
 
     Ok(rows > 0)
 }
 
 /// Increment use count for a favorite
-pub fn increment_tool_favorite_use(id: i64) -> Result<(), String> {
+pub fn increment_tool_favorite_use(id: i64) -> Result<(), Error> {
     let conn = get_connection()?;
     let now = Utc::now().to_rfc3339();
 
@@ -128,7 +130,7 @@ pub fn increment_tool_favorite_use(id: i64) -> Result<(), String> {
         "UPDATE tool_favorites SET use_count = use_count + 1, last_used_at = ?1, updated_at = ?1 WHERE id = ?2",
         params![now, id],
     )
-    .map_err(|e| format!("Failed to increment use count: {e}"))?;
+    .map_err(DatabaseError::from)?;
 
     Ok(())
 }
@@ -139,7 +141,7 @@ pub fn update_tool_favorite(
     config_json: Option<&str>,
     label: Option<&str>,
     notes: Option<&str>,
-) -> Result<bool, String> {
+) -> Result<bool, Error> {
     let conn = get_connection()?;
     let now = Utc::now().to_rfc3339();
 
@@ -155,7 +157,7 @@ pub fn update_tool_favorite(
             "#,
             params![config_json, label, notes, now, id],
         )
-        .map_err(|e| format!("Failed to update tool favorite: {e}"))?;
+        .map_err(DatabaseError::from)?;
 
     Ok(rows > 0)
 }

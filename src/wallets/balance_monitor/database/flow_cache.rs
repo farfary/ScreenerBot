@@ -3,6 +3,9 @@
 use chrono::{DateTime, Utc};
 use rusqlite::{params, OptionalExtension};
 
+use crate::errors::DatabaseError;
+use crate::wallets::Error;
+
 use super::super::types::WalletFlowCacheStats;
 use super::WalletDatabase;
 use crate::database::WriteTransaction;
@@ -13,7 +16,7 @@ impl WalletDatabase {
         &self,
         from: DateTime<Utc>,
         to: Option<DateTime<Utc>>,
-    ) -> Result<(f64, f64, usize), String> {
+    ) -> Result<(f64, f64, usize), Error> {
         let conn = self.get_connection()?;
         let mut query = String::from(
             "SELECT \
@@ -35,9 +38,7 @@ impl WalletDatabase {
         }
         let params_refs: Vec<&dyn rusqlite::ToSql> =
             params_vec.iter().map(|p| p.as_ref()).collect();
-        let mut stmt = conn
-            .prepare(&query)
-            .map_err(|e| format!("Failed to prepare cached flow aggregation query: {e}"))?;
+        let mut stmt = conn.prepare(&query).map_err(DatabaseError::from)?;
         let (inflow, outflow, count) = stmt
             .query_row(params_refs.as_slice(), |row| {
                 let inflow = row.get::<_, Option<f64>>(0)?.unwrap_or_default();
@@ -45,25 +46,23 @@ impl WalletDatabase {
                 let count = row.get::<_, i64>(2)?.max(0) as usize;
                 Ok((inflow, outflow, count))
             })
-            .map_err(|e| format!("Failed to aggregate cached SOL flows: {e}"))?;
+            .map_err(DatabaseError::from)?;
         Ok((inflow, outflow, count))
     }
 
     /// Upsert a batch of flow rows into cache
-    pub fn upsert_flow_rows(&self, rows: &[(String, DateTime<Utc>, f64)]) -> Result<usize, String> {
+    pub fn upsert_flow_rows(&self, rows: &[(String, DateTime<Utc>, f64)]) -> Result<usize, Error> {
         if rows.is_empty() {
             return Ok(0);
         }
         let mut conn = self.get_connection()?;
-        let tx = conn
-            .write_tx()
-            .map_err(|e| format!("Failed to start flow cache transaction: {e}"))?;
+        let tx = conn.write_tx().map_err(DatabaseError::from)?;
         {
             let mut stmt = tx
                 .prepare(
                     "INSERT OR REPLACE INTO sol_flow_cache(chain_id, wallet_address, signature, timestamp, sol_delta) VALUES (?1, ?2, ?3, ?4, ?5)",
                 )
-                .map_err(|e| format!("Failed to prepare flow cache upsert: {e}"))?;
+                .map_err(DatabaseError::from)?;
             for (sig, ts, delta) in rows.iter() {
                 stmt.execute(params![
                     self.chain.as_str(),
@@ -72,29 +71,31 @@ impl WalletDatabase {
                     ts.to_rfc3339(),
                     *delta
                 ])
-                .map_err(|e| format!("Failed to upsert flow row: {e}"))?;
+                .map_err(DatabaseError::from)?;
             }
         }
-        tx.commit()
-            .map_err(|e| format!("Failed to commit flow cache upserts: {e}"))?;
+        tx.commit().map_err(DatabaseError::from)?;
         Ok(rows.len())
     }
 
     /// Get the max timestamp present in the flow cache
-    pub fn get_flow_cache_max_ts(&self) -> Result<Option<DateTime<Utc>>, String> {
+    pub fn get_flow_cache_max_ts(&self) -> Result<Option<DateTime<Utc>>, Error> {
         let conn = self.get_connection()?;
         let mut stmt = conn
             .prepare("SELECT MAX(timestamp) FROM sol_flow_cache WHERE chain_id = ?1 AND wallet_address = ?2")
-            .map_err(|e| format!("Failed to prepare max timestamp query: {e}"))?;
+            .map_err(DatabaseError::from)?;
         let ts: Option<String> = stmt
             .query_row(params![self.chain.as_str(), self.subject], |row| row.get(0))
             .optional()
-            .map_err(|e| format!("Failed to query max timestamp: {e}"))?
+            .map_err(DatabaseError::from)?
             .flatten();
         if let Some(ts) = ts {
             let parsed = DateTime::parse_from_rfc3339(&ts)
                 .map(|dt| dt.with_timezone(&Utc))
-                .map_err(|e| format!("Failed to parse cached max timestamp: {e}"))?;
+                .map_err(|e| DatabaseError::Query {
+                    operation: "flow_cache_timestamp".to_owned(),
+                    message: e.to_string(),
+                })?;
             Ok(Some(parsed))
         } else {
             Ok(None)
@@ -102,20 +103,23 @@ impl WalletDatabase {
     }
 
     /// Get the minimum timestamp present in the flow cache (earliest record)
-    pub fn get_flow_cache_min_ts(&self) -> Result<Option<DateTime<Utc>>, String> {
+    pub fn get_flow_cache_min_ts(&self) -> Result<Option<DateTime<Utc>>, Error> {
         let conn = self.get_connection()?;
         let mut stmt = conn
             .prepare("SELECT MIN(timestamp) FROM sol_flow_cache WHERE chain_id = ?1 AND wallet_address = ?2")
-            .map_err(|e| format!("Failed to prepare min timestamp query: {e}"))?;
+            .map_err(DatabaseError::from)?;
         let ts: Option<String> = stmt
             .query_row(params![self.chain.as_str(), self.subject], |row| row.get(0))
             .optional()
-            .map_err(|e| format!("Failed to query min timestamp: {e}"))?
+            .map_err(DatabaseError::from)?
             .flatten();
         if let Some(ts) = ts {
             let parsed = DateTime::parse_from_rfc3339(&ts)
                 .map(|dt| dt.with_timezone(&Utc))
-                .map_err(|e| format!("Failed to parse cached min timestamp: {e}"))?;
+                .map_err(|e| DatabaseError::Query {
+                    operation: "flow_cache_timestamp".to_owned(),
+                    message: e.to_string(),
+                })?;
             Ok(Some(parsed))
         } else {
             Ok(None)
@@ -123,7 +127,7 @@ impl WalletDatabase {
     }
 
     /// Get flow cache stats (row count and latest timestamp)
-    pub fn get_flow_cache_stats(&self) -> Result<WalletFlowCacheStats, String> {
+    pub fn get_flow_cache_stats(&self) -> Result<WalletFlowCacheStats, Error> {
         let conn = self.get_connection()?;
         let rows: i64 = conn
             .query_row(

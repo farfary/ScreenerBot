@@ -3,6 +3,9 @@
 use chrono::{DateTime, Utc};
 use rusqlite::{params, OptionalExtension};
 
+use crate::errors::DatabaseError;
+use crate::wallets::Error;
+
 use super::super::cache::CachedDashboardMetrics;
 use super::WalletDatabase;
 
@@ -10,7 +13,7 @@ impl WalletDatabase {
     pub fn get_dashboard_metrics(
         &self,
         window_key: &str,
-    ) -> Result<Option<CachedDashboardMetrics>, String> {
+    ) -> Result<Option<CachedDashboardMetrics>, Error> {
         let conn = self.get_connection()?;
         let mut stmt = conn
             .prepare(
@@ -19,7 +22,7 @@ impl WalletDatabase {
                     last_processed_timestamp, last_processed_signature, window_start \
                  FROM wallet_dashboard_metrics WHERE chain_id = ?1 AND wallet_address = ?2 AND window_key = ?3",
             )
-            .map_err(|e| format!("Failed to prepare dashboard metrics query: {e}"))?;
+            .map_err(DatabaseError::from)?;
 
         let result = stmt
             .query_row(
@@ -77,12 +80,12 @@ impl WalletDatabase {
                 },
             )
             .optional()
-            .map_err(|e| format!("Failed to fetch dashboard metrics: {e}"))?;
+            .map_err(DatabaseError::from)?;
 
         Ok(result)
     }
 
-    pub fn upsert_dashboard_metrics(&self, metrics: &CachedDashboardMetrics) -> Result<(), String> {
+    pub fn upsert_dashboard_metrics(&self, metrics: &CachedDashboardMetrics) -> Result<(), Error> {
         let conn = self.get_connection()?;
         conn.execute(
             "INSERT OR REPLACE INTO wallet_dashboard_metrics (
@@ -112,28 +115,28 @@ impl WalletDatabase {
                 metrics.window_start.as_ref().map(|ts| ts.to_rfc3339()),
             ],
         )
-        .map_err(|e| format!("Failed to upsert dashboard metrics: {e}"))?;
+        .map_err(DatabaseError::from)?;
         Ok(())
     }
 
-    pub fn invalidate_dashboard_metrics(&self, window_key: &str) -> Result<(), String> {
+    pub fn invalidate_dashboard_metrics(&self, window_key: &str) -> Result<(), Error> {
         let conn = self.get_connection()?;
         conn.execute(
             "DELETE FROM wallet_dashboard_metrics WHERE chain_id = ?1 AND wallet_address = ?2 AND window_key = ?3",
             params![self.chain.as_str(), self.subject, window_key],
         )
-        .map_err(|e| format!("Failed to invalidate dashboard metrics: {e}"))?;
+        .map_err(DatabaseError::from)?;
         Ok(())
     }
 
-    pub fn cleanup_expired_metrics(&self) -> Result<u64, String> {
+    pub fn cleanup_expired_metrics(&self) -> Result<u64, Error> {
         let conn = self.get_connection()?;
         let deleted = conn
             .execute(
                 "DELETE FROM wallet_dashboard_metrics WHERE chain_id = ?1 AND wallet_address = ?2 AND valid_until < datetime('now')",
                 params![self.chain.as_str(), self.subject],
             )
-            .map_err(|e| format!("Failed to cleanup dashboard metrics: {e}"))?;
+            .map_err(DatabaseError::from)?;
         Ok(deleted.max(0) as u64)
     }
 }

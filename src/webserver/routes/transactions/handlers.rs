@@ -253,7 +253,7 @@ async fn resolve_subject(requested: Option<&str>) -> Result<Subject, Response> {
             StatusCode::SERVICE_UNAVAILABLE,
             "WATCH_STORE_UNAVAILABLE",
             "Watched wallets are not available",
-            Some(&e),
+            Some(&e.to_string()),
         )),
     }
 }

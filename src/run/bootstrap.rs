@@ -100,7 +100,10 @@ pub(crate) async fn initialize_full_runtime() -> Result<(), StartupError> {
     logger::info(LogTag::System, "Wallets module initialized");
 
     logger::info(LogTag::System, "Validating wallet consistency...");
-    match crate::wallet_validation::WalletValidator::validate_wallet_consistency().await? {
+    match crate::wallet_validation::WalletValidator::validate_wallet_consistency()
+        .await
+        .map_err(|e| format!("Failed to validate wallet consistency: {e}"))?
+    {
         crate::wallet_validation::WalletValidationResult::Valid => {
             logger::info(LogTag::System, "Wallet validation passed");
         }

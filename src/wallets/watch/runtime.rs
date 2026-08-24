@@ -11,6 +11,7 @@ use std::sync::{Arc, OnceLock};
 use async_trait::async_trait;
 
 use crate::transactions::types::{Subject, Transaction};
+use crate::wallets::Error;
 
 use super::types::{ActivityKind, WatchNotification};
 
@@ -45,7 +46,7 @@ pub trait ConnectionWatch: Send {
 pub trait WalletWatchRuntime: Send + Sync {
     /// Validate a user-supplied address and resolve it to a chain-neutral
     /// subject. Rejects the target before any observation starts.
-    fn resolve_subject(&self, address: &str) -> Result<Subject, String>;
+    fn resolve_subject(&self, address: &str) -> Result<Subject, Error>;
 
     /// True while the shared realtime transport is connected.
     fn is_connected(&self) -> bool;
@@ -56,7 +57,7 @@ pub trait WalletWatchRuntime: Send + Sync {
 
     /// Subscribe to realtime notifications for one address. Ends when the
     /// returned handle is dropped.
-    async fn subscribe(&self, address: &str) -> Result<Box<dyn NotificationStream>, String>;
+    async fn subscribe(&self, address: &str) -> Result<Box<dyn NotificationStream>, Error>;
 
     /// Fetch one page of signatures for `address`, newest first, restricted to
     /// the `(until, before]` range (both ends optional/open).
@@ -66,7 +67,7 @@ pub trait WalletWatchRuntime: Send + Sync {
         page_size: usize,
         before: Option<&str>,
         until: Option<&str>,
-    ) -> Result<Vec<String>, String>;
+    ) -> Result<Vec<String>, Error>;
 
     /// Decode one signature into a chain-neutral transaction record.
     /// `is_own` selects the own-wallet persistence policy (raw JSON retained)
@@ -76,7 +77,7 @@ pub trait WalletWatchRuntime: Send + Sync {
         address: &str,
         signature: &str,
         is_own: bool,
-    ) -> Result<Transaction, String>;
+    ) -> Result<Transaction, Error>;
 
     /// Classify a decoded, successful transaction from `address`'s
     /// perspective. `None` means dedupe should still commit but nothing is
@@ -185,7 +186,7 @@ pub(crate) mod test_support {
         connected_rx: tokio::sync::watch::Receiver<bool>,
         valid_addresses: Vec<String>,
         pages: Mutex<std::collections::HashMap<String, VecDeque<Vec<String>>>>,
-        decode_results: Mutex<std::collections::HashMap<String, Result<Transaction, String>>>,
+        decode_results: Mutex<std::collections::HashMap<String, Result<Transaction, Error>>>,
         classify_results:
             Mutex<std::collections::HashMap<String, (ActivityKind, Option<&'static str>)>>,
         pub calls: Mutex<FakeCalls>,
@@ -214,7 +215,7 @@ pub(crate) mod test_support {
                 .push_back(page);
         }
 
-        pub fn set_decode_result(&self, signature: &str, result: Result<Transaction, String>) {
+        pub fn set_decode_result(&self, signature: &str, result: Result<Transaction, Error>) {
             self.decode_results
                 .lock()
                 .unwrap()
@@ -236,15 +237,19 @@ pub(crate) mod test_support {
 
     #[async_trait]
     impl WalletWatchRuntime for FakeRuntime {
-        fn resolve_subject(&self, address: &str) -> Result<Subject, String> {
+        fn resolve_subject(&self, address: &str) -> Result<Subject, Error> {
             self.calls.lock().unwrap().resolved.push(address.to_owned());
             if !self.valid_addresses.iter().any(|a| a == address) {
-                return Err(format!(
-                    "not a valid address for this fake chain: {address}"
-                ));
+                return Err(Error::ChainRuntime {
+                    operation: "resolve_subject",
+                    detail: format!("not a valid address for this fake chain: {address}"),
+                });
             }
-            let account = AccountId::new(ChainId::Solana, address)
-                .map_err(|e| format!("invalid account: {e}"))?;
+            let account =
+                AccountId::new(ChainId::Solana, address).map_err(|e| Error::ChainRuntime {
+                    operation: "resolve_subject",
+                    detail: format!("invalid account: {e}"),
+                })?;
             Ok(Subject::from_account(account))
         }
 
@@ -258,7 +263,7 @@ pub(crate) mod test_support {
             })
         }
 
-        async fn subscribe(&self, address: &str) -> Result<Box<dyn NotificationStream>, String> {
+        async fn subscribe(&self, address: &str) -> Result<Box<dyn NotificationStream>, Error> {
             self.calls
                 .lock()
                 .unwrap()
@@ -274,7 +279,7 @@ pub(crate) mod test_support {
             _page_size: usize,
             _before: Option<&str>,
             _until: Option<&str>,
-        ) -> Result<Vec<String>, String> {
+        ) -> Result<Vec<String>, Error> {
             let mut pages = self.pages.lock().unwrap();
             Ok(pages
                 .get_mut(address)
@@ -287,7 +292,7 @@ pub(crate) mod test_support {
             address: &str,
             signature: &str,
             is_own: bool,
-        ) -> Result<Transaction, String> {
+        ) -> Result<Transaction, Error> {
             self.calls.lock().unwrap().decoded.push((
                 address.to_owned(),
                 signature.to_owned(),
@@ -298,7 +303,12 @@ pub(crate) mod test_support {
                 .unwrap()
                 .get(signature)
                 .cloned()
-                .unwrap_or_else(|| Err(format!("no decode result seeded for {signature}")))
+                .unwrap_or_else(|| {
+                    Err(Error::ChainRuntime {
+                        operation: "decode_transaction",
+                        detail: format!("no decode result seeded for {signature}"),
+                    })
+                })
         }
 
         fn classify(

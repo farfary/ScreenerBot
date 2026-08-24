@@ -46,7 +46,7 @@ pub async fn search_pools_handler(Path(mint): Path<String>) -> Response {
             error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "POOL_SEARCH_ERROR",
-                &e,
+                &e.to_string(),
                 Some(&mint),
             )
         }
@@ -60,7 +60,7 @@ pub async fn get_watched_tokens_handler() -> Response {
         Err(e) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "DATABASE_ERROR",
-            &e,
+            &e.to_string(),
             None,
         ),
     }
@@ -109,7 +109,7 @@ pub async fn add_watched_token_handler(Json(req): Json<AddWatchedTokenRequest>) 
             error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "DATABASE_ERROR",
-                &e,
+                &e.to_string(),
                 None,
             )
         }
@@ -142,7 +142,7 @@ pub async fn delete_watched_token_handler(Path(id): Path<i64>) -> Response {
             error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "DATABASE_ERROR",
-                &e,
+                &e.to_string(),
                 None,
             )
         }

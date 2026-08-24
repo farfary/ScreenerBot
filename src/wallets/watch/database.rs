@@ -19,7 +19,9 @@ use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{params, OptionalExtension};
 
+use crate::errors::{DatabaseError, InternalError, IoError};
 use crate::paths::get_wallets_db_path;
+use crate::wallets::Error;
 use crate::{chains::ChainId, database};
 
 use super::types::{WatchSource, WatchTarget};
@@ -59,9 +61,13 @@ pub struct WatchDatabase {
     pub(super) chain: ChainId,
 }
 
+fn join_failed(e: tokio::task::JoinError) -> Error {
+    Error::Internal(InternalError::from(e))
+}
+
 impl WatchDatabase {
     /// Create or open the database at its real location and ensure its schema exists.
-    pub fn new(chain: ChainId) -> Result<Self, String> {
+    pub fn new(chain: ChainId) -> Result<Self, Error> {
         Self::open(get_wallets_db_path(), chain)
     }
 
@@ -76,14 +82,13 @@ impl WatchDatabase {
     pub(crate) fn new_with_path<P: AsRef<std::path::Path>>(
         path: P,
         chain: ChainId,
-    ) -> Result<Self, String> {
+    ) -> Result<Self, Error> {
         Self::open(path.as_ref().to_path_buf(), chain)
     }
 
-    fn open(db_path: std::path::PathBuf, chain: ChainId) -> Result<Self, String> {
+    fn open(db_path: std::path::PathBuf, chain: ChainId) -> Result<Self, Error> {
         if let Some(parent) = db_path.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| format!("Failed to create data directory: {e}"))?;
+            std::fs::create_dir_all(parent).map_err(IoError::from)?;
         }
 
         let manager = SqliteConnectionManager::file(&db_path)
@@ -93,7 +98,7 @@ impl WatchDatabase {
             .idle_timeout(None) // SQLite: keep connections alive (WAL stability)
             .max_lifetime(None) // SQLite: no connection recycling
             .build(manager)
-            .map_err(|e| format!("Failed to create watch connection pool: {e}"))?;
+            .map_err(DatabaseError::from)?;
 
         let db = Self { pool, chain };
         db.initialize_sync()?;
@@ -105,49 +110,58 @@ impl WatchDatabase {
     /// build actually wrote.
     pub(super) fn column_exists(
         conn: &rusqlite::Connection,
-        table: &str,
+        table: &'static str,
         column: &str,
-    ) -> Result<bool, String> {
+    ) -> Result<bool, Error> {
         let mut statement = conn
             .prepare(&format!("PRAGMA table_info({table})"))
-            .map_err(|e| format!("Failed to inspect {table} columns: {e}"))?;
+            .map_err(|e| Error::SchemaInspect {
+                table,
+                detail: e.to_string(),
+            })?;
         let mut columns = statement
             .query_map([], |row| row.get::<_, String>(1))
-            .map_err(|e| format!("Failed to read {table} columns: {e}"))?;
+            .map_err(|e| Error::SchemaInspect {
+                table,
+                detail: e.to_string(),
+            })?;
         columns.try_fold(false, |found, name| {
-            let name = name.map_err(|e| format!("Failed to decode {table} columns: {e}"))?;
+            let name = name.map_err(|e| Error::SchemaInspect {
+                table,
+                detail: e.to_string(),
+            })?;
             Ok(found || name == column)
         })
     }
 
-    pub(super) fn conn(&self) -> Result<PooledConnection<SqliteConnectionManager>, String> {
-        self.pool
-            .get()
-            .map_err(|e| format!("Failed to get watch database connection: {e}"))
+    pub(super) fn conn(&self) -> Result<PooledConnection<SqliteConnectionManager>, Error> {
+        self.pool.get().map_err(|e| DatabaseError::from(e).into())
     }
 
-    fn initialize_sync(&self) -> Result<(), String> {
+    fn initialize_sync(&self) -> Result<(), Error> {
         let conn = self.conn()?;
         conn.execute(SCHEMA_WATCH_TARGETS, [])
-            .map_err(|e| format!("Failed to create watch_targets table: {e}"))?;
+            .map_err(DatabaseError::from)?;
         conn.execute(SCHEMA_WATCH_CURSORS, [])
-            .map_err(|e| format!("Failed to create watch_cursors table: {e}"))?;
+            .map_err(DatabaseError::from)?;
         // Bring a database written before chain identity onto the chain-scoped
         // keys the queries in this module name. `CREATE TABLE IF NOT EXISTS` is
         // a no-op on an existing table, and `ALTER TABLE ADD COLUMN` cannot
         // change a key, so only a rebuild can: see `migrations`. Both steps are
         // gated on the live schema and run before anything names the column.
         let mut conn = conn;
-        let tx = conn
-            .write_tx()
-            .map_err(|e| format!("Failed to begin watch schema migration: {e}"))?;
+        let tx = conn.write_tx().map_err(|e| Error::Migration {
+            step: "begin".to_owned(),
+            detail: e.to_string(),
+        })?;
         Self::rebuild_watch_targets(&tx)?;
         Self::rebuild_watch_cursors(&tx)?;
-        tx.commit()
-            .map_err(|e| format!("Failed to commit watch schema migration: {e}"))?;
+        tx.commit().map_err(|e| Error::Migration {
+            step: "commit".to_owned(),
+            detail: e.to_string(),
+        })?;
         for index_sql in INDEXES {
-            conn.execute(index_sql, [])
-                .map_err(|e| format!("Failed to create watch index: {e}"))?;
+            conn.execute(index_sql, []).map_err(DatabaseError::from)?;
         }
         Ok(())
     }
@@ -156,37 +170,37 @@ impl WatchDatabase {
     // watch_targets
     // =========================================================================
 
-    pub async fn list_targets(&self) -> Result<Vec<WatchTarget>, String> {
+    pub async fn list_targets(&self) -> Result<Vec<WatchTarget>, Error> {
         let db = self.clone();
         tokio::task::spawn_blocking(move || db.list_targets_sync())
             .await
-            .map_err(|e| format!("Blocking task failed: {e}"))?
+            .map_err(join_failed)?
     }
 
-    fn list_targets_sync(&self) -> Result<Vec<WatchTarget>, String> {
+    fn list_targets_sync(&self) -> Result<Vec<WatchTarget>, Error> {
         let conn = self.conn()?;
         let mut stmt = conn
             .prepare(
                 "SELECT id, address, label, sources, enabled, created_at, updated_at \
                  FROM watch_targets WHERE chain_id = ?1 ORDER BY created_at DESC",
             )
-            .map_err(|e| format!("Failed to prepare list_targets: {e}"))?;
+            .map_err(DatabaseError::from)?;
         let rows = stmt
             .query_map(params![self.chain.as_str()], Self::row_to_target)
-            .map_err(|e| format!("Failed to query watch_targets: {e}"))?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| format!("Failed to read watch_targets: {e}"))?;
+            .map_err(DatabaseError::from)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(DatabaseError::from)?;
         Ok(rows)
     }
 
-    pub async fn get_target(&self, id: i64) -> Result<Option<WatchTarget>, String> {
+    pub async fn get_target(&self, id: i64) -> Result<Option<WatchTarget>, Error> {
         let db = self.clone();
         tokio::task::spawn_blocking(move || db.get_target_sync(id))
             .await
-            .map_err(|e| format!("Blocking task failed: {e}"))?
+            .map_err(join_failed)?
     }
 
-    pub(super) fn get_target_sync(&self, id: i64) -> Result<Option<WatchTarget>, String> {
+    pub(super) fn get_target_sync(&self, id: i64) -> Result<Option<WatchTarget>, Error> {
         let conn = self.conn()?;
         conn.query_row(
             "SELECT id, address, label, sources, enabled, created_at, updated_at \
@@ -195,21 +209,19 @@ impl WatchDatabase {
             Self::row_to_target,
         )
         .optional()
-        .map_err(|e| format!("Failed to get watch target {id}: {e}"))
+        .map_err(DatabaseError::from)
+        .map_err(Error::from)
     }
 
-    pub async fn get_target_by_address(
-        &self,
-        address: &str,
-    ) -> Result<Option<WatchTarget>, String> {
+    pub async fn get_target_by_address(&self, address: &str) -> Result<Option<WatchTarget>, Error> {
         let db = self.clone();
         let address = address.to_owned();
         tokio::task::spawn_blocking(move || db.get_target_by_address_sync(&address))
             .await
-            .map_err(|e| format!("Blocking task failed: {e}"))?
+            .map_err(join_failed)?
     }
 
-    fn get_target_by_address_sync(&self, address: &str) -> Result<Option<WatchTarget>, String> {
+    fn get_target_by_address_sync(&self, address: &str) -> Result<Option<WatchTarget>, Error> {
         let conn = self.conn()?;
         conn.query_row(
             "SELECT id, address, label, sources, enabled, created_at, updated_at \
@@ -218,7 +230,8 @@ impl WatchDatabase {
             Self::row_to_target,
         )
         .optional()
-        .map_err(|e| format!("Failed to get watch target by address: {e}"))
+        .map_err(DatabaseError::from)
+        .map_err(Error::from)
     }
 
     /// Insert a new alert-only target. Fails if `address` is already watched
@@ -231,26 +244,24 @@ impl WatchDatabase {
         &self,
         address: &str,
         label: Option<&str>,
-    ) -> Result<WatchTarget, String> {
+    ) -> Result<WatchTarget, Error> {
         let db = self.clone();
         let address = address.to_owned();
         let label = label.map(|s| s.to_owned());
         tokio::task::spawn_blocking(move || db.insert_alert_target_sync(&address, label.as_deref()))
             .await
-            .map_err(|e| format!("Blocking task failed: {e}"))?
+            .map_err(join_failed)?
     }
 
     fn insert_alert_target_sync(
         &self,
         address: &str,
         label: Option<&str>,
-    ) -> Result<WatchTarget, String> {
+    ) -> Result<WatchTarget, Error> {
         let mut conn = self.conn()?;
         let now = Utc::now().to_rfc3339();
 
-        let tx = conn
-            .write_tx()
-            .map_err(|e| format!("Failed to begin watch-target insert: {e}"))?;
+        let tx = conn.write_tx().map_err(DatabaseError::from)?;
         tx.execute(
             "INSERT INTO watch_targets (chain_id, address, label, sources, enabled, created_at, updated_at) \
              VALUES (?1, ?2, ?3, '[]', 1, ?4, ?4)",
@@ -258,37 +269,45 @@ impl WatchDatabase {
         )
         .map_err(|e| {
             if e.to_string().contains("UNIQUE constraint failed") {
-                format!("{address} is already watched")
+                DatabaseError::Query {
+                    operation: "insert_alert_target".to_owned(),
+                    message: format!("{address} is already watched"),
+                }
             } else {
-                format!("Failed to insert watch target: {e}")
+                DatabaseError::from(e)
             }
         })?;
 
         let id = tx.last_insert_rowid();
         let sources = vec![WatchSource::Alert { rule_id: id }];
-        let sources_json = serde_json::to_string(&sources)
-            .map_err(|e| format!("Failed to serialize watch sources: {e}"))?;
+        let sources_json = serde_json::to_string(&sources).map_err(|e| {
+            Error::Internal(InternalError::InvariantViolation {
+                message: format!("could not serialize watch sources: {e}"),
+            })
+        })?;
         tx.execute(
             "UPDATE watch_targets SET sources = ?1 WHERE chain_id = ?2 AND id = ?3",
             params![sources_json, self.chain.as_str(), id],
         )
-        .map_err(|e| format!("Failed to set watch target sources: {e}"))?;
-        tx.commit()
-            .map_err(|e| format!("Failed to commit watch target: {e}"))?;
+        .map_err(DatabaseError::from)?;
+        tx.commit().map_err(DatabaseError::from)?;
 
         drop(conn);
-        self.get_target_sync(id)?
-            .ok_or_else(|| "Watch target vanished immediately after insert".to_owned())
+        self.get_target_sync(id)?.ok_or_else(|| {
+            Error::Internal(InternalError::InvariantViolation {
+                message: format!("watch target {id} vanished immediately after insert"),
+            })
+        })
     }
 
-    pub async fn set_enabled(&self, id: i64, enabled: bool) -> Result<(), String> {
+    pub async fn set_enabled(&self, id: i64, enabled: bool) -> Result<(), Error> {
         let db = self.clone();
         tokio::task::spawn_blocking(move || db.set_enabled_sync(id, enabled))
             .await
-            .map_err(|e| format!("Blocking task failed: {e}"))?
+            .map_err(join_failed)?
     }
 
-    fn set_enabled_sync(&self, id: i64, enabled: bool) -> Result<(), String> {
+    fn set_enabled_sync(&self, id: i64, enabled: bool) -> Result<(), Error> {
         let conn = self.conn()?;
         let now = Utc::now().to_rfc3339();
         let affected = conn
@@ -296,25 +315,25 @@ impl WatchDatabase {
                 "UPDATE watch_targets SET enabled = ?1, updated_at = ?2 WHERE chain_id = ?3 AND id = ?4",
                 params![enabled, now, self.chain.as_str(), id],
             )
-            .map_err(|e| format!("Failed to update watch target {id}: {e}"))?;
+            .map_err(DatabaseError::from)?;
         if affected == 0 {
-            return Err(format!("Watch target {id} not found"));
+            return Err(Error::WatchTargetNotFound {
+                address: format!("id={id}"),
+            });
         }
         Ok(())
     }
 
-    pub async fn delete_target(&self, id: i64) -> Result<(), String> {
+    pub async fn delete_target(&self, id: i64) -> Result<(), Error> {
         let db = self.clone();
         tokio::task::spawn_blocking(move || db.delete_target_sync(id))
             .await
-            .map_err(|e| format!("Blocking task failed: {e}"))?
+            .map_err(join_failed)?
     }
 
-    fn delete_target_sync(&self, id: i64) -> Result<(), String> {
+    fn delete_target_sync(&self, id: i64) -> Result<(), Error> {
         let mut conn = self.conn()?;
-        let tx = conn
-            .write_tx()
-            .map_err(|e| format!("Failed to begin watch-target delete: {e}"))?;
+        let tx = conn.write_tx().map_err(DatabaseError::from)?;
         let address: Option<String> = tx
             .query_row(
                 "SELECT address FROM watch_targets WHERE chain_id = ?1 AND id = ?2",
@@ -322,23 +341,24 @@ impl WatchDatabase {
                 |row| row.get(0),
             )
             .optional()
-            .map_err(|e| format!("Failed to look up watch target {id}: {e}"))?;
+            .map_err(DatabaseError::from)?;
         let Some(address) = address else {
-            return Err(format!("Watch target {id} not found"));
+            return Err(Error::WatchTargetNotFound {
+                address: format!("id={id}"),
+            });
         };
 
         tx.execute(
             "DELETE FROM watch_targets WHERE chain_id = ?1 AND id = ?2",
             params![self.chain.as_str(), id],
         )
-        .map_err(|e| format!("Failed to delete watch target {id}: {e}"))?;
+        .map_err(DatabaseError::from)?;
         tx.execute(
             "DELETE FROM watch_cursors WHERE chain_id = ?1 AND address = ?2",
             params![self.chain.as_str(), address],
         )
-        .map_err(|e| format!("Failed to delete watch cursor for {address}: {e}"))?;
-        tx.commit()
-            .map_err(|e| format!("Failed to commit watch target delete: {e}"))?;
+        .map_err(DatabaseError::from)?;
+        tx.commit().map_err(DatabaseError::from)?;
         Ok(())
     }
 
@@ -368,17 +388,17 @@ impl WatchDatabase {
 
     /// The last signature this address's paging (baseline poll, escalated poll or
     /// gap-fill) has already advanced past. `None` before the first successful page.
-    pub async fn get_cursor(&self, address: &str) -> Result<Option<String>, String> {
+    pub async fn get_cursor(&self, address: &str) -> Result<Option<String>, Error> {
         let db = self.clone();
         let address = address.to_owned();
         tokio::task::spawn_blocking(move || db.get_cursor_sync(&address))
             .await
-            .map_err(|e| format!("Blocking task failed: {e}"))?
+            .map_err(join_failed)?
     }
 
     /// Whether observation has been baselined for this address, even when the
     /// address had no signatures and therefore its cursor value is still NULL.
-    pub async fn has_cursor_row(&self, address: &str) -> Result<bool, String> {
+    pub async fn has_cursor_row(&self, address: &str) -> Result<bool, Error> {
         let db = self.clone();
         let address = address.to_owned();
         tokio::task::spawn_blocking(move || {
@@ -388,16 +408,16 @@ impl WatchDatabase {
                 params![db.chain.as_str(), address],
                 |row| row.get::<_, bool>(0),
             )
-            .map_err(|e| format!("Failed to inspect watch cursor for {address}: {e}"))
+            .map_err(|e| Error::Database(DatabaseError::from(e)))
         })
         .await
-        .map_err(|e| format!("Blocking task failed: {e}"))?
+        .map_err(join_failed)?
     }
 
     /// Persist that the initial observation baseline ran even if the address had no
     /// signatures. Without this marker, the first future activity after a restart
     /// would be mistaken for pre-watch history and skipped.
-    pub async fn mark_cursor_initialized(&self, address: &str) -> Result<(), String> {
+    pub async fn mark_cursor_initialized(&self, address: &str) -> Result<(), Error> {
         let db = self.clone();
         let address = address.to_owned();
         tokio::task::spawn_blocking(move || {
@@ -407,14 +427,14 @@ impl WatchDatabase {
                  VALUES (?1, ?2, NULL, ?3)",
                 params![db.chain.as_str(), address, Utc::now().to_rfc3339()],
             )
-            .map_err(|e| format!("Failed to initialize watch cursor for {address}: {e}"))?;
+            .map_err(DatabaseError::from)?;
             Ok(())
         })
         .await
-        .map_err(|e| format!("Blocking task failed: {e}"))?
+        .map_err(join_failed)?
     }
 
-    fn get_cursor_sync(&self, address: &str) -> Result<Option<String>, String> {
+    fn get_cursor_sync(&self, address: &str) -> Result<Option<String>, Error> {
         let conn = self.conn()?;
         let cursor = conn
             .query_row(
@@ -423,7 +443,7 @@ impl WatchDatabase {
                 |row| row.get::<_, Option<String>>(0),
             )
             .optional()
-            .map_err(|e| format!("Failed to get watch cursor for {address}: {e}"))?;
+            .map_err(DatabaseError::from)?;
         Ok(cursor.flatten())
     }
 
@@ -433,15 +453,15 @@ impl WatchDatabase {
     pub async fn get_cursor_updated_at(
         &self,
         address: &str,
-    ) -> Result<Option<DateTime<Utc>>, String> {
+    ) -> Result<Option<DateTime<Utc>>, Error> {
         let db = self.clone();
         let address = address.to_owned();
         tokio::task::spawn_blocking(move || db.get_cursor_updated_at_sync(&address))
             .await
-            .map_err(|e| format!("Blocking task failed: {e}"))?
+            .map_err(join_failed)?
     }
 
-    fn get_cursor_updated_at_sync(&self, address: &str) -> Result<Option<DateTime<Utc>>, String> {
+    fn get_cursor_updated_at_sync(&self, address: &str) -> Result<Option<DateTime<Utc>>, Error> {
         let conn = self.conn()?;
         let raw: Option<String> = conn
             .query_row(
@@ -450,7 +470,7 @@ impl WatchDatabase {
                 |row| row.get(0),
             )
             .optional()
-            .map_err(|e| format!("Failed to get watch cursor timestamp for {address}: {e}"))?;
+            .map_err(DatabaseError::from)?;
         Ok(raw.and_then(|s| {
             DateTime::parse_from_rfc3339(&s)
                 .ok()
@@ -458,16 +478,16 @@ impl WatchDatabase {
         }))
     }
 
-    pub async fn set_cursor(&self, address: &str, last_signature: &str) -> Result<(), String> {
+    pub async fn set_cursor(&self, address: &str, last_signature: &str) -> Result<(), Error> {
         let db = self.clone();
         let address = address.to_owned();
         let last_signature = last_signature.to_owned();
         tokio::task::spawn_blocking(move || db.set_cursor_sync(&address, &last_signature))
             .await
-            .map_err(|e| format!("Blocking task failed: {e}"))?
+            .map_err(join_failed)?
     }
 
-    fn set_cursor_sync(&self, address: &str, last_signature: &str) -> Result<(), String> {
+    fn set_cursor_sync(&self, address: &str, last_signature: &str) -> Result<(), Error> {
         let conn = self.conn()?;
         let now = Utc::now().to_rfc3339();
         conn.execute(
@@ -475,7 +495,7 @@ impl WatchDatabase {
              ON CONFLICT(chain_id, address) DO UPDATE SET last_signature = excluded.last_signature, updated_at = excluded.updated_at",
             params![self.chain.as_str(), address, last_signature, now],
         )
-        .map_err(|e| format!("Failed to set watch cursor for {address}: {e}"))?;
+        .map_err(DatabaseError::from)?;
         Ok(())
     }
 }

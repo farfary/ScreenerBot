@@ -2,8 +2,8 @@
 
 use crate::logger::{self, LogTag};
 use crate::pools;
-use crate::positions::error::{Error, Result};
 use crate::positions::get_open_positions;
+use crate::positions::{Error, Result};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tokio::time::sleep;

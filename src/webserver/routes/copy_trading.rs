@@ -272,7 +272,7 @@ async fn create_task(Json(input): Json<CopyTaskInput>) -> Response {
                 StatusCode::BAD_REQUEST,
                 "WATCH_REJECTED",
                 "Copy target could not be watched",
-                Some(&error),
+                Some(&error.to_string()),
             );
         }
     }
@@ -321,7 +321,7 @@ async fn update_task(Path(id): Path<i64>, Json(input): Json<CopyTaskInput>) -> R
                 StatusCode::BAD_REQUEST,
                 "WATCH_REJECTED",
                 "Copy target could not be watched",
-                Some(&error),
+                Some(&error.to_string()),
             );
         }
     }

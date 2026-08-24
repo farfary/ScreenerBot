@@ -7,6 +7,7 @@ use uuid::Uuid;
 
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::logger::{self, LogTag};
+use crate::tools::Error;
 use crate::wallets::{self, Wallet, WalletRole};
 
 use crate::chains::solana::assets::transfer::{close_ata_for_wallet, transfer_token_for_wallet};
@@ -24,7 +25,7 @@ use super::types::{ConsolidateConfig, SessionResult, WalletOpResult};
 ///
 /// # Returns
 /// Session result with all operation outcomes
-pub async fn execute_consolidation(config: ConsolidateConfig) -> Result<SessionResult, String> {
+pub async fn execute_consolidation(config: ConsolidateConfig) -> Result<SessionResult, Error> {
     // Validate configuration
     config.validate()?;
 
@@ -43,10 +44,12 @@ pub async fn execute_consolidation(config: ConsolidateConfig) -> Result<SessionR
     );
 
     // Get main wallet as destination
-    let main_wallet = wallets::get_main_wallet()
-        .await
-        .map_err(|e| format!("Failed to get main wallet: {e}"))?
-        .ok_or("No main wallet configured")?;
+    let main_wallet =
+        wallets::get_main_wallet()
+            .await?
+            .ok_or_else(|| Error::MainWalletUnavailable {
+                detail: "no main wallet configured".to_owned(),
+            })?;
 
     // Load sub-wallets to consolidate
     let wallets = load_wallets_for_consolidation(&config).await?;
@@ -126,7 +129,7 @@ pub async fn execute_consolidation(config: ConsolidateConfig) -> Result<SessionR
 }
 
 /// Load wallets for consolidation
-async fn load_wallets_for_consolidation(config: &ConsolidateConfig) -> Result<Vec<Wallet>, String> {
+async fn load_wallets_for_consolidation(config: &ConsolidateConfig) -> Result<Vec<Wallet>, Error> {
     let all_wallets = wallets::list_active_wallets().await?;
 
     let selected: Vec<Wallet> = all_wallets

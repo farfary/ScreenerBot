@@ -5,8 +5,8 @@ use rusqlite::params;
 
 use crate::errors::DatabaseError;
 use crate::logger::{self, LogTag};
-use crate::positions::error::{Error, Result};
 use crate::positions::types::{EntryRecord, ExitRecord, Position, PositionManagement};
+use crate::positions::{Error, Result};
 
 use super::global::GLOBAL_POSITIONS_DB;
 use super::types::{DailyTradingStats, PeriodTradingStats, TokenSnapshot};

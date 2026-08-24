@@ -43,7 +43,7 @@ pub async fn export_wallets_csv(Query(query): Query<ExportQuery>) -> impl IntoRe
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "LIST_ERROR",
                 "Failed to list wallets",
-                Some(&e),
+                Some(&e.to_string()),
             )
             .into_response();
         }
@@ -146,7 +146,7 @@ pub async fn export_wallets_full(Json(request): Json<FullExportRequest>) -> impl
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "EXPORT_ERROR",
                 "Failed to export wallets",
-                Some(&e),
+                Some(&e.to_string()),
             )
             .into_response();
         }
@@ -160,7 +160,7 @@ pub async fn export_wallets_full(Json(request): Json<FullExportRequest>) -> impl
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "LIST_ERROR",
                 "Failed to list wallets",
-                Some(&e),
+                Some(&e.to_string()),
             )
             .into_response();
         }

@@ -7,10 +7,21 @@ use std::sync::LazyLock;
 use tokio::sync::RwLock;
 
 use super::database::WalletsDatabase;
+use super::error::Error;
+use crate::errors::InternalError;
 use crate::{
     chains::active_chain,
     logger::{self, LogTag},
 };
+
+/// The wallet database has not been initialized yet — an invariant violation,
+/// not a not-found: `initialize()` must run once at startup before any other
+/// wallet function is called.
+pub(super) fn db_not_initialized() -> Error {
+    Error::Internal(InternalError::InvariantViolation {
+        message: "wallet database not initialized".to_owned(),
+    })
+}
 
 mod cache;
 use cache::refresh_main_wallet_cache;
@@ -39,7 +50,7 @@ static WALLETS_DB: LazyLock<Arc<RwLock<Option<WalletsDatabase>>>> =
 /// Initialize the wallet manager
 ///
 /// Must be called once at startup before using any wallet functions
-pub async fn initialize() -> Result<(), String> {
+pub async fn initialize() -> Result<(), Error> {
     let db = WalletsDatabase::new(active_chain())?;
 
     {

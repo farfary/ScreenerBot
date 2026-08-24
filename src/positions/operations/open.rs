@@ -5,7 +5,6 @@ use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
 use crate::positions::db as positions_db;
-use crate::positions::error::{Error, Result};
 use crate::positions::price_resolution::get_price_with_api_fallback;
 use crate::positions::queue::{enqueue_verification, VerificationItem};
 use crate::positions::state::{
@@ -15,6 +14,7 @@ use crate::positions::state::{
 use crate::positions::types::{
     EntrySubmission, Position, PositionManagement, PositionOrigin, VerificationKind,
 };
+use crate::positions::{Error, Result};
 use crate::swaps::{
     execute_swap_with_fallback, get_best_quote_for_opening, QuoteRequest, SwapMode,
 };

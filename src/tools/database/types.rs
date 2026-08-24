@@ -1,5 +1,8 @@
 //! Database row types and structures
 
+use crate::errors::DatabaseError;
+use crate::tools::Error;
+
 // =============================================================================
 // ATA CACHE TYPES
 // =============================================================================
@@ -19,17 +22,17 @@ pub struct FailedAtaRow {
 }
 
 impl FailedAtaRow {
-    pub(crate) fn from_row(row: &rusqlite::Row<'_>) -> Result<Self, String> {
-        let is_permanent_int: i32 = row.get(8).map_err(|e| e.to_string())?;
+    pub(crate) fn from_row(row: &rusqlite::Row<'_>) -> Result<Self, Error> {
+        let is_permanent_int: i32 = row.get(8).map_err(DatabaseError::from)?;
         Ok(Self {
-            ata_address: row.get(0).map_err(|e| e.to_string())?,
-            token_mint: row.get(1).map_err(|e| e.to_string())?,
-            wallet_address: row.get(2).map_err(|e| e.to_string())?,
-            failure_count: row.get(3).map_err(|e| e.to_string())?,
-            last_error: row.get(4).map_err(|e| e.to_string())?,
-            first_failed_at: row.get(5).map_err(|e| e.to_string())?,
-            last_failed_at: row.get(6).map_err(|e| e.to_string())?,
-            next_retry_at: row.get(7).map_err(|e| e.to_string())?,
+            ata_address: row.get(0).map_err(DatabaseError::from)?,
+            token_mint: row.get(1).map_err(DatabaseError::from)?,
+            wallet_address: row.get(2).map_err(DatabaseError::from)?,
+            failure_count: row.get(3).map_err(DatabaseError::from)?,
+            last_error: row.get(4).map_err(DatabaseError::from)?,
+            first_failed_at: row.get(5).map_err(DatabaseError::from)?,
+            last_failed_at: row.get(6).map_err(DatabaseError::from)?,
+            next_retry_at: row.get(7).map_err(DatabaseError::from)?,
             is_permanent_failure: is_permanent_int != 0,
         })
     }
@@ -58,21 +61,21 @@ pub struct ToolFavoriteRow {
 }
 
 impl ToolFavoriteRow {
-    pub(crate) fn from_row(row: &rusqlite::Row<'_>) -> Result<Self, String> {
+    pub(crate) fn from_row(row: &rusqlite::Row<'_>) -> Result<Self, Error> {
         Ok(Self {
-            id: row.get(0).map_err(|e| e.to_string())?,
-            mint: row.get(1).map_err(|e| e.to_string())?,
-            symbol: row.get(2).map_err(|e| e.to_string())?,
-            name: row.get(3).map_err(|e| e.to_string())?,
-            logo_url: row.get(4).map_err(|e| e.to_string())?,
-            tool_type: row.get(5).map_err(|e| e.to_string())?,
-            config_json: row.get(6).map_err(|e| e.to_string())?,
-            label: row.get(7).map_err(|e| e.to_string())?,
-            notes: row.get(8).map_err(|e| e.to_string())?,
-            use_count: row.get(9).map_err(|e| e.to_string())?,
-            last_used_at: row.get(10).map_err(|e| e.to_string())?,
-            created_at: row.get(11).map_err(|e| e.to_string())?,
-            updated_at: row.get(12).map_err(|e| e.to_string())?,
+            id: row.get(0).map_err(DatabaseError::from)?,
+            mint: row.get(1).map_err(DatabaseError::from)?,
+            symbol: row.get(2).map_err(DatabaseError::from)?,
+            name: row.get(3).map_err(DatabaseError::from)?,
+            logo_url: row.get(4).map_err(DatabaseError::from)?,
+            tool_type: row.get(5).map_err(DatabaseError::from)?,
+            config_json: row.get(6).map_err(DatabaseError::from)?,
+            label: row.get(7).map_err(DatabaseError::from)?,
+            notes: row.get(8).map_err(DatabaseError::from)?,
+            use_count: row.get(9).map_err(DatabaseError::from)?,
+            last_used_at: row.get(10).map_err(DatabaseError::from)?,
+            created_at: row.get(11).map_err(DatabaseError::from)?,
+            updated_at: row.get(12).map_err(DatabaseError::from)?,
         })
     }
 }
@@ -110,31 +113,31 @@ pub struct MwSessionRow {
 }
 
 impl MwSessionRow {
-    pub(crate) fn from_row(row: &rusqlite::Row<'_>) -> Result<Self, String> {
+    pub(crate) fn from_row(row: &rusqlite::Row<'_>) -> Result<Self, Error> {
         Ok(Self {
-            id: row.get(0).map_err(|e| e.to_string())?,
-            session_id: row.get(1).map_err(|e| e.to_string())?,
-            session_type: row.get(2).map_err(|e| e.to_string())?,
-            token_mint: row.get(3).map_err(|e| e.to_string())?,
-            total_wallets: row.get(4).map_err(|e| e.to_string())?,
-            target_amount_sol: row.get(5).map_err(|e| e.to_string())?,
-            min_amount_sol: row.get(6).map_err(|e| e.to_string())?,
-            max_amount_sol: row.get(7).map_err(|e| e.to_string())?,
-            delay_ms: row.get(8).map_err(|e| e.to_string())?,
-            delay_max_ms: row.get(9).map_err(|e| e.to_string())?,
-            concurrency: row.get(10).map_err(|e| e.to_string())?,
-            sol_buffer: row.get(11).map_err(|e| e.to_string())?,
-            status: row.get(12).map_err(|e| e.to_string())?,
-            started_at: row.get(13).map_err(|e| e.to_string())?,
-            ended_at: row.get(14).map_err(|e| e.to_string())?,
-            error_message: row.get(15).map_err(|e| e.to_string())?,
-            wallets_funded: row.get(16).map_err(|e| e.to_string())?,
-            successful_ops: row.get(17).map_err(|e| e.to_string())?,
-            failed_ops: row.get(18).map_err(|e| e.to_string())?,
-            total_sol_spent: row.get(19).map_err(|e| e.to_string())?,
-            total_sol_recovered: row.get(20).map_err(|e| e.to_string())?,
-            created_at: row.get(21).map_err(|e| e.to_string())?,
-            updated_at: row.get(22).map_err(|e| e.to_string())?,
+            id: row.get(0).map_err(DatabaseError::from)?,
+            session_id: row.get(1).map_err(DatabaseError::from)?,
+            session_type: row.get(2).map_err(DatabaseError::from)?,
+            token_mint: row.get(3).map_err(DatabaseError::from)?,
+            total_wallets: row.get(4).map_err(DatabaseError::from)?,
+            target_amount_sol: row.get(5).map_err(DatabaseError::from)?,
+            min_amount_sol: row.get(6).map_err(DatabaseError::from)?,
+            max_amount_sol: row.get(7).map_err(DatabaseError::from)?,
+            delay_ms: row.get(8).map_err(DatabaseError::from)?,
+            delay_max_ms: row.get(9).map_err(DatabaseError::from)?,
+            concurrency: row.get(10).map_err(DatabaseError::from)?,
+            sol_buffer: row.get(11).map_err(DatabaseError::from)?,
+            status: row.get(12).map_err(DatabaseError::from)?,
+            started_at: row.get(13).map_err(DatabaseError::from)?,
+            ended_at: row.get(14).map_err(DatabaseError::from)?,
+            error_message: row.get(15).map_err(DatabaseError::from)?,
+            wallets_funded: row.get(16).map_err(DatabaseError::from)?,
+            successful_ops: row.get(17).map_err(DatabaseError::from)?,
+            failed_ops: row.get(18).map_err(DatabaseError::from)?,
+            total_sol_spent: row.get(19).map_err(DatabaseError::from)?,
+            total_sol_recovered: row.get(20).map_err(DatabaseError::from)?,
+            created_at: row.get(21).map_err(DatabaseError::from)?,
+            updated_at: row.get(22).map_err(DatabaseError::from)?,
         })
     }
 }
@@ -158,21 +161,21 @@ pub struct MwWalletOpRow {
 }
 
 impl MwWalletOpRow {
-    pub(crate) fn from_row(row: &rusqlite::Row<'_>) -> Result<Self, String> {
+    pub(crate) fn from_row(row: &rusqlite::Row<'_>) -> Result<Self, Error> {
         Ok(Self {
-            id: row.get(0).map_err(|e| e.to_string())?,
-            session_id: row.get(1).map_err(|e| e.to_string())?,
-            wallet_id: row.get(2).map_err(|e| e.to_string())?,
-            wallet_address: row.get(3).map_err(|e| e.to_string())?,
-            op_index: row.get(4).map_err(|e| e.to_string())?,
-            op_type: row.get(5).map_err(|e| e.to_string())?,
-            amount_sol: row.get(6).map_err(|e| e.to_string())?,
-            token_amount: row.get(7).map_err(|e| e.to_string())?,
-            signature: row.get(8).map_err(|e| e.to_string())?,
-            status: row.get(9).map_err(|e| e.to_string())?,
-            error_message: row.get(10).map_err(|e| e.to_string())?,
-            executed_at: row.get(11).map_err(|e| e.to_string())?,
-            created_at: row.get(12).map_err(|e| e.to_string())?,
+            id: row.get(0).map_err(DatabaseError::from)?,
+            session_id: row.get(1).map_err(DatabaseError::from)?,
+            wallet_id: row.get(2).map_err(DatabaseError::from)?,
+            wallet_address: row.get(3).map_err(DatabaseError::from)?,
+            op_index: row.get(4).map_err(DatabaseError::from)?,
+            op_type: row.get(5).map_err(DatabaseError::from)?,
+            amount_sol: row.get(6).map_err(DatabaseError::from)?,
+            token_amount: row.get(7).map_err(DatabaseError::from)?,
+            signature: row.get(8).map_err(DatabaseError::from)?,
+            status: row.get(9).map_err(DatabaseError::from)?,
+            error_message: row.get(10).map_err(DatabaseError::from)?,
+            executed_at: row.get(11).map_err(DatabaseError::from)?,
+            created_at: row.get(12).map_err(DatabaseError::from)?,
         })
     }
 }
@@ -221,28 +224,28 @@ pub struct WatchedToken {
 }
 
 impl WatchedToken {
-    pub(crate) fn from_row(row: &rusqlite::Row<'_>) -> Result<Self, String> {
-        let is_active_int: i32 = row.get(12).map_err(|e| e.to_string())?;
+    pub(crate) fn from_row(row: &rusqlite::Row<'_>) -> Result<Self, Error> {
+        let is_active_int: i32 = row.get(12).map_err(DatabaseError::from)?;
         Ok(Self {
-            id: row.get(0).map_err(|e| e.to_string())?,
-            mint: row.get(1).map_err(|e| e.to_string())?,
-            symbol: row.get(2).map_err(|e| e.to_string())?,
-            pool_address: row.get(3).map_err(|e| e.to_string())?,
-            pool_source: row.get(4).map_err(|e| e.to_string())?,
-            pool_dex: row.get(5).map_err(|e| e.to_string())?,
-            pool_pair: row.get(6).map_err(|e| e.to_string())?,
-            pool_liquidity: row.get(7).map_err(|e| e.to_string())?,
-            watch_type: row.get(8).map_err(|e| e.to_string())?,
-            trigger_amount_sol: row.get(9).map_err(|e| e.to_string())?,
-            action_amount_sol: row.get(10).map_err(|e| e.to_string())?,
-            slippage_bps: row.get(11).map_err(|e| e.to_string())?,
+            id: row.get(0).map_err(DatabaseError::from)?,
+            mint: row.get(1).map_err(DatabaseError::from)?,
+            symbol: row.get(2).map_err(DatabaseError::from)?,
+            pool_address: row.get(3).map_err(DatabaseError::from)?,
+            pool_source: row.get(4).map_err(DatabaseError::from)?,
+            pool_dex: row.get(5).map_err(DatabaseError::from)?,
+            pool_pair: row.get(6).map_err(DatabaseError::from)?,
+            pool_liquidity: row.get(7).map_err(DatabaseError::from)?,
+            watch_type: row.get(8).map_err(DatabaseError::from)?,
+            trigger_amount_sol: row.get(9).map_err(DatabaseError::from)?,
+            action_amount_sol: row.get(10).map_err(DatabaseError::from)?,
+            slippage_bps: row.get(11).map_err(DatabaseError::from)?,
             is_active: is_active_int != 0,
-            last_checked_at: row.get(13).map_err(|e| e.to_string())?,
-            last_trade_signature: row.get(14).map_err(|e| e.to_string())?,
-            trades_detected: row.get(15).map_err(|e| e.to_string())?,
-            actions_triggered: row.get(16).map_err(|e| e.to_string())?,
-            created_at: row.get(17).map_err(|e| e.to_string())?,
-            updated_at: row.get(18).map_err(|e| e.to_string())?,
+            last_checked_at: row.get(13).map_err(DatabaseError::from)?,
+            last_trade_signature: row.get(14).map_err(DatabaseError::from)?,
+            trades_detected: row.get(15).map_err(DatabaseError::from)?,
+            actions_triggered: row.get(16).map_err(DatabaseError::from)?,
+            created_at: row.get(17).map_err(DatabaseError::from)?,
+            updated_at: row.get(18).map_err(DatabaseError::from)?,
         })
     }
 }

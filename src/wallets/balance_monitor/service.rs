@@ -28,13 +28,21 @@ use super::types::*;
 use super::worth::{
     publish_snapshot, request_balance_refresh, settle_refresh_burst, wait_for_refresh_request,
 };
+use crate::errors::InternalError;
+use crate::wallets::Error;
+
+fn db_not_initialized() -> Error {
+    Error::Internal(InternalError::InvariantViolation {
+        message: "wallet-monitor database not initialized".to_owned(),
+    })
+}
 
 // =============================================================================
 // INITIALIZATION
 // =============================================================================
 
 /// Initialize the global wallet database
-pub async fn initialize_wallet_database() -> Result<(), String> {
+pub async fn initialize_wallet_database() -> Result<(), Error> {
     let mut db_lock = GLOBAL_WALLET_DB.lock().await;
     if db_lock.is_some() {
         return Ok(()); // Already initialized
@@ -74,7 +82,7 @@ pub async fn initialize_wallet_database() -> Result<(), String> {
 /// a stale cached address. A no-op (not an error) before the wallet-monitor
 /// database has initialized — its own `new()` resolves the then-current main
 /// wallet directly.
-pub async fn refresh_wallet_monitor_subject() -> Result<(), String> {
+pub async fn refresh_wallet_monitor_subject() -> Result<(), Error> {
     let mut db_guard = GLOBAL_WALLET_DB.lock().await;
     match db_guard.as_mut() {
         Some(db) => db.rebind_subject().await,
@@ -87,10 +95,12 @@ pub async fn refresh_wallet_monitor_subject() -> Result<(), String> {
 // =============================================================================
 
 /// Collect current wallet balance and token balances
-async fn collect_wallet_snapshot() -> Result<WalletSnapshot, String> {
+async fn collect_wallet_snapshot() -> Result<WalletSnapshot, Error> {
     // Get wallet address
-    let wallet_address =
-        get_wallet_address().map_err(|e| format!("Failed to get wallet address: {e}"))?;
+    let wallet_address = get_wallet_address().map_err(|e| Error::Dependency {
+        dependency: "config",
+        detail: e.to_string(),
+    })?;
 
     let rpc_client = get_rpc_client();
     let snapshot_time = Utc::now();
@@ -110,13 +120,19 @@ async fn collect_wallet_snapshot() -> Result<WalletSnapshot, String> {
             rpc_client
                 .get_sol_balance(&wallet_address)
                 .await
-                .map_err(|e| format!("Failed to get SOL balance: {e}"))
+                .map_err(|e| Error::Dependency {
+                    dependency: "rpc",
+                    detail: e.to_string(),
+                })
         },
         async {
             rpc_client
                 .get_all_token_accounts_str(&wallet_address)
                 .await
-                .map_err(|e| format!("Failed to get token accounts: {e}"))
+                .map_err(|e| Error::Dependency {
+                    dependency: "rpc",
+                    detail: e.to_string(),
+                })
         }
     )?;
 
@@ -241,7 +257,7 @@ async fn collect_wallet_snapshot() -> Result<WalletSnapshot, String> {
 /// The ONE path that produces a snapshot. Publishing happens before the database
 /// write so the UI reflects a new balance immediately even if the write is slow, and
 /// still would if it failed.
-async fn collect_publish_and_store() -> Result<Arc<WalletSnapshot>, String> {
+async fn collect_publish_and_store() -> Result<Arc<WalletSnapshot>, Error> {
     let snapshot = Arc::new(collect_wallet_snapshot().await?);
 
     increment_operations();
@@ -254,7 +270,7 @@ async fn collect_publish_and_store() -> Result<Arc<WalletSnapshot>, String> {
             db.save_wallet_snapshot(&snapshot)?;
             Ok(snapshot)
         }
-        None => Err("Wallet database not initialized".to_owned()),
+        None => Err(db_not_initialized()),
     }
 }
 
@@ -481,45 +497,45 @@ pub async fn start_wallet_monitoring_service(
 // =============================================================================
 
 /// Get recent wallet snapshots
-pub async fn get_recent_wallet_snapshots(limit: usize) -> Result<Vec<WalletSnapshot>, String> {
+pub async fn get_recent_wallet_snapshots(limit: usize) -> Result<Vec<WalletSnapshot>, Error> {
     let db_guard = GLOBAL_WALLET_DB.lock().await;
     match db_guard.as_ref() {
-        Some(db) => db.get_recent_snapshots(limit),
-        None => Err("Wallet database not initialized".to_owned()),
+        Some(db) => Ok(db.get_recent_snapshots(limit)?),
+        None => Err(db_not_initialized()),
     }
 }
 
 /// Get wallet monitoring statistics
-pub async fn get_wallet_monitor_stats() -> Result<WalletMonitorStats, String> {
+pub async fn get_wallet_monitor_stats() -> Result<WalletMonitorStats, Error> {
     let db_guard = GLOBAL_WALLET_DB.lock().await;
     match db_guard.as_ref() {
-        Some(db) => db.get_monitor_stats(),
-        None => Err("Wallet database not initialized".to_owned()),
+        Some(db) => Ok(db.get_monitor_stats()?),
+        None => Err(db_not_initialized()),
     }
 }
 
 /// Get token balances for a snapshot
 pub async fn get_snapshot_token_balances(
     snapshot_id: i64,
-) -> Result<Vec<SnapshotTokenBalance>, String> {
+) -> Result<Vec<SnapshotTokenBalance>, Error> {
     let db_guard = GLOBAL_WALLET_DB.lock().await;
     match db_guard.as_ref() {
-        Some(db) => db.get_token_balances(snapshot_id),
-        None => Err("Wallet database not initialized".to_owned()),
+        Some(db) => Ok(db.get_token_balances(snapshot_id)?),
+        None => Err(db_not_initialized()),
     }
 }
 
 /// Get NFT balances for a snapshot
-pub async fn get_snapshot_nft_balances(snapshot_id: i64) -> Result<Vec<NftBalance>, String> {
+pub async fn get_snapshot_nft_balances(snapshot_id: i64) -> Result<Vec<NftBalance>, Error> {
     let db_guard = GLOBAL_WALLET_DB.lock().await;
     match db_guard.as_ref() {
-        Some(db) => db.get_nft_balances(snapshot_id),
-        None => Err("Wallet database not initialized".to_owned()),
+        Some(db) => Ok(db.get_nft_balances(snapshot_id)?),
+        None => Err(db_not_initialized()),
     }
 }
 
 /// Get current wallet status (latest snapshot data)
-pub async fn get_current_wallet_status() -> Result<Option<WalletSnapshot>, String> {
+pub async fn get_current_wallet_status() -> Result<Option<WalletSnapshot>, Error> {
     let snapshots = get_recent_wallet_snapshots(1).await?;
     Ok(snapshots.into_iter().next())
 }
@@ -529,17 +545,17 @@ pub async fn get_current_wallet_status() -> Result<Option<WalletSnapshot>, Strin
 /// Used by the dashboard "refresh" button so the user always gets a fresh
 /// holdings list (SOL balance + token balances straight from RPC) instead of
 /// waiting for the next periodic tick. Returns the freshly captured snapshot.
-pub async fn force_wallet_snapshot() -> Result<WalletSnapshot, String> {
+pub async fn force_wallet_snapshot() -> Result<WalletSnapshot, Error> {
     let snapshot = collect_publish_and_store().await?;
     Ok((*snapshot).clone())
 }
 
 /// Get SOL balance at or before a specific time (optimized single-value query)
-pub async fn get_balance_at_time(target_time: DateTime<Utc>) -> Result<Option<f64>, String> {
+pub async fn get_balance_at_time(target_time: DateTime<Utc>) -> Result<Option<f64>, Error> {
     let db_guard = GLOBAL_WALLET_DB.lock().await;
     match db_guard.as_ref() {
-        Some(db) => db.get_balance_at_time(target_time),
-        None => Err("Wallet database not initialized".to_owned()),
+        Some(db) => Ok(db.get_balance_at_time(target_time)?),
+        None => Err(db_not_initialized()),
     }
 }
 
@@ -547,27 +563,27 @@ pub async fn get_balance_at_time(target_time: DateTime<Utc>) -> Result<Option<f6
 pub async fn get_daily_end_balances(
     start: DateTime<Utc>,
     end: DateTime<Utc>,
-) -> Result<Vec<(String, f64)>, String> {
+) -> Result<Vec<(String, f64)>, Error> {
     let db_guard = GLOBAL_WALLET_DB.lock().await;
     match db_guard.as_ref() {
-        Some(db) => db.get_daily_end_balances(start, end),
-        None => Err("Wallet database not initialized".to_owned()),
+        Some(db) => Ok(db.get_daily_end_balances(start, end)?),
+        None => Err(db_not_initialized()),
     }
 }
 
 /// Public accessor for flow cache stats
-pub async fn get_flow_cache_stats() -> Result<WalletFlowCacheStats, String> {
+pub async fn get_flow_cache_stats() -> Result<WalletFlowCacheStats, Error> {
     let db_guard = GLOBAL_WALLET_DB.lock().await;
     match db_guard.as_ref() {
-        Some(db) => db.get_flow_cache_stats(),
-        None => Err("Wallet database not initialized".to_owned()),
+        Some(db) => Ok(db.get_flow_cache_stats()?),
+        None => Err(db_not_initialized()),
     }
 }
 
-pub async fn refresh_dashboard_cache(window_hours: i64) -> Result<(), String> {
+pub async fn refresh_dashboard_cache(window_hours: i64) -> Result<(), Error> {
     let window_hours = clamp_window_hours(window_hours);
     let (window_key, canonical_hours) =
-        canonical_window(window_hours).ok_or_else(|| "Unsupported window".to_owned())?;
+        canonical_window(window_hours).ok_or(Error::InvalidWindow { window_hours })?;
 
     {
         let db_guard = GLOBAL_WALLET_DB.lock().await;

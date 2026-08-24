@@ -23,6 +23,14 @@ pub enum Error {
     #[error(transparent)]
     Trader(#[from] crate::trader::Error),
 
+    /// Wallet storage, watch-target and balance-monitor errors.
+    #[error(transparent)]
+    Wallets(#[from] crate::wallets::Error),
+
+    /// Tool session errors: ATA cleanup, multi-wallet sessions, favorites, trade watching.
+    #[error(transparent)]
+    Tools(#[from] crate::tools::Error),
+
     /// ScreenerBot account / sign-in errors.
     #[error(transparent)]
     Account(#[from] AccountError),

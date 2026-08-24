@@ -13,6 +13,8 @@ use super::service::{
     initialize_wallet_database,
 };
 use super::types::*;
+use crate::errors::InternalError;
+use crate::wallets::Error;
 
 const TOKEN_METADATA_CONCURRENCY: usize = 20;
 const MAX_API_CACHE_ENTRIES: usize = 128;
@@ -69,22 +71,25 @@ pub(super) async fn compute_dashboard_payload_realtime(
     window_hours: i64,
     snapshot_limit: usize,
     max_tokens: usize,
-) -> Result<WalletDashboardData, String> {
+) -> Result<WalletDashboardData, Error> {
     let window_hours = clamp_window_hours(window_hours);
     let snapshot_limit = clamp_snapshot_limit(snapshot_limit);
 
     let mut snapshots = match get_recent_wallet_snapshots(snapshot_limit).await {
         Ok(snaps) => snaps,
         Err(err) => {
-            if err.contains("not initialized") {
+            if err.to_string().contains("not initialized") {
                 if let Err(init_err) = initialize_wallet_database().await {
-                    return Err(format!("Wallet database unavailable: {init_err}"));
+                    return Err(Error::Dependency {
+                        dependency: "wallet-monitor-database",
+                        detail: init_err.to_string(),
+                    });
                 }
 
                 match get_recent_wallet_snapshots(snapshot_limit).await {
                     Ok(snaps) => snaps,
                     Err(retry_err) => {
-                        if retry_err.contains("not initialized") {
+                        if retry_err.to_string().contains("not initialized") {
                             Vec::new()
                         } else {
                             return Err(retry_err);
@@ -121,10 +126,11 @@ pub(super) async fn compute_dashboard_payload_realtime(
 
     snapshots.sort_by(|a, b| a.snapshot_time.cmp(&b.snapshot_time));
 
-    let latest_snapshot = snapshots
-        .last()
-        .cloned()
-        .ok_or_else(|| "Latest snapshot unavailable".to_owned())?;
+    let latest_snapshot = snapshots.last().cloned().ok_or_else(|| {
+        Error::Internal(InternalError::InvariantViolation {
+            message: "latest snapshot unavailable after a non-empty snapshot list".to_owned(),
+        })
+    })?;
     // Determine window_start for trend; for all-time (0), include all loaded snapshots
     let window_start = if window_hours == 0 {
         snapshots
@@ -227,7 +233,7 @@ pub async fn get_wallet_dashboard_data(
     window_hours: i64,
     snapshot_limit: usize,
     max_tokens: usize,
-) -> Result<WalletDashboardData, String> {
+) -> Result<WalletDashboardData, Error> {
     let clamped_window = clamp_window_hours(window_hours);
     let clamped_snapshot_limit = clamp_snapshot_limit(snapshot_limit);
     let clamped_token_limit = clamp_token_limit(max_tokens);

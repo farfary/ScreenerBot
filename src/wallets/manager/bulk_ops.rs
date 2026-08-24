@@ -5,7 +5,9 @@ use std::collections::HashSet;
 use super::super::bulk::{
     BulkImportResult, ImportOptions, ImportRowResult, ParsedWalletRow, WalletExportRow,
 };
+use super::super::error::Error;
 use super::super::types::{CreateWalletRequest, ImportWalletRequest, Wallet, WalletRole};
+use super::db_not_initialized;
 use crate::chains::solana::accounts::address_from_private_key;
 use crate::logger::{self, LogTag};
 
@@ -120,7 +122,7 @@ pub async fn bulk_import_wallets(
                     name: row.name.clone(),
                     address: Some(address),
                     success: false,
-                    error: Some(e),
+                    error: Some(e.to_string()),
                 });
                 result.failed_count += 1;
             }
@@ -156,9 +158,9 @@ pub async fn bulk_import_wallets(
 ///
 /// Returns wallet data including private keys for export to CSV/Excel.
 /// WARNING: This exports sensitive data - handle with care!
-pub async fn export_wallets(include_inactive: bool) -> Result<Vec<WalletExportRow>, String> {
+pub async fn export_wallets(include_inactive: bool) -> Result<Vec<WalletExportRow>, Error> {
     let db_guard = super::WALLETS_DB.read().await;
-    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
+    let db = db_guard.as_ref().ok_or_else(db_not_initialized)?;
 
     let wallets = db.list_wallets(include_inactive)?;
     let mut result = Vec::with_capacity(wallets.len());
@@ -197,9 +199,9 @@ pub async fn export_wallets(include_inactive: bool) -> Result<Vec<WalletExportRo
 }
 
 /// Get existing addresses as HashSet (for duplicate checking)
-pub async fn get_existing_wallet_addresses() -> Result<HashSet<String>, String> {
+pub async fn get_existing_wallet_addresses() -> Result<HashSet<String>, Error> {
     let db_guard = super::WALLETS_DB.read().await;
-    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
+    let db = db_guard.as_ref().ok_or_else(db_not_initialized)?;
 
     let wallets = db.list_wallets(true)?; // Include inactive
     Ok(wallets.into_iter().map(|w| w.address).collect())
@@ -218,13 +220,17 @@ pub async fn create_wallets_batch(
     count: u32,
     name_prefix: &str,
     notes: Option<&str>,
-) -> Result<Vec<Wallet>, String> {
+) -> Result<Vec<Wallet>, Error> {
     if count == 0 {
-        return Err("Count must be greater than 0".to_owned());
+        return Err(Error::InvalidBatchRequest {
+            detail: "count must be greater than 0",
+        });
     }
 
     if count > 100 {
-        return Err("Maximum batch size is 100 wallets".to_owned());
+        return Err(Error::InvalidBatchRequest {
+            detail: "maximum batch size is 100 wallets",
+        });
     }
 
     let mut created_wallets = Vec::with_capacity(count as usize);
@@ -255,7 +261,9 @@ pub async fn create_wallets_batch(
     }
 
     if created_wallets.is_empty() {
-        return Err("Failed to create any wallets".to_owned());
+        return Err(Error::InvalidBatchRequest {
+            detail: "failed to create any wallets",
+        });
     }
 
     logger::info(

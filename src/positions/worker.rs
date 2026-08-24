@@ -16,7 +16,7 @@ use super::{
 };
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::logger::{self, LogTag};
-use crate::positions::error::Result;
+use crate::positions::Result;
 use serde_json::json;
 use std::sync::Arc;
 use std::time::Instant;

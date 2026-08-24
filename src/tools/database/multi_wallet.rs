@@ -5,13 +5,15 @@ use rusqlite::params;
 
 use super::schema::get_connection;
 use super::types::{MwSessionConfig, MwSessionRow, MwWalletOpRow};
+use crate::errors::DatabaseError;
+use crate::tools::Error;
 
 // =============================================================================
 // MULTI-WALLET SESSION OPERATIONS
 // =============================================================================
 
 /// Create a new multi-wallet session
-pub fn create_mw_session(config: &MwSessionConfig) -> Result<String, String> {
+pub fn create_mw_session(config: &MwSessionConfig) -> Result<String, Error> {
     let conn = get_connection()?;
     let session_id = uuid::Uuid::new_v4().to_string();
 
@@ -38,13 +40,13 @@ pub fn create_mw_session(config: &MwSessionConfig) -> Result<String, String> {
             config.sol_buffer,
         ],
     )
-    .map_err(|e| format!("Failed to create MW session: {e}"))?;
+    .map_err(DatabaseError::from)?;
 
     Ok(session_id)
 }
 
 /// Get a multi-wallet session by session_id
-pub fn get_mw_session(session_id: &str) -> Result<MwSessionRow, String> {
+pub fn get_mw_session(session_id: &str) -> Result<MwSessionRow, Error> {
     let conn = get_connection()?;
 
     conn.query_row(
@@ -68,7 +70,7 @@ pub fn get_mw_session(session_id: &str) -> Result<MwSessionRow, String> {
             })
         },
     )
-    .map_err(|e| format!("Failed to get MW session: {e}"))
+    .map_err(|e| DatabaseError::from(e).into())
 }
 
 /// Update multi-wallet session status
@@ -76,7 +78,7 @@ pub fn update_mw_session_status(
     session_id: &str,
     status: &str,
     error_message: Option<&str>,
-) -> Result<(), String> {
+) -> Result<(), Error> {
     let conn = get_connection()?;
     let now = Utc::now().to_rfc3339();
 
@@ -104,7 +106,7 @@ pub fn update_mw_session_status(
         "#,
         params![status, error_message, started_at, ended_at, now, session_id,],
     )
-    .map_err(|e| format!("Failed to update MW session status: {e}"))?;
+    .map_err(DatabaseError::from)?;
 
     Ok(())
 }
@@ -117,7 +119,7 @@ pub fn update_mw_session_metrics(
     failed_ops: Option<i32>,
     total_sol_spent: Option<f64>,
     total_sol_recovered: Option<f64>,
-) -> Result<(), String> {
+) -> Result<(), Error> {
     let conn = get_connection()?;
     let now = Utc::now().to_rfc3339();
 
@@ -142,7 +144,7 @@ pub fn update_mw_session_metrics(
             session_id,
         ],
     )
-    .map_err(|e| format!("Failed to update MW session metrics: {e}"))?;
+    .map_err(DatabaseError::from)?;
 
     Ok(())
 }
@@ -156,7 +158,7 @@ pub fn add_wallet_op(
     op_type: &str,
     amount_sol: Option<f64>,
     token_amount: Option<f64>,
-) -> Result<i64, String> {
+) -> Result<i64, Error> {
     let conn = get_connection()?;
 
     conn.execute(
@@ -176,7 +178,7 @@ pub fn add_wallet_op(
             token_amount,
         ],
     )
-    .map_err(|e| format!("Failed to add wallet op: {e}"))?;
+    .map_err(DatabaseError::from)?;
 
     Ok(conn.last_insert_rowid())
 }
@@ -187,7 +189,7 @@ pub fn update_wallet_op_status(
     status: &str,
     signature: Option<&str>,
     error_message: Option<&str>,
-) -> Result<(), String> {
+) -> Result<(), Error> {
     let conn = get_connection()?;
     let now = Utc::now().to_rfc3339();
 
@@ -202,13 +204,13 @@ pub fn update_wallet_op_status(
         "#,
         params![status, signature, error_message, now, op_id],
     )
-    .map_err(|e| format!("Failed to update wallet op status: {e}"))?;
+    .map_err(DatabaseError::from)?;
 
     Ok(())
 }
 
 /// Get all operations for a session
-pub fn get_session_ops(session_id: &str) -> Result<Vec<MwWalletOpRow>, String> {
+pub fn get_session_ops(session_id: &str) -> Result<Vec<MwWalletOpRow>, Error> {
     let conn = get_connection()?;
 
     let mut stmt = conn
@@ -222,7 +224,7 @@ pub fn get_session_ops(session_id: &str) -> Result<Vec<MwWalletOpRow>, String> {
             ORDER BY op_index ASC
             "#,
         )
-        .map_err(|e| format!("Failed to prepare statement: {e}"))?;
+        .map_err(DatabaseError::from)?;
 
     let rows = stmt
         .query_map(params![session_id], |row| {
@@ -233,13 +235,13 @@ pub fn get_session_ops(session_id: &str) -> Result<Vec<MwWalletOpRow>, String> {
                 )))
             })
         })
-        .map_err(|e| format!("Failed to query session ops: {e}"))?;
+        .map_err(DatabaseError::from)?;
 
     let mut ops = Vec::new();
     for row in rows {
         match row {
             Ok(op) => ops.push(op),
-            Err(e) => return Err(format!("Failed to read row: {e}")),
+            Err(e) => return Err(DatabaseError::from(e).into()),
         }
     }
 
@@ -247,7 +249,7 @@ pub fn get_session_ops(session_id: &str) -> Result<Vec<MwWalletOpRow>, String> {
 }
 
 /// Get recent multi-wallet sessions
-pub fn get_recent_mw_sessions(limit: i32) -> Result<Vec<MwSessionRow>, String> {
+pub fn get_recent_mw_sessions(limit: i32) -> Result<Vec<MwSessionRow>, Error> {
     let conn = get_connection()?;
 
     let mut stmt = conn
@@ -265,7 +267,7 @@ pub fn get_recent_mw_sessions(limit: i32) -> Result<Vec<MwSessionRow>, String> {
             LIMIT ?1
             "#,
         )
-        .map_err(|e| format!("Failed to prepare statement: {e}"))?;
+        .map_err(DatabaseError::from)?;
 
     let rows = stmt
         .query_map(params![limit], |row| {
@@ -276,13 +278,13 @@ pub fn get_recent_mw_sessions(limit: i32) -> Result<Vec<MwSessionRow>, String> {
                 )))
             })
         })
-        .map_err(|e| format!("Failed to query sessions: {e}"))?;
+        .map_err(DatabaseError::from)?;
 
     let mut sessions = Vec::new();
     for row in rows {
         match row {
             Ok(session) => sessions.push(session),
-            Err(e) => return Err(format!("Failed to read row: {e}")),
+            Err(e) => return Err(DatabaseError::from(e).into()),
         }
     }
 

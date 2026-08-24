@@ -9,8 +9,16 @@ use crate::transactions::get_transaction_database;
 use super::super::database::GLOBAL_WALLET_DB;
 use super::super::types::{DailyFlowPoint, WalletFlowMetrics};
 use super::clamp_window_hours;
+use crate::errors::InternalError;
+use crate::wallets::Error;
 
-pub(super) async fn compute_flow_metrics(window_hours: i64) -> Result<WalletFlowMetrics, String> {
+fn tx_db_not_initialized() -> Error {
+    Error::Internal(InternalError::InvariantViolation {
+        message: "transaction database not initialized".to_owned(),
+    })
+}
+
+pub(super) async fn compute_flow_metrics(window_hours: i64) -> Result<WalletFlowMetrics, Error> {
     logger::debug(
         LogTag::Wallet,
         &format!("Computing flow metrics for window: {window_hours} hours"),
@@ -43,12 +51,9 @@ pub(super) async fn compute_flow_metrics(window_hours: i64) -> Result<WalletFlow
         // Fallback to full aggregation from transactions DB (from epoch)
         let tx_db = get_transaction_database()
             .await
-            .ok_or_else(|| "Transaction database not initialized".to_owned())?;
+            .ok_or_else(tx_db_not_initialized)?;
         let epoch = DateTime::<Utc>::from(std::time::UNIX_EPOCH);
-        let (inflow, outflow, tx_count) = tx_db
-            .aggregate_sol_flows_since(epoch, None)
-            .await
-            .map_err(|e| format!("Failed to aggregate all-time SOL flows: {e}"))?;
+        let (inflow, outflow, tx_count) = tx_db.aggregate_sol_flows_since(epoch, None).await?;
         logger::debug(
             LogTag::Wallet,
             &format!(
@@ -108,11 +113,8 @@ pub(super) async fn compute_flow_metrics(window_hours: i64) -> Result<WalletFlow
 
     let tx_db = get_transaction_database()
         .await
-        .ok_or_else(|| "Transaction database not initialized".to_owned())?;
-    let (inflow, outflow, tx_count) = tx_db
-        .aggregate_sol_flows_since(window_start, None)
-        .await
-        .map_err(|e| format!("Failed to aggregate SOL flows: {e}"))?;
+        .ok_or_else(tx_db_not_initialized)?;
+    let (inflow, outflow, tx_count) = tx_db.aggregate_sol_flows_since(window_start, None).await?;
 
     logger::debug(
         LogTag::Wallet,
@@ -131,7 +133,7 @@ pub(super) async fn compute_flow_metrics(window_hours: i64) -> Result<WalletFlow
     })
 }
 
-pub(super) async fn compute_daily_flows(window_hours: i64) -> Result<Vec<DailyFlowPoint>, String> {
+pub(super) async fn compute_daily_flows(window_hours: i64) -> Result<Vec<DailyFlowPoint>, Error> {
     let window_hours = clamp_window_hours(window_hours);
     let (window_start, _is_all_time) = if window_hours == 0 {
         (DateTime::<Utc>::from(std::time::UNIX_EPOCH), true)
@@ -141,12 +143,9 @@ pub(super) async fn compute_daily_flows(window_hours: i64) -> Result<Vec<DailyFl
 
     let tx_db = get_transaction_database()
         .await
-        .ok_or_else(|| "Transaction database not initialized".to_owned())?;
+        .ok_or_else(tx_db_not_initialized)?;
 
-    let daily_data = tx_db
-        .aggregate_daily_flows(window_start, None)
-        .await
-        .map_err(|e| format!("Failed to aggregate daily flows: {e}"))?;
+    let daily_data = tx_db.aggregate_daily_flows(window_start, None).await?;
 
     // Convert to DailyFlowPoint with timestamps
     let mut result: Vec<DailyFlowPoint> = daily_data

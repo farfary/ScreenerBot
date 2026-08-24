@@ -1,9 +1,11 @@
 //! Wallet CRUD — create, read, update, and delete wallet operations.
 
+use super::super::error::Error;
 use super::super::types::{
     CreateWalletRequest, ExportWalletResponse, ImportWalletRequest, UpdateWalletRequest, Wallet,
     WalletRole, WalletType,
 };
+use super::db_not_initialized;
 use crate::chains::solana::accounts::{generate_wallet_material, import_wallet_material};
 use crate::logger::{self, LogTag};
 
@@ -22,13 +24,14 @@ async fn refresh_wallet_monitor_subject() {
 }
 
 /// Create a new wallet
-pub async fn create_wallet(request: CreateWalletRequest) -> Result<Wallet, String> {
+pub async fn create_wallet(request: CreateWalletRequest) -> Result<Wallet, Error> {
     let db_guard = super::WALLETS_DB.read().await;
-    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
+    let db = db_guard.as_ref().ok_or_else(db_not_initialized)?;
 
     // Generate new wallet material (address + encrypted key) without ever
     // holding the intermediate keypair here.
-    let (address, encrypted) = generate_wallet_material()?;
+    let (address, encrypted) =
+        generate_wallet_material().map_err(|reason| Error::InvalidPrivateKey { reason })?;
 
     // Determine role
     let role = if request.set_as_main {
@@ -79,22 +82,28 @@ pub async fn create_wallet(request: CreateWalletRequest) -> Result<Wallet, Strin
     let db_guard = super::WALLETS_DB.read().await;
     db_guard
         .as_ref()
-        .ok_or("Database unavailable")?
+        .ok_or_else(db_not_initialized)?
         .get_wallet_by_address(&address)?
-        .ok_or_else(|| "Failed to retrieve created wallet".to_owned())
+        .ok_or(Error::WalletNotFound {
+            address: address.clone(),
+        })
 }
 
 /// Import an existing wallet
-pub async fn import_wallet(request: ImportWalletRequest) -> Result<Wallet, String> {
+pub async fn import_wallet(request: ImportWalletRequest) -> Result<Wallet, Error> {
     let db_guard = super::WALLETS_DB.read().await;
-    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
+    let db = db_guard.as_ref().ok_or_else(db_not_initialized)?;
 
     // Parse and encrypt the private key
-    let (address, encrypted) = import_wallet_material(&request.private_key)?;
+    let (address, encrypted) = import_wallet_material(&request.private_key)
+        .map_err(|reason| Error::InvalidPrivateKey { reason })?;
 
     // Check if wallet already exists
     if db.wallet_exists(&address)? {
-        return Err(format!("Wallet {address} already exists"));
+        return Err(Error::Database(crate::errors::DatabaseError::Query {
+            operation: "import_wallet".to_owned(),
+            message: format!("wallet {address} already exists"),
+        }));
     }
 
     // Determine role
@@ -143,23 +152,30 @@ pub async fn import_wallet(request: ImportWalletRequest) -> Result<Wallet, Strin
         .read()
         .await
         .as_ref()
-        .ok_or("Database unavailable")?
+        .ok_or_else(db_not_initialized)?
         .get_wallet_by_address(&address)?
-        .ok_or_else(|| "Failed to retrieve imported wallet".to_owned())
+        .ok_or(Error::WalletNotFound {
+            address: address.clone(),
+        })
 }
 
 /// Export a wallet's private key
-pub async fn export_wallet(wallet_id: i64) -> Result<ExportWalletResponse, String> {
+pub async fn export_wallet(wallet_id: i64) -> Result<ExportWalletResponse, Error> {
     let db_guard = super::WALLETS_DB.read().await;
-    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
+    let db = db_guard.as_ref().ok_or_else(db_not_initialized)?;
 
-    let wallet = db.get_wallet(wallet_id)?.ok_or("Wallet not found")?;
+    let wallet = db.get_wallet(wallet_id)?.ok_or(Error::WalletNotFound {
+        address: format!("id={wallet_id}"),
+    })?;
 
-    let (encrypted, nonce) = db
-        .get_wallet_encrypted_key(wallet_id)?
-        .ok_or("Wallet encrypted key not found")?;
+    let (encrypted, nonce) =
+        db.get_wallet_encrypted_key(wallet_id)?
+            .ok_or(Error::WalletNotFound {
+                address: format!("id={wallet_id}"),
+            })?;
 
-    let private_key = crate::chains::solana::accounts::export_private_key(&encrypted, &nonce)?;
+    let private_key = crate::chains::solana::accounts::export_private_key(&encrypted, &nonce)
+        .map_err(|reason| Error::InvalidPrivateKey { reason })?;
 
     logger::warning(
         LogTag::Wallet,
@@ -175,9 +191,9 @@ pub async fn export_wallet(wallet_id: i64) -> Result<ExportWalletResponse, Strin
 }
 
 /// Update wallet metadata
-pub async fn update_wallet(wallet_id: i64, request: UpdateWalletRequest) -> Result<Wallet, String> {
+pub async fn update_wallet(wallet_id: i64, request: UpdateWalletRequest) -> Result<Wallet, Error> {
     let db_guard = super::WALLETS_DB.read().await;
-    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
+    let db = db_guard.as_ref().ok_or_else(db_not_initialized)?;
 
     db.update_wallet(
         wallet_id,
@@ -198,19 +214,23 @@ pub async fn update_wallet(wallet_id: i64, request: UpdateWalletRequest) -> Resu
         .read()
         .await
         .as_ref()
-        .ok_or("Database unavailable")?
+        .ok_or_else(db_not_initialized)?
         .get_wallet(wallet_id)?
-        .ok_or_else(|| "Wallet not found after update".to_owned())
+        .ok_or(Error::WalletNotFound {
+            address: format!("id={wallet_id}"),
+        })
 }
 
 /// Set a wallet as the main wallet
-pub async fn set_main_wallet(wallet_id: i64) -> Result<Wallet, String> {
+pub async fn set_main_wallet(wallet_id: i64) -> Result<Wallet, Error> {
     let db_guard = super::WALLETS_DB.read().await;
-    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
+    let db = db_guard.as_ref().ok_or_else(db_not_initialized)?;
 
     db.set_main_wallet(wallet_id)?;
 
-    let wallet = db.get_wallet(wallet_id)?.ok_or("Wallet not found")?;
+    let wallet = db.get_wallet(wallet_id)?.ok_or(Error::WalletNotFound {
+        address: format!("id={wallet_id}"),
+    })?;
 
     drop(db_guard);
     super::cache::refresh_main_wallet_cache().await?;
@@ -226,11 +246,13 @@ pub async fn set_main_wallet(wallet_id: i64) -> Result<Wallet, String> {
 }
 
 /// Archive a wallet (soft delete)
-pub async fn archive_wallet(wallet_id: i64) -> Result<(), String> {
+pub async fn archive_wallet(wallet_id: i64) -> Result<(), Error> {
     let db_guard = super::WALLETS_DB.read().await;
-    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
+    let db = db_guard.as_ref().ok_or_else(db_not_initialized)?;
 
-    let wallet = db.get_wallet(wallet_id)?.ok_or("Wallet not found")?;
+    let wallet = db.get_wallet(wallet_id)?.ok_or(Error::WalletNotFound {
+        address: format!("id={wallet_id}"),
+    })?;
 
     db.archive_wallet(wallet_id)?;
 
@@ -243,11 +265,13 @@ pub async fn archive_wallet(wallet_id: i64) -> Result<(), String> {
 }
 
 /// Restore an archived wallet
-pub async fn restore_wallet(wallet_id: i64) -> Result<(), String> {
+pub async fn restore_wallet(wallet_id: i64) -> Result<(), Error> {
     let db_guard = super::WALLETS_DB.read().await;
-    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
+    let db = db_guard.as_ref().ok_or_else(db_not_initialized)?;
 
-    let wallet = db.get_wallet(wallet_id)?.ok_or("Wallet not found")?;
+    let wallet = db.get_wallet(wallet_id)?.ok_or(Error::WalletNotFound {
+        address: format!("id={wallet_id}"),
+    })?;
 
     db.restore_wallet(wallet_id)?;
 
@@ -260,11 +284,13 @@ pub async fn restore_wallet(wallet_id: i64) -> Result<(), String> {
 }
 
 /// Permanently delete a wallet
-pub async fn delete_wallet(wallet_id: i64) -> Result<(), String> {
+pub async fn delete_wallet(wallet_id: i64) -> Result<(), Error> {
     let db_guard = super::WALLETS_DB.read().await;
-    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
+    let db = db_guard.as_ref().ok_or_else(db_not_initialized)?;
 
-    let wallet = db.get_wallet(wallet_id)?.ok_or("Wallet not found")?;
+    let wallet = db.get_wallet(wallet_id)?.ok_or(Error::WalletNotFound {
+        address: format!("id={wallet_id}"),
+    })?;
 
     db.delete_wallet(wallet_id)?;
 

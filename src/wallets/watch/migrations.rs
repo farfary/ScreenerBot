@@ -23,23 +23,36 @@
 use rusqlite::Connection;
 
 use super::database::WatchDatabase;
+use crate::wallets::Error;
 
 impl WatchDatabase {
     /// Whether `table` already carries a unique index over exactly
     /// `(chain_id, address)` — the structural gate that makes both rebuilds
     /// idempotent. A freshly created database satisfies it from
     /// `SCHEMA_WATCH_TARGETS` / `SCHEMA_WATCH_CURSORS` and skips the work.
-    pub(super) fn has_chain_scoped_key(conn: &Connection, table: &str) -> Result<bool, String> {
+    pub(super) fn has_chain_scoped_key(
+        conn: &Connection,
+        table: &'static str,
+    ) -> Result<bool, Error> {
         let mut index_stmt = conn
             .prepare(&format!("PRAGMA index_list({table})"))
-            .map_err(|e| format!("Failed to list {table} indexes: {e}"))?;
+            .map_err(|e| Error::SchemaInspect {
+                table,
+                detail: e.to_string(),
+            })?;
         let indexes: Vec<(String, bool)> = index_stmt
             .query_map([], |row| {
                 Ok((row.get::<_, String>(1)?, row.get::<_, i64>(2)? == 1))
             })
-            .map_err(|e| format!("Failed to read {table} indexes: {e}"))?
-            .collect::<Result<_, _>>()
-            .map_err(|e| format!("Failed to decode {table} indexes: {e}"))?;
+            .map_err(|e| Error::SchemaInspect {
+                table,
+                detail: e.to_string(),
+            })?
+            .collect::<std::result::Result<_, _>>()
+            .map_err(|e| Error::SchemaInspect {
+                table,
+                detail: e.to_string(),
+            })?;
 
         for (index_name, is_unique) in indexes {
             if !is_unique {
@@ -47,12 +60,21 @@ impl WatchDatabase {
             }
             let mut column_stmt = conn
                 .prepare(&format!("PRAGMA index_info({index_name})"))
-                .map_err(|e| format!("Failed to inspect index {index_name}: {e}"))?;
+                .map_err(|e| Error::SchemaInspect {
+                    table,
+                    detail: e.to_string(),
+                })?;
             let columns: Vec<String> = column_stmt
                 .query_map([], |row| row.get::<_, Option<String>>(2))
-                .map_err(|e| format!("Failed to read index {index_name}: {e}"))?
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(|e| format!("Failed to decode index {index_name}: {e}"))?
+                .map_err(|e| Error::SchemaInspect {
+                    table,
+                    detail: e.to_string(),
+                })?
+                .collect::<std::result::Result<Vec<_>, _>>()
+                .map_err(|e| Error::SchemaInspect {
+                    table,
+                    detail: e.to_string(),
+                })?
                 .into_iter()
                 .flatten()
                 .collect();
@@ -71,7 +93,7 @@ impl WatchDatabase {
     /// that met the previous `ALTER TABLE ADD COLUMN` repair has the column but
     /// still the wrong key — both must rebuild, so the copy reads a literal in
     /// the first case and the (default-backfilled) column in the second.
-    fn chain_source_expr(conn: &Connection, table: &str) -> Result<&'static str, String> {
+    fn chain_source_expr(conn: &Connection, table: &'static str) -> Result<&'static str, Error> {
         Ok(if Self::column_exists(conn, table, "chain_id")? {
             "COALESCE(NULLIF(chain_id, ''), 'solana')"
         } else {
@@ -84,10 +106,15 @@ impl WatchDatabase {
     /// Rows are copied verbatim; a legacy row predates chain identity and is by
     /// definition Solana. `id` is preserved because `WatchSource::Alert {
     /// rule_id }` stores it inside `sources`.
-    pub(super) fn rebuild_watch_targets(tx: &rusqlite::Transaction) -> Result<(), String> {
+    pub(super) fn rebuild_watch_targets(tx: &rusqlite::Transaction) -> Result<(), Error> {
         if Self::has_chain_scoped_key(tx, "watch_targets")? {
             return Ok(());
         }
+
+        let migration_step = |step: &str, e: rusqlite::Error| Error::Migration {
+            step: step.to_owned(),
+            detail: e.to_string(),
+        };
 
         tx.execute(
             "CREATE TABLE watch_targets__chain (
@@ -103,7 +130,7 @@ impl WatchDatabase {
             )",
             [],
         )
-        .map_err(|e| format!("Failed to create watch_targets__chain: {e}"))?;
+        .map_err(|e| migration_step("create watch_targets__chain", e))?;
 
         let chain_expr = Self::chain_source_expr(tx, "watch_targets")?;
         tx.execute(
@@ -116,25 +143,30 @@ impl WatchDatabase {
             ),
             [],
         )
-        .map_err(|e| format!("Failed to copy watch_targets rows: {e}"))?;
+        .map_err(|e| migration_step("copy watch_targets rows", e))?;
 
         tx.execute("DROP TABLE watch_targets", [])
-            .map_err(|e| format!("Failed to drop legacy watch_targets: {e}"))?;
+            .map_err(|e| migration_step("drop legacy watch_targets", e))?;
         tx.execute(
             "ALTER TABLE watch_targets__chain RENAME TO watch_targets",
             [],
         )
-        .map_err(|e| format!("Failed to rename watch_targets__chain: {e}"))?;
+        .map_err(|e| migration_step("rename watch_targets__chain", e))?;
 
         Ok(())
     }
 
     /// Rebuild `watch_cursors` onto `PRIMARY KEY (chain_id, address)` — the key
     /// `set_cursor`'s upsert has always named.
-    pub(super) fn rebuild_watch_cursors(tx: &rusqlite::Transaction) -> Result<(), String> {
+    pub(super) fn rebuild_watch_cursors(tx: &rusqlite::Transaction) -> Result<(), Error> {
         if Self::has_chain_scoped_key(tx, "watch_cursors")? {
             return Ok(());
         }
+
+        let migration_step = |step: &str, e: rusqlite::Error| Error::Migration {
+            step: step.to_owned(),
+            detail: e.to_string(),
+        };
 
         tx.execute(
             "CREATE TABLE watch_cursors__chain (
@@ -146,7 +178,7 @@ impl WatchDatabase {
             )",
             [],
         )
-        .map_err(|e| format!("Failed to create watch_cursors__chain: {e}"))?;
+        .map_err(|e| migration_step("create watch_cursors__chain", e))?;
 
         let chain_expr = Self::chain_source_expr(tx, "watch_cursors")?;
         tx.execute(
@@ -157,15 +189,15 @@ impl WatchDatabase {
             ),
             [],
         )
-        .map_err(|e| format!("Failed to copy watch_cursors rows: {e}"))?;
+        .map_err(|e| migration_step("copy watch_cursors rows", e))?;
 
         tx.execute("DROP TABLE watch_cursors", [])
-            .map_err(|e| format!("Failed to drop legacy watch_cursors: {e}"))?;
+            .map_err(|e| migration_step("drop legacy watch_cursors", e))?;
         tx.execute(
             "ALTER TABLE watch_cursors__chain RENAME TO watch_cursors",
             [],
         )
-        .map_err(|e| format!("Failed to rename watch_cursors__chain: {e}"))?;
+        .map_err(|e| migration_step("rename watch_cursors__chain", e))?;
 
         Ok(())
     }

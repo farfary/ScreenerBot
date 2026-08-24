@@ -90,7 +90,7 @@ async fn list_targets() -> Response {
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "LIST_ERROR",
                 "Failed to list watch targets",
-                Some(&e),
+                Some(&e.to_string()),
             )
         }
     }
@@ -126,17 +126,19 @@ async fn add_target(Json(request): Json<AddTargetRequest>) -> Response {
                 LogTag::WalletWatch,
                 &format!("Failed to add watch target {address}: {e}"),
             );
-            let (status, code) =
-                if e.contains("already watched") || e.contains("already one of your own wallets") {
-                    (StatusCode::CONFLICT, "DUPLICATE")
-                } else if e.contains("Invalid Solana address") {
-                    (StatusCode::BAD_REQUEST, "INVALID_ADDRESS")
-                } else if e.contains("limit reached") || e.contains("disabled") {
-                    (StatusCode::BAD_REQUEST, "REJECTED")
-                } else {
-                    (StatusCode::INTERNAL_SERVER_ERROR, "ADD_ERROR")
-                };
-            error_response(status, code, "Failed to add watch target", Some(&e))
+            let msg = e.to_string();
+            let (status, code) = if msg.contains("already watched")
+                || msg.contains("already one of your own wallets")
+            {
+                (StatusCode::CONFLICT, "DUPLICATE")
+            } else if msg.contains("Invalid Solana address") {
+                (StatusCode::BAD_REQUEST, "INVALID_ADDRESS")
+            } else if msg.contains("limit reached") || msg.contains("disabled") {
+                (StatusCode::BAD_REQUEST, "REJECTED")
+            } else {
+                (StatusCode::INTERNAL_SERVER_ERROR, "ADD_ERROR")
+            };
+            error_response(status, code, "Failed to add watch target", Some(&msg))
         }
     }
 }
@@ -152,7 +154,8 @@ async fn remove_target(Path(id): Path<i64>) -> Response {
                 LogTag::WalletWatch,
                 &format!("Failed to remove watch target {id}: {e}"),
             );
-            let status = if e.contains("not found") {
+            let msg = e.to_string();
+            let status = if msg.contains("not found") {
                 StatusCode::NOT_FOUND
             } else {
                 StatusCode::INTERNAL_SERVER_ERROR
@@ -161,7 +164,7 @@ async fn remove_target(Path(id): Path<i64>) -> Response {
                 status,
                 "REMOVE_ERROR",
                 "Failed to remove watch target",
-                Some(&e),
+                Some(&msg),
             )
         }
     }
@@ -186,7 +189,8 @@ async fn set_target_enabled(
                 LogTag::WalletWatch,
                 &format!("Failed to update watch target {id}: {e}"),
             );
-            let status = if e.contains("not found") {
+            let msg = e.to_string();
+            let status = if msg.contains("not found") {
                 StatusCode::NOT_FOUND
             } else {
                 StatusCode::INTERNAL_SERVER_ERROR
@@ -195,7 +199,7 @@ async fn set_target_enabled(
                 status,
                 "UPDATE_ERROR",
                 "Failed to update watch target",
-                Some(&e),
+                Some(&msg),
             )
         }
     }
@@ -220,7 +224,8 @@ async fn get_status(Path(id): Path<i64>) -> Response {
     match watch::get_status(id).await {
         Ok(status) => success_response(status),
         Err(e) => {
-            let status_code = if e.contains("not found") {
+            let msg = e.to_string();
+            let status_code = if msg.contains("not found") {
                 StatusCode::NOT_FOUND
             } else {
                 StatusCode::INTERNAL_SERVER_ERROR
@@ -229,7 +234,7 @@ async fn get_status(Path(id): Path<i64>) -> Response {
                 status_code,
                 "STATUS_ERROR",
                 "Failed to get watch status",
-                Some(&e),
+                Some(&msg),
             )
         }
     }

@@ -9,8 +9,8 @@ use std::sync::atomic::Ordering;
 use crate::database;
 use crate::errors::DatabaseError;
 use crate::logger::{self, LogTag};
-use crate::positions::error::{Error, Result};
 use crate::positions::types::{Position, PositionManagement, PositionOrigin};
+use crate::positions::{Error, Result};
 
 use super::provenance::{merge_ledger_duplicates, migrate_position_provenance};
 use super::types::*;

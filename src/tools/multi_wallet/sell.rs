@@ -12,6 +12,7 @@ use crate::chains::adapter;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::logger::{self, LogTag};
 use crate::tools::swap_executor::tool_sell;
+use crate::tools::Error;
 use crate::wallets::{self, Wallet, WalletRole};
 
 use crate::chains::solana::assets::transfer::{close_ata_for_wallet, transfer_sol_from_main};
@@ -26,7 +27,7 @@ use super::types::{MultiSellConfig, SessionResult, WalletOpResult, WalletPlan};
 ///
 /// # Returns
 /// Session result with all operation outcomes
-pub async fn execute_multi_sell(config: MultiSellConfig) -> Result<SessionResult, String> {
+pub async fn execute_multi_sell(config: MultiSellConfig) -> Result<SessionResult, Error> {
     // Validate configuration
     config.validate()?;
 
@@ -46,13 +47,17 @@ pub async fn execute_multi_sell(config: MultiSellConfig) -> Result<SessionResult
     // Load wallets with token balance
     let wallets = load_wallets_for_sell(&config).await?;
     if wallets.is_empty() {
-        return Err("No wallets found with token balance".to_owned());
+        return Err(Error::InvalidConfig {
+            detail: "no wallets found with token balance".to_owned(),
+        });
     }
 
     // Create sell plans
     let plans = create_sell_plans(&config, &wallets).await?;
     if plans.is_empty() {
-        return Err("No valid sell plans could be created".to_owned());
+        return Err(Error::InvalidConfig {
+            detail: "no valid sell plans could be created".to_owned(),
+        });
     }
 
     logger::info(
@@ -181,10 +186,12 @@ pub async fn execute_multi_sell(config: MultiSellConfig) -> Result<SessionResult
 
     // Consolidate SOL if configured
     if config.consolidate_after {
-        let main_wallet = wallets::get_main_wallet()
-            .await
-            .map_err(|e| format!("Failed to get main wallet: {e}"))?
-            .ok_or("No main wallet configured")?;
+        let main_wallet =
+            wallets::get_main_wallet()
+                .await?
+                .ok_or_else(|| Error::MainWalletUnavailable {
+                    detail: "no main wallet configured".to_owned(),
+                })?;
 
         let wallets_to_consolidate: Vec<Wallet> = wallets
             .into_iter()
@@ -218,7 +225,7 @@ pub async fn execute_multi_sell(config: MultiSellConfig) -> Result<SessionResult
 }
 
 /// Load wallets for multi-sell operation
-async fn load_wallets_for_sell(config: &MultiSellConfig) -> Result<Vec<Wallet>, String> {
+async fn load_wallets_for_sell(config: &MultiSellConfig) -> Result<Vec<Wallet>, Error> {
     let all_wallets = wallets::list_active_wallets().await?;
     let rpc_client = get_rpc_client();
 
@@ -255,7 +262,7 @@ async fn load_wallets_for_sell(config: &MultiSellConfig) -> Result<Vec<Wallet>, 
 async fn create_sell_plans(
     config: &MultiSellConfig,
     wallets: &[Wallet],
-) -> Result<Vec<WalletPlan>, String> {
+) -> Result<Vec<WalletPlan>, Error> {
     let rpc_client = get_rpc_client();
     let mut plans = Vec::new();
 

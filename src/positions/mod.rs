@@ -2,7 +2,7 @@
 pub mod apply;
 pub mod database;
 pub use database as db;
-pub mod error;
+mod error;
 pub use error::{Error, Result};
 pub mod helpers;
 pub use helpers as lib; // Backward compatibility alias

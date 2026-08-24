@@ -13,10 +13,13 @@
 
 pub mod ata_cleanup;
 pub mod database;
+mod error;
 pub mod multi_wallet;
 pub mod swap_executor;
 pub mod trade_watcher;
 mod types;
+
+pub use error::{Error, Result};
 
 // Re-export common types
 pub use types::{

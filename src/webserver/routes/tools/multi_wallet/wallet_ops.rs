@@ -26,7 +26,7 @@ pub async fn get_wallets_summary() -> Response {
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "WALLET_ERROR",
                 "Failed to get wallets",
-                Some(&e),
+                Some(&e.to_string()),
             );
         }
     };
@@ -96,7 +96,12 @@ pub async fn consolidate_wallets(Json(request): Json<ConsolidateRequest>) -> Res
 
     // Validate config
     if let Err(e) = config.validate() {
-        return error_response(StatusCode::BAD_REQUEST, "INVALID_CONFIG", &e, None);
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "INVALID_CONFIG",
+            &e.to_string(),
+            None,
+        );
     }
 
     // Execute consolidation
@@ -126,7 +131,7 @@ pub async fn consolidate_wallets(Json(request): Json<ConsolidateRequest>) -> Res
             StatusCode::INTERNAL_SERVER_ERROR,
             "CONSOLIDATION_FAILED",
             "Failed to consolidate wallets",
-            Some(&e),
+            Some(&e.to_string()),
         ),
     }
 }
@@ -177,7 +182,7 @@ pub async fn cleanup_subwallet_atas(Json(request): Json<SubWalletAtaCleanupReque
             StatusCode::INTERNAL_SERVER_ERROR,
             "CLEANUP_FAILED",
             "Failed to cleanup ATAs",
-            Some(&e),
+            Some(&e.to_string()),
         ),
     }
 }

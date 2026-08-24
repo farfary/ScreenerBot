@@ -3,12 +3,12 @@
 use crate::chains::solana::assets::ata::{get_token_balance, get_total_token_balance};
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::logger::{self, LogTag};
-use crate::positions::error::{Error, Result};
 use crate::positions::price_resolution::get_price_with_api_fallback;
 use crate::positions::queue::{enqueue_verification, VerificationItem};
 use crate::positions::state::{acquire_position_lock, add_signature_to_index};
 use crate::positions::types::VerificationKind;
 use crate::positions::PENDING_VERIFICATION_SUFFIX;
+use crate::positions::{Error, Result};
 use crate::swaps::{execute_swap_with_fallback, get_best_quote, QuoteRequest, SwapMode};
 use crate::utils::get_wallet_address;
 use serde_json::json;

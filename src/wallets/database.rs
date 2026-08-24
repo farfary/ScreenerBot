@@ -5,7 +5,9 @@
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
 
+use crate::errors::{DatabaseError, IoError};
 use crate::paths::get_wallets_db_path;
+use crate::wallets::Error;
 use crate::{chains::ChainId, database};
 
 mod schema;
@@ -23,13 +25,12 @@ pub struct WalletsDatabase {
 
 impl WalletsDatabase {
     /// Create or open the wallets database
-    pub fn new(chain: ChainId) -> Result<Self, String> {
+    pub fn new(chain: ChainId) -> Result<Self, Error> {
         let db_path = get_wallets_db_path();
 
         // Ensure data directory exists
         if let Some(parent) = db_path.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| format!("Failed to create data directory: {e}"))?;
+            std::fs::create_dir_all(parent).map_err(IoError::from)?;
         }
 
         let manager = SqliteConnectionManager::file(&db_path)
@@ -39,7 +40,7 @@ impl WalletsDatabase {
             .idle_timeout(None) // SQLite: keep connections alive (WAL stability)
             .max_lifetime(None) // SQLite: no connection recycling
             .build(manager)
-            .map_err(|e| format!("Failed to create wallets connection pool: {e}"))?;
+            .map_err(DatabaseError::from)?;
 
         let db = Self { pool, chain };
         db.initialize()?;
@@ -48,89 +49,112 @@ impl WalletsDatabase {
     }
 
     /// Get a connection from the pool
-    fn conn(&self) -> Result<PooledConnection<SqliteConnectionManager>, String> {
-        self.pool
-            .get()
-            .map_err(|e| format!("Failed to get connection: {e}"))
+    fn conn(&self) -> Result<PooledConnection<SqliteConnectionManager>, Error> {
+        self.pool.get().map_err(|e| DatabaseError::from(e).into())
     }
 
     /// Initialize database schema
-    fn initialize(&self) -> Result<(), String> {
+    fn initialize(&self) -> Result<(), Error> {
         let mut conn = self.conn()?;
 
         // Create tables
         conn.execute(WALLETS_SCHEMA, [])
-            .map_err(|e| format!("Failed to create wallets table: {e}"))?;
+            .map_err(DatabaseError::from)?;
 
         self.migrate_chain_identity(&mut conn)?;
 
         conn.execute(TOKEN_BALANCES_SCHEMA, [])
-            .map_err(|e| format!("Failed to create token_balances table: {e}"))?;
+            .map_err(DatabaseError::from)?;
 
         // Create indexes
         for index_sql in WALLETS_INDEXES {
-            conn.execute(index_sql, [])
-                .map_err(|e| format!("Failed to create index: {e}"))?;
+            conn.execute(index_sql, []).map_err(DatabaseError::from)?;
         }
 
         Ok(())
     }
 
-    fn migrate_chain_identity(&self, conn: &mut rusqlite::Connection) -> Result<(), String> {
+    fn migrate_chain_identity(&self, conn: &mut rusqlite::Connection) -> Result<(), Error> {
         let has_chain: bool = conn
             .prepare("PRAGMA table_info(wallets)")
-            .map_err(|e| format!("Failed to inspect wallets schema: {e}"))?
+            .map_err(|e| Error::SchemaInspect {
+                table: "wallets",
+                detail: e.to_string(),
+            })?
             .query_map([], |row| row.get::<_, String>(1))
-            .map_err(|e| format!("Failed to inspect wallets schema: {e}"))?
-            .filter_map(Result::ok)
+            .map_err(|e| Error::SchemaInspect {
+                table: "wallets",
+                detail: e.to_string(),
+            })?
+            .filter_map(std::result::Result::ok)
             .any(|column| column == "chain_id");
         if has_chain {
             return Ok(());
         }
         conn.execute("PRAGMA foreign_keys = OFF", [])
-            .map_err(|e| format!("Failed to disable wallet foreign keys: {e}"))?;
-        let result = (|| -> Result<(), String> {
-            let tx = conn
-                .write_tx()
-                .map_err(|e| format!("Failed to begin wallets chain migration: {e}"))?;
+            .map_err(DatabaseError::from)?;
+        let result = (|| -> Result<(), Error> {
+            let tx = conn.write_tx().map_err(|e| Error::Migration {
+                step: "begin".to_owned(),
+                detail: e.to_string(),
+            })?;
             tx.execute(
                 "CREATE TABLE wallets__chain_v1 (id INTEGER PRIMARY KEY AUTOINCREMENT, chain_id TEXT NOT NULL DEFAULT 'solana', name TEXT NOT NULL, address TEXT NOT NULL, encrypted_key TEXT NOT NULL, nonce TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'secondary', wallet_type TEXT NOT NULL DEFAULT 'generated', created_at TEXT NOT NULL DEFAULT (datetime('now')), last_used_at TEXT, notes TEXT, is_active INTEGER NOT NULL DEFAULT 1, UNIQUE(chain_id, address))",
                 [],
-            ).map_err(|e| format!("Failed to create chain-aware wallets table: {e}"))?;
+            ).map_err(|e| Error::Migration { step: "create chain-aware table".to_owned(), detail: e.to_string() })?;
             let before: i64 = tx
                 .query_row("SELECT COUNT(*) FROM wallets", [], |row| row.get(0))
-                .map_err(|e| format!("Failed to count wallets: {e}"))?;
+                .map_err(|e| Error::Migration {
+                    step: "count wallets".to_owned(),
+                    detail: e.to_string(),
+                })?;
             tx.execute("INSERT INTO wallets__chain_v1 (id, chain_id, name, address, encrypted_key, nonce, role, wallet_type, created_at, last_used_at, notes, is_active) SELECT id, 'solana', name, address, encrypted_key, nonce, role, wallet_type, created_at, last_used_at, notes, is_active FROM wallets", [])
-                .map_err(|e| format!("Failed to copy wallets into chain-aware schema: {e}"))?;
+                .map_err(|e| Error::Migration { step: "copy wallets".to_owned(), detail: e.to_string() })?;
             let after: i64 = tx
                 .query_row("SELECT COUNT(*) FROM wallets__chain_v1", [], |row| {
                     row.get(0)
                 })
-                .map_err(|e| format!("Failed to count migrated wallets: {e}"))?;
+                .map_err(|e| Error::Migration {
+                    step: "count migrated wallets".to_owned(),
+                    detail: e.to_string(),
+                })?;
             if before != after {
-                return Err(format!(
-                    "Wallet chain migration row count mismatch: {before} != {after}"
-                ));
+                return Err(Error::Migration {
+                    step: "row count check".to_owned(),
+                    detail: format!("row count mismatch: {before} != {after}"),
+                });
             }
             tx.execute("DROP TABLE wallets", [])
-                .map_err(|e| format!("Failed to drop legacy wallets table: {e}"))?;
+                .map_err(|e| Error::Migration {
+                    step: "drop legacy table".to_owned(),
+                    detail: e.to_string(),
+                })?;
             tx.execute("ALTER TABLE wallets__chain_v1 RENAME TO wallets", [])
-                .map_err(|e| format!("Failed to rename migrated wallets table: {e}"))?;
+                .map_err(|e| Error::Migration {
+                    step: "rename migrated table".to_owned(),
+                    detail: e.to_string(),
+                })?;
             let fk_errors: i64 = tx
                 .query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |row| {
                     row.get(0)
                 })
-                .map_err(|e| format!("Failed to verify wallet foreign keys: {e}"))?;
+                .map_err(|e| Error::Migration {
+                    step: "verify foreign keys".to_owned(),
+                    detail: e.to_string(),
+                })?;
             if fk_errors != 0 {
-                return Err(format!(
-                    "Wallet chain migration foreign key check found {fk_errors} errors"
-                ));
+                return Err(Error::Migration {
+                    step: "foreign key check".to_owned(),
+                    detail: format!("found {fk_errors} errors"),
+                });
             }
-            tx.commit()
-                .map_err(|e| format!("Failed to commit wallets chain migration: {e}"))
+            tx.commit().map_err(|e| Error::Migration {
+                step: "commit".to_owned(),
+                detail: e.to_string(),
+            })
         })();
         conn.execute("PRAGMA foreign_keys = ON", [])
-            .map_err(|e| format!("Failed to re-enable wallet foreign keys: {e}"))?;
+            .map_err(DatabaseError::from)?;
         result
     }
 }

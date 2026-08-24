@@ -12,10 +12,12 @@
 //! event fires, and whether the failed-transaction path (which does not classify)
 //! still gets a row.
 
+use crate::errors::InternalError;
 use crate::events;
 use crate::logger::{self, LogTag};
 use crate::transactions::database::get_transaction_database;
 use crate::transactions::types::{Subject, Transaction};
+use crate::wallets::Error;
 
 use super::types::WatchSource;
 
@@ -26,7 +28,7 @@ pub(super) async fn record(
     subject: Subject,
     sources: &[WatchSource],
     transaction: &Transaction,
-) -> Result<(), String> {
+) -> Result<(), Error> {
     let is_own_wallet = sources.contains(&WatchSource::OwnWallet);
 
     let Some(db) = get_transaction_database().await else {
@@ -34,7 +36,9 @@ pub(super) async fn record(
             LogTag::WalletWatch,
             "Transaction database not initialized; dropping a decoded row",
         );
-        return Err("Transaction database not initialized".to_owned());
+        return Err(Error::Internal(InternalError::InvariantViolation {
+            message: "transaction database not initialized".to_owned(),
+        }));
     };
 
     if let Err(e) = db
@@ -48,8 +52,7 @@ pub(super) async fn record(
                 transaction.signature, subject
             ),
         );
-        // SEAM: wallets still returns String errors; removed when it migrates.
-        return Err(e.to_string());
+        return Err(e.into());
     }
 
     // The own wallet's ledger rows. Detection moved to this funnel, so this is the

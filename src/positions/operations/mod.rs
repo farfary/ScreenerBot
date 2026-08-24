@@ -18,9 +18,9 @@ pub use partial_close::partial_close_position;
 
 use crate::logger::{self, LogTag};
 use crate::positions::db::{save_position, update_position_price_fields};
-use crate::positions::error::{Error, Result};
 use crate::positions::state::acquire_position_lock;
 use crate::positions::types::Position;
+use crate::positions::{Error, Result};
 use chrono::Utc;
 use serde_json::json;
 use tokio::time::{sleep, Duration};

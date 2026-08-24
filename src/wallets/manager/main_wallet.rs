@@ -3,11 +3,13 @@
 //! Never decrypts. `crate::chains::solana::accounts::signing` owns the main
 //! wallet's decrypted-keypair cache; this module only caches the record.
 
+use super::super::error::Error;
 use super::super::types::Wallet;
 use super::cache::{refresh_main_wallet_cache, MAIN_WALLET_CACHE};
+use super::db_not_initialized;
 
 /// Get the main wallet's address (cached for performance)
-pub async fn get_main_address() -> Result<String, String> {
+pub async fn get_main_address() -> Result<String, Error> {
     // Fast path: check cache first
     {
         let cache = MAIN_WALLET_CACHE.read().await;
@@ -23,11 +25,13 @@ pub async fn get_main_address() -> Result<String, String> {
     cache
         .as_ref()
         .map(|w| w.address.clone())
-        .ok_or_else(|| "No main wallet configured".to_owned())
+        .ok_or_else(|| Error::WalletNotFound {
+            address: "main".to_owned(),
+        })
 }
 
 /// Get the main wallet info
-pub async fn get_main_wallet() -> Result<Option<Wallet>, String> {
+pub async fn get_main_wallet() -> Result<Option<Wallet>, Error> {
     let mut wallet = { MAIN_WALLET_CACHE.read().await.clone() };
 
     // Derive "last used" from the most recent recorded transaction (canonical
@@ -46,10 +50,10 @@ pub async fn has_main_wallet() -> bool {
 
 /// The main wallet's ID plus its encrypted key material (ciphertext, nonce).
 /// Chain-neutral — only `crate::chains::solana::accounts` decrypts this.
-pub(crate) async fn get_main_wallet_encrypted_key() -> Result<Option<(i64, String, String)>, String>
+pub(crate) async fn get_main_wallet_encrypted_key() -> Result<Option<(i64, String, String)>, Error>
 {
     let db_guard = super::WALLETS_DB.read().await;
-    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
+    let db = db_guard.as_ref().ok_or_else(db_not_initialized)?;
 
     let Some(wallet) = db.get_main_wallet()? else {
         return Ok(None);

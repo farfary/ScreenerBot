@@ -27,7 +27,7 @@ pub(super) async fn get_wallet_qr(Path(address): Path<String>) -> Response {
                     StatusCode::NOT_FOUND,
                     "WALLET_NOT_FOUND",
                     "Main wallet is not available",
-                    Some(&err),
+                    Some(&err.to_string()),
                 );
             }
         }
@@ -296,7 +296,7 @@ pub(super) async fn get_wallet_dashboard(
         }),
         Err(err) => Json(WalletDashboardResponse {
             data: None,
-            error: Some(err),
+            error: Some(err.to_string()),
         }),
     }
 }
@@ -331,7 +331,7 @@ pub(super) async fn get_wallet_flow_cache_stats() -> Json<WalletFlowCacheRespons
         }),
         Err(err) => Json(WalletFlowCacheResponse {
             data: None,
-            error: Some(err),
+            error: Some(err.to_string()),
         }),
     }
 }

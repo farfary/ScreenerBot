@@ -2,7 +2,7 @@
 
 use rusqlite::{params, Connection};
 
-use crate::positions::error::{Error, Result};
+use crate::positions::{Error, Result};
 
 fn has_column(conn: &Connection, name: &str) -> Result<bool> {
     let mut statement =

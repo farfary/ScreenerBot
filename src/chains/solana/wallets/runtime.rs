@@ -18,6 +18,7 @@ use crate::chains::solana::transactions::subject;
 use crate::transactions::types::{Subject, Transaction};
 use crate::wallets::watch::runtime::{ConnectionWatch, NotificationStream, WalletWatchRuntime};
 use crate::wallets::watch::{ActivityKind, WatchNotification};
+use crate::wallets::Error;
 
 use super::classify;
 
@@ -29,16 +30,20 @@ pub fn build_runtime() -> Arc<dyn WalletWatchRuntime> {
 
 struct SolanaWalletWatchRuntime;
 
-fn parse_pubkey(address: &str) -> Result<Pubkey, String> {
-    address
-        .parse::<Pubkey>()
-        .map_err(|e| format!("Invalid Solana address '{address}': {e}"))
+fn parse_pubkey(address: &str) -> Result<Pubkey, Error> {
+    address.parse::<Pubkey>().map_err(|e| Error::ChainRuntime {
+        operation: "parse_pubkey",
+        detail: format!("Invalid Solana address '{address}': {e}"),
+    })
 }
 
 #[async_trait]
 impl WalletWatchRuntime for SolanaWalletWatchRuntime {
-    fn resolve_subject(&self, address: &str) -> Result<Subject, String> {
-        subject::try_from_address(address).map_err(|e| e.to_string())
+    fn resolve_subject(&self, address: &str) -> Result<Subject, Error> {
+        subject::try_from_address(address).map_err(|e| Error::ChainRuntime {
+            operation: "resolve_subject",
+            detail: e.to_string(),
+        })
     }
 
     fn is_connected(&self) -> bool {
@@ -51,10 +56,13 @@ impl WalletWatchRuntime for SolanaWalletWatchRuntime {
         })
     }
 
-    async fn subscribe(&self, address: &str) -> Result<Box<dyn NotificationStream>, String> {
+    async fn subscribe(&self, address: &str) -> Result<Box<dyn NotificationStream>, Error> {
         let sub = rpc::subscribe_logs_mentions(address)
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| Error::ChainRuntime {
+                operation: "subscribe",
+                detail: e.to_string(),
+            })?;
         Ok(Box::new(SolanaNotificationStream { sub }))
     }
 
@@ -64,11 +72,15 @@ impl WalletWatchRuntime for SolanaWalletWatchRuntime {
         page_size: usize,
         before: Option<&str>,
         until: Option<&str>,
-    ) -> Result<Vec<String>, String> {
+    ) -> Result<Vec<String>, Error> {
         let pubkey = parse_pubkey(address)?;
         TransactionFetcher::new()
             .fetch_signatures_page(pubkey, page_size, before, until)
             .await
+            .map_err(|detail| Error::ChainRuntime {
+                operation: "fetch_signatures_page",
+                detail,
+            })
     }
 
     async fn decode_transaction(
@@ -76,14 +88,20 @@ impl WalletWatchRuntime for SolanaWalletWatchRuntime {
         address: &str,
         signature: &str,
         is_own: bool,
-    ) -> Result<Transaction, String> {
+    ) -> Result<Transaction, Error> {
         let pubkey = parse_pubkey(address)?;
         let processor = if is_own {
             TransactionProcessor::new(pubkey)
         } else {
             TransactionProcessor::new_for_watch_target(pubkey)
         };
-        processor.decode(signature).await
+        processor
+            .decode(signature)
+            .await
+            .map_err(|detail| Error::ChainRuntime {
+                operation: "decode_transaction",
+                detail,
+            })
     }
 
     fn classify(

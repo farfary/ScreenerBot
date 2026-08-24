@@ -29,7 +29,7 @@ pub async fn get_favorites_list(Query(params): Query<HashMap<String, String>>) -
             StatusCode::INTERNAL_SERVER_ERROR,
             "DATABASE_ERROR",
             "Failed to get favorites",
-            Some(&e),
+            Some(&e.to_string()),
         ),
     }
 }
@@ -71,7 +71,7 @@ pub async fn add_favorite(Json(request): Json<AddToolFavoriteRequest>) -> Respon
             StatusCode::INTERNAL_SERVER_ERROR,
             "DATABASE_ERROR",
             "Failed to add favorite",
-            Some(&e),
+            Some(&e.to_string()),
         ),
     }
 }
@@ -98,7 +98,7 @@ pub async fn update_favorite(
             StatusCode::INTERNAL_SERVER_ERROR,
             "DATABASE_ERROR",
             "Failed to update favorite",
-            Some(&e),
+            Some(&e.to_string()),
         ),
     }
 }
@@ -120,7 +120,7 @@ pub async fn delete_favorite(Path(id): Path<i64>) -> Response {
             StatusCode::INTERNAL_SERVER_ERROR,
             "DATABASE_ERROR",
             "Failed to delete favorite",
-            Some(&e),
+            Some(&e.to_string()),
         ),
     }
 }
@@ -133,7 +133,7 @@ pub async fn mark_favorite_used(Path(id): Path<i64>) -> Response {
             StatusCode::INTERNAL_SERVER_ERROR,
             "DATABASE_ERROR",
             "Failed to update use count",
-            Some(&e),
+            Some(&e.to_string()),
         ),
     }
 }

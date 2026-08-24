@@ -7,7 +7,9 @@ use rusqlite::{params, Connection, OptionalExtension};
 use std::sync::LazyLock;
 use tokio::sync::Mutex;
 
+use crate::errors::DatabaseError;
 use crate::logger::{self, LogTag};
+use crate::wallets::Error;
 use crate::{chains::ChainId, database};
 
 use super::types::*;
@@ -76,7 +78,7 @@ pub struct WalletDatabase {
 }
 impl WalletDatabase {
     /// Create new WalletDatabase with connection pooling
-    pub async fn new(chain: ChainId) -> Result<Self, String> {
+    pub async fn new(chain: ChainId) -> Result<Self, Error> {
         let database_path = crate::paths::get_wallet_db_path();
         let database_path_str = database_path.to_string_lossy().to_string();
 
@@ -96,11 +98,14 @@ impl WalletDatabase {
             .idle_timeout(None) // SQLite: keep connections alive (WAL stability)
             .max_lifetime(None) // SQLite: no connection recycling
             .build(manager)
-            .map_err(|e| format!("Failed to create wallet connection pool: {e}"))?;
+            .map_err(DatabaseError::from)?;
 
         let subject = crate::chains::solana::accounts::configured_address_async()
             .await
-            .map_err(|e| format!("Failed to resolve wallet-monitor subject: {e}"))?;
+            .map_err(|e| Error::Dependency {
+                dependency: "accounts",
+                detail: e,
+            })?;
 
         let mut db = WalletDatabase {
             pool,
@@ -123,34 +128,39 @@ impl WalletDatabase {
     /// `crate::wallets::manager::crud` after any mutation that can change
     /// the main wallet, so every subsequent snapshot/dashboard/flow query
     /// scopes to the new wallet instead of a stale cached address.
-    pub async fn rebind_subject(&mut self) -> Result<(), String> {
-        self.subject = crate::chains::solana::accounts::configured_address_async().await?;
+    pub async fn rebind_subject(&mut self) -> Result<(), Error> {
+        self.subject = crate::chains::solana::accounts::configured_address_async()
+            .await
+            .map_err(|e| Error::Dependency {
+                dependency: "accounts",
+                detail: e,
+            })?;
         Ok(())
     }
 
     /// Initialize database schema with all tables and indexes
-    async fn initialize_schema(&mut self) -> Result<(), String> {
+    async fn initialize_schema(&mut self) -> Result<(), Error> {
         let mut conn = self.get_connection()?;
 
         // Create all tables
         conn.execute(SCHEMA_WALLET_SNAPSHOTS, [])
-            .map_err(|e| format!("Failed to create wallet_snapshots table: {e}"))?;
+            .map_err(DatabaseError::from)?;
 
         conn.execute(SCHEMA_TOKEN_BALANCES, [])
-            .map_err(|e| format!("Failed to create token_balances table: {e}"))?;
+            .map_err(DatabaseError::from)?;
 
         conn.execute(SCHEMA_NFT_BALANCES, [])
-            .map_err(|e| format!("Failed to create nft_balances table: {e}"))?;
+            .map_err(DatabaseError::from)?;
 
         conn.execute(SCHEMA_WALLET_METADATA, [])
-            .map_err(|e| format!("Failed to create wallet_metadata table: {e}"))?;
+            .map_err(DatabaseError::from)?;
 
         // Flow cache tables
         conn.execute(SCHEMA_SOL_FLOW_CACHE, [])
-            .map_err(|e| format!("Failed to create sol_flow_cache table: {e}"))?;
+            .map_err(DatabaseError::from)?;
 
         conn.execute(SCHEMA_WALLET_DASHBOARD_METRICS, [])
-            .map_err(|e| format!("Failed to create wallet_dashboard_metrics table: {e}"))?;
+            .map_err(DatabaseError::from)?;
 
         // Migrate existing schema if needed (add missing columns)
         conn.execute(
@@ -172,17 +182,14 @@ impl WalletDatabase {
 
         // Create all indexes
         for index_sql in WALLET_INDEXES {
-            conn.execute(index_sql, [])
-                .map_err(|e| format!("Failed to create wallet index: {e}"))?;
+            conn.execute(index_sql, []).map_err(DatabaseError::from)?;
         }
         for index_sql in FLOW_CACHE_INDEXES {
-            conn.execute(index_sql, [])
-                .map_err(|e| format!("Failed to create flow cache index: {e}"))?;
+            conn.execute(index_sql, []).map_err(DatabaseError::from)?;
         }
 
         for index_sql in DASHBOARD_METRICS_INDEXES {
-            conn.execute(index_sql, [])
-                .map_err(|e| format!("Failed to create dashboard metrics index: {e}"))?;
+            conn.execute(index_sql, []).map_err(DatabaseError::from)?;
         }
 
         // Set schema version
@@ -190,7 +197,7 @@ impl WalletDatabase {
             "INSERT OR REPLACE INTO wallet_metadata (key, value) VALUES ('schema_version', ?1)",
             params![self.schema_version.to_string()],
         )
-        .map_err(|e| format!("Failed to set wallet schema version: {e}"))?;
+        .map_err(DatabaseError::from)?;
 
         // Store current wallet address in metadata
         conn.execute(
@@ -200,7 +207,7 @@ impl WalletDatabase {
                 self.subject
             ],
         )
-        .map_err(|e| format!("Failed to set current_wallet in metadata: {e}"))?;
+        .map_err(DatabaseError::from)?;
 
         logger::debug(
             LogTag::Wallet,
@@ -222,23 +229,32 @@ impl WalletDatabase {
     /// on drop; the pragma restoration afterward means a crash or error
     /// between the rebuild and the final commit can never leave the pooled
     /// connection mid-transaction or with foreign-key enforcement off.
-    fn migrate_chain_identity(&self, conn: &mut Connection) -> Result<(), String> {
+    fn migrate_chain_identity(&self, conn: &mut Connection) -> Result<(), Error> {
         let has_chain: bool = conn
             .prepare("PRAGMA table_info(wallet_snapshots)")
-            .map_err(|e| format!("Failed to inspect wallet snapshot schema: {e}"))?
+            .map_err(|e| Error::SchemaInspect {
+                table: "wallet_snapshots",
+                detail: e.to_string(),
+            })?
             .query_map([], |row| row.get::<_, String>(1))
-            .map_err(|e| format!("Failed to inspect wallet snapshot schema: {e}"))?
-            .filter_map(Result::ok)
+            .map_err(|e| Error::SchemaInspect {
+                table: "wallet_snapshots",
+                detail: e.to_string(),
+            })?
+            .filter_map(std::result::Result::ok)
             .any(|column| column == "chain_id");
         if has_chain {
             return Ok(());
         }
 
-        fn row_count(conn: &Connection, table: &str) -> Result<i64, String> {
+        fn row_count(conn: &Connection, table: &str) -> Result<i64, Error> {
             conn.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
                 row.get(0)
             })
-            .map_err(|e| format!("Failed to count {table} before wallet chain migration: {e}"))
+            .map_err(|e| Error::Migration {
+                step: format!("count {table}"),
+                detail: e.to_string(),
+            })
         }
         let expected = [
             ("wallet_snapshots", row_count(conn, "wallet_snapshots")?),
@@ -249,51 +265,57 @@ impl WalletDatabase {
             ),
         ];
 
-        conn.pragma_update(None, "foreign_keys", 0).map_err(|e| {
-            format!("Failed to disable foreign_keys for wallet chain migration: {e}")
-        })?;
+        conn.pragma_update(None, "foreign_keys", 0)
+            .map_err(DatabaseError::from)?;
 
-        let migration_result = (|| -> Result<(), String> {
-            let tx = conn
-                .write_tx()
-                .map_err(|e| format!("Failed to begin wallet chain migration: {e}"))?;
+        let migration_result = (|| -> Result<(), Error> {
+            let tx = conn.write_tx().map_err(|e| Error::Migration {
+                step: "begin".to_owned(),
+                detail: e.to_string(),
+            })?;
 
             tx.execute_batch("CREATE TABLE wallet_snapshots__chain_v1 (id INTEGER PRIMARY KEY AUTOINCREMENT, chain_id TEXT NOT NULL DEFAULT 'solana', wallet_address TEXT NOT NULL, snapshot_time TEXT NOT NULL, sol_balance REAL NOT NULL, sol_balance_lamports INTEGER NOT NULL, total_equity_sol REAL, total_tokens_count INTEGER NOT NULL DEFAULT 0, total_nfts_count INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now'))); INSERT INTO wallet_snapshots__chain_v1 (id, chain_id, wallet_address, snapshot_time, sol_balance, sol_balance_lamports, total_equity_sol, total_tokens_count, total_nfts_count, created_at) SELECT id, 'solana', wallet_address, snapshot_time, sol_balance, sol_balance_lamports, total_equity_sol, total_tokens_count, total_nfts_count, created_at FROM wallet_snapshots; DROP TABLE wallet_snapshots; ALTER TABLE wallet_snapshots__chain_v1 RENAME TO wallet_snapshots; CREATE TABLE sol_flow_cache__chain_v1 (chain_id TEXT NOT NULL DEFAULT 'solana', wallet_address TEXT NOT NULL DEFAULT '', signature TEXT NOT NULL, timestamp TEXT NOT NULL, sol_delta REAL NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY(chain_id, wallet_address, signature)); INSERT INTO sol_flow_cache__chain_v1 (chain_id, wallet_address, signature, timestamp, sol_delta, created_at) SELECT 'solana', COALESCE((SELECT value FROM wallet_metadata WHERE key = 'current_wallet'), ''), signature, timestamp, sol_delta, created_at FROM sol_flow_cache; DROP TABLE sol_flow_cache; ALTER TABLE sol_flow_cache__chain_v1 RENAME TO sol_flow_cache; CREATE TABLE wallet_dashboard_metrics__chain_v1 (chain_id TEXT NOT NULL DEFAULT 'solana', wallet_address TEXT NOT NULL DEFAULT '', window_key TEXT NOT NULL, window_hours INTEGER NOT NULL, snapshot_limit INTEGER NOT NULL, token_limit INTEGER NOT NULL, payload_blob BLOB NOT NULL, payload_format TEXT NOT NULL DEFAULT 'json-gzip', computed_at TEXT NOT NULL, valid_until TEXT NOT NULL, computation_duration_ms INTEGER, snapshot_count INTEGER NOT NULL DEFAULT 0, flow_cache_rows INTEGER NOT NULL DEFAULT 0, last_processed_timestamp TEXT, last_processed_signature TEXT, window_start TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')), PRIMARY KEY(chain_id, wallet_address, window_key)); INSERT INTO wallet_dashboard_metrics__chain_v1 (chain_id, wallet_address, window_key, window_hours, snapshot_limit, token_limit, payload_blob, payload_format, computed_at, valid_until, computation_duration_ms, snapshot_count, flow_cache_rows, last_processed_timestamp, last_processed_signature, window_start, created_at, updated_at) SELECT 'solana', COALESCE((SELECT value FROM wallet_metadata WHERE key = 'current_wallet'), ''), window_key, window_hours, snapshot_limit, token_limit, payload_blob, payload_format, computed_at, valid_until, computation_duration_ms, snapshot_count, flow_cache_rows, last_processed_timestamp, last_processed_signature, window_start, created_at, updated_at FROM wallet_dashboard_metrics; DROP TABLE wallet_dashboard_metrics; ALTER TABLE wallet_dashboard_metrics__chain_v1 RENAME TO wallet_dashboard_metrics;")
-                .map_err(|e| format!("Failed to migrate wallet chain identity: {e}"))?;
+                .map_err(|e| Error::Migration { step: "rebuild tables".to_owned(), detail: e.to_string() })?;
 
             for (table, count) in expected {
                 let actual = row_count(&tx, table)?;
                 if actual != count {
-                    return Err(format!("Wallet monitor chain migration changed {table} row count: expected {count}, found {actual}"));
+                    return Err(Error::Migration {
+                        step: format!("row count check ({table})"),
+                        detail: format!("expected {count}, found {actual}"),
+                    });
                 }
             }
             let fk_errors: i64 = tx
                 .query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |row| {
                     row.get(0)
                 })
-                .map_err(|e| format!("Failed to verify wallet chain migration: {e}"))?;
+                .map_err(|e| Error::Migration {
+                    step: "verify foreign keys".to_owned(),
+                    detail: e.to_string(),
+                })?;
             if fk_errors != 0 {
-                return Err(format!(
-                    "Wallet monitor chain migration foreign key check found {fk_errors} errors"
-                ));
+                return Err(Error::Migration {
+                    step: "foreign key check".to_owned(),
+                    detail: format!("found {fk_errors} errors"),
+                });
             }
 
-            tx.commit()
-                .map_err(|e| format!("Failed to commit wallet chain migration: {e}"))
+            tx.commit().map_err(|e| Error::Migration {
+                step: "commit".to_owned(),
+                detail: e.to_string(),
+            })
         })();
 
-        conn.pragma_update(None, "foreign_keys", 1).map_err(|e| {
-            format!("Failed to re-enable foreign_keys after wallet chain migration: {e}")
-        })?;
+        conn.pragma_update(None, "foreign_keys", 1)
+            .map_err(DatabaseError::from)?;
 
         migration_result
     }
 
     /// Get database connection from pool
-    fn get_connection(&self) -> Result<PooledConnection<SqliteConnectionManager>, String> {
-        self.pool
-            .get()
-            .map_err(|e| format!("Failed to get wallet database connection: {e}"))
+    fn get_connection(&self) -> Result<PooledConnection<SqliteConnectionManager>, Error> {
+        self.pool.get().map_err(|e| DatabaseError::from(e).into())
     }
 
     /// Get recent wallet snapshots.
@@ -301,7 +323,7 @@ impl WalletDatabase {
     /// Token/NFT balances are NOT loaded (one query per snapshot would make the home
     /// dashboard's 30-snapshot history 30x more expensive). Callers that need holdings
     /// must use `get_wallet_worth()` (live) or `get_latest_snapshot_with_balances()`.
-    pub fn get_recent_snapshots(&self, limit: usize) -> Result<Vec<WalletSnapshot>, String> {
+    pub fn get_recent_snapshots(&self, limit: usize) -> Result<Vec<WalletSnapshot>, Error> {
         let conn = self.get_connection()?;
 
         let mut stmt = conn
@@ -315,18 +337,17 @@ impl WalletDatabase {
             LIMIT ?3
             "#
             )
-            .map_err(|e| format!("Failed to prepare snapshots query: {e}"))?;
+            .map_err(DatabaseError::from)?;
 
         let snapshot_iter = stmt
             .query_map(params![self.chain.as_str(), self.subject, limit], |row| {
                 Self::map_snapshot_row(row)
             })
-            .map_err(|e| format!("Failed to execute snapshots query: {e}"))?;
+            .map_err(DatabaseError::from)?;
 
         let mut snapshots = Vec::new();
         for snapshot_result in snapshot_iter {
-            snapshots
-                .push(snapshot_result.map_err(|e| format!("Failed to parse snapshot row: {e}"))?);
+            snapshots.push(snapshot_result.map_err(DatabaseError::from)?);
         }
 
         Ok(snapshots)
@@ -336,7 +357,7 @@ impl WalletDatabase {
     ///
     /// Used once at startup to hydrate the live worth cache, so the header and hero
     /// show a real figure before the first collection tick rather than zeroes.
-    pub fn get_latest_snapshot_with_balances(&self) -> Result<Option<WalletSnapshot>, String> {
+    pub fn get_latest_snapshot_with_balances(&self) -> Result<Option<WalletSnapshot>, Error> {
         let mut snapshot = match self.get_recent_snapshots(1)?.into_iter().next() {
             Some(snapshot) => snapshot,
             None => return Ok(None),
@@ -377,7 +398,7 @@ impl WalletDatabase {
     }
 
     /// Get wallet monitoring statistics
-    pub fn get_monitor_stats(&self) -> Result<WalletMonitorStats, String> {
+    pub fn get_monitor_stats(&self) -> Result<WalletMonitorStats, Error> {
         let conn = self.get_connection()?;
 
         let total_snapshots: i64 = conn
@@ -386,7 +407,7 @@ impl WalletDatabase {
                 params![self.chain.as_str(), self.subject],
                 |row| row.get(0),
             )
-            .map_err(|e| format!("Failed to count snapshots: {e}"))?;
+            .map_err(DatabaseError::from)?;
 
         // Get latest snapshot info
         let latest_info: Option<(String, String, f64, i64)> = conn
@@ -402,12 +423,15 @@ impl WalletDatabase {
                 |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
             )
             .optional()
-            .map_err(|e| format!("Failed to get latest snapshot: {e}"))?;
+            .map_err(DatabaseError::from)?;
 
         let (wallet_address, latest_snapshot_time, current_sol_balance, current_tokens_count) =
             if let Some((addr, time_str, balance, count)) = latest_info {
                 let time = DateTime::parse_from_rfc3339(&time_str)
-                    .map_err(|e| format!("Failed to parse latest snapshot time: {e}"))?
+                    .map_err(|e| Error::Migration {
+                        step: "parse latest snapshot time".to_owned(),
+                        detail: e.to_string(),
+                    })?
                     .with_timezone(&Utc);
                 (addr, Some(time), Some(balance), Some(count as u32))
             } else {
@@ -431,10 +455,7 @@ impl WalletDatabase {
     }
 
     /// Get token balances for a specific snapshot
-    pub fn get_token_balances(
-        &self,
-        snapshot_id: i64,
-    ) -> Result<Vec<SnapshotTokenBalance>, String> {
+    pub fn get_token_balances(&self, snapshot_id: i64) -> Result<Vec<SnapshotTokenBalance>, Error> {
         let conn = self.get_connection()?;
 
         let mut stmt = conn
@@ -447,7 +468,7 @@ impl WalletDatabase {
             ORDER BY balance_ui DESC
             "#,
             )
-            .map_err(|e| format!("Failed to prepare token balances query: {e}"))?;
+            .map_err(DatabaseError::from)?;
 
         let balances_iter = stmt
             .query_map(params![snapshot_id, self.chain.as_str()], |row| {
@@ -461,20 +482,18 @@ impl WalletDatabase {
                     is_token_2022: row.get(6)?,
                 })
             })
-            .map_err(|e| format!("Failed to execute token balances query: {e}"))?;
+            .map_err(DatabaseError::from)?;
 
         let mut balances = Vec::new();
         for balance_result in balances_iter {
-            balances.push(
-                balance_result.map_err(|e| format!("Failed to parse token balance row: {e}"))?,
-            );
+            balances.push(balance_result.map_err(DatabaseError::from)?);
         }
 
         Ok(balances)
     }
 
     /// Get NFT balances for a specific snapshot
-    pub fn get_nft_balances(&self, snapshot_id: i64) -> Result<Vec<NftBalance>, String> {
+    pub fn get_nft_balances(&self, snapshot_id: i64) -> Result<Vec<NftBalance>, Error> {
         let conn = self.get_connection()?;
 
         let mut stmt = conn
@@ -487,7 +506,7 @@ impl WalletDatabase {
             ORDER BY name ASC
             "#,
             )
-            .map_err(|e| format!("Failed to prepare nft balances query: {e}"))?;
+            .map_err(DatabaseError::from)?;
 
         let balances_iter = stmt
             .query_map(params![snapshot_id, self.chain.as_str()], |row| {
@@ -502,19 +521,18 @@ impl WalletDatabase {
                     is_token_2022: row.get(7)?,
                 })
             })
-            .map_err(|e| format!("Failed to execute nft balances query: {e}"))?;
+            .map_err(DatabaseError::from)?;
 
         let mut balances = Vec::new();
         for balance_result in balances_iter {
-            balances
-                .push(balance_result.map_err(|e| format!("Failed to parse nft balance row: {e}"))?);
+            balances.push(balance_result.map_err(DatabaseError::from)?);
         }
 
         Ok(balances)
     }
 
     /// Cleanup old snapshots (keep last 1000)
-    pub fn cleanup_old_snapshots(&self) -> Result<u64, String> {
+    pub fn cleanup_old_snapshots(&self) -> Result<u64, Error> {
         let conn = self.get_connection()?;
 
         let deleted_count = conn
@@ -530,7 +548,7 @@ impl WalletDatabase {
             "#,
                 params![self.chain.as_str(), self.subject],
             )
-            .map_err(|e| format!("Failed to cleanup old snapshots: {e}"))?;
+            .map_err(DatabaseError::from)?;
 
         if deleted_count > 0 {
             logger::info(

@@ -16,6 +16,8 @@ use crate::transactions::get_transaction_database;
 use super::dashboard::compute_dashboard_payload_realtime;
 use super::database::GLOBAL_WALLET_DB;
 use super::types::*;
+use crate::errors::InternalError;
+use crate::wallets::Error;
 
 // Constants
 const DEFAULT_PRECOMPUTED_SNAPSHOT_LIMIT: usize = 600;
@@ -128,39 +130,50 @@ static COMPUTATION_FAILURES: LazyLock<Arc<RwLock<HashMap<String, (u32, Instant)>
 // COMPRESSION UTILITIES
 // =============================================================================
 
-fn compress_bytes(raw: &[u8]) -> Result<Vec<u8>, String> {
+fn compress_bytes(raw: &[u8]) -> Result<Vec<u8>, Error> {
     let mut encoder = GzEncoder::new(Vec::new(), Compression::fast());
     encoder
         .write_all(raw)
-        .map_err(|e| format!("Failed to write compressed payload: {e}"))?;
-    encoder
-        .finish()
-        .map_err(|e| format!("Failed to finalize compression: {e}"))
+        .map_err(|e| Error::DashboardPayload {
+            operation: "compress",
+            detail: e.to_string(),
+        })?;
+    encoder.finish().map_err(|e| Error::DashboardPayload {
+        operation: "compress",
+        detail: e.to_string(),
+    })
 }
 
-fn decompress_bytes(raw: &[u8]) -> Result<Vec<u8>, String> {
+fn decompress_bytes(raw: &[u8]) -> Result<Vec<u8>, Error> {
     let mut decoder = GzDecoder::new(raw);
     let mut buffer = Vec::new();
     decoder
         .read_to_end(&mut buffer)
-        .map_err(|e| format!("Failed to decompress payload: {e}"))?;
+        .map_err(|e| Error::DashboardPayload {
+            operation: "decompress",
+            detail: e.to_string(),
+        })?;
     Ok(buffer)
 }
 
-pub(super) fn serialize_dashboard_payload(
-    payload: &WalletDashboardData,
-) -> Result<Vec<u8>, String> {
+pub(super) fn serialize_dashboard_payload(payload: &WalletDashboardData) -> Result<Vec<u8>, Error> {
     let mut sanitized = payload.clone();
     sanitized.cache_metadata = None;
-    let json = serde_json::to_vec(&sanitized)
-        .map_err(|e| format!("Failed to serialize dashboard payload: {e}"))?;
+    let json = serde_json::to_vec(&sanitized).map_err(|e| Error::DashboardPayload {
+        operation: "serialize",
+        detail: e.to_string(),
+    })?;
     compress_bytes(&json)
 }
 
-pub(super) fn deserialize_dashboard_payload(raw: &[u8]) -> Result<WalletDashboardData, String> {
+pub(super) fn deserialize_dashboard_payload(raw: &[u8]) -> Result<WalletDashboardData, Error> {
     let json_bytes = decompress_bytes(raw)?;
-    serde_json::from_slice::<WalletDashboardData>(&json_bytes)
-        .map_err(|e| format!("Failed to deserialize dashboard payload: {e}"))
+    serde_json::from_slice::<WalletDashboardData>(&json_bytes).map_err(|e| {
+        Error::DashboardPayload {
+            operation: "deserialize",
+            detail: e.to_string(),
+        }
+    })
 }
 
 // =============================================================================
@@ -292,7 +305,7 @@ pub(super) async fn compute_and_cache_metrics_internal(
 pub(super) async fn compute_and_cache_metrics(
     window_key: &'static str,
     window_hours: i64,
-) -> Result<(), String> {
+) -> Result<(), Error> {
     let start_time = Instant::now();
 
     logger::debug(
@@ -339,9 +352,11 @@ pub(super) async fn compute_and_cache_metrics(
 
     {
         let db_guard = GLOBAL_WALLET_DB.lock().await;
-        let db = db_guard
-            .as_ref()
-            .ok_or_else(|| "Wallet database not initialized".to_owned())?;
+        let db = db_guard.as_ref().ok_or_else(|| {
+            Error::Internal(InternalError::InvariantViolation {
+                message: "wallet-monitor database not initialized".to_owned(),
+            })
+        })?;
         db.upsert_dashboard_metrics(&cached_entry)?;
     }
 

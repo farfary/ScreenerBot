@@ -47,7 +47,9 @@ use std::sync::{Arc, OnceLock};
 
 use tokio::sync::Notify;
 
+use crate::errors::InternalError;
 use crate::transactions::types::Subject;
+use crate::wallets::Error;
 use crate::{chains::active_chain, config::with_config};
 
 use database::WatchDatabase;
@@ -55,19 +57,25 @@ use database::WatchDatabase;
 /// The global watch database instance, set once by `start()`.
 static GLOBAL_WATCH_DB: OnceLock<WatchDatabase> = OnceLock::new();
 
-fn watch_db() -> Result<WatchDatabase, String> {
-    GLOBAL_WATCH_DB
-        .get()
-        .cloned()
-        .ok_or_else(|| "Watch database not initialized".to_owned())
+fn watch_db() -> Result<WatchDatabase, Error> {
+    GLOBAL_WATCH_DB.get().cloned().ok_or_else(|| {
+        Error::Internal(InternalError::InvariantViolation {
+            message: "watch database not initialized".to_owned(),
+        })
+    })
 }
 
 /// Start the wallet observation service: open `watch_targets` / `watch_cursors`,
 /// resolve the own wallet, and spawn the loop. Called by `WalletWatchService::start()`.
-pub async fn start(shutdown: Arc<Notify>) -> Result<tokio::task::JoinHandle<()>, String> {
-    let chain_runtime = runtime::get_runtime().map_err(|e| e.to_string())?;
-    let own_subject =
-        Subject::own().map_err(|e| format!("Cannot resolve own wallet for watch service: {e}"))?;
+pub async fn start(shutdown: Arc<Notify>) -> Result<tokio::task::JoinHandle<()>, Error> {
+    let chain_runtime = runtime::get_runtime().map_err(|e| Error::ChainRuntime {
+        operation: "get_runtime",
+        detail: e.to_string(),
+    })?;
+    let own_subject = Subject::own().map_err(|e| Error::ChainRuntime {
+        operation: "resolve_own_subject",
+        detail: e.to_string(),
+    })?;
 
     let db = WatchDatabase::new(active_chain())?;
     let _ = GLOBAL_WATCH_DB.set(db.clone());
@@ -93,17 +101,17 @@ pub fn is_healthy() -> bool {
 /// Every watched target (alert-only in this phase). Does not include the own
 /// wallet -- it is not a row in `watch_targets`, and is surfaced separately by
 /// whatever UI wants to show it is always-on.
-pub async fn list_targets() -> Result<Vec<WatchTarget>, String> {
+pub async fn list_targets() -> Result<Vec<WatchTarget>, Error> {
     watch_db()?.list_targets().await
 }
 
-pub async fn get_target(id: i64) -> Result<Option<WatchTarget>, String> {
+pub async fn get_target(id: i64) -> Result<Option<WatchTarget>, Error> {
     watch_db()?.get_target(id).await
 }
 
 /// Resolve a watched target by its public address. Used by subject-scoped read APIs
 /// to ensure arbitrary addresses cannot be queried merely by knowing the endpoint.
-pub async fn get_target_by_address(address: &str) -> Result<Option<WatchTarget>, String> {
+pub async fn get_target_by_address(address: &str) -> Result<Option<WatchTarget>, Error> {
     watch_db()?.get_target_by_address(address).await
 }
 
@@ -113,18 +121,24 @@ pub async fn get_target_by_address(address: &str) -> Result<Option<WatchTarget>,
 /// own wallet as a "target" is a different thing, handled implicitly by
 /// `WatchSource::OwnWallet`) and an address already watched, and enforces
 /// `wallet.watch_max_targets`.
-pub async fn add_target(address: &str, label: Option<&str>) -> Result<WatchTarget, String> {
+pub async fn add_target(address: &str, label: Option<&str>) -> Result<WatchTarget, Error> {
     if !with_config(|cfg| cfg.wallet.watch_enabled) {
-        return Err(
-            "Wallet watching is disabled (wallet.watch_enabled) -- enable it in Config first"
-                .to_owned(),
-        );
+        return Err(Error::InvalidWatchAddress {
+            value:
+                "wallet watching is disabled (wallet.watch_enabled) -- enable it in Config first"
+                    .to_owned(),
+        });
     }
 
     runtime::get_runtime()
-        .map_err(|e| e.to_string())?
+        .map_err(|e| Error::ChainRuntime {
+            operation: "get_runtime",
+            detail: e.to_string(),
+        })?
         .resolve_subject(address)
-        .map_err(|e| format!("Invalid watch address: {e}"))?;
+        .map_err(|e| Error::InvalidWatchAddress {
+            value: format!("{address}: {e}"),
+        })?;
 
     let own_wallets = crate::wallets::list_wallets(true).await?;
     let db = watch_db()?;
@@ -150,29 +164,31 @@ fn validate_target_constraints(
     own_addresses: &[String],
     current: &[WatchTarget],
     max_targets: usize,
-) -> Result<(), String> {
+) -> Result<(), Error> {
     if own_addresses.iter().any(|own| own == address) {
-        return Err(
-            "This address is already one of your own wallets, not a target to watch".to_owned(),
-        );
+        return Err(Error::InvalidWatchAddress {
+            value: "this address is already one of your own wallets, not a target to watch"
+                .to_owned(),
+        });
     }
     if current.iter().any(|target| target.address == address) {
-        return Err(format!("{address} is already watched"));
+        return Err(Error::InvalidWatchAddress {
+            value: format!("{address} is already watched"),
+        });
     }
     if current.len() >= max_targets {
-        return Err(format!(
-            "Watch target limit reached ({max_targets}); remove one before adding another"
-        ));
+        return Err(Error::InvalidBatchRequest {
+            detail: "watch target limit reached; remove one before adding another",
+        });
     }
     Ok(())
 }
 
-pub async fn remove_target(id: i64) -> Result<(), String> {
+pub async fn remove_target(id: i64) -> Result<(), Error> {
     let db = watch_db()?;
-    let target = db
-        .get_target(id)
-        .await?
-        .ok_or_else(|| format!("Watch target {id} not found"))?;
+    let target = db.get_target(id).await?.ok_or(Error::WatchTargetNotFound {
+        address: format!("id={id}"),
+    })?;
     db.remove_source(&target.address, WatchSource::Alert { rule_id: id })
         .await?;
     service::request_reload();
@@ -185,21 +201,30 @@ pub async fn add_copy_source(
     task_id: i64,
     address: &str,
     label: Option<&str>,
-) -> Result<WatchTarget, String> {
+) -> Result<WatchTarget, Error> {
     runtime::get_runtime()
-        .map_err(|e| e.to_string())?
+        .map_err(|e| Error::ChainRuntime {
+            operation: "get_runtime",
+            detail: e.to_string(),
+        })?
         .resolve_subject(address)
-        .map_err(|e| format!("Invalid watch address: {e}"))?;
+        .map_err(|e| Error::InvalidWatchAddress {
+            value: format!("{address}: {e}"),
+        })?;
     let own_wallets = crate::wallets::list_wallets(true).await?;
     if own_wallets.iter().any(|wallet| wallet.address == address) {
-        return Err("This address is one of your own wallets and cannot be copied".to_owned());
+        return Err(Error::InvalidWatchAddress {
+            value: "this address is one of your own wallets and cannot be copied".to_owned(),
+        });
     }
     let db = watch_db()?;
     let current = db.list_targets().await?;
     if !current.iter().any(|target| target.address == address) {
         let max_targets = with_config(|cfg| cfg.wallet.watch_max_targets);
         if current.len() >= max_targets {
-            return Err(format!("Watch target limit reached ({max_targets})"));
+            return Err(Error::InvalidBatchRequest {
+                detail: "watch target limit reached",
+            });
         }
     }
     let target = db
@@ -209,7 +234,7 @@ pub async fn add_copy_source(
     Ok(target)
 }
 
-pub async fn remove_copy_source(task_id: i64, address: &str) -> Result<(), String> {
+pub async fn remove_copy_source(task_id: i64, address: &str) -> Result<(), Error> {
     watch_db()?
         .remove_source(address, WatchSource::Copy { task_id })
         .await?;
@@ -217,7 +242,7 @@ pub async fn remove_copy_source(task_id: i64, address: &str) -> Result<(), Strin
     Ok(())
 }
 
-pub async fn set_target_enabled(id: i64, enabled: bool) -> Result<(), String> {
+pub async fn set_target_enabled(id: i64, enabled: bool) -> Result<(), Error> {
     watch_db()?.set_enabled(id, enabled).await?;
     service::request_reload();
     Ok(())
@@ -225,12 +250,11 @@ pub async fn set_target_enabled(id: i64, enabled: bool) -> Result<(), String> {
 
 /// Per-target status: whether the shared transport is currently connected, when its
 /// cursor last advanced, and what it last advanced to.
-pub async fn get_status(id: i64) -> Result<WatchStatus, String> {
+pub async fn get_status(id: i64) -> Result<WatchStatus, Error> {
     let db = watch_db()?;
-    let target = db
-        .get_target(id)
-        .await?
-        .ok_or_else(|| format!("Watch target {id} not found"))?;
+    let target = db.get_target(id).await?.ok_or(Error::WatchTargetNotFound {
+        address: format!("id={id}"),
+    })?;
 
     let last_signature = db.get_cursor(&target.address).await?;
     let last_activity_at = db.get_cursor_updated_at(&target.address).await?;

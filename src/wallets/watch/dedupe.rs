@@ -11,22 +11,30 @@
 //! produce; committing after dispatch would let a crash between the two re-emit on
 //! the next run.
 
+use crate::errors::InternalError;
 use crate::logger::{self, LogTag};
 use crate::transactions::database::{get_transaction_database, TransactionDatabase};
 use crate::transactions::types::Subject;
 use crate::transactions::utils::{add_signature_to_known_globally, is_signature_known_globally};
+use crate::wallets::Error;
+
+fn transactions_db_not_initialized() -> Error {
+    Error::Internal(InternalError::InvariantViolation {
+        message: "transaction database not initialized".to_owned(),
+    })
+}
 
 /// True when `signature` has already been recorded for `subject`. Checks the fast
 /// in-memory cache first, falling back to the database -- the source of truth across
 /// restarts, when the in-memory cache is cold.
-pub(super) async fn has_seen(subject: Subject, signature: &str) -> Result<bool, String> {
+pub(super) async fn has_seen(subject: Subject, signature: &str) -> Result<bool, Error> {
     if is_signature_known_globally(subject.clone(), signature).await {
         return Ok(true);
     }
 
     match get_transaction_database().await {
         Some(db) => has_seen_in_database(&db, subject, signature).await,
-        None => Err("Transaction database not initialized".to_owned()),
+        None => Err(transactions_db_not_initialized()),
     }
 }
 
@@ -34,10 +42,10 @@ pub(super) async fn has_seen(subject: Subject, signature: &str) -> Result<bool, 
 /// database. Durability is part of success: callers must not advance the watch
 /// cursor or publish activity when the database write fails, otherwise a restart
 /// can re-emit something that was only marked in memory.
-pub(super) async fn commit(subject: Subject, signature: &str) -> Result<(), String> {
+pub(super) async fn commit(subject: Subject, signature: &str) -> Result<(), Error> {
     let db = get_transaction_database()
         .await
-        .ok_or_else(|| "Transaction database not initialized".to_owned())?;
+        .ok_or_else(transactions_db_not_initialized)?;
     commit_to_database(&db, subject.clone(), signature)
         .await
         .map_err(|e| {
@@ -55,22 +63,16 @@ async fn has_seen_in_database(
     db: &TransactionDatabase,
     subject: Subject,
     signature: &str,
-) -> Result<bool, String> {
-    // SEAM: wallets still returns String errors; removed when it migrates.
-    db.is_signature_known(subject, signature)
-        .await
-        .map_err(|e| e.to_string())
+) -> Result<bool, Error> {
+    Ok(db.is_signature_known(subject, signature).await?)
 }
 
 async fn commit_to_database(
     db: &TransactionDatabase,
     subject: Subject,
     signature: &str,
-) -> Result<(), String> {
-    // SEAM: wallets still returns String errors; removed when it migrates.
-    db.add_known_signature(subject, signature)
-        .await
-        .map_err(|e| e.to_string())
+) -> Result<(), Error> {
+    Ok(db.add_known_signature(subject, signature).await?)
 }
 
 #[cfg(test)]

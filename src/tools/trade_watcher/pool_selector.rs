@@ -5,6 +5,7 @@
 use super::types::{PoolInfo, PoolSource};
 use crate::apis::manager::get_api_manager;
 use crate::logger::{self, LogTag};
+use crate::tools::Error;
 
 /// Search for all pools of a token from both GeckoTerminal and DexScreener
 ///
@@ -15,7 +16,7 @@ use crate::logger::{self, LogTag};
 ///
 /// # Returns
 /// Vec of PoolInfo from both sources, deduplicated and sorted by liquidity
-pub async fn search_pools(token_mint: &str) -> Result<Vec<PoolInfo>, String> {
+pub async fn search_pools(token_mint: &str) -> Result<Vec<PoolInfo>, Error> {
     let mut pools = Vec::new();
     let api_manager = get_api_manager();
 
@@ -136,7 +137,7 @@ pub async fn search_pools(token_mint: &str) -> Result<Vec<PoolInfo>, String> {
 }
 
 /// Get the best pool for a token (highest liquidity)
-pub async fn get_best_pool(token_mint: &str) -> Result<Option<PoolInfo>, String> {
+pub async fn get_best_pool(token_mint: &str) -> Result<Option<PoolInfo>, Error> {
     let pools = search_pools(token_mint).await?;
     Ok(pools.into_iter().next())
 }
@@ -145,7 +146,7 @@ pub async fn get_best_pool(token_mint: &str) -> Result<Option<PoolInfo>, String>
 pub async fn search_pools_with_min_liquidity(
     token_mint: &str,
     min_liquidity_usd: f64,
-) -> Result<Vec<PoolInfo>, String> {
+) -> Result<Vec<PoolInfo>, Error> {
     let pools = search_pools(token_mint).await?;
     Ok(pools
         .into_iter()
@@ -157,7 +158,7 @@ pub async fn search_pools_with_min_liquidity(
 pub async fn search_pools_by_source(
     token_mint: &str,
     source: PoolSource,
-) -> Result<Vec<PoolInfo>, String> {
+) -> Result<Vec<PoolInfo>, Error> {
     let mut pools = Vec::new();
     let api_manager = get_api_manager();
 
@@ -190,7 +191,12 @@ pub async fn search_pools_by_source(
                         });
                     }
                 }
-                Err(e) => return Err(format!("GeckoTerminal search failed: {e}")),
+                Err(e) => {
+                    return Err(Error::Search {
+                        provider: "geckoterminal",
+                        detail: e.to_string(),
+                    })
+                }
             }
         }
         PoolSource::DexScreener => {
@@ -215,7 +221,12 @@ pub async fn search_pools_by_source(
                         });
                     }
                 }
-                Err(e) => return Err(format!("DexScreener search failed: {e}")),
+                Err(e) => {
+                    return Err(Error::Search {
+                        provider: "dexscreener",
+                        detail: e.to_string(),
+                    })
+                }
             }
         }
     }

@@ -42,7 +42,7 @@ pub async fn list_wallets(Query(query): Query<ListWalletsQuery>) -> Response {
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "LIST_ERROR",
                 "Failed to list wallets",
-                Some(&e),
+                Some(&e.to_string()),
             )
         }
     }
@@ -71,7 +71,7 @@ pub async fn create_wallet(Json(request): Json<CreateWalletRequest>) -> Response
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "CREATE_ERROR",
                 "Failed to create wallet",
-                Some(&e),
+                Some(&e.to_string()),
             )
         }
     }
@@ -108,9 +108,10 @@ pub async fn import_wallet(Json(request): Json<ImportWalletRequest>) -> Response
             logger::error(LogTag::Wallet, &format!("Failed to import wallet: {e}"));
 
             // Check for specific error types
-            let (status, code, msg) = if e.contains("already exists") {
+            let e_str = e.to_string();
+            let (status, code, msg) = if e_str.contains("already exists") {
                 (StatusCode::CONFLICT, "DUPLICATE", "Wallet already exists")
-            } else if e.contains("Invalid") {
+            } else if e_str.contains("Invalid") {
                 (
                     StatusCode::BAD_REQUEST,
                     "INVALID_KEY",
@@ -124,7 +125,7 @@ pub async fn import_wallet(Json(request): Json<ImportWalletRequest>) -> Response
                 )
             };
 
-            error_response(status, code, msg, Some(&e))
+            error_response(status, code, msg, Some(&e_str))
         }
     }
 }
@@ -139,7 +140,7 @@ pub async fn get_summary() -> Response {
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "SUMMARY_ERROR",
                 "Failed to get wallets summary",
-                Some(&e),
+                Some(&e.to_string()),
             )
         }
     }
@@ -161,7 +162,7 @@ pub async fn get_main_wallet() -> Response {
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "MAIN_WALLET_ERROR",
                 "Failed to get main wallet",
-                Some(&e),
+                Some(&e.to_string()),
             )
         }
     }
@@ -178,7 +179,7 @@ pub async fn get_wallet(Path(id): Path<i64>) -> Response {
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "GET_ERROR",
                 "Failed to get wallet",
-                Some(&e),
+                Some(&e.to_string()),
             )
         }
     }
@@ -200,7 +201,7 @@ pub async fn update_wallet(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "UPDATE_ERROR",
                 "Failed to update wallet",
-                Some(&e),
+                Some(&e.to_string()),
             )
         }
     }
@@ -218,13 +219,14 @@ pub async fn delete_wallet(Path(id): Path<i64>) -> Response {
                 &format!("Failed to delete wallet {id}: {e}"),
             );
 
-            let (status, code) = if e.contains("main wallet") {
+            let e_str = e.to_string();
+            let (status, code) = if e_str.contains("main wallet") {
                 (StatusCode::BAD_REQUEST, "MAIN_WALLET")
             } else {
                 (StatusCode::INTERNAL_SERVER_ERROR, "DELETE_ERROR")
             };
 
-            error_response(status, code, "Failed to delete wallet", Some(&e))
+            error_response(status, code, "Failed to delete wallet", Some(&e_str))
         }
     }
 }
@@ -242,7 +244,7 @@ pub async fn export_wallet(Path(id): Path<i64>) -> Response {
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "EXPORT_ERROR",
                 "Failed to export wallet",
-                Some(&e),
+                Some(&e.to_string()),
             )
         }
     }
@@ -264,7 +266,7 @@ pub async fn set_main_wallet(Path(id): Path<i64>) -> Response {
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "SET_MAIN_ERROR",
                 "Failed to set main wallet",
-                Some(&e),
+                Some(&e.to_string()),
             )
         }
     }
@@ -282,13 +284,14 @@ pub async fn archive_wallet(Path(id): Path<i64>) -> Response {
                 &format!("Failed to archive wallet {id}: {e}"),
             );
 
-            let (status, code) = if e.contains("main wallet") {
+            let e_str = e.to_string();
+            let (status, code) = if e_str.contains("main wallet") {
                 (StatusCode::BAD_REQUEST, "MAIN_WALLET")
             } else {
                 (StatusCode::INTERNAL_SERVER_ERROR, "ARCHIVE_ERROR")
             };
 
-            error_response(status, code, "Failed to archive wallet", Some(&e))
+            error_response(status, code, "Failed to archive wallet", Some(&e_str))
         }
     }
 }
@@ -305,13 +308,14 @@ pub async fn restore_wallet(Path(id): Path<i64>) -> Response {
                 &format!("Failed to restore wallet {id}: {e}"),
             );
 
-            let (status, code) = if e.contains("not archived") {
+            let e_str = e.to_string();
+            let (status, code) = if e_str.contains("not archived") {
                 (StatusCode::BAD_REQUEST, "NOT_ARCHIVED")
             } else {
                 (StatusCode::INTERNAL_SERVER_ERROR, "RESTORE_ERROR")
             };
 
-            error_response(status, code, "Failed to restore wallet", Some(&e))
+            error_response(status, code, "Failed to restore wallet", Some(&e_str))
         }
     }
 }

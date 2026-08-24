@@ -5,6 +5,7 @@ use crate::chains::solana::accounts::{fetch_wallet_sol_balance, fetch_wallet_tok
 use crate::chains::solana::constants::RENT_EXEMPT_MINIMUM_LAMPORTS;
 use crate::logger::{self, LogTag};
 
+use super::super::error::Error;
 use super::super::types::{SimpleTokenBalance, WalletBalanceSummary, WalletWithTokenBalance};
 use super::list_active_wallets;
 
@@ -39,7 +40,7 @@ fn reclaimable_ata_rent(empty_ata_count: u32) -> f64 {
 pub async fn get_wallets_with_token(
     token_mint: &str,
     min_balance: Option<f64>,
-) -> Result<Vec<WalletWithTokenBalance>, String> {
+) -> Result<Vec<WalletWithTokenBalance>, Error> {
     let wallets = list_active_wallets().await?;
     let min_balance = min_balance.unwrap_or_default();
 
@@ -90,7 +91,7 @@ pub async fn get_wallets_with_token(
 ///
 /// # Returns
 /// Vector of wallet balance summaries with SOL, token counts, and reclaimable rent
-pub async fn get_all_wallet_balances() -> Result<Vec<WalletBalanceSummary>, String> {
+pub async fn get_all_wallet_balances() -> Result<Vec<WalletBalanceSummary>, Error> {
     let wallets = list_active_wallets().await?;
 
     let mut results = Vec::new();

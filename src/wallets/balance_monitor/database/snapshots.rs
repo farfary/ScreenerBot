@@ -5,13 +5,16 @@ use rusqlite::{params, OptionalExtension};
 
 use crate::logger::{self, LogTag};
 
+use crate::errors::DatabaseError;
+use crate::wallets::Error;
+
 use super::super::cache::update_wallet_snapshot_status;
 use super::super::types::WalletSnapshot;
 use super::WalletDatabase;
 
 impl WalletDatabase {
     /// Save wallet snapshot with token balances
-    pub fn save_wallet_snapshot(&self, snapshot: &WalletSnapshot) -> Result<i64, String> {
+    pub fn save_wallet_snapshot(&self, snapshot: &WalletSnapshot) -> Result<i64, Error> {
         let conn = self.get_connection()?;
 
         // Insert wallet snapshot
@@ -34,7 +37,7 @@ impl WalletDatabase {
                 ],
                 |row| row.get::<_, i64>(0),
             )
-            .map_err(|e| format!("Failed to insert wallet snapshot: {e}"))?;
+            .map_err(DatabaseError::from)?;
 
         // Insert token balances
         for token_balance in &snapshot.token_balances {
@@ -53,7 +56,7 @@ impl WalletDatabase {
                     token_balance.is_token_2022
                 ],
             )
-            .map_err(|e| format!("Failed to insert token balance: {e}"))?;
+            .map_err(DatabaseError::from)?;
         }
 
         // Insert NFT balances
@@ -74,7 +77,7 @@ impl WalletDatabase {
                     nft_balance.is_token_2022
                 ],
             )
-            .map_err(|e| format!("Failed to insert NFT balance: {e}"))?;
+            .map_err(DatabaseError::from)?;
         }
 
         logger::debug(
@@ -101,7 +104,7 @@ impl WalletDatabase {
     /// equal to its entire holdings value, every day. Rows predating the equity column
     /// fall back to their SOL balance.
     /// Uses idx_wallet_snapshots_time index for fast descending time lookup.
-    pub fn get_balance_at_time(&self, target_time: DateTime<Utc>) -> Result<Option<f64>, String> {
+    pub fn get_balance_at_time(&self, target_time: DateTime<Utc>) -> Result<Option<f64>, Error> {
         let conn = self.get_connection()?;
 
         let result = conn
@@ -117,7 +120,7 @@ impl WalletDatabase {
                 |row| row.get(0),
             )
             .optional()
-            .map_err(|e| format!("Failed to query balance at time: {e}"))?;
+            .map_err(DatabaseError::from)?;
 
         Ok(result)
     }
@@ -129,7 +132,7 @@ impl WalletDatabase {
         &self,
         start: DateTime<Utc>,
         end: DateTime<Utc>,
-    ) -> Result<Vec<(String, f64)>, String> {
+    ) -> Result<Vec<(String, f64)>, Error> {
         let conn = self.get_connection()?;
 
         let mut stmt = conn
@@ -148,7 +151,7 @@ impl WalletDatabase {
             ORDER BY day ASC
             "#,
             )
-            .map_err(|e| format!("Failed to prepare daily balances query: {e}"))?;
+            .map_err(DatabaseError::from)?;
 
         let rows = stmt
             .query_map(
@@ -160,17 +163,17 @@ impl WalletDatabase {
                 ],
                 |row| Ok((row.get::<_, String>(0)?, row.get::<_, f64>(1)?)),
             )
-            .map_err(|e| format!("Failed to execute daily balances query: {e}"))?;
+            .map_err(DatabaseError::from)?;
 
         let mut result = Vec::new();
         for row in rows {
-            result.push(row.map_err(|e| format!("Failed to read daily balance row: {e}"))?);
+            result.push(row.map_err(DatabaseError::from)?);
         }
         Ok(result)
     }
 
     /// Get the most recent snapshot timestamp (if any) without loading token data
-    pub fn get_latest_snapshot_time(&self) -> Result<Option<DateTime<Utc>>, String> {
+    pub fn get_latest_snapshot_time(&self) -> Result<Option<DateTime<Utc>>, Error> {
         let conn = self.get_connection()?;
 
         let snapshot_time_str: Option<String> = conn
@@ -186,11 +189,14 @@ impl WalletDatabase {
                 |row| row.get(0),
             )
             .optional()
-            .map_err(|e| format!("Failed to fetch latest wallet snapshot time: {e}"))?;
+            .map_err(DatabaseError::from)?;
 
         if let Some(ts_str) = snapshot_time_str {
             let timestamp = DateTime::parse_from_rfc3339(&ts_str)
-                .map_err(|_| format!("Invalid snapshot_time stored: {ts_str}"))?
+                .map_err(|_| DatabaseError::Query {
+                    operation: "get_latest_snapshot_time".to_owned(),
+                    message: format!("invalid snapshot_time stored: {ts_str}"),
+                })?
                 .with_timezone(&Utc);
             Ok(Some(timestamp))
         } else {

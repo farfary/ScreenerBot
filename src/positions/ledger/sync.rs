@@ -648,7 +648,7 @@ fn short_mint(mint: &str) -> String {
 /// rather than corrupting an existing position. Safe to call repeatedly — a wallet whose
 /// history has not moved produces an empty plan and writes nothing.
 pub async fn sync_wallet_history() -> super::super::error::Result<SyncSummary> {
-    use crate::positions::error::Error;
+    use crate::positions::Error;
 
     let wallet_address =
         crate::utils::get_wallet_address().map_err(|e| Error::WalletUnavailable {

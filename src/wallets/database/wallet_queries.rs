@@ -7,6 +7,8 @@ use rusqlite::{params, OptionalExtension};
 
 use super::super::types::{Wallet, WalletRole, WalletType};
 use super::WalletsDatabase;
+use crate::errors::DatabaseError;
+use crate::wallets::Error;
 
 impl WalletsDatabase {
     /// Insert a new wallet
@@ -19,7 +21,7 @@ impl WalletsDatabase {
         role: WalletRole,
         wallet_type: WalletType,
         notes: Option<&str>,
-    ) -> Result<i64, String> {
+    ) -> Result<i64, Error> {
         let conn = self.conn()?;
         let now = Utc::now().to_rfc3339();
 
@@ -41,9 +43,13 @@ impl WalletsDatabase {
         )
         .map_err(|e| {
             if e.to_string().contains("UNIQUE constraint failed") {
-                format!("Wallet with address {address} already exists")
+                DatabaseError::Query {
+                    operation: "insert_wallet".to_owned(),
+                    message: format!("wallet with address {address} already exists"),
+                }
+                .into()
             } else {
-                format!("Failed to insert wallet: {e}")
+                Error::Database(DatabaseError::from(e))
             }
         })?;
 
@@ -51,7 +57,7 @@ impl WalletsDatabase {
     }
 
     /// Get a wallet by ID
-    pub fn get_wallet(&self, id: i64) -> Result<Option<Wallet>, String> {
+    pub fn get_wallet(&self, id: i64) -> Result<Option<Wallet>, Error> {
         let conn = self.conn()?;
 
         conn.query_row(
@@ -63,11 +69,12 @@ impl WalletsDatabase {
             |row| Self::row_to_wallet(row),
         )
         .optional()
-        .map_err(|e| format!("Failed to get wallet: {e}"))
+        .map_err(DatabaseError::from)
+        .map_err(Error::from)
     }
 
     /// Get a wallet by address
-    pub fn get_wallet_by_address(&self, address: &str) -> Result<Option<Wallet>, String> {
+    pub fn get_wallet_by_address(&self, address: &str) -> Result<Option<Wallet>, Error> {
         let conn = self.conn()?;
 
         conn.query_row(
@@ -79,11 +86,12 @@ impl WalletsDatabase {
             |row| Self::row_to_wallet(row),
         )
         .optional()
-        .map_err(|e| format!("Failed to get wallet by address: {e}"))
+        .map_err(DatabaseError::from)
+        .map_err(Error::from)
     }
 
     /// Get the main wallet
-    pub fn get_main_wallet(&self) -> Result<Option<Wallet>, String> {
+    pub fn get_main_wallet(&self) -> Result<Option<Wallet>, Error> {
         let conn = self.conn()?;
 
         conn.query_row(
@@ -95,11 +103,12 @@ impl WalletsDatabase {
             |row| Self::row_to_wallet(row),
         )
         .optional()
-        .map_err(|e| format!("Failed to get main wallet: {e}"))
+        .map_err(DatabaseError::from)
+        .map_err(Error::from)
     }
 
     /// Get encrypted key data for a wallet
-    pub fn get_wallet_encrypted_key(&self, id: i64) -> Result<Option<(String, String)>, String> {
+    pub fn get_wallet_encrypted_key(&self, id: i64) -> Result<Option<(String, String)>, Error> {
         let conn = self.conn()?;
 
         conn.query_row(
@@ -108,11 +117,12 @@ impl WalletsDatabase {
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .optional()
-        .map_err(|e| format!("Failed to get encrypted key: {e}"))
+        .map_err(DatabaseError::from)
+        .map_err(Error::from)
     }
 
     /// Get encrypted key data for main wallet
-    pub fn get_main_wallet_encrypted_key(&self) -> Result<Option<(String, String)>, String> {
+    pub fn get_main_wallet_encrypted_key(&self) -> Result<Option<(String, String)>, Error> {
         let conn = self.conn()?;
 
         conn.query_row(
@@ -121,11 +131,12 @@ impl WalletsDatabase {
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .optional()
-        .map_err(|e| format!("Failed to get main wallet encrypted key: {e}"))
+        .map_err(DatabaseError::from)
+        .map_err(Error::from)
     }
 
     /// List all wallets
-    pub fn list_wallets(&self, include_inactive: bool) -> Result<Vec<Wallet>, String> {
+    pub fn list_wallets(&self, include_inactive: bool) -> Result<Vec<Wallet>, Error> {
         let conn = self.conn()?;
 
         let sql = if include_inactive {
@@ -140,21 +151,19 @@ impl WalletsDatabase {
             "#
         };
 
-        let mut stmt = conn
-            .prepare(sql)
-            .map_err(|e| format!("Failed to prepare statement: {e}"))?;
+        let mut stmt = conn.prepare(sql).map_err(DatabaseError::from)?;
 
         let wallets = stmt
             .query_map(params![self.chain.as_str()], |row| Self::row_to_wallet(row))
-            .map_err(|e| format!("Failed to query wallets: {e}"))?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| format!("Failed to collect wallets: {e}"))?;
+            .map_err(DatabaseError::from)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(DatabaseError::from)?;
 
         Ok(wallets)
     }
 
     /// List active wallets (main + secondary)
-    pub fn list_active_wallets(&self) -> Result<Vec<Wallet>, String> {
+    pub fn list_active_wallets(&self) -> Result<Vec<Wallet>, Error> {
         let conn = self.conn()?;
 
         let mut stmt = conn
@@ -165,24 +174,24 @@ impl WalletsDatabase {
             ORDER BY role = 'main' DESC, created_at DESC
             "#,
             )
-            .map_err(|e| format!("Failed to prepare statement: {e}"))?;
+            .map_err(DatabaseError::from)?;
 
         let wallets = stmt
             .query_map(params![self.chain.as_str()], |row| Self::row_to_wallet(row))
-            .map_err(|e| format!("Failed to query wallets: {e}"))?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| format!("Failed to collect wallets: {e}"))?;
+            .map_err(DatabaseError::from)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(DatabaseError::from)?;
 
         Ok(wallets)
     }
 
     /// Set a wallet as main (unsets previous main)
-    pub fn set_main_wallet(&self, id: i64) -> Result<(), String> {
+    pub fn set_main_wallet(&self, id: i64) -> Result<(), Error> {
         let conn = self.conn()?;
 
         // Start transaction
         conn.execute("BEGIN IMMEDIATE", [])
-            .map_err(|e| format!("Failed to begin transaction: {e}"))?;
+            .map_err(DatabaseError::from)?;
 
         // Unset current main wallet
         if let Err(e) = conn.execute(
@@ -190,7 +199,7 @@ impl WalletsDatabase {
             params![self.chain.as_str()],
         ) {
             let _ = conn.execute("ROLLBACK", []);
-            return Err(format!("Failed to unset main wallet: {e}"));
+            return Err(DatabaseError::from(e).into());
         }
 
         // Set new main wallet
@@ -201,16 +210,17 @@ impl WalletsDatabase {
             )
             .map_err(|e| {
                 let _ = conn.execute("ROLLBACK", []);
-                format!("Failed to set main wallet: {e}")
+                DatabaseError::from(e)
             })?;
 
         if updated == 0 {
             let _ = conn.execute("ROLLBACK", []);
-            return Err("Wallet not found or inactive".to_owned());
+            return Err(Error::WalletNotFound {
+                address: format!("id={id}"),
+            });
         }
 
-        conn.execute("COMMIT", [])
-            .map_err(|e| format!("Failed to commit transaction: {e}"))?;
+        conn.execute("COMMIT", []).map_err(DatabaseError::from)?;
 
         Ok(())
     }
@@ -222,7 +232,7 @@ impl WalletsDatabase {
         name: Option<&str>,
         notes: Option<&str>,
         role: Option<WalletRole>,
-    ) -> Result<(), String> {
+    ) -> Result<(), Error> {
         let conn = self.conn()?;
 
         // Build dynamic update query
@@ -258,7 +268,7 @@ impl WalletsDatabase {
         // If changing role to main, wrap in transaction like set_main_wallet does
         if changing_to_main {
             conn.execute("BEGIN IMMEDIATE", [])
-                .map_err(|e| format!("Failed to begin transaction: {e}"))?;
+                .map_err(DatabaseError::from)?;
 
             // Unset current main wallet
             if let Err(e) = conn.execute(
@@ -266,29 +276,28 @@ impl WalletsDatabase {
                 params![self.chain.as_str()],
             ) {
                 let _ = conn.execute("ROLLBACK", []);
-                return Err(format!("Failed to unset main: {e}"));
+                return Err(DatabaseError::from(e).into());
             }
 
             // Apply the update
             let params: Vec<&dyn rusqlite::ToSql> = values.iter().map(|v| v.as_ref()).collect();
             if let Err(e) = conn.execute(&sql, params.as_slice()) {
                 let _ = conn.execute("ROLLBACK", []);
-                return Err(format!("Failed to update wallet: {e}"));
+                return Err(DatabaseError::from(e).into());
             }
 
-            conn.execute("COMMIT", [])
-                .map_err(|e| format!("Failed to commit transaction: {e}"))?;
+            conn.execute("COMMIT", []).map_err(DatabaseError::from)?;
         } else {
             let params: Vec<&dyn rusqlite::ToSql> = values.iter().map(|v| v.as_ref()).collect();
             conn.execute(&sql, params.as_slice())
-                .map_err(|e| format!("Failed to update wallet: {e}"))?;
+                .map_err(DatabaseError::from)?;
         }
 
         Ok(())
     }
 
     /// Soft delete (archive) a wallet
-    pub fn archive_wallet(&self, id: i64) -> Result<(), String> {
+    pub fn archive_wallet(&self, id: i64) -> Result<(), Error> {
         let conn = self.conn()?;
 
         // Check if it's the main wallet
@@ -299,26 +308,27 @@ impl WalletsDatabase {
                 |row| row.get(0),
             )
             .optional()
-            .map_err(|e| format!("Failed to check wallet: {e}"))?
+            .map_err(DatabaseError::from)?
             .unwrap_or_default();
 
         if is_main {
-            return Err(
-                "Cannot archive the main wallet. Set another wallet as main first.".to_owned(),
-            );
+            return Err(Error::InvalidWalletState {
+                id,
+                detail: "cannot archive the main wallet; set another wallet as main first",
+            });
         }
 
         conn.execute(
             "UPDATE wallets SET is_active = 0, role = 'archive' WHERE chain_id = ?1 AND id = ?2",
             params![self.chain.as_str(), id],
         )
-        .map_err(|e| format!("Failed to archive wallet: {e}"))?;
+        .map_err(DatabaseError::from)?;
 
         Ok(())
     }
 
     /// Restore an archived wallet (unarchive)
-    pub fn restore_wallet(&self, id: i64) -> Result<(), String> {
+    pub fn restore_wallet(&self, id: i64) -> Result<(), Error> {
         let conn = self.conn()?;
 
         // Check if wallet exists and is archived
@@ -329,28 +339,33 @@ impl WalletsDatabase {
                 |row| Ok((row.get::<_, i32>(0)? == 1, row.get::<_, bool>(1)?)),
             )
             .optional()
-            .map_err(|e| format!("Failed to check wallet: {e}"))?
+            .map_err(DatabaseError::from)?
             .unwrap_or((false, false));
 
         if !exists {
-            return Err("Wallet not found".to_owned());
+            return Err(Error::WalletNotFound {
+                address: format!("id={id}"),
+            });
         }
 
         if !is_archived {
-            return Err("Wallet is not archived".to_owned());
+            return Err(Error::InvalidWalletState {
+                id,
+                detail: "wallet is not archived",
+            });
         }
 
         conn.execute(
             "UPDATE wallets SET is_active = 1, role = 'secondary' WHERE chain_id = ?1 AND id = ?2",
             params![self.chain.as_str(), id],
         )
-        .map_err(|e| format!("Failed to restore wallet: {e}"))?;
+        .map_err(DatabaseError::from)?;
 
         Ok(())
     }
 
     /// Permanently delete a wallet
-    pub fn delete_wallet(&self, id: i64) -> Result<(), String> {
+    pub fn delete_wallet(&self, id: i64) -> Result<(), Error> {
         let conn = self.conn()?;
 
         // Check if it's the main wallet
@@ -361,26 +376,27 @@ impl WalletsDatabase {
                 |row| row.get(0),
             )
             .optional()
-            .map_err(|e| format!("Failed to check wallet: {e}"))?
+            .map_err(DatabaseError::from)?
             .unwrap_or_default();
 
         if is_main {
-            return Err(
-                "Cannot delete the main wallet. Set another wallet as main first.".to_owned(),
-            );
+            return Err(Error::InvalidWalletState {
+                id,
+                detail: "cannot delete the main wallet; set another wallet as main first",
+            });
         }
 
         conn.execute(
             "DELETE FROM wallets WHERE chain_id = ?1 AND id = ?2",
             params![self.chain.as_str(), id],
         )
-        .map_err(|e| format!("Failed to delete wallet: {e}"))?;
+        .map_err(DatabaseError::from)?;
 
         Ok(())
     }
 
     /// Get wallet count statistics
-    pub fn get_wallet_counts(&self) -> Result<(u32, u32), String> {
+    pub fn get_wallet_counts(&self) -> Result<(u32, u32), Error> {
         let conn = self.conn()?;
 
         let total: u32 = conn
@@ -389,7 +405,7 @@ impl WalletsDatabase {
                 params![self.chain.as_str()],
                 |row| row.get(0),
             )
-            .map_err(|e| format!("Failed to count wallets: {e}"))?;
+            .map_err(DatabaseError::from)?;
 
         let active: u32 = conn
             .query_row(
@@ -397,13 +413,13 @@ impl WalletsDatabase {
                 params![self.chain.as_str()],
                 |row| row.get(0),
             )
-            .map_err(|e| format!("Failed to count active wallets: {e}"))?;
+            .map_err(DatabaseError::from)?;
 
         Ok((total, active))
     }
 
     /// Check if a wallet with this address exists
-    pub fn wallet_exists(&self, address: &str) -> Result<bool, String> {
+    pub fn wallet_exists(&self, address: &str) -> Result<bool, Error> {
         let conn = self.conn()?;
 
         let count: u32 = conn
@@ -412,7 +428,7 @@ impl WalletsDatabase {
                 params![self.chain.as_str(), address],
                 |row| row.get(0),
             )
-            .map_err(|e| format!("Failed to check wallet existence: {e}"))?;
+            .map_err(DatabaseError::from)?;
 
         Ok(count > 0)
     }

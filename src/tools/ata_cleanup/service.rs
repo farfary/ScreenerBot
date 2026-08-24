@@ -8,6 +8,7 @@ use tokio::sync::Notify;
 use tokio::time::{interval, Duration, MissedTickBehavior};
 
 use crate::logger::{self, LogTag};
+use crate::tools::Error;
 use crate::utils::{check_shutdown_or_delay, get_wallet_address, run_or_shutdown};
 
 use super::operations::{cleanup_empty_atas, update_stats};
@@ -109,10 +110,13 @@ pub async fn start_ata_cleanup_service(shutdown_notify: Arc<Notify>) {
 }
 
 /// Perform a scheduled cleanup cycle
-async fn perform_scheduled_cleanup() -> Result<(u32, Vec<String>), String> {
+async fn perform_scheduled_cleanup() -> Result<(u32, Vec<String>), Error> {
     logger::debug(LogTag::Wallet, "Starting periodic ATA cleanup check...");
 
-    let wallet_address = get_wallet_address().map_err(|e| e.to_string())?;
+    let wallet_address = get_wallet_address().map_err(|e| Error::Dependency {
+        dependency: "config",
+        detail: e.to_string(),
+    })?;
 
     let result = cleanup_empty_atas(&wallet_address).await?;
 
