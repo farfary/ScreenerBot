@@ -51,6 +51,10 @@ pub enum Error {
     #[error(transparent)]
     Pools(#[from] crate::pools::Error),
 
+    /// Telegram bot lifecycle, notification, session and command errors.
+    #[error(transparent)]
+    Telegram(#[from] crate::telegram::Error),
+
     /// ScreenerBot account / sign-in errors.
     #[error(transparent)]
     Account(#[from] AccountError),

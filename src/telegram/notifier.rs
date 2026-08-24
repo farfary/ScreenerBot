@@ -8,6 +8,7 @@ use crate::telegram::formatters;
 use crate::telegram::keyboards;
 use crate::telegram::pagination::PAGINATION_MANAGER;
 use crate::telegram::types::{ErrorSeverity, Notification, NotificationType};
+use crate::telegram::{Error, Result};
 use teloxide::prelude::*;
 use teloxide::types::{ChatId, InlineKeyboardButton, InlineKeyboardMarkup, ParseMode};
 use tokio::sync::mpsc;
@@ -28,18 +29,22 @@ impl TelegramNotifier {
     /// # Returns
     /// * `Ok(Self)` - Successfully created notifier
     /// * `Err(String)` - Failed to create notifier
-    pub fn new(bot_token: &str, chat_id: &str) -> Result<Self, String> {
+    pub fn new(bot_token: &str, chat_id: &str) -> Result<Self> {
         if bot_token.is_empty() {
-            return Err("Bot token is empty".to_owned());
+            return Err(Error::NotConfigured);
         }
 
         if chat_id.is_empty() {
-            return Err("Chat ID is empty".to_owned());
+            return Err(Error::NotConfigured);
         }
 
-        let chat_id_parsed: i64 = chat_id
-            .parse()
-            .map_err(|e| format!("Invalid chat ID '{chat_id}': {e}"))?;
+        let chat_id_parsed: i64 =
+            chat_id
+                .parse()
+                .map_err(|e: std::num::ParseIntError| Error::InvalidChatId {
+                    chat_id: chat_id.to_owned(),
+                    detail: e.to_string(),
+                })?;
 
         let bot = Bot::new(bot_token);
 
@@ -50,13 +55,13 @@ impl TelegramNotifier {
     }
 
     /// Create a notifier from config
-    pub fn from_config() -> Result<Self, String> {
+    pub fn from_config() -> Result<Self> {
         let config = with_config(|c| c.telegram.clone());
         Self::new(&config.bot_token, &config.chat_id)
     }
 
     /// Send a notification
-    pub async fn send(&self, notification: &Notification) -> Result<(), String> {
+    pub async fn send(&self, notification: &Notification) -> Result<()> {
         // Handle pagination notification
         if let NotificationType::NewTokensFound { session_id, .. } = &notification.notification_type
         {
@@ -78,7 +83,10 @@ impl TelegramNotifier {
                     })
                     .reply_markup(keyboard)
                     .await
-                    .map_err(|e| format!("Failed to send pagination message: {e}"))?;
+                    .map_err(|e| Error::SendFailed {
+                        chat_id: self.chat_id.0.to_string(),
+                        detail: e.to_string(),
+                    })?;
 
                 logger::info(LogTag::Telegram, "Sent paginated token notification");
                 return Ok(());
@@ -90,12 +98,15 @@ impl TelegramNotifier {
     }
 
     /// Send a plain text message
-    pub async fn send_message(&self, message: &str) -> Result<(), String> {
+    pub async fn send_message(&self, message: &str) -> Result<()> {
         self.bot
             .send_message(self.chat_id, message)
             .parse_mode(ParseMode::Html)
             .await
-            .map_err(|e| format!("Failed to send Telegram message: {e}"))?;
+            .map_err(|e| Error::SendFailed {
+                chat_id: self.chat_id.0.to_string(),
+                detail: e.to_string(),
+            })?;
 
         logger::debug(
             LogTag::Telegram,
@@ -110,7 +121,7 @@ impl TelegramNotifier {
         &self,
         message: &str,
         buttons: Vec<Vec<InlineKeyboardButton>>,
-    ) -> Result<(), String> {
+    ) -> Result<()> {
         let keyboard = InlineKeyboardMarkup::new(buttons);
 
         self.bot
@@ -118,7 +129,10 @@ impl TelegramNotifier {
             .parse_mode(ParseMode::Html)
             .reply_markup(keyboard)
             .await
-            .map_err(|e| format!("Failed to send Telegram message with buttons: {e}"))?;
+            .map_err(|e| Error::SendFailed {
+                chat_id: self.chat_id.0.to_string(),
+                detail: e.to_string(),
+            })?;
 
         Ok(())
     }
@@ -128,13 +142,16 @@ impl TelegramNotifier {
         &self,
         message: &str,
         keyboard: InlineKeyboardMarkup,
-    ) -> Result<(), String> {
+    ) -> Result<()> {
         self.bot
             .send_message(self.chat_id, message)
             .parse_mode(ParseMode::Html)
             .reply_markup(keyboard)
             .await
-            .map_err(|e| format!("Failed to send Telegram message with keyboard: {e}"))?;
+            .map_err(|e| Error::SendFailed {
+                chat_id: self.chat_id.0.to_string(),
+                detail: e.to_string(),
+            })?;
 
         Ok(())
     }
@@ -327,7 +344,7 @@ static NOTIFICATION_QUEUE: LazyLock<RwLock<Option<mpsc::Sender<Notification>>>> 
     LazyLock::new(|| RwLock::new(None));
 
 /// Initialize the global notifier
-pub fn init_notifier() -> Result<(), String> {
+pub fn init_notifier() -> Result<()> {
     let config = with_config(|c| c.telegram.clone());
 
     if !config.enabled {
@@ -454,14 +471,17 @@ fn should_send_notification(notification: &Notification) -> bool {
 }
 
 /// Send a test message to verify the connection
-pub async fn send_test_message(message: &str) -> Result<(), String> {
+pub async fn send_test_message(message: &str) -> Result<()> {
     if let Ok(guard) = NOTIFIER.read() {
         if let Some(ref notifier) = *guard {
             notifier.send_message(message).await
         } else {
-            Err("Notifier not initialized".to_owned())
+            Err(Error::NotConfigured)
         }
     } else {
-        Err("Failed to acquire notifier lock".to_owned())
+        Err(crate::errors::InternalError::InvariantViolation {
+            message: "telegram notifier lock is poisoned".to_owned(),
+        }
+        .into())
     }
 }

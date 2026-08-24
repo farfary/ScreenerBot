@@ -8,6 +8,7 @@ use crate::logger::{self, LogTag};
 use crate::telegram::commands::{handle_auth_attempt, handle_callback_query, handle_command};
 use crate::telegram::session::get_session_manager;
 use crate::telegram::types::SessionState;
+use crate::telegram::{Error, Result};
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::Arc;
 use teloxide::prelude::*;
@@ -25,17 +26,17 @@ static LAST_UPDATE_ID: AtomicI32 = AtomicI32::new(0);
 pub async fn start_polling(
     shutdown: Arc<Notify>,
     running: Arc<AtomicBool>,
-) -> Result<JoinHandle<()>, String> {
+) -> Result<JoinHandle<()>> {
     let bot_token = with_config(|c| c.telegram.bot_token.clone());
     let chat_id = with_config(|c| c.telegram.chat_id.clone());
 
     if bot_token.is_empty() {
-        return Err("Bot token is empty".to_owned());
+        return Err(Error::NotConfigured);
     }
 
     // If no chat_id, we should be in discovery mode instead
     if chat_id.is_empty() {
-        return Err("Chat ID is empty - use discovery mode first".to_owned());
+        return Err(Error::NotConfigured);
     }
 
     let bot = Bot::new(bot_token);

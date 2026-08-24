@@ -7,6 +7,7 @@
 use crate::config::{update_config_section, with_config};
 use crate::logger::{self, LogTag};
 use crate::telegram::session::get_session_manager;
+use crate::telegram::{Error, Result};
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -46,14 +47,14 @@ impl DiscoveryService {
     ///
     /// This starts a background task that polls for Telegram updates
     /// and captures any incoming messages as discovered chats.
-    pub async fn start(&mut self) -> Result<(), String> {
+    pub async fn start(&mut self) -> Result<()> {
         if self.is_running() {
-            return Err("Discovery is already running".to_owned());
+            return Err(Error::DiscoveryAlreadyRunning);
         }
 
         let bot_token = with_config(|c| c.telegram.bot_token.clone());
         if bot_token.is_empty() {
-            return Err("Bot token is not configured".to_owned());
+            return Err(Error::NotConfigured);
         }
 
         // Validate the token
@@ -70,7 +71,9 @@ impl DiscoveryService {
                 );
             }
             Err(e) => {
-                return Err(format!("Invalid bot token: {e}"));
+                return Err(Error::InvalidBotToken {
+                    detail: e.to_string(),
+                });
             }
         }
 
@@ -143,14 +146,14 @@ impl DiscoveryService {
     }
 
     /// Select a discovered chat and save to config
-    pub async fn select_chat(&self, chat_id: i64) -> Result<(), String> {
+    pub async fn select_chat(&self, chat_id: i64) -> Result<()> {
         let manager = get_session_manager();
 
         // Find the discovered chat
         let chat = manager
             .select_discovered_chat(chat_id)
             .await
-            .ok_or("Chat not found in discovered list")?;
+            .ok_or(Error::ChatNotFound { chat_id })?;
 
         // Update config with the selected chat_id
         let chat_id_str = chat_id.to_string();
@@ -159,7 +162,8 @@ impl DiscoveryService {
                 cfg.telegram.chat_id = chat_id_str;
             },
             true,
-        )?;
+        )
+        .map_err(|detail| Error::ConfigUpdateFailed { detail })?;
 
         logger::info(
             LogTag::Telegram,
@@ -295,7 +299,7 @@ static DISCOVERY_SERVICE: LazyLock<RwLock<DiscoveryService>> =
     LazyLock::new(|| RwLock::new(DiscoveryService::new()));
 
 /// Start the discovery service
-pub async fn start_discovery() -> Result<(), String> {
+pub async fn start_discovery() -> Result<()> {
     let mut service = DISCOVERY_SERVICE.write().await;
     service.start().await
 }
@@ -313,7 +317,7 @@ pub async fn is_discovery_running() -> bool {
 }
 
 /// Select a discovered chat and save to config
-pub async fn select_discovered_chat(chat_id: i64) -> Result<(), String> {
+pub async fn select_discovered_chat(chat_id: i64) -> Result<()> {
     let service = DISCOVERY_SERVICE.read().await;
     service.select_chat(chat_id).await
 }

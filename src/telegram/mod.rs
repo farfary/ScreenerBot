@@ -79,6 +79,7 @@ pub mod bot;
 pub mod commands;
 pub mod crash;
 pub mod discovery;
+mod error;
 pub mod formatters;
 pub mod keyboards;
 pub mod notifier;
@@ -87,6 +88,8 @@ pub mod polling;
 pub mod session;
 pub mod types;
 pub(crate) mod wallet_alerts;
+
+pub use error::{Error, Result};
 
 // ============================================================================
 // PUBLIC API RE-EXPORTS

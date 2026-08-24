@@ -6,6 +6,7 @@ use super::callbacks::send_with_keyboard;
 use crate::logger::{self, LogTag};
 use crate::positions;
 use crate::telegram::{formatters, keyboards};
+use crate::telegram::{Error, Result};
 use crate::trader::manual::manual_add;
 use teloxide::prelude::*;
 use teloxide::types::{ChatId, ParseMode};
@@ -15,7 +16,7 @@ use teloxide::types::{ChatId, ParseMode};
 // ============================================================================
 
 /// Send token explorer main menu
-pub async fn send_tokens_menu(bot: &Bot, chat_id: ChatId) -> Result<(), String> {
+pub async fn send_tokens_menu(bot: &Bot, chat_id: ChatId) -> Result<()> {
     let stats = match crate::filtering::fetch_stats().await {
         Ok(s) => s,
         Err(e) => {
@@ -42,7 +43,7 @@ pub async fn send_tokens_menu(bot: &Bot, chat_id: ChatId) -> Result<(), String> 
 }
 
 /// Send paginated token list for a view
-pub async fn send_tokens_list(bot: &Bot, chat_id: ChatId, view: &str) -> Result<(), String> {
+pub async fn send_tokens_list(bot: &Bot, chat_id: ChatId, view: &str) -> Result<()> {
     send_tokens_page(bot, chat_id, view, 1).await
 }
 
@@ -52,7 +53,7 @@ pub(super) async fn send_tokens_page(
     chat_id: ChatId,
     view: &str,
     page: usize,
-) -> Result<(), String> {
+) -> Result<()> {
     use crate::filtering::types::{FilteringQuery, FilteringView, SortDirection, TokenSortKey};
 
     let filtering_view = match view {
@@ -156,7 +157,7 @@ pub(super) async fn send_tokens_page(
 }
 
 /// Send filter statistics
-pub(super) async fn send_filter_stats(bot: &Bot, chat_id: ChatId) -> Result<(), String> {
+pub(super) async fn send_filter_stats(bot: &Bot, chat_id: ChatId) -> Result<()> {
     let stats = match crate::filtering::fetch_stats().await {
         Ok(s) => s,
         Err(e) => {
@@ -205,7 +206,7 @@ pub(super) async fn send_filter_stats(bot: &Bot, chat_id: ChatId) -> Result<(), 
 }
 
 /// Send token detail view
-pub async fn send_token_detail(bot: &Bot, chat_id: ChatId, mint_short: &str) -> Result<(), String> {
+pub async fn send_token_detail(bot: &Bot, chat_id: ChatId, mint_short: &str) -> Result<()> {
     // Try to find token by mint prefix from the filtering store
     let token = match find_token_by_prefix(mint_short).await {
         Some(t) => t,
@@ -305,7 +306,7 @@ async fn find_token_by_prefix(prefix: &str) -> Option<crate::tokens::types::Toke
 }
 
 /// Send search prompt
-pub(super) async fn send_search_prompt(bot: &Bot, chat_id: ChatId) -> Result<(), String> {
+pub(super) async fn send_search_prompt(bot: &Bot, chat_id: ChatId) -> Result<()> {
     let msg = "🔍 <b>Search Market</b>\n\n\
                Enter symbol or mint address to search:\n\n\
                <i>Example: /token_BONK or /token_So11111</i>";
@@ -318,7 +319,7 @@ pub(super) async fn send_confirm_token_buy(
     chat_id: ChatId,
     mint_short: &str,
     amount: f64,
-) -> Result<(), String> {
+) -> Result<()> {
     let token = match find_token_by_prefix(mint_short).await {
         Some(t) => t,
         None => {
@@ -352,7 +353,7 @@ pub(super) async fn send_confirm_token_blacklist(
     bot: &Bot,
     chat_id: ChatId,
     mint_short: &str,
-) -> Result<(), String> {
+) -> Result<()> {
     let token = match find_token_by_prefix(mint_short).await {
         Some(t) => t,
         None => {
@@ -384,7 +385,7 @@ pub(super) async fn execute_token_blacklist(
     bot: &Bot,
     chat_id: ChatId,
     mint_short: &str,
-) -> Result<(), String> {
+) -> Result<()> {
     let token = match find_token_by_prefix(mint_short).await {
         Some(t) => t,
         None => {
@@ -435,7 +436,7 @@ pub(super) async fn execute_token_buy(
     chat_id: ChatId,
     mint_short: &str,
     amount: f64,
-) -> Result<(), String> {
+) -> Result<()> {
     // Find token by mint prefix
     let token = match find_token_by_prefix(mint_short).await {
         Some(t) => t,
@@ -455,7 +456,10 @@ pub(super) async fn execute_token_buy(
     bot.send_message(chat_id, &msg)
         .parse_mode(ParseMode::Html)
         .await
-        .map_err(|e| format!("Failed to send: {e}"))?;
+        .map_err(|e| Error::SendFailed {
+            chat_id: chat_id.0.to_string(),
+            detail: e.to_string(),
+        })?;
 
     // Execute the buy via manual trading system
     match manual_add(&token.mint, amount, None).await {

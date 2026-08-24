@@ -20,6 +20,7 @@ use super::trading::{handle_pause_entries_command, handle_stop_command};
 use crate::config::{update_config_section, with_config};
 use crate::logger::{self, LogTag};
 use crate::telegram::{formatters, keyboards, pagination::PAGINATION_MANAGER};
+use crate::telegram::{Error, Result};
 use teloxide::prelude::*;
 use teloxide::types::{ChatId, InlineKeyboardMarkup, ParseMode};
 
@@ -29,11 +30,14 @@ pub async fn handle_callback_query(
     chat_id: ChatId,
     user_id: i64,
     query: teloxide::types::CallbackQuery,
-) -> Result<(), String> {
+) -> Result<()> {
     // Always answer callback query first to remove loading indicator
     bot.answer_callback_query(&query.id)
         .await
-        .map_err(|e| format!("Failed to answer callback: {e}"))?;
+        .map_err(|e| Error::SendFailed {
+            chat_id: chat_id.0.to_string(),
+            detail: e.to_string(),
+        })?;
 
     let data = query.data.as_deref().unwrap_or_default();
     let parts: Vec<&str> = data.split(':').collect();
@@ -92,11 +96,17 @@ pub async fn handle_callback_query(
                         })
                         .reply_markup(keyboard)
                         .await
-                        .map_err(|e| format!("Failed to update pagination: {e}"))?;
+                        .map_err(|e| Error::SendFailed {
+                            chat_id: chat_id.0.to_string(),
+                            detail: e.to_string(),
+                        })?;
                 } else {
                     bot.send_message(chat_id, "⚠️ Pagination session expired.")
                         .await
-                        .map_err(|e| format!("Failed to send expiry message: {e}"))?;
+                        .map_err(|e| Error::SendFailed {
+                            chat_id: chat_id.0.to_string(),
+                            detail: e.to_string(),
+                        })?;
                 }
             }
             Ok(())
@@ -230,12 +240,15 @@ pub(super) async fn send_with_keyboard(
     chat_id: ChatId,
     message: &str,
     keyboard: InlineKeyboardMarkup,
-) -> Result<(), String> {
+) -> Result<()> {
     bot.send_message(chat_id, message)
         .parse_mode(ParseMode::Html)
         .reply_markup(keyboard)
         .await
-        .map_err(|e| format!("Failed to send: {e}"))?;
+        .map_err(|e| Error::SendFailed {
+            chat_id: chat_id.0.to_string(),
+            detail: e.to_string(),
+        })?;
     Ok(())
 }
 
@@ -243,7 +256,7 @@ pub(super) async fn send_with_keyboard(
 // SETTINGS HANDLERS
 // ============================================================================
 
-async fn handle_toggle(bot: &Bot, chat_id: ChatId, setting: &str) -> Result<(), String> {
+async fn handle_toggle(bot: &Bot, chat_id: ChatId, setting: &str) -> Result<()> {
     let result = match setting {
         "entry_monitor" => update_config_section(
             |cfg| {
@@ -301,7 +314,7 @@ async fn handle_toggle(bot: &Bot, chat_id: ChatId, setting: &str) -> Result<(), 
     send_settings_menu(bot, chat_id).await
 }
 
-async fn handle_settings_section(bot: &Bot, chat_id: ChatId, section: &str) -> Result<(), String> {
+async fn handle_settings_section(bot: &Bot, chat_id: ChatId, section: &str) -> Result<()> {
     match section {
         "notifications" => {
             let config = with_config(|c| c.telegram.clone());

@@ -5,6 +5,7 @@
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
 use crate::telegram::types::BotState;
+use crate::telegram::{Error, Result};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use teloxide::prelude::*;
@@ -35,7 +36,7 @@ impl TelegramBot {
     }
 
     /// Initialize the bot with the configured token
-    pub async fn initialize(&mut self) -> Result<(), String> {
+    pub async fn initialize(&mut self) -> Result<()> {
         let token = with_config(|c| c.telegram.bot_token.clone());
 
         if token.is_empty() {
@@ -73,7 +74,9 @@ impl TelegramBot {
                     LogTag::Telegram,
                     &format!("Failed to validate bot token: {e}"),
                 );
-                Err(format!("Invalid bot token: {e}"))
+                Err(Error::InvalidBotToken {
+                    detail: e.to_string(),
+                })
             }
         }
     }
@@ -120,27 +123,34 @@ impl TelegramBot {
     }
 
     /// Send a message to a specific chat
-    pub async fn send_message(&self, chat_id: i64, message: &str) -> Result<(), String> {
-        let bot = self.bot.as_ref().ok_or("Bot not initialized")?;
+    pub async fn send_message(&self, chat_id: i64, message: &str) -> Result<()> {
+        let bot = self.bot.as_ref().ok_or(Error::NotConfigured)?;
 
         bot.send_message(ChatId(chat_id), message)
             .parse_mode(ParseMode::Html)
             .await
-            .map_err(|e| format!("Failed to send message: {e}"))?;
+            .map_err(|e| Error::SendFailed {
+                chat_id: chat_id.to_string(),
+                detail: e.to_string(),
+            })?;
 
         Ok(())
     }
 
     /// Send a message to the configured chat
-    pub async fn send_to_configured_chat(&self, message: &str) -> Result<(), String> {
+    pub async fn send_to_configured_chat(&self, message: &str) -> Result<()> {
         let chat_id_str = with_config(|c| c.telegram.chat_id.clone());
         if chat_id_str.is_empty() {
-            return Err("No chat ID configured".to_owned());
+            return Err(Error::NotConfigured);
         }
 
-        let chat_id: i64 = chat_id_str
-            .parse()
-            .map_err(|e| format!("Invalid chat ID: {e}"))?;
+        let chat_id: i64 =
+            chat_id_str
+                .parse()
+                .map_err(|e: std::num::ParseIntError| Error::InvalidChatId {
+                    chat_id: chat_id_str.clone(),
+                    detail: e.to_string(),
+                })?;
 
         self.send_message(chat_id, message).await
     }
@@ -167,7 +177,7 @@ use std::sync::Mutex;
 static TELEGRAM_BOT: LazyLock<Mutex<Option<TelegramBot>>> = LazyLock::new(|| Mutex::new(None));
 
 /// Initialize the global bot instance
-pub async fn init_bot() -> Result<(), String> {
+pub async fn init_bot() -> Result<()> {
     let mut bot = TelegramBot::new();
     bot.initialize().await?;
 
@@ -193,17 +203,20 @@ pub fn is_bot_initialized() -> bool {
 }
 
 /// Send a message using the global bot instance
-pub async fn send_message(chat_id: i64, message: &str) -> Result<(), String> {
+pub async fn send_message(chat_id: i64, message: &str) -> Result<()> {
     let token = with_config(|c| c.telegram.bot_token.clone());
     if token.is_empty() {
-        return Err("Bot not configured".to_owned());
+        return Err(Error::NotConfigured);
     }
 
     let bot = Bot::new(&token);
     bot.send_message(ChatId(chat_id), message)
         .parse_mode(ParseMode::Html)
         .await
-        .map_err(|e| format!("Failed to send message: {e}"))?;
+        .map_err(|e| Error::SendFailed {
+            chat_id: chat_id.to_string(),
+            detail: e.to_string(),
+        })?;
 
     Ok(())
 }

@@ -6,6 +6,7 @@ use super::callbacks::send_with_keyboard;
 use super::trading::execute_force_stop;
 use crate::logger::{self, LogTag};
 use crate::positions;
+use crate::telegram::Result;
 use crate::telegram::{formatters, keyboards};
 use crate::trader::manual::{manual_add, manual_sell};
 use teloxide::prelude::*;
@@ -19,7 +20,7 @@ pub(super) async fn send_position_details(
     bot: &Bot,
     chat_id: ChatId,
     mint_short: &str,
-) -> Result<(), String> {
+) -> Result<()> {
     let positions_list = positions::get_open_positions().await;
     let position = positions_list
         .iter()
@@ -63,7 +64,7 @@ pub(super) async fn send_position_details(
     }
 }
 
-pub(super) async fn send_history(bot: &Bot, chat_id: ChatId) -> Result<(), String> {
+pub(super) async fn send_history(bot: &Bot, chat_id: ChatId) -> Result<()> {
     let positions = match positions::db::get_closed_positions().await {
         Ok(pos) => pos,
         Err(e) => {
@@ -110,7 +111,7 @@ pub(super) async fn send_confirm_sell(
     chat_id: ChatId,
     mint_short: &str,
     percent: u32,
-) -> Result<(), String> {
+) -> Result<()> {
     let positions_list = positions::get_open_positions().await;
     let position = positions_list
         .iter()
@@ -151,7 +152,7 @@ pub(super) async fn send_confirm_dca(
     chat_id: ChatId,
     mint_short: &str,
     amount: f64,
-) -> Result<(), String> {
+) -> Result<()> {
     let positions_list = positions::get_open_positions().await;
     let position = positions_list
         .iter()
@@ -181,11 +182,7 @@ pub(super) async fn send_confirm_dca(
     }
 }
 
-pub(super) async fn send_confirm_close(
-    bot: &Bot,
-    chat_id: ChatId,
-    mint_short: &str,
-) -> Result<(), String> {
+pub(super) async fn send_confirm_close(bot: &Bot, chat_id: ChatId, mint_short: &str) -> Result<()> {
     let positions_list = positions::get_open_positions().await;
     let position = positions_list
         .iter()
@@ -219,7 +216,7 @@ pub(super) async fn send_confirm_close(
     }
 }
 
-pub(super) async fn send_confirm_close_all(bot: &Bot, chat_id: ChatId) -> Result<(), String> {
+pub(super) async fn send_confirm_close_all(bot: &Bot, chat_id: ChatId) -> Result<()> {
     let positions = positions::get_open_positions().await;
     let msg = format!(
         "⚠️ <b>Close All Positions?</b>\n\n\
@@ -230,7 +227,7 @@ pub(super) async fn send_confirm_close_all(bot: &Bot, chat_id: ChatId) -> Result
     send_with_keyboard(bot, chat_id, &msg, keyboards::confirm_close_all()).await
 }
 
-pub(super) async fn send_confirm_force_stop(bot: &Bot, chat_id: ChatId) -> Result<(), String> {
+pub(super) async fn send_confirm_force_stop(bot: &Bot, chat_id: ChatId) -> Result<()> {
     let msg = "🚨 <b>FORCE STOP</b>\n\n\
          This will immediately halt ALL trading:\n\
          • No new entries\n\
@@ -244,7 +241,7 @@ pub(super) async fn send_confirm_blacklist(
     bot: &Bot,
     chat_id: ChatId,
     mint_short: &str,
-) -> Result<(), String> {
+) -> Result<()> {
     let positions_list = positions::get_open_positions().await;
     let position = positions_list
         .iter()
@@ -284,7 +281,7 @@ pub(super) async fn execute_sell(
     chat_id: ChatId,
     mint_short: &str,
     percent: u32,
-) -> Result<(), String> {
+) -> Result<()> {
     let positions_list = positions::get_open_positions().await;
     let position = positions_list
         .iter()
@@ -329,7 +326,7 @@ pub(super) async fn execute_dca(
     chat_id: ChatId,
     mint_short: &str,
     amount: f64,
-) -> Result<(), String> {
+) -> Result<()> {
     let positions_list = positions::get_open_positions().await;
     let position = positions_list
         .iter()
@@ -366,15 +363,11 @@ pub(super) async fn execute_dca(
     }
 }
 
-pub(super) async fn execute_close(
-    bot: &Bot,
-    chat_id: ChatId,
-    mint_short: &str,
-) -> Result<(), String> {
+pub(super) async fn execute_close(bot: &Bot, chat_id: ChatId, mint_short: &str) -> Result<()> {
     execute_sell(bot, chat_id, mint_short, 100).await
 }
 
-pub(super) async fn execute_close_all(bot: &Bot, chat_id: ChatId) -> Result<(), String> {
+pub(super) async fn execute_close_all(bot: &Bot, chat_id: ChatId) -> Result<()> {
     let positions = positions::get_open_positions().await;
 
     if positions.is_empty() {
@@ -406,16 +399,12 @@ pub(super) async fn execute_close_all(bot: &Bot, chat_id: ChatId) -> Result<(), 
     send_with_keyboard(bot, chat_id, &msg, keyboards::main_menu()).await
 }
 
-pub(super) async fn execute_force_stop_callback(bot: &Bot, chat_id: ChatId) -> Result<(), String> {
+pub(super) async fn execute_force_stop_callback(bot: &Bot, chat_id: ChatId) -> Result<()> {
     let msg = execute_force_stop().await;
     send_with_keyboard(bot, chat_id, &msg, keyboards::main_menu()).await
 }
 
-pub(super) async fn execute_blacklist(
-    bot: &Bot,
-    chat_id: ChatId,
-    mint_short: &str,
-) -> Result<(), String> {
+pub(super) async fn execute_blacklist(bot: &Bot, chat_id: ChatId, mint_short: &str) -> Result<()> {
     let positions_list = positions::get_open_positions().await;
     let position = positions_list
         .iter()

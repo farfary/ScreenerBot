@@ -26,6 +26,7 @@ use crate::logger::{self, LogTag};
 use crate::telegram::keyboards;
 use crate::telegram::session::get_session_manager;
 use crate::telegram::types::SessionState;
+use crate::telegram::{Error, Result};
 use std::time::Duration;
 use teloxide::prelude::*;
 use teloxide::types::{ChatId, ParseMode};
@@ -47,12 +48,7 @@ fn button_to_command(text: &str) -> Option<&'static str> {
 }
 
 /// Handle a single command from text message
-pub async fn handle_command(
-    bot: &Bot,
-    chat_id: ChatId,
-    user_id: i64,
-    text: &str,
-) -> Result<(), String> {
+pub async fn handle_command(bot: &Bot, chat_id: ChatId, user_id: i64, text: &str) -> Result<()> {
     let text = text.trim();
 
     // Map keyboard button text to command, or use text directly if it's a command
@@ -109,7 +105,10 @@ pub async fn handle_command(
                 .parse_mode(ParseMode::Html)
                 .reply_markup(keyboards::main_reply_keyboard())
                 .await
-                .map_err(|e| format!("Failed to send start response: {e}"))?;
+                .map_err(|e| Error::SendFailed {
+                    chat_id: chat_id.0.to_string(),
+                    detail: e.to_string(),
+                })?;
 
             logger::info(
                 LogTag::Telegram,
@@ -154,7 +153,10 @@ pub async fn handle_command(
     bot.send_message(chat_id, &response)
         .parse_mode(ParseMode::Html)
         .await
-        .map_err(|e| format!("Failed to send response: {e}"))?;
+        .map_err(|e| Error::SendFailed {
+            chat_id: chat_id.0.to_string(),
+            detail: e.to_string(),
+        })?;
 
     logger::info(
         LogTag::Telegram,

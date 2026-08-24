@@ -5,6 +5,7 @@
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
 use crate::telegram::types::{DiscoveredChat, SessionState, TelegramSession};
+use crate::telegram::{Error, Result};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -38,18 +39,19 @@ impl TelegramSessionManager {
     // ========================================================================
 
     /// Start the login flow for a session (transition to AwaitingTotp)
-    pub async fn start_login(&self, user_id: i64) -> Result<(), String> {
+    pub async fn start_login(&self, user_id: i64) -> Result<()> {
         let mut sessions = self.sessions.write().await;
-        let session = sessions.get_mut(&user_id).ok_or("Session not found")?;
+        let session = sessions
+            .get_mut(&user_id)
+            .ok_or(Error::SessionNotFound { user_id })?;
 
         // Check if locked
         if let SessionState::Locked { until } = session.state {
             if Instant::now() < until {
                 let remaining = until.saturating_duration_since(Instant::now()).as_secs();
-                return Err(format!(
-                    "Account locked. Try again in {} seconds.",
-                    remaining
-                ));
+                return Err(Error::AccountLocked {
+                    remaining_secs: remaining,
+                });
             }
         }
 
@@ -60,18 +62,19 @@ impl TelegramSessionManager {
 
     /// Verify TOTP code for a user session (uses lockscreen TOTP secret)
     /// Returns Ok(true) if code matches, Ok(false) if wrong, Err if locked or no TOTP configured
-    pub async fn verify_totp(&self, user_id: i64, code: &str) -> Result<bool, String> {
+    pub async fn verify_totp(&self, user_id: i64, code: &str) -> Result<bool> {
         let mut sessions = self.sessions.write().await;
-        let session = sessions.get_mut(&user_id).ok_or("Session not found")?;
+        let session = sessions
+            .get_mut(&user_id)
+            .ok_or(Error::SessionNotFound { user_id })?;
 
         // Check if locked
         if let SessionState::Locked { until } = session.state {
             if Instant::now() < until {
                 let remaining = until.saturating_duration_since(Instant::now()).as_secs();
-                return Err(format!(
-                    "Account locked. Try again in {} seconds.",
-                    remaining
-                ));
+                return Err(Error::AccountLocked {
+                    remaining_secs: remaining,
+                });
             }
             // Lock expired, allow retry
             session.state = SessionState::AwaitingTotp;
@@ -80,17 +83,20 @@ impl TelegramSessionManager {
 
         // Must be in AwaitingTotp state
         if session.state != SessionState::AwaitingTotp {
-            return Err("Not awaiting TOTP verification".to_owned());
+            return Err(Error::NotAwaitingTotp);
         }
 
         // Get TOTP secret from WEBSERVER config (shared with lockscreen)
         let totp_secret = with_config(|c| c.webserver.auth_totp_secret.clone());
         if totp_secret.is_empty() {
-            return Err("2FA not configured. Enable 2FA in Security settings first.".to_owned());
+            return Err(Error::TotpNotConfigured);
         }
 
-        // Verify TOTP code
-        if crate::webserver::totp::verify_totp(&totp_secret, code)? {
+        // Verify TOTP code. webserver::totp has not migrated yet; its String
+        // error is captured into a named variant, not propagated raw.
+        if crate::webserver::totp::verify_totp(&totp_secret, code)
+            .map_err(|detail| Error::TotpVerificationFailed { detail })?
+        {
             // Success - activate session
             session.state = SessionState::Active;
             session.failed_attempts = 0;

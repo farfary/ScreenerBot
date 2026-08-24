@@ -5,6 +5,7 @@
 use crate::config::update_config_section;
 use crate::logger::{self, LogTag};
 use crate::telegram::keyboards;
+use crate::telegram::{Error, Result};
 use teloxide::prelude::*;
 use teloxide::types::{ChatId, ParseMode};
 
@@ -93,7 +94,7 @@ pub async fn handle_resume_entries_command() -> String {
 }
 
 /// Handle /force_stop command - Show confirmation
-pub async fn handle_force_stop_command(bot: &Bot, chat_id: ChatId) -> Result<(), String> {
+pub async fn handle_force_stop_command(bot: &Bot, chat_id: ChatId) -> Result<()> {
     let message = "🚨 <b>FORCE STOP</b>\n\n\
         This will immediately halt ALL trading activity:\n\
         • No new entries\n\
@@ -108,7 +109,10 @@ pub async fn handle_force_stop_command(bot: &Bot, chat_id: ChatId) -> Result<(),
         .parse_mode(ParseMode::Html)
         .reply_markup(keyboard)
         .await
-        .map_err(|e| format!("Failed to send force stop confirmation: {e}"))?;
+        .map_err(|e| Error::SendFailed {
+            chat_id: chat_id.0.to_string(),
+            detail: e.to_string(),
+        })?;
 
     Ok(())
 }
@@ -163,7 +167,7 @@ pub async fn execute_force_stop() -> String {
 }
 
 /// Handle /login command - Start the 2FA login flow
-pub async fn handle_login_command(bot: &Bot, chat_id: ChatId, user_id: i64) -> Result<(), String> {
+pub async fn handle_login_command(bot: &Bot, chat_id: ChatId, user_id: i64) -> Result<()> {
     let manager = crate::telegram::session::get_session_manager();
 
     // Check if 2FA is configured
