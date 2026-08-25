@@ -116,12 +116,13 @@ pub async fn connect_ws(
             &format!("Proxy '{proxy}' is not an HTTP proxy — attempting direct WebSocket connect"),
         );
     }
-    let (stream, _) = connect_async(ws_url)
-        .await
-        .map_err(|e| crate::errors::NetworkError::RequestFailed {
-            endpoint: ws_url.to_owned(),
-            detail: format!("Failed to connect to WebSocket: {e}"),
-        })?;
+    let (stream, _) =
+        connect_async(ws_url)
+            .await
+            .map_err(|e| crate::errors::NetworkError::RequestFailed {
+                endpoint: ws_url.to_owned(),
+                detail: format!("Failed to connect to WebSocket: {e}"),
+            })?;
     Ok(stream)
 }
 
@@ -170,24 +171,24 @@ async fn connect_ws_via_http_proxy(
         host = target_host,
         port = target_port,
     );
-    tcp.write_all(connect_req.as_bytes())
-        .await
-        .map_err(|e| crate::errors::NetworkError::RequestFailed {
+    tcp.write_all(connect_req.as_bytes()).await.map_err(|e| {
+        crate::errors::NetworkError::RequestFailed {
             endpoint: format!("{proxy_host}:{proxy_port}"),
             detail: format!("Proxy CONNECT write failed: {e}"),
-        })?;
+        }
+    })?;
 
     // Read the proxy response headers (until CRLFCRLF).
     let mut buf = Vec::with_capacity(256);
     let mut byte = [0u8; 1];
     loop {
-        let n = tcp
-            .read(&mut byte)
-            .await
-            .map_err(|e| crate::errors::NetworkError::RequestFailed {
-                endpoint: format!("{proxy_host}:{proxy_port}"),
-                detail: format!("Proxy CONNECT read failed: {e}"),
-            })?;
+        let n =
+            tcp.read(&mut byte)
+                .await
+                .map_err(|e| crate::errors::NetworkError::RequestFailed {
+                    endpoint: format!("{proxy_host}:{proxy_port}"),
+                    detail: format!("Proxy CONNECT read failed: {e}"),
+                })?;
         if n == 0 {
             return Err(crate::errors::NetworkError::RequestFailed {
                 endpoint: format!("{proxy_host}:{proxy_port}"),

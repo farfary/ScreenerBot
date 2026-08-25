@@ -163,53 +163,6 @@ impl StartupError {
         })
     }
 
-    /// Classify an arbitrary bubbled-up error message into the most specific
-    /// startup error possible, upgrading common fatal causes (another instance
-    /// running, port already in use, unreadable config) to dedicated codes with
-    /// binary-user-appropriate remedies. Falls back to [`StartupError::generic`].
-    pub fn classify(message: impl Into<String>) -> Self {
-        let message = message.into();
-        let lower = message.to_lowercase();
-
-        if lower.contains("already running") || lower.contains("process lock") {
-            return Self::new(
-                StartupErrorCode::LockHeld,
-                "ScreenerBot is already running",
-                "Another copy of ScreenerBot is already running on this computer, so a second \
-                 one cannot start.",
-                "Switch to the window that's already open. If you don't see one, quit any \
-                 background ScreenerBot process and try again. If the problem persists after a \
-                 reboot, the lock file may be stale and can be removed from the data folder \
-                 (.screenerbot.lock).",
-            );
-        }
-
-        if lower.contains("address already in use") || lower.contains("addrinuse") {
-            return Self::new(
-                StartupErrorCode::PortInUse,
-                "Network port is busy",
-                message.clone(),
-                "Another program is using the port ScreenerBot needs. Close that program, or \
-                 change the webserver port in Settings, then start ScreenerBot again.",
-            );
-        }
-
-        let config_parse_error = lower.contains("failed to load config")
-            || (lower.contains("config") && lower.contains("parse"));
-        if config_parse_error {
-            return Self::new(
-                StartupErrorCode::ConfigInvalid,
-                "Configuration could not be read",
-                message.clone(),
-                "Your configuration file could not be read. Restore a backup from the data \
-                 folder, or reset configuration to defaults and set up your wallet and RPC \
-                 again.",
-            );
-        }
-
-        Self::generic(message)
-    }
-
     /// Build a generic fatal startup error from an arbitrary message.
     pub fn generic(message: impl Into<String>) -> Self {
         let message = message.into();
@@ -283,18 +236,6 @@ impl std::error::Error for StartupError {}
 impl From<StartupError> for String {
     fn from(e: StartupError) -> Self {
         e.summary()
-    }
-}
-
-impl From<String> for StartupError {
-    fn from(message: String) -> Self {
-        StartupError::classify(message)
-    }
-}
-
-impl From<&str> for StartupError {
-    fn from(message: &str) -> Self {
-        StartupError::classify(message.to_owned())
     }
 }
 

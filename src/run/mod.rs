@@ -35,8 +35,19 @@ pub async fn run_bot() -> Result<()> {
     })?;
 
     // 2. Acquire process lock to prevent multiple instances
-    let process_lock =
-        ProcessLock::acquire().map_err(|error| StartupError::from(error.to_string()))?;
+    let process_lock = ProcessLock::acquire().map_err(|error| match error {
+        crate::process::Error::LockHeld { .. } => StartupError::new(
+            crate::errors::StartupErrorCode::LockHeld,
+            "ScreenerBot is already running",
+            "Another copy of ScreenerBot is already running on this computer, so a second \
+             one cannot start.",
+            "Switch to the window that's already open. If you don't see one, quit any \
+             background ScreenerBot process and try again. If the problem persists after a \
+             reboot, the lock file may be stale and can be removed from the data folder \
+             (.screenerbot.lock).",
+        ),
+        error => StartupError::generic(error.to_string()),
+    })?;
 
     // Run bot with the acquired lock
     run_bot_internal(process_lock).await
@@ -157,13 +168,14 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<()> {
 
         // 4. Load configuration (if not already loaded by main.rs)
         if !crate::config::is_config_initialized() {
-            crate::config::load_config().map_err(|error| {
-                StartupError::new(
+            crate::config::load_config().map_err(|error| match error {
+                crate::config::Error::ParseFailed { detail } => StartupError::new(
                     crate::errors::StartupErrorCode::ConfigInvalid,
                     "Configuration could not be read",
-                    format!("Failed to load config: {error}"),
+                    format!("Failed to load config: config.toml could not be parsed: {detail}"),
                     "Restore a valid configuration or complete setup again.",
-                )
+                ),
+                error => StartupError::generic(format!("Failed to load config: {error}")),
             })?;
             logger::info(LogTag::System, "Configuration loaded successfully");
         }

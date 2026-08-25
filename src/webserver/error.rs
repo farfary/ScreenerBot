@@ -19,6 +19,12 @@ pub enum Error {
     #[error("could not bind the dashboard server to {address}: {detail}")]
     Bind { address: String, detail: String },
 
+    /// The configured port is already bound by another process. Split from
+    /// `Bind` because it is the one bind failure with a specific user remedy,
+    /// and it must be selectable without reading the message text.
+    #[error("the dashboard port {address} is already in use")]
+    PortInUse { address: String },
+
     /// A TOTP code did not verify.
     #[error("the submitted authentication code is not valid")]
     InvalidTotpCode,
@@ -88,6 +94,7 @@ impl ErrorClass for Error {
             Error::Io(e) => e.is_retryable(),
             Error::Config(e) => e.is_retryable(),
             Error::Bind { .. }
+            | Error::PortInUse { .. }
             | Error::InvalidTotpCode
             | Error::InvalidImport { .. }
             | Error::UnknownConfigKey { .. }
@@ -111,6 +118,7 @@ impl ErrorClass for Error {
             Error::ServiceStartup { .. } => Some(Duration::from_secs(5)),
             Error::ExternalFeed { .. } | Error::Api { .. } => Some(Duration::from_secs(1)),
             Error::Bind { .. }
+            | Error::PortInUse { .. }
             | Error::InvalidTotpCode
             | Error::InvalidImport { .. }
             | Error::UnknownConfigKey { .. }
@@ -127,6 +135,7 @@ impl ErrorClass for Error {
             Error::Io(e) => e.severity(),
             Error::Config(e) => e.severity(),
             Error::Bind { .. }
+            | Error::PortInUse { .. }
             | Error::TotpSecret { .. }
             | Error::TotpQrCode { .. }
             | Error::ServiceStartup { .. }
@@ -154,6 +163,7 @@ impl ErrorClass for Error {
             | Error::InvalidLockscreenPassword { .. }
             | Error::InvalidPositionKey { .. } => 400,
             Error::InvalidInitialization { .. } => 400,
+            Error::PortInUse { .. } => 503,
             Error::Bind { .. }
             | Error::TotpSecret { .. }
             | Error::TotpQrCode { .. }

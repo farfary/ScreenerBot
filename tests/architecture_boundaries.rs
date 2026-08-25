@@ -1030,6 +1030,38 @@ fn migrated_modules_never_return_string_errors() {
     );
 }
 
+/// A string-to-error conversion lets any caller launder prose into a typed
+/// error, and re-guessing the type from that text is how the boot path kept
+/// sniffing messages long after its signatures were typed.
+#[test]
+fn errors_never_convert_strings_into_typed_errors() {
+    let mut violations = Vec::new();
+    for (relative, contents) in walk_src() {
+        if !relative.starts_with("errors") {
+            continue;
+        }
+        for (index, line) in code_lines(&contents).lines().enumerate() {
+            let trimmed = line.trim_start();
+            if trimmed.starts_with("impl From<String> for")
+                || trimmed.starts_with("impl From<&str> for")
+            {
+                violations.push(format!(
+                    "src/{}:{}: {}",
+                    relative.display(),
+                    index + 1,
+                    trimmed
+                ));
+            }
+        }
+    }
+    assert!(
+        violations.is_empty(),
+        "src/errors must never implement From<String> or From<&str> for a typed error; \
+         callers must construct a named variant instead:\n{}",
+        violations.join("\n")
+    );
+}
+
 /// Exact current violators of [`error_types_live_in_their_module`], scanned
 /// against today's tree. Entries are removed as each module moves its error type
 /// into an `error.rs`. The list shrinks as that work lands; it grows only when

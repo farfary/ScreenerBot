@@ -218,38 +218,24 @@ pub async fn start_server(port_override: Option<u16>, host_override: Option<Stri
     })?;
 
     // Create TCP listener
-    let listener = TcpListener::bind(&addr).await.map_err(|e| {
-        // Provide helpful error message for common cases
-        match e.kind() {
-            std::io::ErrorKind::AddrInUse => Error::Bind {
-                address: addr.to_string(),
-                detail: format!(
-                    "address already in use\n\
-           \n\
-           This usually means another instance of ScreenerBot is running.\n\
-           The process lock should have prevented this - please report this issue.\n\
-           \n\
-           To verify and stop other instances:\n\
-            1. Check: ps aux | grep screenerbot | grep -v grep\n\
-            2. Stop: pkill -f screenerbot\n\
-            3. Verify: ps aux | grep screenerbot | grep -v grep"
-                ),
-            },
-            std::io::ErrorKind::PermissionDenied => Error::Bind {
-                address: addr.to_string(),
-                detail: format!(
-                    "permission denied\n\
+    let listener = TcpListener::bind(&addr).await.map_err(|e| match e.kind() {
+        std::io::ErrorKind::AddrInUse => Error::PortInUse {
+            address: addr.to_string(),
+        },
+        std::io::ErrorKind::PermissionDenied => Error::Bind {
+            address: addr.to_string(),
+            detail: format!(
+                "permission denied\n\
            \n\
            Port {} requires elevated privileges on this system.\n\
            Consider using a port above 1024 or running with appropriate permissions.",
-                    port
-                ),
-            },
-            _ => Error::Bind {
-                address: addr.to_string(),
-                detail: e.to_string(),
-            },
-        }
+                port
+            ),
+        },
+        _ => Error::Bind {
+            address: addr.to_string(),
+            detail: e.to_string(),
+        },
     })?;
 
     logger::debug(

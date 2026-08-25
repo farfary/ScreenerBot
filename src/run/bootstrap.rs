@@ -12,14 +12,14 @@ use crate::{
 /// tier prevents globally available dashboard surfaces from depending on the
 /// wallet setup branch that happened to start the process.
 pub(super) async fn initialize_dashboard_persistence() -> Result<(), StartupError> {
-    crate::actions::init_database()
-        .await
-        .map_err(|e| format!("Failed to initialize actions database: {e}"))?;
+    crate::actions::init_database().await.map_err(|e| {
+        StartupError::generic(format!("Failed to initialize actions database: {e}"))
+    })?;
     logger::info(LogTag::System, "Actions database initialized successfully");
 
     crate::actions::sync_from_db()
         .await
-        .map_err(|e| format!("Failed to sync actions from database: {e}"))?;
+        .map_err(|e| StartupError::generic(format!("Failed to sync actions from database: {e}")))?;
     crate::actions::spawn_cleanup_task();
 
     // Maintenance covers every database that currently exists and is safe in
@@ -51,7 +51,7 @@ pub(super) async fn initialize_dashboard_persistence() -> Result<(), StartupErro
     // configuration APIs must remain usable in Explore Mode.
     crate::strategies::init_strategy_system(crate::strategies::engine::EngineConfig::default())
         .await
-        .map_err(|e| format!("Failed to initialize strategy system: {e}"))?;
+        .map_err(|e| StartupError::generic(format!("Failed to initialize strategy system: {e}")))?;
     logger::info(LogTag::System, "Strategy system initialized successfully");
 
     Ok(())
@@ -71,23 +71,21 @@ pub(crate) async fn initialize_ai_runtime_if_enabled() -> Result<(), StartupErro
         logger::info(LogTag::System, "Initializing AI engine...");
         crate::ai::init_ai_engine()
             .await
-            .map_err(|e| format!("Failed to initialize AI engine: {e}"))?;
+            .map_err(|e| StartupError::generic(format!("Failed to initialize AI engine: {e}")))?;
         logger::info(LogTag::System, "AI engine initialized successfully");
     }
 
     if crate::ai::try_get_chat_engine().is_none() {
-        crate::ai::init_chat_engine()
-            .await
-            .map_err(|e| format!("Failed to initialize AI chat engine: {e}"))?;
+        crate::ai::init_chat_engine().await.map_err(|e| {
+            StartupError::generic(format!("Failed to initialize AI chat engine: {e}"))
+        })?;
         logger::info(LogTag::System, "AI chat engine initialized successfully");
     }
 
     if crate::apis::llm::try_get_llm_manager().is_none() {
-        // SEAM: run/bootstrap still returns String errors via StartupError's
-        // From<String>; removed when this module migrates.
         crate::apis::llm::init::init_providers_from_config()
             .await
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| StartupError::generic(e.to_string()))?;
     }
 
     Ok(())
@@ -100,13 +98,13 @@ pub(crate) async fn initialize_ai_runtime_if_enabled() -> Result<(), StartupErro
 pub(crate) async fn initialize_full_runtime() -> Result<(), StartupError> {
     crate::wallets::initialize()
         .await
-        .map_err(|e| format!("Failed to initialize wallets: {e}"))?;
+        .map_err(|e| StartupError::generic(format!("Failed to initialize wallets: {e}")))?;
     logger::info(LogTag::System, "Wallets module initialized");
 
     logger::info(LogTag::System, "Validating wallet consistency...");
     match crate::wallet_validation::WalletValidator::validate_wallet_consistency()
         .await
-        .map_err(|e| format!("Failed to validate wallet consistency: {e}"))?
+        .map_err(|e| StartupError::generic(format!("Failed to validate wallet consistency: {e}")))?
     {
         crate::wallet_validation::WalletValidationResult::Valid => {
             logger::info(LogTag::System, "Wallet validation passed");

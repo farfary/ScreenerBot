@@ -95,6 +95,10 @@ pub enum Error {
     #[error(transparent)]
     Run(#[from] crate::run::Error),
 
+    /// Process-wide lock and lifecycle errors.
+    #[error(transparent)]
+    Process(#[from] crate::process::Error),
+
     /// ScreenerBot account / sign-in errors.
     #[error(transparent)]
     Account(#[from] AccountError),

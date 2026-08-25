@@ -14,9 +14,9 @@
 //! // Lock held until _lock is dropped (end of scope)
 //! ```
 
-use crate::errors::{InternalError, IoError};
+use crate::errors::IoError;
 use crate::logger::{self, LogTag};
-use crate::{Error, Result};
+use crate::process::{Error, Result};
 use fslock::LockFile;
 use std::path::PathBuf;
 
@@ -66,12 +66,9 @@ impl ProcessLock {
                 ),
             })
         })? {
-            return Err(Error::Internal(InternalError::InvariantViolation {
-                message: format!(
-                    "another ScreenerBot instance holds process lock {}",
-                    lock_path.display()
-                ),
-            }));
+            return Err(Error::LockHeld {
+                path: lock_path.to_string_lossy().into_owned(),
+            });
         }
 
         logger::info(

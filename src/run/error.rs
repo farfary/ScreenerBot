@@ -116,6 +116,33 @@ impl From<Error> for StartupError {
     fn from(error: Error) -> Self {
         match error {
             Error::Startup(error) => error,
+            Error::Core { source } => match *source {
+                crate::Error::Webserver(crate::webserver::Error::PortInUse { address }) => {
+                    StartupError::new(
+                        StartupErrorCode::PortInUse,
+                        "Network port is busy",
+                        format!("the dashboard port {address} is already in use"),
+                        "Another program is using the port ScreenerBot needs. Close that program, or \
+                         change the webserver port in Settings, then start ScreenerBot again.",
+                    )
+                }
+                crate::Error::Config(crate::config::Error::ParseFailed { detail }) => {
+                    StartupError::new(
+                        StartupErrorCode::ConfigInvalid,
+                        "Configuration could not be read",
+                        format!("config.toml could not be parsed: {detail}"),
+                        "Your configuration file could not be read. Restore a backup from the data \
+                         folder, or reset configuration to defaults and set up your wallet and RPC \
+                         again.",
+                    )
+                }
+                source => StartupError::generic(
+                    Error::Core {
+                        source: Box::new(source),
+                    }
+                    .to_string(),
+                ),
+            },
             error => StartupError::generic(error.to_string()),
         }
     }
