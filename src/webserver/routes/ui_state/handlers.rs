@@ -3,7 +3,10 @@ use std::collections::HashMap;
 
 use super::types::*;
 use crate::paths;
-use crate::webserver::utils::{error_response, success_response};
+use crate::webserver::{
+    utils::{error_response, success_response},
+    Error, Result,
+};
 
 /// Load the UI state store from disk.
 ///
@@ -36,7 +39,7 @@ fn load_store() -> UiStateStore {
 /// Discarded during a promotional fixture session: the scene drives tables through
 /// states the operator never chose, and persisting those would rewrite the real
 /// store the next normal launch reads.
-fn save_store(store: &UiStateStore) -> Result<(), String> {
+fn save_store(store: &UiStateStore) -> Result<()> {
     if crate::webserver::promo::are_promo_fixtures_enabled() {
         return Ok(());
     }
@@ -45,13 +48,14 @@ fn save_store(store: &UiStateStore) -> Result<(), String> {
 
     // Ensure parent directory exists
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| format!("Failed to create directory: {e}"))?;
+        std::fs::create_dir_all(parent).map_err(|e| Error::Io(e.into()))?;
     }
 
-    let content =
-        serde_json::to_string_pretty(store).map_err(|e| format!("Failed to serialize: {e}"))?;
+    let content = serde_json::to_string_pretty(store).map_err(|e| Error::InvalidUiState {
+        detail: format!("failed to serialize: {e}"),
+    })?;
 
-    std::fs::write(&path, content).map_err(|e| format!("Failed to write file: {e}"))?;
+    std::fs::write(&path, content).map_err(|e| Error::Io(e.into()))?;
 
     Ok(())
 }

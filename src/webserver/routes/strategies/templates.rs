@@ -16,21 +16,29 @@ pub async fn list_templates() -> Response {
     let mut items: Vec<StrategyTemplateItem> = Vec::new();
 
     // Attempt to query templates table
-    let result: Result<Vec<StrategyTemplateItem>, String> = (|| {
+    let result: crate::webserver::Result<Vec<StrategyTemplateItem>> = (|| {
         // Open a read-only connection to strategies DB directly for listing templates
         let db_path = crate::paths::get_strategies_db_path();
-        let conn = rusqlite::Connection::open(&db_path)
-            .map_err(|e| format!("Failed to open strategies db: {e}"))?;
+        let conn = rusqlite::Connection::open(&db_path).map_err(|e| {
+            crate::webserver::Error::TemplateDecode {
+                detail: format!("Failed to open strategies db: {e}"),
+            }
+        })?;
 
         // Apply centralized PRAGMA configuration
-        crate::database::configure_connection(&conn, crate::database::STRATEGIES_DB)
-            .map_err(|e| format!("Failed to configure connection: {e}"))?;
+        crate::database::configure_connection(&conn, crate::database::STRATEGIES_DB).map_err(
+            |e| crate::webserver::Error::TemplateDecode {
+                detail: format!("Failed to configure connection: {e}"),
+            },
+        )?;
 
         let mut stmt = conn
             .prepare(
                 "SELECT id, name, description, category, risk_level, rules_json, parameters_json, created_at, author FROM strategy_templates ORDER BY created_at DESC",
             )
-            .map_err(|e| format!("Failed to prepare templates query: {e}"))?;
+            .map_err(|e| crate::webserver::Error::TemplateDecode {
+                detail: format!("Failed to prepare templates query: {e}"),
+            })?;
         let rows = stmt
             .query_map([], |row| {
                 let rules_json: String = row.get(5)?;
@@ -51,9 +59,13 @@ pub async fn list_templates() -> Response {
                     author: row.get(8)?,
                 })
             })
-            .map_err(|e| format!("Failed to query templates: {e}"))?
+            .map_err(|e| crate::webserver::Error::TemplateDecode {
+                detail: format!("Failed to query templates: {e}"),
+            })?
             .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| format!("Failed to collect templates: {e}"))?;
+            .map_err(|e| crate::webserver::Error::TemplateDecode {
+                detail: format!("Failed to collect templates: {e}"),
+            })?;
         Ok(rows)
     })();
 

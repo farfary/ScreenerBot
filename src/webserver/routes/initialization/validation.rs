@@ -8,6 +8,8 @@ use std::sync::{LazyLock, Mutex};
 use std::time::{Duration, Instant};
 use uuid::Uuid;
 
+use crate::webserver::{Error, Result};
+
 const SETUP_VALIDATION_TTL: Duration = Duration::from_secs(5 * 60);
 
 struct PendingSetupValidation {
@@ -146,26 +148,34 @@ pub(super) fn store_setup_validation(
 
 pub(super) fn consume_setup_validation(
     request: &CompleteInitializationRequest,
-) -> Result<ValidatedSetup, String> {
+) -> Result<ValidatedSetup> {
     let mut guard = match PENDING_SETUP_VALIDATION.lock() {
         Ok(guard) => guard,
         Err(poisoned) => poisoned.into_inner(),
     };
     let Some(pending) = guard.take() else {
-        return Err("Run credential verification again before saving setup".to_owned());
+        return Err(Error::InvalidInitialization {
+            detail: "Run credential verification again before saving setup".to_owned(),
+        });
     };
 
     if pending.expires_at <= Instant::now() {
-        return Err("Credential verification expired. Run it again before saving".to_owned());
+        return Err(Error::InvalidInitialization {
+            detail: "Credential verification expired. Run it again before saving".to_owned(),
+        });
     }
     if pending.id != request.validation_id
         || pending.snapshot_digest
             != setup_snapshot_digest(&request.wallet_private_key, &request.rpc_urls)
     {
-        return Err("Credentials changed after verification. Run verification again".to_owned());
+        return Err(Error::InvalidInitialization {
+            detail: "Credentials changed after verification. Run verification again".to_owned(),
+        });
     }
     if pending.working_rpc_indices.is_empty() {
-        return Err("No validated RPC endpoints are available to save".to_owned());
+        return Err(Error::InvalidInitialization {
+            detail: "No validated RPC endpoints are available to save".to_owned(),
+        });
     }
 
     Ok(ValidatedSetup {

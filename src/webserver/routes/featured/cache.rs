@@ -6,6 +6,7 @@
 
 use super::types::ExternalToken;
 use crate::apis::get_api_manager;
+use crate::webserver::{Error, Result};
 use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
@@ -28,7 +29,7 @@ static DEXSCREENER_TRENDING_CACHE: LazyLock<Arc<RwLock<Option<ExternalTokensCach
 const EXTERNAL_CACHE_TTL: Duration = Duration::from_secs(120);
 
 /// Fetch Jupiter top organic score tokens
-async fn fetch_jupiter_organic() -> Result<Vec<ExternalToken>, String> {
+async fn fetch_jupiter_organic() -> Result<Vec<ExternalToken>> {
     let api = get_api_manager();
 
     if !api.jupiter.is_enabled() {
@@ -39,7 +40,10 @@ async fn fetch_jupiter_organic() -> Result<Vec<ExternalToken>, String> {
         .jupiter
         .fetch_top_organic_score("24h", Some(20))
         .await
-        .map_err(|e| format!("Jupiter organic fetch failed: {:?}", e))?;
+        .map_err(|source| Error::Api {
+            operation: "Jupiter organic fetch",
+            source,
+        })?;
 
     Ok(tokens
         .into_iter()
@@ -65,7 +69,7 @@ async fn fetch_jupiter_organic() -> Result<Vec<ExternalToken>, String> {
 }
 
 /// Fetch Jupiter top traded tokens
-async fn fetch_jupiter_traded() -> Result<Vec<ExternalToken>, String> {
+async fn fetch_jupiter_traded() -> Result<Vec<ExternalToken>> {
     let api = get_api_manager();
 
     if !api.jupiter.is_enabled() {
@@ -76,7 +80,10 @@ async fn fetch_jupiter_traded() -> Result<Vec<ExternalToken>, String> {
         .jupiter
         .fetch_top_traded("24h", Some(20))
         .await
-        .map_err(|e| format!("Jupiter traded fetch failed: {:?}", e))?;
+        .map_err(|source| Error::Api {
+            operation: "Jupiter traded fetch",
+            source,
+        })?;
 
     Ok(tokens
         .into_iter()
@@ -106,7 +113,7 @@ async fn fetch_jupiter_traded() -> Result<Vec<ExternalToken>, String> {
 /// This is DexScreener's OWN boost product and has nothing to do with a
 /// ScreenerBot boost — it is a third-party discovery board, so its rows stay
 /// `boosts: 0` and never earn our gold treatment.
-async fn fetch_dexscreener_trending() -> Result<Vec<ExternalToken>, String> {
+async fn fetch_dexscreener_trending() -> Result<Vec<ExternalToken>> {
     let api = get_api_manager();
 
     if !api.dexscreener.is_enabled() {
@@ -117,7 +124,10 @@ async fn fetch_dexscreener_trending() -> Result<Vec<ExternalToken>, String> {
         .dexscreener
         .get_top_boosted_tokens(Some(crate::chains::adapter().market_data_network()))
         .await
-        .map_err(|e| format!("DexScreener trending fetch failed: {e}"))?;
+        .map_err(|source| Error::Api {
+            operation: "DexScreener trending fetch",
+            source,
+        })?;
 
     Ok(tokens
         .into_iter()
@@ -179,7 +189,7 @@ async fn cached_board<F, Fut>(
 ) -> Vec<ExternalToken>
 where
     F: FnOnce() -> Fut,
-    Fut: std::future::Future<Output = Result<Vec<ExternalToken>, String>>,
+    Fut: std::future::Future<Output = Result<Vec<ExternalToken>>>,
 {
     {
         let cache = slot.read().await;

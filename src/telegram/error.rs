@@ -42,8 +42,11 @@ pub enum Error {
     #[error("2FA is not configured; enable it in security settings first")]
     TotpNotConfigured,
     /// The shared lockscreen TOTP verifier rejected the request.
-    #[error("TOTP verification failed: {detail}")]
-    TotpVerificationFailed { detail: String },
+    #[error("TOTP verification failed")]
+    TotpVerificationFailed {
+        #[source]
+        source: crate::webserver::Error,
+    },
     /// The discovery polling service was started while already running.
     #[error("chat discovery is already running")]
     DiscoveryAlreadyRunning,
@@ -68,9 +71,9 @@ impl ErrorClass for Error {
             | Error::AccountLocked { .. }
             | Error::NotAwaitingTotp
             | Error::TotpNotConfigured
-            | Error::TotpVerificationFailed { .. }
             | Error::DiscoveryAlreadyRunning
             | Error::ChatNotFound { .. } => false,
+            Error::TotpVerificationFailed { source } => source.is_retryable(),
         }
     }
 
@@ -80,6 +83,7 @@ impl ErrorClass for Error {
             Error::Config(e) => e.retry_after(),
             Error::SendFailed { .. } => Some(Duration::from_secs(1)),
             Error::AccountLocked { remaining_secs } => Some(Duration::from_secs(*remaining_secs)),
+            Error::TotpVerificationFailed { source } => source.retry_after(),
             _ => None,
         }
     }
@@ -96,7 +100,7 @@ impl ErrorClass for Error {
             Error::AccountLocked { .. } => Severity::Warning,
             Error::NotAwaitingTotp => Severity::Info,
             Error::TotpNotConfigured => Severity::Warning,
-            Error::TotpVerificationFailed { .. } => Severity::Error,
+            Error::TotpVerificationFailed { source } => source.severity(),
             Error::DiscoveryAlreadyRunning => Severity::Info,
             Error::ChatNotFound { .. } => Severity::Warning,
         }
@@ -114,7 +118,7 @@ impl ErrorClass for Error {
             Error::AccountLocked { .. } => 423,
             Error::NotAwaitingTotp => 409,
             Error::TotpNotConfigured => 412,
-            Error::TotpVerificationFailed { .. } => 502,
+            Error::TotpVerificationFailed { source } => source.http_status(),
             Error::DiscoveryAlreadyRunning => 409,
             Error::ChatNotFound { .. } => 404,
         }

@@ -51,7 +51,7 @@ pub(super) async fn get_wallet_qr(Path(address): Path<String>) -> Response {
             StatusCode::INTERNAL_SERVER_ERROR,
             "QR_ERROR",
             "Could not generate the wallet QR code",
-            Some(&err),
+            Some(&err.to_string()),
         ),
     }
 }

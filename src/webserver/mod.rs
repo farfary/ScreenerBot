@@ -1,6 +1,9 @@
 //! Web dashboard server — REST API and real-time status endpoints.
 mod server;
 
+mod error;
+pub use error::{Error, Result};
+
 mod embeds;
 pub mod middleware;
 pub mod promo;

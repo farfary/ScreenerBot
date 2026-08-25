@@ -4,8 +4,8 @@ use axum::{http::StatusCode, response::Response, Json};
 
 use crate::config;
 use crate::secure_storage::verify_password;
-use crate::webserver::totp;
 use crate::webserver::utils::{error_response, success_response};
+use crate::webserver::{totp, Error};
 
 use super::types::{
     SetPasswordResponse, TotpDisableRequest, TotpSetupRequest, TotpSetupResponse,
@@ -67,7 +67,7 @@ pub async fn totp_setup(Json(req): Json<TotpSetupRequest>) -> Response {
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "TOTP_ERROR",
                 "Failed to generate TOTP URI",
-                Some(&e),
+                Some(&e.to_string()),
             );
         }
     };
@@ -79,7 +79,7 @@ pub async fn totp_setup(Json(req): Json<TotpSetupRequest>) -> Response {
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "QR_ERROR",
                 "Failed to generate QR code",
-                Some(&e),
+                Some(&e.to_string()),
             );
         }
     };
@@ -107,8 +107,14 @@ pub async fn totp_verify_setup(Json(req): Json<TotpVerifySetupRequest>) -> Respo
     }
 
     // Verify the TOTP code
-    match totp::verify_totp(&req.secret, &req.code) {
-        Ok(true) => {
+    match totp::verify_totp(&req.secret, &req.code).and_then(|valid| {
+        if valid {
+            Ok(())
+        } else {
+            Err(Error::InvalidTotpCode)
+        }
+    }) {
+        Ok(()) => {
             // Code verified, save secret and enable TOTP
             if let Err(e) = config::update_config_section(
                 |cfg| {
@@ -131,7 +137,7 @@ pub async fn totp_verify_setup(Json(req): Json<TotpVerifySetupRequest>) -> Respo
                 timestamp: chrono::Utc::now().to_rfc3339(),
             })
         }
-        Ok(false) => error_response(
+        Err(Error::InvalidTotpCode) => error_response(
             StatusCode::BAD_REQUEST,
             "INVALID_CODE",
             "Invalid verification code. Please check the code and try again.",

@@ -14,7 +14,10 @@ use crate::{
     global,
     logger::{self, LogTag},
     services,
-    webserver::utils::{error_response, success_response},
+    webserver::{
+        utils::{error_response, success_response},
+        Error, Result,
+    },
 };
 use axum::{extract::Json, http::StatusCode, response::Response};
 
@@ -349,7 +352,7 @@ pub(super) async fn complete_initialization(
             return error_response(
                 StatusCode::BAD_REQUEST,
                 "SETUP_VALIDATION_REQUIRED",
-                &message,
+                &message.to_string(),
                 None,
             );
         }
@@ -513,26 +516,33 @@ pub(super) async fn initialization_progress() -> Response {
 }
 
 /// Start remaining services after initialization
-async fn start_remaining_services() -> Result<services::ServiceStartupReport, String> {
+async fn start_remaining_services() -> Result<services::ServiceStartupReport> {
     logger::info(
         LogTag::Webserver,
         "Requesting service startup from ServiceManager",
     );
 
-    let manager_ref = services::get_service_manager()
-        .await
-        .ok_or_else(|| "ServiceManager not available".to_owned())?;
+    let manager_ref =
+        services::get_service_manager()
+            .await
+            .ok_or_else(|| Error::ServiceStartup {
+                detail: "ServiceManager not available".to_owned(),
+            })?;
 
     let mut manager_guard = manager_ref.write().await;
     let manager = manager_guard
         .as_mut()
-        .ok_or_else(|| "ServiceManager not initialized".to_owned())?;
+        .ok_or_else(|| Error::ServiceStartup {
+            detail: "ServiceManager not initialized".to_owned(),
+        })?;
 
     // Start newly enabled services
     let report = manager
         .start_newly_enabled()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| Error::ServiceStartup {
+            detail: e.to_string(),
+        })?;
 
     Ok(report)
 }

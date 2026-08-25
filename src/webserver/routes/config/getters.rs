@@ -7,7 +7,10 @@ use axum::{http::StatusCode, response::Response, Json};
 use crate::config;
 use crate::config::metadata::collect_config_metadata;
 use crate::config::schemas::default_tabs;
-use crate::webserver::utils::{error_response, success_response};
+use crate::webserver::{
+    utils::{error_response, success_response},
+    Error, Result,
+};
 
 use super::types::*;
 
@@ -354,7 +357,7 @@ where
         .unwrap_or("unknown");
 
     // Prepare the merged config outside closure
-    let merge_result: Result<(), String> = (|| {
+    let merge_result: Result<()> = (|| {
         // Get current config
         let current_section = config::with_config(|cfg| match section_name {
             "TraderConfig" => serde_json::to_value(&cfg.trader).ok(),
@@ -385,7 +388,9 @@ where
             _ => None,
         });
 
-        let mut section_json = current_section.ok_or("Failed to serialize current config")?;
+        let mut section_json = current_section.ok_or_else(|| Error::InvalidImport {
+            detail: "failed to serialize current config".to_owned(),
+        })?;
 
         // Merge updates into existing config
         if let (Some(section_obj), Some(updates_obj)) =
@@ -404,303 +409,304 @@ where
         match section_name {
             "TraderConfig" => {
                 let new_config: config::TraderConfig = serde_json::from_value(section_json)
-                    .map_err(|e| format!("Invalid TraderConfig: {e}"))?;
+                    .map_err(|e| Error::InvalidImport {
+                        detail: format!("Invalid TraderConfig: {e}"),
+                    })?;
                 config::update_config_section(
                     |cfg| {
                         cfg.trader = new_config;
                     },
                     true,
-                )
-                // SEAM: webserver still returns String errors; removed when it migrates.
-                .map_err(|e| e.to_string())?;
+                )?;
             }
             "PositionsConfig" => {
                 let new_config: config::PositionsConfig = serde_json::from_value(section_json)
-                    .map_err(|e| format!("Invalid PositionsConfig: {e}"))?;
+                    .map_err(|e| Error::InvalidImport {
+                        detail: format!("Invalid PositionsConfig: {e}"),
+                    })?;
                 config::update_config_section(
                     |cfg| {
                         cfg.positions = new_config;
                     },
                     true,
-                )
-                // SEAM: webserver still returns String errors; removed when it migrates.
-                .map_err(|e| e.to_string())?;
+                )?;
             }
             "FilteringConfig" => {
                 let new_config: config::FilteringConfig = serde_json::from_value(section_json)
-                    .map_err(|e| format!("Invalid FilteringConfig: {e}"))?;
+                    .map_err(|e| Error::InvalidImport {
+                        detail: format!("Invalid FilteringConfig: {e}"),
+                    })?;
                 config::update_config_section(
                     |cfg| {
                         cfg.filtering = new_config;
                     },
                     true,
-                )
-                // SEAM: webserver still returns String errors; removed when it migrates.
-                .map_err(|e| e.to_string())?;
+                )?;
             }
             "SwapsConfig" => {
                 let new_config: config::SwapsConfig = serde_json::from_value(section_json)
-                    .map_err(|e| format!("Invalid SwapsConfig: {e}"))?;
+                    .map_err(|e| Error::InvalidImport {
+                        detail: format!("Invalid SwapsConfig: {e}"),
+                    })?;
                 config::update_config_section(
                     |cfg| {
                         cfg.swaps = new_config;
                     },
                     true,
-                )
-                // SEAM: webserver still returns String errors; removed when it migrates.
-                .map_err(|e| e.to_string())?;
+                )?;
             }
             "TokensConfig" => {
                 let new_config: config::TokensConfig = serde_json::from_value(section_json)
-                    .map_err(|e| format!("Invalid TokensConfig: {e}"))?;
+                    .map_err(|e| Error::InvalidImport {
+                        detail: format!("Invalid TokensConfig: {e}"),
+                    })?;
                 config::update_config_section(
                     |cfg| {
                         cfg.tokens = new_config;
                     },
                     true,
-                )
-                // SEAM: webserver still returns String errors; removed when it migrates.
-                .map_err(|e| e.to_string())?;
+                )?;
             }
             "PoolsConfig" => {
                 let new_config: config::PoolsConfig = serde_json::from_value(section_json)
-                    .map_err(|e| format!("Invalid PoolsConfig: {e}"))?;
+                    .map_err(|e| Error::InvalidImport {
+                        detail: format!("Invalid PoolsConfig: {e}"),
+                    })?;
                 config::update_config_section(
                     |cfg| {
                         cfg.pools = new_config;
                     },
                     true,
-                )
-                // SEAM: webserver still returns String errors; removed when it migrates.
-                .map_err(|e| e.to_string())?;
+                )?;
             }
             "MaintenanceConfig" => {
                 let new_config: config::MaintenanceConfig = serde_json::from_value(section_json)
-                    .map_err(|e| format!("Invalid MaintenanceConfig: {e}"))?;
+                    .map_err(|e| Error::InvalidImport {
+                        detail: format!("Invalid MaintenanceConfig: {e}"),
+                    })?;
                 config::update_config_section(
                     |cfg| {
                         cfg.maintenance = new_config;
                     },
                     true,
-                )
-                // SEAM: webserver still returns String errors; removed when it migrates.
-                .map_err(|e| e.to_string())?;
+                )?;
             }
             "RpcConfig" => {
-                let new_config: config::RpcConfig = serde_json::from_value(section_json)
-                    .map_err(|e| format!("Invalid RpcConfig: {e}"))?;
+                let new_config: config::RpcConfig =
+                    serde_json::from_value(section_json).map_err(|e| Error::InvalidImport {
+                        detail: format!("Invalid RpcConfig: {e}"),
+                    })?;
                 config::update_config_section(
                     |cfg| {
                         cfg.rpc = new_config;
                     },
                     true,
-                )
-                // SEAM: webserver still returns String errors; removed when it migrates.
-                .map_err(|e| e.to_string())?;
+                )?;
             }
             "SolPriceConfig" => {
                 let new_config: config::SolPriceConfig = serde_json::from_value(section_json)
-                    .map_err(|e| format!("Invalid SolPriceConfig: {e}"))?;
+                    .map_err(|e| Error::InvalidImport {
+                        detail: format!("Invalid SolPriceConfig: {e}"),
+                    })?;
                 config::update_config_section(
                     |cfg| {
                         cfg.sol_price = new_config;
                     },
                     true,
-                )
-                // SEAM: webserver still returns String errors; removed when it migrates.
-                .map_err(|e| e.to_string())?;
+                )?;
             }
             "EventsConfig" => {
                 let new_config: config::EventsConfig = serde_json::from_value(section_json)
-                    .map_err(|e| format!("Invalid EventsConfig: {e}"))?;
+                    .map_err(|e| Error::InvalidImport {
+                        detail: format!("Invalid EventsConfig: {e}"),
+                    })?;
                 config::update_config_section(
                     |cfg| {
                         cfg.events = new_config;
                     },
                     true,
-                )
-                // SEAM: webserver still returns String errors; removed when it migrates.
-                .map_err(|e| e.to_string())?;
+                )?;
             }
             "ServicesConfig" => {
                 let new_config: config::ServicesConfig = serde_json::from_value(section_json)
-                    .map_err(|e| format!("Invalid ServicesConfig: {e}"))?;
+                    .map_err(|e| Error::InvalidImport {
+                        detail: format!("Invalid ServicesConfig: {e}"),
+                    })?;
                 config::update_config_section(
                     |cfg| {
                         cfg.services = new_config;
                     },
                     true,
-                )
-                // SEAM: webserver still returns String errors; removed when it migrates.
-                .map_err(|e| e.to_string())?;
+                )?;
             }
             "MonitoringConfig" => {
                 let new_config: config::MonitoringConfig = serde_json::from_value(section_json)
-                    .map_err(|e| format!("Invalid MonitoringConfig: {e}"))?;
+                    .map_err(|e| Error::InvalidImport {
+                        detail: format!("Invalid MonitoringConfig: {e}"),
+                    })?;
                 config::update_config_section(
                     |cfg| {
                         cfg.monitoring = new_config;
                     },
                     true,
-                )
-                // SEAM: webserver still returns String errors; removed when it migrates.
-                .map_err(|e| e.to_string())?;
+                )?;
             }
             "OhlcvConfig" => {
                 let new_config: config::OhlcvConfig = serde_json::from_value(section_json)
-                    .map_err(|e| format!("Invalid OhlcvConfig: {e}"))?;
+                    .map_err(|e| Error::InvalidImport {
+                        detail: format!("Invalid OhlcvConfig: {e}"),
+                    })?;
                 config::update_config_section(
                     |cfg| {
                         cfg.ohlcv = new_config;
                     },
                     true,
-                )
-                // SEAM: webserver still returns String errors; removed when it migrates.
-                .map_err(|e| e.to_string())?;
+                )?;
             }
             "GuiConfig" => {
-                let new_config: config::GuiConfig = serde_json::from_value(section_json)
-                    .map_err(|e| format!("Invalid GuiConfig: {e}"))?;
+                let new_config: config::GuiConfig =
+                    serde_json::from_value(section_json).map_err(|e| Error::InvalidImport {
+                        detail: format!("Invalid GuiConfig: {e}"),
+                    })?;
                 config::update_config_section(
                     |cfg| {
                         cfg.gui = new_config;
                     },
                     true,
-                )
-                // SEAM: webserver still returns String errors; removed when it migrates.
-                .map_err(|e| e.to_string())?;
+                )?;
             }
             "TelegramConfig" => {
                 let new_config: config::TelegramConfig = serde_json::from_value(section_json)
-                    .map_err(|e| format!("Invalid TelegramConfig: {e}"))?;
+                    .map_err(|e| Error::InvalidImport {
+                        detail: format!("Invalid TelegramConfig: {e}"),
+                    })?;
                 config::update_config_section(
                     |cfg| {
                         cfg.telegram = new_config;
                     },
                     true,
-                )
-                // SEAM: webserver still returns String errors; removed when it migrates.
-                .map_err(|e| e.to_string())?;
+                )?;
             }
             "AiConfig" => {
-                let new_config: config::AiConfig = serde_json::from_value(section_json)
-                    .map_err(|e| format!("Invalid AiConfig: {e}"))?;
+                let new_config: config::AiConfig =
+                    serde_json::from_value(section_json).map_err(|e| Error::InvalidImport {
+                        detail: format!("Invalid AiConfig: {e}"),
+                    })?;
                 config::update_config_section(
                     |cfg| {
                         cfg.ai = new_config;
                     },
                     true,
-                )
-                // SEAM: webserver still returns String errors; removed when it migrates.
-                .map_err(|e| e.to_string())?;
+                )?;
             }
             "StrategiesConfig" => {
                 let new_config: config::StrategiesConfig = serde_json::from_value(section_json)
-                    .map_err(|e| format!("Invalid StrategiesConfig: {e}"))?;
+                    .map_err(|e| Error::InvalidImport {
+                        detail: format!("Invalid StrategiesConfig: {e}"),
+                    })?;
                 config::update_config_section(
                     |cfg| {
                         cfg.strategies = new_config;
                     },
                     true,
-                )
-                // SEAM: webserver still returns String errors; removed when it migrates.
-                .map_err(|e| e.to_string())?;
+                )?;
             }
             "HolderWatchConfig" => {
                 let new_config: config::HolderWatchConfig = serde_json::from_value(section_json)
-                    .map_err(|e| format!("Invalid HolderWatchConfig: {e}"))?;
+                    .map_err(|e| Error::InvalidImport {
+                        detail: format!("Invalid HolderWatchConfig: {e}"),
+                    })?;
                 config::update_config_section(
                     |cfg| {
                         cfg.holder_watch = new_config;
                     },
                     true,
-                )
-                // SEAM: webserver still returns String errors; removed when it migrates.
-                .map_err(|e| e.to_string())?;
+                )?;
             }
             "WalletConfig" => {
                 let new_config: config::WalletConfig = serde_json::from_value(section_json)
-                    .map_err(|e| format!("Invalid WalletConfig: {e}"))?;
+                    .map_err(|e| Error::InvalidImport {
+                        detail: format!("Invalid WalletConfig: {e}"),
+                    })?;
                 config::update_config_section(
                     |cfg| {
                         cfg.wallet = new_config;
                     },
                     true,
-                )
-                // SEAM: webserver still returns String errors; removed when it migrates.
-                .map_err(|e| e.to_string())?;
+                )?;
             }
             "WebserverConfig" => {
                 let new_config: config::WebserverConfig = serde_json::from_value(section_json)
-                    .map_err(|e| format!("Invalid WebserverConfig: {e}"))?;
+                    .map_err(|e| Error::InvalidImport {
+                        detail: format!("Invalid WebserverConfig: {e}"),
+                    })?;
                 config::update_config_section(
                     |cfg| {
                         cfg.webserver = new_config;
                     },
                     true,
-                )
-                // SEAM: webserver still returns String errors; removed when it migrates.
-                .map_err(|e| e.to_string())?;
+                )?;
             }
             "CopyTradingConfig" => {
                 let new_config: config::CopyTradingConfig = serde_json::from_value(section_json)
-                    .map_err(|e| format!("Invalid CopyTradingConfig: {e}"))?;
-                // SEAM: webserver still returns String errors; removed when it migrates.
-                new_config.validate().map_err(|e| e.to_string())?;
-                // SEAM: webserver still returns String errors; removed when it migrates.
-                config::update_config_section(|cfg| cfg.copy_trading = new_config, true)
-                    .map_err(|e| e.to_string())?;
+                    .map_err(|e| Error::InvalidImport {
+                        detail: format!("Invalid CopyTradingConfig: {e}"),
+                    })?;
+                new_config.validate()?;
+                config::update_config_section(|cfg| cfg.copy_trading = new_config, true)?;
             }
             "PerformanceConfig" => {
                 let new_config: config::PerformanceConfig = serde_json::from_value(section_json)
-                    .map_err(|e| format!("Invalid PerformanceConfig: {e}"))?;
+                    .map_err(|e| Error::InvalidImport {
+                        detail: format!("Invalid PerformanceConfig: {e}"),
+                    })?;
                 config::update_config_section(
                     |cfg| {
                         cfg.performance = new_config;
                     },
                     true,
-                )
-                // SEAM: webserver still returns String errors; removed when it migrates.
-                .map_err(|e| e.to_string())?;
+                )?;
             }
             "NetworkConfig" => {
                 let new_config: config::NetworkConfig = serde_json::from_value(section_json)
-                    .map_err(|e| format!("Invalid NetworkConfig: {e}"))?;
+                    .map_err(|e| Error::InvalidImport {
+                        detail: format!("Invalid NetworkConfig: {e}"),
+                    })?;
                 config::update_config_section(
                     |cfg| {
                         cfg.network = new_config;
                     },
                     true,
-                )
-                // SEAM: webserver still returns String errors; removed when it migrates.
-                .map_err(|e| e.to_string())?;
+                )?;
             }
             "ReferralConfig" => {
                 let new_config: config::ReferralConfig = serde_json::from_value(section_json)
-                    .map_err(|e| format!("Invalid ReferralConfig: {e}"))?;
+                    .map_err(|e| Error::InvalidImport {
+                        detail: format!("Invalid ReferralConfig: {e}"),
+                    })?;
                 config::update_config_section(
                     |cfg| {
                         cfg.referral = new_config;
                     },
                     true,
-                )
-                // SEAM: webserver still returns String errors; removed when it migrates.
-                .map_err(|e| e.to_string())?;
+                )?;
             }
             "AccountConfig" => {
                 let new_config: config::AccountConfig = serde_json::from_value(section_json)
-                    .map_err(|e| format!("Invalid AccountConfig: {e}"))?;
+                    .map_err(|e| Error::InvalidImport {
+                        detail: format!("Invalid AccountConfig: {e}"),
+                    })?;
                 config::update_config_section(
                     |cfg| {
                         cfg.account = new_config;
                     },
                     true,
-                )
-                // SEAM: webserver still returns String errors; removed when it migrates.
-                .map_err(|e| e.to_string())?;
+                )?;
             }
             _ => {
-                return Err(format!("Unknown config section: {section_name}"));
+                return Err(Error::UnknownConfigKey {
+                    key: section_name.to_owned(),
+                });
             }
         }
 

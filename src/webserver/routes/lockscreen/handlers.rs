@@ -4,7 +4,10 @@ use axum::Json;
 
 use crate::config;
 use crate::secure_storage::{generate_password_salt, hash_password, verify_password};
-use crate::webserver::utils::{error_response, success_response};
+use crate::webserver::{
+    utils::{error_response, success_response},
+    Error, Result,
+};
 
 use super::types::*;
 
@@ -71,7 +74,12 @@ pub(super) async fn set_password(Json(req): Json<SetPasswordRequest>) -> Respons
 
     // Validate password format based on type
     if let Err(e) = validate_password_format(&req.new_password, &req.password_type) {
-        return error_response(StatusCode::BAD_REQUEST, "INVALID_FORMAT", &e, None);
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "INVALID_FORMAT",
+            &e.to_string(),
+            None,
+        );
     }
 
     // Check if password already exists
@@ -256,34 +264,48 @@ pub(super) async fn update_settings(Json(req): Json<UpdateSettingsRequest>) -> R
 // =============================================================================
 
 /// Validate password format based on type
-fn validate_password_format(password: &str, password_type: &str) -> Result<(), String> {
+fn validate_password_format(password: &str, password_type: &str) -> Result<()> {
     match password_type {
         "pin4" => {
             if password.len() != 4 {
-                return Err("PIN must be exactly 4 digits".to_owned());
+                return Err(Error::InvalidLockscreenPassword {
+                    detail: "PIN must be exactly 4 digits".to_owned(),
+                });
             }
             if !password.chars().all(|c| c.is_ascii_digit()) {
-                return Err("PIN must contain only digits".to_owned());
+                return Err(Error::InvalidLockscreenPassword {
+                    detail: "PIN must contain only digits".to_owned(),
+                });
             }
         }
         "pin6" => {
             if password.len() != 6 {
-                return Err("PIN must be exactly 6 digits".to_owned());
+                return Err(Error::InvalidLockscreenPassword {
+                    detail: "PIN must be exactly 6 digits".to_owned(),
+                });
             }
             if !password.chars().all(|c| c.is_ascii_digit()) {
-                return Err("PIN must contain only digits".to_owned());
+                return Err(Error::InvalidLockscreenPassword {
+                    detail: "PIN must contain only digits".to_owned(),
+                });
             }
         }
         "text" => {
             if password.len() < 4 {
-                return Err("Password must be at least 4 characters".to_owned());
+                return Err(Error::InvalidLockscreenPassword {
+                    detail: "Password must be at least 4 characters".to_owned(),
+                });
             }
             if password.len() > 128 {
-                return Err("Password must be at most 128 characters".to_owned());
+                return Err(Error::InvalidLockscreenPassword {
+                    detail: "Password must be at most 128 characters".to_owned(),
+                });
             }
         }
         _ => {
-            return Err("Invalid password type".to_owned());
+            return Err(Error::InvalidLockscreenPassword {
+                detail: "Invalid password type".to_owned(),
+            });
         }
     }
     Ok(())

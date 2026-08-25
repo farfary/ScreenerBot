@@ -3,6 +3,7 @@
 use super::types::{rank_boosts, retain_active, BoostStanding, WebsiteBoostResponse};
 use crate::connectivity;
 use crate::logger::{self, LogTag};
+use crate::webserver::{Error, Result};
 use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
@@ -25,9 +26,11 @@ static BOOST_CACHE: LazyLock<Arc<RwLock<Option<BoostCache>>>> =
     LazyLock::new(|| Arc::new(RwLock::new(None)));
 
 /// Fetch, validate and rank the website's boost feed.
-async fn fetch_feed() -> Result<Vec<BoostStanding>, String> {
+async fn fetch_feed() -> Result<Vec<BoostStanding>> {
     if connectivity::is_network_offline() {
-        return Err("network offline".to_owned());
+        return Err(Error::ExternalFeed {
+            detail: "network offline".to_owned(),
+        });
     }
 
     let response = crate::net::client()
@@ -35,19 +38,24 @@ async fn fetch_feed() -> Result<Vec<BoostStanding>, String> {
         .timeout(FETCH_TIMEOUT)
         .send()
         .await
-        .map_err(|e| format!("boost feed request failed: {e}"))?;
+        .map_err(|e| Error::ExternalFeed {
+            detail: format!("boost feed request failed: {e}"),
+        })?;
 
     if !response.status().is_success() {
-        return Err(format!("boost feed returned status {}", response.status()));
+        return Err(Error::ExternalFeed {
+            detail: format!("boost feed returned status {}", response.status()),
+        });
     }
 
-    let payload: WebsiteBoostResponse = response
-        .json()
-        .await
-        .map_err(|e| format!("boost feed parse failed: {e}"))?;
+    let payload: WebsiteBoostResponse = response.json().await.map_err(|e| Error::ExternalFeed {
+        detail: format!("boost feed parse failed: {e}"),
+    })?;
 
     if !payload.success {
-        return Err("boost feed returned success=false".to_owned());
+        return Err(Error::ExternalFeed {
+            detail: "boost feed returned success=false".to_owned(),
+        });
     }
 
     let mut standings = payload.tokens;
@@ -58,7 +66,7 @@ async fn fetch_feed() -> Result<Vec<BoostStanding>, String> {
 }
 
 /// Fetch and store. Returns the fresh standings.
-async fn refresh() -> Result<Vec<BoostStanding>, String> {
+async fn refresh() -> Result<Vec<BoostStanding>> {
     let standings = fetch_feed().await?;
     {
         let mut cache = BOOST_CACHE.write().await;

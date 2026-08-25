@@ -150,7 +150,7 @@ pub async fn get_position_details(Path(key): Path<String>) -> Response {
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "POSITION_DETAIL_ERROR",
                 "Failed to load position details",
-                Some(&err),
+                Some(&err.to_string()),
             )
         }
     }
@@ -164,11 +164,13 @@ pub async fn get_position_details(Path(key): Path<String>) -> Response {
 /// with "no open position for this token".
 pub(super) async fn resolve_position_by_key(
     key: &str,
-) -> Result<Option<positions::Position>, String> {
+) -> crate::webserver::Result<Option<positions::Position>> {
     if let Some(id_part) = key.strip_prefix("id:") {
         let id: i64 = id_part
             .parse()
-            .map_err(|_| format!("Invalid position id: {id_part}"))?;
+            .map_err(|_| crate::webserver::Error::InvalidPositionKey {
+                detail: format!("Invalid position id: {id_part}"),
+            })?;
         return Ok(positions::get_position_by_id(id).await);
     }
 

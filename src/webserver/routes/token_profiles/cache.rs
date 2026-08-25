@@ -1,6 +1,7 @@
 use super::types::{PublishedTokenProfile, WebsiteProfileResponse};
 use crate::connectivity;
 use crate::logger::{self, LogTag};
+use crate::webserver::{Error, Result};
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant};
@@ -18,26 +19,29 @@ struct ProfileCache {
 static CACHE: LazyLock<Arc<RwLock<Option<ProfileCache>>>> =
     LazyLock::new(|| Arc::new(RwLock::new(None)));
 
-async fn fetch_feed() -> Result<HashMap<String, PublishedTokenProfile>, String> {
+async fn fetch_feed() -> Result<HashMap<String, PublishedTokenProfile>> {
     if connectivity::is_network_offline() {
-        return Err("network offline".to_owned());
+        return Err(Error::ExternalFeed {
+            detail: "network offline".to_owned(),
+        });
     }
     let response = crate::net::client()
         .get(PROFILE_FEED_URL)
         .timeout(FETCH_TIMEOUT)
         .send()
         .await
-        .map_err(|error| format!("token profile feed request failed: {error}"))?;
+        .map_err(|error| Error::ExternalFeed {
+            detail: format!("token profile feed request failed: {error}"),
+        })?;
     if !response.status().is_success() {
-        return Err(format!(
-            "token profile feed returned status {}",
-            response.status()
-        ));
+        return Err(Error::ExternalFeed {
+            detail: format!("token profile feed returned status {}", response.status()),
+        });
     }
-    let payload: WebsiteProfileResponse = response
-        .json()
-        .await
-        .map_err(|error| format!("token profile feed parse failed: {error}"))?;
+    let payload: WebsiteProfileResponse =
+        response.json().await.map_err(|error| Error::ExternalFeed {
+            detail: format!("token profile feed parse failed: {error}"),
+        })?;
     Ok(payload
         .profiles
         .into_iter()
@@ -46,7 +50,7 @@ async fn fetch_feed() -> Result<HashMap<String, PublishedTokenProfile>, String> 
         .collect())
 }
 
-async fn refresh() -> Result<HashMap<String, PublishedTokenProfile>, String> {
+async fn refresh() -> Result<HashMap<String, PublishedTokenProfile>> {
     let profiles = fetch_feed().await?;
     *CACHE.write().await = Some(ProfileCache {
         profiles: profiles.clone(),

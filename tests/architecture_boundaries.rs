@@ -947,6 +947,7 @@ const MIGRATED_TO_TYPED_ERRORS: &[&str] = &[
     "events",
     "version",
     "config",
+    "webserver",
 ];
 
 /// True when `line` declares a two-parameter `Result<_, String>` — a signature

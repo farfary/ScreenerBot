@@ -55,7 +55,7 @@ pub async fn get_token_activity(Path(key): Path<String>) -> Response {
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "POSITION_ACTIVITY_ERROR",
                 "Failed to resolve position",
-                Some(&err),
+                Some(&err.to_string()),
             )
         }
     };

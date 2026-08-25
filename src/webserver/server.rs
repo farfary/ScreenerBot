@@ -23,7 +23,7 @@ use crate::{
     config::with_config,
     global,
     logger::{self, LogTag},
-    webserver::{routes, state::AppState},
+    webserver::{routes, state::AppState, Error, Result},
 };
 
 pub(crate) const DEFAULT_HOST: &str = "127.0.0.1";
@@ -38,7 +38,7 @@ static SHUTDOWN_NOTIFY: std::sync::LazyLock<Arc<Notify>> =
     std::sync::LazyLock::new(|| Arc::new(Notify::new()));
 
 /// Find an available port in the dynamic range
-async fn find_available_port() -> Result<u16, String> {
+async fn find_available_port() -> Result<u16> {
     // Generate random ports to try (do RNG sync to avoid Send issues)
     let ports_to_try: Vec<u16> = {
         use rand::Rng;
@@ -49,9 +49,13 @@ async fn find_available_port() -> Result<u16, String> {
     };
 
     for (attempt, port) in ports_to_try.into_iter().enumerate() {
-        let addr: SocketAddr = format!("{DEFAULT_HOST}:{port}")
-            .parse()
-            .map_err(|e| format!("Invalid address: {e}"))?;
+        let addr: SocketAddr =
+            format!("{DEFAULT_HOST}:{port}")
+                .parse()
+                .map_err(|e| Error::Bind {
+                    address: format!("{DEFAULT_HOST}:{port}"),
+                    detail: format!("invalid address: {e}"),
+                })?;
 
         // Try to bind - if successful, the port is available
         match TcpListener::bind(&addr).await {
@@ -72,7 +76,10 @@ async fn find_available_port() -> Result<u16, String> {
         }
     }
 
-    Err("Could not find an available port after 100 attempts".to_owned())
+    Err(Error::Bind {
+        address: format!("{DEFAULT_HOST}:{DYNAMIC_PORT_START}-{DYNAMIC_PORT_END}"),
+        detail: "could not find an available port after 100 attempts".to_owned(),
+    })
 }
 
 /// Start the webserver
@@ -87,10 +94,7 @@ async fn find_available_port() -> Result<u16, String> {
 /// - Uses port from config.webserver.port (default 8080)
 /// - Uses host from config.webserver.host (default 127.0.0.1, use 0.0.0.0 for remote)
 /// - Password authentication is mandatory for any non-loopback bind
-pub async fn start_server(
-    port_override: Option<u16>,
-    host_override: Option<String>,
-) -> Result<(), String> {
+pub async fn start_server(port_override: Option<u16>, host_override: Option<String>) -> Result<()> {
     let is_gui = global::is_gui_mode();
 
     // Get config values for headless mode (use defaults if config not loaded yet)
@@ -208,17 +212,19 @@ pub async fn start_server(
     let app = build_app(state.clone());
 
     // Parse bind address
-    let addr: SocketAddr = format!("{host}:{port}")
-        .parse()
-        .map_err(|e| format!("Invalid bind address: {e}"))?;
+    let addr: SocketAddr = format!("{host}:{port}").parse().map_err(|e| Error::Bind {
+        address: format!("{host}:{port}"),
+        detail: format!("invalid bind address: {e}"),
+    })?;
 
     // Create TCP listener
     let listener = TcpListener::bind(&addr).await.map_err(|e| {
         // Provide helpful error message for common cases
         match e.kind() {
-            std::io::ErrorKind::AddrInUse => {
-                format!(
-                    "Failed to bind to {}: Address already in use\n\
+            std::io::ErrorKind::AddrInUse => Error::Bind {
+                address: addr.to_string(),
+                detail: format!(
+                    "address already in use\n\
            \n\
            This usually means another instance of ScreenerBot is running.\n\
            The process lock should have prevented this - please report this issue.\n\
@@ -226,20 +232,23 @@ pub async fn start_server(
            To verify and stop other instances:\n\
             1. Check: ps aux | grep screenerbot | grep -v grep\n\
             2. Stop: pkill -f screenerbot\n\
-            3. Verify: ps aux | grep screenerbot | grep -v grep",
-                    addr
-                )
-            }
-            std::io::ErrorKind::PermissionDenied => {
-                format!(
-                    "Failed to bind to {}: Permission denied\n\
+            3. Verify: ps aux | grep screenerbot | grep -v grep"
+                ),
+            },
+            std::io::ErrorKind::PermissionDenied => Error::Bind {
+                address: addr.to_string(),
+                detail: format!(
+                    "permission denied\n\
            \n\
            Port {} requires elevated privileges on this system.\n\
            Consider using a port above 1024 or running with appropriate permissions.",
-                    addr, port
-                )
-            }
-            _ => format!("Failed to bind to {addr}: {e}"),
+                    port
+                ),
+            },
+            _ => Error::Bind {
+                address: addr.to_string(),
+                detail: e.to_string(),
+            },
         }
     })?;
 
@@ -275,7 +284,10 @@ pub async fn start_server(
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal)
         .await
-        .map_err(|e| format!("Server error: {e}"))?;
+        .map_err(|e| Error::Bind {
+            address: addr.to_string(),
+            detail: format!("server error: {e}"),
+        })?;
 
     logger::debug(LogTag::Webserver, "Webserver stopped gracefully");
 
@@ -285,17 +297,17 @@ pub async fn start_server(
     Ok(())
 }
 
-fn validate_headless_bind(host: &str, auth_enabled: bool) -> Result<(), String> {
+fn validate_headless_bind(host: &str, auth_enabled: bool) -> Result<()> {
     let is_loopback = host.eq_ignore_ascii_case("localhost")
         || host
             .parse::<IpAddr>()
             .is_ok_and(|address| address.is_loopback());
 
     if !is_loopback && !auth_enabled {
-        return Err(format!(
-            "Refusing to bind the headless dashboard to {host} without password authentication. \
-             Enable webserver authentication or bind to 127.0.0.1."
-        ));
+        return Err(Error::Bind {
+            address: host.to_owned(),
+            detail: "refusing to bind the headless dashboard without password authentication; enable webserver authentication or bind to 127.0.0.1".to_owned(),
+        });
     }
     Ok(())
 }
@@ -336,7 +348,7 @@ fn build_app(state: Arc<AppState>) -> Router {
 pub async fn test_port_binding(
     port_override: Option<u16>,
     host_override: Option<String>,
-) -> Result<(), String> {
+) -> Result<()> {
     logger::debug(LogTag::Webserver, "[TEST-BIND] test_port_binding() entry");
 
     let is_gui = global::is_gui_mode();
@@ -463,10 +475,11 @@ pub async fn test_port_binding(
             );
 
             // Provide helpful error messages for common cases
-            let error_msg = match e.kind() {
-                std::io::ErrorKind::AddrInUse => {
-                    format!(
-                        "Failed to bind to {}: Address already in use\n\
+            let error = match e.kind() {
+                std::io::ErrorKind::AddrInUse => Error::Bind {
+                    address: addr.clone(),
+                    detail: format!(
+                        "address already in use\n\
              \n\
              This usually means another instance of ScreenerBot is running.\n\
              The process lock should have prevented this - please report this issue.\n\
@@ -474,24 +487,27 @@ pub async fn test_port_binding(
              To verify and stop other instances:\n\
               1. Check: ps aux | grep screenerbot | grep -v grep\n\
               2. Stop: pkill -f screenerbot\n\
-              3. Verify: ps aux | grep screenerbot | grep -v grep",
-                        addr
-                    )
-                }
-                std::io::ErrorKind::PermissionDenied => {
-                    format!(
-                        "Failed to bind to {}: Permission denied\n\
+              3. Verify: ps aux | grep screenerbot | grep -v grep"
+                    ),
+                },
+                std::io::ErrorKind::PermissionDenied => Error::Bind {
+                    address: addr.clone(),
+                    detail: format!(
+                        "permission denied\n\
              \n\
              Port {} requires elevated privileges on this system.\n\
              Consider using a port above 1024 or running with appropriate permissions.",
-                        addr, effective_port
-                    )
-                }
-                _ => format!("Failed to bind to {addr}: {e}"),
+                        effective_port
+                    ),
+                },
+                _ => Error::Bind {
+                    address: addr.clone(),
+                    detail: e.to_string(),
+                },
             };
 
-            logger::error(LogTag::System, &error_msg);
-            Err(error_msg)
+            logger::error(LogTag::System, &error.to_string());
+            Err(error)
         }
     }
 }

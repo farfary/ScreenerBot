@@ -5,7 +5,10 @@
 use axum::{http::StatusCode, response::Response, Json};
 
 use crate::config;
-use crate::webserver::utils::{error_response, success_response};
+use crate::webserver::{
+    utils::{error_response, success_response},
+    Error, Result,
+};
 
 use super::types::*;
 
@@ -164,72 +167,91 @@ fn apply_section_to_config(
     cfg: &mut config::Config,
     section: &str,
     value: serde_json::Value,
-) -> Result<(), String> {
+) -> Result<()> {
     match section {
         "rpc" => {
-            cfg.rpc =
-                serde_json::from_value(value).map_err(|e| format!("Invalid RpcConfig: {e}"))?;
+            cfg.rpc = serde_json::from_value(value).map_err(|e| Error::InvalidImport {
+                detail: format!("Invalid RpcConfig: {e}"),
+            })?;
         }
         "trader" => {
-            cfg.trader =
-                serde_json::from_value(value).map_err(|e| format!("Invalid TraderConfig: {e}"))?;
+            cfg.trader = serde_json::from_value(value).map_err(|e| Error::InvalidImport {
+                detail: format!("Invalid TraderConfig: {e}"),
+            })?;
         }
         "copy_trading" => {
-            let copy: config::CopyTradingConfig = serde_json::from_value(value)
-                .map_err(|e| format!("Invalid CopyTradingConfig: {e}"))?;
-            // SEAM: webserver still returns String errors; removed when it migrates.
-            copy.validate().map_err(|e| e.to_string())?;
+            let copy: config::CopyTradingConfig =
+                serde_json::from_value(value).map_err(|e| Error::InvalidImport {
+                    detail: format!("Invalid CopyTradingConfig: {e}"),
+                })?;
+            copy.validate()?;
             cfg.copy_trading = copy;
         }
         "positions" => {
-            cfg.positions = serde_json::from_value(value)
-                .map_err(|e| format!("Invalid PositionsConfig: {e}"))?;
+            cfg.positions = serde_json::from_value(value).map_err(|e| Error::InvalidImport {
+                detail: format!("Invalid PositionsConfig: {e}"),
+            })?;
         }
         "filtering" => {
-            cfg.filtering = serde_json::from_value(value)
-                .map_err(|e| format!("Invalid FilteringConfig: {e}"))?;
+            cfg.filtering = serde_json::from_value(value).map_err(|e| Error::InvalidImport {
+                detail: format!("Invalid FilteringConfig: {e}"),
+            })?;
         }
         "swaps" => {
-            cfg.swaps =
-                serde_json::from_value(value).map_err(|e| format!("Invalid SwapsConfig: {e}"))?;
+            cfg.swaps = serde_json::from_value(value).map_err(|e| Error::InvalidImport {
+                detail: format!("Invalid SwapsConfig: {e}"),
+            })?;
         }
         "tokens" => {
-            cfg.tokens =
-                serde_json::from_value(value).map_err(|e| format!("Invalid TokensConfig: {e}"))?;
+            cfg.tokens = serde_json::from_value(value).map_err(|e| Error::InvalidImport {
+                detail: format!("Invalid TokensConfig: {e}"),
+            })?;
         }
         "sol_price" => {
-            cfg.sol_price = serde_json::from_value(value)
-                .map_err(|e| format!("Invalid SolPriceConfig: {e}"))?;
+            cfg.sol_price = serde_json::from_value(value).map_err(|e| Error::InvalidImport {
+                detail: format!("Invalid SolPriceConfig: {e}"),
+            })?;
         }
         "network" => {
-            cfg.network =
-                serde_json::from_value(value).map_err(|e| format!("Invalid NetworkConfig: {e}"))?;
+            cfg.network = serde_json::from_value(value).map_err(|e| Error::InvalidImport {
+                detail: format!("Invalid NetworkConfig: {e}"),
+            })?;
         }
         "events" => {
-            cfg.events =
-                serde_json::from_value(value).map_err(|e| format!("Invalid EventsConfig: {e}"))?;
+            cfg.events = serde_json::from_value(value).map_err(|e| Error::InvalidImport {
+                detail: format!("Invalid EventsConfig: {e}"),
+            })?;
         }
         "services" => {
-            cfg.services = serde_json::from_value(value)
-                .map_err(|e| format!("Invalid ServicesConfig: {e}"))?;
+            cfg.services = serde_json::from_value(value).map_err(|e| Error::InvalidImport {
+                detail: format!("Invalid ServicesConfig: {e}"),
+            })?;
         }
         "monitoring" => {
-            cfg.monitoring = serde_json::from_value(value)
-                .map_err(|e| format!("Invalid MonitoringConfig: {e}"))?;
+            cfg.monitoring = serde_json::from_value(value).map_err(|e| Error::InvalidImport {
+                detail: format!("Invalid MonitoringConfig: {e}"),
+            })?;
         }
         "ohlcv" => {
-            cfg.ohlcv =
-                serde_json::from_value(value).map_err(|e| format!("Invalid OhlcvConfig: {e}"))?;
+            cfg.ohlcv = serde_json::from_value(value).map_err(|e| Error::InvalidImport {
+                detail: format!("Invalid OhlcvConfig: {e}"),
+            })?;
         }
         "gui" => {
-            cfg.gui =
-                serde_json::from_value(value).map_err(|e| format!("Invalid GuiConfig: {e}"))?;
+            cfg.gui = serde_json::from_value(value).map_err(|e| Error::InvalidImport {
+                detail: format!("Invalid GuiConfig: {e}"),
+            })?;
         }
         "telegram" => {
-            cfg.telegram = serde_json::from_value(value)
-                .map_err(|e| format!("Invalid TelegramConfig: {e}"))?;
+            cfg.telegram = serde_json::from_value(value).map_err(|e| Error::InvalidImport {
+                detail: format!("Invalid TelegramConfig: {e}"),
+            })?;
         }
-        _ => return Err(format!("Unknown section: {section}")),
+        _ => {
+            return Err(Error::UnknownConfigKey {
+                key: section.to_owned(),
+            })
+        }
     }
     Ok(())
 }
@@ -377,52 +399,82 @@ pub async fn import_config_preview(Json(request): Json<ImportConfigPreviewReques
         let field_count = count_fields(value);
 
         // Validate by attempting to deserialize
-        let validation_result: Result<(), String> = match *section {
+        let validation_result: Result<()> = match *section {
             "rpc" => serde_json::from_value::<config::RpcConfig>(value.clone())
                 .map(|_| ())
-                .map_err(|e| e.to_string()),
+                .map_err(|e| Error::InvalidImport {
+                    detail: e.to_string(),
+                }),
             "trader" => serde_json::from_value::<config::TraderConfig>(value.clone())
                 .map(|_| ())
-                .map_err(|e| e.to_string()),
+                .map_err(|e| Error::InvalidImport {
+                    detail: e.to_string(),
+                }),
             "copy_trading" => serde_json::from_value::<config::CopyTradingConfig>(value.clone())
-                .map_err(|e| e.to_string())
-                .and_then(|copy| copy.validate().map_err(|e| e.to_string())),
+                .map_err(|e| Error::InvalidImport {
+                    detail: e.to_string(),
+                })
+                .and_then(|copy| copy.validate().map_err(Error::from)),
             "positions" => serde_json::from_value::<config::PositionsConfig>(value.clone())
                 .map(|_| ())
-                .map_err(|e| e.to_string()),
+                .map_err(|e| Error::InvalidImport {
+                    detail: e.to_string(),
+                }),
             "filtering" => serde_json::from_value::<config::FilteringConfig>(value.clone())
                 .map(|_| ())
-                .map_err(|e| e.to_string()),
+                .map_err(|e| Error::InvalidImport {
+                    detail: e.to_string(),
+                }),
             "swaps" => serde_json::from_value::<config::SwapsConfig>(value.clone())
                 .map(|_| ())
-                .map_err(|e| e.to_string()),
+                .map_err(|e| Error::InvalidImport {
+                    detail: e.to_string(),
+                }),
             "tokens" => serde_json::from_value::<config::TokensConfig>(value.clone())
                 .map(|_| ())
-                .map_err(|e| e.to_string()),
+                .map_err(|e| Error::InvalidImport {
+                    detail: e.to_string(),
+                }),
             "sol_price" => serde_json::from_value::<config::SolPriceConfig>(value.clone())
                 .map(|_| ())
-                .map_err(|e| e.to_string()),
+                .map_err(|e| Error::InvalidImport {
+                    detail: e.to_string(),
+                }),
             "network" => serde_json::from_value::<config::NetworkConfig>(value.clone())
                 .map(|_| ())
-                .map_err(|e| e.to_string()),
+                .map_err(|e| Error::InvalidImport {
+                    detail: e.to_string(),
+                }),
             "events" => serde_json::from_value::<config::EventsConfig>(value.clone())
                 .map(|_| ())
-                .map_err(|e| e.to_string()),
+                .map_err(|e| Error::InvalidImport {
+                    detail: e.to_string(),
+                }),
             "services" => serde_json::from_value::<config::ServicesConfig>(value.clone())
                 .map(|_| ())
-                .map_err(|e| e.to_string()),
+                .map_err(|e| Error::InvalidImport {
+                    detail: e.to_string(),
+                }),
             "monitoring" => serde_json::from_value::<config::MonitoringConfig>(value.clone())
                 .map(|_| ())
-                .map_err(|e| e.to_string()),
+                .map_err(|e| Error::InvalidImport {
+                    detail: e.to_string(),
+                }),
             "ohlcv" => serde_json::from_value::<config::OhlcvConfig>(value.clone())
                 .map(|_| ())
-                .map_err(|e| e.to_string()),
+                .map_err(|e| Error::InvalidImport {
+                    detail: e.to_string(),
+                }),
             "gui" => serde_json::from_value::<config::GuiConfig>(value.clone())
                 .map(|_| ())
-                .map_err(|e| e.to_string()),
+                .map_err(|e| Error::InvalidImport {
+                    detail: e.to_string(),
+                }),
             "telegram" => serde_json::from_value::<config::TelegramConfig>(value.clone())
                 .map(|_| ())
-                .map_err(|e| e.to_string()),
+                .map_err(|e| Error::InvalidImport {
+                    detail: e.to_string(),
+                }),
             _ => Ok(()),
         };
 
@@ -460,7 +512,7 @@ pub async fn import_config_preview(Json(request): Json<ImportConfigPreviewReques
             present: true,
             valid: validation_result.is_ok(),
             field_count,
-            error: validation_result.err(),
+            error: validation_result.err().map(|e| e.to_string()),
             changes,
         });
     }
@@ -532,7 +584,7 @@ pub async fn import_config(Json(request): Json<ImportConfigRequest>) -> Response
             None => continue,
         };
 
-        let result: Result<serde_json::Value, String> = (|| {
+        let result: Result<serde_json::Value> = (|| {
             // Get current config section for merging if needed
             let final_value = if request.merge {
                 let current = match section.as_str() {

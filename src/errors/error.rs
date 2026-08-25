@@ -79,6 +79,10 @@ pub enum Error {
     #[error(transparent)]
     Config(#[from] crate::config::Error),
 
+    /// Dashboard server lifecycle, authentication, and route-input errors.
+    #[error(transparent)]
+    Webserver(#[from] crate::webserver::Error),
+
     /// ScreenerBot account / sign-in errors.
     #[error(transparent)]
     Account(#[from] AccountError),

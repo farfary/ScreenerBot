@@ -92,10 +92,9 @@ impl TelegramSessionManager {
             return Err(Error::TotpNotConfigured);
         }
 
-        // Verify TOTP code. webserver::totp has not migrated yet; its String
-        // error is captured into a named variant, not propagated raw.
+        // Preserve the TOTP verifier's typed failure for callers that need its classification.
         if crate::webserver::totp::verify_totp(&totp_secret, code)
-            .map_err(|detail| Error::TotpVerificationFailed { detail })?
+            .map_err(|source| Error::TotpVerificationFailed { source })?
         {
             // Success - activate session
             session.state = SessionState::Active;

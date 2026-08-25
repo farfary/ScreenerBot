@@ -8,8 +8,8 @@ use axum::{
 use crate::config;
 use crate::secure_storage::verify_password;
 use crate::webserver::session;
-use crate::webserver::totp;
 use crate::webserver::utils::{error_response, success_response};
+use crate::webserver::{totp, Error};
 
 use super::helpers::{build_session_cookie, get_cookie_value};
 use super::types::{
@@ -99,11 +99,17 @@ pub async fn login(Json(req): Json<LoginRequest>) -> Response {
         match &req.totp_code {
             Some(code) => {
                 // Verify TOTP code
-                match totp::verify_totp(&totp_secret, code) {
-                    Ok(true) => {
+                match totp::verify_totp(&totp_secret, code).and_then(|valid| {
+                    if valid {
+                        Ok(())
+                    } else {
+                        Err(Error::InvalidTotpCode)
+                    }
+                }) {
+                    Ok(()) => {
                         // TOTP verified, continue to create session
                     }
-                    Ok(false) => {
+                    Err(Error::InvalidTotpCode) => {
                         return error_response(
                             StatusCode::UNAUTHORIZED,
                             "INVALID_TOTP",
@@ -116,7 +122,7 @@ pub async fn login(Json(req): Json<LoginRequest>) -> Response {
                             StatusCode::INTERNAL_SERVER_ERROR,
                             "TOTP_ERROR",
                             "Failed to verify 2FA code",
-                            Some(&e),
+                            Some(&e.to_string()),
                         );
                     }
                 }
