@@ -1137,3 +1137,80 @@ fn no_catch_all_error_variants() {
         violations.join("\n")
     );
 }
+
+/// The only functions in `src/` allowed to return a bare error value instead of
+/// constructing one at the site that fails.
+///
+/// Each entry earns its place by doing real work: `map_llm_error` maps one
+/// error enum onto another arm by arm, `classify_quote_failure` inspects a list
+/// of router failures to decide which failure it was, and `json_error` adapts a
+/// `serde_json::Error` into the foreign `rusqlite::Error` that rusqlite's row
+/// mappers are required to return. None of them is a variant in disguise.
+const ERROR_MAPPING_FUNCTIONS: &[&str] = &["map_llm_error", "classify_quote_failure", "json_error"];
+
+/// A function whose whole job is to return an error is a variant wearing a
+/// function costume: `fn db_not_initialized() -> Error` and
+/// `fn database_error(operation, e) -> Error` say nothing that
+/// `Error::NotInitialized` and `DatabaseError::Query { operation, message }`
+/// do not, while hiding the vocabulary from every reader and diverging from
+/// the hundreds of sites that construct the same variants inline.
+///
+/// The failure mode this prevents is silent: a module gets a private
+/// constructor helper, callers use it because it is nearest, and the module's
+/// errors stop looking like the rest of the codebase. Construct the variant at
+/// the site that fails. A function that genuinely *maps* one error type onto
+/// another belongs in [`ERROR_MAPPING_FUNCTIONS`] with a reason.
+#[test]
+fn errors_are_constructed_at_the_failure_site() {
+    fn returned_type(signature: &str) -> Option<&str> {
+        let after = signature.split("->").nth(1)?;
+        let returned = after
+            .trim()
+            .trim_end_matches(|c: char| c == '{' || c.is_whitespace());
+        (!returned.contains("Result") && returned.ends_with("Error")).then_some(returned)
+    }
+
+    fn declared_name(trimmed: &str) -> Option<&str> {
+        let after = trimmed.split_once("fn ")?.1;
+        Some(
+            after
+                .split(|c: char| !(c.is_alphanumeric() || c == '_'))
+                .next()
+                .unwrap_or(""),
+        )
+    }
+
+    let mut violations = Vec::new();
+    for (relative, contents) in walk_src() {
+        let path_str = relative.to_string_lossy();
+        let production = production_text(&contents);
+        for (idx, line) in production.lines().enumerate() {
+            let trimmed = line.trim_start();
+            let is_fn = trimmed.starts_with("fn ")
+                || trimmed.starts_with("pub fn ")
+                || trimmed.starts_with("async fn ")
+                || (trimmed.starts_with("pub(") && trimmed.contains(") fn "));
+            if !is_fn {
+                continue;
+            }
+            let Some(returned) = returned_type(trimmed) else {
+                continue;
+            };
+            let name = declared_name(trimmed).unwrap_or("");
+            if ERROR_MAPPING_FUNCTIONS.contains(&name) {
+                continue;
+            }
+            violations.push(format!(
+                "src/{path_str}:{}: fn {name}(..) -> {returned} — construct the variant at the \
+                 failure site instead of behind a helper",
+                idx + 1
+            ));
+        }
+    }
+    assert!(
+        violations.is_empty(),
+        "an error-returning helper hides the module's error vocabulary and diverges from every \
+         other construction site — build the variant where the failure happens:\n{}",
+        violations.join("\n")
+    );
+}

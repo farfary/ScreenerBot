@@ -9,14 +9,7 @@ use crate::transactions::get_transaction_database;
 use super::super::database::GLOBAL_WALLET_DB;
 use super::super::types::{DailyFlowPoint, WalletFlowMetrics};
 use super::clamp_window_hours;
-use crate::errors::InternalError;
 use crate::wallets::Error;
-
-fn tx_db_not_initialized() -> Error {
-    Error::Internal(InternalError::InvariantViolation {
-        message: "transaction database not initialized".to_owned(),
-    })
-}
 
 pub(super) async fn compute_flow_metrics(window_hours: i64) -> Result<WalletFlowMetrics, Error> {
     logger::debug(
@@ -51,7 +44,9 @@ pub(super) async fn compute_flow_metrics(window_hours: i64) -> Result<WalletFlow
         // Fallback to full aggregation from transactions DB (from epoch)
         let tx_db = get_transaction_database()
             .await
-            .ok_or_else(tx_db_not_initialized)?;
+            .ok_or_else(|| Error::NotInitialized {
+                database: "transaction",
+            })?;
         let epoch = DateTime::<Utc>::from(std::time::UNIX_EPOCH);
         let (inflow, outflow, tx_count) = tx_db.aggregate_sol_flows_since(epoch, None).await?;
         logger::debug(
@@ -113,7 +108,9 @@ pub(super) async fn compute_flow_metrics(window_hours: i64) -> Result<WalletFlow
 
     let tx_db = get_transaction_database()
         .await
-        .ok_or_else(tx_db_not_initialized)?;
+        .ok_or_else(|| Error::NotInitialized {
+            database: "transaction",
+        })?;
     let (inflow, outflow, tx_count) = tx_db.aggregate_sol_flows_since(window_start, None).await?;
 
     logger::debug(
@@ -143,7 +140,9 @@ pub(super) async fn compute_daily_flows(window_hours: i64) -> Result<Vec<DailyFl
 
     let tx_db = get_transaction_database()
         .await
-        .ok_or_else(tx_db_not_initialized)?;
+        .ok_or_else(|| Error::NotInitialized {
+            database: "transaction",
+        })?;
 
     let daily_data = tx_db.aggregate_daily_flows(window_start, None).await?;
 

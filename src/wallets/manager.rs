@@ -8,20 +8,10 @@ use tokio::sync::RwLock;
 
 use super::database::WalletsDatabase;
 use super::error::Error;
-use crate::errors::InternalError;
 use crate::{
     chains::active_chain,
     logger::{self, LogTag},
 };
-
-/// The wallet database has not been initialized yet — an invariant violation,
-/// not a not-found: `initialize()` must run once at startup before any other
-/// wallet function is called.
-pub(super) fn db_not_initialized() -> Error {
-    Error::Internal(InternalError::InvariantViolation {
-        message: "wallet database not initialized".to_owned(),
-    })
-}
 
 mod cache;
 use cache::refresh_main_wallet_cache;

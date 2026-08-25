@@ -4,7 +4,6 @@ use std::collections::HashMap;
 
 use super::super::error::Error;
 use super::super::types::TokenBalance;
-use super::db_not_initialized;
 use crate::chains::solana::accounts::fetch_wallet_token_balances;
 use crate::logger::{self, LogTag};
 
@@ -30,7 +29,9 @@ pub async fn update_wallet_balances(wallet_id: i64) -> Result<usize, Error> {
 
     // Bulk update in database
     let db_guard = super::WALLETS_DB.read().await;
-    let db = db_guard.as_ref().ok_or_else(db_not_initialized)?;
+    let db = db_guard
+        .as_ref()
+        .ok_or_else(|| Error::NotInitialized { database: "wallet" })?;
 
     db.update_balances_bulk(wallet_id, &balances)?;
 
@@ -75,7 +76,9 @@ pub async fn update_all_wallet_balances() -> Result<HashMap<i64, usize>, Error> 
 /// Get cached token balances for a wallet
 pub async fn get_token_balances(wallet_id: i64) -> Result<Vec<TokenBalance>, Error> {
     let db_guard = super::WALLETS_DB.read().await;
-    let db = db_guard.as_ref().ok_or_else(db_not_initialized)?;
+    let db = db_guard
+        .as_ref()
+        .ok_or_else(|| Error::NotInitialized { database: "wallet" })?;
 
     db.get_token_balances(wallet_id)
 }
@@ -83,7 +86,9 @@ pub async fn get_token_balances(wallet_id: i64) -> Result<Vec<TokenBalance>, Err
 /// Get cached token balances for all wallets
 pub async fn get_all_token_balances() -> Result<HashMap<i64, Vec<TokenBalance>>, Error> {
     let db_guard = super::WALLETS_DB.read().await;
-    let db = db_guard.as_ref().ok_or_else(db_not_initialized)?;
+    let db = db_guard
+        .as_ref()
+        .ok_or_else(|| Error::NotInitialized { database: "wallet" })?;
 
     db.get_all_token_balances()
 }
@@ -91,7 +96,9 @@ pub async fn get_all_token_balances() -> Result<HashMap<i64, Vec<TokenBalance>>,
 /// Clear cached token balances for a wallet
 pub async fn clear_token_balances(wallet_id: i64) -> Result<u64, Error> {
     let db_guard = super::WALLETS_DB.read().await;
-    let db = db_guard.as_ref().ok_or_else(db_not_initialized)?;
+    let db = db_guard
+        .as_ref()
+        .ok_or_else(|| Error::NotInitialized { database: "wallet" })?;
 
     db.clear_token_balances(wallet_id)
 }
@@ -108,7 +115,9 @@ pub async fn upsert_token_balance(
     is_token_2022: bool,
 ) -> Result<(), Error> {
     let db_guard = super::WALLETS_DB.read().await;
-    let db = db_guard.as_ref().ok_or_else(db_not_initialized)?;
+    let db = db_guard
+        .as_ref()
+        .ok_or_else(|| Error::NotInitialized { database: "wallet" })?;
 
     db.upsert_token_balance(
         wallet_id,

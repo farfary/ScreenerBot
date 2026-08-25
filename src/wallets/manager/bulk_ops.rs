@@ -7,7 +7,6 @@ use super::super::bulk::{
 };
 use super::super::error::Error;
 use super::super::types::{CreateWalletRequest, ImportWalletRequest, Wallet, WalletRole};
-use super::db_not_initialized;
 use crate::chains::solana::accounts::address_from_private_key;
 use crate::logger::{self, LogTag};
 
@@ -160,7 +159,9 @@ pub async fn bulk_import_wallets(
 /// WARNING: This exports sensitive data - handle with care!
 pub async fn export_wallets(include_inactive: bool) -> Result<Vec<WalletExportRow>, Error> {
     let db_guard = super::WALLETS_DB.read().await;
-    let db = db_guard.as_ref().ok_or_else(db_not_initialized)?;
+    let db = db_guard
+        .as_ref()
+        .ok_or_else(|| Error::NotInitialized { database: "wallet" })?;
 
     let wallets = db.list_wallets(include_inactive)?;
     let mut result = Vec::with_capacity(wallets.len());
@@ -201,7 +202,9 @@ pub async fn export_wallets(include_inactive: bool) -> Result<Vec<WalletExportRo
 /// Get existing addresses as HashSet (for duplicate checking)
 pub async fn get_existing_wallet_addresses() -> Result<HashSet<String>, Error> {
     let db_guard = super::WALLETS_DB.read().await;
-    let db = db_guard.as_ref().ok_or_else(db_not_initialized)?;
+    let db = db_guard
+        .as_ref()
+        .ok_or_else(|| Error::NotInitialized { database: "wallet" })?;
 
     let wallets = db.list_wallets(true)?; // Include inactive
     Ok(wallets.into_iter().map(|w| w.address).collect())

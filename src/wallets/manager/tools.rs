@@ -2,12 +2,13 @@
 
 use super::super::error::Error;
 use super::super::types::WalletsSummary;
-use super::db_not_initialized;
 
 /// Get wallets summary for dashboard
 pub async fn get_wallets_summary() -> Result<WalletsSummary, Error> {
     let db_guard = super::WALLETS_DB.read().await;
-    let db = db_guard.as_ref().ok_or_else(db_not_initialized)?;
+    let db = db_guard
+        .as_ref()
+        .ok_or_else(|| Error::NotInitialized { database: "wallet" })?;
 
     let (total, active) = db.get_wallet_counts()?;
 

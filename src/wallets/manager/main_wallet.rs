@@ -6,7 +6,6 @@
 use super::super::error::Error;
 use super::super::types::Wallet;
 use super::cache::{refresh_main_wallet_cache, MAIN_WALLET_CACHE};
-use super::db_not_initialized;
 
 /// Get the main wallet's address (cached for performance)
 pub async fn get_main_address() -> Result<String, Error> {
@@ -53,7 +52,9 @@ pub async fn has_main_wallet() -> bool {
 pub(crate) async fn get_main_wallet_encrypted_key() -> Result<Option<(i64, String, String)>, Error>
 {
     let db_guard = super::WALLETS_DB.read().await;
-    let db = db_guard.as_ref().ok_or_else(db_not_initialized)?;
+    let db = db_guard
+        .as_ref()
+        .ok_or_else(|| Error::NotInitialized { database: "wallet" })?;
 
     let Some(wallet) = db.get_main_wallet()? else {
         return Ok(None);

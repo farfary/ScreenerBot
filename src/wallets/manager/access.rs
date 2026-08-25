@@ -5,12 +5,13 @@
 
 use super::super::error::Error;
 use super::super::types::Wallet;
-use super::db_not_initialized;
 
 /// Get a wallet by ID
 pub async fn get_wallet(wallet_id: i64) -> Result<Option<Wallet>, Error> {
     let db_guard = super::WALLETS_DB.read().await;
-    let db = db_guard.as_ref().ok_or_else(db_not_initialized)?;
+    let db = db_guard
+        .as_ref()
+        .ok_or_else(|| Error::NotInitialized { database: "wallet" })?;
 
     db.get_wallet(wallet_id)
 }
@@ -18,7 +19,9 @@ pub async fn get_wallet(wallet_id: i64) -> Result<Option<Wallet>, Error> {
 /// Get a wallet by address
 pub async fn get_wallet_by_address(address: &str) -> Result<Option<Wallet>, Error> {
     let db_guard = super::WALLETS_DB.read().await;
-    let db = db_guard.as_ref().ok_or_else(db_not_initialized)?;
+    let db = db_guard
+        .as_ref()
+        .ok_or_else(|| Error::NotInitialized { database: "wallet" })?;
 
     db.get_wallet_by_address(address)
 }
@@ -27,7 +30,9 @@ pub async fn get_wallet_by_address(address: &str) -> Result<Option<Wallet>, Erro
 /// Chain-neutral — only `crate::chains::solana::accounts` decrypts this.
 pub(crate) async fn get_wallet_encrypted_key(wallet_id: i64) -> Result<(String, String), Error> {
     let db_guard = super::WALLETS_DB.read().await;
-    let db = db_guard.as_ref().ok_or_else(db_not_initialized)?;
+    let db = db_guard
+        .as_ref()
+        .ok_or_else(|| Error::NotInitialized { database: "wallet" })?;
 
     db.get_wallet_encrypted_key(wallet_id)?
         .ok_or(Error::WalletNotFound {
@@ -39,7 +44,9 @@ pub(crate) async fn get_wallet_encrypted_key(wallet_id: i64) -> Result<(String, 
 pub async fn list_wallets(include_inactive: bool) -> Result<Vec<Wallet>, Error> {
     let mut wallets = {
         let db_guard = super::WALLETS_DB.read().await;
-        let db = db_guard.as_ref().ok_or_else(db_not_initialized)?;
+        let db = db_guard
+            .as_ref()
+            .ok_or_else(|| Error::NotInitialized { database: "wallet" })?;
         db.list_wallets(include_inactive)?
     };
 
@@ -67,7 +74,9 @@ pub async fn enrich_last_used(wallet: &mut Wallet) {
 /// List active wallets (usable for operations)
 pub async fn list_active_wallets() -> Result<Vec<Wallet>, Error> {
     let db_guard = super::WALLETS_DB.read().await;
-    let db = db_guard.as_ref().ok_or_else(db_not_initialized)?;
+    let db = db_guard
+        .as_ref()
+        .ok_or_else(|| Error::NotInitialized { database: "wallet" })?;
 
     db.list_active_wallets()
 }

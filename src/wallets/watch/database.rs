@@ -61,10 +61,6 @@ pub struct WatchDatabase {
     pub(super) chain: ChainId,
 }
 
-fn join_failed(e: tokio::task::JoinError) -> Error {
-    Error::Internal(InternalError::from(e))
-}
-
 impl WatchDatabase {
     /// Create or open the database at its real location and ensure its schema exists.
     pub fn new(chain: ChainId) -> Result<Self, Error> {
@@ -174,7 +170,7 @@ impl WatchDatabase {
         let db = self.clone();
         tokio::task::spawn_blocking(move || db.list_targets_sync())
             .await
-            .map_err(join_failed)?
+            .map_err(|e| Error::Internal(InternalError::from(e)))?
     }
 
     fn list_targets_sync(&self) -> Result<Vec<WatchTarget>, Error> {
@@ -197,7 +193,7 @@ impl WatchDatabase {
         let db = self.clone();
         tokio::task::spawn_blocking(move || db.get_target_sync(id))
             .await
-            .map_err(join_failed)?
+            .map_err(|e| Error::Internal(InternalError::from(e)))?
     }
 
     pub(super) fn get_target_sync(&self, id: i64) -> Result<Option<WatchTarget>, Error> {
@@ -218,7 +214,7 @@ impl WatchDatabase {
         let address = address.to_owned();
         tokio::task::spawn_blocking(move || db.get_target_by_address_sync(&address))
             .await
-            .map_err(join_failed)?
+            .map_err(|e| Error::Internal(InternalError::from(e)))?
     }
 
     fn get_target_by_address_sync(&self, address: &str) -> Result<Option<WatchTarget>, Error> {
@@ -250,7 +246,7 @@ impl WatchDatabase {
         let label = label.map(|s| s.to_owned());
         tokio::task::spawn_blocking(move || db.insert_alert_target_sync(&address, label.as_deref()))
             .await
-            .map_err(join_failed)?
+            .map_err(|e| Error::Internal(InternalError::from(e)))?
     }
 
     fn insert_alert_target_sync(
@@ -304,7 +300,7 @@ impl WatchDatabase {
         let db = self.clone();
         tokio::task::spawn_blocking(move || db.set_enabled_sync(id, enabled))
             .await
-            .map_err(join_failed)?
+            .map_err(|e| Error::Internal(InternalError::from(e)))?
     }
 
     fn set_enabled_sync(&self, id: i64, enabled: bool) -> Result<(), Error> {
@@ -328,7 +324,7 @@ impl WatchDatabase {
         let db = self.clone();
         tokio::task::spawn_blocking(move || db.delete_target_sync(id))
             .await
-            .map_err(join_failed)?
+            .map_err(|e| Error::Internal(InternalError::from(e)))?
     }
 
     fn delete_target_sync(&self, id: i64) -> Result<(), Error> {
@@ -393,7 +389,7 @@ impl WatchDatabase {
         let address = address.to_owned();
         tokio::task::spawn_blocking(move || db.get_cursor_sync(&address))
             .await
-            .map_err(join_failed)?
+            .map_err(|e| Error::Internal(InternalError::from(e)))?
     }
 
     /// Whether observation has been baselined for this address, even when the
@@ -411,7 +407,7 @@ impl WatchDatabase {
             .map_err(|e| Error::Database(DatabaseError::from(e)))
         })
         .await
-        .map_err(join_failed)?
+        .map_err(|e| Error::Internal(InternalError::from(e)))?
     }
 
     /// Persist that the initial observation baseline ran even if the address had no
@@ -431,7 +427,7 @@ impl WatchDatabase {
             Ok(())
         })
         .await
-        .map_err(join_failed)?
+        .map_err(|e| Error::Internal(InternalError::from(e)))?
     }
 
     fn get_cursor_sync(&self, address: &str) -> Result<Option<String>, Error> {
@@ -458,7 +454,7 @@ impl WatchDatabase {
         let address = address.to_owned();
         tokio::task::spawn_blocking(move || db.get_cursor_updated_at_sync(&address))
             .await
-            .map_err(join_failed)?
+            .map_err(|e| Error::Internal(InternalError::from(e)))?
     }
 
     fn get_cursor_updated_at_sync(&self, address: &str) -> Result<Option<DateTime<Utc>>, Error> {
@@ -484,7 +480,7 @@ impl WatchDatabase {
         let last_signature = last_signature.to_owned();
         tokio::task::spawn_blocking(move || db.set_cursor_sync(&address, &last_signature))
             .await
-            .map_err(join_failed)?
+            .map_err(|e| Error::Internal(InternalError::from(e)))?
     }
 
     fn set_cursor_sync(&self, address: &str, last_signature: &str) -> Result<(), Error> {

@@ -16,6 +16,11 @@ pub enum Error {
     #[error(transparent)]
     Transactions(#[from] crate::transactions::Error),
 
+    /// A database this module reads through has not been initialized yet — an
+    /// invariant violation, not a not-found: initialization must run once at
+    /// startup before any other wallet function is called.
+    #[error("the {database} database is not initialized")]
+    NotInitialized { database: &'static str },
     #[error("wallet {address} is not known")]
     WalletNotFound { address: String },
     /// The wallet exists but its current role/state forbids the requested
@@ -99,6 +104,7 @@ impl ErrorClass for Error {
             Error::Internal(e) => e.is_retryable(),
             Error::Io(e) => e.is_retryable(),
             Error::Transactions(e) => e.is_retryable(),
+            Error::NotInitialized { .. } => false,
             Error::WalletNotFound { .. } => false,
             Error::InvalidWalletState { .. } => false,
             Error::WatchTargetNotFound { .. } => false,
@@ -139,6 +145,7 @@ impl ErrorClass for Error {
             Error::Internal(e) => e.severity(),
             Error::Io(e) => e.severity(),
             Error::Transactions(e) => e.severity(),
+            Error::NotInitialized { .. } => Severity::Critical,
             Error::WalletNotFound { .. } => Severity::Warning,
             Error::InvalidWalletState { .. } => Severity::Warning,
             Error::WatchTargetNotFound { .. } => Severity::Warning,
@@ -163,6 +170,7 @@ impl ErrorClass for Error {
             Error::Internal(e) => e.http_status(),
             Error::Io(e) => e.http_status(),
             Error::Transactions(e) => e.http_status(),
+            Error::NotInitialized { .. } => 500,
             Error::WalletNotFound { .. } => 404,
             Error::InvalidWalletState { .. } => 409,
             Error::WatchTargetNotFound { .. } => 404,

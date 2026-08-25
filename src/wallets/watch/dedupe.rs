@@ -11,18 +11,11 @@
 //! produce; committing after dispatch would let a crash between the two re-emit on
 //! the next run.
 
-use crate::errors::InternalError;
 use crate::logger::{self, LogTag};
 use crate::transactions::database::{get_transaction_database, TransactionDatabase};
 use crate::transactions::types::Subject;
 use crate::transactions::utils::{add_signature_to_known_globally, is_signature_known_globally};
 use crate::wallets::Error;
-
-fn transactions_db_not_initialized() -> Error {
-    Error::Internal(InternalError::InvariantViolation {
-        message: "transaction database not initialized".to_owned(),
-    })
-}
 
 /// True when `signature` has already been recorded for `subject`. Checks the fast
 /// in-memory cache first, falling back to the database -- the source of truth across
@@ -34,7 +27,9 @@ pub(super) async fn has_seen(subject: Subject, signature: &str) -> Result<bool, 
 
     match get_transaction_database().await {
         Some(db) => has_seen_in_database(&db, subject, signature).await,
-        None => Err(transactions_db_not_initialized()),
+        None => Err(Error::NotInitialized {
+            database: "transaction",
+        }),
     }
 }
 
@@ -45,7 +40,9 @@ pub(super) async fn has_seen(subject: Subject, signature: &str) -> Result<bool, 
 pub(super) async fn commit(subject: Subject, signature: &str) -> Result<(), Error> {
     let db = get_transaction_database()
         .await
-        .ok_or_else(transactions_db_not_initialized)?;
+        .ok_or_else(|| Error::NotInitialized {
+            database: "transaction",
+        })?;
     commit_to_database(&db, subject.clone(), signature)
         .await
         .map_err(|e| {

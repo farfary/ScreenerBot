@@ -28,14 +28,7 @@ use super::types::*;
 use super::worth::{
     publish_snapshot, request_balance_refresh, settle_refresh_burst, wait_for_refresh_request,
 };
-use crate::errors::InternalError;
 use crate::wallets::Error;
-
-fn db_not_initialized() -> Error {
-    Error::Internal(InternalError::InvariantViolation {
-        message: "wallet-monitor database not initialized".to_owned(),
-    })
-}
 
 // =============================================================================
 // INITIALIZATION
@@ -270,7 +263,9 @@ async fn collect_publish_and_store() -> Result<Arc<WalletSnapshot>, Error> {
             db.save_wallet_snapshot(&snapshot)?;
             Ok(snapshot)
         }
-        None => Err(db_not_initialized()),
+        None => Err(Error::NotInitialized {
+            database: "wallet-monitor",
+        }),
     }
 }
 
@@ -501,7 +496,9 @@ pub async fn get_recent_wallet_snapshots(limit: usize) -> Result<Vec<WalletSnaps
     let db_guard = GLOBAL_WALLET_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => Ok(db.get_recent_snapshots(limit)?),
-        None => Err(db_not_initialized()),
+        None => Err(Error::NotInitialized {
+            database: "wallet-monitor",
+        }),
     }
 }
 
@@ -510,7 +507,9 @@ pub async fn get_wallet_monitor_stats() -> Result<WalletMonitorStats, Error> {
     let db_guard = GLOBAL_WALLET_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => Ok(db.get_monitor_stats()?),
-        None => Err(db_not_initialized()),
+        None => Err(Error::NotInitialized {
+            database: "wallet-monitor",
+        }),
     }
 }
 
@@ -521,7 +520,9 @@ pub async fn get_snapshot_token_balances(
     let db_guard = GLOBAL_WALLET_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => Ok(db.get_token_balances(snapshot_id)?),
-        None => Err(db_not_initialized()),
+        None => Err(Error::NotInitialized {
+            database: "wallet-monitor",
+        }),
     }
 }
 
@@ -530,7 +531,9 @@ pub async fn get_snapshot_nft_balances(snapshot_id: i64) -> Result<Vec<NftBalanc
     let db_guard = GLOBAL_WALLET_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => Ok(db.get_nft_balances(snapshot_id)?),
-        None => Err(db_not_initialized()),
+        None => Err(Error::NotInitialized {
+            database: "wallet-monitor",
+        }),
     }
 }
 
@@ -555,7 +558,9 @@ pub async fn get_balance_at_time(target_time: DateTime<Utc>) -> Result<Option<f6
     let db_guard = GLOBAL_WALLET_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => Ok(db.get_balance_at_time(target_time)?),
-        None => Err(db_not_initialized()),
+        None => Err(Error::NotInitialized {
+            database: "wallet-monitor",
+        }),
     }
 }
 
@@ -567,7 +572,9 @@ pub async fn get_daily_end_balances(
     let db_guard = GLOBAL_WALLET_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => Ok(db.get_daily_end_balances(start, end)?),
-        None => Err(db_not_initialized()),
+        None => Err(Error::NotInitialized {
+            database: "wallet-monitor",
+        }),
     }
 }
 
@@ -576,7 +583,9 @@ pub async fn get_flow_cache_stats() -> Result<WalletFlowCacheStats, Error> {
     let db_guard = GLOBAL_WALLET_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => Ok(db.get_flow_cache_stats()?),
-        None => Err(db_not_initialized()),
+        None => Err(Error::NotInitialized {
+            database: "wallet-monitor",
+        }),
     }
 }
 

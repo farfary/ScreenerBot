@@ -4,14 +4,15 @@ use crate::logger::{self, LogTag};
 
 use super::super::error::Error;
 use super::super::types::{WalletRole, WalletType};
-use super::db_not_initialized;
 use super::WALLETS_DB;
 use crate::chains::solana::accounts::address_from_encrypted_key;
 
 /// Migrate existing wallet from config.toml to wallets database
 pub(super) async fn migrate_from_config() -> Result<(), Error> {
     let db_guard = WALLETS_DB.read().await;
-    let db = db_guard.as_ref().ok_or_else(db_not_initialized)?;
+    let db = db_guard
+        .as_ref()
+        .ok_or_else(|| Error::NotInitialized { database: "wallet" })?;
 
     // Check if we already have wallets
     let (total, _) = db.get_wallet_counts()?;

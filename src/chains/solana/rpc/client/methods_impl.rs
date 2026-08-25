@@ -28,28 +28,6 @@ use base64::Engine;
 use std::str::FromStr;
 use std::time::Duration;
 
-// =============================================================================
-// Helper functions for error conversion
-// =============================================================================
-
-/// Convert a string error message into a DataError::ParseError
-#[inline]
-fn parse_err(data_type: &str, error: &str) -> crate::Error {
-    crate::Error::Data(crate::errors::DataError::ParseError {
-        data_type: data_type.to_string(),
-        error: error.to_string(),
-    })
-}
-
-/// Convert a string error message into a DataError::InvalidFormat
-#[inline]
-fn format_err(expected: &str, received: &str) -> crate::Error {
-    crate::Error::Data(crate::errors::DataError::InvalidFormat {
-        expected: expected.to_string(),
-        received: received.to_string(),
-    })
-}
-
 impl RpcClientMethods for RpcClient {
     async fn get_account(&self, pubkey: &Pubkey) -> crate::Result<Option<Account>> {
         self.get_account_with_commitment(pubkey, CommitmentLevel::Confirmed)
@@ -110,7 +88,12 @@ impl RpcClientMethods for RpcClient {
             let values = result
                 .get("value")
                 .and_then(|v| v.as_array())
-                .ok_or_else(|| parse_err("response", "missing value array"))?;
+                .ok_or_else(|| {
+                    crate::Error::Data(crate::errors::DataError::ParseError {
+                        data_type: "response".to_string(),
+                        error: "missing value array".to_string(),
+                    })
+                })?;
 
             for value in values {
                 if value.is_null() {
@@ -132,7 +115,12 @@ impl RpcClientMethods for RpcClient {
         let lamports = result
             .get("value")
             .and_then(|v| v.as_u64())
-            .ok_or_else(|| parse_err("balance", "invalid response format"))?;
+            .ok_or_else(|| {
+                crate::Error::Data(crate::errors::DataError::ParseError {
+                    data_type: "balance".to_string(),
+                    error: "invalid response format".to_string(),
+                })
+            })?;
 
         Ok(lamports as f64 / 1_000_000_000.0)
     }
@@ -182,10 +170,10 @@ impl RpcClientMethods for RpcClient {
                     .and_then(|a| a.as_str())
                 {
                     return amount_str.parse::<u64>().map_err(|e| {
-                        parse_err(
-                            "token amount",
-                            &format!("Failed to parse '{amount_str}': {e}"),
-                        )
+                        crate::Error::Data(crate::errors::DataError::ParseError {
+                            data_type: "token amount".to_string(),
+                            error: format!("Failed to parse '{amount_str}': {e}"),
+                        })
                     });
                 }
             }
@@ -215,20 +203,37 @@ impl RpcClientMethods for RpcClient {
             .execute_raw("getLatestBlockhash", params)
             .await?;
 
-        let value = result
-            .get("value")
-            .ok_or_else(|| parse_err("response", "missing value field"))?;
+        let value = result.get("value").ok_or_else(|| {
+            crate::Error::Data(crate::errors::DataError::ParseError {
+                data_type: "response".to_string(),
+                error: "missing value field".to_string(),
+            })
+        })?;
         let blockhash = value
             .get("blockhash")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| parse_err("blockhash", "missing blockhash field"))?;
+            .ok_or_else(|| {
+                crate::Error::Data(crate::errors::DataError::ParseError {
+                    data_type: "blockhash".to_string(),
+                    error: "missing blockhash field".to_string(),
+                })
+            })?;
         let last_valid_block_height = value
             .get("lastValidBlockHeight")
             .and_then(|v| v.as_u64())
-            .ok_or_else(|| parse_err("blockhash", "missing lastValidBlockHeight"))?;
+            .ok_or_else(|| {
+                crate::Error::Data(crate::errors::DataError::ParseError {
+                    data_type: "blockhash".to_string(),
+                    error: "missing lastValidBlockHeight".to_string(),
+                })
+            })?;
 
-        let hash = Hash::from_str(blockhash)
-            .map_err(|e| parse_err("blockhash", &format!("Invalid hash \'{blockhash}\': {e}")))?;
+        let hash = Hash::from_str(blockhash).map_err(|e| {
+            crate::Error::Data(crate::errors::DataError::ParseError {
+                data_type: "blockhash".to_string(),
+                error: format!("Invalid hash \'{blockhash}\': {e}"),
+            })
+        })?;
 
         Ok((hash, last_valid_block_height))
     }
@@ -238,9 +243,12 @@ impl RpcClientMethods for RpcClient {
 
         let result = self.manager.execute_raw("getBlockHeight", params).await?;
 
-        result
-            .as_u64()
-            .ok_or_else(|| parse_err("block height", "invalid response format"))
+        result.as_u64().ok_or_else(|| {
+            crate::Error::Data(crate::errors::DataError::ParseError {
+                data_type: "block height".to_string(),
+                error: "invalid response format".to_string(),
+            })
+        })
     }
 
     async fn send_transaction(
@@ -248,8 +256,12 @@ impl RpcClientMethods for RpcClient {
         transaction: &VersionedTransaction,
     ) -> crate::Result<Signature> {
         // Serialize transaction
-        let tx_bytes = bincode::serialize(transaction)
-            .map_err(|e| parse_err("transaction", &format!("Failed to serialize: {e}")))?;
+        let tx_bytes = bincode::serialize(transaction).map_err(|e| {
+            crate::Error::Data(crate::errors::DataError::ParseError {
+                data_type: "transaction".to_string(),
+                error: format!("Failed to serialize: {e}"),
+            })
+        })?;
         let tx_base64 = base64::engine::general_purpose::STANDARD.encode(&tx_bytes);
 
         let params = serde_json::json!([
@@ -264,15 +276,18 @@ impl RpcClientMethods for RpcClient {
 
         let result = self.manager.execute_raw("sendTransaction", params).await?;
 
-        let sig_str = result
-            .as_str()
-            .ok_or_else(|| parse_err("signature", "invalid response format"))?;
+        let sig_str = result.as_str().ok_or_else(|| {
+            crate::Error::Data(crate::errors::DataError::ParseError {
+                data_type: "signature".to_string(),
+                error: "invalid response format".to_string(),
+            })
+        })?;
 
         Signature::from_str(sig_str).map_err(|e| {
-            parse_err(
-                "signature",
-                &format!("Invalid signature \'{sig_str}\': {e}"),
-            )
+            crate::Error::Data(crate::errors::DataError::ParseError {
+                data_type: "signature".to_string(),
+                error: format!("Invalid signature \'{sig_str}\': {e}"),
+            })
         })
     }
 
@@ -296,9 +311,13 @@ impl RpcClientMethods for RpcClient {
                 if value.is_null() {
                     return Ok(None);
                 }
-                let tx: EncodedConfirmedTransactionWithStatusMeta =
-                    serde_json::from_value(value)
-                        .map_err(|e| parse_err("transaction", &e.to_string()))?;
+                let tx: EncodedConfirmedTransactionWithStatusMeta = serde_json::from_value(value)
+                    .map_err(|e| {
+                    crate::Error::Data(crate::errors::DataError::ParseError {
+                        data_type: "transaction".to_string(),
+                        error: e.to_string().to_string(),
+                    })
+                })?;
                 Ok(Some(tx))
             }
             Err(RpcError::AccountNotFound { .. }) => Ok(None),
@@ -321,7 +340,12 @@ impl RpcClientMethods for RpcClient {
         let values = result
             .get("value")
             .and_then(|v| v.as_array())
-            .ok_or_else(|| parse_err("response", "invalid format"))?;
+            .ok_or_else(|| {
+                crate::Error::Data(crate::errors::DataError::ParseError {
+                    data_type: "response".to_string(),
+                    error: "invalid format".to_string(),
+                })
+            })?;
 
         let mut statuses = Vec::with_capacity(values.len());
         for value in values {
@@ -360,16 +384,26 @@ impl RpcClientMethods for RpcClient {
         let values = result
             .get("value")
             .and_then(|v| v.as_array())
-            .ok_or_else(|| parse_err("response", "invalid format"))?;
+            .ok_or_else(|| {
+                crate::Error::Data(crate::errors::DataError::ParseError {
+                    data_type: "response".to_string(),
+                    error: "invalid format".to_string(),
+                })
+            })?;
 
         let mut accounts = Vec::with_capacity(values.len());
         for item in values {
-            let pubkey_str = item
-                .get("pubkey")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| parse_err("pubkey", "missing pubkey field"))?;
+            let pubkey_str = item.get("pubkey").and_then(|v| v.as_str()).ok_or_else(|| {
+                crate::Error::Data(crate::errors::DataError::ParseError {
+                    data_type: "pubkey".to_string(),
+                    error: "missing pubkey field".to_string(),
+                })
+            })?;
             let pubkey = Pubkey::from_str(pubkey_str).map_err(|e| {
-                parse_err("pubkey", &format!("Invalid pubkey \'{pubkey_str}\': {e}"))
+                crate::Error::Data(crate::errors::DataError::ParseError {
+                    data_type: "pubkey".to_string(),
+                    error: format!("Invalid pubkey \'{pubkey_str}\': {e}"),
+                })
             })?;
 
             if let Some(account) =
@@ -387,9 +421,12 @@ impl RpcClientMethods for RpcClient {
 
         let result = self.manager.execute_raw("getSlot", params).await?;
 
-        result
-            .as_u64()
-            .ok_or_else(|| parse_err("slot", "invalid response format"))
+        result.as_u64().ok_or_else(|| {
+            crate::Error::Data(crate::errors::DataError::ParseError {
+                data_type: "slot".to_string(),
+                error: "invalid response format".to_string(),
+            })
+        })
     }
 
     async fn get_minimum_balance_for_rent_exemption(&self, data_len: usize) -> crate::Result<u64> {
@@ -400,9 +437,12 @@ impl RpcClientMethods for RpcClient {
             .execute_raw("getMinimumBalanceForRentExemption", params)
             .await?;
 
-        result
-            .as_u64()
-            .ok_or_else(|| parse_err("rent", "invalid response format"))
+        result.as_u64().ok_or_else(|| {
+            crate::Error::Data(crate::errors::DataError::ParseError {
+                data_type: "rent".to_string(),
+                error: "invalid response format".to_string(),
+            })
+        })
     }
 
     async fn get_health(&self) -> crate::Result<()> {
@@ -477,10 +517,10 @@ impl RpcClientMethods for RpcClient {
         if confirmed {
             Ok(signature)
         } else {
-            Err(parse_err(
-                "transaction",
-                &format!("Transaction {signature} not confirmed within timeout"),
-            ))
+            Err(crate::Error::Data(crate::errors::DataError::ParseError {
+                data_type: "transaction".to_string(),
+                error: format!("Transaction {signature} not confirmed within timeout"),
+            }))
         }
     }
 
@@ -497,14 +537,17 @@ impl RpcClientMethods for RpcClient {
 
         let result = self.manager.execute_raw("sendTransaction", params).await?;
 
-        let sig_str = result
-            .as_str()
-            .ok_or_else(|| parse_err("signature", "invalid response format"))?;
+        let sig_str = result.as_str().ok_or_else(|| {
+            crate::Error::Data(crate::errors::DataError::ParseError {
+                data_type: "signature".to_string(),
+                error: "invalid response format".to_string(),
+            })
+        })?;
         Signature::from_str(sig_str).map_err(|e| {
-            parse_err(
-                "signature",
-                &format!("Invalid signature \'{sig_str}\': {e}"),
-            )
+            crate::Error::Data(crate::errors::DataError::ParseError {
+                data_type: "signature".to_string(),
+                error: format!("Invalid signature \'{sig_str}\': {e}"),
+            })
         })
     }
 
@@ -542,12 +585,14 @@ impl RpcClientMethods for RpcClient {
                                 // Check for error
                                 if let Some(err) = status.get("err") {
                                     if !err.is_null() {
-                                        return Err(parse_err(
-                                            "transaction",
-                                            &format!(
-                                                "Transaction failed: {}",
-                                                serde_json::to_string(err).unwrap_or_default()
-                                            ),
+                                        return Err(crate::Error::Data(
+                                            crate::errors::DataError::ParseError {
+                                                data_type: "transaction".to_string(),
+                                                error: format!(
+                                                    "Transaction failed: {}",
+                                                    serde_json::to_string(err).unwrap_or_default()
+                                                ),
+                                            },
                                         ));
                                     }
                                 }
@@ -649,17 +694,20 @@ impl RpcClientMethods for RpcClient {
 
         let value = result.get("value");
         if value.is_none() || value == Some(&serde_json::Value::Null) {
-            return Err(parse_err(
-                "mint account",
-                &format!("Account not found: {mint}"),
-            ));
+            return Err(crate::Error::Data(crate::errors::DataError::ParseError {
+                data_type: "mint account".to_string(),
+                error: format!("Account not found: {mint}"),
+            }));
         }
 
         let value = value.unwrap();
         if let Some(owner) = value.get("owner").and_then(|v| v.as_str()) {
             Ok(owner == TOKEN_2022_PROGRAM_ID)
         } else {
-            Err(parse_err("account", "Missing owner field"))
+            Err(crate::Error::Data(crate::errors::DataError::ParseError {
+                data_type: "account".to_string(),
+                error: "Missing owner field".to_string(),
+            }))
         }
     }
 
@@ -693,23 +741,31 @@ impl RpcClientMethods for RpcClient {
         &self,
         owner: &str,
     ) -> crate::Result<Vec<TokenAccountInfo>> {
-        let owner_pubkey = Pubkey::from_str(owner)
-            .map_err(|e| parse_err("pubkey", &format!("Invalid owner \'{owner}\': {e}")))?;
+        let owner_pubkey = Pubkey::from_str(owner).map_err(|e| {
+            crate::Error::Data(crate::errors::DataError::ParseError {
+                data_type: "pubkey".to_string(),
+                error: format!("Invalid owner \'{owner}\': {e}"),
+            })
+        })?;
         self.get_all_token_accounts(&owner_pubkey).await
     }
 
     async fn is_token_2022_mint_str(&self, mint: &str) -> crate::Result<bool> {
-        let mint_pubkey = Pubkey::from_str(mint)
-            .map_err(|e| parse_err("pubkey", &format!("Invalid mint '{mint}': {e}")))?;
+        let mint_pubkey = Pubkey::from_str(mint).map_err(|e| {
+            crate::Error::Data(crate::errors::DataError::ParseError {
+                data_type: "pubkey".to_string(),
+                error: format!("Invalid mint '{mint}': {e}"),
+            })
+        })?;
         self.is_token_2022_mint(&mint_pubkey).await
     }
 
     async fn is_token_account_token_2022(&self, token_account: &str) -> crate::Result<bool> {
         let account_pubkey = Pubkey::from_str(token_account).map_err(|e| {
-            parse_err(
-                "pubkey",
-                &format!("Invalid token account \'{token_account}\': {e}"),
-            )
+            crate::Error::Data(crate::errors::DataError::ParseError {
+                data_type: "pubkey".to_string(),
+                error: format!("Invalid token account \'{token_account}\': {e}"),
+            })
         })?;
 
         let params = serde_json::json!([
@@ -721,17 +777,20 @@ impl RpcClientMethods for RpcClient {
 
         let value = result.get("value");
         if value.is_none() || value == Some(&serde_json::Value::Null) {
-            return Err(parse_err(
-                "token account",
-                &format!("Account not found: {token_account}"),
-            ));
+            return Err(crate::Error::Data(crate::errors::DataError::ParseError {
+                data_type: "token account".to_string(),
+                error: format!("Account not found: {token_account}"),
+            }));
         }
 
         let value = value.unwrap();
         if let Some(owner) = value.get("owner").and_then(|v| v.as_str()) {
             Ok(owner == TOKEN_2022_PROGRAM_ID)
         } else {
-            Err(parse_err("account", "Missing owner field"))
+            Err(crate::Error::Data(crate::errors::DataError::ParseError {
+                data_type: "account".to_string(),
+                error: "Missing owner field".to_string(),
+            }))
         }
     }
 
@@ -741,13 +800,17 @@ impl RpcClientMethods for RpcClient {
         mint: &str,
     ) -> crate::Result<String> {
         let wallet_pubkey = Pubkey::from_str(wallet_address).map_err(|e| {
-            parse_err(
-                "pubkey",
-                &format!("Invalid wallet \'{wallet_address}\': {e}"),
-            )
+            crate::Error::Data(crate::errors::DataError::ParseError {
+                data_type: "pubkey".to_string(),
+                error: format!("Invalid wallet \'{wallet_address}\': {e}"),
+            })
         })?;
-        let mint_pubkey = Pubkey::from_str(mint)
-            .map_err(|e| parse_err("pubkey", &format!("Invalid mint \'{mint}\': {e}")))?;
+        let mint_pubkey = Pubkey::from_str(mint).map_err(|e| {
+            crate::Error::Data(crate::errors::DataError::ParseError {
+                data_type: "pubkey".to_string(),
+                error: format!("Invalid mint \'{mint}\': {e}"),
+            })
+        })?;
 
         // First try standard SPL Token ATA
         let spl_ata = Self::get_associated_token_address(&wallet_pubkey, &mint_pubkey);
@@ -758,8 +821,12 @@ impl RpcClientMethods for RpcClient {
         }
 
         // Try Token-2022 ATA
-        let token_2022_program_id = Pubkey::from_str(TOKEN_2022_PROGRAM_ID)
-            .map_err(|e| parse_err("pubkey", &format!("Invalid Token-2022 program ID: {e}")))?;
+        let token_2022_program_id = Pubkey::from_str(TOKEN_2022_PROGRAM_ID).map_err(|e| {
+            crate::Error::Data(crate::errors::DataError::ParseError {
+                data_type: "pubkey".to_string(),
+                error: format!("Invalid Token-2022 program ID: {e}"),
+            })
+        })?;
         let token_2022_ata = Self::get_associated_token_address_with_program(
             &wallet_pubkey,
             &mint_pubkey,
@@ -781,8 +848,12 @@ impl RpcClientMethods for RpcClient {
         use bincode;
 
         // Serialize the transaction
-        let serialized = bincode::serialize(transaction)
-            .map_err(|e| parse_err("transaction", &format!("Failed to serialize: {e}")))?;
+        let serialized = bincode::serialize(transaction).map_err(|e| {
+            crate::Error::Data(crate::errors::DataError::ParseError {
+                data_type: "transaction".to_string(),
+                error: format!("Failed to serialize: {e}"),
+            })
+        })?;
 
         // Encode to base64
         let transaction_base64 = base64::engine::general_purpose::STANDARD.encode(&serialized);
@@ -800,9 +871,12 @@ impl RpcClientMethods for RpcClient {
 
         let result = self.manager.execute_raw("sendTransaction", params).await?;
 
-        let signature_str = result
-            .as_str()
-            .ok_or_else(|| parse_err("signature", "expected signature string"))?;
+        let signature_str = result.as_str().ok_or_else(|| {
+            crate::Error::Data(crate::errors::DataError::ParseError {
+                data_type: "signature".to_string(),
+                error: "expected signature string".to_string(),
+            })
+        })?;
 
         let signature = Signature::from_str(signature_str).map_err(|e| {
             crate::Error::Data(crate::errors::DataError::ParseError {
@@ -820,10 +894,10 @@ impl RpcClientMethods for RpcClient {
         if confirmed {
             Ok(signature)
         } else {
-            Err(parse_err(
-                "transaction",
-                &format!("Transaction {signature} not confirmed within timeout"),
-            ))
+            Err(crate::Error::Data(crate::errors::DataError::ParseError {
+                data_type: "transaction".to_string(),
+                error: format!("Transaction {signature} not confirmed within timeout"),
+            }))
         }
     }
 
@@ -873,9 +947,12 @@ impl RpcClientMethods for RpcClient {
             .execute_raw("getSignaturesForAddress", params)
             .await?;
 
-        let signatures_array = result
-            .as_array()
-            .ok_or_else(|| parse_err("response", "expected array"))?;
+        let signatures_array = result.as_array().ok_or_else(|| {
+            crate::Error::Data(crate::errors::DataError::ParseError {
+                data_type: "response".to_string(),
+                error: "expected array".to_string(),
+            })
+        })?;
 
         let mut signatures = Vec::with_capacity(signatures_array.len());
 
@@ -883,19 +960,26 @@ impl RpcClientMethods for RpcClient {
             let sig_str = item
                 .get("signature")
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| parse_err("signature", "missing signature field"))?;
+                .ok_or_else(|| {
+                    crate::Error::Data(crate::errors::DataError::ParseError {
+                        data_type: "signature".to_string(),
+                        error: "missing signature field".to_string(),
+                    })
+                })?;
 
             let signature = Signature::from_str(sig_str).map_err(|e| {
-                parse_err(
-                    "signature",
-                    &format!("Invalid signature \'{sig_str}\': {e}"),
-                )
+                crate::Error::Data(crate::errors::DataError::ParseError {
+                    data_type: "signature".to_string(),
+                    error: format!("Invalid signature \'{sig_str}\': {e}"),
+                })
             })?;
 
-            let slot = item
-                .get("slot")
-                .and_then(|v| v.as_u64())
-                .ok_or_else(|| parse_err("slot", "missing slot field"))?;
+            let slot = item.get("slot").and_then(|v| v.as_u64()).ok_or_else(|| {
+                crate::Error::Data(crate::errors::DataError::ParseError {
+                    data_type: "slot".to_string(),
+                    error: "missing slot field".to_string(),
+                })
+            })?;
 
             let err = item.get("err").and_then(|v| {
                 if v.is_null() {
@@ -1035,25 +1119,36 @@ impl RpcClientMethods for RpcClient {
             .execute_raw("getProgramAccounts", params)
             .await?;
 
-        let accounts_array = result
-            .as_array()
-            .ok_or_else(|| parse_err("response", "expected array"))?;
+        let accounts_array = result.as_array().ok_or_else(|| {
+            crate::Error::Data(crate::errors::DataError::ParseError {
+                data_type: "response".to_string(),
+                error: "expected array".to_string(),
+            })
+        })?;
 
         let mut accounts = Vec::with_capacity(accounts_array.len());
 
         for item in accounts_array {
-            let pubkey_str = item
-                .get("pubkey")
-                .and_then(|v| v.as_str())
-                .ok_or_else(|| parse_err("pubkey", "missing pubkey field"))?;
-
-            let pubkey = Pubkey::from_str(pubkey_str).map_err(|e| {
-                parse_err("pubkey", &format!("Invalid pubkey \'{pubkey_str}\': {e}"))
+            let pubkey_str = item.get("pubkey").and_then(|v| v.as_str()).ok_or_else(|| {
+                crate::Error::Data(crate::errors::DataError::ParseError {
+                    data_type: "pubkey".to_string(),
+                    error: "missing pubkey field".to_string(),
+                })
             })?;
 
-            let account_data = item
-                .get("account")
-                .ok_or_else(|| parse_err("account", "missing account field"))?;
+            let pubkey = Pubkey::from_str(pubkey_str).map_err(|e| {
+                crate::Error::Data(crate::errors::DataError::ParseError {
+                    data_type: "pubkey".to_string(),
+                    error: format!("Invalid pubkey \'{pubkey_str}\': {e}"),
+                })
+            })?;
+
+            let account_data = item.get("account").ok_or_else(|| {
+                crate::Error::Data(crate::errors::DataError::ParseError {
+                    data_type: "account".to_string(),
+                    error: "missing account field".to_string(),
+                })
+            })?;
 
             if let Some(account) = parse_account_from_json(account_data)? {
                 accounts.push((pubkey, account));
@@ -1075,21 +1170,33 @@ impl RpcClientMethods for RpcClient {
 
         let result = self.manager.execute_raw("getTokenSupply", params).await?;
 
-        let value = result
-            .get("value")
-            .ok_or_else(|| parse_err("response", "missing value field"))?;
+        let value = result.get("value").ok_or_else(|| {
+            crate::Error::Data(crate::errors::DataError::ParseError {
+                data_type: "response".to_string(),
+                error: "missing value field".to_string(),
+            })
+        })?;
 
         let amount = value
             .get("amount")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| parse_err("amount", "missing amount field"))?
+            .ok_or_else(|| {
+                crate::Error::Data(crate::errors::DataError::ParseError {
+                    data_type: "amount".to_string(),
+                    error: "missing amount field".to_string(),
+                })
+            })?
             .to_string();
 
         let decimals = value
             .get("decimals")
             .and_then(|v| v.as_u64())
-            .ok_or_else(|| parse_err("decimals", "missing decimals field"))?
-            as u8;
+            .ok_or_else(|| {
+                crate::Error::Data(crate::errors::DataError::ParseError {
+                    data_type: "decimals".to_string(),
+                    error: "missing decimals field".to_string(),
+                })
+            })? as u8;
 
         let ui_amount = value.get("uiAmount").and_then(|v| v.as_f64());
 
@@ -1154,14 +1261,23 @@ impl RpcClientMethods for RpcClient {
             let amount = item
                 .get("amount")
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| parse_err("amount", "missing amount field"))?
+                .ok_or_else(|| {
+                    crate::Error::Data(crate::errors::DataError::ParseError {
+                        data_type: "amount".to_string(),
+                        error: "missing amount field".to_string(),
+                    })
+                })?
                 .to_string();
 
             let decimals = item
                 .get("decimals")
                 .and_then(|v| v.as_u64())
-                .ok_or_else(|| parse_err("decimals", "missing decimals field"))?
-                as u8;
+                .ok_or_else(|| {
+                    crate::Error::Data(crate::errors::DataError::ParseError {
+                        data_type: "decimals".to_string(),
+                        error: "missing decimals field".to_string(),
+                    })
+                })? as u8;
 
             let ui_amount = item.get("uiAmount").and_then(|v| v.as_f64());
 
@@ -1277,13 +1393,18 @@ impl RpcClientMethods for RpcClient {
         let result = self.manager.execute_raw("getTransaction", params).await?;
 
         if result.is_null() {
-            return Err(parse_err(
-                "transaction",
-                &format!("Transaction not found: {signature}"),
-            ));
+            return Err(crate::Error::Data(crate::errors::DataError::ParseError {
+                data_type: "transaction".to_string(),
+                error: format!("Transaction not found: {signature}"),
+            }));
         }
 
-        serde_json::from_value(result).map_err(|e| parse_err("transaction", &e.to_string()))
+        serde_json::from_value(result).map_err(|e| {
+            crate::Error::Data(crate::errors::DataError::ParseError {
+                data_type: "transaction".to_string(),
+                error: e.to_string().to_string(),
+            })
+        })
     }
 
     async fn sign_send_and_confirm_transaction_simple(

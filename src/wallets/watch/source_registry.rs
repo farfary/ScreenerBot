@@ -9,10 +9,6 @@ use crate::database::WriteTransaction;
 use crate::errors::{DatabaseError, InternalError};
 use crate::wallets::Error;
 
-fn join_failed(e: tokio::task::JoinError) -> Error {
-    Error::Internal(InternalError::from(e))
-}
-
 impl WatchDatabase {
     pub async fn upsert_source(
         &self,
@@ -65,7 +61,7 @@ impl WatchDatabase {
                 }))
         })
         .await
-        .map_err(join_failed)?
+        .map_err(|e| Error::Internal(InternalError::from(e)))?
     }
 
     /// Remove one consumer; delete the target/cursor only after its final source.
@@ -116,6 +112,6 @@ impl WatchDatabase {
             tx.commit().map_err(DatabaseError::from).map_err(Error::from)
         })
         .await
-        .map_err(join_failed)?
+        .map_err(|e| Error::Internal(InternalError::from(e)))?
     }
 }

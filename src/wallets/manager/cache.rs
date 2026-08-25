@@ -9,7 +9,6 @@ use tokio::sync::RwLock;
 
 use super::super::error::Error;
 use super::super::types::Wallet;
-use super::db_not_initialized;
 
 /// Cached main wallet record
 pub(super) static MAIN_WALLET_CACHE: LazyLock<Arc<RwLock<Option<Wallet>>>> =
@@ -18,7 +17,9 @@ pub(super) static MAIN_WALLET_CACHE: LazyLock<Arc<RwLock<Option<Wallet>>>> =
 /// Refresh the cached main wallet record
 pub(super) async fn refresh_main_wallet_cache() -> Result<(), Error> {
     let db_guard = super::WALLETS_DB.read().await;
-    let db = db_guard.as_ref().ok_or_else(db_not_initialized)?;
+    let db = db_guard
+        .as_ref()
+        .ok_or_else(|| Error::NotInitialized { database: "wallet" })?;
 
     let main_wallet = db.get_main_wallet()?;
 
