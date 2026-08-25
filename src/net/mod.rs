@@ -105,7 +105,7 @@ pub fn log_detected_proxy() {
 /// Returns the same stream type as `connect_async` so callers are unaffected.
 pub async fn connect_ws(
     ws_url: &str,
-) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>, String> {
+) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>, crate::errors::NetworkError> {
     if let Some(proxy) = proxy_url() {
         if let Some((proxy_host, proxy_port)) = parse_http_proxy(proxy) {
             return connect_ws_via_http_proxy(ws_url, &proxy_host, proxy_port).await;
@@ -118,7 +118,10 @@ pub async fn connect_ws(
     }
     let (stream, _) = connect_async(ws_url)
         .await
-        .map_err(|e| format!("Failed to connect to WebSocket: {e}"))?;
+        .map_err(|e| crate::errors::NetworkError::RequestFailed {
+            endpoint: ws_url.to_owned(),
+            detail: format!("Failed to connect to WebSocket: {e}"),
+        })?;
     Ok(stream)
 }
 
@@ -136,12 +139,18 @@ async fn connect_ws_via_http_proxy(
     ws_url: &str,
     proxy_host: &str,
     proxy_port: u16,
-) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>, String> {
+) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>, crate::errors::NetworkError> {
     // Target host/port from the ws(s) URL.
-    let url = url::Url::parse(ws_url).map_err(|e| format!("Invalid ws url: {e}"))?;
+    let url = url::Url::parse(ws_url).map_err(|e| crate::errors::NetworkError::RequestFailed {
+        endpoint: ws_url.to_owned(),
+        detail: format!("Invalid ws url: {e}"),
+    })?;
     let target_host = url
         .host_str()
-        .ok_or_else(|| "ws url has no host".to_owned())?
+        .ok_or_else(|| crate::errors::NetworkError::RequestFailed {
+            endpoint: ws_url.to_owned(),
+            detail: "ws url has no host".to_owned(),
+        })?
         .to_owned();
     let target_port = url
         .port_or_known_default()
@@ -150,7 +159,10 @@ async fn connect_ws_via_http_proxy(
     // 1) TCP to the proxy.
     let mut tcp = TcpStream::connect((proxy_host, proxy_port))
         .await
-        .map_err(|e| format!("Proxy TCP connect failed: {e}"))?;
+        .map_err(|e| crate::errors::NetworkError::RequestFailed {
+            endpoint: format!("{proxy_host}:{proxy_port}"),
+            detail: format!("Proxy TCP connect failed: {e}"),
+        })?;
 
     // 2) HTTP CONNECT tunnel to the target.
     let connect_req = format!(
@@ -160,7 +172,10 @@ async fn connect_ws_via_http_proxy(
     );
     tcp.write_all(connect_req.as_bytes())
         .await
-        .map_err(|e| format!("Proxy CONNECT write failed: {e}"))?;
+        .map_err(|e| crate::errors::NetworkError::RequestFailed {
+            endpoint: format!("{proxy_host}:{proxy_port}"),
+            detail: format!("Proxy CONNECT write failed: {e}"),
+        })?;
 
     // Read the proxy response headers (until CRLFCRLF).
     let mut buf = Vec::with_capacity(256);
@@ -169,16 +184,25 @@ async fn connect_ws_via_http_proxy(
         let n = tcp
             .read(&mut byte)
             .await
-            .map_err(|e| format!("Proxy CONNECT read failed: {e}"))?;
+            .map_err(|e| crate::errors::NetworkError::RequestFailed {
+                endpoint: format!("{proxy_host}:{proxy_port}"),
+                detail: format!("Proxy CONNECT read failed: {e}"),
+            })?;
         if n == 0 {
-            return Err("Proxy closed connection during CONNECT".to_owned());
+            return Err(crate::errors::NetworkError::RequestFailed {
+                endpoint: format!("{proxy_host}:{proxy_port}"),
+                detail: "Proxy closed connection during CONNECT".to_owned(),
+            });
         }
         buf.push(byte[0]);
         if buf.len() >= 4 && &buf[buf.len() - 4..] == b"\r\n\r\n" {
             break;
         }
         if buf.len() > 8192 {
-            return Err("Proxy CONNECT response too large".to_owned());
+            return Err(crate::errors::NetworkError::RequestFailed {
+                endpoint: format!("{proxy_host}:{proxy_port}"),
+                detail: "Proxy CONNECT response too large".to_owned(),
+            });
         }
     }
     let head = String::from_utf8_lossy(&buf);
@@ -189,14 +213,20 @@ async fn connect_ws_via_http_proxy(
         .unwrap_or(false);
     if !status_ok {
         let first = head.lines().next().unwrap_or("").to_owned();
-        return Err(format!("Proxy CONNECT rejected: {first}"));
+        return Err(crate::errors::NetworkError::RequestFailed {
+            endpoint: format!("{proxy_host}:{proxy_port}"),
+            detail: format!("Proxy CONNECT rejected: {first}"),
+        });
     }
 
     // 3) TLS + WebSocket handshake over the tunnelled stream.
     let config: Option<WebSocketConfig> = None;
     let (stream, _) = client_async_tls_with_config(ws_url, tcp, config, None)
         .await
-        .map_err(|e| format!("WebSocket handshake over proxy failed: {e}"))?;
+        .map_err(|e| crate::errors::NetworkError::RequestFailed {
+            endpoint: ws_url.to_owned(),
+            detail: format!("WebSocket handshake over proxy failed: {e}"),
+        })?;
     Ok(stream)
 }
 

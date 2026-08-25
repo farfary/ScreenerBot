@@ -928,6 +928,7 @@ fn chain_parameter_values_have_exactly_one_owning_const() {
 /// stringly-typed errors onto their own `error.rs`. Each migration task
 /// appends its module here — this list may only ever grow.
 const MIGRATED_TO_TYPED_ERRORS: &[&str] = &[
+    "net",
     "ohlcvs",
     "swaps",
     "filtering",
