@@ -21,8 +21,10 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+use crate::errors::{DataError, IoError};
 use crate::paths::get_data_directory;
 use crate::secure_storage::{decrypt_private_key, encrypt_private_key, EncryptedData};
+use crate::{Error, Result};
 
 /// Deliberately not inside `config.toml`: that file is plain text and gets
 /// shared. This one is opaque and gets ignored.
@@ -70,27 +72,34 @@ pub fn load() -> Option<StoredSession> {
     serde_json::from_str(&plaintext).ok()
 }
 
-pub fn save(session: &StoredSession) -> Result<(), String> {
-    let plaintext =
-        serde_json::to_string(session).map_err(|e| format!("could not serialize session: {e}"))?;
+pub fn save(session: &StoredSession) -> Result<()> {
+    let plaintext = serde_json::to_string(session).map_err(|e| {
+        Error::Data(DataError::ParseError {
+            data_type: "account session".to_owned(),
+            error: e.to_string(),
+        })
+    })?;
 
-    // SEAM: account still returns String errors; removed when this module migrates.
-    let encrypted = encrypt_private_key(&plaintext).map_err(|error| error.to_string())?;
+    let encrypted = encrypt_private_key(&plaintext)?;
 
     let envelope = EncryptedEnvelope {
         ciphertext: encrypted.ciphertext,
         nonce: encrypted.nonce,
     };
 
-    let body = serde_json::to_string(&envelope)
-        .map_err(|e| format!("could not serialize session envelope: {e}"))?;
+    let body = serde_json::to_string(&envelope).map_err(|e| {
+        Error::Data(DataError::ParseError {
+            data_type: "encrypted account session".to_owned(),
+            error: e.to_string(),
+        })
+    })?;
 
     let path = store_path();
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| format!("could not create data dir: {e}"))?;
+        std::fs::create_dir_all(parent).map_err(|e| Error::Io(IoError::from(e)))?;
     }
 
-    std::fs::write(&path, body).map_err(|e| format!("could not write session: {e}"))?;
+    std::fs::write(&path, body).map_err(|e| Error::Io(IoError::from(e)))?;
 
     // Owner-only. The file is encrypted, but a token readable by every account
     // on a shared machine is one unnecessary step closer to being used.
@@ -105,10 +114,10 @@ pub fn save(session: &StoredSession) -> Result<(), String> {
 
 /// Remove the stored session. Signing out must leave nothing behind, so a
 /// missing file is success rather than an error.
-pub fn clear() -> Result<(), String> {
+pub fn clear() -> Result<()> {
     match std::fs::remove_file(store_path()) {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(format!("could not remove session: {error}")),
+        Err(error) => Err(Error::Io(IoError::from(error))),
     }
 }

@@ -3,6 +3,7 @@
 use crate::config::get_config_clone;
 use crate::connectivity::monitor::EndpointMonitor;
 use crate::connectivity::types::{EndpointCriticality, FallbackStrategy, HealthCheckResult};
+use crate::errors::NetworkError;
 use async_trait::async_trait;
 use futures::future::select_ok;
 use std::time::Instant;
@@ -29,12 +30,15 @@ impl InternetMonitor {
     /// detection) and fails only once ALL fail or time out (bounded by
     /// `MAX_PROBE_SECS`, so offline detection is ~one short timeout, not the sum
     /// across servers).
-    async fn check_dns(&self, timeout_secs: u64) -> Result<u64, String> {
+    async fn check_dns(&self, timeout_secs: u64) -> Result<u64, NetworkError> {
         let cfg = get_config_clone();
         let dns_servers = cfg.connectivity.internet.dns_servers.clone();
 
         if dns_servers.is_empty() {
-            return Err("No DNS servers configured".to_owned());
+            return Err(NetworkError::RequestFailed {
+                endpoint: "DNS reachability probe".to_owned(),
+                detail: "no DNS servers configured".to_owned(),
+            });
         }
 
         let timeout_duration = Duration::from_secs(timeout_secs.min(MAX_PROBE_SECS).max(1));
@@ -47,8 +51,14 @@ impl InternetMonitor {
                 Box::pin(async move {
                     match timeout(timeout_duration, TcpStream::connect(&addr)).await {
                         Ok(Ok(_)) => Ok(()),
-                        Ok(Err(e)) => Err(e.to_string()),
-                        Err(_) => Err("timeout".to_owned()),
+                        Ok(Err(e)) => Err(NetworkError::RequestFailed {
+                            endpoint: addr,
+                            detail: e.to_string(),
+                        }),
+                        Err(_) => Err(NetworkError::Timeout {
+                            endpoint: addr,
+                            timeout_ms: timeout_duration.as_millis() as u64,
+                        }),
                     }
                 })
             })
@@ -56,26 +66,35 @@ impl InternetMonitor {
 
         match select_ok(connects).await {
             Ok(_) => Ok(start.elapsed().as_millis() as u64),
-            Err(_) => Err(format!("All DNS servers unreachable: {:?}", dns_servers)),
+            Err(_) => Err(NetworkError::RequestFailed {
+                endpoint: "DNS reachability probe".to_owned(),
+                detail: format!("all DNS servers unreachable: {dns_servers:?}"),
+            }),
         }
     }
 
     /// Check HTTP connectivity by racing HEAD requests to all configured check
     /// endpoints concurrently (same fast-resolve / bounded-fail semantics as
     /// `check_dns`).
-    async fn check_http(&self, timeout_secs: u64) -> Result<u64, String> {
+    async fn check_http(&self, timeout_secs: u64) -> Result<u64, NetworkError> {
         let cfg = get_config_clone();
         let http_checks = cfg.connectivity.internet.http_checks.clone();
 
         if http_checks.is_empty() {
-            return Err("No HTTP check endpoints configured".to_owned());
+            return Err(NetworkError::RequestFailed {
+                endpoint: "HTTP reachability probe".to_owned(),
+                detail: "no HTTP check endpoints configured".to_owned(),
+            });
         }
 
         let probe_secs = timeout_secs.min(MAX_PROBE_SECS).max(1);
         let client = crate::net::client_builder()
             .timeout(Duration::from_secs(probe_secs))
             .build()
-            .map_err(|e| format!("Failed to create HTTP client: {e}"))?;
+            .map_err(|e| NetworkError::RequestFailed {
+                endpoint: "HTTP reachability probe".to_owned(),
+                detail: e.to_string(),
+            })?;
 
         let start = Instant::now();
         let requests: Vec<_> = http_checks
@@ -86,8 +105,15 @@ impl InternetMonitor {
                 Box::pin(async move {
                     match client.head(&url).send().await {
                         Ok(response) if response.status().is_success() => Ok(()),
-                        Ok(response) => Err(format!("status {}", response.status())),
-                        Err(e) => Err(e.to_string()),
+                        Ok(response) => Err(NetworkError::HttpStatus {
+                            endpoint: url,
+                            status: response.status().as_u16(),
+                            body: None,
+                        }),
+                        Err(e) => Err(NetworkError::RequestFailed {
+                            endpoint: url,
+                            detail: e.to_string(),
+                        }),
                     }
                 })
             })
@@ -95,10 +121,10 @@ impl InternetMonitor {
 
         match select_ok(requests).await {
             Ok(_) => Ok(start.elapsed().as_millis() as u64),
-            Err(_) => Err(format!(
-                "All HTTP check endpoints unreachable: {:?}",
-                http_checks
-            )),
+            Err(_) => Err(NetworkError::RequestFailed {
+                endpoint: "HTTP reachability probe".to_owned(),
+                detail: format!("all HTTP check endpoints unreachable: {http_checks:?}"),
+            }),
         }
     }
 }

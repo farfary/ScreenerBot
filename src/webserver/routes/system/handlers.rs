@@ -201,7 +201,7 @@ pub(super) async fn get_paths() -> Response {
         return error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "PATHS_INIT_FAILED",
-            &err,
+            &err.to_string(),
             None,
         );
     }
@@ -226,7 +226,7 @@ pub(super) async fn open_data_directory() -> Response {
         return error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "PATHS_INIT_FAILED",
-            &err,
+            &err.to_string(),
             None,
         );
     }
@@ -242,7 +242,7 @@ pub(super) async fn open_data_directory() -> Response {
         Err(err) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "OPEN_DATA_FAILED",
-            &err,
+            &err.to_string(),
             None,
         ),
     }
@@ -270,7 +270,7 @@ pub(super) async fn open_url(Json(request): Json<OpenUrlRequest>) -> Response {
         Err(err) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "OPEN_URL_FAILED",
-            &err,
+            &err.to_string(),
             None,
         ),
     }

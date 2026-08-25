@@ -1,6 +1,7 @@
 //! Webserver argument validation and port/host utilities.
 
 use super::get_arg_value;
+use crate::errors::ConfigurationError;
 
 /// Get the port override from CLI (overrides config file).
 pub fn get_port_override() -> Option<u16> {
@@ -13,18 +14,17 @@ pub fn get_host_override() -> Option<String> {
 }
 
 /// Validates port argument provided via CLI.
-pub fn validate_port_argument() -> Result<(), String> {
+pub fn validate_port_argument() -> Result<(), ConfigurationError> {
     if let Some(port_str) = get_arg_value("--port") {
         match port_str.parse::<u16>() {
             Ok(0) => {
-                return Err("Invalid port value '0': Port must be between 1 and 65535".to_owned());
+                return Err(ConfigurationError::Generic {
+                    message: "invalid port value '0': port must be between 1 and 65535".to_owned(),
+                });
             }
             Ok(_) => Ok(()),
             Err(_) => {
-                return Err(format!(
-                    "Invalid port value '{}': Port must be a number between 1 and 65535",
-                    port_str
-                ));
+                return Err(ConfigurationError::Generic { message: format!("invalid port value '{port_str}': port must be a number between 1 and 65535") });
             }
         }
     } else {
@@ -33,10 +33,12 @@ pub fn validate_port_argument() -> Result<(), String> {
 }
 
 /// Validates host argument provided via CLI.
-pub fn validate_host_argument() -> Result<(), String> {
+pub fn validate_host_argument() -> Result<(), ConfigurationError> {
     if let Some(host) = get_arg_value("--host") {
         if host.trim().is_empty() {
-            return Err("Invalid host value: Host cannot be empty".to_owned());
+            return Err(ConfigurationError::Generic {
+                message: "invalid host value: host cannot be empty".to_owned(),
+            });
         }
         Ok(())
     } else {

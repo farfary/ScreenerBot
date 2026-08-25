@@ -35,7 +35,8 @@ pub async fn run_bot() -> Result<()> {
     })?;
 
     // 2. Acquire process lock to prevent multiple instances
-    let process_lock = ProcessLock::acquire().map_err(StartupError::from)?;
+    let process_lock =
+        ProcessLock::acquire().map_err(|error| StartupError::from(error.to_string()))?;
 
     // Run bot with the acquired lock
     run_bot_internal(process_lock).await
@@ -56,7 +57,7 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<()> {
         return Err(Error::Startup(StartupError::new(
             crate::errors::StartupErrorCode::ConfigInvalid,
             "Invalid startup option",
-            e,
+            e.to_string(),
             "A command-line option is invalid. Start ScreenerBot without that option, or \
              correct it and try again.",
         )));
@@ -66,7 +67,7 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<()> {
         return Err(Error::Startup(StartupError::new(
             crate::errors::StartupErrorCode::ConfigInvalid,
             "Invalid startup option",
-            e,
+            e.to_string(),
             "A command-line option is invalid. Start ScreenerBot without that option, or \
              correct it and try again.",
         )));

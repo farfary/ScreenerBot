@@ -236,8 +236,7 @@ fn adopt_tokens(tokens: TokenResponse, name: Option<String>, email: Option<Strin
         scopes: scopes.clone(),
         account_label: name.clone(),
         account_email: email.clone(),
-    })
-    .map_err(|message| Error::Account(AccountError::Storage { message }))?;
+    })?;
 
     write_session(Some(Session {
         access_token: tokens.access_token,

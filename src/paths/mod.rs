@@ -23,6 +23,8 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::LazyLock;
 
+use crate::errors::IoError;
+
 // =============================================================================
 // BASE DIRECTORY RESOLUTION
 // =============================================================================
@@ -120,7 +122,7 @@ pub fn get_analysis_exports_directory() -> PathBuf {
 ///
 /// Creates the base directory and all subdirectories needed for operation.
 /// This should be called early in the application startup.
-pub fn ensure_all_directories() -> Result<(), String> {
+pub fn ensure_all_directories() -> Result<(), IoError> {
     // Log base directory initialization (safe to log now, outside of lazy init)
     if !is_initialized() {
         eprintln!("Base directory: {}", get_base_directory().display());
@@ -136,13 +138,11 @@ pub fn ensure_all_directories() -> Result<(), String> {
 
     for (name, dir) in dirs_to_create {
         if !dir.exists() {
-            std::fs::create_dir_all(&dir).map_err(|e| {
-                format!(
-                    "Failed to create {} directory at {}: {}",
-                    name,
-                    dir.display(),
-                    e
-                )
+            std::fs::create_dir_all(&dir).map_err(|e| IoError::Generic {
+                message: format!(
+                    "failed to create {name} directory at {}: {e}",
+                    dir.display()
+                ),
             })?;
 
             eprintln!("Created directory: {}", dir.display());

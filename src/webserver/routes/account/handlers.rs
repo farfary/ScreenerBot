@@ -57,7 +57,7 @@ pub async fn start_browser_signin() -> Response {
                 error_response(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "ACCOUNT_BROWSER_OPEN_FAILED",
-                    &error,
+                    &error.to_string(),
                     Some("Open your default browser and try again"),
                 )
             }
@@ -84,7 +84,7 @@ pub async fn open_signup() -> Response {
         Err(error) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "ACCOUNT_BROWSER_OPEN_FAILED",
-            &error,
+            &error.to_string(),
             Some("Open screenerbot.io/signup in your browser"),
         ),
     }

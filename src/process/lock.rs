@@ -14,7 +14,9 @@
 //! // Lock held until _lock is dropped (end of scope)
 //! ```
 
+use crate::errors::{InternalError, IoError};
 use crate::logger::{self, LogTag};
+use crate::{Error, Result};
 use fslock::LockFile;
 use std::path::PathBuf;
 
@@ -37,7 +39,7 @@ impl ProcessLock {
     /// **Error cases:**
     /// - Another instance is running (lock is held)
     /// - Cannot create lock file (permission/path issues)
-    pub fn acquire() -> Result<Self, String> {
+    pub fn acquire() -> Result<Self> {
         let lock_path = crate::paths::get_process_lock_path();
 
         logger::info(
@@ -47,33 +49,29 @@ impl ProcessLock {
 
         // Open lock file (directory creation handled by paths module)
         let mut lock = LockFile::open(&lock_path).map_err(|e| {
-            format!(
-                "Failed to open lock file {:?}: {}\n\
-         Hint: Check directory permissions",
-                lock_path, e
-            )
+            Error::Io(IoError::Generic {
+                message: format!(
+                    "failed to open process lock file {}: {e}",
+                    lock_path.display()
+                ),
+            })
         })?;
 
         // Try to acquire exclusive lock (non-blocking)
-        if !lock
-            .try_lock()
-            .map_err(|e| format!("Failed to acquire lock on {:?}: {}", lock_path, e))?
-        {
-            return Err(format!(
-                "Another instance of ScreenerBot is already running.\n\
-         \n\
-         The process lock file is held by another process:\n\
-          Lock file: {:?}\n\
-         \n\
-         To stop the running instance:\n\
-          1. Find process: ps aux | grep screenerbot | grep -v grep\n\
-          2. Stop process: pkill -f screenerbot\n\
-          3. Verify stopped: ps aux | grep screenerbot | grep -v grep\n\
-         \n\
-         If no process is found but lock persists, it may be stale.\n\
-         In that case, manually remove: rm {:?}",
-                lock_path, lock_path
-            ));
+        if !lock.try_lock().map_err(|e| {
+            Error::Io(IoError::Generic {
+                message: format!(
+                    "failed to acquire process lock {}: {e}",
+                    lock_path.display()
+                ),
+            })
+        })? {
+            return Err(Error::Internal(InternalError::InvariantViolation {
+                message: format!(
+                    "another ScreenerBot instance holds process lock {}",
+                    lock_path.display()
+                ),
+            }));
         }
 
         logger::info(

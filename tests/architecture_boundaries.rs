@@ -951,6 +951,13 @@ const MIGRATED_TO_TYPED_ERRORS: &[&str] = &[
     "reset",
     "secure_storage",
     "run",
+    "database",
+    "paths",
+    "connectivity",
+    "account",
+    "arguments",
+    "logger",
+    "process",
 ];
 
 /// True when `line` declares a two-parameter `Result<_, String>` — a signature

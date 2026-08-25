@@ -13,6 +13,8 @@ use std::path::PathBuf;
 use std::sync::LazyLock;
 use std::sync::{Arc, Mutex};
 
+use crate::errors::IoError;
+
 /// File logging configuration
 const ENABLE_FILE_LOGGING: bool = true;
 const LOG_RETENTION_HOURS: u64 = 24; // Keep logs for 24 hours
@@ -110,7 +112,7 @@ impl FileLogger {
         }
     }
 
-    fn cleanup_old_logs_blocking(log_dir: &std::path::Path) -> Result<(), String> {
+    fn cleanup_old_logs_blocking(log_dir: &std::path::Path) -> Result<(), IoError> {
         let now = Local::now();
         let cutoff_time = now - chrono::Duration::hours(LOG_RETENTION_HOURS as i64);
 
