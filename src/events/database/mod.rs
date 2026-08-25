@@ -10,7 +10,9 @@
 mod pagination;
 
 use crate::database;
+use crate::errors::{DataError, DatabaseError};
 use crate::events::types::{Event, EventCategory, Severity};
+use crate::events::{Error, Result};
 use crate::logger::{self, LogTag};
 use chrono::{DateTime, Utc};
 use r2d2::{Pool, PooledConnection};
@@ -45,7 +47,7 @@ pub struct EventsDatabase {
 
 impl EventsDatabase {
     /// Create new EventsDatabase with connection pooling
-    pub async fn new() -> Result<Self, String> {
+    pub async fn new() -> Result<Self> {
         let database_path = crate::paths::get_events_db_path();
         let database_path_str = database_path.to_string_lossy().to_string();
 
@@ -63,7 +65,11 @@ impl EventsDatabase {
             .idle_timeout(None) // SQLite: keep connections alive (WAL stability)
             .max_lifetime(None) // SQLite: no connection recycling
             .build(write_manager)
-            .map_err(|e| format!("Failed to create events write pool: {e}"))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Connection {
+                    message: e.to_string(),
+                })
+            })?;
 
         // Create read pool
         let read_pool = Pool::builder()
@@ -73,7 +79,11 @@ impl EventsDatabase {
             .idle_timeout(None) // SQLite: keep connections alive (WAL stability)
             .max_lifetime(None) // SQLite: no connection recycling
             .build(read_manager)
-            .map_err(|e| format!("Failed to create events read pool: {e}"))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Connection {
+                    message: e.to_string(),
+                })
+            })?;
 
         let mut db = EventsDatabase {
             write_pool,
@@ -93,7 +103,7 @@ impl EventsDatabase {
     }
 
     /// Initialize database schema with all tables and indexes
-    async fn initialize_schema(&mut self) -> Result<(), String> {
+    async fn initialize_schema(&mut self) -> Result<()> {
         // Use a write connection for initialization
         let conn = self.get_write_connection()?;
 
@@ -113,7 +123,12 @@ impl EventsDatabase {
             )",
             [],
         )
-        .map_err(|e| format!("Failed to create events table: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "create events table".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         // Create optimized indexes
         conn.execute(
@@ -121,35 +136,60 @@ impl EventsDatabase {
              ON events(category, event_time DESC)",
             [],
         )
-        .map_err(|e| format!("Failed to create category-time index: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "create events category-time index".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_events_reference_id 
              ON events(reference_id)",
             [],
         )
-        .map_err(|e| format!("Failed to create reference_id index: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "create events reference id index".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_events_mint 
              ON events(mint)",
             [],
         )
-        .map_err(|e| format!("Failed to create mint index: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "create events mint index".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_events_severity_time 
              ON events(severity, event_time DESC)",
             [],
         )
-        .map_err(|e| format!("Failed to create severity-time index: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "create events severity-time index".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_events_created_at 
              ON events(created_at)",
             [],
         )
-        .map_err(|e| format!("Failed to create created_at index: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "create events created at index".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         // Keyset and composite indexes for pagination and filters
         conn.execute(
@@ -157,50 +197,71 @@ impl EventsDatabase {
              ON events(id DESC)",
             [],
         )
-        .map_err(|e| format!("Failed to create id desc index: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "create events id descending index".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_events_category_severity_id 
              ON events(category, severity, id DESC)",
             [],
         )
-        .map_err(|e| format!("Failed to create category-severity-id index: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "create events category severity id index".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_events_mint_id 
              ON events(mint, id DESC)",
             [],
         )
-        .map_err(|e| format!("Failed to create mint-id index: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "create events mint id index".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         Ok(())
     }
 
     /// Get write connection from pool
-    fn get_write_connection(&self) -> Result<PooledConnection<SqliteConnectionManager>, String> {
-        self.write_pool
-            .get()
-            .map_err(|e| format!("Failed to get events write connection: {e}"))
+    fn get_write_connection(&self) -> Result<PooledConnection<SqliteConnectionManager>> {
+        self.write_pool.get().map_err(|e| {
+            Error::Database(DatabaseError::Connection {
+                message: e.to_string(),
+            })
+        })
     }
 
     /// Get read connection from pool
-    pub(crate) fn get_read_connection(
-        &self,
-    ) -> Result<PooledConnection<SqliteConnectionManager>, String> {
-        self.read_pool
-            .get()
-            .map_err(|e| format!("Failed to get events read connection: {e}"))
+    pub(crate) fn get_read_connection(&self) -> Result<PooledConnection<SqliteConnectionManager>> {
+        self.read_pool.get().map_err(|e| {
+            Error::Database(DatabaseError::Connection {
+                message: e.to_string(),
+            })
+        })
     }
 
     /// Insert a single event
-    pub async fn insert_event(&self, event: &Event) -> Result<i64, String> {
+    pub async fn insert_event(&self, event: &Event) -> Result<i64> {
         let conn = self.get_write_connection()?;
 
         let event_time_str = event.event_time.to_rfc3339();
         let category_str = event.category.to_string();
         let severity_str = event.severity.to_string();
-        let payload_str = serde_json::to_string(&event.payload)
-            .map_err(|e| format!("Failed to serialize event payload: {e}"))?;
+        let payload_str = serde_json::to_string(&event.payload).map_err(|e| {
+            Error::Data(DataError::ParseError {
+                data_type: "event payload".to_owned(),
+                error: e.to_string(),
+            })
+        })?;
         let message_short: Option<String> = event
             .payload
             .get("message")
@@ -235,22 +296,30 @@ impl EventsDatabase {
                     payload_str
                 ],
             )
-            .map_err(|e| format!("Failed to insert event: {e}"))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "insert event".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         Ok(conn.last_insert_rowid())
     }
 
     /// Insert multiple events in a batch (more efficient)
-    pub async fn insert_events(&self, events: &mut [Event]) -> Result<(), String> {
+    pub async fn insert_events(&self, events: &mut [Event]) -> Result<()> {
         if events.is_empty() {
             return Ok(());
         }
 
         let conn = self.get_write_connection()?;
 
-        let tx = conn
-            .unchecked_transaction()
-            .map_err(|e| format!("Failed to start transaction: {e}"))?;
+        let tx = conn.unchecked_transaction().map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "start events insert transaction".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         {
             let mut stmt = tx
@@ -260,14 +329,23 @@ impl EventsDatabase {
                         mint, reference_id, message_short, json_payload
                     ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
                 )
-                .map_err(|e| format!("Failed to prepare insert statement: {e}"))?;
+                .map_err(|e| {
+                    Error::Database(DatabaseError::Query {
+                        operation: "prepare event insert".to_owned(),
+                        message: e.to_string(),
+                    })
+                })?;
 
             for event in events.iter_mut() {
                 let event_time_str = event.event_time.to_rfc3339();
                 let category_str = event.category.to_string();
                 let severity_str = event.severity.to_string();
-                let payload_str = serde_json::to_string(&event.payload)
-                    .map_err(|e| format!("Failed to serialize event payload: {e}"))?;
+                let payload_str = serde_json::to_string(&event.payload).map_err(|e| {
+                    Error::Data(DataError::ParseError {
+                        data_type: "event payload".to_owned(),
+                        error: e.to_string(),
+                    })
+                })?;
                 let message_short: Option<String> = event
                     .payload
                     .get("message")
@@ -294,7 +372,12 @@ impl EventsDatabase {
                     message_short,
                     payload_str
                 ])
-                .map_err(|e| format!("Failed to execute insert: {e}"))?;
+                .map_err(|e| {
+                    Error::Database(DatabaseError::Query {
+                        operation: "insert event batch item".to_owned(),
+                        message: e.to_string(),
+                    })
+                })?;
 
                 let inserted_id = tx.last_insert_rowid();
                 event.id = Some(inserted_id);
@@ -304,8 +387,12 @@ impl EventsDatabase {
             }
         }
 
-        tx.commit()
-            .map_err(|e| format!("Failed to commit transaction: {e}"))?;
+        tx.commit().map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "commit events insert transaction".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         Ok(())
     }
@@ -315,7 +402,7 @@ impl EventsDatabase {
         &self,
         category: Option<EventCategory>,
         limit: usize,
-    ) -> Result<Vec<Event>, String> {
+    ) -> Result<Vec<Event>> {
         let conn = self.get_read_connection()?;
 
         let (query, params): (String, Vec<Box<dyn rusqlite::ToSql>>) = match category {
@@ -333,9 +420,12 @@ impl EventsDatabase {
                 ),
         };
 
-        let mut stmt = conn
-            .prepare(&query)
-            .map_err(|e| format!("Failed to prepare select statement: {e}"))?;
+        let mut stmt = conn.prepare(&query).map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "prepare recent events query".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         let event_iter = stmt
             .query_map(
@@ -375,11 +465,19 @@ impl EventsDatabase {
                     })
                 },
             )
-            .map_err(|e| format!("Failed to execute query: {e}"))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "execute recent events query".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         let mut events = Vec::new();
         for event_result in event_iter {
-            events.push(event_result.map_err(|e| format!("Failed to parse event row: {e}"))?);
+            events.push(event_result.map_err(|e| Error::RowDecode {
+                column: "event row",
+                detail: e.to_string(),
+            })?);
         }
 
         Ok(events)
@@ -390,7 +488,7 @@ impl EventsDatabase {
         &self,
         reference_id: &str,
         limit: usize,
-    ) -> Result<Vec<Event>, String> {
+    ) -> Result<Vec<Event>> {
         let conn = self.get_read_connection()?;
 
         let mut stmt = conn
@@ -398,7 +496,10 @@ impl EventsDatabase {
                 "SELECT id, event_time, category, subtype, severity, mint, reference_id, json_payload, created_at
               FROM events WHERE reference_id = ?1 ORDER BY id DESC LIMIT ?2"
             )
-            .map_err(|e| format!("Failed to prepare select statement: {e}"))?;
+            .map_err(|e| Error::Database(DatabaseError::Query {
+                operation: "prepare events by reference query".to_owned(),
+                message: e.to_string(),
+            }))?;
 
         let event_iter = stmt
             .query_map(params![reference_id, limit as i64], |row| {
@@ -431,18 +532,26 @@ impl EventsDatabase {
                         .map(|dt| dt.with_timezone(&Utc)),
                 })
             })
-            .map_err(|e| format!("Failed to execute query: {e}"))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "execute events by reference query".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         let mut events = Vec::new();
         for event_result in event_iter {
-            events.push(event_result.map_err(|e| format!("Failed to parse event row: {e}"))?);
+            events.push(event_result.map_err(|e| Error::RowDecode {
+                column: "event row",
+                detail: e.to_string(),
+            })?);
         }
 
         Ok(events)
     }
 
     /// Get events by token mint
-    pub async fn get_events_by_mint(&self, mint: &str, limit: usize) -> Result<Vec<Event>, String> {
+    pub async fn get_events_by_mint(&self, mint: &str, limit: usize) -> Result<Vec<Event>> {
         let conn = self.get_read_connection()?;
 
         let mut stmt = conn
@@ -450,7 +559,10 @@ impl EventsDatabase {
                 "SELECT id, event_time, category, subtype, severity, mint, reference_id, json_payload, created_at
               FROM events WHERE mint = ?1 ORDER BY id DESC LIMIT ?2"
             )
-            .map_err(|e| format!("Failed to prepare select statement: {e}"))?;
+            .map_err(|e| Error::Database(DatabaseError::Query {
+                operation: "prepare events by mint query".to_owned(),
+                message: e.to_string(),
+            }))?;
 
         let event_iter = stmt
             .query_map(params![mint, limit as i64], |row| {
@@ -483,11 +595,19 @@ impl EventsDatabase {
                         .map(|dt| dt.with_timezone(&Utc)),
                 })
             })
-            .map_err(|e| format!("Failed to execute query: {e}"))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "execute events by mint query".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         let mut events = Vec::new();
         for event_result in event_iter {
-            events.push(event_result.map_err(|e| format!("Failed to parse event row: {e}"))?);
+            events.push(event_result.map_err(|e| Error::RowDecode {
+                column: "event row",
+                detail: e.to_string(),
+            })?);
         }
 
         Ok(events)
@@ -497,7 +617,7 @@ impl EventsDatabase {
     pub async fn get_event_counts_by_category(
         &self,
         since_hours: u64,
-    ) -> Result<HashMap<String, u64>, String> {
+    ) -> Result<HashMap<String, u64>> {
         let conn = self.get_read_connection()?;
 
         let cutoff_time = Utc::now() - chrono::Duration::hours(since_hours as i64);
@@ -510,18 +630,30 @@ impl EventsDatabase {
                  WHERE event_time >= ?1 
                  GROUP BY category",
             )
-            .map_err(|e| format!("Failed to prepare count query: {e}"))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "prepare event category count query".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         let count_iter = stmt
             .query_map(params![cutoff_str], |row| {
                 Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)? as u64))
             })
-            .map_err(|e| format!("Failed to execute count query: {e}"))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "execute event category count query".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         let mut counts = HashMap::new();
         for count_result in count_iter {
-            let (category, count) =
-                count_result.map_err(|e| format!("Failed to parse count row: {e}"))?;
+            let (category, count) = count_result.map_err(|e| Error::RowDecode {
+                column: "category count",
+                detail: e.to_string(),
+            })?;
             counts.insert(category, count);
         }
 
@@ -529,7 +661,7 @@ impl EventsDatabase {
     }
 
     /// Cleanup old events (older than MAX_EVENT_AGE_DAYS)
-    pub async fn cleanup_old_events(&self) -> Result<usize, String> {
+    pub async fn cleanup_old_events(&self) -> Result<usize> {
         let conn = self.get_write_connection()?;
 
         let cutoff_time = Utc::now() - chrono::Duration::days(MAX_EVENT_AGE_DAYS);
@@ -540,7 +672,12 @@ impl EventsDatabase {
                 "DELETE FROM events WHERE event_time < ?1",
                 params![cutoff_str],
             )
-            .map_err(|e| format!("Failed to delete old events: {e}"))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "delete old events".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         if deleted_count > 0 {
             logger::info(
@@ -553,7 +690,7 @@ impl EventsDatabase {
     }
 
     /// Get database statistics
-    pub async fn get_stats(&self) -> Result<HashMap<String, i64>, String> {
+    pub async fn get_stats(&self) -> Result<HashMap<String, i64>> {
         let conn = self.get_read_connection()?;
 
         let mut stats = HashMap::new();
@@ -561,7 +698,12 @@ impl EventsDatabase {
         // Total event count
         let total_events: i64 = conn
             .query_row("SELECT COUNT(*) FROM events", [], |row| row.get(0))
-            .map_err(|e| format!("Failed to get total event count: {e}"))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "get total event count".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
         stats.insert("total_events".to_owned(), total_events);
 
         // Database file size
@@ -578,7 +720,12 @@ impl EventsDatabase {
                 params![cutoff_24h_str],
                 |row| row.get(0),
             )
-            .map_err(|e| format!("Failed to get 24h event count: {e}"))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "get 24 hour event count".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
         stats.insert("events_24h".to_owned(), events_24h);
 
         Ok(stats)

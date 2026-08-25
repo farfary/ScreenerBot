@@ -67,6 +67,10 @@ pub enum Error {
     #[error(transparent)]
     Strategies(#[from] crate::strategies::Error),
 
+    /// Persistent event recording, querying and maintenance errors.
+    #[error(transparent)]
+    Events(#[from] crate::events::Error),
+
     /// ScreenerBot account / sign-in errors.
     #[error(transparent)]
     Account(#[from] AccountError),

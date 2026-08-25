@@ -3,7 +3,9 @@
 //! Provides cursor-based pagination (forward, backward, head) and filtered counting
 //! for efficient event browsing without OFFSET.
 
+use crate::errors::DatabaseError;
 use crate::events::types::{Event, EventCategory, Severity};
+use crate::events::{Error, Result};
 use chrono::{DateTime, Utc};
 
 use super::EventsDatabase;
@@ -19,7 +21,7 @@ impl EventsDatabase {
         mint: Option<&str>,
         reference_id: Option<&str>,
         search: Option<&str>,
-    ) -> Result<Vec<Event>, String> {
+    ) -> Result<Vec<Event>> {
         let conn = self.get_read_connection()?;
         let mut query = String::from(
             "SELECT id, event_time, category, subtype, severity, mint, reference_id, json_payload, created_at FROM events WHERE id > ?1"
@@ -55,9 +57,12 @@ impl EventsDatabase {
         query.push_str(" ORDER BY id ASC LIMIT ?");
         bind.push(Box::new(limit as i64));
 
-        let mut stmt = conn
-            .prepare(&query)
-            .map_err(|e| format!("Failed to prepare since query: {e}"))?;
+        let mut stmt = conn.prepare(&query).map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "prepare events since query".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
         let rows = stmt
             .query_map(
                 bind.iter()
@@ -66,11 +71,19 @@ impl EventsDatabase {
                     .as_slice(),
                 |row| parse_event_row(row),
             )
-            .map_err(|e| format!("Failed to execute since query: {e}"))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "execute events since query".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         let mut events = Vec::new();
         for r in rows {
-            events.push(r.map_err(|e| format!("Failed to parse row: {e}"))?);
+            events.push(r.map_err(|e| Error::RowDecode {
+                column: "event row",
+                detail: e.to_string(),
+            })?);
         }
         Ok(events)
     }
@@ -85,7 +98,7 @@ impl EventsDatabase {
         mint: Option<&str>,
         reference_id: Option<&str>,
         search: Option<&str>,
-    ) -> Result<Vec<Event>, String> {
+    ) -> Result<Vec<Event>> {
         let conn = self.get_read_connection()?;
         let mut query = String::from(
             "SELECT id, event_time, category, subtype, severity, mint, reference_id, json_payload, created_at FROM events WHERE id < ?1"
@@ -121,9 +134,12 @@ impl EventsDatabase {
         query.push_str(" ORDER BY id DESC LIMIT ?");
         bind.push(Box::new(limit as i64));
 
-        let mut stmt = conn
-            .prepare(&query)
-            .map_err(|e| format!("Failed to prepare before query: {e}"))?;
+        let mut stmt = conn.prepare(&query).map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "prepare events before query".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
         let rows = stmt
             .query_map(
                 bind.iter()
@@ -132,11 +148,19 @@ impl EventsDatabase {
                     .as_slice(),
                 |row| parse_event_row(row),
             )
-            .map_err(|e| format!("Failed to execute before query: {e}"))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "execute events before query".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         let mut events = Vec::new();
         for r in rows {
-            events.push(r.map_err(|e| format!("Failed to parse row: {e}"))?);
+            events.push(r.map_err(|e| Error::RowDecode {
+                column: "event row",
+                detail: e.to_string(),
+            })?);
         }
         Ok(events)
     }
@@ -150,7 +174,7 @@ impl EventsDatabase {
         mint: Option<&str>,
         reference_id: Option<&str>,
         search: Option<&str>,
-    ) -> Result<(Vec<Event>, i64), String> {
+    ) -> Result<(Vec<Event>, i64)> {
         let conn = self.get_read_connection()?;
         let mut query = String::from(
             "SELECT id, event_time, category, subtype, severity, mint, reference_id, json_payload, created_at FROM events"
@@ -232,9 +256,12 @@ impl EventsDatabase {
         query.push_str(" ORDER BY id DESC LIMIT ?");
         bind.push(Box::new(limit as i64));
 
-        let mut stmt = conn
-            .prepare(&query)
-            .map_err(|e| format!("Failed to prepare head query: {e}"))?;
+        let mut stmt = conn.prepare(&query).map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "prepare events head query".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
         let rows = stmt
             .query_map(
                 bind.iter()
@@ -243,12 +270,20 @@ impl EventsDatabase {
                     .as_slice(),
                 |row| parse_event_row(row),
             )
-            .map_err(|e| format!("Failed to execute head query: {e}"))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "execute events head query".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         let mut events = Vec::new();
         let mut max_id: i64 = 0;
         for r in rows {
-            let e = r.map_err(|e| format!("Failed to parse row: {e}"))?;
+            let e = r.map_err(|e| Error::RowDecode {
+                column: "event row",
+                detail: e.to_string(),
+            })?;
             if let Some(id) = e.id {
                 if id > max_id {
                     max_id = id;
@@ -267,7 +302,7 @@ impl EventsDatabase {
         mint: Option<&str>,
         reference_id: Option<&str>,
         search: Option<&str>,
-    ) -> Result<i64, String> {
+    ) -> Result<i64> {
         let conn = self.get_read_connection()?;
         let mut query = "SELECT COUNT(*) FROM events".to_owned();
         let mut where_added = false;
@@ -354,7 +389,12 @@ impl EventsDatabase {
                     .as_slice(),
                 |row| row.get(0),
             )
-            .map_err(|e| format!("Failed to count filtered events: {e}"))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "count filtered events".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         Ok(count)
     }

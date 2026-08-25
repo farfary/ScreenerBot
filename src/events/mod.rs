@@ -43,6 +43,7 @@
 //! monitoring and debugging; events are for persistent analysis and metrics.
 
 pub mod database;
+mod error;
 pub use database as db;
 pub mod maintenance;
 pub mod recorders;
@@ -50,6 +51,7 @@ pub mod types;
 
 use crate::logger::{self, LogTag};
 use db::EventsDatabase;
+pub use error::{Error, Result};
 pub use maintenance::{get_events_summary, search_events, start_maintenance_task};
 pub use recorders::{
     record_api_event, record_connectivity_event, record_filtering_event, record_ohlcv_event,
@@ -98,7 +100,7 @@ static EVENTS_CACHE: LazyLock<Arc<RwLock<VecDeque<Event>>>> =
 
 /// Initialize the events system
 /// Must be called once at application startup
-pub async fn init() -> Result<(), String> {
+pub async fn init() -> Result<()> {
     let mut writer_guard = EVENT_WRITER.lock().await;
 
     if writer_guard.is_some() {
@@ -106,11 +108,7 @@ pub async fn init() -> Result<(), String> {
     }
 
     // Initialize database (fresh schema)
-    let db = Arc::new(
-        EventsDatabase::new()
-            .await
-            .map_err(|e| format!("Failed to initialize events database: {e}"))?,
-    );
+    let db = Arc::new(EventsDatabase::new().await?);
     let _ = EVENTS_DB.set(db.clone());
 
     // Initialize broadcaster with larger capacity to reduce lag frequency
@@ -139,7 +137,7 @@ pub async fn init() -> Result<(), String> {
 /// Record an event asynchronously
 /// Non-blocking: events are queued and written by background task
 /// Returns Ok(()) silently if events system is disabled in config
-pub async fn record(event: Event) -> Result<(), String> {
+pub async fn record(event: Event) -> Result<()> {
     // Silently skip if events system is disabled
     if !crate::config::with_config(|c| c.events.enabled) {
         return Ok(());
@@ -148,14 +146,14 @@ pub async fn record(event: Event) -> Result<(), String> {
     let writer_guard = EVENT_WRITER.lock().await;
 
     if let Some(ref writer) = *writer_guard {
-        writer
-            .sender
-            .send(event)
-            .await
-            .map_err(|_| "Event channel closed".to_owned())?;
+        writer.sender.send(event).await.map_err(|_| {
+            Error::Internal(crate::errors::InternalError::InvariantViolation {
+                message: "event channel closed".to_owned(),
+            })
+        })?;
         Ok(())
     } else {
-        Err("Events system not initialized".to_owned())
+        Err(Error::NotInitialized)
     }
 }
 
@@ -174,50 +172,38 @@ pub async fn record_safe(event: Event) {
 }
 
 /// Get recent events by category
-pub async fn recent(category: EventCategory, limit: usize) -> Result<Vec<Event>, String> {
-    let db = EVENTS_DB
-        .get()
-        .ok_or_else(|| "Events system not initialized".to_owned())?;
+pub async fn recent(category: EventCategory, limit: usize) -> Result<Vec<Event>> {
+    let db = EVENTS_DB.get().ok_or(Error::NotInitialized)?;
     db.get_recent_events(Some(category), limit).await
 }
 
 /// Get recent events across all categories
-pub async fn recent_all(limit: usize) -> Result<Vec<Event>, String> {
-    let db = EVENTS_DB
-        .get()
-        .ok_or_else(|| "Events system not initialized".to_owned())?;
+pub async fn recent_all(limit: usize) -> Result<Vec<Event>> {
+    let db = EVENTS_DB.get().ok_or(Error::NotInitialized)?;
     db.get_recent_events(None, limit).await
 }
 
 /// Get event counts by category for the last N hours
-pub async fn count_by_category(since_hours: u64) -> Result<HashMap<String, u64>, String> {
-    let db = EVENTS_DB
-        .get()
-        .ok_or_else(|| "Events system not initialized".to_owned())?;
+pub async fn count_by_category(since_hours: u64) -> Result<HashMap<String, u64>> {
+    let db = EVENTS_DB.get().ok_or(Error::NotInitialized)?;
     db.get_event_counts_by_category(since_hours).await
 }
 
 /// Get events for a specific reference ID (e.g., transaction signature, pool address)
-pub async fn by_reference(reference_id: &str, limit: usize) -> Result<Vec<Event>, String> {
-    let db = EVENTS_DB
-        .get()
-        .ok_or_else(|| "Events system not initialized".to_owned())?;
+pub async fn by_reference(reference_id: &str, limit: usize) -> Result<Vec<Event>> {
+    let db = EVENTS_DB.get().ok_or(Error::NotInitialized)?;
     db.get_events_by_reference(reference_id, limit).await
 }
 
 /// Get events for a specific token mint
-pub async fn by_mint(mint: &str, limit: usize) -> Result<Vec<Event>, String> {
-    let db = EVENTS_DB
-        .get()
-        .ok_or_else(|| "Events system not initialized".to_owned())?;
+pub async fn by_mint(mint: &str, limit: usize) -> Result<Vec<Event>> {
+    let db = EVENTS_DB.get().ok_or(Error::NotInitialized)?;
     db.get_events_by_mint(mint, limit).await
 }
 
 /// Force cleanup of old events (normally handled automatically)
-pub async fn cleanup_old_events() -> Result<usize, String> {
-    let db = EVENTS_DB
-        .get()
-        .ok_or_else(|| "Events system not initialized".to_owned())?;
+pub async fn cleanup_old_events() -> Result<usize> {
+    let db = EVENTS_DB.get().ok_or(Error::NotInitialized)?;
     db.cleanup_old_events().await
 }
 
