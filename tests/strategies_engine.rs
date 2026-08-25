@@ -13,6 +13,7 @@ use screenerbot::strategies::engine::{EngineConfig, StrategyEngine};
 use screenerbot::strategies::types::{
     Condition, EvaluationContext, LogicalOperator, MarketData, RuleTree, Strategy, StrategyType,
 };
+use screenerbot::strategies::Error as StrategyError;
 use serde_json::json;
 
 /// A liquidity condition — deterministic, needs no OHLCV, and its truth is controlled
@@ -108,7 +109,16 @@ async fn an_unknown_condition_type_errors_instead_of_evaluating_false() {
         .evaluate_strategy(&strategy(rules), &context(100.0))
         .await
         .expect_err("unknown condition must error");
-    assert!(err.contains("Unknown condition type"), "got: {err}");
+    assert!(
+        matches!(
+            err,
+            StrategyError::InvalidConditionValue {
+                field: "condition type",
+                ref value
+            } if value == "NoSuchCondition"
+        ),
+        "got: {err}"
+    );
 }
 
 #[tokio::test]
@@ -127,7 +137,16 @@ async fn a_leaf_validates_its_parameters_before_evaluating() {
         .evaluate_strategy(&strategy(rules), &context(100.0))
         .await
         .expect_err("invalid parameters must error");
-    assert!(err.contains("non-negative"), "got: {err}");
+    assert!(
+        matches!(
+            err,
+            StrategyError::InvalidConditionValue {
+                field: "threshold",
+                ..
+            }
+        ),
+        "got: {err}"
+    );
 }
 
 // ==================== AND / OR / NOT ====================
@@ -252,7 +271,15 @@ async fn not_with_multiple_children_is_rejected() {
         .evaluate_strategy(&strategy(rules.clone()), &context(100.0))
         .await
         .expect_err("NOT must take exactly one child");
-    assert!(err.contains("exactly one child"), "got: {err}");
+    assert!(
+        matches!(
+            err,
+            StrategyError::InvalidRuleTree {
+                reason: "NOT operator must have exactly one child"
+            }
+        ),
+        "got: {err}"
+    );
     assert!(engine.validate_strategy(&strategy(rules)).is_err());
 }
 
@@ -268,7 +295,10 @@ async fn an_empty_node_is_neither_leaf_nor_branch_and_is_rejected() {
         .evaluate_strategy(&strategy(empty.clone()), &context(100.0))
         .await
         .expect_err("empty node must error");
-    assert!(err.contains("Invalid rule tree"), "got: {err}");
+    assert!(
+        matches!(err, StrategyError::InvalidRuleTree { .. }),
+        "got: {err}"
+    );
     assert!(engine.validate_strategy(&strategy(empty)).is_err());
 }
 

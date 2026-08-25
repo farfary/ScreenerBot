@@ -5,6 +5,7 @@ use crate::strategies::conditions::{
     ConditionEvaluator,
 };
 use crate::strategies::types::{Condition, EvaluationContext};
+use crate::strategies::{Error, Result};
 use async_trait::async_trait;
 use serde_json::json;
 
@@ -17,11 +18,7 @@ impl ConditionEvaluator for VolumeSpikeCondition {
         "VolumeSpike"
     }
 
-    async fn evaluate(
-        &self,
-        condition: &Condition,
-        context: &EvaluationContext,
-    ) -> Result<bool, String> {
+    async fn evaluate(&self, condition: &Condition, context: &EvaluationContext) -> Result<bool> {
         let lookback = get_param_f64(condition, "lookback")? as usize;
         let multiplier = get_param_f64(condition, "multiplier")?;
         let timeframe = get_param_string_optional(condition, "timeframe");
@@ -29,15 +26,20 @@ impl ConditionEvaluator for VolumeSpikeCondition {
         let candles = get_candles_for_timeframe(context, timeframe.as_deref())?;
 
         if candles.len() < lookback + 1 {
-            return Err(format!(
-                "Not enough candles: {} < {}",
-                candles.len(),
-                lookback + 1
-            ));
+            return Err(Error::InsufficientCandles {
+                indicator: "volume spike",
+                available: candles.len(),
+                required: lookback + 1,
+            });
         }
 
         // Get current candle volume (safe - checked above)
-        let current_candle = candles.last().ok_or("No candles available")?;
+        let current_candle = candles.last().ok_or_else(|| Error::NoCandleData {
+            timeframe: timeframe
+                .as_deref()
+                .unwrap_or(&context.strategy_timeframe)
+                .to_owned(),
+        })?;
         let current_volume = current_candle.volume;
 
         // Calculate average volume over lookback period (excluding current)
@@ -46,14 +48,22 @@ impl ConditionEvaluator for VolumeSpikeCondition {
         let lookback_candles = &candles[start_idx..end_idx];
 
         if lookback_candles.is_empty() {
-            return Err("No lookback candles for volume calculation".to_owned());
+            return Err(Error::NoCandleData {
+                timeframe: timeframe
+                    .as_deref()
+                    .unwrap_or(&context.strategy_timeframe)
+                    .to_owned(),
+            });
         }
 
         let avg_volume: f64 =
             lookback_candles.iter().map(|c| c.volume).sum::<f64>() / lookback_candles.len() as f64;
 
         if avg_volume <= 0.0 {
-            return Err("Average volume is zero or negative".to_owned());
+            return Err(Error::InvalidConditionValue {
+                field: "average volume",
+                value: avg_volume.to_string(),
+            });
         }
 
         // Check if current volume is multiplier times the average
@@ -63,18 +73,24 @@ impl ConditionEvaluator for VolumeSpikeCondition {
         Ok(result)
     }
 
-    fn validate(&self, condition: &Condition) -> Result<(), String> {
+    fn validate(&self, condition: &Condition) -> Result<()> {
         // Validate timeframe if provided
         validate_timeframe_param(condition)?;
 
         let lookback = get_param_f64(condition, "lookback")?;
         if lookback < 2.0 || lookback > 100.0 {
-            return Err("Lookback must be between 2 and 100".to_owned());
+            return Err(Error::InvalidConditionValue {
+                field: "lookback",
+                value: lookback.to_string(),
+            });
         }
 
         let multiplier = get_param_f64(condition, "multiplier")?;
         if multiplier < 1.0 || multiplier > 50.0 {
-            return Err("Multiplier must be between 1.0 and 50.0".to_owned());
+            return Err(Error::InvalidConditionValue {
+                field: "multiplier",
+                value: multiplier.to_string(),
+            });
         }
 
         Ok(())

@@ -39,6 +39,7 @@ use screenerbot::strategies::types::{
     Condition, EvaluationContext, LogicalOperator, MarketData, PositionData, RuleTree, Strategy,
     StrategyType,
 };
+use screenerbot::strategies::Error as StrategyError;
 use serde_json::json;
 
 const MINUTE: i64 = 60;
@@ -61,7 +62,7 @@ async fn eval_err(
     evaluator: &dyn ConditionEvaluator,
     cond: &Condition,
     ctx: &EvaluationContext,
-) -> String {
+) -> StrategyError {
     evaluator
         .evaluate(cond, ctx)
         .await
@@ -310,7 +311,12 @@ async fn a_pool_with_no_price_reports_unknown_liquidity_rather_than_zero() {
     )
     .await;
     assert!(
-        err.contains("Liquidity data not available"),
+        matches!(
+            err,
+            StrategyError::MissingContextData {
+                data: "liquidity data"
+            }
+        ),
         "unexpected error: {err}"
     );
 }
@@ -344,7 +350,10 @@ async fn an_ohlcv_outage_is_an_error_in_every_candle_rule_not_a_missed_signal() 
     for (name, evaluator, cond) in every_candle_rule() {
         let err = eval_err(evaluator.as_ref(), &cond, &ctx).await;
         assert!(
-            err.contains("OHLCV data not available"),
+            matches!(
+                err,
+                StrategyError::MissingContextData { data: "OHLCV data" }
+            ),
             "{name} answered `{err}` instead of reporting the missing bundle"
         );
     }
@@ -361,7 +370,7 @@ async fn a_bundle_that_is_missing_the_strategy_timeframe_names_the_timeframe_it_
     for (name, evaluator, cond) in every_candle_rule() {
         let err = eval_err(evaluator.as_ref(), &cond, &ctx).await;
         assert!(
-            err.contains("5m") && err.contains("no candle data"),
+            matches!(err, StrategyError::NoCandleData { ref timeframe } if timeframe == "5m"),
             "{name} answered `{err}` instead of naming the empty timeframe"
         );
     }
@@ -409,7 +418,13 @@ async fn a_series_that_stopped_tracking_the_price_is_refused_not_measured() {
     for (name, evaluator, cond) in every_candle_rule() {
         let err = eval_err(evaluator.as_ref(), &cond, &ctx).await;
         assert!(
-            err.contains("is stale") && err.contains("10800s old"),
+            matches!(
+                err,
+                StrategyError::StaleCandleData {
+                    age_seconds: 10_800,
+                    ..
+                }
+            ),
             "{name} answered `{err}` instead of refusing a three-hour-old series"
         );
     }
@@ -427,13 +442,15 @@ async fn a_series_that_stopped_tracking_the_price_is_refused_not_measured() {
     );
 
     let too_quiet = candle_series(anchor_ts() - 4 * MINUTE, MINUTE, &[100.0; 20]);
-    assert!(eval_err(
-        &PriceChangePercentCondition,
-        &price_change(10.0, "ABOVE", 5.0),
-        &context_with_candles(150.0, "1m", bundle_with("1m", too_quiet)),
-    )
-    .await
-    .contains("is stale"));
+    assert!(matches!(
+        eval_err(
+            &PriceChangePercentCondition,
+            &price_change(10.0, "ABOVE", 5.0),
+            &context_with_candles(150.0, "1m", bundle_with("1m", too_quiet)),
+        )
+        .await,
+        StrategyError::StaleCandleData { .. }
+    ));
 }
 
 #[tokio::test]
@@ -482,7 +499,14 @@ async fn a_series_shorter_than_the_lookback_says_how_much_it_actually_holds() {
     )
     .await;
     assert!(
-        err.contains("Insufficient historical data") && err.contains("600 seconds available"),
+        matches!(
+            err,
+            StrategyError::InsufficientHistory {
+                indicator: "price change lookback",
+                available_seconds: 600,
+                ..
+            }
+        ),
         "unexpected error: {err}"
     );
 }
@@ -516,7 +540,14 @@ async fn both_lookback_rules_require_the_same_history_for_the_same_lookback() {
         ),
     ] {
         assert!(
-            err.contains("Not enough candles: 5 < 6"),
+            matches!(
+                err,
+                StrategyError::InsufficientCandles {
+                    available: 5,
+                    required: 6,
+                    ..
+                }
+            ),
             "{name} answered `{err}` instead of asking for six candles"
         );
     }
@@ -562,7 +593,13 @@ async fn a_zero_reference_price_is_refused_instead_of_reading_as_an_infinite_gai
         )
         .await;
         assert!(
-            err.contains("not a usable basis"),
+            matches!(
+                err,
+                StrategyError::InvalidConditionValue {
+                    field: "reference candle close",
+                    ..
+                }
+            ),
             "{direction} answered `{err}` instead of refusing the zero reference"
         );
     }
@@ -580,7 +617,13 @@ async fn a_dead_series_cannot_place_the_price_above_its_moving_average() {
 
     let err = eval_err(&PriceToMaCondition, &price_to_ma(5, "ABOVE", 100.0), &ctx).await;
     assert!(
-        err.contains("not a usable basis"),
+        matches!(
+            err,
+            StrategyError::InvalidConditionValue {
+                field: "moving average",
+                ..
+            }
+        ),
         "unexpected error: {err}"
     );
 }
@@ -643,20 +686,30 @@ async fn a_not_a_number_price_is_refused_by_every_price_rule() {
         )
         .await;
         assert!(
-            err.contains("Current price is not usable"),
+            matches!(
+                err,
+                StrategyError::InvalidConditionValue {
+                    field: "current price",
+                    ..
+                }
+            ),
             "a NaN price answered `{err}` for {direction}"
         );
     }
-    assert!(
-        eval_err(&PriceToMaCondition, &price_to_ma(5, "WITHIN", 100.0), &ctx)
-            .await
-            .contains("Current price is not usable")
-    );
-    assert!(
-        eval_err(&PriceBreakoutCondition, &breakout(5, "DOWNWARD", 0.0), &ctx)
-            .await
-            .contains("Current price is not usable")
-    );
+    assert!(matches!(
+        eval_err(&PriceToMaCondition, &price_to_ma(5, "WITHIN", 100.0), &ctx).await,
+        StrategyError::InvalidConditionValue {
+            field: "current price",
+            ..
+        }
+    ));
+    assert!(matches!(
+        eval_err(&PriceBreakoutCondition, &breakout(5, "DOWNWARD", 0.0), &ctx).await,
+        StrategyError::InvalidConditionValue {
+            field: "current price",
+            ..
+        }
+    ));
 }
 
 // ==================== WHOLE-STRATEGY BEHAVIOUR ====================
@@ -707,7 +760,10 @@ async fn one_unavailable_input_fails_the_whole_strategy_not_just_its_own_leaf() 
         .await
         .expect_err("a tree containing an unanswerable rule must not return a verdict");
     assert!(
-        err.contains("OHLCV data not available"),
+        matches!(
+            err,
+            StrategyError::MissingContextData { data: "OHLCV data" }
+        ),
         "unexpected error: {err}"
     );
 }
@@ -784,7 +840,10 @@ async fn a_strategy_reads_the_timeframe_it_was_saved_with_not_whatever_is_popula
         .evaluate_strategy(&strategy(StrategyType::Entry, "5m", rules), &ctx)
         .await
         .expect_err("5m is empty in this bundle");
-    assert!(err.contains("5m"), "unexpected error: {err}");
+    assert!(
+        matches!(err, StrategyError::NoCandleData { ref timeframe } if timeframe == "5m"),
+        "unexpected error: {err}"
+    );
 }
 
 // ==================== THE SECURITY-DATA GATE ====================

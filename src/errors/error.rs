@@ -63,6 +63,10 @@ pub enum Error {
     #[error(transparent)]
     Actions(#[from] crate::actions::Error),
 
+    /// Strategy condition validation and evaluation errors.
+    #[error(transparent)]
+    Strategies(#[from] crate::strategies::Error),
+
     /// ScreenerBot account / sign-in errors.
     #[error(transparent)]
     Account(#[from] AccountError),

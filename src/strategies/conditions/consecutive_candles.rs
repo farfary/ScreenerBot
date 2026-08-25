@@ -5,6 +5,7 @@ use crate::strategies::conditions::{
     validate_timeframe_param, ConditionEvaluator,
 };
 use crate::strategies::types::{Condition, EvaluationContext};
+use crate::strategies::{Error, Result};
 use async_trait::async_trait;
 use serde_json::json;
 
@@ -17,11 +18,7 @@ impl ConditionEvaluator for ConsecutiveCandlesCondition {
         "ConsecutiveCandles"
     }
 
-    async fn evaluate(
-        &self,
-        condition: &Condition,
-        context: &EvaluationContext,
-    ) -> Result<bool, String> {
+    async fn evaluate(&self, condition: &Condition, context: &EvaluationContext) -> Result<bool> {
         let count = get_param_f64(condition, "count")? as usize;
         let direction = get_param_string(condition, "direction")?;
         let minimum_change = get_param_f64(condition, "minimum_change")?;
@@ -30,7 +27,11 @@ impl ConditionEvaluator for ConsecutiveCandlesCondition {
         let candles = get_candles_for_timeframe(context, timeframe.as_deref())?;
 
         if candles.len() < count {
-            return Err(format!("Not enough candles: {} < {}", candles.len(), count));
+            return Err(Error::InsufficientCandles {
+                indicator: "consecutive candles",
+                available: candles.len(),
+                required: count,
+            });
         }
 
         // Get the most recent candles
@@ -53,7 +54,12 @@ impl ConditionEvaluator for ConsecutiveCandlesCondition {
             let is_match = match direction.as_str() {
                 "GREEN" => price_change_pct >= minimum_change,
                 "RED" => price_change_pct <= -minimum_change,
-                _ => return Err(format!("Invalid direction: {direction}")),
+                _ => {
+                    return Err(Error::InvalidConditionValue {
+                        field: "direction",
+                        value: direction.clone(),
+                    })
+                }
             };
 
             if is_match {
@@ -67,26 +73,38 @@ impl ConditionEvaluator for ConsecutiveCandlesCondition {
         Ok(consecutive_count >= count)
     }
 
-    fn validate(&self, condition: &Condition) -> Result<(), String> {
+    fn validate(&self, condition: &Condition) -> Result<()> {
         // Validate timeframe if provided
         validate_timeframe_param(condition)?;
 
         let count = get_param_f64(condition, "count")?;
         if count < 2.0 || count > 20.0 {
-            return Err("Count must be between 2 and 20".to_owned());
+            return Err(Error::InvalidConditionValue {
+                field: "count",
+                value: count.to_string(),
+            });
         }
 
         let direction = get_param_string(condition, "direction")?;
         if !["GREEN", "RED"].contains(&direction.as_str()) {
-            return Err(format!("Invalid direction: {direction}"));
+            return Err(Error::InvalidConditionValue {
+                field: "direction",
+                value: direction,
+            });
         }
 
         let minimum_change = get_param_f64(condition, "minimum_change")?;
         if minimum_change < 0.0 {
-            return Err("Minimum change must be non-negative".to_owned());
+            return Err(Error::InvalidConditionValue {
+                field: "minimum change",
+                value: minimum_change.to_string(),
+            });
         }
         if minimum_change > 50.0 {
-            return Err("Minimum change must be 50% or less".to_owned());
+            return Err(Error::InvalidConditionValue {
+                field: "minimum change",
+                value: minimum_change.to_string(),
+            });
         }
 
         Ok(())

@@ -5,6 +5,7 @@ use crate::strategies::conditions::{
     get_param_string_optional, usable_basis, validate_timeframe_param, ConditionEvaluator,
 };
 use crate::strategies::types::{Condition, EvaluationContext};
+use crate::strategies::{Error, Result};
 use async_trait::async_trait;
 use serde_json::json;
 
@@ -17,11 +18,7 @@ impl ConditionEvaluator for PriceToMaCondition {
         "PriceToMA"
     }
 
-    async fn evaluate(
-        &self,
-        condition: &Condition,
-        context: &EvaluationContext,
-    ) -> Result<bool, String> {
+    async fn evaluate(&self, condition: &Condition, context: &EvaluationContext) -> Result<bool> {
         let period = get_param_f64(condition, "period")? as usize;
         let position = get_param_string(condition, "position")?;
         let distance = get_param_f64(condition, "distance")?;
@@ -30,11 +27,11 @@ impl ConditionEvaluator for PriceToMaCondition {
         let candles = get_candles_for_timeframe(context, timeframe.as_deref())?;
 
         if candles.len() < period {
-            return Err(format!(
-                "Not enough candles for MA calculation: {} < {}",
-                candles.len(),
-                period
-            ));
+            return Err(Error::InsufficientCandles {
+                indicator: "moving average",
+                available: candles.len(),
+                required: period,
+            });
         }
 
         // Calculate simple moving average
@@ -42,7 +39,7 @@ impl ConditionEvaluator for PriceToMaCondition {
         let ma: f64 = recent_candles.iter().map(|c| c.close).sum::<f64>() / period as f64;
         // A dead series averages to zero, which would put any price infinitely above its
         // own moving average and satisfy every ABOVE rule ever configured.
-        let ma = usable_basis("Moving average", ma)?;
+        let ma = usable_basis("moving average", ma)?;
 
         let current_price = get_current_price(context)?;
 
@@ -53,35 +50,55 @@ impl ConditionEvaluator for PriceToMaCondition {
             "ABOVE" => distance_pct >= distance,
             "BELOW" => distance_pct <= -distance,
             "WITHIN" => distance_pct.abs() <= distance,
-            _ => return Err(format!("Invalid position: {position}")),
+            _ => {
+                return Err(Error::InvalidConditionValue {
+                    field: "position",
+                    value: position,
+                })
+            }
         };
 
         Ok(result)
     }
 
-    fn validate(&self, condition: &Condition) -> Result<(), String> {
+    fn validate(&self, condition: &Condition) -> Result<()> {
         // Validate timeframe if provided
         validate_timeframe_param(condition)?;
 
         let period = get_param_f64(condition, "period")?;
         if period < 2.0 {
-            return Err("Period must be at least 2".to_owned());
+            return Err(Error::InvalidConditionValue {
+                field: "period",
+                value: period.to_string(),
+            });
         }
         if period > 200.0 {
-            return Err("Period must be 200 or less".to_owned());
+            return Err(Error::InvalidConditionValue {
+                field: "period",
+                value: period.to_string(),
+            });
         }
 
         let distance = get_param_f64(condition, "distance")?;
         if distance < 0.0 {
-            return Err("Distance must be non-negative".to_owned());
+            return Err(Error::InvalidConditionValue {
+                field: "distance",
+                value: distance.to_string(),
+            });
         }
         if distance > 100.0 {
-            return Err("Distance must be 100% or less".to_owned());
+            return Err(Error::InvalidConditionValue {
+                field: "distance",
+                value: distance.to_string(),
+            });
         }
 
         let position = get_param_string(condition, "position")?;
         if !["ABOVE", "BELOW", "WITHIN"].contains(&position.as_str()) {
-            return Err(format!("Invalid position: {position}"));
+            return Err(Error::InvalidConditionValue {
+                field: "position",
+                value: position,
+            });
         }
 
         Ok(())

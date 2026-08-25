@@ -2,6 +2,7 @@
 
 use crate::strategies::conditions::{get_param_f64, get_param_string, ConditionEvaluator};
 use crate::strategies::types::{Condition, EvaluationContext};
+use crate::strategies::{Error, Result};
 use async_trait::async_trait;
 use serde_json::json;
 
@@ -14,44 +15,56 @@ impl ConditionEvaluator for LiquidityLevelCondition {
         "LiquidityLevel"
     }
 
-    async fn evaluate(
-        &self,
-        condition: &Condition,
-        context: &EvaluationContext,
-    ) -> Result<bool, String> {
+    async fn evaluate(&self, condition: &Condition, context: &EvaluationContext) -> Result<bool> {
         let threshold = get_param_f64(condition, "threshold")?;
         let comparison = get_param_string(condition, "comparison")?;
 
-        let market_data = context
-            .market_data
-            .as_ref()
-            .ok_or_else(|| "Market data not available".to_owned())?;
+        let market_data =
+            context
+                .market_data
+                .as_ref()
+                .ok_or_else(|| Error::MissingContextData {
+                    data: "market data",
+                })?;
 
         let liquidity = market_data
             .liquidity_sol
-            .ok_or_else(|| "Liquidity data not available".to_owned())?;
+            .ok_or_else(|| Error::MissingContextData {
+                data: "liquidity data",
+            })?;
 
         let result = match comparison.as_str() {
             "GREATER_THAN" => liquidity > threshold,
             "LESS_THAN" => liquidity < threshold,
             "GREATER_EQUAL" => liquidity >= threshold,
             "LESS_EQUAL" => liquidity <= threshold,
-            _ => return Err(format!("Invalid comparison: {comparison}")),
+            _ => {
+                return Err(Error::InvalidConditionValue {
+                    field: "comparison",
+                    value: comparison,
+                })
+            }
         };
 
         Ok(result)
     }
 
-    fn validate(&self, condition: &Condition) -> Result<(), String> {
+    fn validate(&self, condition: &Condition) -> Result<()> {
         let threshold = get_param_f64(condition, "threshold")?;
         if threshold < 0.0 {
-            return Err("Threshold must be non-negative".to_owned());
+            return Err(Error::InvalidConditionValue {
+                field: "threshold",
+                value: threshold.to_string(),
+            });
         }
 
         let comparison = get_param_string(condition, "comparison")?;
         let valid_comparisons = ["GREATER_THAN", "LESS_THAN", "GREATER_EQUAL", "LESS_EQUAL"];
         if !valid_comparisons.contains(&comparison.as_str()) {
-            return Err(format!("Invalid comparison: {comparison}"));
+            return Err(Error::InvalidConditionValue {
+                field: "comparison",
+                value: comparison,
+            });
         }
 
         Ok(())

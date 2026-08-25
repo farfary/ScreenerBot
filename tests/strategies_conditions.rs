@@ -18,6 +18,7 @@ use screenerbot::strategies::conditions::{
     PriceToMaCondition, VolumeSpikeCondition,
 };
 use screenerbot::strategies::types::{Condition, EvaluationContext, MarketData, PositionData};
+use screenerbot::strategies::Error as StrategyError;
 use serde_json::json;
 
 const MINUTE: i64 = 60;
@@ -34,12 +35,12 @@ async fn eval(
         .unwrap_or_else(|e| panic!("evaluation failed: {e}"))
 }
 
-/// Evaluate a condition, asserting it DID error, and return the message.
+/// Evaluate a condition, asserting it DID error, and return the typed error.
 async fn eval_err(
     evaluator: &dyn ConditionEvaluator,
     cond: &Condition,
     ctx: &EvaluationContext,
-) -> String {
+) -> StrategyError {
     evaluator
         .evaluate(cond, ctx)
         .await
@@ -87,7 +88,13 @@ async fn missing_bundle_is_an_error_not_a_false_signal() {
         ],
     );
     let err = eval_err(&PriceToMaCondition, &cond, &context_bare(Some(1.0))).await;
-    assert!(err.contains("bundle is None"), "unexpected error: {err}");
+    assert!(
+        matches!(
+            err,
+            StrategyError::MissingContextData { data: "OHLCV data" }
+        ),
+        "unexpected error: {err}"
+    );
 }
 
 #[tokio::test]
@@ -102,7 +109,10 @@ async fn empty_timeframe_is_an_error() {
     );
     let ctx = context_with_candles(1.0, "5m", bundle_with("1m", vec![]));
     let err = eval_err(&PriceToMaCondition, &cond, &ctx).await;
-    assert!(err.contains("no candle data"), "unexpected error: {err}");
+    assert!(
+        matches!(err, StrategyError::NoCandleData { .. }),
+        "unexpected error: {err}"
+    );
 }
 
 #[tokio::test]
@@ -239,7 +249,13 @@ async fn price_change_errors_when_history_is_shorter_than_the_lookback() {
     )
     .await;
     assert!(
-        err.contains("Insufficient historical data"),
+        matches!(
+            err,
+            StrategyError::InsufficientHistory {
+                indicator: "price change lookback",
+                ..
+            }
+        ),
         "unexpected error: {err}"
     );
 }
@@ -291,7 +307,15 @@ async fn price_change_requires_a_current_price() {
     let mut ctx = context_with_candles(1.0, "1m", bundle_with("1m", flat_1m_series()));
     ctx.current_price = None;
     let err = eval_err(&PriceChangePercentCondition, &pcp(10.0, "ABOVE", 5.0), &ctx).await;
-    assert!(err.contains("Current price"), "unexpected error: {err}");
+    assert!(
+        matches!(
+            err,
+            StrategyError::MissingContextData {
+                data: "current price"
+            }
+        ),
+        "unexpected error: {err}"
+    );
 }
 
 // ==================== PriceToMA ====================
@@ -357,7 +381,13 @@ async fn ma_errors_when_there_are_fewer_candles_than_the_period() {
     );
     let err = eval_err(&PriceToMaCondition, &ma(20, "ABOVE", 1.0), &ctx).await;
     assert!(
-        err.contains("Not enough candles"),
+        matches!(
+            err,
+            StrategyError::InsufficientCandles {
+                indicator: "moving average",
+                ..
+            }
+        ),
         "unexpected error: {err}"
     );
 }
@@ -517,7 +547,16 @@ async fn candle_size_unknown_pattern_errors() {
     let big = vec![candle(anchor_ts(), 100.0, 110.0, 100.0, 110.0, 1.0)];
     let ctx = context_with_candles(110.0, "1m", bundle_with("1m", big));
     let err = eval_err(&CandleSizeCondition, &shape("HAMMER", 10.0), &ctx).await;
-    assert!(err.contains("Invalid pattern"), "unexpected error: {err}");
+    assert!(
+        matches!(
+            err,
+            StrategyError::InvalidConditionValue {
+                field: "pattern",
+                ref value
+            } if value == "HAMMER"
+        ),
+        "unexpected error: {err}"
+    );
 }
 
 // ==================== PriceBreakout ====================
@@ -591,7 +630,13 @@ async fn breakout_errors_without_enough_history() {
     let ctx = context_with_candles(200.0, "1m", bundle_with("1m", short));
     let err = eval_err(&PriceBreakoutCondition, &breakout(20, "UPWARD", 1.0), &ctx).await;
     assert!(
-        err.contains("Not enough candles"),
+        matches!(
+            err,
+            StrategyError::InsufficientCandles {
+                indicator: "price breakout",
+                ..
+            }
+        ),
         "unexpected error: {err}"
     );
 }
@@ -656,7 +701,13 @@ async fn volume_spike_errors_when_the_baseline_is_zero() {
     let ctx = context_with_candles(100.0, "1m", bundle_with("1m", candles));
     let err = eval_err(&VolumeSpikeCondition, &spike(5, 2.0), &ctx).await;
     assert!(
-        err.contains("Average volume is zero"),
+        matches!(
+            err,
+            StrategyError::InvalidConditionValue {
+                field: "average volume",
+                ..
+            }
+        ),
         "unexpected error: {err}"
     );
 }
@@ -666,7 +717,13 @@ async fn volume_spike_needs_more_candles_than_the_lookback() {
     let ctx = context_with_candles(100.0, "1m", bundle_with("1m", volume_series(2, 500.0)));
     let err = eval_err(&VolumeSpikeCondition, &spike(20, 2.0), &ctx).await;
     assert!(
-        err.contains("Not enough candles"),
+        matches!(
+            err,
+            StrategyError::InsufficientCandles {
+                indicator: "volume spike",
+                ..
+            }
+        ),
         "unexpected error: {err}"
     );
 }
@@ -740,7 +797,12 @@ async fn liquidity_missing_data_errors_rather_than_passing_the_filter() {
     )
     .await;
     assert!(
-        err.contains("Liquidity data not available"),
+        matches!(
+            err,
+            StrategyError::MissingContextData {
+                data: "liquidity data"
+            }
+        ),
         "unexpected error: {err}"
     );
 
@@ -751,7 +813,12 @@ async fn liquidity_missing_data_errors_rather_than_passing_the_filter() {
     )
     .await;
     assert!(
-        err.contains("Market data not available"),
+        matches!(
+            err,
+            StrategyError::MissingContextData {
+                data: "market data"
+            }
+        ),
         "unexpected error: {err}"
     );
 }
@@ -826,7 +893,12 @@ async fn holding_time_without_a_position_errors() {
     )
     .await;
     assert!(
-        err.contains("Position data not available"),
+        matches!(
+            err,
+            StrategyError::MissingContextData {
+                data: "position data"
+            }
+        ),
         "unexpected error: {err}"
     );
 }
@@ -850,7 +922,13 @@ async fn holding_time_validation_bounds() {
 async fn missing_parameter_is_reported_by_name() {
     let cond = condition("PriceToMA", &[("period", json!(5))]);
     let err = PriceToMaCondition.validate(&cond).unwrap_err();
-    assert!(err.contains("distance"), "unexpected error: {err}");
+    assert!(
+        matches!(
+            err,
+            StrategyError::MissingConditionParameter { field: "distance" }
+        ),
+        "unexpected error: {err}"
+    );
 }
 
 #[tokio::test]
@@ -866,7 +944,16 @@ async fn wrongly_typed_parameter_is_rejected_not_coerced() {
         ],
     );
     let err = PriceToMaCondition.validate(&cond).unwrap_err();
-    assert!(err.contains("must be a number"), "unexpected error: {err}");
+    assert!(
+        matches!(
+            err,
+            StrategyError::ConditionParameterType {
+                field: "period",
+                expected: "a number"
+            }
+        ),
+        "unexpected error: {err}"
+    );
 }
 
 #[test]

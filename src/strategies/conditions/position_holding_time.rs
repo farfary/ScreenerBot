@@ -2,6 +2,7 @@
 
 use crate::strategies::conditions::{get_param_f64, get_param_string, ConditionEvaluator};
 use crate::strategies::types::{Condition, EvaluationContext};
+use crate::strategies::{Error, Result};
 use async_trait::async_trait;
 use serde_json::json;
 
@@ -14,18 +15,17 @@ impl ConditionEvaluator for PositionHoldingTimeCondition {
         "PositionHoldingTime"
     }
 
-    async fn evaluate(
-        &self,
-        condition: &Condition,
-        context: &EvaluationContext,
-    ) -> Result<bool, String> {
+    async fn evaluate(&self, condition: &Condition, context: &EvaluationContext) -> Result<bool> {
         let hours = get_param_f64(condition, "hours")?;
         let comparison = get_param_string(condition, "comparison")?;
 
-        let position_data = context
-            .position_data
-            .as_ref()
-            .ok_or_else(|| "Position data not available".to_owned())?;
+        let position_data =
+            context
+                .position_data
+                .as_ref()
+                .ok_or_else(|| Error::MissingContextData {
+                    data: "position data",
+                })?;
 
         let position_age_hours = position_data.position_age_hours;
 
@@ -34,22 +34,33 @@ impl ConditionEvaluator for PositionHoldingTimeCondition {
             "LESS_THAN" => position_age_hours < hours,
             "GREATER_EQUAL" => position_age_hours >= hours,
             "LESS_EQUAL" => position_age_hours <= hours,
-            _ => return Err(format!("Invalid comparison: {comparison}")),
+            _ => {
+                return Err(Error::InvalidConditionValue {
+                    field: "comparison",
+                    value: comparison,
+                })
+            }
         };
 
         Ok(result)
     }
 
-    fn validate(&self, condition: &Condition) -> Result<(), String> {
+    fn validate(&self, condition: &Condition) -> Result<()> {
         let hours = get_param_f64(condition, "hours")?;
         if hours < 0.0 {
-            return Err("Hours must be non-negative".to_owned());
+            return Err(Error::InvalidConditionValue {
+                field: "hours",
+                value: hours.to_string(),
+            });
         }
 
         let comparison = get_param_string(condition, "comparison")?;
         let valid_comparisons = ["GREATER_THAN", "LESS_THAN", "GREATER_EQUAL", "LESS_EQUAL"];
         if !valid_comparisons.contains(&comparison.as_str()) {
-            return Err(format!("Invalid comparison: {comparison}"));
+            return Err(Error::InvalidConditionValue {
+                field: "comparison",
+                value: comparison,
+            });
         }
 
         Ok(())

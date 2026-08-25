@@ -5,6 +5,7 @@ use crate::strategies::conditions::ConditionRegistry;
 use crate::strategies::types::{
     EvaluationContext, EvaluationResult, LogicalOperator, RuleTree, Strategy,
 };
+use crate::strategies::{Error, Result};
 use crate::trader::STRATEGY_CACHE_MAX_ENTRIES;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
@@ -59,7 +60,7 @@ impl StrategyEngine {
         &self,
         strategy: &Strategy,
         context: &EvaluationContext,
-    ) -> Result<EvaluationResult, String> {
+    ) -> Result<EvaluationResult> {
         let start = Instant::now();
 
         // Check cache first (safe-scoped to a fingerprint of the evaluation context)
@@ -107,7 +108,9 @@ impl StrategyEngine {
                         strategy.id, self.config.evaluation_timeout_ms
                     ),
                 );
-                return Err("Evaluation timeout".to_owned());
+                return Err(Error::EvaluationTimeout {
+                    timeout_ms: self.config.evaluation_timeout_ms,
+                });
             }
         };
 
@@ -140,8 +143,7 @@ impl StrategyEngine {
         &'a self,
         rule_tree: &'a RuleTree,
         context: &'a EvaluationContext,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<bool, String>> + Send + 'a>>
-    {
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<bool>> + Send + 'a>> {
         Box::pin(async move {
             // Leaf node - evaluate condition
             if rule_tree.is_leaf() {
@@ -149,8 +151,9 @@ impl StrategyEngine {
                     let evaluator = self
                         .condition_registry
                         .get(&condition.condition_type)
-                        .ok_or_else(|| {
-                            format!("Unknown condition type: {}", condition.condition_type)
+                        .ok_or_else(|| Error::InvalidConditionValue {
+                            field: "condition type",
+                            value: condition.condition_type.clone(),
                         })?;
 
                     // Validate condition first
@@ -159,20 +162,25 @@ impl StrategyEngine {
                     // Evaluate condition
                     return evaluator.evaluate(condition, context).await;
                 } else {
-                    return Err("Leaf node missing condition".to_owned());
+                    return Err(Error::InvalidRuleTree {
+                        reason: "leaf node missing condition",
+                    });
                 }
             }
 
             // Branch node - evaluate operator
             if rule_tree.is_branch() {
-                let operator = rule_tree
-                    .operator
-                    .ok_or_else(|| "Branch node missing operator".to_owned())?;
+                let operator = rule_tree.operator.ok_or_else(|| Error::InvalidRuleTree {
+                    reason: "branch node missing operator",
+                })?;
 
-                let conditions = rule_tree
-                    .conditions
-                    .as_ref()
-                    .ok_or_else(|| "Branch node missing conditions".to_owned())?;
+                let conditions =
+                    rule_tree
+                        .conditions
+                        .as_ref()
+                        .ok_or_else(|| Error::InvalidRuleTree {
+                            reason: "branch node missing conditions",
+                        })?;
 
                 return match operator {
                     LogicalOperator::And => {
@@ -197,7 +205,9 @@ impl StrategyEngine {
                     }
                     LogicalOperator::Not => {
                         if conditions.len() != 1 {
-                            return Err("NOT operator must have exactly one child".to_owned());
+                            return Err(Error::InvalidRuleTree {
+                                reason: "NOT operator must have exactly one child",
+                            });
                         }
                         let result = self.evaluate_rule_tree(&conditions[0], context).await?;
                         Ok(!result)
@@ -205,7 +215,9 @@ impl StrategyEngine {
                 };
             }
 
-            Err("Invalid rule tree structure".to_owned())
+            Err(Error::InvalidRuleTree {
+                reason: "invalid rule tree structure",
+            })
         })
     }
 
@@ -251,54 +263,55 @@ impl StrategyEngine {
     }
 
     /// Validate a strategy without evaluating
-    pub fn validate_strategy(&self, strategy: &Strategy) -> crate::Result<()> {
+    pub fn validate_strategy(&self, strategy: &Strategy) -> Result<()> {
         self.validate_rule_tree(&strategy.rules)
     }
 
     /// Validate a rule tree recursively
-    fn validate_rule_tree(&self, rule_tree: &RuleTree) -> crate::Result<()> {
+    fn validate_rule_tree(&self, rule_tree: &RuleTree) -> Result<()> {
         // Leaf node - validate condition
         if rule_tree.is_leaf() {
             if let Some(condition) = &rule_tree.condition {
                 let evaluator = self
                     .condition_registry
                     .get(&condition.condition_type)
-                    .ok_or_else(|| {
-                        crate::Error::internal_error(format!(
-                            "Unknown condition type: {}",
-                            condition.condition_type
-                        ))
+                    .ok_or_else(|| Error::InvalidConditionValue {
+                        field: "condition type",
+                        value: condition.condition_type.clone(),
                     })?;
 
-                return evaluator
-                    .validate(condition)
-                    .map_err(|e| crate::Error::internal_error(e));
+                return evaluator.validate(condition);
             } else {
-                return Err(crate::Error::internal_error("Leaf node missing condition"));
+                return Err(Error::InvalidRuleTree {
+                    reason: "leaf node missing condition",
+                });
             }
         }
 
         // Branch node - validate operator and children
         if rule_tree.is_branch() {
-            let operator = rule_tree
-                .operator
-                .ok_or_else(|| crate::Error::internal_error("Branch node missing operator"))?;
+            let operator = rule_tree.operator.ok_or_else(|| Error::InvalidRuleTree {
+                reason: "branch node missing operator",
+            })?;
 
-            let conditions = rule_tree
-                .conditions
-                .as_ref()
-                .ok_or_else(|| crate::Error::internal_error("Branch node missing conditions"))?;
+            let conditions =
+                rule_tree
+                    .conditions
+                    .as_ref()
+                    .ok_or_else(|| Error::InvalidRuleTree {
+                        reason: "branch node missing conditions",
+                    })?;
 
             if conditions.is_empty() {
-                return Err(crate::Error::internal_error(
-                    "Branch node must have at least one child",
-                ));
+                return Err(Error::InvalidRuleTree {
+                    reason: "branch node must have at least one child",
+                });
             }
 
             if operator == LogicalOperator::Not && conditions.len() != 1 {
-                return Err(crate::Error::internal_error(
-                    "NOT operator must have exactly one child",
-                ));
+                return Err(Error::InvalidRuleTree {
+                    reason: "NOT operator must have exactly one child",
+                });
             }
 
             // Validate all children recursively
@@ -309,7 +322,9 @@ impl StrategyEngine {
             return Ok(());
         }
 
-        Err(crate::Error::internal_error("Invalid rule tree structure"))
+        Err(Error::InvalidRuleTree {
+            reason: "invalid rule tree structure",
+        })
     }
 }
 

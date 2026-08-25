@@ -5,6 +5,7 @@ use crate::strategies::conditions::{
     validate_timeframe_param, ConditionEvaluator,
 };
 use crate::strategies::types::{Condition, EvaluationContext};
+use crate::strategies::{Error, Result};
 use async_trait::async_trait;
 use serde_json::json;
 
@@ -17,11 +18,7 @@ impl ConditionEvaluator for CandleSizeCondition {
         "CandleSize"
     }
 
-    async fn evaluate(
-        &self,
-        condition: &Condition,
-        context: &EvaluationContext,
-    ) -> Result<bool, String> {
+    async fn evaluate(&self, condition: &Condition, context: &EvaluationContext) -> Result<bool> {
         let pattern = get_param_string(condition, "pattern")?;
         let threshold = get_param_f64(condition, "threshold")?;
         let timeframe = get_param_string_optional(condition, "timeframe");
@@ -29,11 +26,21 @@ impl ConditionEvaluator for CandleSizeCondition {
         let candles = get_candles_for_timeframe(context, timeframe.as_deref())?;
 
         if candles.is_empty() {
-            return Err("No candles available".to_owned());
+            return Err(Error::NoCandleData {
+                timeframe: timeframe
+                    .as_deref()
+                    .unwrap_or(&context.strategy_timeframe)
+                    .to_owned(),
+            });
         }
 
         // Get the most recent candle (safe - checked above)
-        let candle = candles.last().ok_or("No candles available")?;
+        let candle = candles.last().ok_or_else(|| Error::NoCandleData {
+            timeframe: timeframe
+                .as_deref()
+                .unwrap_or(&context.strategy_timeframe)
+                .to_owned(),
+        })?;
 
         // Calculate candle metrics
         let body_size = (candle.close - candle.open).abs();
@@ -53,10 +60,10 @@ impl ConditionEvaluator for CandleSizeCondition {
         let price_change_pct = if candle.open.is_finite() && candle.open > 0.0 {
             ((candle.close - candle.open) / candle.open).abs() * 100.0
         } else {
-            return Err(format!(
-                "Candle open is not a usable basis for a percentage: {}",
-                candle.open
-            ));
+            return Err(Error::InvalidConditionValue {
+                field: "candle open",
+                value: candle.open.to_string(),
+            });
         };
 
         let result = match pattern.as_str() {
@@ -84,13 +91,18 @@ impl ConditionEvaluator for CandleSizeCondition {
                     false
                 }
             }
-            _ => return Err(format!("Invalid pattern: {pattern}")),
+            _ => {
+                return Err(Error::InvalidConditionValue {
+                    field: "pattern",
+                    value: pattern,
+                })
+            }
         };
 
         Ok(result)
     }
 
-    fn validate(&self, condition: &Condition) -> Result<(), String> {
+    fn validate(&self, condition: &Condition) -> Result<()> {
         // Validate timeframe if provided
         validate_timeframe_param(condition)?;
 
@@ -103,15 +115,24 @@ impl ConditionEvaluator for CandleSizeCondition {
         ]
         .contains(&pattern.as_str())
         {
-            return Err(format!("Invalid pattern: {pattern}"));
+            return Err(Error::InvalidConditionValue {
+                field: "pattern",
+                value: pattern,
+            });
         }
 
         let threshold = get_param_f64(condition, "threshold")?;
         if threshold < 0.0 {
-            return Err("Threshold must be non-negative".to_owned());
+            return Err(Error::InvalidConditionValue {
+                field: "threshold",
+                value: threshold.to_string(),
+            });
         }
         if threshold > 100.0 {
-            return Err("Threshold must be 100% or less".to_owned());
+            return Err(Error::InvalidConditionValue {
+                field: "threshold",
+                value: threshold.to_string(),
+            });
         }
 
         Ok(())

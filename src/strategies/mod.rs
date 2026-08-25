@@ -1,9 +1,13 @@
 //! Trading strategy engine — rule trees, conditions, and evaluation logic.
+mod error;
+
 pub mod conditions;
 pub mod database;
 pub use database as db;
 pub mod engine;
 pub mod types;
+
+pub use error::{Error, Result};
 
 use crate::logger::{self, LogTag};
 use crate::ohlcvs::TimeframeBundle;
@@ -219,7 +223,7 @@ pub async fn validate_strategy(strategy: &Strategy) -> crate::Result<()> {
         .as_ref()
         .ok_or_else(|| crate::Error::internal_error("Strategy engine not available"))?;
 
-    engine.validate_strategy(strategy)
+    Ok(engine.validate_strategy(strategy)?)
 }
 
 /// Clear the evaluation cache

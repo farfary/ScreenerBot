@@ -5,6 +5,7 @@ use crate::strategies::conditions::{
     get_param_string_optional, validate_timeframe_param, ConditionEvaluator,
 };
 use crate::strategies::types::{Condition, EvaluationContext};
+use crate::strategies::{Error, Result};
 use async_trait::async_trait;
 use serde_json::json;
 
@@ -17,11 +18,7 @@ impl ConditionEvaluator for PriceBreakoutCondition {
         "PriceBreakout"
     }
 
-    async fn evaluate(
-        &self,
-        condition: &Condition,
-        context: &EvaluationContext,
-    ) -> Result<bool, String> {
+    async fn evaluate(&self, condition: &Condition, context: &EvaluationContext) -> Result<bool> {
         let lookback = get_param_f64(condition, "lookback")? as usize;
         let direction = get_param_string(condition, "direction")?;
         let confirmation = get_param_f64(condition, "confirmation")?;
@@ -35,11 +32,11 @@ impl ConditionEvaluator for PriceBreakoutCondition {
         // configured, measuring the level over a narrower range and making the breakout
         // easier to clear than the strategy said.
         if candles.len() < lookback + 1 {
-            return Err(format!(
-                "Not enough candles: {} < {}",
-                candles.len(),
-                lookback + 1
-            ));
+            return Err(Error::InsufficientCandles {
+                indicator: "price breakout",
+                available: candles.len(),
+                required: lookback + 1,
+            });
         }
 
         let current_price = get_current_price(context)?;
@@ -50,7 +47,12 @@ impl ConditionEvaluator for PriceBreakoutCondition {
         let lookback_candles = &candles[start_idx..end_idx];
 
         if lookback_candles.is_empty() {
-            return Err("No lookback candles available".to_owned());
+            return Err(Error::NoCandleData {
+                timeframe: timeframe
+                    .as_deref()
+                    .unwrap_or(&context.strategy_timeframe)
+                    .to_owned(),
+            });
         }
 
         // Find highest high and lowest low in lookback period
@@ -74,29 +76,43 @@ impl ConditionEvaluator for PriceBreakoutCondition {
                 let breakout_level = period_low * (1.0 - confirmation / 100.0);
                 current_price <= breakout_level
             }
-            _ => return Err(format!("Invalid direction: {direction}")),
+            _ => {
+                return Err(Error::InvalidConditionValue {
+                    field: "direction",
+                    value: direction,
+                })
+            }
         };
 
         Ok(result)
     }
 
-    fn validate(&self, condition: &Condition) -> Result<(), String> {
+    fn validate(&self, condition: &Condition) -> Result<()> {
         // Validate timeframe if provided
         validate_timeframe_param(condition)?;
 
         let lookback = get_param_f64(condition, "lookback")?;
         if lookback < 2.0 || lookback > 100.0 {
-            return Err("Lookback must be between 2 and 100".to_owned());
+            return Err(Error::InvalidConditionValue {
+                field: "lookback",
+                value: lookback.to_string(),
+            });
         }
 
         let direction = get_param_string(condition, "direction")?;
         if !["UPWARD", "DOWNWARD"].contains(&direction.as_str()) {
-            return Err(format!("Invalid direction: {direction}"));
+            return Err(Error::InvalidConditionValue {
+                field: "direction",
+                value: direction,
+            });
         }
 
         let confirmation = get_param_f64(condition, "confirmation")?;
         if confirmation < 0.0 || confirmation > 20.0 {
-            return Err("Confirmation must be between 0 and 20%".to_owned());
+            return Err(Error::InvalidConditionValue {
+                field: "confirmation",
+                value: confirmation.to_string(),
+            });
         }
 
         Ok(())

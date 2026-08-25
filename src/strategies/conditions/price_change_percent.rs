@@ -5,6 +5,7 @@ use crate::strategies::conditions::{
     get_param_string_optional, usable_basis, validate_timeframe_param, ConditionEvaluator,
 };
 use crate::strategies::types::{Condition, EvaluationContext};
+use crate::strategies::{Error, Result};
 use async_trait::async_trait;
 use serde_json::json;
 
@@ -17,11 +18,7 @@ impl ConditionEvaluator for PriceChangePercentCondition {
         "PriceChangePercent"
     }
 
-    async fn evaluate(
-        &self,
-        condition: &Condition,
-        context: &EvaluationContext,
-    ) -> Result<bool, String> {
+    async fn evaluate(&self, condition: &Condition, context: &EvaluationContext) -> Result<bool> {
         let percentage = get_param_f64(condition, "percentage")?;
         let direction = get_param_string(condition, "direction")?;
         let time_value = get_param_f64(condition, "time_value")?;
@@ -35,7 +32,12 @@ impl ConditionEvaluator for PriceChangePercentCondition {
             "SECONDS" => time_value as i64,
             "MINUTES" => (time_value * 60.0) as i64,
             "HOURS" => (time_value * 3600.0) as i64,
-            _ => return Err(format!("Invalid time unit: {time_unit}")),
+            _ => {
+                return Err(Error::InvalidConditionValue {
+                    field: "time unit",
+                    value: time_unit,
+                })
+            }
         };
 
         // Get candles for specified timeframe (or use strategy default)
@@ -71,20 +73,15 @@ impl ConditionEvaluator for PriceChangePercentCondition {
                     .min()
                     .unwrap_or(current_timestamp);
                 let available_seconds = current_timestamp - oldest_timestamp;
-                let requested_unit = match time_unit.as_str() {
-                    "SECONDS" => format!("{time_value} seconds"),
-                    "MINUTES" => format!("{time_value} minutes"),
-                    "HOURS" => format!("{time_value} hours"),
-                    _ => "unknown".to_owned(),
-                };
-                return Err(format!(
-                    "Insufficient historical data: requested {} lookback, only {} seconds available",
-                    requested_unit, available_seconds
-                ));
+                return Err(Error::InsufficientHistory {
+                    indicator: "price change lookback",
+                    available_seconds: available_seconds.max(0),
+                    required_seconds: lookback_seconds.max(0),
+                });
             }
         };
 
-        let past_price = usable_basis("Reference candle close", past_candle.close)?;
+        let past_price = usable_basis("reference candle close", past_candle.close)?;
 
         // Calculate price change percentage
         let price_change_pct = ((current_price - past_price) / past_price) * 100.0;
@@ -93,58 +90,83 @@ impl ConditionEvaluator for PriceChangePercentCondition {
             "ABOVE" => price_change_pct >= percentage,
             "BELOW" => price_change_pct <= -percentage,
             "WITHIN" => price_change_pct.abs() <= percentage,
-            _ => return Err(format!("Invalid direction: {direction}")),
+            _ => {
+                return Err(Error::InvalidConditionValue {
+                    field: "direction",
+                    value: direction,
+                })
+            }
         };
 
         Ok(result)
     }
 
-    fn validate(&self, condition: &Condition) -> Result<(), String> {
+    fn validate(&self, condition: &Condition) -> Result<()> {
         // Validate timeframe if provided
         validate_timeframe_param(condition)?;
 
         let percentage = get_param_f64(condition, "percentage")?;
         if percentage < 0.1 {
-            return Err("Percentage must be at least 0.1".to_owned());
+            return Err(Error::InvalidConditionValue {
+                field: "percentage",
+                value: percentage.to_string(),
+            });
         }
         if percentage > 1000.0 {
-            return Err("Percentage must be 1000 or less".to_owned());
+            return Err(Error::InvalidConditionValue {
+                field: "percentage",
+                value: percentage.to_string(),
+            });
         }
 
         let direction = get_param_string(condition, "direction")?;
         if !["ABOVE", "BELOW", "WITHIN"].contains(&direction.as_str()) {
-            return Err(format!("Invalid direction: {direction}"));
+            return Err(Error::InvalidConditionValue {
+                field: "direction",
+                value: direction,
+            });
         }
 
         let time_value = get_param_f64(condition, "time_value")?;
         if time_value < 1.0 {
-            return Err("Time value must be at least 1".to_owned());
+            return Err(Error::InvalidConditionValue {
+                field: "time value",
+                value: time_value.to_string(),
+            });
         }
 
         let time_unit = get_param_string(condition, "time_unit")?;
         if !["SECONDS", "MINUTES", "HOURS"].contains(&time_unit.as_str()) {
-            return Err(format!("Invalid time unit: {time_unit}"));
+            return Err(Error::InvalidConditionValue {
+                field: "time unit",
+                value: time_unit.clone(),
+            });
         }
 
         // Validate time value ranges based on unit
         match time_unit.as_str() {
             "SECONDS" => {
                 if time_value > 3600.0 {
-                    return Err(
-                        "Time value for seconds must be 3600 or less (1 hour max)".to_owned()
-                    );
+                    return Err(Error::InvalidConditionValue {
+                        field: "time value",
+                        value: time_value.to_string(),
+                    });
                 }
             }
             "MINUTES" => {
                 if time_value > 1440.0 {
-                    return Err(
-                        "Time value for minutes must be 1440 or less (24 hours max)".to_owned()
-                    );
+                    return Err(Error::InvalidConditionValue {
+                        field: "time value",
+                        value: time_value.to_string(),
+                    });
                 }
             }
             "HOURS" => {
                 if time_value > 720.0 {
-                    return Err("Time value for hours must be 720 or less (30 days max)".to_owned());
+                    return Err(Error::InvalidConditionValue {
+                        field: "time value",
+                        value: time_value.to_string(),
+                    });
                 }
             }
             _ => {}

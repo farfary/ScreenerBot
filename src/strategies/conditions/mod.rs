@@ -19,6 +19,7 @@ pub use volume_spike::VolumeSpikeCondition;
 
 use crate::ohlcvs::{Candle, Timeframe};
 use crate::strategies::types::{Condition, EvaluationContext};
+use crate::strategies::{Error, Result};
 use async_trait::async_trait;
 use std::collections::HashMap;
 
@@ -46,37 +47,36 @@ const MAX_SERIES_STALENESS_BUCKETS: i64 = 3;
 pub fn get_candles_for_timeframe(
     context: &EvaluationContext,
     condition_timeframe: Option<&str>,
-) -> Result<Vec<Candle>, String> {
+) -> Result<Vec<Candle>> {
     // Check if bundle exists
     let bundle = context
         .timeframe_bundle
         .as_ref()
-        .ok_or_else(|| "OHLCV data not available - bundle is None".to_owned())?;
+        .ok_or_else(|| Error::MissingContextData { data: "OHLCV data" })?;
 
     // Use condition's timeframe if provided, otherwise fallback to strategy timeframe
     let timeframe = condition_timeframe.unwrap_or(&context.strategy_timeframe);
 
     // Validate timeframe value against the one enum that defines them
     let bucket_seconds = Timeframe::from_str(timeframe)
-        .ok_or_else(|| {
-            format!(
-                "Invalid timeframe '{}' - valid options: 1m, 5m, 15m, 1h, 4h, 12h, 1d",
-                timeframe
-            )
+        .ok_or_else(|| Error::InvalidConditionValue {
+            field: "timeframe",
+            value: timeframe.to_owned(),
         })?
         .to_seconds();
 
     // Check if timeframe exists in bundle
-    let candles = bundle.get_timeframe(timeframe).ok_or_else(|| {
-        format!(
-            "Timeframe {} not available in bundle (valid: 1m, 5m, 15m, 1h, 4h, 12h, 1d)",
-            timeframe
-        )
-    })?;
+    let candles = bundle
+        .get_timeframe(timeframe)
+        .ok_or_else(|| Error::NoCandleData {
+            timeframe: timeframe.to_owned(),
+        })?;
 
     // Check if timeframe has data
     if candles.is_empty() {
-        return Err(format!("Timeframe {timeframe} has no candle data - OHLCV system may not have fetched historical data yet"));
+        return Err(Error::NoCandleData {
+            timeframe: timeframe.to_owned(),
+        });
     }
 
     // Check the series still describes the present
@@ -88,9 +88,11 @@ pub fn get_candles_for_timeframe(
     let age_seconds = context.evaluated_at.timestamp() - newest;
     let max_age_seconds = bucket_seconds * MAX_SERIES_STALENESS_BUCKETS;
     if age_seconds > max_age_seconds {
-        return Err(format!(
-            "Timeframe {timeframe} series is stale: newest candle is {age_seconds}s old (max {max_age_seconds}s) - the live price and these candles no longer describe the same moment"
-        ));
+        return Err(Error::StaleCandleData {
+            timeframe: timeframe.to_owned(),
+            age_seconds,
+            max_age_seconds,
+        });
     }
 
     Ok(candles.clone())
@@ -103,13 +105,18 @@ pub fn get_candles_for_timeframe(
 /// `NaN` price reports "no signal" forever instead of failing. An entry that never fires
 /// is money not spent, but an EXIT that never fires is a position that cannot be closed
 /// by strategy, so this is an `Err` and never a `false`.
-pub fn get_current_price(context: &EvaluationContext) -> Result<f64, String> {
+pub fn get_current_price(context: &EvaluationContext) -> Result<f64> {
     let price = context
         .current_price
-        .ok_or_else(|| "Current price not available".to_owned())?;
+        .ok_or_else(|| Error::MissingContextData {
+            data: "current price",
+        })?;
 
     if !price.is_finite() || price <= 0.0 {
-        return Err(format!("Current price is not usable: {price}"));
+        return Err(Error::InvalidConditionValue {
+            field: "current price",
+            value: price.to_string(),
+        });
     }
 
     Ok(price)
@@ -121,11 +128,12 @@ pub fn get_current_price(context: &EvaluationContext) -> Result<f64, String> {
 /// clears EVERY upward threshold a user can configure — the validator caps the
 /// threshold at 1000%, and infinity is above that too. Refusing the basis is the only
 /// way such a series produces no signal rather than a guaranteed one.
-pub fn usable_basis(label: &str, value: f64) -> Result<f64, String> {
+pub fn usable_basis(label: &'static str, value: f64) -> Result<f64> {
     if !value.is_finite() || value <= 0.0 {
-        return Err(format!(
-            "{label} is not a usable basis for a percentage: {value}"
-        ));
+        return Err(Error::InvalidConditionValue {
+            field: label,
+            value: value.to_string(),
+        });
     }
     Ok(value)
 }
@@ -137,14 +145,10 @@ pub trait ConditionEvaluator: Send + Sync {
     fn condition_type(&self) -> &'static str;
 
     /// Evaluate the condition against the context
-    async fn evaluate(
-        &self,
-        condition: &Condition,
-        context: &EvaluationContext,
-    ) -> Result<bool, String>;
+    async fn evaluate(&self, condition: &Condition, context: &EvaluationContext) -> Result<bool>;
 
     /// Validate condition parameters
-    fn validate(&self, condition: &Condition) -> Result<(), String>;
+    fn validate(&self, condition: &Condition) -> Result<()>;
 
     /// Get parameter description for UI
     fn parameter_schema(&self) -> serde_json::Value;
@@ -208,43 +212,46 @@ impl Default for ConditionRegistry {
 }
 
 /// Helper function to get parameter value with type checking
-pub fn get_param_f64(condition: &Condition, param_name: &str) -> Result<f64, String> {
+pub fn get_param_f64(condition: &Condition, param_name: &'static str) -> Result<f64> {
     let param = condition
         .parameters
         .get(param_name)
-        .ok_or_else(|| format!("Missing parameter: {param_name}"))?;
+        .ok_or(Error::MissingConditionParameter { field: param_name })?;
 
-    param
-        .value
-        .as_f64()
-        .ok_or_else(|| format!("Parameter {param_name} must be a number"))
+    param.value.as_f64().ok_or(Error::ConditionParameterType {
+        field: param_name,
+        expected: "a number",
+    })
 }
 
 /// Helper function to get parameter value as string
-pub fn get_param_string(condition: &Condition, param_name: &str) -> Result<String, String> {
+pub fn get_param_string(condition: &Condition, param_name: &'static str) -> Result<String> {
     let param = condition
         .parameters
         .get(param_name)
-        .ok_or_else(|| format!("Missing parameter: {param_name}"))?;
+        .ok_or(Error::MissingConditionParameter { field: param_name })?;
 
     param
         .value
         .as_str()
         .map(str::to_string)
-        .ok_or_else(|| format!("Parameter {param_name} must be a string"))
+        .ok_or(Error::ConditionParameterType {
+            field: param_name,
+            expected: "a string",
+        })
 }
 
 /// Helper function to get parameter value as bool
-pub fn get_param_bool(condition: &Condition, param_name: &str) -> Result<bool, String> {
+pub fn get_param_bool(condition: &Condition, param_name: &'static str) -> Result<bool> {
     let param = condition
         .parameters
         .get(param_name)
-        .ok_or_else(|| format!("Missing parameter: {param_name}"))?;
+        .ok_or(Error::MissingConditionParameter { field: param_name })?;
 
-    param
-        .value
-        .as_bool()
-        .ok_or_else(|| format!("Parameter {param_name} must be a boolean"))
+    param.value.as_bool().ok_or(Error::ConditionParameterType {
+        field: param_name,
+        expected: "a boolean",
+    })
 }
 
 /// Helper function to get optional parameter value as string
@@ -257,15 +264,14 @@ pub fn get_param_string_optional(condition: &Condition, param_name: &str) -> Opt
 }
 
 /// Helper function to validate optional timeframe parameter
-pub fn validate_timeframe_param(condition: &Condition) -> Result<(), String> {
+pub fn validate_timeframe_param(condition: &Condition) -> Result<()> {
     if let Some(timeframe) = get_param_string_optional(condition, "timeframe") {
         let valid_timeframes = ["1m", "5m", "15m", "1h", "4h", "12h", "1d"];
         if !valid_timeframes.contains(&timeframe.as_str()) {
-            return Err(format!(
-                "Invalid timeframe '{}' - valid options: {}",
-                timeframe,
-                valid_timeframes.join(", ")
-            ));
+            return Err(Error::InvalidConditionValue {
+                field: "timeframe",
+                value: timeframe,
+            });
         }
     }
     Ok(())
