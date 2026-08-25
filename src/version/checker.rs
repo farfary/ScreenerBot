@@ -2,8 +2,8 @@
 
 use super::types::*;
 use super::{
-    current_platform_key, mutate_state, UPDATE_AVAILABLE, UPDATE_CHECK_INTERVAL_SECS,
-    UPDATE_SERVER_URL, VERSION,
+    current_platform_key, mutate_state, Error, Result, UPDATE_AVAILABLE,
+    UPDATE_CHECK_INTERVAL_SECS, UPDATE_SERVER_URL, VERSION,
 };
 use crate::logger::{self, LogTag};
 use chrono::Utc;
@@ -53,7 +53,7 @@ pub fn start_update_check_service(
     }))
 }
 
-pub async fn check_for_update() -> Result<Option<UpdateInfo>, String> {
+pub async fn check_for_update() -> Result<Option<UpdateInfo>> {
     check_for_update_from(
         crate::net::client(),
         UPDATE_SERVER_URL,
@@ -68,7 +68,7 @@ async fn check_for_update_from(
     server_url: &str,
     current_version: &str,
     platform: &str,
-) -> Result<Option<UpdateInfo>, String> {
+) -> Result<Option<UpdateInfo>> {
     mutate_state(|state| {
         state.phase = UpdatePhase::Checking;
         state.last_check_attempt = Some(Utc::now());
@@ -94,7 +94,7 @@ async fn request_update(
     server_url: &str,
     current_version: &str,
     platform: &str,
-) -> Result<Option<UpdateInfo>, String> {
+) -> Result<Option<UpdateInfo>> {
     let url = format!(
         "{}/releases/check?version={}&platform={}",
         server_url, current_version, platform
@@ -105,52 +105,91 @@ async fn request_update(
         .timeout(Duration::from_secs(10))
         .send()
         .await
-        .map_err(|error| format!("Failed to check for updates: {error}"))?;
+        .map_err(|error| {
+            Error::Network(crate::errors::NetworkError::RequestFailed {
+                endpoint: url.clone(),
+                detail: error.to_string(),
+            })
+        })?;
 
     if !response.status().is_success() {
-        return Err(format!("Update check failed: HTTP {}", response.status()));
+        return Err(Error::UpdateCheckFailed {
+            status: response.status().as_u16(),
+        });
     }
 
-    let body = response
-        .bytes()
-        .await
-        .map_err(|error| format!("Failed to read update response: {error}"))?;
+    let body = response.bytes().await.map_err(|error| {
+        Error::Network(crate::errors::NetworkError::RequestFailed {
+            endpoint: url,
+            detail: error.to_string(),
+        })
+    })?;
     parse_update_response(&body, current_version)
 }
 
-fn parse_update_response(body: &[u8], current_version: &str) -> Result<Option<UpdateInfo>, String> {
-    let api_response: ApiResponse<UpdateCheckData> = serde_json::from_slice(body)
-        .map_err(|error| format!("Failed to parse update response: {error}"))?;
+fn parse_update_response(body: &[u8], current_version: &str) -> Result<Option<UpdateInfo>> {
+    let api_response: ApiResponse<UpdateCheckData> =
+        serde_json::from_slice(body).map_err(|error| {
+            Error::Data(crate::errors::DataError::ParseError {
+                data_type: "update response".to_owned(),
+                error: error.to_string(),
+            })
+        })?;
     if !api_response.success {
-        return Err(api_response
-            .error
-            .unwrap_or_else(|| "Update server returned an unknown error".to_owned()));
+        return Err(Error::Data(crate::errors::DataError::InvalidFormat {
+            expected: "successful update response".to_owned(),
+            received: api_response
+                .error
+                .unwrap_or_else(|| "an unspecified server error".to_owned()),
+        }));
     }
 
-    let data = api_response
-        .data
-        .ok_or_else(|| "Update response has no data".to_owned())?;
+    let data = api_response.data.ok_or_else(|| {
+        Error::Data(crate::errors::DataError::InvalidFormat {
+            expected: "update response data".to_owned(),
+            received: "no data".to_owned(),
+        })
+    })?;
     if data.current_version != current_version {
-        return Err("Update server echoed a different current version".to_owned());
+        return Err(Error::Data(crate::errors::DataError::InvalidFormat {
+            expected: current_version.to_owned(),
+            received: data.current_version,
+        }));
     }
 
     if !data.update_available {
         return Ok(None);
     }
 
-    let update = data
-        .update
-        .ok_or_else(|| "Update response says an update is available but has no build".to_owned())?;
+    let update = data.update.ok_or_else(|| {
+        Error::Data(crate::errors::DataError::InvalidFormat {
+            expected: "update build when updateAvailable is true".to_owned(),
+            received: "no update build".to_owned(),
+        })
+    })?;
     if data.latest_version.as_deref() != Some(update.version.as_str()) {
-        return Err("Update response version fields do not agree".to_owned());
+        return Err(Error::Data(crate::errors::DataError::InvalidFormat {
+            expected: update.version.clone(),
+            received: data
+                .latest_version
+                .unwrap_or_else(|| "no latest version".to_owned()),
+        }));
     }
     if !super::is_newer_version(current_version, &update.version) {
-        return Err("Update server offered a version that is not newer".to_owned());
+        return Err(Error::Data(crate::errors::DataError::ValidationError {
+            field: "update.version".to_owned(),
+            value: update.version.clone(),
+            reason: format!("must be newer than {current_version}"),
+        }));
     }
     validate_checksum(&update.checksum)?;
     validate_filename(&update.filename, &update.version)?;
     if update.file_size == 0 || update.file_size > super::MAX_UPDATE_BYTES {
-        return Err("Update file size is outside the allowed range".to_owned());
+        return Err(Error::Data(crate::errors::DataError::ValidationError {
+            field: "update.file_size".to_owned(),
+            value: update.file_size.to_string(),
+            reason: format!("must be between 1 and {} bytes", super::MAX_UPDATE_BYTES),
+        }));
     }
     validate_download_url(&update.download_url)?;
 
@@ -165,15 +204,19 @@ fn parse_update_response(body: &[u8], current_version: &str) -> Result<Option<Up
     }))
 }
 
-pub(super) fn validate_checksum(checksum: &str) -> Result<(), String> {
+pub(super) fn validate_checksum(checksum: &str) -> Result<()> {
     if checksum.len() == 64 && checksum.bytes().all(|byte| byte.is_ascii_hexdigit()) {
         Ok(())
     } else {
-        Err("Update checksum is not a SHA-256 digest".to_owned())
+        Err(Error::Data(crate::errors::DataError::ValidationError {
+            field: "update.checksum".to_owned(),
+            value: checksum.to_owned(),
+            reason: "must be a SHA-256 digest".to_owned(),
+        }))
     }
 }
 
-fn validate_filename(filename: &str, version: &str) -> Result<(), String> {
+fn validate_filename(filename: &str, version: &str) -> Result<()> {
     let safe = !filename.is_empty()
         && filename.len() <= 255
         && !filename.contains('/')
@@ -185,20 +228,29 @@ fn validate_filename(filename: &str, version: &str) -> Result<(), String> {
     if safe {
         Ok(())
     } else {
-        Err("Update filename is invalid".to_owned())
+        Err(Error::Data(crate::errors::DataError::ValidationError {
+            field: "update.filename".to_owned(),
+            value: filename.to_owned(),
+            reason: "must be a safe release filename for the offered version".to_owned(),
+        }))
     }
 }
 
-fn validate_download_url(download_url: &str) -> Result<(), String> {
+fn validate_download_url(download_url: &str) -> Result<()> {
     if download_url.starts_with("/api/releases/download?") {
         return Ok(());
     }
-    let url = reqwest::Url::parse(download_url)
-        .map_err(|error| format!("Invalid update download URL: {error}"))?;
+    let url = reqwest::Url::parse(download_url).map_err(|error| Error::InvalidUpdateUrl {
+        url: download_url.to_owned(),
+        reason: error.to_string(),
+    })?;
     if url.scheme() == "https" && url.host_str() == Some("screenerbot.io") {
         Ok(())
     } else {
-        Err("Update download URL must use the ScreenerBot HTTPS origin".to_owned())
+        Err(Error::InvalidUpdateUrl {
+            url: download_url.to_owned(),
+            reason: "must use the ScreenerBot HTTPS origin".to_owned(),
+        })
     }
 }
 
@@ -228,11 +280,11 @@ async fn record_check_success(update: Option<UpdateInfo>) {
     .await;
 }
 
-async fn record_check_failure(error: &str) {
+async fn record_check_failure(error: &Error) {
     UPDATE_AVAILABLE.store(false, Ordering::SeqCst);
     mutate_state(|state| {
         state.phase = UpdatePhase::CheckFailed;
-        state.check_error = Some(error.to_owned());
+        state.check_error = Some(error.to_string());
         state.available_update = None;
     })
     .await;

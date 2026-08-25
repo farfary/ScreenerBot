@@ -2,7 +2,7 @@
 
 use super::types::*;
 use super::{
-    mutate_state, mutate_state_with_result, state_lock, DOWNLOAD_TIMEOUT_SECS,
+    mutate_state, mutate_state_with_result, state_lock, Error, Result, DOWNLOAD_TIMEOUT_SECS,
     GITHUB_RELEASES_API_URL, MAX_UPDATE_BYTES,
 };
 use crate::logger::{self, LogTag};
@@ -24,11 +24,11 @@ struct GithubAsset {
     size: u64,
 }
 
-pub async fn start_download(update: UpdateInfo) -> Result<(), String> {
+pub async fn start_download(update: UpdateInfo) -> Result<()> {
     if !crate::arguments::is_gui_enabled() {
-        return Err(
-            "Headless updates must be installed with screenerbot-manager update".to_owned(),
-        );
+        return Err(Error::UnsupportedInstall {
+            detail: "headless updates must be installed with screenerbot-manager update".to_owned(),
+        });
     }
     mutate_state_with_result(|state| claim_download(state, &update)).await?;
     tokio::spawn(async move {
@@ -40,16 +40,16 @@ pub async fn start_download(update: UpdateInfo) -> Result<(), String> {
     Ok(())
 }
 
-fn claim_download(state: &mut UpdateState, update: &UpdateInfo) -> Result<(), String> {
+fn claim_download(state: &mut UpdateState, update: &UpdateInfo) -> Result<()> {
     let available = state
         .available_update
         .as_ref()
-        .ok_or_else(|| "No update is available to download".to_owned())?;
+        .ok_or(Error::NoUpdateAvailable)?;
     if available.version != update.version || available.checksum != update.checksum {
-        return Err("The requested update no longer matches the available release".to_owned());
+        return Err(Error::UpdateChanged);
     }
     if state.download_progress.downloading {
-        return Err("An update download is already in progress".to_owned());
+        return Err(Error::DownloadInProgress);
     }
 
     state.phase = UpdatePhase::Downloading;
@@ -63,7 +63,7 @@ fn claim_download(state: &mut UpdateState, update: &UpdateInfo) -> Result<(), St
     Ok(())
 }
 
-async fn run_download(update: &UpdateInfo) -> Result<(), String> {
+async fn run_download(update: &UpdateInfo) -> Result<()> {
     let download_dir = get_download_dir()?;
     let final_path = download_dir.join(&update.filename);
     let partial_path = download_dir.join(format!("{}.part", update.filename));
@@ -80,7 +80,7 @@ async fn run_download_inner(
     update: &UpdateInfo,
     partial_path: &Path,
     final_path: &Path,
-) -> Result<(), String> {
+) -> Result<()> {
     let client = build_update_client()?;
     verify_github_digest(&client, GITHUB_RELEASES_API_URL, update).await?;
 
@@ -95,31 +95,52 @@ async fn run_download_inner(
         .header("User-Agent", format!("ScreenerBot/{}", super::VERSION))
         .send()
         .await
-        .map_err(|error| format!("Download request failed: {error}"))?;
+        .map_err(|error| {
+            Error::Network(crate::errors::NetworkError::RequestFailed {
+                endpoint: update.download_url.clone(),
+                detail: error.to_string(),
+            })
+        })?;
     if !response.status().is_success() {
-        return Err(format!("Download failed: HTTP {}", response.status()));
+        return Err(Error::Network(crate::errors::NetworkError::HttpStatus {
+            endpoint: response.url().to_string(),
+            status: response.status().as_u16(),
+            body: None,
+        }));
     }
     validate_final_url(response.url())?;
     validate_content_length(response.content_length(), update.file_size)?;
 
     let mut file = tokio::fs::File::create(partial_path)
         .await
-        .map_err(|error| format!("Failed to create staged update: {error}"))?;
+        .map_err(|error| Error::Io(crate::errors::IoError::from(error)))?;
     let mut stream = response.bytes_stream();
     let mut downloaded = 0_u64;
     let mut last_progress = std::time::Instant::now();
 
     while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|error| format!("Download stream failed: {error}"))?;
-        downloaded = downloaded
-            .checked_add(chunk.len() as u64)
-            .ok_or_else(|| "Downloaded byte count overflowed".to_owned())?;
+        let chunk = chunk.map_err(|error| {
+            Error::Network(crate::errors::NetworkError::RequestFailed {
+                endpoint: update.download_url.clone(),
+                detail: error.to_string(),
+            })
+        })?;
+        downloaded = downloaded.checked_add(chunk.len() as u64).ok_or_else(|| {
+            Error::Data(crate::errors::DataError::ValidationError {
+                field: "downloaded bytes".to_owned(),
+                value: downloaded.to_string(),
+                reason: "overflowed the supported byte count".to_owned(),
+            })
+        })?;
         if downloaded > update.file_size || downloaded > MAX_UPDATE_BYTES {
-            return Err("Downloaded update exceeded its declared size".to_owned());
+            return Err(Error::DownloadSizeMismatch {
+                expected: update.file_size.min(MAX_UPDATE_BYTES),
+                actual: downloaded,
+            });
         }
         file.write_all(&chunk)
             .await
-            .map_err(|error| format!("Failed to write staged update: {error}"))?;
+            .map_err(|error| Error::Io(crate::errors::IoError::from(error)))?;
 
         if last_progress.elapsed() >= Duration::from_millis(500) {
             record_progress(downloaded, update.file_size).await;
@@ -129,41 +150,43 @@ async fn run_download_inner(
 
     file.flush()
         .await
-        .map_err(|error| format!("Failed to flush staged update: {error}"))?;
+        .map_err(|error| Error::Io(crate::errors::IoError::from(error)))?;
     file.sync_all()
         .await
-        .map_err(|error| format!("Failed to sync staged update: {error}"))?;
+        .map_err(|error| Error::Io(crate::errors::IoError::from(error)))?;
     drop(file);
 
     if downloaded != update.file_size {
-        return Err(format!(
-            "Downloaded size mismatch: expected {}, got {}",
-            update.file_size, downloaded
-        ));
+        return Err(Error::DownloadSizeMismatch {
+            expected: update.file_size,
+            actual: downloaded,
+        });
     }
 
     mutate_state(|state| state.phase = UpdatePhase::Verifying).await;
     let actual_checksum = calculate_sha256_async(partial_path.to_owned()).await?;
     if actual_checksum != update.checksum {
-        return Err(format!(
-            "Checksum mismatch: expected {}, got {}",
-            update.checksum, actual_checksum
-        ));
+        return Err(Error::DigestMismatch {
+            detail: format!(
+                "staged file checksum expected {}, got {actual_checksum}",
+                update.checksum
+            ),
+        });
     }
 
     if final_path.exists() {
         tokio::fs::remove_file(final_path)
             .await
-            .map_err(|error| format!("Failed to replace previous staged update: {error}"))?;
+            .map_err(|error| Error::Io(crate::errors::IoError::from(error)))?;
     }
     tokio::fs::rename(partial_path, final_path)
         .await
-        .map_err(|error| format!("Failed to commit staged update: {error}"))?;
+        .map_err(|error| Error::Io(crate::errors::IoError::from(error)))?;
     record_download_ready(update, final_path).await;
     Ok(())
 }
 
-fn build_update_client() -> Result<reqwest::Client, String> {
+fn build_update_client() -> Result<reqwest::Client> {
     crate::net::client_builder()
         .timeout(Duration::from_secs(DOWNLOAD_TIMEOUT_SECS))
         .redirect(reqwest::redirect::Policy::custom(|attempt| {
@@ -177,21 +200,34 @@ fn build_update_client() -> Result<reqwest::Client, String> {
             }
         }))
         .build()
-        .map_err(|error| format!("Failed to create update HTTP client: {error}"))
+        .map_err(|error| {
+            Error::Network(crate::errors::NetworkError::RequestFailed {
+                endpoint: "update HTTP client".to_owned(),
+                detail: error.to_string(),
+            })
+        })
 }
 
-fn resolve_download_url(download_url: &str) -> Result<reqwest::Url, String> {
+fn resolve_download_url(download_url: &str) -> Result<reqwest::Url> {
     if download_url.starts_with('/') {
         return reqwest::Url::parse("https://screenerbot.io")
             .and_then(|base| base.join(download_url))
-            .map_err(|error| format!("Invalid relative update URL: {error}"));
+            .map_err(|error| Error::InvalidUpdateUrl {
+                url: download_url.to_owned(),
+                reason: error.to_string(),
+            });
     }
-    let url = reqwest::Url::parse(download_url)
-        .map_err(|error| format!("Invalid update URL: {error}"))?;
+    let url = reqwest::Url::parse(download_url).map_err(|error| Error::InvalidUpdateUrl {
+        url: download_url.to_owned(),
+        reason: error.to_string(),
+    })?;
     if is_allowed_update_url(&url) {
         Ok(url)
     } else {
-        Err("Update URL is outside the HTTPS allowlist".to_owned())
+        Err(Error::InvalidUpdateUrl {
+            url: download_url.to_owned(),
+            reason: "outside the HTTPS allowlist".to_owned(),
+        })
     }
 }
 
@@ -207,23 +243,28 @@ fn is_allowed_update_url(url: &reqwest::Url) -> bool {
         .is_some_and(|host| host.ends_with(".githubusercontent.com"))
 }
 
-fn validate_final_url(url: &reqwest::Url) -> Result<(), String> {
+fn validate_final_url(url: &reqwest::Url) -> Result<()> {
     if is_allowed_update_url(url) {
         Ok(())
     } else {
-        Err("Final update URL is outside the HTTPS allowlist".to_owned())
+        Err(Error::InvalidUpdateUrl {
+            url: url.to_string(),
+            reason: "outside the HTTPS allowlist after redirects".to_owned(),
+        })
     }
 }
 
-fn validate_content_length(actual: Option<u64>, expected: u64) -> Result<(), String> {
+fn validate_content_length(actual: Option<u64>, expected: u64) -> Result<()> {
     if expected == 0 || expected > MAX_UPDATE_BYTES {
-        return Err("Declared update size is outside the allowed range".to_owned());
+        return Err(Error::Data(crate::errors::DataError::ValidationError {
+            field: "update.file_size".to_owned(),
+            value: expected.to_string(),
+            reason: format!("must be between 1 and {MAX_UPDATE_BYTES} bytes"),
+        }));
     }
     if let Some(actual) = actual {
         if actual != expected {
-            return Err(format!(
-                "Download Content-Length mismatch: expected {expected}, got {actual}"
-            ));
+            return Err(Error::DownloadSizeMismatch { expected, actual });
         }
     }
     Ok(())
@@ -233,42 +274,59 @@ async fn verify_github_digest(
     client: &reqwest::Client,
     github_api: &str,
     update: &UpdateInfo,
-) -> Result<(), String> {
+) -> Result<()> {
     let url = format!("{github_api}/releases/tags/v{}", update.version);
     let response = client
-        .get(url)
+        .get(&url)
         .header("Accept", "application/vnd.github+json")
         .header("X-GitHub-Api-Version", "2022-11-28")
         .header("User-Agent", format!("ScreenerBot/{}", super::VERSION))
         .timeout(Duration::from_secs(15))
         .send()
         .await
-        .map_err(|error| format!("Failed to verify GitHub release digest: {error}"))?;
+        .map_err(|error| {
+            Error::Network(crate::errors::NetworkError::RequestFailed {
+                endpoint: url.clone(),
+                detail: error.to_string(),
+            })
+        })?;
     if !response.status().is_success() {
-        return Err(format!(
-            "GitHub release verification failed: HTTP {}",
-            response.status()
-        ));
+        return Err(Error::Network(crate::errors::NetworkError::HttpStatus {
+            endpoint: url,
+            status: response.status().as_u16(),
+            body: None,
+        }));
     }
-    let release: GithubRelease = response
-        .json()
-        .await
-        .map_err(|error| format!("Failed to parse GitHub release metadata: {error}"))?;
+    let release: GithubRelease = response.json().await.map_err(|error| {
+        Error::Data(crate::errors::DataError::ParseError {
+            data_type: "GitHub release metadata".to_owned(),
+            error: error.to_string(),
+        })
+    })?;
     verify_github_release(&release, update)
 }
 
-fn verify_github_release(release: &GithubRelease, update: &UpdateInfo) -> Result<(), String> {
+fn verify_github_release(release: &GithubRelease, update: &UpdateInfo) -> Result<()> {
     let asset = release
         .assets
         .iter()
         .find(|asset| asset.name == update.filename)
-        .ok_or_else(|| "GitHub release does not contain the expected asset".to_owned())?;
+        .ok_or_else(|| Error::DigestMismatch {
+            detail: format!("GitHub release does not contain {}", update.filename),
+        })?;
     if asset.size != update.file_size {
-        return Err("Website and GitHub release sizes do not match".to_owned());
+        return Err(Error::DigestMismatch {
+            detail: format!(
+                "GitHub asset size {} differs from website size {}",
+                asset.size, update.file_size
+            ),
+        });
     }
     let expected = format!("sha256:{}", update.checksum);
     if asset.digest.as_deref() != Some(expected.as_str()) {
-        return Err("Website and GitHub release checksums do not match".to_owned());
+        return Err(Error::DigestMismatch {
+            detail: "GitHub asset checksum differs from website checksum".to_owned(),
+        });
     }
     Ok(())
 }
@@ -295,41 +353,37 @@ async fn record_download_ready(update: &UpdateInfo, path: &Path) {
     .await;
 }
 
-async fn record_download_failure(update: &UpdateInfo, error: &str) {
+async fn record_download_failure(update: &UpdateInfo, error: &Error) {
     mutate_state(|state| {
         if state.download_progress.version.as_deref() == Some(update.version.as_str()) {
             state.phase = UpdatePhase::Failed;
             state.download_progress.downloading = false;
             state.download_progress.completed = false;
-            state.download_progress.error = Some(error.to_owned());
+            state.download_progress.error = Some(error.to_string());
             state.download_progress.downloaded_path = None;
         }
     })
     .await;
 }
 
-fn get_download_dir() -> Result<PathBuf, String> {
+fn get_download_dir() -> Result<PathBuf> {
     let dir = crate::paths::get_data_directory().join("updates");
     std::fs::create_dir_all(&dir)
-        .map_err(|error| format!("Failed to create update directory: {error}"))?;
+        .map_err(|error| Error::Io(crate::errors::IoError::from(error)))?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700))
-            .map_err(|error| format!("Failed to secure update directory: {error}"))?;
+            .map_err(|error| Error::Io(crate::errors::IoError::from(error)))?;
     }
     Ok(dir)
 }
 
-async fn file_matches(
-    path: &Path,
-    expected_size: u64,
-    expected_checksum: &str,
-) -> Result<bool, String> {
+async fn file_matches(path: &Path, expected_size: u64, expected_checksum: &str) -> Result<bool> {
     let metadata = match tokio::fs::metadata(path).await {
         Ok(metadata) => metadata,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
-        Err(error) => return Err(format!("Failed to inspect staged update: {error}")),
+        Err(error) => return Err(Error::Io(crate::errors::IoError::from(error))),
     };
     if !metadata.is_file() || metadata.len() != expected_size {
         return Ok(false);
@@ -337,24 +391,24 @@ async fn file_matches(
     Ok(calculate_sha256_async(path.to_owned()).await? == expected_checksum)
 }
 
-async fn calculate_sha256_async(path: PathBuf) -> Result<String, String> {
+async fn calculate_sha256_async(path: PathBuf) -> Result<String> {
     tokio::task::spawn_blocking(move || calculate_sha256(&path))
         .await
-        .map_err(|error| format!("Checksum task failed: {error}"))?
+        .map_err(|error| Error::Internal(crate::errors::InternalError::from(error)))?
 }
 
-fn calculate_sha256(path: &Path) -> Result<String, String> {
+fn calculate_sha256(path: &Path) -> Result<String> {
     use sha2::{Digest, Sha256};
     use std::io::Read;
 
     let mut file = std::fs::File::open(path)
-        .map_err(|error| format!("Failed to open update for checksum: {error}"))?;
+        .map_err(|error| Error::Io(crate::errors::IoError::from(error)))?;
     let mut hasher = Sha256::new();
     let mut buffer = [0_u8; 64 * 1024];
     loop {
         let read = file
             .read(&mut buffer)
-            .map_err(|error| format!("Failed to read update for checksum: {error}"))?;
+            .map_err(|error| Error::Io(crate::errors::IoError::from(error)))?;
         if read == 0 {
             break;
         }
@@ -363,37 +417,42 @@ fn calculate_sha256(path: &Path) -> Result<String, String> {
     Ok(format!("{:x}", hasher.finalize()))
 }
 
-pub async fn prepare_install() -> Result<String, String> {
+pub async fn prepare_install() -> Result<String> {
     if !crate::arguments::is_gui_enabled() {
-        return Err(
-            "Headless updates must be installed with screenerbot-manager update".to_owned(),
-        );
+        return Err(Error::UnsupportedInstall {
+            detail: "headless updates must be installed with screenerbot-manager update".to_owned(),
+        });
     }
 
     let (update, path) = {
         let state = super::get_update_state().await;
-        let update = state
-            .available_update
-            .ok_or_else(|| "No update is currently available".to_owned())?;
+        let update = state.available_update.ok_or(Error::NoUpdateAvailable)?;
         let progress = state.download_progress;
         if state.phase != UpdatePhase::Ready
             || !progress.completed
             || progress.version.as_deref() != Some(update.version.as_str())
             || progress.checksum.as_deref() != Some(update.checksum.as_str())
         {
-            return Err("The staged installer does not match the available update".to_owned());
+            return Err(Error::DigestMismatch {
+                detail: "staged installer metadata does not match the available update".to_owned(),
+            });
         }
-        let path = PathBuf::from(
-            progress
-                .downloaded_path
-                .ok_or_else(|| "The staged installer path is missing".to_owned())?,
-        );
+        let path =
+            PathBuf::from(
+                progress
+                    .downloaded_path
+                    .ok_or_else(|| Error::DigestMismatch {
+                        detail: "staged installer path is missing".to_owned(),
+                    })?,
+            );
         (update, path)
     };
 
     let expected_path = get_download_dir()?.join(&update.filename);
     if path != expected_path || !file_matches(&path, update.file_size, &update.checksum).await? {
-        return Err("The staged installer failed final integrity verification".to_owned());
+        return Err(Error::DigestMismatch {
+            detail: "staged installer failed final integrity verification".to_owned(),
+        });
     }
 
     let client = build_update_client()?;
@@ -403,13 +462,15 @@ pub async fn prepare_install() -> Result<String, String> {
     Ok(path.to_string_lossy().into_owned())
 }
 
-fn open_installer(path: &Path) -> Result<(), String> {
+fn open_installer(path: &Path) -> Result<()> {
     #[cfg(target_os = "macos")]
     let mut command = std::process::Command::new("open");
     #[cfg(target_os = "windows")]
     let mut command = {
         if path.extension().and_then(|value| value.to_str()) != Some("msi") {
-            return Err("Windows updates require an .msi installer".to_owned());
+            return Err(Error::UnsupportedInstall {
+                detail: "Windows updates require an .msi installer".to_owned(),
+            });
         }
         let mut command = std::process::Command::new("msiexec.exe");
         command.arg("/i");
@@ -418,17 +479,21 @@ fn open_installer(path: &Path) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     let mut command = {
         if path.extension().and_then(|value| value.to_str()) != Some("deb") {
-            return Err("Linux desktop updates require a .deb installer".to_owned());
+            return Err(Error::UnsupportedInstall {
+                detail: "Linux desktop updates require a .deb installer".to_owned(),
+            });
         }
         std::process::Command::new("xdg-open")
     };
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
-    return Err("This operating system has no update installer adapter".to_owned());
+    return Err(Error::UnsupportedInstall {
+        detail: "this operating system has no update installer adapter".to_owned(),
+    });
 
     command
         .arg(path)
         .spawn()
-        .map_err(|error| format!("Failed to open update installer: {error}"))?;
+        .map_err(|error| Error::Io(crate::errors::IoError::from(error)))?;
     Ok(())
 }
 

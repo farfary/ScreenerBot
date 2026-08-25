@@ -945,6 +945,7 @@ const MIGRATED_TO_TYPED_ERRORS: &[&str] = &[
     "actions",
     "strategies",
     "events",
+    "version",
 ];
 
 /// True when `line` declares a two-parameter `Result<_, String>` — a signature

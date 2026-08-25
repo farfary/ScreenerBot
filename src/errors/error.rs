@@ -71,6 +71,10 @@ pub enum Error {
     #[error(transparent)]
     Events(#[from] crate::events::Error),
 
+    /// Application update checking, download, and installer staging errors.
+    #[error(transparent)]
+    Version(#[from] crate::version::Error),
+
     /// ScreenerBot account / sign-in errors.
     #[error(transparent)]
     Account(#[from] AccountError),

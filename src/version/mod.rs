@@ -2,10 +2,12 @@
 
 mod checker;
 mod download;
+mod error;
 pub mod types;
 
 pub use checker::{check_for_update, start_update_check_service};
 pub use download::{prepare_install, start_download};
+pub use error::{Error, Result};
 pub use types::*;
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -90,17 +92,24 @@ fn normalize_loaded_state(state: &mut UpdateState) {
 }
 
 async fn persist_state(snapshot: UpdateState) {
-    let result = tokio::task::spawn_blocking(move || -> Result<(), String> {
+    let result = tokio::task::spawn_blocking(move || -> Result<()> {
         let path = state_path();
-        let parent = path
-            .parent()
-            .ok_or_else(|| "Update state path has no parent".to_owned())?;
+        let parent = path.parent().ok_or_else(|| {
+            Error::Data(crate::errors::DataError::InvalidFormat {
+                expected: "update state path with a parent directory".to_owned(),
+                received: path.display().to_string(),
+            })
+        })?;
         std::fs::create_dir_all(parent)
-            .map_err(|error| format!("Failed to create update state directory: {error}"))?;
+            .map_err(|error| Error::Io(crate::errors::IoError::from(error)))?;
 
         let temporary = path.with_extension("json.part");
-        let bytes = serde_json::to_vec_pretty(&snapshot)
-            .map_err(|error| format!("Failed to serialize update state: {error}"))?;
+        let bytes = serde_json::to_vec_pretty(&snapshot).map_err(|error| {
+            Error::Data(crate::errors::DataError::ParseError {
+                data_type: "update state".to_owned(),
+                error: error.to_string(),
+            })
+        })?;
 
         #[cfg(unix)]
         {
@@ -112,17 +121,17 @@ async fn persist_state(snapshot: UpdateState) {
                 .write(true)
                 .mode(0o600)
                 .open(&temporary)
-                .map_err(|error| format!("Failed to create update state: {error}"))?;
+                .map_err(|error| Error::Io(crate::errors::IoError::from(error)))?;
             file.write_all(&bytes)
                 .and_then(|_| file.sync_all())
-                .map_err(|error| format!("Failed to write update state: {error}"))?;
+                .map_err(|error| Error::Io(crate::errors::IoError::from(error)))?;
         }
         #[cfg(not(unix))]
         std::fs::write(&temporary, bytes)
-            .map_err(|error| format!("Failed to write update state: {error}"))?;
+            .map_err(|error| Error::Io(crate::errors::IoError::from(error)))?;
 
         std::fs::rename(&temporary, &path)
-            .map_err(|error| format!("Failed to commit update state: {error}"))?;
+            .map_err(|error| Error::Io(crate::errors::IoError::from(error)))?;
         Ok(())
     })
     .await;
@@ -130,7 +139,7 @@ async fn persist_state(snapshot: UpdateState) {
     let error = match result {
         Ok(Ok(())) => return,
         Ok(Err(error)) => error,
-        Err(error) => format!("Update state persistence task failed: {error}"),
+        Err(error) => Error::Internal(crate::errors::InternalError::from(error)),
     };
     crate::logger::warning(
         crate::logger::LogTag::System,
@@ -152,9 +161,9 @@ where
     snapshot
 }
 
-async fn mutate_state_with_result<F, T>(mutator: F) -> Result<T, String>
+async fn mutate_state_with_result<F, T>(mutator: F) -> Result<T>
 where
-    F: FnOnce(&mut UpdateState) -> Result<T, String>,
+    F: FnOnce(&mut UpdateState) -> Result<T>,
 {
     let mut state = state_lock().await.write().await;
     let value = mutator(&mut state)?;

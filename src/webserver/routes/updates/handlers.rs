@@ -54,7 +54,7 @@ pub(super) async fn check_updates() -> Response {
             error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "UPDATE_CHECK_FAILED",
-                &e,
+                &e.to_string(),
                 None,
             )
         }
@@ -94,7 +94,12 @@ pub(super) async fn download_update(Json(body): Json<DownloadRequest>) -> Respon
     let version_str = update.version.clone();
 
     if let Err(e) = version::start_download(update).await {
-        return error_response(StatusCode::CONFLICT, "DOWNLOAD_NOT_STARTED", &e, None);
+        return error_response(
+            StatusCode::CONFLICT,
+            "DOWNLOAD_NOT_STARTED",
+            &e.to_string(),
+            None,
+        );
     }
 
     success_response(DownloadResponse {
