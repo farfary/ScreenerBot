@@ -111,7 +111,7 @@ pub async fn run_refresh_loop(
             }
             Err(err) => {
                 errors.fetch_add(1, Ordering::Relaxed);
-                logger::warning(LogTag::Filtering, &err);
+                logger::warning(LogTag::Filtering, &err.to_string());
                 if check_shutdown_or_delay(&shutdown, Duration::from_secs(3)).await {
                     break;
                 }

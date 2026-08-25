@@ -145,7 +145,7 @@ async fn process_activity(
             .await
             .map_err(|e| crate::trader::Error::Dependency {
                 dependency: "filtering",
-                detail: e,
+                detail: e.to_string(),
             })?
             .iter()
             .any(|passed| passed == mint)

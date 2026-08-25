@@ -55,6 +55,10 @@ pub enum Error {
     #[error(transparent)]
     Telegram(#[from] crate::telegram::Error),
 
+    /// Filtering snapshot and token-query errors.
+    #[error(transparent)]
+    Filtering(#[from] crate::filtering::Error),
+
     /// ScreenerBot account / sign-in errors.
     #[error(transparent)]
     Account(#[from] AccountError),

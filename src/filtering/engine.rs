@@ -23,6 +23,7 @@ use super::types::{
     BlacklistReasonInfo, FilteringSnapshot, PassedToken, RejectedToken, TokenEntry,
     MAX_DECISION_HISTORY,
 };
+use super::{Error, Result};
 
 const MIN_VALID_BLOCKCHAIN_TIMESTAMP: i64 = 1; // Avoid 0/invalid timestamps from market APIs
 
@@ -30,7 +31,7 @@ const MIN_VALID_BLOCKCHAIN_TIMESTAMP: i64 = 1; // Avoid 0/invalid timestamps fro
 pub async fn compute_snapshot(
     config: FilteringConfig,
     previous: Option<&FilteringSnapshot>,
-) -> Result<FilteringSnapshot, String> {
+) -> Result<FilteringSnapshot> {
     let start = StdInstant::now();
 
     // INFO: Record snapshot computation start
@@ -46,9 +47,13 @@ pub async fn compute_snapshot(
     // PERF: Load tokens with market data only (reduces 144k -> ~56k tokens)
     // Tokens without DexScreener/GeckoTerminal data are immediately rejected anyway
     let load_start = StdInstant::now();
-    let mut tokens = get_all_tokens_for_filtering_async()
-        .await
-        .map_err(|e| format!("Failed to batch load tokens: {e}"))?;
+    let mut tokens =
+        get_all_tokens_for_filtering_async()
+            .await
+            .map_err(|e| Error::TokenSetLoad {
+                kind: "batch filtering",
+                source: e,
+            })?;
 
     let load_duration_ms = load_start.elapsed().as_millis();
     let total_candidates = tokens.len();
@@ -558,7 +563,7 @@ pub async fn compute_snapshot(
 pub async fn apply_all_filters(
     token: &Token,
     config: &FilteringConfig,
-) -> Result<(), FilterRejectionReason> {
+) -> std::result::Result<(), FilterRejectionReason> {
     sources::meta::evaluate(token, config).await?;
 
     // On-chain scam detection — fast, zero-cost, catches obvious scams

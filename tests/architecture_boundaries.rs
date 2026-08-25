@@ -930,6 +930,7 @@ fn chain_parameter_values_have_exactly_one_owning_const() {
 const MIGRATED_TO_TYPED_ERRORS: &[&str] = &[
     "ohlcvs",
     "swaps",
+    "filtering",
     "positions",
     "transactions",
     "trader",

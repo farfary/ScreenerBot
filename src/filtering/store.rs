@@ -23,6 +23,7 @@ use super::types::{
     BlacklistReasonInfo, FilteringQuery, FilteringQueryResult, FilteringSnapshot,
     FilteringStatsSnapshot, FilteringView, PassedToken, RejectedToken, SortDirection, TokenSortKey,
 };
+use super::{Error, Result};
 
 static GLOBAL_STORE: LazyLock<Arc<FilteringStore>> =
     LazyLock::new(|| Arc::new(FilteringStore::new()));
@@ -54,7 +55,7 @@ impl FilteringStore {
     /// That wait is the right trade for a surface that is nothing but filtering results —
     /// the tokens tab has nothing to show without it. It is the wrong trade for a caller
     /// that only wants counts; use [`Self::snapshot_if_ready`] there.
-    async fn ensure_snapshot(&self) -> Result<Arc<FilteringSnapshot>, String> {
+    async fn ensure_snapshot(&self) -> Result<Arc<FilteringSnapshot>> {
         let stale_snapshot = self.snapshot.read().await.clone();
 
         // If we have any snapshot (even stale), return it immediately
@@ -71,7 +72,9 @@ impl FilteringStore {
         match tokio::time::timeout(Duration::from_secs(30), self.try_refresh()).await {
             Ok(Ok(snapshot)) => Ok(snapshot),
             Ok(Err(err)) => Err(err),
-            Err(_) => Err("Snapshot refresh timed out after 30 seconds".to_owned()),
+            Err(_) => Err(Error::Internal(crate::errors::InternalError::Timeout {
+                message: "filtering snapshot refresh timed out after 30 seconds".to_owned(),
+            })),
         }
     }
 
@@ -116,7 +119,7 @@ impl FilteringStore {
     }
 
     /// Background refresh - doesn't block, logs errors instead of returning them
-    async fn try_refresh_background(&self) -> Result<(), String> {
+    async fn try_refresh_background(&self) -> Result<()> {
         // Check if refresh is already in progress
         if self.refresh_in_progress.swap(true, AtomicOrdering::SeqCst) {
             logger::debug(LogTag::Filtering, "Skipping refresh - already in progress");
@@ -137,7 +140,7 @@ impl FilteringStore {
         result.map(|_| ())
     }
 
-    async fn try_refresh(&self) -> Result<Arc<FilteringSnapshot>, String> {
+    async fn try_refresh(&self) -> Result<Arc<FilteringSnapshot>> {
         // Acquire refresh lock to prevent concurrent refreshes
         let _guard = self.refresh_lock.lock().await;
 
@@ -152,7 +155,7 @@ impl FilteringStore {
         self.try_refresh_inner().await
     }
 
-    async fn try_refresh_inner(&self) -> Result<Arc<FilteringSnapshot>, String> {
+    async fn try_refresh_inner(&self) -> Result<Arc<FilteringSnapshot>> {
         let config = crate::config::with_config(|cfg| cfg.filtering.clone());
         let previous_snapshot = {
             let guard = self.snapshot.read().await;
@@ -184,29 +187,26 @@ impl FilteringStore {
         Ok(snapshot)
     }
 
-    pub async fn refresh(&self) -> Result<(), String> {
+    pub async fn refresh(&self) -> Result<()> {
         self.try_refresh().await.map(|_| ())
     }
 
-    pub async fn get_filtered_mints(&self) -> Result<Vec<String>, String> {
+    pub async fn get_filtered_mints(&self) -> Result<Vec<String>> {
         let snapshot = self.ensure_snapshot().await?;
         Ok(snapshot.filtered_mints.clone())
     }
 
-    pub async fn get_passed_tokens(&self) -> Result<Vec<PassedToken>, String> {
+    pub async fn get_passed_tokens(&self) -> Result<Vec<PassedToken>> {
         let snapshot = self.ensure_snapshot().await?;
         Ok(snapshot.passed_tokens.clone())
     }
 
-    pub async fn get_rejected_tokens(&self) -> Result<Vec<RejectedToken>, String> {
+    pub async fn get_rejected_tokens(&self) -> Result<Vec<RejectedToken>> {
         let snapshot = self.ensure_snapshot().await?;
         Ok(snapshot.rejected_tokens.clone())
     }
 
-    pub async fn execute_query(
-        &self,
-        mut query: FilteringQuery,
-    ) -> Result<FilteringQueryResult, String> {
+    pub async fn execute_query(&self, mut query: FilteringQuery) -> Result<FilteringQueryResult> {
         let max_page_size = TOKENS_TAB_MAX_PAGE_SIZE;
         let recent_hours = TOKENS_TAB_RECENT_TOKEN_HOURS;
 
@@ -380,16 +380,16 @@ impl FilteringStore {
     }
 
     /// Execute query for "All" view by querying database directly (bypasses snapshot)
-    async fn execute_all_view_query(
-        &self,
-        query: FilteringQuery,
-    ) -> Result<FilteringQueryResult, String> {
+    async fn execute_all_view_query(&self, query: FilteringQuery) -> Result<FilteringQueryResult> {
         use crate::tokens::{count_tokens_async, get_all_tokens_optional_market_async};
 
         // Fast count query (no data loading)
         let total_count = count_tokens_async()
             .await
-            .map_err(|e| format!("Failed to count tokens: {:?}", e))?;
+            .map_err(|e| Error::TokenSetLoad {
+                kind: "all",
+                source: e,
+            })?;
 
         // Calculate pagination FIRST, then only fetch what we need
         let total_pages = if total_count == 0 {
@@ -441,7 +441,10 @@ impl FilteringStore {
         let items =
             get_all_tokens_optional_market_async(query.page_size, offset, sort_by, sort_direction)
                 .await
-                .map_err(|e| format!("Failed to get tokens from database: {:?}", e))?;
+                .map_err(|e| Error::TokenSetLoad {
+                    kind: "all",
+                    source: e,
+                })?;
 
         // Derived flags (pool price, open positions, ohlcv) come from the snapshot, but the
         // ROWS above came straight from the database — so this view has everything it needs
@@ -520,13 +523,17 @@ impl FilteringStore {
     async fn execute_no_market_view_query(
         &self,
         query: FilteringQuery,
-    ) -> Result<FilteringQueryResult, String> {
+    ) -> Result<FilteringQueryResult> {
         use crate::tokens::{count_tokens_no_market_async, get_tokens_no_market_async};
 
         // Count
-        let total_count = count_tokens_no_market_async()
-            .await
-            .map_err(|e| format!("Failed to count no-market tokens: {:?}", e))?;
+        let total_count =
+            count_tokens_no_market_async()
+                .await
+                .map_err(|e| Error::TokenSetLoad {
+                    kind: "no-market",
+                    source: e,
+                })?;
 
         let total_pages = if total_count == 0 {
             0
@@ -561,7 +568,10 @@ impl FilteringStore {
 
         let items = get_tokens_no_market_async(query.page_size, offset, sort_by, sort_direction)
             .await
-            .map_err(|e| format!("Failed to load no-market tokens: {:?}", e))?;
+            .map_err(|e| Error::TokenSetLoad {
+                kind: "no-market",
+                source: e,
+            })?;
 
         // Snapshot for timestamp and derived counts — read only if one already exists, for
         // the same reason as the All view: the rows are database-backed and the snapshot
@@ -625,7 +635,7 @@ impl FilteringStore {
             blacklist_reasons,
         })
     }
-    pub async fn get_stats(&self) -> Result<FilteringStatsSnapshot, String> {
+    pub async fn get_stats(&self) -> Result<FilteringStatsSnapshot> {
         let snapshot = self.ensure_snapshot().await?;
         Ok(build_stats(snapshot.as_ref()).await)
     }
@@ -651,32 +661,32 @@ pub fn global_store() -> Arc<FilteringStore> {
 }
 
 /// Refresh the filtering snapshot with current token data.
-pub async fn refresh_snapshot() -> Result<(), String> {
+pub async fn refresh_snapshot() -> Result<()> {
     global_store().refresh().await
 }
 
 /// Get the list of mint addresses that passed all filters.
-pub async fn get_filtered_mints() -> Result<Vec<String>, String> {
+pub async fn get_filtered_mints() -> Result<Vec<String>> {
     global_store().get_filtered_mints().await
 }
 
 /// Get detailed info for tokens that passed all filters.
-pub async fn get_passed_tokens() -> Result<Vec<PassedToken>, String> {
+pub async fn get_passed_tokens() -> Result<Vec<PassedToken>> {
     global_store().get_passed_tokens().await
 }
 
 /// Get detailed info for tokens that were rejected by filters.
-pub async fn get_rejected_tokens() -> Result<Vec<RejectedToken>, String> {
+pub async fn get_rejected_tokens() -> Result<Vec<RejectedToken>> {
     global_store().get_rejected_tokens().await
 }
 
 /// Execute a filtering query with custom parameters.
-pub async fn execute_query(query: FilteringQuery) -> Result<FilteringQueryResult, String> {
+pub async fn execute_query(query: FilteringQuery) -> Result<FilteringQueryResult> {
     global_store().execute_query(query).await
 }
 
 /// Get aggregated filtering statistics.
-pub async fn get_stats() -> Result<FilteringStatsSnapshot, String> {
+pub async fn get_stats() -> Result<FilteringStatsSnapshot> {
     global_store().get_stats().await
 }
 
