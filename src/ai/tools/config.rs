@@ -191,11 +191,7 @@ fn update_trader_config(key: &str, value: serde_json::Value) -> crate::ai::Resul
                     cfg.trader.enabled = val;
                 },
                 true,
-            )
-            .map_err(|detail| Error::Dependency {
-                dependency: "config".to_owned(),
-                detail,
-            })?;
+            )?;
             Ok(format!("Updated trader enabled to {val}"))
         }
         "max_open_positions" => {
@@ -212,11 +208,7 @@ fn update_trader_config(key: &str, value: serde_json::Value) -> crate::ai::Resul
                     cfg.trader.max_open_positions = val as usize;
                 },
                 true,
-            )
-            .map_err(|detail| Error::Dependency {
-                dependency: "config".to_owned(),
-                detail,
-            })?;
+            )?;
             Ok(format!("Updated max_open_positions to {val}"))
         }
         "trade_size_sol" => {
@@ -233,11 +225,7 @@ fn update_trader_config(key: &str, value: serde_json::Value) -> crate::ai::Resul
                     cfg.trader.trade_size_sol = val;
                 },
                 true,
-            )
-            .map_err(|detail| Error::Dependency {
-                dependency: "config".to_owned(),
-                detail,
-            })?;
+            )?;
             Ok(format!("Updated trade_size_sol to {val}"))
         }
         _ => Err(Error::InvalidParameters {
@@ -257,11 +245,7 @@ fn update_filters_config(key: &str, value: serde_json::Value) -> crate::ai::Resu
                     cfg.filtering.age_enabled = val;
                 },
                 true,
-            )
-            .map_err(|detail| Error::Dependency {
-                dependency: "config".to_owned(),
-                detail,
-            })?;
+            )?;
             Ok(format!("Updated age filtering enabled to {val}"))
         }
         "cooldown_enabled" => {
@@ -273,11 +257,7 @@ fn update_filters_config(key: &str, value: serde_json::Value) -> crate::ai::Resu
                     cfg.filtering.cooldown_enabled = val;
                 },
                 true,
-            )
-            .map_err(|detail| Error::Dependency {
-                dependency: "config".to_owned(),
-                detail,
-            })?;
+            )?;
             Ok(format!("Updated cooldown filtering enabled to {val}"))
         }
         _ => Err(Error::InvalidParameters {
@@ -297,11 +277,7 @@ fn update_telegram_config(key: &str, value: serde_json::Value) -> crate::ai::Res
                     cfg.telegram.enabled = val;
                 },
                 true,
-            )
-            .map_err(|detail| Error::Dependency {
-                dependency: "config".to_owned(),
-                detail,
-            })?;
+            )?;
             Ok(format!("Updated telegram enabled to {val}"))
         }
         _ => Err(Error::InvalidParameters {
@@ -321,11 +297,7 @@ fn update_ai_config(key: &str, value: serde_json::Value) -> crate::ai::Result<St
                     cfg.ai.enabled = val;
                 },
                 true,
-            )
-            .map_err(|detail| Error::Dependency {
-                dependency: "config".to_owned(),
-                detail,
-            })?;
+            )?;
             Ok(format!("Updated AI enabled to {val}"))
         }
         _ => Err(Error::InvalidParameters {

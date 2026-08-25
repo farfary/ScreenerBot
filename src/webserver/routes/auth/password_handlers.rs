@@ -60,7 +60,7 @@ pub async fn set_password(Json(req): Json<SetPasswordRequest>) -> Response {
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "CONFIG_ERROR",
                 "Failed to save configuration",
-                Some(&e),
+                Some(&e.to_string()),
             );
         }
 
@@ -118,7 +118,7 @@ pub async fn set_password(Json(req): Json<SetPasswordRequest>) -> Response {
             StatusCode::INTERNAL_SERVER_ERROR,
             "CONFIG_ERROR",
             "Failed to save configuration",
-            Some(&e),
+            Some(&e.to_string()),
         );
     }
 

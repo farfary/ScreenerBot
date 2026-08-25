@@ -121,7 +121,7 @@ pub async fn totp_verify_setup(Json(req): Json<TotpVerifySetupRequest>) -> Respo
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "CONFIG_ERROR",
                     "Failed to save TOTP configuration",
-                    Some(&e),
+                    Some(&e.to_string()),
                 );
             }
 
@@ -141,7 +141,7 @@ pub async fn totp_verify_setup(Json(req): Json<TotpVerifySetupRequest>) -> Respo
             StatusCode::INTERNAL_SERVER_ERROR,
             "TOTP_ERROR",
             "Failed to verify code",
-            Some(&e),
+            Some(&e.to_string()),
         ),
     }
 }
@@ -179,7 +179,7 @@ pub async fn totp_disable(Json(req): Json<TotpDisableRequest>) -> Response {
             StatusCode::INTERNAL_SERVER_ERROR,
             "CONFIG_ERROR",
             "Failed to save configuration",
-            Some(&e),
+            Some(&e.to_string()),
         );
     }
 

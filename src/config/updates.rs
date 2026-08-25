@@ -2,6 +2,8 @@
 
 use super::schemas::Config;
 use super::utils::{save_config, validate_config, with_config, CONFIG};
+use super::{Error, Result};
+use crate::errors::ConfigurationError;
 use crate::logger::{self, LogTag};
 
 /// Update a config section in-memory and optionally save to disk
@@ -30,18 +32,18 @@ use crate::logger::{self, LogTag};
 /// true // Save to disk
 /// )?;
 /// ```
-pub fn update_config_section<F>(update_fn: F, save_to_disk: bool) -> Result<(), String>
+pub fn update_config_section<F>(update_fn: F, save_to_disk: bool) -> Result<()>
 where
     F: FnOnce(&mut Config),
 {
-    let config_lock = CONFIG
-        .get()
-        .ok_or("Config not initialized. Call load_config() first.")?;
+    let config_lock = CONFIG.get().ok_or(Error::NotLoaded)?;
 
     {
         let mut config = config_lock
             .write()
-            .map_err(|e| format!("Failed to acquire config write lock: {e}"))?;
+            .map_err(|e| ConfigurationError::Generic {
+                message: format!("Failed to acquire config write lock: {e}"),
+            })?;
 
         // Apply the update
         update_fn(&mut config);
@@ -84,7 +86,7 @@ pub fn update_with_diff<F, T>(
     get_section: impl Fn(&Config) -> T,
     update_fn: F,
     save_to_disk: bool,
-) -> Result<(T, T), String>
+) -> Result<(T, T)>
 where
     F: FnOnce(&mut Config),
     T: Clone,
@@ -116,7 +118,7 @@ where
 ///
 /// reset_config_to_defaults_preserving_credentials()?;
 /// ```
-pub fn reset_config_to_defaults_preserving_credentials() -> Result<(), String> {
+pub fn reset_config_to_defaults_preserving_credentials() -> Result<()> {
     logger::info(LogTag::System, "Resetting configuration to defaults...");
 
     // 1. Capture current encrypted wallet and RPC URLs

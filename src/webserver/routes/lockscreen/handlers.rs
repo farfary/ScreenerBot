@@ -138,7 +138,7 @@ pub(super) async fn set_password(Json(req): Json<SetPasswordRequest>) -> Respons
             StatusCode::INTERNAL_SERVER_ERROR,
             "CONFIG_ERROR",
             "Failed to save configuration",
-            Some(&e),
+            Some(&e.to_string()),
         );
     }
 
@@ -193,7 +193,7 @@ pub(super) async fn clear_password(Json(req): Json<ClearPasswordRequest>) -> Res
             StatusCode::INTERNAL_SERVER_ERROR,
             "CONFIG_ERROR",
             "Failed to save configuration",
-            Some(&e),
+            Some(&e.to_string()),
         );
     }
 
@@ -240,7 +240,7 @@ pub(super) async fn update_settings(Json(req): Json<UpdateSettingsRequest>) -> R
             StatusCode::INTERNAL_SERVER_ERROR,
             "CONFIG_ERROR",
             "Failed to save configuration",
-            Some(&e),
+            Some(&e.to_string()),
         );
     }
 

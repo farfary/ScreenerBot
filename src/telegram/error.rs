@@ -12,6 +12,9 @@ pub enum Error {
     /// violation, not a data problem.
     #[error(transparent)]
     Internal(#[from] InternalError),
+    /// Updating configuration failed.
+    #[error(transparent)]
+    Config(#[from] crate::config::Error),
 
     /// The bot has no usable token/chat ID configured yet, or the global
     /// bot/notifier instance has not been initialised.
@@ -47,9 +50,6 @@ pub enum Error {
     /// A discovered-chat lookup by ID found nothing.
     #[error("chat {chat_id} was not found in the discovered list")]
     ChatNotFound { chat_id: i64 },
-    /// Persisting a config change (e.g. the selected chat ID) failed.
-    #[error("could not update configuration: {detail}")]
-    ConfigUpdateFailed { detail: String },
 }
 
 /// Result alias for the telegram module.
@@ -59,6 +59,7 @@ impl ErrorClass for Error {
     fn is_retryable(&self) -> bool {
         match self {
             Error::Internal(e) => e.is_retryable(),
+            Error::Config(e) => e.is_retryable(),
             Error::SendFailed { .. } => true,
             Error::NotConfigured
             | Error::InvalidBotToken { .. }
@@ -69,14 +70,14 @@ impl ErrorClass for Error {
             | Error::TotpNotConfigured
             | Error::TotpVerificationFailed { .. }
             | Error::DiscoveryAlreadyRunning
-            | Error::ChatNotFound { .. }
-            | Error::ConfigUpdateFailed { .. } => false,
+            | Error::ChatNotFound { .. } => false,
         }
     }
 
     fn retry_after(&self) -> Option<Duration> {
         match self {
             Error::Internal(e) => e.retry_after(),
+            Error::Config(e) => e.retry_after(),
             Error::SendFailed { .. } => Some(Duration::from_secs(1)),
             Error::AccountLocked { remaining_secs } => Some(Duration::from_secs(*remaining_secs)),
             _ => None,
@@ -86,6 +87,7 @@ impl ErrorClass for Error {
     fn severity(&self) -> Severity {
         match self {
             Error::Internal(e) => e.severity(),
+            Error::Config(e) => e.severity(),
             Error::NotConfigured => Severity::Warning,
             Error::InvalidBotToken { .. } => Severity::Critical,
             Error::InvalidChatId { .. } => Severity::Error,
@@ -97,13 +99,13 @@ impl ErrorClass for Error {
             Error::TotpVerificationFailed { .. } => Severity::Error,
             Error::DiscoveryAlreadyRunning => Severity::Info,
             Error::ChatNotFound { .. } => Severity::Warning,
-            Error::ConfigUpdateFailed { .. } => Severity::Error,
         }
     }
 
     fn http_status(&self) -> u16 {
         match self {
             Error::Internal(e) => e.http_status(),
+            Error::Config(e) => e.http_status(),
             Error::NotConfigured => 503,
             Error::InvalidBotToken { .. } => 401,
             Error::InvalidChatId { .. } => 400,
@@ -115,7 +117,6 @@ impl ErrorClass for Error {
             Error::TotpVerificationFailed { .. } => 502,
             Error::DiscoveryAlreadyRunning => 409,
             Error::ChatNotFound { .. } => 404,
-            Error::ConfigUpdateFailed { .. } => 502,
         }
     }
 }

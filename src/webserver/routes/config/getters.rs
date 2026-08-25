@@ -410,7 +410,9 @@ where
                         cfg.trader = new_config;
                     },
                     true,
-                )?;
+                )
+                // SEAM: webserver still returns String errors; removed when it migrates.
+                .map_err(|e| e.to_string())?;
             }
             "PositionsConfig" => {
                 let new_config: config::PositionsConfig = serde_json::from_value(section_json)
@@ -420,7 +422,9 @@ where
                         cfg.positions = new_config;
                     },
                     true,
-                )?;
+                )
+                // SEAM: webserver still returns String errors; removed when it migrates.
+                .map_err(|e| e.to_string())?;
             }
             "FilteringConfig" => {
                 let new_config: config::FilteringConfig = serde_json::from_value(section_json)
@@ -430,7 +434,9 @@ where
                         cfg.filtering = new_config;
                     },
                     true,
-                )?;
+                )
+                // SEAM: webserver still returns String errors; removed when it migrates.
+                .map_err(|e| e.to_string())?;
             }
             "SwapsConfig" => {
                 let new_config: config::SwapsConfig = serde_json::from_value(section_json)
@@ -440,7 +446,9 @@ where
                         cfg.swaps = new_config;
                     },
                     true,
-                )?;
+                )
+                // SEAM: webserver still returns String errors; removed when it migrates.
+                .map_err(|e| e.to_string())?;
             }
             "TokensConfig" => {
                 let new_config: config::TokensConfig = serde_json::from_value(section_json)
@@ -450,7 +458,9 @@ where
                         cfg.tokens = new_config;
                     },
                     true,
-                )?;
+                )
+                // SEAM: webserver still returns String errors; removed when it migrates.
+                .map_err(|e| e.to_string())?;
             }
             "PoolsConfig" => {
                 let new_config: config::PoolsConfig = serde_json::from_value(section_json)
@@ -460,7 +470,9 @@ where
                         cfg.pools = new_config;
                     },
                     true,
-                )?;
+                )
+                // SEAM: webserver still returns String errors; removed when it migrates.
+                .map_err(|e| e.to_string())?;
             }
             "MaintenanceConfig" => {
                 let new_config: config::MaintenanceConfig = serde_json::from_value(section_json)
@@ -470,7 +482,9 @@ where
                         cfg.maintenance = new_config;
                     },
                     true,
-                )?;
+                )
+                // SEAM: webserver still returns String errors; removed when it migrates.
+                .map_err(|e| e.to_string())?;
             }
             "RpcConfig" => {
                 let new_config: config::RpcConfig = serde_json::from_value(section_json)
@@ -480,7 +494,9 @@ where
                         cfg.rpc = new_config;
                     },
                     true,
-                )?;
+                )
+                // SEAM: webserver still returns String errors; removed when it migrates.
+                .map_err(|e| e.to_string())?;
             }
             "SolPriceConfig" => {
                 let new_config: config::SolPriceConfig = serde_json::from_value(section_json)
@@ -490,7 +506,9 @@ where
                         cfg.sol_price = new_config;
                     },
                     true,
-                )?;
+                )
+                // SEAM: webserver still returns String errors; removed when it migrates.
+                .map_err(|e| e.to_string())?;
             }
             "EventsConfig" => {
                 let new_config: config::EventsConfig = serde_json::from_value(section_json)
@@ -500,7 +518,9 @@ where
                         cfg.events = new_config;
                     },
                     true,
-                )?;
+                )
+                // SEAM: webserver still returns String errors; removed when it migrates.
+                .map_err(|e| e.to_string())?;
             }
             "ServicesConfig" => {
                 let new_config: config::ServicesConfig = serde_json::from_value(section_json)
@@ -510,7 +530,9 @@ where
                         cfg.services = new_config;
                     },
                     true,
-                )?;
+                )
+                // SEAM: webserver still returns String errors; removed when it migrates.
+                .map_err(|e| e.to_string())?;
             }
             "MonitoringConfig" => {
                 let new_config: config::MonitoringConfig = serde_json::from_value(section_json)
@@ -520,7 +542,9 @@ where
                         cfg.monitoring = new_config;
                     },
                     true,
-                )?;
+                )
+                // SEAM: webserver still returns String errors; removed when it migrates.
+                .map_err(|e| e.to_string())?;
             }
             "OhlcvConfig" => {
                 let new_config: config::OhlcvConfig = serde_json::from_value(section_json)
@@ -530,7 +554,9 @@ where
                         cfg.ohlcv = new_config;
                     },
                     true,
-                )?;
+                )
+                // SEAM: webserver still returns String errors; removed when it migrates.
+                .map_err(|e| e.to_string())?;
             }
             "GuiConfig" => {
                 let new_config: config::GuiConfig = serde_json::from_value(section_json)
@@ -540,7 +566,9 @@ where
                         cfg.gui = new_config;
                     },
                     true,
-                )?;
+                )
+                // SEAM: webserver still returns String errors; removed when it migrates.
+                .map_err(|e| e.to_string())?;
             }
             "TelegramConfig" => {
                 let new_config: config::TelegramConfig = serde_json::from_value(section_json)
@@ -550,7 +578,9 @@ where
                         cfg.telegram = new_config;
                     },
                     true,
-                )?;
+                )
+                // SEAM: webserver still returns String errors; removed when it migrates.
+                .map_err(|e| e.to_string())?;
             }
             "AiConfig" => {
                 let new_config: config::AiConfig = serde_json::from_value(section_json)
@@ -560,7 +590,9 @@ where
                         cfg.ai = new_config;
                     },
                     true,
-                )?;
+                )
+                // SEAM: webserver still returns String errors; removed when it migrates.
+                .map_err(|e| e.to_string())?;
             }
             "StrategiesConfig" => {
                 let new_config: config::StrategiesConfig = serde_json::from_value(section_json)
@@ -570,7 +602,9 @@ where
                         cfg.strategies = new_config;
                     },
                     true,
-                )?;
+                )
+                // SEAM: webserver still returns String errors; removed when it migrates.
+                .map_err(|e| e.to_string())?;
             }
             "HolderWatchConfig" => {
                 let new_config: config::HolderWatchConfig = serde_json::from_value(section_json)
@@ -580,7 +614,9 @@ where
                         cfg.holder_watch = new_config;
                     },
                     true,
-                )?;
+                )
+                // SEAM: webserver still returns String errors; removed when it migrates.
+                .map_err(|e| e.to_string())?;
             }
             "WalletConfig" => {
                 let new_config: config::WalletConfig = serde_json::from_value(section_json)
@@ -590,7 +626,9 @@ where
                         cfg.wallet = new_config;
                     },
                     true,
-                )?;
+                )
+                // SEAM: webserver still returns String errors; removed when it migrates.
+                .map_err(|e| e.to_string())?;
             }
             "WebserverConfig" => {
                 let new_config: config::WebserverConfig = serde_json::from_value(section_json)
@@ -600,13 +638,18 @@ where
                         cfg.webserver = new_config;
                     },
                     true,
-                )?;
+                )
+                // SEAM: webserver still returns String errors; removed when it migrates.
+                .map_err(|e| e.to_string())?;
             }
             "CopyTradingConfig" => {
                 let new_config: config::CopyTradingConfig = serde_json::from_value(section_json)
                     .map_err(|e| format!("Invalid CopyTradingConfig: {e}"))?;
-                new_config.validate()?;
-                config::update_config_section(|cfg| cfg.copy_trading = new_config, true)?;
+                // SEAM: webserver still returns String errors; removed when it migrates.
+                new_config.validate().map_err(|e| e.to_string())?;
+                // SEAM: webserver still returns String errors; removed when it migrates.
+                config::update_config_section(|cfg| cfg.copy_trading = new_config, true)
+                    .map_err(|e| e.to_string())?;
             }
             "PerformanceConfig" => {
                 let new_config: config::PerformanceConfig = serde_json::from_value(section_json)
@@ -616,7 +659,9 @@ where
                         cfg.performance = new_config;
                     },
                     true,
-                )?;
+                )
+                // SEAM: webserver still returns String errors; removed when it migrates.
+                .map_err(|e| e.to_string())?;
             }
             "NetworkConfig" => {
                 let new_config: config::NetworkConfig = serde_json::from_value(section_json)
@@ -626,7 +671,9 @@ where
                         cfg.network = new_config;
                     },
                     true,
-                )?;
+                )
+                // SEAM: webserver still returns String errors; removed when it migrates.
+                .map_err(|e| e.to_string())?;
             }
             "ReferralConfig" => {
                 let new_config: config::ReferralConfig = serde_json::from_value(section_json)
@@ -636,7 +683,9 @@ where
                         cfg.referral = new_config;
                     },
                     true,
-                )?;
+                )
+                // SEAM: webserver still returns String errors; removed when it migrates.
+                .map_err(|e| e.to_string())?;
             }
             "AccountConfig" => {
                 let new_config: config::AccountConfig = serde_json::from_value(section_json)
@@ -646,7 +695,9 @@ where
                         cfg.account = new_config;
                     },
                     true,
-                )?;
+                )
+                // SEAM: webserver still returns String errors; removed when it migrates.
+                .map_err(|e| e.to_string())?;
             }
             _ => {
                 return Err(format!("Unknown config section: {section_name}"));

@@ -26,6 +26,9 @@ pub enum Error {
     /// An external API client failure (LLM provider call, HTTP transport).
     #[error(transparent)]
     Apis(#[from] crate::apis::Error),
+    /// Reading or updating configuration failed.
+    #[error(transparent)]
+    Config(#[from] crate::config::Error),
 
     /// The AI module is turned off via configuration.
     #[error("the AI module is disabled")]
@@ -73,6 +76,7 @@ impl ErrorClass for Error {
             Error::Data(e) => e.is_retryable(),
             Error::Io(e) => e.is_retryable(),
             Error::Apis(e) => e.is_retryable(),
+            Error::Config(e) => e.is_retryable(),
             Error::RateLimited { .. } | Error::Timeout { .. } => true,
             Error::Disabled
             | Error::ProviderNotConfigured { .. }
@@ -91,6 +95,7 @@ impl ErrorClass for Error {
             Error::Data(e) => e.retry_after(),
             Error::Io(e) => e.retry_after(),
             Error::Apis(e) => e.retry_after(),
+            Error::Config(e) => e.retry_after(),
             Error::RateLimited { retry_after_secs } => Some(
                 retry_after_secs
                     .map(Duration::from_secs)
@@ -108,6 +113,7 @@ impl ErrorClass for Error {
             Error::Data(e) => e.severity(),
             Error::Io(e) => e.severity(),
             Error::Apis(e) => e.severity(),
+            Error::Config(e) => e.severity(),
             Error::Disabled => Severity::Info,
             Error::ProviderNotConfigured { .. } => Severity::Warning,
             Error::RateLimited { .. } => Severity::Warning,
@@ -126,6 +132,7 @@ impl ErrorClass for Error {
             Error::Data(e) => e.http_status(),
             Error::Io(e) => e.http_status(),
             Error::Apis(e) => e.http_status(),
+            Error::Config(e) => e.http_status(),
             Error::Disabled => 409,
             Error::ProviderNotConfigured { .. } => 503,
             Error::RateLimited { .. } => 429,

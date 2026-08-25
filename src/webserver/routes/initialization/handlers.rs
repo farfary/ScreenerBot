@@ -101,7 +101,7 @@ pub(super) async fn complete_onboarding() -> Response {
             StatusCode::INTERNAL_SERVER_ERROR,
             "CONFIG_ERROR",
             "Failed to update onboarding state",
-            Some(&e),
+            Some(&e.to_string()),
         );
     }
 

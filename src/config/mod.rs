@@ -15,7 +15,7 @@
 //! use screenerbot::config::load_config;
 //!
 //! #[tokio::main]
-//! async fn main() -> Result<(), String> {
+//! async fn main() -> screenerbot::config::Result<()> {
 //!     load_config()?;
 //!     // Config is now available globally
 //!     Ok(())
@@ -72,6 +72,9 @@
 
 // Metadata helpers (must be declared before macros so macro expansions can use them)
 pub mod metadata;
+
+mod error;
+pub use error::{Error, Result};
 
 // Export the macro
 #[macro_use]

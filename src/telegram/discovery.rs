@@ -162,8 +162,7 @@ impl DiscoveryService {
                 cfg.telegram.chat_id = chat_id_str;
             },
             true,
-        )
-        .map_err(|detail| Error::ConfigUpdateFailed { detail })?;
+        )?;
 
         logger::info(
             LogTag::Telegram,

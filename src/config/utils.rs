@@ -1,6 +1,8 @@
 //! Configuration helper utilities — validation, default values, and config access functions.
 
 use super::schemas::Config;
+use super::{Error, Result};
+use crate::errors::{ConfigurationError, IoError};
 use crate::logger::{self, LogTag};
 
 /// Configuration utilities - loading, reloading, and access helpers
@@ -32,13 +34,13 @@ pub static CONFIG: OnceLock<RwLock<Config>> = OnceLock::new();
 /// ```
 /// use screenerbot::config::load_config;
 ///
-/// fn main() -> Result<(), String> {
+/// fn main() -> crate::config::Result<()> {
 /// load_config()?;
 /// // Config is now available globally
 /// Ok(())
 /// }
 /// ```
-pub fn load_config() -> Result<(), String> {
+pub fn load_config() -> Result<()> {
     let config_path = crate::paths::get_config_path();
     load_config_from_path(&config_path.to_string_lossy())
 }
@@ -51,14 +53,16 @@ pub fn load_config() -> Result<(), String> {
 /// # Returns
 /// - `Ok(())` - Configuration loaded successfully
 /// - `Err(String)` - Error message if loading failed
-pub fn load_config_from_path(path: &str) -> Result<(), String> {
+pub fn load_config_from_path(path: &str) -> Result<()> {
     let mut config = if std::path::Path::new(path).exists() {
         // Load from file
-        let contents = std::fs::read_to_string(path)
-            .map_err(|e| format!("Failed to read config file '{path}': {e}"))?;
+        let contents = std::fs::read_to_string(path).map_err(|e| IoError::Generic {
+            message: format!("Failed to read config file '{path}': {e}"),
+        })?;
 
-        toml::from_str::<Config>(&contents)
-            .map_err(|e| format!("Failed to parse config file '{path}': {e}"))?
+        toml::from_str::<Config>(&contents).map_err(|e| Error::ParseFailed {
+            detail: format!("Failed to parse config file '{path}': {e}"),
+        })?
     } else {
         // Use defaults if file doesn't exist
         crate::logger::warning(
@@ -74,7 +78,9 @@ pub fn load_config_from_path(path: &str) -> Result<(), String> {
 
     CONFIG
         .set(RwLock::new(config))
-        .map_err(|_| "Config already initialized".to_owned())?;
+        .map_err(|_| ConfigurationError::Generic {
+            message: "Config already initialized".to_owned(),
+        })?;
 
     Ok(())
 }
@@ -96,7 +102,7 @@ pub fn load_config_from_path(path: &str) -> Result<(), String> {
 /// reload_config()?;
 /// // New values are now active
 /// ```
-pub fn reload_config() -> Result<(), String> {
+pub fn reload_config() -> Result<()> {
     let config_path = crate::paths::get_config_path();
     reload_config_from_path(&config_path.to_string_lossy())
 }
@@ -109,112 +115,159 @@ pub fn reload_config() -> Result<(), String> {
 /// # Returns
 /// - `Ok(())` - Configuration is valid
 /// - `Err(String)` - Validation error message
-pub fn validate_config(config: &Config) -> Result<(), String> {
+pub fn validate_config(config: &Config) -> Result<()> {
     config.copy_trading.validate()?;
 
     // Trader validation
     if config.trader.max_open_positions == 0 {
-        return Err("trader.max_open_positions must be greater than 0".to_owned());
+        return Err(ConfigurationError::Generic {
+            message: "trader.max_open_positions must be greater than 0".to_owned(),
+        }
+        .into());
     }
     if config.trader.trade_size_sol <= 0.0 {
-        return Err("trader.trade_size_sol must be greater than 0".to_owned());
+        return Err(ConfigurationError::Generic {
+            message: "trader.trade_size_sol must be greater than 0".to_owned(),
+        }
+        .into());
     }
     if !config.trader.trade_size_sol.is_finite() {
-        return Err("trader.trade_size_sol must be a finite number".to_owned());
+        return Err(ConfigurationError::Generic {
+            message: "trader.trade_size_sol must be a finite number".to_owned(),
+        }
+        .into());
     }
     if config.trader.entry_check_concurrency == 0 {
-        return Err("trader.entry_check_concurrency must be at least 1".to_owned());
+        return Err(ConfigurationError::Generic {
+            message: "trader.entry_check_concurrency must be at least 1".to_owned(),
+        }
+        .into());
     }
 
     // DCA validation
     if config.trader.dca_enabled {
         if config.trader.dca_threshold_pct >= 0.0 {
-            return Err(
-                "trader.dca_threshold_pct must be negative (represents price drop percentage)"
-                    .to_string(),
-            );
+            return Err(ConfigurationError::Generic {
+                message:
+                    "trader.dca_threshold_pct must be negative (represents price drop percentage)"
+                        .to_owned(),
+            }
+            .into());
         }
         if config.trader.dca_size_percentage <= 0.0 || config.trader.dca_size_percentage > 100.0 {
-            return Err(
-                "trader.dca_size_percentage must be between 0 and 100 (exclusive)".to_owned(),
-            );
+            return Err(ConfigurationError::Generic {
+                message: "trader.dca_size_percentage must be between 0 and 100 (exclusive)"
+                    .to_owned(),
+            }
+            .into());
         }
         if config.trader.dca_max_count == 0 {
-            return Err("trader.dca_max_count must be at least 1 when DCA is enabled".to_owned());
+            return Err(ConfigurationError::Generic {
+                message: "trader.dca_max_count must be at least 1 when DCA is enabled".to_owned(),
+            }
+            .into());
         }
     }
 
     // ROI exit validation
     if config.trader.roi_target_percent <= 0.0 {
-        return Err("trader.roi_target_percent must be greater than 0".to_owned());
+        return Err(ConfigurationError::Generic {
+            message: "trader.roi_target_percent must be greater than 0".to_owned(),
+        }
+        .into());
     }
     if !config.trader.roi_target_percent.is_finite() {
-        return Err("trader.roi_target_percent must be a finite number".to_owned());
+        return Err(ConfigurationError::Generic {
+            message: "trader.roi_target_percent must be a finite number".to_owned(),
+        }
+        .into());
     }
 
     // Time override validation
     if config.trader.time_override_enabled {
         if config.trader.time_override_duration <= 0.0 {
-            return Err("trader.time_override_duration must be greater than 0".to_owned());
+            return Err(ConfigurationError::Generic {
+                message: "trader.time_override_duration must be greater than 0".to_owned(),
+            }
+            .into());
         }
         if !config.trader.time_override_duration.is_finite() {
-            return Err("trader.time_override_duration must be a finite number".to_owned());
+            return Err(ConfigurationError::Generic {
+                message: "trader.time_override_duration must be a finite number".to_owned(),
+            }
+            .into());
         }
 
         // Validate unit
         use crate::config::TimeUnit;
-        let unit = TimeUnit::from_str(&config.trader.time_override_unit)
-      .ok_or_else(|| format!("Invalid time_override_unit: '{}'. Must be 'seconds', 'minutes', 'hours', or 'days'", config.trader.time_override_unit))?;
+        let unit = TimeUnit::from_str(&config.trader.time_override_unit).ok_or_else(|| {
+            ConfigurationError::Generic {
+                message: format!("Invalid time_override_unit: '{}'. Must be 'seconds', 'minutes', 'hours', or 'days'", config.trader.time_override_unit),
+            }
+        })?;
 
         // Validate duration based on unit (max 30 days in any unit)
         let max_seconds = 30.0 * 86400.0; // 30 days
         let duration_seconds = unit.to_seconds(config.trader.time_override_duration);
         if duration_seconds > max_seconds {
-            return Err(format!(
-                "trader.time_override_duration ({} {}) exceeds maximum of 30 days",
-                config.trader.time_override_duration, config.trader.time_override_unit
-            ));
+            return Err(ConfigurationError::Generic {
+                message: format!(
+                    "trader.time_override_duration ({} {}) exceeds maximum of 30 days",
+                    config.trader.time_override_duration, config.trader.time_override_unit
+                ),
+            }
+            .into());
         }
 
         if config.trader.time_override_loss_threshold_percent > 0.0 {
-            return Err(
-        "trader.time_override_loss_threshold_percent must be <= 0 (represents loss percentage)"
-          .to_string(),
-      );
+            return Err(ConfigurationError::Generic {
+                message: "trader.time_override_loss_threshold_percent must be <= 0 (represents loss percentage)"
+                    .to_owned(),
+            }
+            .into());
         }
         if !config
             .trader
             .time_override_loss_threshold_percent
             .is_finite()
         {
-            return Err(
-                "trader.time_override_loss_threshold_percent must be a finite number".to_owned(),
-            );
+            return Err(ConfigurationError::Generic {
+                message: "trader.time_override_loss_threshold_percent must be a finite number"
+                    .to_owned(),
+            }
+            .into());
         }
         if config.trader.time_override_loss_threshold_percent < -100.0 {
-            return Err(
-        "trader.time_override_loss_threshold_percent must be >= -100 (cannot lose more than 100%)"
-          .to_string(),
-      );
+            return Err(ConfigurationError::Generic {
+                message: "trader.time_override_loss_threshold_percent must be >= -100 (cannot lose more than 100%)"
+                    .to_owned(),
+            }
+            .into());
         }
     }
 
     // Stop loss validation
     if config.trader.stop_loss_enabled {
         if config.trader.stop_loss_threshold_pct <= 0.0 {
-            return Err(
-        "trader.stop_loss_threshold_pct must be greater than 0 (represents loss percentage)"
-          .to_string(),
-      );
+            return Err(ConfigurationError::Generic {
+                message: "trader.stop_loss_threshold_pct must be greater than 0 (represents loss percentage)"
+                    .to_owned(),
+            }
+            .into());
         }
         if config.trader.stop_loss_threshold_pct > 100.0 {
-            return Err(
-                "trader.stop_loss_threshold_pct must be <= 100 (cannot lose more than 100%)"
-                    .to_string(),
-            );
+            return Err(ConfigurationError::Generic {
+                message:
+                    "trader.stop_loss_threshold_pct must be <= 100 (cannot lose more than 100%)"
+                        .to_owned(),
+            }
+            .into());
         }
         if !config.trader.stop_loss_threshold_pct.is_finite() {
-            return Err("trader.stop_loss_threshold_pct must be a finite number".to_owned());
+            return Err(ConfigurationError::Generic {
+                message: "trader.stop_loss_threshold_pct must be a finite number".to_owned(),
+            }
+            .into());
         }
     }
 
@@ -222,10 +275,16 @@ pub fn validate_config(config: &Config) -> Result<(), String> {
     if config.positions.profit_extra_needed_sol < 0.0
         || !config.positions.profit_extra_needed_sol.is_finite()
     {
-        return Err("positions.profit_extra_needed_sol must be non-negative and finite".to_owned());
+        return Err(ConfigurationError::Generic {
+            message: "positions.profit_extra_needed_sol must be non-negative and finite".to_owned(),
+        }
+        .into());
     }
     if config.positions.position_open_cooldown_secs < 0 {
-        return Err("positions.position_open_cooldown_secs cannot be negative".to_owned());
+        return Err(ConfigurationError::Generic {
+            message: "positions.position_open_cooldown_secs cannot be negative".to_owned(),
+        }
+        .into());
     }
 
     // Partial exit validation
@@ -233,7 +292,10 @@ pub fn validate_config(config: &Config) -> Result<(), String> {
         if config.positions.partial_exit_default_pct < 10.0
             || config.positions.partial_exit_default_pct > 90.0
         {
-            return Err("positions.partial_exit_default_pct must be between 10 and 90".to_owned());
+            return Err(ConfigurationError::Generic {
+                message: "positions.partial_exit_default_pct must be between 10 and 90".to_owned(),
+            }
+            .into());
         }
     }
 
@@ -242,27 +304,34 @@ pub fn validate_config(config: &Config) -> Result<(), String> {
         if config.positions.trailing_stop_activation_pct <= 0.0
             || config.positions.trailing_stop_activation_pct > 100.0
         {
-            return Err(
-                "positions.trailing_stop_activation_pct must be between 0 and 100 (exclusive)"
-                    .to_string(),
-            );
+            return Err(ConfigurationError::Generic {
+                message:
+                    "positions.trailing_stop_activation_pct must be between 0 and 100 (exclusive)"
+                        .to_owned(),
+            }
+            .into());
         }
         if config.positions.trailing_stop_distance_pct <= 0.0
             || config.positions.trailing_stop_distance_pct > 100.0
         {
-            return Err(
-                "positions.trailing_stop_distance_pct must be between 0 and 100 (exclusive)"
-                    .to_string(),
-            );
+            return Err(ConfigurationError::Generic {
+                message:
+                    "positions.trailing_stop_distance_pct must be between 0 and 100 (exclusive)"
+                        .to_owned(),
+            }
+            .into());
         }
         if config.positions.trailing_stop_distance_pct
             >= config.positions.trailing_stop_activation_pct
         {
-            return Err(format!(
-        "positions.trailing_stop_distance_pct ({:.1}%) must be less than trailing_stop_activation_pct ({:.1}%)",
-        config.positions.trailing_stop_distance_pct,
-        config.positions.trailing_stop_activation_pct
-      ));
+            return Err(ConfigurationError::Generic {
+                message: format!(
+                    "positions.trailing_stop_distance_pct ({:.1}%) must be less than trailing_stop_activation_pct ({:.1}%)",
+                    config.positions.trailing_stop_distance_pct,
+                    config.positions.trailing_stop_activation_pct
+                ),
+            }
+            .into());
         }
     }
 
@@ -270,32 +339,49 @@ pub fn validate_config(config: &Config) -> Result<(), String> {
     if config.swaps.slippage.quote_default_pct < 0.0
         || config.swaps.slippage.quote_default_pct > 100.0
     {
-        return Err("swaps.slippage.quote_default_pct must be between 0 and 100".to_owned());
+        return Err(ConfigurationError::Generic {
+            message: "swaps.slippage.quote_default_pct must be between 0 and 100".to_owned(),
+        }
+        .into());
     }
     if config.swaps.slippage.exit_profit_shortfall_pct < 0.0
         || config.swaps.slippage.exit_profit_shortfall_pct > 100.0
     {
-        return Err(
-            "swaps.slippage.exit_profit_shortfall_pct must be between 0 and 100".to_owned(),
-        );
+        return Err(ConfigurationError::Generic {
+            message: "swaps.slippage.exit_profit_shortfall_pct must be between 0 and 100"
+                .to_owned(),
+        }
+        .into());
     }
     if config.swaps.slippage.exit_loss_shortfall_pct < 0.0
         || config.swaps.slippage.exit_loss_shortfall_pct > 100.0
     {
-        return Err("swaps.slippage.exit_loss_shortfall_pct must be between 0 and 100".to_owned());
+        return Err(ConfigurationError::Generic {
+            message: "swaps.slippage.exit_loss_shortfall_pct must be between 0 and 100".to_owned(),
+        }
+        .into());
     }
     if config.swaps.slippage.exit_retry_steps_pct.is_empty() {
-        return Err("swaps.slippage.exit_retry_steps_pct cannot be empty - at least one slippage step is required".to_owned());
+        return Err(ConfigurationError::Generic {
+            message: "swaps.slippage.exit_retry_steps_pct cannot be empty - at least one slippage step is required".to_owned(),
+        }
+        .into());
     }
 
     // Router availability check - Jupiter is the primary user-configurable router
     if !config.swaps.jupiter.enabled {
-        return Err("Jupiter router must be enabled (primary swap router)".to_owned());
+        return Err(ConfigurationError::Generic {
+            message: "Jupiter router must be enabled (primary swap router)".to_owned(),
+        }
+        .into());
     }
 
     // RPC validation
     if config.rpc.urls.is_empty() {
-        return Err("rpc.urls cannot be empty - at least one RPC endpoint is required".to_owned());
+        return Err(ConfigurationError::Generic {
+            message: "rpc.urls cannot be empty - at least one RPC endpoint is required".to_owned(),
+        }
+        .into());
     }
 
     Ok(())
@@ -309,12 +395,14 @@ pub fn validate_config(config: &Config) -> Result<(), String> {
 /// # Returns
 /// - `Ok(())` - Configuration reloaded successfully
 /// - `Err(String)` - Error message if reloading failed
-pub fn reload_config_from_path(path: &str) -> Result<(), String> {
-    let contents = std::fs::read_to_string(path)
-        .map_err(|e| format!("Failed to read config file '{path}': {e}"))?;
+pub fn reload_config_from_path(path: &str) -> Result<()> {
+    let contents = std::fs::read_to_string(path).map_err(|e| IoError::Generic {
+        message: format!("Failed to read config file '{path}': {e}"),
+    })?;
 
-    let mut new_config = toml::from_str::<Config>(&contents)
-        .map_err(|e| format!("Failed to parse config file '{path}': {e}"))?;
+    let mut new_config = toml::from_str::<Config>(&contents).map_err(|e| Error::ParseFailed {
+        detail: format!("Failed to parse config file '{path}': {e}"),
+    })?;
 
     // Ensure all navigation tabs are present (handles migrations)
     new_config.gui.dashboard.navigation.tabs =
@@ -326,11 +414,13 @@ pub fn reload_config_from_path(path: &str) -> Result<(), String> {
     if let Some(config_lock) = CONFIG.get() {
         let mut config = config_lock
             .write()
-            .map_err(|e| format!("Failed to acquire config write lock: {e}"))?;
+            .map_err(|e| ConfigurationError::Generic {
+                message: format!("Failed to acquire config write lock: {e}"),
+            })?;
         *config = new_config;
         Ok(())
     } else {
-        Err("Config not initialized. Call load_config() first.".to_owned())
+        Err(Error::NotLoaded)
     }
 }
 
@@ -401,17 +491,20 @@ pub fn get_config_clone() -> Config {
 /// # Returns
 /// - `Ok(())` - Configuration saved successfully
 /// - `Err(String)` - Error message if saving failed
-pub fn save_config(path: Option<&str>) -> Result<(), String> {
+pub fn save_config(path: Option<&str>) -> Result<()> {
     let default_path = crate::paths::get_config_path();
     let default_path_str = default_path.to_string_lossy();
     let path = path.unwrap_or(&default_path_str);
 
     let config_str = with_config(|cfg| {
-        toml::to_string_pretty(cfg).map_err(|e| format!("Failed to serialize config: {e}"))
+        toml::to_string_pretty(cfg).map_err(|e| Error::WriteFailed {
+            detail: format!("Failed to serialize config: {e}"),
+        })
     })?;
 
-    std::fs::write(path, config_str)
-        .map_err(|e| format!("Failed to write config file '{path}': {e}"))?;
+    std::fs::write(path, config_str).map_err(|e| Error::WriteFailed {
+        detail: format!("Failed to write config file '{path}': {e}"),
+    })?;
 
     Ok(())
 }
@@ -441,34 +534,40 @@ pub fn save_config(path: Option<&str>) -> Result<(), String> {
 /// };
 /// save_config_to_file(&config, "data/config.toml", true)?;
 /// ```
-pub fn save_config_to_file(config: &Config, path: &str, set_global: bool) -> Result<(), String> {
+pub fn save_config_to_file(config: &Config, path: &str, set_global: bool) -> Result<()> {
     // Validate configuration before saving
     validate_config(config)?;
 
     // Serialize to TOML
-    let config_str =
-        toml::to_string_pretty(config).map_err(|e| format!("Failed to serialize config: {e}"))?;
+    let config_str = toml::to_string_pretty(config).map_err(|e| Error::WriteFailed {
+        detail: format!("Failed to serialize config: {e}"),
+    })?;
 
     // Ensure parent directory exists
     if let Some(parent) = std::path::Path::new(path).parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("Failed to create config directory: {e}"))?;
+        std::fs::create_dir_all(parent).map_err(|e| IoError::Generic {
+            message: format!("Failed to create config directory: {e}"),
+        })?;
     }
 
     // Write to file
-    std::fs::write(path, config_str)
-        .map_err(|e| format!("Failed to write config file '{path}': {e}"))?;
+    std::fs::write(path, config_str).map_err(|e| Error::WriteFailed {
+        detail: format!("Failed to write config file '{path}': {e}"),
+    })?;
 
     // Set restrictive permissions on Unix systems (owner read/write only)
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         let mut perms = std::fs::metadata(path)
-            .map_err(|e| format!("Failed to get file metadata: {e}"))?
+            .map_err(|e| IoError::Generic {
+                message: format!("Failed to get file metadata: {e}"),
+            })?
             .permissions();
         perms.set_mode(0o600); // rw------- (owner read/write only)
-        std::fs::set_permissions(path, perms)
-            .map_err(|e| format!("Failed to set file permissions: {e}"))?;
+        std::fs::set_permissions(path, perms).map_err(|e| IoError::Generic {
+            message: format!("Failed to set file permissions: {e}"),
+        })?;
     }
 
     logger::info(
@@ -485,7 +584,9 @@ pub fn save_config_to_file(config: &Config, path: &str, set_global: bool) -> Res
             // First-time initialization
             CONFIG
                 .set(RwLock::new(config.clone()))
-                .map_err(|_| "Config already initialized".to_owned())?;
+                .map_err(|_| ConfigurationError::Generic {
+                    message: "Config already initialized".to_owned(),
+                })?;
         }
         logger::info(LogTag::System, "Config loaded into global state");
     }

@@ -8,7 +8,7 @@ use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
-use crate::ai::error::{Error, Result};
+use crate::ai::error::Result;
 use crate::ai::tools::ToolCategory;
 use crate::config::{update_config_section, with_config};
 
@@ -283,11 +283,9 @@ pub fn update_tool_permissions(permissions: ToolPermissions) -> Result<()> {
             cfg.ai.tool_permissions_system = permissions.system.to_str().to_string();
         },
         true, // Save to disk
-    )
-    .map_err(|detail| Error::Dependency {
-        dependency: "config".to_owned(),
-        detail,
-    })
+    )?;
+
+    Ok(())
 }
 
 /// Check if a tool can be executed based on permissions

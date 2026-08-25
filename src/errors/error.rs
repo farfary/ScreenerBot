@@ -75,6 +75,10 @@ pub enum Error {
     #[error(transparent)]
     Version(#[from] crate::version::Error),
 
+    /// Configuration loading, validation, persistence, and hot-update errors.
+    #[error(transparent)]
+    Config(#[from] crate::config::Error),
+
     /// ScreenerBot account / sign-in errors.
     #[error(transparent)]
     Account(#[from] AccountError),

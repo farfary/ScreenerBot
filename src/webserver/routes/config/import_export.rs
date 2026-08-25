@@ -177,7 +177,8 @@ fn apply_section_to_config(
         "copy_trading" => {
             let copy: config::CopyTradingConfig = serde_json::from_value(value)
                 .map_err(|e| format!("Invalid CopyTradingConfig: {e}"))?;
-            copy.validate()?;
+            // SEAM: webserver still returns String errors; removed when it migrates.
+            copy.validate().map_err(|e| e.to_string())?;
             cfg.copy_trading = copy;
         }
         "positions" => {
@@ -385,7 +386,7 @@ pub async fn import_config_preview(Json(request): Json<ImportConfigPreviewReques
                 .map_err(|e| e.to_string()),
             "copy_trading" => serde_json::from_value::<config::CopyTradingConfig>(value.clone())
                 .map_err(|e| e.to_string())
-                .and_then(|copy| copy.validate()),
+                .and_then(|copy| copy.validate().map_err(|e| e.to_string())),
             "positions" => serde_json::from_value::<config::PositionsConfig>(value.clone())
                 .map(|_| ())
                 .map_err(|e| e.to_string()),
