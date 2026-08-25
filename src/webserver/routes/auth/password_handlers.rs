@@ -99,7 +99,7 @@ pub async fn set_password(Json(req): Json<SetPasswordRequest>) -> Response {
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "HASH_ERROR",
                 "Failed to hash password",
-                Some(&e),
+                Some(&e.to_string()),
             );
         }
     };

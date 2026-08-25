@@ -3,6 +3,7 @@
 use crate::{
     global,
     logger::{self, LogTag},
+    run::{Error, Result},
 };
 
 /// Spawn the ctrl-c listener that requests shutdown during the initial boot
@@ -22,7 +23,7 @@ pub(super) fn spawn_initial_ctrl_c_listener() {
 /// NOTE: SIGHUP is intentionally NOT handled. SIGHUP is sent when a terminal
 /// disconnects (e.g., SSH session closes, nohup usage). A headless trading bot
 /// must survive terminal disconnects. Use SIGTERM or Ctrl+C to stop the bot.
-pub(super) async fn wait_for_shutdown_signal() -> Result<(), String> {
+pub(super) async fn wait_for_shutdown_signal() -> Result<()> {
     logger::info(
         LogTag::System,
         "Waiting for shutdown signal (press Ctrl+C twice to force kill)",
@@ -64,17 +65,24 @@ pub(super) async fn wait_for_shutdown_signal() -> Result<(), String> {
 }
 
 /// Wait for a platform shutdown signal and return its display name.
-async fn wait_for_os_shutdown_signal() -> Result<&'static str, String> {
+async fn wait_for_os_shutdown_signal() -> Result<&'static str> {
     #[cfg(unix)]
     {
         use tokio::signal::unix::{signal, SignalKind};
 
-        let mut sigint =
-            signal(SignalKind::interrupt()).map_err(|e| format!("Failed to bind SIGINT: {e}"))?;
+        let mut sigint = signal(SignalKind::interrupt()).map_err(|error| Error::SignalBinding {
+            signal: "SIGINT",
+            detail: error.to_string(),
+        })?;
         let mut sigterm =
-            signal(SignalKind::terminate()).map_err(|e| format!("Failed to bind SIGTERM: {e}"))?;
-        let mut sigquit =
-            signal(SignalKind::quit()).map_err(|e| format!("Failed to bind SIGQUIT: {e}"))?;
+            signal(SignalKind::terminate()).map_err(|error| Error::SignalBinding {
+                signal: "SIGTERM",
+                detail: error.to_string(),
+            })?;
+        let mut sigquit = signal(SignalKind::quit()).map_err(|error| Error::SignalBinding {
+            signal: "SIGQUIT",
+            detail: error.to_string(),
+        })?;
 
         Ok(tokio::select! {
             _ = sigint.recv() => "SIGINT",
@@ -88,13 +96,16 @@ async fn wait_for_os_shutdown_signal() -> Result<&'static str, String> {
         // On Windows, ctrl_c() handles Ctrl+C and Ctrl+Break
         tokio::signal::ctrl_c()
             .await
-            .map_err(|e| format!("Failed to listen for shutdown signal: {e}"))?;
+            .map_err(|error| Error::SignalBinding {
+                signal: "CTRL_C",
+                detail: error.to_string(),
+            })?;
         Ok("CTRL_C")
     }
 }
 
 /// Wait until setup enters either Explore Mode or full mode, or for shutdown.
-pub(super) async fn wait_for_operational_mode_or_shutdown() -> Result<(), String> {
+pub(super) async fn wait_for_operational_mode_or_shutdown() -> Result<()> {
     use tokio::time::{sleep, Duration, Instant};
 
     const MAX_WAIT_DURATION: Duration = Duration::from_secs(30 * 60); // 30 minutes
@@ -129,10 +140,9 @@ pub(super) async fn wait_for_operational_mode_or_shutdown() -> Result<(), String
                     MAX_WAIT_DURATION.as_secs() / 60
                 ),
             );
-            return Err(format!(
-                "Setup timeout after {} minutes",
-                MAX_WAIT_DURATION.as_secs() / 60
-            ));
+            return Err(Error::SetupTimedOut {
+                minutes: MAX_WAIT_DURATION.as_secs() / 60,
+            });
         }
 
         // Periodic warning logs
@@ -154,7 +164,7 @@ pub(super) async fn wait_for_operational_mode_or_shutdown() -> Result<(), String
               LogTag::System,
               "Shutdown signal received during initialization",
             );
-            return Err("Shutdown during initialization".to_owned());
+            return Err(Error::ShutdownDuringInitialization);
           }
           _ = sleep(Duration::from_millis(500)) => {
             // Continue polling

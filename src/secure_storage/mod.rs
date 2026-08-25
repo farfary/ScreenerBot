@@ -5,7 +5,9 @@
 //! - **password**: BLAKE3 password hashing with salt for lockscreen authentication.
 
 mod encryption;
+mod error;
 mod password;
 
 pub use encryption::*;
+pub use error::{Error, Result};
 pub use password::*;

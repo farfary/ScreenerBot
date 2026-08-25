@@ -82,7 +82,7 @@ pub async fn boot() {
     // with a non-zero code so callers (Electron, systemd) can tell a failed
     // boot apart from a clean shutdown.
     if let Err(e) = super::run_bot().await {
-        e.emit();
+        crate::errors::StartupError::from(e).emit();
         std::process::exit(1);
     }
 

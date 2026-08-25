@@ -9,8 +9,10 @@
 //! cargo run --bin screenerbot -- --reset --force  # Force mode (no confirmation)
 //! ```
 
+mod error;
 mod types;
 
+pub use error::{Error, Result};
 pub use types::*;
 
 use crate::logger::{self, LogTag};
@@ -20,7 +22,7 @@ use std::io::{self, Write};
 use std::path::Path;
 
 /// Execute reset operation with given configuration
-pub fn execute_reset(config: ResetConfig) -> Result<(), String> {
+pub fn execute_reset(config: ResetConfig) -> Result<()> {
     logger::info(LogTag::System, "Reset operation starting...");
 
     // Show what will be reset
@@ -90,14 +92,14 @@ pub fn execute_reset(config: ResetConfig) -> Result<(), String> {
     );
 
     if error_count > 0 {
-        return Err(format!("Reset completed with {error_count} errors"));
+        return Err(Error::CompletedWithErrors { count: error_count });
     }
 
     Ok(())
 }
 
 /// Extended reset operation that also clears pending verification metadata
-pub fn execute_extended_reset(config: ResetConfig) -> Result<(), String> {
+pub fn execute_extended_reset(config: ResetConfig) -> Result<()> {
     // First clear pending verifications from database
     if let Err(e) = clear_pending_verifications() {
         logger::error(
@@ -111,7 +113,7 @@ pub fn execute_extended_reset(config: ResetConfig) -> Result<(), String> {
 }
 
 /// Clear pending verification metadata from positions database
-pub fn clear_pending_verifications() -> Result<(), String> {
+pub fn clear_pending_verifications() -> Result<()> {
     use rusqlite::Connection;
 
     let db_path = paths::get_positions_db_path();
@@ -125,12 +127,18 @@ pub fn clear_pending_verifications() -> Result<(), String> {
 
     logger::info(LogTag::System, "Clearing pending verification metadata...");
 
-    let conn = Connection::open(&db_path)
-        .map_err(|e| format!("Failed to open positions database: {e}"))?;
+    let conn = Connection::open(&db_path).map_err(|error| crate::errors::DatabaseError::Query {
+        operation: "open positions database for reset".to_owned(),
+        message: error.to_string(),
+    })?;
 
     // Apply centralized PRAGMA configuration
-    crate::database::configure_connection(&conn, crate::database::POSITIONS_DB)
-        .map_err(|e| format!("Failed to configure connection: {e}"))?;
+    crate::database::configure_connection(&conn, crate::database::POSITIONS_DB).map_err(
+        |error| crate::errors::DatabaseError::Query {
+            operation: "configure positions database for reset".to_owned(),
+            message: error.to_string(),
+        },
+    )?;
 
     // Clear pending DCA swaps metadata
     match conn.execute(
@@ -204,27 +212,25 @@ fn print_reset_targets(targets: &[std::path::PathBuf]) {
 }
 
 /// Ask user for confirmation to proceed with reset
-fn confirm_reset() -> Result<bool, String> {
+fn confirm_reset() -> Result<bool> {
     print!("Are you sure you want to proceed? (y/n): ");
-    io::stdout()
-        .flush()
-        .map_err(|e| format!("Failed to flush stdout: {e}"))?;
+    io::stdout().flush().map_err(crate::errors::IoError::from)?;
 
     let mut input = String::new();
     io::stdin()
         .read_line(&mut input)
-        .map_err(|e| format!("Failed to read input: {e}"))?;
+        .map_err(crate::errors::IoError::from)?;
 
     let response = input.trim().to_lowercase();
     Ok(response == "y" || response == "yes")
 }
 
 /// Remove a file or directory
-fn remove_file_or_dir(path: &Path) -> Result<(), String> {
+fn remove_file_or_dir(path: &Path) -> Result<()> {
     if path.is_dir() {
-        fs::remove_dir_all(path).map_err(|e| format!("Failed to remove directory: {e}"))?;
+        fs::remove_dir_all(path).map_err(crate::errors::IoError::from)?;
     } else {
-        fs::remove_file(path).map_err(|e| format!("Failed to remove file: {e}"))?;
+        fs::remove_file(path).map_err(crate::errors::IoError::from)?;
     }
     Ok(())
 }

@@ -22,6 +22,9 @@ pub enum Error {
     /// The wallet keypair could not be loaded (config, decrypt, or storage failure).
     #[error("the wallet keypair could not be loaded: {detail}")]
     KeypairUnavailable { detail: String },
+    /// Decrypting the wallet's stored private-key material failed.
+    #[error(transparent)]
+    SecureStorage(#[from] crate::secure_storage::Error),
     /// A Solana RPC call failed.
     #[error("solana rpc {operation} failed: {detail}")]
     Rpc {
@@ -68,6 +71,7 @@ impl ErrorClass for Error {
             Error::InvalidAddress { .. }
             | Error::InvalidKeypair { .. }
             | Error::KeypairUnavailable { .. }
+            | Error::SecureStorage(_)
             | Error::AccountNotFound { .. }
             | Error::Decode { .. }
             | Error::InstructionBuild { .. } => false,
@@ -86,7 +90,9 @@ impl ErrorClass for Error {
         match self {
             Error::Execution(e) => e.severity(),
             Error::InvalidAddress { .. } | Error::AccountNotFound { .. } => Severity::Warning,
-            Error::InvalidKeypair { .. } | Error::KeypairUnavailable { .. } => Severity::Critical,
+            Error::InvalidKeypair { .. }
+            | Error::KeypairUnavailable { .. }
+            | Error::SecureStorage(_) => Severity::Critical,
             Error::Rpc { .. } => Severity::Warning,
             Error::Decode { .. } | Error::InstructionBuild { .. } => Severity::Error,
         }
@@ -96,7 +102,9 @@ impl ErrorClass for Error {
         match self {
             Error::Execution(e) => e.http_status(),
             Error::InvalidAddress { .. } => 400,
-            Error::InvalidKeypair { .. } | Error::KeypairUnavailable { .. } => 500,
+            Error::InvalidKeypair { .. }
+            | Error::KeypairUnavailable { .. }
+            | Error::SecureStorage(_) => 500,
             Error::AccountNotFound { .. } => 404,
             Error::Rpc { .. } => 503,
             Error::Decode { .. } | Error::InstructionBuild { .. } => 500,

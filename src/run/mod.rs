@@ -5,10 +5,12 @@
 
 mod boot;
 mod bootstrap;
+mod error;
 pub mod services;
 mod shutdown;
 
 pub use boot::boot;
+pub use error::{Error, Result};
 
 use bootstrap::{initialize_ai_runtime_if_enabled, initialize_full_runtime};
 
@@ -21,23 +23,26 @@ use crate::{
 };
 
 /// Main bot execution function — handles the full bot lifecycle with ServiceManager.
-pub async fn run_bot() -> Result<(), StartupError> {
+pub async fn run_bot() -> Result<()> {
     // 0. Initialize profiling if requested (must be done before any tokio tasks)
     profiling::init_profiling();
 
     // 1. Ensure all required directories exist (safety backup, already done in main.rs)
-    crate::paths::ensure_all_directories()
-        .map_err(|e| format!("Failed to create required directories: {e}"))?;
+    crate::paths::ensure_all_directories().map_err(|error| {
+        Error::Startup(StartupError::generic(format!(
+            "Failed to create required directories: {error}"
+        )))
+    })?;
 
     // 2. Acquire process lock to prevent multiple instances
-    let process_lock = ProcessLock::acquire()?;
+    let process_lock = ProcessLock::acquire().map_err(StartupError::from)?;
 
     // Run bot with the acquired lock
     run_bot_internal(process_lock).await
 }
 
 /// Internal bot execution with pre-acquired lock.
-async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), StartupError> {
+async fn run_bot_internal(_process_lock: ProcessLock) -> Result<()> {
     logger::info(LogTag::System, "ScreenerBot starting up...");
 
     // 1. Set GUI mode if --gui flag is present (must be done early for webserver security)
@@ -48,23 +53,23 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), StartupError
 
     // 2. Validate CLI arguments early (before any processing)
     if let Err(e) = crate::arguments::validate_port_argument() {
-        return Err(StartupError::new(
+        return Err(Error::Startup(StartupError::new(
             crate::errors::StartupErrorCode::ConfigInvalid,
             "Invalid startup option",
             e,
             "A command-line option is invalid. Start ScreenerBot without that option, or \
              correct it and try again.",
-        ));
+        )));
     }
 
     if let Err(e) = crate::arguments::validate_host_argument() {
-        return Err(StartupError::new(
+        return Err(Error::Startup(StartupError::new(
             crate::errors::StartupErrorCode::ConfigInvalid,
             "Invalid startup option",
             e,
             "A command-line option is invalid. Start ScreenerBot without that option, or \
              correct it and try again.",
-        ));
+        )));
     }
 
     // 3. Log CLI overrides (if provided)
@@ -151,7 +156,14 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), StartupError
 
         // 4. Load configuration (if not already loaded by main.rs)
         if !crate::config::is_config_initialized() {
-            crate::config::load_config().map_err(|e| format!("Failed to load config: {e}"))?;
+            crate::config::load_config().map_err(|error| {
+                StartupError::new(
+                    crate::errors::StartupErrorCode::ConfigInvalid,
+                    "Configuration could not be read",
+                    format!("Failed to load config: {error}"),
+                    "Restore a valid configuration or complete setup again.",
+                )
+            })?;
             logger::info(LogTag::System, "Configuration loaded successfully");
         }
 

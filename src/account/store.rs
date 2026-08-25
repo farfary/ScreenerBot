@@ -74,7 +74,8 @@ pub fn save(session: &StoredSession) -> Result<(), String> {
     let plaintext =
         serde_json::to_string(session).map_err(|e| format!("could not serialize session: {e}"))?;
 
-    let encrypted = encrypt_private_key(&plaintext)?;
+    // SEAM: account still returns String errors; removed when this module migrates.
+    let encrypted = encrypt_private_key(&plaintext).map_err(|error| error.to_string())?;
 
     let envelope = EncryptedEnvelope {
         ciphertext: encrypted.ciphertext,

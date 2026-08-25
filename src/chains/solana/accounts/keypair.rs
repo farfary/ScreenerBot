@@ -24,8 +24,7 @@ pub fn generate_keypair() -> Keypair {
 pub fn generate_and_encrypt_keypair() -> Result<(Keypair, EncryptedData)> {
     let keypair = generate_keypair();
     let private_key_b58 = bs58::encode(keypair.to_bytes()).into_string();
-    let encrypted = encrypt_private_key(&private_key_b58)
-        .map_err(|detail| Error::KeypairUnavailable { detail })?;
+    let encrypted = encrypt_private_key(&private_key_b58)?;
     Ok((keypair, encrypted))
 }
 
@@ -99,8 +98,7 @@ pub fn import_and_encrypt(private_key: &str) -> Result<(Keypair, EncryptedData)>
 
     // Re-encode to base58 for storage (normalized format)
     let private_key_b58 = bs58::encode(keypair.to_bytes()).into_string();
-    let encrypted = encrypt_private_key(&private_key_b58)
-        .map_err(|detail| Error::KeypairUnavailable { detail })?;
+    let encrypted = encrypt_private_key(&private_key_b58)?;
 
     Ok((keypair, encrypted))
 }
@@ -112,7 +110,7 @@ pub fn export_private_key(encrypted_key: &str, nonce: &str) -> Result<String> {
         nonce: nonce.to_string(),
     };
 
-    decrypt_private_key(&encrypted).map_err(|detail| Error::KeypairUnavailable { detail })
+    decrypt_private_key(&encrypted).map_err(Error::from)
 }
 
 /// Decrypt encrypted key and return keypair

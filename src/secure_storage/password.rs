@@ -2,6 +2,8 @@
 
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 
+use super::{Error, Result};
+
 /// Generate a random 16-byte salt for password hashing.
 pub fn generate_password_salt() -> String {
     let salt: [u8; 16] = rand::random();
@@ -14,10 +16,13 @@ pub fn generate_password_salt() -> String {
 /// - Fast hashing (important for PIN verification UX)
 /// - Cryptographic security
 /// - Resistance to rainbow table attacks (via salt)
-pub fn hash_password(password: &str, salt: &str) -> Result<String, String> {
+pub fn hash_password(password: &str, salt: &str) -> Result<String> {
     let salt_bytes = BASE64
         .decode(salt)
-        .map_err(|e| format!("Invalid salt encoding: {e}"))?;
+        .map_err(|error| Error::InvalidEncoding {
+            field: "salt",
+            detail: error.to_string(),
+        })?;
 
     let mut key = [0u8; 32];
     let mut key_hasher = blake3::Hasher::new();

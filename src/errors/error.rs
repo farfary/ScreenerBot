@@ -83,6 +83,18 @@ pub enum Error {
     #[error(transparent)]
     Webserver(#[from] crate::webserver::Error),
 
+    /// Runtime reset operations.
+    #[error(transparent)]
+    Reset(#[from] crate::reset::Error),
+
+    /// Local encryption and password-hashing operations.
+    #[error(transparent)]
+    SecureStorage(#[from] crate::secure_storage::Error),
+
+    /// Process lifecycle and service-manager orchestration.
+    #[error(transparent)]
+    Run(#[from] crate::run::Error),
+
     /// ScreenerBot account / sign-in errors.
     #[error(transparent)]
     Account(#[from] AccountError),
