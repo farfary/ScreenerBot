@@ -16,7 +16,7 @@
 //! use crate::actions::*;
 //! use uuid::Uuid;
 //!
-//! async fn my_operation() -> Result<(), String> {
+//! async fn my_operation() -> Result<()> {
 //!     let action_id = Uuid::new_v4().to_string();
 //!     let action = Action::new(
 //!         action_id.clone(),
@@ -40,6 +40,9 @@
 //!     Ok(())
 //! }
 //! ```
+
+mod error;
+pub use error::{Error, Result};
 
 pub mod broadcast;
 pub mod database;

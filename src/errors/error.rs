@@ -59,6 +59,10 @@ pub enum Error {
     #[error(transparent)]
     Filtering(#[from] crate::filtering::Error),
 
+    /// Action progress persistence and lifecycle errors.
+    #[error(transparent)]
+    Actions(#[from] crate::actions::Error),
+
     /// ScreenerBot account / sign-in errors.
     #[error(transparent)]
     Account(#[from] AccountError),

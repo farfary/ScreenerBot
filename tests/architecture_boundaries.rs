@@ -942,6 +942,7 @@ const MIGRATED_TO_TYPED_ERRORS: &[&str] = &[
     "tokens",
     "ai",
     "telegram",
+    "actions",
 ];
 
 /// True when `line` declares a two-parameter `Result<_, String>` — a signature

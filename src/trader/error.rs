@@ -38,8 +38,14 @@ pub enum Error {
     CopyValidation { detail: String },
     #[error("copy database task failed: {detail}")]
     CopyDatabaseUnavailable { detail: String },
-    #[error("could not record manual trade: {detail}")]
-    ManualTradeRecord { detail: String },
+    /// Registering the trade's action entry failed. The actions module's own typed
+    /// error is kept as the source rather than flattened into text, so callers keep
+    /// its classification.
+    #[error("could not record manual trade")]
+    ManualTradeRecord {
+        #[source]
+        source: crate::actions::Error,
+    },
     #[error("no open position for token {mint}")]
     NoOpenPosition { mint: String },
     #[error("invalid trade size {amount_sol} SOL: {reason}")]

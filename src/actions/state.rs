@@ -5,6 +5,7 @@
 
 use super::db::ActionsDatabase;
 use super::types::{Action, ActionId, ActionState, ActionUpdate, StepStatus};
+use super::{Error, Result};
 use crate::logger::{self, LogTag};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -20,7 +21,7 @@ static ACTIONS_DB: LazyLock<Arc<tokio::sync::RwLock<Option<ActionsDatabase>>>> =
     LazyLock::new(|| Arc::new(tokio::sync::RwLock::new(None)));
 
 /// Initialize the actions database
-pub async fn init_database() -> Result<(), String> {
+pub async fn init_database() -> Result<()> {
     let db = ActionsDatabase::new().await?;
     let mut db_lock = ACTIONS_DB.write().await;
     *db_lock = Some(db);
@@ -38,16 +39,16 @@ async fn get_db() -> Option<Arc<tokio::sync::RwLock<Option<ActionsDatabase>>>> {
 }
 
 /// Sync recent incomplete actions from database to memory on startup
-pub async fn sync_from_db() -> Result<(), String> {
+pub async fn sync_from_db() -> Result<()> {
     let db_arc = match get_db().await {
         Some(db) => db,
-        None => return Err("Database not initialized".to_owned()),
+        None => return Err(Error::NotInitialized),
     };
 
     let db_lock = db_arc.read().await;
     let db = match db_lock.as_ref() {
         Some(db) => db,
-        None => return Err("Database not initialized".to_owned()),
+        None => return Err(Error::NotInitialized),
     };
 
     // Any action still marked in_progress in the DB at startup is an orphan from
@@ -73,7 +74,7 @@ pub async fn sync_from_db() -> Result<(), String> {
 }
 
 /// Register a new action (dual-write: DB → HashMap → Broadcast)
-pub async fn register_action(action: Action) -> Result<(), String> {
+pub async fn register_action(action: Action) -> Result<()> {
     let action_id = action.id.clone();
 
     // 1. Write to database first
@@ -84,7 +85,7 @@ pub async fn register_action(action: Action) -> Result<(), String> {
                 let error_msg = format!("Failed to insert action {action_id} into database: {e}");
                 logger::error(LogTag::System, &error_msg);
                 // Return error - don't proceed if DB write fails
-                return Err(error_msg);
+                return Err(e);
             }
         }
     }
@@ -493,7 +494,7 @@ pub async fn get_unread_count() -> usize {
 }
 
 /// Mark one action notification as read in the database and hot cache.
-pub async fn mark_action_read(action_id: &str) -> Result<bool, String> {
+pub async fn mark_action_read(action_id: &str) -> Result<bool> {
     let found = if let Some(db_arc) = get_db().await {
         let db_lock = db_arc.read().await;
         if let Some(db) = db_lock.as_ref() {
@@ -515,7 +516,7 @@ pub async fn mark_action_read(action_id: &str) -> Result<bool, String> {
 }
 
 /// Mark every persisted action notification as read.
-pub async fn mark_all_actions_read() -> Result<usize, String> {
+pub async fn mark_all_actions_read() -> Result<usize> {
     let updated = if let Some(db_arc) = get_db().await {
         let db_lock = db_arc.read().await;
         if let Some(db) = db_lock.as_ref() {
@@ -536,7 +537,7 @@ pub async fn mark_all_actions_read() -> Result<usize, String> {
 }
 
 /// Dismiss one action notification from live notification lists.
-pub async fn dismiss_action(action_id: &str) -> Result<bool, String> {
+pub async fn dismiss_action(action_id: &str) -> Result<bool> {
     let found = if let Some(db_arc) = get_db().await {
         let db_lock = db_arc.read().await;
         if let Some(db) = db_lock.as_ref() {
@@ -559,7 +560,7 @@ pub async fn dismiss_action(action_id: &str) -> Result<bool, String> {
 }
 
 /// Dismiss every action notification from live lists while keeping history rows.
-pub async fn dismiss_all_actions() -> Result<usize, String> {
+pub async fn dismiss_all_actions() -> Result<usize> {
     let updated = if let Some(db_arc) = get_db().await {
         let db_lock = db_arc.read().await;
         if let Some(db) = db_lock.as_ref() {
@@ -583,16 +584,16 @@ pub async fn dismiss_all_actions() -> Result<usize, String> {
 /// Query action history from database with pagination and filters
 pub async fn query_action_history(
     filters: super::db::ActionFilters,
-) -> Result<(Vec<Action>, usize), String> {
+) -> Result<(Vec<Action>, usize)> {
     let db_arc = match get_db().await {
         Some(db) => db,
-        None => return Err("Database not initialized".to_owned()),
+        None => return Err(Error::NotInitialized),
     };
 
     let db_lock = db_arc.read().await;
     let db = match db_lock.as_ref() {
         Some(db) => db,
-        None => return Err("Database not initialized".to_owned()),
+        None => return Err(Error::NotInitialized),
     };
 
     let limit = filters.limit.unwrap_or(50);

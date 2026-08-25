@@ -9,8 +9,10 @@
 mod queries;
 
 use super::types::{Action, ActionState, ActionStep, ActionType, StepStatus};
+use crate::actions::{Error, Result};
 use crate::database;
 use crate::database::WriteTransaction;
+use crate::errors::{DataError, DatabaseError, InternalError};
 use crate::logger::{self, LogTag};
 use crate::utils::get_wallet_address;
 use chrono::{DateTime, Utc};
@@ -46,7 +48,7 @@ pub struct ActionsDatabase {
 
 impl ActionsDatabase {
     /// Create new ActionsDatabase with connection pooling
-    pub async fn new() -> Result<Self, String> {
+    pub async fn new() -> Result<Self> {
         let database_path = crate::paths::get_actions_db_path();
         let database_path_str = database_path.to_string_lossy().to_string();
 
@@ -64,7 +66,12 @@ impl ActionsDatabase {
             .idle_timeout(None) // SQLite: keep connections alive (WAL stability)
             .max_lifetime(None) // SQLite: no connection recycling
             .build(write_manager)
-            .map_err(|e| format!("Failed to create actions write pool: {e}"))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "create actions write pool".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         // Create read pool
         let read_pool = Pool::builder()
@@ -74,7 +81,12 @@ impl ActionsDatabase {
             .idle_timeout(None) // SQLite: keep connections alive (WAL stability)
             .max_lifetime(None) // SQLite: no connection recycling
             .build(read_manager)
-            .map_err(|e| format!("Failed to create actions read pool: {e}"))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "create actions read pool".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         let mut db = ActionsDatabase {
             write_pool,
@@ -94,7 +106,7 @@ impl ActionsDatabase {
     }
 
     /// Initialize database schema with all tables and indexes
-    async fn initialize_schema(&mut self) -> Result<(), String> {
+    async fn initialize_schema(&mut self) -> Result<()> {
         let conn = self.get_write_connection()?;
 
         // Create main actions table
@@ -119,7 +131,12 @@ impl ActionsDatabase {
             "#,
             [],
         )
-        .map_err(|e| format!("Failed to create actions table: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "create actions table".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         // Create action steps table
         conn.execute(
@@ -142,44 +159,77 @@ impl ActionsDatabase {
             "#,
             [],
         )
-        .map_err(|e| format!("Failed to create action_steps table: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "create action steps table".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         // Create indexes for performance
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_actions_action_type ON actions(action_type)",
             [],
         )
-        .map_err(|e| format!("Failed to create action_type index: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "create action type index".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_actions_entity_id ON actions(entity_id)",
             [],
         )
-        .map_err(|e| format!("Failed to create entity_id index: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "create action entity id index".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_actions_state ON actions(state)",
             [],
         )
-        .map_err(|e| format!("Failed to create state index: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "create action state index".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_actions_started_at ON actions(started_at DESC)",
             [],
         )
-        .map_err(|e| format!("Failed to create started_at index: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "create action started at index".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_actions_wallet_address ON actions(wallet_address)",
             [],
         )
-        .map_err(|e| format!("Failed to create wallet_address index: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "create action wallet address index".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_actions_completed_at ON actions(completed_at DESC) WHERE completed_at IS NOT NULL",
             [],
         )
-        .map_err(|e| format!("Failed to create completed_at index: {e}"))?;
+        .map_err(|e| Error::Database(DatabaseError::Query {
+            operation: "create action completed at index".to_owned(),
+            message: e.to_string(),
+        }))?;
 
         self.ensure_actions_column(&conn, "read_at", "TEXT")?;
         self.ensure_actions_column(&conn, "dismissed_at", "TEXT")?;
@@ -188,19 +238,34 @@ impl ActionsDatabase {
             "CREATE INDEX IF NOT EXISTS idx_actions_read_at ON actions(read_at)",
             [],
         )
-        .map_err(|e| format!("Failed to create read_at index: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "create action read at index".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_actions_dismissed_at ON actions(dismissed_at)",
             [],
         )
-        .map_err(|e| format!("Failed to create dismissed_at index: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "create action dismissed at index".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_action_steps_action_id ON action_steps(action_id)",
             [],
         )
-        .map_err(|e| format!("Failed to create action_steps index: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "create action steps index".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         logger::info(LogTag::System, "Actions database schema initialized");
 
@@ -212,17 +277,30 @@ impl ActionsDatabase {
         conn: &Connection,
         column_name: &str,
         column_type: &str,
-    ) -> Result<(), String> {
-        let mut stmt = conn
-            .prepare("PRAGMA table_info(actions)")
-            .map_err(|e| format!("Failed to inspect actions schema: {e}"))?;
+    ) -> Result<()> {
+        let mut stmt = conn.prepare("PRAGMA table_info(actions)").map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "inspect actions schema".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         let columns = stmt
             .query_map([], |row| row.get::<_, String>(1))
-            .map_err(|e| format!("Failed to read actions schema: {e}"))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "read actions schema".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         for column in columns {
-            let column = column.map_err(|e| format!("Failed to parse actions schema row: {e}"))?;
+            let column = column.map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "read actions schema row".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
             if column == column_name {
                 return Ok(());
             }
@@ -232,7 +310,12 @@ impl ActionsDatabase {
             &format!("ALTER TABLE actions ADD COLUMN {column_name} {column_type}"),
             [],
         )
-        .map_err(|e| format!("Failed to add actions.{column_name}: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: format!("add actions.{column_name}"),
+                message: e.to_string(),
+            })
+        })?;
 
         logger::info(
             LogTag::System,
@@ -243,29 +326,34 @@ impl ActionsDatabase {
     }
 
     /// Get a write connection from the pool
-    pub(crate) fn get_write_connection(
-        &self,
-    ) -> Result<PooledConnection<SqliteConnectionManager>, String> {
-        self.write_pool
-            .get()
-            .map_err(|e| format!("Failed to get write connection: {e}"))
+    pub(crate) fn get_write_connection(&self) -> Result<PooledConnection<SqliteConnectionManager>> {
+        self.write_pool.get().map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "get actions write connection".to_owned(),
+                message: e.to_string(),
+            })
+        })
     }
 
     /// Get a read connection from the pool
-    pub(crate) fn get_read_connection(
-        &self,
-    ) -> Result<PooledConnection<SqliteConnectionManager>, String> {
-        self.read_pool
-            .get()
-            .map_err(|e| format!("Failed to get read connection: {e}"))
+    pub(crate) fn get_read_connection(&self) -> Result<PooledConnection<SqliteConnectionManager>> {
+        self.read_pool.get().map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "get actions read connection".to_owned(),
+                message: e.to_string(),
+            })
+        })
     }
 
     /// Insert a new action into the database
-    pub async fn insert_action(&self, action: &Action) -> Result<(), String> {
+    pub async fn insert_action(&self, action: &Action) -> Result<()> {
         let mut conn = self.get_write_connection()?;
 
-        let wallet_address =
-            get_wallet_address().map_err(|e| format!("Failed to get wallet address: {e}"))?;
+        let wallet_address = get_wallet_address().map_err(|e| {
+            Error::Internal(InternalError::InvariantViolation {
+                message: format!("failed to get wallet address: {e}"),
+            })
+        })?;
         let action_type_str = format!("{:?}", action.action_type).to_lowercase();
         let state_str = match &action.state {
             ActionState::InProgress { .. } => "in_progress",
@@ -273,16 +361,27 @@ impl ActionsDatabase {
             ActionState::Failed { .. } => "failed",
             ActionState::Cancelled => "cancelled",
         };
-        let state_data = serde_json::to_string(&action.state)
-            .map_err(|e| format!("Failed to serialize state: {e}"))?;
-        let metadata = serde_json::to_string(&action.metadata)
-            .map_err(|e| format!("Failed to serialize metadata: {e}"))?;
+        let state_data = serde_json::to_string(&action.state).map_err(|e| {
+            Error::Data(DataError::ParseError {
+                data_type: "action state".to_owned(),
+                error: e.to_string(),
+            })
+        })?;
+        let metadata = serde_json::to_string(&action.metadata).map_err(|e| {
+            Error::Data(DataError::ParseError {
+                data_type: "action metadata".to_owned(),
+                error: e.to_string(),
+            })
+        })?;
         let now = Utc::now().to_rfc3339();
 
         // Use transaction to ensure atomicity of action + steps insertion
-        let tx = conn
-            .write_tx()
-            .map_err(|e| format!("Failed to begin transaction: {e}"))?;
+        let tx = conn.write_tx().map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "begin action insert transaction".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         tx.execute(
             r#"
@@ -309,15 +408,24 @@ impl ActionsDatabase {
                 now,
             ],
         )
-        .map_err(|e| format!("Failed to insert action: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "insert action".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         // Insert all steps within the same transaction
         for (index, step) in action.steps.iter().enumerate() {
             self.insert_step_internal_tx(&tx, &action.id, index, step)?;
         }
 
-        tx.commit()
-            .map_err(|e| format!("Failed to commit transaction: {e}"))?;
+        tx.commit().map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "commit action insert transaction".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         Ok(())
     }
@@ -329,10 +437,14 @@ impl ActionsDatabase {
         action_id: &str,
         step_index: usize,
         step: &ActionStep,
-    ) -> Result<(), String> {
+    ) -> Result<()> {
         let status_str = format!("{:?}", step.status).to_lowercase();
-        let metadata = serde_json::to_string(&step.metadata)
-            .map_err(|e| format!("Failed to serialize step metadata: {e}"))?;
+        let metadata = serde_json::to_string(&step.metadata).map_err(|e| {
+            Error::Data(DataError::ParseError {
+                data_type: "action step metadata".to_owned(),
+                error: e.to_string(),
+            })
+        })?;
 
         tx.execute(
             r#"
@@ -356,7 +468,12 @@ impl ActionsDatabase {
                 metadata,
             ],
         )
-        .map_err(|e| format!("Failed to insert step: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "insert action step".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         Ok(())
     }
@@ -368,10 +485,14 @@ impl ActionsDatabase {
         action_id: &str,
         step_index: usize,
         step: &ActionStep,
-    ) -> Result<(), String> {
+    ) -> Result<()> {
         let status_str = format!("{:?}", step.status).to_lowercase();
-        let metadata = serde_json::to_string(&step.metadata)
-            .map_err(|e| format!("Failed to serialize step metadata: {e}"))?;
+        let metadata = serde_json::to_string(&step.metadata).map_err(|e| {
+            Error::Data(DataError::ParseError {
+                data_type: "action step metadata".to_owned(),
+                error: e.to_string(),
+            })
+        })?;
 
         conn.execute(
             r#"
@@ -395,7 +516,12 @@ impl ActionsDatabase {
                 metadata,
             ],
         )
-        .map_err(|e| format!("Failed to insert step: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "insert action step".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         Ok(())
     }
@@ -407,7 +533,7 @@ impl ActionsDatabase {
         state: &ActionState,
         completed_at: Option<DateTime<Utc>>,
         started_at: DateTime<Utc>,
-    ) -> Result<(), String> {
+    ) -> Result<()> {
         let conn = self.get_write_connection()?;
 
         let state_str = match state {
@@ -416,8 +542,12 @@ impl ActionsDatabase {
             ActionState::Failed { .. } => "failed",
             ActionState::Cancelled => "cancelled",
         };
-        let state_data =
-            serde_json::to_string(&state).map_err(|e| format!("Failed to serialize state: {e}"))?;
+        let state_data = serde_json::to_string(&state).map_err(|e| {
+            Error::Data(DataError::ParseError {
+                data_type: "action state".to_owned(),
+                error: e.to_string(),
+            })
+        })?;
         let now = Utc::now().to_rfc3339();
 
         conn.execute(
@@ -436,7 +566,12 @@ impl ActionsDatabase {
                 action_id,
             ],
         )
-        .map_err(|e| format!("Failed to update action state: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "update action state".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         Ok(())
     }
@@ -449,7 +584,7 @@ impl ActionsDatabase {
         status: StepStatus,
         error: Option<String>,
         metadata: Option<serde_json::Value>,
-    ) -> Result<(), String> {
+    ) -> Result<()> {
         let conn = self.get_write_connection()?;
 
         let status_str = format!("{:?}", status).to_lowercase();
@@ -492,14 +627,18 @@ impl ActionsDatabase {
                 step_index as i64,
             ],
         )
-        .map_err(|e| format!("Failed to update step: {e}"))?;
+        .map_err(|e| Error::Database(DatabaseError::Query {
+            operation: "update action step".to_owned(),
+            message: e.to_string(),
+        }))?;
 
         // Validate that the step was found and updated
         if affected == 0 {
-            return Err(format!(
-                "Step not found or not updated: action_id={}, step_index={}",
-                action_id, step_index
-            ));
+            return Err(Error::Internal(InternalError::InvariantViolation {
+                message: format!(
+                    "step not found or not updated: action_id={action_id}, step_index={step_index}"
+                ),
+            }));
         }
 
         Ok(())

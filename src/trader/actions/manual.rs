@@ -46,7 +46,7 @@ impl ManualBuyAction {
 
         register_action(action)
             .await
-            .map_err(|e| Error::ManualTradeRecord { detail: e })?;
+            .map_err(|e| Error::ManualTradeRecord { source: e })?;
         Ok(Self { action_id })
     }
 
@@ -245,7 +245,7 @@ impl ManualSellAction {
 
         register_action(action)
             .await
-            .map_err(|e| Error::ManualTradeRecord { detail: e })?;
+            .map_err(|e| Error::ManualTradeRecord { source: e })?;
         Ok(Self { action_id })
     }
 
@@ -446,7 +446,7 @@ impl ManualAddAction {
 
         register_action(action)
             .await
-            .map_err(|e| Error::ManualTradeRecord { detail: e })?;
+            .map_err(|e| Error::ManualTradeRecord { source: e })?;
         Ok(Self { action_id })
     }
 

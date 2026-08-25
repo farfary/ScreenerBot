@@ -5,6 +5,8 @@
 
 use super::ActionFilters;
 use crate::actions::types::{Action, ActionState, ActionStep, ActionType, StepStatus};
+use crate::actions::{Error, Result};
+use crate::errors::{DataError, DatabaseError};
 use crate::logger::{self, LogTag};
 use chrono::{DateTime, Utc};
 use rusqlite::{params, OptionalExtension};
@@ -15,7 +17,7 @@ use crate::database::WriteTransaction;
 
 impl ActionsDatabase {
     /// Get a single action by ID
-    pub async fn get_action(&self, action_id: &str) -> Result<Option<Action>, String> {
+    pub async fn get_action(&self, action_id: &str) -> Result<Option<Action>> {
         let conn = self.get_read_connection()?;
 
         let action_row: Option<(
@@ -59,7 +61,12 @@ impl ActionsDatabase {
                 },
             )
             .optional()
-            .map_err(|e| format!("Failed to query action: {e}"))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "query action".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         let Some((
             id,
@@ -82,12 +89,21 @@ impl ActionsDatabase {
         let action_type = self.parse_action_type(&action_type_str)?;
 
         // Parse state
-        let state: ActionState =
-            serde_json::from_str(&state_data).map_err(|e| format!("Failed to parse state: {e}"))?;
+        let state: ActionState = serde_json::from_str(&state_data).map_err(|e| {
+            Error::Data(DataError::ParseError {
+                data_type: "action state".to_owned(),
+                error: e.to_string(),
+            })
+        })?;
 
         // Parse timestamps
         let started_at = DateTime::parse_from_rfc3339(&started_at_str)
-            .map_err(|e| format!("Failed to parse started_at: {e}"))?
+            .map_err(|e| {
+                Error::Data(DataError::ParseError {
+                    data_type: "action started at timestamp".to_owned(),
+                    error: e.to_string(),
+                })
+            })?
             .with_timezone(&Utc);
 
         let completed_at = if let Some(s) = completed_at_str {
@@ -99,8 +115,12 @@ impl ActionsDatabase {
         };
 
         // Parse metadata
-        let metadata: serde_json::Value = serde_json::from_str(&metadata_str)
-            .map_err(|e| format!("Failed to parse metadata: {e}"))?;
+        let metadata: serde_json::Value = serde_json::from_str(&metadata_str).map_err(|e| {
+            Error::Data(DataError::ParseError {
+                data_type: "action metadata".to_owned(),
+                error: e.to_string(),
+            })
+        })?;
 
         // Get steps
         let mut stmt = conn
@@ -112,7 +132,12 @@ impl ActionsDatabase {
                 ORDER BY step_index ASC
                 "#,
             )
-            .map_err(|e| format!("Failed to prepare step query: {e}"))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "prepare action steps query".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         let steps = stmt
             .query_map(params![action_id], |row| {
@@ -144,9 +169,19 @@ impl ActionsDatabase {
                     metadata,
                 })
             })
-            .map_err(|e| format!("Failed to query steps: {e}"))?
-            .collect::<Result<Vec<ActionStep>, _>>()
-            .map_err(|e| format!("Failed to collect steps: {e}"))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "query action steps".to_owned(),
+                    message: e.to_string(),
+                })
+            })?
+            .collect::<std::result::Result<Vec<ActionStep>, _>>()
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "collect action steps".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         let current_step_index = match &state {
             ActionState::InProgress {
@@ -171,7 +206,7 @@ impl ActionsDatabase {
     }
 
     /// Get actions with filters (optimized with batch fetching)
-    pub async fn get_actions(&self, filters: &ActionFilters) -> Result<Vec<Action>, String> {
+    pub async fn get_actions(&self, filters: &ActionFilters) -> Result<Vec<Action>> {
         let conn = self.get_read_connection()?;
 
         // Build query for action IDs
@@ -229,9 +264,12 @@ impl ActionsDatabase {
             query.push_str(&format!(" OFFSET {offset}"));
         }
 
-        let mut stmt = conn
-            .prepare(&query)
-            .map_err(|e| format!("Failed to prepare query: {e}"))?;
+        let mut stmt = conn.prepare(&query).map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "prepare actions query".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         let params_refs: Vec<&dyn rusqlite::ToSql> =
             params.iter().map(|p| p as &dyn rusqlite::ToSql).collect();
@@ -263,9 +301,19 @@ impl ActionsDatabase {
                     row.get(9)?, // metadata
                 ))
             })
-            .map_err(|e| format!("Failed to query actions: {e}"))?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| format!("Failed to collect actions: {e}"))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "query actions".to_owned(),
+                    message: e.to_string(),
+                })
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "collect actions".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         if actions_data.is_empty() {
             return Ok(Vec::new());
@@ -287,9 +335,12 @@ impl ActionsDatabase {
             placeholders
         );
 
-        let mut steps_stmt = conn
-            .prepare(&steps_query)
-            .map_err(|e| format!("Failed to prepare steps query: {e}"))?;
+        let mut steps_stmt = conn.prepare(&steps_query).map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "prepare action steps query".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         let action_id_refs: Vec<&dyn rusqlite::ToSql> = action_ids
             .iter()
@@ -330,9 +381,19 @@ impl ActionsDatabase {
                     },
                 ))
             })
-            .map_err(|e| format!("Failed to query steps: {e}"))?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| format!("Failed to collect steps: {e}"))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "query action steps".to_owned(),
+                    message: e.to_string(),
+                })
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "collect action steps".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         // Build a map of action_id -> Vec<ActionStep>
         let mut steps_map: HashMap<String, Vec<ActionStep>> = HashMap::new();
@@ -357,11 +418,20 @@ impl ActionsDatabase {
         {
             let action_type = self.parse_action_type(&action_type_str)?;
 
-            let state: ActionState = serde_json::from_str(&state_data)
-                .map_err(|e| format!("Failed to parse state for action {id}: {e}"))?;
+            let state: ActionState = serde_json::from_str(&state_data).map_err(|e| {
+                Error::Data(DataError::ParseError {
+                    data_type: format!("action state for {id}"),
+                    error: e.to_string(),
+                })
+            })?;
 
             let started_at = DateTime::parse_from_rfc3339(&started_at_str)
-                .map_err(|e| format!("Failed to parse started_at for action {id}: {e}"))?
+                .map_err(|e| {
+                    Error::Data(DataError::ParseError {
+                        data_type: format!("action started at timestamp for {id}"),
+                        error: e.to_string(),
+                    })
+                })?
                 .with_timezone(&Utc);
 
             let completed_at = if let Some(s) = completed_at_str {
@@ -372,8 +442,12 @@ impl ActionsDatabase {
                 None
             };
 
-            let metadata: serde_json::Value = serde_json::from_str(&metadata_str)
-                .map_err(|e| format!("Failed to parse metadata for action {id}: {e}"))?;
+            let metadata: serde_json::Value = serde_json::from_str(&metadata_str).map_err(|e| {
+                Error::Data(DataError::ParseError {
+                    data_type: format!("action metadata for {id}"),
+                    error: e.to_string(),
+                })
+            })?;
 
             let steps = steps_map.remove(&id).unwrap_or_default();
 
@@ -408,7 +482,7 @@ impl ActionsDatabase {
         limit: usize,
         offset: usize,
         filters: &ActionFilters,
-    ) -> Result<(Vec<Action>, usize), String> {
+    ) -> Result<(Vec<Action>, usize)> {
         // Get total count in a scope to drop conn and params early
         let total = {
             let conn = self.get_read_connection()?;
@@ -451,7 +525,12 @@ impl ActionsDatabase {
 
             let total: i64 = conn
                 .query_row(&count_query, &params_refs[..], |row| row.get(0))
-                .map_err(|e| format!("Failed to count actions: {e}"))?;
+                .map_err(|e| {
+                    Error::Database(DatabaseError::Query {
+                        operation: "count actions".to_owned(),
+                        message: e.to_string(),
+                    })
+                })?;
 
             total as usize
         };
@@ -467,16 +546,19 @@ impl ActionsDatabase {
     }
 
     /// Cleanup old actions
-    pub async fn cleanup_old_actions(&self, days: i64) -> Result<usize, String> {
+    pub async fn cleanup_old_actions(&self, days: i64) -> Result<usize> {
         let mut conn = self.get_write_connection()?;
 
         let cutoff = Utc::now() - chrono::Duration::days(days);
         let cutoff_str = cutoff.to_rfc3339();
 
         // Use transaction to ensure both deletes succeed or both roll back
-        let tx = conn
-            .write_tx()
-            .map_err(|e| format!("Failed to begin transaction: {e}"))?;
+        let tx = conn.write_tx().map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "begin action cleanup transaction".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         // CHILD ROWS FIRST. `action_steps.action_id` is a FOREIGN KEY into `actions(id)`
         // with no ON DELETE CASCADE, so deleting the parent while its steps still point at
@@ -493,24 +575,43 @@ impl ActionsDatabase {
             "#,
             params![cutoff_str],
         )
-        .map_err(|e| format!("Failed to cleanup old action steps: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "cleanup old action steps".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         let deleted = tx
             .execute(
                 "DELETE FROM actions WHERE completed_at < ?1 AND completed_at IS NOT NULL",
                 params![cutoff_str],
             )
-            .map_err(|e| format!("Failed to cleanup old actions: {e}"))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "cleanup old actions".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         // Sweep steps left behind by any earlier failed cleanup.
         tx.execute(
             "DELETE FROM action_steps WHERE action_id NOT IN (SELECT id FROM actions)",
             [],
         )
-        .map_err(|e| format!("Failed to cleanup orphaned steps: {e}"))?;
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "cleanup orphaned action steps".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
-        tx.commit()
-            .map_err(|e| format!("Failed to commit cleanup transaction: {e}"))?;
+        tx.commit().map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "commit action cleanup transaction".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         if deleted > 0 {
             logger::info(
@@ -528,20 +629,35 @@ impl ActionsDatabase {
     /// Count actions grouped by state across the WHOLE database (not just the
     /// in-memory cache). Returns (in_progress, completed, failed, cancelled) so
     /// the notifications center tab badges reflect the full persisted history.
-    pub async fn count_by_state(&self) -> Result<(usize, usize, usize, usize), String> {
+    pub async fn count_by_state(&self) -> Result<(usize, usize, usize, usize)> {
         let conn = self.get_read_connection()?;
         let mut stmt = conn
             .prepare("SELECT state, COUNT(*) FROM actions GROUP BY state")
-            .map_err(|e| format!("Failed to prepare count query: {e}"))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "prepare action state count query".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
         let rows = stmt
             .query_map([], |row| {
                 Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
             })
-            .map_err(|e| format!("Failed to count actions by state: {e}"))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "count actions by state".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
 
         let (mut in_progress, mut completed, mut failed, mut cancelled) = (0usize, 0, 0, 0);
         for row in rows {
-            let (state, count) = row.map_err(|e| format!("Failed to read count row: {e}"))?;
+            let (state, count) = row.map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "read action state count row".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
             let count = count.max(0) as usize;
             match state.as_str() {
                 "in_progress" => in_progress = count,
@@ -554,7 +670,7 @@ impl ActionsDatabase {
         Ok((in_progress, completed, failed, cancelled))
     }
 
-    pub async fn count_unread(&self) -> Result<usize, String> {
+    pub async fn count_unread(&self) -> Result<usize> {
         let conn = self.get_read_connection()?;
         let count: i64 = conn
             .query_row(
@@ -562,11 +678,16 @@ impl ActionsDatabase {
                 [],
                 |row| row.get(0),
             )
-            .map_err(|e| format!("Failed to count unread actions: {e}"))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "count unread actions".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
         Ok(count.max(0) as usize)
     }
 
-    pub async fn mark_action_read(&self, action_id: &str) -> Result<bool, String> {
+    pub async fn mark_action_read(&self, action_id: &str) -> Result<bool> {
         let conn = self.get_write_connection()?;
         let now = Utc::now().to_rfc3339();
         let affected = conn
@@ -579,11 +700,16 @@ impl ActionsDatabase {
                 "#,
                 params![now, action_id],
             )
-            .map_err(|e| format!("Failed to mark action read: {e}"))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "mark action read".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
         Ok(affected > 0)
     }
 
-    pub async fn mark_all_actions_read(&self) -> Result<usize, String> {
+    pub async fn mark_all_actions_read(&self) -> Result<usize> {
         let conn = self.get_write_connection()?;
         let now = Utc::now().to_rfc3339();
         conn.execute(
@@ -595,10 +721,15 @@ impl ActionsDatabase {
             "#,
             params![now],
         )
-        .map_err(|e| format!("Failed to mark all actions read: {e}"))
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "mark all actions read".to_owned(),
+                message: e.to_string(),
+            })
+        })
     }
 
-    pub async fn dismiss_action(&self, action_id: &str) -> Result<bool, String> {
+    pub async fn dismiss_action(&self, action_id: &str) -> Result<bool> {
         let conn = self.get_write_connection()?;
         let now = Utc::now().to_rfc3339();
         let affected = conn
@@ -612,11 +743,16 @@ impl ActionsDatabase {
                 "#,
                 params![now, action_id],
             )
-            .map_err(|e| format!("Failed to dismiss action: {e}"))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "dismiss action".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
         Ok(affected > 0)
     }
 
-    pub async fn dismiss_all_actions(&self) -> Result<usize, String> {
+    pub async fn dismiss_all_actions(&self) -> Result<usize> {
         let conn = self.get_write_connection()?;
         let now = Utc::now().to_rfc3339();
         conn.execute(
@@ -629,7 +765,12 @@ impl ActionsDatabase {
             "#,
             params![now],
         )
-        .map_err(|e| format!("Failed to dismiss all actions: {e}"))
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "dismiss all actions".to_owned(),
+                message: e.to_string(),
+            })
+        })
     }
 
     /// Finalize any actions still marked `in_progress` in the database.
@@ -640,18 +781,28 @@ impl ActionsDatabase {
     /// stuck in the actions center forever (uncancellable, reappearing after any
     /// client-side clear). Instead we mark them failed with a clear reason and
     /// fail their non-terminal steps. Returns the number of actions finalized.
-    pub async fn finalize_orphaned_in_progress(&self, reason: &str) -> Result<usize, String> {
+    pub async fn finalize_orphaned_in_progress(&self, reason: &str) -> Result<usize> {
         let mut conn = self.get_write_connection()?;
 
         // Collect orphan ids first so we can also fail their non-terminal steps.
         let ids: Vec<String> = {
             let mut stmt = conn
                 .prepare("SELECT id FROM actions WHERE state = 'in_progress'")
-                .map_err(|e| format!("Failed to prepare orphan query: {e}"))?;
+                .map_err(|e| {
+                    Error::Database(DatabaseError::Query {
+                        operation: "prepare orphan actions query".to_owned(),
+                        message: e.to_string(),
+                    })
+                })?;
             let rows = stmt
                 .query_map([], |row| row.get::<_, String>(0))
-                .map_err(|e| format!("Failed to query orphan actions: {e}"))?;
-            rows.filter_map(Result::ok).collect()
+                .map_err(|e| {
+                    Error::Database(DatabaseError::Query {
+                        operation: "query orphan actions".to_owned(),
+                        message: e.to_string(),
+                    })
+                })?;
+            rows.filter_map(std::result::Result::ok).collect()
         };
 
         if ids.is_empty() {
@@ -662,12 +813,19 @@ impl ActionsDatabase {
         let failed_state = ActionState::Failed {
             error: reason.to_owned(),
         };
-        let state_data = serde_json::to_string(&failed_state)
-            .map_err(|e| format!("Failed to serialize failed state: {e}"))?;
+        let state_data = serde_json::to_string(&failed_state).map_err(|e| {
+            Error::Data(DataError::ParseError {
+                data_type: "failed action state".to_owned(),
+                error: e.to_string(),
+            })
+        })?;
 
-        let tx = conn
-            .write_tx()
-            .map_err(|e| format!("Failed to begin transaction: {e}"))?;
+        let tx = conn.write_tx().map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "begin orphan action finalize transaction".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         for id in &ids {
             tx.execute(
@@ -682,7 +840,10 @@ impl ActionsDatabase {
                 "#,
                 params![state_data, now, id],
             )
-            .map_err(|e| format!("Failed to finalize orphan action {id}: {e}"))?;
+            .map_err(|e| Error::Database(DatabaseError::Query {
+            operation: format!("finalize orphan action {id}"),
+            message: e.to_string(),
+        }))?;
 
             tx.execute(
                 r#"
@@ -694,17 +855,26 @@ impl ActionsDatabase {
                 "#,
                 params![reason, now, id],
             )
-            .map_err(|e| format!("Failed to finalize orphan steps for {id}: {e}"))?;
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: format!("finalize orphan action steps for {id}"),
+                    message: e.to_string(),
+                })
+            })?;
         }
 
-        tx.commit()
-            .map_err(|e| format!("Failed to commit orphan finalize: {e}"))?;
+        tx.commit().map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "commit orphan action finalize transaction".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
 
         Ok(ids.len())
     }
 
     /// Parse action type from string
-    fn parse_action_type(&self, s: &str) -> Result<ActionType, String> {
+    fn parse_action_type(&self, s: &str) -> Result<ActionType> {
         match s {
             "swapbuy" => Ok(ActionType::SwapBuy),
             "swapsell" => Ok(ActionType::SwapSell),
@@ -713,7 +883,9 @@ impl ActionsDatabase {
             "positiondca" => Ok(ActionType::PositionDca),
             "positionpartialexit" => Ok(ActionType::PositionPartialExit),
             "manualorder" => Ok(ActionType::ManualOrder),
-            _ => Err(format!("Unknown action type: {s}")),
+            _ => Err(Error::UnknownActionType {
+                value: s.to_owned(),
+            }),
         }
     }
 

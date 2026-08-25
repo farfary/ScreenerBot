@@ -50,7 +50,7 @@ impl AutoOpenAction {
 
         register_action(action)
             .await
-            .map_err(|e| Error::ManualTradeRecord { detail: e })?;
+            .map_err(|e| Error::ManualTradeRecord { source: e })?;
         Ok(Self { action_id })
     }
 
@@ -133,7 +133,7 @@ impl AutoCloseAction {
 
         register_action(action)
             .await
-            .map_err(|e| Error::ManualTradeRecord { detail: e })?;
+            .map_err(|e| Error::ManualTradeRecord { source: e })?;
         Ok(Self { action_id })
     }
 
@@ -216,7 +216,7 @@ impl AutoDcaAction {
 
         register_action(action)
             .await
-            .map_err(|e| Error::ManualTradeRecord { detail: e })?;
+            .map_err(|e| Error::ManualTradeRecord { source: e })?;
         Ok(Self { action_id })
     }
 
