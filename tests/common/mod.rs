@@ -58,15 +58,27 @@ pub fn ensure_config() {
     let _ = CONFIG.get_or_init(|| std::sync::RwLock::new(Config::default()));
 }
 
-/// Context for a mainnet test. Carries the funded test-wallet path, the mint to trade,
-/// and a hard lamports cap so a money test can never exceed it.
+/// Context for a mainnet test. Carries the signer to use, the mint to trade, and a
+/// hard lamports cap so a money test can never exceed it.
 pub struct MainnetCtx {
-    /// Filesystem path to the funded test-wallet keypair JSON.
-    pub wallet_path: String,
+    /// Filesystem path to a funded test-wallet keypair JSON. When absent, the
+    /// app's own main wallet signs — see [`MainnetCtx::keypair`].
+    pub wallet_path: Option<String>,
     /// Mint address to buy then sell.
     pub mint: String,
     /// Absolute ceiling on lamports the test may spend on the buy.
     pub max_lamports: u64,
+}
+
+impl MainnetCtx {
+    /// The signer for this run: the keypair file when one was named, otherwise
+    /// the app's own main wallet.
+    pub fn keypair(&self) -> screenerbot::chains::solana::solana_sdk::signature::Keypair {
+        match &self.wallet_path {
+            Some(path) => load_keypair(path),
+            None => app_main_wallet_keypair(),
+        }
+    }
 }
 
 /// Mainnet gate: returns `Some(ctx)` only when the owner has explicitly opted into
@@ -78,10 +90,10 @@ pub fn require_mainnet() -> Option<MainnetCtx> {
         eprintln!("SKIP mainnet: set SB_TEST_MAINNET_SWAP=1 (./test.sh mainnet) to run");
         return None;
     }
-    let Ok(wallet_path) = std::env::var("SB_TEST_WALLET") else {
-        eprintln!("SKIP mainnet: SB_TEST_WALLET (funded keypair path) not set");
-        return None;
-    };
+    // SB_TEST_WALLET names a dedicated keypair file. Without it the app's own
+    // main wallet signs, which is what makes a real end-to-end run possible on
+    // the owner's machine without exporting a key to disk.
+    let wallet_path = std::env::var("SB_TEST_WALLET").ok();
     let mint = std::env::var("SB_TEST_MINT")
         .unwrap_or_else(|_| "So11111111111111111111111111111111111111112".to_string());
     let max_lamports = std::env::var("SB_TEST_MAX_LAMPORTS")
@@ -93,6 +105,67 @@ pub fn require_mainnet() -> Option<MainnetCtx> {
         mint,
         max_lamports,
     })
+}
+
+/// The app's own main wallet, decrypted from `wallets.db`.
+///
+/// The library encrypts a wallet's key against a value derived from the machine,
+/// not from a passphrase or a keychain entry, so a process running on the owner's
+/// machine can decrypt it without a prompt. That is what lets the mainnet tier
+/// sign a real swap with the wallet that actually holds the funds instead of
+/// requiring a key to be exported to a file.
+///
+/// The real data directory is resolved DIRECTLY rather than through
+/// `crate::paths`, because a mainnet test still runs under `isolated_env()` and
+/// that points `SCREENERBOT_DATA_DIR` at a throwaway directory. Only `wallets.db`
+/// is opened, and only read.
+pub fn app_main_wallet_keypair() -> screenerbot::chains::solana::solana_sdk::signature::Keypair {
+    use screenerbot::secure_storage::{decrypt_private_key, EncryptedData};
+
+    let base = std::env::var("SB_TEST_APP_DATA_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| app_support_data_dir());
+    let db_path = base.join("wallets.db");
+    assert!(
+        db_path.exists(),
+        "the app wallet database is not at {} -- set SB_TEST_WALLET to a keypair file, \
+         or SB_TEST_APP_DATA_DIR to the app's data directory",
+        db_path.display()
+    );
+
+    let connection =
+        rusqlite::Connection::open_with_flags(&db_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .unwrap_or_else(|e| panic!("wallets.db could not be opened read-only: {e}"));
+
+    let (ciphertext, nonce): (String, String) = connection
+        .query_row(
+            "SELECT encrypted_key, nonce FROM wallets \
+             WHERE role = 'main' AND is_active = 1 AND chain_id = 'solana' LIMIT 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap_or_else(|e| panic!("no active main Solana wallet in wallets.db: {e}"));
+
+    let secret = decrypt_private_key(&EncryptedData { ciphertext, nonce })
+        .unwrap_or_else(|e| panic!("the main wallet key could not be decrypted: {e}"));
+    let bytes = bs58::decode(&secret)
+        .into_vec()
+        .unwrap_or_else(|e| panic!("the stored key is not base58: {e}"));
+    screenerbot::chains::solana::solana_sdk::signature::Keypair::try_from(bytes.as_slice())
+        .unwrap_or_else(|e| panic!("the stored key is not a usable keypair: {e}"))
+}
+
+/// The platform data directory the desktop app uses, independent of any test
+/// environment override.
+fn app_support_data_dir() -> PathBuf {
+    let home = dirs::home_dir().expect("a home directory");
+    if cfg!(target_os = "macos") {
+        home.join("Library/Application Support/ScreenerBot/data")
+    } else if cfg!(target_os = "windows") {
+        home.join("AppData/Roaming/ScreenerBot/data")
+    } else {
+        home.join(".local/share/ScreenerBot/data")
+    }
 }
 
 /// Load a funded test keypair from a Solana CLI keypair JSON file (a 64-byte

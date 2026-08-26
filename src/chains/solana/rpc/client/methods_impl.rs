@@ -1429,6 +1429,37 @@ impl RpcClientMethods for RpcClient {
         .await
     }
 
+    async fn get_transaction_details_with_commitment(
+        &self,
+        signature: &str,
+        commitment: CommitmentLevel,
+    ) -> crate::Result<TransactionDetails> {
+        let params = serde_json::json!([
+            signature,
+            {
+                "encoding": "jsonParsed",
+                "commitment": commitment_to_string(commitment),
+                "maxSupportedTransactionVersion": 0
+            }
+        ]);
+
+        let result = self.manager.execute_raw("getTransaction", params).await?;
+
+        if result.is_null() {
+            return Err(crate::Error::Data(crate::errors::DataError::ParseError {
+                data_type: "transaction".to_string(),
+                error: format!("Transaction not found: {signature}"),
+            }));
+        }
+
+        serde_json::from_value(result).map_err(|e| {
+            crate::Error::Data(crate::errors::DataError::ParseError {
+                data_type: "transaction".to_string(),
+                error: format!("failed to parse transaction: {e}"),
+            })
+        })
+    }
+
     async fn get_transaction_details(&self, signature: &str) -> crate::Result<TransactionDetails> {
         // Use jsonParsed encoding for proper decoding (required for v0 transactions with LUTs)
         let params = serde_json::json!([

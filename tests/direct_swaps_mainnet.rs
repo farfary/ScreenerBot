@@ -354,7 +354,7 @@ async fn a_real_round_trip_through_cpmm_settles_and_pays_the_platform_fee() {
 /// from fees. The sell uses exactly what the buy delivered, which is why the buy
 /// receipt has to be exact rather than estimated.
 async fn round_trip(ctx: &common::MainnetCtx, pool: &str, token: &str) {
-    let keypair = common::load_keypair(&ctx.wallet_path);
+    let keypair = ctx.keypair();
     let owner = {
         use screenerbot::chains::solana::solana_sdk::signature::Signer;
         keypair.pubkey()

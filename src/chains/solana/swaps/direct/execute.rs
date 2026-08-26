@@ -42,6 +42,66 @@ pub struct DirectSwapOutcome {
     pub duration_ms: u64,
 }
 
+/// How many times to re-read a confirmed transaction before giving up on an
+/// exact receipt.
+const RECEIPT_READ_ATTEMPTS: usize = 6;
+
+/// Delay between those attempts.
+const RECEIPT_READ_DELAY: Duration = Duration::from_millis(600);
+
+/// Read back what a CONFIRMED swap delivered.
+///
+/// The read asks at `confirmed`, the same commitment the swap was confirmed at.
+/// Asking without a commitment lets the node apply its default of `finalized`,
+/// roughly thirteen seconds behind the tip — the first real mainnet swap through
+/// this engine landed successfully and was then reported as "not found" for
+/// exactly that reason. Even at the right commitment, indexing trails
+/// confirmation slightly, so the read is retried.
+///
+/// So the read is retried, and if it still cannot be had the swap is NOT failed.
+/// Confirmation already proves success: `confirm_transaction` returns an error
+/// rather than `true` when the signature status carries one, and the pool
+/// programme itself refused to return less than `min_out`. What is lost is only
+/// the exact amount, so the receipt falls back to the guaranteed minimum and
+/// marks itself inexact rather than inventing precision it does not have.
+async fn read_receipt(
+    signature: &str,
+    owner: &crate::chains::solana::solana_sdk::pubkey::Pubkey,
+    plan: &SwapPlan,
+) -> DirectSwapResult<Receipt> {
+    let rpc = get_rpc_client();
+    let mut last_error = String::new();
+
+    for attempt in 0..RECEIPT_READ_ATTEMPTS {
+        match rpc
+            .get_transaction_details_with_commitment(signature, CommitmentLevel::Confirmed)
+            .await
+        {
+            Ok(details) => return receipt_from_transaction(signature, owner, plan, &details),
+            Err(e) => last_error = e.to_string(),
+        }
+        if attempt + 1 < RECEIPT_READ_ATTEMPTS {
+            tokio::time::sleep(RECEIPT_READ_DELAY).await;
+        }
+    }
+
+    logger::warning(
+        LogTag::Swap,
+        &format!(
+            "Swap {signature} confirmed but could not be read back after \
+             {RECEIPT_READ_ATTEMPTS} attempts ({last_error}); reporting the \
+             chain-guaranteed minimum of {} raw units",
+            plan.quote.min_net_out
+        ),
+    );
+    Ok(Receipt {
+        received: plan.quote.min_net_out,
+        exact: false,
+        network_fee_lamports: 0,
+        slot: 0,
+    })
+}
+
 /// Run `plan` against a node WITHOUT submitting it.
 ///
 /// The transaction is built unsigned with `owner` as the fee payer, which is
@@ -143,30 +203,30 @@ pub async fn execute_plan(
             detail: format!("node returned an unparsable signature {signature}: {e}"),
         })?;
 
-    let confirmed = rpc
+    // `confirm_transaction` separates the two outcomes that must never be
+    // conflated: it returns `Err` when the signature status carries an on-chain
+    // error, and `Ok(false)` when the wait simply elapsed. Only the second is a
+    // timeout, and only the second leaves the outcome genuinely unknown.
+    match rpc
         .confirm_transaction(&parsed, CommitmentLevel::Confirmed, timeout)
         .await
-        .map_err(|_| DirectSwapError::ConfirmationTimeout {
-            signature: signature.clone(),
-            waited_ms: timeout.as_millis() as u64,
-        })?;
-    if !confirmed {
-        return Err(DirectSwapError::ConfirmationTimeout {
-            signature: signature.clone(),
-            waited_ms: timeout.as_millis() as u64,
-        });
+    {
+        Ok(true) => {}
+        Ok(false) => {
+            return Err(DirectSwapError::ConfirmationTimeout {
+                signature: signature.clone(),
+                waited_ms: timeout.as_millis() as u64,
+            })
+        }
+        Err(e) => {
+            return Err(DirectSwapError::TransactionFailed {
+                signature: signature.clone(),
+                detail: e.to_string(),
+            })
+        }
     }
 
-    let details = rpc.get_transaction_details(&signature).await.map_err(|e| {
-        // Confirmed but unreadable: the swap happened, so this must stay a
-        // submitted-class error rather than anything a caller might retry.
-        DirectSwapError::TransactionFailed {
-            signature: signature.clone(),
-            detail: format!("confirmed transaction could not be read back: {e}"),
-        }
-    })?;
-
-    let receipt = receipt_from_transaction(&signature, &owner, plan, &details)?;
+    let receipt = read_receipt(&signature, &owner, plan).await?;
 
     Ok(DirectSwapOutcome {
         signature,

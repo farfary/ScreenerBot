@@ -473,6 +473,19 @@ pub trait RpcClientMethods {
         signature: &str,
     ) -> impl std::future::Future<Output = crate::Result<TransactionDetails>> + Send;
 
+    /// Transaction details at an explicit commitment.
+    ///
+    /// [`Self::get_transaction_details`] sends no commitment, so the node applies
+    /// its default of `finalized` — roughly thirteen seconds behind the tip. A
+    /// caller that has just confirmed a transaction at `confirmed` must ask at
+    /// `confirmed` too, or it reads back nothing for that whole window and
+    /// concludes a landed transaction is missing.
+    fn get_transaction_details_with_commitment(
+        &self,
+        signature: &str,
+        commitment: CommitmentLevel,
+    ) -> impl std::future::Future<Output = crate::Result<TransactionDetails>> + Send;
+
     /// Sign, send and confirm transaction with main wallet (simple API)
     ///
     /// Convenience method that uses default commitment and timeout.
