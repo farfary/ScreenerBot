@@ -15,7 +15,8 @@ use super::error::{DirectSwapError, DirectSwapResult};
 use super::venue::PoolMarket;
 use crate::chains::solana::solana_sdk::{instruction::Instruction, pubkey::Pubkey};
 use crate::chains::solana::spl_associated_token_account::{
-    get_associated_token_address_with_program_id, instruction::create_associated_token_account_idempotent,
+    get_associated_token_address_with_program_id,
+    instruction::create_associated_token_account_idempotent,
 };
 
 /// The owner's token accounts for both legs of a swap, with the token program
@@ -40,20 +41,22 @@ impl WalletLegs {
         input_mint: &Pubkey,
         output_mint: &Pubkey,
     ) -> DirectSwapResult<Self> {
-        let input_program = market.token_program(input_mint).ok_or_else(|| {
-            DirectSwapError::PairNotInPool {
-                pool: market.pool(),
-                input_mint: *input_mint,
-                output_mint: *output_mint,
-            }
-        })?;
-        let output_program = market.token_program(output_mint).ok_or_else(|| {
-            DirectSwapError::PairNotInPool {
-                pool: market.pool(),
-                input_mint: *input_mint,
-                output_mint: *output_mint,
-            }
-        })?;
+        let input_program =
+            market
+                .token_program(input_mint)
+                .ok_or_else(|| DirectSwapError::PairNotInPool {
+                    pool: market.pool(),
+                    input_mint: *input_mint,
+                    output_mint: *output_mint,
+                })?;
+        let output_program =
+            market
+                .token_program(output_mint)
+                .ok_or_else(|| DirectSwapError::PairNotInPool {
+                    pool: market.pool(),
+                    input_mint: *input_mint,
+                    output_mint: *output_mint,
+                })?;
 
         Ok(Self {
             input_account: get_associated_token_address_with_program_id(

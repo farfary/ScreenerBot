@@ -14,13 +14,15 @@
 
 use super::error::DirectSwapResult;
 use crate::chains::solana::pools::types::ProgramKind;
-use crate::chains::solana::solana_sdk::{account::Account, instruction::Instruction, pubkey::Pubkey};
+use crate::chains::solana::solana_sdk::{
+    account::Account, instruction::Instruction, pubkey::Pubkey,
+};
 use async_trait::async_trait;
 use std::fmt::Debug;
 
 /// What a venue's own math says a swap returns, before slippage and before the
 /// platform fee. All amounts are raw units.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct VenueQuote {
     /// Amount routed into the pool.
     pub amount_in: u64,

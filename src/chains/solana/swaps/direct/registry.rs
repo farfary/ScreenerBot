@@ -24,7 +24,6 @@ pub fn venues() -> &'static [Arc<dyn PoolVenue>] {
         vec![
             Arc::new(venues::raydium_cpmm::RaydiumCpmmVenue) as Arc<dyn PoolVenue>,
             Arc::new(venues::raydium_amm_v4::RaydiumAmmV4Venue) as Arc<dyn PoolVenue>,
-            Arc::new(venues::raydium_clmm::RaydiumClmmVenue) as Arc<dyn PoolVenue>,
         ]
     })
 }
@@ -77,11 +76,18 @@ mod tests {
 
     #[test]
     fn no_two_venues_claim_the_same_program_or_kind() {
-        let mut ids: Vec<String> = venues().iter().map(|v| v.program_id().to_string()).collect();
+        let mut ids: Vec<String> = venues()
+            .iter()
+            .map(|v| v.program_id().to_string())
+            .collect();
         let count = ids.len();
         ids.sort();
         ids.dedup();
-        assert_eq!(ids.len(), count, "duplicate program id in the venue registry");
+        assert_eq!(
+            ids.len(),
+            count,
+            "duplicate program id in the venue registry"
+        );
 
         let mut kinds: Vec<String> = venues()
             .iter()
@@ -89,7 +95,11 @@ mod tests {
             .collect();
         kinds.sort();
         kinds.dedup();
-        assert_eq!(kinds.len(), count, "duplicate pool kind in the venue registry");
+        assert_eq!(
+            kinds.len(),
+            count,
+            "duplicate pool kind in the venue registry"
+        );
     }
 
     #[test]
@@ -102,9 +112,8 @@ mod tests {
     }
 
     #[test]
-    fn the_three_raydium_pool_kinds_are_supported() {
+    fn the_registered_raydium_pool_kinds_are_supported() {
         assert!(supports(ProgramKind::RaydiumCpmm));
-        assert!(supports(ProgramKind::RaydiumClmm));
         assert!(supports(ProgramKind::RaydiumLegacyAmm));
     }
 }

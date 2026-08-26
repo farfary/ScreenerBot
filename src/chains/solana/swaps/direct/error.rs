@@ -47,7 +47,7 @@ pub enum DirectSwapError {
     SubmitFailed { detail: String },
     /// Submitted, then the confirmation wait elapsed. The transaction MAY have
     /// landed. Never retry on this variant.
-    ConfirmationTimeout { signature: String },
+    ConfirmationTimeout { signature: String, waited_ms: u64 },
     /// Submitted and confirmed, but the chain reported the transaction failed.
     TransactionFailed { signature: String, detail: String },
     /// Confirmed on chain, but the wallet did not receive at least the minimum.
@@ -91,7 +91,7 @@ impl DirectSwapError {
     /// The on-chain signature, when one exists.
     pub fn signature(&self) -> Option<&str> {
         match self {
-            DirectSwapError::ConfirmationTimeout { signature }
+            DirectSwapError::ConfirmationTimeout { signature, .. }
             | DirectSwapError::TransactionFailed { signature, .. }
             | DirectSwapError::OutputNotReceived { signature, .. } => Some(signature),
             _ => None,
@@ -134,9 +134,12 @@ impl fmt::Display for DirectSwapError {
                 write!(f, "simulation rejected the swap: {detail}")
             }
             DirectSwapError::SubmitFailed { detail } => write!(f, "swap submission failed: {detail}"),
-            DirectSwapError::ConfirmationTimeout { signature } => write!(
+            DirectSwapError::ConfirmationTimeout {
+                signature,
+                waited_ms,
+            } => write!(
                 f,
-                "swap {signature} was submitted but not confirmed in time; do not retry"
+                "swap was submitted but transaction {signature} was not confirmed within {waited_ms}ms; do not retry"
             ),
             DirectSwapError::TransactionFailed { signature, detail } => {
                 write!(f, "swap {signature} failed on chain: {detail}")
@@ -166,6 +169,59 @@ impl std::error::Error for DirectSwapError {}
 /// Result alias for the direct pool-swap engine.
 pub type DirectSwapResult<T> = Result<T, DirectSwapError>;
 
+/// Map the engine's typed cause onto the routing layer's verdict.
+///
+/// Only a POOL-side verdict may become `NotTradable`/`NoRoute` and count towards
+/// retiring a mint. An RPC read, a build fault or a submission failure says
+/// nothing about the token, so it stays `Unavailable`, which the blacklisting
+/// rules ignore. Getting this backwards retires perfectly good tokens whenever
+/// our own node has a bad minute.
+impl DirectSwapError {
+    /// Classify this failure for `crate::swaps`.
+    pub fn into_quote_error(self, router: &str) -> crate::swaps::error::QuoteError {
+        use crate::swaps::error::QuoteError;
+        let detail = self.to_string();
+        match self {
+            DirectSwapError::PoolNotTradable { .. } => QuoteError::NotTradable {
+                router: router.to_owned(),
+                detail,
+            },
+            DirectSwapError::PairNotInPool { .. }
+            | DirectSwapError::InsufficientLiquidity { .. } => QuoteError::NoRoute {
+                router: router.to_owned(),
+                detail,
+            },
+            DirectSwapError::InvalidRequest { .. } => QuoteError::RouterRejected {
+                router: router.to_owned(),
+                detail,
+            },
+            _ => QuoteError::Unavailable {
+                router: router.to_owned(),
+                detail,
+            },
+        }
+    }
+}
+
+/// Carry the engine's typed cause up into the Solana domain error UNCHANGED.
+///
+/// Wrapping transparently rather than flattening to a message is what lets
+/// callers keep deciding from the variant — most importantly
+/// `crate::swaps::unconfirmed_swap_signature`, which recovers the signature of a
+/// swap that may still land. That used to be a string search for a marker
+/// sentence; a direct swap hands it the signature as data instead.
+impl From<DirectSwapError> for crate::chains::solana::Error {
+    fn from(error: DirectSwapError) -> Self {
+        crate::chains::solana::Error::DirectSwap(error)
+    }
+}
+
+impl From<DirectSwapError> for crate::Error {
+    fn from(error: DirectSwapError) -> Self {
+        crate::Error::Solana(crate::chains::solana::Error::DirectSwap(error))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -174,6 +230,7 @@ mod tests {
     fn a_confirmation_timeout_counts_as_submitted_so_it_is_never_retried() {
         let err = DirectSwapError::ConfirmationTimeout {
             signature: "sig".to_owned(),
+            waited_ms: 60_000,
         };
         assert!(err.submitted());
         assert_eq!(err.signature(), Some("sig"));

@@ -98,8 +98,8 @@ impl PlatformFee {
         }
         let reference = fee_reference_for_pair(&input_mint.to_string(), &output_mint.to_string())
             .ok_or_else(|| DirectSwapError::InvalidRequest {
-                detail: "fee side resolved without a reference mint on either leg".to_owned(),
-            })?;
+            detail: "fee side resolved without a reference mint on either leg".to_owned(),
+        })?;
         let mint = Pubkey::from_str(reference.mint).map_err(|e| DirectSwapError::Build {
             detail: format!("fee mint is not a pubkey: {e}"),
         })?;
@@ -231,7 +231,8 @@ mod tests {
         let token = Pubkey::new_unique();
         let fee = PlatformFee::resolve(FeeSide::Input, &wsol(), &token, 100).unwrap();
         assert_eq!(fee.amount, 0);
-        assert!(fee.transfer_instruction(&Pubkey::new_unique(), &Pubkey::new_unique())
+        assert!(fee
+            .transfer_instruction(&Pubkey::new_unique(), &Pubkey::new_unique())
             .unwrap()
             .is_none());
     }

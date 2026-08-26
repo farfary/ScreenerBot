@@ -388,9 +388,23 @@ pub async fn execute_swap_with_fallback(token: &Token, quote: Quote) -> Result<S
 /// fee), but on a PARTIAL exit the tokens are still there — so a "sell 25%" that timed out
 /// once actually sells 25% twice, and the position records only one of them.
 ///
-/// The signature is embedded in the error text, so a caller can stop retrying and hand it
-/// to verification, which reconciles what really happened on chain.
+/// The signature is recovered so a caller can stop retrying and hand it to verification,
+/// which reconciles what really happened on chain.
+///
+/// Two paths, and the typed one is tried first. The direct pool-swap engine reports the
+/// timeout as a VARIANT that already carries the signature as data; only the aggregator
+/// path, whose timeout is produced deep inside the RPC client as free text, still needs
+/// the marker-sentence scan below.
 pub fn unconfirmed_swap_signature(error: &Error) -> Option<String> {
+    if let Error::Solana(crate::chains::solana::Error::DirectSwap(
+        crate::chains::solana::swaps::direct::DirectSwapError::ConfirmationTimeout {
+            signature,
+            ..
+        },
+    )) = error
+    {
+        return Some(signature.clone());
+    }
     unconfirmed_swap_signature_from_message(&error.to_string())
 }
 

@@ -185,9 +185,13 @@ mod tests {
     #[test]
     fn a_buy_keeps_the_full_pool_output_because_the_fee_was_taken_on_the_input() {
         let intent = buy_intent();
-        let input_fee =
-            PlatformFee::resolve(FeeSide::Input, &intent.input_mint, &intent.output_mint, 5_000_000)
-                .unwrap();
+        let input_fee = PlatformFee::resolve(
+            FeeSide::Input,
+            &intent.input_mint,
+            &intent.output_mint,
+            5_000_000,
+        )
+        .unwrap();
         let swap_in = intent.amount_in - input_fee.amount;
 
         let quote = DirectQuote::assemble(
@@ -200,7 +204,10 @@ mod tests {
         .unwrap();
 
         assert_eq!(quote.amount_in, 5_000_000);
-        assert_eq!(quote.swap_amount_in, 4_975_000, "0.5% never reaches the pool");
+        assert_eq!(
+            quote.swap_amount_in, 4_975_000,
+            "0.5% never reaches the pool"
+        );
         assert_eq!(quote.fee.amount, 25_000);
         assert_eq!(quote.min_out, 990_000);
         assert_eq!(
@@ -218,7 +225,8 @@ mod tests {
         };
         let side = FeeSide::for_pair(&intent.input_mint, &intent.output_mint);
         assert_eq!(side, FeeSide::Output);
-        let placeholder = PlatformFee::resolve(side, &intent.input_mint, &intent.output_mint, 0).unwrap();
+        let placeholder =
+            PlatformFee::resolve(side, &intent.input_mint, &intent.output_mint, 0).unwrap();
 
         let quote = DirectQuote::assemble(
             &intent,
@@ -229,7 +237,10 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(quote.swap_amount_in, intent.amount_in, "nothing is held back");
+        assert_eq!(
+            quote.swap_amount_in, intent.amount_in,
+            "nothing is held back"
+        );
         assert_eq!(quote.min_out, 990_000, "the chain enforces the pool output");
         assert_eq!(quote.fee.amount, 4_950, "0.5% of the GUARANTEED output");
         assert_eq!(quote.min_net_out, 985_050);

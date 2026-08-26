@@ -55,7 +55,12 @@ pub fn build_plan(
     market: &dyn PoolMarket,
     quote: &DirectQuote,
 ) -> DirectSwapResult<SwapPlan> {
-    let legs = WalletLegs::resolve(&intent.owner, market, &intent.input_mint, &intent.output_mint)?;
+    let legs = WalletLegs::resolve(
+        &intent.owner,
+        market,
+        &intent.input_mint,
+        &intent.output_mint,
+    )?;
 
     let venue_units = market.compute_units();
     let mut instructions = compute_budget_instructions(venue_units);

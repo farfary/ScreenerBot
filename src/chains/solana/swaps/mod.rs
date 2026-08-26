@@ -1,24 +1,24 @@
-//! Solana swap mechanics: DEX instruction building, transaction execution, and
-//! the concrete Jupiter/Raydium adapters behind `crate::swaps::SwapRouter`.
+//! Solana swap mechanics: the concrete Jupiter and direct-pool adapters behind
+//! `crate::swaps::SwapRouter`, plus everything Solana-specific about turning a
+//! swap intent into a landed transaction.
 //!
-//! Owns every Solana-specific detail of turning a swap intent into a landed
-//! transaction: program IDs, instruction discriminators, account metas,
-//! WSOL wrap/unwrap, ATA preparation (via `crate::chains::solana::assets`),
-//! signing and submission (via `crate::chains::solana::rpc`), and the
-//! endpoint-specific Jupiter response decoding. Chain-neutral swap
-//! intent, quoting policy, routing/fallback orchestration and the
-//! `SwapRouter` contract stay in `crate::swaps` — this module implements
-//! that contract, it does not own it.
+//! Two execution mechanisms live here and they are deliberately different:
+//!
+//! * `routers::JupiterRouter` — an aggregator quotes and builds the transaction
+//!   for us; we sign and send it.
+//! * `direct` — we decode the pool, compute the curve, build the instruction and
+//!   attach our own fee. No third party in the money path.
+//!
+//! `revenue` holds the fee rate and destinations BOTH use, so there is exactly
+//! one definition of what a ScreenerBot swap charges.
+//!
+//! Chain-neutral swap intent, quoting policy, routing/fallback orchestration and
+//! the `SwapRouter` contract stay in `crate::swaps` — this module implements that
+//! contract, it does not own it.
 
-pub mod builder;
-pub mod executor;
-pub mod programs;
+pub mod direct;
+pub mod revenue;
 pub mod routers;
-pub mod types;
 
-pub use builder::SwapBuilder;
-pub use executor::SwapExecutor;
-pub use programs::raydium_clmm::RaydiumClmmSwap;
-pub use programs::raydium_cpmm::RaydiumCpmmSwap;
-pub use routers::{JupiterRouter, RaydiumRouter};
-pub use types::{SwapDirection, SwapError, SwapRequest, SwapResult};
+pub use direct::{DirectSwapIntent, DirectSwapOutcome, DirectSwapResult};
+pub use routers::{DirectPoolRouter, JupiterRouter};

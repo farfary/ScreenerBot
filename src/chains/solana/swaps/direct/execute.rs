@@ -42,7 +42,10 @@ pub struct DirectSwapOutcome {
 }
 
 /// Build, sign, simulate, send, confirm and verify `plan`.
-pub async fn execute_plan(plan: &SwapPlan, keypair: &Keypair) -> DirectSwapResult<DirectSwapOutcome> {
+pub async fn execute_plan(
+    plan: &SwapPlan,
+    keypair: &Keypair,
+) -> DirectSwapResult<DirectSwapOutcome> {
     let started = Instant::now();
     let rpc = get_rpc_client();
     let owner = keypair.pubkey();
@@ -62,12 +65,11 @@ pub async fn execute_plan(plan: &SwapPlan, keypair: &Keypair) -> DirectSwapResul
     ));
 
     if with_config(|cfg| cfg.swaps.direct.simulate_before_send) {
-        let outcome = rpc
-            .simulate_transaction(&transaction)
-            .await
-            .map_err(|e| DirectSwapError::SubmitFailed {
+        let outcome = rpc.simulate_transaction(&transaction).await.map_err(|e| {
+            DirectSwapError::SubmitFailed {
                 detail: format!("simulation could not be run: {e}"),
-            })?;
+            }
+        })?;
         if !outcome.succeeded() {
             return Err(DirectSwapError::SimulationRejected {
                 detail: outcome.failure_detail(),
@@ -93,7 +95,9 @@ pub async fn execute_plan(plan: &SwapPlan, keypair: &Keypair) -> DirectSwapResul
         })?
         .to_string();
 
-    let timeout = Duration::from_secs(with_config(|cfg| cfg.swaps.direct.confirmation_timeout_secs));
+    let timeout = Duration::from_secs(with_config(|cfg| {
+        cfg.swaps.direct.confirmation_timeout_secs
+    }));
     let parsed = signature
         .parse()
         .map_err(|e| DirectSwapError::SubmitFailed {
@@ -105,10 +109,12 @@ pub async fn execute_plan(plan: &SwapPlan, keypair: &Keypair) -> DirectSwapResul
         .await
         .map_err(|_| DirectSwapError::ConfirmationTimeout {
             signature: signature.clone(),
+            waited_ms: timeout.as_millis() as u64,
         })?;
     if !confirmed {
         return Err(DirectSwapError::ConfirmationTimeout {
             signature: signature.clone(),
+            waited_ms: timeout.as_millis() as u64,
         });
     }
 
