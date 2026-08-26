@@ -50,7 +50,7 @@ pub mod venues;
 pub mod verify;
 
 pub use error::{DirectSwapError, DirectSwapResult};
-pub use execute::{execute_plan, DirectSwapOutcome};
+pub use execute::{execute_plan, simulate_plan, DirectSwapOutcome};
 pub use fee::{FeeSide, PlatformFee};
 pub use intent::DirectSwapIntent;
 pub use plan::{build_plan, SwapPlan};

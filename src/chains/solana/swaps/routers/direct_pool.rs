@@ -20,9 +20,7 @@
 //! count against a mint. Our own RPC or build faults are `Unavailable`, which
 //! never does.
 
-use crate::chains::solana::swaps::direct::{
-    self, DirectSwapError, DirectSwapIntent, DirectSwapOutcome,
-};
+use crate::chains::solana::swaps::direct::{self, DirectSwapIntent, DirectSwapOutcome};
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
 use crate::swaps::error::{QuoteError, QuoteResult};
@@ -279,6 +277,7 @@ fn slippage_bps_for(slippage_pct: f64) -> u16 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::chains::solana::swaps::direct::DirectSwapError;
 
     #[test]
     fn slippage_converts_percent_to_basis_points_and_never_reaches_zero() {

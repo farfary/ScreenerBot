@@ -39,7 +39,7 @@
 //! compares `minimum_amount_out` against the amount received NET of the output
 //! transfer fee, so the quote must be net too.
 
-use super::layout::{pubkey_at, token_account_amount, u16_at, u64_at, u8_at};
+use super::layout::{pubkey_at, token_account_amount, u64_at, u8_at};
 use super::math::{constant_product_out, fee_amount, price_impact_pct};
 use super::token2022::{transfer_fee_schedule, TransferFeeSchedule};
 use crate::chains::solana::constants::RAYDIUM_CPMM_PROGRAM_ID;

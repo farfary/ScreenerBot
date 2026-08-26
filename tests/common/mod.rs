@@ -95,6 +95,18 @@ pub fn require_mainnet() -> Option<MainnetCtx> {
     })
 }
 
+/// Load a funded test keypair from a Solana CLI keypair JSON file (a 64-byte
+/// array). Only the mainnet tier calls this — the live tier simulates, which
+/// needs an address and no key at all.
+pub fn load_keypair(path: &str) -> screenerbot::chains::solana::solana_sdk::signature::Keypair {
+    let raw = std::fs::read_to_string(path)
+        .unwrap_or_else(|e| panic!("test wallet {path} could not be read: {e}"));
+    let bytes: Vec<u8> = serde_json::from_str(&raw)
+        .unwrap_or_else(|e| panic!("test wallet {path} is not a keypair JSON array: {e}"));
+    screenerbot::chains::solana::solana_sdk::signature::Keypair::try_from(bytes.as_slice())
+        .unwrap_or_else(|e| panic!("test wallet {path} is not a usable keypair: {e}"))
+}
+
 // ==================== GLOBAL-CONFIG MUTATION ====================
 
 /// Serialises tests that WRITE the global `CONFIG`.

@@ -19,7 +19,8 @@ use super::verify::{receipt_from_transaction, Receipt};
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::chains::solana::solana_sdk::{
     commitment_config::CommitmentLevel,
-    signature::{Keypair, Signer},
+    pubkey::Pubkey,
+    signature::{Keypair, Signature, Signer},
     transaction::{Transaction, VersionedTransaction},
 };
 use crate::config::with_config;
@@ -39,6 +40,44 @@ pub struct DirectSwapOutcome {
     pub platform_fee: u64,
     /// Wall-clock time from build to verified, in milliseconds.
     pub duration_ms: u64,
+}
+
+/// Run `plan` against a node WITHOUT submitting it.
+///
+/// The transaction is built unsigned with `owner` as the fee payer, which is
+/// enough because `simulate_transaction` sends `sigVerify: false`: the node
+/// executes the instructions against real account state and real balances but
+/// nothing is signed and nothing lands.
+///
+/// This is the strongest check available for free. It exercises the exact
+/// account list, the exact instruction data and the exact `min_out` that a real
+/// swap would carry, against the live pool — so a wrong account order, a bad
+/// discriminator, an under-sized compute budget or an unsatisfiable `min_out`
+/// all surface here rather than costing a fee.
+pub async fn simulate_plan(
+    plan: &SwapPlan,
+    owner: &Pubkey,
+) -> DirectSwapResult<crate::chains::solana::rpc::types::SimulationOutcome> {
+    let rpc = get_rpc_client();
+    let blockhash = rpc
+        .get_latest_blockhash()
+        .await
+        .map_err(|e| DirectSwapError::Build {
+            detail: format!("no recent blockhash: {e}"),
+        })?;
+
+    let mut transaction = Transaction::new_with_payer(&plan.instructions, Some(owner));
+    transaction.message.recent_blockhash = blockhash;
+    // An unsigned transaction still needs a signature slot per required signer or
+    // it fails to deserialise on the node.
+    transaction.signatures =
+        vec![Signature::default(); transaction.message.header.num_required_signatures as usize];
+
+    rpc.simulate_transaction(&VersionedTransaction::from(transaction))
+        .await
+        .map_err(|e| DirectSwapError::SubmitFailed {
+            detail: format!("simulation could not be run: {e}"),
+        })
 }
 
 /// Build, sign, simulate, send, confirm and verify `plan`.
