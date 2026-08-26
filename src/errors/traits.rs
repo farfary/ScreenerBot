@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use super::{
     AccountError, ConfigurationError, DataError, DatabaseError, Error, InternalError, IoError,
-    NetworkError, ServiceError,
+    NetworkError, RpcProviderError, ServiceError,
 };
 
 /// How loudly a failure should be reported.
@@ -37,6 +37,15 @@ pub trait ErrorClass {
 
     /// HTTP status when this error surfaces through the webserver.
     fn http_status(&self) -> u16;
+
+    /// True when the failure was a provider refusing us for volume rather than
+    /// a problem with the request. Callers that pace themselves — the exit
+    /// monitor backing off Jupiter, for one — ask this instead of searching the
+    /// message for `429`, which silently stops matching the moment a provider
+    /// rewords its response.
+    fn is_rate_limited(&self) -> bool {
+        self.http_status() == 429
+    }
 }
 
 impl ErrorClass for AccountError {
@@ -423,6 +432,18 @@ impl ErrorClass for Error {
             Error::Configuration(e) => e.http_status(),
             Error::Data(e) => e.http_status(),
             Error::Rpc(_) | Error::RpcProvider(_) => 502,
+        }
+    }
+
+    /// `RpcProviderError` has no `ErrorClass` impl yet, so its rate-limit
+    /// variant cannot reach the default via `http_status()` (it collapses to
+    /// 502 above). Name it explicitly rather than let a throttled provider
+    /// read as an ordinary gateway failure — the exit monitor decides whether
+    /// to back off from this answer.
+    fn is_rate_limited(&self) -> bool {
+        match self {
+            Error::RpcProvider(RpcProviderError::RateLimitExceeded { .. }) => true,
+            other => other.http_status() == 429,
         }
     }
 }

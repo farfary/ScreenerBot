@@ -32,7 +32,7 @@ pub(crate) async fn quote_and_execute_for_wallet_on(
         .get_primary_router_for(request.chain)
         .ok_or_else(|| Error::configuration_error("No swap routers enabled in config"))?;
     router.accept_own_chain(&request)?;
-    let quote = router.get_quote(&request).await?;
+    let quote = router.get_quote(&request).await.map_err(Error::from)?;
     let result = router.execute_swap_for_wallet(&quote, wallet_id).await?;
     Ok((quote, result))
 }
@@ -100,7 +100,7 @@ mod tests {
             crate::chains::ChainId::Solana
         }
 
-        async fn get_quote(&self, request: &QuoteRequest) -> Result<Quote> {
+        async fn get_quote(&self, request: &QuoteRequest) -> crate::swaps::QuoteResult<Quote> {
             self.log.quotes.lock().expect("quotes").push(self.id);
             Ok(Quote {
                 chain: request.chain,
@@ -311,7 +311,7 @@ mod tests {
             fn chain(&self) -> crate::chains::ChainId {
                 crate::chains::ChainId::Solana
             }
-            async fn get_quote(&self, request: &QuoteRequest) -> Result<Quote> {
+            async fn get_quote(&self, request: &QuoteRequest) -> crate::swaps::QuoteResult<Quote> {
                 Ok(Quote {
                     chain: request.chain,
                     router_id: self.id().to_owned(),

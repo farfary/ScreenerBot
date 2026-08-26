@@ -398,7 +398,12 @@ pub(super) async fn execute_token_blacklist(
     let mint_clone = token.mint.clone();
     let blacklist_result = tokio::task::spawn_blocking(move || {
         if let Some(db) = crate::tokens::get_global_database() {
-            crate::tokens::cleanup::blacklist_token(&mint_clone, "Blacklisted via Telegram", &db)
+            crate::tokens::cleanup::blacklist_token(
+                &mint_clone,
+                "Blacklisted via Telegram",
+                "manual",
+                &db,
+            )
         } else {
             Err(crate::tokens::Error::NotInitialized {
                 resource: "token database".to_owned(),

@@ -60,6 +60,12 @@ pub enum Error {
         mint: String,
         detail: String,
     },
+    /// No router would quote the trade. Distinct from [`Error::SwapFailed`]
+    /// because nothing was built, signed or submitted — the trade stopped one
+    /// step earlier, and the manual-trade timeline reports that step from this
+    /// variant rather than by reading the message.
+    #[error("could not quote a swap for token {mint}: {detail}")]
+    QuoteFailed { mint: String, detail: String },
     #[error("swap for token {mint} failed: {detail}")]
     SwapFailed { mint: String, detail: String },
     #[error("wallet-history sync failed: {detail}")]
@@ -105,6 +111,7 @@ impl ErrorClass for Error {
             Error::RowDecode { .. }
             | Error::SchemaMigration { .. }
             | Error::TransitionFailed { .. }
+            | Error::QuoteFailed { .. }
             | Error::SwapFailed { .. } => false,
             Error::Maintenance { .. } => false,
             Error::WalletHistorySync { .. } => true,
@@ -139,6 +146,8 @@ impl ErrorClass for Error {
             | Error::ZeroExitAmount { .. }
             | Error::DcaDisabled => Severity::Warning,
             Error::TransitionFailed { .. } | Error::SwapFailed { .. } => Severity::Critical,
+            // Nothing was submitted, so no money moved and no state is at risk.
+            Error::QuoteFailed { .. } => Severity::Warning,
             Error::WalletHistorySync { .. } => Severity::Error,
             Error::WalletUnavailable { .. } => Severity::Critical,
             Error::SlotUnavailable { .. } => Severity::Info,
@@ -159,6 +168,8 @@ impl ErrorClass for Error {
             | Error::InvalidTradeSize { .. }
             | Error::InvalidExitPercentage { .. }
             | Error::DcaDisabled => 400,
+            // The trade is well-formed; no provider would price it.
+            Error::QuoteFailed { .. } => 422,
             Error::RowDecode { .. }
             | Error::SchemaMigration { .. }
             | Error::Maintenance { .. }

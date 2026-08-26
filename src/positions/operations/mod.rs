@@ -25,6 +25,39 @@ use chrono::Utc;
 use serde_json::json;
 use tokio::time::{sleep, Duration};
 
+/// Wait before retrying the next slippage rung of an exit.
+///
+/// Being throttled needs a much longer pause than an ordinary failure, and the
+/// error itself is the only reliable place to learn which happened — this asks
+/// [`ErrorClass::is_rate_limited`] instead of searching the rendered message
+/// for "429", which stops matching whenever a provider rewords its response.
+/// `Retry-After` is honoured when the provider sent one.
+pub(crate) async fn backoff_after<E: crate::errors::ErrorClass>(error: &E) {
+    if error.is_rate_limited() {
+        let wait = error.retry_after().unwrap_or(RATE_LIMIT_BACKOFF).max(
+            // Never pause less than the ordinary rung wait just because a
+            // provider asked for a token gesture of a delay.
+            SLIPPAGE_RUNG_BACKOFF,
+        );
+        logger::warning(
+            LogTag::Positions,
+            &format!(
+                "Router rate limit hit, backing off {:.0}s before retry",
+                wait.as_secs_f64()
+            ),
+        );
+        sleep(wait).await;
+    } else {
+        sleep(SLIPPAGE_RUNG_BACKOFF).await;
+    }
+}
+
+/// Pause between slippage rungs after an ordinary failure.
+const SLIPPAGE_RUNG_BACKOFF: Duration = Duration::from_secs(2);
+
+/// Pause after a rate-limited attempt when the provider named no `Retry-After`.
+const RATE_LIMIT_BACKOFF: Duration = Duration::from_secs(10);
+
 const SOLANA_BLOCKHASH_VALIDITY_SLOTS: u64 = 150;
 const POSITION_SAVE_MAX_RETRIES: usize = 5;
 const POSITION_SAVE_BASE_BACKOFF_MS: u64 = 200;

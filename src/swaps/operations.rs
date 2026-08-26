@@ -2,7 +2,8 @@
 //! Provides get_best_quote() and execute_swap_with_fallback()
 
 use crate::logger::{self, LogTag};
-use crate::swaps::registry::get_registry;
+use crate::swaps::error::{QuoteError, QuoteResult};
+use crate::swaps::registry::{get_registry, try_get_registry};
 use crate::swaps::types::{Quote, QuoteRequest, SwapResult};
 use crate::tokens::Token;
 use crate::{Error, Result};
@@ -13,17 +14,33 @@ use std::time::Instant;
 // CONCURRENT QUOTE FETCHING
 // ============================================================================
 
+/// Get best quote from all enabled routers (concurrent), folded into the crate
+/// error channel. Callers that must react to WHY quoting failed — the opening
+/// path deciding whether to blacklist, the trade dialog choosing a message —
+/// take [`try_get_best_quote`] instead and match the [`QuoteError`] variant.
+pub async fn get_best_quote(request: QuoteRequest) -> Result<Quote> {
+    try_get_best_quote(request).await.map_err(Error::from)
+}
+
 /// Get best quote from all enabled routers (concurrent)
 /// Fetches quotes from all enabled routers simultaneously
 /// Returns the quote with highest output amount
-pub async fn get_best_quote(request: QuoteRequest) -> Result<Quote> {
-    let registry = get_registry()?;
+pub async fn try_get_best_quote(request: QuoteRequest) -> QuoteResult<Quote> {
+    // The registry failure stays a ServiceError all the way through: a swap
+    // service that never started is not a fact about the token, and callers on
+    // the crate channel must still see WHICH service failed.
+    let registry = try_get_registry().ok_or_else(|| {
+        QuoteError::RegistryUnavailable(crate::errors::ServiceError::Initialize {
+            service: "swaps.registry".to_owned(),
+            message: "router factory has not been registered".to_owned(),
+        })
+    })?;
     let enabled = registry.enabled_routers_for(request.chain);
 
     if enabled.is_empty() {
-        return Err(Error::configuration_error(
-            "No swap routers enabled in config",
-        ));
+        return Err(QuoteError::NoRoutersEnabled {
+            chain: request.chain,
+        });
     }
 
     logger::info(
@@ -61,9 +78,8 @@ pub async fn get_best_quote(request: QuoteRequest) -> Result<Quote> {
                         Ok(quote)
                     }
                     Err(e) => {
-                        let msg = e.to_string();
-                        logger::warning(LogTag::Swap, &format!("{} quote failed: {msg}", r.name()));
-                        Err((r.name().to_owned(), msg))
+                        logger::warning(LogTag::Swap, &format!("{} quote failed: {e}", r.name()));
+                        Err(e)
                     }
                 }
             }
@@ -77,7 +93,7 @@ pub async fn get_best_quote(request: QuoteRequest) -> Result<Quote> {
     // failures lets us report the ACTUAL reason (e.g. token not tradable) to the
     // trade dialog instead of a generic "all routers failed" that hides it.
     let mut quotes: Vec<Quote> = Vec::new();
-    let mut errors: Vec<(String, String)> = Vec::new();
+    let mut errors: Vec<QuoteError> = Vec::new();
     for res in results {
         match res {
             Ok(q) => quotes.push(q),
@@ -86,7 +102,7 @@ pub async fn get_best_quote(request: QuoteRequest) -> Result<Quote> {
     }
 
     if quotes.is_empty() {
-        return Err(classify_quote_failure(&errors));
+        return Err(select_quote_failure(errors));
     }
 
     // Select best quote (highest output)
@@ -100,20 +116,22 @@ pub async fn get_best_quote(request: QuoteRequest) -> Result<Quote> {
     // for, must never reach the builder — selection is the last point where
     // either is still cheap to refuse.
     if best.output_amount == 0 {
-        return Err(Error::api_error(format!(
-            "Router '{}' returned a zero-output quote for {} -> {}",
-            best.router_name, best.input_mint, best.output_mint
-        )));
+        return Err(QuoteError::RouterRejected {
+            router: best.router_name.clone(),
+            detail: format!(
+                "zero-output quote for {} -> {}",
+                best.input_mint, best.output_mint
+            ),
+        });
     }
     if best.input_mint != request.input_mint || best.output_mint != request.output_mint {
-        return Err(Error::api_error(format!(
-            "Router '{}' quoted {} -> {} but {} -> {} was requested",
-            best.router_name,
-            best.input_mint,
-            best.output_mint,
-            request.input_mint,
-            request.output_mint
-        )));
+        return Err(QuoteError::RouterRejected {
+            router: best.router_name.clone(),
+            detail: format!(
+                "quoted {} -> {} but {} -> {} was requested",
+                best.input_mint, best.output_mint, request.input_mint, request.output_mint
+            ),
+        });
     }
 
     logger::info(
@@ -130,39 +148,42 @@ pub async fn get_best_quote(request: QuoteRequest) -> Result<Quote> {
     Ok(best)
 }
 
-/// Turn the collected per-router quote failures into a single, user-meaningful
-/// error message. The common case — a token with no pool/liquidity — is reported
-/// by routers as "not tradable"; surface that plainly so the trade dialog can
-/// explain WHY the swap can't be previewed instead of a generic failure string.
+/// Reduce the per-router failures to the one verdict that best describes the
+/// attempt as a whole.
 ///
-/// The message is kept clean and self-describing (the quote route matches on it
-/// to pick a friendly title/hint for the UI), so it must not be wrapped in extra
-/// prefixes here.
-fn classify_quote_failure(errors: &[(String, String)]) -> Error {
-    if errors.is_empty() {
-        return Error::api_error("All routers failed to provide quotes");
+/// Routers disagree: Jupiter may say the token is not tradable while GMGN
+/// times out. The most specific answer wins, because that is the one a caller
+/// can act on — a token no provider can trade is a durable fact, whereas one
+/// router's timeout says nothing about the token. Ordering is therefore by how
+/// much the variant licenses the caller to conclude, most-concluding first.
+///
+/// This replaced a function that re-read its own output: it rendered a friendly
+/// message for the "no route" case, and the opening path then searched that
+/// message for the word "no route" — which the friendly wording no longer
+/// contained, so no token was ever blacklisted for having no market.
+fn select_quote_failure(errors: Vec<QuoteError>) -> QuoteError {
+    fn specificity(err: &QuoteError) -> u8 {
+        match err {
+            QuoteError::NotTradable { .. } => 0,
+            QuoteError::NoRoute { .. } => 1,
+            QuoteError::RouterRejected { .. } => 2,
+            QuoteError::RateLimited { .. } => 3,
+            QuoteError::Timeout { .. } => 4,
+            QuoteError::Unavailable { .. } => 5,
+            QuoteError::NoRoutersEnabled { .. } => 6,
+            // Unreachable from the per-router loop (the registry is resolved
+            // before any router is asked), and least specific if it ever is.
+            QuoteError::RegistryUnavailable(_) => 7,
+        }
     }
 
-    let joined = errors
-        .iter()
-        .map(|(name, msg)| format!("{name}: {msg}"))
-        .collect::<Vec<_>>()
-        .join("; ");
-    let lower = joined.to_lowercase();
-
-    if lower.contains("not tradable") || lower.contains("token_not_tradable") {
-        return Error::api_error(
-            "Token not tradable: no liquidity or swap route is available for this token",
-        );
-    }
-    if lower.contains("no route")
-        || lower.contains("no routes")
-        || lower.contains("could not find any route")
-    {
-        return Error::api_error("No swap route available for this token at the requested amount");
-    }
-
-    Error::api_error(format!("No swap route available ({joined})"))
+    errors
+        .into_iter()
+        .min_by_key(specificity)
+        .unwrap_or_else(|| QuoteError::Unavailable {
+            router: "all".to_owned(),
+            detail: "no router returned a quote or an error".to_owned(),
+        })
 }
 
 // ============================================================================
@@ -472,46 +493,249 @@ fn is_retryable_error(error: &Error) -> bool {
 // SPECIALIZED QUOTE FUNCTIONS
 // ============================================================================
 
-/// Get best quote for opening positions with route failure tracking
-/// Blacklists tokens after repeated no-route failures
+/// How many separate no-route failures a token may collect before the opening
+/// path stops offering it. One is not enough: a route can be missing for the
+/// requested size alone and reappear minutes later, while the blacklist is
+/// permanent and can only be lifted by hand.
+const NO_ROUTE_STRIKES_BEFORE_BLACKLIST: u32 = 3;
+
+/// How long a strike stays on a token's record. A token that fails once a day
+/// is not a token without a market, so strikes must decay rather than
+/// accumulate for the life of the process.
+const NO_ROUTE_STRIKE_TTL: std::time::Duration = std::time::Duration::from_secs(30 * 60);
+
+/// Consecutive no-route strikes per mint. Bounded and self-expiring, so a long
+/// discovery session cannot grow it without limit.
+static NO_ROUTE_STRIKES: std::sync::LazyLock<moka::sync::Cache<String, u32>> =
+    std::sync::LazyLock::new(|| {
+        moka::sync::Cache::builder()
+            .max_capacity(10_000)
+            .time_to_live(NO_ROUTE_STRIKE_TTL)
+            .build()
+    });
+
+/// Get best quote for opening a position, recording route failures against the
+/// token.
+///
+/// A provider saying the token is not tradable at all is a durable verdict and
+/// retires the token immediately. A provider merely failing to route the
+/// requested size is not: it has to repeat
+/// [`NO_ROUTE_STRIKES_BEFORE_BLACKLIST`] times inside
+/// [`NO_ROUTE_STRIKE_TTL`] before the token is retired, and any successful
+/// quote clears the record.
 pub async fn get_best_quote_for_opening(
     request: QuoteRequest,
     token_symbol: &str,
 ) -> Result<Quote> {
-    match get_best_quote(request.clone()).await {
-        Ok(quote) => Ok(quote),
+    // The token being assessed is whichever side of the pair is not the chain's
+    // native asset — a buy spends SOL for it, a sell spends it for SOL.
+    let subject_mint = if crate::chains::adapter().is_native_asset(&request.input_mint) {
+        request.output_mint.clone()
+    } else {
+        request.input_mint.clone()
+    };
+
+    match try_get_best_quote(request).await {
+        Ok(quote) => {
+            NO_ROUTE_STRIKES.invalidate(&subject_mint);
+            Ok(quote)
+        }
         Err(e) => {
-            let error_msg = e.to_string();
-            let is_no_route_error = error_msg.contains("no route")
-                || error_msg.contains("No routers available for quote")
-                || error_msg.contains("jupiter has no route")
-                || error_msg.contains("Jupiter API error: 400")
-                || error_msg.contains("400 Bad Request")
-                || (error_msg.contains("Jupiter") && error_msg.contains("400"));
+            if let Some(reason) = e.permanent_token_verdict() {
+                retire_token(&subject_mint, token_symbol, reason, &e);
+            } else if e.is_route_failure() {
+                let strikes = NO_ROUTE_STRIKES.get(&subject_mint).unwrap_or(0) + 1;
+                NO_ROUTE_STRIKES.insert(subject_mint.clone(), strikes);
 
-            if is_no_route_error {
-                let output_mint = if crate::chains::adapter().is_native_asset(&request.input_mint) {
-                    &request.output_mint
+                if strikes >= NO_ROUTE_STRIKES_BEFORE_BLACKLIST {
+                    NO_ROUTE_STRIKES.invalidate(&subject_mint);
+                    retire_token(&subject_mint, token_symbol, "NoRoute", &e);
                 } else {
-                    &request.input_mint
-                };
-
-                if let Some(db) = crate::tokens::database::get_global_database() {
-                    let _ = crate::tokens::cleanup::blacklist_token(output_mint, "NoRoute", &db);
+                    logger::info(
+                        LogTag::Swap,
+                        &format!(
+                            "No route for {token_symbol} ({}): strike {strikes}/{} - {e}",
+                            short_mint(&subject_mint),
+                            NO_ROUTE_STRIKES_BEFORE_BLACKLIST
+                        ),
+                    );
                 }
-
-                logger::info(
-                    LogTag::Swap,
-                    &format!(
-                        "No route error tracked for {} ({}): {}",
-                        token_symbol,
-                        &output_mint[..8],
-                        error_msg
-                    ),
-                );
             }
 
-            Err(e)
+            Err(Error::from(e))
         }
+    }
+}
+
+/// Blacklist a token the routers cannot trade, recording it as an automatic
+/// decision. The source matters: the dashboard's blacklist summary counts
+/// `manual` entries as the owner's own choices, so an automatic retirement
+/// filed under `manual` would misreport who excluded the token.
+fn retire_token(mint: &str, symbol: &str, reason: &str, cause: &QuoteError) {
+    let Some(db) = crate::tokens::database::get_global_database() else {
+        return;
+    };
+    match crate::tokens::cleanup::blacklist_token(mint, reason, "auto_swap_route", &db) {
+        Ok(()) => logger::info(
+            LogTag::Swap,
+            &format!(
+                "Blacklisted {symbol} ({}) as {reason}: {cause}",
+                short_mint(mint)
+            ),
+        ),
+        Err(e) => logger::warning(
+            LogTag::Swap,
+            &format!(
+                "Failed to blacklist {symbol} ({}) as {reason}: {e}",
+                short_mint(mint)
+            ),
+        ),
+    }
+}
+
+/// First 8 characters of a mint for logs, without panicking on a short or
+/// non-ASCII value.
+fn short_mint(mint: &str) -> &str {
+    mint.get(..8).unwrap_or(mint)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::chains::ChainId;
+    use crate::errors::ErrorClass;
+
+    fn not_tradable(router: &str) -> QuoteError {
+        QuoteError::NotTradable {
+            router: router.to_owned(),
+            detail: "TOKEN_NOT_TRADABLE".to_owned(),
+        }
+    }
+
+    fn no_route(router: &str) -> QuoteError {
+        QuoteError::NoRoute {
+            router: router.to_owned(),
+            detail: "COULD_NOT_FIND_ANY_ROUTE".to_owned(),
+        }
+    }
+
+    fn timeout(router: &str) -> QuoteError {
+        QuoteError::Timeout {
+            router: router.to_owned(),
+        }
+    }
+
+    /// The regression this file's rewrite exists for. The old classifier
+    /// rendered a friendly message for a no-route failure and the opening path
+    /// then searched THAT message for the words it no longer contained, so a
+    /// token with no market was never retired. The verdict now survives as a
+    /// value, so no wording can lose it.
+    #[test]
+    fn a_no_market_verdict_survives_aggregation() {
+        assert!(matches!(
+            select_quote_failure(vec![timeout("GMGN"), not_tradable("Jupiter")]),
+            QuoteError::NotTradable { .. }
+        ));
+        assert!(matches!(
+            select_quote_failure(vec![timeout("GMGN"), no_route("Jupiter")]),
+            QuoteError::NoRoute { .. }
+        ));
+    }
+
+    /// One router timing out says nothing about the token, so it must not be
+    /// what the caller acts on when another router gave a real verdict — and
+    /// on its own it must never license retiring a mint.
+    #[test]
+    fn a_router_fault_never_becomes_a_verdict_on_the_token() {
+        let only_faults = select_quote_failure(vec![
+            timeout("GMGN"),
+            QuoteError::Unavailable {
+                router: "Jupiter".to_owned(),
+                detail: "HTTP 503".to_owned(),
+            },
+        ]);
+        assert!(only_faults.permanent_token_verdict().is_none());
+        assert!(!only_faults.is_route_failure());
+    }
+
+    /// A token the routers cannot trade at all is a durable fact and retires
+    /// the mint at once; failing to route a given size is not, and must repeat
+    /// before it counts. The blacklist is permanent and hand-removable only.
+    #[test]
+    fn only_a_no_market_verdict_retires_a_token_immediately() {
+        assert_eq!(
+            not_tradable("Jupiter").permanent_token_verdict(),
+            Some("NotTradable")
+        );
+        assert!(no_route("Jupiter").permanent_token_verdict().is_none());
+        assert!(no_route("Jupiter").is_route_failure());
+    }
+
+    /// Being throttled must be answerable from the value, so back-off does not
+    /// depend on a provider's wording.
+    #[test]
+    fn rate_limiting_is_visible_through_error_class() {
+        let throttled = QuoteError::RateLimited {
+            router: "Jupiter".to_owned(),
+            retry_after: Some(std::time::Duration::from_secs(3)),
+        };
+        assert!(throttled.is_rate_limited());
+        assert_eq!(throttled.http_status(), 429);
+        assert_eq!(
+            throttled.retry_after(),
+            Some(std::time::Duration::from_secs(3))
+        );
+
+        // And it must still be answerable after folding into the crate channel.
+        let folded = Error::from(throttled);
+        assert!(folded.is_rate_limited());
+
+        assert!(!not_tradable("Jupiter").is_rate_limited());
+    }
+
+    /// Statuses and codes are read by the trade dialog; they come from the
+    /// variant, never from prose.
+    #[test]
+    fn every_variant_answers_with_its_own_status_and_code() {
+        let cases = [
+            (
+                QuoteError::NoRoutersEnabled {
+                    chain: ChainId::Solana,
+                },
+                503,
+                "NoRouters",
+            ),
+            (not_tradable("Jupiter"), 422, "TokenNotTradable"),
+            (no_route("Jupiter"), 422, "NoRoute"),
+            (timeout("Jupiter"), 504, "QuoteTimeout"),
+            (
+                QuoteError::RouterRejected {
+                    router: "Jupiter".to_owned(),
+                    detail: "zero output".to_owned(),
+                },
+                502,
+                "QuoteRejected",
+            ),
+        ];
+        for (err, status, code) in cases {
+            assert_eq!(err.http_status(), status, "{err}");
+            assert_eq!(err.code(), code, "{err}");
+            assert!(!err.hint().is_empty(), "{err}");
+            assert!(!err.title().is_empty(), "{err}");
+        }
+    }
+
+    /// A router handing back something unusable is our refusal of untrusted
+    /// input on a money path, and must be loud — it is never retried and never
+    /// blamed on the token.
+    #[test]
+    fn an_unusable_quote_is_critical_and_not_retryable() {
+        let rejected = QuoteError::RouterRejected {
+            router: "Jupiter".to_owned(),
+            detail: "zero-output quote".to_owned(),
+        };
+        assert_eq!(rejected.severity(), crate::errors::Severity::Critical);
+        assert!(!rejected.is_retryable());
+        assert!(rejected.permanent_token_verdict().is_none());
     }
 }

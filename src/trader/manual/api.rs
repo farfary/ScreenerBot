@@ -137,13 +137,7 @@ pub async fn manual_buy(
     {
         Ok(result) => result,
         Err(e) => {
-            // Check if this is a quote error or later
-            let msg = e.to_string();
-            if msg.contains("Quote") || msg.contains("quote") {
-                action.fail_quote(&msg).await;
-            } else {
-                action.fail(&msg).await;
-            }
+            crate::trader::actions::fail_from_error(&action, &e).await;
             return Err(e);
         }
     };
@@ -151,15 +145,7 @@ pub async fn manual_buy(
     // Check if trade succeeded
     if !result.success {
         let error = result.error.as_deref().unwrap_or("Trade failed");
-        // Determine which step failed based on error message
-        if error.contains("Unhealthy") || error.contains("connectivity") {
-            action.fail_validation(error).await;
-        } else if error.contains("Quote") || error.contains("quote") || error.contains("No routes")
-        {
-            action.fail_quote(error).await;
-        } else {
-            action.fail_swap(error).await;
-        }
+        crate::trader::actions::fail_at_step(&action, result.failed_step, error).await;
         return Ok(result);
     }
 
@@ -282,12 +268,7 @@ pub async fn manual_sell(
     let result = match executors::execute_trade(&decision).await {
         Ok(result) => result,
         Err(e) => {
-            let msg = e.to_string();
-            if msg.contains("Quote") || msg.contains("quote") {
-                action.fail_quote(&msg).await;
-            } else {
-                action.fail(&msg).await;
-            }
+            crate::trader::actions::fail_from_error(&action, &e).await;
             return Err(e);
         }
     };
@@ -295,14 +276,7 @@ pub async fn manual_sell(
     // Check if trade succeeded
     if !result.success {
         let error = result.error.as_deref().unwrap_or("Trade failed");
-        if error.contains("Unhealthy") || error.contains("connectivity") {
-            action.fail_validation(error).await;
-        } else if error.contains("Quote") || error.contains("quote") || error.contains("No routes")
-        {
-            action.fail_quote(error).await;
-        } else {
-            action.fail_swap(error).await;
-        }
+        crate::trader::actions::fail_at_step(&action, result.failed_step, error).await;
         return Ok(result);
     }
 
@@ -443,12 +417,7 @@ pub async fn manual_add(
     let result = match executors::execute_trade(&decision).await {
         Ok(result) => result,
         Err(e) => {
-            let msg = e.to_string();
-            if msg.contains("Quote") || msg.contains("quote") {
-                action.fail_quote(&msg).await;
-            } else {
-                action.fail(&msg).await;
-            }
+            crate::trader::actions::fail_from_error(&action, &e).await;
             return Err(e);
         }
     };
@@ -456,14 +425,7 @@ pub async fn manual_add(
     // Check if trade succeeded
     if !result.success {
         let error = result.error.as_deref().unwrap_or("Trade failed");
-        if error.contains("Unhealthy") || error.contains("connectivity") {
-            action.fail_validation(error).await;
-        } else if error.contains("Quote") || error.contains("quote") || error.contains("No routes")
-        {
-            action.fail_quote(error).await;
-        } else {
-            action.fail_swap(error).await;
-        }
+        crate::trader::actions::fail_at_step(&action, result.failed_step, error).await;
         return Ok(result);
     }
 

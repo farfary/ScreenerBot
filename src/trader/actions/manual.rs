@@ -659,3 +659,74 @@ pub async fn create_failed_add_action(mint: &str, error: &str) {
         action.fail_validation(error).await;
     }
 }
+
+// =============================================================================
+// STEP-ACCURATE FAILURE REPORTING
+// =============================================================================
+
+/// The failure surface every manual-trade action shares.
+///
+/// It exists so one function can report a failure at the step that actually
+/// failed, for all three action kinds. Before it, five copies of the same
+/// message search guessed the step from the error text and disagreed with each
+/// other — a quote failure was routinely reported as a failed SWAP, telling the
+/// user a transaction had been attempted when nothing had been submitted.
+#[async_trait::async_trait]
+pub trait ManualActionFailure {
+    async fn fail(&self, error: &str);
+    async fn fail_validation(&self, error: &str);
+    async fn fail_quote(&self, error: &str);
+    async fn fail_swap(&self, error: &str);
+}
+
+macro_rules! impl_manual_action_failure {
+    ($($ty:ty),+ $(,)?) => {
+        $(
+            #[async_trait::async_trait]
+            impl ManualActionFailure for $ty {
+                async fn fail(&self, error: &str) {
+                    <$ty>::fail(self, error).await
+                }
+                async fn fail_validation(&self, error: &str) {
+                    <$ty>::fail_validation(self, error).await
+                }
+                async fn fail_quote(&self, error: &str) {
+                    <$ty>::fail_quote(self, error).await
+                }
+                async fn fail_swap(&self, error: &str) {
+                    <$ty>::fail_swap(self, error).await
+                }
+            }
+        )+
+    };
+}
+
+impl_manual_action_failure!(ManualBuyAction, ManualSellAction, ManualAddAction);
+
+/// Mark the action failed at `step`, or as an untyped failure when the executor
+/// could not say where it stopped.
+pub async fn fail_at_step<A: ManualActionFailure + Sync>(
+    action: &A,
+    step: Option<crate::trader::types::TradeStep>,
+    error: &str,
+) {
+    use crate::trader::types::TradeStep;
+    match step {
+        Some(TradeStep::Validation) => action.fail_validation(error).await,
+        Some(TradeStep::Quote) => action.fail_quote(error).await,
+        Some(TradeStep::Swap) => action.fail_swap(error).await,
+        // Never claim a step we do not know: an unattributed failure must not
+        // be drawn as a failed swap.
+        None => action.fail(error).await,
+    }
+}
+
+/// Mark the action failed for an error that escaped the executor, attributing
+/// it from the error's own type rather than its message.
+pub async fn fail_from_error<A, E>(action: &A, error: &E)
+where
+    A: ManualActionFailure + Sync,
+    E: crate::trader::types::FailedTradeStep + std::fmt::Display,
+{
+    fail_at_step(action, Some(error.trade_step()), &error.to_string()).await;
+}

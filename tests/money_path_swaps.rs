@@ -151,8 +151,13 @@ impl SwapRouter for ScenarioRouter {
     fn chain(&self) -> ChainId {
         ChainId::Solana
     }
-    async fn get_quote(&self, request: &QuoteRequest) -> Result<Quote> {
-        self.accept_own_chain(request)?;
+    async fn get_quote(&self, request: &QuoteRequest) -> screenerbot::swaps::QuoteResult<Quote> {
+        self.accept_own_chain(request).map_err(|e| {
+            screenerbot::swaps::QuoteError::RouterRejected {
+                router: self.id.to_owned(),
+                detail: e.to_string(),
+            }
+        })?;
         let base = Quote {
             chain: request.chain,
             router_id: self.id.to_owned(),
@@ -190,7 +195,10 @@ impl SwapRouter for ScenarioRouter {
                 output_amount: 200,
                 ..base
             }),
-            _ => Err(screenerbot::Error::api_error("router not part of scenario")),
+            _ => Err(screenerbot::swaps::QuoteError::Unavailable {
+                router: self.id.to_owned(),
+                detail: "router not part of scenario".to_owned(),
+            }),
         }
     }
     async fn execute_swap(&self, _token: &Token, _quote: &Quote) -> Result<SwapResult> {

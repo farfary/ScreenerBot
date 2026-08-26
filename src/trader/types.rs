@@ -89,6 +89,70 @@ pub struct TradeResult {
     /// (`positions::Error::SlotUnavailable`) rather than an execution failure, so
     /// callers can react to it structurally instead of pattern-matching `error`.
     pub capacity_guard_remaining: Option<usize>,
+    /// Which step of the trade actually failed, set by the executor that was
+    /// running it. `None` on success.
+    pub failed_step: Option<TradeStep>,
+}
+
+/// The stages a trade passes through, in order.
+///
+/// The manual-trade action timeline shows the user where a trade stopped. That
+/// used to be guessed by five separate copies of the same message search
+/// (`error.contains("Quote")`, `contains("No routes")`), which attributed a
+/// failure to the wrong step as soon as any wording changed — and reported the
+/// SWAP as failed when nothing had been submitted. The executor knows which
+/// step it was in, so it says so.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TradeStep {
+    /// Pre-flight: connectivity, capacity, sizing, blacklist.
+    Validation,
+    /// Asking the routers what the trade would cost.
+    Quote,
+    /// Building, signing and submitting the swap.
+    Swap,
+}
+
+/// An error that can say which step of a trade it ended.
+///
+/// One mapping, stated once, for every error channel a trade can fail through.
+/// The five copies this replaced each searched the message for `"Quote"` and
+/// disagreed with each other.
+pub trait FailedTradeStep {
+    fn trade_step(&self) -> TradeStep;
+}
+
+impl FailedTradeStep for crate::positions::Error {
+    /// `QuoteFailed` means no router would price the trade, so nothing was
+    /// built or submitted; `SwapFailed` means it was. Anything else failed
+    /// before either — capacity, sizing, wallet, persistence — and belongs to
+    /// validation.
+    fn trade_step(&self) -> TradeStep {
+        match self {
+            crate::positions::Error::QuoteFailed { .. } => TradeStep::Quote,
+            crate::positions::Error::SwapFailed { .. } => TradeStep::Swap,
+            _ => TradeStep::Validation,
+        }
+    }
+}
+
+impl FailedTradeStep for crate::trader::Error {
+    fn trade_step(&self) -> TradeStep {
+        match self {
+            crate::trader::Error::Positions(e) => e.trade_step(),
+            _ => TradeStep::Validation,
+        }
+    }
+}
+
+impl FailedTradeStep for crate::Error {
+    fn trade_step(&self) -> TradeStep {
+        match self {
+            crate::Error::Positions(e) => e.trade_step(),
+            crate::Error::Trader(e) => e.trade_step(),
+            _ => TradeStep::Validation,
+        }
+    }
 }
 
 impl TradeResult {
@@ -112,11 +176,17 @@ impl TradeResult {
             retry_count: 0,
             confirmation_pending: false,
             capacity_guard_remaining: None,
+            failed_step: None,
         }
     }
 
-    /// Create a failed trade result
-    pub fn failure(decision: TradeDecision, error: String, retry_count: u32) -> Self {
+    /// Create a failed trade result, naming the step that failed.
+    pub fn failure_at(
+        decision: TradeDecision,
+        step: TradeStep,
+        error: String,
+        retry_count: u32,
+    ) -> Self {
         Self {
             decision,
             success: false,
@@ -129,6 +199,62 @@ impl TradeResult {
             retry_count,
             confirmation_pending: false,
             capacity_guard_remaining: None,
+            failed_step: Some(step),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A trade that never got a quote must not be reported as a failed SWAP.
+    /// The prose ladder this replaced did exactly that, telling the user a
+    /// transaction had been attempted when nothing had been submitted.
+    #[test]
+    fn a_quote_failure_is_never_attributed_to_the_swap() {
+        let quote_failed = crate::positions::Error::QuoteFailed {
+            mint: "So11111111111111111111111111111111111111112".to_owned(),
+            detail: "no router would price it".to_owned(),
+        };
+        assert_eq!(quote_failed.trade_step(), TradeStep::Quote);
+        assert_eq!(
+            crate::Error::Positions(quote_failed).trade_step(),
+            TradeStep::Quote
+        );
+    }
+
+    /// A failure after submission stays attributed to the swap, whichever
+    /// channel it arrives through.
+    #[test]
+    fn a_swap_failure_is_attributed_to_the_swap_through_every_channel() {
+        let mint = "So11111111111111111111111111111111111111112".to_owned();
+        let swap_failed = || crate::positions::Error::SwapFailed {
+            mint: mint.clone(),
+            detail: "submitted and reverted".to_owned(),
+        };
+        assert_eq!(swap_failed().trade_step(), TradeStep::Swap);
+        assert_eq!(
+            crate::trader::Error::Positions(swap_failed()).trade_step(),
+            TradeStep::Swap
+        );
+        assert_eq!(
+            crate::Error::Trader(crate::trader::Error::Positions(swap_failed())).trade_step(),
+            TradeStep::Swap
+        );
+    }
+
+    /// Anything that failed before quoting belongs to validation — never to a
+    /// step the trade did not reach.
+    #[test]
+    fn a_pre_quote_failure_belongs_to_validation() {
+        assert_eq!(
+            crate::positions::Error::SlotUnavailable { remaining: 0 }.trade_step(),
+            TradeStep::Validation
+        );
+        assert_eq!(
+            crate::positions::Error::DcaDisabled.trade_step(),
+            TradeStep::Validation
+        );
     }
 }

@@ -186,12 +186,23 @@ pub fn start_cleanup_loop(db: Arc<TokenDatabase>, shutdown: Arc<Notify>) -> Join
 }
 
 // ============================================================================
-// MANUAL BLACKLIST OPERATIONS
+// BLACKLIST OPERATIONS
 // ============================================================================
 
-/// Manually add a token to blacklist (e.g., via API)
-pub fn blacklist_token(mint: &str, reason: &str, db: &TokenDatabase) -> TokenResult<()> {
-    db.add_to_blacklist(mint, reason, "manual")
+/// Add a token to the blacklist.
+///
+/// `source` records WHO excluded the token and is not cosmetic:
+/// [`get_blacklist_summary`] counts every `manual` entry as an owner decision,
+/// so an automatic exclusion filed as `manual` misreports the dashboard's
+/// blacklist breakdown. Use `"manual"` only for an action the owner took
+/// (API, Telegram), and a descriptive `auto_*` source otherwise.
+pub fn blacklist_token(
+    mint: &str,
+    reason: &str,
+    source: &str,
+    db: &TokenDatabase,
+) -> TokenResult<()> {
+    db.add_to_blacklist(mint, reason, source)
 }
 
 /// Remove a token from blacklist (e.g., via API)

@@ -1,6 +1,7 @@
 //! Router trait — defines the unified interface for all DEX swap routers.
 
 use crate::chains::ChainId;
+use crate::swaps::error::QuoteResult;
 use crate::swaps::types::{Quote, QuoteRequest, SwapResult};
 use crate::tokens::Token;
 use crate::{Error, Result};
@@ -31,8 +32,13 @@ pub trait SwapRouter: Send + Sync {
     /// see `RouterRegistry::enabled_routers_for` and friends.
     fn chain(&self) -> ChainId;
 
-    /// Get quote from this router
-    async fn get_quote(&self, request: &QuoteRequest) -> Result<Quote>;
+    /// Get quote from this router.
+    ///
+    /// The router classifies its own failure into [`QuoteError`] here, while it
+    /// still holds the HTTP status and the decoded provider body. Everything
+    /// downstream — whether to blacklist the token, whether to back off, what
+    /// the trade dialog says — reads the variant, never the message.
+    async fn get_quote(&self, request: &QuoteRequest) -> QuoteResult<Quote>;
 
     /// Execute swap using quote from this router
     async fn execute_swap(&self, token: &Token, quote: &Quote) -> Result<SwapResult>;

@@ -41,7 +41,7 @@ pub async fn add_to_blacklist(
     let mint_clone = mint.clone();
     let reason_clone = reason.clone();
     match tokio::task::spawn_blocking(move || {
-        cleanup::blacklist_token(&mint_clone, &reason_clone, &db)
+        cleanup::blacklist_token(&mint_clone, &reason_clone, "manual", &db)
     })
     .await
     {

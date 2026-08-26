@@ -3,7 +3,7 @@
 use crate::logger::{self, LogTag};
 use crate::positions::{self, PositionManagement, PositionOrigin, TradeOrigin};
 use crate::trader::config;
-use crate::trader::types::{TradeDecision, TradeReason, TradeResult};
+use crate::trader::types::{FailedTradeStep, TradeDecision, TradeReason, TradeResult, TradeStep};
 
 /// Execute a buy trade (auto/strategy path).
 ///
@@ -42,7 +42,12 @@ pub async fn execute_buy_managed(
     if let Some(unhealthy) = crate::connectivity::check_endpoints_healthy(&["rpc"]).await {
         let error = format!("Cannot execute buy - Unhealthy endpoints: {unhealthy}");
         logger::error(LogTag::Trader, &error);
-        return Ok(TradeResult::failure(decision.clone(), error, 0));
+        return Ok(TradeResult::failure_at(
+            decision.clone(),
+            TradeStep::Validation,
+            error,
+            0,
+        ));
     }
 
     logger::info(
@@ -106,14 +111,16 @@ pub async fn execute_buy_managed(
                 ),
             );
 
-            let mut result = TradeResult::failure(decision.clone(), guard_msg, 0);
+            let mut result =
+                TradeResult::failure_at(decision.clone(), TradeStep::Validation, guard_msg, 0);
             result.capacity_guard_remaining = Some(remaining);
             Ok(result)
         }
         Err(e) => {
+            let step = e.trade_step();
             let error = format!("Buy execution failed: {e}");
             logger::error(LogTag::Trader, &error);
-            Ok(TradeResult::failure(decision.clone(), error, 0))
+            Ok(TradeResult::failure_at(decision.clone(), step, error, 0))
         }
     }
 }
@@ -124,7 +131,12 @@ pub async fn execute_dca(decision: &TradeDecision) -> crate::trader::Result<Trad
     if let Some(unhealthy) = crate::connectivity::check_endpoints_healthy(&["rpc"]).await {
         let error = format!("Cannot execute DCA - Unhealthy endpoints: {unhealthy}");
         logger::error(LogTag::Trader, &error);
-        return Ok(TradeResult::failure(decision.clone(), error, 0));
+        return Ok(TradeResult::failure_at(
+            decision.clone(),
+            TradeStep::Validation,
+            error,
+            0,
+        ));
     }
 
     // A manual "Add to Position" is the user overriding the bot, so the auto-trader's
@@ -184,9 +196,10 @@ pub async fn execute_dca(decision: &TradeDecision) -> crate::trader::Result<Trad
             ))
         }
         Err(e) => {
+            let step = e.trade_step();
             let error = format!("DCA execution failed: {e}");
             logger::error(LogTag::Trader, &error);
-            Ok(TradeResult::failure(decision.clone(), error, 0))
+            Ok(TradeResult::failure_at(decision.clone(), step, error, 0))
         }
     }
 }

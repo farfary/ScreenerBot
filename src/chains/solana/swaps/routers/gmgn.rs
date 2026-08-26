@@ -4,6 +4,7 @@ use crate::chains::solana::constants::SOL_MINT;
 use crate::chains::solana::rpc::RpcClientMethods;
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
+use crate::swaps::error::{QuoteError, QuoteResult};
 use crate::swaps::router::SwapRouter;
 use crate::swaps::types::deserialize_optional_string_or_number;
 use crate::swaps::types::{Quote, QuoteRequest, SwapResult};
@@ -115,14 +116,14 @@ impl GmgnRouter {
         from_address: &str,
         slippage: f64,
         swap_mode: &str,
-    ) -> Result<SwapData> {
+    ) -> QuoteResult<SwapData> {
         if let Some(unhealthy) =
             crate::connectivity::check_endpoints_healthy(&["internet", "rpc"]).await
         {
-            return Err(Error::connectivity_error(format!(
-                "Cannot fetch GMGN quote - Unhealthy endpoints: {}",
-                unhealthy
-            )));
+            return Err(QuoteError::Unavailable {
+                router: self.name().to_owned(),
+                detail: format!("unhealthy endpoints: {unhealthy}"),
+            });
         }
 
         let gmgn_fee_sol = with_config(|cfg| cfg.swaps.gmgn.fee_sol);
@@ -177,10 +178,10 @@ impl GmgnRouter {
                         let response_text = match response.text().await {
                             Ok(t) => t,
                             Err(e) => {
-                                last_error = Some(Error::invalid_response(format!(
-                                    "Failed to get response text: {}",
-                                    e
-                                )));
+                                last_error = Some(QuoteError::Unavailable {
+                                    router: self.name().to_owned(),
+                                    detail: format!("failed to read response: {e}"),
+                                });
                                 continue;
                             }
                         };
@@ -202,15 +203,15 @@ impl GmgnRouter {
                                                 code, msg_opt
                                             ),
                                         );
-                                        return Err(Error::api_error(format!(
-                                            "GMGN no route: {} (code {})",
-                                            msg_opt, code
-                                        )));
+                                        return Err(QuoteError::NoRoute {
+                                            router: self.name().to_owned(),
+                                            detail: format!("{msg_opt} (code {code})"),
+                                        });
                                     } else {
-                                        last_error = Some(Error::api_error(format!(
-                                            "GMGN API error: {} - {}",
-                                            code, msg_opt
-                                        )));
+                                        last_error = Some(QuoteError::Unavailable {
+                                            router: self.name().to_owned(),
+                                            detail: format!("API error {code}: {msg_opt}"),
+                                        });
                                         continue;
                                     }
                                 }
@@ -232,33 +233,54 @@ impl GmgnRouter {
                                         );
                                         return Ok(data);
                                     } else {
-                                        last_error = Some(Error::invalid_response(
-                                            "GMGN API returned empty data".to_owned(),
-                                        ));
+                                        last_error = Some(QuoteError::Unavailable {
+                                            router: self.name().to_owned(),
+                                            detail: "API returned empty data".to_owned(),
+                                        });
                                     }
                                 } else {
-                                    last_error = Some(Error::api_error(format!(
-                                        "GMGN API error: {} - {}",
-                                        api_response.code, api_response.msg
-                                    )));
+                                    last_error = Some(QuoteError::Unavailable {
+                                        router: self.name().to_owned(),
+                                        detail: format!(
+                                            "API error {}: {}",
+                                            api_response.code, api_response.msg
+                                        ),
+                                    });
                                 }
                             }
                             Err(e) => {
-                                last_error = Some(Error::invalid_response(format!(
-                                    "GMGN API JSON parse error: {}",
-                                    e
-                                )));
+                                last_error = Some(QuoteError::Unavailable {
+                                    router: self.name().to_owned(),
+                                    detail: format!("JSON parse error: {e}"),
+                                });
                             }
                         }
                     } else {
-                        last_error = Some(Error::api_error(format!(
-                            "GMGN API HTTP error: {}",
-                            response.status()
-                        )));
+                        let status = response.status();
+                        last_error = Some(if status.as_u16() == 429 {
+                            QuoteError::RateLimited {
+                                router: self.name().to_owned(),
+                                retry_after: None,
+                            }
+                        } else {
+                            QuoteError::Unavailable {
+                                router: self.name().to_owned(),
+                                detail: format!("HTTP {status}"),
+                            }
+                        });
                     }
                 }
                 Err(e) => {
-                    last_error = Some(Error::network_error(e.to_string()));
+                    last_error = Some(if e.is_timeout() {
+                        QuoteError::Timeout {
+                            router: self.name().to_owned(),
+                        }
+                    } else {
+                        QuoteError::Unavailable {
+                            router: self.name().to_owned(),
+                            detail: e.to_string(),
+                        }
+                    });
                 }
             }
 
@@ -268,8 +290,10 @@ impl GmgnRouter {
             }
         }
 
-        Err(last_error
-            .unwrap_or_else(|| Error::api_error("All GMGN retry attempts failed".to_owned())))
+        Err(last_error.unwrap_or_else(|| QuoteError::Unavailable {
+            router: self.name().to_owned(),
+            detail: "all retry attempts failed".to_owned(),
+        }))
     }
 
     async fn execute_gmgn_swap_internal(
@@ -380,8 +404,12 @@ impl SwapRouter for GmgnRouter {
         crate::chains::ChainId::Solana
     }
 
-    async fn get_quote(&self, request: &QuoteRequest) -> Result<Quote> {
-        self.accept_own_chain(request)?;
+    async fn get_quote(&self, request: &QuoteRequest) -> QuoteResult<Quote> {
+        self.accept_own_chain(request)
+            .map_err(|e| QuoteError::RouterRejected {
+                router: self.name().to_owned(),
+                detail: e.to_string(),
+            })?;
         let swap_data = self
             .fetch_gmgn_quote_internal(
                 &request.input_mint,
@@ -393,11 +421,18 @@ impl SwapRouter for GmgnRouter {
             )
             .await?;
 
-        let output_amount = swap_data
-            .quote
-            .out_amount
-            .parse::<u64>()
-            .map_err(|e| Error::parse_error(format!("Failed to parse output_amount: {e}")))?;
+        let output_amount =
+            swap_data
+                .quote
+                .out_amount
+                .parse::<u64>()
+                .map_err(|e| QuoteError::RouterRejected {
+                    router: self.name().to_owned(),
+                    detail: format!(
+                        "invalid output amount '{}': {e}",
+                        swap_data.quote.out_amount
+                    ),
+                })?;
 
         let price_impact = swap_data
             .quote
@@ -405,8 +440,11 @@ impl SwapRouter for GmgnRouter {
             .parse::<f64>()
             .unwrap_or_default();
 
-        let execution_data = serde_json::to_vec(&swap_data)
-            .map_err(|e| Error::internal_error(format!("Swap data serialization failed: {e}")))?;
+        let execution_data =
+            serde_json::to_vec(&swap_data).map_err(|e| QuoteError::Unavailable {
+                router: self.name().to_owned(),
+                detail: format!("swap data serialization failed: {e}"),
+            })?;
 
         Ok(Quote {
             chain: request.chain,

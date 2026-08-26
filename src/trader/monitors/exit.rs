@@ -8,6 +8,7 @@
 //! - Event recording
 //! - Action tracking for dashboard visibility
 
+use crate::errors::ErrorClass;
 use crate::logger::{self, LogTag};
 use crate::positions;
 use crate::trader::types::{TradeDecision, TradePriority};
@@ -283,19 +284,22 @@ pub async fn monitor_positions(
                         }
                     }
                     Err(e) => {
+                        // Ask the error whether we were throttled instead of
+                        // searching its message for "429": the message is
+                        // written by whichever provider failed, and a rewording
+                        // there would silently switch the back-off off.
+                        let throttled = e.is_rate_limited();
                         let e = e.to_string();
                         // Fail action
                         if let Some(ref a) = action {
                             a.fail(&e).await;
                         }
 
-                        // Detect Jupiter rate limiting to back off
-                        let err_lower = e.to_lowercase();
-                        if err_lower.contains("429") || err_lower.contains("rate limit") {
+                        if throttled {
                             logger::warning(
                                 LogTag::Trader,
                                 &format!(
-                                    "Jupiter rate limit hit during exit for {}, will back off",
+                                    "Rate limited during exit for {}, will back off",
                                     evaluation.symbol
                                 ),
                             );

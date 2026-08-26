@@ -74,8 +74,13 @@ impl SwapRouter for StubRouter {
     fn chain(&self) -> ChainId {
         self.chain
     }
-    async fn get_quote(&self, request: &QuoteRequest) -> Result<Quote> {
-        self.accept_own_chain(request)?;
+    async fn get_quote(&self, request: &QuoteRequest) -> screenerbot::swaps::QuoteResult<Quote> {
+        self.accept_own_chain(request).map_err(|e| {
+            screenerbot::swaps::QuoteError::RouterRejected {
+                router: self.id.to_owned(),
+                detail: e.to_string(),
+            }
+        })?;
         Ok(quote_from(self, request))
     }
     async fn execute_swap(&self, _token: &Token, _quote: &Quote) -> Result<SwapResult> {

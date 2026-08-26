@@ -16,21 +16,6 @@ use crate::swaps::{
 };
 use crate::utils::get_wallet_address;
 use chrono::Utc;
-use tokio::time::{sleep, Duration};
-
-/// Back off before the next slippage rung — longer when the router is rate-limiting us.
-async fn backoff_after(error_message: &str) {
-    let lowered = error_message.to_lowercase();
-    if lowered.contains("429") || lowered.contains("rate limit") {
-        logger::warning(
-            LogTag::Positions,
-            "Jupiter rate limit hit, backing off 10 seconds before retry",
-        );
-        sleep(Duration::from_secs(10)).await;
-    } else {
-        sleep(Duration::from_secs(2)).await;
-    }
-}
 
 /// Partially close a position by selling a percentage of remaining tokens
 /// CRITICAL: This does NOT release the semaphore permit - position stays open
@@ -191,14 +176,13 @@ pub async fn partial_close_position(
         let quote = match get_best_quote(quote_request.clone()).await {
             Ok(quote) => quote,
             Err(e) => {
-                let err_msg = e.to_string();
                 last_err = Some(format!(
                     "Quote failed at step {} ({}%): {}",
                     i + 1,
                     slippage,
-                    err_msg
+                    e
                 ));
-                backoff_after(&err_msg).await;
+                super::backoff_after(&e).await;
                 continue;
             }
         };
@@ -293,7 +277,7 @@ pub async fn partial_close_position(
                     slippage,
                     err_msg
                 ));
-                backoff_after(&err_msg).await;
+                super::backoff_after(&e).await;
             }
         }
     }

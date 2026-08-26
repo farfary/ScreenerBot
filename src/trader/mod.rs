@@ -46,7 +46,9 @@ pub use constants::*;
 pub use controller::{is_trader_running, start_trader, stop_trader_gracefully};
 pub use error::{Error, Result};
 pub use executors::execute_trade;
-pub use types::{TradeAction, TradeDecision, TradePriority, TradeReason, TradeResult};
+pub use types::{
+    FailedTradeStep, TradeAction, TradeDecision, TradePriority, TradeReason, TradeResult, TradeStep,
+};
 
 use crate::logger::{self, LogTag};
 

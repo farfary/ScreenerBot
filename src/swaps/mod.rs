@@ -3,6 +3,7 @@
 //! `crate::chains::solana::swaps::routers`; this module owns only the
 //! `SwapRouter` contract, the registry that wires adapters up, and the
 //! router-agnostic quote/execute-with-fallback policy.
+pub mod error;
 pub mod operations;
 mod operations_wallet;
 pub mod registry;
@@ -10,8 +11,9 @@ pub mod router;
 pub mod types;
 
 // Re-export router system
+pub use error::{QuoteError, QuoteResult};
 pub use operations::{
-    execute_swap_with_fallback, get_best_quote, get_best_quote_for_opening,
+    execute_swap_with_fallback, get_best_quote, get_best_quote_for_opening, try_get_best_quote,
     unconfirmed_swap_signature, unconfirmed_swap_signature_from_message,
 };
 pub use operations_wallet::quote_and_execute_for_wallet;

@@ -180,12 +180,16 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                         }
                     };
                 } else {
-                    let retry_msg = format!("Transaction failed: {error_msg}");
-                    if is_transient_verification_error(&retry_msg) {
-                        return VerificationOutcome::RetryTransient(retry_msg);
-                    } else {
-                        return VerificationOutcome::RetryTransient(retry_msg); // Be conservative
-                    }
+                    // Without the `[PERMANENT]` marker we cannot tell a doomed
+                    // transaction from a transient one, and giving up on a
+                    // position whose exit may yet land is the costlier mistake
+                    // — so retry either way. (This deliberately does NOT consult
+                    // `is_transient_verification_error`: both branches of the
+                    // check it replaced returned the same outcome, so the call
+                    // only made the code read as if the answer mattered.)
+                    return VerificationOutcome::RetryTransient(format!(
+                        "Transaction failed: {error_msg}"
+                    ));
                 }
             }
 

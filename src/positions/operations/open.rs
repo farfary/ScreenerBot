@@ -257,9 +257,9 @@ async fn open_position_impl(
 
     let quote = get_best_quote_for_opening(quote_request, &api_token.symbol)
         .await
-        .map_err(|e| Error::SwapFailed {
+        .map_err(|e| Error::QuoteFailed {
             mint: api_token.mint.clone(),
-            detail: format!("quote failed: {e}"),
+            detail: e.to_string(),
         })?;
 
     let expected_output_amount = quote.output_amount;

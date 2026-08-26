@@ -12,7 +12,6 @@ use crate::positions::{Error, Result};
 use crate::swaps::{execute_swap_with_fallback, get_best_quote, QuoteRequest, SwapMode};
 use crate::utils::get_wallet_address;
 use serde_json::json;
-use tokio::time::{sleep, Duration};
 
 /// Close an existing position
 pub async fn close_position_direct(
@@ -217,23 +216,13 @@ pub async fn close_position_direct(
         let quote = match get_best_quote(quote_request.clone()).await {
             Ok(q) => q,
             Err(e) => {
-                let err_msg = e.to_string();
                 last_err = Some(format!(
                     "Quote failed at step {} ({}%): {}",
                     i + 1,
                     slippage,
-                    err_msg
+                    e
                 ));
-                let err_lower = err_msg.to_lowercase();
-                if err_lower.contains("429") || err_lower.contains("rate limit") {
-                    logger::warning(
-                        LogTag::Positions,
-                        "Jupiter rate limit hit, backing off 10 seconds before retry",
-                    );
-                    sleep(Duration::from_secs(10)).await;
-                } else {
-                    sleep(Duration::from_secs(2)).await;
-                }
+                super::backoff_after(&e).await;
                 continue;
             }
         };
@@ -323,15 +312,7 @@ pub async fn close_position_direct(
                     i + 1,
                     slippage
                 ));
-                if msg_lower.contains("429") || msg_lower.contains("rate limit") {
-                    logger::warning(
-                        LogTag::Positions,
-                        "Jupiter rate limit hit, backing off 10 seconds before retry",
-                    );
-                    sleep(Duration::from_secs(10)).await;
-                } else {
-                    sleep(Duration::from_secs(2)).await;
-                }
+                super::backoff_after(&e).await;
                 continue;
             }
         }

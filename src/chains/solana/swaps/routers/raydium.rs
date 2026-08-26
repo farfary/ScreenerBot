@@ -2,6 +2,7 @@
 //! Placeholder for future Raydium direct swap support
 
 use crate::config::with_config;
+use crate::swaps::error::{QuoteError, QuoteResult};
 use crate::swaps::router::SwapRouter;
 use crate::swaps::types::{Quote, QuoteRequest, SwapResult};
 use crate::tokens::Token;
@@ -43,9 +44,13 @@ impl SwapRouter for RaydiumRouter {
         crate::chains::ChainId::Solana
     }
 
-    async fn get_quote(&self, request: &QuoteRequest) -> Result<Quote> {
-        self.accept_own_chain(request)?;
-        Err(Error::internal_error("Raydium router not implemented yet"))
+    async fn get_quote(&self, _request: &QuoteRequest) -> QuoteResult<Quote> {
+        // Not implemented, so it can say nothing about the token — this must
+        // stay a router-level fault and never count towards retiring a mint.
+        Err(QuoteError::Unavailable {
+            router: self.name().to_owned(),
+            detail: "Raydium router not implemented yet".to_owned(),
+        })
     }
 
     async fn execute_swap(&self, _token: &Token, quote: &Quote) -> Result<SwapResult> {

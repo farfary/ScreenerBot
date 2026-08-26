@@ -184,8 +184,11 @@ mod tests {
         fn chain(&self) -> ChainId {
             crate::chains::active_chain()
         }
-        async fn get_quote(&self, _request: &QuoteRequest) -> Result<Quote> {
-            Err(crate::Error::api_error("stub"))
+        async fn get_quote(&self, _request: &QuoteRequest) -> crate::swaps::QuoteResult<Quote> {
+            Err(crate::swaps::QuoteError::Unavailable {
+                router: "stub".to_owned(),
+                detail: "stub".to_owned(),
+            })
         }
         async fn execute_swap(&self, _token: &Token, _quote: &Quote) -> Result<SwapResult> {
             Err(crate::Error::api_error("stub"))

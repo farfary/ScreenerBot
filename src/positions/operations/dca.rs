@@ -133,9 +133,9 @@ pub async fn add_to_position(
     };
     let quote = get_best_quote_for_opening(quote_request, &api_token.symbol)
         .await
-        .map_err(|e| Error::SwapFailed {
+        .map_err(|e| Error::QuoteFailed {
             mint: token_mint.to_owned(),
-            detail: format!("DCA quote failed: {e}"),
+            detail: e.to_string(),
         })?;
 
     // Only scale into a UI amount when the decimals are actually known; printing raw

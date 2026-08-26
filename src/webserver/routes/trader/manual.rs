@@ -3,9 +3,11 @@
 use axum::{extract::Query, http::StatusCode, response::Response, Json};
 
 use crate::config::with_config;
+use crate::errors::ErrorClass;
 use crate::global::{are_core_services_ready, get_pending_services};
 use crate::logger::{self, LogTag};
 use crate::positions;
+use crate::swaps::{try_get_best_quote, QuoteError};
 use crate::trader::MAX_MANUAL_SLIPPAGE_PCT;
 use crate::webserver::utils::{error_response, success_response};
 
@@ -411,7 +413,6 @@ pub async fn manual_sell_handler(Json(req): Json<ManualSellRequest>) -> Response
 /// For BUY: requires amount_sol (SOL to spend), returns tokens received
 /// For SELL: requires amount_tokens (tokens to sell), returns SOL received
 pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Response {
-    use crate::swaps::operations::get_best_quote;
     use crate::swaps::types::{QuoteRequest, SwapMode};
     use crate::tokens::database::get_token_async;
     use crate::utils::get_wallet_address;
@@ -557,7 +558,7 @@ pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Re
     };
 
     // Fetch quote
-    match get_best_quote(quote_request).await {
+    match try_get_best_quote(quote_request).await {
         Ok(quote) => {
             // Format input/output based on direction
             let (input_formatted, output_display, output_formatted, price_per_token) = if direction
@@ -634,51 +635,19 @@ pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Re
             success_response(response)
         }
         Err(e) => {
-            // Map the underlying failure to a friendly title + actionable hint so
-            // the trade dialog explains WHY a quote couldn't be fetched instead of
-            // dumping the raw error chain (e.g. "RPC Provider Error: ...").
-            let raw = e.to_string();
-            let low = raw.to_lowercase();
-            let (status, code, message, details): (StatusCode, &str, &str, &str) =
-                if low.contains("not tradable") || low.contains("token_not_tradable") {
-                    (
-                        StatusCode::UNPROCESSABLE_ENTITY,
-                        "TokenNotTradable",
-                        "This token isn't tradable right now",
-                        "No liquidity or swap route is available. The token may be unlaunched, \
-                         abandoned, or have no pool. Try again later or choose another token.",
-                    )
-                } else if low.contains("no swap route") || low.contains("no route") {
-                    (
-                        StatusCode::UNPROCESSABLE_ENTITY,
-                        "NoRoute",
-                        "No swap route available",
-                        "No provider could route this trade at the requested amount. Try a \
-                         smaller amount, or try again in a moment.",
-                    )
-                } else if low.contains("no swap routers enabled") {
-                    (
-                        StatusCode::SERVICE_UNAVAILABLE,
-                        "NoRouters",
-                        "No swap providers are enabled",
-                        "Enable at least one swap router in Trader settings, then try again.",
-                    )
-                } else if low.contains("timeout") || low.contains("timed out") {
-                    (
-                    StatusCode::GATEWAY_TIMEOUT,
-                    "QuoteTimeout",
-                    "Quote request timed out",
-                    "The swap providers didn't respond in time. Check your connection and retry.",
-                )
-                } else {
-                    (
-                        StatusCode::BAD_GATEWAY,
-                        "QuoteFailed",
-                        "Couldn't fetch a quote",
-                        raw.as_str(),
-                    )
-                };
-            error_response(status, code, message, Some(details))
+            // The trade dialog explains WHY a quote couldn't be fetched. Every
+            // part of that answer — status, code, headline, hint — comes from
+            // the QuoteError variant the router produced, so a provider
+            // rewording its response cannot change what the user is told.
+            // `Unavailable` is the only case that shows the raw detail, and
+            // even then only as supporting text.
+            let status =
+                StatusCode::from_u16(e.http_status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+            let details = match &e {
+                QuoteError::Unavailable { .. } => e.to_string(),
+                _ => e.hint().to_owned(),
+            };
+            error_response(status, e.code(), e.title(), Some(&details))
         }
     }
 }

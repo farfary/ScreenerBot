@@ -417,7 +417,7 @@ fn shared_swaps_registry_never_panics_on_missing_factory() {
         .split("#[cfg(test)]")
         .next()
         .expect("production source");
-    let code = code_lines(production);
+    let code = code_lines(&production);
 
     for needle in [
         ".expect(",
@@ -501,8 +501,64 @@ fn crate_root_constants_facade_must_not_return() {
     );
 }
 
-fn production_text(contents: &str) -> &str {
-    contents.split("#[cfg(test)]").next().unwrap_or(contents)
+/// The file with its `#[cfg(test)]` items removed, line numbering preserved.
+///
+/// This used to truncate at the FIRST `#[cfg(test)]`, which made every guard
+/// blind to everything after an inline test module. In `swaps/operations.rs`
+/// that module sits at line 409 and the quote path it hid, at line 490, is
+/// exactly where the no-route blacklist was silently reading error prose.
+/// Removing only the test items — and replacing them with blank lines so
+/// reported line numbers still point at the real source — closes that hole.
+fn production_text(contents: &str) -> String {
+    let mut out = String::with_capacity(contents.len());
+    let mut skipping_depth: Option<i32> = None;
+    let mut awaiting_block = false;
+    for line in contents.lines() {
+        if skipping_depth.is_none()
+            && !awaiting_block
+            && line.trim_start().starts_with("#[cfg(test)]")
+        {
+            awaiting_block = true;
+            out.push('\n');
+            continue;
+        }
+        if awaiting_block || skipping_depth.is_some() {
+            let mut depth = skipping_depth.unwrap_or(0);
+            let mut in_str = false;
+            let mut escaped = false;
+            for c in line.chars() {
+                if in_str {
+                    if escaped {
+                        escaped = false;
+                    } else if c == '\\' {
+                        escaped = true;
+                    } else if c == '"' {
+                        in_str = false;
+                    }
+                    continue;
+                }
+                match c {
+                    '"' => in_str = true,
+                    '{' => {
+                        depth += 1;
+                        awaiting_block = false;
+                    }
+                    '}' => depth -= 1,
+                    _ => {}
+                }
+            }
+            out.push('\n');
+            if !awaiting_block && depth <= 0 {
+                skipping_depth = None;
+            } else {
+                skipping_depth = Some(depth);
+            }
+            continue;
+        }
+        out.push_str(line);
+        out.push('\n');
+    }
+    out
 }
 
 fn is_chain_module(relative: &Path) -> bool {
@@ -763,7 +819,7 @@ fn shared_modules_never_name_solana_vendor_types_through_the_facade() {
             continue;
         }
         let production = production_text(&contents);
-        for (idx, line) in code_lines(production).lines().enumerate() {
+        for (idx, line) in code_lines(&production).lines().enumerate() {
             for crate_name in VENDOR_CRATES {
                 if line.contains(&format!("chains::solana::{crate_name}")) {
                     violations.push(format!(
@@ -853,7 +909,7 @@ fn shared_modules_never_hardcode_the_market_data_network_slug() {
             continue;
         }
         let production = production_text(&contents);
-        for (idx, line) in code_lines(production).lines().enumerate() {
+        for (idx, line) in code_lines(&production).lines().enumerate() {
             if line.contains("\"solana\"") {
                 violations.push(format!(
                     "src/{}:{}: hardcodes the \"solana\" network slug — call \
@@ -1194,7 +1250,24 @@ fn no_catch_all_error_variants() {
 /// of router failures to decide which failure it was, and `json_error` adapts a
 /// `serde_json::Error` into the foreign `rusqlite::Error` that rusqlite's row
 /// mappers are required to return. None of them is a variant in disguise.
-const ERROR_MAPPING_FUNCTIONS: &[&str] = &["map_llm_error", "classify_quote_failure", "json_error"];
+/// Functions that MAP an existing failure onto another vocabulary rather than
+/// inventing one. Each already holds the failure it is translating, so there is
+/// no "failure site" further in for it to be pushed to.
+///
+/// - `select_quote_failure` picks among per-router errors already built at
+///   their own failure sites.
+/// - `into_error` / `into_quote_error` convert a captured Jupiter HTTP failure
+///   (status + body) into the crate and quote channels. Keeping the status and
+///   the raw body structured until this point is the whole reason a quote
+///   failure can still be classified by type; rendering a message at the
+///   failure site is what the migration is removing.
+const ERROR_MAPPING_FUNCTIONS: &[&str] = &[
+    "map_llm_error",
+    "select_quote_failure",
+    "into_error",
+    "into_quote_error",
+    "json_error",
+];
 
 /// A function whose whole job is to return an error is a variant wearing a
 /// function costume: `fn db_not_initialized() -> Error` and
@@ -1278,34 +1351,137 @@ const ERROR_TEXT_BINDINGS: &[&str] = &[
     "message",
 ];
 
-/// **Routes take the status from the error, never from its prose.**
+/// Directories whose decisions must come from an error's TYPE, never its text.
 ///
-/// Every module error implements `ErrorClass::http_status()`, so a handler that
-/// re-derives the status with `msg.contains("not found")` is guessing at a fact
-/// the value already carries — and the guess breaks silently when the error
-/// vocabulary is renamed. That is exactly what happened when `src/wallets/`
-/// migrated: `Watch target {id} not found` became `watch target {address} is
-/// not being watched`, and three endpoints started answering 500 where they had
-/// answered 404, with nothing failing to say so. Use
-/// `webserver::utils::status_for(&error)` and match the variant when a route
-/// also needs its own error code.
+/// `webserver/routes` picks an HTTP status; `swaps` decides whether a token has
+/// a market; `positions/operations` and `trader` decide whether to back off,
+/// blacklist, or which step of a trade to report as failed. All four were
+/// caught guessing from prose, and all four failed silently when the prose
+/// changed — the money-path ones in the direction of doing nothing at all.
+const TYPED_DECISION_DIRS: &[&str] = &[
+    "webserver/routes",
+    "swaps",
+    "positions/operations",
+    "trader",
+];
+
+/// `positions/verifier.rs` is out of scope on purpose: its entire job is to
+/// translate the RPC's own free-text transaction errors into verification
+/// outcomes. That is an anti-corruption boundary, not a decision taken from one
+/// of OUR errors, and the same is true of the four wire values below — Solana
+/// program error codes and markers that arrive as text from the chain, never
+/// from a Rust error type we control.
+const EXTERNAL_WIRE_VALUES: &[&str] = &["0x1787", "6023", "insufficient funds", "[PERMANENT]"];
+
+/// Locals that are an error's text: `let x = err.to_string()`, or anything
+/// derived from such a local with `.to_lowercase()`/`.to_uppercase()`.
+///
+/// Naming the bindings alone was not enough — `manual.rs` renamed the error's
+/// text to `raw`, lowercased it into `low`, and ran a five-branch prose ladder
+/// that this guard could not see.
+fn error_text_locals(production: &str) -> Vec<String> {
+    let mut locals: Vec<String> = ERROR_TEXT_BINDINGS
+        .iter()
+        .map(|s| (*s).to_owned())
+        .collect();
+    // Two passes so a local derived from a derived local is also caught.
+    for _ in 0..2 {
+        for line in production.lines() {
+            let trimmed = line.trim_start();
+            let Some(rest) = trimmed.strip_prefix("let ") else {
+                continue;
+            };
+            let Some((binding, value)) = rest.split_once('=') else {
+                continue;
+            };
+            let name = binding
+                .trim()
+                .trim_start_matches("mut ")
+                .trim()
+                .trim_end_matches(':')
+                .split(':')
+                .next()
+                .unwrap_or("")
+                .trim()
+                .to_owned();
+            if name.is_empty() || locals.contains(&name) {
+                continue;
+            }
+            let receiver = |call: &str| -> Option<String> {
+                let idx = value.find(call)?;
+                Some(
+                    value[..idx]
+                        .trim_end()
+                        .rsplit(|c: char| !(c.is_alphanumeric() || c == '_'))
+                        .next()
+                        .unwrap_or("")
+                        .to_owned(),
+                )
+            };
+            let derived = [".to_string()", ".to_lowercase()", ".to_uppercase()"]
+                .iter()
+                .filter_map(|call| receiver(call))
+                .any(|r| locals.contains(&r));
+            if derived {
+                locals.push(name);
+            }
+        }
+    }
+    locals
+}
+
+/// **Decisions come from the error's type, never from its prose.**
+///
+/// Every module error implements `ErrorClass`, so code that re-derives an
+/// answer with `msg.contains("not found")` is guessing at a fact the value
+/// already carries — and the guess breaks silently when the error vocabulary is
+/// reworded. Three separate incidents:
+///
+/// - `src/wallets/` migrated, `Watch target {id} not found` became `watch
+///   target {address} is not being watched`, and three endpoints started
+///   answering 500 where they had answered 404.
+/// - `classify_quote_failure` rendered a friendly "No swap route available"
+///   message, and `get_best_quote_for_opening` then searched that message for
+///   the lowercase words "no route" — which it no longer contained. No token
+///   was blacklisted for having no market for as long as that stood.
+/// - Five copies of `error.contains("Quote")` picked which step of a manual
+///   trade to mark failed, and reported a failed SWAP for trades where nothing
+///   had been submitted.
+///
+/// Take the answer from the value: `webserver::utils::status_for(&error)`,
+/// `ErrorClass::is_rate_limited()`, the `QuoteError` variant, `TradeStep`.
+///
+/// Reading a PROVIDER's body — Jupiter's `errorCode`, GMGN's numeric `code` —
+/// is a different thing and stays allowed: that is the boundary whose whole
+/// job is translating a wire format into our vocabulary. It is allowed because
+/// those router files live outside `TYPED_DECISION_DIRS`.
 #[test]
-fn route_handlers_never_select_an_http_status_from_error_text() {
+fn decisions_are_never_made_from_error_text() {
     let mut violations = Vec::new();
     for (relative, contents) in walk_src() {
-        if !relative.starts_with("webserver/routes") {
+        let path = relative.to_string_lossy().replace('\\', "/");
+        if !TYPED_DECISION_DIRS.iter().any(|dir| path.starts_with(dir)) {
             continue;
         }
         let production = production_text(&contents);
+        let bindings = error_text_locals(&production);
         for (index, line) in production.lines().enumerate() {
+            // A doc comment describing the defect is not the defect.
+            if line.trim_start().starts_with("//") {
+                continue;
+            }
+            if EXTERNAL_WIRE_VALUES.iter().any(|v| line.contains(v)) {
+                continue;
+            }
             let mut haystack = line;
             while let Some((before, after)) = haystack.split_once(".contains(") {
                 let receiver = before
                     .trim_end()
                     .rsplit(|c: char| !(c.is_alphanumeric() || c == '_'))
                     .next()
-                    .unwrap_or("");
-                if ERROR_TEXT_BINDINGS.contains(&receiver) {
+                    .unwrap_or("")
+                    .to_owned();
+                if bindings.contains(&receiver) {
                     violations.push(format!(
                         "src/{}:{}: {}",
                         relative.display(),
@@ -1320,9 +1496,9 @@ fn route_handlers_never_select_an_http_status_from_error_text() {
     }
     assert!(
         violations.is_empty(),
-        "a route must not classify a failure by reading the error's message — take the status \
-         from ErrorClass::http_status() via webserver::utils::status_for and match the variant \
-         for the error code:\n{}",
+        "a decision must not be made by reading an error's message — take it from the value: \
+         ErrorClass::http_status() (via webserver::utils::status_for), \
+         ErrorClass::is_rate_limited(), the QuoteError variant, or TradeStep:\n{}",
         violations.join("\n")
     );
 }

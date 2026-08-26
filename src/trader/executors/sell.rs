@@ -3,7 +3,7 @@
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
 use crate::positions;
-use crate::trader::types::{TradeDecision, TradeReason, TradeResult};
+use crate::trader::types::{FailedTradeStep, TradeDecision, TradeReason, TradeResult, TradeStep};
 
 /// How much of a position a sell decision actually liquidates.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -63,8 +63,9 @@ pub(super) fn resolve_exit_size(
 /// Execute a sell trade
 pub async fn execute_sell(decision: &TradeDecision) -> crate::trader::Result<TradeResult> {
     if crate::global::is_force_stopped() {
-        return Ok(TradeResult::failure(
+        return Ok(TradeResult::failure_at(
             decision.clone(),
+            TradeStep::Validation,
             "Cannot execute sell - trading is force stopped".to_owned(),
             0,
         ));
@@ -73,7 +74,12 @@ pub async fn execute_sell(decision: &TradeDecision) -> crate::trader::Result<Tra
     if let Some(unhealthy) = crate::connectivity::check_endpoints_healthy(&["rpc"]).await {
         let error = format!("Cannot execute sell - Unhealthy endpoints: {unhealthy}");
         logger::error(LogTag::Trader, &error);
-        return Ok(TradeResult::failure(decision.clone(), error, 0));
+        return Ok(TradeResult::failure_at(
+            decision.clone(),
+            TradeStep::Validation,
+            error,
+            0,
+        ));
     }
 
     logger::info(
@@ -123,9 +129,10 @@ pub async fn execute_sell(decision: &TradeDecision) -> crate::trader::Result<Tra
                 ))
             }
             Err(e) => {
+                let step = e.trade_step();
                 let error = format!("Partial sell execution failed: {e}");
                 logger::error(LogTag::Trader, &error);
-                Ok(TradeResult::failure(decision.clone(), error, 0))
+                Ok(TradeResult::failure_at(decision.clone(), step, error, 0))
             }
         }
     } else {
@@ -155,9 +162,10 @@ pub async fn execute_sell(decision: &TradeDecision) -> crate::trader::Result<Tra
                 ))
             }
             Err(e) => {
+                let step = e.trade_step();
                 let error = format!("Full sell execution failed: {e}");
                 logger::error(LogTag::Trader, &error);
-                Ok(TradeResult::failure(decision.clone(), error, 0))
+                Ok(TradeResult::failure_at(decision.clone(), step, error, 0))
             }
         }
     }

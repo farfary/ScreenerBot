@@ -101,7 +101,9 @@ pub async fn background_check_loop(engine: Arc<AiEngine>, shutdown: Arc<Notify>)
                                     result.decision.confidence
                                 );
 
-                                if let Err(e) = blacklist_token(&mint, &blacklist_reason, &db) {
+                                if let Err(e) =
+                                    blacklist_token(&mint, &blacklist_reason, "auto_ai", &db)
+                                {
                                     logger::error(
                                         LogTag::Filtering,
                                         &format!("Failed to blacklist token {mint}: {e}"),
