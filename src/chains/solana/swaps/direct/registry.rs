@@ -24,6 +24,7 @@ pub fn venues() -> &'static [Arc<dyn PoolVenue>] {
         vec![
             Arc::new(venues::raydium_cpmm::RaydiumCpmmVenue) as Arc<dyn PoolVenue>,
             Arc::new(venues::raydium_amm_v4::RaydiumAmmV4Venue) as Arc<dyn PoolVenue>,
+            Arc::new(venues::raydium_clmm::RaydiumClmmVenue) as Arc<dyn PoolVenue>,
         ]
     })
 }
@@ -112,8 +113,9 @@ mod tests {
     }
 
     #[test]
-    fn the_registered_raydium_pool_kinds_are_supported() {
+    fn all_three_raydium_pool_kinds_are_supported() {
         assert!(supports(ProgramKind::RaydiumCpmm));
         assert!(supports(ProgramKind::RaydiumLegacyAmm));
+        assert!(supports(ProgramKind::RaydiumClmm));
     }
 }

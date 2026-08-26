@@ -21,11 +21,16 @@
 mod common;
 
 use screenerbot::chains::solana::solana_sdk::pubkey::Pubkey;
-use screenerbot::chains::solana::swaps::direct::{self, DirectSwapIntent, FeeSide, PlatformFee};
+use screenerbot::chains::solana::swaps::direct::{
+    self, DirectSwapIntent, FeeSide, PlatformFee, SwapAccounts,
+};
 use std::str::FromStr;
 
 /// Raydium AMM v4, SOL/USDC. The deepest v4 pool on mainnet.
 const AMM_V4_SOL_USDC: &str = "58oQChx4yWmvKdwLLZzBi4ChoCc2fqCUWBkwMihLYQo2";
+
+/// Raydium CLMM, SOL/USDC. The deepest concentrated-liquidity pool on mainnet.
+const CLMM_SOL_USDC: &str = "3ucNos4NbumPLZNWztqGHNFFgkHeRMBQAVemeeomsUxv";
 
 /// Raydium CPMM (CP-Swap), SOL paired against a Token-2022 mint.
 const CPMM_POOL: &str = "Q2sPHPdUWFMg7M7wwrQKLrn619cAucfRsmhVJffodSp";
@@ -154,6 +159,78 @@ async fn cpmm_accepts_a_minimum_sol_to_token_swap() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "live network"]
+async fn clmm_accepts_a_minimum_sol_to_usdc_swap() {
+    let _guard = common::isolated_env();
+    simulate_direction(CLMM_SOL_USDC, WSOL, USDC, MINIMUM_SWAP_LAMPORTS).await;
+}
+
+/// The reverse leg matters on its own: a concentrated-liquidity swap walks tick
+/// arrays in the direction the price moves, so selling reaches DIFFERENT
+/// accounts than buying. A derivation that is right one way and wrong the other
+/// passes a one-way test.
+///
+/// This cannot be simulated the way the forward leg is, because a simulation
+/// runs against the wallet's REAL balances and the wallet holds no USDC to sell
+/// — the token programme fails the transfer before the swap is reached. So the
+/// free tier asserts the structure that differs, and the real reverse execution
+/// is covered by the spending tier's round trip, which buys the token first.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "live network"]
+async fn a_clmm_swap_reaches_different_tick_arrays_in_each_direction() {
+    let _guard = common::isolated_env();
+    let pool = Pubkey::from_str(CLMM_SOL_USDC).unwrap();
+    let market = direct::load_market(&pool)
+        .await
+        .expect("the CLMM pool decodes");
+    let owner = simulation_owner();
+
+    let accounts_for = |input: &str, output: &str| {
+        market
+            .swap_instruction(
+                &SwapAccounts {
+                    owner,
+                    input_mint: mint(input),
+                    output_mint: mint(output),
+                    input_token_account: Pubkey::new_unique(),
+                    output_token_account: Pubkey::new_unique(),
+                },
+                MINIMUM_SWAP_LAMPORTS,
+                1,
+            )
+            .expect("both directions build")
+            .accounts
+    };
+
+    let buying = accounts_for(WSOL, USDC);
+    let selling = accounts_for(USDC, WSOL);
+
+    // 13 named accounts, then the bitmap extension, then the tick arrays.
+    assert!(
+        buying.len() > 14,
+        "a CLMM swap must carry tick arrays; passing none is why the old implementation          could never execute"
+    );
+    assert_eq!(
+        buying[13].pubkey, selling[13].pubkey,
+        "the bitmap extension is a property of the pool, not of the direction"
+    );
+    let buy_arrays: Vec<_> = buying[14..].iter().map(|a| a.pubkey).collect();
+    let sell_arrays: Vec<_> = selling[14..].iter().map(|a| a.pubkey).collect();
+    assert_ne!(
+        buy_arrays, sell_arrays,
+        "the two directions walk the tick arrays opposite ways"
+    );
+    assert_eq!(
+        buy_arrays[0], sell_arrays[0],
+        "both start from the array holding the current tick"
+    );
+    assert_eq!(
+        buying[5].pubkey, selling[6].pubkey,
+        "the input vault of one direction is the output vault of the other"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "live network"]
 async fn a_pool_quotes_both_directions_of_its_pair() {
     let _guard = common::isolated_env();
     let pool = Pubkey::from_str(AMM_V4_SOL_USDC).unwrap();
@@ -238,6 +315,16 @@ async fn a_real_round_trip_through_amm_v4_settles_and_pays_the_platform_fee() {
         return;
     };
     round_trip(&ctx, AMM_V4_SOL_USDC, USDC).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "spends real SOL"]
+async fn a_real_round_trip_through_clmm_settles_and_pays_the_platform_fee() {
+    let _guard = common::isolated_env();
+    let Some(ctx) = common::require_mainnet() else {
+        return;
+    };
+    round_trip(&ctx, CLMM_SOL_USDC, USDC).await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

@@ -9,8 +9,10 @@
 //! rather than guess, because its numbers become a `min_out` that real money is
 //! settled against.
 
+pub mod clmm_ticks;
 pub mod layout;
 pub mod math;
 pub mod raydium_amm_v4;
+pub mod raydium_clmm;
 pub mod raydium_cpmm;
 pub mod token2022;

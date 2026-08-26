@@ -60,6 +60,76 @@ pub fn price_impact_pct(reserve_in: u64, reserve_out: u64, amount_in: u64, amoun
     ((spot - realised) / spot * 100.0).clamp(0.0, 100.0)
 }
 
+// ============================================================================
+// 256-BIT INTERMEDIATES
+// ============================================================================
+//
+// Concentrated-liquidity math multiplies a Q64.64 sqrt price by a liquidity
+// value and only then divides. Both operands reach the top of `u128`, so the
+// product does not fit and the intermediate must be 256 bits wide. Dividing
+// first instead would throw away the low bits that decide the output to the raw
+// unit.
+
+const LOW_64: u128 = u64::MAX as u128;
+
+/// Full 256-bit product of two `u128`s, as `(high, low)`.
+fn mul_full(a: u128, b: u128) -> (u128, u128) {
+    let (a_hi, a_lo) = (a >> 64, a & LOW_64);
+    let (b_hi, b_lo) = (b >> 64, b & LOW_64);
+
+    let low_low = a_lo * b_lo;
+    let low_high = a_lo * b_hi;
+    let high_low = a_hi * b_lo;
+    let high_high = a_hi * b_hi;
+
+    let middle = (low_low >> 64) + (low_high & LOW_64) + (high_low & LOW_64);
+    let low = (low_low & LOW_64) | (middle << 64);
+    let high = high_high + (low_high >> 64) + (high_low >> 64) + (middle >> 64);
+    (high, low)
+}
+
+/// Divide a 256-bit value by a `u128`, returning `None` when the quotient would
+/// not fit in a `u128` (or the divisor is zero).
+///
+/// Long division one bit at a time. The loop keeps the invariant
+/// `remainder < divisor`, so the only way the shifted remainder can exceed
+/// `u128` is the top bit falling out — tracked as a carry, which always forces a
+/// subtraction.
+fn div_full(high: u128, low: u128, divisor: u128) -> Option<u128> {
+    if divisor == 0 || high >= divisor {
+        return None;
+    }
+    let mut remainder = high;
+    let mut quotient: u128 = 0;
+    for bit in (0..128).rev() {
+        let carry = remainder >> 127;
+        remainder = (remainder << 1) | ((low >> bit) & 1);
+        if carry == 1 || remainder >= divisor {
+            remainder = remainder.wrapping_sub(divisor);
+            quotient |= 1 << bit;
+        }
+    }
+    Some(quotient)
+}
+
+/// `a * b / denominator`, rounded DOWN, with a 256-bit intermediate.
+pub fn mul_div_floor(a: u128, b: u128, denominator: u128) -> Option<u128> {
+    let (high, low) = mul_full(a, b);
+    div_full(high, low, denominator)
+}
+
+/// `a * b / denominator`, rounded UP, with a 256-bit intermediate.
+pub fn mul_div_ceil(a: u128, b: u128, denominator: u128) -> Option<u128> {
+    let floor = mul_div_floor(a, b, denominator)?;
+    let (floor_high, floor_low) = mul_full(floor, denominator);
+    let (product_high, product_low) = mul_full(a, b);
+    if floor_high == product_high && floor_low == product_low {
+        Some(floor)
+    } else {
+        floor.checked_add(1)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -129,5 +199,69 @@ mod tests {
     fn price_impact_of_an_empty_or_zero_fill_is_zero_not_nan() {
         assert_eq!(price_impact_pct(0, 1, 1, 1), 0.0);
         assert_eq!(price_impact_pct(1, 1, 0, 0), 0.0);
+    }
+
+    #[test]
+    fn a_product_that_overflows_u128_still_divides_correctly() {
+        // The product of two 2^127 values needs 254 bits.
+        let big = 1u128 << 127;
+        assert_eq!(
+            mul_div_floor(big, big, 1u128 << 126),
+            None,
+            "quotient overflows"
+        );
+        assert_eq!(mul_div_floor(big, big, big), Some(big));
+    }
+
+    #[test]
+    fn mul_div_matches_plain_arithmetic_when_nothing_overflows() {
+        assert_eq!(mul_div_floor(7, 5, 2), Some(17), "35/2 floors to 17");
+        assert_eq!(mul_div_ceil(7, 5, 2), Some(18), "35/2 ceils to 18");
+        assert_eq!(mul_div_floor(10, 10, 5), Some(20));
+        assert_eq!(
+            mul_div_ceil(10, 10, 5),
+            Some(20),
+            "an exact result never rounds up"
+        );
+    }
+
+    #[test]
+    fn dividing_by_zero_is_none_rather_than_a_panic() {
+        assert_eq!(mul_div_floor(1, 1, 0), None);
+        assert_eq!(mul_div_ceil(1, 1, 0), None);
+    }
+
+    #[test]
+    fn a_quotient_that_cannot_fit_is_refused_rather_than_wrapped() {
+        assert_eq!(mul_div_floor(u128::MAX, u128::MAX, 1), None);
+        assert_eq!(mul_div_floor(u128::MAX, 2, 1), None);
+    }
+
+    #[test]
+    fn the_full_product_agrees_with_u128_where_both_can_represent_it() {
+        for (a, b) in [
+            (0u128, 0u128),
+            (1, 1),
+            (u64::MAX as u128, 3),
+            (12_345_678_901_234_567_890, 987_654_321),
+        ] {
+            let (high, low) = mul_full(a, b);
+            assert_eq!(high, 0, "these products fit in 128 bits");
+            assert_eq!(low, a * b);
+        }
+    }
+
+    #[test]
+    fn a_realistic_concentrated_liquidity_step_does_not_overflow() {
+        // Live SOL/USDC CLMM values: L ~ 1.4e14, sqrt_price_x64 ~ 5.7e18.
+        let liquidity = 139_124_859_123_528u128;
+        let sqrt_price = 5_718_259_629_277_169_978u128;
+        let numerator = liquidity << 64;
+        let next = mul_div_floor(numerator, sqrt_price, numerator + sqrt_price * 5_000_000)
+            .expect("a real step must compute");
+        assert!(
+            next > 0 && next < sqrt_price,
+            "selling token_0 moves the price down"
+        );
     }
 }

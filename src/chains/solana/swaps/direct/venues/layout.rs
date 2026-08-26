@@ -35,6 +35,13 @@ pub fn u16_at(data: &[u8], offset: usize) -> Option<u16> {
     ))
 }
 
+/// Read a little-endian `u32` at `offset`.
+pub fn u32_at(data: &[u8], offset: usize) -> Option<u32> {
+    Some(u32::from_le_bytes(
+        data.get(offset..offset + 4)?.try_into().ok()?,
+    ))
+}
+
 /// Read a little-endian `i32` at `offset`.
 pub fn i32_at(data: &[u8], offset: usize) -> Option<i32> {
     Some(i32::from_le_bytes(
@@ -65,6 +72,7 @@ mod tests {
         assert!(u128_at(&short, 0).is_none());
         assert!(u16_at(&short, 3).is_none());
         assert!(i32_at(&short, 1).is_none());
+        assert!(u32_at(&short, 1).is_none());
         assert!(u8_at(&short, 9).is_none());
         assert!(token_account_amount(&short).is_none());
     }
