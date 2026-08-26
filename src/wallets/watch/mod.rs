@@ -123,11 +123,7 @@ pub async fn get_target_by_address(address: &str) -> Result<Option<WatchTarget>,
 /// `wallet.watch_max_targets`.
 pub async fn add_target(address: &str, label: Option<&str>) -> Result<WatchTarget, Error> {
     if !with_config(|cfg| cfg.wallet.watch_enabled) {
-        return Err(Error::InvalidWatchAddress {
-            value:
-                "wallet watching is disabled (wallet.watch_enabled) -- enable it in Config first"
-                    .to_owned(),
-        });
+        return Err(Error::WatchDisabled);
     }
 
     runtime::get_runtime()
@@ -166,20 +162,17 @@ fn validate_target_constraints(
     max_targets: usize,
 ) -> Result<(), Error> {
     if own_addresses.iter().any(|own| own == address) {
-        return Err(Error::InvalidWatchAddress {
-            value: "this address is already one of your own wallets, not a target to watch"
-                .to_owned(),
+        return Err(Error::WatchTargetIsOwnWallet {
+            address: address.to_owned(),
         });
     }
     if current.iter().any(|target| target.address == address) {
-        return Err(Error::InvalidWatchAddress {
-            value: format!("{address} is already watched"),
+        return Err(Error::WatchTargetAlreadyWatched {
+            address: address.to_owned(),
         });
     }
     if current.len() >= max_targets {
-        return Err(Error::InvalidBatchRequest {
-            detail: "watch target limit reached; remove one before adding another",
-        });
+        return Err(Error::WatchTargetLimitReached { max: max_targets });
     }
     Ok(())
 }
@@ -213,8 +206,8 @@ pub async fn add_copy_source(
         })?;
     let own_wallets = crate::wallets::list_wallets(true).await?;
     if own_wallets.iter().any(|wallet| wallet.address == address) {
-        return Err(Error::InvalidWatchAddress {
-            value: "this address is one of your own wallets and cannot be copied".to_owned(),
+        return Err(Error::WatchTargetIsOwnWallet {
+            address: address.to_owned(),
         });
     }
     let db = watch_db()?;
@@ -222,9 +215,7 @@ pub async fn add_copy_source(
     if !current.iter().any(|target| target.address == address) {
         let max_targets = with_config(|cfg| cfg.wallet.watch_max_targets);
         if current.len() >= max_targets {
-            return Err(Error::InvalidBatchRequest {
-                detail: "watch target limit reached",
-            });
+            return Err(Error::WatchTargetLimitReached { max: max_targets });
         }
     }
     let target = db

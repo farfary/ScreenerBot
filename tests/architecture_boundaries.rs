@@ -1262,3 +1262,67 @@ fn errors_are_constructed_at_the_failure_site() {
         violations.join("\n")
     );
 }
+
+/// Identifiers that hold an error, or the text of one, in a route handler.
+/// Matching `.contains(..)` against any of them is the boot path's
+/// message-sniffing defect moved into the HTTP layer.
+const ERROR_TEXT_BINDINGS: &[&str] = &[
+    "e",
+    "e_str",
+    "err",
+    "err_str",
+    "error",
+    "error_msg",
+    "error_str",
+    "msg",
+    "message",
+];
+
+/// **Routes take the status from the error, never from its prose.**
+///
+/// Every module error implements `ErrorClass::http_status()`, so a handler that
+/// re-derives the status with `msg.contains("not found")` is guessing at a fact
+/// the value already carries — and the guess breaks silently when the error
+/// vocabulary is renamed. That is exactly what happened when `src/wallets/`
+/// migrated: `Watch target {id} not found` became `watch target {address} is
+/// not being watched`, and three endpoints started answering 500 where they had
+/// answered 404, with nothing failing to say so. Use
+/// `webserver::utils::status_for(&error)` and match the variant when a route
+/// also needs its own error code.
+#[test]
+fn route_handlers_never_select_an_http_status_from_error_text() {
+    let mut violations = Vec::new();
+    for (relative, contents) in walk_src() {
+        if !relative.starts_with("webserver/routes") {
+            continue;
+        }
+        let production = production_text(&contents);
+        for (index, line) in production.lines().enumerate() {
+            let mut haystack = line;
+            while let Some((before, after)) = haystack.split_once(".contains(") {
+                let receiver = before
+                    .trim_end()
+                    .rsplit(|c: char| !(c.is_alphanumeric() || c == '_'))
+                    .next()
+                    .unwrap_or("");
+                if ERROR_TEXT_BINDINGS.contains(&receiver) {
+                    violations.push(format!(
+                        "src/{}:{}: {}",
+                        relative.display(),
+                        index + 1,
+                        line.trim()
+                    ));
+                    break;
+                }
+                haystack = after;
+            }
+        }
+    }
+    assert!(
+        violations.is_empty(),
+        "a route must not classify a failure by reading the error's message — take the status \
+         from ErrorClass::http_status() via webserver::utils::status_for and match the variant \
+         for the error code:\n{}",
+        violations.join("\n")
+    );
+}

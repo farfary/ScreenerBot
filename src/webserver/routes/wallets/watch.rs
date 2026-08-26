@@ -15,8 +15,9 @@ use std::sync::Arc;
 
 use crate::logger::{self, LogTag};
 use crate::wallets::watch::{self, WatchTarget};
+use crate::wallets::Error as WalletsError;
 use crate::webserver::state::AppState;
-use crate::webserver::utils::{error_response, success_response};
+use crate::webserver::utils::{error_response, status_for, success_response};
 
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
@@ -127,19 +128,25 @@ async fn add_target(Json(request): Json<AddTargetRequest>) -> Response {
                 &format!("Failed to add watch target {address}: {e}"),
             );
             let msg = e.to_string();
-            let (status, code) = if msg.contains("already watched")
-                || msg.contains("already one of your own wallets")
-            {
-                (StatusCode::CONFLICT, "DUPLICATE")
-            } else if msg.contains("Invalid Solana address") {
-                (StatusCode::BAD_REQUEST, "INVALID_ADDRESS")
-            } else if msg.contains("limit reached") || msg.contains("disabled") {
-                (StatusCode::BAD_REQUEST, "REJECTED")
-            } else {
-                (StatusCode::INTERNAL_SERVER_ERROR, "ADD_ERROR")
-            };
-            error_response(status, code, "Failed to add watch target", Some(&msg))
+            error_response(
+                status_for(&e),
+                add_target_error_code(&e),
+                "Failed to add watch target",
+                Some(&msg),
+            )
         }
+    }
+}
+
+/// The dashboard's error code for a failed add. The status comes from the
+/// error itself; only the code — which the UI reads — is chosen here.
+fn add_target_error_code(error: &WalletsError) -> &'static str {
+    match error {
+        WalletsError::WatchTargetAlreadyWatched { .. }
+        | WalletsError::WatchTargetIsOwnWallet { .. } => "DUPLICATE",
+        WalletsError::InvalidWatchAddress { .. } => "INVALID_ADDRESS",
+        WalletsError::WatchDisabled | WalletsError::WatchTargetLimitReached { .. } => "REJECTED",
+        _ => "ADD_ERROR",
     }
 }
 
@@ -155,13 +162,8 @@ async fn remove_target(Path(id): Path<i64>) -> Response {
                 &format!("Failed to remove watch target {id}: {e}"),
             );
             let msg = e.to_string();
-            let status = if msg.contains("not found") {
-                StatusCode::NOT_FOUND
-            } else {
-                StatusCode::INTERNAL_SERVER_ERROR
-            };
             error_response(
-                status,
+                status_for(&e),
                 "REMOVE_ERROR",
                 "Failed to remove watch target",
                 Some(&msg),
@@ -190,13 +192,8 @@ async fn set_target_enabled(
                 &format!("Failed to update watch target {id}: {e}"),
             );
             let msg = e.to_string();
-            let status = if msg.contains("not found") {
-                StatusCode::NOT_FOUND
-            } else {
-                StatusCode::INTERNAL_SERVER_ERROR
-            };
             error_response(
-                status,
+                status_for(&e),
                 "UPDATE_ERROR",
                 "Failed to update watch target",
                 Some(&msg),
@@ -225,17 +222,73 @@ async fn get_status(Path(id): Path<i64>) -> Response {
         Ok(status) => success_response(status),
         Err(e) => {
             let msg = e.to_string();
-            let status_code = if msg.contains("not found") {
-                StatusCode::NOT_FOUND
-            } else {
-                StatusCode::INTERNAL_SERVER_ERROR
-            };
             error_response(
-                status_code,
+                status_for(&e),
                 "STATUS_ERROR",
                 "Failed to get watch status",
                 Some(&msg),
             )
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The statuses the dashboard depends on, asserted against the typed value
+    /// rather than the sentence it renders to: `watched.js` reads 409 to say
+    /// "that wallet is already watched", and a missing target must be a 404 so
+    /// a stale row in the list is distinguishable from a server fault.
+    #[test]
+    fn watch_failures_map_to_their_documented_statuses() {
+        let cases = [
+            (
+                WalletsError::WatchTargetAlreadyWatched {
+                    address: "addr".to_owned(),
+                },
+                StatusCode::CONFLICT,
+                "DUPLICATE",
+            ),
+            (
+                WalletsError::WatchTargetIsOwnWallet {
+                    address: "addr".to_owned(),
+                },
+                StatusCode::CONFLICT,
+                "DUPLICATE",
+            ),
+            (
+                WalletsError::InvalidWatchAddress {
+                    value: "nope".to_owned(),
+                },
+                StatusCode::BAD_REQUEST,
+                "INVALID_ADDRESS",
+            ),
+            (
+                WalletsError::WatchDisabled,
+                StatusCode::BAD_REQUEST,
+                "REJECTED",
+            ),
+            (
+                WalletsError::WatchTargetLimitReached { max: 5 },
+                StatusCode::BAD_REQUEST,
+                "REJECTED",
+            ),
+        ];
+
+        for (error, status, code) in cases {
+            assert_eq!(status_for(&error), status, "status for {error}");
+            assert_eq!(add_target_error_code(&error), code, "code for {error}");
+        }
+    }
+
+    /// A target that is gone is a 404 on every endpoint addressed by id —
+    /// remove, enable/disable and status all read the same typed variant.
+    #[test]
+    fn a_missing_watch_target_is_not_a_server_error() {
+        let error = WalletsError::WatchTargetNotFound {
+            address: "id=7".to_owned(),
+        };
+        assert_eq!(status_for(&error), StatusCode::NOT_FOUND);
     }
 }

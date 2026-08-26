@@ -23,6 +23,11 @@ pub enum Error {
     NotInitialized { database: &'static str },
     #[error("wallet {address} is not known")]
     WalletNotFound { address: String },
+    /// The imported private key resolves to a wallet that is already stored
+    /// (no fitting variant above: a duplicate import is a conflict on an
+    /// existing row, not a database failure and not an unusable key).
+    #[error("wallet {address} already exists")]
+    WalletAlreadyExists { address: String },
     /// The wallet exists but its current role/state forbids the requested
     /// operation (no fitting variant above: this is a business-rule
     /// rejection, not a not-found or a plain database failure — archiving/
@@ -31,6 +36,24 @@ pub enum Error {
     InvalidWalletState { id: i64, detail: &'static str },
     #[error("watch target {address} is not being watched")]
     WatchTargetNotFound { address: String },
+    /// Wallet watching is switched off in config, so no target may be added
+    /// (no fitting variant above: the request is well formed and the address
+    /// may be perfectly valid — the feature itself is disabled).
+    #[error("wallet watching is disabled (wallet.watch_enabled)")]
+    WatchDisabled,
+    /// The address is already a watch target (no fitting variant above: a
+    /// conflict with an existing target, not a malformed address).
+    #[error("watch target {address} is already watched")]
+    WatchTargetAlreadyWatched { address: String },
+    /// The address is one of the user's own wallets, which is observed through
+    /// `WatchSource::OwnWallet` rather than added as a target (no fitting
+    /// variant above: a conflict with an existing wallet, not a bad address).
+    #[error("{address} is one of your own wallets, not a target to watch")]
+    WatchTargetIsOwnWallet { address: String },
+    /// `wallet.watch_max_targets` is reached (no fitting variant above: a
+    /// configured-capacity rejection, not a malformed request).
+    #[error("the watch target limit of {max} is reached; remove one before adding another")]
+    WatchTargetLimitReached { max: usize },
     #[error("'{value}' is not a valid watch address")]
     InvalidWatchAddress { value: String },
     /// A batch wallet-creation request is malformed or produced nothing (no
@@ -106,8 +129,13 @@ impl ErrorClass for Error {
             Error::Transactions(e) => e.is_retryable(),
             Error::NotInitialized { .. } => false,
             Error::WalletNotFound { .. } => false,
+            Error::WalletAlreadyExists { .. } => false,
             Error::InvalidWalletState { .. } => false,
             Error::WatchTargetNotFound { .. } => false,
+            Error::WatchDisabled => false,
+            Error::WatchTargetAlreadyWatched { .. } => false,
+            Error::WatchTargetIsOwnWallet { .. } => false,
+            Error::WatchTargetLimitReached { .. } => false,
             Error::InvalidWatchAddress { .. } => false,
             Error::InvalidBatchRequest { .. } => false,
             Error::InvalidWindow { .. } => false,
@@ -147,8 +175,13 @@ impl ErrorClass for Error {
             Error::Transactions(e) => e.severity(),
             Error::NotInitialized { .. } => Severity::Critical,
             Error::WalletNotFound { .. } => Severity::Warning,
+            Error::WalletAlreadyExists { .. } => Severity::Warning,
             Error::InvalidWalletState { .. } => Severity::Warning,
             Error::WatchTargetNotFound { .. } => Severity::Warning,
+            Error::WatchDisabled => Severity::Warning,
+            Error::WatchTargetAlreadyWatched { .. } => Severity::Warning,
+            Error::WatchTargetIsOwnWallet { .. } => Severity::Warning,
+            Error::WatchTargetLimitReached { .. } => Severity::Warning,
             Error::InvalidWatchAddress { .. } => Severity::Warning,
             Error::InvalidBatchRequest { .. } => Severity::Warning,
             Error::InvalidWindow { .. } => Severity::Warning,
@@ -172,8 +205,12 @@ impl ErrorClass for Error {
             Error::Transactions(e) => e.http_status(),
             Error::NotInitialized { .. } => 500,
             Error::WalletNotFound { .. } => 404,
+            Error::WalletAlreadyExists { .. } => 409,
             Error::InvalidWalletState { .. } => 409,
             Error::WatchTargetNotFound { .. } => 404,
+            Error::WatchDisabled => 400,
+            Error::WatchTargetAlreadyWatched { .. } | Error::WatchTargetIsOwnWallet { .. } => 409,
+            Error::WatchTargetLimitReached { .. } => 400,
             Error::InvalidWatchAddress { .. } => 400,
             Error::InvalidBatchRequest { .. } => 400,
             Error::InvalidWindow { .. } => 400,

@@ -108,10 +108,7 @@ pub async fn import_wallet(request: ImportWalletRequest) -> Result<Wallet, Error
 
     // Check if wallet already exists
     if db.wallet_exists(&address)? {
-        return Err(Error::Database(crate::errors::DatabaseError::Query {
-            operation: "import_wallet".to_owned(),
-            message: format!("wallet {address} already exists"),
-        }));
+        return Err(Error::WalletAlreadyExists { address });
     }
 
     // Determine role

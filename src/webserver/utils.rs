@@ -28,6 +28,18 @@ pub fn error_response(
     (status, Json(error)).into_response()
 }
 
+/// The HTTP status a typed domain error already carries.
+///
+/// Every module error implements [`ErrorClass::http_status`], so a route must
+/// never re-derive the status by reading the error's message text: the prose is
+/// free to change with the error vocabulary, and when it does a silently
+/// unmatched `.contains(..)` downgrades a 404 or a 400 to a 500 with nothing
+/// failing. Take the status from the value instead, and match the variant when
+/// a route also needs its own error code.
+pub fn status_for(error: &impl crate::errors::ErrorClass) -> StatusCode {
+    StatusCode::from_u16(error.http_status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)
+}
+
 /// Format success response with data
 pub fn success_response<T: serde::Serialize>(data: T) -> Response {
     Json(data).into_response()

@@ -10,8 +10,10 @@ use axum::{
 };
 
 use crate::logger::{self, LogTag};
-use crate::wallets::{self, CreateWalletRequest, ImportWalletRequest, UpdateWalletRequest};
-use crate::webserver::utils::{error_response, success_response};
+use crate::wallets::{
+    self, CreateWalletRequest, Error as WalletsError, ImportWalletRequest, UpdateWalletRequest,
+};
+use crate::webserver::utils::{error_response, status_for, success_response};
 
 use super::types::{
     DeleteResponse, ListWalletsQuery, SetMainResponse, WalletCreatedResponse, WalletListResponse,
@@ -107,25 +109,16 @@ pub async fn import_wallet(Json(request): Json<ImportWalletRequest>) -> Response
         Err(e) => {
             logger::error(LogTag::Wallet, &format!("Failed to import wallet: {e}"));
 
-            // Check for specific error types
             let e_str = e.to_string();
-            let (status, code, msg) = if e_str.contains("already exists") {
-                (StatusCode::CONFLICT, "DUPLICATE", "Wallet already exists")
-            } else if e_str.contains("Invalid") {
-                (
-                    StatusCode::BAD_REQUEST,
-                    "INVALID_KEY",
-                    "Invalid private key format",
-                )
-            } else {
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "IMPORT_ERROR",
-                    "Failed to import wallet",
-                )
+            let (code, msg) = match e {
+                WalletsError::WalletAlreadyExists { .. } => ("DUPLICATE", "Wallet already exists"),
+                WalletsError::InvalidPrivateKey { .. } => {
+                    ("INVALID_KEY", "Invalid private key format")
+                }
+                _ => ("IMPORT_ERROR", "Failed to import wallet"),
             };
 
-            error_response(status, code, msg, Some(&e_str))
+            error_response(status_for(&e), code, msg, Some(&e_str))
         }
     }
 }
@@ -220,13 +213,17 @@ pub async fn delete_wallet(Path(id): Path<i64>) -> Response {
             );
 
             let e_str = e.to_string();
-            let (status, code) = if e_str.contains("main wallet") {
-                (StatusCode::BAD_REQUEST, "MAIN_WALLET")
-            } else {
-                (StatusCode::INTERNAL_SERVER_ERROR, "DELETE_ERROR")
+            let code = match e {
+                WalletsError::InvalidWalletState { .. } => "MAIN_WALLET",
+                _ => "DELETE_ERROR",
             };
 
-            error_response(status, code, "Failed to delete wallet", Some(&e_str))
+            error_response(
+                status_for(&e),
+                code,
+                "Failed to delete wallet",
+                Some(&e_str),
+            )
         }
     }
 }
@@ -285,13 +282,17 @@ pub async fn archive_wallet(Path(id): Path<i64>) -> Response {
             );
 
             let e_str = e.to_string();
-            let (status, code) = if e_str.contains("main wallet") {
-                (StatusCode::BAD_REQUEST, "MAIN_WALLET")
-            } else {
-                (StatusCode::INTERNAL_SERVER_ERROR, "ARCHIVE_ERROR")
+            let code = match e {
+                WalletsError::InvalidWalletState { .. } => "MAIN_WALLET",
+                _ => "ARCHIVE_ERROR",
             };
 
-            error_response(status, code, "Failed to archive wallet", Some(&e_str))
+            error_response(
+                status_for(&e),
+                code,
+                "Failed to archive wallet",
+                Some(&e_str),
+            )
         }
     }
 }
@@ -309,13 +310,17 @@ pub async fn restore_wallet(Path(id): Path<i64>) -> Response {
             );
 
             let e_str = e.to_string();
-            let (status, code) = if e_str.contains("not archived") {
-                (StatusCode::BAD_REQUEST, "NOT_ARCHIVED")
-            } else {
-                (StatusCode::INTERNAL_SERVER_ERROR, "RESTORE_ERROR")
+            let code = match e {
+                WalletsError::InvalidWalletState { .. } => "NOT_ARCHIVED",
+                _ => "RESTORE_ERROR",
             };
 
-            error_response(status, code, "Failed to restore wallet", Some(&e_str))
+            error_response(
+                status_for(&e),
+                code,
+                "Failed to restore wallet",
+                Some(&e_str),
+            )
         }
     }
 }
