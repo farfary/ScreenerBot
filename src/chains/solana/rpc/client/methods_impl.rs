@@ -9,7 +9,7 @@ use super::methods::{
 };
 use super::RpcClient;
 use crate::chains::solana::constants::{SPL_TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID};
-use crate::chains::solana::rpc::types::{TokenAccountInfo, TransactionDetails};
+use crate::chains::solana::rpc::types::{SimulationOutcome, TokenAccountInfo, TransactionDetails};
 use crate::chains::solana::solana_sdk::{
     account::Account,
     commitment_config::CommitmentLevel,
@@ -288,6 +288,55 @@ impl RpcClientMethods for RpcClient {
                 data_type: "signature".to_string(),
                 error: format!("Invalid signature \'{sig_str}\': {e}"),
             })
+        })
+    }
+
+    async fn simulate_transaction(
+        &self,
+        transaction: &VersionedTransaction,
+    ) -> crate::Result<SimulationOutcome> {
+        let tx_bytes = bincode::serialize(transaction).map_err(|e| {
+            crate::Error::Data(crate::errors::DataError::ParseError {
+                data_type: "transaction".to_string(),
+                error: format!("Failed to serialize: {e}"),
+            })
+        })?;
+        let tx_base64 = base64::engine::general_purpose::STANDARD.encode(&tx_bytes);
+
+        // `sigVerify: false` with `replaceRecentBlockhash: true` lets a preflight
+        // run even when the blockhash has aged out between build and simulate --
+        // the point here is whether the INSTRUCTIONS are correct, not whether this
+        // exact blockhash is still current.
+        let params = serde_json::json!([
+            tx_base64,
+            {
+                "encoding": "base64",
+                "commitment": "confirmed",
+                "sigVerify": false,
+                "replaceRecentBlockhash": true
+            }
+        ]);
+
+        let result = self
+            .manager
+            .execute_raw("simulateTransaction", params)
+            .await?;
+
+        let value = result.get("value").unwrap_or(&result);
+        Ok(SimulationOutcome {
+            err: value.get("err").filter(|v| !v.is_null()).cloned(),
+            logs: value
+                .get("logs")
+                .and_then(|v| v.as_array())
+                .map(|logs| {
+                    logs.iter()
+                        .filter_map(|l| l.as_str().map(str::to_owned))
+                        .collect()
+                })
+                .unwrap_or_default(),
+            units_consumed: value
+                .get("unitsConsumed")
+                .and_then(serde_json::Value::as_u64),
         })
     }
 

@@ -3,7 +3,7 @@
 //! Type definitions and trait signatures for RPC client methods.
 //! The trait implementation for `RpcClient` is in `methods_impl.rs`.
 
-use crate::chains::solana::rpc::types::{TokenAccountInfo, TransactionDetails};
+use crate::chains::solana::rpc::types::{SimulationOutcome, TokenAccountInfo, TransactionDetails};
 use crate::chains::solana::solana_sdk::{
     account::Account,
     commitment_config::CommitmentLevel,
@@ -248,6 +248,17 @@ pub trait RpcClientMethods {
         commitment: CommitmentLevel,
         timeout: Duration,
     ) -> impl std::future::Future<Output = crate::Result<bool>> + Send;
+
+    /// Simulate a signed transaction without submitting it.
+    ///
+    /// Returns the node's verdict rather than an error: a transaction that WOULD
+    /// fail is a successful call with `err` set. Callers that spend money use
+    /// this as a preflight — a rejection here costs nothing, the same rejection
+    /// after `send_transaction` costs the priority fee.
+    fn simulate_transaction(
+        &self,
+        transaction: &VersionedTransaction,
+    ) -> impl std::future::Future<Output = crate::Result<SimulationOutcome>> + Send;
 
     // =========================================================================
     // Token Account Utility Methods

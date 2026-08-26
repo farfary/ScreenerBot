@@ -53,26 +53,59 @@ config_struct! {
 }
 
 config_struct! {
-    /// Raydium direct swap configuration
-    pub struct RaydiumConfig {
+    /// Direct pool-swap engine configuration.
+    ///
+    /// Direct swaps build the DEX instruction themselves instead of routing
+    /// through an aggregator. They apply to every venue the engine supports, not
+    /// to one DEX -- which is why this section is named for the mechanism.
+    pub struct DirectSwapConfig {
         #[metadata(field_metadata! {
             label: "Enabled",
-            hint: "Enable direct Raydium swaps (bypass aggregators)",
-            impact: "medium",
+            hint: "Swap straight against the pool instead of through an aggregator",
+            impact: "high",
             category: "Router",
         })]
         enabled: bool = false,
         #[metadata(field_metadata! {
             label: "Default Slippage (BPS)",
-            hint: "Default slippage for direct pool swaps in basis points (100 = 1%)",
+            hint: "Slippage floor written into the swap instruction (100 = 1%)",
             min: 10,
-            max: 2500,
+            max: 5000,
             step: 10,
             unit: "bps",
             impact: "high",
             category: "Risk",
         })]
         default_slippage_bps: u16 = 100,
+        #[metadata(field_metadata! {
+            label: "Priority Fee",
+            hint: "Compute-unit price in micro-lamports. Higher lands faster in a busy block.",
+            min: 0,
+            max: 10000000,
+            step: 1000,
+            unit: "micro-lamports/CU",
+            impact: "medium",
+            category: "Fees",
+        })]
+        priority_fee_micro_lamports: u64 = 50_000,
+        #[metadata(field_metadata! {
+            label: "Simulate Before Send",
+            hint: "Run the swap against a node first so a broken build fails for free",
+            impact: "high",
+            category: "Safety",
+        })]
+        simulate_before_send: bool = true,
+        #[metadata(field_metadata! {
+            label: "Confirmation Timeout",
+            hint: "How long to wait for the swap to confirm before reporting an unknown outcome",
+            min: 10,
+            max: 180,
+            step: 5,
+            unit: "seconds",
+            impact: "medium",
+            category: "Safety",
+        })]
+        confirmation_timeout_secs: u64 = 60,
     }
 }
 
@@ -135,16 +168,14 @@ config_struct! {
         })]
         jupiter: JupiterConfig = JupiterConfig::default(),
 
-        /// Raydium direct swap configuration
-        #[serde(skip_serializing)]
+        /// Direct pool-swap engine configuration
         #[metadata(field_metadata! {
-            label: "Raydium",
-            hint: "Direct Raydium swaps",
-            impact: "medium",
+            label: "Direct Pool Swaps",
+            hint: "Build DEX instructions directly against the pool",
+            impact: "high",
             category: "Routers",
-            hidden: true,
         })]
-        raydium: RaydiumConfig = RaydiumConfig::default(),
+        direct: DirectSwapConfig = DirectSwapConfig::default(),
 
         /// Slippage configuration
         #[metadata(field_metadata! {

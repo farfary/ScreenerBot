@@ -1,0 +1,133 @@
+//! Turning a [`SwapPlan`] into a landed, verified transaction.
+//!
+//! The step order is the money-safety contract of the engine:
+//!
+//! 1. build and sign — nothing is on the network yet;
+//! 2. simulate — a mis-built instruction is rejected here for free;
+//! 3. send — the point of no return;
+//! 4. confirm — bounded wait;
+//! 5. verify — read back what actually arrived.
+//!
+//! Anything that fails at steps 1-2 returns an error whose
+//! [`DirectSwapError::submitted`] is false, and is safe to retry. Everything from
+//! step 3 onward returns `submitted() == true`, INCLUDING a confirmation timeout:
+//! a timed-out swap may still land, and retrying it buys the position twice.
+
+use super::error::{DirectSwapError, DirectSwapResult};
+use super::plan::SwapPlan;
+use super::verify::{receipt_from_transaction, Receipt};
+use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
+use crate::chains::solana::solana_sdk::{
+    commitment_config::CommitmentLevel,
+    signature::{Keypair, Signer},
+    transaction::{Transaction, VersionedTransaction},
+};
+use crate::config::with_config;
+use crate::logger::{self, LogTag};
+use std::time::{Duration, Instant};
+
+/// A completed direct swap.
+#[derive(Debug, Clone)]
+pub struct DirectSwapOutcome {
+    /// Transaction signature.
+    pub signature: String,
+    /// Amount of the input mint the wallet gave up, platform fee included.
+    pub amount_in: u64,
+    /// What the wallet received, per [`Receipt`].
+    pub receipt: Receipt,
+    /// Platform fee collected, in raw units of the fee mint.
+    pub platform_fee: u64,
+    /// Wall-clock time from build to verified, in milliseconds.
+    pub duration_ms: u64,
+}
+
+/// Build, sign, simulate, send, confirm and verify `plan`.
+pub async fn execute_plan(plan: &SwapPlan, keypair: &Keypair) -> DirectSwapResult<DirectSwapOutcome> {
+    let started = Instant::now();
+    let rpc = get_rpc_client();
+    let owner = keypair.pubkey();
+
+    let blockhash = rpc
+        .get_latest_blockhash()
+        .await
+        .map_err(|e| DirectSwapError::Build {
+            detail: format!("no recent blockhash: {e}"),
+        })?;
+
+    let transaction = VersionedTransaction::from(Transaction::new_signed_with_payer(
+        &plan.instructions,
+        Some(&owner),
+        &[keypair],
+        blockhash,
+    ));
+
+    if with_config(|cfg| cfg.swaps.direct.simulate_before_send) {
+        let outcome = rpc
+            .simulate_transaction(&transaction)
+            .await
+            .map_err(|e| DirectSwapError::SubmitFailed {
+                detail: format!("simulation could not be run: {e}"),
+            })?;
+        if !outcome.succeeded() {
+            return Err(DirectSwapError::SimulationRejected {
+                detail: outcome.failure_detail(),
+                logs: outcome.logs,
+            });
+        }
+        if let Some(units) = outcome.units_consumed {
+            logger::debug(
+                LogTag::System,
+                &format!(
+                    "Direct swap simulation consumed {units} CU against a {} CU venue estimate",
+                    plan.venue_compute_units
+                ),
+            );
+        }
+    }
+
+    let signature = rpc
+        .send_transaction(&transaction)
+        .await
+        .map_err(|e| DirectSwapError::SubmitFailed {
+            detail: e.to_string(),
+        })?
+        .to_string();
+
+    let timeout = Duration::from_secs(with_config(|cfg| cfg.swaps.direct.confirmation_timeout_secs));
+    let parsed = signature
+        .parse()
+        .map_err(|e| DirectSwapError::SubmitFailed {
+            detail: format!("node returned an unparsable signature {signature}: {e}"),
+        })?;
+
+    let confirmed = rpc
+        .confirm_transaction(&parsed, CommitmentLevel::Confirmed, timeout)
+        .await
+        .map_err(|_| DirectSwapError::ConfirmationTimeout {
+            signature: signature.clone(),
+        })?;
+    if !confirmed {
+        return Err(DirectSwapError::ConfirmationTimeout {
+            signature: signature.clone(),
+        });
+    }
+
+    let details = rpc.get_transaction_details(&signature).await.map_err(|e| {
+        // Confirmed but unreadable: the swap happened, so this must stay a
+        // submitted-class error rather than anything a caller might retry.
+        DirectSwapError::TransactionFailed {
+            signature: signature.clone(),
+            detail: format!("confirmed transaction could not be read back: {e}"),
+        }
+    })?;
+
+    let receipt = receipt_from_transaction(&signature, &owner, plan, &details)?;
+
+    Ok(DirectSwapOutcome {
+        signature,
+        amount_in: plan.quote.amount_in,
+        receipt,
+        platform_fee: plan.quote.fee.amount,
+        duration_ms: started.elapsed().as_millis() as u64,
+    })
+}

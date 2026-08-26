@@ -75,6 +75,38 @@ pub struct UiTokenAmount {
     pub ui_amount_string: Option<String>,
 }
 
+/// Outcome of a `simulateTransaction` call.
+///
+/// A simulation that returns `err = Some(..)` is a REJECTION: the transaction was
+/// never submitted and nothing was spent. That distinction is why the direct-swap
+/// engine simulates before sending — a mis-built instruction costs a round trip
+/// instead of a priority fee and a slot.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SimulationOutcome {
+    /// The program error, if the transaction would fail.
+    pub err: Option<serde_json::Value>,
+    /// Program log lines, which name the failing program and its error code.
+    pub logs: Vec<String>,
+    /// Compute units the simulated run consumed — the ground truth for sizing
+    /// a venue's `compute_units()` estimate.
+    pub units_consumed: Option<u64>,
+}
+
+impl SimulationOutcome {
+    /// Whether the transaction would succeed as built.
+    pub fn succeeded(&self) -> bool {
+        self.err.is_none()
+    }
+
+    /// A one-line rendering of the failure, for a typed error's `detail`.
+    pub fn failure_detail(&self) -> String {
+        match &self.err {
+            Some(err) => err.to_string(),
+            None => String::new(),
+        }
+    }
+}
+
 // ============================================================================
 // Account Types
 // ============================================================================
