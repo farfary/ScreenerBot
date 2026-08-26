@@ -206,7 +206,7 @@ mod tests {
     #[test]
     fn primary_router_is_the_enabled_router_with_lowest_priority() {
         let registry = RouterRegistry::new(vec![
-            stub("gmgn", true, 1),
+            stub("alt_router", true, 1),
             stub("jupiter", true, 0),
             stub("raydium", true, 2),
         ]);
@@ -218,13 +218,13 @@ mod tests {
     fn primary_router_skips_disabled_routers_regardless_of_registration_order() {
         let registry = RouterRegistry::new(vec![
             stub("jupiter", false, 0),
-            stub("gmgn", true, 1),
+            stub("alt_router", true, 1),
             stub("raydium", false, 2),
         ]);
-        let primary = registry.get_primary_router().expect("gmgn enabled");
-        assert_eq!(primary.id(), "gmgn");
+        let primary = registry.get_primary_router().expect("alt_router enabled");
+        assert_eq!(primary.id(), "alt_router");
         let enabled: Vec<_> = registry.enabled_routers().iter().map(|r| r.id()).collect();
-        assert_eq!(enabled, vec!["gmgn"]);
+        assert_eq!(enabled, vec!["alt_router"]);
     }
 
     #[test]
@@ -232,18 +232,18 @@ mod tests {
         let orders = [
             vec![
                 stub("raydium", true, 2),
-                stub("gmgn", true, 1),
+                stub("alt_router", true, 1),
                 stub("jupiter", true, 0),
             ],
             vec![
-                stub("gmgn", true, 1),
+                stub("alt_router", true, 1),
                 stub("jupiter", true, 0),
                 stub("raydium", true, 2),
             ],
             vec![
                 stub("jupiter", true, 0),
                 stub("raydium", true, 2),
-                stub("gmgn", true, 1),
+                stub("alt_router", true, 1),
             ],
         ];
         for routers in orders {
@@ -259,7 +259,7 @@ mod tests {
     fn fallback_chain_is_enabled_routers_by_priority_excluding_failed() {
         let registry = RouterRegistry::new(vec![
             stub("jupiter", true, 0),
-            stub("gmgn", true, 1),
+            stub("alt_router", true, 1),
             stub("raydium", false, 2),
         ]);
         let chain: Vec<_> = registry
@@ -267,6 +267,6 @@ mod tests {
             .iter()
             .map(|r| r.id())
             .collect();
-        assert_eq!(chain, vec!["gmgn"]);
+        assert_eq!(chain, vec!["alt_router"]);
     }
 }

@@ -3,8 +3,8 @@
 use crate::config::get_config_clone;
 use crate::connectivity::monitor::EndpointMonitor;
 use crate::connectivity::monitors::{
-    DexScreenerMonitor, GeckoTerminalMonitor, GmgnMonitor, InternetMonitor, JupiterMonitor,
-    RpcMonitor, RugcheckMonitor,
+    DexScreenerMonitor, GeckoTerminalMonitor, InternetMonitor, JupiterMonitor, RpcMonitor,
+    RugcheckMonitor,
 };
 use crate::connectivity::state;
 use crate::events::{record_connectivity_event, Severity};
@@ -39,7 +39,6 @@ impl ConnectivityChecker {
             Box::new(DexScreenerMonitor::new()),
             Box::new(GeckoTerminalMonitor::new()),
             Box::new(RugcheckMonitor::new()),
-            Box::new(GmgnMonitor::new()),
             Box::new(JupiterMonitor::new()),
         ];
 

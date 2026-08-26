@@ -131,17 +131,17 @@ fn arc(router: StubRouter) -> Arc<dyn SwapRouter> {
 #[test]
 fn quote_from_one_router_is_refused_by_another_naming_both() {
     let jupiter = StubRouter::new("jupiter", 0);
-    let gmgn = StubRouter::new("gmgn", 1);
+    let alt_router = StubRouter::new("alt_router", 1);
 
     let req = request(ChainId::Solana);
     let quote = futures::executor::block_on(jupiter.get_quote(&req)).expect("jupiter quotes");
 
-    let err = gmgn
+    let err = alt_router
         .accept_own_quote(&quote)
-        .expect_err("gmgn must refuse a jupiter quote");
+        .expect_err("alt_router must refuse a jupiter quote");
     let message = err.to_string();
     assert!(
-        message.contains("jupiter") && message.contains("gmgn"),
+        message.contains("jupiter") && message.contains("alt_router"),
         "error must name both routers: {message}"
     );
 }
@@ -170,7 +170,7 @@ fn accept_own_chain_accepts_a_request_for_its_own_chain() {
 fn primary_router_for_chain_is_lowest_priority_enabled_router() {
     let registry = RouterRegistry::new(vec![
         arc(StubRouter::new("raydium", 2)),
-        arc(StubRouter::new("gmgn", 1)),
+        arc(StubRouter::new("alt_router", 1)),
         arc(StubRouter::new("jupiter", 0)),
     ]);
 
@@ -184,7 +184,7 @@ fn primary_router_for_chain_is_lowest_priority_enabled_router() {
 fn primary_router_for_chain_is_none_when_all_routers_for_that_chain_are_disabled() {
     let registry = RouterRegistry::new(vec![
         arc(StubRouter::new("jupiter", 0).disabled()),
-        arc(StubRouter::new("gmgn", 1).disabled()),
+        arc(StubRouter::new("alt_router", 1).disabled()),
     ]);
 
     assert!(registry.get_primary_router_for(ChainId::Solana).is_none());
@@ -207,7 +207,7 @@ fn fallback_chain_excludes_failed_router_and_is_priority_ordered() {
     let registry = RouterRegistry::new(vec![
         arc(StubRouter::new("jupiter", 0)),
         arc(StubRouter::new("raydium", 2)),
-        arc(StubRouter::new("gmgn", 1)),
+        arc(StubRouter::new("alt_router", 1)),
         arc(StubRouter::new("disabled_one", 3).disabled()),
     ]);
 
@@ -219,7 +219,7 @@ fn fallback_chain_excludes_failed_router_and_is_priority_ordered() {
 
     assert_eq!(
         chain,
-        vec!["gmgn", "raydium"],
+        vec!["alt_router", "raydium"],
         "fallback must exclude the failed router, exclude disabled routers, and be priority-ordered"
     );
 }
@@ -231,7 +231,7 @@ fn fallback_chain_excludes_failed_router_and_is_priority_ordered() {
 fn stub_factory() -> Vec<Arc<dyn SwapRouter>> {
     vec![
         arc(StubRouter::new("jupiter", 0)),
-        arc(StubRouter::new("gmgn", 1)),
+        arc(StubRouter::new("alt_router", 1)),
         arc(StubRouter::new("raydium", 2).disabled()),
     ]
 }

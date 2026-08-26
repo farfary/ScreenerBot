@@ -178,7 +178,7 @@ mod tests {
                 log: Arc::clone(&log),
             },
             StubRouter {
-                id: "gmgn",
+                id: "alt_router",
                 enabled: true,
                 priority: 1,
                 supports_wallet: true,
@@ -188,17 +188,17 @@ mod tests {
 
         let (quote, result) = quote_and_execute_for_wallet_on(&registry, request(), 7)
             .await
-            .expect("gmgn should quote and execute");
+            .expect("alt_router should quote and execute");
 
-        assert_eq!(quote.router_id, "gmgn");
-        assert_eq!(result.router_id, "gmgn");
-        assert_eq!(result.transaction_signature, "sig-gmgn");
-        assert_eq!(*log.quotes.lock().expect("quotes"), vec!["gmgn"]);
+        assert_eq!(quote.router_id, "alt_router");
+        assert_eq!(result.router_id, "alt_router");
+        assert_eq!(result.transaction_signature, "sig-alt_router");
+        assert_eq!(*log.quotes.lock().expect("quotes"), vec!["alt_router"]);
         let execs = log.wallet_execs.lock().expect("execs");
         assert_eq!(execs.len(), 1);
-        assert_eq!(execs[0].0, "gmgn");
-        assert_eq!(execs[0].1, "gmgn");
-        assert_eq!(execs[0].2, b"gmgn");
+        assert_eq!(execs[0].0, "alt_router");
+        assert_eq!(execs[0].1, "alt_router");
+        assert_eq!(execs[0].2, b"alt_router");
         assert_eq!(execs[0].3, 7);
     }
 
@@ -214,7 +214,7 @@ mod tests {
                 log: Arc::clone(&log),
             },
             StubRouter {
-                id: "gmgn",
+                id: "alt_router",
                 enabled: true,
                 priority: 1,
                 supports_wallet: true,
@@ -224,14 +224,14 @@ mod tests {
 
         quote_and_execute_for_wallet_on(&registry, request(), 3)
             .await
-            .expect("gmgn path");
+            .expect("alt_router path");
 
         let execs = log.wallet_execs.lock().expect("execs");
         assert!(
             execs.iter().all(|e| e.0 != "jupiter"),
-            "Jupiter wallet execution must not run for a GMGN quote: {execs:?}"
+            "Jupiter wallet execution must not run for another router's quote: {execs:?}"
         );
-        assert_eq!(execs[0].2, b"gmgn");
+        assert_eq!(execs[0].2, b"alt_router");
     }
 
     #[tokio::test]
@@ -239,7 +239,7 @@ mod tests {
         let log = CallLog::new();
         let registry = registry(vec![
             StubRouter {
-                id: "gmgn",
+                id: "alt_router",
                 enabled: true,
                 priority: 1,
                 supports_wallet: true,

@@ -7,7 +7,7 @@
 //!
 //! NOT duplicated here (see file headers): `tests/swaps_chain_routing.rs` (router
 //! selection/fallback/chain scoping), `tests/swap_resilience.rs`, `tests/trader_*.rs`,
-//! and `src/chains/solana/swaps/routers/gmgn.rs`'s own quote-decode unit tests.
+//! and the routers' own co-located quote-decode unit tests.
 //! Item 4 (instruction structure) is covered co-located in
 //! `src/chains/solana/swaps/programs/raydium_clmm.rs` (CPMM already had its own).
 
@@ -27,8 +27,8 @@ use std::sync::{Arc, Mutex, OnceLock};
 // ============================================================================
 //
 // There is no standalone, pure, PUBLIC "compute minimum out" function in the
-// money path: Jupiter and GMGN both outsource min-out enforcement to their own
-// APIs (they just forward `slippageBps`), and the only place that computes a
+// money path: Jupiter outsources min-out enforcement to its own API (it just
+// forwards `slippageBps`), and the only place that computes a
 // local minimum output is the direct Raydium builders
 // (`src/chains/solana/swaps/programs/raydium_cpmm.rs:164-166` and
 // `raydium_clmm.rs`'s equivalent), which are private `async fn`s already
@@ -318,21 +318,16 @@ async fn get_best_quote_picks_the_higher_output_among_valid_quotes() {
 }
 
 // ============================================================================
-// ITEM 1 — quote decoding (Jupiter, GMGN)
+// ITEM 1 — quote decoding (Jupiter)
 // ============================================================================
 //
-// SKIPPED: Jupiter's `JupiterQuoteResponse` and GMGN's `GMGNApiResponse` /
-// `SwapQuote` are declared in modules that are NOT `pub` from the crate root
-// (`mod jupiter;` / `mod gmgn;` in
-// `src/chains/solana/swaps/routers/mod.rs`), so they are unreachable from this
+// SKIPPED: Jupiter's `JupiterQuoteResponse` is declared in a module that is NOT
+// `pub` from the crate root (`mod jupiter;` in
+// `src/chains/solana/swaps/routers/mod.rs`), so it is unreachable from this
 // external integration-test crate — only the library's `pub` surface is
 // visible here. Widening that visibility (or the router's hardcoded API base
 // URL, which also blocks driving `get_quote()` against a local mock server)
-// would be a production edit outside this stretch's scope. GMGN's own decode
-// edge cases (well-formed / error / malformed) are already covered by
-// `src/chains/solana/swaps/routers/gmgn.rs`'s co-located unit tests
-// (`success_response_decodes_quote_and_raw_transaction`,
-// `error_response_decodes_with_no_data`, `malformed_response_is_rejected`).
+// would be a production edit outside this stretch's scope.
 // Jupiter's own co-located tests cover well-formed decode, a bad
 // `priceImpactPct` falling back to 0.0, and malformed-JSON rejection, but do
 // NOT cover an EMPTY body or the real "no route" provider error shape — both

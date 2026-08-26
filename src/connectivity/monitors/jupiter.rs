@@ -30,14 +30,9 @@ impl EndpointMonitor for JupiterMonitor {
     }
 
     fn fallback_strategy(&self) -> Option<FallbackStrategy> {
-        let cfg = get_config_clone();
-        if cfg.swaps.gmgn.enabled {
-            Some(FallbackStrategy::UseAlternative {
-                endpoint_name: "gmgn".to_owned(),
-            })
-        } else {
-            None
-        }
+        // No monitored alternative swap endpoint: the only other router
+        // (Raydium direct) talks to the RPC, which has its own monitor.
+        None
     }
 
     fn is_enabled(&self) -> bool {

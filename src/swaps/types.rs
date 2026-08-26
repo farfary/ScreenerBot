@@ -98,13 +98,6 @@ impl SwapResult {
 // SWAP ENUMS
 // ============================================================================
 
-/// Router types for swap operations
-#[derive(Debug, Clone, PartialEq)]
-pub enum RouterType {
-    GMGN,
-    Jupiter,
-}
-
 /// Exit type for position closing
 #[derive(Debug, Clone, PartialEq)]
 pub enum ExitType {

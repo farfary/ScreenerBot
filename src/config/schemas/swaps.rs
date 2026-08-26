@@ -8,51 +8,6 @@ use crate::field_metadata;
 // ============================================================================
 
 config_struct! {
-    /// GMGN router configuration
-    pub struct GmgnConfig {
-        #[metadata(field_metadata! {
-            label: "Enabled",
-            hint: "Enable GMGN router (provides MEV protection)",
-            impact: "high",
-            category: "Router",
-        })]
-        enabled: bool = false,
-        #[metadata(field_metadata! {
-            label: "Partner",
-            hint: "Partner identifier for GMGN",
-            impact: "low",
-            category: "API",
-        })]
-        partner: String = "screenerbot".to_owned(),
-        #[metadata(field_metadata! {
-            label: "Anti-MEV",
-            hint: "Enable GMGN MEV protection",
-            impact: "medium",
-            category: "Protection",
-        })]
-        anti_mev: bool = false,
-        #[metadata(field_metadata! {
-            label: "Fee",
-            hint: "Usually 0, check GMGN docs",
-            min: 0,
-            max: 0.1,
-            step: 0.001,
-            unit: "SOL",
-            impact: "low",
-            category: "Fees",
-        })]
-        fee_sol: f64 = 0.0,
-        #[metadata(field_metadata! {
-            label: "Default Swap Mode",
-            hint: "ExactIn or ExactOut",
-            impact: "low",
-            category: "Routing",
-        })]
-        default_swap_mode: String = "ExactIn".to_owned(),
-    }
-}
-
-config_struct! {
     /// Jupiter router configuration
     pub struct JupiterConfig {
         #[metadata(field_metadata! {
@@ -171,17 +126,6 @@ config_struct! {
 config_struct! {
     /// Swap router configuration
     pub struct SwapsConfig {
-        /// GMGN router configuration
-        #[serde(skip_serializing)]
-        #[metadata(field_metadata! {
-            label: "GMGN",
-            hint: "GMGN router with MEV protection",
-            impact: "high",
-            category: "Routers",
-            hidden: true,
-        })]
-        gmgn: GmgnConfig = GmgnConfig::default(),
-
         /// Jupiter router configuration
         #[metadata(field_metadata! {
             label: "Jupiter",

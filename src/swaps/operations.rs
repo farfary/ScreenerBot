@@ -151,7 +151,7 @@ pub async fn try_get_best_quote(request: QuoteRequest) -> QuoteResult<Quote> {
 /// Reduce the per-router failures to the one verdict that best describes the
 /// attempt as a whole.
 ///
-/// Routers disagree: Jupiter may say the token is not tradable while GMGN
+/// Routers disagree: Jupiter may say the token is not tradable while Raydium
 /// times out. The most specific answer wins, because that is the one a caller
 /// can act on — a token no provider can trade is a durable fact, whereas one
 /// router's timeout says nothing about the token. Ordering is therefore by how
@@ -633,11 +633,11 @@ mod tests {
     #[test]
     fn a_no_market_verdict_survives_aggregation() {
         assert!(matches!(
-            select_quote_failure(vec![timeout("GMGN"), not_tradable("Jupiter")]),
+            select_quote_failure(vec![timeout("Raydium"), not_tradable("Jupiter")]),
             QuoteError::NotTradable { .. }
         ));
         assert!(matches!(
-            select_quote_failure(vec![timeout("GMGN"), no_route("Jupiter")]),
+            select_quote_failure(vec![timeout("Raydium"), no_route("Jupiter")]),
             QuoteError::NoRoute { .. }
         ));
     }
@@ -648,7 +648,7 @@ mod tests {
     #[test]
     fn a_router_fault_never_becomes_a_verdict_on_the_token() {
         let only_faults = select_quote_failure(vec![
-            timeout("GMGN"),
+            timeout("Raydium"),
             QuoteError::Unavailable {
                 router: "Jupiter".to_owned(),
                 detail: "HTTP 503".to_owned(),

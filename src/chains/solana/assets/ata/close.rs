@@ -409,7 +409,7 @@ pub async fn close_token_account_with_context(
         logger::info(LogTag::Wallet, "Using standard SPL Token program");
     }
 
-    // Create and send the close account instruction using GMGN API approach
+    // Create and send the close account instruction
     logger::debug(
         LogTag::Wallet,
         &format!(

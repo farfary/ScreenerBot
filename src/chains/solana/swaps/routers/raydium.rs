@@ -37,7 +37,7 @@ impl SwapRouter for RaydiumRouter {
     }
 
     fn priority(&self) -> u8 {
-        2 // Tertiary priority (after Jupiter and GMGN)
+        1 // Secondary priority (after Jupiter)
     }
 
     fn chain(&self) -> crate::chains::ChainId {

@@ -35,7 +35,7 @@ pub struct MultiBuyConfig {
     pub concurrency: usize,
     /// Slippage tolerance in basis points
     pub slippage_bps: u64,
-    /// Optional: specific router to use (jupiter, raydium, gmgn)
+    /// Optional: specific router to use (jupiter, raydium)
     pub router: Option<String>,
     /// Abort flag for cancellation (not serialized)
     #[serde(skip)]
@@ -125,7 +125,7 @@ pub struct MultiSellConfig {
     pub consolidate_after: bool,
     /// Close token ATAs after selling (reclaim rent)
     pub close_atas_after: bool,
-    /// Optional: specific router to use (jupiter, raydium, gmgn)
+    /// Optional: specific router to use (jupiter, raydium)
     pub router: Option<String>,
     /// Abort flag for cancellation (not serialized)
     #[serde(skip)]

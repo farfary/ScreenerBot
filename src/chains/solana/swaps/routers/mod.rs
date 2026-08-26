@@ -1,10 +1,8 @@
-//! Solana implementations of `crate::swaps::SwapRouter`: Jupiter, GMGN, Raydium.
+//! Solana implementations of `crate::swaps::SwapRouter`: Jupiter, Raydium.
 
-mod gmgn;
 mod jupiter;
 mod raydium;
 
-pub use gmgn::GmgnRouter;
 pub use jupiter::JupiterRouter;
 pub use raydium::RaydiumRouter;
 
@@ -14,7 +12,6 @@ pub use raydium::RaydiumRouter;
 pub fn build_routers() -> Vec<std::sync::Arc<dyn crate::swaps::router::SwapRouter>> {
     vec![
         std::sync::Arc::new(JupiterRouter::new()),
-        std::sync::Arc::new(GmgnRouter::new()),
         std::sync::Arc::new(RaydiumRouter::new()),
     ]
 }

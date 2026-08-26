@@ -15,10 +15,10 @@ use async_trait::async_trait;
 /// All routers must implement this trait to participate in the swap system
 #[async_trait]
 pub trait SwapRouter: Send + Sync {
-    /// Router identifier (e.g., "jupiter", "gmgn", "raydium")
+    /// Router identifier (e.g., "jupiter", "raydium")
     fn id(&self) -> &'static str;
 
-    /// Display name for logging/UI (e.g., "Jupiter", "GMGN", "Raydium")
+    /// Display name for logging/UI (e.g., "Jupiter", "Raydium")
     fn name(&self) -> &'static str;
 
     /// Check if router is enabled in config

@@ -88,7 +88,7 @@ pub struct MultiBuyStartRequest {
     /// Slippage in basis points
     #[serde(default = "default_slippage")]
     pub slippage_bps: u64,
-    /// Router to use (jupiter, raydium, gmgn)
+    /// Router to use (jupiter, raydium)
     pub router: Option<String>,
 }
 

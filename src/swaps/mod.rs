@@ -1,5 +1,5 @@
 //! Swap routing, quoting and fallback orchestration — chain-neutral. The concrete
-//! DEX adapters implementing `SwapRouter` (Jupiter, GMGN, Raydium) live under
+//! DEX adapters implementing `SwapRouter` (Jupiter, Raydium) live under
 //! `crate::chains::solana::swaps::routers`; this module owns only the
 //! `SwapRouter` contract, the registry that wires adapters up, and the
 //! router-agnostic quote/execute-with-fallback policy.
@@ -19,7 +19,7 @@ pub use operations::{
 pub use operations_wallet::quote_and_execute_for_wallet;
 pub use registry::{get_registry, try_get_registry, RouterRegistry};
 pub use router::SwapRouter;
-pub use types::{ExitType, Quote, QuoteRequest, RouterType, SwapMode, SwapResult};
+pub use types::{ExitType, Quote, QuoteRequest, SwapMode, SwapResult};
 
 /// Calculate the token amount for a partial exit
 /// Returns 0 if total_amount is 0 or percentage is <= 0

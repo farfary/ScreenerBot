@@ -388,7 +388,7 @@ fn shared_pools_service_never_imports_solana_runtime() {
 /// Swap router registry boundary: `src/swaps/registry.rs` must hold only
 /// `Arc<dyn SwapRouter>` injected via `set_router_factory`, never construct a
 /// concrete Solana router itself. Regression guard for the leak fixed by
-/// moving `JupiterRouter`/`GmgnRouter`/`RaydiumRouter` construction to
+/// moving `JupiterRouter`/`RaydiumRouter` construction to
 /// `crate::chains::solana::swaps::routers::build_routers`, registered once by
 /// the composition root (`src/run/services.rs`).
 #[test]
@@ -1451,7 +1451,7 @@ fn error_text_locals(production: &str) -> Vec<String> {
 /// Take the answer from the value: `webserver::utils::status_for(&error)`,
 /// `ErrorClass::is_rate_limited()`, the `QuoteError` variant, `TradeStep`.
 ///
-/// Reading a PROVIDER's body — Jupiter's `errorCode`, GMGN's numeric `code` —
+/// Reading a PROVIDER's body — Jupiter's `errorCode`, for instance —
 /// is a different thing and stays allowed: that is the boundary whose whole
 /// job is translating a wire format into our vocabulary. It is allowed because
 /// those router files live outside `TYPED_DECISION_DIRS`.
