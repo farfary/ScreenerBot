@@ -47,6 +47,32 @@ pub fn compute_unit_limit(venue_units: u32) -> u32 {
     with_headroom.clamp(MIN_COMPUTE_UNITS, MAX_COMPUTE_UNITS)
 }
 
+/// Safety margin added on top of a MEASURED consumption, in percent. Smaller
+/// than [`COMPUTE_UNIT_HEADROOM_PCT`] because this is sized off what the
+/// transaction actually used in simulation, not off a venue's static guess.
+const MEASURED_SAFETY_MARGIN_PCT: u32 = 15;
+
+/// Flat units added on top of the margin, to absorb the small variance between
+/// simulated state and the state the real execution lands against.
+const MEASURED_SAFETY_FLAT_UNITS: u32 = 2_000;
+
+/// Tighten the requested compute-unit limit from a simulation's MEASURED
+/// `units_consumed`, clamped to the same runtime bounds as the venue estimate.
+///
+/// Solana charges the prioritization fee on the LIMIT a transaction requests,
+/// not on the compute it actually consumes. A venue's static estimate carries
+/// 30% headroom for a swap that may cross more state than usual; simulation
+/// already measures the true cost, so requesting a limit sized off the measured
+/// number instead of the static estimate stops paying a priority fee on compute
+/// units the transaction never uses.
+pub fn compute_unit_limit_from_measured(units_consumed: u64) -> u32 {
+    let with_margin = units_consumed
+        .saturating_mul(100 + MEASURED_SAFETY_MARGIN_PCT as u64)
+        .saturating_div(100)
+        .saturating_add(MEASURED_SAFETY_FLAT_UNITS as u64);
+    (with_margin.min(u32::MAX as u64) as u32).clamp(MIN_COMPUTE_UNITS, MAX_COMPUTE_UNITS)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -65,6 +91,29 @@ mod tests {
     fn an_absurd_estimate_is_clamped_below_the_runtime_ceiling() {
         assert_eq!(compute_unit_limit(u32::MAX), MAX_COMPUTE_UNITS);
         assert_eq!(compute_unit_limit(2_000_000), MAX_COMPUTE_UNITS);
+    }
+
+    #[test]
+    fn a_measured_limit_adds_margin_plus_a_flat_cushion() {
+        // 100_000 * 1.15 + 2_000 = 117_000, then clamped like everything else.
+        assert_eq!(compute_unit_limit_from_measured(100_000), 117_000);
+    }
+
+    #[test]
+    fn a_tiny_measured_consumption_is_still_raised_to_the_floor() {
+        assert_eq!(compute_unit_limit_from_measured(100), MIN_COMPUTE_UNITS);
+    }
+
+    #[test]
+    fn an_absurd_measured_consumption_is_clamped_below_the_runtime_ceiling() {
+        assert_eq!(
+            compute_unit_limit_from_measured(u64::MAX),
+            MAX_COMPUTE_UNITS
+        );
+        assert_eq!(
+            compute_unit_limit_from_measured(2_000_000),
+            MAX_COMPUTE_UNITS
+        );
     }
 
     #[test]

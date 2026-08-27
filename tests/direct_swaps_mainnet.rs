@@ -146,7 +146,22 @@ async fn simulate_with_no_slippage_room(
     output_mint: &str,
     amount_in: u64,
 ) {
-    let owner = simulation_owner();
+    simulate_with_no_slippage_room_as(simulation_owner(), pool, input_mint, output_mint, amount_in)
+        .await;
+}
+
+/// [`simulate_with_no_slippage_room`] with an explicit owner, for the rare test
+/// whose size needs more real SOL than the default simulation wallet holds --
+/// nothing is signed or submitted, so any real wallet's public address is a
+/// valid stand-in for "an account with enough lamports to make the numbers
+/// realistic".
+async fn simulate_with_no_slippage_room_as(
+    owner: Pubkey,
+    pool: &str,
+    input_mint: &str,
+    output_mint: &str,
+    amount_in: u64,
+) {
     let intent = DirectSwapIntent {
         pool: Pubkey::from_str(pool).expect("pool constant must be a pubkey"),
         owner,
@@ -302,6 +317,44 @@ async fn a_clmm_swap_reaches_different_tick_arrays_in_each_direction() {
         buying[5].pubkey, selling[6].pubkey,
         "the input vault of one direction is the output vault of the other"
     );
+}
+
+/// A real Solana validator identity: a plain, System-Program-owned wallet with
+/// a large public SOL balance. Nothing here is signed or submitted -- this is
+/// only a fee-payer stand-in for a simulation, and only the wallet's real
+/// on-chain balance is used, so any well-funded public address works. Chosen
+/// deliberately over the default `simulation_owner()`, whose balance is far
+/// too small to move the SOL/USDC CLMM pool's price across a whole
+/// initialised tick.
+fn deep_pockets_owner() -> Pubkey {
+    Pubkey::from_str("JUPiTERrZqgf1jUyR7dSkhMx4Kn2qJyekWsg3LT1h4b")
+        .expect("validator identity constant must be a pubkey")
+}
+
+/// The sharpest proof the tick walk exists at all: a size picked, against the
+/// live pool, to cross at least one real initialised tick -- confirmed by
+/// hand against this pool's own on-chain tick arrays before this constant was
+/// fixed here. A single constant-liquidity step (what the venue did before
+/// this task) would over-state the output past a crossing exactly like this
+/// one, and `simulate_with_no_slippage_room` sets `min_out == expected_out`,
+/// so the node accepting it proves the walk crosses the tick correctly to the
+/// raw unit rather than merely refusing to.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "live network"]
+async fn a_clmm_quote_that_crosses_a_tick_is_exact_to_the_raw_unit() {
+    let _guard = common::isolated_env();
+    // 10 SOL against the deepest SOL/USDC CLMM pool: small enough that the
+    // deep-pockets wallet above easily covers it, large enough to walk past
+    // the first initialised tick below the pool's current price.
+    const CROSSES_A_TICK_LAMPORTS: u64 = 10_000_000_000;
+    simulate_with_no_slippage_room_as(
+        deep_pockets_owner(),
+        CLMM_SOL_USDC,
+        WSOL,
+        USDC,
+        CROSSES_A_TICK_LAMPORTS,
+    )
+    .await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

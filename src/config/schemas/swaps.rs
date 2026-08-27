@@ -67,17 +67,6 @@ config_struct! {
         })]
         enabled: bool = false,
         #[metadata(field_metadata! {
-            label: "Default Slippage (BPS)",
-            hint: "Slippage floor written into the swap instruction (100 = 1%)",
-            min: 10,
-            max: 5000,
-            step: 10,
-            unit: "bps",
-            impact: "high",
-            category: "Risk",
-        })]
-        default_slippage_bps: u16 = 100,
-        #[metadata(field_metadata! {
             label: "Priority Fee",
             hint: "Compute-unit price in micro-lamports. Higher lands faster in a busy block.",
             min: 0,
@@ -106,6 +95,17 @@ config_struct! {
             category: "Safety",
         })]
         confirmation_timeout_secs: u64 = 60,
+        #[metadata(field_metadata! {
+            label: "Max Price Impact",
+            hint: "Refuse a direct quote that moves the pool more than this -- an aggregator that splits the order is the safer choice above it",
+            min: 0.1,
+            max: 50,
+            step: 0.1,
+            unit: "%",
+            impact: "high",
+            category: "Risk",
+        })]
+        max_price_impact_pct: f64 = 10.0,
     }
 }
 

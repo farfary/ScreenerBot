@@ -17,6 +17,13 @@ use super::error::{DirectSwapError, DirectSwapResult};
 use crate::chains::solana::constants::SOL_MINT;
 use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 use std::str::FromStr;
+use std::sync::LazyLock;
+
+/// The wrapped-SOL mint, decoded once. `is_wsol` runs on every quote for every
+/// pool, so comparing 32 bytes rather than base58-encoding a `Pubkey` into a
+/// `String` on each call matters on this hot path.
+static WSOL_MINT: LazyLock<Pubkey> =
+    LazyLock::new(|| Pubkey::from_str(SOL_MINT).expect("SOL_MINT constant is a valid pubkey"));
 
 /// Hard ceiling on slippage the engine will accept, in basis points (50%).
 /// Anything above this is a mistake, not a preference: it authorises a swap to
@@ -86,12 +93,12 @@ impl DirectSwapIntent {
 
 /// The wrapped-SOL mint as a `Pubkey`.
 pub fn wsol_mint() -> Pubkey {
-    Pubkey::from_str(SOL_MINT).expect("SOL_MINT constant is a valid pubkey")
+    *WSOL_MINT
 }
 
 /// Whether a mint is wrapped SOL.
 pub fn is_wsol(mint: &Pubkey) -> bool {
-    mint.to_string() == SOL_MINT
+    *mint == *WSOL_MINT
 }
 
 #[cfg(test)]

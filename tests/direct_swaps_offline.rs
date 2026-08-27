@@ -14,16 +14,31 @@
 //!
 //! Fetch `getAccountInfo` for the pool and for the accounts its state points at
 //! (CPMM: `amm_config` @8, vaults @72/@104, mints @168/@200; AMM v4: vaults
-//! @336/@368), store them base64 under `accounts`, and re-run. Balances move, so
-//! assertions here are on RELATIONSHIPS — fee rates, orientation, monotonicity —
-//! not on a specific output amount that would rot with the next trade.
+//! @336/@368; CLMM: `amm_config` @9, vaults @137/@169, mints @73/@105, plus the
+//! tick-array accounts `TickArrayBitmap::arrays_for_swap` names in both
+//! directions from the pool's own `tick_current`), store them base64 under
+//! `accounts`, and re-run. Balances move, so assertions here are on
+//! RELATIONSHIPS — fee rates, orientation, monotonicity — not on a specific
+//! output amount that would rot with the next trade.
 
 mod common;
 
 use screenerbot::chains::solana::solana_sdk::pubkey::Pubkey;
-use screenerbot::chains::solana::swaps::direct::venues::layout::token_account_amount;
+use screenerbot::chains::solana::swaps::direct::venues::clmm_ticks::{
+    decode_tick_array, TickArrayBitmap,
+};
+use screenerbot::chains::solana::swaps::direct::venues::layout::{
+    token_account_amount, u64_at, u8_at,
+};
+use screenerbot::chains::solana::swaps::direct::venues::meteora_damm::{DammMarket, DammPoolState};
+use screenerbot::chains::solana::swaps::direct::venues::pumpfun_amm::{
+    FeeTierTable, GlobalConfig, PumpAmmMarket, PumpAmmPoolState,
+};
 use screenerbot::chains::solana::swaps::direct::venues::raydium_amm_v4::{
     AmmV4Market, AmmV4PoolState,
+};
+use screenerbot::chains::solana::swaps::direct::venues::raydium_clmm::{
+    ClmmFeeConfig, ClmmMarket, ClmmPoolState,
 };
 use screenerbot::chains::solana::swaps::direct::venues::raydium_cpmm::{
     CpmmFeeConfig, CpmmMarket, CpmmPoolState,
@@ -132,6 +147,142 @@ fn amm_v4_market() -> AmmV4Market {
     )
 }
 
+fn clmm_market() -> ClmmMarket {
+    use screenerbot::chains::solana::swaps::direct::venues::clmm_ticks::{
+        bitmap_extension_address, tick_array_address,
+    };
+
+    let fixture = Fixture::load("raydium_clmm_pool");
+    let program = fixture.account(&fixture.pool).owner;
+    let state = ClmmPoolState::decode(fixture.pool, fixture.data(&fixture.pool))
+        .expect("the captured CLMM pool must decode");
+    let config = ClmmFeeConfig::decode(fixture.data(&state.amm_config))
+        .expect("the captured AmmConfig must decode");
+
+    // Same derivation `load()` uses: the pool's own bitmap picks which tick
+    // arrays to fetch, both directions, before the extension is known.
+    let initial_bitmap = TickArrayBitmap::from_pool_state(fixture.data(&fixture.pool))
+        .expect("the captured bitmap decodes");
+    let tick_array_addresses: Vec<Pubkey> = [true, false]
+        .into_iter()
+        .flat_map(|zero_for_one| {
+            initial_bitmap.arrays_for_swap(state.tick_current, state.tick_spacing, zero_for_one)
+        })
+        .map(|start| tick_array_address(&program, &fixture.pool, start))
+        .collect();
+
+    let bitmap_extension_address = bitmap_extension_address(&program, &fixture.pool);
+    let mut bitmap = initial_bitmap;
+    if let Some(extension) = fixture.accounts.get(&bitmap_extension_address.to_string()) {
+        bitmap = bitmap.with_extension(&fixture.pool, &extension.data);
+    }
+
+    let mut ticks = Vec::new();
+    for address in tick_array_addresses {
+        if let Some(account) = fixture.accounts.get(&address.to_string()) {
+            let decoded = decode_tick_array(&fixture.pool, &account.data)
+                .expect("a captured tick array must match the expected layout");
+            ticks.extend(decoded);
+        }
+    }
+
+    ClmmMarket::new(
+        state,
+        config,
+        bitmap,
+        bitmap_extension_address,
+        fixture.account(&state.mint_0).owner,
+        fixture.account(&state.mint_1).owner,
+        fixture.balance(&state.vault_0),
+        fixture.balance(&state.vault_1),
+        transfer_fee_schedule(fixture.account(&state.mint_0)),
+        transfer_fee_schedule(fixture.account(&state.mint_1)),
+        ticks,
+    )
+}
+
+fn damm_market() -> DammMarket {
+    let fixture = Fixture::load("meteora_damm_v2_pool");
+    let state = DammPoolState::decode(fixture.pool, fixture.data(&fixture.pool))
+        .expect("the captured DAMM v2 pool must decode");
+    let mint_a = fixture.account(&state.mint_a);
+    let mint_b = fixture.account(&state.mint_b);
+    let decimals_a = u8_at(&mint_a.data, 44).expect("mint_a carries a decimals byte");
+    let decimals_b = u8_at(&mint_b.data, 44).expect("mint_b carries a decimals byte");
+
+    // The fixture's fee schedule is keyed on the wall clock (activation_type
+    // 1, a unix timestamp) rather than the slot -- `load()` reads the same
+    // clock live, so re-reading it here rather than freezing a captured value
+    // is what keeps this fixture from rotting the day the cliff period ends.
+    let current_point = chrono::Utc::now().timestamp().max(0) as u64;
+
+    DammMarket::new(
+        state,
+        mint_a.owner,
+        mint_b.owner,
+        decimals_a,
+        decimals_b,
+        fixture.balance(&state.vault_a),
+        fixture.balance(&state.vault_b),
+        transfer_fee_schedule(mint_a),
+        transfer_fee_schedule(mint_b),
+        current_point,
+    )
+}
+
+/// pump-swap's own programme id, for deriving the `GlobalConfig` and
+/// `FeeConfig` PDAs the fixture captured. Kept local to this test rather than
+/// imported: the venue does not expose these addresses as `pub`, since
+/// production always derives them itself.
+fn pump_amm_program_id_for_test() -> Pubkey {
+    Pubkey::from_str("pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52FMfXEA").unwrap()
+}
+
+fn pump_amm_market() -> PumpAmmMarket {
+    let fixture = Fixture::load("pumpfun_amm_pool");
+    let state = PumpAmmPoolState::decode(fixture.pool, fixture.data(&fixture.pool))
+        .expect("the captured pump-swap pool must decode");
+
+    let program = pump_amm_program_id_for_test();
+    let fee_program = Pubkey::from_str("pfeeUxB6jkeY1Hxd7CsFCAjcbHA9rWtchMGdZ6VojVZ").unwrap();
+    let (global_config, _) = Pubkey::find_program_address(&[b"global_config"], &program);
+    let (fee_config, _) =
+        Pubkey::find_program_address(&[b"fee_config", program.as_ref()], &fee_program);
+
+    let global = GlobalConfig::decode(fixture.data(&global_config))
+        .expect("the captured GlobalConfig must decode");
+    let protocol_fee_recipient = global
+        .first_fee_recipient()
+        .expect("the captured global config lists a protocol fee recipient");
+    let buyback_fee_recipient = global
+        .first_buyback_recipient()
+        .expect("the captured global config lists a buyback fee recipient");
+    let tiers = FeeTierTable::decode(fixture.data(&fee_config));
+
+    let base_mint = fixture.account(&state.base_mint);
+    let quote_mint = fixture.account(&state.quote_mint);
+    let base_supply = u64_at(&base_mint.data, 36).expect("base mint carries a supply");
+    let base_decimals = u8_at(&base_mint.data, 44).expect("base mint carries a decimals byte");
+    let quote_decimals = u8_at(&quote_mint.data, 44).expect("quote mint carries a decimals byte");
+
+    PumpAmmMarket::new(
+        state,
+        protocol_fee_recipient,
+        buyback_fee_recipient,
+        tiers,
+        global.flat_fees(),
+        base_mint.owner,
+        quote_mint.owner,
+        base_decimals,
+        quote_decimals,
+        base_supply,
+        fixture.balance(&state.base_token_account),
+        fixture.balance(&state.quote_token_account),
+        transfer_fee_schedule(base_mint),
+        transfer_fee_schedule(quote_mint),
+    )
+}
+
 // ============================================================================
 // LAYOUT — the fixtures exist to catch an offset that drifted
 // ============================================================================
@@ -202,6 +353,245 @@ fn the_amm_v4_layout_reads_real_values_at_every_offset_it_claims() {
     );
     assert_eq!(state.swap_fee_denominator, 10_000);
     assert_ne!(state.coin_vault, state.pc_vault);
+}
+
+#[test]
+fn the_clmm_layout_reads_real_values_at_every_offset_it_claims() {
+    let fixture = Fixture::load("raydium_clmm_pool");
+    let state = ClmmPoolState::decode(fixture.pool, fixture.data(&fixture.pool))
+        .expect("the captured CLMM pool must decode");
+
+    assert_eq!(
+        state.mint_0.to_string(),
+        WSOL,
+        "this fixture is a SOL/USDC pool; a wrong mint offset would not land on WSOL"
+    );
+    assert_eq!(state.decimals_0, 9, "WSOL has nine decimals");
+    assert!(
+        state.decimals_1 <= 18,
+        "a decimals byte read from the wrong offset is almost never a plausible value, got {}",
+        state.decimals_1
+    );
+    assert!(state.swap_enabled(), "the fixture pool is tradable");
+    assert!(
+        state.tick_spacing > 0 && state.tick_spacing < 1_000,
+        "tick_spacing read from the wrong offset would not be a small positive integer, got {}",
+        state.tick_spacing
+    );
+    assert!(state.liquidity > 0, "a live deep pool must carry liquidity");
+    assert!(
+        state.sqrt_price_x64 > 0,
+        "sqrt_price_x64 must be a real Q64.64 value, not padding"
+    );
+    assert_ne!(state.vault_0, state.vault_1);
+    assert_ne!(state.amm_config, Pubkey::default());
+
+    let config = ClmmFeeConfig::decode(fixture.data(&state.amm_config))
+        .expect("the captured AmmConfig must decode");
+    assert!(
+        config.trade_fee_rate > 0 && config.trade_fee_rate <= 100_000,
+        "trade_fee_rate {} is not a plausible rate over 1e6",
+        config.trade_fee_rate
+    );
+}
+
+#[test]
+fn the_clmm_captured_tick_arrays_hold_real_ticks_not_padding() {
+    use screenerbot::chains::solana::swaps::direct::venues::clmm_ticks::tick_array_address;
+
+    let fixture = Fixture::load("raydium_clmm_pool");
+    let program = fixture.account(&fixture.pool).owner;
+    let state = ClmmPoolState::decode(fixture.pool, fixture.data(&fixture.pool)).unwrap();
+    let bitmap = TickArrayBitmap::from_pool_state(fixture.data(&fixture.pool)).unwrap();
+
+    let mut ticks = Vec::new();
+    for zero_for_one in [true, false] {
+        for start in bitmap.arrays_for_swap(state.tick_current, state.tick_spacing, zero_for_one) {
+            let address = tick_array_address(&program, &fixture.pool, start);
+            if let Some(account) = fixture.accounts.get(&address.to_string()) {
+                ticks
+                    .extend(decode_tick_array(&fixture.pool, &account.data).expect(
+                        "a captured tick array named by the pool's own bitmap must decode",
+                    ));
+            }
+        }
+    }
+
+    // A deep, actively-traded pool must have at least one initialised tick in
+    // the arrays either side of its current price -- otherwise this fixture
+    // is not exercising the tick walk it was captured to protect.
+    assert!(
+        !ticks.is_empty(),
+        "no initialised ticks were decoded from the captured arrays"
+    );
+    for tick in &ticks {
+        assert!(
+            tick.tick > -443_636 && tick.tick < 443_636,
+            "a tick decoded from padding would not be a real index, got {}",
+            tick.tick
+        );
+    }
+}
+
+#[test]
+fn a_clmm_quote_off_real_state_walks_ticks_and_charges_the_configured_rate() {
+    let market = clmm_market();
+    let (mint_0, mint_1) = market.mints();
+    let amount_in = 5_000_000; // 0.005 SOL
+
+    let quote = market
+        .quote(&mint_0, amount_in)
+        .expect("a live, captured pool quotes");
+    assert!(quote.expected_out > 0);
+    assert!(
+        quote.price_impact_pct < 5.0,
+        "0.005 SOL should barely move a pool this deep, got {}%",
+        quote.price_impact_pct
+    );
+
+    // Monotonic: more in must mean more out. A dust-sized trade against a
+    // pool this deep does not reliably show sub-linear scaling to the raw
+    // unit -- that concavity is asserted properly on live state in
+    // `tests/direct_swaps_mainnet.rs`, where the size can be chosen to move
+    // the pool enough to matter.
+    let ten_x = market
+        .quote(&mint_0, amount_in * 10)
+        .expect("a larger size still quotes");
+    assert!(ten_x.expected_out > quote.expected_out, "more in, more out");
+
+    // And the reverse direction must also price.
+    let back = market
+        .quote(&mint_1, quote.expected_out)
+        .expect("the reverse direction quotes too");
+    assert!(back.expected_out > 0);
+    assert!(
+        back.expected_out < amount_in,
+        "a round trip through two fees cannot return more than it started with"
+    );
+}
+
+#[test]
+fn the_damm_v2_layout_reads_real_values_at_every_offset_it_claims() {
+    let fixture = Fixture::load("meteora_damm_v2_pool");
+    let state = DammPoolState::decode(fixture.pool, fixture.data(&fixture.pool))
+        .expect("the captured DAMM v2 pool must decode");
+
+    assert_eq!(
+        state.mint_b.to_string(),
+        WSOL,
+        "this fixture is a SOL-quoted pool; a wrong mint offset would not land on WSOL"
+    );
+    assert_ne!(state.mint_a, state.mint_b);
+    assert_ne!(state.vault_a, state.vault_b);
+    assert!(state.liquidity > 0, "a live deep pool must carry liquidity");
+    assert!(
+        state.sqrt_price > 0 && state.sqrt_price >= state.sqrt_min_price,
+        "sqrt_price must be a real Q64.64 value inside the pool's own range"
+    );
+    assert!(
+        state.sqrt_price <= state.sqrt_max_price,
+        "sqrt_price read from a drifted offset would not sit inside sqrt_max_price"
+    );
+    assert_eq!(state.pool_status, 0, "the fixture pool is tradable");
+    assert!(
+        state.collect_fee_mode <= 1,
+        "collect_fee_mode is a two-value enum, got {}",
+        state.collect_fee_mode
+    );
+}
+
+#[test]
+fn a_damm_v2_quote_off_real_state_charges_a_fee_and_is_monotonic() {
+    let market = damm_market();
+    let (mint_a, mint_b) = market.mints();
+    let amount_in = 5_000_000; // 0.005 SOL
+
+    let quote = market
+        .quote(&mint_b, amount_in)
+        .expect("a live, captured pool quotes");
+    assert!(quote.expected_out > 0);
+    assert!(
+        quote.price_impact_pct < 5.0,
+        "0.005 SOL should barely move a pool this deep, got {}%",
+        quote.price_impact_pct
+    );
+
+    let ten_x = market
+        .quote(&mint_b, amount_in * 10)
+        .expect("a larger size still quotes");
+    assert!(ten_x.expected_out > quote.expected_out, "more in, more out");
+
+    let back = market
+        .quote(&mint_a, quote.expected_out)
+        .expect("the reverse direction quotes too");
+    assert!(back.expected_out > 0);
+    assert!(
+        back.expected_out < amount_in,
+        "a round trip through two fees cannot return more than it started with"
+    );
+}
+
+#[test]
+fn the_pump_amm_layout_reads_real_values_at_every_offset_it_claims() {
+    let fixture = Fixture::load("pumpfun_amm_pool");
+    let state = PumpAmmPoolState::decode(fixture.pool, fixture.data(&fixture.pool))
+        .expect("the captured pump-swap pool must decode");
+
+    assert_eq!(
+        state.quote_mint.to_string(),
+        WSOL,
+        "this fixture's quote side is SOL; a wrong mint offset would not land on WSOL"
+    );
+    assert_ne!(state.base_mint, state.quote_mint);
+    assert_ne!(state.base_token_account, state.quote_token_account);
+    assert!(
+        !state.is_cashback_coin,
+        "this fixture was chosen to be a plain pool this venue can quote"
+    );
+
+    let market = pump_amm_market();
+    assert!(
+        market.market_cap().is_some(),
+        "a real pool with real reserves must have a computable market cap"
+    );
+}
+
+#[test]
+fn a_pump_amm_quote_off_real_state_charges_a_fee_and_is_monotonic() {
+    let market = pump_amm_market();
+    let (base, quote) = market.mints();
+    let amount_in = 5_000_000; // 0.005 SOL
+
+    let quote_result = market
+        .quote(&quote, amount_in)
+        .expect("a live, captured pool quotes");
+    assert!(quote_result.expected_out > 0);
+    assert!(
+        quote_result.lp_fee > 0,
+        "a real trade against a live pool must pay a nonzero fee"
+    );
+    assert!(
+        quote_result.price_impact_pct < 5.0,
+        "0.005 SOL should barely move a deep pool, got {}%",
+        quote_result.price_impact_pct
+    );
+
+    let ten_x = market
+        .quote(&quote, amount_in * 10)
+        .expect("a larger size still quotes");
+    assert!(
+        ten_x.expected_out > quote_result.expected_out,
+        "more in, more out"
+    );
+
+    let back = market
+        .quote(&base, quote_result.expected_out)
+        .expect("the reverse direction quotes too");
+    assert!(back.expected_out > 0);
+    assert!(
+        back.expected_out < amount_in,
+        "a round trip through two fees cannot return more than it started with"
+    );
 }
 
 // ============================================================================

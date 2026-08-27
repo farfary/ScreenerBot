@@ -37,14 +37,44 @@ pub enum DirectSwapError {
     InvalidRequest { detail: String },
     /// A required on-chain account could not be read.
     AccountUnavailable { address: Pubkey, detail: String },
+    /// An RPC call the engine depends on could not be completed. NOT an account
+    /// read: `getLatestBlockhash` and `getMinimumBalanceForRentExemption` are
+    /// node-computed values with no account behind them, and naming a sysvar as
+    /// their `address` would send an operator chasing an account nothing read.
+    /// `operation` is the RPC method, so a log line points at the call that
+    /// actually failed.
+    NodeUnavailable {
+        operation: &'static str,
+        detail: String,
+    },
     /// Quote arithmetic could not produce a usable result.
     QuoteMath { detail: String },
     /// The transaction could not be assembled or signed.
     Build { detail: String },
     /// Preflight simulation rejected the transaction — nothing was submitted.
     SimulationRejected { detail: String, logs: Vec<String> },
+    /// Simulation itself could not be run -- a transport failure talking to the
+    /// node, not a verdict on the transaction. Distinct from
+    /// [`DirectSwapError::SimulationRejected`] (the node ran it and refused it)
+    /// and from [`DirectSwapError::SubmitFailed`] (the transaction was actually
+    /// handed to a node for inclusion): nothing was submitted here, and nothing
+    /// about the pool or the mint is implicated.
+    SimulationUnavailable { detail: String },
     /// Submission failed before the transaction was accepted by a node.
     SubmitFailed { detail: String },
+    /// The transaction was never seen by any node and its blockhash provably
+    /// expired: the current block height passed `lastValidBlockHeight` while the
+    /// signature stayed absent. The runtime rejects any blockhash older than 151
+    /// blocks, so this transaction can never land, by any node, ever -- the one
+    /// post-send outcome that is definitively safe to retry. Kept distinct from
+    /// [`DirectSwapError::SubmitFailed`] so an operator reading a log can tell
+    /// "never reached a node" apart from "reached the chain and provably died
+    /// unseen"; both carry `submitted() == false`.
+    BlockhashExpired {
+        signature: String,
+        last_valid_block_height: u64,
+        current_block_height: u64,
+    },
     /// Submitted, then the confirmation wait elapsed. The transaction MAY have
     /// landed. Never retry on this variant.
     ConfirmationTimeout { signature: String, waited_ms: u64 },
@@ -62,6 +92,16 @@ pub enum DirectSwapError {
         mint: Pubkey,
         required: u64,
         available: u64,
+    },
+    /// The market moved between a quote being accepted and execution running:
+    /// the fresh guaranteed output has fallen below what the caller agreed to.
+    /// Nothing was submitted -- the caller may re-quote and retry. This is a
+    /// race we lost, not a verdict on the pool, so it must never count towards
+    /// retiring the mint.
+    MarketMoved {
+        pool: Pubkey,
+        accepted_min_net_out: u64,
+        fresh_expected_net_out: u64,
     },
 }
 
@@ -128,12 +168,28 @@ impl fmt::Display for DirectSwapError {
             DirectSwapError::AccountUnavailable { address, detail } => {
                 write!(f, "account {address} unavailable: {detail}")
             }
+            DirectSwapError::NodeUnavailable { operation, detail } => {
+                write!(f, "RPC call {operation} could not be completed: {detail}")
+            }
             DirectSwapError::QuoteMath { detail } => write!(f, "quote math failed: {detail}"),
             DirectSwapError::Build { detail } => write!(f, "transaction build failed: {detail}"),
             DirectSwapError::SimulationRejected { detail, .. } => {
                 write!(f, "simulation rejected the swap: {detail}")
             }
+            DirectSwapError::SimulationUnavailable { detail } => {
+                write!(f, "simulation could not be run: {detail}")
+            }
             DirectSwapError::SubmitFailed { detail } => write!(f, "swap submission failed: {detail}"),
+            DirectSwapError::BlockhashExpired {
+                signature,
+                last_valid_block_height,
+                current_block_height,
+            } => write!(
+                f,
+                "transaction {signature} was never seen and its blockhash expired (valid \
+                 through block {last_valid_block_height}, current block {current_block_height}); \
+                 it can never land now, safe to retry"
+            ),
             DirectSwapError::ConfirmationTimeout {
                 signature,
                 waited_ms,
@@ -159,6 +215,15 @@ impl fmt::Display for DirectSwapError {
             } => write!(
                 f,
                 "wallet holds {available} of {mint}, needs {required}"
+            ),
+            DirectSwapError::MarketMoved {
+                pool,
+                accepted_min_net_out,
+                fresh_expected_net_out,
+            } => write!(
+                f,
+                "pool {pool} moved: the trade accepted at a guaranteed {accepted_min_net_out} \
+                 raw units now only offers {fresh_expected_net_out}"
             ),
         }
     }
@@ -247,6 +312,64 @@ mod tests {
             logs: Vec::new(),
         }
         .submitted());
+        assert!(!DirectSwapError::SimulationUnavailable {
+            detail: String::new(),
+        }
+        .submitted());
+    }
+
+    #[test]
+    fn a_dead_blockhash_never_counts_as_submitted_or_a_token_fault() {
+        // The transaction was never seen and can now never land -- distinct
+        // from SubmitFailed's "never reached a node" only in diagnosis, not in
+        // retry safety: both must stay `submitted() == false`.
+        let err = DirectSwapError::BlockhashExpired {
+            signature: "sig".to_owned(),
+            last_valid_block_height: 100,
+            current_block_height: 102,
+        };
+        assert!(!err.submitted());
+        assert!(!err.is_token_fault());
+        assert!(matches!(
+            err.into_quote_error("Direct Pool"),
+            crate::swaps::error::QuoteError::Unavailable { .. }
+        ));
+    }
+
+    #[test]
+    fn an_rpc_call_that_could_not_be_made_is_our_fault_and_is_retryable() {
+        // `getLatestBlockhash` and `getMinimumBalanceForRentExemption` are
+        // node-computed values with no account behind them, so this is neither
+        // an account read nor anything the token did. Nothing was submitted, so
+        // a retry is safe.
+        let err = DirectSwapError::NodeUnavailable {
+            operation: "getLatestBlockhash",
+            detail: "connection reset".to_owned(),
+        };
+        assert!(!err.submitted(), "nothing ever reached the network");
+        assert!(!err.is_token_fault());
+        assert!(err.signature().is_none());
+        assert!(matches!(
+            err.into_quote_error("Direct Pool"),
+            crate::swaps::error::QuoteError::Unavailable { .. }
+        ));
+    }
+
+    #[test]
+    fn a_wallet_short_of_funds_never_counts_against_the_token() {
+        // A wallet that cannot afford the swap says nothing about whether the
+        // MINT is tradable -- retiring a good token because our own balance ran
+        // low would be exactly backwards.
+        let err = DirectSwapError::InsufficientBalance {
+            mint: Pubkey::new_unique(),
+            required: 1_000_000,
+            available: 100,
+        };
+        assert!(!err.is_token_fault());
+        assert!(matches!(
+            err.into_quote_error("Direct Pool"),
+            crate::swaps::error::QuoteError::Unavailable { .. }
+        ));
     }
 
     #[test]

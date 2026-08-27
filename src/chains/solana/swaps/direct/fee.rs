@@ -23,8 +23,25 @@
 use super::error::{DirectSwapError, DirectSwapResult};
 use crate::chains::solana::constants::{SOL_MINT, USDC_MINT};
 use crate::chains::solana::solana_sdk::{instruction::Instruction, pubkey::Pubkey};
-use crate::chains::solana::swaps::revenue::{fee_reference_for_pair, platform_fee_amount};
+use crate::chains::solana::swaps::revenue::{
+    platform_fee_amount, FEE_TOKEN_ACCOUNT_USDC, FEE_TOKEN_ACCOUNT_WSOL,
+};
 use std::str::FromStr;
+use std::sync::LazyLock;
+
+/// The two reference mints and their fee-collection accounts, decoded once.
+/// `for_pair` and `resolve` run per quote per pool, so comparing 32-byte
+/// `Pubkey`s here rather than base58-encoding/decoding on every call matters.
+static WSOL_MINT: LazyLock<Pubkey> =
+    LazyLock::new(|| Pubkey::from_str(SOL_MINT).expect("SOL_MINT constant is a valid pubkey"));
+static USDC_MINT_KEY: LazyLock<Pubkey> =
+    LazyLock::new(|| Pubkey::from_str(USDC_MINT).expect("USDC_MINT constant is a valid pubkey"));
+static WSOL_FEE_ACCOUNT: LazyLock<Pubkey> = LazyLock::new(|| {
+    Pubkey::from_str(FEE_TOKEN_ACCOUNT_WSOL).expect("FEE_TOKEN_ACCOUNT_WSOL is a valid pubkey")
+});
+static USDC_FEE_ACCOUNT: LazyLock<Pubkey> = LazyLock::new(|| {
+    Pubkey::from_str(FEE_TOKEN_ACCOUNT_USDC).expect("FEE_TOKEN_ACCOUNT_USDC is a valid pubkey")
+});
 
 /// Which leg of the swap the platform fee is taken from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -41,11 +58,9 @@ impl FeeSide {
     /// Decide the fee side from the pair alone. Output is preferred; input is the
     /// fallback; a pair with no reference mint on either side pays nothing.
     pub fn for_pair(input_mint: &Pubkey, output_mint: &Pubkey) -> Self {
-        let input = input_mint.to_string();
-        let output = output_mint.to_string();
-        if is_reference_mint(&output) {
+        if is_reference_mint(output_mint) {
             FeeSide::Output
-        } else if is_reference_mint(&input) {
+        } else if is_reference_mint(input_mint) {
             FeeSide::Input
         } else {
             FeeSide::None
@@ -53,8 +68,8 @@ impl FeeSide {
     }
 }
 
-fn is_reference_mint(mint: &str) -> bool {
-    mint == SOL_MINT || mint == USDC_MINT
+fn is_reference_mint(mint: &Pubkey) -> bool {
+    *mint == *WSOL_MINT || *mint == *USDC_MINT_KEY
 }
 
 /// A fully resolved platform fee: how much, in what, and where it goes.
@@ -96,23 +111,28 @@ impl PlatformFee {
         if side == FeeSide::None {
             return Ok(Self::none());
         }
-        let reference = fee_reference_for_pair(&input_mint.to_string(), &output_mint.to_string())
-            .ok_or_else(|| DirectSwapError::InvalidRequest {
-            detail: "fee side resolved without a reference mint on either leg".to_owned(),
-        })?;
-        let mint = Pubkey::from_str(reference.mint).map_err(|e| DirectSwapError::Build {
-            detail: format!("fee mint is not a pubkey: {e}"),
-        })?;
-        let destination =
-            Pubkey::from_str(reference.account).map_err(|e| DirectSwapError::Build {
-                detail: format!("fee account is not a pubkey: {e}"),
-            })?;
+        // The reference mint is whichever leg `side` names: the input leg for
+        // `FeeSide::Input`, the output leg for `FeeSide::Output`.
+        let reference_mint = match side {
+            FeeSide::Input => input_mint,
+            FeeSide::Output => output_mint,
+            FeeSide::None => unreachable!("handled above"),
+        };
+        let (mint, destination, decimals) = if *reference_mint == *WSOL_MINT {
+            (*WSOL_MINT, *WSOL_FEE_ACCOUNT, 9)
+        } else if *reference_mint == *USDC_MINT_KEY {
+            (*USDC_MINT_KEY, *USDC_FEE_ACCOUNT, 6)
+        } else {
+            return Err(DirectSwapError::InvalidRequest {
+                detail: "fee side resolved without a reference mint on either leg".to_owned(),
+            });
+        };
         Ok(Self {
             side,
             amount: platform_fee_amount(base),
             mint: Some(mint),
             destination: Some(destination),
-            decimals: reference_mint_decimals(reference.mint),
+            decimals,
         })
     }
 
@@ -154,14 +174,6 @@ impl PlatformFee {
             detail: format!("platform fee transfer could not be built: {e}"),
         })?;
         Ok(Some(instruction))
-    }
-}
-
-/// Decimals of a reference mint. Both are fixed on mainnet: WSOL 9, USDC 6.
-fn reference_mint_decimals(mint: &str) -> u8 {
-    match mint {
-        USDC_MINT => 6,
-        _ => 9,
     }
 }
 

@@ -22,6 +22,7 @@
 
 use crate::chains::solana::swaps::direct::{self, DirectSwapIntent, DirectSwapOutcome};
 use crate::config::with_config;
+use crate::errors::DataError;
 use crate::logger::{self, LogTag};
 use crate::swaps::error::{QuoteError, QuoteResult};
 use crate::swaps::router::SwapRouter;
@@ -35,8 +36,11 @@ use std::time::Instant;
 
 use crate::chains::solana::solana_sdk::{pubkey::Pubkey, signature::Keypair};
 
-/// What a direct quote carries forward to execution, so the swap is built from
-/// the quote the caller accepted rather than re-derived from a moved market.
+/// What a direct quote carries forward to execution. `execute_with_keypair`
+/// re-quotes and re-builds against the CURRENT market rather than trusting a
+/// cached instruction list, because the market can move between a quote being
+/// accepted and execution running -- but it refuses to execute below
+/// `accepted_min_net_out`, which is the floor the caller actually agreed to.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct DirectExecutionData {
     pool: String,
@@ -45,6 +49,9 @@ struct DirectExecutionData {
     slippage_bps: u16,
     /// The venue the quote was priced against, for the log line.
     venue: String,
+    /// The guaranteed net output the caller accepted this quote for. Execution
+    /// refuses to proceed if the fresh quote has fallen below this.
+    accepted_min_net_out: u64,
 }
 
 /// The direct pool-swap router.
@@ -97,6 +104,14 @@ impl DirectPoolRouter {
     }
 
     /// Execute an accepted quote with a specific signer.
+    ///
+    /// Quotes and builds explicitly (`direct::quote` -> `direct::build_plan` ->
+    /// `direct::execute_plan`) rather than calling the opaque `direct::swap`, so
+    /// the FRESH quote is in hand and can be checked against what the caller
+    /// actually accepted before anything is built or sent. The comparison layer
+    /// may have chosen this router over Jupiter on a number that no longer
+    /// exists by the time execution runs; refusing below the accepted floor is
+    /// what keeps that choice honest.
     async fn execute_with_keypair(
         &self,
         quote: &Quote,
@@ -104,22 +119,62 @@ impl DirectPoolRouter {
     ) -> Result<DirectSwapOutcome> {
         use crate::chains::solana::solana_sdk::signature::Signer;
 
-        let data: DirectExecutionData = serde_json::from_slice(&quote.execution_data)
-            .map_err(|e| Error::parse_error(format!("direct quote is undecodable: {e}")))?;
+        let data: DirectExecutionData =
+            serde_json::from_slice(&quote.execution_data).map_err(|e| {
+                Error::Data(DataError::ParseError {
+                    data_type: "direct pool execution data".to_owned(),
+                    error: e.to_string(),
+                })
+            })?;
 
         let intent = DirectSwapIntent {
-            pool: Pubkey::from_str(&data.pool)
-                .map_err(|e| Error::parse_error(format!("quote carries a bad pool: {e}")))?,
+            pool: Pubkey::from_str(&data.pool).map_err(|e| {
+                Error::Data(DataError::ParseError {
+                    data_type: format!("direct pool execution data pool ({})", data.pool),
+                    error: e.to_string(),
+                })
+            })?,
             owner: keypair.pubkey(),
-            input_mint: Pubkey::from_str(&quote.input_mint)
-                .map_err(|e| Error::parse_error(format!("quote carries a bad input mint: {e}")))?,
-            output_mint: Pubkey::from_str(&quote.output_mint)
-                .map_err(|e| Error::parse_error(format!("quote carries a bad output mint: {e}")))?,
+            input_mint: Pubkey::from_str(&quote.input_mint).map_err(|e| {
+                Error::Data(DataError::ParseError {
+                    data_type: format!("quote input mint ({})", quote.input_mint),
+                    error: e.to_string(),
+                })
+            })?,
+            output_mint: Pubkey::from_str(&quote.output_mint).map_err(|e| {
+                Error::Data(DataError::ParseError {
+                    data_type: format!("quote output mint ({})", quote.output_mint),
+                    error: e.to_string(),
+                })
+            })?,
             amount_in: data.amount_in,
             slippage_bps: data.slippage_bps,
         };
 
-        Ok(direct::swap(&intent, keypair).await?)
+        let (fresh_quote, market) = direct::quote(&intent).await?;
+
+        if fresh_quote.expected_net_out < data.accepted_min_net_out {
+            return Err(direct::DirectSwapError::MarketMoved {
+                pool: intent.pool,
+                accepted_min_net_out: data.accepted_min_net_out,
+                fresh_expected_net_out: fresh_quote.expected_net_out,
+            }
+            .into());
+        }
+
+        if fresh_quote.expected_net_out != data.accepted_min_net_out {
+            logger::info(
+                LogTag::Swap,
+                &format!(
+                    "Direct pool market moved before execution: accepted floor {}, fresh \
+                     expected net out {} (pool {})",
+                    data.accepted_min_net_out, fresh_quote.expected_net_out, intent.pool
+                ),
+            );
+        }
+
+        let plan = direct::build_plan(&intent, market.as_ref(), &fresh_quote)?;
+        Ok(direct::execute_plan(&plan, keypair).await?)
     }
 }
 
@@ -171,11 +226,24 @@ impl SwapRouter for DirectPoolRouter {
             .await
             .map_err(|e| e.into_quote_error(self.name()))?;
 
+        let max_price_impact_pct = with_config(|cfg| cfg.swaps.direct.max_price_impact_pct);
+        if quote.price_impact_pct > max_price_impact_pct {
+            return Err(QuoteError::NoRoute {
+                router: self.name().to_owned(),
+                detail: format!(
+                    "price impact {:.2}% exceeds the {max_price_impact_pct:.2}% ceiling -- an \
+                     aggregator that can split the order is the safer choice at this size",
+                    quote.price_impact_pct
+                ),
+            });
+        }
+
         let execution_data = serde_json::to_vec(&DirectExecutionData {
             pool: pool.to_string(),
             amount_in: intent.amount_in,
             slippage_bps: intent.slippage_bps,
             venue: format!("{:?}", market.program()),
+            accepted_min_net_out: quote.min_net_out,
         })
         .map_err(|e| QuoteError::RouterRejected {
             router: self.name().to_owned(),
@@ -241,6 +309,18 @@ impl SwapRouter for DirectPoolRouter {
         let keypair = crate::chains::solana::accounts::keypair_for_wallet(wallet_id).await?;
         let outcome = self.execute_with_keypair(quote, &keypair).await?;
 
+        logger::info(
+            LogTag::Swap,
+            &format!(
+                "Direct pool swap executed for wallet {wallet_id}: sig={}, in={}, received={}, fee={}, {}ms",
+                outcome.signature,
+                outcome.amount_in,
+                outcome.receipt.received,
+                outcome.platform_fee,
+                outcome.duration_ms
+            ),
+        );
+
         Ok(SwapResult {
             success: true,
             router_id: self.id().to_string(),
@@ -269,9 +349,14 @@ fn parse_mint(mint: &str) -> QuoteResult<Pubkey> {
 }
 
 /// Percentage slippage to basis points, floored at one bp so a rounding error
-/// can never produce an unprotected zero.
+/// can never produce an unprotected zero, and ceilinged at the engine's own
+/// [`MAX_SLIPPAGE_BPS`] rather than `u16::MAX`. Clamping to the raw integer
+/// range let a high slippage SETTING silently disable this router entirely: a
+/// value like 1_000% clamped to 65_535 bps, which `DirectSwapIntent::validate`
+/// then rejects outright as `RouterRejected` -- a confusing way to find out a
+/// slippage preference and a router are incompatible.
 fn slippage_bps_for(slippage_pct: f64) -> u16 {
-    ((slippage_pct * 100.0).round() as i64).clamp(1, u16::MAX as i64) as u16
+    ((slippage_pct * 100.0).round() as i64).clamp(1, direct::intent::MAX_SLIPPAGE_BPS as i64) as u16
 }
 
 #[cfg(test)]
@@ -289,7 +374,30 @@ mod tests {
             "an unprotected swap is never built"
         );
         assert_eq!(slippage_bps_for(-5.0), 1);
-        assert_eq!(slippage_bps_for(1_000_000.0), u16::MAX);
+    }
+
+    #[test]
+    fn an_extreme_slippage_setting_clamps_to_the_engines_own_ceiling_not_u16_max() {
+        // Clamping to u16::MAX (655%) used to pass validation straight into
+        // `DirectSwapIntent::validate`'s 50% ceiling, which then rejected the
+        // swap as a confusing `RouterRejected` rather than a slippage clamp.
+        assert_eq!(
+            slippage_bps_for(1_000_000.0),
+            crate::chains::solana::swaps::direct::intent::MAX_SLIPPAGE_BPS
+        );
+        assert!(
+            DirectSwapIntent {
+                pool: Pubkey::new_unique(),
+                owner: Pubkey::new_unique(),
+                input_mint: Pubkey::new_unique(),
+                output_mint: Pubkey::new_unique(),
+                amount_in: 1,
+                slippage_bps: slippage_bps_for(1_000_000.0),
+            }
+            .validate()
+            .is_ok(),
+            "a clamped value must still pass the intent's own validation"
+        );
     }
 
     #[test]

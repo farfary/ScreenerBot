@@ -40,6 +40,8 @@ pub struct SwapPlan {
     pub instructions: Vec<Instruction>,
     /// Compute units the venue asked for, before headroom.
     pub venue_compute_units: u32,
+    /// The token account the input mint is spent from.
+    pub input_account: Pubkey,
     /// The token account the proceeds land in.
     pub output_account: Pubkey,
     /// Whether the proceeds are unwrapped to native SOL inside this transaction,
@@ -140,6 +142,7 @@ pub fn build_plan(
     Ok(SwapPlan {
         instructions,
         venue_compute_units: venue_units,
+        input_account: legs.input_account,
         output_account: legs.output_account,
         output_is_native: intent.unwraps_native(),
         quote: quote.clone(),

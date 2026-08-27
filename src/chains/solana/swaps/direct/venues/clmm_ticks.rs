@@ -23,7 +23,7 @@
 //! an uninitialised tick array is an account that does not exist, and passing
 //! one fails the instruction on deserialisation.
 
-use super::layout::{pubkey_at, u64_at};
+use super::layout::{i128_at, i32_at, pubkey_at, u128_at, u64_at};
 use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 
 /// Ticks stored per tick-array account.
@@ -79,6 +79,130 @@ pub fn tick_array_address(program: &Pubkey, pool: &Pubkey, start_index: i32) -> 
 /// The PDA of a pool's tick-array bitmap extension.
 pub fn bitmap_extension_address(program: &Pubkey, pool: &Pubkey) -> Pubkey {
     Pubkey::find_program_address(&[BITMAP_EXTENSION_SEED, pool.as_ref()], program).0
+}
+
+/// The smallest and largest tick the programme's own price math is defined
+/// over. Verified against Raydium's published `tick_math.rs`
+/// (`raydium-io/raydium-clmm`), not re-derived.
+pub const MIN_TICK: i32 = -443_636;
+pub const MAX_TICK: i32 = 443_636;
+
+/// `1.0001^(tick/2)` as a Q64.64 sqrt price, computed as the exact integer
+/// chain of 128-bit magic-constant multiplications Raydium's own programme
+/// uses (`get_sqrt_price_at_tick` in `libraries/tick_math.rs`), not the
+/// `1.0001_f64.powf(...)` approximation the previous version of this venue
+/// used as a range GUARD. An `f64` carries 53 bits of mantissa; a Q64.64 value
+/// needs all 128, and this is no longer only a guard -- it decides which tick
+/// a swap step lands on, so an approximation here is a wrong `min_out`, not
+/// just an early refusal.
+///
+/// Verified against live mainnet state: for the SOL/USDC CLMM pool
+/// `3ucNos4NbumPLZNWztqGHNFFgkHeRMBQAVemeeomsUxv` at `tick_current = -22882`,
+/// `sqrt_price_x64 = 5876023812037193314`, this function brackets the pool's
+/// own price exactly: `get_sqrt_price_at_tick(-22882) = 5875816817492017904 <=
+/// 5876023812037193314 < get_sqrt_price_at_tick(-22881) = 5876110600988489675`.
+pub fn get_sqrt_price_at_tick(tick: i32) -> Option<u128> {
+    if tick < MIN_TICK || tick > MAX_TICK {
+        return None;
+    }
+    let abs_tick = tick.unsigned_abs();
+
+    // Each magic factor is `2^64 / (1.0001^(2^(i-1)))` for i in 0..19,
+    // matching the constants in Raydium's `get_sqrt_price_at_tick` bit for bit.
+    const MAGIC: [(u32, u128); 19] = [
+        (0x1, 0xfffcb933bd6fb800),
+        (0x2, 0xfff97272373d4000),
+        (0x4, 0xfff2e50f5f657000),
+        (0x8, 0xffe5caca7e10f000),
+        (0x10, 0xffcb9843d60f7000),
+        (0x20, 0xff973b41fa98e800),
+        (0x40, 0xff2ea16466c9b000),
+        (0x80, 0xfe5dee046a9a3800),
+        (0x100, 0xfcbe86c7900bb000),
+        (0x200, 0xf987a7253ac65800),
+        (0x400, 0xf3392b0822bb6000),
+        (0x800, 0xe7159475a2caf000),
+        (0x1000, 0xd097f3bdfd2f2000),
+        (0x2000, 0xa9f746462d9f8000),
+        (0x4000, 0x70d869a156f31c00),
+        (0x8000, 0x31be135f97ed3200),
+        (0x10000, 0x9aa508b5b85a500),
+        (0x20000, 0x5d6af8dedc582c),
+        (0x40000, 0x2216e584f5fa),
+    ];
+
+    let mut ratio: u128 = if abs_tick & 0x1 != 0 {
+        0xfffcb933bd6fb800
+    } else {
+        1u128 << 64
+    };
+    for &(mask, magic) in &MAGIC[1..] {
+        if abs_tick & mask != 0 {
+            ratio = ratio.checked_mul(magic)?.checked_shr(64)?;
+        }
+    }
+
+    if tick > 0 {
+        ratio = u128::MAX.checked_div(ratio)?;
+    }
+    Some(ratio)
+}
+
+/// One initialised tick out of a decoded `TickArrayState`: the entries whose
+/// `liquidity_gross` is non-zero, which is what an active position actually
+/// requires -- a slot with `tick == 0, liquidity_net == 0, liquidity_gross ==
+/// 0` is simply an unused array slot, not a real tick at index 0.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct InitializedTick {
+    pub tick: i32,
+    pub liquidity_net: i128,
+}
+
+/// Bytes from the start of a `TickArrayState` account to its first `TickState`
+/// entry: an 8-byte Anchor discriminator, a 32-byte `pool_id`, and the 4-byte
+/// `start_tick_index`.
+///
+/// Verified against live mainnet bytes, NOT the offset originally guessed for
+/// this module (`start_tick_index` at 8): the real `TickArrayState` carries a
+/// `pool_id: Pubkey` field between the discriminator and `start_tick_index`
+/// that the guess omitted. Confirmed two ways against tick array
+/// `7KGRHr8gSwVqmJVv3sdnUEmKM3jRC551SMCt9ZxmCXsb` (start index -22920) and
+/// `5LuEHwAuoPAEJunEvBcDnTwRGnXWtC7JQmAgeXzA44cV` (start index -22980), both
+/// derived PDAs of the SOL/USDC pool above: the on-chain Anchor IDL (pulled per
+/// `adding-a-venue.md`) declares this exact layout, and decoding both accounts
+/// at this offset reproduces `start_tick_index + i * tick_spacing` for all 60
+/// `tick` fields with `tick_spacing = 1`.
+const TICKS_OFFSET: usize = 44;
+
+/// One `TickState` entry's byte size. `168` was the size named in the
+/// unverified starting hypothesis and IS correct — confirmed by IDL field
+/// layout (i32 + i128 + u128 + u128 + u128 + u128*3 + u64*3 + u128 + u32*3 =
+/// 168 bytes) and independently by live bytes: `TICKS_OFFSET + 60 * 168 + 1 +
+/// 8 + 107 == 10240`, the exact account length fetched from chain.
+const TICK_STATE_SIZE: usize = 168;
+
+/// Decode the initialised ticks out of a live `TickArrayState` account.
+///
+/// Returns `None` when the account does not belong to `pool` or is too short
+/// to hold a full array -- a decode failure, never a partially-wrong swap.
+pub fn decode_tick_array(pool: &Pubkey, data: &[u8]) -> Option<Vec<InitializedTick>> {
+    if pubkey_at(data, 8)? != *pool {
+        return None;
+    }
+    let mut ticks = Vec::new();
+    for i in 0..(TICK_ARRAY_SIZE as usize) {
+        let offset = TICKS_OFFSET + i * TICK_STATE_SIZE;
+        let tick = i32_at(data, offset)?;
+        let liquidity_net = i128_at(data, offset + 4)?;
+        let liquidity_gross = u128_at(data, offset + 20)?;
+        if liquidity_gross != 0 {
+            ticks.push(InitializedTick {
+                tick,
+                liquidity_net,
+            });
+        }
+    }
+    Some(ticks)
 }
 
 /// A pool's initialised-tick-array bitmap: the pool's own 1024 bits plus, when
@@ -204,6 +328,119 @@ impl TickArrayBitmap {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_sqrt_price_at_tick_brackets_a_real_live_pools_own_price() {
+        // Pool 3ucNos4NbumPLZNWztqGHNFFgkHeRMBQAVemeeomsUxv (Raydium CLMM
+        // SOL/USDC), fetched live: tick_current = -22882, sqrt_price_x64 =
+        // 5876023812037193314. The current price always sits between the sqrt
+        // price of the current tick and the next one -- if this function's
+        // integer chain were wrong, it would not bracket a real pool's own
+        // reported price.
+        let tick_current = -22_882;
+        let actual_sqrt_price: u128 = 5_876_023_812_037_193_314;
+        let lower = get_sqrt_price_at_tick(tick_current).unwrap();
+        let upper = get_sqrt_price_at_tick(tick_current + 1).unwrap();
+        assert!(
+            lower <= actual_sqrt_price,
+            "lower bound must not exceed the real price"
+        );
+        assert!(
+            upper > actual_sqrt_price,
+            "upper bound must exceed the real price"
+        );
+    }
+
+    #[test]
+    fn tick_zero_is_the_identity_price() {
+        assert_eq!(get_sqrt_price_at_tick(0), Some(1u128 << 64));
+    }
+
+    #[test]
+    fn a_tick_outside_the_programmes_own_range_is_refused() {
+        assert!(get_sqrt_price_at_tick(MIN_TICK - 1).is_none());
+        assert!(get_sqrt_price_at_tick(MAX_TICK + 1).is_none());
+        assert!(get_sqrt_price_at_tick(MIN_TICK).is_some());
+        assert!(get_sqrt_price_at_tick(MAX_TICK).is_some());
+    }
+
+    #[test]
+    fn a_positive_and_its_negative_tick_are_reciprocal_prices() {
+        // sqrt(1.0001^t) * sqrt(1.0001^-t) == 1, which in Q64.64 means
+        // up * down == 2^128. That product does not fit a u128, so it is
+        // divided back down through the same 256-bit helper the venue itself
+        // uses rather than multiplied directly -- `up * down` would overflow,
+        // and comparing as f64 would hide a real sign or branch bug in
+        // `get_sqrt_price_at_tick`.
+        for tick in [1_000i32, 50_000, MAX_TICK - 1, MAX_TICK] {
+            let up = get_sqrt_price_at_tick(tick).unwrap();
+            let down = get_sqrt_price_at_tick(-tick).unwrap();
+            let round_trip = super::super::math::mul_div_floor(up, down, 1u128 << 64)
+                .expect("the product of reciprocal sqrt prices fits back into Q64.64");
+            let expected = 1u128 << 64;
+            let diff = round_trip.abs_diff(expected);
+            assert!(
+                diff <= 2,
+                "tick {tick}: sqrt(1.0001^t) * sqrt(1.0001^-t) should be 1 within a \
+                 couple of ULP, got round trip {round_trip} vs {expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn decode_tick_array_reads_only_the_entries_with_gross_liquidity() {
+        let pool = Pubkey::new_unique();
+        let mut data = vec![0u8; TICKS_OFFSET + (TICK_ARRAY_SIZE as usize) * TICK_STATE_SIZE + 200];
+        data[8..40].copy_from_slice(&pool.to_bytes());
+        data[40..44].copy_from_slice(&(-60i32).to_le_bytes());
+
+        // Slot 0: a real initialised tick.
+        let slot0 = TICKS_OFFSET;
+        data[slot0..slot0 + 4].copy_from_slice(&(-60i32).to_le_bytes());
+        data[slot0 + 4..slot0 + 20].copy_from_slice(&(12_345i128).to_le_bytes());
+        data[slot0 + 20..slot0 + 36].copy_from_slice(&(999_999u128).to_le_bytes());
+
+        // Slot 1: left at all zero -- an unused slot, not tick 0.
+        // Slot 2: a negative liquidity_net, still initialised.
+        let slot2 = TICKS_OFFSET + 2 * TICK_STATE_SIZE;
+        data[slot2..slot2 + 4].copy_from_slice(&(-58i32).to_le_bytes());
+        data[slot2 + 4..slot2 + 20].copy_from_slice(&(-500i128).to_le_bytes());
+        data[slot2 + 20..slot2 + 36].copy_from_slice(&(1u128).to_le_bytes());
+
+        let ticks = decode_tick_array(&pool, &data).expect("a full-length array decodes");
+        assert_eq!(ticks.len(), 2, "the untouched zero slot must not appear");
+        assert_eq!(
+            ticks[0],
+            InitializedTick {
+                tick: -60,
+                liquidity_net: 12_345
+            }
+        );
+        assert_eq!(
+            ticks[1],
+            InitializedTick {
+                tick: -58,
+                liquidity_net: -500
+            }
+        );
+    }
+
+    #[test]
+    fn decode_tick_array_refuses_an_account_belonging_to_another_pool() {
+        let pool = Pubkey::new_unique();
+        let stranger = Pubkey::new_unique();
+        let mut data = vec![0u8; TICKS_OFFSET + (TICK_ARRAY_SIZE as usize) * TICK_STATE_SIZE];
+        data[8..40].copy_from_slice(&stranger.to_bytes());
+        assert!(decode_tick_array(&pool, &data).is_none());
+    }
+
+    #[test]
+    fn decode_tick_array_refuses_a_truncated_account_rather_than_reading_short() {
+        let pool = Pubkey::new_unique();
+        let mut data = vec![0u8; TICKS_OFFSET + 10];
+        data[8..40].copy_from_slice(&pool.to_bytes());
+        assert!(decode_tick_array(&pool, &data).is_none());
+    }
 
     #[test]
     fn a_tick_array_start_index_floors_towards_negative_infinity() {
