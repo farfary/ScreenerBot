@@ -12,6 +12,8 @@
 pub mod clmm_ticks;
 pub mod layout;
 pub mod math;
+pub mod meteora_damm;
+pub mod pumpfun_amm;
 pub mod raydium_amm_v4;
 pub mod raydium_clmm;
 pub mod raydium_cpmm;

@@ -35,6 +35,22 @@ const CLMM_SOL_USDC: &str = "3ucNos4NbumPLZNWztqGHNFFgkHeRMBQAVemeeomsUxv";
 /// Raydium CPMM (CP-Swap), SOL paired against a Token-2022 mint.
 const CPMM_POOL: &str = "Q2sPHPdUWFMg7M7wwrQKLrn619cAucfRsmhVJffodSp";
 
+/// Pump.fun AMM, a deep graduated pool whose quote side is SOL. Its market cap
+/// is far above the last fee tier, so it pays the cheapest 30 bps.
+const PUMP_AMM_POOL: &str = "4w2cysotX6czaUGmmWg13hDpY4QEMG2CzeKYEQyK9Ama";
+
+/// Pump.fun AMM with USDC as its BASE and SOL as its quote — the orientation
+/// that catches any code still assuming the SOL side is the token side.
+const PUMP_AMM_SOL_QUOTE_POOL: &str = "Gf7sXMoP8iRw4iiXmJ1nq4vxcRycbGXy5RL8a8LnTd3v";
+
+/// Meteora DAMM v2 with `collect_fee_mode = OnlyB` and SOL as token B, so a buy
+/// pays the pool fee on the INPUT and a sell pays it on the output.
+const DAMM_V2_ONLY_B_POOL: &str = "3CVNnECvuyPtUys2QpaLSNRrQMvbqArsNJqKvbp3zmt1";
+
+/// Meteora DAMM v2 with `collect_fee_mode = BothToken`, which always charges the
+/// output leg. Together the two pools cover both branches of the fee side.
+const DAMM_V2_BOTH_TOKEN_POOL: &str = "6nA26rxJxWZicm5bFnTpjUcN6jCrybqLuRrApKVERSz3";
+
 const WSOL: &str = "So11111111111111111111111111111111111111112";
 const USDC: &str = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 
@@ -102,6 +118,65 @@ async fn simulate_direction(pool: &str, input_mint: &str, output_mint: &str, amo
             plan.venue_compute_units
         );
     }
+}
+
+/// The other side of the pair a SOL pool trades.
+async fn paired_token(pool: &str) -> String {
+    let market = direct::load_market(&Pubkey::from_str(pool).expect("pool constant"))
+        .await
+        .unwrap_or_else(|e| panic!("{pool} must decode: {e}"));
+    let (mint_a, mint_b) = market.mints();
+    if mint_a.to_string() == WSOL {
+        mint_b.to_string()
+    } else {
+        mint_a.to_string()
+    }
+}
+
+/// Simulate a swap whose `min_out` is the quote EXACTLY, with no slippage room.
+///
+/// This is the sharpest free check of a venue's curve there is. `min_out` is
+/// enforced by the pool programme itself, so a node accepting a zero-slippage
+/// swap proves the quote does not over-state the output by even one raw unit —
+/// which is the only direction that costs money, because an over-stated quote
+/// becomes an unsatisfiable floor and reverts the whole transaction.
+async fn simulate_with_no_slippage_room(
+    pool: &str,
+    input_mint: &str,
+    output_mint: &str,
+    amount_in: u64,
+) {
+    let owner = simulation_owner();
+    let intent = DirectSwapIntent {
+        pool: Pubkey::from_str(pool).expect("pool constant must be a pubkey"),
+        owner,
+        input_mint: mint(input_mint),
+        output_mint: mint(output_mint),
+        amount_in,
+        slippage_bps: 0,
+    };
+    let (quote, market) = direct::quote(&intent)
+        .await
+        .unwrap_or_else(|e| panic!("tight quote for {pool} failed: {e}"));
+    assert_eq!(
+        quote.min_out, quote.expected_out,
+        "zero slippage must leave the floor at the estimate"
+    );
+
+    let plan = direct::build_plan(&intent, market.as_ref(), &quote)
+        .unwrap_or_else(|e| panic!("tight plan for {pool} failed: {e}"));
+    let outcome = direct::simulate_plan(&plan, &owner)
+        .await
+        .unwrap_or_else(|e| panic!("tight simulation for {pool} could not run: {e}"));
+
+    assert!(
+        outcome.succeeded(),
+        "the venue over-stated its output: a {amount_in} unit {input_mint} -> {output_mint} swap \
+         in {pool} promised {} but the pool would not pay it: {}\nlogs:\n{}",
+        quote.expected_out,
+        outcome.failure_detail(),
+        outcome.logs.join("\n")
+    );
 }
 
 /// The platform fee must be a real instruction in the plan, not a number in a
@@ -231,6 +306,79 @@ async fn a_clmm_swap_reaches_different_tick_arrays_in_each_direction() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "live network"]
+async fn damm_v2_accepts_a_minimum_sol_to_token_swap_when_the_fee_rides_the_input() {
+    let _guard = common::isolated_env();
+    let token = paired_token(DAMM_V2_ONLY_B_POOL).await;
+    simulate_direction(DAMM_V2_ONLY_B_POOL, WSOL, &token, MINIMUM_SWAP_LAMPORTS).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "live network"]
+async fn damm_v2_accepts_a_minimum_sol_to_token_swap_when_the_fee_rides_the_output() {
+    let _guard = common::isolated_env();
+    let token = paired_token(DAMM_V2_BOTH_TOKEN_POOL).await;
+    simulate_direction(DAMM_V2_BOTH_TOKEN_POOL, WSOL, &token, MINIMUM_SWAP_LAMPORTS).await;
+}
+
+/// A DAMM v2 pool holds ONE position spanning its whole price band, so the
+/// active liquidity does not change with the price and a single
+/// constant-liquidity step is exact. That claim is only worth making if the
+/// chain agrees with it to the raw unit.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "live network"]
+async fn a_damm_v2_quote_is_exact_to_the_raw_unit() {
+    let _guard = common::isolated_env();
+    for pool in [DAMM_V2_ONLY_B_POOL, DAMM_V2_BOTH_TOKEN_POOL] {
+        let token = paired_token(pool).await;
+        simulate_with_no_slippage_room(pool, WSOL, &token, MINIMUM_SWAP_LAMPORTS).await;
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "live network"]
+async fn pump_amm_accepts_a_minimum_sol_to_token_swap() {
+    let _guard = common::isolated_env();
+    let token = paired_token(PUMP_AMM_POOL).await;
+    simulate_direction(PUMP_AMM_POOL, WSOL, &token, MINIMUM_SWAP_LAMPORTS).await;
+}
+
+/// Pump's fee is a market-cap tier, not a constant. A quote that reads the flat
+/// rate out of `GlobalConfig` and stops there is right for a big pool and wrong
+/// by almost a percent for a small one, so the tier lookup is checked against
+/// the pool programme itself with no slippage room to hide in.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "live network"]
+async fn a_pump_amm_quote_is_exact_to_the_raw_unit() {
+    let _guard = common::isolated_env();
+    let token = paired_token(PUMP_AMM_POOL).await;
+    simulate_with_no_slippage_room(PUMP_AMM_POOL, WSOL, &token, MINIMUM_SWAP_LAMPORTS).await;
+}
+
+/// The deepest pump-swap pool on mainnet holds USDC as its BASE and SOL as its
+/// quote. Anything that assumes the SOL leg is the quote leg mis-orients here.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "live network"]
+async fn pump_amm_swaps_a_pool_whose_sol_side_is_the_quote() {
+    let _guard = common::isolated_env();
+    let pool = Pubkey::from_str(PUMP_AMM_SOL_QUOTE_POOL).unwrap();
+    let market = direct::load_market(&pool).await.expect("pool decodes");
+    let (base, quote) = market.mints();
+    assert_eq!(
+        quote.to_string(),
+        WSOL,
+        "this fixture is chosen precisely because SOL is its quote"
+    );
+    simulate_direction(
+        PUMP_AMM_SOL_QUOTE_POOL,
+        WSOL,
+        &base.to_string(),
+        MINIMUM_SWAP_LAMPORTS,
+    )
+    .await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "live network"]
 async fn a_pool_quotes_both_directions_of_its_pair() {
     let _guard = common::isolated_env();
     let pool = Pubkey::from_str(AMM_V4_SOL_USDC).unwrap();
@@ -344,6 +492,28 @@ async fn a_real_round_trip_through_cpmm_settles_and_pays_the_platform_fee() {
         mint_a
     };
     round_trip(&ctx, CPMM_POOL, &token.to_string()).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "spends real SOL"]
+async fn a_real_round_trip_through_damm_v2_settles_and_pays_the_platform_fee() {
+    let _guard = common::isolated_env();
+    let Some(ctx) = common::require_mainnet() else {
+        return;
+    };
+    let token = paired_token(DAMM_V2_ONLY_B_POOL).await;
+    round_trip(&ctx, DAMM_V2_ONLY_B_POOL, &token).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "spends real SOL"]
+async fn a_real_round_trip_through_pump_amm_settles_and_pays_the_platform_fee() {
+    let _guard = common::isolated_env();
+    let Some(ctx) = common::require_mainnet() else {
+        return;
+    };
+    let token = paired_token(PUMP_AMM_POOL).await;
+    round_trip(&ctx, PUMP_AMM_POOL, &token).await;
 }
 
 /// Buy `token` with the capped amount of SOL, then sell every unit back.
