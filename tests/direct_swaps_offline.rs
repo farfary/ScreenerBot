@@ -31,6 +31,10 @@ use screenerbot::chains::solana::swaps::direct::venues::layout::{
     mint_decimals, token_account_amount, u64_at, u8_at,
 };
 use screenerbot::chains::solana::swaps::direct::venues::meteora_damm::{DammMarket, DammPoolState};
+use screenerbot::chains::solana::swaps::direct::venues::meteora_dlmm::{
+    bin_array_address, bitmap_extension_address as dlmm_bitmap_extension_address,
+    event_authority_address, oracle_address as dlmm_oracle_address, DlmmMarket, LbPairState,
+};
 use screenerbot::chains::solana::swaps::direct::venues::orca_whirlpool::{
     candidate_tick_array_starts, decode_tick_array as orca_decode_tick_array, oracle_address,
     tick_array_address as orca_tick_array_address, WhirlpoolMarket, WhirlpoolState,
@@ -262,6 +266,86 @@ fn orca_market() -> WhirlpoolMarket {
         transfer_fee_schedule(fixture.account(&state.mint_b)),
         ticks,
         available_starts,
+    )
+}
+
+fn dlmm_market() -> DlmmMarket {
+    let fixture = Fixture::load("meteora_dlmm_pool");
+    let program = fixture.account(&fixture.pool).owner;
+    let state = LbPairState::decode(fixture.pool, fixture.data(&fixture.pool))
+        .expect("the captured LbPair must decode");
+    let raw_v_params = LbPairState::decode_v_parameters(fixture.data(&fixture.pool))
+        .expect("the captured LbPair's v_parameters must decode");
+
+    // Same derivation `load()` uses, but against the CLOCK CAPTURED IN THE
+    // FIXTURE rather than the current wall clock -- the bin arrays and
+    // reserves were captured at that same instant, so re-deriving against
+    // "now" would apply a fee-reference decay the captured bins never saw.
+    let clock_address = Pubkey::from_str("SysvarC1ock11111111111111111111111111111111").unwrap();
+    let clock_data = fixture.data(&clock_address);
+    let now = i64::from_le_bytes(
+        clock_data[32..40]
+            .try_into()
+            .expect("the fixture's clock sysvar is 40 bytes"),
+    );
+    let v_params = raw_v_params.update_references(now, state.active_id, &state.parameters);
+
+    // Same derivation `load()` uses: consecutive candidate array indices in
+    // both directions out from the active bin, keeping only what the
+    // fixture actually captured.
+    let active_array_index = state.active_id.div_euclid(70) as i64;
+    let mut array_indices: Vec<i64> = Vec::new();
+    for step in [-1i64, 1] {
+        let mut index = active_array_index;
+        for _ in 0..3 {
+            if !array_indices.contains(&index) {
+                array_indices.push(index);
+            }
+            index += step;
+        }
+    }
+
+    let mut bins: Vec<(i32, u64, u64)> = Vec::new();
+    let mut available: Vec<i64> = Vec::new();
+    for index in array_indices {
+        let address = bin_array_address(&program, &fixture.pool, index);
+        if let Some(account) = fixture.accounts.get(&address.to_string()) {
+            available.push(index);
+            for i in 0..70i32 {
+                let offset = 56 + (i as usize) * 144;
+                let amount_x = u64_at(&account.data, offset).expect("bin amount_x");
+                let amount_y = u64_at(&account.data, offset + 8).expect("bin amount_y");
+                let id = (index * 70) as i32 + i;
+                bins.push((id, amount_x, amount_y));
+            }
+        }
+    }
+
+    let mint_x = fixture.account(&state.token_x_mint);
+    let mint_y = fixture.account(&state.token_y_mint);
+
+    // Optional account: read from the fixture the same way `load()` reads it
+    // from the batch, rather than assumed either way.
+    let has_bitmap_extension = fixture
+        .accounts
+        .contains_key(&dlmm_bitmap_extension_address(&program, &fixture.pool).to_string());
+
+    DlmmMarket::new(
+        state,
+        v_params,
+        mint_x.owner,
+        mint_y.owner,
+        (
+            mint_decimals(&mint_x.data).expect("token_x_mint decimals"),
+            mint_decimals(&mint_y.data).expect("token_y_mint decimals"),
+        ),
+        fixture.balance(&state.reserve_x),
+        fixture.balance(&state.reserve_y),
+        transfer_fee_schedule(mint_x),
+        transfer_fee_schedule(mint_y),
+        bins,
+        available,
+        has_bitmap_extension,
     )
 }
 
@@ -1022,5 +1106,172 @@ fn the_cpmm_instruction_pairs_each_wallet_account_with_the_matching_vault() {
     assert_ne!(
         ix.accounts[6].pubkey, ix.accounts[7].pubkey,
         "a swap can never route both legs through one vault"
+    );
+}
+
+#[test]
+fn the_dlmm_layout_reads_real_values_at_every_offset_it_claims() {
+    let fixture = Fixture::load("meteora_dlmm_pool");
+    let state = LbPairState::decode(fixture.pool, fixture.data(&fixture.pool))
+        .expect("the captured LbPair must decode");
+
+    assert_eq!(
+        state.token_x_mint.to_string(),
+        WSOL,
+        "this fixture is a SOL/USDC pool; a wrong mint offset would not land on WSOL"
+    );
+    assert_ne!(state.token_x_mint, state.token_y_mint);
+    assert_ne!(state.reserve_x, state.reserve_y);
+    assert!(
+        state.bin_step > 0 && state.bin_step < 1_000,
+        "bin_step read from the wrong offset would not be a small positive integer, got {}",
+        state.bin_step
+    );
+    assert_eq!(state.status, 0, "the fixture pool is tradable");
+    assert!(
+        state.parameters.base_factor > 0,
+        "base_factor {} is not a plausible rate",
+        state.parameters.base_factor
+    );
+    assert!(
+        state.parameters.protocol_share <= 2_500,
+        "protocol_share {} exceeds the programme's own 25% ceiling",
+        state.parameters.protocol_share
+    );
+    assert_eq!(
+        dlmm_oracle_address(&fixture.account(&fixture.pool).owner, &fixture.pool),
+        state.oracle,
+        "the stored oracle field must match its own PDA derivation"
+    );
+
+    let v_params = LbPairState::decode_v_parameters(fixture.data(&fixture.pool))
+        .expect("v_parameters must decode");
+    assert!(
+        v_params.last_update_timestamp > 1_700_000_000,
+        "last_update_timestamp read from the wrong offset would not be a plausible Unix time, \
+         got {}",
+        v_params.last_update_timestamp
+    );
+}
+
+#[test]
+fn the_dlmm_captured_bin_arrays_hold_real_bins_not_padding() {
+    let fixture = Fixture::load("meteora_dlmm_pool");
+    let program = fixture.account(&fixture.pool).owner;
+    let state = LbPairState::decode(fixture.pool, fixture.data(&fixture.pool)).unwrap();
+
+    let active_array_index = state.active_id.div_euclid(70) as i64;
+    let address = bin_array_address(&program, &fixture.pool, active_array_index);
+    let account = fixture
+        .accounts
+        .get(&address.to_string())
+        .expect("the fixture must have captured the active bin array");
+    assert_eq!(
+        account.data.len(),
+        10_136,
+        "a real BinArray account is 10136 bytes"
+    );
+
+    let local_index = state.active_id - (active_array_index as i32) * 70;
+    let offset = 56 + (local_index as usize) * 144;
+    let amount_x = u64_at(&account.data, offset).expect("active bin amount_x");
+    let amount_y = u64_at(&account.data, offset + 8).expect("active bin amount_y");
+    assert!(
+        amount_x > 0 || amount_y > 0,
+        "the pool's own active bin decoded to no liquidity at all -- offset drift, not a real gap"
+    );
+
+    // Every bin id in this array is a real, small integer -- a wrong
+    // `BINS_OFFSET`/`BIN_SIZE` would still produce SOME id here, but a
+    // decode off by even one field would make every other assertion above
+    // fail first (garbage `amount_x`/`amount_y`), which is the real drift
+    // detector; this only guards the id arithmetic itself.
+    for i in 0..70i32 {
+        let bin_id = (active_array_index as i32) * 70 + i;
+        assert!(
+            bin_id > -500_000 && bin_id < 500_000,
+            "bin id out of any real range"
+        );
+    }
+}
+
+#[test]
+fn a_dlmm_quote_off_real_state_walks_bins_and_charges_the_configured_rate() {
+    let market = dlmm_market();
+    let (mint_x, mint_y) = market.mints();
+    let amount_in = 5_000_000; // 0.005 SOL
+
+    let quote = market
+        .quote(&mint_x, amount_in)
+        .expect("a live, captured pool quotes");
+    assert!(quote.expected_out > 0);
+    assert!(
+        quote.lp_fee > 0,
+        "base_factor={} bin_step={} must charge something",
+        4,
+        4
+    );
+    assert!(
+        quote.price_impact_pct < 5.0,
+        "0.005 SOL should barely move a pool this deep, got {}%",
+        quote.price_impact_pct
+    );
+
+    let ten_x = market
+        .quote(&mint_x, amount_in * 10)
+        .expect("a larger size still quotes");
+    assert!(ten_x.expected_out > quote.expected_out, "more in, more out");
+
+    let back = market
+        .quote(&mint_y, quote.expected_out)
+        .expect("the reverse direction quotes too");
+    assert!(back.expected_out > 0);
+    assert!(
+        back.expected_out < amount_in,
+        "a round trip through two fees cannot return more than it started with"
+    );
+}
+
+#[test]
+fn a_dlmm_swap_instruction_names_the_event_authority_and_orients_from_the_input_mint() {
+    let market = dlmm_market();
+    let (mint_x, mint_y) = market.mints();
+    let program =
+        Pubkey::from_str(screenerbot::chains::solana::constants::METEORA_DLMM_PROGRAM_ID).unwrap();
+    let owner = Pubkey::new_unique();
+    let ata_in = Pubkey::new_unique();
+    let ata_out = Pubkey::new_unique();
+
+    let ix = market
+        .swap_instruction(
+            &SwapAccounts {
+                owner,
+                input_mint: mint_y,
+                output_mint: mint_x,
+                input_token_account: ata_in,
+                output_token_account: ata_out,
+            },
+            1_000_000,
+            0,
+        )
+        .expect("builds against real state");
+
+    assert_eq!(ix.program_id, program);
+    // input_token_in @4, user_token_out @5 (see module docs' account order).
+    assert_eq!(ix.accounts[4].pubkey, ata_in);
+    assert_eq!(ix.accounts[5].pubkey, ata_out);
+    assert_eq!(
+        ix.accounts[14].pubkey,
+        event_authority_address(&program),
+        "event_authority sits at index 14 in the 16 named accounts"
+    );
+    assert_eq!(
+        ix.accounts[1].pubkey,
+        dlmm_bitmap_extension_address(&program, &market.pool())
+    );
+    // At least one trailing bin array beyond the 16 named accounts.
+    assert!(
+        ix.accounts.len() > 16,
+        "a real swap must name at least one bin array"
     );
 }

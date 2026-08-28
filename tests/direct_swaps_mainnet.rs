@@ -54,6 +54,24 @@ const DAMM_V2_ONLY_B_POOL: &str = "3CVNnECvuyPtUys2QpaLSNRrQMvbqArsNJqKvbp3zmt1"
 /// output leg. Together the two pools cover both branches of the fee side.
 const DAMM_V2_BOTH_TOKEN_POOL: &str = "6nA26rxJxWZicm5bFnTpjUcN6jCrybqLuRrApKVERSz3";
 
+/// Meteora DLMM, SOL/USDC, bin step 4 (0.04% base fee). The deepest DLMM pool
+/// on mainnet -- also, per `venues.md`/module docs, one that trades often
+/// enough that the offline vault-delta replay could not be completed against
+/// it; this live tier is the exactness proof that IS available.
+const DLMM_SOL_USDC: &str = "5rCf1DM8LjKTw4YqhnoLcngyZYeNnQqztScTogYHAS6";
+
+/// A Meteora DLMM pool with NO `bin_array_bitmap_extension` account, which is
+/// the COMMON case -- most pools never create one, since it only exists where
+/// liquidity reaches past the +/-512 array indices `LbPair`'s own bitmap
+/// covers. `DLMM_SOL_USDC` happens to HAVE one, so it cannot catch an
+/// instruction that names the un-created PDA instead of spelling the optional
+/// account as absent.
+///
+/// It also has SOL as token Y rather than token X, so buying with SOL walks
+/// bins UPWARD -- the direction `DLMM_SOL_USDC` (SOL is token X) never
+/// exercises.
+const DLMM_NO_BITMAP_EXTENSION_POOL: &str = "46CgAPEz8V2e9UL5PDa3JNWFW6sk7uFCj7TjdB3XbKD3";
+
 const WSOL: &str = "So11111111111111111111111111111111111111112";
 const USDC: &str = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 
@@ -380,6 +398,45 @@ async fn an_orca_whirlpool_quote_is_exact_to_the_raw_unit() {
     simulate_with_no_slippage_room(ORCA_SOL_USDC, WSOL, USDC, MINIMUM_SWAP_LAMPORTS).await;
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "live network"]
+async fn meteora_dlmm_accepts_a_minimum_sol_to_usdc_swap() {
+    let _guard = common::isolated_env();
+    simulate_direction(DLMM_SOL_USDC, WSOL, USDC, MINIMUM_SWAP_LAMPORTS).await;
+}
+
+/// The zero-slippage exactness proof for Meteora DLMM: with `min_out` set to
+/// exactly the quote, a node accepting the swap proves the bin walk is not
+/// over-stating the output by even one raw unit -- the strongest check this
+/// engine can run for free, and the one this venue leans on most heavily
+/// since its fee formula could not be cross-checked against a replayed
+/// vault-delta transaction (see module docs on `meteora_dlmm.rs`).
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "live network"]
+async fn a_meteora_dlmm_quote_is_exact_to_the_raw_unit() {
+    let _guard = common::isolated_env();
+    simulate_with_no_slippage_room(DLMM_SOL_USDC, WSOL, USDC, MINIMUM_SWAP_LAMPORTS).await;
+}
+
+/// `bin_array_bitmap_extension` is an Anchor OPTIONAL account that most DLMM
+/// pools never create. Naming its un-created PDA fails the programme's own
+/// deserialisation; absent must be spelled as the programme's own id. The
+/// deepest pool HAS an extension, so only a pool without one proves the
+/// venue handles the majority case.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "live network"]
+async fn meteora_dlmm_swaps_a_pool_that_has_no_bin_array_bitmap_extension() {
+    let _guard = common::isolated_env();
+    let token = paired_token(DLMM_NO_BITMAP_EXTENSION_POOL).await;
+    simulate_direction(
+        DLMM_NO_BITMAP_EXTENSION_POOL,
+        WSOL,
+        &token,
+        MINIMUM_SWAP_LAMPORTS,
+    )
+    .await;
+}
+
 /// The reverse leg reaches different tick arrays than the forward one, the
 /// same structural property Raydium CLMM's own test asserts -- see that
 /// test's doc comment for why this cannot be simulated directly instead.
@@ -672,6 +729,16 @@ async fn a_real_round_trip_through_pump_amm_settles_and_pays_the_platform_fee() 
     };
     let token = paired_token(PUMP_AMM_POOL).await;
     round_trip(&ctx, PUMP_AMM_POOL, &token).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "spends real SOL"]
+async fn a_real_round_trip_through_meteora_dlmm_settles_and_pays_the_platform_fee() {
+    let _guard = common::isolated_env();
+    let Some(ctx) = common::require_mainnet() else {
+        return;
+    };
+    round_trip(&ctx, DLMM_SOL_USDC, USDC).await;
 }
 
 /// Buy `token` with the capped amount of SOL, then sell every unit back.
