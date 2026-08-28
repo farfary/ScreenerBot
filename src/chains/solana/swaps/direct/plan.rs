@@ -10,6 +10,7 @@
 //! 4. wrap native SOL + sync_native   only when the input leg is WSOL
 //! 5. platform fee transfer (input)   only when the fee rides the input leg
 //! 6. the venue swap instruction      carries min_out, the on-chain guarantee
+//! 6a. wrap the output-side fee       only for a venue that settles native SOL
 //! 7. platform fee transfer (output)  after the swap, before the WSOL close
 //! 8. close the WSOL account          unwraps the proceeds back to native SOL
 //! ```
@@ -20,6 +21,24 @@
 //!
 //! The fee is in the SAME transaction as the swap by construction. There is no
 //! ordering in which a user swaps and the platform is not paid.
+//!
+//! # A venue that settles in native SOL
+//!
+//! A bonding curve (Pump.fun legacy, and any future venue like it) never reads
+//! the WSOL account: SOL moves as native lamports, straight out of the wallet
+//! on a buy and straight into it on a sell. [`PoolMarket::settles_native_sol`]
+//! is the fact the plan learns this from, and it changes exactly two steps:
+//!
+//! * step 4 wraps the PLATFORM FEE amount, not the whole input — the swap
+//!   itself spends native lamports the wrap never touched;
+//! * a new step 6a wraps the platform fee AFTER the swap, because on a sell the
+//!   proceeds land as native lamports in the wallet, not in the WSOL account
+//!   step 7's `transfer_checked` reads from. `min_out` is enforced on chain
+//!   before step 6a runs, so the wallet is guaranteed to hold at least the fee
+//!   amount by the time it wraps it.
+//!
+//! Every other venue leaves `settles_native_sol` at its default `false`, so
+//! this changes nothing for them.
 
 use super::accounts::WalletLegs;
 use super::compute::compute_budget_instructions;
@@ -74,21 +93,33 @@ pub fn build_plan(
         &intent.output_mint,
     ));
 
+    let native_settle = market.settles_native_sol();
+
     if intent.wraps_native() {
-        instructions.push(system_instruction::transfer(
-            &intent.owner,
-            &legs.input_account,
-            intent.amount_in,
-        ));
-        instructions.push(
-            crate::chains::solana::spl_token::instruction::sync_native(
-                &crate::chains::solana::spl_token::id(),
+        // A native-settling venue never reads the WSOL account for the swap
+        // itself, so wrapping the whole input would leave the fee as the only
+        // thing that ever moves through it — wrap just that much.
+        let wrap_amount = if native_settle {
+            quote.fee.amount
+        } else {
+            intent.amount_in
+        };
+        if wrap_amount > 0 {
+            instructions.push(system_instruction::transfer(
+                &intent.owner,
                 &legs.input_account,
-            )
-            .map_err(|e| DirectSwapError::Build {
-                detail: format!("sync_native could not be built: {e}"),
-            })?,
-        );
+                wrap_amount,
+            ));
+            instructions.push(
+                crate::chains::solana::spl_token::instruction::sync_native(
+                    &crate::chains::solana::spl_token::id(),
+                    &legs.input_account,
+                )
+                .map_err(|e| DirectSwapError::Build {
+                    detail: format!("sync_native could not be built: {e}"),
+                })?,
+            );
+        }
     }
 
     if quote.fee.side == FeeSide::Input {
@@ -113,6 +144,26 @@ pub fn build_plan(
     )?);
 
     if quote.fee.side == FeeSide::Output {
+        // A native-settling venue's proceeds land as lamports in the wallet,
+        // not in the WSOL account the fee transfer below reads `source` from.
+        // `min_out` was just enforced on chain, so the wallet is guaranteed to
+        // hold at least the fee amount by the time this wraps it.
+        if native_settle && quote.fee.amount > 0 {
+            instructions.push(system_instruction::transfer(
+                &intent.owner,
+                &legs.output_account,
+                quote.fee.amount,
+            ));
+            instructions.push(
+                crate::chains::solana::spl_token::instruction::sync_native(
+                    &crate::chains::solana::spl_token::id(),
+                    &legs.output_account,
+                )
+                .map_err(|e| DirectSwapError::Build {
+                    detail: format!("sync_native could not be built: {e}"),
+                })?,
+            );
+        }
         if let Some(ix) = quote
             .fee
             .transfer_instruction(&legs.output_account, &intent.owner)?

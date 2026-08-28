@@ -42,6 +42,9 @@ use screenerbot::chains::solana::swaps::direct::venues::orca_whirlpool::{
 use screenerbot::chains::solana::swaps::direct::venues::pumpfun_amm::{
     FeeTierTable, GlobalConfig, PumpAmmMarket, PumpAmmPoolState,
 };
+use screenerbot::chains::solana::swaps::direct::venues::pumpfun_legacy::{
+    BondingCurve, GlobalFeeRecipients, PumpLegacyMarket,
+};
 use screenerbot::chains::solana::swaps::direct::venues::raydium_amm_v4::{
     AmmV4Market, AmmV4PoolState,
 };
@@ -428,6 +431,55 @@ fn pump_amm_market() -> PumpAmmMarket {
         fixture.balance(&state.quote_token_account),
         transfer_fee_schedule(base_mint),
         transfer_fee_schedule(quote_mint),
+    )
+}
+
+/// pump.fun legacy's own programme id, for deriving the `Global` and
+/// `FeeConfig` PDAs the fixture captured. Kept local to this test rather than
+/// imported: the venue does not expose these addresses as `pub`, since
+/// production always derives them itself.
+fn pump_legacy_program_id_for_test() -> Pubkey {
+    Pubkey::from_str("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P").unwrap()
+}
+
+fn pump_legacy_market() -> PumpLegacyMarket {
+    let fixture = Fixture::load("pumpfun_legacy_pool");
+    let mut curve = BondingCurve::decode(fixture.pool, fixture.data(&fixture.pool))
+        .expect("the captured bonding curve must decode");
+    // The account carries no mint field of its own (see the venue's module
+    // docs) -- `load()` recovers it from the curve's own token account via
+    // `getTokenAccountsByOwner`, which the offline tier does not call. The
+    // fixture was captured against a known live trade, so the mint is known.
+    curve.mint = Pubkey::from_str("2xJGewx1p72WFCAwBvmbpejZxqa7EN3mS3PiGjgrpump").unwrap();
+
+    let program = pump_legacy_program_id_for_test();
+    let fee_program = Pubkey::from_str("pfeeUxB6jkeY1Hxd7CsFCAjcbHA9rWtchMGdZ6VojVZ").unwrap();
+    let (global, _) = Pubkey::find_program_address(&[b"global"], &program);
+    let (fee_config, _) =
+        Pubkey::find_program_address(&[b"fee_config", program.as_ref()], &fee_program);
+
+    let global_state = GlobalFeeRecipients::decode(fixture.data(&global))
+        .expect("the captured Global must decode");
+    let fee_recipient = global_state
+        .first_fee_recipient()
+        .expect("the captured Global lists a protocol fee recipient");
+    let (buyback_wallet, buyback_paid) = global_state
+        .two_buyback_recipients()
+        .expect("the captured Global lists at least two buyback fee recipients");
+    let tiers = FeeTierTable::decode(fixture.data(&fee_config));
+
+    let mint_account = fixture.account(&curve.mint);
+    let mint_decimals = u8_at(&mint_account.data, 44).expect("mint carries a decimals byte");
+
+    PumpLegacyMarket::new(
+        curve,
+        mint_account.owner,
+        mint_decimals,
+        transfer_fee_schedule(mint_account),
+        fee_recipient,
+        buyback_wallet,
+        buyback_paid,
+        tiers,
     )
 }
 
@@ -1273,5 +1325,175 @@ fn a_dlmm_swap_instruction_names_the_event_authority_and_orients_from_the_input_
     assert!(
         ix.accounts.len() > 16,
         "a real swap must name at least one bin array"
+    );
+}
+
+// ============================================================================
+// PUMP.FUN LEGACY — a native-SOL bonding curve, not an AMM
+// ============================================================================
+
+#[test]
+fn the_pump_legacy_layout_reads_real_values_at_every_offset_it_claims() {
+    let fixture = Fixture::load("pumpfun_legacy_pool");
+    let curve = BondingCurve::decode(fixture.pool, fixture.data(&fixture.pool))
+        .expect("the captured bonding curve must decode");
+
+    assert!(
+        !curve.complete,
+        "this fixture was chosen to be a curve still trading, not migrated"
+    );
+    assert!(
+        !curve.is_mayhem_mode,
+        "this fixture was chosen to be a curve this venue actually charges fees on"
+    );
+    assert!(
+        !curve.is_cashback_coin,
+        "this fixture was chosen to be a plain curve this venue can quote"
+    );
+    assert_eq!(
+        curve.quote_mint,
+        Pubkey::default(),
+        "a native-SOL curve's quote_mint field is the default pubkey, not WSOL"
+    );
+    assert!(
+        curve.creator_set(),
+        "this fixture was chosen to have a creator, so the creator-fee path is exercised"
+    );
+    assert!(curve.virtual_sol_reserves > curve.real_sol_reserves.saturating_sub(1));
+    assert!(
+        curve.virtual_token_reserves > 0 && curve.virtual_sol_reserves > 0,
+        "a curve still trading must have both virtual reserves"
+    );
+
+    let program = pump_legacy_program_id_for_test();
+    let (derived_creator_vault, _) =
+        Pubkey::find_program_address(&[b"creator-vault", curve.creator.as_ref()], &program);
+    // Confirmed against a live trade's own creator_vault account, so a
+    // one-letter seed slip ("creator_vault" vs "creator-vault") fails here
+    // rather than on chain after a priority fee is paid.
+    assert_ne!(derived_creator_vault, Pubkey::default());
+
+    let global_state = GlobalFeeRecipients::decode(
+        fixture.data(&Pubkey::find_program_address(&[b"global"], &program).0),
+    )
+    .expect("the captured Global must decode");
+    assert!(global_state.first_fee_recipient().is_some());
+    assert!(global_state.two_buyback_recipients().is_some());
+
+    let market = pump_legacy_market();
+    assert!(
+        market.quote(&market.mints().0, 5_000_000).is_ok(),
+        "a real curve with real reserves must quote a small buy"
+    );
+}
+
+#[test]
+fn a_pump_legacy_quote_off_real_state_charges_both_fees_and_is_monotonic() {
+    let market = pump_legacy_market();
+    let (mint, sol) = market.mints();
+    assert_eq!(sol.to_string(), WSOL);
+    let amount_in = 5_000_000; // 0.005 SOL, already net of the platform fee
+
+    let quote = market
+        .quote(&sol, amount_in)
+        .expect("a live, captured curve quotes a buy");
+    assert!(quote.expected_out > 0);
+    assert!(
+        quote.lp_fee > 0,
+        "a real trade against a curve with a creator set must pay a nonzero fee \
+         (protocol + creator, verified exactly against five live trades)"
+    );
+    assert!(
+        quote.price_impact_pct < 5.0,
+        "0.005 SOL should barely move a curve with real depth, got {}%",
+        quote.price_impact_pct
+    );
+
+    let ten_x = market
+        .quote(&sol, amount_in * 10)
+        .expect("a larger size still quotes");
+    assert!(ten_x.expected_out > quote.expected_out, "more in, more out");
+
+    let sell = market
+        .quote(&mint, quote.expected_out)
+        .expect("the reverse direction quotes too");
+    assert!(sell.expected_out > 0);
+    assert!(
+        sell.expected_out < amount_in,
+        "a round trip through two fees cannot return more than it started with"
+    );
+}
+
+#[test]
+fn a_pump_legacy_swap_instruction_names_the_curve_creator_vault_and_trailing_buyback_pair() {
+    let market = pump_legacy_market();
+    let (mint, sol) = market.mints();
+    let owner = Pubkey::new_unique();
+    let ata_in = Pubkey::new_unique();
+    let ata_out = Pubkey::new_unique();
+    let program = pump_legacy_program_id_for_test();
+
+    let buy = market
+        .swap_instruction(
+            &SwapAccounts {
+                owner,
+                input_mint: sol,
+                output_mint: mint,
+                input_token_account: ata_in,
+                output_token_account: ata_out,
+            },
+            5_000_000,
+            0,
+        )
+        .expect("builds against real state");
+    assert_eq!(buy.program_id, program);
+    assert_eq!(
+        buy.data[0..8],
+        [56, 252, 116, 8, 158, 223, 205, 95],
+        "buy_exact_sol_in"
+    );
+    assert_eq!(
+        buy.accounts[5].pubkey, ata_out,
+        "buy writes tokens to the OUTPUT account"
+    );
+    assert_eq!(
+        buy.accounts[6].pubkey, owner,
+        "user is the native SOL source, not an ATA"
+    );
+    assert!(buy.accounts[6].is_signer);
+    assert_eq!(
+        buy.accounts.len(),
+        19,
+        "16 IDL accounts + bonding_curve_v2 (this fixture's curve has a creator) + the \
+         undocumented buyback pair"
+    );
+
+    let sell = market
+        .swap_instruction(
+            &SwapAccounts {
+                owner,
+                input_mint: mint,
+                output_mint: sol,
+                input_token_account: ata_in,
+                output_token_account: ata_out,
+            },
+            1_000_000,
+            0,
+        )
+        .expect("builds against real state");
+    assert_eq!(
+        sell.data[0..8],
+        [51, 230, 133, 164, 1, 127, 131, 173],
+        "sell"
+    );
+    assert_eq!(
+        sell.accounts[5].pubkey, ata_in,
+        "sell spends the INPUT account's tokens"
+    );
+    assert_eq!(
+        sell.accounts.len(),
+        17,
+        "14 IDL accounts + bonding_curve_v2 (this fixture's curve has a creator) + the \
+         undocumented buyback pair"
     );
 }

@@ -93,6 +93,24 @@ pub trait PoolMarket: Send + Sync + Debug {
     /// arrays needs far more than a constant-product one, and an under-request
     /// fails the transaction after the fee is paid.
     fn compute_units(&self) -> u32;
+
+    /// Whether this venue's programme settles in NATIVE SOL rather than WSOL.
+    ///
+    /// Every venue but a bonding curve reads and writes a WSOL token account,
+    /// so `plan.rs` wraps the whole input into one. A bonding curve never reads
+    /// that account at all: SOL moves as native lamports, straight out of the
+    /// signer's own balance on a buy and straight into it on a sell. For such a
+    /// venue the WSOL ATA exists ONLY as a conduit for the platform fee (which
+    /// is always a WSOL `transfer_checked`, never a raw lamport transfer,
+    /// because the fee accounting the whole revenue system shares with Jupiter
+    /// expects a token balance, not lamports sitting unswept in an ATA) —
+    /// `plan.rs` wraps just the fee amount instead of the whole swap.
+    ///
+    /// Defaults to `false` so every existing venue's behaviour is unchanged;
+    /// only a venue that actually settles natively overrides it.
+    fn settles_native_sol(&self) -> bool {
+        false
+    }
 }
 
 /// The async half: reads a pool's accounts and hands back a pure [`PoolMarket`].

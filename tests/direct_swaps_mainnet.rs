@@ -46,6 +46,17 @@ const PUMP_AMM_POOL: &str = "4w2cysotX6czaUGmmWg13hDpY4QEMG2CzeKYEQyK9Ama";
 /// that catches any code still assuming the SOL side is the token side.
 const PUMP_AMM_SOL_QUOTE_POOL: &str = "Gf7sXMoP8iRw4iiXmJ1nq4vxcRycbGXy5RL8a8LnTd3v";
 
+/// Pump.fun legacy bonding curve WITH a creator set, still trading (not
+/// migrated, not mayhem, not cashback). Exercises the creator-fee path this
+/// venue's whole blocker was about -- verified on chain against a live `buy`
+/// paying `creator_vault` exactly `ceil(net * creator_bps / 10_000)`.
+const PUMP_LEGACY_CREATOR_POOL: &str = "AUKZMypBMmVi3gPMNmY46eb841La2mZufkdkPSh3PWEj";
+
+/// Pump.fun legacy bonding curve WITH the DEFAULT (unset) creator, the other
+/// side of the same property: verified on chain to pay zero to `creator_vault`
+/// on a real `buy_exact_sol_in` while still paying the protocol fee in full.
+const PUMP_LEGACY_NO_CREATOR_POOL: &str = "cYyAicKQgqecnPNjgaGSee68n6DfhLMUYxfD4zBYKRT";
+
 /// Meteora DAMM v2 with `collect_fee_mode = OnlyB` and SOL as token B, so a buy
 /// pays the pool fee on the INPUT and a sell pays it on the output.
 const DAMM_V2_ONLY_B_POOL: &str = "3CVNnECvuyPtUys2QpaLSNRrQMvbqArsNJqKvbp3zmt1";
@@ -584,6 +595,79 @@ async fn pump_amm_swaps_a_pool_whose_sol_side_is_the_quote() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "live network"]
+async fn pump_legacy_accepts_a_minimum_sol_to_token_swap() {
+    let _guard = common::isolated_env();
+    let token = paired_token(PUMP_LEGACY_CREATOR_POOL).await;
+    simulate_direction(
+        PUMP_LEGACY_CREATOR_POOL,
+        WSOL,
+        &token,
+        MINIMUM_SWAP_LAMPORTS,
+    )
+    .await;
+}
+
+/// The other side of the creator-vault property: a curve with NO creator must
+/// still build and simulate a real swap, naming `bonding_curve_v2` as ABSENT
+/// (the account is only appended when a creator is set) rather than the
+/// un-created PDA a curve WITH a creator would name.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "live network"]
+async fn pump_legacy_accepts_a_minimum_sol_to_token_swap_with_no_creator() {
+    let _guard = common::isolated_env();
+    let token = paired_token(PUMP_LEGACY_NO_CREATOR_POOL).await;
+    simulate_direction(
+        PUMP_LEGACY_NO_CREATOR_POOL,
+        WSOL,
+        &token,
+        MINIMUM_SWAP_LAMPORTS,
+    )
+    .await;
+}
+
+/// The zero-slippage exactness proof for the buy leg, on a curve WITH a
+/// creator so the creator-fee path is inside the number being proved.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "live network"]
+async fn a_pump_legacy_quote_is_exact_to_the_raw_unit() {
+    let _guard = common::isolated_env();
+    let token = paired_token(PUMP_LEGACY_CREATOR_POOL).await;
+    simulate_with_no_slippage_room(
+        PUMP_LEGACY_CREATOR_POOL,
+        WSOL,
+        &token,
+        MINIMUM_SWAP_LAMPORTS,
+    )
+    .await;
+}
+
+/// The same proof on a curve with NO creator, where the spend/net split has
+/// one fee term instead of two -- the two curves round differently, and the
+/// search has to be exact on both.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "live network"]
+async fn a_pump_legacy_quote_is_exact_to_the_raw_unit_with_no_creator() {
+    let _guard = common::isolated_env();
+    let token = paired_token(PUMP_LEGACY_NO_CREATOR_POOL).await;
+    simulate_with_no_slippage_room(
+        PUMP_LEGACY_NO_CREATOR_POOL,
+        WSOL,
+        &token,
+        MINIMUM_SWAP_LAMPORTS,
+    )
+    .await;
+}
+
+// The SELL direction (token -> SOL) is not simulated stand-alone here, the
+// same as every other venue in this file: `simulation_owner` is a real
+// trading wallet used ONLY for its address, not its holdings, and a fresh
+// simulation cannot be relied on to hold the pump.fun token. The sell side's
+// distinct account list and the native-SOL fee-wrap step it exercises are
+// proven by `a_real_round_trip_through_pump_legacy_...` below instead, which
+// sells exactly what a real buy just delivered.
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "live network"]
 async fn a_pool_quotes_both_directions_of_its_pair() {
     let _guard = common::isolated_env();
     let pool = Pubkey::from_str(AMM_V4_SOL_USDC).unwrap();
@@ -739,6 +823,22 @@ async fn a_real_round_trip_through_meteora_dlmm_settles_and_pays_the_platform_fe
         return;
     };
     round_trip(&ctx, DLMM_SOL_USDC, USDC).await;
+}
+
+/// The exactness proof for the native-SOL plan change: the buy leg wraps only
+/// the platform fee into the WSOL ATA rather than the whole spend, and the
+/// sell leg's proceeds land as lamports in the wallet and have to be wrapped
+/// AFTER the swap so the fee transfer has something to read. Never run
+/// automatically -- see the module docs' two-tier explanation.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "spends real SOL"]
+async fn a_real_round_trip_through_pump_legacy_settles_natively_and_pays_the_platform_fee() {
+    let _guard = common::isolated_env();
+    let Some(ctx) = common::require_mainnet() else {
+        return;
+    };
+    let token = paired_token(PUMP_LEGACY_CREATOR_POOL).await;
+    round_trip(&ctx, PUMP_LEGACY_CREATOR_POOL, &token).await;
 }
 
 /// Buy `token` with the capped amount of SOL, then sell every unit back.
