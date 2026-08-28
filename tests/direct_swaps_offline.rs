@@ -38,6 +38,9 @@ use screenerbot::chains::solana::swaps::direct::venues::meteora_dlmm::{
     bin_array_address, bitmap_extension_address as dlmm_bitmap_extension_address,
     event_authority_address, oracle_address as dlmm_oracle_address, DlmmMarket, LbPairState,
 };
+use screenerbot::chains::solana::swaps::direct::venues::moonit::{
+    ConfigAccountState, CurveAccountState, MoonitMarket,
+};
 use screenerbot::chains::solana::swaps::direct::venues::orca_whirlpool::{
     candidate_tick_array_starts, decode_tick_array as orca_decode_tick_array, oracle_address,
     tick_array_address as orca_tick_array_address, WhirlpoolMarket, WhirlpoolState,
@@ -1793,4 +1796,199 @@ fn a_dbc_swap_instruction_carries_the_confirmed_account_order_and_discriminator(
         sell.accounts[4].pubkey, ata_out,
         "sell credits the output account's quote"
     );
+}
+
+// ============================================================================
+// MOONIT — a native-SOL ConstantProductV1 bonding curve
+// ============================================================================
+
+fn moonit_program_id_for_test() -> Pubkey {
+    Pubkey::from_str("MoonCVVNZFSYkqNXP6bxHLPL6QQJiMagDL3qcqUQTrG").unwrap()
+}
+
+fn moonit_market() -> MoonitMarket {
+    let fixture = Fixture::load("moonit_pool");
+    let curve = CurveAccountState::decode(fixture.pool, fixture.data(&fixture.pool))
+        .expect("the captured Moonit curve must decode");
+
+    let program = moonit_program_id_for_test();
+    let (config_address, bump) = Pubkey::find_program_address(&[b"config_account"], &program);
+    assert_eq!(bump, 251, "the live ConfigAccount's own stored bump is 251");
+    let config = ConfigAccountState::decode(fixture.data(&config_address))
+        .expect("the captured ConfigAccount must decode");
+
+    let mint_account = fixture.account(&curve.mint);
+    let mint_decimals =
+        mint_decimals(&mint_account.data).expect("the curve's mint carries a decimals byte");
+
+    MoonitMarket::new(
+        curve,
+        mint_account.owner,
+        mint_decimals,
+        config.dex_fee,
+        config.helio_fee,
+        config.fee_bps,
+    )
+}
+
+#[test]
+fn the_moonit_layout_reads_real_values_at_every_offset_it_claims() {
+    let fixture = Fixture::load("moonit_pool");
+    let curve = CurveAccountState::decode(fixture.pool, fixture.data(&fixture.pool))
+        .expect("the captured Moonit curve must decode");
+
+    assert_eq!(
+        curve.total_supply, 1_000_000_000_000_000_000,
+        "the programme enforces this exact total supply for ConstantProductV1"
+    );
+    assert!(
+        curve.curve_amount > 0 && curve.curve_amount <= curve.total_supply,
+        "a curve still trading holds a real, non-empty token balance"
+    );
+    assert_eq!(
+        curve.collateral_currency, 0,
+        "this fixture trades SOL collateral"
+    );
+    assert_eq!(curve.curve_type, 1, "this fixture is ConstantProductV1");
+    assert_eq!(curve.decimals, 9);
+
+    let mint_account = fixture.account(&curve.mint);
+    assert_eq!(
+        mint_account.owner.to_string(),
+        "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+        "every Moonit mint observed while building this venue is legacy SPL"
+    );
+
+    let program = moonit_program_id_for_test();
+    let (config_address, _) = Pubkey::find_program_address(&[b"config_account"], &program);
+    let config = ConfigAccountState::decode(fixture.data(&config_address))
+        .expect("the captured ConfigAccount must decode");
+    assert_eq!(
+        config.fee_bps, 100,
+        "verified against every replayed real trade"
+    );
+    assert_eq!(
+        config.dex_fee.to_string(),
+        "3udvfL24waJcLhskRAsStNMoNUvtyXdxrWQz4hgi953N"
+    );
+    assert_eq!(
+        config.helio_fee.to_string(),
+        "5K5RtTWzzLp4P8Npi84ocf7F1vBsAu29N1irG4iiUnzt"
+    );
+
+    let market = moonit_market();
+    assert!(
+        market.quote(&market.mints().1, 5_000_000).is_ok(),
+        "a real curve with real reserves must quote a small buy"
+    );
+}
+
+#[test]
+fn a_moonit_quote_off_real_state_is_monotonic_and_settles_native_sol() {
+    let market = moonit_market();
+    let (mint, sol) = market.mints();
+    assert_eq!(sol.to_string(), WSOL);
+    assert!(market.settles_native_sol());
+
+    let amount_in = 5_000_000; // 0.005 SOL
+    let quote = market
+        .quote(&sol, amount_in)
+        .expect("a live, captured curve quotes a buy");
+    assert!(quote.expected_out > 0);
+    assert!(
+        quote.lp_fee > 0,
+        "the 100bps protocol fee is always charged"
+    );
+    assert!(
+        quote.price_impact_pct < 5.0,
+        "0.005 SOL should barely move a curve this deep, got {}%",
+        quote.price_impact_pct
+    );
+
+    let ten_x = market
+        .quote(&sol, amount_in * 10)
+        .expect("a larger size still quotes");
+    assert!(ten_x.expected_out > quote.expected_out, "more in, more out");
+
+    let sell = market
+        .quote(&mint, quote.expected_out)
+        .expect("the reverse direction quotes too");
+    assert!(sell.expected_out > 0);
+    assert!(
+        sell.expected_out < amount_in,
+        "a round trip through two fee charges cannot return more than it started with"
+    );
+}
+
+#[test]
+fn a_moonit_swap_instruction_carries_the_eleven_idl_accounts_in_order() {
+    let market = moonit_market();
+    let (mint, sol) = market.mints();
+    let owner = Pubkey::new_unique();
+    let ata_in = Pubkey::new_unique();
+    let ata_out = Pubkey::new_unique();
+    let program = moonit_program_id_for_test();
+    let (config_address, _) = Pubkey::find_program_address(&[b"config_account"], &program);
+
+    let buy = market
+        .swap_instruction(
+            &SwapAccounts {
+                owner,
+                input_mint: sol,
+                output_mint: mint,
+                input_token_account: ata_in,
+                output_token_account: ata_out,
+            },
+            5_000_000,
+            0,
+        )
+        .expect("builds against real state");
+    assert_eq!(buy.program_id, program);
+    assert_eq!(
+        buy.data[0..8],
+        [0x66, 0x06, 0x3d, 0x12, 0x01, 0xda, 0xeb, 0xea]
+    );
+    assert_eq!(buy.accounts.len(), 11);
+    assert_eq!(buy.accounts[0].pubkey, owner);
+    assert!(buy.accounts[0].is_signer);
+    assert_eq!(
+        buy.accounts[1].pubkey, ata_out,
+        "a buy's senderTokenAccount is the wallet's OWN base-mint account, \
+         receiving the tokens bought"
+    );
+    assert_eq!(buy.accounts[2].pubkey, market.pool());
+    assert_eq!(buy.accounts[6].pubkey, mint);
+    assert_eq!(buy.accounts[7].pubkey, config_address);
+    assert_eq!(
+        buy.accounts[10].pubkey.to_string(),
+        "11111111111111111111111111111111"
+    );
+    // fixed_side byte and the trailing zero slippage_bps.
+    assert_eq!(buy.data[24], 0);
+    assert_eq!(&buy.data[25..33], &0u64.to_le_bytes());
+
+    let sell = market
+        .swap_instruction(
+            &SwapAccounts {
+                owner,
+                input_mint: mint,
+                output_mint: sol,
+                input_token_account: ata_in,
+                output_token_account: ata_out,
+            },
+            1_000_000,
+            0,
+        )
+        .expect("builds against real state");
+    assert_eq!(
+        sell.data[0..8],
+        [0x33, 0xe6, 0x85, 0xa4, 0x01, 0x7f, 0x83, 0xad]
+    );
+    assert_eq!(
+        sell.accounts[1].pubkey, ata_in,
+        "a sell's senderTokenAccount is the wallet's OWN base-mint account, \
+         spending the tokens sold"
+    );
+    // token_amount is exact (fixedSide::In on the token leg for a sell).
+    assert_eq!(&sell.data[8..16], &1_000_000u64.to_le_bytes());
 }

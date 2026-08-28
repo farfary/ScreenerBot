@@ -57,6 +57,14 @@ const PUMP_LEGACY_CREATOR_POOL: &str = "AUKZMypBMmVi3gPMNmY46eb841La2mZufkdkPSh3
 /// on a real `buy_exact_sol_in` while still paying the protocol fee in full.
 const PUMP_LEGACY_NO_CREATOR_POOL: &str = "cYyAicKQgqecnPNjgaGSee68n6DfhLMUYxfD4zBYKRT";
 
+/// Moonit (formerly Moonshot), a `ConstantProductV1` bonding curve settling in
+/// native SOL, the same shape as pump.fun legacy. Chosen because it was the
+/// most recently traded live curve found while building this venue, so it is
+/// well below its migration threshold. A bonding-curve pool can migrate at any
+/// time -- a sudden failure here is more likely a migration than a code
+/// regression; repoint the constant rather than weaken the assertion.
+const MOONIT_POOL: &str = "Fiw2hDFe4YW4acj1pxpEwXVFf2aBHBBnog6qzoA5pCdW";
+
 /// Meteora DAMM v2 with `collect_fee_mode = OnlyB` and SOL as token B, so a buy
 /// pays the pool fee on the INPUT and a sell pays it on the output.
 const DAMM_V2_ONLY_B_POOL: &str = "3CVNnECvuyPtUys2QpaLSNRrQMvbqArsNJqKvbp3zmt1";
@@ -706,6 +714,29 @@ async fn a_pump_legacy_quote_is_exact_to_the_raw_unit_with_no_creator() {
     .await;
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "live network"]
+async fn moonit_accepts_a_minimum_sol_to_token_swap() {
+    let _guard = common::isolated_env();
+    let token = paired_token(MOONIT_POOL).await;
+    simulate_direction(MOONIT_POOL, WSOL, &token, MINIMUM_SWAP_LAMPORTS).await;
+}
+
+/// The zero-slippage exactness proof: `min_out` IS the quote, and the pool
+/// programme's own `SlippageOverflow` check is the enforcement -- confirmed
+/// directly on chain while building this venue (a `simulateTransaction` with
+/// the exact formula-predicted threshold succeeded; the identical swap with
+/// the threshold one raw unit higher failed with `SlippageOverflow`, Anchor
+/// error `6003`). This test is that same proof, through the engine's own
+/// quote/plan/simulate path rather than a hand-built instruction.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "live network"]
+async fn a_moonit_quote_is_exact_to_the_raw_unit() {
+    let _guard = common::isolated_env();
+    let token = paired_token(MOONIT_POOL).await;
+    simulate_with_no_slippage_room(MOONIT_POOL, WSOL, &token, MINIMUM_SWAP_LAMPORTS).await;
+}
+
 // The SELL direction (token -> SOL) is not simulated stand-alone here, the
 // same as every other venue in this file: `simulation_owner` is a real
 // trading wallet used ONLY for its address, not its holdings, and a fresh
@@ -900,6 +931,21 @@ async fn a_real_round_trip_through_pump_legacy_settles_natively_and_pays_the_pla
     };
     let token = paired_token(PUMP_LEGACY_CREATOR_POOL).await;
     round_trip(&ctx, PUMP_LEGACY_CREATOR_POOL, &token).await;
+}
+
+/// The second native-SOL venue through the same plan path, and the only one
+/// whose SELL threshold is measured against the output NET of the programme's
+/// own fee rather than the gross curve output -- so a wrong fee orientation
+/// here would show up as a real revert, not a rounding difference.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "spends real SOL"]
+async fn a_real_round_trip_through_moonit_settles_natively_and_pays_the_platform_fee() {
+    let _guard = common::isolated_env();
+    let Some(ctx) = common::require_mainnet() else {
+        return;
+    };
+    let token = paired_token(MOONIT_POOL).await;
+    round_trip(&ctx, MOONIT_POOL, &token).await;
 }
 
 /// Buy `token` with the capped amount of SOL, then sell every unit back.
