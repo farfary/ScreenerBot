@@ -32,6 +32,9 @@ const AMM_V4_SOL_USDC: &str = "58oQChx4yWmvKdwLLZzBi4ChoCc2fqCUWBkwMihLYQo2";
 /// Raydium CLMM, SOL/USDC. The deepest concentrated-liquidity pool on mainnet.
 const CLMM_SOL_USDC: &str = "3ucNos4NbumPLZNWztqGHNFFgkHeRMBQAVemeeomsUxv";
 
+/// Orca Whirlpool, SOL/USDC. The deepest Orca pool on mainnet.
+const ORCA_SOL_USDC: &str = "Czfq3xZZDmsdGdUyrNLtRhGc47cXcZtLG4crryfu44zE";
+
 /// Raydium CPMM (CP-Swap), SOL paired against a Token-2022 mint.
 const CPMM_POOL: &str = "Q2sPHPdUWFMg7M7wwrQKLrn619cAucfRsmhVJffodSp";
 
@@ -359,6 +362,98 @@ async fn a_clmm_quote_that_crosses_a_tick_is_exact_to_the_raw_unit() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "live network"]
+async fn orca_whirlpool_accepts_a_minimum_sol_to_usdc_swap() {
+    let _guard = common::isolated_env();
+    simulate_direction(ORCA_SOL_USDC, WSOL, USDC, MINIMUM_SWAP_LAMPORTS).await;
+}
+
+/// The zero-slippage exactness proof for Orca Whirlpool: with `min_out` set to
+/// exactly the quote, a node accepting the swap proves the tick walk (shared
+/// with Raydium CLMM via `clmm_ticks::walk_ticks`) is not over-stating the
+/// output by even one raw unit on Orca's own 88-tick, decimal-string-seeded
+/// tick arrays -- a layout `walk_ticks` itself never sees, only the ticks
+/// `load()` decoded from it.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "live network"]
+async fn an_orca_whirlpool_quote_is_exact_to_the_raw_unit() {
+    let _guard = common::isolated_env();
+    simulate_with_no_slippage_room(ORCA_SOL_USDC, WSOL, USDC, MINIMUM_SWAP_LAMPORTS).await;
+}
+
+/// The reverse leg reaches different tick arrays than the forward one, the
+/// same structural property Raydium CLMM's own test asserts -- see that
+/// test's doc comment for why this cannot be simulated directly instead.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "live network"]
+async fn an_orca_whirlpool_swap_reaches_different_tick_arrays_in_each_direction() {
+    let _guard = common::isolated_env();
+    let pool = Pubkey::from_str(ORCA_SOL_USDC).unwrap();
+    let market = direct::load_market(&pool)
+        .await
+        .expect("the Orca Whirlpool pool decodes");
+    let owner = simulation_owner();
+
+    let accounts_for = |input: &str, output: &str| {
+        market
+            .swap_instruction(
+                &SwapAccounts {
+                    owner,
+                    input_mint: mint(input),
+                    output_mint: mint(output),
+                    input_token_account: Pubkey::new_unique(),
+                    output_token_account: Pubkey::new_unique(),
+                },
+                MINIMUM_SWAP_LAMPORTS,
+                1,
+            )
+            .expect("both directions build")
+            .accounts
+    };
+
+    let buying = accounts_for(WSOL, USDC);
+    let selling = accounts_for(USDC, WSOL);
+
+    // Legacy `swap` (11 accounts): token_program, token_authority, whirlpool,
+    // owner_a, vault_a, owner_b, vault_b, then up to 3 tick arrays, then oracle.
+    assert!(
+        buying.len() > 7,
+        "an Orca swap must carry tick arrays; passing none fails on deserialisation"
+    );
+    let buy_arrays_end = buying.len() - 1;
+    let sell_arrays_end = selling.len() - 1;
+    let buy_arrays: Vec<_> = buying[7..buy_arrays_end].iter().map(|a| a.pubkey).collect();
+    let sell_arrays: Vec<_> = selling[7..sell_arrays_end]
+        .iter()
+        .map(|a| a.pubkey)
+        .collect();
+    assert_ne!(
+        buy_arrays, sell_arrays,
+        "the two directions walk the tick arrays opposite ways"
+    );
+    assert_eq!(
+        buy_arrays[0], sell_arrays[0],
+        "both start from the array holding the current tick"
+    );
+    // Unlike Raydium CLMM's swap_v2, Orca's `swap` never reorders the vaults
+    // by direction -- vault_a and vault_b sit at fixed positions 4 and 6 in
+    // every transaction, and only the `a_to_b` argument (plus which owner
+    // account plays source vs destination) says which way the trade runs.
+    assert_eq!(
+        buying[4].pubkey, selling[4].pubkey,
+        "vault_a is a property of the pool, not of the direction"
+    );
+    assert_eq!(
+        buying[6].pubkey, selling[6].pubkey,
+        "vault_b is a property of the pool, not of the direction"
+    );
+    assert_eq!(
+        buying[buy_arrays_end].pubkey, selling[sell_arrays_end].pubkey,
+        "the oracle account is a property of the pool, not of the direction"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "live network"]
 async fn damm_v2_accepts_a_minimum_sol_to_token_swap_when_the_fee_rides_the_input() {
     let _guard = common::isolated_env();
     let token = paired_token(DAMM_V2_ONLY_B_POOL).await;
@@ -526,6 +621,16 @@ async fn a_real_round_trip_through_clmm_settles_and_pays_the_platform_fee() {
         return;
     };
     round_trip(&ctx, CLMM_SOL_USDC, USDC).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "spends real SOL"]
+async fn a_real_round_trip_through_orca_whirlpool_settles_and_pays_the_platform_fee() {
+    let _guard = common::isolated_env();
+    let Some(ctx) = common::require_mainnet() else {
+        return;
+    };
+    round_trip(&ctx, ORCA_SOL_USDC, USDC).await;
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

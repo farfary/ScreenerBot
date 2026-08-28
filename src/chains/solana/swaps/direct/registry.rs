@@ -27,6 +27,7 @@ pub fn venues() -> &'static [Arc<dyn PoolVenue>] {
             Arc::new(venues::raydium_clmm::RaydiumClmmVenue) as Arc<dyn PoolVenue>,
             Arc::new(venues::meteora_damm::MeteoraDammVenue) as Arc<dyn PoolVenue>,
             Arc::new(venues::pumpfun_amm::PumpFunAmmVenue) as Arc<dyn PoolVenue>,
+            Arc::new(venues::orca_whirlpool::OrcaWhirlpoolVenue) as Arc<dyn PoolVenue>,
         ]
     })
 }

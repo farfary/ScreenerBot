@@ -63,6 +63,14 @@ pub fn u8_at(data: &[u8], offset: usize) -> Option<u8> {
 
 /// The SPL token account balance, which lives at a fixed offset in both the
 /// legacy and the Token-2022 account layouts.
+/// Decimals out of an SPL mint account, at the one offset both token
+/// programmes share: a 36-byte `COption<Pubkey>` mint authority, then an
+/// 8-byte supply. Token-2022's extensions all live PAST the base layout, so
+/// the same read serves both.
+pub fn mint_decimals(data: &[u8]) -> Option<u8> {
+    u8_at(data, 44)
+}
+
 pub fn token_account_amount(data: &[u8]) -> Option<u64> {
     u64_at(data, 64)
 }

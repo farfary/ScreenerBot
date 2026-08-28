@@ -28,9 +28,13 @@ use screenerbot::chains::solana::swaps::direct::venues::clmm_ticks::{
     decode_tick_array, TickArrayBitmap,
 };
 use screenerbot::chains::solana::swaps::direct::venues::layout::{
-    token_account_amount, u64_at, u8_at,
+    mint_decimals, token_account_amount, u64_at, u8_at,
 };
 use screenerbot::chains::solana::swaps::direct::venues::meteora_damm::{DammMarket, DammPoolState};
+use screenerbot::chains::solana::swaps::direct::venues::orca_whirlpool::{
+    candidate_tick_array_starts, decode_tick_array as orca_decode_tick_array, oracle_address,
+    tick_array_address as orca_tick_array_address, WhirlpoolMarket, WhirlpoolState,
+};
 use screenerbot::chains::solana::swaps::direct::venues::pumpfun_amm::{
     FeeTierTable, GlobalConfig, PumpAmmMarket, PumpAmmPoolState,
 };
@@ -198,6 +202,66 @@ fn clmm_market() -> ClmmMarket {
         transfer_fee_schedule(fixture.account(&state.mint_0)),
         transfer_fee_schedule(fixture.account(&state.mint_1)),
         ticks,
+    )
+}
+
+fn orca_market() -> WhirlpoolMarket {
+    let fixture = Fixture::load("orca_whirlpool_pool");
+    let program = fixture.account(&fixture.pool).owner;
+    let state = WhirlpoolState::decode(fixture.pool, fixture.data(&fixture.pool))
+        .expect("the captured Whirlpool state must decode");
+
+    // Same derivation `load()` uses: candidates in both directions, arithmetic
+    // only, since a Whirlpool carries no bitmap -- existence is learned from
+    // which accounts the fixture actually captured.
+    let mut tick_array_starts: Vec<i32> = Vec::new();
+    for zero_for_one in [true, false] {
+        for start in
+            candidate_tick_array_starts(state.tick_current, state.tick_spacing, zero_for_one)
+        {
+            if !tick_array_starts.contains(&start) {
+                tick_array_starts.push(start);
+            }
+        }
+    }
+
+    let mut ticks = Vec::new();
+    let mut available_starts: Vec<i32> = Vec::new();
+    for start in &tick_array_starts {
+        let address = orca_tick_array_address(&program, &fixture.pool, *start);
+        if let Some(account) = fixture.accounts.get(&address.to_string()) {
+            available_starts.push(*start);
+            ticks.extend(
+                orca_decode_tick_array(&account.data, *start, state.tick_spacing)
+                    .expect("a captured tick array must match the expected layout"),
+            );
+        }
+    }
+
+    let oracle = oracle_address(&program, &fixture.pool);
+    // The captured fixture has no oracle account at all -- this pool is
+    // classic (non-adaptive-fee), matching the module's own on-chain finding.
+    assert!(
+        !fixture.accounts.contains_key(&oracle.to_string()),
+        "the fixture pool is expected to be a classic Whirlpool with no oracle account; \
+         re-check the adaptive-fee refusal test if this fixture is ever refreshed"
+    );
+
+    WhirlpoolMarket::new(
+        state,
+        oracle,
+        fixture.account(&state.mint_a).owner,
+        fixture.account(&state.mint_b).owner,
+        (
+            mint_decimals(fixture.data(&state.mint_a)).expect("mint_a decimals"),
+            mint_decimals(fixture.data(&state.mint_b)).expect("mint_b decimals"),
+        ),
+        fixture.balance(&state.vault_a),
+        fixture.balance(&state.vault_b),
+        transfer_fee_schedule(fixture.account(&state.mint_a)),
+        transfer_fee_schedule(fixture.account(&state.mint_b)),
+        ticks,
+        available_starts,
     )
 }
 
@@ -462,6 +526,102 @@ fn a_clmm_quote_off_real_state_walks_ticks_and_charges_the_configured_rate() {
     // And the reverse direction must also price.
     let back = market
         .quote(&mint_1, quote.expected_out)
+        .expect("the reverse direction quotes too");
+    assert!(back.expected_out > 0);
+    assert!(
+        back.expected_out < amount_in,
+        "a round trip through two fees cannot return more than it started with"
+    );
+}
+
+#[test]
+fn the_orca_whirlpool_layout_reads_real_values_at_every_offset_it_claims() {
+    let fixture = Fixture::load("orca_whirlpool_pool");
+    let state = WhirlpoolState::decode(fixture.pool, fixture.data(&fixture.pool))
+        .expect("the captured Whirlpool must decode");
+
+    assert_eq!(
+        state.mint_a.to_string(),
+        WSOL,
+        "this fixture is a SOL/USDC pool; a wrong mint offset would not land on WSOL"
+    );
+    assert!(
+        state.tick_spacing > 0 && state.tick_spacing < 1_000,
+        "tick_spacing read from the wrong offset would not be a small positive integer, got {}",
+        state.tick_spacing
+    );
+    assert!(
+        state.fee_rate > 0,
+        "fee_rate {} is not a plausible rate over 1e6",
+        state.fee_rate
+    );
+    assert!(state.liquidity > 0, "a live deep pool must carry liquidity");
+    assert!(
+        state.sqrt_price > 0,
+        "sqrt_price must be a real Q64.64 value, not padding"
+    );
+    assert_ne!(state.vault_a, state.vault_b);
+    assert_ne!(state.mint_a, state.mint_b);
+}
+
+#[test]
+fn the_orca_whirlpool_captured_tick_arrays_hold_real_ticks_not_padding() {
+    let fixture = Fixture::load("orca_whirlpool_pool");
+    let program = fixture.account(&fixture.pool).owner;
+    let state = WhirlpoolState::decode(fixture.pool, fixture.data(&fixture.pool)).unwrap();
+
+    let mut ticks = Vec::new();
+    for zero_for_one in [true, false] {
+        for start in
+            candidate_tick_array_starts(state.tick_current, state.tick_spacing, zero_for_one)
+        {
+            let address = orca_tick_array_address(&program, &fixture.pool, start);
+            if let Some(account) = fixture.accounts.get(&address.to_string()) {
+                ticks.extend(
+                    orca_decode_tick_array(&account.data, start, state.tick_spacing).expect(
+                        "a captured tick array named by the candidate derivation must decode",
+                    ),
+                );
+            }
+        }
+    }
+
+    assert!(
+        !ticks.is_empty(),
+        "no initialised ticks were decoded from the captured arrays"
+    );
+    for tick in &ticks {
+        assert!(
+            tick.tick > -500_000 && tick.tick < 500_000,
+            "a tick decoded from padding would not be a real index, got {}",
+            tick.tick
+        );
+    }
+}
+
+#[test]
+fn an_orca_whirlpool_quote_off_real_state_walks_ticks_and_charges_the_configured_rate() {
+    let market = orca_market();
+    let (mint_a, mint_b) = market.mints();
+    let amount_in = 5_000_000; // 0.005 SOL
+
+    let quote = market
+        .quote(&mint_a, amount_in)
+        .expect("a live, captured pool quotes");
+    assert!(quote.expected_out > 0);
+    assert!(
+        quote.price_impact_pct < 5.0,
+        "0.005 SOL should barely move a pool this deep, got {}%",
+        quote.price_impact_pct
+    );
+
+    let ten_x = market
+        .quote(&mint_a, amount_in * 10)
+        .expect("a larger size still quotes");
+    assert!(ten_x.expected_out > quote.expected_out, "more in, more out");
+
+    let back = market
+        .quote(&mint_b, quote.expected_out)
         .expect("the reverse direction quotes too");
     assert!(back.expected_out > 0);
     assert!(

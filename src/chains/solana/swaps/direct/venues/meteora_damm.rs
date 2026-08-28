@@ -48,7 +48,9 @@
 //! input when token B is being spent and the output otherwise; modes 0 and 2
 //! always charge the output.
 
-use super::layout::{pubkey_at, token_account_amount, u128_at, u16_at, u32_at, u64_at, u8_at};
+use super::layout::{
+    mint_decimals, pubkey_at, token_account_amount, u128_at, u16_at, u32_at, u64_at, u8_at,
+};
 use super::math::{mul_div_ceil, mul_div_floor};
 use super::token2022::{transfer_fee_schedule, TransferFeeSchedule};
 use crate::chains::solana::constants::METEORA_DAMM_PROGRAM_ID;
@@ -202,11 +204,6 @@ impl PoolVenue for MeteoraDammVenue {
             current_point,
         }))
     }
-}
-
-/// Decimals out of an SPL mint account, a layout both token programmes share.
-fn mint_decimals(data: &[u8]) -> Option<u8> {
-    u8_at(data, 44)
 }
 
 /// The base-fee union, already resolved to the one variant its tag selects.

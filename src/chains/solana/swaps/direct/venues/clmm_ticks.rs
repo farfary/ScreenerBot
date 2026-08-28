@@ -24,7 +24,9 @@
 //! one fails the instruction on deserialisation.
 
 use super::layout::{i128_at, i32_at, pubkey_at, u128_at, u64_at};
+use super::math::{ceil_div, mul_div_ceil, mul_div_floor};
 use crate::chains::solana::solana_sdk::pubkey::Pubkey;
+use crate::chains::solana::swaps::direct::error::{DirectSwapError, DirectSwapResult};
 
 /// Ticks stored per tick-array account.
 pub const TICK_ARRAY_SIZE: i32 = 60;
@@ -323,6 +325,269 @@ impl TickArrayBitmap {
         }
         found
     }
+}
+
+// ============================================================================
+// SHARED TICK-WALK STEP MATH
+// ============================================================================
+//
+// Everything below is the constant-liquidity, Q64.64 step arithmetic that a
+// concentrated-liquidity swap performs between two initialised ticks. It is
+// program-agnostic -- Raydium CLMM and Orca Whirlpool both implement the same
+// Uniswap-v3-style curve over the same sqrt-price representation -- so it is
+// lifted here rather than duplicated per venue. A venue's own `walk()` still
+// owns its fee rate, its tick source and its pool identity for error
+// reporting; only the per-step formulas live here.
+
+/// The initialised ticks a walk may cross, in the order it will meet them:
+/// descending from (and including) the current tick when selling the "0"/"A"
+/// side (price falling), ascending above it when selling the "1"/"B" side
+/// (price rising). `ticks` must already be sorted ascending by `tick`.
+pub fn ticks_ahead(
+    ticks: &[InitializedTick],
+    tick_current: i32,
+    zero_for_one: bool,
+) -> Vec<InitializedTick> {
+    if zero_for_one {
+        ticks
+            .iter()
+            .rev()
+            .filter(|t| t.tick <= tick_current)
+            .copied()
+            .collect()
+    } else {
+        ticks
+            .iter()
+            .filter(|t| t.tick > tick_current)
+            .copied()
+            .collect()
+    }
+}
+
+/// The output produced by moving the price at constant `liquidity` from
+/// `sqrt_from` to `sqrt_to`, rounded DOWN -- the pool never owes more than it
+/// computed.
+pub fn output_for_move(
+    zero_for_one: bool,
+    liquidity: u128,
+    sqrt_from: u128,
+    sqrt_to: u128,
+) -> DirectSwapResult<u64> {
+    let overflow = || DirectSwapError::QuoteMath {
+        detail: "the concentrated-liquidity output overflowed 256 bits".to_owned(),
+    };
+    let out = if zero_for_one {
+        mul_div_floor(liquidity, sqrt_from.saturating_sub(sqrt_to), 1u128 << 64)
+            .ok_or_else(overflow)?
+    } else {
+        let numerator = liquidity
+            .checked_shl(64)
+            .ok_or_else(|| DirectSwapError::QuoteMath {
+                detail: "liquidity is too large to scale to Q64.64".to_owned(),
+            })?;
+        let spread = sqrt_to.saturating_sub(sqrt_from);
+        let intermediate = mul_div_floor(numerator, spread, sqrt_to).ok_or_else(overflow)?;
+        intermediate / sqrt_from.max(1)
+    };
+    Ok(out.min(u64::MAX as u128) as u64)
+}
+
+/// The sqrt price reached by spending `amount_in` (already net of the fee) at
+/// constant `liquidity` from `sqrt_price` -- the partial-step case, when the
+/// input runs out before the next tick.
+pub fn next_sqrt_price_from_input(
+    zero_for_one: bool,
+    liquidity: u128,
+    sqrt_price: u128,
+    amount_in: u128,
+) -> DirectSwapResult<u128> {
+    let overflow = || DirectSwapError::QuoteMath {
+        detail: "the concentrated-liquidity step overflowed 256 bits".to_owned(),
+    };
+    if zero_for_one {
+        let numerator = liquidity
+            .checked_shl(64)
+            .ok_or_else(|| DirectSwapError::QuoteMath {
+                detail: "liquidity is too large to scale to Q64.64".to_owned(),
+            })?;
+        let product = amount_in.checked_mul(sqrt_price).ok_or_else(overflow)?;
+        let denominator = numerator.checked_add(product).ok_or_else(overflow)?;
+        mul_div_ceil(numerator, sqrt_price, denominator).ok_or_else(overflow)
+    } else {
+        let delta = mul_div_floor(amount_in, 1u128 << 64, liquidity).ok_or_else(overflow)?;
+        sqrt_price.checked_add(delta).ok_or_else(overflow)
+    }
+}
+
+/// The amount of the input side needed to move the price EXACTLY from
+/// `sqrt_from` to `sqrt_to` at constant `liquidity`, rounded UP.
+///
+/// Understating this would cross a tick boundary -- and apply its
+/// `liquidity_net` -- without having paid for reaching it, which is a step the
+/// programme never takes.
+pub fn input_for_move(
+    zero_for_one: bool,
+    liquidity: u128,
+    sqrt_from: u128,
+    sqrt_to: u128,
+) -> DirectSwapResult<u128> {
+    let overflow = || DirectSwapError::QuoteMath {
+        detail: "the concentrated-liquidity input overflowed 256 bits".to_owned(),
+    };
+    if zero_for_one {
+        // Side 0/A in, price falling: sqrt_from (high) > sqrt_to (low).
+        if sqrt_from <= sqrt_to {
+            return Ok(0);
+        }
+        let numerator = liquidity
+            .checked_shl(64)
+            .ok_or_else(|| DirectSwapError::QuoteMath {
+                detail: "liquidity is too large to scale to Q64.64".to_owned(),
+            })?;
+        let spread = sqrt_from - sqrt_to;
+        let step1 = mul_div_ceil(numerator, spread, sqrt_from).ok_or_else(overflow)?;
+        Ok(ceil_div(step1, sqrt_to.max(1)))
+    } else {
+        // Side 1/B in, price rising: sqrt_to (high) > sqrt_from (low).
+        if sqrt_to <= sqrt_from {
+            return Ok(0);
+        }
+        let spread = sqrt_to - sqrt_from;
+        mul_div_ceil(liquidity, spread, 1u128 << 64).ok_or_else(overflow)
+    }
+}
+
+/// Apply a crossed tick's `liquidity_net` to `liquidity`: ADDED when the price
+/// is moving up (`!zero_for_one`), SUBTRACTED when it is moving down --
+/// `liquidity_net` is always defined for an upward crossing, so the downward
+/// direction negates it.
+pub fn cross_tick(
+    pool: Pubkey,
+    liquidity: u128,
+    tick: &InitializedTick,
+    zero_for_one: bool,
+) -> DirectSwapResult<u128> {
+    let delta = if zero_for_one {
+        -tick.liquidity_net
+    } else {
+        tick.liquidity_net
+    };
+    liquidity
+        .checked_add_signed(delta)
+        .ok_or(DirectSwapError::InsufficientLiquidity {
+            pool,
+            amount_in: 0,
+            detail: format!(
+                "crossing tick {} would take pool liquidity negative -- the loaded tick data \
+                 is inconsistent with the pool's own reported liquidity",
+                tick.tick
+            ),
+        })
+}
+
+/// Walk a swap tick by tick from `sqrt_price`/`liquidity`, exactly as a
+/// concentrated-liquidity programme's own loop does: constant liquidity
+/// between initialised ticks, a fee charged per step, `liquidity_net` applied
+/// at every crossing. `amount_in` is already net of any Token-2022 transfer
+/// fee on the input -- it is what the pool itself receives to swap and to fee.
+///
+/// `candidates` must already be ordered the way the walk will meet them (see
+/// [`ticks_ahead`]). Returns `(total_output, total_lp_fee, ending_sqrt_price)`.
+/// Refuses, rather than approximates, once the walk would cross beyond the
+/// last candidate tick.
+#[allow(clippy::too_many_arguments)]
+pub fn walk_ticks(
+    pool: Pubkey,
+    candidates: &[InitializedTick],
+    mut liquidity: u128,
+    mut sqrt_price: u128,
+    fee_rate: u64,
+    fee_rate_denominator: u64,
+    zero_for_one: bool,
+    amount_in: u64,
+) -> DirectSwapResult<(u64, u64, u128)> {
+    let rate = fee_rate as u128;
+    let denom = fee_rate_denominator as u128;
+    if rate >= denom {
+        return Err(DirectSwapError::QuoteMath {
+            detail: "the trade fee rate is not below its own denominator".to_owned(),
+        });
+    }
+
+    let mut remaining = amount_in as u128;
+    let mut total_out: u128 = 0;
+    let mut total_fee: u128 = 0;
+    let mut candidates = candidates.iter();
+
+    while remaining > 0 {
+        if liquidity == 0 || sqrt_price == 0 {
+            return Err(DirectSwapError::InsufficientLiquidity {
+                pool,
+                amount_in,
+                detail: "liquidity was exhausted mid-walk".to_owned(),
+            });
+        }
+
+        let Some(next_tick) = candidates.next() else {
+            return Err(DirectSwapError::InsufficientLiquidity {
+                pool,
+                amount_in,
+                detail: "the size travels further than the loaded tick arrays cover".to_owned(),
+            });
+        };
+        let target_sqrt =
+            get_sqrt_price_at_tick(next_tick.tick).ok_or_else(|| DirectSwapError::QuoteMath {
+                detail: format!(
+                    "tick {} lies outside the programme's own range",
+                    next_tick.tick
+                ),
+            })?;
+
+        let amount_to_target = input_for_move(zero_for_one, liquidity, sqrt_price, target_sqrt)?;
+        let gross_needed = if amount_to_target == 0 {
+            0
+        } else {
+            mul_div_ceil(amount_to_target, denom, denom - rate).ok_or(
+                DirectSwapError::QuoteMath {
+                    detail: "the per-step fee grossing-up overflowed 256 bits".to_owned(),
+                },
+            )?
+        };
+
+        if gross_needed <= remaining {
+            let fee = (gross_needed - amount_to_target).min(u64::MAX as u128);
+            let out = output_for_move(zero_for_one, liquidity, sqrt_price, target_sqrt)?;
+            total_out += out as u128;
+            total_fee += fee;
+            remaining -= gross_needed;
+            sqrt_price = target_sqrt;
+            liquidity = cross_tick(pool, liquidity, next_tick, zero_for_one)?;
+        } else {
+            let swappable = mul_div_floor(remaining, denom - rate, denom).ok_or(
+                DirectSwapError::QuoteMath {
+                    detail: "the per-step net-of-fee amount overflowed 256 bits".to_owned(),
+                },
+            )?;
+            let fee = remaining - swappable;
+            if swappable == 0 {
+                total_fee += fee;
+                break;
+            }
+            let sqrt_next =
+                next_sqrt_price_from_input(zero_for_one, liquidity, sqrt_price, swappable)?;
+            let out = output_for_move(zero_for_one, liquidity, sqrt_price, sqrt_next)?;
+            total_out += out as u128;
+            total_fee += fee;
+            remaining = 0;
+            sqrt_price = sqrt_next;
+        }
+    }
+
+    Ok((
+        total_out.min(u64::MAX as u128) as u64,
+        total_fee.min(u64::MAX as u128) as u64,
+        sqrt_price,
+    ))
 }
 
 #[cfg(test)]
