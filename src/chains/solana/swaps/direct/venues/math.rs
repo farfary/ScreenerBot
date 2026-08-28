@@ -130,9 +130,65 @@ pub fn mul_div_ceil(a: u128, b: u128, denominator: u128) -> Option<u128> {
     }
 }
 
+/// `a * b / 2^128`, rounded DOWN. Dividing by exactly `2^128` (rather than an
+/// arbitrary `u128` denominator) is just the high limb of the 256-bit product,
+/// with no long division needed -- used by a double-Q64.64 liquidity value
+/// (liquidity itself carrying the same 2^64 scale as the sqrt price it is
+/// multiplied against, so the combined scale is 2^128, which does not fit in a
+/// `u128` denominator at all).
+pub fn mul_shr128_floor(a: u128, b: u128) -> u128 {
+    mul_full(a, b).0
+}
+
+/// `a * b / 2^128`, rounded UP.
+pub fn mul_shr128_ceil(a: u128, b: u128) -> u128 {
+    let (high, low) = mul_full(a, b);
+    if low == 0 {
+        high
+    } else {
+        high.saturating_add(1)
+    }
+}
+
+/// `(numerator << 128) / denominator`, rounded DOWN, i.e. `numerator * 2^128 /
+/// denominator` without ever materialising `2^128` itself (which does not fit
+/// in a `u128`). `numerator << 128` is exactly the 256-bit value whose high
+/// limb is `numerator` and whose low limb is zero.
+pub fn shl128_div_floor(numerator: u128, denominator: u128) -> Option<u128> {
+    div_full(numerator, 0, denominator)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mul_shr128_of_operands_below_the_scale_is_zero() {
+        // 5 * 3 = 15, far short of 2^128, so shifting right 128 gives 0.
+        assert_eq!(mul_shr128_floor(5, 3), 0);
+        assert_eq!(mul_shr128_ceil(5, 3), 1, "any non-zero remainder rounds up");
+    }
+
+    #[test]
+    fn shl128_div_recovers_a_plain_ratio_when_it_divides_evenly() {
+        // The quotient must itself fit in a u128, so the denominator has to be
+        // large relative to the numerator -- exactly DBC's real shape, where
+        // the numerator is a raw swap amount (well under 2^64) and the
+        // denominator is a double-Q64.64 liquidity value (over 2^100).
+        let denominator = 1u128 << 100;
+        let numerator = 5u128;
+        let floor = shl128_div_floor(numerator, denominator).expect("fits");
+        assert_eq!(floor, numerator << 28, "(5 << 128) / 2^100 == 5 << 28");
+    }
+
+    #[test]
+    fn mul_shr128_ceil_matches_floor_on_an_exact_product() {
+        // 2^64 * 2^64 == 2^128 exactly, so shifting right 128 loses nothing.
+        let a = 1u128 << 64;
+        let b = 1u128 << 64;
+        assert_eq!(mul_shr128_floor(a, b), mul_shr128_ceil(a, b));
+        assert_eq!(mul_shr128_floor(a, b), 1);
+    }
 
     #[test]
     fn a_fee_always_rounds_up_so_the_pool_is_never_short() {

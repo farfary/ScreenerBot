@@ -13,6 +13,7 @@ pub mod clmm_ticks;
 pub mod layout;
 pub mod math;
 pub mod meteora_damm;
+pub mod meteora_dbc;
 pub mod meteora_dlmm;
 pub mod orca_whirlpool;
 pub mod pumpfun_amm;

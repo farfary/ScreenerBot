@@ -83,6 +83,21 @@ const DLMM_SOL_USDC: &str = "5rCf1DM8LjKTw4YqhnoLcngyZYeNnQqztScTogYHAS6";
 /// exercises.
 const DLMM_NO_BITMAP_EXTENSION_POOL: &str = "46CgAPEz8V2e9UL5PDa3JNWFW6sk7uFCj7TjdB3XbKD3";
 
+/// Meteora DBC (bonding curve), `collect_fee_mode = 0` (`QuoteToken`).
+/// Verified not-migrated with a real (~2.5 SOL of 85 SOL) buffer below its
+/// own `migration_quote_threshold` when this venue was built -- a DBC pool
+/// can cross that threshold and migrate within minutes of real trading, so
+/// re-verify on chain before trusting this constant again (see
+/// `meteora_dbc.rs`'s module docs for the pool that migrated out from under
+/// this venue's first fixture attempt).
+const DBC_QUOTE_FEE_POOL: &str = "J1YvC19EHXGjmthszo7sM5FwL3mn3qjS8Bf3zTMjeX2T";
+
+/// Meteora DBC, `collect_fee_mode = 1` (`OutputToken`) -- the OTHER branch of
+/// `DbcMarket::fee_on_input`. Essentially untraded when chosen (near-zero
+/// `quote_reserve`), so it exercises the branch and the layout rather than
+/// depth; re-verify on chain before trusting this constant too.
+const DBC_OUTPUT_FEE_POOL: &str = "F71peWVSaCjEL5bsMJMrhguuEN7K8vhiKvFN6tf91Ymk";
+
 const WSOL: &str = "So11111111111111111111111111111111111111112";
 const USDC: &str = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 
@@ -427,6 +442,39 @@ async fn meteora_dlmm_accepts_a_minimum_sol_to_usdc_swap() {
 async fn a_meteora_dlmm_quote_is_exact_to_the_raw_unit() {
     let _guard = common::isolated_env();
     simulate_with_no_slippage_room(DLMM_SOL_USDC, WSOL, USDC, MINIMUM_SWAP_LAMPORTS).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "live network"]
+async fn meteora_dbc_accepts_a_minimum_sol_buy_on_the_quote_token_fee_pool() {
+    let _guard = common::isolated_env();
+    let token = paired_token(DBC_QUOTE_FEE_POOL).await;
+    simulate_direction(DBC_QUOTE_FEE_POOL, WSOL, &token, MINIMUM_SWAP_LAMPORTS).await;
+}
+
+/// The zero-slippage exactness proof for Meteora DBC: with `min_out` set to
+/// exactly the quote, a node accepting the swap proves the double-Q64.64
+/// curve walk (see `meteora_dbc.rs`'s module docs for why the scale is
+/// double, established by replaying a real transaction) is not over-stating
+/// the output by even one raw unit.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "live network"]
+async fn a_meteora_dbc_quote_is_exact_to_the_raw_unit() {
+    let _guard = common::isolated_env();
+    let token = paired_token(DBC_QUOTE_FEE_POOL).await;
+    simulate_with_no_slippage_room(DBC_QUOTE_FEE_POOL, WSOL, &token, MINIMUM_SWAP_LAMPORTS).await;
+}
+
+/// `collect_fee_mode = 1` (`OutputToken`) is the OTHER branch of
+/// `DbcMarket::fee_on_input` -- the quote-fee pool above always charges
+/// mode 0. This pool was essentially untraded when chosen, so it proves the
+/// branch and the layout, not depth.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "live network"]
+async fn meteora_dbc_accepts_a_minimum_sol_buy_on_the_output_token_fee_pool() {
+    let _guard = common::isolated_env();
+    let token = paired_token(DBC_OUTPUT_FEE_POOL).await;
+    simulate_direction(DBC_OUTPUT_FEE_POOL, WSOL, &token, MINIMUM_SWAP_LAMPORTS).await;
 }
 
 /// `bin_array_bitmap_extension` is an Anchor OPTIONAL account that most DLMM
@@ -823,6 +871,19 @@ async fn a_real_round_trip_through_meteora_dlmm_settles_and_pays_the_platform_fe
         return;
     };
     round_trip(&ctx, DLMM_SOL_USDC, USDC).await;
+}
+
+/// Mirrors the pattern above for Meteora DBC. Never run automatically --
+/// `SB_TEST_MAINNET_SWAP` is never set in this repo's own test runs.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "spends real SOL"]
+async fn a_real_round_trip_through_meteora_dbc_settles_and_pays_the_platform_fee() {
+    let _guard = common::isolated_env();
+    let Some(ctx) = common::require_mainnet() else {
+        return;
+    };
+    let token = paired_token(DBC_QUOTE_FEE_POOL).await;
+    round_trip(&ctx, DBC_QUOTE_FEE_POOL, &token).await;
 }
 
 /// The exactness proof for the native-SOL plan change: the buy leg wraps only

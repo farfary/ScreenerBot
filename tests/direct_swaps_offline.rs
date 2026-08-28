@@ -31,6 +31,9 @@ use screenerbot::chains::solana::swaps::direct::venues::layout::{
     mint_decimals, token_account_amount, u64_at, u8_at,
 };
 use screenerbot::chains::solana::swaps::direct::venues::meteora_damm::{DammMarket, DammPoolState};
+use screenerbot::chains::solana::swaps::direct::venues::meteora_dbc::{
+    DbcMarket, PoolConfigState as DbcPoolConfigState, VirtualPoolState,
+};
 use screenerbot::chains::solana::swaps::direct::venues::meteora_dlmm::{
     bin_array_address, bitmap_extension_address as dlmm_bitmap_extension_address,
     event_authority_address, oracle_address as dlmm_oracle_address, DlmmMarket, LbPairState,
@@ -1495,5 +1498,299 @@ fn a_pump_legacy_swap_instruction_names_the_curve_creator_vault_and_trailing_buy
         17,
         "14 IDL accounts + bonding_curve_v2 (this fixture's curve has a creator) + the \
          undocumented buyback pair"
+    );
+}
+
+// ============================================================================
+// METEORA DBC
+// ============================================================================
+
+fn dbc_market() -> DbcMarket {
+    let fixture = Fixture::load("meteora_dbc_pool");
+    let state = VirtualPoolState::decode(fixture.pool, fixture.data(&fixture.pool))
+        .expect("the captured VirtualPool must decode");
+    let config = DbcPoolConfigState::decode(fixture.data(&state.config))
+        .expect("the captured PoolConfig must decode");
+
+    let base_mint = fixture.account(&state.base_mint);
+    let quote_mint = fixture.account(&config.quote_mint);
+
+    DbcMarket::new(
+        state,
+        config,
+        mint_decimals(&base_mint.data).expect("base mint carries a decimals byte"),
+        mint_decimals(&quote_mint.data).expect("quote mint carries a decimals byte"),
+        base_mint.owner,
+        quote_mint.owner,
+        transfer_fee_schedule(base_mint),
+        transfer_fee_schedule(quote_mint),
+        fixture.balance(&state.base_vault),
+        fixture.balance(&state.quote_vault),
+    )
+}
+
+/// The second fixture: a different pool whose config carries
+/// `collect_fee_mode = 1` (`OutputToken`) rather than the primary fixture's
+/// `0` (`QuoteToken`) -- the other branch of `DbcMarket::fee_on_input`.
+fn dbc_output_fee_market() -> DbcMarket {
+    let fixture = Fixture::load("meteora_dbc_pool_output_fee");
+    let state = VirtualPoolState::decode(fixture.pool, fixture.data(&fixture.pool))
+        .expect("the captured VirtualPool must decode");
+    let config = DbcPoolConfigState::decode(fixture.data(&state.config))
+        .expect("the captured PoolConfig must decode");
+
+    let base_mint = fixture.account(&state.base_mint);
+    let quote_mint = fixture.account(&config.quote_mint);
+
+    DbcMarket::new(
+        state,
+        config,
+        mint_decimals(&base_mint.data).expect("base mint carries a decimals byte"),
+        mint_decimals(&quote_mint.data).expect("quote mint carries a decimals byte"),
+        base_mint.owner,
+        quote_mint.owner,
+        transfer_fee_schedule(base_mint),
+        transfer_fee_schedule(quote_mint),
+        fixture.balance(&state.base_vault),
+        fixture.balance(&state.quote_vault),
+    )
+}
+
+#[test]
+fn the_dbc_layout_reads_real_values_at_every_offset_it_claims() {
+    let fixture = Fixture::load("meteora_dbc_pool");
+    let state = VirtualPoolState::decode(fixture.pool, fixture.data(&fixture.pool))
+        .expect("the captured VirtualPool must decode");
+    let config = DbcPoolConfigState::decode(fixture.data(&state.config))
+        .expect("the captured PoolConfig must decode");
+
+    assert_eq!(
+        config.quote_mint.to_string(),
+        WSOL,
+        "this fixture is a SOL-quoted pool; a wrong mint offset would not land on WSOL"
+    );
+    assert_ne!(state.base_mint, config.quote_mint);
+    assert_ne!(state.base_vault, state.quote_vault);
+    assert!(!state.is_migrated, "this fixture was chosen pre-migration");
+    assert!(
+        state.sqrt_price > 0,
+        "a real pool must carry a nonzero sqrt price"
+    );
+    assert!(
+        state.sqrt_price >= config.sqrt_start_price,
+        "the pool's current price can never sit below its own curve floor"
+    );
+    assert!(
+        config.cliff_fee_numerator > 0 && config.cliff_fee_numerator < 1_000_000_000,
+        "a plausible fee rate below its own 1e9 denominator, got {}",
+        config.cliff_fee_numerator
+    );
+    assert!(
+        config.collect_fee_mode == 0 || config.collect_fee_mode == 1,
+        "collect_fee_mode is a two-value enum on this venue, got {}",
+        config.collect_fee_mode
+    );
+    assert!(
+        !config.scheduler_active(),
+        "this fixture was chosen flat-fee"
+    );
+    assert!(
+        !config.dynamic_fee_initialized,
+        "this fixture was chosen flat-fee"
+    );
+}
+
+#[test]
+fn the_dbc_curve_points_are_real_segments_not_padding() {
+    let fixture = Fixture::load("meteora_dbc_pool");
+    let state = VirtualPoolState::decode(fixture.pool, fixture.data(&fixture.pool))
+        .expect("the captured VirtualPool must decode");
+    let config = DbcPoolConfigState::decode(fixture.data(&state.config))
+        .expect("the captured PoolConfig must decode");
+
+    let points = config.curve_points();
+    assert!(
+        points.len() >= 2,
+        "this fixture's pool was chosen for carrying at least two real segments, got {}",
+        points.len()
+    );
+
+    // Ascending sqrt price, each one strictly past the last -- a decode that
+    // wandered into the padding tail would produce a zero or a value that
+    // does not keep climbing.
+    let mut previous = config.sqrt_start_price;
+    for (sqrt_price, liquidity) in &points {
+        assert!(
+            *sqrt_price > previous,
+            "curve points must strictly increase: {sqrt_price} did not exceed {previous}"
+        );
+        assert!(*liquidity > 0, "a real segment carries non-zero liquidity");
+        previous = *sqrt_price;
+    }
+
+    // The LAST point's price must sit at, or extremely close to, the pool's
+    // own migration price -- the field `migration_sqrt_price` at a completely
+    // different byte offset (280 vs 408), so a match here is not a
+    // coincidence of a shared offset. Not exact equality: on this fixture the
+    // two differ by about 1 part in 10^12, evidently independent roundings of
+    // the same target performed when the config was created, not a decode
+    // error (an offset error produces a wildly different value, not an
+    // agreement to eleven significant figures).
+    let migration_sqrt_price = screenerbot::chains::solana::swaps::direct::venues::layout::u128_at(
+        fixture.data(&state.config),
+        280,
+    )
+    .expect("migration_sqrt_price is at offset 280");
+    let last = points.last().expect("checked non-empty above").0;
+    let diff = last.abs_diff(migration_sqrt_price);
+    assert!(
+        diff * 1_000_000_000 < migration_sqrt_price,
+        "the curve's last point ({last}) must sit within 1 part in 10^9 of \
+         migration_sqrt_price ({migration_sqrt_price}), got a difference of {diff}"
+    );
+}
+
+#[test]
+fn a_dbc_quote_off_real_state_charges_a_fee_and_is_monotonic() {
+    let market = dbc_market();
+    let (base, quote) = market.mints();
+    let amount_in = 5_000_000; // 0.005 SOL
+
+    let buy = market
+        .quote(&quote, amount_in)
+        .expect("a live, captured pool quotes");
+    assert!(buy.expected_out > 0);
+    assert!(
+        buy.lp_fee > 0,
+        "a real trade against a live pool must pay a nonzero fee"
+    );
+
+    let ten_x = market
+        .quote(&quote, amount_in * 10)
+        .expect("a larger size still quotes");
+    assert!(ten_x.expected_out > buy.expected_out, "more in, more out");
+
+    let sell = market
+        .quote(&base, buy.expected_out)
+        .expect("the reverse direction quotes too");
+    assert!(sell.expected_out > 0);
+    assert!(
+        sell.expected_out < amount_in,
+        "a round trip through two platform-equivalent fees cannot return more than it started \
+         with"
+    );
+}
+
+#[test]
+fn a_dbc_quote_orients_from_the_input_mint_not_a_hardcoded_side() {
+    let market = dbc_market();
+    let (base, quote) = market.mints();
+
+    let buy = market.quote(&quote, 5_000_000).expect("buy quotes");
+    // Base has far more raw units per human token than quote does at this
+    // pool's price, so a base-side sell needs a proportionally larger raw
+    // amount to move the curve by a measurable amount.
+    let sell = market.quote(&base, 5_000_000_000).expect("sell quotes");
+
+    // A buy returns base units, a sell returns quote units -- if orientation
+    // were swapped, one of these would be quoting against the wrong reserve
+    // and the two directions would not both succeed independently.
+    assert!(buy.expected_out > 0);
+    assert!(sell.expected_out > 0);
+    assert!(market.trades(&quote, &base));
+    assert!(market.trades(&base, &quote));
+    assert!(!market.trades(&base, &base));
+}
+
+#[test]
+fn the_output_token_collect_fee_mode_is_a_real_second_pool_not_a_toy() {
+    let fixture = Fixture::load("meteora_dbc_pool_output_fee");
+    let state = VirtualPoolState::decode(fixture.pool, fixture.data(&fixture.pool))
+        .expect("the captured VirtualPool must decode");
+    let config = DbcPoolConfigState::decode(fixture.data(&state.config))
+        .expect("the captured PoolConfig must decode");
+    assert_eq!(
+        config.collect_fee_mode, 1,
+        "this fixture was chosen for exercising OutputToken, the OTHER branch of fee_on_input"
+    );
+
+    // A buy on THIS pool charges the fee on the OUTPUT (base) leg, not the
+    // input -- the opposite of the primary fixture's QuoteToken pool.
+    let market = dbc_output_fee_market();
+    let (_, quote) = market.mints();
+    let buy = market.quote(&quote, 5_000_000);
+    // This pool is essentially untouched (chosen for the branch, not depth),
+    // so a tiny size may legitimately find no liquidity; either a real quote
+    // or an explicit InsufficientLiquidity is acceptable here, a panic is not.
+    match buy {
+        Ok(q) => assert!(q.expected_out > 0),
+        Err(screenerbot::chains::solana::swaps::direct::error::DirectSwapError::InsufficientLiquidity { .. }) => {}
+        Err(e) => panic!("unexpected error against a real captured pool: {e:?}"),
+    }
+}
+
+#[test]
+fn a_dbc_swap_instruction_carries_the_confirmed_account_order_and_discriminator() {
+    let market = dbc_market();
+    let (base, quote) = market.mints();
+    let owner = Pubkey::new_unique();
+    let ata_in = Pubkey::new_unique();
+    let ata_out = Pubkey::new_unique();
+
+    let buy = market
+        .swap_instruction(
+            &SwapAccounts {
+                owner,
+                input_mint: quote,
+                output_mint: base,
+                input_token_account: ata_in,
+                output_token_account: ata_out,
+            },
+            5_000_000,
+            0,
+        )
+        .expect("builds against real state");
+
+    assert_eq!(
+        buy.data[0..8],
+        [248, 198, 158, 145, 225, 117, 135, 200],
+        "sha256(\"global:swap\")[..8], confirmed against two live mainnet swaps"
+    );
+    assert_eq!(buy.accounts.len(), 15, "the confirmed live account count");
+    assert_eq!(
+        buy.accounts[0].pubkey.to_string(),
+        "FhVo3mqL8PW5pH5U2CN4XE33DokiyZnUwuGpH2hmHLuM",
+        "pool_authority is a fixed address, not a derived PDA slot"
+    );
+    assert_eq!(buy.accounts[3].pubkey, ata_in, "input_token_account");
+    assert_eq!(buy.accounts[4].pubkey, ata_out, "output_token_account");
+    assert_eq!(buy.accounts[9].pubkey, owner);
+    assert!(buy.accounts[9].is_signer);
+    assert_eq!(
+        buy.accounts[12].pubkey.to_string(),
+        "dbcij3LWUppWqq96dh6gJWwBifmcGfLSB5D4DuSMaqN",
+        "an absent referral_token_account is spelled as the programme's own id"
+    );
+
+    let sell = market
+        .swap_instruction(
+            &SwapAccounts {
+                owner,
+                input_mint: base,
+                output_mint: quote,
+                input_token_account: ata_in,
+                output_token_account: ata_out,
+            },
+            1_000_000,
+            0,
+        )
+        .expect("builds against real state");
+    assert_eq!(
+        sell.accounts[3].pubkey, ata_in,
+        "sell spends the input account's base tokens"
+    );
+    assert_eq!(
+        sell.accounts[4].pubkey, ata_out,
+        "sell credits the output account's quote"
     );
 }
