@@ -57,6 +57,8 @@
      from the first line, a label that wraps keeps the control on line one.
      A row that centres its own children (an icon/card row) cancels the offset
      with --control-line-offset: 0px; nothing else may nudge a control. */
+  --control-row-gap: var(--spacing-sm);
+  --control-group-gap: var(--spacing-lg);
   --control-line-height: 1.45;
   --control-text-ascent: 0.969;
   --control-text-descent: 0.241;
@@ -743,7 +745,7 @@ input[type="radio"]:disabled {
 ) {
   display: inline-flex;
   align-items: flex-start;
-  gap: var(--spacing-sm);
+  gap: var(--control-row-gap);
   font-size: var(--input-font-size);
   color: var(--text-secondary);
   line-height: var(--control-line-height);
@@ -773,11 +775,14 @@ input[type="radio"]:disabled {
 }
 
 /* Several control rows side by side, wrapping as a block, with any help text
-   below them on its own line. */
+   below them on its own line. Rows must separate from each other by more than a
+   control separates from its own text, or three checkboxes on one line read as
+   one run of words: the column gap is the group's, the row gap only stacks
+   wrapped lines. */
 .checkbox-group {
   flex-flow: row wrap;
   align-items: flex-start;
-  gap: var(--spacing-sm);
+  gap: var(--control-row-gap) var(--control-group-gap);
 }
 
 .checkbox-group > label {

@@ -242,17 +242,6 @@
   box-shadow: 0 0 0 3px var(--danger-alpha-20);
 }
 
-/* Standalone checkbox group (not in form-row) */
-.tools-page .form-group.checkbox-group {
-  flex-flow: row wrap;
-  align-items: flex-start;
-  gap: var(--spacing-sm);
-}
-
-.tools-page .form-group.checkbox-group > label {
-  flex: 0 0 auto;
-}
-
 .tools-page .form-group.checkbox-group > small {
   flex: 1 1 100%;
   margin-top: 0;
