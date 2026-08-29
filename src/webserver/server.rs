@@ -197,12 +197,12 @@ pub async fn start_server(port_override: Option<u16>, host_override: Option<Stri
     );
 
     // Create application state with AI engine if enabled
-    let ai_engine = if crate::config::with_config(|cfg| cfg.ai.enabled) {
-        crate::ai::try_get_ai_engine()
+    let analysis_engine = if crate::config::with_config(|cfg| cfg.ai.enabled) {
+        crate::llm_analysis::try_get_analysis_engine()
     } else {
         None
     };
-    let state = Arc::new(AppState::with_ai_engine(ai_engine));
+    let state = Arc::new(AppState::with_analysis_engine(analysis_engine));
 
     // Set global app state
     crate::webserver::state::set_global_app_state(Arc::clone(&state));
@@ -250,7 +250,7 @@ pub async fn start_server(port_override: Option<u16>, host_override: Option<Stri
     // Write MCP connection file for external tool integration
     // This allows the ScreenerBot MCP server and other tools to auto-discover
     // the running instance without manual configuration
-    write_mcp_connection_file(port, is_gui);
+    write_agent_runtime_file(port, is_gui);
 
     // Warm the boost feed in the background so the first dashboard paint already
     // knows which tokens are boosted, instead of blocking on the remote fetch and
@@ -278,7 +278,7 @@ pub async fn start_server(port_override: Option<u16>, host_override: Option<Stri
     logger::debug(LogTag::Webserver, "Webserver stopped gracefully");
 
     // Clean up MCP connection file
-    cleanup_mcp_connection_file();
+    cleanup_agent_runtime_file();
 
     Ok(())
 }
@@ -499,63 +499,85 @@ pub async fn test_port_binding(
 }
 
 // =============================================================================
-// MCP CONNECTION FILE
+// AGENT RUNTIME FILE
 // =============================================================================
 
-/// Returns the path for the MCP connection file.
-fn mcp_connection_file_path() -> std::path::PathBuf {
-    crate::paths::get_data_directory().join("mcp.json")
+/// Path of the agent runtime metadata file. It advertises the local webserver
+/// URL/port/pid to co-located tooling. It carries NO security token and NO
+/// secret — it is owner-readable only, but its contents are not sensitive.
+fn agent_runtime_file_path() -> std::path::PathBuf {
+    crate::paths::get_data_directory().join("agent-runtime.json")
 }
 
-/// Write MCP connection file so external tools (like @screenerbot/mcp) can
-/// auto-discover the running bot's URL and security token.
-fn write_mcp_connection_file(port: u16, is_gui: bool) {
-    let token = if is_gui {
-        global::get_security_token().unwrap_or_default()
-    } else {
-        String::new()
-    };
-
+/// Write the agent runtime metadata file atomically. On Unix the temp file is
+/// created with `0600` before it is written or renamed, so it is never briefly
+/// group/world-readable; the mode is preserved across the rename. On other
+/// platforms the standard atomic write is used.
+fn write_agent_runtime_file(port: u16, is_gui: bool) {
     let content = serde_json::json!({
         "url": format!("http://127.0.0.1:{}", port),
         "port": port,
-        "token": token,
         "pid": std::process::id(),
         "gui_mode": is_gui,
         "version": env!("CARGO_PKG_VERSION"),
     });
 
-    let path = mcp_connection_file_path();
-    match std::fs::write(
-        &path,
-        serde_json::to_string_pretty(&content).unwrap_or_default(),
-    ) {
+    let path = agent_runtime_file_path();
+    let temporary = path.with_extension("json.tmp");
+    let write_result = (|| -> std::io::Result<()> {
+        use std::io::Write;
+        let mut options = std::fs::OpenOptions::new();
+        options.write(true).create(true).truncate(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let mut file = options.open(&temporary)?;
+        file.write_all(
+            serde_json::to_string_pretty(&content)
+                .unwrap_or_default()
+                .as_bytes(),
+        )?;
+        file.sync_all()?;
+        std::fs::rename(&temporary, &path)
+    })();
+    match write_result {
         Ok(_) => {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                // Defensive: enforce owner-only even if the file already existed
+                // with a wider mode before this write.
+                let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
+            }
             logger::debug(
                 LogTag::Webserver,
-                &format!("MCP connection file written to {}", path.display()),
+                &format!("Agent runtime file written to {}", path.display()),
             );
+            let _ = std::fs::remove_file(crate::paths::get_data_directory().join("mcp.json"));
         }
         Err(e) => {
+            let _ = std::fs::remove_file(&temporary);
             logger::warning(
                 LogTag::Webserver,
-                &format!("Failed to write MCP connection file: {e}"),
+                &format!("Failed to write agent runtime file: {e}"),
             );
         }
     }
 }
 
-/// Remove the MCP connection file on shutdown.
-fn cleanup_mcp_connection_file() {
-    let path = mcp_connection_file_path();
+/// Remove the agent runtime metadata file on shutdown.
+fn cleanup_agent_runtime_file() {
+    let path = agent_runtime_file_path();
     if path.exists() {
         if let Err(e) = std::fs::remove_file(&path) {
             logger::warning(
                 LogTag::Webserver,
-                &format!("Failed to remove MCP connection file: {e}"),
+                &format!("Failed to remove agent runtime file: {e}"),
             );
         } else {
-            logger::debug(LogTag::Webserver, "MCP connection file removed");
+            logger::debug(LogTag::Webserver, "Agent runtime file removed");
         }
     }
 }

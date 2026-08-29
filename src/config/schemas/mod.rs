@@ -4,6 +4,7 @@
 use crate::config_struct;
 
 mod account;
+mod agents;
 mod ai;
 mod connectivity;
 mod copy_trading;
@@ -31,6 +32,7 @@ mod wallet;
 mod webserver;
 
 pub use account::*;
+pub use agents::*;
 pub use ai::*;
 pub use connectivity::*;
 pub use copy_trading::*;
@@ -148,5 +150,8 @@ config_struct! {
         /// ScreenerBot account — optional sign-in. Holds no secrets; tokens
         /// live in the encrypted store, and the server address is a constant.
         account: AccountConfig = AccountConfig::default(),
+
+        /// Native local agent-control settings. Paired clients remain empty by default.
+        agents: AgentsConfig = AgentsConfig::default(),
     }
 }

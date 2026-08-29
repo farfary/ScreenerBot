@@ -15,8 +15,8 @@
 
 use chrono::{DateTime, Duration, Utc};
 
-use crate::ai::chat::database::{ChatMessage, ChatSession};
-use crate::ai::scheduled::types::{AutomationStats, ScheduledTask, TaskRun};
+use crate::assistant::chat::database::{ChatMessage, ChatSession};
+use crate::assistant::scheduled::types::{AutomationStats, ScheduledTask, TaskRun};
 use crate::webserver::routes::ai::types::{
     AiStatsResponse, CacheStatsResponse, DecisionHistoryResponse, GetChatSessionResponse,
     HistoryListResponse, InstructionResponse, InstructionsListResponse, ProvidersListResponse,

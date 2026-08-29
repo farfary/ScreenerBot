@@ -10,7 +10,19 @@ use super::file::write_to_file;
 use super::tags::LogTag;
 use chrono::Local;
 use colored::*;
-use std::io::{stdout, ErrorKind, Write};
+use std::io::{stderr, stdout, ErrorKind, Write};
+use std::sync::atomic::{AtomicBool, Ordering};
+
+/// When set, console log lines go to stderr instead of stdout. The MCP stdio
+/// adapter enables this so protocol stdout carries only JSON-RPC framing while
+/// its own boot diagnostics still reach the operator.
+static CONSOLE_TO_STDERR: AtomicBool = AtomicBool::new(false);
+
+/// Route all further console log output to stderr. One-way for the process
+/// lifetime; used by the MCP stdio subcommand before any other work.
+pub fn route_console_to_stderr() {
+    CONSOLE_TO_STDERR.store(true, Ordering::Relaxed);
+}
 
 /// Display configuration
 const LOG_SHOW_DATE: bool = false;
@@ -239,8 +251,19 @@ fn format_log_type(log_type: &str) -> ColoredString {
     }
 }
 
-/// Print to stdout but ignore broken pipe errors
+/// Print a console log line, ignoring broken-pipe errors. Writes to stderr
+/// instead of stdout when `route_console_to_stderr()` has been called.
 fn print_stdout_safe(message: &str) {
+    if CONSOLE_TO_STDERR.load(Ordering::Relaxed) {
+        let mut sink = stderr();
+        if let Err(e) = writeln!(sink, "{}", message) {
+            if e.kind() == ErrorKind::BrokenPipe {
+                std::process::exit(0);
+            }
+        }
+        let _ = sink.flush();
+        return;
+    }
     if let Err(e) = writeln!(stdout(), "{}", message) {
         if e.kind() == ErrorKind::BrokenPipe {
             std::process::exit(0);

@@ -26,7 +26,6 @@
 
 pub mod actions;
 pub mod admission;
-pub mod ai_analysis;
 pub mod config;
 mod constants;
 mod controller;
@@ -35,6 +34,7 @@ pub mod entry;
 mod error;
 pub mod evaluators;
 pub mod executors;
+pub mod llm_analysis;
 pub mod manual;
 pub mod monitors;
 pub mod policy;

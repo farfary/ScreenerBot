@@ -57,8 +57,8 @@ pub fn register_all_services(manager: &mut ServiceManager) {
     manager.register(Box::new(WebserverService));
 
     // AI service (background auto-blacklisting)
-    manager.register(Box::new(AiService::default()));
-    manager.register(Box::new(ScheduledAiTasksService::default()));
+    manager.register(Box::new(LlmAnalysisService::default()));
+    manager.register(Box::new(AssistantScheduledTasksService::default()));
 
     // Telegram service (notifications + commands + discovery)
     manager.register(Box::new(TelegramService::new()));

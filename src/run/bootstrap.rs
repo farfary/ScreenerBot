@@ -28,7 +28,7 @@ pub(super) async fn initialize_dashboard_persistence() -> Result<(), StartupErro
 
     // AI instructions and chat history are dashboard persistence, not AI
     // execution. The databases must be available even when AI itself is off.
-    if let Err(e) = crate::ai::init_ai_database() {
+    if let Err(e) = crate::llm_analysis::init_analysis_database() {
         logger::warning(
             LogTag::System,
             &format!(
@@ -37,7 +37,7 @@ pub(super) async fn initialize_dashboard_persistence() -> Result<(), StartupErro
         );
     }
 
-    if let Err(e) = crate::ai::init_chat_db() {
+    if let Err(e) = crate::assistant::init_chat_db() {
         logger::warning(
             LogTag::System,
             &format!(
@@ -67,16 +67,16 @@ pub(crate) async fn initialize_ai_runtime_if_enabled() -> Result<(), StartupErro
         return Ok(());
     }
 
-    if crate::ai::try_get_ai_engine().is_none() {
+    if crate::llm_analysis::try_get_analysis_engine().is_none() {
         logger::info(LogTag::System, "Initializing AI engine...");
-        crate::ai::init_ai_engine()
+        crate::llm_analysis::init_analysis_engine()
             .await
             .map_err(|e| StartupError::generic(format!("Failed to initialize AI engine: {e}")))?;
         logger::info(LogTag::System, "AI engine initialized successfully");
     }
 
-    if crate::ai::try_get_chat_engine().is_none() {
-        crate::ai::init_chat_engine().await.map_err(|e| {
+    if crate::assistant::try_get_chat_engine().is_none() {
+        crate::assistant::init_chat_engine().await.map_err(|e| {
             StartupError::generic(format!("Failed to initialize AI chat engine: {e}"))
         })?;
         logger::info(LogTag::System, "AI chat engine initialized successfully");

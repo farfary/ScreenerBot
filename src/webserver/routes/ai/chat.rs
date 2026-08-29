@@ -11,11 +11,11 @@ use std::convert::Infallible;
 use std::sync::Arc;
 use tokio_stream::{wrappers::UnboundedReceiverStream, StreamExt};
 
-use crate::ai::chat::database as chat_db;
-use crate::ai::chat::ChatProgressEvent;
-use crate::ai::permissions::ToolPermissions;
-use crate::ai::{try_get_chat_engine, ChatRequest as ChatEngineRequest};
+use crate::agent_control::permissions::ToolPermissions;
 use crate::apis::llm::{try_get_llm_manager, ChatMessage, ChatRequest, Provider};
+use crate::assistant::chat::database as chat_db;
+use crate::assistant::chat::ChatProgressEvent;
+use crate::assistant::{try_get_chat_engine, ChatRequest as ChatEngineRequest};
 use crate::config::{update_config_section, with_config};
 use crate::logger::{self, LogTag};
 use crate::webserver::state::AppState;
@@ -754,7 +754,7 @@ pub async fn list_tools(State(_state): State<Arc<AppState>>) -> Response {
 
     // Use the tool registry from the engine (we'll need to expose this method)
     // For now, create a temporary registry
-    let registry = crate::ai::create_tool_registry();
+    let registry = crate::agent_control::create_tool_registry();
     let tools = registry.list_definitions();
 
     success_response(tools)
@@ -763,11 +763,15 @@ pub async fn list_tools(State(_state): State<Arc<AppState>>) -> Response {
 /// GET /api/ai/permissions - Get tool permissions
 pub async fn get_permissions(State(_state): State<Arc<AppState>>) -> Response {
     let permissions = with_config(|cfg| ToolPermissions {
-        analysis: crate::ai::PermissionLevel::from_str(&cfg.ai.tool_permissions_analysis),
-        portfolio: crate::ai::PermissionLevel::from_str(&cfg.ai.tool_permissions_portfolio),
-        trading: crate::ai::PermissionLevel::from_str(&cfg.ai.tool_permissions_trading),
-        config: crate::ai::PermissionLevel::from_str(&cfg.ai.tool_permissions_config),
-        system: crate::ai::PermissionLevel::from_str(&cfg.ai.tool_permissions_system),
+        analysis: crate::agent_control::PermissionLevel::from_str(
+            &cfg.ai.tool_permissions_analysis,
+        ),
+        portfolio: crate::agent_control::PermissionLevel::from_str(
+            &cfg.ai.tool_permissions_portfolio,
+        ),
+        trading: crate::agent_control::PermissionLevel::from_str(&cfg.ai.tool_permissions_trading),
+        config: crate::agent_control::PermissionLevel::from_str(&cfg.ai.tool_permissions_config),
+        system: crate::agent_control::PermissionLevel::from_str(&cfg.ai.tool_permissions_system),
     });
 
     success_response(permissions)

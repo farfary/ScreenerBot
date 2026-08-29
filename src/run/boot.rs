@@ -14,6 +14,17 @@ pub async fn boot() {
     // Store command line arguments
     set_cmd_args(std::env::args().collect());
 
+    // MCP is a protocol subprocess. It must run before the banner, logger, or
+    // config boot so stdout is exclusively JSON-RPC framing.
+    let args = crate::arguments::get_cmd_args();
+    if crate::mcp::is_mcp_command(&args) {
+        if let Err(error) = crate::mcp::dispatch(&args).await {
+            eprintln!("ScreenerBot MCP failed: {error}");
+            std::process::exit(1);
+        }
+        return;
+    }
+
     // Handle help flag
     if std::env::args().any(|arg| arg == "--help" || arg == "-h") {
         print_help();

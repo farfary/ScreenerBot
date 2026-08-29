@@ -18,7 +18,7 @@
 use crate::positions::price_resolution::get_price_with_api_fallback;
 use crate::positions::Position;
 use crate::trader::types::TradeDecision;
-use crate::trader::{ai_analysis, evaluators, safety};
+use crate::trader::{evaluators, llm_analysis, safety};
 
 /// Force stop, the price cascade and the fresh position re-read — everything every exit
 /// rule needs before any of them can run. `None` means nothing is evaluable this tick.
@@ -105,13 +105,13 @@ pub(crate) async fn evaluate_policy_exit(
     let policy = crate::trader::policy::resolve_exit_policy(position).await;
 
     // Priority 3: AI exit analysis (high priority - if enabled)
-    if ai_analysis::should_analyze_exit() {
+    if llm_analysis::should_analyze_exit() {
         // Get token data for AI analysis
         match crate::tokens::get_full_token_async(&position.mint).await {
             Ok(Some(token)) => {
-                match ai_analysis::analyze_exit(position, &token).await {
+                match llm_analysis::analyze_exit(position, &token).await {
                     Some(result) => {
-                        if result.action == ai_analysis::ExitAction::Exit {
+                        if result.action == llm_analysis::ExitAction::Exit {
                             crate::logger::info(
                                 crate::logger::LogTag::Trader,
                                 &format!(
@@ -132,10 +132,10 @@ pub(crate) async fn evaluate_policy_exit(
                                 strategy_id: Some("ai_exit".to_owned()),
                                 timestamp: chrono::Utc::now(),
                                 priority: match result.urgency {
-                                    ai_analysis::ExitUrgency::Immediate => {
+                                    llm_analysis::ExitUrgency::Immediate => {
                                         crate::trader::types::TradePriority::Emergency
                                     }
-                                    ai_analysis::ExitUrgency::High => {
+                                    llm_analysis::ExitUrgency::High => {
                                         crate::trader::types::TradePriority::High
                                     }
                                     _ => crate::trader::types::TradePriority::Normal,
@@ -167,7 +167,7 @@ pub(crate) async fn evaluate_policy_exit(
                             .await;
 
                             return Ok(Some(trade_decision));
-                        } else if result.action == ai_analysis::ExitAction::Hold {
+                        } else if result.action == llm_analysis::ExitAction::Hold {
                             crate::logger::debug(
                                 crate::logger::LogTag::Trader,
                                 &format!(

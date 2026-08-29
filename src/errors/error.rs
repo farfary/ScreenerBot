@@ -11,9 +11,20 @@ use crate::rpc::errors::RpcError;
 /// This is re-exported as `crate::Error` for ergonomic usage across the codebase.
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum Error {
-    /// AI evaluation, chat, tool execution and scheduled automation errors.
+    /// LLM analysis errors: model-scored filtering, entry and exit decisions,
+    /// the response cache, and the decision/instruction database.
     #[error(transparent)]
-    Ai(#[from] crate::ai::Error),
+    LlmAnalysis(#[from] crate::llm_analysis::Error),
+
+    /// In-app assistant errors: dashboard conversation, its persistence, and
+    /// scheduled-conversation automation.
+    #[error(transparent)]
+    Assistant(#[from] crate::assistant::Error),
+
+    /// Shared agent-control boundary errors: tool-argument validation and
+    /// tool-policy persistence.
+    #[error(transparent)]
+    AgentControl(#[from] crate::agent_control::Error),
 
     /// Position lifecycle errors (open/close/DCA/verification).
     #[error(transparent)]

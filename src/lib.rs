@@ -12,9 +12,10 @@
 
 pub mod account;
 pub mod actions;
-pub mod ai;
+pub mod agent_control;
 pub mod apis;
 pub mod arguments;
+pub mod assistant;
 pub mod chains;
 pub mod config;
 pub mod connectivity;
@@ -24,7 +25,9 @@ pub mod events;
 pub mod features;
 pub mod filtering;
 pub mod global;
+pub mod llm_analysis;
 pub mod logger;
+pub mod mcp;
 pub mod net;
 pub mod ohlcvs;
 pub mod paths;

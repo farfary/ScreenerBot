@@ -10,7 +10,7 @@
 use crate::pools::PriceResult;
 use crate::trader::admission::{check_entry_admission, EntryBlock};
 use crate::trader::types::TradeDecision;
-use crate::trader::{ai_analysis, evaluators};
+use crate::trader::{evaluators, llm_analysis};
 
 /// Evaluate entry opportunity for a token
 ///
@@ -48,11 +48,11 @@ pub async fn evaluate_entry_for_token(
     }
 
     // 6. AI entry analysis - check if AI recommends entry (if enabled)
-    if ai_analysis::should_analyze_entry() {
+    if llm_analysis::should_analyze_entry() {
         // Get token data for AI analysis
         match crate::tokens::get_full_token_async(token_mint).await {
             Ok(Some(token)) => {
-                match ai_analysis::analyze_entry(&token).await {
+                match llm_analysis::analyze_entry(&token).await {
                     Some(result) => {
                         if !result.should_enter {
                             crate::logger::info(

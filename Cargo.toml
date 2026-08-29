@@ -171,6 +171,7 @@ calamine = "0.32"
 tabled = "0.20"
 axum = { version = "0.7", features = ["ws", "macros", "multipart"] }
 axum-macros = "0.4"
+rmcp = { version = "3.1.4", default-features = false, features = ["server", "transport-io"] }
 tower = "0.4"
 tower-http = { version = "0.5", features = ["cors", "trace", "compression-full"] }
 hyper = "1.0"

@@ -3,9 +3,9 @@
 use axum::{extract::State, http::StatusCode, response::Response, Json};
 use std::sync::Arc;
 
-use crate::ai::types::{EvaluationContext, Priority};
 use crate::apis::llm::Provider;
 use crate::config::{update_config_section, with_config};
+use crate::llm_analysis::types::{EvaluationContext, Priority};
 use crate::logger::{self, LogTag};
 use crate::webserver::state::AppState;
 use crate::webserver::utils::{error_response, success_response};
@@ -21,7 +21,7 @@ pub async fn get_ai_status(State(state): State<Arc<AppState>>) -> Response {
     let config = with_config(|cfg| cfg.ai.clone());
 
     // Get cache stats
-    let (total_entries, fresh_entries) = if let Some(engine) = &state.ai_engine {
+    let (total_entries, fresh_entries) = if let Some(engine) = &state.analysis_engine {
         engine.cache_stats()
     } else {
         (0, 0)
@@ -244,7 +244,7 @@ pub async fn update_ai_config(
 
 /// POST /api/ai/cache/clear - Clear AI cache
 pub async fn clear_cache(State(state): State<Arc<AppState>>) -> Response {
-    if let Some(engine) = &state.ai_engine {
+    if let Some(engine) = &state.analysis_engine {
         engine.clear_cache();
         logger::info(LogTag::Api, "AI cache cleared via API");
         success_response(serde_json::json!({
@@ -267,7 +267,7 @@ pub async fn get_cache_stats(State(state): State<Arc<AppState>>) -> Response {
         return success_response(crate::webserver::promo::get_promo_cache_stats());
     }
 
-    if let Some(engine) = &state.ai_engine {
+    if let Some(engine) = &state.analysis_engine {
         let (total_entries, fresh_entries) = engine.cache_stats();
         let ttl_seconds = with_config(|cfg| cfg.ai.cache_ttl_seconds);
 
@@ -303,7 +303,7 @@ pub async fn test_evaluate(
     }
 
     // Get AI engine
-    let engine = match &state.ai_engine {
+    let engine = match &state.analysis_engine {
         Some(e) => e,
         None => {
             return error_response(
@@ -340,10 +340,10 @@ pub async fn test_evaluate(
     match engine.evaluate_filter(context, priority).await {
         Ok(result) => {
             let risk_level = match result.decision.risk_level {
-                crate::ai::types::RiskLevel::Low => "low",
-                crate::ai::types::RiskLevel::Medium => "medium",
-                crate::ai::types::RiskLevel::High => "high",
-                crate::ai::types::RiskLevel::Critical => "critical",
+                crate::llm_analysis::types::RiskLevel::Low => "low",
+                crate::llm_analysis::types::RiskLevel::Medium => "medium",
+                crate::llm_analysis::types::RiskLevel::High => "high",
+                crate::llm_analysis::types::RiskLevel::Critical => "critical",
             };
 
             let factors: Vec<FactorResponse> = result
@@ -352,9 +352,9 @@ pub async fn test_evaluate(
                 .into_iter()
                 .map(|f| {
                     let impact = match f.impact {
-                        crate::ai::types::Impact::Positive => "positive",
-                        crate::ai::types::Impact::Negative => "negative",
-                        crate::ai::types::Impact::Neutral => "neutral",
+                        crate::llm_analysis::types::Impact::Positive => "positive",
+                        crate::llm_analysis::types::Impact::Negative => "negative",
+                        crate::llm_analysis::types::Impact::Neutral => "neutral",
                     };
                     FactorResponse {
                         name: f.name,

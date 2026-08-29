@@ -12,7 +12,7 @@ pub struct AppState {
     /// Server startup time
     pub startup_time: chrono::DateTime<chrono::Utc>,
     /// AI engine instance (optional, only if AI is enabled)
-    pub ai_engine: Option<Arc<crate::ai::engine::AiEngine>>,
+    pub analysis_engine: Option<Arc<crate::llm_analysis::engine::AnalysisEngine>>,
 }
 
 impl AppState {
@@ -20,15 +20,17 @@ impl AppState {
     pub fn new() -> Self {
         Self {
             startup_time: chrono::Utc::now(),
-            ai_engine: None,
+            analysis_engine: None,
         }
     }
 
     /// Create new application state with AI engine
-    pub fn with_ai_engine(ai_engine: Option<Arc<crate::ai::engine::AiEngine>>) -> Self {
+    pub fn with_analysis_engine(
+        analysis_engine: Option<Arc<crate::llm_analysis::engine::AnalysisEngine>>,
+    ) -> Self {
         Self {
             startup_time: chrono::Utc::now(),
-            ai_engine,
+            analysis_engine,
         }
     }
 

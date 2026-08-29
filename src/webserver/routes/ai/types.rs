@@ -2,9 +2,9 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::ai::chat::database as chat_db;
-use crate::ai::ChatContext;
-use crate::ai::ChatSession;
+use crate::assistant::chat::database as chat_db;
+use crate::assistant::ChatContext;
+use crate::assistant::ChatSession;
 
 // ============================================================================
 // RESPONSE TYPES

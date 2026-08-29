@@ -3,8 +3,8 @@
 //! Uses LLM analysis to determine if tokens pass filtering criteria.
 //! Disabled by default. Configure in [ai] section of config.
 
-use crate::ai::types::{EvaluationContext, Priority};
 use crate::config::with_config;
+use crate::llm_analysis::types::{EvaluationContext, Priority};
 use crate::tokens::types::Token;
 
 use super::FilterRejectionReason;
@@ -29,7 +29,7 @@ pub async fn evaluate(token: &Token) -> Result<(), FilterRejectionReason> {
     }
 
     // Get global AI engine instance
-    let ai_engine = match crate::ai::try_get_ai_engine() {
+    let ai_engine = match crate::llm_analysis::try_get_analysis_engine() {
         Some(engine) => engine,
         None => {
             // AI is enabled but engine not initialized - this shouldn't happen

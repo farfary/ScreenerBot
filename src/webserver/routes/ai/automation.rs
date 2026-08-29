@@ -16,7 +16,7 @@ pub async fn list_automation_tasks() -> Response {
         );
     }
 
-    let pool = match crate::ai::chat::database::get_chat_pool() {
+    let pool = match crate::assistant::chat::database::get_chat_pool() {
         Some(p) => p,
         None => {
             return error_response(
@@ -28,7 +28,7 @@ pub async fn list_automation_tasks() -> Response {
         }
     };
 
-    match crate::ai::scheduled::database::list_tasks(&pool) {
+    match crate::assistant::scheduled::database::list_tasks(&pool) {
         Ok(tasks) => success_response(serde_json::json!({ "tasks": tasks })),
         Err(e) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -41,7 +41,7 @@ pub async fn list_automation_tasks() -> Response {
 
 /// POST /api/ai/automation — Create a new scheduled task
 pub async fn create_automation_task(Json(req): Json<CreateAutomationTaskRequest>) -> Response {
-    let pool = match crate::ai::chat::database::get_chat_pool() {
+    let pool = match crate::assistant::chat::database::get_chat_pool() {
         Some(p) => p,
         None => {
             return error_response(
@@ -84,7 +84,7 @@ pub async fn create_automation_task(Json(req): Json<CreateAutomationTaskRequest>
     }
 
     // Validate schedule value
-    if let Err(e) = crate::ai::scheduled::database::calculate_next_run(
+    if let Err(e) = crate::assistant::scheduled::database::calculate_next_run(
         &req.schedule_type,
         &req.schedule_value,
         None,
@@ -97,7 +97,7 @@ pub async fn create_automation_task(Json(req): Json<CreateAutomationTaskRequest>
         );
     }
 
-    match crate::ai::scheduled::database::create_task(
+    match crate::assistant::scheduled::database::create_task(
         &pool,
         &req.name,
         &req.instruction,
@@ -108,7 +108,7 @@ pub async fn create_automation_task(Json(req): Json<CreateAutomationTaskRequest>
     ) {
         Ok(id) => {
             // Update optional fields that aren't part of create_task
-            if let Err(e) = crate::ai::scheduled::database::update_task(
+            if let Err(e) = crate::assistant::scheduled::database::update_task(
                 &pool,
                 id,
                 None,
@@ -130,7 +130,7 @@ pub async fn create_automation_task(Json(req): Json<CreateAutomationTaskRequest>
                 );
             }
 
-            match crate::ai::scheduled::database::get_task(&pool, id) {
+            match crate::assistant::scheduled::database::get_task(&pool, id) {
                 Ok(Some(task)) => success_response(serde_json::json!({ "task": task })),
                 _ => success_response(serde_json::json!({ "id": id })),
             }
@@ -146,7 +146,7 @@ pub async fn create_automation_task(Json(req): Json<CreateAutomationTaskRequest>
 
 /// GET /api/ai/automation/:id — Get a specific task
 pub async fn get_automation_task(Path(id): Path<i64>) -> Response {
-    let pool = match crate::ai::chat::database::get_chat_pool() {
+    let pool = match crate::assistant::chat::database::get_chat_pool() {
         Some(p) => p,
         None => {
             return error_response(
@@ -158,7 +158,7 @@ pub async fn get_automation_task(Path(id): Path<i64>) -> Response {
         }
     };
 
-    match crate::ai::scheduled::database::get_task(&pool, id) {
+    match crate::assistant::scheduled::database::get_task(&pool, id) {
         Ok(Some(task)) => success_response(serde_json::json!({ "task": task })),
         Ok(None) => error_response(StatusCode::NOT_FOUND, "NOT_FOUND", "Task not found", None),
         Err(e) => error_response(
@@ -175,7 +175,7 @@ pub async fn update_automation_task(
     Path(id): Path<i64>,
     Json(req): Json<UpdateAutomationTaskRequest>,
 ) -> Response {
-    let pool = match crate::ai::chat::database::get_chat_pool() {
+    let pool = match crate::assistant::chat::database::get_chat_pool() {
         Some(p) => p,
         None => {
             return error_response(
@@ -189,7 +189,7 @@ pub async fn update_automation_task(
 
     // Validate schedule if provided
     if let (Some(st), Some(sv)) = (&req.schedule_type, &req.schedule_value) {
-        if let Err(e) = crate::ai::scheduled::database::calculate_next_run(st, sv, None) {
+        if let Err(e) = crate::assistant::scheduled::database::calculate_next_run(st, sv, None) {
             return error_response(
                 StatusCode::BAD_REQUEST,
                 "INVALID_SCHEDULE",
@@ -223,7 +223,7 @@ pub async fn update_automation_task(
         }
     }
 
-    match crate::ai::scheduled::database::update_task(
+    match crate::assistant::scheduled::database::update_task(
         &pool,
         id,
         req.name.as_deref(),
@@ -239,7 +239,7 @@ pub async fn update_automation_task(
         req.max_retries,
         req.timeout_seconds,
     ) {
-        Ok(_) => match crate::ai::scheduled::database::get_task(&pool, id) {
+        Ok(_) => match crate::assistant::scheduled::database::get_task(&pool, id) {
             Ok(Some(task)) => success_response(serde_json::json!({ "task": task })),
             _ => success_response(serde_json::json!({ "updated": true })),
         },
@@ -254,7 +254,7 @@ pub async fn update_automation_task(
 
 /// DELETE /api/ai/automation/:id — Delete a task
 pub async fn delete_automation_task(Path(id): Path<i64>) -> Response {
-    let pool = match crate::ai::chat::database::get_chat_pool() {
+    let pool = match crate::assistant::chat::database::get_chat_pool() {
         Some(p) => p,
         None => {
             return error_response(
@@ -267,7 +267,7 @@ pub async fn delete_automation_task(Path(id): Path<i64>) -> Response {
     };
 
     // Check if task has a running execution
-    match crate::ai::scheduled::database::list_runs_for_task(&pool, id, 1) {
+    match crate::assistant::scheduled::database::list_runs_for_task(&pool, id, 1) {
         Ok(runs) if !runs.is_empty() && runs[0].status == "running" => {
             return error_response(
                 StatusCode::CONFLICT,
@@ -279,7 +279,7 @@ pub async fn delete_automation_task(Path(id): Path<i64>) -> Response {
         _ => {}
     }
 
-    match crate::ai::scheduled::database::delete_task(&pool, id) {
+    match crate::assistant::scheduled::database::delete_task(&pool, id) {
         Ok(_) => success_response(serde_json::json!({ "deleted": true })),
         Err(e) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -295,7 +295,7 @@ pub async fn toggle_automation_task(
     Path(id): Path<i64>,
     Json(req): Json<ToggleTaskRequest>,
 ) -> Response {
-    let pool = match crate::ai::chat::database::get_chat_pool() {
+    let pool = match crate::assistant::chat::database::get_chat_pool() {
         Some(p) => p,
         None => {
             return error_response(
@@ -307,8 +307,8 @@ pub async fn toggle_automation_task(
         }
     };
 
-    match crate::ai::scheduled::database::toggle_task(&pool, id, req.enabled) {
-        Ok(_) => match crate::ai::scheduled::database::get_task(&pool, id) {
+    match crate::assistant::scheduled::database::toggle_task(&pool, id, req.enabled) {
+        Ok(_) => match crate::assistant::scheduled::database::get_task(&pool, id) {
             Ok(Some(task)) => success_response(serde_json::json!({ "task": task })),
             _ => success_response(serde_json::json!({ "toggled": true })),
         },
@@ -323,7 +323,7 @@ pub async fn toggle_automation_task(
 
 /// POST /api/ai/automation/:id/run — Trigger immediate execution
 pub async fn run_automation_task(Path(id): Path<i64>) -> Response {
-    let pool = match crate::ai::chat::database::get_chat_pool() {
+    let pool = match crate::assistant::chat::database::get_chat_pool() {
         Some(p) => p,
         None => {
             return error_response(
@@ -335,7 +335,7 @@ pub async fn run_automation_task(Path(id): Path<i64>) -> Response {
         }
     };
 
-    let task = match crate::ai::scheduled::database::get_task(&pool, id) {
+    let task = match crate::assistant::scheduled::database::get_task(&pool, id) {
         Ok(Some(t)) => t,
         Ok(None) => {
             return error_response(StatusCode::NOT_FOUND, "NOT_FOUND", "Task not found", None)
@@ -361,7 +361,7 @@ pub async fn run_automation_task(Path(id): Path<i64>) -> Response {
     }
 
     // Check if task is already running
-    match crate::ai::scheduled::database::list_runs_for_task(&pool, id, 1) {
+    match crate::assistant::scheduled::database::list_runs_for_task(&pool, id, 1) {
         Ok(runs) if !runs.is_empty() && runs[0].status == "running" => {
             return error_response(
                 StatusCode::CONFLICT,
@@ -375,7 +375,7 @@ pub async fn run_automation_task(Path(id): Path<i64>) -> Response {
 
     // Execute in background
     tokio::spawn(async move {
-        let pool = match crate::ai::chat::database::get_chat_pool() {
+        let pool = match crate::assistant::chat::database::get_chat_pool() {
             Some(p) => p,
             None => {
                 logger::warning(
@@ -391,7 +391,7 @@ pub async fn run_automation_task(Path(id): Path<i64>) -> Response {
             120
         };
         if let Err(e) =
-            crate::ai::scheduled::worker::execute_task_public(&pool, &task, timeout).await
+            crate::assistant::scheduled::worker::execute_task_public(&pool, &task, timeout).await
         {
             logger::warning(
                 LogTag::System,
@@ -414,7 +414,7 @@ pub async fn get_automation_task_runs(Path(id): Path<i64>) -> Response {
         return success_response(serde_json::json!({ "runs": runs }));
     }
 
-    let pool = match crate::ai::chat::database::get_chat_pool() {
+    let pool = match crate::assistant::chat::database::get_chat_pool() {
         Some(p) => p,
         None => {
             return error_response(
@@ -426,7 +426,7 @@ pub async fn get_automation_task_runs(Path(id): Path<i64>) -> Response {
         }
     };
 
-    match crate::ai::scheduled::database::list_runs_for_task(&pool, id, 50) {
+    match crate::assistant::scheduled::database::list_runs_for_task(&pool, id, 50) {
         Ok(runs) => success_response(serde_json::json!({ "runs": runs })),
         Err(e) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -446,7 +446,7 @@ pub async fn get_automation_recent_runs() -> Response {
         );
     }
 
-    let pool = match crate::ai::chat::database::get_chat_pool() {
+    let pool = match crate::assistant::chat::database::get_chat_pool() {
         Some(p) => p,
         None => {
             return error_response(
@@ -458,7 +458,7 @@ pub async fn get_automation_recent_runs() -> Response {
         }
     };
 
-    match crate::ai::scheduled::database::list_recent_runs(&pool, 100) {
+    match crate::assistant::scheduled::database::list_recent_runs(&pool, 100) {
         Ok(runs) => success_response(serde_json::json!({ "runs": runs })),
         Err(e) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -471,7 +471,7 @@ pub async fn get_automation_recent_runs() -> Response {
 
 /// GET /api/ai/automation/runs/:id — Get a specific run
 pub async fn get_automation_run_detail(Path(run_id): Path<i64>) -> Response {
-    let pool = match crate::ai::chat::database::get_chat_pool() {
+    let pool = match crate::assistant::chat::database::get_chat_pool() {
         Some(p) => p,
         None => {
             return error_response(
@@ -483,7 +483,7 @@ pub async fn get_automation_run_detail(Path(run_id): Path<i64>) -> Response {
         }
     };
 
-    match crate::ai::scheduled::database::get_run(&pool, run_id) {
+    match crate::assistant::scheduled::database::get_run(&pool, run_id) {
         Ok(Some(run)) => success_response(serde_json::json!({ "run": run })),
         Ok(None) => error_response(StatusCode::NOT_FOUND, "NOT_FOUND", "Run not found", None),
         Err(e) => error_response(
@@ -504,7 +504,7 @@ pub async fn get_automation_stats_handler() -> Response {
         );
     }
 
-    let pool = match crate::ai::chat::database::get_chat_pool() {
+    let pool = match crate::assistant::chat::database::get_chat_pool() {
         Some(p) => p,
         None => {
             return error_response(
@@ -516,7 +516,7 @@ pub async fn get_automation_stats_handler() -> Response {
         }
     };
 
-    match crate::ai::scheduled::database::get_automation_stats(&pool) {
+    match crate::assistant::scheduled::database::get_automation_stats(&pool) {
         Ok(stats) => success_response(serde_json::json!({ "stats": stats })),
         Err(e) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,

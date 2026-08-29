@@ -8,7 +8,7 @@ use axum::{
 };
 use std::sync::Arc;
 
-use crate::ai::db;
+use crate::llm_analysis::db;
 use crate::logger::{self, LogTag};
 use crate::webserver::state::AppState;
 use crate::webserver::utils::{error_response, success_response};
@@ -26,7 +26,7 @@ pub async fn list_instructions(State(_state): State<Arc<AppState>>) -> Response 
         return success_response(crate::webserver::promo::get_promo_instructions());
     }
 
-    match db::with_ai_db(|conn| db::list_instructions(conn)) {
+    match db::with_analysis_db(|conn| db::list_instructions(conn)) {
         Ok(instructions) => {
             let total = instructions.len();
             let instructions: Vec<InstructionResponse> = instructions
@@ -59,7 +59,7 @@ pub async fn list_instructions(State(_state): State<Arc<AppState>>) -> Response 
 
 /// GET /api/ai/instructions/:id - Get single instruction
 pub async fn get_instruction(State(_state): State<Arc<AppState>>, Path(id): Path<i64>) -> Response {
-    match db::with_ai_db(|conn| db::get_instruction(conn, id)) {
+    match db::with_analysis_db(|conn| db::get_instruction(conn, id)) {
         Ok(Some(i)) => success_response(InstructionResponse {
             id: i.id,
             name: i.name,
@@ -92,7 +92,9 @@ pub async fn create_instruction(
 ) -> Response {
     let category = req.category.unwrap_or_else(|| "general".to_owned());
 
-    match db::with_ai_db(|conn| db::create_instruction(conn, &req.name, &req.content, &category)) {
+    match db::with_analysis_db(|conn| {
+        db::create_instruction(conn, &req.name, &req.content, &category)
+    }) {
         Ok(id) => {
             logger::info(
                 LogTag::Api,
@@ -100,7 +102,7 @@ pub async fn create_instruction(
             );
 
             // Fetch the created instruction
-            match db::with_ai_db(|conn| db::get_instruction(conn, id)) {
+            match db::with_analysis_db(|conn| db::get_instruction(conn, id)) {
                 Ok(Some(instruction)) => success_response(InstructionResponse {
                     id: instruction.id,
                     name: instruction.name,
@@ -140,7 +142,7 @@ pub async fn update_instruction(
     Path(id): Path<i64>,
     Json(req): Json<UpdateInstructionRequest>,
 ) -> Response {
-    match db::with_ai_db(|conn| {
+    match db::with_analysis_db(|conn| {
         db::update_instruction(
             conn,
             id,
@@ -155,7 +157,7 @@ pub async fn update_instruction(
             logger::info(LogTag::Api, &format!("Updated AI instruction: {id}"));
 
             // Fetch the updated instruction
-            match db::with_ai_db(|conn| db::get_instruction(conn, id)) {
+            match db::with_analysis_db(|conn| db::get_instruction(conn, id)) {
                 Ok(Some(instruction)) => success_response(InstructionResponse {
                     id: instruction.id,
                     name: instruction.name,
@@ -194,7 +196,7 @@ pub async fn delete_instruction(
     State(_state): State<Arc<AppState>>,
     Path(id): Path<i64>,
 ) -> Response {
-    match db::with_ai_db(|conn| db::delete_instruction(conn, id)) {
+    match db::with_analysis_db(|conn| db::delete_instruction(conn, id)) {
         Ok(()) => {
             logger::info(LogTag::Api, &format!("Deleted AI instruction: {id}"));
             success_response(serde_json::json!({
@@ -215,7 +217,7 @@ pub async fn reorder_instructions(
     State(_state): State<Arc<AppState>>,
     Json(req): Json<ReorderInstructionsRequest>,
 ) -> Response {
-    match db::with_ai_db(|conn| db::reorder_instructions(conn, &req.ids)) {
+    match db::with_analysis_db(|conn| db::reorder_instructions(conn, &req.ids)) {
         Ok(()) => {
             logger::info(
                 LogTag::Api,
@@ -280,10 +282,12 @@ pub async fn list_history(
     // Fetch decisions based on whether mint filter is provided
     let result = if let Some(mint) = query.mint {
         // For specific mint, use list_decisions_for_mint_paginated with offset
-        db::with_ai_db(|conn| db::list_decisions_for_mint_paginated(conn, &mint, per_page, offset))
+        db::with_analysis_db(|conn| {
+            db::list_decisions_for_mint_paginated(conn, &mint, per_page, offset)
+        })
     } else {
         // For all decisions, use list_decisions with pagination
-        db::with_ai_db(|conn| db::list_decisions(conn, per_page, offset))
+        db::with_analysis_db(|conn| db::list_decisions(conn, per_page, offset))
     };
 
     match result {
@@ -337,7 +341,7 @@ pub async fn get_history_detail(
     State(_state): State<Arc<AppState>>,
     Path(id): Path<i64>,
 ) -> Response {
-    match db::with_ai_db(|conn| db::get_decision(conn, id)) {
+    match db::with_analysis_db(|conn| db::get_decision(conn, id)) {
         Ok(Some(d)) => success_response(DecisionHistoryResponse {
             id: d.id,
             mint: d.mint,
