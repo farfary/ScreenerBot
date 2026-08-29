@@ -27,6 +27,9 @@ use screenerbot::chains::solana::solana_sdk::pubkey::Pubkey;
 use screenerbot::chains::solana::swaps::direct::venues::clmm_ticks::{
     decode_tick_array, TickArrayBitmap,
 };
+use screenerbot::chains::solana::swaps::direct::venues::fluxbeam::{
+    FluxbeamMarket, FluxbeamPoolState,
+};
 use screenerbot::chains::solana::swaps::direct::venues::layout::{
     mint_decimals, token_account_amount, u64_at, u8_at,
 };
@@ -1991,4 +1994,283 @@ fn a_moonit_swap_instruction_carries_the_eleven_idl_accounts_in_order() {
     );
     // token_amount is exact (fixedSide::In on the token leg for a sell).
     assert_eq!(&sell.data[8..16], &1_000_000u64.to_le_bytes());
+}
+
+// ============================================================================
+// FLUXBEAM — a fork of the vanilla spl-token-swap programme, no Anchor IDL
+// ============================================================================
+
+fn fluxbeam_program_id_for_test() -> Pubkey {
+    Pubkey::from_str("FLUXubRmkEi2q6K3Y9kBPg9248ggaZVsoSFhtJHSrm1X").unwrap()
+}
+
+fn fluxbeam_market() -> FluxbeamMarket {
+    let fixture = Fixture::load("fluxbeam_pool");
+    let state = FluxbeamPoolState::decode(fixture.pool, fixture.data(&fixture.pool))
+        .expect("the captured FluxBeam SwapV1 state must decode");
+
+    let mint_a_account = fixture.account(&state.mint_a);
+    let mint_b_account = fixture.account(&state.mint_b);
+    let pool_mint_account = fixture.account(&state.pool_mint);
+
+    FluxbeamMarket::new(
+        state,
+        fixture.balance(&state.vault_a),
+        fixture.balance(&state.vault_b),
+        mint_decimals(&mint_a_account.data).expect("mint_a carries a decimals byte"),
+        mint_decimals(&mint_b_account.data).expect("mint_b carries a decimals byte"),
+        mint_a_account.owner,
+        mint_b_account.owner,
+        pool_mint_account.owner,
+    )
+}
+
+#[test]
+fn the_fluxbeam_layout_reads_real_values_at_every_offset_it_claims() {
+    let fixture = Fixture::load("fluxbeam_pool");
+    let state = FluxbeamPoolState::decode(fixture.pool, fixture.data(&fixture.pool))
+        .expect("the captured FluxBeam SwapV1 state must decode");
+
+    assert!(state.is_initialized, "a live pool is initialized");
+    assert_eq!(
+        state.curve_type, 0,
+        "this fixture is ConstantProduct, the only curve this venue quotes"
+    );
+    assert_eq!(
+        state.mint_a.to_string(),
+        WSOL,
+        "this fixture is a SOL pool; a wrong mint offset would not land on WSOL"
+    );
+    assert_ne!(state.mint_a, state.mint_b);
+    assert_ne!(state.vault_a, state.vault_b);
+
+    // The authority PDA is the vanilla spl-token-swap derivation: seed is just
+    // the pool's own pubkey, bump 255 on this fixture -- confirmed to match a
+    // live swap's own `authority` account.
+    let program = fluxbeam_program_id_for_test();
+    let (authority, bump) = Pubkey::find_program_address(&[fixture.pool.as_ref()], &program);
+    assert_eq!(bump, 255, "the live pool's own stored bump_seed is 255");
+    assert_eq!(
+        authority.to_string(),
+        "5WCAmQDfnpfYDcNnCbcpf69tHVVLwnTWs1QGae145VPg",
+        "must re-derive the exact authority a live swap named"
+    );
+
+    // Rates are plausible fee fractions, not padding read from the wrong offset.
+    assert!(
+        state.trade_fee_numerator > 0
+            && state.trade_fee_denominator > 0
+            && state.trade_fee_numerator < state.trade_fee_denominator,
+        "trade_fee {}/{} is not a plausible rate",
+        state.trade_fee_numerator,
+        state.trade_fee_denominator
+    );
+    assert!(
+        state.owner_trade_fee_numerator > 0 && state.owner_trade_fee_denominator > 0,
+        "owner_trade_fee {}/{} is not a plausible rate",
+        state.owner_trade_fee_numerator,
+        state.owner_trade_fee_denominator
+    );
+    assert_ne!(state.fee_account, Pubkey::default());
+    assert_ne!(state.pool_mint, Pubkey::default());
+}
+
+#[test]
+fn a_fluxbeam_quote_off_real_state_charges_the_pools_own_rate() {
+    let market = fluxbeam_market();
+    let (mint_a, mint_b) = market.mints();
+    let amount_in = 5_000_000; // 0.005 SOL
+
+    let quote = market
+        .quote(&mint_a, amount_in)
+        .expect("a live pool quotes");
+    assert!(quote.expected_out > 0);
+    assert!(
+        quote.lp_fee > 0,
+        "both the trade fee and the owner fee are always charged on this pool"
+    );
+    assert!(
+        quote.lp_fee < amount_in,
+        "the fee can never consume the whole trade"
+    );
+    // This fixture's owner_trade_fee is 99/100 -- an unusually high, PER-POOL
+    // rate read straight from the account (see the module docs), so almost
+    // the whole trade is fee rather than genuine reserve-depth impact. The
+    // fee itself is asserted above; here just check it dominates as expected.
+    assert!(
+        quote.price_impact_pct > 90.0,
+        "a 99% owner fee must dominate the reported impact, got {}%",
+        quote.price_impact_pct
+    );
+
+    // The reverse direction must also price, and a round trip through two
+    // fees cannot return more than it started with.
+    let back = market
+        .quote(&mint_b, quote.expected_out)
+        .expect("the reverse direction quotes too");
+    assert!(back.expected_out > 0);
+    assert!(back.expected_out < amount_in);
+}
+
+#[test]
+fn a_fluxbeam_quote_is_monotonic_and_concave_in_size() {
+    let market = fluxbeam_market();
+    let (mint_a, _) = market.mints();
+
+    let small = market.quote(&mint_a, 5_000_000).expect("quote");
+    let large = market.quote(&mint_a, 500_000_000).expect("quote");
+    assert!(large.expected_out > small.expected_out, "more in, more out");
+    assert!(
+        large.expected_out < small.expected_out * 100,
+        "a hundred times the size must return LESS than a hundred times the output: \
+         {} vs {}",
+        large.expected_out,
+        small.expected_out * 100
+    );
+    assert!(
+        large.price_impact_pct >= small.price_impact_pct,
+        "a bigger trade cannot report less impact: {}% vs {}%",
+        large.price_impact_pct,
+        small.price_impact_pct
+    );
+}
+
+#[test]
+fn fluxbeam_refuses_a_mint_the_pool_does_not_hold() {
+    let stranger = Pubkey::new_unique();
+    assert!(fluxbeam_market().quote(&stranger, 5_000_000).is_err());
+}
+
+#[test]
+fn the_fluxbeam_instruction_orients_from_the_input_mint_and_matches_the_confirmed_shape() {
+    let market = fluxbeam_market();
+    let (mint_a, mint_b) = market.mints();
+    let fixture = Fixture::load("fluxbeam_pool");
+    let state = FluxbeamPoolState::decode(fixture.pool, fixture.data(&fixture.pool)).unwrap();
+    let owner = Pubkey::new_unique();
+    let ata_in = Pubkey::new_unique();
+    let ata_out = Pubkey::new_unique();
+
+    let buy = market
+        .swap_instruction(
+            &SwapAccounts {
+                owner,
+                input_mint: mint_a,
+                output_mint: mint_b,
+                input_token_account: ata_in,
+                output_token_account: ata_out,
+            },
+            1_000_000,
+            1,
+        )
+        .expect("builds against real state");
+
+    // Tag 1, amount_in, min_out -- confirmed against three real buys.
+    assert_eq!(buy.data[0], 1);
+    assert_eq!(&buy.data[1..9], &1_000_000u64.to_le_bytes());
+    assert_eq!(&buy.data[9..17], &1u64.to_le_bytes());
+    assert_eq!(buy.data.len(), 17);
+    assert_eq!(buy.accounts.len(), 14);
+
+    // 0 pool, 1 authority, 2 owner, 3 source, 4 swap_source_vault,
+    // 5 swap_destination_vault, 6 destination, 7 pool_mint, 8 fee_account,
+    // 9 mint_a, 10 mint_b, 11/12/13 token programmes.
+    assert_eq!(buy.accounts[0].pubkey, market.pool());
+    assert_eq!(buy.accounts[2].pubkey, owner);
+    assert!(buy.accounts[2].is_signer);
+    assert_eq!(buy.accounts[3].pubkey, ata_in);
+    assert_eq!(
+        buy.accounts[4].pubkey, state.vault_a,
+        "buying with mint_a must route through vault_a as the swap source"
+    );
+    assert_eq!(buy.accounts[5].pubkey, state.vault_b);
+    assert_eq!(buy.accounts[6].pubkey, ata_out);
+    assert_eq!(buy.accounts[7].pubkey, state.pool_mint);
+    assert_eq!(buy.accounts[8].pubkey, state.fee_account);
+    assert_eq!(buy.accounts[9].pubkey, mint_a);
+    assert_eq!(buy.accounts[10].pubkey, mint_b);
+    assert_ne!(buy.accounts[4].pubkey, buy.accounts[5].pubkey);
+
+    // Selling reverses the vaults: accounts 3-6 are swap-ordered.
+    let sell = market
+        .swap_instruction(
+            &SwapAccounts {
+                owner,
+                input_mint: mint_b,
+                output_mint: mint_a,
+                input_token_account: ata_in,
+                output_token_account: ata_out,
+            },
+            1_000_000,
+            1,
+        )
+        .expect("builds against real state");
+    assert_eq!(
+        sell.accounts[4].pubkey, state.vault_b,
+        "selling mint_b must route through vault_b as the swap source"
+    );
+    assert_eq!(sell.accounts[5].pubkey, state.vault_a);
+
+    // Slots 9-13 are swap-ordered too, NOT pool-ordered. This venue shipped its
+    // first draft pool-ordered and a live BUY still simulated clean, because on
+    // a pool whose SOL side is token A the two orderings coincide -- and on this
+    // very fixture they coincide for the PROGRAMMES as well, since its pool_mint
+    // and its token_b are both Token-2022. Only the reverse direction separates
+    // them, so it has to be asserted here or nothing offline catches a
+    // regression. On chain the pool-ordered list is rejected with
+    // `custom program error: 0x18`.
+    let program_a = market
+        .token_program(&mint_a)
+        .expect("mint_a is in the pool");
+    let program_b = market
+        .token_program(&mint_b)
+        .expect("mint_b is in the pool");
+
+    assert_eq!(buy.accounts[11].pubkey, program_a, "buy source programme");
+    assert_eq!(
+        buy.accounts[12].pubkey, program_b,
+        "buy destination programme"
+    );
+
+    assert_eq!(
+        sell.accounts[9].pubkey, mint_b,
+        "sell source mint is mint_b"
+    );
+    assert_eq!(
+        sell.accounts[10].pubkey, mint_a,
+        "sell destination mint is mint_a"
+    );
+    assert_eq!(sell.accounts[11].pubkey, program_b, "sell source programme");
+    assert_eq!(
+        sell.accounts[12].pubkey, program_a,
+        "sell destination programme"
+    );
+    assert_eq!(
+        buy.accounts[13].pubkey, sell.accounts[13].pubkey,
+        "slot 13 is the POOL mint's programme, so it never depends on direction"
+    );
+}
+
+#[test]
+fn a_fluxbeam_funded_buy_holds_back_the_platform_fee_before_the_pool_sees_it() {
+    let _guard = common::config_guard();
+    let market = fluxbeam_market();
+    let (mint_a, mint_b) = market.mints();
+    let intent = DirectSwapIntent {
+        pool: market.pool(),
+        owner: Pubkey::new_unique(),
+        input_mint: mint_a,
+        output_mint: mint_b,
+        amount_in: 5_000_000,
+        slippage_bps: 300,
+    };
+
+    let quote = direct::quote_with_market(&intent, &market).expect("quotes offline");
+    assert_eq!(quote.fee.side, FeeSide::Input, "SOL is the input leg here");
+    assert_eq!(quote.fee.amount, 25_000, "0.5% of 0.005 SOL");
+    assert_eq!(
+        quote.swap_amount_in,
+        5_000_000 - 25_000,
+        "the platform fee never reaches the pool"
+    );
 }

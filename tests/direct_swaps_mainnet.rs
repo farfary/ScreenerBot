@@ -106,6 +106,31 @@ const DBC_QUOTE_FEE_POOL: &str = "J1YvC19EHXGjmthszo7sM5FwL3mn3qjS8Bf3zTMjeX2T";
 /// depth; re-verify on chain before trusting this constant too.
 const DBC_OUTPUT_FEE_POOL: &str = "F71peWVSaCjEL5bsMJMrhguuEN7K8vhiKvFN6tf91Ymk";
 
+/// FluxBeam AMM, a fork of the vanilla `spl-token-swap` reference programme --
+/// SOL paired against a Token-2022 mint, SOL as token A. Fees are read live
+/// from the pool, never hardcoded, and this one's are extreme: `20/10_000`
+/// trade plus `99/100` OWNER, so only 0.8% of any input ever reaches the
+/// curve. That is not a decoding error -- it is replayed to the raw unit
+/// against a real buy (see `venues/fluxbeam.rs`), and roughly 60% of live
+/// FluxBeam pools carry a 90% or 99% owner fee. Kept deliberately as the
+/// fixture and live-simulation pool because it exercises the owner-fee term
+/// hardest; the SPENDING round trip deliberately uses a sane pool instead.
+const FLUXBEAM_POOL: &str = "7uajENggf2MaiZ5XGff91uoVsch1y5QN3bqjisv7eP6V";
+
+/// FluxBeam with SOL as token **B**, so a SOL buy's source is the pool's SECOND
+/// side. This is the pool that settles what a same-orientation pool cannot:
+/// account slots 9-13 (the two mints and their token programmes) are built
+/// POOL-ordered, and on a pool where SOL is token A that is indistinguishable
+/// from swap-ordered because the two coincide. Here they do NOT coincide -- a
+/// swap-ordered programme would need `(mint_b, mint_a)` and
+/// `(program_b, ..., program_a)` -- so this simulation alone discriminates
+/// between the two hypotheses, for free and without spending anything.
+///
+/// Its base mint is Token-2022 with an `interestBearingConfig` extension, which
+/// changes only the displayed UI amount and never a raw transfer amount, so it
+/// is accepted; a transfer-FEE mint would be refused (see the module docs).
+const FLUXBEAM_SOL_QUOTE_POOL: &str = "82Gxnc1ubRPWKn8nQRRb45KhBKJ15LoxtQ9rRnWPPUSq";
+
 const WSOL: &str = "So11111111111111111111111111111111111111112";
 const USDC: &str = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 
@@ -737,6 +762,43 @@ async fn a_moonit_quote_is_exact_to_the_raw_unit() {
     simulate_with_no_slippage_room(MOONIT_POOL, WSOL, &token, MINIMUM_SWAP_LAMPORTS).await;
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "live network"]
+async fn fluxbeam_accepts_a_minimum_sol_to_token_swap() {
+    let _guard = common::isolated_env();
+    let token = paired_token(FLUXBEAM_POOL).await;
+    simulate_direction(FLUXBEAM_POOL, WSOL, &token, MINIMUM_SWAP_LAMPORTS).await;
+}
+
+/// The zero-slippage exactness proof for the vanilla `spl-token-swap` curve
+/// replayed in `venues/fluxbeam.rs`'s module docs: `min_out` IS the quote, and
+/// the pool programme's own on-chain check is the enforcement.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "live network"]
+async fn a_fluxbeam_quote_is_exact_to_the_raw_unit() {
+    let _guard = common::isolated_env();
+    let token = paired_token(FLUXBEAM_POOL).await;
+    simulate_with_no_slippage_room(FLUXBEAM_POOL, WSOL, &token, MINIMUM_SWAP_LAMPORTS).await;
+}
+
+/// The account-order discriminator described on `FLUXBEAM_SOL_QUOTE_POOL`. If
+/// slots 9-13 were swap-ordered rather than pool-ordered, this simulation would
+/// fail on the mint/programme check while `fluxbeam_accepts_a_minimum_sol_to_token_swap`
+/// (SOL as token A, where the two orderings coincide) still passed.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "live network"]
+async fn fluxbeam_accepts_a_swap_whose_sol_side_is_token_b() {
+    let _guard = common::isolated_env();
+    let token = paired_token(FLUXBEAM_SOL_QUOTE_POOL).await;
+    simulate_direction(FLUXBEAM_SOL_QUOTE_POOL, WSOL, &token, MINIMUM_SWAP_LAMPORTS).await;
+}
+
+// The SELL direction (token -> SOL) is not simulated stand-alone here, for the
+// same reason as every other venue in this file. It is also this venue's one
+// remaining unverified fact -- see `venues/fluxbeam.rs`'s module docs on
+// account slots 9-13 -- so a real round trip is the definitive proof, not
+// just the usual convenience.
+
 // The SELL direction (token -> SOL) is not simulated stand-alone here, the
 // same as every other venue in this file: `simulation_owner` is a real
 // trading wallet used ONLY for its address, not its holdings, and a fresh
@@ -946,6 +1008,24 @@ async fn a_real_round_trip_through_moonit_settles_natively_and_pays_the_platform
     };
     let token = paired_token(MOONIT_POOL).await;
     round_trip(&ctx, MOONIT_POOL, &token).await;
+}
+
+/// Runs against `FLUXBEAM_SOL_QUOTE_POOL`, not `FLUXBEAM_POOL`, for two
+/// reasons. It is the REVERSE orientation, so its sell leg spends a
+/// Token-2022 mint through account slots 9-13 in the order a same-orientation
+/// pool can never exercise -- the ordering this venue got wrong on its first
+/// draft. And `FLUXBEAM_POOL` charges a 99.2% owner fee, so a round trip there
+/// would return almost nothing and measure the pool's rapacity rather than
+/// this engine's correctness.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "spends real SOL"]
+async fn a_real_round_trip_through_fluxbeam_settles_and_pays_the_platform_fee() {
+    let _guard = common::isolated_env();
+    let Some(ctx) = common::require_mainnet() else {
+        return;
+    };
+    let token = paired_token(FLUXBEAM_SOL_QUOTE_POOL).await;
+    round_trip(&ctx, FLUXBEAM_SOL_QUOTE_POOL, &token).await;
 }
 
 /// Buy `token` with the capped amount of SOL, then sell every unit back.
