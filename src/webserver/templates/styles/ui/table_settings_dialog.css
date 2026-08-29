@@ -199,6 +199,9 @@
 }
 
 .table-settings-column-label {
+  /* Centred row: the column name and its meta chips set the height. */
+  --control-line-offset: 0px;
+
   display: flex;
   align-items: center;
   gap: 10px;
@@ -368,6 +371,9 @@ body.table-settings-open {
 }
 
 .table-settings-pagination-label {
+  /* Centred row. */
+  --control-line-offset: 0px;
+
   display: flex;
   align-items: center;
   gap: 10px;

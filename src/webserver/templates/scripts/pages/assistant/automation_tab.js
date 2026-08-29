@@ -244,15 +244,15 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
         </div>
         <div class="form-group">
           <div class="checkbox-group">
-            <label class="checkbox-label checkbox-label--centered">
+            <label class="checkbox-label">
               <input type="checkbox" id="auto-notify-telegram" checked>
               <span>Notify via Telegram</span>
             </label>
-            <label class="checkbox-label checkbox-label--centered">
+            <label class="checkbox-label">
               <input type="checkbox" id="auto-notify-success" checked>
               <span>Notify on success</span>
             </label>
-            <label class="checkbox-label checkbox-label--centered">
+            <label class="checkbox-label">
               <input type="checkbox" id="auto-notify-failure" checked>
               <span>Notify on failure</span>
             </label>
@@ -491,15 +491,15 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
         </div>
         <div class="form-group">
           <div class="checkbox-group">
-            <label class="checkbox-label checkbox-label--centered">
+            <label class="checkbox-label">
               <input type="checkbox" id="edit-auto-notify-telegram" ${task.notify_telegram !== false ? "checked" : ""}>
               <span>Notify via Telegram</span>
             </label>
-            <label class="checkbox-label checkbox-label--centered">
+            <label class="checkbox-label">
               <input type="checkbox" id="edit-auto-notify-success" ${task.notify_on_success !== false ? "checked" : ""}>
               <span>Notify on success</span>
             </label>
-            <label class="checkbox-label checkbox-label--centered">
+            <label class="checkbox-label">
               <input type="checkbox" id="edit-auto-notify-failure" ${task.notify_on_failure !== false ? "checked" : ""}>
               <span>Notify on failure</span>
             </label>

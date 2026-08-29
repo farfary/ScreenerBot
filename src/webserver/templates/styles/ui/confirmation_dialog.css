@@ -116,6 +116,9 @@
 }
 
 .confirmation-dialog__checkbox {
+  /* Centred row inside its own padded card. */
+  --control-line-offset: 0px;
+
   display: flex;
   align-items: center;
   gap: 10px;

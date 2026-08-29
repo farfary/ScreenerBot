@@ -202,10 +202,6 @@
   box-shadow: 0 0 0 1px var(--primary-alpha-20);
 }
 
-.config-section-item input[type="checkbox"] {
-  margin-top: 2px;
-}
-
 .config-section-item-content {
   display: flex;
   align-items: flex-start;
@@ -288,6 +284,10 @@
 }
 
 .config-import-section-header {
+  /* Centred row: the icon and meta column set the height, so the control is
+     centred on the row rather than on a line of text. */
+  --control-line-offset: 0px;
+
   display: flex;
   align-items: center;
   gap: 10px;
@@ -656,10 +656,6 @@
   align-items: flex-start;
   gap: 10px;
   cursor: pointer;
-}
-
-.config-dialog-option input[type="checkbox"] {
-  margin-top: 3px;
 }
 
 .config-dialog-option-content {

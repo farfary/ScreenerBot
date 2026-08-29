@@ -37,6 +37,7 @@ const canonicalOwners = new Map([
   [".toggle-label", "components/form_controls.css"],
   [".toggle-state", "components/form_controls.css"],
   [".checkbox-label", "components/form_controls.css"],
+  [".checkbox-group", "components/form_controls.css"],
   [".number-field", "components/form_controls.css"],
   [".number-field-suffix", "components/form_controls.css"],
   [".number-field-spin", "components/form_controls.css"],
@@ -104,6 +105,13 @@ function rulesIn(css) {
   return rules;
 }
 
+/* Where a control sits against its label text is one calculation, in one place:
+   every hand-rolled `margin-top: 3px` was a different answer to it. A row that
+   is centred by its own layout cancels the shared offset with
+   `--control-line-offset: 0px` instead of nudging the control. */
+const controlPlacementDeclaration =
+  /^\s*(margin(?:-top|-block-start|-block)?|vertical-align|align-self)\s*:\s*(?!var\(--control-line-offset\))/m;
+
 const controlSkinDeclaration =
   /^\s*(width|height|min-width|max-width|min-height|max-height|padding(?:-[a-z-]+)?|background(?:-color)?|border(?:-[a-z-]+)?|border-radius|box-shadow|outline|appearance|accent-color)\s*:/m;
 
@@ -144,6 +152,16 @@ function auditSelectContract(file, source) {
   }
 }
 
+/* Markup half of the same contract: a row's alignment is never a class. */
+function auditChoiceRowContract(file, source) {
+  for (const match of source.matchAll(/checkbox-label--[\w-]+/g)) {
+    const line = source.slice(0, match.index).split("\n").length;
+    errors.push(
+      `${relative(root, file)}:${line}: ${match[0]}; a checkbox row is aligned by .checkbox-label alone`
+    );
+  }
+}
+
 function auditNativeChoiceContract(file, source) {
   for (const match of source.matchAll(
     /<[^>]+\brole\s*=\s*["'](?:switch|checkbox|radio)["'][^>]*>/gi
@@ -167,6 +185,11 @@ for (const file of cssFiles) {
     if (/\.(?:source|category)-switch\b|\.slider\b|-switch__/.test(selector)) {
       errors.push(`${path}: custom switch selector ${selector}; use .toggle`);
     }
+    if (/\.checkbox-label--/.test(selector)) {
+      errors.push(
+        `${path}: ${selector}; checkbox alignment is not a variant, it is the row contract in components/form_controls.css`
+      );
+    }
     if (/(?:^|[\s>+~,])\.[\w-]+-radio\b/.test(selector)) {
       errors.push(`${path}: custom radio selector ${selector}; use input[type="radio"]`);
     }
@@ -182,6 +205,12 @@ for (const file of cssFiles) {
       if (skin) {
         errors.push(
           `${path}: ${selector} sets ${skin[1]}; the control skin is owned by components/form_controls.css`
+        );
+      }
+      const placement = body.match(controlPlacementDeclaration);
+      if (placement) {
+        errors.push(
+          `${path}: ${selector} sets ${placement[1]}; a choice control is aligned to its label by --control-line-offset in components/form_controls.css`
         );
       }
     }
@@ -207,6 +236,7 @@ for (const file of await walk(scriptsRoot)) {
   }
   if (!file.endsWith("custom_select.js")) auditSelectContract(file, source);
   auditNativeChoiceContract(file, source);
+  auditChoiceRowContract(file, source);
 }
 
 for (const file of await walk(pagesRoot)) {
@@ -217,6 +247,7 @@ for (const file of await walk(pagesRoot)) {
   }
   auditSelectContract(file, source);
   auditNativeChoiceContract(file, source);
+  auditChoiceRowContract(file, source);
 }
 
 const templatesSource = await readFile(resolve(root, "src/webserver/templates.rs"), "utf8");

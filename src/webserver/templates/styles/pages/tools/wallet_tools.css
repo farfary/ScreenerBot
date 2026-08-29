@@ -357,6 +357,9 @@
 }
 
 .burn-select-all {
+  /* Centred row. */
+  --control-line-offset: 0px;
+
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);

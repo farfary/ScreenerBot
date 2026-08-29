@@ -32,6 +32,9 @@
 }
 
 .provider-select {
+  /* The control is the whole row: no text to align it against. */
+  --control-line-offset: 0px;
+
   display: flex;
   align-items: center;
   justify-content: center;
@@ -471,23 +474,6 @@
   margin-top: 0.25rem;
   font-weight: 400;
   line-height: 1.4;
-}
-
-/* Checkbox Group Pattern (from tools.css) */
-.checkbox-group {
-  flex-flow: row wrap;
-  align-items: flex-start;
-  gap: var(--spacing-sm);
-}
-
-.checkbox-group > label {
-  flex: 0 0 auto;
-}
-
-.checkbox-group > small,
-.checkbox-group > .form-help {
-  flex: 1 1 100%;
-  margin-top: 0;
 }
 
 .modal-body .form-group input:not([type="checkbox"], [type="radio"]),

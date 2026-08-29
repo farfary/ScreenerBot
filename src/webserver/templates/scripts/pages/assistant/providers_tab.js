@@ -246,7 +246,7 @@ export function createProvidersTab({ state, _eventCleanups, loadConfig }) {
           
           <!-- Enable Checkbox -->
           <div class="form-group checkbox-group">
-            <label class="checkbox-label checkbox-label--centered">
+            <label class="checkbox-label">
               <input type="checkbox" id="modal-enabled" ${provider.enabled ? "checked" : ""}>
               <span>Enable this provider</span>
             </label>
