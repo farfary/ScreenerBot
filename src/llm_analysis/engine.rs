@@ -52,7 +52,7 @@ pub struct AnalysisEngine {
 impl AnalysisEngine {
     /// Create a new AI engine
     pub fn new() -> Self {
-        let cache_ttl = with_config(|cfg| cfg.ai.cache_ttl_seconds);
+        let cache_ttl = with_config(|cfg| cfg.llm_analysis.cache_ttl_seconds);
         Self {
             cache: Arc::new(AnalysisCache::new(cache_ttl)),
         }
@@ -66,7 +66,7 @@ impl AnalysisEngine {
     ) -> Result<EvaluationResult> {
         // Check if AI is enabled
         let (ai_enabled, filtering_enabled) =
-            with_config(|cfg| (cfg.ai.enabled, cfg.ai.filtering_enabled));
+            with_config(|cfg| (cfg.llm.enabled, cfg.llm_analysis.filtering_enabled));
 
         if !ai_enabled || !filtering_enabled {
             return Err(Error::Disabled);
@@ -81,8 +81,12 @@ impl AnalysisEngine {
         }
 
         // Get provider and model from config
-        let (provider_name, bypass_cache) =
-            with_config(|cfg| (cfg.ai.default_provider.clone(), cfg.ai.trading_bypass_cache));
+        let (provider_name, bypass_cache) = with_config(|cfg| {
+            (
+                cfg.llm.default_provider.clone(),
+                cfg.llm_analysis.trading_bypass_cache,
+            )
+        });
 
         let provider =
             Provider::from_str(&provider_name).ok_or_else(|| Error::ProviderNotConfigured {
@@ -140,16 +144,16 @@ impl AnalysisEngine {
     fn get_model_for_provider(&self, provider: Provider) -> String {
         with_config(|cfg| {
             let provider_config = match provider {
-                Provider::OpenAi => &cfg.ai.providers.openai,
-                Provider::Anthropic => &cfg.ai.providers.anthropic,
-                Provider::Groq => &cfg.ai.providers.groq,
-                Provider::DeepSeek => &cfg.ai.providers.deepseek,
-                Provider::Gemini => &cfg.ai.providers.gemini,
-                Provider::Together => &cfg.ai.providers.together,
-                Provider::OpenRouter => &cfg.ai.providers.openrouter,
-                Provider::Mistral => &cfg.ai.providers.mistral,
+                Provider::OpenAi => &cfg.llm.providers.openai,
+                Provider::Anthropic => &cfg.llm.providers.anthropic,
+                Provider::Groq => &cfg.llm.providers.groq,
+                Provider::DeepSeek => &cfg.llm.providers.deepseek,
+                Provider::Gemini => &cfg.llm.providers.gemini,
+                Provider::Together => &cfg.llm.providers.together,
+                Provider::OpenRouter => &cfg.llm.providers.openrouter,
+                Provider::Mistral => &cfg.llm.providers.mistral,
                 Provider::Ollama => {
-                    return cfg.ai.providers.ollama.model.clone();
+                    return cfg.llm.providers.ollama.model.clone();
                 }
             };
 
@@ -247,7 +251,7 @@ impl AnalysisEngine {
     ) -> Result<EvaluationResult> {
         // Check if AI is enabled
         let (ai_enabled, entry_enabled) =
-            with_config(|cfg| (cfg.ai.enabled, cfg.ai.entry_analysis_enabled));
+            with_config(|cfg| (cfg.llm.enabled, cfg.llm_analysis.entry_analysis_enabled));
 
         if !ai_enabled || !entry_enabled {
             return Err(Error::Disabled);
@@ -264,7 +268,7 @@ impl AnalysisEngine {
         }
 
         // Get provider and model from config
-        let provider_name = with_config(|cfg| cfg.ai.default_provider.clone());
+        let provider_name = with_config(|cfg| cfg.llm.default_provider.clone());
 
         let provider =
             Provider::from_str(&provider_name).ok_or_else(|| Error::ProviderNotConfigured {
@@ -305,7 +309,7 @@ impl AnalysisEngine {
             self.convert_trade_decision(trade_decision, response, latency_ms, provider)?;
 
         // Cache the result (unless bypass cache is enabled for high priority)
-        let bypass_cache = with_config(|cfg| cfg.ai.trading_bypass_cache);
+        let bypass_cache = with_config(|cfg| cfg.llm_analysis.trading_bypass_cache);
         if !bypass_cache || priority != Priority::High {
             self.cache.insert(&context.mint, "entry", decision.clone());
         }
@@ -327,14 +331,14 @@ impl AnalysisEngine {
     ) -> Result<EvaluationResult> {
         // Check if AI is enabled
         let (ai_enabled, exit_enabled) =
-            with_config(|cfg| (cfg.ai.enabled, cfg.ai.exit_analysis_enabled));
+            with_config(|cfg| (cfg.llm.enabled, cfg.llm_analysis.exit_analysis_enabled));
 
         if !ai_enabled || !exit_enabled {
             return Err(Error::Disabled);
         }
 
         // Exit analysis should always be fresh (no cache for exit decisions)
-        let provider_name = with_config(|cfg| cfg.ai.default_provider.clone());
+        let provider_name = with_config(|cfg| cfg.llm.default_provider.clone());
 
         let provider =
             Provider::from_str(&provider_name).ok_or_else(|| Error::ProviderNotConfigured {

@@ -257,7 +257,7 @@ impl ChatEngine {
         }
 
         let llm_manager = get_llm_manager();
-        let provider_name = crate::config::with_config(|cfg| cfg.ai.default_provider.clone());
+        let provider_name = crate::config::with_config(|cfg| cfg.llm.default_provider.clone());
         let provider =
             Provider::from_str(&provider_name).ok_or_else(|| Error::ProviderNotConfigured {
                 provider: provider_name.clone(),
@@ -279,16 +279,16 @@ impl ChatEngine {
     pub(super) fn get_model_for_provider(&self, provider: Provider) -> String {
         crate::config::with_config(|cfg| {
             let provider_config = match provider {
-                Provider::OpenAi => &cfg.ai.providers.openai,
-                Provider::Anthropic => &cfg.ai.providers.anthropic,
-                Provider::Groq => &cfg.ai.providers.groq,
-                Provider::DeepSeek => &cfg.ai.providers.deepseek,
-                Provider::Gemini => &cfg.ai.providers.gemini,
-                Provider::Together => &cfg.ai.providers.together,
-                Provider::OpenRouter => &cfg.ai.providers.openrouter,
-                Provider::Mistral => &cfg.ai.providers.mistral,
+                Provider::OpenAi => &cfg.llm.providers.openai,
+                Provider::Anthropic => &cfg.llm.providers.anthropic,
+                Provider::Groq => &cfg.llm.providers.groq,
+                Provider::DeepSeek => &cfg.llm.providers.deepseek,
+                Provider::Gemini => &cfg.llm.providers.gemini,
+                Provider::Together => &cfg.llm.providers.together,
+                Provider::OpenRouter => &cfg.llm.providers.openrouter,
+                Provider::Mistral => &cfg.llm.providers.mistral,
                 Provider::Ollama => {
-                    return cfg.ai.providers.ollama.model.clone();
+                    return cfg.llm.providers.ollama.model.clone();
                 }
             };
 

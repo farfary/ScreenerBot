@@ -138,7 +138,7 @@
   font-family: var(--font-mono, monospace);
 }
 
-/* NOTE: the old `.ai-native-select` CSS-only wrapper (with its own ::after triangle)
+/* NOTE: the old `.assistant-native-select` CSS-only wrapper (with its own ::after triangle)
    was removed. Its <select> is now upgraded to the shared CustomSelect by the global
    enhancer, so the wrapper's triangle painted a SECOND arrow on top of .cs-arrow
    (the double arrow on the AI settings page). Style the dropdown via the shared
@@ -208,8 +208,8 @@
 .testing-section {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: var(--ai-card-radius);
-  padding: var(--ai-card-padding);
+  border-radius: var(--assistant-card-radius);
+  padding: var(--assistant-card-padding);
 }
 
 .testing-form {
@@ -313,7 +313,7 @@
    ============================================================================ */
 
 @media (width <= 768px) {
-  .ai-main-panel {
+  .assistant-main-panel {
     padding: 16px;
   }
 
@@ -339,7 +339,6 @@
     min-width: 0;
     min-height: 0;
   }
-
 }
 
 @media (width <= 640px) {

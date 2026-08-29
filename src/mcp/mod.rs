@@ -163,6 +163,17 @@ fn to_mcp_tool(definition: ToolDefinition) -> Tool {
 /// will look `client_id` up in the paired-client registry and return the stored
 /// scope only for an authenticated, non-revoked pairing.
 fn resolve_client_scope(client_id: Option<&str>) -> Option<ClientScope> {
+    // Honor the master availability switch. When config is loaded and
+    // `agent_control.enabled` is false, the surface is off regardless of
+    // pairing — no client is trusted. (With no pairing store this is already
+    // the effective state; the check makes the flag authoritative.)
+    if crate::config::is_config_initialized()
+        && !crate::config::with_config(|cfg| cfg.agent_control.enabled)
+    {
+        eprintln!("ScreenerBot MCP: agent_control.enabled is false; serving zero capabilities.");
+        return None;
+    }
+
     match client_id {
         Some(id) => {
             eprintln!(

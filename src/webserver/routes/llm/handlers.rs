@@ -1,4 +1,4 @@
-//! AI provider management handlers
+//! Outbound LLM provider handlers (`/api/llm`).
 
 use axum::{
     extract::{Path, State},
@@ -9,21 +9,21 @@ use axum::{
 use std::sync::Arc;
 
 use crate::apis::llm::{try_get_llm_manager, ChatMessage, ChatRequest, Provider};
-use crate::config::{update_config_section, with_config};
+use crate::config::{update_config_section, with_config, Config};
 use crate::logger::{self, LogTag};
 use crate::webserver::state::AppState;
 use crate::webserver::utils::{error_response, success_response};
 
 use super::types::*;
 
-/// GET /api/ai/providers - List all providers with status
+/// GET /api/llm/providers - List all providers with status
 pub async fn list_providers(State(_state): State<Arc<AppState>>) -> Response {
     // Return promotional fixtures only for owner-initiated media capture.
     if crate::webserver::promo::are_promo_fixtures_enabled() {
         return success_response(crate::webserver::promo::get_promo_providers());
     }
 
-    let config = with_config(|cfg| cfg.ai.clone());
+    let config = with_config(|cfg| cfg.llm.clone());
 
     let mut providers = Vec::new();
 
@@ -66,7 +66,59 @@ pub async fn list_providers(State(_state): State<Arc<AppState>>) -> Response {
     })
 }
 
-/// POST /api/ai/providers/:provider/test - Test a specific provider
+/// GET /api/llm/config - Master LLM configuration (enable switch + default provider).
+///
+/// Returns only the two master fields. Provider credentials are never included;
+/// they are read through `GET /api/llm/providers`.
+pub async fn get_config(State(_state): State<Arc<AppState>>) -> Response {
+    let response = with_config(|cfg| LlmConfigResponse {
+        enabled: cfg.llm.enabled,
+        default_provider: cfg.llm.default_provider.clone(),
+    });
+    success_response(response)
+}
+
+/// PATCH /api/llm/config - Update the master LLM enable switch and/or default provider.
+///
+/// This owner touches `cfg.llm.enabled` and `cfg.llm.default_provider` only.
+/// Analysis behaviour lives at `/api/llm-analysis/config`; provider credentials
+/// at `/api/llm/providers/:provider`.
+pub async fn update_config(
+    State(_state): State<Arc<AppState>>,
+    Json(req): Json<UpdateLlmConfigRequest>,
+) -> Response {
+    match update_config_section(|cfg| apply_llm_config_update(cfg, &req), true) {
+        Ok(()) => {
+            logger::info(LogTag::Api, "Master LLM configuration updated via API");
+            success_response(serde_json::json!({
+                "message": "LLM configuration updated successfully"
+            }))
+        }
+        Err(e) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "CONFIG_UPDATE_FAILED",
+            &format!("Failed to update LLM config: {e}"),
+            None,
+        ),
+    }
+}
+
+/// Apply a master-LLM patch in place. Split out so the ownership boundary — this
+/// mutates `cfg.llm` master fields and nothing else — is unit-testable without a
+/// running server. An unknown `default_provider` is ignored, matching the
+/// per-provider update handler.
+fn apply_llm_config_update(cfg: &mut Config, req: &UpdateLlmConfigRequest) {
+    if let Some(enabled) = req.enabled {
+        cfg.llm.enabled = enabled;
+    }
+    if let Some(provider) = req.default_provider.as_deref() {
+        if Provider::from_str(provider).is_some() {
+            cfg.llm.default_provider = provider.to_owned();
+        }
+    }
+}
+
+/// POST /api/llm/providers/:provider/test - Test a specific provider
 pub async fn test_provider(
     State(_state): State<Arc<AppState>>,
     Path(provider_name): Path<String>,
@@ -113,16 +165,16 @@ pub async fn test_provider(
     // Get model from config
     let model = with_config(|cfg| {
         let provider_cfg = match provider {
-            Provider::OpenAi => &cfg.ai.providers.openai,
-            Provider::Anthropic => &cfg.ai.providers.anthropic,
-            Provider::Groq => &cfg.ai.providers.groq,
-            Provider::DeepSeek => &cfg.ai.providers.deepseek,
-            Provider::Gemini => &cfg.ai.providers.gemini,
-            Provider::Together => &cfg.ai.providers.together,
-            Provider::OpenRouter => &cfg.ai.providers.openrouter,
-            Provider::Mistral => &cfg.ai.providers.mistral,
+            Provider::OpenAi => &cfg.llm.providers.openai,
+            Provider::Anthropic => &cfg.llm.providers.anthropic,
+            Provider::Groq => &cfg.llm.providers.groq,
+            Provider::DeepSeek => &cfg.llm.providers.deepseek,
+            Provider::Gemini => &cfg.llm.providers.gemini,
+            Provider::Together => &cfg.llm.providers.together,
+            Provider::OpenRouter => &cfg.llm.providers.openrouter,
+            Provider::Mistral => &cfg.llm.providers.mistral,
             Provider::Ollama => {
-                return cfg.ai.providers.ollama.model.clone();
+                return cfg.llm.providers.ollama.model.clone();
             }
         };
 
@@ -202,7 +254,7 @@ pub async fn test_provider(
     }
 }
 
-/// PATCH /api/ai/providers/:provider - Update a specific provider's configuration
+/// PATCH /api/llm/providers/:provider - Update a specific provider's configuration
 pub async fn update_provider(
     State(_state): State<Arc<AppState>>,
     Path(provider_name): Path<String>,
@@ -227,141 +279,141 @@ pub async fn update_provider(
             match provider {
                 Provider::OpenAi => {
                     if let Some(enabled) = req.enabled {
-                        cfg.ai.providers.openai.enabled = enabled;
+                        cfg.llm.providers.openai.enabled = enabled;
                     }
                     if let Some(ref api_key) = req.api_key {
                         if !api_key.is_empty() {
-                            cfg.ai.providers.openai.api_key = api_key.clone();
+                            cfg.llm.providers.openai.api_key = api_key.clone();
                         }
                     }
                     if let Some(ref model) = req.model {
-                        cfg.ai.providers.openai.model = model.clone();
+                        cfg.llm.providers.openai.model = model.clone();
                     }
                     if let Some(rate_limit) = req.rate_limit_per_minute {
-                        cfg.ai.providers.openai.rate_limit_per_minute = rate_limit;
+                        cfg.llm.providers.openai.rate_limit_per_minute = rate_limit;
                     }
                 }
                 Provider::Anthropic => {
                     if let Some(enabled) = req.enabled {
-                        cfg.ai.providers.anthropic.enabled = enabled;
+                        cfg.llm.providers.anthropic.enabled = enabled;
                     }
                     if let Some(ref api_key) = req.api_key {
                         if !api_key.is_empty() {
-                            cfg.ai.providers.anthropic.api_key = api_key.clone();
+                            cfg.llm.providers.anthropic.api_key = api_key.clone();
                         }
                     }
                     if let Some(ref model) = req.model {
-                        cfg.ai.providers.anthropic.model = model.clone();
+                        cfg.llm.providers.anthropic.model = model.clone();
                     }
                     if let Some(rate_limit) = req.rate_limit_per_minute {
-                        cfg.ai.providers.anthropic.rate_limit_per_minute = rate_limit;
+                        cfg.llm.providers.anthropic.rate_limit_per_minute = rate_limit;
                     }
                 }
                 Provider::Groq => {
                     if let Some(enabled) = req.enabled {
-                        cfg.ai.providers.groq.enabled = enabled;
+                        cfg.llm.providers.groq.enabled = enabled;
                     }
                     if let Some(ref api_key) = req.api_key {
                         if !api_key.is_empty() {
-                            cfg.ai.providers.groq.api_key = api_key.clone();
+                            cfg.llm.providers.groq.api_key = api_key.clone();
                         }
                     }
                     if let Some(ref model) = req.model {
-                        cfg.ai.providers.groq.model = model.clone();
+                        cfg.llm.providers.groq.model = model.clone();
                     }
                     if let Some(rate_limit) = req.rate_limit_per_minute {
-                        cfg.ai.providers.groq.rate_limit_per_minute = rate_limit;
+                        cfg.llm.providers.groq.rate_limit_per_minute = rate_limit;
                     }
                 }
                 Provider::DeepSeek => {
                     if let Some(enabled) = req.enabled {
-                        cfg.ai.providers.deepseek.enabled = enabled;
+                        cfg.llm.providers.deepseek.enabled = enabled;
                     }
                     if let Some(ref api_key) = req.api_key {
                         if !api_key.is_empty() {
-                            cfg.ai.providers.deepseek.api_key = api_key.clone();
+                            cfg.llm.providers.deepseek.api_key = api_key.clone();
                         }
                     }
                     if let Some(ref model) = req.model {
-                        cfg.ai.providers.deepseek.model = model.clone();
+                        cfg.llm.providers.deepseek.model = model.clone();
                     }
                     if let Some(rate_limit) = req.rate_limit_per_minute {
-                        cfg.ai.providers.deepseek.rate_limit_per_minute = rate_limit;
+                        cfg.llm.providers.deepseek.rate_limit_per_minute = rate_limit;
                     }
                 }
                 Provider::Gemini => {
                     if let Some(enabled) = req.enabled {
-                        cfg.ai.providers.gemini.enabled = enabled;
+                        cfg.llm.providers.gemini.enabled = enabled;
                     }
                     if let Some(ref api_key) = req.api_key {
                         if !api_key.is_empty() {
-                            cfg.ai.providers.gemini.api_key = api_key.clone();
+                            cfg.llm.providers.gemini.api_key = api_key.clone();
                         }
                     }
                     if let Some(ref model) = req.model {
-                        cfg.ai.providers.gemini.model = model.clone();
+                        cfg.llm.providers.gemini.model = model.clone();
                     }
                     if let Some(rate_limit) = req.rate_limit_per_minute {
-                        cfg.ai.providers.gemini.rate_limit_per_minute = rate_limit;
+                        cfg.llm.providers.gemini.rate_limit_per_minute = rate_limit;
                     }
                 }
                 Provider::Together => {
                     if let Some(enabled) = req.enabled {
-                        cfg.ai.providers.together.enabled = enabled;
+                        cfg.llm.providers.together.enabled = enabled;
                     }
                     if let Some(ref api_key) = req.api_key {
                         if !api_key.is_empty() {
-                            cfg.ai.providers.together.api_key = api_key.clone();
+                            cfg.llm.providers.together.api_key = api_key.clone();
                         }
                     }
                     if let Some(ref model) = req.model {
-                        cfg.ai.providers.together.model = model.clone();
+                        cfg.llm.providers.together.model = model.clone();
                     }
                     if let Some(rate_limit) = req.rate_limit_per_minute {
-                        cfg.ai.providers.together.rate_limit_per_minute = rate_limit;
+                        cfg.llm.providers.together.rate_limit_per_minute = rate_limit;
                     }
                 }
                 Provider::OpenRouter => {
                     if let Some(enabled) = req.enabled {
-                        cfg.ai.providers.openrouter.enabled = enabled;
+                        cfg.llm.providers.openrouter.enabled = enabled;
                     }
                     if let Some(ref api_key) = req.api_key {
                         if !api_key.is_empty() {
-                            cfg.ai.providers.openrouter.api_key = api_key.clone();
+                            cfg.llm.providers.openrouter.api_key = api_key.clone();
                         }
                     }
                     if let Some(ref model) = req.model {
-                        cfg.ai.providers.openrouter.model = model.clone();
+                        cfg.llm.providers.openrouter.model = model.clone();
                     }
                     if let Some(rate_limit) = req.rate_limit_per_minute {
-                        cfg.ai.providers.openrouter.rate_limit_per_minute = rate_limit;
+                        cfg.llm.providers.openrouter.rate_limit_per_minute = rate_limit;
                     }
                 }
                 Provider::Mistral => {
                     if let Some(enabled) = req.enabled {
-                        cfg.ai.providers.mistral.enabled = enabled;
+                        cfg.llm.providers.mistral.enabled = enabled;
                     }
                     if let Some(ref api_key) = req.api_key {
                         if !api_key.is_empty() {
-                            cfg.ai.providers.mistral.api_key = api_key.clone();
+                            cfg.llm.providers.mistral.api_key = api_key.clone();
                         }
                     }
                     if let Some(ref model) = req.model {
-                        cfg.ai.providers.mistral.model = model.clone();
+                        cfg.llm.providers.mistral.model = model.clone();
                     }
                     if let Some(rate_limit) = req.rate_limit_per_minute {
-                        cfg.ai.providers.mistral.rate_limit_per_minute = rate_limit;
+                        cfg.llm.providers.mistral.rate_limit_per_minute = rate_limit;
                     }
                 }
                 Provider::Ollama => {
                     if let Some(enabled) = req.enabled {
-                        cfg.ai.providers.ollama.enabled = enabled;
+                        cfg.llm.providers.ollama.enabled = enabled;
                     }
                     if let Some(ref model) = req.model {
-                        cfg.ai.providers.ollama.model = model.clone();
+                        cfg.llm.providers.ollama.model = model.clone();
                     }
                     if let Some(rate_limit) = req.rate_limit_per_minute {
-                        cfg.ai.providers.ollama.rate_limit_per_minute = rate_limit;
+                        cfg.llm.providers.ollama.rate_limit_per_minute = rate_limit;
                     }
                     // Ollama can also have a base_url but we're not updating it here
                 }
@@ -385,5 +437,91 @@ pub async fn update_provider(
             &format!("Failed to update provider config: {e}"),
             None,
         ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn master_patch_touches_only_llm_master_fields() {
+        let mut cfg = Config::default();
+        cfg.llm_analysis.filtering_enabled = true;
+        cfg.llm.providers.openai.api_key = "sk-existing".to_owned();
+        let before_analysis = serde_json::to_value(&cfg.llm_analysis).unwrap();
+        let before_providers = serde_json::to_value(&cfg.llm.providers).unwrap();
+
+        apply_llm_config_update(
+            &mut cfg,
+            &UpdateLlmConfigRequest {
+                enabled: Some(true),
+                default_provider: Some("anthropic".to_owned()),
+            },
+        );
+
+        assert!(cfg.llm.enabled);
+        assert_eq!(cfg.llm.default_provider, "anthropic");
+        // The other owners' config is untouched.
+        assert_eq!(
+            serde_json::to_value(&cfg.llm_analysis).unwrap(),
+            before_analysis
+        );
+        assert_eq!(
+            serde_json::to_value(&cfg.llm.providers).unwrap(),
+            before_providers
+        );
+    }
+
+    #[test]
+    fn master_patch_ignores_unknown_default_provider() {
+        let mut cfg = Config::default();
+        let original = cfg.llm.default_provider.clone();
+        apply_llm_config_update(
+            &mut cfg,
+            &UpdateLlmConfigRequest {
+                enabled: None,
+                default_provider: Some("not-a-provider".to_owned()),
+            },
+        );
+        assert_eq!(cfg.llm.default_provider, original);
+    }
+
+    #[test]
+    fn config_response_carries_no_provider_or_secret_fields() {
+        let json = serde_json::to_value(LlmConfigResponse {
+            enabled: true,
+            default_provider: "openai".to_owned(),
+        })
+        .unwrap();
+        let obj = json.as_object().unwrap();
+        assert_eq!(obj.len(), 2);
+        assert!(obj.contains_key("enabled"));
+        assert!(obj.contains_key("default_provider"));
+        assert!(!obj.contains_key("providers"));
+        assert!(!obj.contains_key("api_key"));
+    }
+
+    #[test]
+    fn provider_status_never_serializes_an_api_key() {
+        let json = serde_json::to_value(ProvidersListResponse {
+            providers: vec![ProviderStatus {
+                id: "openai".to_owned(),
+                name: "OpenAI".to_owned(),
+                enabled: true,
+                has_api_key: true,
+                model: "gpt-4o".to_owned(),
+                rate_limit_per_minute: 60,
+            }],
+            default_provider: "openai".to_owned(),
+        })
+        .unwrap();
+        let provider = json["providers"][0].as_object().unwrap();
+        // The boolean presence flag is exposed; the secret itself never is.
+        assert!(provider.contains_key("has_api_key"));
+        assert!(!provider.contains_key("api_key"));
+        assert!(!provider
+            .keys()
+            .any(|k| k.contains("key") && k != "has_api_key"));
     }
 }

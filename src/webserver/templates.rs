@@ -66,12 +66,12 @@ pub fn page_styles(page: &str) -> Option<String> {
             TOOLS_TRADING_STYLES,
         ]
         .join("\n"),
-        "ai" => [
-            AI_BASE_STYLES,
-            AI_SETTINGS_TESTING_STYLES,
-            AI_PROVIDERS_STYLES,
-            AI_INSTRUCTIONS_STYLES,
-            AI_AUTOMATION_STYLES,
+        "assistant" => [
+            ASSISTANT_BASE_STYLES,
+            ASSISTANT_SETTINGS_TESTING_STYLES,
+            ASSISTANT_PROVIDERS_STYLES,
+            ASSISTANT_INSTRUCTIONS_STYLES,
+            ASSISTANT_AUTOMATION_STYLES,
         ]
         .join("\n"),
         "home" => [HOME_PAGE_STYLES, HOME_CALENDAR_STYLES].join("\n"),
@@ -355,8 +355,8 @@ pub fn tools_content() -> String {
     render_page(TOOLS_PAGE)
 }
 
-pub fn ai_content() -> String {
-    render_page(AI_PAGE)
+pub fn assistant_content() -> String {
+    render_page(ASSISTANT_PAGE)
 }
 
 pub fn initialization_content() -> String {
@@ -428,7 +428,7 @@ mod tests {
             "trader",
             "wallets",
             "tools",
-            "ai",
+            "assistant",
             "initialization",
         ];
 

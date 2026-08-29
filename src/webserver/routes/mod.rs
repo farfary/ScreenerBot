@@ -5,8 +5,9 @@ use std::sync::Arc;
 
 pub mod account;
 pub mod actions;
-pub mod ai;
+pub mod agent_control;
 pub mod asset_serving;
+pub mod assistant;
 pub mod auth;
 pub mod blacklist;
 pub mod boosts;
@@ -20,6 +21,8 @@ pub mod features;
 pub mod filtering;
 pub mod header;
 pub mod initialization;
+pub mod llm;
+pub mod llm_analysis;
 pub mod lockscreen;
 pub mod ohlcv;
 pub mod positions;
@@ -54,7 +57,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/filtering", get(filtering_page))
         .route("/wallets", get(wallets_page))
         .route("/tools", get(tools_page))
-        .route("/ai", get(ai_page))
+        .route("/assistant", get(assistant_page))
         .route("/config", get(config_page))
         .route("/trader", get(trader_page))
         .route("/initialization", get(initialization_page))
@@ -143,9 +146,9 @@ async fn tools_page() -> Html<String> {
 }
 
 /// Assistant page handler
-async fn ai_page() -> Html<String> {
-    let content = templates::ai_content();
-    Html(templates::base_template("Assistant", "ai", &content))
+async fn assistant_page() -> Html<String> {
+    let content = templates::assistant_content();
+    Html(templates::base_template("Assistant", "assistant", &content))
 }
 
 /// Initialization page handler
@@ -199,7 +202,10 @@ fn api_routes() -> Router<Arc<AppState>> {
         .nest("/auth", auth::routes())
         .nest("/account", account::routes())
         .nest("/telegram", telegram::routes())
-        .nest("/ai", ai::routes())
+        .nest("/llm", llm::routes())
+        .nest("/llm-analysis", llm_analysis::routes())
+        .nest("/assistant", assistant::routes())
+        .nest("/agent-control", agent_control::routes())
         .merge(updates::routes())
         .route("/pages/:page", get(get_page_content))
 }
@@ -219,7 +225,7 @@ async fn get_page_content(AxumPath(page): AxumPath<String>) -> Html<String> {
         "config" => templates::config_content(),
         "trader" => templates::trader_content(),
         "initialization" => templates::initialization_content(),
-        "ai" => templates::ai_content(),
+        "assistant" => templates::assistant_content(),
         _ => {
             // Escape page name to prevent XSS
             let escaped_page = page

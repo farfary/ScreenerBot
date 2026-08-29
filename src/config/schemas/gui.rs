@@ -154,7 +154,7 @@ pub fn default_tabs() -> Vec<TabConfig> {
             enabled: true,
         },
         TabConfig {
-            id: "ai".into(),
+            id: "assistant".into(),
             label: "Assistant".into(),
             icon: "icon-bot-message-square".into(),
             order: 1,
@@ -240,11 +240,22 @@ pub fn default_tabs() -> Vec<TabConfig> {
 pub fn ensure_all_tabs_present(mut tabs: Vec<TabConfig>) -> Vec<TabConfig> {
     let defaults = default_tabs();
 
-    // Migration: rename "wallet" to "wallets" if present
+    // Migration: rename old tab IDs to their current names, preserving the
+    // user's saved order/enabled for that tab. "wallet" -> "wallets" and the
+    // catch-all "ai" page -> "assistant".
     for tab in &mut tabs {
         if tab.id == "wallet" {
             tab.id = "wallets".into();
         }
+        if tab.id == "ai" {
+            tab.id = "assistant".into();
+        }
+    }
+    // A config that carried both the legacy "ai" id and a fresh "assistant" id
+    // would now hold a duplicate; keep the first (the user-ordered one).
+    {
+        let mut seen = std::collections::HashSet::new();
+        tabs.retain(|t| seen.insert(t.id.clone()));
     }
 
     // Create a map of default tabs for quick lookup
@@ -287,7 +298,48 @@ pub fn ensure_all_tabs_present(mut tabs: Vec<TabConfig>) -> Vec<TabConfig> {
 
 #[cfg(test)]
 mod tests {
-    use super::StartupConfig;
+    use super::{ensure_all_tabs_present, StartupConfig, TabConfig};
+
+    fn tab(id: &str, order: u32, enabled: bool) -> TabConfig {
+        TabConfig {
+            id: id.into(),
+            label: String::new(),
+            icon: String::new(),
+            order,
+            enabled,
+        }
+    }
+
+    #[test]
+    fn legacy_ai_tab_id_migrates_to_assistant_preserving_order_and_enabled() {
+        let migrated = ensure_all_tabs_present(vec![
+            tab("home", 0, true),
+            tab("ai", 1, false),
+            tab("config", 2, true),
+        ]);
+        let assistant = migrated
+            .iter()
+            .find(|t| t.id == "assistant")
+            .expect("ai tab migrated to assistant");
+        assert_eq!(assistant.order, 1);
+        assert!(!assistant.enabled, "user's disabled state is preserved");
+        assert!(
+            !migrated.iter().any(|t| t.id == "ai"),
+            "no legacy id remains"
+        );
+        assert_eq!(
+            migrated.iter().filter(|t| t.id == "assistant").count(),
+            1,
+            "exactly one assistant tab"
+        );
+    }
+
+    #[test]
+    fn ai_and_assistant_both_present_collapses_to_one() {
+        let migrated =
+            ensure_all_tabs_present(vec![tab("ai", 1, true), tab("assistant", 5, false)]);
+        assert_eq!(migrated.iter().filter(|t| t.id == "assistant").count(), 1);
+    }
 
     #[test]
     fn startup_config_reads_legacy_explore_marker_and_writes_canonical_name() {

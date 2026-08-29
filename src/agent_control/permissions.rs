@@ -270,11 +270,11 @@ pub fn get_tool_permissions() -> ToolPermissions {
         return ToolPermissions::default();
     }
     with_config(|cfg| ToolPermissions {
-        analysis: PermissionLevel::from_str(&cfg.ai.tool_permissions_analysis),
-        portfolio: PermissionLevel::from_str(&cfg.ai.tool_permissions_portfolio),
-        trading: PermissionLevel::from_str(&cfg.ai.tool_permissions_trading),
-        config: PermissionLevel::from_str(&cfg.ai.tool_permissions_config),
-        system: PermissionLevel::from_str(&cfg.ai.tool_permissions_system),
+        analysis: PermissionLevel::from_str(&cfg.agent_control.analysis),
+        portfolio: PermissionLevel::from_str(&cfg.agent_control.portfolio),
+        trading: PermissionLevel::from_str(&cfg.agent_control.trading),
+        config: PermissionLevel::from_str(&cfg.agent_control.config),
+        system: PermissionLevel::from_str(&cfg.agent_control.system),
     })
 }
 
@@ -282,11 +282,11 @@ pub fn get_tool_permissions() -> ToolPermissions {
 pub fn update_tool_permissions(permissions: ToolPermissions) -> Result<()> {
     update_config_section(
         |cfg| {
-            cfg.ai.tool_permissions_analysis = permissions.analysis.to_str().to_string();
-            cfg.ai.tool_permissions_portfolio = permissions.portfolio.to_str().to_string();
-            cfg.ai.tool_permissions_trading = permissions.trading.to_str().to_string();
-            cfg.ai.tool_permissions_config = permissions.config.to_str().to_string();
-            cfg.ai.tool_permissions_system = permissions.system.to_str().to_string();
+            cfg.agent_control.analysis = permissions.analysis.to_str().to_string();
+            cfg.agent_control.portfolio = permissions.portfolio.to_str().to_string();
+            cfg.agent_control.trading = permissions.trading.to_str().to_string();
+            cfg.agent_control.config = permissions.config.to_str().to_string();
+            cfg.agent_control.system = permissions.system.to_str().to_string();
         },
         true, // Save to disk
     )?;

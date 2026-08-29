@@ -47,12 +47,12 @@ pub enum ExitUrgency {
 
 /// Check if LLM entry analysis should be performed
 pub fn should_analyze_entry() -> bool {
-    with_config(|cfg| cfg.ai.enabled && cfg.ai.entry_analysis_enabled)
+    with_config(|cfg| cfg.llm.enabled && cfg.llm_analysis.entry_analysis_enabled)
 }
 
 /// Check if LLM exit analysis should be performed
 pub fn should_analyze_exit() -> bool {
-    with_config(|cfg| cfg.ai.enabled && cfg.ai.exit_analysis_enabled)
+    with_config(|cfg| cfg.llm.enabled && cfg.llm_analysis.exit_analysis_enabled)
 }
 
 /// Perform LLM entry analysis for a token
@@ -62,8 +62,12 @@ pub async fn analyze_entry(token: &Token) -> Option<EntryAnalysisResult> {
         return None;
     }
 
-    let (min_confidence, bypass_cache) =
-        with_config(|cfg| (cfg.ai.filtering_min_confidence, cfg.ai.trading_bypass_cache));
+    let (min_confidence, bypass_cache) = with_config(|cfg| {
+        (
+            cfg.llm_analysis.min_confidence,
+            cfg.llm_analysis.trading_bypass_cache,
+        )
+    });
 
     // Get the global analysis engine
     let analysis_engine = match crate::llm_analysis::try_get_analysis_engine() {
@@ -122,7 +126,7 @@ pub async fn analyze_exit(position: &Position, token: &Token) -> Option<ExitAnal
         return None;
     }
 
-    let bypass_cache = with_config(|cfg| cfg.ai.trading_bypass_cache);
+    let bypass_cache = with_config(|cfg| cfg.llm_analysis.trading_bypass_cache);
 
     // Get the global analysis engine
     let analysis_engine = match crate::llm_analysis::try_get_analysis_engine() {

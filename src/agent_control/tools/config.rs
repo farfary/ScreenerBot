@@ -33,7 +33,7 @@ impl Tool for GetConfigTool {
                     "section": {
                         "type": "string",
                         "description": "Specific config section to retrieve (if not provided, returns all)",
-                        "enum": ["trader", "screener", "filters", "telegram", "ai", "services"]
+                        "enum": ["trader", "screener", "filters", "telegram", "llm", "services"]
                     }
                 },
                 "required": []
@@ -69,10 +69,10 @@ impl Tool for GetConfigTool {
                     "enabled": config.telegram.enabled,
                 }
             }),
-            Some("ai") => json!({
-                "ai": {
-                    "enabled": config.ai.enabled,
-                    "default_provider": config.ai.default_provider,
+            Some("llm") => json!({
+                "llm": {
+                    "enabled": config.llm.enabled,
+                    "default_provider": config.llm.default_provider,
                 }
             }),
             Some("services") => json!({
@@ -94,8 +94,8 @@ impl Tool for GetConfigTool {
                     "telegram": {
                         "enabled": config.telegram.enabled,
                     },
-                    "ai": {
-                        "enabled": config.ai.enabled,
+                    "llm": {
+                        "enabled": config.llm.enabled,
                     }
                 })
             }
@@ -132,7 +132,7 @@ impl Tool for UpdateConfigTool {
                     "section": {
                         "type": "string",
                         "description": "Config section to update",
-                        "enum": ["trader", "screener", "filters", "telegram", "ai"]
+                        "enum": ["trader", "screener", "filters", "telegram", "llm"]
                     },
                     "key": {
                         "type": "string",
@@ -159,7 +159,7 @@ impl Tool for UpdateConfigTool {
             "trader" => update_trader_config(&params.key, params.value),
             "filters" => update_filters_config(&params.key, params.value),
             "telegram" => update_telegram_config(&params.key, params.value),
-            "ai" => update_ai_config(&params.key, params.value),
+            "llm" => update_llm_config(&params.key, params.value),
             section => {
                 return ToolResult::error(format!("Cannot update section: {section}"));
             }
@@ -295,7 +295,7 @@ fn update_telegram_config(
     }
 }
 
-fn update_ai_config(
+fn update_llm_config(
     key: &str,
     value: serde_json::Value,
 ) -> crate::agent_control::error::Result<String> {
@@ -306,14 +306,14 @@ fn update_ai_config(
             })?;
             crate::config::update_config_section(
                 |cfg| {
-                    cfg.ai.enabled = val;
+                    cfg.llm.enabled = val;
                 },
                 true,
             )?;
-            Ok(format!("Updated AI enabled to {val}"))
+            Ok(format!("Updated LLM enabled to {val}"))
         }
         _ => Err(Error::InvalidParameters {
-            detail: format!("unknown AI config key '{key}'"),
+            detail: format!("unknown LLM config key '{key}'"),
         }),
     }
 }

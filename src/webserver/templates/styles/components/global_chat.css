@@ -20,8 +20,8 @@
   border-color: var(--primary-alpha-50);
 }
 
-/* Hide button on AI page (chat already visible) */
-[data-page="ai"] .header-action-btn.global-chat-btn,
+/* Hide button on the Assistant page (chat already visible) */
+[data-page="assistant"] .header-action-btn.global-chat-btn,
 .header-action-btn.global-chat-btn.hidden {
   display: none !important;
 }

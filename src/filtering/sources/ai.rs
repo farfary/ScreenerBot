@@ -1,7 +1,8 @@
 //! AI-powered token filtering
 //!
 //! Uses LLM analysis to determine if tokens pass filtering criteria.
-//! Disabled by default. Configure in [ai] section of config.
+//! Disabled by default. Provider clients are configured under `[llm]`; this
+//! analysis stage is configured under `[llm_analysis]`.
 
 use crate::config::with_config;
 use crate::llm_analysis::types::{EvaluationContext, Priority};
@@ -17,10 +18,10 @@ pub async fn evaluate(token: &Token) -> Result<(), FilterRejectionReason> {
     // Check if AI filtering is enabled
     let (ai_enabled, filtering_enabled, min_confidence, fallback_pass) = with_config(|cfg| {
         (
-            cfg.ai.enabled,
-            cfg.ai.filtering_enabled,
-            cfg.ai.filtering_min_confidence,
-            cfg.ai.filtering_fallback_pass,
+            cfg.llm.enabled,
+            cfg.llm_analysis.filtering_enabled,
+            cfg.llm_analysis.min_confidence,
+            cfg.llm_analysis.fallback_pass,
         )
     });
 

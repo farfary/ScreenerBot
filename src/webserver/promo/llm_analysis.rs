@@ -1,13 +1,13 @@
-//! Promo generator for the AI assistant "Overview" tab (`/api/ai/status`).
+//! Promo generator for the Assistant page's "Overview" tab (`/api/llm-analysis/status`).
 //!
-//! Produces a realistic, active-looking AI module snapshot — enabled module,
+//! Produces a realistic, active-looking analysis-module snapshot — enabled module,
 //! a mix of configured providers, headline metrics, and a recent-decisions feed —
 //! so the overview tab makes a compelling marketing screenshot.
 
 use chrono::{Duration, Utc};
 
-use crate::webserver::routes::ai::types::{
-    AiDecision, AiMetrics, AiStatusResponse, ProviderStatus,
+use crate::webserver::routes::llm_analysis::types::{
+    AnalysisDecision, AnalysisMetrics, AnalysisStatusResponse, ProviderStatus,
 };
 
 /// (id, name, enabled, has_api_key, model, rate_limit_per_minute)
@@ -69,8 +69,8 @@ pub(super) fn promo_provider_statuses() -> Vec<ProviderStatus> {
         .collect()
 }
 
-/// Generate a rich promo AI status snapshot.
-pub fn get_promo_ai_status() -> AiStatusResponse {
+/// Generate a rich promo analysis-status snapshot.
+pub fn get_promo_analysis_status() -> AnalysisStatusResponse {
     let now = Utc::now();
 
     let configured_providers = promo_provider_statuses();
@@ -81,10 +81,10 @@ pub fn get_promo_ai_status() -> AiStatusResponse {
         .count() as u32;
     let total_providers = configured_providers.len() as u32;
 
-    let recent_decisions: Vec<AiDecision> = PROMO_DECISIONS
+    let recent_decisions: Vec<AnalysisDecision> = PROMO_DECISIONS
         .iter()
         .map(
-            |(decision, context, token, mins_ago, latency, confidence)| AiDecision {
+            |(decision, context, token, mins_ago, latency, confidence)| AnalysisDecision {
                 decision: (*decision).to_owned(),
                 context: (*context).to_owned(),
                 token: (*token).to_owned(),
@@ -95,7 +95,7 @@ pub fn get_promo_ai_status() -> AiStatusResponse {
         )
         .collect();
 
-    AiStatusResponse {
+    AnalysisStatusResponse {
         enabled: true,
         filtering_enabled: true,
         entry_analysis_enabled: true,
@@ -105,7 +105,7 @@ pub fn get_promo_ai_status() -> AiStatusResponse {
         total_evaluations: 18_432,
         cache_entries: 1_284,
         cache_fresh_entries: 947,
-        metrics: AiMetrics {
+        metrics: AnalysisMetrics {
             total_evaluations: 18_432,
             cache_hit_rate: 0.86,
             avg_response_time_ms: 742.0,

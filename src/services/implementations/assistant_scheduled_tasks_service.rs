@@ -43,7 +43,7 @@ impl Service for AssistantScheduledTasksService {
 
     fn is_enabled(&self) -> bool {
         crate::global::is_initialization_complete()
-            && with_config(|cfg| cfg.ai.enabled && cfg.ai.scheduled_tasks_enabled)
+            && with_config(|cfg| cfg.llm.enabled && cfg.assistant.scheduled_tasks_enabled)
     }
 
     async fn initialize(&mut self) -> crate::Result<()> {
@@ -73,7 +73,7 @@ impl Service for AssistantScheduledTasksService {
 
     async fn health(&self) -> ServiceHealth {
         if !crate::global::is_initialization_complete()
-            || !with_config(|cfg| cfg.ai.enabled && cfg.ai.scheduled_tasks_enabled)
+            || !with_config(|cfg| cfg.llm.enabled && cfg.assistant.scheduled_tasks_enabled)
         {
             return ServiceHealth::Degraded("Disabled in config".to_owned());
         }

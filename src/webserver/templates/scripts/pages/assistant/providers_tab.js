@@ -28,7 +28,7 @@ export function createProvidersTab({ state, _eventCleanups, loadConfig }) {
    */
   async function loadProviders() {
     try {
-      const response = await fetch("/api/ai/providers");
+      const response = await fetch("/api/llm/providers");
       if (!response.ok) throw new Error("Failed to fetch providers");
 
       const data = await response.json();
@@ -42,7 +42,7 @@ export function createProvidersTab({ state, _eventCleanups, loadConfig }) {
       renderProviders(state.providers);
     } catch (error) {
       console.error("[AI] Failed to load providers:", error);
-      Utils.showToast({ key: "ai-load", type: "error", title: "Could not load providers" });
+      Utils.showToast({ key: "assistant-load", type: "error", title: "Could not load providers" });
     }
   }
 
@@ -84,7 +84,7 @@ export function createProvidersTab({ state, _eventCleanups, loadConfig }) {
               <input type="radio" name="default-provider" value="${providerId}"
                      aria-label="Use ${name} as the default provider"
                      ${isDefault ? "checked" : ""}
-                     onchange="window.aiPage.setDefaultProvider('${providerId}')">
+                     onchange="window.assistantPage.setDefaultProvider('${providerId}')">
             </label>
             
             <div class="provider-logo">
@@ -103,8 +103,8 @@ export function createProvidersTab({ state, _eventCleanups, loadConfig }) {
             </div>
             
             <div class="provider-actions">
-              ${isConfigured ? `<button class="provider-btn test-btn" onclick="window.aiPage.testProviderFromList('${providerId}')"><i class="icon-zap"></i> Test</button>` : ""}
-              <button class="provider-btn ${isConfigured ? "" : "primary"}" onclick="window.aiPage.configureProvider('${providerId}')">
+              ${isConfigured ? `<button class="provider-btn test-btn" onclick="window.assistantPage.testProviderFromList('${providerId}')"><i class="icon-zap"></i> Test</button>` : ""}
+              <button class="provider-btn ${isConfigured ? "" : "primary"}" onclick="window.assistantPage.configureProvider('${providerId}')">
                 <i class="icon-${isConfigured ? "settings" : "plus"}"></i> ${isConfigured ? "Edit" : "Configure"}
               </button>
             </div>
@@ -119,7 +119,8 @@ export function createProvidersTab({ state, _eventCleanups, loadConfig }) {
    */
   async function setDefaultProvider(providerId) {
     try {
-      const response = await fetch("/api/ai/config", {
+      // Default provider is a master LLM field, owned by /api/llm/config.
+      const response = await fetch("/api/llm/config", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ default_provider: providerId }),
@@ -157,7 +158,7 @@ export function createProvidersTab({ state, _eventCleanups, loadConfig }) {
         message: `Testing ${PROVIDER_NAMES[providerId]}...`,
       });
 
-      const response = await fetch(`/api/ai/providers/${providerId}/test`, {
+      const response = await fetch(`/api/llm/providers/${providerId}/test`, {
         method: "POST",
       });
 
@@ -321,7 +322,7 @@ export function createProvidersTab({ state, _eventCleanups, loadConfig }) {
       try {
         // Only save new key if entered, otherwise test with existing
         if (apiKey) {
-          const saveRes = await fetch(`/api/ai/providers/${providerId}`, {
+          const saveRes = await fetch(`/api/llm/providers/${providerId}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -335,7 +336,7 @@ export function createProvidersTab({ state, _eventCleanups, loadConfig }) {
         }
 
         // Now test the provider
-        const response = await fetch(`/api/ai/providers/${providerId}/test`, {
+        const response = await fetch(`/api/llm/providers/${providerId}/test`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
         });
@@ -402,7 +403,7 @@ export function createProvidersTab({ state, _eventCleanups, loadConfig }) {
           payload.api_key = apiKey;
         }
 
-        const response = await fetch(`/api/ai/providers/${providerId}`, {
+        const response = await fetch(`/api/llm/providers/${providerId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),

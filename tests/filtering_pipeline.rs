@@ -528,8 +528,8 @@ async fn pipeline_ai_stage_fails_open_when_the_engine_is_missing() {
     // optional subsystem being up.
     let _cfg = config_guard();
     common::set_config(|cfg| {
-        cfg.ai.enabled = true;
-        cfg.ai.filtering_enabled = true;
+        cfg.llm.enabled = true;
+        cfg.llm_analysis.filtering_enabled = true;
     });
 
     let token = seeded_token();

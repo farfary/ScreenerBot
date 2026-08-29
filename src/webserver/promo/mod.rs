@@ -12,8 +12,9 @@
 //! - /api/positions, /api/positions/stats
 //! - /api/tokens/list, /api/tokens/stats, /api/tokens/favorites
 //! - /api/wallets, /api/wallets/watch/*
-//! - /api/ai/stats, /api/ai/cache/stats, /api/ai/providers, /api/ai/instructions,
-//!   /api/ai/automation*, /api/ai/history, /api/ai/chat/sessions*
+//! - /api/llm-analysis/stats, /api/llm-analysis/cache/stats, /api/llm/providers,
+//!   /api/llm-analysis/instructions, /api/llm-analysis/history,
+//!   /api/assistant/automation*, /api/assistant/chat/sessions*
 //! - /api/copy-trading/overview
 //! - /api/events/head
 //! - /api/wallet/current, /api/wallet/tokens
@@ -23,22 +24,21 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
 mod aggregates;
-mod ai;
 mod assistant;
 mod copy_trading;
 mod dashboard;
 mod data;
 mod events;
 mod header;
+mod llm_analysis;
 mod positions;
 mod tokens;
 mod trader;
 mod wallet;
 mod wallets;
 
-pub use ai::get_promo_ai_status;
 pub use assistant::{
-    get_promo_ai_stats, get_promo_automation_runs, get_promo_automation_stats,
+    get_promo_analysis_stats, get_promo_automation_runs, get_promo_automation_stats,
     get_promo_automation_tasks, get_promo_cache_stats, get_promo_chat_session,
     get_promo_chat_sessions, get_promo_decision_history, get_promo_instructions,
     get_promo_providers,
@@ -49,6 +49,7 @@ pub use dashboard::{
 };
 pub use events::get_promo_events;
 pub use header::get_promo_header_metrics;
+pub use llm_analysis::get_promo_analysis_status;
 pub use positions::{get_promo_positions, get_promo_positions_stats};
 pub use tokens::{get_promo_favorites, get_promo_tokens_list, get_promo_tokens_stats};
 pub use trader::get_promo_trader_stats;

@@ -1,4 +1,4 @@
-//! AI chat sessions, messages, tools, and permissions handlers
+//! Assistant chat sessions, messages and confirmations (`/api/assistant/chat`).
 
 use axum::{
     extract::{Path, State},
@@ -11,12 +11,11 @@ use std::convert::Infallible;
 use std::sync::Arc;
 use tokio_stream::{wrappers::UnboundedReceiverStream, StreamExt};
 
-use crate::agent_control::permissions::ToolPermissions;
 use crate::apis::llm::{try_get_llm_manager, ChatMessage, ChatRequest, Provider};
 use crate::assistant::chat::database as chat_db;
 use crate::assistant::chat::ChatProgressEvent;
 use crate::assistant::{try_get_chat_engine, ChatRequest as ChatEngineRequest};
-use crate::config::{update_config_section, with_config};
+use crate::config::with_config;
 use crate::logger::{self, LogTag};
 use crate::webserver::state::AppState;
 use crate::webserver::utils::{error_response, success_response};
@@ -27,7 +26,7 @@ use super::types::*;
 // CHAT HANDLERS
 // ============================================================================
 
-/// POST /api/ai/chat - Send a message to AI chat
+/// POST /api/assistant/chat - Send a message to AI chat
 pub async fn send_chat_message(
     State(_state): State<Arc<AppState>>,
     Json(req): Json<SendChatMessageRequest>,
@@ -130,7 +129,7 @@ pub async fn send_chat_message(
     }
 }
 
-/// POST /api/ai/chat/stream - Stream agent progress and the final response.
+/// POST /api/assistant/chat/stream - Stream agent progress and the final response.
 pub async fn stream_chat_message(
     State(_state): State<Arc<AppState>>,
     Json(req): Json<SendChatMessageRequest>,
@@ -214,7 +213,7 @@ pub async fn stream_chat_message(
     Ok(Sse::new(stream))
 }
 
-/// GET /api/ai/chat/sessions - List all chat sessions
+/// GET /api/assistant/chat/sessions - List all chat sessions
 pub async fn list_chat_sessions(State(_state): State<Arc<AppState>>) -> Response {
     // Return promotional fixtures only for owner-initiated media capture — the real
     // list is the operator's own conversations.
@@ -245,7 +244,7 @@ pub async fn list_chat_sessions(State(_state): State<Arc<AppState>>) -> Response
     }
 }
 
-/// POST /api/ai/chat/sessions - Create new chat session
+/// POST /api/assistant/chat/sessions - Create new chat session
 pub async fn create_chat_session(
     State(_state): State<Arc<AppState>>,
     Json(req): Json<CreateChatSessionRequest>,
@@ -281,7 +280,7 @@ pub async fn create_chat_session(
     }
 }
 
-/// GET /api/ai/chat/sessions/:id - Get session with messages
+/// GET /api/assistant/chat/sessions/:id - Get session with messages
 pub async fn get_chat_session(
     State(_state): State<Arc<AppState>>,
     Path(id): Path<i64>,
@@ -344,7 +343,7 @@ pub async fn get_chat_session(
     }
 }
 
-/// DELETE /api/ai/chat/sessions/:id - Delete session
+/// DELETE /api/assistant/chat/sessions/:id - Delete session
 pub async fn delete_chat_session(
     State(_state): State<Arc<AppState>>,
     Path(id): Path<i64>,
@@ -377,7 +376,7 @@ pub async fn delete_chat_session(
     }
 }
 
-/// POST /api/ai/chat/sessions/:id/summarize - Summarize session
+/// POST /api/assistant/chat/sessions/:id/summarize - Summarize session
 pub async fn summarize_chat_session(
     State(_state): State<Arc<AppState>>,
     Path(id): Path<i64>,
@@ -436,7 +435,7 @@ pub async fn summarize_chat_session(
         }
     };
 
-    let provider_name = with_config(|cfg| cfg.ai.default_provider.clone());
+    let provider_name = with_config(|cfg| cfg.llm.default_provider.clone());
     let provider = match Provider::from_str(&provider_name) {
         Some(p) => p,
         None => {
@@ -496,7 +495,7 @@ pub async fn summarize_chat_session(
     }
 }
 
-/// POST /api/ai/chat/sessions/:id/generate-title - Generate AI title for session
+/// POST /api/assistant/chat/sessions/:id/generate-title - Generate AI title for session
 pub async fn generate_session_title(
     State(_state): State<Arc<AppState>>,
     Path(id): Path<i64>,
@@ -591,7 +590,7 @@ Rules:
         }
     };
 
-    let provider_name = with_config(|cfg| cfg.ai.default_provider.clone());
+    let provider_name = with_config(|cfg| cfg.llm.default_provider.clone());
     let provider = match Provider::from_str(&provider_name) {
         Some(p) => p,
         None => {
@@ -664,7 +663,7 @@ Rules:
     success_response(GenerateTitleResponse { title })
 }
 
-/// POST /api/ai/chat/confirm/:confirmation_id - Confirm/deny tool execution
+/// POST /api/assistant/chat/confirm/:confirmation_id - Confirm/deny tool execution
 pub async fn confirm_tool_execution(
     State(_state): State<Arc<AppState>>,
     Path(confirmation_id): Path<String>,
@@ -734,80 +733,6 @@ pub async fn confirm_tool_execution(
 }
 
 // ============================================================================
-// TOOLS & PERMISSIONS HANDLERS
-// ============================================================================
-
-/// GET /api/ai/tools - List available tools
-pub async fn list_tools(State(_state): State<Arc<AppState>>) -> Response {
-    // Get chat engine to access tool registry
-    let _engine = match try_get_chat_engine() {
-        Some(e) => e,
-        None => {
-            return error_response(
-                StatusCode::SERVICE_UNAVAILABLE,
-                "CHAT_NOT_INITIALIZED",
-                "Chat engine not initialized",
-                None,
-            )
-        }
-    };
-
-    // Use the tool registry from the engine (we'll need to expose this method)
-    // For now, create a temporary registry
-    let registry = crate::agent_control::create_tool_registry();
-    let tools = registry.list_definitions();
-
-    success_response(tools)
-}
-
-/// GET /api/ai/permissions - Get tool permissions
-pub async fn get_permissions(State(_state): State<Arc<AppState>>) -> Response {
-    let permissions = with_config(|cfg| ToolPermissions {
-        analysis: crate::agent_control::PermissionLevel::from_str(
-            &cfg.ai.tool_permissions_analysis,
-        ),
-        portfolio: crate::agent_control::PermissionLevel::from_str(
-            &cfg.ai.tool_permissions_portfolio,
-        ),
-        trading: crate::agent_control::PermissionLevel::from_str(&cfg.ai.tool_permissions_trading),
-        config: crate::agent_control::PermissionLevel::from_str(&cfg.ai.tool_permissions_config),
-        system: crate::agent_control::PermissionLevel::from_str(&cfg.ai.tool_permissions_system),
-    });
-
-    success_response(permissions)
-}
-
-/// PATCH /api/ai/permissions - Update permissions
-pub async fn update_permissions(
-    State(_state): State<Arc<AppState>>,
-    Json(req): Json<ToolPermissions>,
-) -> Response {
-    match update_config_section(
-        |cfg| {
-            cfg.ai.tool_permissions_analysis = req.analysis.to_str().to_string();
-            cfg.ai.tool_permissions_portfolio = req.portfolio.to_str().to_string();
-            cfg.ai.tool_permissions_trading = req.trading.to_str().to_string();
-            cfg.ai.tool_permissions_config = req.config.to_str().to_string();
-            cfg.ai.tool_permissions_system = req.system.to_str().to_string();
-        },
-        true,
-    ) {
-        Ok(()) => {
-            logger::info(LogTag::Api, "Updated AI tool permissions");
-            success_response(serde_json::json!({
-                "message": "Tool permissions updated successfully"
-            }))
-        }
-        Err(e) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "CONFIG_ERROR",
-            &format!("Failed to update permissions: {e}"),
-            None,
-        ),
-    }
-}
-
-// ============================================================================
 // HELPER FUNCTIONS
 // ============================================================================
 
@@ -815,16 +740,16 @@ pub async fn update_permissions(
 fn get_model_for_provider(provider: Provider) -> String {
     with_config(|cfg| {
         let provider_config = match provider {
-            Provider::OpenAi => &cfg.ai.providers.openai,
-            Provider::Anthropic => &cfg.ai.providers.anthropic,
-            Provider::Groq => &cfg.ai.providers.groq,
-            Provider::DeepSeek => &cfg.ai.providers.deepseek,
-            Provider::Gemini => &cfg.ai.providers.gemini,
-            Provider::Together => &cfg.ai.providers.together,
-            Provider::OpenRouter => &cfg.ai.providers.openrouter,
-            Provider::Mistral => &cfg.ai.providers.mistral,
+            Provider::OpenAi => &cfg.llm.providers.openai,
+            Provider::Anthropic => &cfg.llm.providers.anthropic,
+            Provider::Groq => &cfg.llm.providers.groq,
+            Provider::DeepSeek => &cfg.llm.providers.deepseek,
+            Provider::Gemini => &cfg.llm.providers.gemini,
+            Provider::Together => &cfg.llm.providers.together,
+            Provider::OpenRouter => &cfg.llm.providers.openrouter,
+            Provider::Mistral => &cfg.llm.providers.mistral,
             Provider::Ollama => {
-                return cfg.ai.providers.ollama.model.clone();
+                return cfg.llm.providers.ollama.model.clone();
             }
         };
 

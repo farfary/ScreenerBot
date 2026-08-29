@@ -4,14 +4,16 @@
 use crate::config_struct;
 
 mod account;
-mod agents;
-mod ai;
+mod agent_control;
+mod assistant;
 mod connectivity;
 mod copy_trading;
 mod events;
 mod filtering;
 mod gui;
 mod holder_watch;
+mod llm;
+mod llm_analysis;
 mod maintenance;
 mod monitoring;
 mod network;
@@ -32,14 +34,16 @@ mod wallet;
 mod webserver;
 
 pub use account::*;
-pub use agents::*;
-pub use ai::*;
+pub use agent_control::*;
+pub use assistant::*;
 pub use connectivity::*;
 pub use copy_trading::*;
 pub use events::*;
 pub use filtering::*;
 pub use gui::*;
 pub use holder_watch::*;
+pub use llm::*;
+pub use llm_analysis::*;
 pub use maintenance::*;
 pub use monitoring::*;
 pub use network::*;
@@ -132,8 +136,14 @@ config_struct! {
         /// Holder watch tool configuration
         holder_watch: HolderWatchConfig = HolderWatchConfig::default(),
 
-        /// AI integration configuration for filtering and trading
-        ai: AiConfig = AiConfig::default(),
+        /// Outbound LLM provider clients (credentials, models, rate limits)
+        llm: LlmConfig = LlmConfig::default(),
+
+        /// Model-scored token/trading analysis settings
+        llm_analysis: LlmAnalysisConfig = LlmAnalysisConfig::default(),
+
+        /// Dashboard assistant: chat plus scheduled conversations
+        assistant: AssistantConfig = AssistantConfig::default(),
 
         /// Performance tuning (memory profile, cache sizing)
         performance: PerformanceConfig = PerformanceConfig::default(),
@@ -151,7 +161,8 @@ config_struct! {
         /// live in the encrypted store, and the server address is a constant.
         account: AccountConfig = AccountConfig::default(),
 
-        /// Native local agent-control settings. Paired clients remain empty by default.
-        agents: AgentsConfig = AgentsConfig::default(),
+        /// Shared agent-control capability boundary: availability plus the
+        /// per-category tool permission policy.
+        agent_control: AgentControlConfig = AgentControlConfig::default(),
     }
 }

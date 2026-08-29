@@ -89,21 +89,22 @@ pub(super) const TOOLS_TOKEN_STYLES: &str =
     include_str!("templates/styles/pages/tools/token_tools.css");
 pub(super) const TOOLS_TRADING_STYLES: &str =
     include_str!("templates/styles/pages/tools/trading_tools.css");
-pub(super) const AI_BASE_STYLES: &str = include_str!("templates/styles/pages/ai/base.css");
-pub(super) const AI_SETTINGS_TESTING_STYLES: &str =
-    include_str!("templates/styles/pages/ai/settings_testing.css");
-pub(super) const AI_PROVIDERS_STYLES: &str =
-    include_str!("templates/styles/pages/ai/providers.css");
-pub(super) const AI_INSTRUCTIONS_STYLES: &str =
-    include_str!("templates/styles/pages/ai/instructions.css");
+pub(super) const ASSISTANT_BASE_STYLES: &str =
+    include_str!("templates/styles/pages/assistant/base.css");
+pub(super) const ASSISTANT_SETTINGS_TESTING_STYLES: &str =
+    include_str!("templates/styles/pages/assistant/settings_testing.css");
+pub(super) const ASSISTANT_PROVIDERS_STYLES: &str =
+    include_str!("templates/styles/pages/assistant/providers.css");
+pub(super) const ASSISTANT_INSTRUCTIONS_STYLES: &str =
+    include_str!("templates/styles/pages/assistant/instructions.css");
 pub(super) const CHAT_WIDGET_LAYOUT_STYLES: &str =
     include_str!("templates/styles/components/chat_widget/layout.css");
 pub(super) const CHAT_WIDGET_MESSAGES_STYLES: &str =
     include_str!("templates/styles/components/chat_widget/messages.css");
 pub(super) const CHAT_WIDGET_INPUT_STYLES: &str =
     include_str!("templates/styles/components/chat_widget/input.css");
-pub(super) const AI_AUTOMATION_STYLES: &str =
-    include_str!("templates/styles/pages/ai/automation.css");
+pub(super) const ASSISTANT_AUTOMATION_STYLES: &str =
+    include_str!("templates/styles/pages/assistant/automation.css");
 pub(super) const HOME_PAGE_STYLES: &str = include_str!("templates/styles/pages/home.css");
 pub(super) const HOME_CALENDAR_STYLES: &str =
     include_str!("templates/styles/pages/home/calendar.css");
@@ -467,11 +468,15 @@ pub const TOOLS_TRADING_TOOLS: &str =
     include_str!("templates/scripts/pages/tools/trading_tools.js");
 pub const TOOLS_MULTI_WALLET_TOOLS: &str =
     include_str!("templates/scripts/pages/tools/multi_wallet_tools.js");
-pub const AI_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/ai.js");
-pub const AI_PROVIDERS_TAB: &str = include_str!("templates/scripts/pages/ai/providers_tab.js");
-pub const AI_INSTRUCTIONS_TAB: &str =
-    include_str!("templates/scripts/pages/ai/instructions_tab.js");
-pub const AI_AUTOMATION_TAB: &str = include_str!("templates/scripts/pages/ai/automation_tab.js");
+pub const ASSISTANT_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/assistant.js");
+pub const ASSISTANT_CONFIG_CONTRACT: &str =
+    include_str!("templates/scripts/pages/assistant/config_contract.js");
+pub const ASSISTANT_PROVIDERS_TAB: &str =
+    include_str!("templates/scripts/pages/assistant/providers_tab.js");
+pub const ASSISTANT_INSTRUCTIONS_TAB: &str =
+    include_str!("templates/scripts/pages/assistant/instructions_tab.js");
+pub const ASSISTANT_AUTOMATION_TAB: &str =
+    include_str!("templates/scripts/pages/assistant/automation_tab.js");
 pub const HOME_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/home.js");
 pub const HOME_CALENDAR_JS: &str =
     include_str!("templates/scripts/pages/home/portfolio_calendar.js");
@@ -489,7 +494,7 @@ pub(super) const STRATEGIES_PAGE: &str = include_str!("templates/pages/strategie
 pub(super) const TRADER_PAGE: &str = include_str!("templates/pages/trader.html");
 pub(super) const WALLETS_PAGE: &str = include_str!("templates/pages/wallets.html");
 pub(super) const TOOLS_PAGE: &str = include_str!("templates/pages/tools.html");
-pub(super) const AI_PAGE: &str = include_str!("templates/pages/ai.html");
+pub(super) const ASSISTANT_PAGE: &str = include_str!("templates/pages/assistant.html");
 pub(super) const HOME_PAGE: &str = include_str!("templates/pages/home.html");
 pub(super) const SPLASH_PAGE: &str = include_str!("templates/pages/splash.html");
 pub(super) const ONBOARDING_PAGE: &str = include_str!("templates/pages/onboarding.html");

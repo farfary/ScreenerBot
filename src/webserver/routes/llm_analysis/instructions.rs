@@ -19,7 +19,7 @@ use super::types::*;
 // INSTRUCTIONS HANDLERS
 // ============================================================================
 
-/// GET /api/ai/instructions - List all instructions
+/// GET /api/llm-analysis/instructions - List all instructions
 pub async fn list_instructions(State(_state): State<Arc<AppState>>) -> Response {
     // Return promotional fixtures only for owner-initiated media capture.
     if crate::webserver::promo::are_promo_fixtures_enabled() {
@@ -57,7 +57,7 @@ pub async fn list_instructions(State(_state): State<Arc<AppState>>) -> Response 
     }
 }
 
-/// GET /api/ai/instructions/:id - Get single instruction
+/// GET /api/llm-analysis/instructions/:id - Get single instruction
 pub async fn get_instruction(State(_state): State<Arc<AppState>>, Path(id): Path<i64>) -> Response {
     match db::with_analysis_db(|conn| db::get_instruction(conn, id)) {
         Ok(Some(i)) => success_response(InstructionResponse {
@@ -85,7 +85,7 @@ pub async fn get_instruction(State(_state): State<Arc<AppState>>, Path(id): Path
     }
 }
 
-/// POST /api/ai/instructions - Create new instruction
+/// POST /api/llm-analysis/instructions - Create new instruction
 pub async fn create_instruction(
     State(_state): State<Arc<AppState>>,
     Json(req): Json<CreateInstructionRequest>,
@@ -136,7 +136,7 @@ pub async fn create_instruction(
     }
 }
 
-/// PATCH /api/ai/instructions/:id - Update instruction
+/// PATCH /api/llm-analysis/instructions/:id - Update instruction
 pub async fn update_instruction(
     State(_state): State<Arc<AppState>>,
     Path(id): Path<i64>,
@@ -191,7 +191,7 @@ pub async fn update_instruction(
     }
 }
 
-/// DELETE /api/ai/instructions/:id - Delete instruction
+/// DELETE /api/llm-analysis/instructions/:id - Delete instruction
 pub async fn delete_instruction(
     State(_state): State<Arc<AppState>>,
     Path(id): Path<i64>,
@@ -212,7 +212,7 @@ pub async fn delete_instruction(
     }
 }
 
-/// POST /api/ai/instructions/reorder - Reorder instructions
+/// POST /api/llm-analysis/instructions/reorder - Reorder instructions
 pub async fn reorder_instructions(
     State(_state): State<Arc<AppState>>,
     Json(req): Json<ReorderInstructionsRequest>,
@@ -240,7 +240,7 @@ pub async fn reorder_instructions(
 // TEMPLATES HANDLERS
 // ============================================================================
 
-/// GET /api/ai/templates - List built-in templates
+/// GET /api/llm-analysis/templates - List built-in templates
 pub async fn list_templates(State(_state): State<Arc<AppState>>) -> Response {
     let templates = db::get_builtin_templates();
     let templates: Vec<TemplateResponse> = templates
@@ -261,7 +261,7 @@ pub async fn list_templates(State(_state): State<Arc<AppState>>) -> Response {
 // HISTORY HANDLERS
 // ============================================================================
 
-/// GET /api/ai/history - List decision history with pagination
+/// GET /api/llm-analysis/history - List decision history with pagination
 pub async fn list_history(
     State(_state): State<Arc<AppState>>,
     Query(query): Query<HistoryQuery>,
@@ -336,7 +336,7 @@ pub async fn list_history(
     }
 }
 
-/// GET /api/ai/history/:id - Get single decision details
+/// GET /api/llm-analysis/history/:id - Get single decision details
 pub async fn get_history_detail(
     State(_state): State<Arc<AppState>>,
     Path(id): Path<i64>,

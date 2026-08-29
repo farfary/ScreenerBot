@@ -197,7 +197,7 @@ pub async fn start_server(port_override: Option<u16>, host_override: Option<Stri
     );
 
     // Create application state with AI engine if enabled
-    let analysis_engine = if crate::config::with_config(|cfg| cfg.ai.enabled) {
+    let analysis_engine = if crate::config::with_config(|cfg| cfg.llm.enabled) {
         crate::llm_analysis::try_get_analysis_engine()
     } else {
         None

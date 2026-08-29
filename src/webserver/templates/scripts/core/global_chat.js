@@ -133,7 +133,7 @@ class GlobalChat {
     if (!this._btn) return;
     // Hide on AI page since chat is already inline there
     const path = window.location.pathname;
-    const isAiPage = path === "/ai" || path.startsWith("/ai/");
+    const isAiPage = path === "/assistant" || path.startsWith("/assistant/");
     this._btn.classList.toggle("hidden", isAiPage);
 
     // Close dialog if navigating to AI page

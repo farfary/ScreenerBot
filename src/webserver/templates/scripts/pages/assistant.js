@@ -9,14 +9,21 @@ import { ChatWidget } from "../core/chat_widget.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
 
 // Import tab modules
-import { createProvidersTab } from "./ai/providers_tab.js";
-import { createInstructionsTab } from "./ai/instructions_tab.js";
-import { createAutomationTab } from "./ai/automation_tab.js";
+import { createProvidersTab } from "./assistant/providers_tab.js";
+import { createInstructionsTab } from "./assistant/instructions_tab.js";
+import { createAutomationTab } from "./assistant/automation_tab.js";
+import {
+  ANALYSIS_CONFIG_FIELDS,
+  SLIDER_SUFFIX,
+  readAnalysisConfigForm,
+  applyAnalysisConfigForm,
+  sliderLabelId,
+} from "./assistant/config_contract.js";
 
 // Constants
 const DEFAULT_TAB = "chat";
-const AI_STATE_KEY = "ai.activeTab";
-const AI_TABS = [
+const ASSISTANT_STATE_KEY = "assistant.activeTab";
+const ASSISTANT_TABS = [
   { id: "chat", label: "Chat" },
   { id: "stats", label: "Overview" },
   { id: "providers", label: "Providers" },
@@ -26,7 +33,7 @@ const AI_TABS = [
   { id: "testing", label: "Testing" },
   { id: "settings", label: "Settings" },
 ];
-const AI_TAB_IDS = new Set(AI_TABS.map(({ id }) => id));
+const ASSISTANT_TAB_IDS = new Set(ASSISTANT_TABS.map(({ id }) => id));
 
 // Decisions per History page. Sent as `per_page` and used to compute the page
 // count, so one constant keeps the request and the pager agreeing.
@@ -128,7 +135,7 @@ function createLifecycle() {
     if (automationPoller) automationPoller.stop();
 
     // Hide all panels
-    const allPanels = $$(".ai-panel-content");
+    const allPanels = $$(".assistant-panel-content");
     allPanels.forEach((panel) => {
       panel.classList.remove("active");
     });
@@ -175,7 +182,7 @@ function createLifecycle() {
    */
   async function loadAiStatus() {
     try {
-      const response = await fetch("/api/ai/status");
+      const response = await fetch("/api/llm-analysis/status");
       if (!response.ok) throw new Error("Failed to fetch AI status");
 
       const data = await response.json();
@@ -186,7 +193,7 @@ function createLifecycle() {
       updateRecentDecisions(data.recent_decisions || []);
     } catch (error) {
       console.error("[AI] Failed to load AI status:", error);
-      Utils.showToast({ key: "ai-load", type: "error", title: "Could not load AI status" });
+      Utils.showToast({ key: "assistant-load", type: "error", title: "Could not load AI status" });
     }
   }
 
@@ -194,9 +201,9 @@ function createLifecycle() {
    * Update status bar
    */
   function updateStatusBar(data) {
-    const statusBar = $("#ai-status-bar");
-    const statusText = $("#ai-status-text");
-    const toggle = $("#stats-ai-toggle");
+    const statusBar = $("#assistant-status-bar");
+    const statusText = $("#assistant-status-text");
+    const toggle = $("#stats-assistant-toggle");
     const toggleLabel = $("#stats-toggle-label");
 
     if (!statusBar || !toggle) return;
@@ -306,7 +313,8 @@ function createLifecycle() {
    */
   async function toggleAiEnabled(enabled) {
     try {
-      const response = await fetch("/api/ai/config", {
+      // The master enable switch is owned by /api/llm/config, not the analysis endpoint.
+      const response = await fetch("/api/llm/config", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ enabled }),
@@ -328,7 +336,7 @@ function createLifecycle() {
       Utils.showToast({ type: "error", title: "Failed to update AI status" });
 
       // Revert toggle
-      const toggle = $("#stats-ai-toggle");
+      const toggle = $("#stats-assistant-toggle");
       if (toggle) toggle.checked = !enabled;
     }
   }
@@ -342,21 +350,42 @@ function createLifecycle() {
    */
   async function loadConfig() {
     try {
-      const response = await fetch("/api/ai/config");
-      if (!response.ok) throw new Error("Failed to fetch AI config");
+      // Master fields (enabled / default_provider) are owned by /api/llm/config;
+      // analysis behaviour by /api/llm-analysis/config. Fetch both and merge.
+      const [analysisRes, masterRes] = await Promise.all([
+        fetch("/api/llm-analysis/config"),
+        fetch("/api/llm/config"),
+      ]);
+      if (!analysisRes.ok) throw new Error("Failed to fetch analysis config");
+      if (!masterRes.ok) throw new Error("Failed to fetch LLM config");
 
-      const data = await response.json();
+      const analysis = await analysisRes.json();
+      const master = await masterRes.json();
+      const data = {
+        ...analysis,
+        enabled: master.enabled,
+        default_provider: master.default_provider,
+      };
       state.config = data;
 
       updateConfigForm(data);
     } catch (error) {
       console.error("[AI] Failed to load config:", error);
-      Utils.showToast({ key: "ai-load", type: "error", title: "Could not load AI configuration" });
+      Utils.showToast({
+        key: "assistant-load",
+        type: "error",
+        title: "Could not load AI configuration",
+      });
     }
   }
 
   /**
-   * Update configuration form
+   * Update configuration form.
+   *
+   * `enabled` / `default_provider` come from `/api/llm/config`; every other
+   * field is the flat `AnalysisConfigResponse` from `/api/llm-analysis/config`
+   * and is applied through the shared wire contract so the form can never drift
+   * from the endpoint's key names or scalar shapes.
    */
   function updateConfigForm(config) {
     // Master Control
@@ -374,17 +403,15 @@ function createLifecycle() {
       defaultProvider.value = config.default_provider || "";
     }
 
-    // Filtering
-    const filteringEnabled = $("#setting-filtering-enabled");
-    if (filteringEnabled) filteringEnabled.checked = config.filtering?.enabled || false;
-
-    const minConfidence = $("#setting-min-confidence");
-    const minConfidenceValue = $("#slider-value-min-confidence");
-    if (minConfidence && minConfidenceValue) {
-      const value = Math.round((config.filtering?.min_confidence || 0.7) * 100);
-      minConfidence.value = value / 100;
-      minConfidenceValue.textContent = value + "%";
-    }
+    // Analysis behaviour — flat contract, one control per wire key.
+    applyAnalysisConfigForm(
+      config,
+      (id) => $(`#${id}`),
+      (id, text) => {
+        const label = $(`#${sliderLabelId(id)}`);
+        if (label) label.textContent = text;
+      }
+    );
   }
 
   // ============================================================================
@@ -396,7 +423,7 @@ function createLifecycle() {
    */
   async function loadCacheStats() {
     try {
-      const response = await fetch("/api/ai/cache/stats");
+      const response = await fetch("/api/llm-analysis/cache/stats");
       if (!response.ok) throw new Error("Failed to fetch cache stats");
 
       const data = await response.json();
@@ -434,7 +461,7 @@ function createLifecycle() {
     if (!confirmed) return;
 
     try {
-      const response = await fetch("/api/ai/cache/clear", { method: "POST" });
+      const response = await fetch("/api/llm-analysis/cache/clear", { method: "POST" });
       if (!response.ok) throw new Error("Failed to clear cache");
 
       playSuccess();
@@ -464,32 +491,30 @@ function createLifecycle() {
     const saveConfigBtn = $("#save-config-btn");
     if (saveConfigBtn) {
       addTrackedListener(saveConfigBtn, "click", async () => {
-        // Collect form data
-        const config = {
+        // Master enable + default provider are owned by /api/llm/config.
+        const master = {
           enabled: $("#setting-enabled")?.checked || false,
           default_provider: $("#setting-default-provider")?.value || "",
-          filtering: {
-            enabled: $("#setting-filtering-enabled")?.checked || false,
-            min_confidence: parseFloat($("#setting-min-confidence")?.value) || 0.7,
-          },
-          entry_analysis: {
-            enabled: $("#setting-entry-enabled")?.checked || false,
-            min_confidence: parseFloat($("#setting-entry-min-confidence")?.value) || 0.7,
-          },
-          exit_analysis: {
-            enabled: $("#setting-exit-enabled")?.checked || false,
-            min_confidence: parseFloat($("#setting-exit-min-confidence")?.value) || 0.7,
-          },
         };
+        // Everything else is analysis behaviour, owned by /api/llm-analysis/config:
+        // a flat `UpdateAnalysisConfigRequest` carrying only the backed controls.
+        const analysis = readAnalysisConfigForm((id) => $(`#${id}`));
 
         try {
-          const response = await fetch("/api/ai/config", {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(config),
-          });
+          const [masterRes, analysisRes] = await Promise.all([
+            fetch("/api/llm/config", {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(master),
+            }),
+            fetch("/api/llm-analysis/config", {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(analysis),
+            }),
+          ]);
 
-          if (!response.ok) throw new Error("Failed to save configuration");
+          if (!masterRes.ok || !analysisRes.ok) throw new Error("Failed to save configuration");
 
           playSuccess();
           Utils.showToast({
@@ -512,21 +537,19 @@ function createLifecycle() {
   }
 
   /**
-   * Setup slider value displays
+   * Setup slider value displays.
+   *
+   * Every range control in the contract carries its integer value straight to
+   * the wire, so the readout is the raw value plus the field's unit suffix — no
+   * 0-1 rescaling.
    */
   function setupSliders() {
-    const sliders = [
-      { slider: "setting-min-confidence", display: "slider-value-min-confidence" },
-      { slider: "setting-entry-min-confidence", display: "slider-value-entry-min-confidence" },
-      { slider: "setting-exit-min-confidence", display: "slider-value-exit-min-confidence" },
-    ];
-
-    sliders.forEach(({ slider, display }) => {
-      const sliderEl = $(`#${slider}`);
-      const displayEl = $(`#${display}`);
+    ANALYSIS_CONFIG_FIELDS.filter(([, , kind]) => kind !== "bool").forEach(([, id, kind]) => {
+      const sliderEl = $(`#${id}`);
+      const displayEl = $(`#${sliderLabelId(id)}`);
       if (sliderEl && displayEl) {
         addTrackedListener(sliderEl, "input", () => {
-          displayEl.textContent = Math.round(parseFloat(sliderEl.value) * 100) + "%";
+          displayEl.textContent = `${sliderEl.value}${SLIDER_SUFFIX[kind]}`;
         });
       }
     });
@@ -565,7 +588,9 @@ function createLifecycle() {
     try {
       // `per_page`, not `limit`: HistoryQuery has no `limit` field, so the old
       // parameter was silently dropped and every page asked for the default 50.
-      const response = await fetch(`/api/ai/history?page=${page}&per_page=${HISTORY_PAGE_SIZE}`);
+      const response = await fetch(
+        `/api/llm-analysis/history?page=${page}&per_page=${HISTORY_PAGE_SIZE}`
+      );
       if (!response.ok) throw new Error("Failed to load history");
 
       const data = await response.json();
@@ -625,12 +650,12 @@ function createLifecycle() {
           ? `
         <div class="pagination">
           <button class="btn btn-sm btn-secondary" ${page <= 1 ? "disabled" : ""}
-                  onclick="window.aiPage.loadHistory(${page - 1})">
+                  onclick="window.assistantPage.loadHistory(${page - 1})">
             <i class="icon-chevron-left"></i> Previous
           </button>
           <span class="pagination-info">Page ${page} of ${totalPages}</span>
           <button class="btn btn-sm btn-secondary" ${page >= totalPages ? "disabled" : ""}
-                  onclick="window.aiPage.loadHistory(${page + 1})">
+                  onclick="window.assistantPage.loadHistory(${page + 1})">
             Next <i class="icon-chevron-right"></i>
           </button>
         </div>
@@ -809,14 +834,14 @@ function createLifecycle() {
       console.log("[AI] Initializing");
 
       const hashTab = window.location.hash.slice(1);
-      const savedTab = AppState.load(AI_STATE_KEY, DEFAULT_TAB);
-      state.currentTab = AI_TAB_IDS.has(hashTab)
+      const savedTab = AppState.load(ASSISTANT_STATE_KEY, DEFAULT_TAB);
+      state.currentTab = ASSISTANT_TAB_IDS.has(hashTab)
         ? hashTab
-        : AI_TAB_IDS.has(savedTab)
+        : ASSISTANT_TAB_IDS.has(savedTab)
           ? savedTab
           : DEFAULT_TAB;
       window.history.replaceState(
-        { page: "ai", subtab: state.currentTab },
+        { page: "assistant", subtab: state.currentTab },
         "",
         `#${state.currentTab}`
       );
@@ -833,9 +858,9 @@ function createLifecycle() {
 
       addTrackedListener(window, "popstate", () => {
         const tabId = window.location.hash.slice(1);
-        if (!AI_TAB_IDS.has(tabId) || tabId === state.currentTab) return;
+        if (!ASSISTANT_TAB_IDS.has(tabId) || tabId === state.currentTab) return;
         state.currentTab = tabId;
-        AppState.save(AI_STATE_KEY, tabId);
+        AppState.save(ASSISTANT_STATE_KEY, tabId);
         subTabBar?.setActive(tabId, {
           silent: true,
           skipValidation: true,
@@ -846,7 +871,7 @@ function createLifecycle() {
       });
 
       // Setup stats toggle
-      const statsToggle = $("#stats-ai-toggle");
+      const statsToggle = $("#stats-assistant-toggle");
       if (statsToggle) {
         addTrackedListener(statsToggle, "change", async (e) => {
           await toggleAiEnabled(e.target.checked);
@@ -863,19 +888,19 @@ function createLifecycle() {
       if (!subTabBar) {
         subTabBar = new TabBar({
           container: "#subTabsContainer",
-          tabs: AI_TABS,
+          tabs: ASSISTANT_TABS,
           defaultTab: state.currentTab,
-          stateKey: AI_STATE_KEY,
-          pageName: "ai",
+          stateKey: ASSISTANT_STATE_KEY,
+          pageName: "assistant",
           onChange: (tabId) => {
             state.currentTab = tabId;
             switchTab(tabId);
           },
         });
-        TabBarManager.register("ai", subTabBar);
+        TabBarManager.register("assistant", subTabBar);
       }
       ctx.manageTabBar(subTabBar);
-      TabBarManager.register("ai", subTabBar);
+      TabBarManager.register("assistant", subTabBar);
       subTabBar.show({ force: true });
 
       const restoredTab = subTabBar.getActiveTab();
@@ -984,7 +1009,7 @@ function createLifecycle() {
         _chatWidget = null;
       }
       subTabBar = null;
-      TabBarManager.unregister("ai");
+      TabBarManager.unregister("assistant");
 
       // Clean up event listeners
       eventCleanups.forEach((cleanup) => cleanup());
@@ -1002,7 +1027,7 @@ const lifecycle = createLifecycle();
 
 // Expose API functions globally for dynamically-rendered inline event handlers
 // (used in provider cards, instruction cards, modals, etc.)
-window.aiPage = lifecycle.api;
+window.assistantPage = lifecycle.api;
 
 // Register the page
-registerPage("ai", lifecycle);
+registerPage("assistant", lifecycle);

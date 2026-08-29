@@ -1,5 +1,5 @@
 //! Promo generators for the Assistant page's tabs other than Overview
-//! (`ai.rs` owns `/api/ai/status`).
+//! (`llm_analysis.rs` owns `/api/llm-analysis/status`).
 //!
 //! Every one of these tabs reads a local database that a fresh install has never
 //! written: Providers lists the operator's own configured keys, Instructions and
@@ -8,7 +8,7 @@
 //! more often — photograph an empty state, which is what a screenshot must never
 //! show of a feature that works.
 //!
-//! The tabs describe one coherent desk: the same five providers `ai.rs` reports as
+//! The tabs describe one coherent desk: the same five providers `llm_analysis.rs` reports as
 //! configured, six instruction rules, three scheduled tasks whose run history and
 //! aggregate statistics reconcile with each other, and a decision log whose newest
 //! entries are the ones the Overview tab shows as recent decisions.
@@ -17,12 +17,14 @@ use chrono::{DateTime, Duration, Utc};
 
 use crate::assistant::chat::database::{ChatMessage, ChatSession};
 use crate::assistant::scheduled::types::{AutomationStats, ScheduledTask, TaskRun};
-use crate::webserver::routes::ai::types::{
-    AiStatsResponse, CacheStatsResponse, DecisionHistoryResponse, GetChatSessionResponse,
-    HistoryListResponse, InstructionResponse, InstructionsListResponse, ProvidersListResponse,
+use crate::webserver::routes::assistant::types::GetChatSessionResponse;
+use crate::webserver::routes::llm::types::ProvidersListResponse;
+use crate::webserver::routes::llm_analysis::types::{
+    AnalysisStatsResponse, CacheStatsResponse, DecisionHistoryResponse, HistoryListResponse,
+    InstructionResponse, InstructionsListResponse,
 };
 
-use super::ai::promo_provider_statuses;
+use super::llm_analysis::promo_provider_statuses;
 
 /// The one clock every fixture in this module is measured against, so a run's
 /// timestamps stay ordered relative to each other.
@@ -40,7 +42,7 @@ fn stamp(minutes: i64) -> String {
 
 /// Generate the Providers tab list.
 ///
-/// Shares `ai.rs`'s provider table rather than repeating it: the Overview tab
+/// Shares `llm_analysis.rs`'s provider table rather than repeating it: the Overview tab
 /// counts "5 of 9 active" from the same rows, and two tables would drift.
 pub fn get_promo_providers() -> ProvidersListResponse {
     ProvidersListResponse {
@@ -55,11 +57,11 @@ pub fn get_promo_providers() -> ProvidersListResponse {
 
 /// Generate the request/latency counters.
 ///
-/// The totals match `get_promo_ai_status`'s `total_evaluations`, and the failure
+/// The totals match `get_promo_analysis_status`'s `total_evaluations`, and the failure
 /// count is what makes the success rate on screen a real division rather than a
 /// flat 100%.
-pub fn get_promo_ai_stats() -> AiStatsResponse {
-    AiStatsResponse {
+pub fn get_promo_analysis_stats() -> AnalysisStatsResponse {
+    AnalysisStatsResponse {
         total_requests: 18_432,
         successful_requests: 18_301,
         failed_requests: 131,

@@ -10,7 +10,13 @@ import * as Utils from "../../core/utils.js";
 function getDefaultTabs() {
   return [
     { id: "home", label: "Home", icon: "icon-house", order: 0, enabled: true },
-    { id: "ai", label: "Assistant", icon: "icon-bot-message-square", order: 1, enabled: true },
+    {
+      id: "assistant",
+      label: "Assistant",
+      icon: "icon-bot-message-square",
+      order: 1,
+      enabled: true,
+    },
     {
       id: "positions",
       label: "Positions",

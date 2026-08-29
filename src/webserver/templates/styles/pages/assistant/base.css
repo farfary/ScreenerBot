@@ -1,7 +1,7 @@
 /* AI Page Styles */
 
 /* Main Panel */
-.ai-main-panel {
+.assistant-main-panel {
   flex: 1;
   min-height: 0;
   min-width: 0;
@@ -12,34 +12,34 @@
 }
 
 /* Chat panel needs full-fill layout - no padding */
-.ai-main-panel:has(#chat-panel.active) {
+.assistant-main-panel:has(#chat-panel.active) {
   padding: 0;
   overflow: hidden;
 }
 
-.ai-panel-content {
+.assistant-panel-content {
   display: none;
   padding-bottom: var(--spacing-xl);
 }
 
-.ai-panel-content.active {
+.assistant-panel-content.active {
   display: block;
-  animation: ai-panel-fade 0.3s ease-out;
+  animation: assistant-panel-fade 0.3s ease-out;
 }
 
 /* Chat panel fills entire available space */
-#chat-panel.ai-panel-content {
+#chat-panel.assistant-panel-content {
   padding-bottom: 0;
   height: 100%;
   min-height: 0;
 }
 
-#chat-panel.ai-panel-content.active {
+#chat-panel.assistant-panel-content.active {
   display: flex;
   flex-direction: column;
 }
 
-@keyframes ai-panel-fade {
+@keyframes assistant-panel-fade {
   from {
     opacity: 0;
     transform: translateY(8px);
@@ -51,7 +51,7 @@
   }
 }
 
-.ai-panel-header {
+.assistant-panel-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
@@ -64,14 +64,14 @@
   min-width: 0;
 }
 
-.ai-panel-title {
+.assistant-panel-title {
   font-size: 24px;
   font-weight: 600;
   color: var(--text-primary);
   margin: 0 0 8px;
 }
 
-.ai-panel-description {
+.assistant-panel-description {
   font-size: 14px;
   color: var(--text-secondary);
   margin: 0;
@@ -79,19 +79,19 @@
 
 /* Page layout tokens */
 
-.ai-page {
+.assistant-page {
   padding: 0;
   display: flex;
   flex-direction: column;
   height: 100%;
   overflow: hidden;
 
-  --ai-card-radius: 8px;
-  --ai-card-padding: 1rem;
+  --assistant-card-radius: 8px;
+  --assistant-card-padding: 1rem;
 }
 
 /* AI content container - full height for chat */
-#ai-content {
+#assistant-content {
   flex: 1;
   min-height: 0;
   display: flex;
@@ -99,7 +99,7 @@
   height: 100%;
 }
 
-.ai-panel-content > * + * {
+.assistant-panel-content > * + * {
   margin-top: 1rem;
 }
 
@@ -107,59 +107,59 @@
    AI Status Bar - AI Module Toggle Control
    ============================================================================ */
 
-.ai-status-bar {
+.assistant-status-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0.85rem 1.1rem;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: var(--ai-card-radius);
+  border-radius: var(--assistant-card-radius);
   margin-bottom: 1.25rem;
   transition: border-color 0.2s ease;
 }
 
-.ai-status-bar[data-status="enabled"] {
+.assistant-status-bar[data-status="enabled"] {
   border-color: var(--success-alpha-40);
 }
 
-.ai-status-bar[data-status="disabled"] {
+.assistant-status-bar[data-status="disabled"] {
   border-color: var(--danger-alpha-40);
 }
 
-.ai-page .status-bar-main {
+.assistant-page .status-bar-main {
   display: flex;
   align-items: center;
   gap: 0.75rem;
 }
 
-.ai-page .status-bar-icon {
+.assistant-page .status-bar-icon {
   color: var(--text-muted);
   font-size: 1.25rem;
   line-height: 1;
 }
 
-.ai-status-bar[data-status="enabled"] .status-bar-icon {
+.assistant-status-bar[data-status="enabled"] .status-bar-icon {
   color: var(--success);
 }
 
-.ai-status-bar[data-status="disabled"] .status-bar-icon {
+.assistant-status-bar[data-status="disabled"] .status-bar-icon {
   color: var(--text-muted);
 }
 
-.ai-page .status-bar-info {
+.assistant-page .status-bar-info {
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
 }
 
-.ai-page .status-bar-title {
+.assistant-page .status-bar-title {
   font-size: 0.9rem;
   font-weight: 600;
   color: var(--text-primary);
 }
 
-.ai-page .status-bar-status {
+.assistant-page .status-bar-status {
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
@@ -167,7 +167,7 @@
   color: var(--text-muted);
 }
 
-.ai-status-bar[data-status="enabled"] .status-bar-status {
+.assistant-status-bar[data-status="enabled"] .status-bar-status {
   color: var(--success);
 }
 
@@ -175,21 +175,21 @@
    Stats Section
    ============================================================================ */
 
-.ai-page .stats-section {
+.assistant-page .stats-section {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: var(--ai-card-radius);
-  padding: var(--ai-card-padding);
+  border-radius: var(--assistant-card-radius);
+  padding: var(--assistant-card-padding);
 }
 
-.ai-page .section-header {
+.assistant-page .section-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 1rem;
 }
 
-.ai-page .section-header h3 {
+.assistant-page .section-header h3 {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -199,7 +199,7 @@
   margin: 0;
 }
 
-.ai-page .section-header h4 {
+.assistant-page .section-header h4 {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -209,7 +209,7 @@
   margin: 0;
 }
 
-.ai-page .section-subtitle {
+.assistant-page .section-subtitle {
   font-size: 0.85rem;
   color: var(--text-muted);
 }

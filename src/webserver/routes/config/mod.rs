@@ -21,9 +21,10 @@ pub mod types;
 
 // Re-export handler functions for use by the router
 use getters::{
-    get_account_config, get_ai_config, get_config_metadata, get_copy_trading_config,
-    get_events_config, get_filtering_config, get_full_config, get_gui_config, get_gui_defaults,
-    get_holder_watch_config, get_maintenance_config, get_monitoring_config, get_network_config,
+    get_account_config, get_agent_control_config, get_assistant_config, get_config_metadata,
+    get_copy_trading_config, get_events_config, get_filtering_config, get_full_config,
+    get_gui_config, get_gui_defaults, get_holder_watch_config, get_llm_analysis_config,
+    get_llm_config, get_maintenance_config, get_monitoring_config, get_network_config,
     get_ohlcv_config, get_performance_config, get_pools_config, get_positions_config,
     get_referral_config, get_rpc_config, get_services_config, get_sol_price_config,
     get_strategies_config, get_summary_config, get_swaps_config, get_telegram_config,
@@ -61,7 +62,10 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/config/gui", get(get_gui_config))
         .route("/config/gui/defaults", get(get_gui_defaults))
         .route("/config/telegram", get(get_telegram_config))
-        .route("/config/ai", get(get_ai_config))
+        .route("/config/llm", get(get_llm_config))
+        .route("/config/llm_analysis", get(get_llm_analysis_config))
+        .route("/config/assistant", get(get_assistant_config))
+        .route("/config/agent_control", get(get_agent_control_config))
         .route("/config/strategies", get(get_strategies_config))
         .route("/config/holder_watch", get(get_holder_watch_config))
         .route("/config/wallet", get(get_wallet_config))
@@ -127,7 +131,19 @@ pub fn routes() -> Router<Arc<AppState>> {
             "/config/telegram",
             patch(patch_any_config::<config::TelegramConfig>),
         )
-        .route("/config/ai", patch(patch_any_config::<config::AiConfig>))
+        .route("/config/llm", patch(patch_any_config::<config::LlmConfig>))
+        .route(
+            "/config/llm_analysis",
+            patch(patch_any_config::<config::LlmAnalysisConfig>),
+        )
+        .route(
+            "/config/assistant",
+            patch(patch_any_config::<config::AssistantConfig>),
+        )
+        .route(
+            "/config/agent_control",
+            patch(patch_any_config::<config::AgentControlConfig>),
+        )
         .route(
             "/config/strategies",
             patch(patch_any_config::<config::StrategiesConfig>),

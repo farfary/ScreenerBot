@@ -304,7 +304,10 @@ pub fn collect_config_metadata() -> ConfigMetadata {
     map.insert("ohlcv", super::OhlcvConfig::field_metadata());
     map.insert("webserver", super::WebserverConfig::field_metadata());
     map.insert("telegram", super::TelegramConfig::field_metadata());
-    map.insert("ai", super::AiConfig::field_metadata());
+    map.insert("llm", super::LlmConfig::field_metadata());
+    map.insert("llm_analysis", super::LlmAnalysisConfig::field_metadata());
+    map.insert("assistant", super::AssistantConfig::field_metadata());
+    map.insert("agent_control", super::AgentControlConfig::field_metadata());
     map.insert("strategies", super::StrategiesConfig::field_metadata());
     map.insert("holder_watch", super::HolderWatchConfig::field_metadata());
     map.insert("wallet", super::WalletConfig::field_metadata());
@@ -514,6 +517,38 @@ mod tests {
             round_tripped.auto_wallet_signin,
             config.account.auto_wallet_signin
         );
+    }
+
+    /// The `[ai]` section was split into four canonical owners. Each must be
+    /// registered here (or its dashboard form never renders) and must round-trip
+    /// both ways (or its PATCH arm 400s). Mirrors the seven-step trap above.
+    #[test]
+    fn llm_split_sections_are_registered_and_round_trip() {
+        let metadata = collect_config_metadata();
+        for section in ["llm", "llm_analysis", "assistant", "agent_control"] {
+            let fields = metadata
+                .get(section)
+                .unwrap_or_else(|| panic!("`{section}` is missing from collect_config_metadata()"));
+            assert!(!fields.is_empty(), "`{section}` exposes no fields");
+        }
+
+        let config = crate::config::schemas::Config::default();
+        for value in [
+            serde_json::to_value(&config.llm).unwrap(),
+            serde_json::to_value(&config.llm_analysis).unwrap(),
+            serde_json::to_value(&config.assistant).unwrap(),
+            serde_json::to_value(&config.agent_control).unwrap(),
+        ] {
+            assert!(value.is_object());
+        }
+        let _: crate::config::LlmConfig =
+            serde_json::from_value(serde_json::to_value(&config.llm).unwrap()).unwrap();
+        let _: crate::config::LlmAnalysisConfig =
+            serde_json::from_value(serde_json::to_value(&config.llm_analysis).unwrap()).unwrap();
+        let _: crate::config::AssistantConfig =
+            serde_json::from_value(serde_json::to_value(&config.assistant).unwrap()).unwrap();
+        let _: crate::config::AgentControlConfig =
+            serde_json::from_value(serde_json::to_value(&config.agent_control).unwrap()).unwrap();
     }
 
     #[test]

@@ -1,9 +1,10 @@
 /**
  * ChatWidget - Reusable chat component
  *
- * Extracted from ai.js to allow usage in both the AI page chat tab
- * and the global floating chat dialog. All DOM queries are scoped to
- * the provided root element so multiple instances can coexist.
+ * Extracted from the Assistant page (`pages/assistant.js`) so it can serve both
+ * the Assistant page chat tab and the global floating chat dialog. All DOM
+ * queries are scoped to the provided root element so multiple instances can
+ * coexist.
  */
 import * as Utils from "./utils.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
@@ -271,7 +272,7 @@ export class ChatWidget {
   async loadSessions() {
     const generation = ++this._sessionLoadGeneration;
     try {
-      const response = await fetch("/api/ai/chat/sessions");
+      const response = await fetch("/api/assistant/chat/sessions");
       if (!response.ok) throw new Error("Failed to load chat sessions");
 
       const data = await response.json();
@@ -337,7 +338,9 @@ export class ChatWidget {
       });
       if (!confirmed) return;
 
-      const response = await fetch(`/api/ai/chat/sessions/${sessionId}`, { method: "DELETE" });
+      const response = await fetch(`/api/assistant/chat/sessions/${sessionId}`, {
+        method: "DELETE",
+      });
       if (!response.ok) throw new Error("Failed to delete session");
 
       playSuccess();
@@ -358,7 +361,7 @@ export class ChatWidget {
 
   async generateSessionTitle(sessionId) {
     try {
-      const response = await fetch(`/api/ai/chat/sessions/${sessionId}/generate-title`, {
+      const response = await fetch(`/api/assistant/chat/sessions/${sessionId}/generate-title`, {
         method: "POST",
       });
       if (!response.ok) return;
@@ -397,7 +400,7 @@ export class ChatWidget {
     // Auto-create session if none exists
     if (!this.state.currentSession) {
       try {
-        const response = await fetch("/api/ai/chat/sessions", {
+        const response = await fetch("/api/assistant/chat/sessions", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({}),
@@ -613,7 +616,7 @@ export class ChatWidget {
     this._hideToolConfirmation();
 
     try {
-      const response = await fetch(`/api/ai/chat/confirm/${confirmation.confirmation_id}`, {
+      const response = await fetch(`/api/assistant/chat/confirm/${confirmation.confirmation_id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ approved, session_id: this.state.currentSession }),
@@ -664,7 +667,7 @@ export class ChatWidget {
     const sessionId = session.id;
 
     try {
-      const response = await fetch(`/api/ai/chat/sessions/${session.id}`);
+      const response = await fetch(`/api/assistant/chat/sessions/${session.id}`);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
       const data = await response.json();
@@ -1041,7 +1044,7 @@ export class ChatWidget {
   }
 
   async _streamChat(payload, signal, onEvent) {
-    const response = await fetch("/api/ai/chat/stream", {
+    const response = await fetch("/api/assistant/chat/stream", {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
       body: JSON.stringify(payload),

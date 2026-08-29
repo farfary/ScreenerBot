@@ -63,7 +63,7 @@ pub(super) async fn initialize_dashboard_persistence() -> Result<(), StartupErro
 /// is valid in Explore Mode. The wallet/position-dependent AI background
 /// services remain gated separately on full initialization.
 pub(crate) async fn initialize_ai_runtime_if_enabled() -> Result<(), StartupError> {
-    if !crate::config::with_config(|cfg| cfg.ai.enabled) {
+    if !crate::config::with_config(|cfg| cfg.llm.enabled) {
         return Ok(());
     }
 

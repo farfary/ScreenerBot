@@ -357,7 +357,13 @@ export class SettingsDialog {
   _getDefaultTabs() {
     return [
       { id: "home", label: "Home", icon: "icon-house", order: 0, enabled: true },
-      { id: "ai", label: "Assistant", icon: "icon-bot-message-square", order: 1, enabled: true },
+      {
+        id: "assistant",
+        label: "Assistant",
+        icon: "icon-bot-message-square",
+        order: 1,
+        enabled: true,
+      },
       {
         id: "positions",
         label: "Positions",
@@ -1133,104 +1139,107 @@ export class SettingsDialog {
     let lastTime = Date.now();
     let speedHistory = [];
 
-    this.downloadPoller = new Poller(async () => {
-      try {
-        const statusRes = await fetch("/api/updates/status");
-        const data = await statusRes.json();
-        if (!statusRes.ok || data.success === false) {
-          throw new Error(data.error?.message || data.error || "Failed to read update status");
-        }
-        // API returns { state: { download_progress: { downloading, progress_percent, completed, error, downloaded_bytes, total_bytes } } }
-        const state = data.state || data;
-        const progress = state.download_progress || {};
+    this.downloadPoller = new Poller(
+      async () => {
+        try {
+          const statusRes = await fetch("/api/updates/status");
+          const data = await statusRes.json();
+          if (!statusRes.ok || data.success === false) {
+            throw new Error(data.error?.message || data.error || "Failed to read update status");
+          }
+          // API returns { state: { download_progress: { downloading, progress_percent, completed, error, downloaded_bytes, total_bytes } } }
+          const state = data.state || data;
+          const progress = state.download_progress || {};
 
-        if (progress.downloading) {
-          const currentProgress = progress.progress_percent || 0;
-          const now = Date.now();
-          const elapsed = (now - lastTime) / 1000; // seconds
+          if (progress.downloading) {
+            const currentProgress = progress.progress_percent || 0;
+            const now = Date.now();
+            const elapsed = (now - lastTime) / 1000; // seconds
 
-          // Calculate speed (using progress percentage and total size if available)
-          let speedMBps = 0;
-          let etaText = "";
+            // Calculate speed (using progress percentage and total size if available)
+            let speedMBps = 0;
+            let etaText = "";
 
-          if (progress.downloaded_bytes && progress.total_bytes) {
-            const bytesDiff =
-              progress.downloaded_bytes - (lastProgress / 100) * progress.total_bytes;
-            if (elapsed > 0 && bytesDiff > 0) {
-              const bytesPerSec = bytesDiff / elapsed;
-              speedMBps = bytesPerSec / (1024 * 1024);
+            if (progress.downloaded_bytes && progress.total_bytes) {
+              const bytesDiff =
+                progress.downloaded_bytes - (lastProgress / 100) * progress.total_bytes;
+              if (elapsed > 0 && bytesDiff > 0) {
+                const bytesPerSec = bytesDiff / elapsed;
+                speedMBps = bytesPerSec / (1024 * 1024);
 
-              // Smooth speed using moving average
-              speedHistory.push(speedMBps);
-              if (speedHistory.length > 5) speedHistory.shift();
-              const avgSpeed = speedHistory.reduce((a, b) => a + b, 0) / speedHistory.length;
+                // Smooth speed using moving average
+                speedHistory.push(speedMBps);
+                if (speedHistory.length > 5) speedHistory.shift();
+                const avgSpeed = speedHistory.reduce((a, b) => a + b, 0) / speedHistory.length;
 
-              // Calculate ETA
-              const remainingBytes = progress.total_bytes - progress.downloaded_bytes;
-              const etaSeconds = remainingBytes / (avgSpeed * 1024 * 1024);
-              if (etaSeconds < 60) {
-                etaText = `${Math.round(etaSeconds)}s remaining`;
-              } else if (etaSeconds < 3600) {
-                etaText = `${Math.round(etaSeconds / 60)}m remaining`;
-              } else {
-                etaText = `${Math.round(etaSeconds / 3600)}h remaining`;
+                // Calculate ETA
+                const remainingBytes = progress.total_bytes - progress.downloaded_bytes;
+                const etaSeconds = remainingBytes / (avgSpeed * 1024 * 1024);
+                if (etaSeconds < 60) {
+                  etaText = `${Math.round(etaSeconds)}s remaining`;
+                } else if (etaSeconds < 3600) {
+                  etaText = `${Math.round(etaSeconds / 60)}m remaining`;
+                } else {
+                  etaText = `${Math.round(etaSeconds / 3600)}h remaining`;
+                }
+
+                speedMBps = avgSpeed;
               }
+            } else {
+              // Fallback: estimate speed from progress change
+              const progressDiff = currentProgress - lastProgress;
+              if (elapsed > 0 && progressDiff > 0 && globalUpdateState.info?.file_size) {
+                const totalBytes = globalUpdateState.info.file_size;
+                const bytesDiff = (progressDiff / 100) * totalBytes;
+                speedMBps = bytesDiff / elapsed / (1024 * 1024);
+              }
+            }
 
-              speedMBps = avgSpeed;
+            lastProgress = currentProgress;
+            lastTime = now;
+            globalUpdateState.progress = currentProgress;
+
+            // Update UI elements directly for smoothness
+            if (this.dialogEl) {
+              const bar = this.dialogEl.querySelector("#downloadProgressBar");
+              const percentText = this.dialogEl.querySelector("#download-percent-text");
+              const speedText = this.dialogEl.querySelector("#download-speed-text");
+              const etaElement = this.dialogEl.querySelector("#downloadEtaText");
+              const sizeText = this.dialogEl.querySelector("#downloadSizeText");
+
+              if (bar) bar.style.width = `${currentProgress}%`;
+              if (percentText) percentText.textContent = `${Math.round(currentProgress)}%`;
+              if (speedText && speedMBps > 0) {
+                speedText.textContent = `${speedMBps.toFixed(1)} MB/s`;
+              }
+              if (etaElement && etaText) {
+                etaElement.textContent = etaText;
+              }
+              if (sizeText && progress.downloaded_bytes && progress.total_bytes) {
+                sizeText.textContent = `${this._formatBytes(progress.downloaded_bytes)} / ${this._formatBytes(progress.total_bytes)}`;
+              }
             }
-          } else {
-            // Fallback: estimate speed from progress change
-            const progressDiff = currentProgress - lastProgress;
-            if (elapsed > 0 && progressDiff > 0 && globalUpdateState.info?.file_size) {
-              const totalBytes = globalUpdateState.info.file_size;
-              const bytesDiff = (progressDiff / 100) * totalBytes;
-              speedMBps = bytesDiff / elapsed / (1024 * 1024);
-            }
+          } else if (progress.completed && progress.downloaded_path) {
+            globalUpdateState.downloading = false;
+            globalUpdateState.downloaded = true;
+            globalUpdateState.progress = 100;
+            if (this.downloadPoller) this.downloadPoller.cleanup();
+            this.downloadPoller = null;
+            this._updateUpdatesTabUI();
+          } else if (progress.error) {
+            throw new Error(progress.error || "Download failed");
           }
-
-          lastProgress = currentProgress;
-          lastTime = now;
-          globalUpdateState.progress = currentProgress;
-
-          // Update UI elements directly for smoothness
-          if (this.dialogEl) {
-            const bar = this.dialogEl.querySelector("#downloadProgressBar");
-            const percentText = this.dialogEl.querySelector("#download-percent-text");
-            const speedText = this.dialogEl.querySelector("#download-speed-text");
-            const etaElement = this.dialogEl.querySelector("#downloadEtaText");
-            const sizeText = this.dialogEl.querySelector("#downloadSizeText");
-
-            if (bar) bar.style.width = `${currentProgress}%`;
-            if (percentText) percentText.textContent = `${Math.round(currentProgress)}%`;
-            if (speedText && speedMBps > 0) {
-              speedText.textContent = `${speedMBps.toFixed(1)} MB/s`;
-            }
-            if (etaElement && etaText) {
-              etaElement.textContent = etaText;
-            }
-            if (sizeText && progress.downloaded_bytes && progress.total_bytes) {
-              sizeText.textContent = `${this._formatBytes(progress.downloaded_bytes)} / ${this._formatBytes(progress.total_bytes)}`;
-            }
-          }
-        } else if (progress.completed && progress.downloaded_path) {
+        } catch (err) {
+          console.error("Download poll error:", err);
           globalUpdateState.downloading = false;
-          globalUpdateState.downloaded = true;
-          globalUpdateState.progress = 100;
+          globalUpdateState.error = err.message;
           if (this.downloadPoller) this.downloadPoller.cleanup();
           this.downloadPoller = null;
           this._updateUpdatesTabUI();
-        } else if (progress.error) {
-          throw new Error(progress.error || "Download failed");
         }
-      } catch (err) {
-        console.error("Download poll error:", err);
-        globalUpdateState.downloading = false;
-        globalUpdateState.error = err.message;
-        if (this.downloadPoller) this.downloadPoller.cleanup();
-        this.downloadPoller = null;
-        this._updateUpdatesTabUI();
-      }
-    }, { label: "UpdateDownload", intervalMs: 1000, pauseWhenHidden: false });
+      },
+      { label: "UpdateDownload", intervalMs: 1000, pauseWhenHidden: false }
+    );
 
     this.downloadPoller.start();
   }

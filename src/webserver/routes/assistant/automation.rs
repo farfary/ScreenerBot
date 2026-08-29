@@ -1,4 +1,4 @@
-//! AI automation scheduled tasks handlers
+//! Assistant scheduled-automation handlers (`/api/assistant/automation`).
 
 use axum::{extract::Path, http::StatusCode, response::Response, Json};
 
@@ -7,7 +7,7 @@ use crate::webserver::utils::{error_response, success_response};
 
 use super::types::*;
 
-/// GET /api/ai/automation — List all scheduled tasks
+/// GET /api/assistant/automation — List all scheduled tasks
 pub async fn list_automation_tasks() -> Response {
     // Return promotional fixtures only for owner-initiated media capture.
     if crate::webserver::promo::are_promo_fixtures_enabled() {
@@ -39,7 +39,7 @@ pub async fn list_automation_tasks() -> Response {
     }
 }
 
-/// POST /api/ai/automation — Create a new scheduled task
+/// POST /api/assistant/automation — Create a new scheduled task
 pub async fn create_automation_task(Json(req): Json<CreateAutomationTaskRequest>) -> Response {
     let pool = match crate::assistant::chat::database::get_chat_pool() {
         Some(p) => p,
@@ -144,7 +144,7 @@ pub async fn create_automation_task(Json(req): Json<CreateAutomationTaskRequest>
     }
 }
 
-/// GET /api/ai/automation/:id — Get a specific task
+/// GET /api/assistant/automation/:id — Get a specific task
 pub async fn get_automation_task(Path(id): Path<i64>) -> Response {
     let pool = match crate::assistant::chat::database::get_chat_pool() {
         Some(p) => p,
@@ -170,7 +170,7 @@ pub async fn get_automation_task(Path(id): Path<i64>) -> Response {
     }
 }
 
-/// PATCH /api/ai/automation/:id — Update a task
+/// PATCH /api/assistant/automation/:id — Update a task
 pub async fn update_automation_task(
     Path(id): Path<i64>,
     Json(req): Json<UpdateAutomationTaskRequest>,
@@ -252,7 +252,7 @@ pub async fn update_automation_task(
     }
 }
 
-/// DELETE /api/ai/automation/:id — Delete a task
+/// DELETE /api/assistant/automation/:id — Delete a task
 pub async fn delete_automation_task(Path(id): Path<i64>) -> Response {
     let pool = match crate::assistant::chat::database::get_chat_pool() {
         Some(p) => p,
@@ -290,7 +290,7 @@ pub async fn delete_automation_task(Path(id): Path<i64>) -> Response {
     }
 }
 
-/// POST /api/ai/automation/:id/toggle — Enable/disable a task
+/// POST /api/assistant/automation/:id/toggle — Enable/disable a task
 pub async fn toggle_automation_task(
     Path(id): Path<i64>,
     Json(req): Json<ToggleTaskRequest>,
@@ -321,7 +321,7 @@ pub async fn toggle_automation_task(
     }
 }
 
-/// POST /api/ai/automation/:id/run — Trigger immediate execution
+/// POST /api/assistant/automation/:id/run — Trigger immediate execution
 pub async fn run_automation_task(Path(id): Path<i64>) -> Response {
     let pool = match crate::assistant::chat::database::get_chat_pool() {
         Some(p) => p,
@@ -403,7 +403,7 @@ pub async fn run_automation_task(Path(id): Path<i64>) -> Response {
     success_response(serde_json::json!({ "triggered": true, "task_id": id }))
 }
 
-/// GET /api/ai/automation/:id/runs — Get run history for a task
+/// GET /api/assistant/automation/:id/runs — Get run history for a task
 pub async fn get_automation_task_runs(Path(id): Path<i64>) -> Response {
     // Return promotional fixtures only for owner-initiated media capture.
     if crate::webserver::promo::are_promo_fixtures_enabled() {
@@ -437,7 +437,7 @@ pub async fn get_automation_task_runs(Path(id): Path<i64>) -> Response {
     }
 }
 
-/// GET /api/ai/automation/runs — Get all recent runs
+/// GET /api/assistant/automation/runs — Get all recent runs
 pub async fn get_automation_recent_runs() -> Response {
     // Return promotional fixtures only for owner-initiated media capture.
     if crate::webserver::promo::are_promo_fixtures_enabled() {
@@ -469,7 +469,7 @@ pub async fn get_automation_recent_runs() -> Response {
     }
 }
 
-/// GET /api/ai/automation/runs/:id — Get a specific run
+/// GET /api/assistant/automation/runs/:id — Get a specific run
 pub async fn get_automation_run_detail(Path(run_id): Path<i64>) -> Response {
     let pool = match crate::assistant::chat::database::get_chat_pool() {
         Some(p) => p,
@@ -495,7 +495,7 @@ pub async fn get_automation_run_detail(Path(run_id): Path<i64>) -> Response {
     }
 }
 
-/// GET /api/ai/automation/stats — Aggregated automation statistics
+/// GET /api/assistant/automation/stats — Aggregated automation statistics
 pub async fn get_automation_stats_handler() -> Response {
     // Return promotional fixtures only for owner-initiated media capture.
     if crate::webserver::promo::are_promo_fixtures_enabled() {

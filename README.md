@@ -480,7 +480,10 @@ Core configuration sections:
 | `[sol_price]`    | SOL/USD price service                                          |
 | `[gui]`          | Desktop application settings                                   |
 | `[webserver]`    | Headless host, port, sessions, and authentication              |
-| `[ai]`           | AI providers, filtering, trading analysis, chat, automation    |
+| `[llm]`          | LLM provider credentials, models, rate limits, master switch   |
+| `[llm_analysis]` | Model-scored filtering and trading analysis                    |
+| `[assistant]`    | Dashboard chat and scheduled automation                        |
+| `[agent_control]` | Shared agent/MCP tool availability and permission policy      |
 | `[telegram]`     | Telegram bot, notifications, commands                          |
 | `[performance]`  | Cache and memory tuning                                        |
 | `[maintenance]`  | Retention, vacuum, and checkpoint schedules                    |

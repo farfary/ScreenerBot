@@ -19,7 +19,7 @@
 
 /* AI-specific filter-select overrides - base in notifications.css.
    Arrow inherited from global `select {}` (form_controls.css). */
-.ai-page .filter-select {
+.assistant-page .filter-select {
   padding: 8px 32px 8px 12px;
   font-size: 13px;
   border-radius: var(--radius-md);
@@ -468,8 +468,8 @@
 .history-section {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: var(--ai-card-radius);
-  padding: var(--ai-card-padding);
+  border-radius: var(--assistant-card-radius);
+  padding: var(--assistant-card-padding);
 }
 
 .history-table {

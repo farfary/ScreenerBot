@@ -54,9 +54,9 @@ pub async fn scheduler_worker(
     loop {
         let (enabled, interval_secs, default_timeout) = with_config(|cfg| {
             (
-                cfg.ai.enabled && cfg.ai.scheduled_tasks_enabled,
-                cfg.ai.scheduled_tasks_check_interval_seconds,
-                cfg.ai.scheduled_tasks_default_timeout_seconds,
+                cfg.llm.enabled && cfg.assistant.scheduled_tasks_enabled,
+                cfg.assistant.check_interval_seconds,
+                cfg.assistant.default_timeout_seconds,
             )
         });
 

@@ -86,6 +86,9 @@ pub mod schemas;
 // Export utilities (loading, reloading, access)
 pub mod utils;
 
+// One-time migration of legacy [ai] / [agents] TOML into the canonical sections
+mod migrate;
+
 // Wallet management (keypair loading, pubkey access)
 pub mod wallet;
 
@@ -98,12 +101,13 @@ pub use metadata::{
 };
 
 pub use schemas::{
-    AccountConfig, AiConfig, Config, CopyTradingConfig, DashboardConfig, EventsConfig,
-    FilteringConfig, GuiConfig, HolderWatchConfig, InterfaceConfig, LockscreenConfig,
-    MaintenanceConfig, MonitoringConfig, NetworkConfig, OhlcvConfig, PerformanceConfig,
-    PoolsConfig, PositionsConfig, ReferralConfig, RpcConfig, ServicesConfig, SolPriceConfig,
-    StartupConfig, StrategiesConfig, SwapsConfig, TelegramConfig, TimeUnit, TokensConfig,
-    TraderConfig, WalletConfig, WebserverConfig,
+    AccountConfig, AgentControlConfig, AssistantConfig, Config, CopyTradingConfig, DashboardConfig,
+    EventsConfig, FilteringConfig, GuiConfig, HolderWatchConfig, InterfaceConfig,
+    LlmAnalysisConfig, LlmConfig, LlmProviderConfig, LlmProvidersConfig, LockscreenConfig,
+    MaintenanceConfig, MonitoringConfig, NetworkConfig, OhlcvConfig, OllamaConfig,
+    PerformanceConfig, PoolsConfig, PositionsConfig, ReferralConfig, RpcConfig, ServicesConfig,
+    SolPriceConfig, StartupConfig, StrategiesConfig, SwapsConfig, TelegramConfig, TimeUnit,
+    TokensConfig, TraderConfig, WalletConfig, WebserverConfig,
 };
 
 pub use utils::{

@@ -42,7 +42,10 @@ pub async fn get_full_config() -> Response {
         performance: cfg.performance.clone(),
         gui: cfg.gui.clone(),
         telegram: cfg.telegram.clone(),
-        ai: cfg.ai.clone(),
+        llm: cfg.llm.clone(),
+        llm_analysis: cfg.llm_analysis.clone(),
+        assistant: cfg.assistant.clone(),
+        agent_control: cfg.agent_control.clone(),
         network: cfg.network.clone(),
         referral: cfg.referral.clone(),
         account: cfg.account.clone(),
@@ -276,10 +279,40 @@ pub async fn get_telegram_config() -> Response {
     success_response(data)
 }
 
-/// GET /api/config/ai - Get AI configuration
-pub async fn get_ai_config() -> Response {
+/// GET /api/config/llm - Get outbound LLM provider configuration
+pub async fn get_llm_config() -> Response {
     let data = config::with_config(|cfg| ConfigResponse {
-        data: cfg.ai.clone(),
+        data: cfg.llm.clone(),
+        timestamp: chrono::Utc::now().to_rfc3339(),
+    });
+
+    success_response(data)
+}
+
+/// GET /api/config/llm_analysis - Get model-scored analysis configuration
+pub async fn get_llm_analysis_config() -> Response {
+    let data = config::with_config(|cfg| ConfigResponse {
+        data: cfg.llm_analysis.clone(),
+        timestamp: chrono::Utc::now().to_rfc3339(),
+    });
+
+    success_response(data)
+}
+
+/// GET /api/config/assistant - Get dashboard assistant configuration
+pub async fn get_assistant_config() -> Response {
+    let data = config::with_config(|cfg| ConfigResponse {
+        data: cfg.assistant.clone(),
+        timestamp: chrono::Utc::now().to_rfc3339(),
+    });
+
+    success_response(data)
+}
+
+/// GET /api/config/agent_control - Get agent-control configuration
+pub async fn get_agent_control_config() -> Response {
+    let data = config::with_config(|cfg| ConfigResponse {
+        data: cfg.agent_control.clone(),
         timestamp: chrono::Utc::now().to_rfc3339(),
     });
 
@@ -375,7 +408,10 @@ where
             "OhlcvConfig" => serde_json::to_value(&cfg.ohlcv).ok(),
             "GuiConfig" => serde_json::to_value(&cfg.gui).ok(),
             "TelegramConfig" => serde_json::to_value(&cfg.telegram).ok(),
-            "AiConfig" => serde_json::to_value(&cfg.ai).ok(),
+            "LlmConfig" => serde_json::to_value(&cfg.llm).ok(),
+            "LlmAnalysisConfig" => serde_json::to_value(&cfg.llm_analysis).ok(),
+            "AssistantConfig" => serde_json::to_value(&cfg.assistant).ok(),
+            "AgentControlConfig" => serde_json::to_value(&cfg.agent_control).ok(),
             "StrategiesConfig" => serde_json::to_value(&cfg.strategies).ok(),
             "HolderWatchConfig" => serde_json::to_value(&cfg.holder_watch).ok(),
             "WalletConfig" => serde_json::to_value(&cfg.wallet).ok(),
@@ -587,14 +623,50 @@ where
                     true,
                 )?;
             }
-            "AiConfig" => {
-                let new_config: config::AiConfig =
+            "LlmConfig" => {
+                let new_config: config::LlmConfig =
                     serde_json::from_value(section_json).map_err(|e| Error::InvalidImport {
-                        detail: format!("Invalid AiConfig: {e}"),
+                        detail: format!("Invalid LlmConfig: {e}"),
                     })?;
                 config::update_config_section(
                     |cfg| {
-                        cfg.ai = new_config;
+                        cfg.llm = new_config;
+                    },
+                    true,
+                )?;
+            }
+            "LlmAnalysisConfig" => {
+                let new_config: config::LlmAnalysisConfig = serde_json::from_value(section_json)
+                    .map_err(|e| Error::InvalidImport {
+                        detail: format!("Invalid LlmAnalysisConfig: {e}"),
+                    })?;
+                config::update_config_section(
+                    |cfg| {
+                        cfg.llm_analysis = new_config;
+                    },
+                    true,
+                )?;
+            }
+            "AssistantConfig" => {
+                let new_config: config::AssistantConfig = serde_json::from_value(section_json)
+                    .map_err(|e| Error::InvalidImport {
+                        detail: format!("Invalid AssistantConfig: {e}"),
+                    })?;
+                config::update_config_section(
+                    |cfg| {
+                        cfg.assistant = new_config;
+                    },
+                    true,
+                )?;
+            }
+            "AgentControlConfig" => {
+                let new_config: config::AgentControlConfig = serde_json::from_value(section_json)
+                    .map_err(|e| Error::InvalidImport {
+                    detail: format!("Invalid AgentControlConfig: {e}"),
+                })?;
+                config::update_config_section(
+                    |cfg| {
+                        cfg.agent_control = new_config;
                     },
                     true,
                 )?;

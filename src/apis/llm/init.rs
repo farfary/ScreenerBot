@@ -21,13 +21,14 @@ pub async fn init_providers_from_config() -> crate::apis::Result<()> {
 
     with_config(|cfg| {
         // OpenRouter (has extra parameters for site_url and site_name)
-        if cfg.ai.providers.openrouter.enabled && !cfg.ai.providers.openrouter.api_key.is_empty() {
+        if cfg.llm.providers.openrouter.enabled && !cfg.llm.providers.openrouter.api_key.is_empty()
+        {
             use crate::apis::llm::openrouter::OpenRouterClient;
-            let model = get_model(&cfg.ai.providers.openrouter.model);
+            let model = get_model(&cfg.llm.providers.openrouter.model);
             match OpenRouterClient::new(
-                cfg.ai.providers.openrouter.api_key.clone(),
+                cfg.llm.providers.openrouter.api_key.clone(),
                 model,
-                cfg.ai.providers.openrouter.enabled,
+                cfg.llm.providers.openrouter.enabled,
                 None, // site_url - would need to be added to config
                 None, // site_name - would need to be added to config
             ) {
@@ -45,13 +46,13 @@ pub async fn init_providers_from_config() -> crate::apis::Result<()> {
         }
 
         // OpenAI
-        if cfg.ai.providers.openai.enabled && !cfg.ai.providers.openai.api_key.is_empty() {
+        if cfg.llm.providers.openai.enabled && !cfg.llm.providers.openai.api_key.is_empty() {
             use crate::apis::llm::openai::OpenAiClient;
-            let model = get_model(&cfg.ai.providers.openai.model);
+            let model = get_model(&cfg.llm.providers.openai.model);
             match OpenAiClient::new(
-                cfg.ai.providers.openai.api_key.clone(),
+                cfg.llm.providers.openai.api_key.clone(),
                 model,
-                cfg.ai.providers.openai.enabled,
+                cfg.llm.providers.openai.enabled,
             ) {
                 Ok(client) => {
                     llm_manager.set_openai(std::sync::Arc::new(client));
@@ -64,13 +65,13 @@ pub async fn init_providers_from_config() -> crate::apis::Result<()> {
         }
 
         // Anthropic
-        if cfg.ai.providers.anthropic.enabled && !cfg.ai.providers.anthropic.api_key.is_empty() {
+        if cfg.llm.providers.anthropic.enabled && !cfg.llm.providers.anthropic.api_key.is_empty() {
             use crate::apis::llm::anthropic::AnthropicClient;
-            let model = get_model(&cfg.ai.providers.anthropic.model);
+            let model = get_model(&cfg.llm.providers.anthropic.model);
             match AnthropicClient::new(
-                cfg.ai.providers.anthropic.api_key.clone(),
+                cfg.llm.providers.anthropic.api_key.clone(),
                 model,
-                cfg.ai.providers.anthropic.enabled,
+                cfg.llm.providers.anthropic.enabled,
             ) {
                 Ok(client) => {
                     llm_manager.set_anthropic(std::sync::Arc::new(client));
@@ -86,13 +87,13 @@ pub async fn init_providers_from_config() -> crate::apis::Result<()> {
         }
 
         // Groq
-        if cfg.ai.providers.groq.enabled && !cfg.ai.providers.groq.api_key.is_empty() {
+        if cfg.llm.providers.groq.enabled && !cfg.llm.providers.groq.api_key.is_empty() {
             use crate::apis::llm::groq::GroqClient;
-            let model = get_model(&cfg.ai.providers.groq.model);
+            let model = get_model(&cfg.llm.providers.groq.model);
             match GroqClient::new(
-                cfg.ai.providers.groq.api_key.clone(),
+                cfg.llm.providers.groq.api_key.clone(),
                 model,
-                cfg.ai.providers.groq.enabled,
+                cfg.llm.providers.groq.enabled,
             ) {
                 Ok(client) => {
                     llm_manager.set_groq(std::sync::Arc::new(client));
@@ -105,13 +106,13 @@ pub async fn init_providers_from_config() -> crate::apis::Result<()> {
         }
 
         // DeepSeek
-        if cfg.ai.providers.deepseek.enabled && !cfg.ai.providers.deepseek.api_key.is_empty() {
+        if cfg.llm.providers.deepseek.enabled && !cfg.llm.providers.deepseek.api_key.is_empty() {
             use crate::apis::llm::deepseek::DeepSeekClient;
-            let model = get_model(&cfg.ai.providers.deepseek.model);
+            let model = get_model(&cfg.llm.providers.deepseek.model);
             match DeepSeekClient::new(
-                cfg.ai.providers.deepseek.api_key.clone(),
+                cfg.llm.providers.deepseek.api_key.clone(),
                 model,
-                cfg.ai.providers.deepseek.enabled,
+                cfg.llm.providers.deepseek.enabled,
             ) {
                 Ok(client) => {
                     llm_manager.set_deepseek(std::sync::Arc::new(client));
@@ -127,13 +128,13 @@ pub async fn init_providers_from_config() -> crate::apis::Result<()> {
         }
 
         // Gemini
-        if cfg.ai.providers.gemini.enabled && !cfg.ai.providers.gemini.api_key.is_empty() {
+        if cfg.llm.providers.gemini.enabled && !cfg.llm.providers.gemini.api_key.is_empty() {
             use crate::apis::llm::gemini::GeminiClient;
-            let model = get_model(&cfg.ai.providers.gemini.model);
+            let model = get_model(&cfg.llm.providers.gemini.model);
             match GeminiClient::new(
-                cfg.ai.providers.gemini.api_key.clone(),
+                cfg.llm.providers.gemini.api_key.clone(),
                 model,
-                cfg.ai.providers.gemini.enabled,
+                cfg.llm.providers.gemini.enabled,
             ) {
                 Ok(client) => {
                     llm_manager.set_gemini(std::sync::Arc::new(client));
@@ -146,15 +147,15 @@ pub async fn init_providers_from_config() -> crate::apis::Result<()> {
         }
 
         // Ollama (no API key, uses base_url instead)
-        if cfg.ai.providers.ollama.enabled {
+        if cfg.llm.providers.ollama.enabled {
             use crate::apis::llm::ollama::OllamaClient;
-            let base_url = if !cfg.ai.providers.ollama.base_url.is_empty() {
-                Some(cfg.ai.providers.ollama.base_url.clone())
+            let base_url = if !cfg.llm.providers.ollama.base_url.is_empty() {
+                Some(cfg.llm.providers.ollama.base_url.clone())
             } else {
                 None
             };
-            let model = get_model(&cfg.ai.providers.ollama.model);
-            match OllamaClient::new(base_url, model, cfg.ai.providers.ollama.enabled) {
+            let model = get_model(&cfg.llm.providers.ollama.model);
+            match OllamaClient::new(base_url, model, cfg.llm.providers.ollama.enabled) {
                 Ok(client) => {
                     llm_manager.set_ollama(std::sync::Arc::new(client));
                     enabled_providers.push("Ollama");
@@ -166,13 +167,13 @@ pub async fn init_providers_from_config() -> crate::apis::Result<()> {
         }
 
         // Together
-        if cfg.ai.providers.together.enabled && !cfg.ai.providers.together.api_key.is_empty() {
+        if cfg.llm.providers.together.enabled && !cfg.llm.providers.together.api_key.is_empty() {
             use crate::apis::llm::together::TogetherClient;
-            let model = get_model(&cfg.ai.providers.together.model);
+            let model = get_model(&cfg.llm.providers.together.model);
             match TogetherClient::new(
-                cfg.ai.providers.together.api_key.clone(),
+                cfg.llm.providers.together.api_key.clone(),
                 model,
-                cfg.ai.providers.together.enabled,
+                cfg.llm.providers.together.enabled,
             ) {
                 Ok(client) => {
                     llm_manager.set_together(std::sync::Arc::new(client));
@@ -188,13 +189,13 @@ pub async fn init_providers_from_config() -> crate::apis::Result<()> {
         }
 
         // Mistral
-        if cfg.ai.providers.mistral.enabled && !cfg.ai.providers.mistral.api_key.is_empty() {
+        if cfg.llm.providers.mistral.enabled && !cfg.llm.providers.mistral.api_key.is_empty() {
             use crate::apis::llm::mistral::MistralClient;
-            let model = get_model(&cfg.ai.providers.mistral.model);
+            let model = get_model(&cfg.llm.providers.mistral.model);
             match MistralClient::new(
-                cfg.ai.providers.mistral.api_key.clone(),
+                cfg.llm.providers.mistral.api_key.clone(),
                 model,
-                cfg.ai.providers.mistral.enabled,
+                cfg.llm.providers.mistral.enabled,
             ) {
                 Ok(client) => {
                     llm_manager.set_mistral(std::sync::Arc::new(client));

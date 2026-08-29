@@ -29,11 +29,11 @@ pub async fn background_check_loop(engine: Arc<AnalysisEngine>, shutdown: Arc<No
         let (enabled, interval_secs, batch_size, auto_blacklist, min_confidence) =
             with_config(|cfg| {
                 (
-                    cfg.ai.enabled && cfg.ai.background_check_enabled,
-                    cfg.ai.background_check_interval_seconds,
-                    cfg.ai.background_batch_size as usize,
-                    cfg.ai.auto_blacklist_enabled,
-                    cfg.ai.auto_blacklist_min_confidence,
+                    cfg.llm.enabled && cfg.llm_analysis.background_check_enabled,
+                    cfg.llm_analysis.background_check_interval_seconds,
+                    cfg.llm_analysis.background_batch_size as usize,
+                    cfg.llm_analysis.auto_blacklist_enabled,
+                    cfg.llm_analysis.auto_blacklist_min_confidence,
                 )
             });
 

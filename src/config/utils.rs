@@ -54,27 +54,44 @@ pub fn load_config() -> Result<()> {
 /// - `Ok(())` - Configuration loaded successfully
 /// - `Err(String)` - Error message if loading failed
 pub fn load_config_from_path(path: &str) -> Result<()> {
-    let mut config = if std::path::Path::new(path).exists() {
-        // Load from file
-        let contents = std::fs::read_to_string(path).map_err(|e| IoError::Generic {
+    let raw = if std::path::Path::new(path).exists() {
+        Some(std::fs::read_to_string(path).map_err(|e| IoError::Generic {
             message: format!("Failed to read config file '{path}': {e}"),
-        })?;
-
-        toml::from_str::<Config>(&contents).map_err(|e| Error::ParseFailed {
-            detail: format!("Failed to parse config file '{path}': {e}"),
-        })?
+        })?)
     } else {
         // Use defaults if file doesn't exist
         crate::logger::warning(
             crate::logger::LogTag::System,
             &format!("Config file '{path}' not found, using default values"),
         );
-        Config::default()
+        None
+    };
+
+    let mut config = match &raw {
+        Some(contents) => toml::from_str::<Config>(contents).map_err(|e| Error::ParseFailed {
+            detail: format!("Failed to parse config file '{path}': {e}"),
+        })?,
+        None => Config::default(),
+    };
+
+    // One-time migration of the legacy [ai] / [agents] sections. Only runs when
+    // the file exists and still carries a legacy table.
+    let migrated = match &raw {
+        Some(contents) => super::migrate::migrate_legacy_sections(contents, &mut config)?,
+        None => false,
     };
 
     // Ensure all navigation tabs are present (handles migrations like wallet -> wallets, adds new tabs like tools)
     config.gui.dashboard.navigation.tabs =
         crate::config::schemas::ensure_all_tabs_present(config.gui.dashboard.navigation.tabs);
+
+    if migrated {
+        write_config_atomic(&config, path)?;
+        logger::info(
+            LogTag::System,
+            "Migrated legacy [ai]/[agents] config into llm/llm_analysis/assistant/agent_control",
+        );
+    }
 
     CONFIG
         .set(RwLock::new(config))
@@ -83,6 +100,198 @@ pub fn load_config_from_path(path: &str) -> Result<()> {
         })?;
 
     Ok(())
+}
+
+/// Serialize `config` and replace `path` as atomically as the platform allows
+/// (write a sibling temp file, fsync it, then rename over `path`). Used by the
+/// legacy-section migration so the rewrite is crash-safe and never widens access
+/// to the secrets in `config.toml`.
+///
+/// Permissions: `config.toml` holds provider API keys, so the temp file is
+/// created with mode `0600` **before its first byte is written** (via
+/// `OpenOptionsExt::mode`) — there is no window in which a secret-bearing file
+/// exists at the process umask. When `path` already exists, its owner
+/// read/write bits are preserved but nothing wider: an existing `0644`/`0640`
+/// is tightened to `0600`, never copied.
+///
+/// Atomicity: on Unix `rename(2)` replaces the destination atomically. On
+/// Windows `std::fs::rename` fails if the destination exists, so the existing
+/// file is removed first and the replacement is therefore **not** atomic there;
+/// a crash between the two steps can leave `path` missing. The migration only
+/// runs on the local desktop config and re-derives from the still-present
+/// legacy tables on the next start, so this is acceptable but not silently
+/// claimed to be atomic.
+///
+/// Concurrency: the sibling temp path carries the pid **and** a process-monotonic
+/// counter, and is opened `O_EXCL` (`create_new`) with a bounded retry. Two
+/// concurrent callers in this process therefore never select — let alone
+/// truncate — the same temp, and a stale leftover temp is stepped over rather
+/// than clobbered.
+pub(crate) fn write_config_atomic(config: &Config, path: &str) -> Result<()> {
+    use std::io::Write;
+
+    let body = toml::to_string_pretty(config).map_err(|e| Error::WriteFailed {
+        detail: format!("Failed to serialize migrated config: {e}"),
+    })?;
+
+    let dest = std::path::Path::new(path);
+
+    // Owner read/write only, and never wider — even if `path` is currently
+    // group/world readable. Fall back to 0600 when there is no existing file or
+    // it somehow carries no owner-read bit (a file the app must be able to
+    // rewrite).
+    #[cfg(unix)]
+    let mode: u32 = {
+        use std::os::unix::fs::PermissionsExt;
+        let existing = std::fs::metadata(dest)
+            .ok()
+            .map(|m| m.permissions().mode() & 0o600);
+        match existing {
+            Some(bits) if bits & 0o400 != 0 => bits,
+            _ => 0o600,
+        }
+    };
+
+    // Create the temp with `O_EXCL` and the restrictive mode already applied, so
+    // an existing candidate (a concurrent writer's temp, or a stale leftover) is
+    // never opened or truncated. A fresh process-monotonic token per attempt
+    // makes a genuine collision improbable; the bounded retry covers the residue.
+    let mut opts = std::fs::OpenOptions::new();
+    opts.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        opts.mode(mode);
+    }
+
+    let (tmp, mut file) = {
+        let mut opened = None;
+        let mut last_err = None;
+        for _ in 0..MAX_TEMP_ATTEMPTS {
+            let seq = TEMP_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let candidate = sibling_temp_path(dest, seq);
+            match opts.open(&candidate) {
+                Ok(f) => {
+                    opened = Some((candidate, f));
+                    break;
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                    last_err = Some(e);
+                }
+                Err(e) => {
+                    return Err(Error::WriteFailed {
+                        detail: format!(
+                            "Failed to create temp config '{}': {e}",
+                            candidate.display()
+                        ),
+                    });
+                }
+            }
+        }
+        match opened {
+            Some(pair) => pair,
+            None => {
+                return Err(Error::WriteFailed {
+                    detail: format!(
+                        "Failed to create a unique temp config beside '{path}' after \
+                         {MAX_TEMP_ATTEMPTS} attempts: {}",
+                        last_err
+                            .map(|e| e.to_string())
+                            .unwrap_or_else(|| "unknown error".to_owned())
+                    ),
+                });
+            }
+        }
+    };
+
+    // Any failure past this point must not leave the temp behind.
+    let write_and_sync = (|| -> std::io::Result<()> {
+        file.write_all(body.as_bytes())?;
+        file.sync_all()?;
+        Ok(())
+    })();
+    if let Err(e) = write_and_sync {
+        drop(file);
+        let _ = std::fs::remove_file(&tmp);
+        return Err(Error::WriteFailed {
+            detail: format!("Failed to write temp config '{}': {e}", tmp.display()),
+        });
+    }
+
+    // `OpenOptionsExt::mode` is subject to the umask; re-assert the exact mode
+    // so an existing over-broad file is genuinely tightened, not merely masked.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Err(e) = std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(mode)) {
+            drop(file);
+            let _ = std::fs::remove_file(&tmp);
+            return Err(IoError::Generic {
+                message: format!("Failed to set permissions on '{}': {e}", tmp.display()),
+            }
+            .into());
+        }
+    }
+    drop(file);
+
+    #[cfg(not(unix))]
+    {
+        // Windows: rename onto an existing path fails. Best-effort replace; see
+        // the doc comment — this is not crash-atomic.
+        if dest.exists() {
+            if let Err(e) = std::fs::remove_file(dest) {
+                let _ = std::fs::remove_file(&tmp);
+                return Err(Error::WriteFailed {
+                    detail: format!("Failed to replace config '{path}': {e}"),
+                });
+            }
+        }
+    }
+
+    std::fs::rename(&tmp, dest).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp);
+        Error::WriteFailed {
+            detail: format!("Failed to persist migrated config to '{path}': {e}"),
+        }
+    })?;
+
+    // Persist the directory entry for the rename where the platform supports it.
+    #[cfg(unix)]
+    {
+        if let Some(parent) = dest.parent() {
+            if let Ok(dir) = std::fs::File::open(parent) {
+                let _ = dir.sync_all();
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Upper bound on how many temp-name tokens `write_config_atomic` will try
+/// before giving up. With a process-monotonic counter a single retry is already
+/// enough in practice; the slack absorbs a burst of concurrent writers plus any
+/// stale leftover temps.
+const MAX_TEMP_ATTEMPTS: u32 = 16;
+
+/// Process-monotonic token that makes every in-process temp path distinct, so
+/// two concurrent `write_config_atomic` calls never select the same sibling temp.
+static TEMP_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// A never-clobbering temp path in the same directory as `dest` (so `rename`
+/// stays within one filesystem), hidden and suffixed to avoid colliding with the
+/// real file. `seq` is a per-attempt token from [`TEMP_SEQ`]; combined with the
+/// pid it is unique across every writer that can race here.
+fn sibling_temp_path(dest: &std::path::Path, seq: u64) -> std::path::PathBuf {
+    let name = dest
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "config.toml".to_owned());
+    let tmp_name = format!(".{name}.migrate.{}.{seq}.tmp", std::process::id());
+    match dest.parent() {
+        Some(parent) => parent.join(tmp_name),
+        None => std::path::PathBuf::from(tmp_name),
+    }
 }
 
 /// Reload configuration from disk
@@ -404,12 +613,23 @@ pub fn reload_config_from_path(path: &str) -> Result<()> {
         detail: format!("Failed to parse config file '{path}': {e}"),
     })?;
 
+    // One-time migration of the legacy [ai] / [agents] sections on the reload path too.
+    let migrated = super::migrate::migrate_legacy_sections(&contents, &mut new_config)?;
+
     // Ensure all navigation tabs are present (handles migrations)
     new_config.gui.dashboard.navigation.tabs =
         crate::config::schemas::ensure_all_tabs_present(new_config.gui.dashboard.navigation.tabs);
 
     // Validate configuration before applying
     validate_config(&new_config)?;
+
+    if migrated {
+        write_config_atomic(&new_config, path)?;
+        logger::info(
+            LogTag::System,
+            "Migrated legacy [ai]/[agents] config into llm/llm_analysis/assistant/agent_control on reload",
+        );
+    }
 
     if let Some(config_lock) = CONFIG.get() {
         let mut config = config_lock
@@ -600,4 +820,132 @@ pub fn save_config_to_file(config: &Config, path: &str, set_global: bool) -> Res
 /// `true` if load_config() has been called successfully
 pub fn is_config_initialized() -> bool {
     CONFIG.get().is_some()
+}
+
+#[cfg(test)]
+mod atomic_write_tests {
+    use super::*;
+
+    #[test]
+    fn round_trips_a_valid_config() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        write_config_atomic(&Config::default(), &path.to_string_lossy()).unwrap();
+
+        let reread = std::fs::read_to_string(&path).unwrap();
+        toml::from_str::<Config>(&reread).expect("written config parses back");
+        // No temp file left in the directory.
+        assert!(!has_temp_file(dir.path()));
+    }
+
+    #[cfg(unix)]
+    fn mode_of(path: &std::path::Path) -> u32 {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::metadata(path).unwrap().permissions().mode() & 0o777
+    }
+
+    fn has_temp_file(dir: &std::path::Path) -> bool {
+        std::fs::read_dir(dir).unwrap().any(|entry| {
+            entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .ends_with(".tmp")
+        })
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn fresh_file_is_created_owner_only() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        write_config_atomic(&Config::default(), &path.to_string_lossy()).unwrap();
+        assert_eq!(mode_of(&path), 0o600);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn overly_broad_existing_mode_is_tightened_not_copied() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, "x = 1\n").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+
+        write_config_atomic(&Config::default(), &path.to_string_lossy()).unwrap();
+        assert_eq!(mode_of(&path), 0o600);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn narrower_existing_owner_mode_is_preserved() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, "x = 1\n").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o400)).unwrap();
+
+        write_config_atomic(&Config::default(), &path.to_string_lossy()).unwrap();
+        assert_eq!(mode_of(&path), 0o400);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn temp_is_removed_when_the_replace_fails() {
+        // Renaming the temp file onto an existing *directory* fails; the temp
+        // must not survive the error.
+        let dir = tempfile::tempdir().unwrap();
+        let clash = dir.path().join("config.toml");
+        std::fs::create_dir(&clash).unwrap();
+
+        let err = write_config_atomic(&Config::default(), &clash.to_string_lossy());
+        assert!(err.is_err());
+        assert!(!has_temp_file(dir.path()), "temp file leaked on error path");
+    }
+
+    #[test]
+    fn existing_temp_candidate_is_never_opened_or_truncated() {
+        // Squat a file at a candidate temp path and try to create it with the
+        // exact options `write_config_atomic` uses: `O_EXCL` must refuse it and
+        // leave its bytes intact — the writer then moves to the next token.
+        let dir = tempfile::tempdir().unwrap();
+        let dest = dir.path().join("config.toml");
+        let victim = sibling_temp_path(&dest, 0);
+        std::fs::write(&victim, b"PRECIOUS").unwrap();
+
+        let mut opts = std::fs::OpenOptions::new();
+        opts.write(true).create_new(true);
+        let err = opts.open(&victim).unwrap_err();
+
+        assert_eq!(err.kind(), std::io::ErrorKind::AlreadyExists);
+        assert_eq!(std::fs::read(&victim).unwrap(), b"PRECIOUS");
+    }
+
+    #[test]
+    fn concurrent_writes_do_not_share_a_temp_or_corrupt_the_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        let path_str = path.to_string_lossy().into_owned();
+
+        let handles: Vec<_> = (0..8)
+            .map(|_| {
+                let p = path_str.clone();
+                std::thread::spawn(move || write_config_atomic(&Config::default(), &p))
+            })
+            .collect();
+        for h in handles {
+            h.join()
+                .unwrap()
+                .expect("every racing atomic write succeeds");
+        }
+
+        // A shared temp would have surfaced as a rename error above or a leaked /
+        // half-written temp here; the destination must be one clean document.
+        toml::from_str::<Config>(&std::fs::read_to_string(&path).unwrap())
+            .expect("final config is a clean, complete document");
+        assert!(
+            !has_temp_file(dir.path()),
+            "a concurrent writer leaked its temp"
+        );
+    }
 }
