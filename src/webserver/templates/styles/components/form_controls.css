@@ -780,6 +780,10 @@ input[type="radio"]:disabled {
    one run of words: the column gap is the group's, the row gap only stacks
    wrapped lines. */
 .checkbox-group {
+  /* The group owns its own flex context: it is not always ALSO a .form-group,
+     and on a bare nested div a `gap` without `display: flex` is ignored, which
+     left the rows separated by nothing but collapsed whitespace. */
+  display: flex;
   flex-flow: row wrap;
   align-items: flex-start;
   gap: var(--control-row-gap) var(--control-group-gap);
