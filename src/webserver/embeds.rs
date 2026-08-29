@@ -203,6 +203,8 @@ pub(super) const SETTINGS_SECURITY_STYLES: &str =
 pub(super) const SETTINGS_UPDATES_STYLES: &str =
     include_str!("templates/styles/settings/updates.css");
 pub(super) const SETTINGS_DATA_STYLES: &str = include_str!("templates/styles/settings/data.css");
+pub(super) const SETTINGS_AGENT_CONNECTIONS_STYLES: &str =
+    include_str!("templates/styles/settings/agent_connections.css");
 pub(super) const STATUS_BAR_STYLES: &str = include_str!("templates/styles/status_bar.css");
 pub(super) const HINT_POPOVER_STYLES: &str = include_str!("templates/styles/ui/hint_popover.css");
 pub(super) const SEARCH_DIALOG_STYLES: &str = include_str!("templates/styles/ui/search_dialog.css");
@@ -405,6 +407,8 @@ pub const SETTINGS_UPDATES_TAB_UI: &str =
 pub const SETTINGS_INTERFACE_TAB_UI: &str =
     include_str!("templates/scripts/ui/settings/interface_tab.js");
 pub const SETTINGS_HINTS_TAB_UI: &str = include_str!("templates/scripts/ui/settings/hints_tab.js");
+pub const SETTINGS_AGENT_CONNECTIONS_TAB_UI: &str =
+    include_str!("templates/scripts/ui/settings/agent_connections_tab.js");
 pub const SETTINGS_NAVIGATION_TAB_UI: &str =
     include_str!("templates/scripts/ui/settings/navigation_tab.js");
 pub const SETTINGS_LICENSES_TAB_UI: &str =

@@ -255,6 +255,7 @@ pub async fn get_ui_script(Path(file): Path<String>) -> Response {
         "settings/updates_tab.js" => Some(embeds::SETTINGS_UPDATES_TAB_UI),
         "settings/interface_tab.js" => Some(embeds::SETTINGS_INTERFACE_TAB_UI),
         "settings/hints_tab.js" => Some(embeds::SETTINGS_HINTS_TAB_UI),
+        "settings/agent_connections_tab.js" => Some(embeds::SETTINGS_AGENT_CONNECTIONS_TAB_UI),
         "settings/navigation_tab.js" => Some(embeds::SETTINGS_NAVIGATION_TAB_UI),
         "settings/licenses_tab.js" => Some(embeds::SETTINGS_LICENSES_TAB_UI),
         "settings/telegram_tab.js" => Some(embeds::SETTINGS_TELEGRAM_TAB_UI),

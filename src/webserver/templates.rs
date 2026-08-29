@@ -206,6 +206,7 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         SETTINGS_SECURITY_STYLES,
         SETTINGS_UPDATES_STYLES,
         SETTINGS_DATA_STYLES,
+        SETTINGS_AGENT_CONNECTIONS_STYLES,
         HINT_POPOVER_STYLES,
         SEARCH_DIALOG_STYLES,
         CUSTOM_SELECT_STYLES,

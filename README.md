@@ -104,6 +104,7 @@ Trading bots written in Python or JavaScript can't match the speed and reliabili
 - [Supported DEXs](#supported-dexs)
 - [Trading Features](#trading-features)
 - [AI Assistant](#ai-assistant)
+- [Agent Connections (MCP)](#agent-connections-mcp)
 - [Dashboard](#dashboard)
 - [Configuration](#configuration)
 - [Data Sources](#data-sources)
@@ -412,6 +413,7 @@ and Mistral.
 - **Interactive Chat**: Tool-calling chat interface with portfolio, trading, and system tools
 - **Custom Instructions**: User-defined prompts injected into all AI evaluations
 - **Automation**: Scheduled AI tasks with interval/daily/weekly schedules, headless tool execution, Telegram notifications, and run history tracking
+- **Agent Connections**: Pair an external MCP client (an AI coding agent) with the running app through the native `screenerbot mcp serve` bridge — set up in **Settings → Agent Connections**. Full guide: [AGENT_CONNECTIONS.md](AGENT_CONNECTIONS.md)
 
 ### Automation
 
@@ -424,32 +426,48 @@ Create scheduled tasks that run AI instructions automatically:
 - Run history with tool call details and AI responses
 - Telegram notifications on completion or failure
 
-### MCP Bridge (External Agents)
+## Agent Connections (MCP)
 
-An external MCP client (an AI coding agent, for example) can drive the same tool
-registry over stdio. The `screenerbot mcp` subprocess holds no trading logic: it
-discovers the already-running app from `agent-runtime.json` and calls an internal
-loopback bridge, which resolves the client's scope, applies the permission
-policy, and runs each tool in the live process.
+An external MCP client — an AI coding agent — can drive ScreenerBot's own tool registry
+over stdio. `screenerbot mcp serve` is a thin bridge built into the binary: it holds no
+trading logic, discovers the running app from `agent-runtime.json`, and calls an internal
+loopback bridge that resolves the pairing's scope, applies the permission policy, and runs
+each tool in the live process. No separate package, extension, sidecar, or hosted
+endpoint.
 
-- `screenerbot mcp serve` — run the stdio MCP server (JSON-RPC on stdout only).
-- `screenerbot mcp doctor` — report whether the app is running and whether the
-  pairing credential is valid. Never prints the secret.
+- **Pair a client** in **Settings → Agent Connections**: choose a least-privilege scope
+  (`read`, `operate`, `trade`) and the client kind, then create the connection. The panel
+  shows the one-time secret and the setup for that client:
+  - **Claude Code** — a copyable `claude mcp add --scope user screenerbot -e … -- <binary> mcp serve` command.
+  - **Claude Desktop** — a `claude_desktop_config.json` (`mcpServers.screenerbot`) block.
+  - **Codex CLI** — a copyable `codex mcp add screenerbot --env … -- <binary> mcp serve` command, with a `~/.codex/config.toml` fallback.
+  - **Hermes** — a YAML block under `mcp_servers`.
+  - **OpenClaw** — its native `openclaw mcp add` command.
+  - **Generic stdio** — a plain stdio JSON object to add by hand.
+  There is no universal MCP-client config format and no repo-wide installer script.
+- **`screenerbot mcp serve`** checks `agent-runtime.json` when no live origin is known and
+  after transport failure, so a long-lived client recovers when ScreenerBot starts later or
+  restarts on a different port. It only talks to a loopback origin and never starts the app.
+- **`screenerbot mcp doctor`** reports app reachability and pairing status without printing
+  the secret, and its **exit code** is the contract: `0` only when the live app answered a
+  pairing probe; `3` no runtime, `4` missing credentials, `5` bridge unreachable, `6`
+  pairing rejected (revoked/invalid, or agent control disabled).
 
-Pairings are created, listed, and revoked through the dashboard-authenticated
-`/api/agent-control/pairings` API. Creating one returns a one-time secret; only
-its hash is stored. The integrated Agent Connections screen and guided install
-flows are planned for the next product slice. The subprocess reads its credential
-from the environment, never from command-line arguments:
+The one-time secret is shown once and stored by ScreenerBot only as a SHA-256 verifier; it
+is read only from `SCREENERBOT_CLIENT_ID` / `SCREENERBOT_PAIRING_SECRET` in the environment,
+never a CLI flag. Once you configure a client it keeps the plaintext under its own config
+(`claude mcp get` prints it back; Codex masks it). ScreenerBot must be running — the
+dashboard window can be closed while the process stays up, but a person needs it open to
+approve anything that moves money or changes configuration; approved requests run at most
+once.
 
-- `SCREENERBOT_CLIENT_ID` — the pairing's client id.
-- `SCREENERBOT_PAIRING_SECRET` — the one-time secret shown at creation.
+Remove a connection with **Settings → Agent Connections → Revoke** (effective on the
+client's next request), then drop it from the client: `claude mcp remove --scope user
+screenerbot` or `codex mcp remove screenerbot`.
 
-Scopes are `read`, `operate`, `trade`. Unpaired, revoked, disabled or
-app-not-running states expose zero capabilities. A tool that needs confirmation
-(any trade, and anything the policy marks *ask*) is never executed by the agent
-directly — it creates a request that a person approves or denies inside
-ScreenerBot, and the approved request runs at most once.
+**Full guide: [AGENT_CONNECTIONS.md](AGENT_CONNECTIONS.md)** — prerequisites,
+pairing flow, per-client setup, approval behavior, troubleshooting, revocation, and the
+security model.
 
 ---
 

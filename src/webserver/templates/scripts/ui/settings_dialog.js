@@ -14,6 +14,7 @@ import { buildDataTab, attachDataHandlers } from "./settings/data_tab.js";
 import { buildUpdatesTab, attachUpdatesHandlers } from "./settings/updates_tab.js";
 import { buildInterfaceTab, attachInterfaceHandlers } from "./settings/interface_tab.js";
 import { buildHintsTab, attachHintsHandlers } from "./settings/hints_tab.js";
+import { loadAgentConnectionsTab } from "./settings/agent_connections_tab.js";
 import { buildNavigationTab, attachNavigationHandlers } from "./settings/navigation_tab.js";
 import { buildLicensesTab, attachLicensesHandlers } from "./settings/licenses_tab.js";
 import { loadTelegramTab } from "./settings/telegram_tab.js";
@@ -599,6 +600,10 @@ export class SettingsDialog {
               <i class="icon-send"></i>
               <span>Telegram</span>
             </button>
+            <button class="settings-nav-item" data-tab="agent-connections">
+              <i class="icon-plug"></i>
+              <span>Agent Connections</span>
+            </button>
             <div class="settings-nav-divider"></div>
             <button class="settings-nav-item" data-tab="updates">
               <i class="icon-refresh-cw"></i>
@@ -648,6 +653,9 @@ export class SettingsDialog {
               <div class="settings-loading">Loading...</div>
             </div>
             <div class="settings-tab" data-tab-content="telegram">
+              <div class="settings-loading">Loading...</div>
+            </div>
+            <div class="settings-tab" data-tab-content="agent-connections">
               <div class="settings-loading">Loading...</div>
             </div>
             <div class="settings-tab" data-tab-content="updates">
@@ -766,6 +774,9 @@ export class SettingsDialog {
         break;
       case "telegram":
         loadTelegramTab(this, content);
+        break;
+      case "agent-connections":
+        loadAgentConnectionsTab(this, content);
         break;
       case "updates":
         content.innerHTML = buildUpdatesTab(this, this.versionInfo, globalUpdateState);

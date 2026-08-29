@@ -1,0 +1,273 @@
+/* Agent Connections settings tab.
+   Scoped beneath .agent-connections; reuses the .settings-* row primitives and
+   adds only the scope picker, the one-time-secret panel and the pairing list. */
+
+.agent-connections .agent-pair-create {
+  margin-bottom: 16px;
+}
+
+/* Scope picker — native radios, one row per option, description under the label. */
+.agent-connections .agent-scope-field .settings-field-control.agent-scope-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.agent-connections .agent-scope-option {
+  gap: 10px;
+}
+
+.agent-connections .agent-scope-option > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.agent-connections .agent-scope-desc {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+/* One-time credential panel. */
+.agent-connections .agent-issued {
+  margin: 12px 0 20px;
+  padding: 14px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  background: var(--bg-card-hover);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.agent-connections .agent-issued-warn {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  color: var(--semantic-warning-text);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.agent-connections .agent-issued-warn i {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.agent-connections .agent-issued-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.agent-connections .agent-issued-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.agent-connections .agent-issued-key {
+  flex-shrink: 0;
+  width: 110px;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.agent-connections .agent-issued-value {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  white-space: nowrap;
+  padding: 6px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-mono, monospace);
+  font-size: 0.8rem;
+}
+
+.agent-connections .agent-issued-secret {
+  color: var(--semantic-warning-text);
+}
+
+.agent-connections .agent-setup-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.agent-connections .agent-setup-head label {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+
+.agent-connections .agent-setup-head .settings-select {
+  width: auto;
+  min-width: 180px;
+}
+
+.agent-connections .agent-setup-notes {
+  margin: 8px 0 10px;
+  padding-left: 18px;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.agent-connections .agent-setup-notes li + li {
+  margin-top: 4px;
+}
+
+.agent-connections .agent-setup-blocks {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.agent-connections .agent-setup-block-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.agent-connections .agent-setup-block-label {
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.agent-connections .agent-setup-body {
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+  overflow-x: auto;
+}
+
+.agent-connections .agent-setup-body code {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--text-primary);
+  white-space: pre;
+}
+
+/* Pairing list. */
+.agent-connections .agent-pair-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+  border-top: 1px solid var(--border-color);
+  padding-top: 12px;
+}
+
+.agent-connections .agent-pair-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.agent-connections .agent-pair-row:last-child {
+  border-bottom: 0;
+}
+
+.agent-connections .agent-pair-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.agent-connections .agent-pair-label {
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-connections .agent-pair-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+}
+
+.agent-connections .agent-pair-times {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--text-tertiary);
+  font-size: 0.74rem;
+  text-align: right;
+}
+
+.agent-connections .agent-scope-badge {
+  padding: 1px 7px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-color);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.agent-connections .agent-scope-badge--trade {
+  color: var(--semantic-error-text);
+  border-color: var(--danger-alpha-30);
+}
+
+.agent-connections .agent-scope-badge--operate {
+  color: var(--semantic-warning-text);
+  border-color: var(--warning-alpha-30);
+}
+
+.agent-connections .agent-pair-revoked-group {
+  margin-top: 6px;
+  opacity: 0.55;
+}
+
+.agent-connections .agent-pair-row--revoked .agent-pair-label {
+  text-decoration: line-through;
+}
+
+.agent-connections .agent-pair-revoked-tag {
+  color: var(--text-tertiary);
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.agent-connections .settings-empty {
+  color: var(--text-secondary);
+  font-size: 0.84rem;
+  padding: 12px 4px;
+}
+
+@media (width <= 640px) {
+  .agent-connections .agent-pair-row {
+    grid-template-columns: 1fr auto;
+  }
+
+  .agent-connections .agent-pair-times {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    gap: 10px;
+    text-align: left;
+  }
+}

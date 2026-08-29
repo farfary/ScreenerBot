@@ -29,7 +29,10 @@ use rmcp::{
     service::{RequestContext, RoleServer},
     ServerHandler, ServiceExt,
 };
-use std::{borrow::Cow, sync::Arc};
+use std::{
+    borrow::Cow,
+    sync::{Arc, Mutex},
+};
 
 use crate::agent_control::{is_read_only, ToolDefinition};
 
@@ -60,51 +63,143 @@ struct RuntimeInfo {
     version: Option<String>,
 }
 
+/// Whether a bridge path mutates live state. A state-changing request is never
+/// replayed after a transport failure, even against a different origin; only
+/// read-only probes are retried.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Mutation {
+    ReadOnly,
+    StateChanging,
+}
+
+/// Why a bridge call produced no usable body.
+enum BridgeError {
+    /// No pairing credential in the environment.
+    NotPaired,
+    /// No running app discoverable from `agent-runtime.json`.
+    NotRunning,
+    /// The origin could not be reached at all (connect/timeout/transport).
+    Unreachable,
+    /// The app answered with a non-success status. The message is server-authored
+    /// and already non-secret, so it is safe to surface verbatim.
+    Rejected(String),
+}
+
+impl BridgeError {
+    fn user_message(&self) -> String {
+        match self {
+            BridgeError::NotPaired => "this client is not paired (set SCREENERBOT_CLIENT_ID and \
+                 SCREENERBOT_PAIRING_SECRET)"
+                .to_owned(),
+            BridgeError::NotRunning => {
+                "ScreenerBot is not running (no agent-runtime.json)".to_owned()
+            }
+            BridgeError::Unreachable => {
+                "ScreenerBot is not reachable at its known local address".to_owned()
+            }
+            BridgeError::Rejected(message) => message.clone(),
+        }
+    }
+}
+
+/// What to do after a transport failure, given a fresh re-read of the runtime
+/// origin from `agent-runtime.json`.
+#[derive(Debug, PartialEq, Eq)]
+enum Rediscovery {
+    /// Retry the request once against this new origin, and cache it.
+    RetryWith(String),
+    /// Do not retry, but cache this new origin for the next call.
+    AdoptWithoutRetry(String),
+    /// Do not retry; drop the cached origin so the next call rediscovers.
+    Drop,
+}
+
+/// Pure retry/selection decision. A retry happens only when a fresh read of
+/// `agent-runtime.json` yields a DIFFERENT validated loopback origin than the
+/// one that just failed, and never for a state-changing request. An unchanged or
+/// absent origin is never retried and is dropped from the cache, so a stale
+/// origin can never be pinned indefinitely and the app is never auto-started.
+fn plan_rediscovery(tried: &str, found: Option<&str>, mutation: Mutation) -> Rediscovery {
+    match found {
+        Some(origin) if origin == tried => Rediscovery::Drop,
+        Some(origin) if mutation == Mutation::StateChanging => {
+            Rediscovery::AdoptWithoutRetry(origin.to_owned())
+        }
+        Some(origin) => Rediscovery::RetryWith(origin.to_owned()),
+        None => Rediscovery::Drop,
+    }
+}
+
 #[derive(Clone)]
 pub struct McpServer {
     http: reqwest::Client,
-    runtime: Option<RuntimeInfo>,
+    /// The last validated loopback origin (`http://host:port`), or `None` until
+    /// the next call rediscovers it from `agent-runtime.json`. Interior mutable
+    /// so an unavailable app can be rediscovered on the next request and a
+    /// failed stale origin can be replaced without restarting the MCP client.
+    origin: Arc<Mutex<Option<String>>>,
     client_id: Option<String>,
     secret: Option<String>,
 }
 
 impl McpServer {
-    /// The base URL + credential, only when all three are present.
-    fn ready(&self) -> Option<(&str, &str, &str)> {
-        Some((
-            self.runtime.as_ref()?.url.as_str(),
-            self.client_id.as_deref()?,
-            self.secret.as_deref()?,
-        ))
+    fn new(
+        http: reqwest::Client,
+        origin: Option<String>,
+        client_id: Option<String>,
+        secret: Option<String>,
+    ) -> Self {
+        Self {
+            http,
+            origin: Arc::new(Mutex::new(origin)),
+            client_id,
+            secret,
+        }
     }
 
-    /// POST a JSON body to a bridge path. Returns the parsed body on 2xx, or a
-    /// short non-secret error string otherwise (unreachable app, rejected
-    /// credential, disabled surface, …).
-    async fn bridge_post(
-        &self,
-        path: &str,
-        body: serde_json::Value,
-    ) -> Result<serde_json::Value, String> {
-        let (url, client_id, secret) = self
-            .ready()
-            .ok_or_else(|| "ScreenerBot is not running or this client is not paired".to_owned())?;
+    fn credential(&self) -> Option<(&str, &str)> {
+        Some((self.client_id.as_deref()?, self.secret.as_deref()?))
+    }
 
+    /// The origin to use now: the cached one, or a fresh validated read of
+    /// `agent-runtime.json`. The lock is never held across an `.await`.
+    fn current_origin(&self) -> Option<String> {
+        let mut guard = self.origin.lock().unwrap_or_else(|e| e.into_inner());
+        if guard.is_none() {
+            *guard = read_runtime_info().map(|info| info.url);
+        }
+        guard.clone()
+    }
+
+    fn set_origin(&self, value: Option<String>) {
+        let mut guard = self.origin.lock().unwrap_or_else(|e| e.into_inner());
+        *guard = value;
+    }
+
+    /// One HTTP attempt against a specific origin. `Ok` only on 2xx.
+    async fn send_once(
+        &self,
+        origin: &str,
+        path: &str,
+        body: &serde_json::Value,
+        client_id: &str,
+        secret: &str,
+    ) -> Result<serde_json::Value, BridgeError> {
         let response = self
             .http
-            .post(format!("{url}{path}"))
+            .post(format!("{origin}{path}"))
             .header("x-screenerbot-client", client_id)
             .header("x-screenerbot-pairing-secret", secret)
-            .json(&body)
+            .json(body)
             .send()
             .await
-            .map_err(|e| format!("bridge unreachable: {e}"))?;
+            .map_err(|_| BridgeError::Unreachable)?;
 
         let status = response.status();
         let value: serde_json::Value = response
             .json()
             .await
-            .map_err(|e| format!("unreadable bridge response: {e}"))?;
+            .map_err(|_| BridgeError::Unreachable)?;
 
         if status.is_success() {
             return Ok(value);
@@ -115,7 +210,46 @@ impl McpServer {
             .and_then(|m| m.as_str())
             .unwrap_or("request rejected")
             .to_owned();
-        Err(message)
+        Err(BridgeError::Rejected(message))
+    }
+
+    /// POST a JSON body to a bridge path against the current runtime origin, with
+    /// a single rediscovery retry on a transport failure — only when the origin
+    /// actually changed, and never for a state-changing request. A rejection
+    /// (the app answered) is returned as-is: it is not a discovery problem.
+    async fn bridge_post(
+        &self,
+        path: &str,
+        body: serde_json::Value,
+        mutation: Mutation,
+    ) -> Result<serde_json::Value, BridgeError> {
+        let (client_id, secret) = self.credential().ok_or(BridgeError::NotPaired)?;
+        let origin = self.current_origin().ok_or(BridgeError::NotRunning)?;
+
+        match self
+            .send_once(&origin, path, &body, client_id, secret)
+            .await
+        {
+            Ok(value) => Ok(value),
+            Err(BridgeError::Unreachable) => {
+                let found = read_runtime_info().map(|info| info.url);
+                match plan_rediscovery(&origin, found.as_deref(), mutation) {
+                    Rediscovery::RetryWith(next) => {
+                        self.set_origin(Some(next.clone()));
+                        self.send_once(&next, path, &body, client_id, secret).await
+                    }
+                    Rediscovery::AdoptWithoutRetry(next) => {
+                        self.set_origin(Some(next));
+                        Err(BridgeError::Unreachable)
+                    }
+                    Rediscovery::Drop => {
+                        self.set_origin(None);
+                        Err(BridgeError::Unreachable)
+                    }
+                }
+            }
+            Err(other) => Err(other),
+        }
     }
 
     async fn poll_approval(&self, approval_id: &str) -> CallToolResponse {
@@ -136,11 +270,12 @@ impl McpServer {
                 .bridge_post(
                     BRIDGE_STATUS,
                     serde_json::json!({ "approval_id": approval_id }),
+                    Mutation::ReadOnly,
                 )
                 .await
             {
                 Ok(v) => v,
-                Err(e) => return error_result(&e),
+                Err(e) => return error_result(&e.user_message()),
             };
             match value.get("state").and_then(|s| s.as_str()).unwrap_or("") {
                 "pending" | "claimed" | "executing" => continue,
@@ -181,7 +316,10 @@ impl ServerHandler for McpServer {
         _request: Option<rmcp::model::PaginatedRequestParams>,
         _context: RequestContext<RoleServer>,
     ) -> Result<ListToolsResult, rmcp::model::ErrorData> {
-        match self.bridge_post(BRIDGE_LIST, serde_json::json!({})).await {
+        match self
+            .bridge_post(BRIDGE_LIST, serde_json::json!({}), Mutation::ReadOnly)
+            .await
+        {
             Ok(value) => {
                 let defs: Vec<ToolDefinition> = value
                     .get("tools")
@@ -193,7 +331,10 @@ impl ServerHandler for McpServer {
                 ))
             }
             Err(reason) => {
-                eprintln!("ScreenerBot MCP: no capabilities available ({reason}).");
+                eprintln!(
+                    "ScreenerBot MCP: no capabilities available ({}).",
+                    reason.user_message()
+                );
                 Ok(ListToolsResult::with_all_items(Vec::new()))
             }
         }
@@ -218,11 +359,12 @@ impl ServerHandler for McpServer {
                     "arguments": arguments,
                     "correlation_id": correlation_id,
                 }),
+                Mutation::StateChanging,
             )
             .await
         {
             Ok(v) => v,
-            Err(reason) => return Ok(error_result(&reason)),
+            Err(reason) => return Ok(error_result(&reason.user_message())),
         };
 
         match value.get("status").and_then(|s| s.as_str()).unwrap_or("") {
@@ -387,14 +529,19 @@ fn credential_from_env(cli_client_id: Option<&str>) -> (Option<String>, Option<S
 }
 
 /// Run an MCP server over stdio. Never prints to stdout.
+///
+/// Runtime discovery is dynamic: an unavailable origin is re-read on the next
+/// bridge request, while a transport failure re-reads the runtime and may adopt
+/// a changed origin. A long-lived client therefore recovers if ScreenerBot
+/// starts later or restarts on a different port. It never auto-starts the app.
 pub async fn serve_stdio(cli_client_id: Option<&str>) -> anyhow::Result<()> {
-    let runtime = read_runtime_info();
+    let origin = read_runtime_info().map(|info| info.url);
     let (client_id, secret) = credential_from_env(cli_client_id);
 
-    if runtime.is_none() {
+    if origin.is_none() {
         eprintln!(
-            "ScreenerBot MCP: ScreenerBot does not appear to be running (no agent-runtime.json); \
-             serving zero capabilities."
+            "ScreenerBot MCP: ScreenerBot does not appear to be running yet (no \
+             agent-runtime.json); each request re-checks, so capabilities appear once it starts."
         );
     }
     if client_id.is_none() || secret.is_none() {
@@ -404,12 +551,7 @@ pub async fn serve_stdio(cli_client_id: Option<&str>) -> anyhow::Result<()> {
         );
     }
 
-    let server = McpServer {
-        http: build_http_client()?,
-        runtime,
-        client_id,
-        secret,
-    };
+    let server = McpServer::new(build_http_client()?, origin, client_id, secret);
     let (stdin, stdout) = rmcp::transport::stdio();
     server.serve((stdin, stdout)).await?.waiting().await?;
     Ok(())
@@ -440,8 +582,8 @@ pub async fn dispatch(args: &[String]) -> anyhow::Result<bool> {
             Ok(true)
         }
         Some("doctor") => {
-            run_doctor(cli_client_id).await;
-            Ok(true)
+            let code = run_doctor(cli_client_id).await;
+            std::process::exit(code);
         }
         _ => {
             eprintln!("Usage: screenerbot mcp <serve | doctor>");
@@ -451,8 +593,70 @@ pub async fn dispatch(args: &[String]) -> anyhow::Result<bool> {
     }
 }
 
-/// Report runtime reachability and pairing status. Never prints the secret.
-async fn run_doctor(cli_client_id: Option<&str>) {
+/// Exit status for `mcp doctor`. Zero ONLY when the live app answered a pairing
+/// probe successfully; every unhealthy state is a distinct non-zero code so a
+/// caller (a client's setup script, CI) can branch on it. Codes start at 3 to
+/// stay clear of the shells' own `1`/`2` conventions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DoctorExit {
+    Healthy,
+    RuntimeMissing,
+    CredentialsMissing,
+    BridgeUnreachable,
+    PairingRejected,
+}
+
+impl DoctorExit {
+    fn code(self) -> i32 {
+        match self {
+            DoctorExit::Healthy => 0,
+            DoctorExit::RuntimeMissing => 3,
+            DoctorExit::CredentialsMissing => 4,
+            DoctorExit::BridgeUnreachable => 5,
+            DoctorExit::PairingRejected => 6,
+        }
+    }
+}
+
+/// The pairing-probe result, only meaningful once a runtime and credentials are
+/// both known to be present.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DoctorProbe {
+    /// Not attempted (a prerequisite was missing, or the HTTP client failed to
+    /// build).
+    Skipped,
+    /// The bridge answered a `ping` successfully.
+    Ok,
+    /// The origin could not be reached.
+    Unreachable,
+    /// The app answered, but refused the pairing (revoked, unknown, malformed,
+    /// or agent control disabled).
+    Rejected,
+}
+
+/// Pure mapping from what `doctor` observed to its exit status. Keeping it
+/// separate from the I/O lets the decision be unit-tested without the app.
+fn decide_doctor(
+    runtime_present: bool,
+    credentials_present: bool,
+    probe: DoctorProbe,
+) -> DoctorExit {
+    if !runtime_present {
+        return DoctorExit::RuntimeMissing;
+    }
+    if !credentials_present {
+        return DoctorExit::CredentialsMissing;
+    }
+    match probe {
+        DoctorProbe::Ok => DoctorExit::Healthy,
+        DoctorProbe::Rejected => DoctorExit::PairingRejected,
+        DoctorProbe::Unreachable | DoctorProbe::Skipped => DoctorExit::BridgeUnreachable,
+    }
+}
+
+/// Report runtime reachability and pairing status, and return the process exit
+/// code. Never prints the secret.
+async fn run_doctor(cli_client_id: Option<&str>) -> i32 {
     let runtime = read_runtime_info();
     match &runtime {
         None => {
@@ -472,74 +676,192 @@ async fn run_doctor(cli_client_id: Option<&str>) {
     }
 
     let (client_id, secret) = credential_from_env(cli_client_id);
-    if runtime.is_none() {
-        return;
-    }
-    let (Some(client_id), Some(secret)) = (client_id, secret) else {
+    let credentials_present = client_id.is_some() && secret.is_some();
+
+    let probe = if runtime.is_none() {
+        DoctorProbe::Skipped
+    } else if !credentials_present {
         eprintln!(
             "ScreenerBot MCP: {CLIENT_ID_ENV} / {SECRET_ENV} not both set; cannot check pairing."
         );
-        return;
+        DoctorProbe::Skipped
+    } else {
+        match build_http_client() {
+            Err(_) => {
+                eprintln!(
+                    "ScreenerBot MCP: could not construct the bounded HTTP client; cannot check \
+                     pairing."
+                );
+                DoctorProbe::Skipped
+            }
+            Ok(http) => {
+                let server = McpServer::new(
+                    http,
+                    runtime.as_ref().map(|info| info.url.clone()),
+                    client_id,
+                    secret,
+                );
+                match server
+                    .bridge_post(BRIDGE_PING, serde_json::json!({}), Mutation::ReadOnly)
+                    .await
+                {
+                    Ok(value) => {
+                        let scope = value
+                            .get("scope")
+                            .and_then(|s| s.as_str())
+                            .unwrap_or("unknown");
+                        let label = value
+                            .get("client_label")
+                            .and_then(|s| s.as_str())
+                            .unwrap_or("");
+                        eprintln!(
+                            "ScreenerBot MCP: bridge reachable; pairing OK (scope {scope}, label \
+                             {label:?})."
+                        );
+                        DoctorProbe::Ok
+                    }
+                    Err(BridgeError::Rejected(reason)) => {
+                        eprintln!(
+                            "ScreenerBot MCP: bridge reachable but the pairing was rejected \
+                             ({reason})."
+                        );
+                        DoctorProbe::Rejected
+                    }
+                    Err(other) => {
+                        eprintln!(
+                            "ScreenerBot MCP: bridge check failed ({}).",
+                            other.user_message()
+                        );
+                        DoctorProbe::Unreachable
+                    }
+                }
+            }
+        }
     };
 
-    let http = match build_http_client() {
-        Ok(client) => client,
-        Err(_) => {
-            eprintln!(
-                "ScreenerBot MCP: could not construct the bounded HTTP client; cannot check pairing."
-            );
-            return;
-        }
-    };
-    let server = McpServer {
-        http,
-        runtime,
-        client_id: Some(client_id),
-        secret: Some(secret),
-    };
-    match server.bridge_post(BRIDGE_PING, serde_json::json!({})).await {
-        Ok(value) => {
-            let scope = value
-                .get("scope")
-                .and_then(|s| s.as_str())
-                .unwrap_or("unknown");
-            let label = value
-                .get("client_label")
-                .and_then(|s| s.as_str())
-                .unwrap_or("");
-            eprintln!(
-                "ScreenerBot MCP: bridge reachable; pairing OK (scope {scope}, label {label:?})."
-            );
-        }
-        Err(reason) => {
-            eprintln!("ScreenerBot MCP: bridge check failed ({reason}).");
-        }
-    }
+    let exit = decide_doctor(runtime.is_some(), credentials_present, probe);
+    eprintln!(
+        "ScreenerBot MCP: doctor result {exit:?} (exit code {}).",
+        exit.code()
+    );
+    exit.code()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn server(runtime: bool, creds: bool) -> McpServer {
-        McpServer {
-            http: reqwest::Client::new(),
-            runtime: runtime.then(|| RuntimeInfo {
-                url: "http://127.0.0.1:65535".to_owned(),
-                pid: Some(1),
-                version: Some("test".to_owned()),
-            }),
-            client_id: creds.then(|| "cid".to_owned()),
-            secret: creds.then(|| "sec".to_owned()),
-        }
+    fn server(origin: Option<&str>, creds: bool) -> McpServer {
+        McpServer::new(
+            reqwest::Client::new(),
+            origin.map(str::to_owned),
+            creds.then(|| "cid".to_owned()),
+            creds.then(|| "sec".to_owned()),
+        )
     }
 
     #[test]
-    fn not_ready_without_runtime_or_credentials() {
-        assert!(server(false, false).ready().is_none());
-        assert!(server(true, false).ready().is_none());
-        assert!(server(false, true).ready().is_none());
-        assert!(server(true, true).ready().is_some());
+    fn credential_requires_both_id_and_secret() {
+        assert!(server(None, false).credential().is_none());
+        assert!(server(None, true).credential().is_some());
+    }
+
+    #[test]
+    fn cached_origin_is_returned_without_touching_the_filesystem() {
+        let s = server(Some("http://127.0.0.1:8080"), true);
+        assert_eq!(s.current_origin().as_deref(), Some("http://127.0.0.1:8080"));
+        // Explicitly clearing the cache is honoured.
+        s.set_origin(Some("http://localhost:9999".to_owned()));
+        assert_eq!(s.current_origin().as_deref(), Some("http://localhost:9999"));
+    }
+
+    #[test]
+    fn rediscovery_retries_only_a_changed_origin_for_a_read() {
+        let tried = "http://127.0.0.1:8080";
+        // Same origin as before → never retry, drop the cache.
+        assert_eq!(
+            plan_rediscovery(tried, Some(tried), Mutation::ReadOnly),
+            Rediscovery::Drop
+        );
+        // A genuinely different loopback origin → retry once against it.
+        assert_eq!(
+            plan_rediscovery(tried, Some("http://127.0.0.1:9090"), Mutation::ReadOnly),
+            Rediscovery::RetryWith("http://127.0.0.1:9090".to_owned())
+        );
+        // Nothing discoverable now → drop, do not retry (never auto-start).
+        assert_eq!(
+            plan_rediscovery(tried, None, Mutation::ReadOnly),
+            Rediscovery::Drop
+        );
+    }
+
+    #[test]
+    fn rediscovery_never_replays_a_state_changing_request() {
+        let tried = "http://127.0.0.1:8080";
+        // Even with a new origin, a state-changing call is adopted, not retried.
+        assert_eq!(
+            plan_rediscovery(
+                tried,
+                Some("http://127.0.0.1:9090"),
+                Mutation::StateChanging
+            ),
+            Rediscovery::AdoptWithoutRetry("http://127.0.0.1:9090".to_owned())
+        );
+        // Same origin / none → still just drop.
+        assert_eq!(
+            plan_rediscovery(tried, Some(tried), Mutation::StateChanging),
+            Rediscovery::Drop
+        );
+        assert_eq!(
+            plan_rediscovery(tried, None, Mutation::StateChanging),
+            Rediscovery::Drop
+        );
+    }
+
+    #[test]
+    fn doctor_exit_is_zero_only_when_the_app_and_pairing_verify() {
+        // Missing runtime dominates, whatever the probe says.
+        assert_eq!(
+            decide_doctor(false, false, DoctorProbe::Skipped),
+            DoctorExit::RuntimeMissing
+        );
+        assert_eq!(
+            decide_doctor(false, true, DoctorProbe::Ok),
+            DoctorExit::RuntimeMissing
+        );
+        // Runtime present, credentials missing.
+        assert_eq!(
+            decide_doctor(true, false, DoctorProbe::Skipped),
+            DoctorExit::CredentialsMissing
+        );
+        // Reachable but the pairing was refused (revoked / disabled control).
+        assert_eq!(
+            decide_doctor(true, true, DoctorProbe::Rejected),
+            DoctorExit::PairingRejected
+        );
+        // Could not reach the bridge, or the probe was skipped despite inputs.
+        assert_eq!(
+            decide_doctor(true, true, DoctorProbe::Unreachable),
+            DoctorExit::BridgeUnreachable
+        );
+        assert_eq!(
+            decide_doctor(true, true, DoctorProbe::Skipped),
+            DoctorExit::BridgeUnreachable
+        );
+        // The one healthy path.
+        assert_eq!(
+            decide_doctor(true, true, DoctorProbe::Ok),
+            DoctorExit::Healthy
+        );
+        assert_eq!(DoctorExit::Healthy.code(), 0);
+        for unhealthy in [
+            DoctorExit::RuntimeMissing,
+            DoctorExit::CredentialsMissing,
+            DoctorExit::BridgeUnreachable,
+            DoctorExit::PairingRejected,
+        ] {
+            assert_ne!(unhealthy.code(), 0, "{unhealthy:?} must be non-zero");
+        }
     }
 
     #[test]
