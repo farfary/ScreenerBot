@@ -19,7 +19,7 @@ export function createInstructionsTab({ state, _eventCleanups }) {
       state.instructions = data.instructions || [];
       renderInstructionsList(state.instructions);
     } catch (error) {
-      console.error("[AI] Error loading instructions:", error);
+      console.error("[Assistant] Error loading instructions:", error);
       const container = $("#instructions-list");
       if (container) {
         container.innerHTML = '<div class="empty-state">Failed to load instructions</div>';
@@ -38,7 +38,7 @@ export function createInstructionsTab({ state, _eventCleanups }) {
       state.templates = data.templates || [];
       renderTemplatesList(data.templates || []);
     } catch (error) {
-      console.error("[AI] Error loading templates:", error);
+      console.error("[Assistant] Error loading templates:", error);
     }
   }
 
@@ -384,7 +384,7 @@ export function createInstructionsTab({ state, _eventCleanups }) {
       // Reload to get updated priorities
       await loadInstructions();
     } catch (error) {
-      console.error("[AI] Error reordering instructions:", error);
+      console.error("[Assistant] Error reordering instructions:", error);
       Utils.showToast({ type: "error", title: "Failed to reorder instructions" });
       // Reload to restore original order
       await loadInstructions();
@@ -629,7 +629,7 @@ export function createInstructionsTab({ state, _eventCleanups }) {
         message: "Instruction created successfully",
       });
     } catch (error) {
-      console.error("[AI] Error creating instruction:", error);
+      console.error("[Assistant] Error creating instruction:", error);
       Utils.showToast({ type: "error", title: "Failed to create instruction" });
     }
   }
@@ -648,7 +648,7 @@ export function createInstructionsTab({ state, _eventCleanups }) {
         throw new Error("Failed to toggle instruction");
       }
     } catch (error) {
-      console.error("[AI] Error toggling instruction:", error);
+      console.error("[Assistant] Error toggling instruction:", error);
       // Revert the checkbox on failure
       const checkbox = document.querySelector(`.instruction-item[data-id="${id}"] .toggle input`);
       if (checkbox) checkbox.checked = !enabled;
@@ -762,7 +762,7 @@ export function createInstructionsTab({ state, _eventCleanups }) {
         });
       }
     } catch (error) {
-      console.error("[AI] Error loading instruction for edit:", error);
+      console.error("[Assistant] Error loading instruction for edit:", error);
       Utils.showToast({ type: "error", title: "Failed to load instruction data" });
     }
   }
@@ -801,7 +801,7 @@ export function createInstructionsTab({ state, _eventCleanups }) {
         message: "Instruction updated successfully",
       });
     } catch (error) {
-      console.error("[AI] Error updating instruction:", error);
+      console.error("[Assistant] Error updating instruction:", error);
       Utils.showToast({ type: "error", title: "Failed to update instruction" });
     }
   }
@@ -829,7 +829,7 @@ export function createInstructionsTab({ state, _eventCleanups }) {
         message: "Instruction deleted successfully",
       });
     } catch (error) {
-      console.error("[AI] Error deleting instruction:", error);
+      console.error("[Assistant] Error deleting instruction:", error);
       Utils.showToast({ type: "error", title: "Failed to delete instruction" });
     }
   }
@@ -866,7 +866,7 @@ export function createInstructionsTab({ state, _eventCleanups }) {
         message: "Instruction duplicated successfully",
       });
     } catch (error) {
-      console.error("[AI] Error duplicating instruction:", error);
+      console.error("[Assistant] Error duplicating instruction:", error);
       Utils.showToast({ type: "error", title: "Failed to duplicate instruction" });
     }
   }
@@ -895,7 +895,7 @@ export function createInstructionsTab({ state, _eventCleanups }) {
         message: `Instruction created from template: ${template.name}`,
       });
     } catch (error) {
-      console.error("[AI] Error using template:", error);
+      console.error("[Assistant] Error using template:", error);
       Utils.showToast({ type: "error", title: "Failed to create instruction from template" });
     }
   }

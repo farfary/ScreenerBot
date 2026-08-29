@@ -192,7 +192,7 @@ function createLifecycle() {
       updateMetrics(data);
       updateRecentDecisions(data.recent_decisions || []);
     } catch (error) {
-      console.error("[AI] Failed to load AI status:", error);
+      console.error("[Assistant] Failed to load AI status:", error);
       Utils.showToast({ key: "assistant-load", type: "error", title: "Could not load AI status" });
     }
   }
@@ -331,7 +331,7 @@ function createLifecycle() {
 
       await loadAiStatus();
     } catch (error) {
-      console.error("[AI] Failed to toggle AI:", error);
+      console.error("[Assistant] Failed to toggle AI:", error);
       playError();
       Utils.showToast({ type: "error", title: "Failed to update AI status" });
 
@@ -370,7 +370,7 @@ function createLifecycle() {
 
       updateConfigForm(data);
     } catch (error) {
-      console.error("[AI] Failed to load config:", error);
+      console.error("[Assistant] Failed to load config:", error);
       Utils.showToast({
         key: "assistant-load",
         type: "error",
@@ -431,7 +431,7 @@ function createLifecycle() {
 
       updateCacheStats(data);
     } catch (error) {
-      console.error("[AI] Failed to load cache stats:", error);
+      console.error("[Assistant] Failed to load cache stats:", error);
     }
   }
 
@@ -473,7 +473,7 @@ function createLifecycle() {
 
       await loadCacheStats();
     } catch (error) {
-      console.error("[AI] Failed to clear cache:", error);
+      console.error("[Assistant] Failed to clear cache:", error);
       playError();
       Utils.showToast({ type: "error", title: "Failed to clear cache" });
     }
@@ -525,7 +525,7 @@ function createLifecycle() {
 
           await loadConfig();
         } catch (error) {
-          console.error("[AI] Failed to save config:", error);
+          console.error("[Assistant] Failed to save config:", error);
           playError();
           Utils.showToast({ type: "error", title: "Failed to save configuration" });
         }
@@ -601,7 +601,7 @@ function createLifecycle() {
       // rendered its empty state no matter how many evaluations existed.
       renderHistory(data.decisions || [], page, data.total || 0);
     } catch (error) {
-      console.error("[AI] Error loading history:", error);
+      console.error("[Assistant] Error loading history:", error);
       const container = $("#history-list");
       if (container) {
         container.innerHTML = '<div class="empty-state">Failed to load history</div>';
@@ -831,7 +831,7 @@ function createLifecycle() {
      * Init - called once when page is first loaded
      */
     async init(_ctx) {
-      console.log("[AI] Initializing");
+      console.log("[Assistant] Initializing");
 
       const hashTab = window.location.hash.slice(1);
       const savedTab = AppState.load(ASSISTANT_STATE_KEY, DEFAULT_TAB);
@@ -883,7 +883,7 @@ function createLifecycle() {
      * Activate the page (start pollers)
      */
     async activate(ctx) {
-      console.log("[AI] Activating page");
+      console.log("[Assistant] Activating page");
 
       if (!subTabBar) {
         subTabBar = new TabBar({
@@ -993,7 +993,7 @@ function createLifecycle() {
      * Deactivate the page (stop pollers)
      */
     async deactivate() {
-      console.log("[AI] Deactivating page");
+      console.log("[Assistant] Deactivating page");
       // Pollers are auto-stopped by lifecycle
     },
 
@@ -1001,7 +1001,7 @@ function createLifecycle() {
      * Dispose - cleanup when page is destroyed
      */
     async dispose() {
-      console.log("[AI] Disposing page");
+      console.log("[Assistant] Disposing page");
 
       // Destroy chat widget
       if (_chatWidget) {

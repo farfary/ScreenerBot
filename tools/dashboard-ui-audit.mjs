@@ -244,7 +244,9 @@ if (!routerSource.includes("/styles/pages/")) {
   errors.push("router.js must load route-scoped page styles from /styles/pages/");
 }
 
-const aiStyleManifest = templatesSource.match(/"ai"\s*=>\s*\[([\s\S]*?)\]\s*\.join/);
+const assistantStyleManifest = templatesSource.match(
+  /"assistant"\s*=>\s*\[([\s\S]*?)\]\s*\.join/
+);
 const globalStyleManifest = templatesSource.match(/let combined_styles = \[([\s\S]*?)\];/);
 const chatWidgetStyles = [
   "CHAT_WIDGET_LAYOUT_STYLES",
@@ -265,8 +267,10 @@ for (const style of chatWidgetStyles) {
   if (!globalStyleManifest?.[1].includes(style)) {
     errors.push(`${style} must be loaded by the global shared-style manifest`);
   }
-  if (aiStyleManifest?.[1].includes(style)) {
-    errors.push(`${style} must not depend on the AI route-scoped style manifest`);
+  if (assistantStyleManifest?.[1].includes(style)) {
+    errors.push(
+      `${style} must not depend on the Assistant route-scoped style manifest`
+    );
   }
 }
 

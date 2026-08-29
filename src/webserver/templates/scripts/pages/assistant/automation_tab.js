@@ -20,7 +20,7 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
       state.automationTasks = data.tasks || [];
       renderAutomationList(state.automationTasks);
     } catch (error) {
-      console.error("[AI] Error loading automation tasks:", error);
+      console.error("[Assistant] Error loading automation tasks:", error);
     }
   }
 
@@ -32,7 +32,7 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
       state.automationRuns = data.runs || [];
       renderAutomationRuns(state.automationRuns);
     } catch (error) {
-      console.error("[AI] Error loading automation runs:", error);
+      console.error("[Assistant] Error loading automation runs:", error);
     }
   }
 
@@ -44,7 +44,7 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
       state.automationStats = data.stats;
       renderAutomationStats(data.stats);
     } catch (error) {
-      console.error("[AI] Error loading automation stats:", error);
+      console.error("[Assistant] Error loading automation stats:", error);
     }
   }
 

@@ -41,7 +41,7 @@ export function createProvidersTab({ state, _eventCleanups, loadConfig }) {
 
       renderProviders(state.providers);
     } catch (error) {
-      console.error("[AI] Failed to load providers:", error);
+      console.error("[Assistant] Failed to load providers:", error);
       Utils.showToast({ key: "assistant-load", type: "error", title: "Could not load providers" });
     }
   }
@@ -138,7 +138,7 @@ export function createProvidersTab({ state, _eventCleanups, loadConfig }) {
       await loadConfig();
       await loadProviders();
     } catch (error) {
-      console.error("[AI] Error setting default provider:", error);
+      console.error("[Assistant] Error setting default provider:", error);
       // A native radio updates immediately. Restore the persisted selection if
       // the mutation fails instead of leaving the failed choice checked.
       _lastProvidersKey = null;
@@ -179,7 +179,7 @@ export function createProvidersTab({ state, _eventCleanups, loadConfig }) {
         throw new Error(result.error || "Test failed");
       }
     } catch (error) {
-      console.error(`[AI] Provider test failed for ${providerId}:`, error);
+      console.error(`[Assistant] Provider test failed for ${providerId}:`, error);
       Utils.showToast({
         type: "error",
         title: "Test Failed",
@@ -420,7 +420,7 @@ export function createProvidersTab({ state, _eventCleanups, loadConfig }) {
         modal.remove();
         await loadProviders();
       } catch (error) {
-        console.error(`[AI] Failed to save provider ${providerId}:`, error);
+        console.error(`[Assistant] Failed to save provider ${providerId}:`, error);
         Utils.showToast({ type: "error", title: "Failed to save provider configuration" });
         saveBtn.disabled = false;
         saveBtn.innerHTML = '<i class="icon-save"></i> Save Configuration';
