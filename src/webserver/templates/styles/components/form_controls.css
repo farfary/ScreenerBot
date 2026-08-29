@@ -50,24 +50,28 @@
 
   /* Choice-control alignment - the single source for how a checkbox or radio
      sits beside its label text. Inter's metrics, in em, plus the line height of
-     a label row. The control is centred on the text's x-height band (its visual
-     mass), not on the line box: half-leading and the ascent above the cap put a
-     line box's geometric centre above the text a reader actually sees, which is
-     why a "centred" control still reads high. Because the offset is measured
-     from the first line, a label that wraps keeps the control on line one.
-     A row that centres its own children (an icon/card row) cancels the offset
-     with --control-line-offset: 0px; nothing else may nudge a control. */
+     a label row. The control is centred on the text's cap band (baseline to
+     cap height): that is the block of ink a reader sees in a sentence-case
+     label, and its top edge - the leading capital and the ascenders - is what
+     the eye lines the control up with. Centring on the line box instead puts
+     the control low, because half-leading and the ascent above the cap height
+     are empty space; centring on the x-height band puts it low too, by half
+     the distance between the x-height and the cap. Because the offset is
+     measured from the first line, a label that wraps keeps the control on
+     line one. A row that centres its own children (an icon/card row) cancels
+     the offset with --control-line-offset: 0px; nothing else may nudge a
+     control. */
   --control-row-gap: var(--spacing-sm);
   --control-group-gap: var(--spacing-lg);
   --control-line-height: 1.45;
   --control-text-ascent: 0.969;
   --control-text-descent: 0.241;
-  --control-text-x-height: 0.545;
+  --control-text-cap-height: 0.727;
   --control-box-size: var(--checkbox-size);
   --control-line-offset: calc(
     (
         var(--control-line-height) + var(--control-text-ascent) - var(--control-text-descent) -
-          var(--control-text-x-height)
+          var(--control-text-cap-height)
       ) *
       0.5em - var(--control-box-size) * 0.5
   );

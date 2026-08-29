@@ -39,7 +39,7 @@ test("the offset is derived from type metrics, not a magic number", async () => 
     "--control-line-height",
     "--control-text-ascent",
     "--control-text-descent",
-    "--control-text-x-height",
+    "--control-text-cap-height",
     "--control-box-size",
     "--control-line-offset",
   ]) {
