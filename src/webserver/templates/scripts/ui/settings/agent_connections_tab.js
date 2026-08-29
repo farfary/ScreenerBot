@@ -89,6 +89,20 @@ export const SETUP_CLIENTS = [
 ];
 export const DEFAULT_CLIENT = "claude";
 
+let activeTabCleanup = null;
+let loadGeneration = 0;
+
+/**
+ * Release listeners and one-time credentials whenever Settings leaves this tab.
+ * The content node survives tab switches, so relying on innerHTML replacement
+ * would retain delegated handlers and their secret-bearing closures.
+ */
+export function teardownAgentConnectionsTab() {
+  loadGeneration += 1;
+  activeTabCleanup?.();
+  activeTabCleanup = null;
+}
+
 // ── Pure config generators (unit-tested under node) ──────────────────────────
 
 /** Wrap a value in POSIX single quotes, escaping any embedded single quote. */
@@ -221,7 +235,11 @@ export function clientSetup(id, exe, clientId, secret) {
           ...shared,
         ],
         blocks: [
-          { label: "Codex CLI — terminal command", lang: "sh", body: codexCommand(exe, clientId, secret) },
+          {
+            label: "Codex CLI — terminal command",
+            lang: "sh",
+            body: codexCommand(exe, clientId, secret),
+          },
           {
             label: "Codex CLI — ~/.codex/config.toml (fallback)",
             lang: "toml",
@@ -273,7 +291,11 @@ export function clientSetup(id, exe, clientId, secret) {
           ...shared,
         ],
         blocks: [
-          { label: "Hermes — mcp_servers (YAML)", lang: "yaml", body: hermesYaml(exe, clientId, secret) },
+          {
+            label: "Hermes — mcp_servers (YAML)",
+            lang: "yaml",
+            body: hermesYaml(exe, clientId, secret),
+          },
         ],
       };
     case "generic":
@@ -335,6 +357,10 @@ function clientOptions(selected) {
   ).join("");
 }
 
+function clientLabel(kind) {
+  return SETUP_CLIENTS.find((client) => client.id === kind)?.label || kind;
+}
+
 function buildShell() {
   return `
     <div class="settings-section agent-connections">
@@ -343,11 +369,8 @@ function buildShell() {
         Agent Connections
       </h3>
       <p class="settings-section-description">
-        Let an external MCP client — an AI coding agent — drive ScreenerBot's tools through the
-        native <code>screenerbot mcp serve</code> bridge. ScreenerBot must stay running in the
-        background for a paired client to connect; the dashboard window can be closed as long as
-        the app process is up, but a person must have it open to approve any action that changes
-        configuration or moves money.
+        Connect Claude, Codex, Hermes, OpenClaw, or any stdio MCP client; ScreenerBot must remain
+        running, and configuration changes or trades still require approval in the dashboard.
       </p>
 
       <div class="settings-group agent-pair-create">
@@ -374,18 +397,19 @@ function buildShell() {
           </div>
         </div>
 
-        <div class="settings-field agent-scope-field">
+        <div class="settings-field agent-scope-field" role="radiogroup"
+             aria-labelledby="agentPairScopeLabel" aria-describedby="agentPairScopeHint">
           <div class="settings-field-info">
-            <label>Scope</label>
-            <span class="settings-field-hint">Grant the least a connection needs. Stronger scopes only widen what you can approve.</span>
+            <span class="settings-field-label" id="agentPairScopeLabel">Scope</span>
+            <span class="settings-field-hint" id="agentPairScopeHint">Grant the least a connection needs. Stronger scopes only widen what you can approve.</span>
           </div>
           <div class="settings-field-control agent-scope-list">
             ${SCOPE_OPTIONS.map(scopeRow).join("")}
           </div>
         </div>
 
-        <div class="form-group">
-          <p class="form-error hidden" id="agentPairError"></p>
+        <div class="form-group agent-pair-actions">
+          <p class="form-error" id="agentPairError" hidden></p>
           <button type="button" class="btn btn-primary btn-sm" id="agentPairCreate">
             <i class="icon-plus"></i>
             Create connection
@@ -393,7 +417,8 @@ function buildShell() {
         </div>
       </div>
 
-      <div class="agent-issued hidden" id="agentIssued" role="group" aria-label="New connection credential">
+      <div class="agent-issued" id="agentIssued" role="group"
+           aria-label="New connection credential" hidden>
         <div class="agent-issued-warn">
           <i class="icon-triangle-alert"></i>
           <span>Copy the secret now. It is shown once and cannot be retrieved again — revoke and
@@ -427,8 +452,14 @@ function buildShell() {
         <button type="button" class="btn btn-secondary btn-sm" id="agentIssuedDone">Done</button>
       </div>
 
-      <div class="agent-pair-list" id="agentPairList">
-        <div class="settings-loading">Loading connections...</div>
+      <div class="agent-pair-section">
+        <div class="agent-pair-list-head">
+          <h4>Connections</h4>
+          <span id="agentPairCount"></span>
+        </div>
+        <div class="agent-pair-list" id="agentPairList">
+          <div class="settings-loading"><i class="icon-loader spin"></i> Loading connections...</div>
+        </div>
       </div>
     </div>
   `;
@@ -442,19 +473,22 @@ function scopeBadge(scope) {
 }
 
 function renderList(container, rows) {
+  const countEl = container.closest(".agent-pair-section")?.querySelector("#agentPairCount");
   if (!Array.isArray(rows) || rows.length === 0) {
+    if (countEl) countEl.textContent = "0 active";
     container.innerHTML =
       '<div class="settings-empty">No connections yet. Create one above to pair a client.</div>';
     return;
   }
   const active = rows.filter((r) => !r.revoked);
   const revoked = rows.filter((r) => r.revoked);
+  if (countEl) countEl.textContent = `${active.length} active`;
   const rowHtml = (r) => `
-    <div class="agent-pair-row${r.revoked ? " agent-pair-row--revoked" : ""}">
+    <div class="agent-pair-row${r.revoked ? " agent-pair-row--revoked" : ""}" role="listitem">
       <div class="agent-pair-main">
         <span class="agent-pair-label">${Utils.escapeHtml(r.label)}</span>
         <span class="agent-pair-meta">
-          ${Utils.escapeHtml(r.agent_kind)} · ${scopeBadge(r.scope)}
+          ${Utils.escapeHtml(clientLabel(r.agent_kind))} · ${scopeBadge(r.scope)}
         </span>
       </div>
       <div class="agent-pair-times">
@@ -465,20 +499,23 @@ function renderList(container, rows) {
             : "Never used"
         }</span>
       </div>
-      <div class="agent-pair-action">
-        ${
-          r.revoked
-            ? '<span class="agent-pair-revoked-tag">Revoked</span>'
-            : `<button type="button" class="btn btn-danger btn-sm" data-revoke="${Utils.escapeHtml(
-                r.client_id
-              )}" data-label="${Utils.escapeHtml(r.label)}">Revoke</button>`
-        }
-      </div>
+      ${
+        r.revoked
+          ? ""
+          : `<div class="agent-pair-action"><button type="button" class="btn btn-danger btn-sm" data-revoke="${Utils.escapeHtml(
+              r.client_id
+            )}" data-label="${Utils.escapeHtml(r.label)}">Revoke</button></div>`
+      }
     </div>`;
   container.innerHTML =
-    (active.length ? active.map(rowHtml).join("") : "") +
+    (active.length
+      ? `<div class="agent-pair-active" role="list">${active.map(rowHtml).join("")}</div>`
+      : '<div class="settings-empty">No active connections.</div>') +
     (revoked.length
-      ? `<div class="agent-pair-revoked-group">${revoked.map(rowHtml).join("")}</div>`
+      ? `<details class="agent-pair-revoked-group">
+          <summary><i class="icon-chevron-right"></i> Revoked connections <span>${revoked.length}</span></summary>
+          <div role="list">${revoked.map(rowHtml).join("")}</div>
+        </details>`
       : "");
 }
 
@@ -487,7 +524,10 @@ function renderList(container, rows) {
  * pattern: this owns `content.innerHTML`.
  */
 export async function loadAgentConnectionsTab(_dialog, content) {
-  content.innerHTML = '<div class="settings-loading">Loading connections...</div>';
+  teardownAgentConnectionsTab();
+  const generation = loadGeneration;
+  content.innerHTML =
+    '<div class="settings-loading"><i class="icon-loader spin"></i> Loading connections...</div>';
 
   let ConfirmationDialog;
   try {
@@ -496,9 +536,12 @@ export async function loadAgentConnectionsTab(_dialog, content) {
       import("../confirmation_dialog.js"),
     ]);
   } catch {
+    if (generation !== loadGeneration) return;
     content.innerHTML = '<div class="settings-error">Failed to load Agent Connections</div>';
     return;
   }
+
+  if (generation !== loadGeneration) return;
 
   // One-time credential, held only while the issued panel is on screen.
   let issued = null; // { clientId, secret, exe }
@@ -521,13 +564,13 @@ export async function loadAgentConnectionsTab(_dialog, content) {
 
   function showError(message) {
     errorEl.textContent = message;
-    errorEl.classList.toggle("hidden", !message);
+    errorEl.hidden = !message;
   }
 
   function clearIssued() {
     issued = null;
     currentBlocks = [];
-    issuedEl.classList.add("hidden");
+    issuedEl.hidden = true;
     issuedClientIdEl.textContent = "";
     issuedSecretEl.textContent = "";
     setupNotesEl.innerHTML = "";
@@ -538,9 +581,7 @@ export async function loadAgentConnectionsTab(_dialog, content) {
     if (!issued) return;
     const setup = clientSetup(setupClientEl.value, issued.exe, issued.clientId, issued.secret);
     currentBlocks = setup.blocks;
-    setupNotesEl.innerHTML = setup.notes
-      .map((n) => `<li>${Utils.escapeHtml(n)}</li>`)
-      .join("");
+    setupNotesEl.innerHTML = setup.notes.map((n) => `<li>${Utils.escapeHtml(n)}</li>`).join("");
     setupBlocksEl.innerHTML = setup.blocks
       .map(
         (b, i) => `
@@ -557,13 +598,17 @@ export async function loadAgentConnectionsTab(_dialog, content) {
 
   async function refreshList() {
     try {
-      const res = await fetch(LIST_URL, { headers: { Accept: "application/json" } });
+      const res = await fetch(LIST_URL, {
+        headers: { Accept: "application/json" },
+        signal: controller.signal,
+      });
       if (!res.ok) {
         listEl.innerHTML = '<div class="settings-error">Could not load connections</div>';
         return;
       }
       renderList(listEl, await res.json());
     } catch {
+      if (controller.signal.aborted) return;
       listEl.innerHTML = '<div class="settings-error">Could not load connections</div>';
     }
   }
@@ -585,8 +630,10 @@ export async function loadAgentConnectionsTab(_dialog, content) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ label: label.value, agent_kind: agentKind, scope }),
+        signal: controller.signal,
       });
       const body = await res.json().catch(() => null);
+      if (controller.signal.aborted) return;
       if (!res.ok) {
         showError((body && body.error && body.error.message) || "Could not create the connection.");
         return;
@@ -601,10 +648,11 @@ export async function loadAgentConnectionsTab(_dialog, content) {
       issuedSecretEl.textContent = issued.secret;
       setupClientEl.value = SETUP_CLIENTS.some((c) => c.id === agentKind) ? agentKind : "generic";
       renderSetup();
-      issuedEl.classList.remove("hidden");
+      issuedEl.hidden = false;
       labelEl.value = "";
       await refreshList();
     } catch {
+      if (controller.signal.aborted) return;
       showError("Could not reach ScreenerBot to create the connection.");
     } finally {
       createBtn.disabled = false;
@@ -620,14 +668,19 @@ export async function loadAgentConnectionsTab(_dialog, content) {
       variant: "danger",
     });
     if (!confirmed) return;
+    if (controller.signal.aborted) return;
     try {
-      const res = await fetch(pairingUrl(clientId), { method: "DELETE" });
+      const res = await fetch(pairingUrl(clientId), {
+        method: "DELETE",
+        signal: controller.signal,
+      });
       if (!res.ok && res.status !== 404) {
         Utils.showToast({ type: "error", title: "Could not revoke the connection" });
         return;
       }
       await refreshList();
     } catch {
+      if (controller.signal.aborted) return;
       Utils.showToast({ type: "error", title: "Could not reach ScreenerBot to revoke" });
     }
   }
@@ -649,25 +702,38 @@ export async function loadAgentConnectionsTab(_dialog, content) {
       .catch((err) => Utils.notifyCopyFailed(err));
   }
 
-  createBtn.addEventListener("click", createPairing);
-  content.querySelector("#agentIssuedDone").addEventListener("click", clearIssued);
-  setupClientEl.addEventListener("change", renderSetup);
-  content.addEventListener("click", (e) => {
-    const copyIssuedBtn = e.target.closest("[data-copy-issued]");
-    if (copyIssuedBtn) {
-      copyIssuedValue(copyIssuedBtn.dataset.copyIssued);
-      return;
-    }
-    const copyBlockBtn = e.target.closest("[data-copy-block]");
-    if (copyBlockBtn) {
-      copyBlock(copyBlockBtn.dataset.copyBlock);
-      return;
-    }
-    const revokeBtn = e.target.closest("[data-revoke]");
-    if (revokeBtn) {
-      revokePairing(revokeBtn.dataset.revoke, revokeBtn.dataset.label || "this connection");
-    }
-  });
+  const controller = new AbortController();
+  const listenerOptions = { signal: controller.signal };
+  const issuedDoneBtn = content.querySelector("#agentIssuedDone");
+
+  createBtn.addEventListener("click", createPairing, listenerOptions);
+  issuedDoneBtn.addEventListener("click", clearIssued, listenerOptions);
+  setupClientEl.addEventListener("change", renderSetup, listenerOptions);
+  content.addEventListener(
+    "click",
+    (e) => {
+      const copyIssuedBtn = e.target.closest("[data-copy-issued]");
+      if (copyIssuedBtn) {
+        copyIssuedValue(copyIssuedBtn.dataset.copyIssued);
+        return;
+      }
+      const copyBlockBtn = e.target.closest("[data-copy-block]");
+      if (copyBlockBtn) {
+        copyBlock(copyBlockBtn.dataset.copyBlock);
+        return;
+      }
+      const revokeBtn = e.target.closest("[data-revoke]");
+      if (revokeBtn) {
+        revokePairing(revokeBtn.dataset.revoke, revokeBtn.dataset.label || "this connection");
+      }
+    },
+    listenerOptions
+  );
+
+  activeTabCleanup = () => {
+    controller.abort();
+    clearIssued();
+  };
 
   await refreshList();
 }

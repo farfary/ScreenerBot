@@ -139,39 +139,6 @@
   min-width: 200px;
 }
 
-/* Settings Input */
-.settings-input {
-  padding: 10px 14px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  color: var(--text-primary);
-  font-size: 0.9rem;
-  font-weight: 500;
-  transition: all var(--transition-base);
-  font-family: var(--font-mono);
-}
-
-.settings-input:hover {
-  border-color: var(--text-secondary);
-  background-color: var(--bg-card-hover);
-}
-
-.settings-input:focus {
-  outline: none;
-  border-color: var(--primary-color);
-  box-shadow: 0 0 0 3px var(--primary-alpha-10);
-}
-
-.settings-input::placeholder {
-  color: var(--text-muted);
-}
-
-.settings-input-sm {
-  padding: 5px 8px;
-  font-size: 0.75rem;
-}
-
 /* Sessions List */
 .sessions-list {
   display: flex;

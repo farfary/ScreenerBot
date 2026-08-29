@@ -15,6 +15,8 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { URL, fileURLToPath } from "node:url";
 
 const MODULE = "../../src/webserver/templates/scripts/ui/settings/agent_connections_tab.js";
 
@@ -39,9 +41,29 @@ test("module imports under node with only the pure helpers", async () => {
     "openClawCommand",
     "clientSetup",
     "validateLabel",
+    "teardownAgentConnectionsTab",
   ]) {
     assert.equal(typeof m[name], "function", `${name} is exported`);
   }
+});
+
+test("one-time credential UI owns teardown and does not depend on route-scoped hidden CSS", async () => {
+  const moduleSrc = await readFile(fileURLToPath(new URL(MODULE, import.meta.url)), "utf8");
+  const dialogSrc = await readFile(
+    fileURLToPath(
+      new URL("../../src/webserver/templates/scripts/ui/settings_dialog.js", import.meta.url)
+    ),
+    "utf8"
+  );
+
+  assert.doesNotMatch(moduleSrc, /class="[^"]*\bhidden\b/);
+  assert.match(moduleSrc, /const controller = new AbortController\(\)/);
+  assert.match(moduleSrc, /activeTabCleanup = \(\) => \{[\s\S]*?clearIssued\(\)/);
+  assert.match(
+    dialogSrc,
+    /if \(this\.currentTab === "agent-connections"\)[\s\S]*?teardownAgentConnectionsTab\(\)/
+  );
+  assert.match(dialogSrc, /close\(\)[\s\S]*?teardownAgentConnectionsTab\(\)/);
 });
 
 test("exePath falls back to the marked placeholder, uses a real path verbatim", async () => {
@@ -206,12 +228,7 @@ test("setup notes cover the non-default data directory case", async () => {
 });
 
 test("nothing in the module references the removed install-mcp.sh configurator", async () => {
-  const { readFile } = await import("node:fs/promises");
-  const { fileURLToPath } = await import("node:url");
-  const src = await readFile(
-    fileURLToPath(new URL(MODULE, import.meta.url)),
-    "utf8"
-  );
+  const src = await readFile(fileURLToPath(new URL(MODULE, import.meta.url)), "utf8");
   assert.ok(!/install-mcp/i.test(src));
 });
 

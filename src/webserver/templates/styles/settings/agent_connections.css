@@ -6,6 +6,19 @@
   margin-bottom: 16px;
 }
 
+.agent-connections .agent-pair-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+}
+
+.agent-connections .agent-pair-actions .form-error[hidden],
+.agent-connections .agent-issued[hidden] {
+  display: none;
+}
+
 /* Scope picker — native radios, one row per option, description under the label. */
 .agent-connections .agent-scope-field .settings-field-control.agent-scope-list {
   display: flex;
@@ -163,13 +176,40 @@
 }
 
 /* Pairing list. */
+.agent-connections .agent-pair-section {
+  margin-top: 12px;
+  border-top: 1px solid var(--border-color);
+  padding-top: 16px;
+}
+
+.agent-connections .agent-pair-list-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.agent-connections .agent-pair-list-head h4 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.agent-connections .agent-pair-list-head span {
+  color: var(--text-tertiary);
+  font-size: 0.74rem;
+}
+
 .agent-connections .agent-pair-list {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  margin-top: 12px;
-  border-top: 1px solid var(--border-color);
-  padding-top: 12px;
+}
+
+.agent-connections .agent-pair-list .settings-loading {
+  padding: 24px;
 }
 
 .agent-connections .agent-pair-row {
@@ -238,19 +278,41 @@
 }
 
 .agent-connections .agent-pair-revoked-group {
-  margin-top: 6px;
-  opacity: 0.55;
+  margin-top: 8px;
+  border-top: 1px solid var(--border-color);
+}
+
+.agent-connections .agent-pair-revoked-group summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 4px;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.agent-connections .agent-pair-revoked-group summary::-webkit-details-marker {
+  display: none;
+}
+
+.agent-connections .agent-pair-revoked-group summary i {
+  transition: transform var(--transition-fast);
+}
+
+.agent-connections .agent-pair-revoked-group[open] summary i {
+  transform: rotate(90deg);
+}
+
+.agent-connections .agent-pair-revoked-group summary span {
+  margin-left: auto;
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
 }
 
 .agent-connections .agent-pair-row--revoked .agent-pair-label {
-  text-decoration: line-through;
-}
-
-.agent-connections .agent-pair-revoked-tag {
-  color: var(--text-tertiary);
-  font-size: 0.74rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  color: var(--text-secondary);
 }
 
 .agent-connections .settings-empty {
@@ -260,6 +322,14 @@
 }
 
 @media (width <= 640px) {
+  .agent-connections .agent-pair-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .agent-connections .agent-pair-actions .btn {
+    justify-content: center;
+  }
+
   .agent-connections .agent-pair-row {
     grid-template-columns: 1fr auto;
   }

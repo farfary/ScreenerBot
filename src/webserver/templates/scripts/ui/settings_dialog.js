@@ -14,7 +14,10 @@ import { buildDataTab, attachDataHandlers } from "./settings/data_tab.js";
 import { buildUpdatesTab, attachUpdatesHandlers } from "./settings/updates_tab.js";
 import { buildInterfaceTab, attachInterfaceHandlers } from "./settings/interface_tab.js";
 import { buildHintsTab, attachHintsHandlers } from "./settings/hints_tab.js";
-import { loadAgentConnectionsTab } from "./settings/agent_connections_tab.js";
+import {
+  loadAgentConnectionsTab,
+  teardownAgentConnectionsTab,
+} from "./settings/agent_connections_tab.js";
 import { buildNavigationTab, attachNavigationHandlers } from "./settings/navigation_tab.js";
 import { buildLicensesTab, attachLicensesHandlers } from "./settings/licenses_tab.js";
 import { loadTelegramTab } from "./settings/telegram_tab.js";
@@ -276,6 +279,7 @@ export class SettingsDialog {
 
     // The account panel polls while a browser sign-in is in flight.
     teardownAccountTab();
+    teardownAgentConnectionsTab();
 
     this.dialogEl.classList.remove("active");
 
@@ -721,6 +725,10 @@ export class SettingsDialog {
   _switchTab(tab) {
     // Play tab switch sound
     playTabSwitch();
+
+    if (this.currentTab === "agent-connections") {
+      teardownAgentConnectionsTab();
+    }
 
     // Update nav buttons
     this.dialogEl.querySelectorAll(".settings-nav-item").forEach((btn) => {
