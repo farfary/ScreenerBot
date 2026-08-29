@@ -18,7 +18,7 @@ const PAGE_TITLES = Object.freeze({
   filtering: "Filtering",
   wallets: "Wallets",
   tools: "Tools",
-  ai: "AI",
+  assistant: "Assistant",
   config: "Configuration",
   trader: "Auto Trader",
 });
