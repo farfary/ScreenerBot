@@ -584,9 +584,11 @@
   grid-column: span 2;
 }
 
-.wallet-copy-fields label,
+.wallet-copy-fields
+  label:not(.checkbox-label, :has(> input[type="checkbox"]), :has(> input[type="radio"])),
 .wallet-copy-policy-field,
-.wallet-copy-settings-form > label {
+.wallet-copy-settings-form
+  > label:not(.checkbox-label, :has(> input[type="checkbox"]), :has(> input[type="radio"])) {
   display: grid;
   align-content: start;
   gap: var(--spacing-xs);
@@ -595,7 +597,9 @@
   font-weight: 500;
 }
 
-.wallet-copy-fields label small {
+.wallet-copy-fields
+  label:not(.checkbox-label, :has(> input[type="checkbox"]), :has(> input[type="radio"]))
+  small {
   color: var(--text-muted);
   font-size: 0.64rem;
   font-weight: 400;
@@ -639,7 +643,8 @@
   gap: 0;
 }
 
-.wallet-copy-settings-form > label {
+.wallet-copy-settings-form
+  > label:not(.checkbox-label, :has(> input[type="checkbox"]), :has(> input[type="radio"])) {
   grid-template-columns: minmax(180px, 1fr) minmax(180px, 0.7fr);
   align-items: center;
   padding: var(--spacing-sm) 0;

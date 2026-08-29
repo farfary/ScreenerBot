@@ -226,7 +226,6 @@
   color: var(--success-color);
 }
 
-
 /* Selection Summary */
 .mw-selection-summary {
   display: flex;
@@ -453,7 +452,9 @@
   gap: var(--spacing-xs);
 }
 
-.holder-watch-tool .hw-form-group label {
+.holder-watch-tool
+  .hw-form-group
+  label:not(.checkbox-label, :has(> input[type="checkbox"]), :has(> input[type="radio"])) {
   font-size: 0.75rem;
   font-weight: 500;
   color: var(--text-secondary);
@@ -540,4 +541,3 @@
 /* Toggle Switch for Holder Watch - Now uses centralized .toggle from form_controls.css */
 
 /* Migrated: Use <label class="toggle"><input type="checkbox"><span class="toggle-track"></span></label> */
-

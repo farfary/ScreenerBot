@@ -1057,7 +1057,8 @@ input[type="number"]::-webkit-inner-spin-button {
   gap: var(--spacing-sm);
 }
 
-.form-inline label {
+.form-inline
+  label:not(.checkbox-label, :has(> input[type="checkbox"]), :has(> input[type="radio"])) {
   font-size: var(--input-font-size);
   font-weight: 500;
   color: var(--text-secondary);

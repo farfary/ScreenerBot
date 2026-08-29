@@ -93,3 +93,34 @@ test("alignment is never expressed as a markup variant", async () => {
   }
   assert.deepEqual(offenders, []);
 });
+
+test("no page styles `label` generically and unflexes a control row", async () => {
+  const offenders = [];
+  for (const file of await walk(stylesRoot)) {
+    if (!file.endsWith(".css")) continue;
+    const css = (await readFile(file, "utf8")).replace(/\/\*[\s\S]*?\*\//g, "");
+    for (const [, selectors, body] of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      if (selectors.trim().startsWith("@")) continue;
+      for (const selector of selectors.split(",")) {
+        const compounds = selector
+          .trim()
+          .split(/[\s>+~](?![^(]*\))/)
+          .filter(Boolean);
+        if (compounds.length < 2) continue;
+        const target = compounds[compounds.length - 1];
+        if (!/^label(?![\w-])/.test(target)) continue;
+        if (/\.checkbox-label/.test(target)) continue;
+        if (/:has\(>\s*input\[type=["']?(?:checkbox|radio)/.test(target)) continue;
+        if (/:not\([^)]*(?:checkbox-label|\[type=["']?(?:checkbox|radio))/.test(target)) continue;
+        if (
+          /^\s*(?:display|align-items|gap|margin(?:-[a-z]+)?|font-size|line-height|font-weight)\s*:/m.test(
+            body
+          )
+        ) {
+          offenders.push(`${relative(root, file)}: ${selector.trim()}`);
+        }
+      }
+    }
+  }
+  assert.deepEqual(offenders, []);
+});

@@ -286,7 +286,8 @@
   gap: 0.4rem;
 }
 
-.param-field label {
+.param-field
+  label:not(.checkbox-label, :has(> input[type="checkbox"]), :has(> input[type="radio"])) {
   font-size: 0.8rem;
   font-weight: 500;
   color: var(--text-muted);

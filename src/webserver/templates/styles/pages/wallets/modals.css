@@ -78,10 +78,6 @@
   color: var(--text-secondary);
 }
 
-.wallets-page .form-group.checkbox-group label {
-  font-weight: 500;
-}
-
 /* Password/Secure Input */
 .password-input-wrapper {
   position: relative;
@@ -128,7 +124,8 @@
   gap: var(--spacing-xs);
 }
 
-.export-key-display label {
+.export-key-display
+  label:not(.checkbox-label, :has(> input[type="checkbox"]), :has(> input[type="radio"])) {
   font-size: 0.8rem;
   font-weight: 600;
   color: var(--text-primary);

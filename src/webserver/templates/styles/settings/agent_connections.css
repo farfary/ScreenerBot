@@ -115,7 +115,9 @@
   flex-wrap: wrap;
 }
 
-.agent-connections .agent-setup-head label {
+.agent-connections
+  .agent-setup-head
+  label:not(.checkbox-label, :has(> input[type="checkbox"]), :has(> input[type="radio"])) {
   color: var(--text-secondary);
   font-size: 0.8rem;
 }

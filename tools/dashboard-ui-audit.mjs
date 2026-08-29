@@ -139,6 +139,24 @@ function inputMayBeChoiceControl(selector) {
   return !excludesCheckbox || !excludesRadio;
 }
 
+/* A page that styles `label` generically hits the checkbox ROW too: the
+   Assistant modal's `.modal-body .form-group label { display: block }` (0,2,1)
+   outranked `.checkbox-label` (0,1,0) and unflexed the row, so the control fell
+   back to baseline alignment. A caption rule must say it means captions. */
+const labelBoxDeclaration =
+  /^\s*(display|align-items|gap|margin(?:-[a-z]+)?|font-size|line-height|font-weight)\s*:/m;
+
+function genericLabelTarget(selector) {
+  const compounds = selector.split(/[\s>+~](?![^(]*\))/).filter(Boolean);
+  if (compounds.length < 2) return false;
+  const target = compounds[compounds.length - 1];
+  if (!/^label(?![\w-])/.test(target)) return false;
+  if (/\.checkbox-label/.test(target)) return false;
+  /* A rule that deliberately targets control rows is the contract, not a leak. */
+  if (/:has\(>\s*input\[type=["']?(?:checkbox|radio)/.test(target)) return false;
+  return !/:not\([^)]*(?:checkbox-label|\[type=["']?(?:checkbox|radio))/.test(target);
+}
+
 const errors = [];
 const cssFiles = (await walk(stylesRoot)).filter((file) => file.endsWith(".css"));
 
@@ -198,6 +216,16 @@ for (const file of cssFiles) {
   /* The control family (switch, checkbox, radio) has one skin. A page may place
      a control - margins, order, alignment - but never re-draw its box, which is
      how four different switches and five checkbox sizes grew in the first place. */
+  for (const [selector, body] of rulesIn(css)) {
+    if (!genericLabelTarget(selector)) continue;
+    const boxed = body.match(labelBoxDeclaration);
+    if (boxed) {
+      errors.push(
+        `${path}: ${selector} sets ${boxed[1]} on every label; exclude control rows with :not(.checkbox-label, :has(> input[type="checkbox"]), :has(> input[type="radio"]))`
+      );
+    }
+  }
+
   if (path !== "components/form_controls.css") {
     for (const [selector, body] of rulesIn(css)) {
       if (!inputMayBeChoiceControl(selector)) continue;

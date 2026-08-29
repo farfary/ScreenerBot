@@ -98,7 +98,8 @@
   gap: var(--spacing-xs);
 }
 
-.security-form-group label {
+.security-form-group
+  label:not(.checkbox-label, :has(> input[type="checkbox"]), :has(> input[type="radio"])) {
   font-size: 0.8125rem;
   font-weight: 500;
   color: var(--text-secondary);

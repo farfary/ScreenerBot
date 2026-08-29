@@ -450,7 +450,9 @@
   resize: vertical;
 }
 
-.modal-body .form-group label {
+.modal-body
+  .form-group
+  label:not(.checkbox-label, :has(> input[type="checkbox"]), :has(> input[type="radio"])) {
   display: block;
   margin-bottom: 0.375rem;
   font-size: 0.85rem;
