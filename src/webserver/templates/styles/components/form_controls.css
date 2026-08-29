@@ -721,6 +721,16 @@ input[type="radio"]:disabled {
   margin-top: 0.15em;
 }
 
+/* Short labels align the control to the text's line box. Keep the base variant
+   for explanatory copy that can span multiple lines. */
+.checkbox-label--centered {
+  align-items: center;
+}
+
+.checkbox-label--centered > input {
+  margin-top: 0;
+}
+
 .checkbox-label span {
   min-width: 0;
 }
