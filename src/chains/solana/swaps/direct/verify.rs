@@ -13,8 +13,13 @@
 //! ever exact:
 //!
 //! * A TOKEN output is exact. The transaction's own pre/post token balances for
-//!   the owner and mint give the delta to the raw unit, and a delta below the
-//!   guaranteed minimum is a hard [`DirectSwapError::OutputNotReceived`].
+//!   the swap's destination account give the delta to the raw unit, and a
+//!   GROUNDED delta below the guaranteed minimum is a hard
+//!   [`DirectSwapError::OutputNotReceived`]. When nothing in the reply can be
+//!   attributed to that account at all -- no metadata, or a node that omits the
+//!   optional `owner` field -- there is no measurement to judge, and the
+//!   chain-guaranteed floor is reported as an estimate instead. An absent
+//!   measurement is never a reading of zero.
 //! * A NATIVE SOL output is now ALSO exact, most of the time. The WSOL account is
 //!   closed in the same transaction, so its own balance is gone by the time this
 //!   reads back -- but the swap's own CPI token transfer INTO that account, before
@@ -53,13 +58,30 @@ pub fn receipt_from_transaction(
     plan: &SwapPlan,
     details: &TransactionDetails,
 ) -> DirectSwapResult<Receipt> {
-    let meta = details
-        .meta
-        .as_ref()
-        .ok_or_else(|| DirectSwapError::TransactionFailed {
-            signature: signature.to_owned(),
-            detail: "the confirmed transaction carries no metadata to verify against".to_owned(),
-        })?;
+    // No metadata is a MEASUREMENT GAP, never a failed swap. The settle loop only
+    // reaches this point once the signature status carried no error, so the chain
+    // has already accepted the transaction and the pool programme has already
+    // enforced `min_out`. A node that answers without `meta` -- an older node, a
+    // pruned reply, a shape this decoder does not recognise -- says nothing about
+    // what the swap did. Reporting the chain-guaranteed floor as an estimate is
+    // the honest reading; failing here would discard a position whose tokens are
+    // in the wallet.
+    let Some(meta) = details.meta.as_ref() else {
+        crate::logger::warning(
+            crate::logger::LogTag::Swap,
+            &format!(
+                "Swap {signature} confirmed but its transaction carries no metadata to measure \
+                 against; reporting the chain-guaranteed {} as an estimate",
+                plan.quote.min_net_out
+            ),
+        );
+        return Ok(Receipt {
+            received: plan.quote.min_net_out,
+            exact: false,
+            network_fee_lamports: 0,
+            slot: details.slot,
+        });
+    };
 
     if let Some(err) = &meta.err {
         return Err(DirectSwapError::TransactionFailed {
@@ -72,26 +94,29 @@ pub fn receipt_from_transaction(
         return native_receipt(signature, owner, plan, details, meta);
     }
 
-    let owner_str = owner.to_string();
-    let mint_str = plan.quote.output_mint.to_string();
-    let balance_of = |balances: &Option<Vec<crate::chains::solana::rpc::types::TokenBalance>>| {
-        balances
-            .as_ref()
-            .map(|list| {
-                list.iter()
-                    .filter(|b| {
-                        b.mint == mint_str && b.owner.as_deref() == Some(owner_str.as_str())
-                    })
-                    .filter_map(|b| b.ui_token_amount.amount.parse::<u128>().ok())
-                    .sum::<u128>()
-            })
-            .unwrap_or(0)
+    let Some(received) = token_delta(meta, details, owner, plan) else {
+        // Nothing in the reply could be attributed to the destination account, so
+        // there is no measurement to judge -- and an ABSENT measurement is not a
+        // reading of zero. Same rule as the missing metadata above.
+        crate::logger::warning(
+            crate::logger::LogTag::Swap,
+            &format!(
+                "Swap {signature} confirmed but no token balance in its metadata could be \
+                 attributed to the destination account; reporting the chain-guaranteed {} as an \
+                 estimate",
+                plan.quote.min_net_out
+            ),
+        );
+        return Ok(Receipt {
+            received: plan.quote.min_net_out,
+            exact: false,
+            network_fee_lamports: meta.fee,
+            slot: details.slot,
+        });
     };
 
-    let pre = balance_of(&meta.pre_token_balances);
-    let post = balance_of(&meta.post_token_balances);
-    let received = post.saturating_sub(pre) as u64;
-
+    // A GROUNDED reading below the floor the pool programme itself enforced is a
+    // genuine anomaly rather than a decoding gap, and stays a hard error.
     if received < plan.quote.min_net_out {
         return Err(DirectSwapError::OutputNotReceived {
             signature: signature.to_owned(),
@@ -106,6 +131,63 @@ pub fn receipt_from_transaction(
         network_fee_lamports: meta.fee,
         slot: details.slot,
     })
+}
+
+/// The raw-unit delta the swap's output account gained, or `None` when nothing in
+/// the reply can be attributed to it.
+///
+/// Two ways of identifying the destination, in order of how much they assume:
+///
+/// 1. By ACCOUNT INDEX. `plan.output_account` is the exact account the swap pays
+///    into, and `TokenBalance::account_index` points into the transaction's own
+///    account keys. Nothing optional is involved.
+/// 2. By mint AND `owner`. This is what the module used to do exclusively -- but
+///    `owner` is an OPTIONAL field of the RPC reply, and where a node leaves it
+///    out the filter matches nothing, both sides read zero, and a buy that
+///    delivered its tokens looks like one that delivered none.
+///
+/// Falling through to a mint-only match is deliberately NOT offered: the pool's
+/// own vaults hold the same mint in the same transaction, so it would measure
+/// someone else's balance change as the wallet's proceeds.
+fn token_delta(
+    meta: &crate::chains::solana::rpc::types::TransactionMeta,
+    details: &TransactionDetails,
+    owner: &Pubkey,
+    plan: &SwapPlan,
+) -> Option<u64> {
+    use crate::chains::solana::rpc::types::TokenBalance;
+
+    // `None` means NO entry matched (nothing to measure); `Some(0)` means entries
+    // matched and summed to zero, which is a real reading.
+    fn sum(
+        balances: &Option<Vec<TokenBalance>>,
+        keep: &dyn Fn(&TokenBalance) -> bool,
+    ) -> Option<u128> {
+        let list = balances.as_ref()?;
+        let mut total: u128 = 0;
+        let mut matched = false;
+        for balance in list.iter().filter(|b| keep(b)) {
+            matched = true;
+            total = total.saturating_add(balance.ui_token_amount.amount.parse::<u128>().ok()?);
+        }
+        matched.then_some(total)
+    }
+
+    if let Some(index) = account_index_of(details, &plan.output_account) {
+        let by_index = |b: &TokenBalance| b.account_index as usize == index;
+        if let Some(post) = sum(&meta.post_token_balances, &by_index) {
+            let pre = sum(&meta.pre_token_balances, &by_index).unwrap_or(0);
+            return Some(post.saturating_sub(pre) as u64);
+        }
+    }
+
+    let owner_str = owner.to_string();
+    let mint_str = plan.quote.output_mint.to_string();
+    let by_owner =
+        |b: &TokenBalance| b.mint == mint_str && b.owner.as_deref() == Some(owner_str.as_str());
+    let post = sum(&meta.post_token_balances, &by_owner)?;
+    let pre = sum(&meta.pre_token_balances, &by_owner).unwrap_or(0);
+    Some(post.saturating_sub(pre) as u64)
 }
 
 /// Measure a native-SOL output, preferring the exact inner-instruction transfer

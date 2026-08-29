@@ -2274,3 +2274,407 @@ fn a_fluxbeam_funded_buy_holds_back_the_platform_fee_before_the_pool_sees_it() {
         "the platform fee never reaches the pool"
     );
 }
+
+// ============================================================================
+// CROSS-VENUE INVARIANTS
+// ============================================================================
+
+/// Every fixture market, paired with the name a failure should name.
+fn every_fixture_market() -> Vec<(&'static str, Box<dyn PoolMarket>)> {
+    vec![
+        (
+            "raydium_amm_v4",
+            Box::new(amm_v4_market()) as Box<dyn PoolMarket>,
+        ),
+        ("raydium_cpmm", Box::new(cpmm_market())),
+        ("raydium_clmm", Box::new(clmm_market())),
+        ("orca_whirlpool", Box::new(orca_market())),
+        ("meteora_dlmm", Box::new(dlmm_market())),
+        ("meteora_damm", Box::new(damm_market())),
+        ("meteora_dbc", Box::new(dbc_market())),
+        ("meteora_dbc_output_fee", Box::new(dbc_output_fee_market())),
+        ("pumpfun_amm", Box::new(pump_amm_market())),
+        ("pumpfun_legacy", Box::new(pump_legacy_market())),
+        ("moonit", Box::new(moonit_market())),
+        ("fluxbeam", Box::new(fluxbeam_market())),
+    ]
+}
+
+/// `VenueQuote::lp_fee` is contracted to be in INPUT raw units on BOTH legs.
+///
+/// A venue that charges its fee on the OUTPUT must convert back at the realised
+/// rate of that same fill; reporting the raw output-side figure is a silent unit
+/// error no compiler and no existing test catches. The check compares the fee
+/// RATE the venue charges on a buy against the rate it reports on the sell of
+/// what that buy returned: a pool charges the same rate in both directions, so
+/// the two must agree. If the sell figure is left in output units the ratio is
+/// off by the token price -- millions, not percent.
+#[test]
+fn every_venue_reports_its_pool_fee_in_input_units_on_both_legs() {
+    let mut offenders: Vec<String> = Vec::new();
+
+    for (name, market) in every_fixture_market() {
+        let (a, b) = market.mints();
+        let sol = if a.to_string() == WSOL {
+            a
+        } else if b.to_string() == WSOL {
+            b
+        } else {
+            continue; // fixture without a SOL leg; nothing to denominate against
+        };
+        let token = if sol == a { b } else { a };
+
+        let buy = match market.quote(&sol, 5_000_000) {
+            Ok(q) => q,
+            Err(e) => {
+                offenders.push(format!("{name}: the buy leg would not quote: {e}"));
+                continue;
+            }
+        };
+        // Both legs are quoted against ONE unchanged snapshot, so selling the
+        // buy's proceeds back means selling into a curve that never received
+        // the buy. On a bonding curve sitting at its own starting price that is
+        // legitimately unfillable -- a property of the fixture, not of the fee
+        // units this test is about.
+        let sell = match market.quote(&token, buy.expected_out) {
+            Ok(q) => q,
+            Err(e) => {
+                eprintln!("{name:<24} skipped: the sell leg cannot quote off this snapshot ({e})");
+                continue;
+            }
+        };
+
+        let buy_rate = buy.lp_fee as f64 / buy.amount_in as f64;
+        let sell_rate = sell.lp_fee as f64 / sell.amount_in as f64;
+        eprintln!(
+            "{name:<24} buy lp_fee {:>18} / {:>18} = {buy_rate:.8}   \
+             sell lp_fee {:>18} / {:>18} = {sell_rate:.8}",
+            buy.lp_fee, buy.amount_in, sell.lp_fee, sell.amount_in
+        );
+
+        if buy_rate <= 0.0 {
+            continue; // a fee-free pool has nothing to compare
+        }
+        if sell_rate > buy_rate * 5.0 || sell_rate < buy_rate / 5.0 {
+            offenders.push(format!(
+                "{name}: charges {:.4}% of the input on a buy but reports {:.4}% on the sell -- \
+                 the sell figure is not in input raw units",
+                buy_rate * 100.0,
+                sell_rate * 100.0
+            ));
+        }
+    }
+
+    assert!(
+        offenders.is_empty(),
+        "lp_fee must be in INPUT raw units on both legs:\n  {}",
+        offenders.join("\n  ")
+    );
+}
+
+/// The preflight's flat network-fee cushion must actually cover the network fee
+/// the transaction it is preflighting will pay.
+///
+/// `execute::preflight_balance` refuses a swap the wallet cannot afford, sizing
+/// the requirement as `amount_in + ATA rent + NETWORK_FEE_CUSHION_LAMPORTS`. Its
+/// own doc calls the cushion "deliberately conservative: a preflight that
+/// under-estimates would let a swap through that then fails on chain, which is
+/// the exact failure mode this preflight exists to avoid."
+///
+/// The cushion was a flat 10_000 lamports, but Solana charges the prioritization
+/// fee on the compute-unit LIMIT the transaction requests times the compute-unit
+/// PRICE it sets -- both of which this very plan puts in instructions 0 and 1. At
+/// the default 50_000 micro-lamports/CU that was already more than the cushion
+/// for every venue in the engine, before the 5_000-lamport base fee was added,
+/// and `swaps.direct.priority_fee_micro_lamports` may be set 200x higher still.
+/// A wallet sitting just above `amount_in` passed, and the swap then died for
+/// fees -- on an exit, at the worst possible moment.
+///
+/// `compute::network_fee_lamports` now derives the figure from the plan's own
+/// budget instructions, so this asserts against that function rather than
+/// against a constant mirrored out of the engine.
+#[test]
+fn the_preflight_cushion_covers_the_priority_fee_the_plan_requests() {
+    let _guard = common::config_guard();
+
+    /// One signature, at the runtime's fixed per-signature price.
+    const BASE_FEE_LAMPORTS: u64 = 5_000;
+
+    let mut short: Vec<String> = Vec::new();
+
+    for (name, market) in every_fixture_market() {
+        let (a, b) = market.mints();
+        let sol = if a.to_string() == WSOL {
+            a
+        } else if b.to_string() == WSOL {
+            b
+        } else {
+            continue;
+        };
+        let token = if sol == a { b } else { a };
+
+        let intent = DirectSwapIntent {
+            pool: market.pool(),
+            owner: Pubkey::new_unique(),
+            input_mint: sol,
+            output_mint: token,
+            amount_in: 5_000_000,
+            slippage_bps: 300,
+        };
+        let Ok(quote) = direct::quote_with_market(&intent, market.as_ref()) else {
+            continue;
+        };
+        let plan = direct::build_plan(&intent, market.as_ref(), &quote).expect("plan builds");
+
+        // plan.rs guarantees the compute budget leads the transaction: index 0 is
+        // SetComputeUnitLimit (discriminator 2), index 1 SetComputeUnitPrice (3).
+        assert_eq!(plan.instructions[0].data[0], 2);
+        assert_eq!(plan.instructions[1].data[0], 3);
+        let limit = u32::from_le_bytes(plan.instructions[0].data[1..5].try_into().unwrap()) as u64;
+        let price_micro_lamports =
+            u64::from_le_bytes(plan.instructions[1].data[1..9].try_into().unwrap());
+        let priority_fee = (limit * price_micro_lamports).div_ceil(1_000_000);
+        let network_fee = priority_fee + BASE_FEE_LAMPORTS;
+
+        let reserved = direct::compute::network_fee_lamports(&plan.instructions);
+        eprintln!(
+            "{name:<24} limit {limit:>7} CU x {price_micro_lamports} uL/CU = {priority_fee:>7} \
+             + {BASE_FEE_LAMPORTS} base = {network_fee:>7} lamports vs a \
+             {reserved} cushion"
+        );
+        if network_fee > reserved {
+            short.push(format!(
+                "{name}: the transaction pays {network_fee} lamports in fees but the preflight \
+                 only reserves {reserved}"
+            ));
+        }
+    }
+
+    assert!(
+        short.is_empty(),
+        "the preflight must reserve at least what the transaction will pay:\n  {}",
+        short.join("\n  ")
+    );
+}
+
+/// A dust-sized trade's reported price impact must be the pool's own fee and
+/// essentially nothing else.
+///
+/// `DirectPoolRouter::get_quote` refuses any quote whose `price_impact_pct`
+/// exceeds `swaps.direct.max_price_impact_pct` (10% by default) and returns
+/// `NoRoute` -- which the opening path counts towards retiring the mint. So an
+/// impact figure wrong in the HIGH direction does not merely mislead a log line:
+/// it takes the venue out of service and blames the token for it.
+///
+/// The venues do not compute it on the same basis. The constant-product ones and
+/// Meteora DLMM compare the REALISED rate against spot, so the pool's own fee
+/// shows up inside the impact; Raydium CLMM and Orca measure the move in the
+/// squared sqrt price, which excludes it. Both are defensible, and this is the
+/// bound that holds on either: at 0.005 SOL against a real pool nothing but the
+/// fee can move the realised rate, so the impact can sit anywhere from zero up
+/// to the fee plus a rounding-scale margin -- and a venue whose formula is in
+/// the wrong basis (a price scaled by the wrong decimals, an inverted side)
+/// lands far outside that band.
+///
+/// FluxBeam's fixture pool charges a 99.2% owner fee, and reporting 99.2% impact
+/// for it is CORRECT: the ceiling refusing that pool is the gate working.
+#[test]
+fn a_minimum_sized_buy_reports_an_impact_no_larger_than_the_pools_own_fee() {
+    /// How far above the pool's own fee rate a dust trade's impact may sit, in
+    /// percentage points. Dust cannot move a real pool, so anything beyond
+    /// integer-rounding scale is a formula in the wrong basis.
+    const MARGIN_PCT_POINTS: f64 = 1.0;
+
+    let mut implausible: Vec<String> = Vec::new();
+
+    for (name, market) in every_fixture_market() {
+        let (a, b) = market.mints();
+        let sol = if a.to_string() == WSOL {
+            a
+        } else if b.to_string() == WSOL {
+            b
+        } else {
+            continue;
+        };
+
+        let Ok(quote) = market.quote(&sol, 5_000_000) else {
+            continue;
+        };
+        let fee_pct = quote.lp_fee as f64 / quote.amount_in as f64 * 100.0;
+        eprintln!(
+            "{name:<24} 0.005 SOL buy -> impact {:.4}% against a {fee_pct:.4}% pool fee",
+            quote.price_impact_pct
+        );
+        assert!(
+            quote.price_impact_pct.is_finite() && quote.price_impact_pct >= 0.0,
+            "{name}: price impact must be a real percentage, got {}",
+            quote.price_impact_pct
+        );
+        if quote.price_impact_pct > fee_pct + MARGIN_PCT_POINTS {
+            implausible.push(format!(
+                "{name}: reports {:.4}% impact on a 0.005 SOL buy against a pool that only \
+                 charges {fee_pct:.4}% -- dust cannot move a real pool that far",
+                quote.price_impact_pct
+            ));
+        }
+    }
+
+    assert!(
+        implausible.is_empty(),
+        "a dust trade's impact is its fee, not a market move:\n  {}",
+        implausible.join("\n  ")
+    );
+}
+
+// ============================================================================
+// A CONFIRMED SWAP MUST NOT BE FAILED BY ITS OWN MEASUREMENT
+// ============================================================================
+//
+// `verify.rs` states the rule itself: safety comes from `min_out`, which the
+// pool programme enforced, so "nothing measured here can make a confirmed swap
+// unsafe after the fact", and a read that cannot be had "does NOT fail the
+// swap". Two paths break that rule, and both do it by turning a gap in the RPC's
+// own reply into a verdict about the trade.
+//
+// The damage is not theoretical. `open.rs` asks
+// `swaps::unconfirmed_swap_signature` what to do with a failed entry: `Some` ->
+// create a pending position and hand it to verification, `None` -> return
+// `SwapFailed` and create NOTHING. Neither error below is recoverable through
+// that function, so a buy that landed, moved the SOL and delivered the tokens
+// ends up with the tokens in the wallet and no position anywhere.
+
+fn measurement_plan(mint: Pubkey, min_net_out: u64) -> direct::SwapPlan {
+    direct::SwapPlan {
+        instructions: Vec::new(),
+        venue_compute_units: 0,
+        input_account: Pubkey::new_unique(),
+        output_account: Pubkey::new_unique(),
+        output_is_native: false,
+        quote: direct::DirectQuote {
+            pool: Pubkey::new_unique(),
+            program: screenerbot::chains::solana::pools::types::ProgramKind::RaydiumCpmm,
+            input_mint: Pubkey::from_str(WSOL).unwrap(),
+            output_mint: mint,
+            amount_in: 5_000_000,
+            swap_amount_in: 4_975_000,
+            expected_out: min_net_out,
+            min_out: min_net_out,
+            expected_net_out: min_net_out,
+            min_net_out,
+            fee: direct::PlatformFee::none(),
+            lp_fee: 0,
+            price_impact_pct: 0.0,
+            slippage_bps: 100,
+        },
+    }
+}
+
+fn transaction_details(
+    meta: Option<screenerbot::chains::solana::rpc::types::TransactionMeta>,
+    owner: &Pubkey,
+) -> screenerbot::chains::solana::rpc::types::TransactionDetails {
+    screenerbot::chains::solana::rpc::types::TransactionDetails {
+        slot: 42,
+        transaction: screenerbot::chains::solana::rpc::types::TransactionData {
+            message: serde_json::json!({ "accountKeys": [owner.to_string()] }),
+            signatures: vec!["sig".to_owned()],
+        },
+        meta,
+        block_time: None,
+    }
+}
+
+fn token_balance(
+    owner: Option<&Pubkey>,
+    mint: &Pubkey,
+    amount: &str,
+) -> screenerbot::chains::solana::rpc::types::TokenBalance {
+    screenerbot::chains::solana::rpc::types::TokenBalance {
+        account_index: 0,
+        mint: mint.to_string(),
+        owner: owner.map(|o| o.to_string()),
+        program_id: None,
+        ui_token_amount: screenerbot::chains::solana::rpc::types::UiTokenAmount {
+            amount: amount.to_owned(),
+            decimals: 6,
+            ui_amount: None,
+            ui_amount_string: None,
+        },
+    }
+}
+
+fn empty_meta() -> screenerbot::chains::solana::rpc::types::TransactionMeta {
+    screenerbot::chains::solana::rpc::types::TransactionMeta {
+        err: None,
+        pre_balances: vec![],
+        post_balances: vec![],
+        pre_token_balances: None,
+        post_token_balances: None,
+        fee: 5_000,
+        compute_units_consumed: None,
+        log_messages: None,
+        inner_instructions: None,
+    }
+}
+
+/// A transaction the node returns WITHOUT metadata is a read this engine cannot
+/// measure -- not a transaction that failed.
+///
+/// The settle loop already proved success: it returns `Ok` only for a signature
+/// status carrying no error, and the pool programme itself refused to return
+/// less than `min_out`. `receipt_from_transaction` nonetheless raises
+/// `TransactionFailed` the moment `meta` is absent, which reports a landed,
+/// successful swap as a chain failure -- while the neighbouring path, a read
+/// that never succeeds at all, correctly falls back to `min_net_out` and marks
+/// the receipt inexact.
+#[test]
+fn a_confirmed_transaction_with_no_metadata_is_a_measurement_gap_not_a_failed_swap() {
+    let owner = Pubkey::new_unique();
+    let mint = Pubkey::new_unique();
+    let plan = measurement_plan(mint, 900_000);
+    let details = transaction_details(None, &owner);
+
+    let receipt = direct::verify::receipt_from_transaction("sig", &owner, &plan, &details);
+    assert!(
+        receipt.is_ok(),
+        "a confirmed swap must not be failed because its metadata could not be read: {:?}",
+        receipt.err()
+    );
+    let receipt = receipt.unwrap();
+    assert_eq!(
+        receipt.received, 900_000,
+        "the chain-guaranteed minimum is the honest fallback"
+    );
+    assert!(!receipt.exact, "and it must be marked inexact");
+}
+
+/// A node that omits `owner` on its token balances must not turn a delivered
+/// buy into `OutputNotReceived`.
+///
+/// The token path measures the delta by filtering `pre`/`post` token balances on
+/// `mint` AND `owner`. `owner` is an OPTIONAL field of the RPC reply; where it
+/// is absent the filter matches nothing, both sides read zero, and a buy that
+/// actually delivered its tokens is reported as having delivered none. The
+/// module's own rule -- "a confirmed swap is never failed by a measurement" --
+/// is exactly what this violates, and unlike the native path, which distrusts
+/// its own reading and falls back, the token path fails hard.
+#[test]
+fn a_node_that_omits_the_balance_owner_does_not_turn_a_delivered_buy_into_a_failure() {
+    let owner = Pubkey::new_unique();
+    let mint = Pubkey::new_unique();
+    let plan = measurement_plan(mint, 900_000);
+
+    let mut meta = empty_meta();
+    // Same transaction, same amounts, `owner` simply not populated by the node.
+    meta.pre_token_balances = Some(vec![token_balance(None, &mint, "0")]);
+    meta.post_token_balances = Some(vec![token_balance(None, &mint, "1000000")]);
+    let details = transaction_details(Some(meta), &owner);
+
+    let receipt = direct::verify::receipt_from_transaction("sig", &owner, &plan, &details);
+    assert!(
+        receipt.is_ok(),
+        "a buy that delivered 1_000_000 raw units must not be reported as \
+         OutputNotReceived because the node left one field out: {:?}",
+        receipt.err()
+    );
+}

@@ -262,8 +262,22 @@ impl PoolVenue for PumpFunAmmVenue {
             flat_fees: global.flat_fees(),
             base_token_program: base_mint_account.owner,
             quote_token_program: quote_mint_account.owner,
-            base_decimals: mint_decimals(&base_mint_account.data).unwrap_or(0),
-            quote_decimals: mint_decimals(&quote_mint_account.data).unwrap_or(0),
+            // A mint whose decimals cannot be read is a structural failure, not a
+            // zero-decimal mint: `unwrap_or(0)` here would let `decimals()` hand
+            // the fee builder a scale that misprices `transfer_checked` by orders
+            // of magnitude. Every other venue hard-fails on this.
+            base_decimals: mint_decimals(&base_mint_account.data).ok_or_else(|| {
+                DirectSwapError::PoolUndecodable {
+                    pool: *pool,
+                    detail: format!("base mint {} carries no readable decimals", addresses[4]),
+                }
+            })?,
+            quote_decimals: mint_decimals(&quote_mint_account.data).ok_or_else(|| {
+                DirectSwapError::PoolUndecodable {
+                    pool: *pool,
+                    detail: format!("quote mint {} carries no readable decimals", addresses[5]),
+                }
+            })?,
             base_supply,
             base_reserve,
             quote_reserve,

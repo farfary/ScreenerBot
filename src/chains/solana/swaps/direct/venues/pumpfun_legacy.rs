@@ -680,7 +680,19 @@ impl PoolMarket for PumpLegacyMarket {
             // same cap pump-swap AMM applies to a boosted pool's real vault.
             .min(self.curve.real_sol_reserves);
             let fee = self.fee_on(gross);
-            (gross.saturating_sub(fee), fee)
+            // `fee` is in LAMPORTS, the output side. `VenueQuote::lp_fee` is
+            // always in INPUT raw units, so it is converted back at the realised
+            // rate of this very fill -- never at a spot price. Reporting the
+            // lamport figure against a token `amount_in` understates the fee by
+            // the token's price, tens of thousands of times over on a live curve.
+            // `pumpfun_amm` carries the identical conversion for the identical
+            // fee mechanism in the same programme family.
+            let fee_in_input_units = if gross == 0 {
+                0
+            } else {
+                (((fee as u128) * (amount_in as u128)) / (gross as u128)) as u64
+            };
+            (gross.saturating_sub(fee), fee_in_input_units)
         } else {
             // BUY: native SOL in, tokens out. Fees sit ON TOP of the amount
             // that reaches the curve, so `amount_in` (already net of the

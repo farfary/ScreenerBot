@@ -152,15 +152,33 @@ pub async fn add_to_position(
         &format!("DCA quote: {dca_amount_sol} SOL → {quoted_tokens} tokens"),
     );
 
-    // Execute swap
-    let swap_result = execute_swap_with_fallback(&api_token, quote)
-        .await
-        .map_err(|e| Error::SwapFailed {
-            mint: token_mint.to_owned(),
-            detail: format!("DCA swap failed: {e}"),
-        })?;
-
-    let transaction_signature = swap_result.transaction_signature.clone();
+    // Execute swap. A swap that REACHED THE CHAIN is never discarded as a trade
+    // that never happened: `unconfirmed_swap_signature` hands back the signature
+    // of a confirmation that timed out or of a confirmed swap whose receipt could
+    // not be measured, and both must be registered for verification exactly like a
+    // clean fill. Returning `SwapFailed` here would leave the wallet holding
+    // tokens the position never counted -- the same recovery `open.rs` performs on
+    // an entry.
+    let transaction_signature = match execute_swap_with_fallback(&api_token, quote).await {
+        Ok(result) => result.transaction_signature,
+        Err(error) => match crate::swaps::unconfirmed_swap_signature(&error) {
+            Some(signature) => {
+                logger::warning(
+                    LogTag::Positions,
+                    &format!(
+                        "DCA swap {signature} for position {position_id} reached the chain but                          could not be confirmed here; registering it for verification instead of                          failing the DCA"
+                    ),
+                );
+                signature
+            }
+            None => {
+                return Err(Error::SwapFailed {
+                    mint: token_mint.to_owned(),
+                    detail: format!("DCA swap failed: {error}"),
+                })
+            }
+        },
+    };
 
     // Pre-compute expiry height for verification + persistence
     let expiry_height = get_rpc_client()

@@ -73,6 +73,49 @@ pub fn compute_unit_limit_from_measured(units_consumed: u64) -> u32 {
     (with_margin.min(u32::MAX as u64) as u32).clamp(MIN_COMPUTE_UNITS, MAX_COMPUTE_UNITS)
 }
 
+/// The runtime's fixed price for one signature. A direct swap carries exactly
+/// one, the owner's.
+pub const BASE_SIGNATURE_FEE_LAMPORTS: u64 = 5_000;
+
+/// What the network will charge a transaction built from `instructions`.
+///
+/// Solana bills the prioritization fee on the compute-unit LIMIT the transaction
+/// REQUESTS multiplied by the price it sets, not on what it consumes -- so the
+/// figure is fully determined by the two compute-budget instructions the plan
+/// already carries, and reading it off them is exact rather than an estimate.
+/// A flat guess cannot stand in: at the default 50,000 micro-lamports per unit a
+/// swap already pays between 10,850 and 31,000 lamports depending on the venue,
+/// and the config permits a price 200x that.
+pub fn network_fee_lamports(instructions: &[Instruction]) -> u64 {
+    let limit = u64::from(requested_compute_unit_limit(instructions).unwrap_or(MAX_COMPUTE_UNITS));
+    let price = requested_compute_unit_price(instructions)
+        .unwrap_or_else(|| with_config(|cfg| cfg.swaps.direct.priority_fee_micro_lamports));
+    limit
+        .saturating_mul(price)
+        .div_ceil(1_000_000)
+        .saturating_add(BASE_SIGNATURE_FEE_LAMPORTS)
+}
+
+/// The compute-unit limit a built plan requests, read back off its own leading
+/// `SetComputeUnitLimit` instruction (discriminator 2).
+pub fn requested_compute_unit_limit(instructions: &[Instruction]) -> Option<u32> {
+    let data = &instructions.first()?.data;
+    if data.first() != Some(&2) {
+        return None;
+    }
+    Some(u32::from_le_bytes(data.get(1..5)?.try_into().ok()?))
+}
+
+/// The compute-unit price a built plan sets, read back off its own
+/// `SetComputeUnitPrice` instruction (discriminator 3).
+pub fn requested_compute_unit_price(instructions: &[Instruction]) -> Option<u64> {
+    let data = &instructions.get(1)?.data;
+    if data.first() != Some(&3) {
+        return None;
+    }
+    Some(u64::from_le_bytes(data.get(1..9)?.try_into().ok()?))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -127,6 +170,34 @@ mod tests {
         assert_eq!(
             u32::from_le_bytes(ixs[0].data[1..5].try_into().unwrap()),
             260_000
+        );
+    }
+
+    #[test]
+    fn the_network_fee_is_the_requested_limit_times_the_price_plus_the_base_fee() {
+        let ixs = vec![
+            ComputeBudgetInstruction::set_compute_unit_limit(260_000),
+            ComputeBudgetInstruction::set_compute_unit_price(50_000),
+        ];
+        // 260_000 CU x 50_000 uL/CU = 13_000_000_000 micro-lamports = 13_000
+        // lamports, plus the 5_000 base fee.
+        assert_eq!(network_fee_lamports(&ixs), 18_000);
+    }
+
+    #[test]
+    fn a_plan_without_a_compute_budget_is_charged_at_the_runtime_ceiling_not_at_zero() {
+        crate::config::utils::CONFIG
+            .get_or_init(|| std::sync::RwLock::new(crate::config::schemas::Config::default()));
+        // Reading nothing must never produce a cheap answer: the preflight built
+        // on this figure exists to refuse a wallet that cannot pay.
+        let fee = network_fee_lamports(&[]);
+        let default_price = with_config(|cfg| cfg.swaps.direct.priority_fee_micro_lamports);
+        assert_eq!(
+            fee,
+            (MAX_COMPUTE_UNITS as u64)
+                .saturating_mul(default_price)
+                .div_ceil(1_000_000)
+                + BASE_SIGNATURE_FEE_LAMPORTS
         );
     }
 }

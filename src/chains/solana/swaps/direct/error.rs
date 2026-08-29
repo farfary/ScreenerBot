@@ -128,6 +128,27 @@ impl DirectSwapError {
         )
     }
 
+    /// The signature of a transaction that reached the chain and was NOT
+    /// reverted, when there is one.
+    ///
+    /// This is the question a caller asks before deciding whether a trade
+    /// happened: `ConfirmationTimeout` may still land, and `OutputNotReceived`
+    /// already DID land -- it confirmed without error, the pool programme
+    /// enforced `min_out`, and only the receipt measurement came in under the
+    /// floor. Both must be handed to reconciliation rather than discarded as
+    /// trades that never happened.
+    ///
+    /// `TransactionFailed` is deliberately excluded even though `submitted()` is
+    /// true for it: a reverted transaction moved nothing, so a caller must be
+    /// free to retry it and must not open a position against it.
+    pub fn settled_signature(&self) -> Option<&str> {
+        match self {
+            DirectSwapError::ConfirmationTimeout { signature, .. }
+            | DirectSwapError::OutputNotReceived { signature, .. } => Some(signature),
+            _ => None,
+        }
+    }
+
     /// The on-chain signature, when one exists.
     pub fn signature(&self) -> Option<&str> {
         match self {

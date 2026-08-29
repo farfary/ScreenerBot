@@ -391,19 +391,20 @@ pub async fn execute_swap_with_fallback(token: &Token, quote: Quote) -> Result<S
 /// The signature is recovered so a caller can stop retrying and hand it to verification,
 /// which reconciles what really happened on chain.
 ///
-/// Two paths, and the typed one is tried first. The direct pool-swap engine reports the
-/// timeout as a VARIANT that already carries the signature as data; only the aggregator
-/// path, whose timeout is produced deep inside the RPC client as free text, still needs
-/// the marker-sentence scan below.
+/// Two paths, and the typed one is tried first. The direct pool-swap engine reports every
+/// outcome that reached the chain as a VARIANT that already carries the signature as data
+/// (see `DirectSwapError::settled_signature`); only the aggregator path, whose timeout is
+/// produced deep inside the RPC client as free text, still needs the marker-sentence scan
+/// below.
 pub fn unconfirmed_swap_signature(error: &Error) -> Option<String> {
-    if let Error::Solana(crate::chains::solana::Error::DirectSwap(
-        crate::chains::solana::swaps::direct::DirectSwapError::ConfirmationTimeout {
-            signature,
-            ..
-        },
-    )) = error
-    {
-        return Some(signature.clone());
+    // The direct engine already knows the answer as DATA, so ask it rather than
+    // pattern-matching prose. `settled_signature` covers both a confirmation that
+    // timed out (it may still land) and a swap that CONFIRMED WITHOUT ERROR whose
+    // receipt could not be measured -- the latter is a trade that provably
+    // happened, and treating it as one that never did leaves the wallet holding
+    // tokens no position was ever created for.
+    if let Error::Solana(crate::chains::solana::Error::DirectSwap(direct)) = error {
+        return direct.settled_signature().map(str::to_owned);
     }
     unconfirmed_swap_signature_from_message(&error.to_string())
 }

@@ -53,8 +53,26 @@ pub struct DirectSwapOutcome {
     pub receipt: Receipt,
     /// Platform fee collected, in raw units of the fee mint.
     pub platform_fee: u64,
+    /// The mint [`Self::platform_fee`] is denominated in, when a fee was
+    /// collected at all. Carried alongside the amount because the fee rides
+    /// whichever leg is a reference mint: on a TOKEN/USDC pair it is USDC, and a
+    /// caller that assumes lamports would report a six-decimal figure as a
+    /// nine-decimal one.
+    pub platform_fee_mint: Option<Pubkey>,
     /// Wall-clock time from build to verified, in milliseconds.
     pub duration_ms: u64,
+}
+
+impl DirectSwapOutcome {
+    /// The platform fee in LAMPORTS, or zero when it was collected in something
+    /// else. Converting a USDC fee would need a price this module does not have,
+    /// and a wrong number in a fee ledger is worse than an absent one.
+    pub fn platform_fee_lamports(&self) -> u64 {
+        match self.platform_fee_mint {
+            Some(mint) if super::intent::is_wsol(&mint) => self.platform_fee,
+            _ => 0,
+        }
+    }
 }
 
 /// How many times to re-read a confirmed transaction before giving up on an
@@ -85,12 +103,25 @@ const POST_EXPIRY_STATUS_DELAY: Duration = Duration::from_secs(1);
 /// runtime, so it is read once rather than once per swap.
 static ATA_RENT_LAMPORTS: tokio::sync::OnceCell<u64> = tokio::sync::OnceCell::const_new();
 
-/// Flat cushion, in lamports, for the transaction's own base fee and priority
-/// fee on top of whatever ATA rent it may need to fund. Deliberately
-/// conservative: a preflight that under-estimates would let a swap through that
-/// then fails on chain, which is the exact failure mode this preflight exists to
-/// avoid.
-const NETWORK_FEE_CUSHION_LAMPORTS: u64 = 10_000;
+/// Extra headroom, in percent, on top of the network fee the plan's own compute
+/// budget determines. Deliberately conservative: a preflight that
+/// under-estimates would let a swap through that then fails on chain, which is
+/// the exact failure mode this preflight exists to avoid.
+const NETWORK_FEE_HEADROOM_PCT: u64 = 20;
+
+/// The lamports this specific plan will hand the network, with headroom.
+///
+/// This was a flat 10,000 constant, which is BELOW what every venue actually
+/// pays at the default priority-fee price -- 10,850 for the cheapest and 31,000
+/// for Meteora DLMM -- because Solana bills the prioritization fee on the
+/// compute-unit LIMIT the transaction requests, and the config allows a price
+/// 200x the default. Sizing it off the plan's own compute-budget instructions is
+/// exact rather than a guess.
+fn network_fee_cushion_lamports(plan: &SwapPlan) -> u64 {
+    super::compute::network_fee_lamports(&plan.instructions)
+        .saturating_mul(100 + NETWORK_FEE_HEADROOM_PCT)
+        .saturating_div(100)
+}
 
 /// SPL token account size, used to size the ATA rent-exemption read.
 const TOKEN_ACCOUNT_SIZE: usize = 165;
@@ -158,12 +189,14 @@ pub async fn preflight_balance(plan: &SwapPlan, owner: &Pubkey) -> DirectSwapRes
         ata_rent_lamports().await?.saturating_mul(missing_accounts)
     };
 
+    let network_cushion = network_fee_cushion_lamports(plan);
+
     if super::intent::is_wsol(&plan.quote.input_mint) {
         let required = plan
             .quote
             .amount_in
             .saturating_add(rent_cushion)
-            .saturating_add(NETWORK_FEE_CUSHION_LAMPORTS);
+            .saturating_add(network_cushion);
         if owner_lamports < required {
             return Err(DirectSwapError::InsufficientBalance {
                 mint: plan.quote.input_mint,
@@ -185,7 +218,7 @@ pub async fn preflight_balance(plan: &SwapPlan, owner: &Pubkey) -> DirectSwapRes
         });
     }
 
-    let required_lamports = rent_cushion.saturating_add(NETWORK_FEE_CUSHION_LAMPORTS);
+    let required_lamports = rent_cushion.saturating_add(network_cushion);
     if owner_lamports < required_lamports {
         return Err(DirectSwapError::InsufficientBalance {
             mint: super::intent::wsol_mint(),
@@ -349,7 +382,9 @@ pub async fn execute_plan(
             // never uses. Only ever tighten, never raise: simulation runs
             // against slightly older state, and a real execution can cost more.
             let measured_limit = super::compute::compute_unit_limit_from_measured(units);
-            if let Some(requested_limit) = requested_compute_unit_limit(&instructions) {
+            if let Some(requested_limit) =
+                super::compute::requested_compute_unit_limit(&instructions)
+            {
                 if measured_limit < requested_limit {
                     instructions[0] = crate::chains::solana::solana_sdk::compute_budget::ComputeBudgetInstruction::set_compute_unit_limit(measured_limit);
                     transaction = VersionedTransaction::from(Transaction::new_signed_with_payer(
@@ -392,6 +427,7 @@ pub async fn execute_plan(
         amount_in: plan.quote.amount_in,
         receipt,
         platform_fee: plan.quote.fee.amount,
+        platform_fee_mint: plan.quote.fee.mint,
         duration_ms: started.elapsed().as_millis() as u64,
     })
 }
@@ -399,15 +435,6 @@ pub async fn execute_plan(
 /// Read the `SetComputeUnitLimit` value plan.rs guarantees is instruction index
 /// zero, so the measured-usage tightening in `execute_plan` knows what it would
 /// be replacing.
-fn requested_compute_unit_limit(
-    instructions: &[crate::chains::solana::solana_sdk::instruction::Instruction],
-) -> Option<u32> {
-    let data = &instructions.first()?.data;
-    if data.first() != Some(&2) {
-        return None; // not a SetComputeUnitLimit instruction
-    }
-    Some(u32::from_le_bytes(data.get(1..5)?.try_into().ok()?))
-}
 
 /// Terminal outcomes the settle loop can reach from one signature-status read.
 /// Kept as a pure function of the SDK's own status/height types so the
@@ -664,7 +691,10 @@ mod tests {
         crate::config::utils::CONFIG
             .get_or_init(|| std::sync::RwLock::new(crate::config::schemas::Config::default()));
         let ixs = super::super::compute::compute_budget_instructions(200_000);
-        assert_eq!(requested_compute_unit_limit(&ixs), Some(260_000));
+        assert_eq!(
+            super::super::compute::requested_compute_unit_limit(&ixs),
+            Some(260_000)
+        );
     }
 
     #[test]
@@ -674,7 +704,10 @@ mod tests {
             accounts: vec![],
             data: vec![9, 9, 9],
         };
-        assert_eq!(requested_compute_unit_limit(&[bogus]), None);
+        assert_eq!(
+            super::super::compute::requested_compute_unit_limit(&[bogus]),
+            None
+        );
     }
 
     #[test]

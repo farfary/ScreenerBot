@@ -277,3 +277,129 @@ async fn uninitialized_execution_returns_a_domain_error() {
         .expect_err("wallet execute without a factory");
     assert_registry_uninitialized(err);
 }
+
+/// A direct swap that LANDED SUCCESSFULLY must never read as "never submitted".
+///
+/// `unconfirmed_swap_signature` is the only thing standing between a submitted
+/// swap and a caller that retries or discards it. `open.rs` creates a pending
+/// position when it returns `Some` and returns `SwapFailed` with NO POSITION AT
+/// ALL when it returns `None`; the exit ladders in `close.rs` and
+/// `partial_close.rs` stop on `Some` and escalate to the next slippage rung on
+/// `None`.
+///
+/// `DirectSwapError::OutputNotReceived` is raised for a transaction that
+/// CONFIRMED WITHOUT ERROR -- the input left the wallet and the output arrived,
+/// `min_out` was enforced by the pool programme itself -- and only the receipt
+/// MEASUREMENT came in under the guaranteed minimum. Its `submitted()` is true
+/// and it carries the signature as data. But the recovery function matches one
+/// variant by name (`ConfirmationTimeout`) and otherwise scans the message for
+/// the aggregator's " not confirmed within timeout" marker, which this variant's
+/// message does not contain.
+///
+/// The consequence is a buy whose tokens are in the wallet and whose position
+/// was never created.
+#[test]
+fn a_confirmed_swap_reported_as_output_not_received_is_still_recoverable() {
+    use screenerbot::chains::solana::swaps::direct::DirectSwapError;
+    use screenerbot::swaps::unconfirmed_swap_signature;
+
+    const SIGNATURE: &str =
+        "5VERv8NMvzbJMEkV8xnrLkEaWRtSz9CosKDYjCJjBRnbJLgp8uirBgmQpjKhoR4tjF3ZpRzrFmBV6UjKdiSZkQUW";
+
+    let error = DirectSwapError::OutputNotReceived {
+        signature: SIGNATURE.to_owned(),
+        expected_minimum: 1_000_000,
+        received: 0,
+    };
+    assert!(
+        error.submitted(),
+        "the engine itself says this one reached the chain"
+    );
+    assert_eq!(
+        error.signature(),
+        Some(SIGNATURE),
+        "the engine itself carries the signature as data"
+    );
+
+    assert_eq!(
+        unconfirmed_swap_signature(&screenerbot::Error::from(error)).as_deref(),
+        Some(SIGNATURE),
+        "a confirmed swap the receipt could not measure must be handed to \
+         reconciliation, not treated as a trade that never happened"
+    );
+}
+
+/// `ConfirmationTimeout` -- the variant the recovery function was written for --
+/// still works, and `TransactionFailed` is deliberately NOT recoverable.
+///
+/// A reverted transaction moved nothing, so a caller must be free to retry it
+/// and must NOT open a position against it. That is why `submitted()` being true
+/// for `TransactionFailed` is not the same question as whether the signature
+/// should be handed back here.
+#[test]
+fn a_reverted_swap_is_not_mistaken_for_one_that_may_still_land() {
+    use screenerbot::chains::solana::swaps::direct::DirectSwapError;
+    use screenerbot::swaps::unconfirmed_swap_signature;
+
+    const SIGNATURE: &str =
+        "5VERv8NMvzbJMEkV8xnrLkEaWRtSz9CosKDYjCJjBRnbJLgp8uirBgmQpjKhoR4tjF3ZpRzrFmBV6UjKdiSZkQUW";
+
+    assert_eq!(
+        unconfirmed_swap_signature(&screenerbot::Error::from(
+            DirectSwapError::ConfirmationTimeout {
+                signature: SIGNATURE.to_owned(),
+                waited_ms: 60_000,
+            }
+        ))
+        .as_deref(),
+        Some(SIGNATURE)
+    );
+    assert_eq!(
+        unconfirmed_swap_signature(&screenerbot::Error::from(
+            DirectSwapError::TransactionFailed {
+                signature: SIGNATURE.to_owned(),
+                detail: "custom program error: 0x1".to_owned(),
+            }
+        )),
+        None,
+        "a transaction that reverted is safe to retry and must not open a position"
+    );
+}
+
+/// A failure that never reached the chain must NOT look submitted, or a
+/// recoverable trade is abandoned against a signature that does not exist.
+#[test]
+fn an_unsubmitted_direct_swap_failure_yields_no_signature() {
+    use screenerbot::chains::solana::solana_sdk::pubkey::Pubkey;
+    use screenerbot::chains::solana::swaps::direct::DirectSwapError;
+    use screenerbot::swaps::unconfirmed_swap_signature;
+
+    for error in [
+        DirectSwapError::SimulationRejected {
+            detail: "rejected".to_owned(),
+            logs: Vec::new(),
+        },
+        DirectSwapError::SubmitFailed {
+            detail: "node refused".to_owned(),
+        },
+        DirectSwapError::BlockhashExpired {
+            signature:
+                "5VERv8NMvzbJMEkV8xnrLkEaWRtSz9CosKDYjCJjBRnbJLgp8uirBgmQpjKhoR4tjF3ZpRzrFmBV6UjKdiSZkQUW"
+                    .to_owned(),
+            last_valid_block_height: 100,
+            current_block_height: 152,
+        },
+        DirectSwapError::InsufficientBalance {
+            mint: Pubkey::new_unique(),
+            required: 10,
+            available: 1,
+        },
+    ] {
+        assert!(!error.submitted(), "sanity: these never reached the chain");
+        assert_eq!(
+            unconfirmed_swap_signature(&screenerbot::Error::from(error)),
+            None,
+            "an unsubmitted failure must stay retryable"
+        );
+    }
+}
