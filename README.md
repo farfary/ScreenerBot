@@ -424,6 +424,33 @@ Create scheduled tasks that run AI instructions automatically:
 - Run history with tool call details and AI responses
 - Telegram notifications on completion or failure
 
+### MCP Bridge (External Agents)
+
+An external MCP client (an AI coding agent, for example) can drive the same tool
+registry over stdio. The `screenerbot mcp` subprocess holds no trading logic: it
+discovers the already-running app from `agent-runtime.json` and calls an internal
+loopback bridge, which resolves the client's scope, applies the permission
+policy, and runs each tool in the live process.
+
+- `screenerbot mcp serve` — run the stdio MCP server (JSON-RPC on stdout only).
+- `screenerbot mcp doctor` — report whether the app is running and whether the
+  pairing credential is valid. Never prints the secret.
+
+Pairings are created, listed, and revoked through the dashboard-authenticated
+`/api/agent-control/pairings` API. Creating one returns a one-time secret; only
+its hash is stored. The integrated Agent Connections screen and guided install
+flows are planned for the next product slice. The subprocess reads its credential
+from the environment, never from command-line arguments:
+
+- `SCREENERBOT_CLIENT_ID` — the pairing's client id.
+- `SCREENERBOT_PAIRING_SECRET` — the one-time secret shown at creation.
+
+Scopes are `read`, `operate`, `trade`. Unpaired, revoked, disabled or
+app-not-running states expose zero capabilities. A tool that needs confirmation
+(any trade, and anything the policy marks *ask*) is never executed by the agent
+directly — it creates a request that a person approves or denies inside
+ScreenerBot, and the approved request runs at most once.
+
 ---
 
 ## Dashboard

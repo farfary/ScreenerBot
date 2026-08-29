@@ -46,6 +46,19 @@ pub(super) async fn initialize_dashboard_persistence() -> Result<(), StartupErro
         );
     }
 
+    // Agent-control pairing/approval/audit store. Dashboard persistence, not AI
+    // execution: the management API and the live-app bridge must work in every
+    // boot state that serves the webserver. A failure here leaves the bridge
+    // fail-closed (no pairings resolvable) rather than aborting boot.
+    if let Err(e) = crate::agent_control::init_store() {
+        logger::warning(
+            LogTag::System,
+            &format!(
+                "Failed to initialize agent-control store: {e} - agent pairing and the MCP bridge will be unavailable"
+            ),
+        );
+    }
+
     // Strategy authoring and persistence are dashboard features. Evaluation is
     // consumed only by the full-mode trader, but the editor, templates, and
     // configuration APIs must remain usable in Explore Mode.

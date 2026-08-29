@@ -175,6 +175,15 @@ fn is_security_token_exempt_path(path: &str) -> bool {
         || path.starts_with("/api/pages/")
         || path == "/oauth/callback"
         || (path.starts_with("/api/") && path.ends_with("/stream"))
+        // The live-app bridge for external agents. Exempt from the GUI security
+        // token ONLY. This function is reached only from `security_gate`, which
+        // runs only in GUI mode and has already enforced the loopback
+        // `Host`/`Origin` check before consulting it. Every bridge handler also
+        // authenticates a pairing credential unconditionally (see
+        // `routes::agent_bridge`). Deliberately the exact prefix, nothing wider:
+        // `tests/architecture_boundaries.rs` proves every other
+        // agent-control/dashboard route stays token-protected.
+        || path.starts_with(crate::webserver::routes::agent_bridge::BRIDGE_PREFIX)
         || !path.starts_with("/api/")
 }
 
@@ -350,6 +359,14 @@ pub async fn auth_gate(request: Request, next: Next) -> Response {
         || path.starts_with("/scripts/")
         || path.starts_with("/styles/")
         || path.starts_with("/assets/")
+        // The external-agent bridge does not carry a dashboard session; every
+        // handler authenticates a mandatory pairing bearer credential instead,
+        // in every mode. That credential — not a loopback guarantee — is what
+        // protects the surface: with password auth enabled a headless server
+        // can be bound to a non-loopback address, and `security_gate`'s
+        // Host/Origin check does not run in headless mode. GUI mode additionally
+        // applies that local Host/Origin check to this path like any other.
+        || path.starts_with(crate::webserver::routes::agent_bridge::BRIDGE_PREFIX)
     {
         return next.run(request).await;
     }

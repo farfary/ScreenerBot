@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 pub mod account;
 pub mod actions;
+pub mod agent_bridge;
 pub mod agent_control;
 pub mod asset_serving;
 pub mod assistant;
@@ -206,6 +207,7 @@ fn api_routes() -> Router<Arc<AppState>> {
         .nest("/llm-analysis", llm_analysis::routes())
         .nest("/assistant", assistant::routes())
         .nest("/agent-control", agent_control::routes())
+        .nest("/agent-bridge", agent_bridge::routes())
         .merge(updates::routes())
         .route("/pages/:page", get(get_page_content))
 }

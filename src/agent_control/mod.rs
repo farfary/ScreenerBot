@@ -7,8 +7,13 @@
 //! reach a domain owner. Transport adapters never decide whether money-moving
 //! work is allowed — they call `decide` and honour the result.
 
+pub mod approvals;
+pub mod audit;
+pub mod bridge;
 pub mod error;
+pub mod pairing;
 pub mod permissions;
+pub mod store;
 pub mod tools;
 
 pub use error::{Error, Result};
@@ -19,6 +24,13 @@ pub use permissions::{
 pub use tools::{
     create_tool_registry, Tool, ToolCategory, ToolDefinition, ToolRegistry, ToolResult,
 };
+
+/// Initialize the durable agent-control store (pairings, approval queue, audit
+/// log). Called from dashboard-persistence bootstrap in every boot state that
+/// serves the webserver; idempotent.
+pub fn init_store() -> Result<()> {
+    store::init()
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InvocationSource {
@@ -33,6 +45,29 @@ pub enum ClientScope {
     Read,
     Operate,
     Trade,
+}
+
+impl ClientScope {
+    /// Parse a stored/requested scope. Only the three exact lowercase tokens
+    /// are accepted; anything else returns `None` so scope handling fails
+    /// closed rather than defaulting to a capability.
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "read" => Some(ClientScope::Read),
+            "operate" => Some(ClientScope::Operate),
+            "trade" => Some(ClientScope::Trade),
+            _ => None,
+        }
+    }
+
+    /// The canonical lowercase token for this scope.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ClientScope::Read => "read",
+            ClientScope::Operate => "operate",
+            ClientScope::Trade => "trade",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -146,5 +181,19 @@ mod tests {
             ),
             Decision::Deny
         );
+    }
+
+    #[test]
+    fn client_scope_parse_fails_closed() {
+        assert_eq!(ClientScope::parse("read"), Some(ClientScope::Read));
+        assert_eq!(ClientScope::parse("operate"), Some(ClientScope::Operate));
+        assert_eq!(ClientScope::parse("trade"), Some(ClientScope::Trade));
+        for bad in ["", "Read", "READ", "admin", "read ", "trade,read", "*"] {
+            assert_eq!(ClientScope::parse(bad), None, "{bad:?}");
+        }
+        // Round-trips through the canonical token.
+        for scope in [ClientScope::Read, ClientScope::Operate, ClientScope::Trade] {
+            assert_eq!(ClientScope::parse(scope.as_str()), Some(scope));
+        }
     }
 }

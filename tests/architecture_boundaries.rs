@@ -1502,3 +1502,169 @@ fn decisions_are_never_made_from_error_text() {
         violations.join("\n")
     );
 }
+
+// ============================================================================
+// Agent-control native MCP boundary (checkpoint 3)
+// ============================================================================
+//
+// The stdio MCP adapter is a bridge client with no local tool execution; the
+// live-app bridge is the only agent-control route exempt from the dashboard
+// token, and only from that; every bridge handler authenticates a pairing
+// credential; and pairing secrets never reach a list/summary type.
+
+fn read_src(relative: &str) -> String {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("src")
+        .join(relative);
+    fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {relative}: {e}"))
+}
+
+#[test]
+fn mcp_adapter_has_no_local_tool_execution_or_policy() {
+    let code = code_lines(&read_src("mcp/mod.rs"));
+    for forbidden in [
+        "create_tool_registry",
+        "InvocationSource",
+        "agent_control::decide",
+        "::decide(",
+        "tool.execute(",
+        "permissions::",
+    ] {
+        assert!(
+            !code.contains(forbidden),
+            "src/mcp/mod.rs must not reference `{forbidden}` — all tool listing, policy and \
+             execution belong to the live app reached through the bridge, never the MCP \
+             subprocess"
+        );
+    }
+    // It must actually go through the bridge.
+    assert!(
+        code.contains("/api/agent-bridge/"),
+        "src/mcp/mod.rs must call the live-app bridge"
+    );
+}
+
+#[test]
+fn only_the_bridge_prefix_is_token_exempt_and_only_from_the_token() {
+    let middleware = read_src("webserver/middleware.rs");
+
+    // Both gates reference the shared const, never a hardcoded path.
+    let uses = middleware.matches("agent_bridge::BRIDGE_PREFIX").count();
+    assert!(
+        uses >= 2,
+        "both `is_security_token_exempt_path` and `auth_gate` must exempt \
+         agent_bridge::BRIDGE_PREFIX (found {uses} references)"
+    );
+    assert!(
+        !middleware.contains("\"/api/agent-bridge"),
+        "the bridge path must come from routes::agent_bridge::BRIDGE_PREFIX, not a literal"
+    );
+    // The management API is never exempted.
+    assert!(
+        !middleware.contains("/api/agent-control"),
+        "no agent-control management route may be named in a middleware exemption"
+    );
+
+    // The const is exactly the intended prefix.
+    let routes = read_src("webserver/routes/agent_bridge/mod.rs");
+    assert!(
+        routes.contains(r#"BRIDGE_PREFIX: &str = "/api/agent-bridge/""#),
+        "BRIDGE_PREFIX must be \"/api/agent-bridge/\""
+    );
+
+    // The exemption is only in the two intended gates. `initialization_gate`
+    // must NOT list the bridge (pre-init it fails closed with 503).
+    let init_gate = middleware
+        .split_once("pub async fn initialization_gate")
+        .map(|(_, rest)| rest.split("pub async fn").next().unwrap_or(""))
+        .unwrap_or("");
+    assert!(
+        !init_gate.contains("agent_bridge") && !init_gate.contains("agent-bridge"),
+        "initialization_gate must not exempt the bridge"
+    );
+}
+
+#[test]
+fn every_bridge_handler_authenticates_a_pairing_credential() {
+    let handlers = read_src("webserver/routes/agent_bridge/handlers.rs");
+    let handler_count = handlers.matches("pub async fn ").count();
+    let auth_calls = handlers.matches("credential(&headers)").count();
+    assert!(handler_count >= 4, "expected the four bridge handlers");
+    assert_eq!(
+        handler_count, auth_calls,
+        "every bridge handler must call `credential(&headers)` before doing anything else"
+    );
+}
+
+#[test]
+fn pairing_secret_never_appears_in_a_list_or_summary_type() {
+    let pairing = read_src("agent_control/pairing.rs");
+
+    // The only struct allowed to carry the secret field is the one-time
+    // creation response.
+    let summary = pairing
+        .split_once("pub struct PairingSummary")
+        .and_then(|(_, r)| r.split_once('}'))
+        .map(|(b, _)| b)
+        .unwrap_or("");
+    for banned in ["secret", "verifier"] {
+        assert!(
+            !summary.contains(banned),
+            "PairingSummary must not expose `{banned}`"
+        );
+    }
+
+    // The verifier is stored, never serialized: it must not be a field of any
+    // `Serialize` type. `AuthedClient` is not Serialize and may hold scope, not
+    // the secret.
+    let authed = pairing
+        .split_once("pub struct AuthedClient")
+        .and_then(|(_, r)| r.split_once('}'))
+        .map(|(b, _)| b)
+        .unwrap_or("");
+    assert!(
+        !authed.contains("secret") && !authed.contains("verifier"),
+        "AuthedClient must not carry the secret or verifier"
+    );
+}
+
+#[test]
+fn agent_approvals_asset_is_fully_registered() {
+    let embeds = read_src("webserver/embeds.rs");
+    assert!(
+        embeds.contains("CORE_AGENT_APPROVALS")
+            && embeds.contains("scripts/core/agent_approvals.js"),
+        "agent_approvals.js needs an include_str! const in embeds.rs"
+    );
+    let serving = read_src("webserver/routes/asset_serving/handlers.rs");
+    assert!(
+        serving.contains(r#""agent_approvals.js" => Some(embeds::CORE_AGENT_APPROVALS)"#),
+        "agent_approvals.js needs a match arm in asset_serving handlers"
+    );
+    let base = read_src("webserver/templates/base.html");
+    assert!(
+        base.contains("/scripts/core/agent_approvals.js"),
+        "agent_approvals.js needs a <script> tag in base.html"
+    );
+}
+
+#[test]
+fn approval_binding_is_unique_and_race_safe() {
+    let store = read_src("agent_control/store.rs");
+    assert!(
+        store.contains("CREATE UNIQUE INDEX IF NOT EXISTS idx_approvals_binding"),
+        "the (client_id, tool, args_digest) binding must be a UNIQUE index — a plain \
+         index lets a SELECT-then-INSERT race create duplicate approval rows"
+    );
+    let approvals = read_src("agent_control/approvals.rs");
+    assert!(
+        approvals.contains("ON CONFLICT(client_id, tool, args_digest) DO NOTHING"),
+        "create_or_reuse must insert with ON CONFLICT DO NOTHING and read the row back, \
+         not branch on a prior SELECT"
+    );
+    // Every terminal state is reused; there is no "open a fresh row on failed/expired" path.
+    assert!(
+        !approvals.contains("Only `expired` and `failed` let a retry open a fresh request"),
+        "stale doc: failed/expired approvals are terminal and reused, never replayed"
+    );
+}

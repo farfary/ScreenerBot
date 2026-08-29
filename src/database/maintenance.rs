@@ -50,6 +50,7 @@ pub fn get_all_db_paths() -> Vec<(String, PathBuf)> {
         ("tools.db", paths::get_tools_db_path()),
         ("ai.db", paths::get_ai_db_path()),
         ("ai_chat.db", paths::get_ai_chat_db_path()),
+        ("agent_control.db", paths::get_agent_control_db_path()),
         // rpc_stats.db uses its own path function (not in paths module)
         (
             "rpc_stats.db",
