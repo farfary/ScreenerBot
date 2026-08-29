@@ -44,10 +44,9 @@ export const DATA_DIR_ENV = "SCREENERBOT_DATA_DIR";
 export const MCP_SERVER_NAME = "screenerbot";
 
 /**
- * The backend does not yet report the installed binary path in the pairing
- * response, so generated configs fall back to this clearly-marked placeholder
- * and the setup notes tell the operator to replace it. If a future pairing
- * response carries a real absolute path, `clientSetup` uses it verbatim.
+ * The pairing response normally reports the running app's absolute backend
+ * path. This placeholder is only the fail-safe for an unusual platform path
+ * that cannot be represented as UTF-8 JSON.
  */
 export const EXE_PLACEHOLDER = "/absolute/path/to/screenerbot";
 
@@ -204,7 +203,7 @@ export function clientSetup(id, exe, clientId, secret) {
   if (exePath(exe) === EXE_PLACEHOLDER) {
     shared.push(
       `Replace ${EXE_PLACEHOLDER} with the absolute path to your ScreenerBot binary — ` +
-        "the app cannot fill this in automatically yet."
+        "the running app could not represent its executable path on this system."
     );
   }
   shared.push(

@@ -190,10 +190,11 @@ test("every clientSetup block carries the secret exactly once, and notes never d
   }
 });
 
-test("placeholder path triggers a replace-me note; a real path does not", async () => {
+test("placeholder is only a path-encoding fallback; a reported path needs no replacement", async () => {
   const { clientSetup, EXE_PLACEHOLDER } = await mod();
   const withPlaceholder = clientSetup("claude", null, CID, SECRET);
   assert.ok(withPlaceholder.notes.some((n) => n.includes(EXE_PLACEHOLDER)));
+  assert.ok(withPlaceholder.notes.some((n) => /could not represent/.test(n)));
   const withPath = clientSetup("claude", "/usr/local/bin/screenerbot", CID, SECRET);
   assert.ok(!withPath.notes.some((n) => n.includes(EXE_PLACEHOLDER)));
 });

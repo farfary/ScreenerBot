@@ -11,7 +11,7 @@ use axum::{
     response::Response,
     Json,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use crate::agent_control::pairing;
@@ -26,6 +26,25 @@ pub struct CreatePairingBody {
     pub label: String,
     pub agent_kind: String,
     pub scope: String,
+}
+
+/// One-time pairing material plus the exact executable this running app was
+/// launched from. Electron packages the backend as a stable resources binary,
+/// while headless installs already execute the durable binary directly, so
+/// `current_exe` is the canonical stdio command on every supported platform.
+#[derive(Serialize)]
+struct CreatePairingResponse {
+    client_id: String,
+    pairing_secret: String,
+    binary_path: Option<String>,
+}
+
+fn current_binary_path() -> Option<String> {
+    std::env::current_exe()
+        .ok()?
+        .into_os_string()
+        .into_string()
+        .ok()
 }
 
 /// GET /api/agent-control/pairings — list pairings (never the verifier/secret).
@@ -59,10 +78,26 @@ pub async fn create(
                     new_pairing.client_id
                 ),
             );
-            success_response(new_pairing)
+            success_response(CreatePairingResponse {
+                client_id: new_pairing.client_id,
+                pairing_secret: new_pairing.pairing_secret,
+                binary_path: current_binary_path(),
+            })
         }
         Ok(Err(e)) => error_response(status_for(&e), error_code(&e), &e.to_string(), None),
         Err(_) => internal(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::current_binary_path;
+
+    #[test]
+    fn setup_binary_path_is_absolute_when_the_platform_path_is_utf8() {
+        if let Some(path) = current_binary_path() {
+            assert!(std::path::Path::new(&path).is_absolute());
+        }
     }
 }
 

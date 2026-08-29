@@ -16,7 +16,6 @@ installer script, and no second implementation of any tool.
 - ScreenerBot installed and **running**. A paired client has zero capabilities while the
   app process is closed; the dashboard window may be closed as long as the process stays
   up, but a person must open it to approve any money- or config-changing action.
-- The absolute path to the `screenerbot` binary (or the binary on your `PATH`).
 - An MCP client that speaks **stdio** (Claude Code / Claude Desktop, Codex CLI, Hermes,
   OpenClaw, or any standards-based stdio MCP client).
 
@@ -58,9 +57,9 @@ you run ScreenerBot with a non-default data directory, also pass
 `SCREENERBOT_DATA_DIR=<same path>` to the client so the bridge finds the right
 `agent-runtime.json`.
 
-The in-app panel fills the client id, secret and (where known) the binary path into the
-snippets below. Until the app reports its own install path, the snippets use the marked
-placeholder `/absolute/path/to/screenerbot` — replace it with the real path.
+The in-app panel fills the client id, secret, and the running app's absolute backend path
+into the snippets below. In the unusual case where an operating-system path cannot be
+represented in JSON, it shows `/absolute/path/to/screenerbot` and asks you to replace it.
 
 ### Claude Code
 
