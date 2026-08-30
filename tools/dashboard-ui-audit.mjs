@@ -226,6 +226,20 @@ for (const file of cssFiles) {
     }
   }
 
+  /* The modal header owns its title. Every page that re-declared the heading it
+     happened to use (h2 here, h3 there) is why one modal family ended up with a
+     1.17em title and an icon sitting on the text baseline. A dialog that needs a
+     different title gives it a class of its own instead. */
+  if (path !== "components.css") {
+    for (const [selector] of rulesIn(css)) {
+      if (/\.modal-header\b[^{]*(?:[\s>]h[1-6]|[\s>]\.modal-title)\b/.test(selector)) {
+        errors.push(
+          `${path}: ${selector} re-styles the modal title; it is owned by components.css .modal-header > :where(h1..h6, .modal-title)`
+        );
+      }
+    }
+  }
+
   if (path !== "components/form_controls.css") {
     for (const [selector, body] of rulesIn(css)) {
       if (!inputMayBeChoiceControl(selector)) continue;
@@ -303,9 +317,7 @@ if (!routerSource.includes("/styles/pages/")) {
   errors.push("router.js must load route-scoped page styles from /styles/pages/");
 }
 
-const assistantStyleManifest = templatesSource.match(
-  /"assistant"\s*=>\s*\[([\s\S]*?)\]\s*\.join/
-);
+const assistantStyleManifest = templatesSource.match(/"assistant"\s*=>\s*\[([\s\S]*?)\]\s*\.join/);
 const globalStyleManifest = templatesSource.match(/let combined_styles = \[([\s\S]*?)\];/);
 const chatWidgetStyles = [
   "CHAT_WIDGET_LAYOUT_STYLES",
@@ -327,9 +339,7 @@ for (const style of chatWidgetStyles) {
     errors.push(`${style} must be loaded by the global shared-style manifest`);
   }
   if (assistantStyleManifest?.[1].includes(style)) {
-    errors.push(
-      `${style} must not depend on the Assistant route-scoped style manifest`
-    );
+    errors.push(`${style} must not depend on the Assistant route-scoped style manifest`);
   }
 }
 

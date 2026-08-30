@@ -1,18 +1,3 @@
-.modal-header h2 {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  margin: 0;
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.modal-header h2 i {
-  font-size: 1.1rem;
-  color: var(--primary-color);
-}
-
 /* Warning/Danger Banners */
 .warning-banner,
 .danger-banner {

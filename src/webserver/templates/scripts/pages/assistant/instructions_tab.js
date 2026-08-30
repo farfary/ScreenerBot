@@ -673,7 +673,7 @@ export function createInstructionsTab({ state, _eventCleanups }) {
       <div class="modal instruction-modal">
         <div class="modal-header">
           <h3><i class="icon-square-pen"></i> Edit Instruction</h3>
-          <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">×</button>
+          <button class="modal-close" aria-label="Close" onclick="this.closest('.modal-overlay').remove()"><i class="icon-x"></i></button>
         </div>
         <div class="modal-body">
           <div class="form-group">
