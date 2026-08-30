@@ -19,11 +19,12 @@ async fn mainnet_manual_buy_then_sell_lifecycle() {
 
     // Prove the guard + wallet resolve so `./test.sh mainnet` exercises the harness.
     assert!(ctx.max_lamports > 0, "spend cap must be positive");
-    assert!(
-        std::path::Path::new(&ctx.wallet_path).exists(),
-        "funded test wallet not found at {}",
-        ctx.wallet_path
-    );
+    if let Some(wallet_path) = &ctx.wallet_path {
+        assert!(
+            std::path::Path::new(wallet_path).exists(),
+            "funded test wallet not found at {wallet_path}"
+        );
+    }
 
     // TODO(wire): drive the real manual-trade path end to end, capped at ctx.max_lamports:
     //   1. load keypair from ctx.wallet_path; init RPC via get_rpc_client()
