@@ -115,10 +115,14 @@ function createLifecycle() {
       setupEventHandlers();
       watched.setup();
 
+      // Show the restored tab's panel BEFORE loading it. Every panel but Main
+      // ships hidden in the markup, and a DataTable built inside a hidden panel
+      // measures a zero-width container - it would render at minimum column
+      // widths. switchTab() already orders it this way.
+      updatePanelVisibility();
+
       // Load initial data
       await loadActiveTab();
-
-      updatePanelVisibility();
     },
 
     activate(ctx) {

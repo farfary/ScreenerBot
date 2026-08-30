@@ -107,6 +107,37 @@ export function applyColumnManagementMixin(DataTable) {
     this._applyTableWidth();
   };
 
+  /**
+   * Is the table actually laid out? A table inside a `display: none` ancestor -
+   * a tab panel not yet unhidden, a page mid-route-switch - reports every width
+   * as 0. Measuring it stores garbage (every column at its minimum) that the
+   * oscillation guards then defend, so no measurement may be taken or recorded
+   * until this is true.
+   */
+  proto._isLaidOut = function () {
+    return (this.elements.scrollContainer?.clientWidth || 0) > 0;
+  };
+
+  /**
+   * The one column-width pass: measure content, capture anything missing, write
+   * it to the DOM, then fit the result to the container exactly once. Called on
+   * every render, and again from the wrapper ResizeObserver when a table that
+   * rendered while hidden finally gets a real width.
+   */
+  proto._sizeColumns = function () {
+    if (!this._isLaidOut()) return;
+
+    this._autoSizeColumnsFromContent();
+    this._snapshotColumnWidths();
+    this._applyStoredColumnWidths();
+
+    // Fit ONCE (prevents double-fitting); the flag is set only when the fit
+    // actually measured something, so a deferred fit stays pending.
+    if (this.options.fitToContainer !== false && !this.state.hasAutoFitted) {
+      this.state.hasAutoFitted = this._fitColumnsToContainer() === true;
+    }
+  };
+
   proto._autoSizeColumnsFromContent = function () {
     if (this.options.autoSizeColumns === false) {
       return;
@@ -294,18 +325,29 @@ export function applyColumnManagementMixin(DataTable) {
   };
 
   /**
-   * Fit columns proportionally to container width if they would overflow
+   * Fit columns proportionally to container width if they would overflow.
+   * Returns true only when a real measurement was taken and applied, so the
+   * caller knows whether the one-shot fit is actually done.
    */
   proto._fitColumnsToContainer = function () {
-    if (!this.elements.scrollContainer) return;
+    if (!this.elements.scrollContainer) return false;
 
     // Use clientWidth which excludes vertical scrollbar width
     const containerWidth = this.elements.scrollContainer.clientWidth;
     const totalWidth = this._computeTableWidthFromState();
-    if (!totalWidth || totalWidth <= 0) return;
+    if (!totalWidth || totalWidth <= 0) return false;
+
+    // A zero-width container is not a measurement - it means the table is
+    // rendering inside a `display: none` ancestor (a tab panel that has not been
+    // unhidden yet, a page mid-route-switch). Fitting against it scales every
+    // column to its minimum and pins `table.style.width` to 0px, which the
+    // stylesheet's `width: 100%` cannot undo; the table then stays collapsed for
+    // the rest of its life. Defer instead: the caller leaves the fit pending and
+    // the next render, or the wrapper ResizeObserver, redoes it with real widths.
+    if (containerWidth <= 0) return false;
 
     const visibleColumns = this._getOrderedColumns();
-    if (!visibleColumns || visibleColumns.length === 0) return;
+    if (!visibleColumns || visibleColumns.length === 0) return false;
 
     // We always attempt to match the container exactly on init-fit
     const targetWidth = Math.max(0, Math.floor(containerWidth));
@@ -364,7 +406,7 @@ export function applyColumnManagementMixin(DataTable) {
       });
 
       applyFinal();
-      return;
+      return true;
     }
 
     // If under target, expand last non-user-resized column to fill remaining gap for exact fit
@@ -392,11 +434,12 @@ export function applyColumnManagementMixin(DataTable) {
       }
 
       applyFinal();
-      return;
+      return true;
     }
 
     // Already exactly matching
     applyFinal();
+    return true;
   };
 
   /**

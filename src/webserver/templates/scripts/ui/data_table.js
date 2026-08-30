@@ -479,8 +479,15 @@ export class DataTable {
 
     // Observe the wrapper for size changes (layout/sidebar toggles, fit-to-container
     // reflows) and refresh pinned offsets. Guarded for environments lacking the API.
+    // This is also the recovery path for a table first rendered inside a hidden
+    // panel: it took no measurement then, so the moment the panel is unhidden and
+    // the wrapper reports a real width, the column pass runs for the first time
+    // instead of waiting for whatever render happens next.
     if (typeof ResizeObserver === "function" && this.elements.wrapper) {
       this._wrapperResizeObserver = new ResizeObserver(() => {
+        if (this.options.fitToContainer !== false && !this.state.hasAutoFitted) {
+          this._sizeColumns();
+        }
         this._updateStickyOffsets();
       });
       this._wrapperResizeObserver.observe(this.elements.wrapper);
@@ -1920,17 +1927,7 @@ export class DataTable {
     }
 
     // Column width handling - coordinated to prevent oscillation
-    // 1. Auto-size from content (only on initial load or when needed)
-    this._autoSizeColumnsFromContent();
-    // 2. Snapshot any missing widths from DOM
-    this._snapshotColumnWidths();
-    // 3. Apply stored widths to DOM
-    this._applyStoredColumnWidths();
-    // 4. Fit to container ONCE if not already done (prevents double-fitting)
-    if (this.options.fitToContainer !== false && !this.state.hasAutoFitted) {
-      this._fitColumnsToContainer();
-      this.state.hasAutoFitted = true;
-    }
+    this._sizeColumns();
 
     // NOTE: Do NOT call _attachEvents() here - event handlers use event delegation
     // on parent elements (thead, tbody, scrollContainer) which are NOT replaced,
