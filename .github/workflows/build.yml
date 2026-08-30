@@ -88,7 +88,7 @@ jobs:
         with:
           toolchain: 1.89.0
       - name: Run updater tests
-        run: cargo test version::
+        run: "cargo test version::"
       - name: Validate Electron update bridge syntax
         run: |
           node --check electron/src/main.js
