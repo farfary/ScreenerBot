@@ -208,16 +208,15 @@ function buildSecurityTab(status) {
       </div>
 
       <!-- Password Setup Modal Container -->
-      <div id="securityPasswordModal" class="security-modal" style="display: none;">
-        <div class="security-modal-backdrop"></div>
-        <div class="security-modal-content">
-          <div class="security-modal-header">
+      <div id="securityPasswordModal" class="modal-overlay" hidden>
+        <div class="modal-dialog modal-sm">
+          <div class="modal-header">
             <h3 id="securityModalTitle">Set Password</h3>
-            <button class="security-modal-close" id="securityModalClose">
+            <button class="modal-close" id="securityModalClose" aria-label="Close">
               <i class="icon-x"></i>
             </button>
           </div>
-          <div class="security-modal-body" id="securityModalBody">
+          <div class="modal-body" id="securityModalBody">
             <!-- Content injected dynamically -->
           </div>
         </div>
@@ -341,7 +340,6 @@ function showPasswordModal(dialog, mode, content) {
   const title = content.querySelector("#securityModalTitle");
   const body = content.querySelector("#securityModalBody");
   const closeBtn = content.querySelector("#securityModalClose");
-  const backdrop = modal.querySelector(".security-modal-backdrop");
 
   if (!modal || !body) return;
 
@@ -388,7 +386,7 @@ function showPasswordModal(dialog, mode, content) {
       </div>
     `;
 
-  modal.style.display = "flex";
+  modal.hidden = false;
   enhanceAllSelects(body);
 
   // Close modal function with keyboard listener cleanup
@@ -397,7 +395,7 @@ function showPasswordModal(dialog, mode, content) {
     if (handleKeydown) {
       document.removeEventListener("keydown", handleKeydown);
     }
-    modal.style.display = "none";
+    modal.hidden = true;
   };
 
   // Keyboard handler for Escape
@@ -410,7 +408,9 @@ function showPasswordModal(dialog, mode, content) {
   document.addEventListener("keydown", handleKeydown);
 
   closeBtn.onclick = closeModal;
-  backdrop.onclick = closeModal;
+  modal.onclick = (event) => {
+    if (event.target === modal) closeModal();
+  };
   body.querySelector("#securityCancelBtn").onclick = closeModal;
 
   // Type change handler - validate input
@@ -507,7 +507,6 @@ function removePassword(dialog, content) {
   const title = content.querySelector("#securityModalTitle");
   const body = content.querySelector("#securityModalBody");
   const closeBtn = content.querySelector("#securityModalClose");
-  const backdrop = modal.querySelector(".security-modal-backdrop");
 
   if (!modal || !body) return;
 
@@ -533,7 +532,7 @@ function removePassword(dialog, content) {
       </div>
     `;
 
-  modal.style.display = "flex";
+  modal.hidden = false;
 
   // Focus the password input
   setTimeout(() => {
@@ -559,11 +558,13 @@ function removePassword(dialog, content) {
   // Close handlers with cleanup
   const closeModal = () => {
     passwordInput.removeEventListener("keydown", handleKeydown);
-    modal.style.display = "none";
+    modal.hidden = true;
   };
 
   closeBtn.onclick = closeModal;
-  backdrop.onclick = closeModal;
+  modal.onclick = (event) => {
+    if (event.target === modal) closeModal();
+  };
   body.querySelector("#securityCancelRemoveBtn").onclick = closeModal;
 
   // Confirm handler
@@ -609,7 +610,6 @@ async function showTotpSetupModal(dialog, content) {
   const title = content.querySelector("#securityModalTitle");
   const body = content.querySelector("#securityModalBody");
   const closeBtn = content.querySelector("#securityModalClose");
-  const backdrop = modal.querySelector(".security-modal-backdrop");
 
   if (!modal || !body) return;
 
@@ -642,17 +642,19 @@ async function showTotpSetupModal(dialog, content) {
       </div>
     `;
 
-  modal.style.display = "flex";
+  modal.hidden = false;
 
   let currentSecret = "";
 
   // Close handlers
   const closeModal = () => {
-    modal.style.display = "none";
+    modal.hidden = true;
   };
 
   closeBtn.onclick = closeModal;
-  backdrop.onclick = closeModal;
+  modal.onclick = (event) => {
+    if (event.target === modal) closeModal();
+  };
 
   // Cancel button
   body.querySelector("#totpCancelBtn")?.addEventListener("click", closeModal);
@@ -741,7 +743,6 @@ async function disableTotp(dialog, content) {
   const title = content.querySelector("#securityModalTitle");
   const body = content.querySelector("#securityModalBody");
   const closeBtn = content.querySelector("#securityModalClose");
-  const backdrop = modal.querySelector(".security-modal-backdrop");
 
   if (!modal || !body) return;
 
@@ -759,15 +760,17 @@ async function disableTotp(dialog, content) {
       </div>
     `;
 
-  modal.style.display = "flex";
+  modal.hidden = false;
 
   // Close handlers
   const closeModal = () => {
-    modal.style.display = "none";
+    modal.hidden = true;
   };
 
   closeBtn.onclick = closeModal;
-  backdrop.onclick = closeModal;
+  modal.onclick = (event) => {
+    if (event.target === modal) closeModal();
+  };
 
   body.querySelector("#totpDisableCancelBtn")?.addEventListener("click", closeModal);
 

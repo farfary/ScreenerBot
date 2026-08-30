@@ -200,7 +200,7 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
     const modal = document.createElement("div");
     modal.className = "modal-overlay automation-modal-overlay";
     modal.innerHTML = `
-    <div class="modal automation-modal">
+    <div class="modal-dialog automation-modal">
       <div class="modal-header">
         <h3><i class="icon-plus"></i> Create Automation Task</h3>
         <button class="modal-close" onclick="this.closest('.modal-overlay').remove()"><i class="icon-x"></i></button>
@@ -448,7 +448,7 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
     const modal = document.createElement("div");
     modal.className = "modal-overlay automation-modal-overlay";
     modal.innerHTML = `
-    <div class="modal automation-modal">
+    <div class="modal-dialog automation-modal">
       <div class="modal-header">
         <h3><i class="icon-square-pen"></i> Edit Task</h3>
         <button class="modal-close" onclick="this.closest('.modal-overlay').remove()"><i class="icon-x"></i></button>
@@ -582,7 +582,7 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
       const modal = document.createElement("div");
       modal.className = "modal-overlay automation-modal-overlay";
       modal.innerHTML = `
-      <div class="modal automation-modal">
+      <div class="modal-dialog automation-modal">
         <div class="modal-header">
           <h3><i class="icon-file-text"></i> Run Details</h3>
           <button class="modal-close" onclick="this.closest('.modal-overlay').remove()"><i class="icon-x"></i></button>
@@ -768,7 +768,7 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
       const modal = document.createElement("div");
       modal.className = "modal-overlay automation-modal-overlay";
       modal.innerHTML = `
-      <div class="modal automation-modal">
+      <div class="modal-dialog automation-modal">
         <div class="modal-header">
           <h3><i class="icon-clock"></i> Run History — ${Utils.escapeHtml(task?.name || "Task")}</h3>
           <button class="modal-close" onclick="this.closest('.modal-overlay').remove()"><i class="icon-x"></i></button>

@@ -90,16 +90,15 @@
   </main>
 
   <!-- Condition Catalog Modal -->
-  <div class="condition-catalog-modal" id="condition-catalog-modal">
-    <div class="condition-catalog-content">
-      <div class="condition-catalog-header">
-        <div class="condition-catalog-title">
-          <i class="icon-puzzle"></i>
-          <h3>Add Condition</h3>
-        </div>
-        <button type="button" class="condition-catalog-close" id="close-condition-catalog">✕</button>
+  <div class="modal-overlay condition-catalog-modal" id="condition-catalog-modal" hidden>
+    <div class="modal-dialog condition-catalog-content">
+      <div class="modal-header">
+        <h3><i class="icon-puzzle"></i> Add Condition</h3>
+        <button type="button" class="modal-close" id="close-condition-catalog" aria-label="Close">
+          <i class="icon-x"></i>
+        </button>
       </div>
-      <div class="condition-catalog-body">
+      <div class="modal-body condition-catalog-body">
         <div class="search-container">
           <input
             type="text"
@@ -127,44 +126,53 @@
   </div>
 
   <!-- Parameter Editor Modal (Optional, kept for complex edits if needed) -->
-  <div class="parameter-editor-modal" id="parameter-editor-modal">
-    <div class="parameter-editor-content">
-      <div class="parameter-editor-header">
-        <div class="parameter-editor-title">
-          <i class="icon-settings"></i>
-          <h3>Edit Parameters</h3>
-        </div>
-        <button type="button" class="parameter-editor-close" id="close-parameter-editor">✕</button>
+  <div class="modal-overlay parameter-editor-modal" id="parameter-editor-modal" hidden>
+    <div class="modal-dialog parameter-editor-content">
+      <div class="modal-header">
+        <h3><i class="icon-settings"></i> Edit Parameters</h3>
+        <button type="button" class="modal-close" id="close-parameter-editor" aria-label="Close">
+          <i class="icon-x"></i>
+        </button>
       </div>
-      <div class="parameter-editor-body" id="parameter-editor-body">
+      <div class="modal-body" id="parameter-editor-body">
         <!-- Dynamic content -->
       </div>
-      <div class="parameter-editor-footer">
-        <button type="button" class="btn" id="cancel-parameter-edit">Cancel</button>
-        <button type="button" class="btn primary" id="apply-parameter-edit">Apply Changes</button>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="cancel-parameter-edit">Cancel</button>
+        <button type="button" class="btn btn-primary" id="apply-parameter-edit">
+          Apply Changes
+        </button>
       </div>
     </div>
   </div>
 
   <!-- Create Strategy Type Selection Modal -->
-  <div class="create-strategy-modal" id="create-strategy-modal">
-    <div class="modal-backdrop"></div>
-    <div class="modal-content">
-      <h3>Create New Strategy</h3>
-      <p class="modal-desc">Choose the type of strategy you want to create:</p>
-      <div class="strategy-type-cards">
-        <button type="button" class="type-card" data-type="ENTRY">
-          <span class="type-icon"><i class="icon-trending-up"></i></span>
-          <span class="type-name">Entry Strategy</span>
-          <span class="type-desc">Define conditions for when to BUY a token</span>
-        </button>
-        <button type="button" class="type-card" data-type="EXIT">
-          <span class="type-icon"><i class="icon-trending-down"></i></span>
-          <span class="type-name">Exit Strategy</span>
-          <span class="type-desc">Define conditions for when to SELL a token</span>
+  <div class="modal-overlay create-strategy-modal" id="create-strategy-modal" hidden>
+    <div class="modal-dialog modal-sm">
+      <div class="modal-header">
+        <h3><i class="icon-plus"></i> Create New Strategy</h3>
+        <button type="button" class="modal-close" id="create-strategy-close" aria-label="Close">
+          <i class="icon-x"></i>
         </button>
       </div>
-      <button type="button" class="btn btn-secondary" id="cancel-create-strategy">Cancel</button>
+      <div class="modal-body">
+        <p class="modal-desc">Choose the type of strategy you want to create:</p>
+        <div class="strategy-type-cards">
+          <button type="button" class="type-card" data-type="ENTRY">
+            <span class="type-icon"><i class="icon-trending-up"></i></span>
+            <span class="type-name">Entry Strategy</span>
+            <span class="type-desc">Define conditions for when to BUY a token</span>
+          </button>
+          <button type="button" class="type-card" data-type="EXIT">
+            <span class="type-icon"><i class="icon-trending-down"></i></span>
+            <span class="type-name">Exit Strategy</span>
+            <span class="type-desc">Define conditions for when to SELL a token</span>
+          </button>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="cancel-create-strategy">Cancel</button>
+      </div>
     </div>
   </div>
 </div>

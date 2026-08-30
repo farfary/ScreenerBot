@@ -421,7 +421,7 @@
    ============================================================================ */
 
 /* Template Preview Modal */
-.template-preview-modal {
+.modal-dialog.instruction-modal.template-preview-modal {
   max-width: 700px;
 }
 

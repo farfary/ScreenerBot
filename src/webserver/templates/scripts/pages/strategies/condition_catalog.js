@@ -77,7 +77,7 @@ export function createConditionCatalog({
         const type = item.dataset.conditionType;
         onAddCondition(type);
         const catalog = $("#condition-catalog-modal");
-        if (catalog) catalog.classList.remove("active");
+        if (catalog) catalog.hidden = true;
       };
       addTrackedListener(item, "click", handler, CleanupScope.MODAL);
     });

@@ -429,7 +429,7 @@ export function createInstructionsTab({ state, _eventCleanups }) {
     const modal = document.createElement("div");
     modal.className = "modal-overlay";
     modal.innerHTML = `
-    <div class="modal instruction-modal template-preview-modal">
+    <div class="modal-dialog instruction-modal template-preview-modal">
       <div class="modal-header">
         <h3><i class="icon-eye"></i> Template Preview: ${Utils.escapeHtml(template.name)}</h3>
         <button class="modal-close" onclick="this.closest('.modal-overlay').remove()"><i class="icon-x"></i></button>
@@ -468,7 +468,7 @@ export function createInstructionsTab({ state, _eventCleanups }) {
     const modal = document.createElement("div");
     modal.className = "modal-overlay";
     modal.innerHTML = `
-    <div class="modal instruction-modal">
+    <div class="modal-dialog instruction-modal">
       <div class="modal-header">
         <h3><i class="icon-square-pen"></i> Customize Template</h3>
         <button class="modal-close" onclick="this.closest('.modal-overlay').remove()"><i class="icon-x"></i></button>
@@ -538,7 +538,7 @@ export function createInstructionsTab({ state, _eventCleanups }) {
     const modal = document.createElement("div");
     modal.className = "modal-overlay";
     modal.innerHTML = `
-    <div class="modal instruction-modal">
+    <div class="modal-dialog instruction-modal">
       <div class="modal-header">
         <h3><i class="icon-plus"></i> Create Instruction</h3>
         <button class="modal-close" onclick="this.closest('.modal-overlay').remove()"><i class="icon-x"></i></button>
@@ -670,7 +670,7 @@ export function createInstructionsTab({ state, _eventCleanups }) {
       const modal = document.createElement("div");
       modal.className = "modal-overlay";
       modal.innerHTML = `
-      <div class="modal instruction-modal">
+      <div class="modal-dialog instruction-modal">
         <div class="modal-header">
           <h3><i class="icon-square-pen"></i> Edit Instruction</h3>
           <button class="modal-close" aria-label="Close" onclick="this.closest('.modal-overlay').remove()"><i class="icon-x"></i></button>

@@ -528,11 +528,6 @@
   width: min(620px, calc(100vw - 48px));
 }
 
-.wallet-copy-dialog .modal-body {
-  min-height: 0;
-  overflow: auto;
-}
-
 .wallet-copy-dialog .modal-header p {
   margin: var(--spacing-xs) 0 0;
   color: var(--text-muted);

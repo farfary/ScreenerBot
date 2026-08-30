@@ -296,26 +296,32 @@ export function createLifecycle() {
 
   function showCreateStrategyModal() {
     const modal = $("#create-strategy-modal");
-    if (modal) modal.classList.add("active");
+    if (modal) modal.hidden = false;
   }
 
   function hideCreateStrategyModal() {
     const modal = $("#create-strategy-modal");
-    if (modal) modal.classList.remove("active");
+    if (modal) modal.hidden = true;
   }
 
   function setupCreateStrategyModal() {
     const modal = $("#create-strategy-modal");
     const cancelBtn = $("#cancel-create-strategy");
+    const closeBtn = $("#create-strategy-close");
     const typeCards = $$(".type-card");
-    const backdrop = modal?.querySelector(".modal-backdrop");
 
     if (cancelBtn) {
       addTrackedListener(cancelBtn, "click", hideCreateStrategyModal);
     }
 
-    if (backdrop) {
-      addTrackedListener(backdrop, "click", hideCreateStrategyModal);
+    if (closeBtn) {
+      addTrackedListener(closeBtn, "click", hideCreateStrategyModal);
+    }
+
+    if (modal) {
+      addTrackedListener(modal, "click", (event) => {
+        if (event.target === modal) hideCreateStrategyModal();
+      });
     }
 
     typeCards.forEach((card) => {
@@ -345,9 +351,9 @@ export function createLifecycle() {
       });
     }
     if (closeCatalog && catalog) {
-      addTrackedListener(closeCatalog, "click", () => catalog.classList.remove("active"));
+      addTrackedListener(closeCatalog, "click", () => (catalog.hidden = true));
       addTrackedListener(catalog, "click", (e) => {
-        if (e.target === catalog) catalog.classList.remove("active");
+        if (e.target === catalog) catalog.hidden = true;
       });
     }
 
@@ -789,7 +795,7 @@ export function createLifecycle() {
 
   function openConditionCatalog() {
     const modal = $("#condition-catalog-modal");
-    if (modal) modal.classList.add("active");
+    if (modal) modal.hidden = false;
   }
 
   function renderPropertiesPanel(node) {
@@ -995,7 +1001,7 @@ export function createLifecycle() {
     modal.dataset.editingNodeId = node.id;
 
     // Show modal
-    modal.classList.add("active");
+    modal.hidden = false;
 
     // Setup event listeners
     setupParameterEditorListeners(node, schema);
@@ -1011,7 +1017,7 @@ export function createLifecycle() {
 
     // Close handlers
     const closeModal = () => {
-      modal.classList.remove("active");
+      modal.hidden = true;
       clearScope(CleanupScope.MODAL);
     };
 

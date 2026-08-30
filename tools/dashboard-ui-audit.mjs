@@ -112,6 +112,9 @@ function rulesIn(css) {
 const controlPlacementDeclaration =
   /^\s*(margin(?:-top|-block-start|-block)?|vertical-align|align-self)\s*:\s*(?!var\(--control-line-offset\))/m;
 
+const modalSkinDeclaration =
+  /^\s*(position|display|z-index|background(?:-color)?|border(?!-radius)(?:-[a-z-]+)?|border-radius|box-shadow|backdrop-filter|animation)\s*:/m;
+
 const controlSkinDeclaration =
   /^\s*(width|height|min-width|max-width|min-height|max-height|padding(?:-[a-z-]+)?|background(?:-color)?|border(?:-[a-z-]+)?|border-radius|box-shadow|outline|appearance|accent-color)\s*:/m;
 
@@ -223,6 +226,22 @@ for (const file of cssFiles) {
       errors.push(
         `${path}: ${selector} sets ${boxed[1]} on every label; exclude control rows with :not(.checkbox-label, :has(> input[type="checkbox"]), :has(> input[type="radio"]))`
       );
+    }
+  }
+
+  /* A dialog is .modal-overlay + .modal-dialog. A page sizes its own modal and
+     nothing else: four parallel modal implementations (security, create-strategy
+     and the two assistant ones) each re-drew the same box, with a different
+     background, radius, shadow and open animation. */
+  if (path !== "components.css") {
+    for (const [selector, body] of rulesIn(css)) {
+      if (!/\.[\w-]*-modal(?![\w-])[^\s>+~]*$/.test(selector.trim())) continue;
+      const skin = body.match(modalSkinDeclaration);
+      if (skin) {
+        errors.push(
+          `${path}: ${selector} sets ${skin[1]}; the dialog box is .modal-dialog in components.css - a page sizes its modal, it does not re-draw it`
+        );
+      }
     }
   }
 

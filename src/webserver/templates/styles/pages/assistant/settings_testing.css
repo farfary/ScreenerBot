@@ -331,7 +331,7 @@
     padding: 0.5rem;
   }
 
-  .instruction-modal {
+  .modal-dialog.instruction-modal {
     width: 95vw;
     max-width: 100%;
     height: auto;

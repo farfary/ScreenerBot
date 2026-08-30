@@ -466,7 +466,6 @@
   display: none;
 }
 
-.modal-content,
 .modal-dialog {
   width: 100%;
   max-width: 900px;
@@ -478,6 +477,27 @@
   border-radius: var(--radius-xl);
   overflow: hidden;
   box-shadow: 0 20px 60px rgb(0, 0, 0, 0.3);
+  animation: modal-dialog-in 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* One open motion for every dialog: the assistant modals each carried their own
+   copy of these exact keyframes under a different name. */
+@keyframes modal-dialog-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal-dialog {
+    animation: none;
+  }
 }
 
 .modal-dialog.modal-sm {
@@ -550,9 +570,14 @@
   line-height: 1;
 }
 
+/* The body takes whatever the header and footer leave: the dialog is already a
+   flex column with its own max-height, so a `calc(90vh - 140px)` guess at the
+   chrome's height (it was wrong the moment the header changed) has nothing to
+   do here. min-height: 0 is what lets it actually shrink and scroll. */
 .modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
   padding: var(--spacing-lg);
-  max-height: calc(90vh - 140px);
   overflow-y: auto;
 }
 
@@ -561,7 +586,6 @@
     padding: 0;
   }
 
-  .modal-content,
   .modal-dialog {
     max-height: 100vh;
     border-radius: 0;

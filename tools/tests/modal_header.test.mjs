@@ -69,6 +69,21 @@ test("no other stylesheet re-styles a modal title", async () => {
   assert.deepEqual(offenders, []);
 });
 
+test("no page re-draws the dialog box", async () => {
+  const skin =
+    /^\s*(position|display|z-index|background(?:-color)?|border(?!-radius)(?:-[a-z-]+)?|border-radius|box-shadow|backdrop-filter|animation)\s*:/m;
+  const offenders = [];
+  for (const file of await walk(stylesRoot)) {
+    if (!file.endsWith(".css") || file === OWNER) continue;
+    const css = await readFile(file, "utf8");
+    for (const [, selector, body] of css.matchAll(/(?:^|[};])\s*([^{}@;]+)\{([^{}]*)\}/g)) {
+      if (!/\.[\w-]*-modal(?![\w-])[^\s>+~]*$/.test(selector.trim())) continue;
+      if (skin.test(body)) offenders.push(`${relative(stylesRoot, file)}: ${selector.trim()}`);
+    }
+  }
+  assert.deepEqual(offenders, []);
+});
+
 test("every modal close button carries the icon, never a literal glyph", async () => {
   const offenders = [];
   for (const directory of [scriptsRoot, pagesRoot]) {

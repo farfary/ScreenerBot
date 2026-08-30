@@ -2,12 +2,6 @@
    Condition Cards - See strategies/condition_cards.css
    ========================================================================== */
 
-/* Modals (Keep existing styles but ensure z-index) */
-.condition-catalog-modal,
-.parameter-editor-modal {
-  z-index: var(--z-header);
-}
-
 /* Tab System */
 .tab-container {
   display: flex;
