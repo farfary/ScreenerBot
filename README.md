@@ -168,7 +168,7 @@ priority-based startup, readiness gates, health monitoring, and reverse-order sh
 │   Connectivity   │ │  Events System   │ │   Swap Router    │ │ Wallet Services  │
 ├──────────────────┤ ├──────────────────┤ ├──────────────────┤ ├──────────────────┤
 │ • Endpoint health│ │ • Non-blocking   │ │ • Jupiter V6     │ │ • Balances       │
-│ • Fallback logic │ │ • Categorized    │ │ • GMGN           │ │ • Multi-wallet   │
+│ • Fallback logic │ │ • Categorized    │ │ • Direct pools   │ │ • Multi-wallet   │
 │ • Critical check │ │ • SQLite storage │ │ • Concurrent     │ │ • Shared watcher │
 └──────────────────┘ └──────────────────┘ └──────────────────┘ └──────────────────┘
         │                    │                    │                    │
@@ -332,11 +332,12 @@ Native decoders for direct pool state interpretation:
 ### Swap Routers
 
 - **Jupiter V6**: Aggregation with route optimization
-- **GMGN**: Alternative router for quote comparison
-- **Raydium Direct**: Pool-specific execution components for supported Raydium pools
+- **Direct pool swaps**: The bot builds the DEX instruction itself and swaps straight against the
+  pool, across every venue the direct engine supports (Raydium CPMM/AMM v4/CLMM, Orca Whirlpool,
+  Meteora DAMM v2/DLMM/DBC, Pump.fun AMM and legacy curves, FluxBeam, Moonit)
 
 Enabled quote routers are queried concurrently with automatic best-output selection and retryable
-fallback. Direct pool execution is separate from the quote-router registry.
+fallback. Direct pool execution is enabled per `[swaps.direct]` and can pre-simulate every swap.
 
 ---
 
@@ -413,7 +414,7 @@ and Mistral.
 - **Interactive Chat**: Tool-calling chat interface with portfolio, trading, and system tools
 - **Custom Instructions**: User-defined prompts injected into all AI evaluations
 - **Automation**: Scheduled AI tasks with interval/daily/weekly schedules, headless tool execution, Telegram notifications, and run history tracking
-- **Agent Connections**: Pair an external MCP client (an AI coding agent) with the running app through the native `screenerbot mcp serve` bridge — set up in **Settings → Agent Connections**. Full guide: [AGENT_CONNECTIONS.md](AGENT_CONNECTIONS.md)
+- **Agent Connections**: Pair an external MCP client (an AI coding agent) with the running app through the native `screenerbot mcp serve` bridge — full access by default, limitable per connection, in **Settings → Agent Connections**. Full guide: [AGENT_CONNECTIONS.md](AGENT_CONNECTIONS.md)
 
 ### Automation
 
@@ -431,12 +432,18 @@ Create scheduled tasks that run AI instructions automatically:
 An external MCP client — an AI coding agent — can drive ScreenerBot's own tool registry
 over stdio. `screenerbot mcp serve` is a thin bridge built into the binary: it holds no
 trading logic, discovers the running app from `agent-runtime.json`, and calls an internal
-loopback bridge that resolves the pairing's scope, applies the permission policy, and runs
-each tool in the live process. No separate package, extension, sidecar, or hosted
-endpoint.
+loopback bridge that resolves that connection's own permission policy and runs each tool
+in the live process. No separate package, extension, sidecar, or hosted endpoint.
 
-- **Pair a client** in **Settings → Agent Connections**: choose a least-privilege scope
-  (`read`, `operate`, `trade`) and the client kind, then create the connection. The panel
+A new connection starts at **full access**: it can analyze tokens, read the portfolio,
+trade, change any setting the app has, and stop or resume the engine — everything the owner
+can do from the dashboard, with one permanent exception. **Wallet private-key material is
+never readable or writable by any agent at any permission level**: `wallet_encrypted` and
+`wallet_nonce` are redacted on read and refused on write before any lock is taken. The app
+signs locally; an agent is never asked to.
+
+- **Pair a client** in **Settings → Agent Connections**: name it, pick the client kind, set
+  its permissions (the form opens at full access), then create the connection. The panel
   shows the one-time secret and the setup for that client:
   - **Claude Code** — a copyable `claude mcp add --scope user screenerbot -e … -- <binary> mcp serve` command.
   - **Claude Desktop** — a `claude_desktop_config.json` (`mcpServers.screenerbot`) block.
@@ -445,6 +452,17 @@ endpoint.
   - **OpenClaw** — its native `openclaw mcp add` command.
   - **Generic stdio** — a plain stdio JSON object to add by hand.
   There is no universal MCP-client config format and no repo-wide installer script.
+- **Limit a connection at any time** with **Settings → Agent Connections → Permissions**.
+  Five capability categories — analysis, portfolio, trading, config, system — each set to
+  **Allow** (runs immediately), **Ask** (parks for an in-app decision) or **Off** (refused
+  and not even listed). Presets cover full access, ask-first and read-only; any per-category
+  mix is valid. The policy is resolved from the pairing store on every call, so an edit or a
+  revocation takes effect on that client's next request, with no restart on either side.
+- **Configuration is schema-driven, not an allowlist.** `update_config` addresses any
+  setting by dotted path (`rpc.urls`, `trader.max_open_positions`, `filtering.…`), type-
+  checked and validated exactly like a dashboard edit, applied atomically inside the config
+  write lock. `describe_config` returns the schema so an agent can discover what it may set.
+  RPC endpoint changes persist immediately and bind on the next app launch.
 - **`screenerbot mcp serve`** checks `agent-runtime.json` when no live origin is known and
   after transport failure, so a long-lived client recovers when ScreenerBot starts later or
   restarts on a different port. It only talks to a loopback origin and never starts the app.
@@ -458,16 +476,15 @@ is read only from `SCREENERBOT_CLIENT_ID` / `SCREENERBOT_PAIRING_SECRET` in the 
 never a CLI flag. Once you configure a client it keeps the plaintext under its own config
 (`claude mcp get` prints it back; Codex masks it). ScreenerBot must be running — the
 dashboard window can be closed while the process stays up, but a person needs it open to
-approve anything that moves money or changes configuration; approved requests run at most
-once.
+decide anything a connection has set to **Ask**; approved requests run at most once.
 
 Remove a connection with **Settings → Agent Connections → Revoke** (effective on the
 client's next request), then drop it from the client: `claude mcp remove --scope user
 screenerbot` or `codex mcp remove screenerbot`.
 
 **Full guide: [AGENT_CONNECTIONS.md](AGENT_CONNECTIONS.md)** — prerequisites,
-pairing flow, per-client setup, approval behavior, troubleshooting, revocation, and the
-security model.
+pairing flow, the permission model, per-client setup, approval behavior, troubleshooting,
+revocation, and the security model.
 
 ---
 
@@ -510,7 +527,7 @@ Core configuration sections:
 | `[copy_trading]` | Global copy-task enablement, limits, slippage, filter policy   |
 | `[positions]`    | Position tracking, partial exits, cooldowns                    |
 | `[filtering]`    | Token filtering with nested DexScreener/GeckoTerminal/Rugcheck |
-| `[swaps]`        | Router configuration (Jupiter, GMGN, Raydium)                  |
+| `[swaps]`        | Router configuration (Jupiter, direct pool swaps, slippage)    |
 | `[tokens]`       | Token database, update intervals                               |
 | `[pools]`        | Pool discovery, caching                                        |
 | `[rpc]`          | RPC endpoints and rate limiting                                |
@@ -528,7 +545,7 @@ Core configuration sections:
 | `[llm]`          | LLM provider credentials, models, rate limits, master switch   |
 | `[llm_analysis]` | Model-scored filtering and trading analysis                    |
 | `[assistant]`    | Dashboard chat and scheduled automation                        |
-| `[agent_control]` | Shared agent/MCP tool availability and permission policy      |
+| `[agent_control]` | Agent/MCP master switch, and the policy for the in-app assistant and scheduled tasks (paired connections carry their own) |
 | `[telegram]`     | Telegram bot, notifications, commands                          |
 | `[performance]`  | Cache and memory tuning                                        |
 | `[maintenance]`  | Retention, vacuum, and checkpoint schedules                    |

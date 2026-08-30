@@ -2,13 +2,18 @@
 
 Agent Connections let an external [Model Context Protocol](https://modelcontextprotocol.io)
 client — typically an AI coding agent — drive ScreenerBot's own tools: portfolio and
-analysis reads, configuration, and (with approval) trades.
+analysis reads, every configuration setting the app has, and trade execution.
+
+A new connection starts at **full access**: it can do anything you can do from the
+dashboard, with one permanent exception — **wallet private-key material is never readable
+or writable by any agent, at any permission level**. You can then limit each connection
+per capability category, at any time, without recreating it.
 
 The connection is **native**. `screenerbot mcp serve` is a thin stdio bridge built into
 the ScreenerBot binary; it holds no trading logic. It discovers the running app from
-`agent-runtime.json`, then calls an internal loopback bridge that
-resolves the pairing's scope, applies the permission policy, and runs each tool inside the
-live process. There is no separate package, extension, sidecar, hosted endpoint, or
+`agent-runtime.json`, then calls an internal loopback bridge that resolves **that
+connection's own stored permission policy**, applies the single decision gate, and runs
+each tool inside the live process. There is no separate package, extension, sidecar, hosted endpoint, or
 installer script, and no second implementation of any tool.
 
 ## Prerequisites
@@ -23,7 +28,7 @@ installer script, and no second implementation of any tool.
 
 1. Open **Settings → Agent Connections**.
 2. Enter a **name** (how the connection shows up in the list), pick the **client**, and
-   choose the least-privilege **scope** you need (see below).
+   choose its **permissions** — the form opens at full access; adjust it now or later.
 3. Click **Create connection**. ScreenerBot shows a **client id** and a **one-time
    secret**, plus setup text tailored to the client you picked.
 4. Copy the secret now. It is shown **once** and cannot be retrieved again — ScreenerBot
@@ -31,15 +36,50 @@ installer script, and no second implementation of any tool.
    one.
 5. Apply the generated setup for your client (below), then restart the client.
 
-### Scopes
+### Permissions
 
-| Scope | Grants | Notes |
-|-------|--------|-------|
-| `read` | Analysis and portfolio reads | No config changes, no trades. Start here. |
-| `operate` | Adds configuration and system actions | Each still needs in-app approval. |
-| `trade` | Adds trade execution | Every trade always needs in-app approval. |
+Each connection carries its own policy, stored with the pairing. Five capability
+categories, three levels each:
 
-A stronger scope only widens what a person can approve. Nothing runs unattended.
+| Category | Tools |
+|----------|-------|
+| Analysis | `analyze_token`, `get_market_data`, `check_security` |
+| Portfolio | `get_positions`, `get_position`, `get_balance`, `get_pnl` |
+| Trading | `buy_token`, `sell_token`, `close_position` |
+| Config | `get_config`, `describe_config`, `update_config` |
+| System | `get_status`, `get_events`, `force_stop`, `clear_force_stop` |
+
+| Level | Behavior |
+|-------|----------|
+| **Allow** | The tool runs immediately in the live app. This is the default for every category. |
+| **Ask** | The call parks on the approval queue until a person approves or denies it in ScreenerBot. |
+| **Off** | The category is refused, and its tools are not even listed to the client. |
+
+Three presets are offered — **Full access** (everything Allow), **Ask first** (everything
+Ask) and **Read only** (Analysis and Portfolio allowed, the rest Off) — and any
+per-category combination is valid, for example: allow analysis, portfolio and config, but
+ask before trading and turn system actions off.
+
+Change a connection's permissions any time with **Settings → Agent Connections →
+Permissions**. The policy is read from the pairing store on **every** call, so an edit (or
+a revocation) takes effect on that client's next request, with no restart on either side.
+
+### What an agent can configure
+
+`update_config` reaches **every** setting the app has, addressed by dotted path over the
+live configuration — `rpc.urls`, `trader.max_positions`, `filtering.min_liquidity_usd`,
+`swaps.jupiter.enabled`, and so on. There is no allowlist to keep in sync: a setting is
+agent-settable as soon as it exists in the schema. `describe_config` returns that schema
+(labels, types, ranges) so the agent can discover what it may set, and `get_config` reads
+the current values.
+
+Every write goes through the same type check and validation as the dashboard, inside the
+configuration write lock; a batch is applied atomically, so one rejected value changes
+nothing. `wallet_encrypted` and `wallet_nonce` are redacted on read and refused on write —
+including through a parent path — with a `WALLET_KEY_MATERIAL` error.
+
+RPC endpoint changes are persisted immediately but are picked up by the RPC manager on the
+next app launch; the tool result says so.
 
 ## Configure a client
 
@@ -157,10 +197,12 @@ Use the JSON/TOML/YAML shapes above with the full path to `screenerbot.exe`:
 
 ## Approval behavior
 
-- Read-only tools within scope run immediately.
-- Any trade, and anything the permission policy marks *ask*, is **never** run by the agent
-  directly. It creates a request that a person approves or denies in ScreenerBot; the
-  global approval prompt is visible from every dashboard page.
+- A category set to **Allow** runs immediately — including trades and configuration
+  writes, which is what full access means. Limit the connection if you do not want that.
+- A category set to **Ask** is **never** run by the agent directly. It creates a request
+  that a person approves or denies in ScreenerBot; the global approval prompt is visible
+  from every dashboard page.
+- A category set to **Off** is refused outright and its tools are hidden from the client.
 - An approved request runs **at most once**. A denied or expired request does not run.
 - The client call waits up to five minutes for a decision, then returns a "still pending"
   message; approving later and retrying the same call does not double-execute it.
@@ -199,7 +241,9 @@ Its **exit code** is the machine-readable contract:
 | `doctor` exits `3` | The app is not running, or its `agent-runtime.json` url is not an accepted loopback origin. |
 | `doctor` exits `6` | The pairing was revoked or is invalid, or **Settings → agent control** is disabled. Recreate the pairing / re-enable control. |
 | Every trade call "requires approval" | Expected. Approve it in ScreenerBot, then retry the same call. |
-| Config value rejected as out of scope | The pairing's scope is too low. Revoke and recreate with the scope you need. |
+| Client lists fewer tools than expected | The connection's policy has that category **Off**. Set it to Allow or Ask in **Settings → Agent Connections → Permissions**. |
+| Config write refused with `WALLET_KEY_MATERIAL` | The path resolves to wallet key material. No permission level grants it; nothing else is affected. |
+| RPC endpoint change had no effect | The value is saved; the RPC manager binds its endpoints at launch. Restart the app. |
 | Secret lost | It cannot be recovered. Revoke the connection and create a new one. |
 
 ## Revocation
@@ -229,7 +273,11 @@ For other clients, delete the `screenerbot` entry from their MCP configuration.
   in its own local configuration under its own security model (`claude mcp get` will
   display it; Codex masks it) — that copy is what launches the bridge. ScreenerBot never
   writes the secret to logs, URLs, DOM attributes, or browser storage.
-- **Scope is resolved live** from the pairing store on every call, so revocation is
-  effective immediately. To change scope, revoke the pairing and create another.
-- **Money and config moves are approval-gated**, verified against on-chain reality by the
-  trading engine, and never trusted from the client.
+- **Wallet key material is out of reach at every level.** Full access does not include it:
+  it is redacted on read and refused on write before any lock is taken, for every agent
+  surface. ScreenerBot never asks an agent to sign; the app signs locally with the key that
+  never leaves the machine.
+- **Permissions are resolved live** from the pairing store on every call, so limiting or
+  revoking a connection is effective on its next request — no restart, no re-pairing.
+- **Every trade is executed by the trading engine**, verified against on-chain reality, and
+  never trusted from the client. An approved request runs at most once.
