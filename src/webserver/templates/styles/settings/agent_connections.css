@@ -1,6 +1,7 @@
 /* Agent Connections settings tab.
    Scoped beneath .agent-connections; reuses the .settings-* row primitives and
-   adds only the scope picker, the one-time-secret panel and the pairing list. */
+   adds only the permission grid, the one-time-secret panel and the pairing
+   list. */
 
 .agent-connections .agent-pair-create {
   margin-bottom: 16px;
@@ -19,28 +20,189 @@
   display: none;
 }
 
-/* Scope picker — native radios, one row per option, description under the label. */
-.agent-connections .agent-scope-field .settings-field-control.agent-scope-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  align-items: stretch;
-}
-
-.agent-connections .agent-scope-option {
-  gap: 10px;
-}
-
-.agent-connections .agent-scope-option > span {
+/* Permission grid — one preset track plus one segmented control per category.
+   Three fixed choices per row read as a single track, never three loose
+   buttons; the radios themselves are visually replaced by their labels. */
+.agent-connections .agent-perm-grid {
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
-.agent-connections .agent-scope-desc {
+.agent-connections .agent-perm-presets {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.agent-connections .agent-perm-preset {
+  padding: 4px 10px;
   color: var(--text-secondary);
-  font-size: 0.78rem;
+  font-size: 0.76rem;
+  font-weight: 600;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition:
+    color var(--transition-fast),
+    background var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.agent-connections .agent-perm-preset:hover {
+  color: var(--text-primary);
+  background: var(--bg-card-hover);
+}
+
+.agent-connections .agent-perm-preset.active {
+  color: var(--primary-color);
+  border-color: var(--primary-alpha-30);
+  background: var(--primary-alpha-10);
+}
+
+.agent-connections .agent-perm-custom-note {
+  color: var(--text-tertiary);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.agent-connections .agent-perm-custom-note[hidden] {
+  display: none;
+}
+
+.agent-connections .agent-perm-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.agent-connections .agent-perm-row:last-child {
+  border-bottom: 0;
+}
+
+.agent-connections .agent-perm-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.agent-connections .agent-perm-label {
+  color: var(--text-primary);
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.agent-connections .agent-perm-desc {
+  color: var(--text-secondary);
+  font-size: 0.74rem;
   line-height: 1.35;
+}
+
+.agent-connections .agent-perm-choices {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+  padding: 2px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+}
+
+.agent-connections .agent-perm-choice {
+  position: relative;
+  display: inline-flex;
+  cursor: pointer;
+}
+
+/* The radio stays focusable for keyboard and assistive tech, but the label
+   paints the segment: the control is stretched invisibly over its own segment
+   so the whole segment is the hit target. */
+.agent-connections .agent-perm-choice input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.agent-connections .agent-perm-choice span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 52px;
+  padding: 4px 10px;
+  color: var(--text-secondary);
+  font-size: 0.74rem;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  transition:
+    color var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.agent-connections .agent-perm-choice:hover span {
+  color: var(--text-primary);
+  background: var(--bg-card-hover);
+}
+
+.agent-connections .agent-perm-choice input:focus-visible + span {
+  outline: 2px solid var(--primary-color);
+  outline-offset: -2px;
+}
+
+.agent-connections .agent-perm-choice input:checked + span {
+  color: var(--primary-color);
+  background: var(--primary-alpha-10);
+}
+
+/* An enabled money-moving or refused category must not read as neutral. */
+.agent-connections
+  .agent-perm-row:has(input[data-perm-key="trading"]:checked[value="allow"])
+  .agent-perm-choice
+  input[value="allow"]:checked
+  + span {
+  color: var(--semantic-warning-text);
+  background: var(--warning-alpha-10);
+}
+
+.agent-connections .agent-perm-choice input[value="deny"]:checked + span {
+  color: var(--semantic-error-text);
+  background: var(--danger-alpha-10);
+}
+
+/* Per-connection editor, revealed under its row. */
+.agent-connections .agent-perm-editor {
+  grid-column: 1 / -1;
+  margin-top: 8px;
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-card-hover);
+}
+
+.agent-connections .agent-perm-editor[hidden] {
+  display: none;
+}
+
+.agent-connections .agent-perm-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.agent-connections .agent-pair-action {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 /* One-time credential panel. */
@@ -260,23 +422,28 @@
   text-align: right;
 }
 
-.agent-connections .agent-scope-badge {
+.agent-connections .agent-perm-badge {
   padding: 1px 7px;
   border-radius: var(--radius-full);
   border: 1px solid var(--border-color);
   font-size: 0.7rem;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.02em;
 }
 
-.agent-connections .agent-scope-badge--trade {
-  color: var(--semantic-error-text);
-  border-color: var(--danger-alpha-30);
-}
-
-.agent-connections .agent-scope-badge--operate {
+/* Full access is the default and is stated plainly, not alarmingly; a limited
+   connection is the one worth marking. */
+.agent-connections .agent-perm-badge--full {
   color: var(--semantic-warning-text);
   border-color: var(--warning-alpha-30);
+}
+
+.agent-connections .agent-perm-badge--custom,
+.agent-connections .agent-perm-badge--ask {
+  color: var(--text-secondary);
+}
+
+.agent-connections .agent-perm-badge--read {
+  color: var(--semantic-success-text);
 }
 
 .agent-connections .agent-pair-revoked-group {
@@ -324,6 +491,24 @@
 }
 
 @media (width <= 640px) {
+  .agent-connections .agent-perm-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .agent-connections .agent-perm-choices {
+    justify-content: space-between;
+  }
+
+  .agent-connections .agent-perm-choice {
+    flex: 1 1 0;
+  }
+
+  .agent-connections .agent-perm-choice span {
+    width: 100%;
+  }
+
   .agent-connections .agent-pair-actions {
     grid-template-columns: 1fr;
   }

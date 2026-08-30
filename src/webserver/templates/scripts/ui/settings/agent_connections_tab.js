@@ -2,10 +2,15 @@
  * Agent Connections Tab — pair external MCP clients with the running app.
  *
  * The app itself is the authority and the executable: `screenerbot mcp serve` is
- * a thin stdio bridge into this process, gated by the pairing's scope and by the
- * global in-app approval prompt. This tab creates, lists and revokes those
+ * a thin stdio bridge into this process, gated by that connection's OWN
+ * per-category permissions. This tab creates, lists, limits and revokes those
  * pairings and hands the operator client-specific setup built from the new
  * pairing.
+ *
+ * A new connection starts at full access — it can do anything the owner can,
+ * except read or write wallet private-key material, which no agent surface can
+ * reach at any level. Each category can then be set to Ask (the call parks until
+ * a person decides in the app) or Off (refused), per connection, at any time.
  *
  * There is no universal MCP-client configuration format, so each client gets its
  * own native artifact: a copyable `claude mcp add` / `codex mcp add` command,
@@ -14,9 +19,10 @@
  * installs, downloads, or launches anything.
  *
  * Uses the existing dashboard-authenticated API only:
- *   GET    /api/agent-control/pairings          — list (never the secret)
- *   POST   /api/agent-control/pairings          — create, returns the secret ONCE
- *   DELETE /api/agent-control/pairings/:client   — revoke (effective next call)
+ *   GET    /api/agent-control/pairings                      — list (never the secret)
+ *   POST   /api/agent-control/pairings                      — create, returns the secret ONCE
+ *   PATCH  /api/agent-control/pairings/:client/permissions  — limit or widen one connection
+ *   DELETE /api/agent-control/pairings/:client              — revoke (effective next call)
  *
  * The one-time secret lives only in a closure variable for the lifetime of the
  * open panel. It is rendered once into the visible setup text (that is the whole
@@ -53,28 +59,119 @@ export const EXE_PLACEHOLDER = "/absolute/path/to/screenerbot";
 /** Label constraints mirror `agent_control::pairing` (1..=64, no control chars). */
 export const MAX_LABEL = 64;
 
-/**
- * Least-privilege first: `read` is preselected and every stronger scope only
- * widens what a person can later approve — nothing here runs unattended.
- */
-export const SCOPE_OPTIONS = [
+/** Tool categories, in the order the permission grid renders them. */
+export const CATEGORIES = [
   {
-    value: "read",
-    label: "Read only",
-    description: "Analysis and portfolio reads. No configuration changes and no trades.",
+    key: "analysis",
+    label: "Analysis",
+    description: "Token analysis, market data and security checks.",
   },
   {
-    value: "operate",
-    label: "Operate",
-    description: "Adds configuration and system actions. Each one still needs in-app approval.",
+    key: "portfolio",
+    label: "Portfolio",
+    description: "Open positions, balances and P&L.",
   },
   {
-    value: "trade",
-    label: "Trade",
-    description: "Adds trade execution. Every trade always needs in-app approval.",
+    key: "trading",
+    label: "Trading",
+    description: "Buying, selling and closing positions with real funds.",
+  },
+  {
+    key: "config",
+    label: "Configuration",
+    description: "Every bot setting, including RPC endpoints. Never wallet keys.",
+  },
+  {
+    key: "system",
+    label: "System",
+    description: "Status, events, and the emergency stop.",
   },
 ];
-export const DEFAULT_SCOPE = "read";
+
+/** The three levels a category can be set to, weakest last. */
+export const LEVELS = [
+  { value: "allow", label: "Allow", hint: "Runs immediately." },
+  { value: "ask_user", label: "Ask", hint: "Waits for your approval in the app." },
+  { value: "deny", label: "Off", hint: "Refused, and hidden from the agent." },
+];
+
+/** Every category at one level. */
+export function uniformPermissions(level) {
+  return Object.fromEntries(CATEGORIES.map((category) => [category.key, level]));
+}
+
+/**
+ * What a new connection gets: full access. The owner limits it from this tab
+ * afterwards, per connection, without recreating it.
+ */
+export function defaultPermissions() {
+  return uniformPermissions("allow");
+}
+
+/**
+ * One-click shapes offered above the grid. `custom` is not offered as a button;
+ * it is what the grid falls into once a category is set individually.
+ */
+export const PRESETS = [
+  {
+    id: "full",
+    label: "Full access",
+    description: "Everything runs without asking. Wallet keys stay unreachable.",
+    permissions: () => defaultPermissions(),
+  },
+  {
+    id: "ask",
+    label: "Ask first",
+    description: "Every action waits for your approval in the app.",
+    permissions: () => uniformPermissions("ask_user"),
+  },
+  {
+    id: "read",
+    label: "Read only",
+    description: "Analysis and portfolio reads. Nothing can be changed.",
+    permissions: () => ({
+      ...uniformPermissions("deny"),
+      analysis: "allow",
+      portfolio: "allow",
+    }),
+  },
+];
+
+/** Normalize an arbitrary API/response value into a complete permission map. */
+export function normalizePermissions(raw) {
+  const known = new Set(LEVELS.map((level) => level.value));
+  const source = raw && typeof raw === "object" ? raw : {};
+  return Object.fromEntries(
+    CATEGORIES.map(({ key }) => [key, known.has(source[key]) ? source[key] : "deny"])
+  );
+}
+
+/** The preset id a permission map corresponds to, or "custom". */
+export function presetFor(permissions) {
+  const normalized = normalizePermissions(permissions);
+  const match = PRESETS.find((preset) =>
+    CATEGORIES.every(({ key }) => preset.permissions()[key] === normalized[key])
+  );
+  return match ? match.id : "custom";
+}
+
+/**
+ * The one-line summary shown on a connection row: the preset name when it is
+ * one, otherwise what is actually restricted — never a bare "custom".
+ */
+export function summarizePermissions(permissions) {
+  const normalized = normalizePermissions(permissions);
+  const preset = presetFor(normalized);
+  if (preset !== "custom") {
+    return { tone: preset, text: PRESETS.find((p) => p.id === preset).label };
+  }
+  const asking = CATEGORIES.filter(({ key }) => normalized[key] === "ask_user");
+  const off = CATEGORIES.filter(({ key }) => normalized[key] === "deny");
+  const parts = [];
+  if (asking.length) parts.push(`asks for ${asking.map((c) => c.label.toLowerCase()).join(", ")}`);
+  if (off.length) parts.push(`no ${off.map((c) => c.label.toLowerCase()).join(", ")}`);
+  return { tone: "custom", text: `Limited — ${parts.join("; ")}` };
+}
 
 /**
  * Client kinds offered for setup guidance. The `id` doubles as the pairing's
@@ -336,16 +433,90 @@ export function validateLabel(raw) {
 /** Set by the loader before any builder runs; keeps the pure helpers node-safe. */
 let Utils = null;
 
-function scopeRow(option) {
-  const checked = option.value === DEFAULT_SCOPE ? " checked" : "";
+/**
+ * One category's three-way choice, as a segmented track. A fixed choice set of
+ * three gets a segmented control, not three separate buttons or a dropdown.
+ * `name` scopes the radios so the create form and each row editor stay
+ * independent when several are on screen.
+ */
+function permissionRow(category, level, name) {
+  const options = LEVELS.map(
+    (option) => `
+      <label class="agent-perm-choice" title="${Utils.escapeHtml(option.hint)}">
+        <input type="radio" name="${Utils.escapeHtml(name)}-${category.key}"
+               value="${option.value}" data-perm-key="${category.key}"${
+                 option.value === level ? " checked" : ""
+               }>
+        <span>${Utils.escapeHtml(option.label)}</span>
+      </label>`
+  ).join("");
   return `
-    <label class="checkbox-label agent-scope-option">
-      <input type="radio" name="agentPairScope" value="${option.value}"${checked}>
-      <span>
-        <strong>${Utils.escapeHtml(option.label)}</strong>
-        <span class="agent-scope-desc">${Utils.escapeHtml(option.description)}</span>
-      </span>
-    </label>`;
+    <div class="agent-perm-row">
+      <div class="agent-perm-info">
+        <span class="agent-perm-label">${Utils.escapeHtml(category.label)}</span>
+        <span class="agent-perm-desc">${Utils.escapeHtml(category.description)}</span>
+      </div>
+      <div class="agent-perm-choices" role="radiogroup"
+           aria-label="${Utils.escapeHtml(category.label)} permission">${options}</div>
+    </div>`;
+}
+
+/** The preset track plus the five category rows, for one `name` namespace. */
+function permissionGrid(permissions, name) {
+  const normalized = normalizePermissions(permissions);
+  const active = presetFor(normalized);
+  const presets = PRESETS.map(
+    (preset) => `
+      <button type="button" class="agent-perm-preset${
+        preset.id === active ? " active" : ""
+      }" data-preset="${preset.id}" title="${Utils.escapeHtml(preset.description)}">${Utils.escapeHtml(
+        preset.label
+      )}</button>`
+  ).join("");
+  return `
+    <div class="agent-perm-grid" data-perm-grid="${Utils.escapeHtml(name)}">
+      <div class="agent-perm-presets" role="group" aria-label="Permission preset">
+        ${presets}
+        <span class="agent-perm-custom-note"${
+          active === "custom" ? "" : " hidden"
+        }>Custom</span>
+      </div>
+      ${CATEGORIES.map((category) => permissionRow(category, normalized[category.key], name)).join(
+        ""
+      )}
+    </div>`;
+}
+
+/** Read a grid's current selection back out of the DOM. */
+function readPermissionGrid(grid) {
+  const permissions = {};
+  for (const { key } of CATEGORIES) {
+    const checked = grid.querySelector(`input[data-perm-key="${key}"]:checked`);
+    if (checked) permissions[key] = checked.value;
+  }
+  return normalizePermissions(permissions);
+}
+
+/** Write a permission map into a grid and re-mark the matching preset. */
+function writePermissionGrid(grid, permissions) {
+  const normalized = normalizePermissions(permissions);
+  for (const { key } of CATEGORIES) {
+    const input = grid.querySelector(
+      `input[data-perm-key="${key}"][value="${normalized[key]}"]`
+    );
+    if (input) input.checked = true;
+  }
+  syncPresetState(grid);
+}
+
+/** Keep the preset track in step with whatever the category rows now say. */
+function syncPresetState(grid) {
+  const active = presetFor(readPermissionGrid(grid));
+  grid.querySelectorAll("[data-preset]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.preset === active);
+  });
+  const note = grid.querySelector(".agent-perm-custom-note");
+  if (note) note.hidden = active !== "custom";
 }
 
 function clientOptions(selected) {
@@ -369,8 +540,9 @@ function buildShell() {
         Agent Connections
       </h3>
       <p class="settings-section-description">
-        Connect Claude, Codex, Hermes, OpenClaw, or any stdio MCP client; ScreenerBot must remain
-        running, and configuration changes or trades still require approval in the dashboard.
+        Connect Claude, Codex, Hermes, OpenClaw, or any stdio MCP client. ScreenerBot must remain
+        running. Each connection carries its own permissions: full access by default, limited per
+        connection whenever you want. No connection can ever read or change your wallet key.
       </p>
 
       <div class="settings-group agent-pair-create">
@@ -397,14 +569,15 @@ function buildShell() {
           </div>
         </div>
 
-        <div class="settings-field agent-scope-field" role="radiogroup"
-             aria-labelledby="agentPairScopeLabel" aria-describedby="agentPairScopeHint">
+        <div class="settings-field agent-perm-field">
           <div class="settings-field-info">
-            <span class="settings-field-label" id="agentPairScopeLabel">Scope</span>
-            <span class="settings-field-hint" id="agentPairScopeHint">Grant the least a connection needs. Stronger scopes only widen what you can approve.</span>
+            <span class="settings-field-label">Permissions</span>
+            <span class="settings-field-hint">A new connection can do everything. Limit any
+            category now, or later from the list below — wallet keys are never reachable either
+            way.</span>
           </div>
-          <div class="settings-field-control agent-scope-list">
-            ${SCOPE_OPTIONS.map(scopeRow).join("")}
+          <div class="settings-field-control">
+            ${permissionGrid(defaultPermissions(), "create")}
           </div>
         </div>
 
@@ -465,11 +638,11 @@ function buildShell() {
   `;
 }
 
-function scopeBadge(scope) {
-  const known = SCOPE_OPTIONS.find((s) => s.value === scope);
-  return `<span class="agent-scope-badge agent-scope-badge--${Utils.escapeHtml(
-    scope
-  )}">${Utils.escapeHtml(known ? known.label : scope)}</span>`;
+function permissionBadge(permissions) {
+  const summary = summarizePermissions(permissions);
+  return `<span class="agent-perm-badge agent-perm-badge--${Utils.escapeHtml(
+    summary.tone
+  )}">${Utils.escapeHtml(summary.text)}</span>`;
 }
 
 function renderList(container, rows) {
@@ -488,7 +661,7 @@ function renderList(container, rows) {
       <div class="agent-pair-main">
         <span class="agent-pair-label">${Utils.escapeHtml(r.label)}</span>
         <span class="agent-pair-meta">
-          ${Utils.escapeHtml(clientLabel(r.agent_kind))} · ${scopeBadge(r.scope)}
+          ${Utils.escapeHtml(clientLabel(r.agent_kind))} · ${permissionBadge(r.permissions)}
         </span>
       </div>
       <div class="agent-pair-times">
@@ -502,9 +675,31 @@ function renderList(container, rows) {
       ${
         r.revoked
           ? ""
-          : `<div class="agent-pair-action"><button type="button" class="btn btn-danger btn-sm" data-revoke="${Utils.escapeHtml(
+          : `<div class="agent-pair-action">
+              <button type="button" class="btn btn-secondary btn-sm" data-edit-perms="${Utils.escapeHtml(
+                r.client_id
+              )}" aria-expanded="false">Permissions</button>
+              <button type="button" class="btn btn-danger btn-sm" data-revoke="${Utils.escapeHtml(
+                r.client_id
+              )}" data-label="${Utils.escapeHtml(r.label)}">Revoke</button>
+            </div>`
+      }
+      ${
+        r.revoked
+          ? ""
+          : `<div class="agent-perm-editor" data-perm-editor="${Utils.escapeHtml(
               r.client_id
-            )}" data-label="${Utils.escapeHtml(r.label)}">Revoke</button></div>`
+            )}" hidden>
+              ${permissionGrid(r.permissions, `row-${r.client_id}`)}
+              <div class="agent-perm-editor-actions">
+                <button type="button" class="btn btn-secondary btn-sm" data-perm-cancel="${Utils.escapeHtml(
+                  r.client_id
+                )}">Cancel</button>
+                <button type="button" class="btn btn-primary btn-sm" data-perm-save="${Utils.escapeHtml(
+                  r.client_id
+                )}">Save permissions</button>
+              </div>
+            </div>`
       }
     </div>`;
   container.innerHTML =
@@ -620,8 +815,8 @@ export async function loadAgentConnectionsTab(_dialog, content) {
       showError(label.error);
       return;
     }
-    const scopeEl = content.querySelector('input[name="agentPairScope"]:checked');
-    const scope = scopeEl ? scopeEl.value : DEFAULT_SCOPE;
+    const createGrid = content.querySelector('[data-perm-grid="create"]');
+    const permissions = createGrid ? readPermissionGrid(createGrid) : defaultPermissions();
     const agentKind = clientEl.value;
 
     createBtn.disabled = true;
@@ -629,7 +824,7 @@ export async function loadAgentConnectionsTab(_dialog, content) {
       const res = await fetch(LIST_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ label: label.value, agent_kind: agentKind, scope }),
+        body: JSON.stringify({ label: label.value, agent_kind: agentKind, permissions }),
         signal: controller.signal,
       });
       const body = await res.json().catch(() => null);
@@ -650,12 +845,56 @@ export async function loadAgentConnectionsTab(_dialog, content) {
       renderSetup();
       issuedEl.hidden = false;
       labelEl.value = "";
+      if (createGrid) writePermissionGrid(createGrid, defaultPermissions());
       await refreshList();
     } catch {
       if (controller.signal.aborted) return;
       showError("Could not reach ScreenerBot to create the connection.");
     } finally {
       createBtn.disabled = false;
+    }
+  }
+
+  /** Show or hide one connection's permission editor. */
+  function togglePermissionEditor(clientId, open) {
+    const editor = listEl.querySelector(`[data-perm-editor="${CSS.escape(clientId)}"]`);
+    const button = listEl.querySelector(`[data-edit-perms="${CSS.escape(clientId)}"]`);
+    if (!editor) return;
+    const next = open ?? editor.hidden;
+    editor.hidden = !next;
+    button?.setAttribute("aria-expanded", String(next));
+  }
+
+  async function savePermissions(clientId) {
+    const editor = listEl.querySelector(`[data-perm-editor="${CSS.escape(clientId)}"]`);
+    const grid = editor?.querySelector("[data-perm-grid]");
+    if (!grid) return;
+    const permissions = readPermissionGrid(grid);
+    const saveBtn = editor.querySelector("[data-perm-save]");
+    if (saveBtn) saveBtn.disabled = true;
+    try {
+      const res = await fetch(`${pairingUrl(clientId)}/permissions`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ permissions }),
+        signal: controller.signal,
+      });
+      if (controller.signal.aborted) return;
+      if (!res.ok) {
+        Utils.showToast({ type: "error", title: "Could not update the permissions" });
+        return;
+      }
+      Utils.showToast({
+        type: "success",
+        title: "Permissions updated",
+        message: "Applies to the connection's next request.",
+      });
+      await refreshList();
+    } catch {
+      if (controller.signal.aborted) return;
+      Utils.showToast({ type: "error", title: "Could not reach ScreenerBot to save" });
+    } finally {
+      if (saveBtn) saveBtn.disabled = false;
     }
   }
 
@@ -722,10 +961,44 @@ export async function loadAgentConnectionsTab(_dialog, content) {
         copyBlock(copyBlockBtn.dataset.copyBlock);
         return;
       }
+      const presetBtn = e.target.closest("[data-preset]");
+      if (presetBtn) {
+        const grid = presetBtn.closest("[data-perm-grid]");
+        const preset = PRESETS.find((p) => p.id === presetBtn.dataset.preset);
+        if (grid && preset) writePermissionGrid(grid, preset.permissions());
+        return;
+      }
+      const editBtn = e.target.closest("[data-edit-perms]");
+      if (editBtn) {
+        togglePermissionEditor(editBtn.dataset.editPerms);
+        return;
+      }
+      const cancelBtn = e.target.closest("[data-perm-cancel]");
+      if (cancelBtn) {
+        togglePermissionEditor(cancelBtn.dataset.permCancel, false);
+        return;
+      }
+      const saveBtn = e.target.closest("[data-perm-save]");
+      if (saveBtn) {
+        savePermissions(saveBtn.dataset.permSave);
+        return;
+      }
       const revokeBtn = e.target.closest("[data-revoke]");
       if (revokeBtn) {
         revokePairing(revokeBtn.dataset.revoke, revokeBtn.dataset.label || "this connection");
       }
+    },
+    listenerOptions
+  );
+
+  // Setting one category by hand is what moves a grid to "Custom".
+  content.addEventListener(
+    "change",
+    (e) => {
+      const input = e.target.closest("input[data-perm-key]");
+      if (!input) return;
+      const grid = input.closest("[data-perm-grid]");
+      if (grid) syncPresetState(grid);
     },
     listenerOptions
   );

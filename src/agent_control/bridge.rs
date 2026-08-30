@@ -1,9 +1,9 @@
 //! The live-app bridge: the transport-free logic that the stdio MCP adapter
 //! reaches through a narrowly-scoped internal HTTP route.
 //!
-//! Every entry point authenticates the pairing credential, resolves the stored
-//! scope *in the running process*, honours `agent_control.enabled` and the
-//! single `agent_control::decide` gate, and then either runs the canonical
+//! Every entry point authenticates the pairing credential, resolves that
+//! connection's own stored policy *in the running process*, honours
+//! `agent_control.enabled` and the single `agent_control::decide` gate, and then either runs the canonical
 //! registry tool where services and databases exist, or parks the call on the
 //! durable approval queue. There is no local execution fallback anywhere in the
 //! MCP adapter — this module is the only place an agent tool runs.
@@ -16,8 +16,7 @@ use crate::agent_control::audit::{self, AuditContext, AuditKind};
 use crate::agent_control::error::{Error, Result};
 use crate::agent_control::pairing::{self, AuthedClient};
 use crate::agent_control::{
-    create_tool_registry, decide, required_scope, Decision, InvocationSource, ToolDefinition,
-    ToolResult,
+    create_tool_registry, decide, Decision, InvocationSource, ToolDefinition, ToolResult,
 };
 
 /// The outcome of a `call_tool` bridge request, translated verbatim by the web
@@ -93,13 +92,13 @@ fn authenticate(client_id: &str, secret: &str) -> Result<AuthedClient> {
 }
 
 /// Liveness + pairing probe for `mcp doctor`. Authenticates the credential and
-/// reports the running app version and the client's scope. Never returns a
-/// secret.
+/// reports the running app version and this connection's own policy. Never
+/// returns a secret.
 #[derive(Debug, Clone, Serialize)]
 pub struct PingInfo {
     pub ok: bool,
     pub version: &'static str,
-    pub scope: &'static str,
+    pub permissions: crate::agent_control::ToolPermissions,
     pub client_label: String,
 }
 
@@ -108,24 +107,26 @@ pub fn ping(client_id: &str, secret: &str) -> Result<PingInfo> {
     Ok(PingInfo {
         ok: true,
         version: env!("CARGO_PKG_VERSION"),
-        scope: client.scope.as_str(),
+        permissions: client.permissions,
         client_label: client.label,
     })
 }
 
 /// The tools this paired client may see. Includes approval-gated tools (they
-/// are listed but cannot run without an in-app decision); excludes anything the
-/// client's scope does not cover or that policy denies outright.
+/// are listed but cannot run without an in-app decision); excludes any category
+/// this connection's policy denies outright.
 pub fn list_tools(client_id: &str, secret: &str) -> Result<Vec<ToolDefinition>> {
     let client = authenticate(client_id, secret)?;
-    let scope = client.scope;
+    let permissions = client.permissions;
 
     let mut defs: Vec<ToolDefinition> = create_tool_registry()
         .list_definitions()
         .into_iter()
         .filter(|def| {
-            required_scope(def) <= scope
-                && !matches!(decide(def, InvocationSource::Mcp { scope }), Decision::Deny)
+            !matches!(
+                decide(def, InvocationSource::Mcp { permissions }),
+                Decision::Deny
+            )
         })
         .collect();
     defs.sort_by(|a, b| a.name.cmp(&b.name));
@@ -141,7 +142,7 @@ pub async fn call_tool(
     correlation_id: &str,
 ) -> Result<CallOutcome> {
     let client = authenticate(client_id, secret)?;
-    let scope = client.scope;
+    let permissions = client.permissions;
     let ctx = authed_context(&client, Some(name), Some(correlation_id));
 
     let Some(tool) = create_tool_registry().get(name) else {
@@ -151,7 +152,7 @@ pub async fn call_tool(
     let definition = tool.definition();
     audit::record(AuditKind::ToolRequest, &ctx, "received", None);
 
-    match decide(&definition, InvocationSource::Mcp { scope }) {
+    match decide(&definition, InvocationSource::Mcp { permissions }) {
         Decision::Deny => {
             audit::record(AuditKind::AuthzDecision, &ctx, "deny", None);
             Ok(CallOutcome::Denied {
@@ -210,7 +211,7 @@ pub fn approval_status(
 /// Run a human-approved request exactly once, in the live process. Invoked only
 /// by the dashboard `decide` route — never reachable from the bridge. Claims
 /// the row (exactly-once), re-checks policy against the pairing's *current*
-/// scope, executes the stored canonical arguments, and records the sanitized
+/// permissions, executes the stored canonical arguments, and records the sanitized
 /// result for the MCP client to poll.
 pub async fn execute_approved(approval_id: &str) -> Result<()> {
     let claimed = approvals::claim(approval_id)?;
@@ -235,14 +236,14 @@ pub async fn execute_approved(approval_id: &str) -> Result<()> {
     if !enabled() {
         return fail("agent control was disabled before this request could run");
     }
-    let Some(scope) = pairing::active_scope(&claimed.client_id)? else {
+    let Some(permissions) = pairing::active_permissions(&claimed.client_id)? else {
         return fail("the paired client was revoked before this request could run");
     };
     let Some(tool) = create_tool_registry().get(&claimed.tool) else {
         return fail("the requested tool is no longer available");
     };
     if matches!(
-        decide(&tool.definition(), InvocationSource::Mcp { scope }),
+        decide(&tool.definition(), InvocationSource::Mcp { permissions }),
         Decision::Deny
     ) {
         return fail("policy denies this tool for the paired client");

@@ -27,6 +27,10 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/permissions", patch(update_permissions))
         .route("/pairings", get(pairings::list).post(pairings::create))
         .route("/pairings/:client_id", delete(pairings::revoke))
+        .route(
+            "/pairings/:client_id/permissions",
+            patch(pairings::update_permissions),
+        )
         .route("/approvals", get(approvals::list_pending))
         .route("/approvals/:id/decide", post(approvals::decide))
         .route("/audit", get(approvals::list_audit))
@@ -40,6 +44,7 @@ pub(crate) fn error_code(error: &crate::agent_control::Error) -> &'static str {
     match error {
         Error::Config(_) => "CONFIG_ERROR",
         Error::InvalidParameters { .. } => "INVALID_PARAMETERS",
+        Error::SecretPath { .. } => "WALLET_KEY_MATERIAL",
         Error::Database(_) => "STORE_ERROR",
         Error::InvalidPairingRequest { .. } => "INVALID_PAIRING_REQUEST",
         Error::PairingRejected => "PAIRING_REJECTED",

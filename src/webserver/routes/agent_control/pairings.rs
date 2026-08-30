@@ -14,7 +14,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use crate::agent_control::pairing;
+use crate::agent_control::{pairing, ToolPermissions};
 use crate::logger::{self, LogTag};
 use crate::webserver::state::AppState;
 use crate::webserver::utils::{error_response, status_for, success_response};
@@ -25,7 +25,15 @@ use super::error_code;
 pub struct CreatePairingBody {
     pub label: String,
     pub agent_kind: String,
-    pub scope: String,
+    /// The connection's own per-category policy. Omitted means the default a
+    /// new connection gets: full access, limited later from this same tab.
+    #[serde(default)]
+    pub permissions: Option<ToolPermissions>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdatePermissionsBody {
+    pub permissions: ToolPermissions,
 }
 
 /// One-time pairing material plus the exact executable this running app was
@@ -64,10 +72,11 @@ pub async fn create(
     let CreatePairingBody {
         label,
         agent_kind,
-        scope,
+        permissions,
     } = body;
     let result =
-        tokio::task::spawn_blocking(move || pairing::create(&label, &agent_kind, &scope)).await;
+        tokio::task::spawn_blocking(move || pairing::create(&label, &agent_kind, permissions))
+            .await;
 
     match result {
         Ok(Ok(new_pairing)) => {
@@ -115,6 +124,36 @@ pub async fn revoke(
                 &format!("agent-control: revoked pairing {id_for_log}"),
             );
             success_response(serde_json::json!({ "revoked": true }))
+        }
+        Ok(Ok(false)) => error_response(
+            StatusCode::NOT_FOUND,
+            "PAIRING_NOT_FOUND",
+            "No active pairing with that id",
+            None,
+        ),
+        Ok(Err(e)) => error_response(status_for(&e), error_code(&e), &e.to_string(), None),
+        Err(_) => internal(),
+    }
+}
+
+/// PATCH /api/agent-control/pairings/:client_id/permissions — limit (or widen)
+/// what one connection may do. Effective on its next request.
+pub async fn update_permissions(
+    State(_state): State<Arc<AppState>>,
+    Path(client_id): Path<String>,
+    Json(body): Json<UpdatePermissionsBody>,
+) -> Response {
+    let id_for_log = client_id.clone();
+    let permissions = body.permissions;
+    match tokio::task::spawn_blocking(move || pairing::set_permissions(&client_id, permissions))
+        .await
+    {
+        Ok(Ok(true)) => {
+            logger::info(
+                LogTag::Security,
+                &format!("agent-control: updated permissions for pairing {id_for_log}"),
+            );
+            success_response(serde_json::json!({ "permissions": permissions }))
         }
         Ok(Ok(false)) => error_response(
             StatusCode::NOT_FOUND,

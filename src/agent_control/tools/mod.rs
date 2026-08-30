@@ -12,9 +12,9 @@ mod system;
 mod trading;
 
 use analysis::{AnalyzeTokenTool, CheckSecurityTool, GetMarketDataTool};
-use config::{GetConfigTool, UpdateConfigTool};
+use config::{DescribeConfigTool, GetConfigTool, UpdateConfigTool};
 use portfolio::{GetBalanceTool, GetPnLTool, GetPositionTool, GetPositionsTool};
-use system::{ForceStopTool, GetEventsTool, GetStatusTool};
+use system::{ClearForceStopTool, ForceStopTool, GetEventsTool, GetStatusTool};
 use trading::{BuyTokenTool, ClosePositionTool, SellTokenTool};
 
 /// Category of tool for organization and UI display
@@ -41,7 +41,13 @@ pub struct ToolDefinition {
     pub category: ToolCategory,
     /// JSON Schema for parameters (OpenAI/Claude format)
     pub parameters: serde_json::Value,
-    /// Whether this tool requires user confirmation before execution
+    /// Whether this tool changes bot state (config, positions, services). Drives
+    /// the client scope a paired agent needs and the MCP read-only annotation —
+    /// it is a property of the tool, never of the current permission policy.
+    pub mutating: bool,
+    /// Whether an interactive caller (the dashboard assistant) must confirm this
+    /// tool before it runs. Distinct from `mutating`: it is a UX gate, not the
+    /// capability boundary.
     pub requires_confirmation: bool,
 }
 
@@ -182,12 +188,14 @@ pub fn create_tool_registry() -> ToolRegistry {
 
     // Config tools
     registry.register(Arc::new(GetConfigTool));
+    registry.register(Arc::new(DescribeConfigTool));
     registry.register(Arc::new(UpdateConfigTool));
 
     // System tools
     registry.register(Arc::new(GetStatusTool));
     registry.register(Arc::new(GetEventsTool));
     registry.register(Arc::new(ForceStopTool));
+    registry.register(Arc::new(ClearForceStopTool));
 
     registry
 }
@@ -202,7 +210,7 @@ mod tests {
         let definitions = registry.list_definitions();
 
         // Should have all registered tools
-        assert_eq!(definitions.len(), 15);
+        assert_eq!(definitions.len(), 17);
 
         // Check that we have tools in each category
         let by_category = registry.get_tools_by_category();
@@ -233,7 +241,7 @@ mod tests {
         // Should be an array
         assert!(schema.is_array());
         let tools = schema.as_array().unwrap();
-        assert_eq!(tools.len(), 15);
+        assert_eq!(tools.len(), 17);
 
         // Check format
         let first_tool = &tools[0];
@@ -241,6 +249,47 @@ mod tests {
         assert!(first_tool["function"]["name"].is_string());
         assert!(first_tool["function"]["description"].is_string());
         assert!(first_tool["function"]["parameters"].is_object());
+    }
+
+    /// `mutating` is the capability boundary: every tool that changes state
+    /// must declare it, or `required_scope` would hand a read-only pairing a
+    /// write. Everything else must declare the opposite, or read-only
+    /// automation would refuse plain queries.
+    #[test]
+    fn mutation_flags_match_what_each_tool_does() {
+        let registry = create_tool_registry();
+        let mutating: Vec<String> = registry
+            .list_definitions()
+            .into_iter()
+            .filter(|def| def.mutating)
+            .map(|def| def.name)
+            .collect();
+        assert_eq!(
+            mutating,
+            vec![
+                "buy_token",
+                "clear_force_stop",
+                "close_position",
+                "force_stop",
+                "sell_token",
+                "update_config",
+            ]
+        );
+    }
+
+    /// Reading configuration is a read: a paired client with `read` scope must
+    /// be able to inspect settings without being able to change them.
+    #[test]
+    fn config_reads_are_not_mutations() {
+        let registry = create_tool_registry();
+        for name in ["get_config", "describe_config"] {
+            let def = registry
+                .get(name)
+                .unwrap_or_else(|| panic!("{name} is registered"))
+                .definition();
+            assert!(!def.mutating, "{name} must not be marked mutating");
+            assert!(!def.requires_confirmation, "{name} must not need approval");
+        }
     }
 
     #[test]

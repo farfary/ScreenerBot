@@ -16,15 +16,15 @@ use rusqlite::OptionalExtension;
 
 use crate::agent_control::audit::{self, AuditContext, AuditKind};
 use crate::agent_control::error::{Error, Result};
+use crate::agent_control::permissions::{PermissionLevel, ToolPermissions};
 use crate::database;
 use crate::errors::DatabaseError;
 use crate::logger::{self, LogTag};
 
-/// The `agent_control.db` schema has never shipped, so v1 is the initial schema:
-/// there is no historical database to migrate from and none is simulated. Bump
-/// this (and add a real migration step in `init`) only when a future schema
-/// change needs one. The approval binding is UNIQUE from the first version.
-const SCHEMA_VERSION: u32 = 1;
+/// v1 was the initial schema. v2 replaces a pairing's coarse `scope` with its
+/// own per-category permission policy (`permissions`), so an owner can grant a
+/// connection everything and then limit exactly the categories they want.
+const SCHEMA_VERSION: u32 = 2;
 
 /// Audit rows older than this are pruned by the periodic sweep.
 const AUDIT_RETENTION_SECS: i64 = 30 * 24 * 60 * 60;
@@ -63,7 +63,9 @@ CREATE TABLE IF NOT EXISTS pairings (
     client_id     TEXT PRIMARY KEY,
     label         TEXT NOT NULL,
     agent_kind    TEXT NOT NULL,
-    scope         TEXT NOT NULL,
+    -- The connection's own per-category policy, as JSON
+    -- ({"analysis":"allow",…}). Unreadable content fails closed in `pairing`.
+    permissions   TEXT NOT NULL,
     verifier      BLOB NOT NULL,
     created_at    INTEGER NOT NULL,
     last_used_at  INTEGER,
@@ -137,6 +139,10 @@ pub fn init() -> Result<()> {
     // creates `schema_version` itself and the UNIQUE approval-binding index.
     connection.execute_batch(SCHEMA)?;
 
+    // v1 -> v2: give an existing pairing its own permission policy, derived
+    // from the scope it was created with, then drop the scope column.
+    migrate_scope_to_permissions(&connection)?;
+
     // With `schema_version` guaranteed to exist, read the recorded version. An
     // empty table (a fresh database) is the only "no value" case; every other
     // SQLite error propagates.
@@ -196,6 +202,74 @@ pub fn init() -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Add the `permissions` column to a v1 `pairings` table and translate each
+/// row's old scope into an equivalent policy, then drop `scope`. A database
+/// created fresh at v2 already has the column and skips this entirely.
+///
+/// The scope translation is deliberately conservative — it preserves what the
+/// pairing could already do rather than widening it to the new full-access
+/// default, which applies to connections created from now on.
+///
+/// Public so `tests/agent_control_store.rs` can run it against a hand-built v1
+/// database; the process pool only ever holds one schema version.
+pub fn migrate_scope_to_permissions(connection: &rusqlite::Connection) -> Result<()> {
+    let has_scope = connection
+        .prepare("SELECT 1 FROM pragma_table_info('pairings') WHERE name = 'scope'")?
+        .exists([])?;
+    if !has_scope {
+        return Ok(());
+    }
+
+    let has_permissions = connection
+        .prepare("SELECT 1 FROM pragma_table_info('pairings') WHERE name = 'permissions'")?
+        .exists([])?;
+    if !has_permissions {
+        connection.execute(
+            "ALTER TABLE pairings ADD COLUMN permissions TEXT NOT NULL DEFAULT ''",
+            [],
+        )?;
+    }
+
+    let rows: Vec<(String, String)> = connection
+        .prepare("SELECT client_id, scope FROM pairings WHERE permissions = ''")?
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+
+    for (client_id, scope) in rows {
+        let policy = permissions_for_legacy_scope(&scope);
+        connection.execute(
+            "UPDATE pairings SET permissions = ?1 WHERE client_id = ?2",
+            rusqlite::params![policy.to_json(), client_id],
+        )?;
+    }
+
+    // SQLite 3.35+ (bundled) supports DROP COLUMN; the column is not indexed.
+    connection.execute("ALTER TABLE pairings DROP COLUMN scope", [])?;
+    logger::info(
+        LogTag::System,
+        "agent-control store: migrated pairing scopes to per-connection permissions",
+    );
+    Ok(())
+}
+
+/// The v1 scopes, mapped onto the policy that grants the same capabilities.
+fn permissions_for_legacy_scope(scope: &str) -> ToolPermissions {
+    use PermissionLevel::{Allow, Deny};
+    let (trading, operate) = match scope {
+        "trade" => (Allow, Allow),
+        "operate" => (Deny, Allow),
+        // "read" and anything unrecognised: reads only.
+        _ => (Deny, Deny),
+    };
+    ToolPermissions {
+        analysis: Allow,
+        portfolio: Allow,
+        trading,
+        config: operate,
+        system: operate,
+    }
 }
 
 /// After a crash, a `claimed`/`executing` approval is indeterminate: we cannot

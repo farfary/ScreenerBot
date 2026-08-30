@@ -5,8 +5,8 @@
 //! ScreenerBot from the token-free `agent-runtime.json`, then calls a narrowly
 //! scoped internal HTTP bridge (`/api/agent-bridge/*`) on that live process.
 //! The live app authenticates the pairing credential, resolves the stored
-//! scope, applies `agent_control.enabled` / `required_scope` / the single
-//! `agent_control::decide` gate, and executes the canonical registry tool where
+//! per-connection permission policy, applies `agent_control.enabled` and the
+//! single `agent_control::decide` gate, and executes the canonical registry tool where
 //! services and databases exist.
 //!
 //! Security posture:
@@ -303,7 +303,9 @@ impl ServerHandler for McpServer {
             Implementation::new("screenerbot", env!("CARGO_PKG_VERSION")).with_title("ScreenerBot");
         info.instructions = Some(
             "Local ScreenerBot control surface. Capabilities come from the running ScreenerBot \
-             process and are gated by the paired client's scope and by explicit in-app approval. \
+             process and are gated by this connection's own permissions, set in ScreenerBot under \
+             Settings > Agent Connections. A category set to ask parks the call until a person \
+             approves it in the app. \
              If ScreenerBot is not running or this client is not paired, no capabilities are \
              offered."
                 .to_owned(),
@@ -706,17 +708,17 @@ async fn run_doctor(cli_client_id: Option<&str>) -> i32 {
                     .await
                 {
                     Ok(value) => {
-                        let scope = value
-                            .get("scope")
-                            .and_then(|s| s.as_str())
-                            .unwrap_or("unknown");
+                        let permissions = value
+                            .get("permissions")
+                            .map(|p| p.to_string())
+                            .unwrap_or_else(|| "unknown".to_owned());
                         let label = value
                             .get("client_label")
                             .and_then(|s| s.as_str())
                             .unwrap_or("");
                         eprintln!(
-                            "ScreenerBot MCP: bridge reachable; pairing OK (scope {scope}, label \
-                             {label:?})."
+                            "ScreenerBot MCP: bridge reachable; pairing OK (label {label:?}, \
+                             permissions {permissions})."
                         );
                         DoctorProbe::Ok
                     }

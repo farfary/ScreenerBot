@@ -62,6 +62,7 @@ impl Tool for BuyTokenTool {
                 },
                 "required": ["mint_address", "amount_sol"]
             }),
+            mutating: true,
             requires_confirmation: true,
         }
     }
@@ -186,6 +187,7 @@ impl Tool for SellTokenTool {
                 },
                 "required": ["mint_address", "percentage"]
             }),
+            mutating: true,
             requires_confirmation: true,
         }
     }
@@ -287,6 +289,7 @@ impl Tool for ClosePositionTool {
                 },
                 "required": ["position_id"]
             }),
+            mutating: true,
             requires_confirmation: true,
         }
     }

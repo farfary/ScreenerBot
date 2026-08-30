@@ -6,10 +6,22 @@
 //! automation and the MCP adapter must all pass a tool through before it can
 //! reach a domain owner. Transport adapters never decide whether money-moving
 //! work is allowed — they call `decide` and honour the result.
+//!
+//! Who is bounded by what:
+//! - A **paired agent connection** carries its own per-category policy, stored
+//!   with the pairing. A new connection starts at full access and the owner
+//!   limits it per connection in Settings → Agent Connections. Nothing else
+//!   narrows it, so what the dashboard shows for a connection is exactly what
+//!   that connection can do.
+//! - The **in-app assistant and scheduled automation** are bounded by the
+//!   `agent_control` config policy, edited on the config page.
+//! - Wallet private-key material is outside this policy entirely: no level and
+//!   no connection can read or write it (`config_access`).
 
 pub mod approvals;
 pub mod audit;
 pub mod bridge;
+pub mod config_access;
 pub mod error;
 pub mod pairing;
 pub mod permissions;
@@ -37,37 +49,10 @@ pub enum InvocationSource {
     Assistant,
     ScheduledReadOnly,
     ScheduledFull,
-    Mcp { scope: ClientScope },
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum ClientScope {
-    Read,
-    Operate,
-    Trade,
-}
-
-impl ClientScope {
-    /// Parse a stored/requested scope. Only the three exact lowercase tokens
-    /// are accepted; anything else returns `None` so scope handling fails
-    /// closed rather than defaulting to a capability.
-    pub fn parse(value: &str) -> Option<Self> {
-        match value {
-            "read" => Some(ClientScope::Read),
-            "operate" => Some(ClientScope::Operate),
-            "trade" => Some(ClientScope::Trade),
-            _ => None,
-        }
-    }
-
-    /// The canonical lowercase token for this scope.
-    pub fn as_str(self) -> &'static str {
-        match self {
-            ClientScope::Read => "read",
-            ClientScope::Operate => "operate",
-            ClientScope::Trade => "trade",
-        }
-    }
+    /// A paired external client, carrying that pairing's own policy.
+    Mcp {
+        permissions: ToolPermissions,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -77,14 +62,27 @@ pub enum Decision {
     Deny,
 }
 
+/// The policy that governs this invocation: a paired connection brings its own,
+/// everything else is the in-app `agent_control` policy.
+pub fn effective_permission(category: &ToolCategory, source: InvocationSource) -> PermissionLevel {
+    match source {
+        InvocationSource::Mcp { permissions } => permissions.get_permission(category),
+        _ => check_tool_permission(category),
+    }
+}
+
 /// The canonical authorization decision for an agent-facing tool.
+///
+/// `Allow` executes, `AskUser` parks the call for a human decision, `Deny`
+/// refuses. `requires_confirmation` is an extra gate for the interactive
+/// assistant only — applying it to the other sources would make an `Allow`
+/// category impossible to actually automate.
 pub fn decide(definition: &ToolDefinition, source: InvocationSource) -> Decision {
-    let category_permission = check_tool_permission(&definition.category);
-    if category_permission == PermissionLevel::Deny {
+    let permission = effective_permission(&definition.category, source);
+    if permission == PermissionLevel::Deny {
         return Decision::Deny;
     }
 
-    let is_trade = definition.category == ToolCategory::Trading;
     match source {
         InvocationSource::ScheduledReadOnly => {
             if is_read_only(definition) {
@@ -93,31 +91,15 @@ pub fn decide(definition: &ToolDefinition, source: InvocationSource) -> Decision
                 Decision::Deny
             }
         }
-        InvocationSource::ScheduledFull => {
-            if category_permission == PermissionLevel::AskUser && !definition.requires_confirmation
-            {
-                Decision::RequireApproval
-            } else {
+        InvocationSource::ScheduledFull | InvocationSource::Mcp { .. } => {
+            if permission == PermissionLevel::Allow {
                 Decision::Execute
-            }
-        }
-        InvocationSource::Mcp { scope } => {
-            if required_scope(definition) > scope {
-                return Decision::Deny;
-            }
-            // External trades are never auto-approved, even when a user has
-            // enabled scheduled Full automation or category Allow.
-            if is_trade
-                || definition.requires_confirmation
-                || category_permission == PermissionLevel::AskUser
-            {
-                Decision::RequireApproval
             } else {
-                Decision::Execute
+                Decision::RequireApproval
             }
         }
         InvocationSource::Assistant => {
-            if definition.requires_confirmation || category_permission == PermissionLevel::AskUser {
+            if definition.requires_confirmation || permission == PermissionLevel::AskUser {
                 Decision::RequireApproval
             } else {
                 Decision::Execute
@@ -126,54 +108,149 @@ pub fn decide(definition: &ToolDefinition, source: InvocationSource) -> Decision
     }
 }
 
-pub fn required_scope(definition: &ToolDefinition) -> ClientScope {
-    match definition.category {
-        ToolCategory::Analysis | ToolCategory::Portfolio => ClientScope::Read,
-        ToolCategory::Trading => ClientScope::Trade,
-        ToolCategory::Config | ToolCategory::System => {
-            if definition.requires_confirmation {
-                ClientScope::Operate
-            } else {
-                ClientScope::Read
-            }
-        }
-    }
-}
-
+/// True when the tool only observes state. Drives the MCP read-only annotation
+/// and what read-only scheduled automation may run. A property of the tool, not
+/// of anyone's policy.
 pub fn is_read_only(definition: &ToolDefinition) -> bool {
-    !definition.requires_confirmation
-        && matches!(
-            definition.category,
-            ToolCategory::Analysis | ToolCategory::Portfolio | ToolCategory::System
-        )
+    !definition.mutating
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    fn tool(category: ToolCategory, confirmation: bool) -> ToolDefinition {
+
+    fn tool(category: ToolCategory, mutating: bool) -> ToolDefinition {
         ToolDefinition {
             name: "test".into(),
             description: String::new(),
             category,
             parameters: serde_json::json!({}),
-            requires_confirmation: confirmation,
+            mutating,
+            requires_confirmation: mutating,
         }
     }
+
+    fn client(permissions: ToolPermissions) -> InvocationSource {
+        InvocationSource::Mcp { permissions }
+    }
+
+    fn with_trading(level: PermissionLevel) -> ToolPermissions {
+        ToolPermissions {
+            trading: level,
+            ..ToolPermissions::full_access()
+        }
+    }
+
+    /// A new connection starts at full access, so it acts without an approval
+    /// round-trip — including money-moving work. This is the owner-facing
+    /// default the settings dialog then narrows per connection.
     #[test]
-    fn mcp_trade_is_always_approval_gated() {
+    fn a_full_access_connection_executes_every_category() {
+        for category in [
+            ToolCategory::Analysis,
+            ToolCategory::Portfolio,
+            ToolCategory::Trading,
+            ToolCategory::Config,
+            ToolCategory::System,
+        ] {
+            assert_eq!(
+                decide(
+                    &tool(category.clone(), true),
+                    client(ToolPermissions::full_access())
+                ),
+                Decision::Execute,
+                "{category:?} must execute for a full-access connection"
+            );
+        }
+    }
+
+    /// Limiting one category limits only that category — the point of the
+    /// per-connection policy.
+    #[test]
+    fn limiting_one_category_leaves_the_others_alone() {
+        let source = client(with_trading(PermissionLevel::AskUser));
         assert_eq!(
-            decide(
-                &tool(ToolCategory::Trading, true),
-                InvocationSource::Mcp {
-                    scope: ClientScope::Trade
-                }
-            ),
+            decide(&tool(ToolCategory::Trading, true), source),
             Decision::RequireApproval
         );
+        assert_eq!(
+            decide(&tool(ToolCategory::Config, true), source),
+            Decision::Execute
+        );
+
+        let source = client(with_trading(PermissionLevel::Deny));
+        assert_eq!(
+            decide(&tool(ToolCategory::Trading, true), source),
+            Decision::Deny
+        );
+        assert_eq!(
+            decide(&tool(ToolCategory::Config, true), source),
+            Decision::Execute
+        );
     }
+
+    /// A connection restricted to reads cannot mutate anything, in any
+    /// category, however the in-app policy is set.
     #[test]
-    fn read_only_schedule_rejects_mutations() {
+    fn a_read_only_connection_cannot_mutate() {
+        let read_only = ToolPermissions {
+            analysis: PermissionLevel::Allow,
+            portfolio: PermissionLevel::Allow,
+            trading: PermissionLevel::Deny,
+            config: PermissionLevel::Deny,
+            system: PermissionLevel::Deny,
+        };
+        assert_eq!(
+            decide(&tool(ToolCategory::Analysis, false), client(read_only)),
+            Decision::Execute
+        );
+        for category in [
+            ToolCategory::Trading,
+            ToolCategory::Config,
+            ToolCategory::System,
+        ] {
+            assert_eq!(
+                decide(&tool(category, true), client(read_only)),
+                Decision::Deny
+            );
+        }
+    }
+
+    /// An unreadable stored policy must fail closed.
+    #[test]
+    fn an_unparseable_policy_denies_everything() {
+        assert_eq!(ToolPermissions::from_json("not json"), None);
+        assert_eq!(
+            decide(
+                &tool(ToolCategory::Analysis, false),
+                client(ToolPermissions::denied())
+            ),
+            Decision::Deny
+        );
+    }
+
+    /// The policy survives the store round-trip it is written through.
+    #[test]
+    fn policy_round_trips_through_its_stored_form() {
+        let policy = with_trading(PermissionLevel::AskUser);
+        let restored = ToolPermissions::from_json(&policy.to_json()).expect("valid stored policy");
+        assert_eq!(restored, policy);
+        assert!(policy.to_json().contains("ask_user"));
+    }
+
+    /// Read-only automation is decided by what a tool does, not by its
+    /// category: reading config is a read, force-stopping is not.
+    #[test]
+    fn read_only_automation_follows_the_mutation_flag() {
+        assert!(is_read_only(&tool(ToolCategory::Config, false)));
+        assert!(!is_read_only(&tool(ToolCategory::System, true)));
+        assert_eq!(
+            decide(
+                &tool(ToolCategory::Config, false),
+                InvocationSource::ScheduledReadOnly
+            ),
+            Decision::Execute
+        );
         assert_eq!(
             decide(
                 &tool(ToolCategory::Config, true),
@@ -181,19 +258,5 @@ mod tests {
             ),
             Decision::Deny
         );
-    }
-
-    #[test]
-    fn client_scope_parse_fails_closed() {
-        assert_eq!(ClientScope::parse("read"), Some(ClientScope::Read));
-        assert_eq!(ClientScope::parse("operate"), Some(ClientScope::Operate));
-        assert_eq!(ClientScope::parse("trade"), Some(ClientScope::Trade));
-        for bad in ["", "Read", "READ", "admin", "read ", "trade,read", "*"] {
-            assert_eq!(ClientScope::parse(bad), None, "{bad:?}");
-        }
-        // Round-trips through the canonical token.
-        for scope in [ClientScope::Read, ClientScope::Operate, ClientScope::Trade] {
-            assert_eq!(ClientScope::parse(scope.as_str()), Some(scope));
-        }
     }
 }

@@ -10,17 +10,19 @@ use uuid::Uuid;
 
 use crate::agent_control::error::Result;
 use crate::agent_control::tools::ToolCategory;
-use crate::config::{update_config_section, with_config};
+use crate::config::{update_config_section, with_config, AgentControlConfig};
 
-/// Permission level for tool execution
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+/// Permission level for tool execution. Ordered least-to-most capable, so
+/// `min` of two levels is "the more restrictive of the two".
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
 pub enum PermissionLevel {
-    /// Auto-execute without asking
-    Allow,
-    /// Show confirmation dialog before executing
-    AskUser,
-    /// Never execute, return error
+    /// Never execute, return an error
     Deny,
+    /// Park the call until a human decides
+    AskUser,
+    /// Execute without asking
+    Allow,
 }
 
 impl Default for PermissionLevel {
@@ -49,8 +51,9 @@ impl PermissionLevel {
     }
 }
 
-/// Tool permissions mapping (matches config schema)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// The per-category policy of one actor: a paired agent connection, or the
+/// in-app assistant. Serializes as `{"analysis":"allow", …}`.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ToolPermissions {
     pub analysis: PermissionLevel,
     pub portfolio: PermissionLevel,
@@ -60,14 +63,51 @@ pub struct ToolPermissions {
 }
 
 impl ToolPermissions {
-    /// Returns sensible defaults for tool permissions
-    pub fn default() -> Self {
+    /// Every category allowed — the policy a newly paired agent starts with, so
+    /// a connection can do everything the owner can until the owner limits it.
+    pub fn full_access() -> Self {
         Self {
             analysis: PermissionLevel::Allow,
             portfolio: PermissionLevel::Allow,
-            trading: PermissionLevel::AskUser,
-            config: PermissionLevel::AskUser,
+            trading: PermissionLevel::Allow,
+            config: PermissionLevel::Allow,
             system: PermissionLevel::Allow,
+        }
+    }
+
+    /// Nothing allowed. Used when a stored policy cannot be parsed: an
+    /// unreadable policy must fail closed, never open.
+    pub fn denied() -> Self {
+        Self {
+            analysis: PermissionLevel::Deny,
+            portfolio: PermissionLevel::Deny,
+            trading: PermissionLevel::Deny,
+            config: PermissionLevel::Deny,
+            system: PermissionLevel::Deny,
+        }
+    }
+
+    /// Serialize for the pairing store. Infallible: the map is five known keys.
+    pub fn to_json(&self) -> String {
+        serde_json::to_string(self).unwrap_or_else(|_| "{}".to_owned())
+    }
+
+    /// Parse a stored policy. A missing, empty or malformed value yields
+    /// `None` so the caller can fail closed rather than assume a capability.
+    pub fn from_json(raw: &str) -> Option<Self> {
+        serde_json::from_str(raw).ok()
+    }
+
+    /// Read the policy out of an `AgentControlConfig`. The config schema is the
+    /// single source of both the policy and its defaults — there is no second
+    /// hardcoded default table to drift from it.
+    pub fn from_config(config: &AgentControlConfig) -> Self {
+        Self {
+            analysis: PermissionLevel::from_str(&config.analysis),
+            portfolio: PermissionLevel::from_str(&config.portfolio),
+            trading: PermissionLevel::from_str(&config.trading),
+            config: PermissionLevel::from_str(&config.config),
+            system: PermissionLevel::from_str(&config.system),
         }
     }
 
@@ -100,7 +140,7 @@ impl ToolPermissions {
 
 impl Default for ToolPermissions {
     fn default() -> Self {
-        Self::default()
+        Self::from_config(&AgentControlConfig::default())
     }
 }
 
@@ -269,13 +309,7 @@ pub fn get_tool_permissions() -> ToolPermissions {
     if !crate::config::is_config_initialized() {
         return ToolPermissions::default();
     }
-    with_config(|cfg| ToolPermissions {
-        analysis: PermissionLevel::from_str(&cfg.agent_control.analysis),
-        portfolio: PermissionLevel::from_str(&cfg.agent_control.portfolio),
-        trading: PermissionLevel::from_str(&cfg.agent_control.trading),
-        config: PermissionLevel::from_str(&cfg.agent_control.config),
-        system: PermissionLevel::from_str(&cfg.agent_control.system),
-    })
+    with_config(|cfg| ToolPermissions::from_config(&cfg.agent_control))
 }
 
 /// Update tool permissions in config
@@ -323,37 +357,58 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_permission_level_equality() {
-        assert_eq!(PermissionLevel::Allow, PermissionLevel::Allow);
-        assert_ne!(PermissionLevel::Allow, PermissionLevel::Deny);
+    fn permission_levels_order_from_least_to_most_capable() {
+        assert!(PermissionLevel::Deny < PermissionLevel::AskUser);
+        assert!(PermissionLevel::AskUser < PermissionLevel::Allow);
+        // `min` is therefore "the more restrictive of the two".
+        assert_eq!(
+            PermissionLevel::Allow.min(PermissionLevel::AskUser),
+            PermissionLevel::AskUser
+        );
     }
 
+    /// The in-app policy defaults come from the config schema and nowhere else,
+    /// so the two can never disagree.
     #[test]
-    fn test_tool_permissions_default() {
+    fn defaults_come_from_the_config_schema() {
         let perms = ToolPermissions::default();
-        assert_eq!(perms.analysis, PermissionLevel::Allow);
-        assert_eq!(perms.portfolio, PermissionLevel::Allow);
-        assert_eq!(perms.trading, PermissionLevel::AskUser);
-        assert_eq!(perms.config, PermissionLevel::AskUser);
-        assert_eq!(perms.system, PermissionLevel::Allow);
+        assert_eq!(
+            perms,
+            ToolPermissions::from_config(&AgentControlConfig::default())
+        );
+        // Shipped default: unrestricted, and narrowed by the owner if wanted.
+        assert_eq!(perms, ToolPermissions::full_access());
+        assert!(perms.can_auto_execute(&ToolCategory::Trading));
+        assert!(!perms.requires_confirmation(&ToolCategory::Config));
     }
 
+    /// An owner who limits a category must actually limit it.
     #[test]
-    fn test_can_auto_execute() {
-        let perms = ToolPermissions::default();
-        assert!(perms.can_auto_execute(&ToolCategory::Analysis));
-        assert!(perms.can_auto_execute(&ToolCategory::Portfolio));
-        assert!(!perms.can_auto_execute(&ToolCategory::Trading));
-        assert!(!perms.can_auto_execute(&ToolCategory::Config));
-        assert!(perms.can_auto_execute(&ToolCategory::System));
-    }
-
-    #[test]
-    fn test_requires_confirmation() {
-        let perms = ToolPermissions::default();
-        assert!(!perms.requires_confirmation(&ToolCategory::Analysis));
+    fn a_limited_category_stops_auto_execution() {
+        let config = AgentControlConfig {
+            trading: "ask_user".to_owned(),
+            config: "deny".to_owned(),
+            ..AgentControlConfig::default()
+        };
+        let perms = ToolPermissions::from_config(&config);
         assert!(perms.requires_confirmation(&ToolCategory::Trading));
-        assert!(perms.requires_confirmation(&ToolCategory::Config));
+        assert!(!perms.can_auto_execute(&ToolCategory::Trading));
+        assert!(perms.is_denied(&ToolCategory::Config));
+        assert!(perms.can_auto_execute(&ToolCategory::Analysis));
+    }
+
+    /// An unreadable stored policy must never be read as a capability.
+    #[test]
+    fn stored_policy_round_trips_and_fails_closed() {
+        let policy = ToolPermissions {
+            system: PermissionLevel::Deny,
+            ..ToolPermissions::full_access()
+        };
+        assert_eq!(ToolPermissions::from_json(&policy.to_json()), Some(policy));
+        for bad in ["", "null", "{}", "{\"analysis\":\"root\"}", "not json"] {
+            assert_eq!(ToolPermissions::from_json(bad), None, "{bad:?}");
+        }
+        assert!(ToolPermissions::denied().is_denied(&ToolCategory::Analysis));
     }
 
     #[test]

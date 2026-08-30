@@ -1,12 +1,18 @@
-//! Agent-facing config tools — read and update bot configuration.
+//! Agent-facing config tools — read, describe and change any bot setting.
+//!
+//! These tools are deliberately schema-driven rather than key-by-key: they
+//! operate on dotted paths into the serialized `Config`, so every setting the
+//! app has (RPC endpoints, trading parameters, filters, providers) is reachable
+//! without a hand-maintained allowlist. Wallet private-key material is the one
+//! exception and is enforced in `agent_control::config_access`.
 
 use async_trait::async_trait;
 use serde::Deserialize;
-use serde_json::json;
+use serde_json::{json, Value};
 
 use super::{Tool, ToolCategory, ToolDefinition, ToolResult};
+use crate::agent_control::config_access;
 use crate::agent_control::error::Error;
-use crate::config::get_config_clone;
 
 // ============================================================================
 // GetConfigTool - Read configuration
@@ -17,7 +23,7 @@ pub struct GetConfigTool;
 #[derive(Deserialize)]
 struct GetConfigParams {
     #[serde(default)]
-    section: Option<String>,
+    path: Option<String>,
 }
 
 #[async_trait]
@@ -25,151 +31,39 @@ impl Tool for GetConfigTool {
     fn definition(&self) -> ToolDefinition {
         ToolDefinition {
             name: "get_config".to_owned(),
-            description: "Get current bot configuration settings including trading parameters, risk settings, and filters.".to_owned(),
+            description: format!(
+                "Read bot configuration. With no arguments returns the entire configuration; \
+                 pass a dotted path such as 'rpc', 'rpc.urls', 'rpc.urls.0' or \
+                 'trader.trade_size_sol' to read one section or value. Wallet private-key \
+                 material is always returned as '{}'.",
+                config_access::REDACTED
+            ),
             category: ToolCategory::Config,
             parameters: json!({
                 "type": "object",
                 "properties": {
-                    "section": {
+                    "path": {
                         "type": "string",
-                        "description": "Specific config section to retrieve (if not provided, returns all)",
-                        "enum": ["trader", "screener", "filters", "telegram", "llm", "services"]
+                        "description": "Dotted config path to read (omit for the whole configuration)"
                     }
                 },
                 "required": []
             }),
+            mutating: false,
             requires_confirmation: false,
         }
     }
 
-    async fn execute(&self, params: serde_json::Value) -> ToolResult {
+    async fn execute(&self, params: Value) -> ToolResult {
         let params: GetConfigParams = match serde_json::from_value(params) {
             Ok(p) => p,
             Err(e) => return ToolResult::error(format!("Invalid parameters: {e}")),
         };
 
-        let config = get_config_clone();
-
-        let result = match params.section.as_deref() {
-            Some("trader") => json!({
-                "trader": {
-                    "enabled": config.trader.enabled,
-                    "max_open_positions": config.trader.max_open_positions,
-                    "trade_size_sol": config.trader.trade_size_sol,
-                }
-            }),
-            Some("filters") => json!({
-                "filters": {
-                    "age_enabled": config.filtering.age_enabled,
-                    "cooldown_enabled": config.filtering.cooldown_enabled,
-                }
-            }),
-            Some("telegram") => json!({
-                "telegram": {
-                    "enabled": config.telegram.enabled,
-                }
-            }),
-            Some("llm") => json!({
-                "llm": {
-                    "enabled": config.llm.enabled,
-                    "default_provider": config.llm.default_provider,
-                }
-            }),
-            Some("services") => json!({
-                "services": {
-                    "note": "Services config is currently empty - use individual service enabled flags"
-                }
-            }),
-            Some(section) => {
-                return ToolResult::error(format!("Unknown section: {section}"));
-            }
-            None => {
-                // Return all important sections
-                json!({
-                    "trader": {
-                        "enabled": config.trader.enabled,
-                        "max_open_positions": config.trader.max_open_positions,
-                        "trade_size_sol": config.trader.trade_size_sol,
-                    },
-                    "telegram": {
-                        "enabled": config.telegram.enabled,
-                    },
-                    "llm": {
-                        "enabled": config.llm.enabled,
-                    }
-                })
-            }
-        };
-
-        ToolResult::success(result)
-    }
-}
-
-// ============================================================================
-// UpdateConfigTool - Update configuration
-// ============================================================================
-
-pub struct UpdateConfigTool;
-
-#[derive(Deserialize)]
-struct UpdateConfigParams {
-    section: String,
-    key: String,
-    value: serde_json::Value,
-}
-
-#[async_trait]
-impl Tool for UpdateConfigTool {
-    fn definition(&self) -> ToolDefinition {
-        ToolDefinition {
-            name: "update_config".to_owned(),
-            description: "Update bot configuration settings. REQUIRES USER CONFIRMATION."
-                .to_string(),
-            category: ToolCategory::Config,
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "section": {
-                        "type": "string",
-                        "description": "Config section to update",
-                        "enum": ["trader", "screener", "filters", "telegram", "llm"]
-                    },
-                    "key": {
-                        "type": "string",
-                        "description": "Configuration key to update (e.g., 'max_open_positions', 'auto_buy')"
-                    },
-                    "value": {
-                        "description": "New value for the configuration key"
-                    }
-                },
-                "required": ["section", "key", "value"]
-            }),
-            requires_confirmation: true,
-        }
-    }
-
-    async fn execute(&self, params: serde_json::Value) -> ToolResult {
-        let params: UpdateConfigParams = match serde_json::from_value(params) {
-            Ok(p) => p,
-            Err(e) => return ToolResult::error(format!("Invalid parameters: {e}")),
-        };
-
-        // Update config based on section and key
-        let result = match params.section.as_str() {
-            "trader" => update_trader_config(&params.key, params.value),
-            "filters" => update_filters_config(&params.key, params.value),
-            "telegram" => update_telegram_config(&params.key, params.value),
-            "llm" => update_llm_config(&params.key, params.value),
-            section => {
-                return ToolResult::error(format!("Cannot update section: {section}"));
-            }
-        };
-
-        match result {
-            Ok(msg) => ToolResult::success(json!({
-                "message": msg,
-                "section": params.section,
-                "key": params.key,
+        match config_access::read(params.path.as_deref()) {
+            Ok(value) => ToolResult::success(json!({
+                "path": params.path,
+                "value": value,
             })),
             Err(e) => ToolResult::error(e.to_string()),
         }
@@ -177,143 +71,164 @@ impl Tool for UpdateConfigTool {
 }
 
 // ============================================================================
-// Helper functions for config updates
+// DescribeConfigTool - Field metadata for discovery
 // ============================================================================
 
-fn update_trader_config(
-    key: &str,
-    value: serde_json::Value,
-) -> crate::agent_control::error::Result<String> {
-    match key {
-        "enabled" => {
-            let val = value.as_bool().ok_or_else(|| Error::InvalidParameters {
-                detail: "value must be true or false".to_owned(),
-            })?;
-            crate::config::update_config_section(
-                |cfg| {
-                    cfg.trader.enabled = val;
+pub struct DescribeConfigTool;
+
+#[derive(Deserialize)]
+struct DescribeConfigParams {
+    #[serde(default)]
+    section: Option<String>,
+}
+
+#[async_trait]
+impl Tool for DescribeConfigTool {
+    fn definition(&self) -> ToolDefinition {
+        ToolDefinition {
+            name: "describe_config".to_owned(),
+            description: "Describe the configuration schema: every section and field with its \
+                          type, label, unit, allowed range and default. Use this to discover \
+                          which paths update_config accepts and what a valid value looks like."
+                .to_owned(),
+            category: ToolCategory::Config,
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "section": {
+                        "type": "string",
+                        "description": "Config section to describe (omit for every section)"
+                    }
                 },
-                true,
-            )?;
-            Ok(format!("Updated trader enabled to {val}"))
+                "required": []
+            }),
+            mutating: false,
+            requires_confirmation: false,
         }
-        "max_open_positions" => {
-            let val = value.as_u64().ok_or_else(|| Error::InvalidParameters {
-                detail: "value must be a number".to_owned(),
-            })?;
-            if val < 1 || val > 100 {
-                return Err(Error::InvalidParameters {
-                    detail: "max_open_positions must be between 1 and 100".to_owned(),
-                });
-            }
-            crate::config::update_config_section(
-                |cfg| {
-                    cfg.trader.max_open_positions = val as usize;
-                },
-                true,
-            )?;
-            Ok(format!("Updated max_open_positions to {val}"))
+    }
+
+    async fn execute(&self, params: Value) -> ToolResult {
+        let params: DescribeConfigParams = match serde_json::from_value(params) {
+            Ok(p) => p,
+            Err(e) => return ToolResult::error(format!("Invalid parameters: {e}")),
+        };
+
+        match config_access::schema(params.section.as_deref()) {
+            Ok(value) => ToolResult::success(json!({
+                "section": params.section,
+                "schema": value,
+            })),
+            Err(e) => ToolResult::error(e.to_string()),
         }
-        "trade_size_sol" => {
-            let val = value.as_f64().ok_or_else(|| Error::InvalidParameters {
-                detail: "value must be a number".to_owned(),
-            })?;
-            if val < 0.001 || val > 100.0 {
-                return Err(Error::InvalidParameters {
-                    detail: "trade_size_sol must be between 0.001 and 100.0".to_owned(),
-                });
-            }
-            crate::config::update_config_section(
-                |cfg| {
-                    cfg.trader.trade_size_sol = val;
-                },
-                true,
-            )?;
-            Ok(format!("Updated trade_size_sol to {val}"))
-        }
-        _ => Err(Error::InvalidParameters {
-            detail: format!("unknown trader config key '{key}'"),
-        }),
     }
 }
 
-fn update_filters_config(
-    key: &str,
-    value: serde_json::Value,
-) -> crate::agent_control::error::Result<String> {
-    match key {
-        "age_enabled" => {
-            let val = value.as_bool().ok_or_else(|| Error::InvalidParameters {
-                detail: "value must be true or false".to_owned(),
-            })?;
-            crate::config::update_config_section(
-                |cfg| {
-                    cfg.filtering.age_enabled = val;
+// ============================================================================
+// UpdateConfigTool - Change configuration
+// ============================================================================
+
+pub struct UpdateConfigTool;
+
+#[derive(Deserialize)]
+struct UpdateConfigParams {
+    #[serde(default)]
+    path: Option<String>,
+    #[serde(default)]
+    value: Option<Value>,
+    #[serde(default)]
+    updates: Option<Value>,
+}
+
+#[async_trait]
+impl Tool for UpdateConfigTool {
+    fn definition(&self) -> ToolDefinition {
+        ToolDefinition {
+            name: "update_config".to_owned(),
+            description: "Change bot configuration. Either pass a single 'path' plus 'value', or \
+                          an 'updates' object mapping several dotted paths to values, which are \
+                          applied as one atomic, schema-validated change and saved to disk. \
+                          Examples: path 'rpc.urls' value ['https://…'], or path \
+                          'trader.trade_size_sol' value 0.05. Wallet private-key material cannot \
+                          be read or written here. Settings read once at startup (RPC endpoint \
+                          list, webserver binding) take effect on the next launch."
+                .to_owned(),
+            category: ToolCategory::Config,
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Dotted config path to set, e.g. 'rpc.urls' or 'trader.trade_size_sol'"
+                    },
+                    "value": {
+                        "description": "New value for 'path'; must match the schema type of that field"
+                    },
+                    "updates": {
+                        "type": "object",
+                        "description": "Map of dotted config path to new value, applied atomically"
+                    }
                 },
-                true,
-            )?;
-            Ok(format!("Updated age filtering enabled to {val}"))
+                "required": []
+            }),
+            mutating: true,
+            requires_confirmation: true,
         }
-        "cooldown_enabled" => {
-            let val = value.as_bool().ok_or_else(|| Error::InvalidParameters {
-                detail: "value must be true or false".to_owned(),
-            })?;
-            crate::config::update_config_section(
-                |cfg| {
-                    cfg.filtering.cooldown_enabled = val;
-                },
-                true,
-            )?;
-            Ok(format!("Updated cooldown filtering enabled to {val}"))
+    }
+
+    async fn execute(&self, params: Value) -> ToolResult {
+        let params: UpdateConfigParams = match serde_json::from_value(params) {
+            Ok(p) => p,
+            Err(e) => return ToolResult::error(format!("Invalid parameters: {e}")),
+        };
+
+        let updates = match collect_updates(params) {
+            Ok(updates) => updates,
+            Err(e) => return ToolResult::error(e.to_string()),
+        };
+
+        match config_access::apply(&updates) {
+            Ok(applied) => ToolResult::success(json!({
+                "message": format!("Applied {} configuration change(s)", applied.len()),
+                "changes": applied,
+                "saved_to_disk": true,
+            })),
+            Err(e) => ToolResult::error(e.to_string()),
         }
-        _ => Err(Error::InvalidParameters {
-            detail: format!("unknown filters config key '{key}'"),
-        }),
     }
 }
 
-fn update_telegram_config(
-    key: &str,
-    value: serde_json::Value,
-) -> crate::agent_control::error::Result<String> {
-    match key {
-        "enabled" => {
-            let val = value.as_bool().ok_or_else(|| Error::InvalidParameters {
-                detail: "value must be true or false".to_owned(),
-            })?;
-            crate::config::update_config_section(
-                |cfg| {
-                    cfg.telegram.enabled = val;
-                },
-                true,
-            )?;
-            Ok(format!("Updated telegram enabled to {val}"))
-        }
-        _ => Err(Error::InvalidParameters {
-            detail: format!("unknown telegram config key '{key}'"),
-        }),
-    }
-}
+/// Accept either the single `path`/`value` form or the batch `updates` object,
+/// and reject the ambiguous or half-specified combinations outright.
+fn collect_updates(
+    params: UpdateConfigParams,
+) -> crate::agent_control::error::Result<Vec<(String, Value)>> {
+    let invalid = |detail: &str| Error::InvalidParameters {
+        detail: detail.to_owned(),
+    };
 
-fn update_llm_config(
-    key: &str,
-    value: serde_json::Value,
-) -> crate::agent_control::error::Result<String> {
-    match key {
-        "enabled" => {
-            let val = value.as_bool().ok_or_else(|| Error::InvalidParameters {
-                detail: "value must be true or false".to_owned(),
-            })?;
-            crate::config::update_config_section(
-                |cfg| {
-                    cfg.llm.enabled = val;
-                },
-                true,
-            )?;
-            Ok(format!("Updated LLM enabled to {val}"))
+    let single = match (params.path, params.value) {
+        (Some(path), Some(value)) => Some((path, value)),
+        (Some(_), None) => return Err(invalid("'path' was supplied without a 'value'")),
+        (None, Some(_)) => return Err(invalid("'value' was supplied without a 'path'")),
+        (None, None) => None,
+    };
+
+    let batch = match params.updates {
+        Some(Value::Object(object)) if !object.is_empty() => {
+            Some(config_access::updates_from_object(&object))
         }
-        _ => Err(Error::InvalidParameters {
-            detail: format!("unknown LLM config key '{key}'"),
-        }),
+        Some(Value::Object(_)) | None => None,
+        Some(_) => return Err(invalid("'updates' must be an object of path -> value")),
+    };
+
+    match (single, batch) {
+        (Some(_), Some(_)) => Err(invalid(
+            "supply either 'path' and 'value', or 'updates' — not both",
+        )),
+        (Some(single), None) => Ok(vec![single]),
+        (None, Some(batch)) => Ok(batch),
+        (None, None) => Err(invalid(
+            "supply 'path' and 'value', or an 'updates' object of path -> value",
+        )),
     }
 }

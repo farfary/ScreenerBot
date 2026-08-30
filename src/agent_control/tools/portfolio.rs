@@ -43,6 +43,7 @@ impl Tool for GetPositionsTool {
                 "properties": {},
                 "required": []
             }),
+            mutating: false,
             requires_confirmation: false,
         }
     }
@@ -134,6 +135,7 @@ impl Tool for GetPositionTool {
                 },
                 "required": ["position_id"]
             }),
+            mutating: false,
             requires_confirmation: false,
         }
     }
@@ -214,6 +216,7 @@ impl Tool for GetBalanceTool {
                 "properties": {},
                 "required": []
             }),
+            mutating: false,
             requires_confirmation: false,
         }
     }
@@ -284,6 +287,7 @@ impl Tool for GetPnLTool {
                 },
                 "required": []
             }),
+            mutating: false,
             requires_confirmation: false,
         }
     }

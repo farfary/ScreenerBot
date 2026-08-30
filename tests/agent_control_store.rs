@@ -15,7 +15,9 @@
 
 use std::sync::{LazyLock, Mutex, MutexGuard, PoisonError};
 
-use screenerbot::agent_control::{approvals, audit, pairing, store, ClientScope, Error};
+use screenerbot::agent_control::{
+    approvals, audit, pairing, store, Error, PermissionLevel, ToolPermissions,
+};
 
 static SETUP: LazyLock<()> = LazyLock::new(|| {
     let dir = tempfile::tempdir().expect("tempdir");
@@ -44,7 +46,11 @@ fn init_is_idempotent() {
 #[test]
 fn pairing_secret_is_shown_once_and_only_the_verifier_is_kept() {
     let _guard = setup();
-    let created = pairing::create("Roundtrip agent", "roundtrip-kind", "operate").unwrap();
+    let limited = ToolPermissions {
+        trading: PermissionLevel::Deny,
+        ..ToolPermissions::full_access()
+    };
+    let created = pairing::create("Roundtrip agent", "roundtrip-kind", Some(limited)).unwrap();
     assert!(created.pairing_secret.len() >= 43);
 
     // The secret never comes back through the list surface.
@@ -53,7 +59,7 @@ fn pairing_secret_is_shown_once_and_only_the_verifier_is_kept() {
         .iter()
         .find(|p| p.client_id == created.client_id)
         .expect("created pairing is listed");
-    assert_eq!(row.scope, "operate");
+    assert_eq!(row.permissions, limited);
     assert!(!row.revoked);
     let json = serde_json::to_string(&listed).unwrap();
     assert!(
@@ -62,15 +68,52 @@ fn pairing_secret_is_shown_once_and_only_the_verifier_is_kept() {
     );
     assert!(!json.to_lowercase().contains("verifier"));
 
-    // The right secret authenticates and resolves the stored scope.
+    // The right secret authenticates and resolves the stored policy.
     let authed = pairing::authenticate(&created.client_id, &created.pairing_secret).unwrap();
-    assert_eq!(authed.scope, ClientScope::Operate);
+    assert_eq!(authed.permissions, limited);
+}
+
+/// A connection created without an explicit policy can do everything, and the
+/// owner can narrow (or re-widen) it afterwards without recreating it.
+#[test]
+fn a_new_pairing_is_full_access_and_can_be_limited_afterwards() {
+    let _guard = setup();
+    let created = pairing::create("Default agent", "default-kind", None).unwrap();
+
+    let authed = pairing::authenticate(&created.client_id, &created.pairing_secret).unwrap();
+    assert_eq!(authed.permissions, ToolPermissions::full_access());
+
+    let limited = ToolPermissions {
+        trading: PermissionLevel::AskUser,
+        config: PermissionLevel::Deny,
+        ..ToolPermissions::full_access()
+    };
+    assert!(pairing::set_permissions(&created.client_id, limited).unwrap());
+
+    // The next authentication — i.e. the connection's next request — sees it.
+    let authed = pairing::authenticate(&created.client_id, &created.pairing_secret).unwrap();
+    assert_eq!(authed.permissions, limited);
+    assert_eq!(
+        pairing::active_permissions(&created.client_id).unwrap(),
+        Some(limited)
+    );
+
+    // And it survives a widening edit, so a limit is never a one-way door.
+    assert!(pairing::set_permissions(&created.client_id, ToolPermissions::full_access()).unwrap());
+    assert_eq!(
+        pairing::active_permissions(&created.client_id).unwrap(),
+        Some(ToolPermissions::full_access())
+    );
+
+    // A revoked pairing accepts no further policy edits.
+    assert!(pairing::revoke(&created.client_id).unwrap());
+    assert!(!pairing::set_permissions(&created.client_id, limited).unwrap());
 }
 
 #[test]
 fn unknown_wrong_and_revoked_credentials_fail_identically() {
     let _guard = setup();
-    let created = pairing::create("Reject agent", "reject-kind", "read").unwrap();
+    let created = pairing::create("Reject agent", "reject-kind", None).unwrap();
 
     let wrong = pairing::authenticate(&created.client_id, "definitely-not-the-secret");
     let unknown = pairing::authenticate("00000000-0000-0000-0000-000000000000", "x");
@@ -82,22 +125,20 @@ fn unknown_wrong_and_revoked_credentials_fail_identically() {
     assert!(matches!(revoked, Err(Error::PairingRejected)));
     // Revoking again changes nothing.
     assert!(!pairing::revoke(&created.client_id).unwrap());
-    assert!(pairing::active_scope(&created.client_id).unwrap().is_none());
+    assert!(pairing::active_permissions(&created.client_id)
+        .unwrap()
+        .is_none());
 }
 
 #[test]
-fn create_rejects_out_of_bounds_input_and_bad_scope() {
+fn create_rejects_out_of_bounds_input() {
     let _guard = setup();
     assert!(matches!(
-        pairing::create("ok", "Bad Kind With Spaces", "read"),
+        pairing::create("ok", "Bad Kind With Spaces", None),
         Err(Error::InvalidPairingRequest { .. })
     ));
     assert!(matches!(
-        pairing::create("", "kind", "read"),
-        Err(Error::InvalidPairingRequest { .. })
-    ));
-    assert!(matches!(
-        pairing::create("ok", "kind", "superuser"),
+        pairing::create("", "kind", None),
         Err(Error::InvalidPairingRequest { .. })
     ));
 }
@@ -463,4 +504,68 @@ fn claim_with_corrupt_canonical_args_fails_the_row_closed() {
         approvals::claim(&handle.id),
         Err(Error::ApprovalNotPending)
     ));
+}
+
+/// The v1 -> v2 upgrade an existing install goes through on its next launch: a
+/// pairing keeps exactly the capabilities its old scope granted, rather than
+/// silently inheriting the new full-access default.
+#[test]
+fn legacy_scopes_migrate_into_equivalent_per_connection_permissions() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let connection = rusqlite::Connection::open(dir.path().join("v1.db")).expect("open v1 db");
+    connection
+        .execute_batch(
+            "CREATE TABLE pairings (
+                 client_id     TEXT PRIMARY KEY,
+                 label         TEXT NOT NULL,
+                 agent_kind    TEXT NOT NULL,
+                 scope         TEXT NOT NULL,
+                 verifier      BLOB NOT NULL,
+                 created_at    INTEGER NOT NULL,
+                 last_used_at  INTEGER,
+                 revoked_at    INTEGER
+             );
+             INSERT INTO pairings VALUES ('r', 'reader', 'k', 'read', x'00', 1, NULL, NULL);
+             INSERT INTO pairings VALUES ('o', 'operator', 'k', 'operate', x'00', 1, NULL, NULL);
+             INSERT INTO pairings VALUES ('t', 'trader', 'k', 'trade', x'00', 1, NULL, NULL);
+             INSERT INTO pairings VALUES ('x', 'broken', 'k', 'bogus', x'00', 1, NULL, NULL);",
+        )
+        .expect("seed a v1 pairings table");
+
+    store::migrate_scope_to_permissions(&connection).expect("migrate");
+
+    let policy = |client_id: &str| -> ToolPermissions {
+        let raw: String = connection
+            .query_row(
+                "SELECT permissions FROM pairings WHERE client_id = ?1",
+                [client_id],
+                |row| row.get(0),
+            )
+            .expect("row");
+        ToolPermissions::from_json(&raw).expect("migrated policy parses")
+    };
+
+    for client_id in ["r", "o", "t", "x"] {
+        let permissions = policy(client_id);
+        assert_eq!(permissions.analysis, PermissionLevel::Allow);
+        assert_eq!(permissions.portfolio, PermissionLevel::Allow);
+    }
+    // read: nothing beyond reads. operate: config/system but no trading.
+    assert_eq!(policy("r").config, PermissionLevel::Deny);
+    assert_eq!(policy("r").trading, PermissionLevel::Deny);
+    assert_eq!(policy("o").config, PermissionLevel::Allow);
+    assert_eq!(policy("o").system, PermissionLevel::Allow);
+    assert_eq!(policy("o").trading, PermissionLevel::Deny);
+    assert_eq!(policy("t"), ToolPermissions::full_access());
+    // An unrecognised stored scope must not be read as a capability.
+    assert_eq!(policy("x").trading, PermissionLevel::Deny);
+    assert_eq!(policy("x").config, PermissionLevel::Deny);
+
+    // The old column is gone, and re-running the migration is a no-op.
+    assert!(!connection
+        .prepare("SELECT 1 FROM pragma_table_info('pairings') WHERE name = 'scope'")
+        .expect("pragma")
+        .exists([])
+        .expect("query"));
+    store::migrate_scope_to_permissions(&connection).expect("second migrate is a no-op");
 }

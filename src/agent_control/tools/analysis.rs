@@ -62,6 +62,7 @@ impl Tool for AnalyzeTokenTool {
                 },
                 "required": ["mint_address"]
             }),
+            mutating: false,
             requires_confirmation: false,
         }
     }
@@ -170,6 +171,7 @@ impl Tool for GetMarketDataTool {
                 },
                 "required": ["mint_address"]
             }),
+            mutating: false,
             requires_confirmation: false,
         }
     }
@@ -265,6 +267,7 @@ impl Tool for CheckSecurityTool {
                 },
                 "required": ["mint_address"]
             }),
+            mutating: false,
             requires_confirmation: false,
         }
     }

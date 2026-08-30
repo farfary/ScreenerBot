@@ -652,6 +652,7 @@ mod tests {
                 description: "Return a deterministic balance".to_owned(),
                 category: ToolCategory::Portfolio,
                 parameters: serde_json::json!({"type": "object", "properties": {}}),
+                mutating: false,
                 requires_confirmation: false,
             }
         }

@@ -20,6 +20,10 @@ pub enum Error {
     /// A tool argument was missing, of the wrong type, or out of range.
     #[error("invalid parameters: {detail}")]
     InvalidParameters { detail: String },
+    /// A config read or write addressed wallet private-key material. Agents
+    /// control every other setting; key material is owner-only, in the app.
+    #[error("config path '{path}' holds wallet key material and is not agent-accessible")]
+    SecretPath { path: String },
     /// The agent-control store (pairings/approvals/audit) failed.
     #[error(transparent)]
     Database(#[from] DatabaseError),
@@ -63,6 +67,7 @@ impl ErrorClass for Error {
             Error::Config(e) => e.is_retryable(),
             Error::Database(e) => e.is_retryable(),
             Error::InvalidParameters { .. }
+            | Error::SecretPath { .. }
             | Error::InvalidPairingRequest { .. }
             | Error::PairingRejected
             | Error::Disabled
@@ -83,7 +88,7 @@ impl ErrorClass for Error {
         match self {
             Error::Config(e) => e.severity(),
             Error::Database(e) => e.severity(),
-            Error::PairingRejected => Severity::Warning,
+            Error::PairingRejected | Error::SecretPath { .. } => Severity::Warning,
             Error::InvalidParameters { .. }
             | Error::InvalidPairingRequest { .. }
             | Error::Disabled
@@ -97,6 +102,9 @@ impl ErrorClass for Error {
             Error::Config(e) => e.http_status(),
             Error::Database(e) => e.http_status(),
             Error::InvalidParameters { .. } | Error::InvalidPairingRequest { .. } => 400,
+            // Wallet key material is never reachable from an agent surface,
+            // whatever the client's scope.
+            Error::SecretPath { .. } => 403,
             // A rejected credential is answered as 401 with a fixed body; an
             // unknown vs revoked vs malformed credential must not be
             // distinguishable from the outside.

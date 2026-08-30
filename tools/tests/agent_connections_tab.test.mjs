@@ -42,6 +42,10 @@ test("module imports under node with only the pure helpers", async () => {
     "clientSetup",
     "validateLabel",
     "teardownAgentConnectionsTab",
+    "defaultPermissions",
+    "normalizePermissions",
+    "presetFor",
+    "summarizePermissions",
   ]) {
     assert.equal(typeof m[name], "function", `${name} is exported`);
   }
@@ -232,14 +236,78 @@ test("nothing in the module references the removed install-mcp.sh configurator",
   assert.ok(!/install-mcp/i.test(src));
 });
 
-test("least-privilege scope: read is the default and first option", async () => {
-  const { SCOPE_OPTIONS, DEFAULT_SCOPE } = await mod();
-  assert.equal(DEFAULT_SCOPE, "read");
-  assert.equal(SCOPE_OPTIONS[0].value, "read");
+test("a new connection defaults to full access across every category", async () => {
+  const { defaultPermissions, CATEGORIES, presetFor } = await mod();
+  const permissions = defaultPermissions();
   assert.deepEqual(
-    SCOPE_OPTIONS.map((s) => s.value),
-    ["read", "operate", "trade"]
+    Object.keys(permissions).sort(),
+    CATEGORIES.map((c) => c.key).sort()
   );
+  assert.ok(Object.values(permissions).every((level) => level === "allow"));
+  assert.equal(presetFor(permissions), "full");
+});
+
+test("the category list matches the backend policy exactly", async () => {
+  const { CATEGORIES, LEVELS } = await mod();
+  assert.deepEqual(
+    CATEGORIES.map((c) => c.key),
+    ["analysis", "portfolio", "trading", "config", "system"]
+  );
+  // The three levels are the serialized `PermissionLevel` values.
+  assert.deepEqual(
+    LEVELS.map((l) => l.value),
+    ["allow", "ask_user", "deny"]
+  );
+});
+
+test("every preset produces a complete, recognisable permission map", async () => {
+  const { PRESETS, presetFor, CATEGORIES } = await mod();
+  assert.deepEqual(
+    PRESETS.map((p) => p.id),
+    ["full", "ask", "read"]
+  );
+  for (const preset of PRESETS) {
+    const permissions = preset.permissions();
+    assert.equal(Object.keys(permissions).length, CATEGORIES.length, preset.id);
+    assert.equal(presetFor(permissions), preset.id);
+  }
+  // Read only must not leave any way to change state.
+  const read = PRESETS.find((p) => p.id === "read").permissions();
+  assert.equal(read.trading, "deny");
+  assert.equal(read.config, "deny");
+  assert.equal(read.system, "deny");
+});
+
+test("an unknown or missing level is read as denied, never as allowed", async () => {
+  const { normalizePermissions } = await mod();
+  assert.deepEqual(normalizePermissions(null), {
+    analysis: "deny",
+    portfolio: "deny",
+    trading: "deny",
+    config: "deny",
+    system: "deny",
+  });
+  assert.equal(normalizePermissions({ trading: "root" }).trading, "deny");
+  assert.equal(normalizePermissions({ trading: "allow" }).trading, "allow");
+});
+
+test("a limited connection is summarized by what it cannot do, never as 'custom'", async () => {
+  const { summarizePermissions, defaultPermissions, PRESETS } = await mod();
+  assert.deepEqual(summarizePermissions(defaultPermissions()), {
+    tone: "full",
+    text: "Full access",
+  });
+  assert.deepEqual(summarizePermissions(PRESETS.find((p) => p.id === "read").permissions()), {
+    tone: "read",
+    text: "Read only",
+  });
+  const limited = summarizePermissions({
+    ...defaultPermissions(),
+    trading: "ask_user",
+    system: "deny",
+  });
+  assert.equal(limited.tone, "custom");
+  assert.match(limited.text, /^Limited — asks for trading; no system$/);
 });
 
 test("validateLabel matches the backend bounds (1..=64, no control chars)", async () => {

@@ -1,5 +1,5 @@
 //! Durable client pairings: the credential that lets an external agent reach
-//! the live-app bridge, and the scope that credential carries.
+//! the live-app bridge, and the per-connection policy that credential carries.
 //!
 //! A pairing secret is 256 bits of randomness shown exactly once at creation.
 //! Only its SHA-256 verifier is stored. Because the secret is full-entropy
@@ -16,7 +16,7 @@ use sha2::{Digest, Sha256};
 use crate::agent_control::audit::{self, AuditContext, AuditKind};
 use crate::agent_control::error::{Error, Result};
 use crate::agent_control::store::{self, now_unix};
-use crate::agent_control::ClientScope;
+use crate::agent_control::ToolPermissions;
 
 const MAX_LABEL: usize = 64;
 const MAX_KIND: usize = 32;
@@ -27,13 +27,13 @@ const SECRET_BYTES: usize = 32;
 const DUMMY_VERIFIER: [u8; 32] = [0u8; 32];
 
 /// A pairing as shown to a dashboard operator. Never carries the verifier or
-/// the secret.
+/// the secret. `permissions` is what the settings dialog renders and edits.
 #[derive(Debug, Clone, Serialize)]
 pub struct PairingSummary {
     pub client_id: String,
     pub label: String,
     pub agent_kind: String,
-    pub scope: String,
+    pub permissions: ToolPermissions,
     pub created_at: i64,
     pub last_used_at: Option<i64>,
     pub revoked: bool,
@@ -44,7 +44,7 @@ pub struct PairingSummary {
 pub struct AuthedClient {
     pub client_id: String,
     pub label: String,
-    pub scope: ClientScope,
+    pub permissions: ToolPermissions,
 }
 
 /// What `create` returns: the new client id and the one-time secret. The secret
@@ -109,14 +109,20 @@ fn verifier_of(secret: &str) -> [u8; 32] {
     out
 }
 
-/// Create a pairing. Validates the label/kind/scope (scope parsing fails
-/// closed), stores only the verifier, and returns the secret once.
-pub fn create(label: &str, agent_kind: &str, scope: &str) -> Result<NewPairing> {
+/// Create a pairing. Validates the label and kind, stores only the verifier,
+/// and returns the secret once.
+///
+/// `permissions` is the connection's own policy. `None` means the default a new
+/// connection gets: full access, which the owner then limits per connection in
+/// Settings → Agent Connections.
+pub fn create(
+    label: &str,
+    agent_kind: &str,
+    permissions: Option<ToolPermissions>,
+) -> Result<NewPairing> {
     let label = validate_label(label)?;
     let agent_kind = validate_kind(agent_kind)?;
-    let scope = ClientScope::parse(scope).ok_or_else(|| Error::InvalidPairingRequest {
-        detail: "scope must be one of: read, operate, trade".to_owned(),
-    })?;
+    let permissions = permissions.unwrap_or_else(ToolPermissions::full_access);
 
     let client_id = uuid::Uuid::new_v4().to_string();
     let secret = generate_secret();
@@ -124,13 +130,13 @@ pub fn create(label: &str, agent_kind: &str, scope: &str) -> Result<NewPairing> 
 
     let connection = store::conn()?;
     connection.execute(
-        "INSERT INTO pairings (client_id, label, agent_kind, scope, verifier, created_at)
+        "INSERT INTO pairings (client_id, label, agent_kind, permissions, verifier, created_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
         rusqlite::params![
             client_id,
             label,
             agent_kind,
-            scope.as_str(),
+            permissions.to_json(),
             verifier.to_vec(),
             now_unix(),
         ],
@@ -144,8 +150,8 @@ pub fn create(label: &str, agent_kind: &str, scope: &str) -> Result<NewPairing> 
         },
         "created",
         Some(&format!(
-            "label={label:?} kind={agent_kind} scope={}",
-            scope.as_str()
+            "label={label:?} kind={agent_kind} permissions={}",
+            permissions.to_json()
         )),
     );
 
@@ -155,21 +161,50 @@ pub fn create(label: &str, agent_kind: &str, scope: &str) -> Result<NewPairing> 
     })
 }
 
+/// Replace an active pairing's policy. Returns `false` when there is no such
+/// active pairing. The bridge reads the policy on every request, so a change
+/// takes effect on the connection's very next call.
+pub fn set_permissions(client_id: &str, permissions: ToolPermissions) -> Result<bool> {
+    let connection = store::conn()?;
+    let changed = connection.execute(
+        "UPDATE pairings SET permissions = ?1 WHERE client_id = ?2 AND revoked_at IS NULL",
+        rusqlite::params![permissions.to_json(), client_id],
+    )?;
+    if changed > 0 {
+        audit::record(
+            AuditKind::PairingCreated,
+            &AuditContext {
+                client_id: Some(client_id.to_owned()),
+                ..Default::default()
+            },
+            "permissions_updated",
+            Some(&permissions.to_json()),
+        );
+    }
+    Ok(changed > 0)
+}
+
+/// A stored policy, failing closed: an unreadable value grants nothing.
+fn stored_permissions(raw: &str) -> ToolPermissions {
+    ToolPermissions::from_json(raw).unwrap_or_else(ToolPermissions::denied)
+}
+
 /// All pairings, newest first. Never includes the verifier.
 pub fn list() -> Result<Vec<PairingSummary>> {
     let connection = store::conn()?;
     let mut stmt = connection.prepare(
-        "SELECT client_id, label, agent_kind, scope, created_at, last_used_at, revoked_at
+        "SELECT client_id, label, agent_kind, permissions, created_at, last_used_at, revoked_at
                FROM pairings ORDER BY created_at DESC",
     )?;
     let rows = stmt
         .query_map([], |row| {
             let revoked_at: Option<i64> = row.get(6)?;
+            let permissions: String = row.get(3)?;
             Ok(PairingSummary {
                 client_id: row.get(0)?,
                 label: row.get(1)?,
                 agent_kind: row.get(2)?,
-                scope: row.get(3)?,
+                permissions: stored_permissions(&permissions),
                 created_at: row.get(4)?,
                 last_used_at: row.get(5)?,
                 revoked: revoked_at.is_some(),
@@ -180,7 +215,7 @@ pub fn list() -> Result<Vec<PairingSummary>> {
 }
 
 /// Revoke a pairing. Returns `true` if a row moved from active to revoked. The
-/// bridge resolves scope from this table on every request, so revocation takes
+/// bridge resolves the policy from this table on every request, so revocation takes
 /// effect on the very next bridge call.
 pub fn revoke(client_id: &str) -> Result<bool> {
     let connection = store::conn()?;
@@ -202,41 +237,42 @@ pub fn revoke(client_id: &str) -> Result<bool> {
     Ok(changed > 0)
 }
 
-/// The current scope of an active (non-revoked) pairing, or `None` if the
+/// The current policy of an active (non-revoked) pairing, or `None` if the
 /// pairing is unknown or revoked. Used when re-checking policy just before a
 /// human-approved execution runs, where no secret is available to re-run
 /// `authenticate`.
-pub fn active_scope(client_id: &str) -> Result<Option<ClientScope>> {
+pub fn active_permissions(client_id: &str) -> Result<Option<ToolPermissions>> {
     let connection = store::conn()?;
     let row: Option<(String, Option<i64>)> = connection
         .query_row(
-            "SELECT scope, revoked_at FROM pairings WHERE client_id = ?1",
+            "SELECT permissions, revoked_at FROM pairings WHERE client_id = ?1",
             rusqlite::params![client_id],
             |r| Ok((r.get(0)?, r.get(1)?)),
         )
         .optional()?;
     Ok(match row {
-        Some((scope, None)) => ClientScope::parse(&scope),
+        Some((permissions, None)) => Some(stored_permissions(&permissions)),
         _ => None,
     })
 }
 
 /// Authenticate a bridge request. Every failure mode — missing/blank fields,
-/// unknown client id, wrong secret, revoked pairing, unparseable stored scope —
-/// returns `Error::PairingRejected`, and the work done is the same in each case.
+/// unknown client id, wrong secret, revoked pairing — returns
+/// `Error::PairingRejected`, and the work done is the same in each case. An
+/// unreadable stored policy authenticates but grants nothing.
 pub fn authenticate(client_id: &str, secret: &str) -> Result<AuthedClient> {
     let candidate = verifier_of(secret);
 
     let connection = store::conn()?;
     let row: Option<(Vec<u8>, String, Option<i64>, String)> = connection
         .query_row(
-            "SELECT verifier, scope, revoked_at, label FROM pairings WHERE client_id = ?1",
+            "SELECT verifier, permissions, revoked_at, label FROM pairings WHERE client_id = ?1",
             rusqlite::params![client_id],
             |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
         )
         .optional()?;
 
-    let Some((verifier, scope_str, revoked_at, label)) = row else {
+    let Some((verifier, permissions_json, revoked_at, label)) = row else {
         // Equalize timing/branch shape against the "found" path.
         let _ = constant_time_eq::constant_time_eq(&candidate, &DUMMY_VERIFIER);
         return Err(Error::PairingRejected);
@@ -245,15 +281,10 @@ pub fn authenticate(client_id: &str, secret: &str) -> Result<AuthedClient> {
     let secret_ok = verifier.len() == candidate.len()
         && constant_time_eq::constant_time_eq(&candidate, &verifier);
     let not_revoked = revoked_at.is_none();
-    let scope = ClientScope::parse(&scope_str);
 
     if !(secret_ok && not_revoked) {
         return Err(Error::PairingRejected);
     }
-    let Some(scope) = scope else {
-        // A stored scope we cannot parse fails closed rather than defaulting.
-        return Err(Error::PairingRejected);
-    };
 
     connection.execute(
         "UPDATE pairings SET last_used_at = ?1 WHERE client_id = ?2",
@@ -263,7 +294,7 @@ pub fn authenticate(client_id: &str, secret: &str) -> Result<AuthedClient> {
     Ok(AuthedClient {
         client_id: client_id.to_owned(),
         label,
-        scope,
+        permissions: stored_permissions(&permissions_json),
     })
 }
 
