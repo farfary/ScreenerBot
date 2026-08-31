@@ -9,11 +9,12 @@
 //!
 //! 1. the provider's own value (URLs normalized),
 //! 2. our local token database,
-//! 3. a live DexScreener batch lookup for whatever is still missing.
+//! 3. the shared Data Server market cache,
+//! 4. live DexScreener and GeckoTerminal batch lookups for whatever is still missing.
 //!
-//! Stage 3 is the only network call, it is batched, and it only runs for mints we
-//! genuinely know nothing about — which is exactly the case for a freshly boosted
-//! token the app has never traded.
+//! Every network stage is batched and runs only for mints that are still incomplete.
+//! The Data Server goes first because it is our shared provider cache; direct provider
+//! calls are the last resort for a freshly boosted token this installation has never seen.
 
 use super::types::FeaturedCard;
 use crate::apis::dexscreener::MAX_TOKENS_PER_REQUEST;
@@ -21,7 +22,9 @@ use crate::apis::get_api_manager;
 use crate::connectivity;
 use crate::logger::{self, LogTag};
 use crate::tokens;
+use serde::Deserialize;
 use std::collections::HashMap;
+use std::time::Duration;
 
 /// Normalize a provider-supplied logo URL, or return `None` if it is unusable.
 ///
@@ -109,10 +112,29 @@ pub(super) async fn fill_identity(cards: &mut [FeaturedCard]) {
         return;
     }
 
-    // Stage 2: live DexScreener lookup for tokens we hold no market data for yet
-    // (a freshly boosted or trending token routinely is). One response carries the
-    // name, symbol, logo AND banner, so harvest all four — no extra request.
+    // Stage 2: our shared Data Server cache. The website Terminal reads this same
+    // normalized market identity, so a token must not be named on the website while
+    // the desktop app renders "???" merely because DexScreener has not indexed it.
+    let resolved = fetch_server_identity(&missing).await;
+    apply_identity(cards, &resolved);
+
+    missing = incomplete_mints(cards);
+    if missing.is_empty() {
+        return;
+    }
+
+    // Stage 3: live DexScreener lookup for anything the shared cache still lacks.
     let resolved = fetch_dexscreener_identity(&missing).await;
+    apply_identity(cards, &resolved);
+
+    missing = incomplete_mints(cards);
+    if missing.is_empty() {
+        return;
+    }
+
+    // Stage 4: GeckoTerminal is the final identity fallback. Newly launched pools
+    // can appear here before DexScreener, which is the exact gap boosted tokens hit.
+    let resolved = fetch_geckoterminal_identity(&missing).await;
     apply_identity(cards, &resolved);
 }
 
@@ -139,6 +161,30 @@ pub(super) struct TokenIdentity {
     pub banner: Option<String>,
 }
 
+#[derive(Deserialize)]
+struct ServerMarketResponse {
+    markets: HashMap<String, ServerMarketIdentity>,
+}
+
+#[derive(Deserialize)]
+struct ServerMarketIdentity {
+    name: Option<String>,
+    symbol: Option<String>,
+    image_url: Option<String>,
+    banner_url: Option<String>,
+}
+
+impl From<ServerMarketIdentity> for TokenIdentity {
+    fn from(value: ServerMarketIdentity) -> Self {
+        Self {
+            name: value.name,
+            symbol: value.symbol,
+            logo: value.image_url,
+            banner: value.banner_url,
+        }
+    }
+}
+
 /// Assign resolved identity back onto the cards that are still missing a field.
 fn apply_identity(cards: &mut [FeaturedCard], resolved: &HashMap<String, TokenIdentity>) {
     for card in cards.iter_mut() {
@@ -158,6 +204,61 @@ fn apply_identity(cards: &mut [FeaturedCard], resolved: &HashMap<String, TokenId
             card.symbol = found.symbol.clone().unwrap_or_default().trim().to_owned();
         }
     }
+}
+
+/// Look up identity in the Data Server's normalized market cache.
+async fn fetch_server_identity(mints: &[String]) -> HashMap<String, TokenIdentity> {
+    let mut resolved = HashMap::new();
+    if connectivity::is_network_offline() {
+        return resolved;
+    }
+
+    let cfg = crate::config::get_config_clone();
+    let server = &cfg.tokens.sources.screenerbot_server;
+    if !server.enabled || server.endpoint.trim().is_empty() {
+        return resolved;
+    }
+
+    let url = format!("{}/v1/market", server.endpoint.trim_end_matches('/'));
+    for chunk in mints.chunks(MAX_TOKENS_PER_REQUEST) {
+        let joined = chunk.join(",");
+        let request = crate::net::client()
+            .get(&url)
+            .query(&[("mints", joined)])
+            .timeout(Duration::from_secs(server.timeout_seconds));
+
+        match request.send().await {
+            Ok(response) if response.status().is_success() => {
+                match response.json::<ServerMarketResponse>().await {
+                    Ok(payload) => {
+                        resolved.extend(
+                            payload
+                                .markets
+                                .into_iter()
+                                .map(|(mint, identity)| (mint, identity.into())),
+                        );
+                    }
+                    Err(e) => logger::debug(
+                        LogTag::Webserver,
+                        &format!("[FEATURED] Data Server identity response invalid: {e}"),
+                    ),
+                }
+            }
+            Ok(response) => logger::debug(
+                LogTag::Webserver,
+                &format!(
+                    "[FEATURED] Data Server identity lookup returned HTTP {}",
+                    response.status()
+                ),
+            ),
+            Err(e) => logger::debug(
+                LogTag::Webserver,
+                &format!("[FEATURED] Data Server identity lookup failed: {e}"),
+            ),
+        }
+    }
+
+    resolved
 }
 
 /// Look up identity for the given mints via DexScreener's batch endpoint.
@@ -200,6 +301,58 @@ async fn fetch_dexscreener_identity(mints: &[String]) -> HashMap<String, TokenId
                 logger::debug(
                     LogTag::Webserver,
                     &format!("[FEATURED] DexScreener identity lookup failed: {e}"),
+                );
+                break;
+            }
+        }
+    }
+
+    resolved
+}
+
+/// Look up identity via GeckoTerminal's token batch endpoint.
+async fn fetch_geckoterminal_identity(mints: &[String]) -> HashMap<String, TokenIdentity> {
+    let mut resolved = HashMap::new();
+
+    if connectivity::is_network_offline() {
+        return resolved;
+    }
+
+    let api = get_api_manager();
+    if !api.geckoterminal.is_enabled() {
+        return resolved;
+    }
+
+    for chunk in mints.chunks(MAX_TOKENS_PER_REQUEST) {
+        let addresses = chunk.join(",");
+        match api
+            .geckoterminal
+            .fetch_tokens_multi(
+                crate::chains::adapter().market_data_network(),
+                &addresses,
+                None,
+                None,
+            )
+            .await
+        {
+            Ok(response) => {
+                for token in response.data {
+                    let attrs = token.attributes;
+                    resolved.insert(
+                        attrs.address,
+                        TokenIdentity {
+                            name: Some(attrs.name),
+                            symbol: Some(attrs.symbol),
+                            logo: attrs.image_url,
+                            banner: None,
+                        },
+                    );
+                }
+            }
+            Err(e) => {
+                logger::debug(
+                    LogTag::Webserver,
+                    &format!("[FEATURED] GeckoTerminal identity lookup failed: {e}"),
                 );
                 break;
             }
@@ -288,6 +441,33 @@ mod tests {
         assert_eq!(cards[0].symbol, "PRV");
         assert_eq!(cards[0].logo.as_deref(), Some("https://cdn/provider.png"));
         // The one field it DID lack is filled.
+        assert_eq!(cards[0].banner.as_deref(), Some("https://cdn/banner.png"));
+    }
+
+    #[test]
+    fn data_server_market_identity_maps_to_the_featured_shape() {
+        let payload: ServerMarketResponse = serde_json::from_value(serde_json::json!({
+            "markets": {
+                "mint1": {
+                    "name": "  Resila Bio Tech ",
+                    "symbol": "RBT",
+                    "image_url": null,
+                    "banner_url": "https://cdn/banner.png"
+                }
+            }
+        }))
+        .unwrap();
+        let resolved = payload
+            .markets
+            .into_iter()
+            .map(|(mint, identity)| (mint, identity.into()))
+            .collect();
+        let mut cards = vec![boosted("mint1")];
+
+        apply_identity(&mut cards, &resolved);
+
+        assert_eq!(cards[0].name, "Resila Bio Tech");
+        assert_eq!(cards[0].symbol, "RBT");
         assert_eq!(cards[0].banner.as_deref(), Some("https://cdn/banner.png"));
     }
 }

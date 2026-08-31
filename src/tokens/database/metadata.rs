@@ -34,7 +34,10 @@ impl TokenDatabase {
                 symbol = COALESCE(?3, symbol),
                 name = COALESCE(?4, name),
                 decimals = COALESCE(?5, decimals),
-                metadata_last_fetched_at = ?6,
+                metadata_last_fetched_at = CASE
+                    WHEN ?3 IS NOT NULL OR ?4 IS NOT NULL THEN ?6
+                    ELSE metadata_last_fetched_at
+                END,
                 decimals_last_fetched_at = CASE WHEN ?5 IS NOT NULL THEN ?6 ELSE decimals_last_fetched_at END",
             params![self.chain_id(), mint, symbol, name, decimals.map(|d| d as i64), now],
         )

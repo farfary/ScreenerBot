@@ -228,7 +228,7 @@ config_struct! {
 
         #[metadata(field_metadata! {
             label: "ScreenerBot Server Source",
-            hint: "Self-hosted ScreenerBot data server — tried FIRST for Rugcheck security reports (shared cache, fast); falls back to the direct Rugcheck API on a miss",
+            hint: "Self-hosted ScreenerBot data server — shared first-hop cache for Rugcheck reports and boosted-token identity",
             impact: "high",
             category: "Sources",
         })]
@@ -239,15 +239,14 @@ config_struct! {
 
 config_struct! {
     /// Self-hosted ScreenerBot data server used as the preferred first-hop source
-    /// for token security (Rugcheck) reports. It serves a shared cache fast and
-    /// warms itself; on any miss/timeout the security fetcher falls straight back
-    /// to the direct Rugcheck API, so this is purely an accelerator — never a hard
-    /// dependency, and it never consumes the direct Rugcheck rate-limit budget.
+    /// for token security (Rugcheck) reports and boosted-token market identity. It
+    /// serves a shared cache fast; every consumer retains a direct-provider fallback,
+    /// so this is an accelerator rather than a hard dependency.
     pub struct ScreenerbotServerSourceConfig {
-        /// Whether to try the ScreenerBot server first for Rugcheck reports
+        /// Whether to try the ScreenerBot server as the shared first-hop cache
         #[metadata(field_metadata! {
             label: "Enabled",
-            hint: "Try the self-hosted ScreenerBot server before the direct Rugcheck API",
+            hint: "Try the self-hosted ScreenerBot server before direct data providers",
             impact: "high",
             category: "Sources",
         })]

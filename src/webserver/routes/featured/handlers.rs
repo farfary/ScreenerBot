@@ -33,7 +33,7 @@ fn ensure_boosted_tokens_tracked(cards: &[FeaturedCard]) {
         return;
     }
 
-    tokio::spawn(async move {
+    tokio::task::spawn_blocking(move || {
         let Some(db) = tokens::get_global_database() else {
             return;
         };
