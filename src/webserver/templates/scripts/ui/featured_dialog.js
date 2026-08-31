@@ -224,7 +224,12 @@ class FeaturedDialog {
         if (e.target.closest("a, button")) return;
         window.dispatchEvent(
           new CustomEvent("screenerbot:open-token-details", {
-            detail: { mint, symbol: card.dataset.symbol || "" },
+            detail: {
+              mint,
+              symbol: card.dataset.symbol || "",
+              name: card.dataset.name || "",
+              logo_url: card.dataset.logoUrl || "",
+            },
           })
         );
       });
@@ -389,6 +394,8 @@ class FeaturedDialog {
       <article class="feat-card${tier ? ` boosted ${tier}` : ""}"
         data-mint="${this._escapeHtml(mint)}"
         data-symbol="${this._escapeHtml(symbol)}"
+        data-name="${this._escapeHtml(name)}"
+        data-logo-url="${this._escapeHtml(logoUrl || "")}"
         style="--feat-hue:${accent.hue};--feat-sat:${accent.saturation}%"
         title="${this._escapeHtml(name)} (${this._escapeHtml(symbol)})">
 

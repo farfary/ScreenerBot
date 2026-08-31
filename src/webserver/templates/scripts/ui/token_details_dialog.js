@@ -1591,7 +1591,7 @@ const globalCoordinator = window[coordinatorKey] || {
 window[coordinatorKey] = globalCoordinator;
 
 async function handleOpenTokenDetails(event) {
-  const { mint, symbol } = event.detail || {};
+  const { mint, symbol, name, logo_url, image_url } = event.detail || {};
 
   if (!mint) {
     console.error("[TokenDetailsDialog] Event received without mint address");
@@ -1620,8 +1620,14 @@ async function handleOpenTokenDetails(event) {
     });
   }
 
-  // Open dialog with minimal token data (dialog will fetch full details)
-  await globalCoordinator.dialogInstance.show({ mint, symbol: symbol || "" });
+  // Preserve identity already resolved by the opening surface. The detail poll
+  // enriches this seed, but must not make the dialog forget what its card knew.
+  await globalCoordinator.dialogInstance.show({
+    mint,
+    symbol: resolvedTokenSymbol(symbol) || "",
+    name: resolvedTokenName(name),
+    logo_url: logo_url || image_url || null,
+  });
 }
 
 if (!globalCoordinator.listenerInstalled) {

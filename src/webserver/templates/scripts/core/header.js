@@ -339,6 +339,7 @@ function initCardHandlers() {
           detail: {
             mint: "So11111111111111111111111111111111111111112",
             symbol: "SOL",
+            name: "Solana",
           },
         })
       );

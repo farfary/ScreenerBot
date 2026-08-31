@@ -375,7 +375,12 @@ class FeaturedRow {
       card.addEventListener("click", () => {
         window.dispatchEvent(
           new CustomEvent("screenerbot:open-token-details", {
-            detail: { mint, symbol: card.dataset.symbol || "" },
+            detail: {
+              mint,
+              symbol: card.dataset.symbol || "",
+              name: card.dataset.name || "",
+              logo_url: card.dataset.logoUrl || "",
+            },
           })
         );
       });
@@ -431,7 +436,7 @@ class FeaturedRow {
       : `<div class="featured-row-card-logo-placeholder"><span>${this._escapeHtml(symbol.charAt(0))}</span></div>`;
 
     return `
-      <div class="featured-row-card${tier ? ` boosted ${tier}` : ""}" data-mint="${this._escapeHtml(mint)}" data-symbol="${this._escapeHtml(symbol)}" title="${this._escapeHtml(fullTitle)}">
+      <div class="featured-row-card${tier ? ` boosted ${tier}` : ""}" data-mint="${this._escapeHtml(mint)}" data-symbol="${this._escapeHtml(symbol)}" data-name="${this._escapeHtml(name)}" data-logo-url="${this._escapeHtml(logoUrl || "")}" title="${this._escapeHtml(fullTitle)}">
         ${logoHtml}
         <span class="featured-row-card-name">${this._escapeHtml(display)}</span>
         ${metric}

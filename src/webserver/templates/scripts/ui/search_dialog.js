@@ -364,7 +364,12 @@ async function openTokenDetails(token) {
   }
   window.dispatchEvent(
     new CustomEvent("screenerbot:open-token-details", {
-      detail: { mint: token.mint, symbol: token.symbol || "" },
+      detail: {
+        mint: token.mint,
+        symbol: token.symbol || "",
+        name: token.name || "",
+        logo_url: token.logo_url || token.image_url || null,
+      },
     })
   );
 }

@@ -524,10 +524,12 @@ export function applyOverviewTabMixin(PositionDetailsDialog) {
     bind("#pddCloseBtn", (btn) => this._handleClosePosition(pos(), btn));
     bind("#pddViewTokenBtn", () => {
       const p = pos();
-      const { mint, symbol } = p;
+      const { mint, symbol, name, logo_url, image_url } = p;
       this.close();
       window.dispatchEvent(
-        new CustomEvent("screenerbot:open-token-details", { detail: { mint, symbol } })
+        new CustomEvent("screenerbot:open-token-details", {
+          detail: { mint, symbol, name, logo_url: logo_url || image_url || null },
+        })
       );
     });
   };

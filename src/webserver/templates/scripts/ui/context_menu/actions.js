@@ -69,7 +69,12 @@
       // Dispatch custom event that token pages listen for
       window.dispatchEvent(
         new CustomEvent("screenerbot:open-token-details", {
-          detail: { mint: context.mint, symbol: context.symbol },
+          detail: {
+            mint: context.mint,
+            symbol: context.symbol,
+            name: context.name,
+            logo_url: context.logo_url || context.image_url || null,
+          },
         })
       );
     };
