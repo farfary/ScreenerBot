@@ -73,104 +73,13 @@
    ============================================================================= */
 
 .settings-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 24px;
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
-  height: 64px;
-  backdrop-filter: blur(10px);
-}
-
-.settings-header-left {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.settings-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  background: var(--primary-alpha-10);
-  border-radius: var(--radius-xl);
-  font-size: 1.25rem;
-  color: var(--primary-color);
-}
-
-.settings-title h2 {
-  margin: 0;
-  font-size: 1.25rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  letter-spacing: -0.02em;
-}
-
-.settings-subtitle {
-  font-size: 0.8rem;
-  color: var(--text-secondary);
-  margin-top: 2px;
 }
 
 .settings-header-actions {
   display: flex;
   align-items: center;
   gap: 6px;
-}
-
-.settings-save-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  background: var(--primary-color);
-  border: none;
-  border-radius: var(--radius-lg);
-  color: white;
-  font-size: 0.85rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all var(--transition-base);
-  letter-spacing: 0.01em;
-}
-
-.settings-save-btn:hover:not(:disabled) {
-  background: var(--primary-hover);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px var(--primary-alpha-30);
-}
-
-.settings-save-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.settings-save-btn i {
-  font-size: 0.9rem;
-}
-
-.settings-close-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius-lg);
-  color: var(--text-secondary);
-  font-size: 1.2rem;
-  cursor: pointer;
-  transition: all var(--transition-base);
-}
-
-.settings-close-btn:hover {
-  background: var(--danger-alpha-15, rgb(248, 81, 73, 0.15));
-  color: var(--danger);
 }
 
 /* =============================================================================

@@ -551,24 +551,21 @@ export class SettingsDialog {
     return `
       <div class="settings-backdrop"></div>
       <div class="settings-container">
-        <div class="settings-header">
-          <div class="settings-header-left">
-            <div class="settings-icon"><i class="icon-settings"></i></div>
-            <div class="settings-title">
-              <h2>Settings</h2>
-              <span class="settings-subtitle">Configure dashboard preferences</span>
-            </div>
-          </div>
+        <header class="settings-header modal-header">
+          <h2 id="settings-dialog-title" class="modal-title">
+            <i class="icon-settings"></i>
+            <span>Settings</span>
+          </h2>
           <div class="settings-header-actions">
-            <button class="settings-save-btn" id="settingsSaveBtn" disabled>
+            <button class="btn btn-primary" id="settingsSaveBtn" type="button" disabled>
               <i class="icon-save"></i>
               <span>Save Changes</span>
             </button>
-            <button class="settings-close-btn" title="Close (ESC)">
+            <button class="modal-close" type="button" title="Close (ESC)" aria-label="Close settings">
               <i class="icon-x"></i>
             </button>
           </div>
-        </div>
+        </header>
 
         <div class="settings-body">
           <nav class="settings-nav">
@@ -682,7 +679,7 @@ export class SettingsDialog {
    */
   _attachEventHandlers() {
     // Close button
-    const closeBtn = this.dialogEl.querySelector(".settings-close-btn");
+    const closeBtn = this.dialogEl.querySelector(".modal-close");
     closeBtn.addEventListener("click", () => this.close());
 
     // Backdrop click
