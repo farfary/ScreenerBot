@@ -178,12 +178,12 @@ function createLifecycle() {
   // ============================================================================
 
   /**
-   * Load AI status and update UI
+   * Load model-feature status and update the UI
    */
   async function loadAiStatus() {
     try {
       const response = await fetch("/api/llm-analysis/status");
-      if (!response.ok) throw new Error("Failed to fetch AI status");
+      if (!response.ok) throw new Error("Failed to fetch model-feature status");
 
       const data = await response.json();
       state.aiStatus = data;
@@ -192,8 +192,12 @@ function createLifecycle() {
       updateMetrics(data);
       updateRecentDecisions(data.recent_decisions || []);
     } catch (error) {
-      console.error("[Assistant] Failed to load AI status:", error);
-      Utils.showToast({ key: "assistant-load", type: "error", title: "Could not load AI status" });
+      console.error("[Assistant] Failed to load model-feature status:", error);
+      Utils.showToast({
+        key: "assistant-load",
+        type: "error",
+        title: "Could not load model-feature status",
+      });
     }
   }
 
@@ -309,7 +313,7 @@ function createLifecycle() {
   }
 
   /**
-   * Toggle AI enabled state
+   * Toggle the shared LLM master switch
    */
   async function toggleAiEnabled(enabled) {
     try {
@@ -320,20 +324,22 @@ function createLifecycle() {
         body: JSON.stringify({ enabled }),
       });
 
-      if (!response.ok) throw new Error("Failed to update AI status");
+      if (!response.ok) throw new Error("Failed to update model-feature status");
 
       enabled ? playToggleOn() : playToggleOff();
       Utils.showToast({
         type: "success",
         title: enabled ? "Assistant Enabled" : "Assistant Disabled",
-        message: enabled ? "AI Assistant is now active" : "AI Assistant has been disabled",
+        message: enabled
+          ? "Model-backed features are now active"
+          : "Model-backed features are disabled",
       });
 
       await loadAiStatus();
     } catch (error) {
-      console.error("[Assistant] Failed to toggle AI:", error);
+      console.error("[Assistant] Failed to toggle model features:", error);
       playError();
-      Utils.showToast({ type: "error", title: "Failed to update AI status" });
+      Utils.showToast({ type: "error", title: "Failed to update model-feature status" });
 
       // Revert toggle
       const toggle = $("#stats-assistant-toggle");
@@ -374,7 +380,7 @@ function createLifecycle() {
       Utils.showToast({
         key: "assistant-load",
         type: "error",
-        title: "Could not load AI configuration",
+        title: "Could not load analysis configuration",
       });
     }
   }
@@ -447,13 +453,13 @@ function createLifecycle() {
   }
 
   /**
-   * Clear AI cache
+   * Clear the model-analysis cache
    */
   async function clearCache() {
     const confirmed = await ConfirmationDialog.show({
       title: "Clear Cache",
       message:
-        "Are you sure you want to clear the AI cache? This will remove all cached AI responses.",
+        "Are you sure you want to clear the analysis cache? This will remove all cached model decisions.",
       confirmText: "Clear Cache",
       confirmClass: "danger",
     });
@@ -468,7 +474,7 @@ function createLifecycle() {
       Utils.showToast({
         type: "success",
         title: "Cache Cleared",
-        message: "AI cache has been cleared successfully",
+        message: "The analysis cache is empty",
       });
 
       await loadCacheStats();
@@ -619,7 +625,7 @@ function createLifecycle() {
     if (!decisions || decisions.length === 0) {
       container.innerHTML = `
         <div class="empty-state">
-          <p class="empty-text">No AI requests yet</p>
+          <p class="empty-text">No LLM-analysis requests yet</p>
         </div>
       `;
       return;

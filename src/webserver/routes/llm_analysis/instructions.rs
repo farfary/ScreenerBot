@@ -1,4 +1,4 @@
-//! AI instructions, templates, and history handlers
+//! LLM-analysis instructions, templates, and history handlers
 
 use axum::{
     extract::{Path, Query, State},
@@ -98,7 +98,7 @@ pub async fn create_instruction(
         Ok(id) => {
             logger::info(
                 LogTag::Api,
-                &format!("Created AI instruction: {} ({})", req.name, category),
+                &format!("Created analysis instruction: {} ({})", req.name, category),
             );
 
             // Fetch the created instruction
@@ -154,7 +154,7 @@ pub async fn update_instruction(
         )
     }) {
         Ok(()) => {
-            logger::info(LogTag::Api, &format!("Updated AI instruction: {id}"));
+            logger::info(LogTag::Api, &format!("Updated analysis instruction: {id}"));
 
             // Fetch the updated instruction
             match db::with_analysis_db(|conn| db::get_instruction(conn, id)) {
@@ -198,7 +198,7 @@ pub async fn delete_instruction(
 ) -> Response {
     match db::with_analysis_db(|conn| db::delete_instruction(conn, id)) {
         Ok(()) => {
-            logger::info(LogTag::Api, &format!("Deleted AI instruction: {id}"));
+            logger::info(LogTag::Api, &format!("Deleted analysis instruction: {id}"));
             success_response(serde_json::json!({
                 "message": "Instruction deleted successfully"
             }))
@@ -221,7 +221,7 @@ pub async fn reorder_instructions(
         Ok(()) => {
             logger::info(
                 LogTag::Api,
-                &format!("Reordered {} AI instructions", req.ids.len()),
+                &format!("Reordered {} analysis instructions", req.ids.len()),
             );
             success_response(serde_json::json!({
                 "message": "Instructions reordered successfully"

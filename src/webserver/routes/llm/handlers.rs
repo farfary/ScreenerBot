@@ -215,7 +215,7 @@ pub async fn test_provider(
             logger::info(
                 LogTag::Api,
                 &format!(
-                    "AI provider '{}' test successful - model: {}, latency: {:.0}ms",
+                    "LLM provider '{}' test successful - model: {}, latency: {:.0}ms",
                     provider_name, model, latency_ms
                 ),
             );
@@ -241,7 +241,7 @@ pub async fn test_provider(
         Err(e) => {
             logger::error(
                 LogTag::Api,
-                &format!("AI provider '{provider_name}' test failed: {e}"),
+                &format!("LLM provider '{provider_name}' test failed: {e}"),
             );
 
             error_response(
@@ -424,7 +424,7 @@ pub async fn update_provider(
         Ok(_) => {
             logger::info(
                 LogTag::Api,
-                &format!("Updated AI provider '{provider_name}' configuration"),
+                &format!("Updated LLM provider '{provider_name}' configuration"),
             );
             success_response(serde_json::json!({
                 "provider": provider_name,

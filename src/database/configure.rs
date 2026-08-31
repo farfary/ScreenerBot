@@ -129,13 +129,13 @@ pub const WALLETS_DB: DbConfig = DbConfig::new(DbPreset::Cold);
 /// rpc_stats.db — Cold: stats aggregation, batch inserts
 pub const RPC_STATS_DB: DbConfig = DbConfig::new(DbPreset::Cold);
 
-/// ai chat.db — Cold: AI chat history
+/// ai_chat.db — Cold: Assistant chat history (legacy filename)
 pub const AI_CHAT_DB: DbConfig = DbConfig::new(DbPreset::Cold);
 
 /// pools.db — Standard: frequent price history writes, 729 MB on disk
 pub const POOLS_DB: DbConfig = DbConfig::new(DbPreset::Standard).with_cache_size(3000);
 
-/// ai database.db — Cold: AI scheduled analysis
+/// ai.db — Cold: LLM-analysis history/instructions (legacy filename)
 pub const AI_DB: DbConfig = DbConfig::new(DbPreset::Cold);
 
 /// agent_control.db — Cold: client pairings, the external-agent approval queue

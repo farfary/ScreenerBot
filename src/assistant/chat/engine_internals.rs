@@ -73,7 +73,7 @@ impl ChatEngine {
     pub(super) fn build_system_prompt(&self, context: &Option<ChatContext>) -> String {
         let mut prompt = String::with_capacity(8192);
         prompt.push_str(
-            "You are an AI assistant for ScreenerBot, a Solana trading bot. \
+            "You are the ScreenerBot Assistant for a Solana trading bot. \
              You help users analyze tokens, manage positions, and configure the bot.\n\n",
         );
 

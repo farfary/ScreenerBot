@@ -242,7 +242,7 @@ pub const SOLANA_FOUNDATION_LOGO_SVG: &str = include_str!("assets/solana/solanaF
 pub const SOLANA_FOUNDATION_LOGO_PNG: &[u8] =
     include_bytes!("assets/solana/solanaFoundationLogo.png");
 
-// AI Provider logos - Public for asset_serving.rs
+// LLM provider logos - Public for asset_serving.rs
 pub const PROVIDER_OPENAI: &[u8] = include_bytes!("assets/providers/openai.png");
 pub const PROVIDER_ANTHROPIC: &[u8] = include_bytes!("assets/providers/anthropic.png");
 pub const PROVIDER_GROQ: &[u8] = include_bytes!("assets/providers/groq.png");

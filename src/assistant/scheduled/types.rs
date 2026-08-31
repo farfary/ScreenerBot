@@ -69,7 +69,7 @@ impl TaskToolPermissions {
     }
 }
 
-/// A scheduled AI task definition
+/// A scheduled Assistant task definition
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScheduledTask {
     pub id: i64,

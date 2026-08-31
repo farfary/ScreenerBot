@@ -5,7 +5,7 @@
 <h1 align="center">APIs Module</h1>
 
 <p align="center">
-  <strong>Centralized External Data & AI Provider Integration</strong>
+  <strong>Centralized External Data & LLM Provider Integration</strong>
 </p>
 
 <p align="center">
@@ -303,7 +303,7 @@ Intervals: `5m`, `1h`, `6h`, `24h`. Default limit: 100 tokens.
 
 ## LLM Module
 
-<p align="center"><strong>Multi-Provider AI Intelligence Layer</strong></p>
+<p align="center"><strong>Multi-Provider LLM Transport Layer</strong></p>
 
 ### Architecture
 
@@ -387,7 +387,7 @@ pub trait LlmClient: Send + Sync {
 | **Jupiter** | 4 | Unlimited | 15s | N/A | Token discovery, organic scores |
 | **CoinGecko** | 1 | N/A | 20s | Full list | Solana address extraction |
 | **DefiLlama** | 2 | N/A | 25s | N/A | Protocol data, prices |
-| **LLM (9)** | 1 each | 30-60/min | 30-120s | N/A | AI analysis, chat |
+| **LLM (9)** | 1 each | 30-60/min | 30-120s | N/A | LLM analysis, chat |
 
 **Total: 6 market/data providers + 9 LLM providers = 15 external integrations**
 

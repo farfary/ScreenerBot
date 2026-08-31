@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-/// AI evaluation priority levels
+/// LLM-analysis evaluation priority levels
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Priority {
     High,   // Trading decisions - bypass cache
@@ -10,7 +10,7 @@ pub enum Priority {
     Low,    // Filtering/background - always use cache
 }
 
-/// AI decision result (after processing LLM response)
+/// Analysis decision produced from a validated LLM response
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AnalysisDecision {
     pub decision: String, // "pass", "reject", "buy", "sell", etc.
@@ -65,7 +65,7 @@ pub struct EvaluationResult {
     pub cached: bool,
 }
 
-/// User-created AI instruction
+/// User-created model-analysis instruction
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Instruction {
     pub id: i64,
@@ -78,7 +78,7 @@ pub struct Instruction {
     pub updated_at: String,
 }
 
-/// AI decision history record
+/// LLM-analysis decision history record
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DecisionRecord {
     pub id: i64,

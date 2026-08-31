@@ -522,10 +522,10 @@ export function createInstructionsTab({ state, _eventCleanups }) {
   function getCategoryHint(category) {
     const hints = {
       filtering:
-        "Instructions for token filtering decisions - helps AI determine which tokens to skip",
-      trading: "Instructions for entry/exit analysis - guides AI on trading decisions",
-      analysis: "General market analysis guidelines - shapes how AI analyzes market conditions",
-      general: "Other instructions - miscellaneous AI behavior customizations",
+        "Instructions for token filtering decisions - helps LLM analysis determine which tokens to skip",
+      trading: "Instructions for entry/exit analysis - guides model-scored trading decisions",
+      analysis: "General market-analysis guidelines for model-scored decisions",
+      general: "Other instructions for model-backed behavior",
     };
     return hints[category] || "";
   }

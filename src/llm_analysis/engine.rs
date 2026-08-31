@@ -18,39 +18,39 @@ use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::OnceCell;
 
-/// Global AI engine singleton
+/// Global model-analysis engine singleton
 static ANALYSIS_ENGINE: OnceCell<Arc<AnalysisEngine>> = OnceCell::const_new();
 
-/// Initialize the global AI engine
+/// Initialize the global model-analysis engine
 pub async fn init_analysis_engine() -> Result<()> {
     let engine = AnalysisEngine::new();
     ANALYSIS_ENGINE.set(Arc::new(engine)).map_err(|_| {
         Error::Internal(InternalError::InvariantViolation {
-            message: "AI engine already initialized".to_owned(),
+            message: "analysis engine already initialized".to_owned(),
         })
     })
 }
 
-/// Get the global AI engine
+/// Get the global model-analysis engine
 pub fn get_analysis_engine() -> Arc<AnalysisEngine> {
     ANALYSIS_ENGINE
         .get()
-        .expect("AI engine not initialized - call init_analysis_engine() first")
+        .expect("analysis engine not initialized - call init_analysis_engine() first")
         .clone()
 }
 
-/// Try to get the global AI engine (non-panicking version)
+/// Try to get the global model-analysis engine (non-panicking version)
 pub fn try_get_analysis_engine() -> Option<Arc<AnalysisEngine>> {
     ANALYSIS_ENGINE.get().cloned()
 }
 
-/// Main AI engine that orchestrates LLM calls, caching, and decision processing
+/// Model-analysis engine that orchestrates LLM calls, caching, and decision processing
 pub struct AnalysisEngine {
     cache: Arc<AnalysisCache>,
 }
 
 impl AnalysisEngine {
-    /// Create a new AI engine
+    /// Create a new model-analysis engine
     pub fn new() -> Self {
         let cache_ttl = with_config(|cfg| cfg.llm_analysis.cache_ttl_seconds);
         Self {
@@ -64,20 +64,27 @@ impl AnalysisEngine {
         context: EvaluationContext,
         priority: Priority,
     ) -> Result<EvaluationResult> {
-        // Check if AI is enabled
-        let (ai_enabled, filtering_enabled) =
-            with_config(|cfg| (cfg.llm.enabled, cfg.llm_analysis.filtering_enabled));
+        // Check whether LLM features and filtering analysis are enabled.
+        let (llm_enabled, filtering_enabled, use_cache) = with_config(|cfg| {
+            (
+                cfg.llm.enabled,
+                cfg.llm_analysis.filtering_enabled,
+                cfg.llm_analysis.use_cache,
+            )
+        });
 
-        if !ai_enabled || !filtering_enabled {
+        if !llm_enabled || !filtering_enabled {
             return Err(Error::Disabled);
         }
 
         // Check cache first
-        if let Some(cached_decision) = self.cache.get(&context.mint, "filter", priority) {
-            return Ok(EvaluationResult {
-                decision: cached_decision,
-                cached: true,
-            });
+        if use_cache {
+            if let Some(cached_decision) = self.cache.get(&context.mint, "filter", priority) {
+                return Ok(EvaluationResult {
+                    decision: cached_decision,
+                    cached: true,
+                });
+            }
         }
 
         // Get provider and model from config
@@ -127,7 +134,7 @@ impl AnalysisEngine {
             self.convert_filter_decision(filter_decision, response, latency_ms, provider)?;
 
         // Cache the result (unless bypass cache is enabled for high priority)
-        if !bypass_cache || priority != Priority::High {
+        if use_cache && (!bypass_cache || priority != Priority::High) {
             self.cache.insert(&context.mint, "filter", decision.clone());
         }
 
@@ -229,7 +236,7 @@ impl AnalysisEngine {
         })
     }
 
-    /// Map LLM errors to AI errors
+    /// Map provider errors to model-analysis errors
     fn map_llm_error(&self, error: LlmError) -> Error {
         match error {
             LlmError::ProviderDisabled { provider } => Error::ProviderNotConfigured { provider },
@@ -249,11 +256,11 @@ impl AnalysisEngine {
         context: &EvaluationContext,
         priority: Priority,
     ) -> Result<EvaluationResult> {
-        // Check if AI is enabled
-        let (ai_enabled, entry_enabled) =
+        // Check whether model-backed features are enabled.
+        let (llm_enabled, entry_enabled) =
             with_config(|cfg| (cfg.llm.enabled, cfg.llm_analysis.entry_analysis_enabled));
 
-        if !ai_enabled || !entry_enabled {
+        if !llm_enabled || !entry_enabled {
             return Err(Error::Disabled);
         }
 
@@ -329,11 +336,11 @@ impl AnalysisEngine {
         context: &EvaluationContext,
         _priority: Priority,
     ) -> Result<EvaluationResult> {
-        // Check if AI is enabled
-        let (ai_enabled, exit_enabled) =
+        // Check whether model-backed features are enabled.
+        let (llm_enabled, exit_enabled) =
             with_config(|cfg| (cfg.llm.enabled, cfg.llm_analysis.exit_analysis_enabled));
 
-        if !ai_enabled || !exit_enabled {
+        if !llm_enabled || !exit_enabled {
             return Err(Error::Disabled);
         }
 
@@ -487,7 +494,7 @@ impl AnalysisEngine {
             // Log but don't fail the operation
             crate::logger::debug(
                 crate::logger::LogTag::Filtering,
-                &format!("Failed to record AI decision in history: {e}"),
+                &format!("Failed to record LLM-analysis decision in history: {e}"),
             );
         }
     }

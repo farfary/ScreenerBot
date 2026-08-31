@@ -337,7 +337,7 @@ pub async fn get_solana_asset(Path(file): Path<String>) -> Response {
     }
 }
 
-/// Serve AI provider logos
+/// Serve LLM provider logos
 pub async fn get_provider_logo(Path(file): Path<String>) -> Response {
     let content_type = [(http_header::CONTENT_TYPE, "image/png")];
     match file.as_str() {

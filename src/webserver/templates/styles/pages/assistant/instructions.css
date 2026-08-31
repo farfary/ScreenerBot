@@ -17,7 +17,7 @@
   gap: 12px;
 }
 
-/* AI-specific filter-select overrides - base in notifications.css.
+/* Assistant-specific filter-select overrides - base in notifications.css.
    Arrow inherited from global `select {}` (form_controls.css). */
 .assistant-page .filter-select {
   padding: 8px 32px 8px 12px;

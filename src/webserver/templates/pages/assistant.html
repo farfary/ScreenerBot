@@ -9,18 +9,18 @@
         <div class="assistant-panel-header">
           <h2 class="assistant-panel-title">Assistant Overview</h2>
           <p class="assistant-panel-description">
-            Live module status, performance metrics, and the latest AI evaluations.
+            Live LLM and analysis status, performance metrics, and the latest model evaluations.
           </p>
         </div>
 
-        <!-- AI Status Control -->
+        <!-- Shared model-feature status control -->
         <div class="assistant-status-bar" id="assistant-status-bar">
           <div class="status-bar-main">
             <div class="status-bar-icon" id="assistant-status-icon">
               <i class="icon-bot"></i>
             </div>
             <div class="status-bar-info">
-              <span class="status-bar-title">Assistant Module</span>
+              <span class="status-bar-title">Model Features</span>
               <span class="status-bar-status" id="assistant-status-text">Loading...</span>
             </div>
           </div>
@@ -58,7 +58,7 @@
             <div class="metric-icon"><i class="icon-server"></i></div>
             <div class="metric-content">
               <div class="metric-label">Active Providers</div>
-              <div class="metric-value" id="metric-providers">0 / 10</div>
+              <div class="metric-value" id="metric-providers">0 / 9</div>
             </div>
           </div>
         </div>
@@ -67,7 +67,7 @@
         <div class="stats-section stats-section-decisions">
           <div class="section-header">
             <h3><i class="icon-list"></i> Recent Decisions</h3>
-            <span class="section-subtitle">Latest AI evaluations</span>
+            <span class="section-subtitle">Latest model-analysis decisions</span>
           </div>
           <div id="recent-decisions-container"></div>
         </div>
@@ -78,7 +78,7 @@
         <div class="assistant-panel-header">
           <h2 class="assistant-panel-title">LLM Providers</h2>
           <p class="assistant-panel-description">
-            Configure Assistant providers for intelligent token analysis
+            Configure the shared LLM providers used by analysis and the Assistant
           </p>
         </div>
 
@@ -96,12 +96,12 @@
         <div class="settings-card">
           <div class="settings-card-header">
             <h3 class="settings-card-title">Master Settings</h3>
-            <p class="settings-card-description">Core Assistant module configuration</p>
+            <p class="settings-card-description">Shared LLM master switch and provider selection</p>
           </div>
           <div class="settings-card-body">
             <div class="setting-item">
               <div class="setting-info">
-                <label class="setting-label" for="setting-enabled">Assistant Module</label>
+                <label class="setting-label" for="setting-enabled">Model Features</label>
                 <span class="setting-description"
                   >Enable intelligent token analysis using LLM providers</span
                 >
@@ -117,7 +117,7 @@
               <div class="setting-info">
                 <label class="setting-label" for="setting-default-provider">Default Provider</label>
                 <span class="setting-description"
-                  >Primary Assistant provider to use for token analysis</span
+                  >The one provider used by analysis, the Assistant, and scheduled tasks</span
                 >
               </div>
               <div class="setting-control">
@@ -494,7 +494,7 @@
           <div class="panel-header-content">
             <h2 class="assistant-panel-title">Automation</h2>
             <p class="assistant-panel-description">
-              Schedule AI tasks to run automatically on intervals or at specific times
+              Schedule Assistant tasks to run automatically on intervals or at specific times
             </p>
           </div>
           <button
@@ -533,7 +533,9 @@
             <div class="empty-state" id="no-automation-tasks">
               <i class="empty-icon icon-zap"></i>
               <p class="empty-text">No scheduled tasks yet</p>
-              <p class="empty-state-subtitle">Create your first automated AI task to get started</p>
+              <p class="empty-state-subtitle">
+                Create your first automated Assistant task to get started
+              </p>
               <button
                 type="button"
                 class="btn btn-secondary"

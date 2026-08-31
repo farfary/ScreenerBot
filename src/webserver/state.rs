@@ -11,7 +11,7 @@ use std::sync::{Arc, OnceLock};
 pub struct AppState {
     /// Server startup time
     pub startup_time: chrono::DateTime<chrono::Utc>,
-    /// AI engine instance (optional, only if AI is enabled)
+    /// Model-analysis engine instance (optional, only if LLM analysis is enabled)
     pub analysis_engine: Option<Arc<crate::llm_analysis::engine::AnalysisEngine>>,
 }
 
@@ -24,7 +24,7 @@ impl AppState {
         }
     }
 
-    /// Create new application state with AI engine
+    /// Create new application state with a model-analysis engine
     pub fn with_analysis_engine(
         analysis_engine: Option<Arc<crate::llm_analysis::engine::AnalysisEngine>>,
     ) -> Self {

@@ -1,4 +1,4 @@
-//! Exit evaluation coordinator with priority-based checks and AI analysis
+//! Exit evaluation coordinator with priority-based checks and LLM analysis
 //!
 //! Evaluates whether an exit should be made for a position by checking in priority order,
 //! split into two groups:
@@ -8,7 +8,7 @@
 //! 2. Risk limits (>90% loss - emergency)
 //!
 //! Policy (3-8, only when the auto-trader owns this position's exits):
-//! 3. AI exit analysis (high priority - if enabled)
+//! 3. LLM exit analysis (high priority - if enabled)
 //! 4. Stop loss (high priority - fixed threshold from entry)
 //! 5. Trailing stop (high priority - from peak)
 //! 6. ROI target (normal priority)
@@ -95,7 +95,7 @@ pub(crate) async fn evaluate_safety_exit(
     Ok(None)
 }
 
-/// Priorities 3-8: AI, stop loss, trailing stop, ROI target, time override, strategy exit.
+/// Priorities 3-8: LLM analysis, stop loss, trailing stop, ROI target, time override, strategy exit.
 /// These are POLICY — opinions about when to take a trade off — and only run when the
 /// auto-trader owns this position's exits.
 pub(crate) async fn evaluate_policy_exit(
@@ -104,9 +104,9 @@ pub(crate) async fn evaluate_policy_exit(
 ) -> crate::trader::Result<Option<TradeDecision>> {
     let policy = crate::trader::policy::resolve_exit_policy(position).await;
 
-    // Priority 3: AI exit analysis (high priority - if enabled)
+    // Priority 3: LLM exit analysis (high priority - if enabled)
     if llm_analysis::should_analyze_exit() {
-        // Get token data for AI analysis
+        // Get token data for LLM analysis
         match crate::tokens::get_full_token_async(&position.mint).await {
             Ok(Some(token)) => {
                 match llm_analysis::analyze_exit(position, &token).await {
@@ -115,7 +115,7 @@ pub(crate) async fn evaluate_policy_exit(
                             crate::logger::info(
                                 crate::logger::LogTag::Trader,
                                 &format!(
-                                    "AI suggests exit for {} (confidence: {}%, urgency: {:?}, reason: {})",
+                                    "LLM analysis suggests exit for {} (confidence: {}%, urgency: {:?}, reason: {})",
                                     position.symbol,
                                     result.confidence,
                                     result.urgency,
@@ -128,8 +128,8 @@ pub(crate) async fn evaluate_policy_exit(
                                 position_id: position.id.map(|id| id.to_string()),
                                 mint: position.mint.clone(),
                                 action: crate::trader::types::TradeAction::Sell,
-                                reason: crate::trader::types::TradeReason::AiExit,
-                                strategy_id: Some("ai_exit".to_owned()),
+                                reason: crate::trader::types::TradeReason::LlmAnalysisExit,
+                                strategy_id: Some("llm_analysis_exit".to_owned()),
                                 timestamp: chrono::Utc::now(),
                                 priority: match result.urgency {
                                     llm_analysis::ExitUrgency::Immediate => {
@@ -147,14 +147,14 @@ pub(crate) async fn evaluate_policy_exit(
                                 slippage_pct: None,
                             };
 
-                            // Record AI exit signal event
+                            // Record the LLM-analysis exit signal event.
                             crate::events::record_trader_event(
-                                "exit_signal_ai",
+                                "exit_signal_llm_analysis",
                                 crate::events::Severity::Info,
                                 Some(&position.mint),
                                 None,
                                 serde_json::json!({
-                                    "exit_type": "ai_exit",
+                                    "exit_type": "llm_analysis_exit",
                                     "mint": position.mint,
                                     "symbol": position.symbol,
                                     "current_price": current_price,
@@ -171,17 +171,17 @@ pub(crate) async fn evaluate_policy_exit(
                             crate::logger::debug(
                                 crate::logger::LogTag::Trader,
                                 &format!(
-                                    "AI suggests holding {} (confidence: {}%, reason: {})",
+                                    "LLM analysis suggests holding {} (confidence: {}%, reason: {})",
                                     position.symbol, result.confidence, result.reasoning
                                 ),
                             );
                         }
                     }
                     None => {
-                        // AI analysis failed or is unavailable
+                        // LLM analysis failed or is unavailable
                         crate::logger::debug(
                             crate::logger::LogTag::Trader,
-                            &format!("AI exit analysis unavailable for {}", position.symbol),
+                            &format!("LLM exit analysis unavailable for {}", position.symbol),
                         );
                     }
                 }
@@ -190,7 +190,7 @@ pub(crate) async fn evaluate_policy_exit(
                 crate::logger::debug(
                     crate::logger::LogTag::Trader,
                     &format!(
-                        "Token data not found for AI exit analysis: {}",
+                        "Token data not found for LLM exit analysis: {}",
                         position.mint
                     ),
                 );
@@ -198,7 +198,7 @@ pub(crate) async fn evaluate_policy_exit(
             Err(e) => {
                 crate::logger::warning(
                     crate::logger::LogTag::Trader,
-                    &format!("Failed to fetch token data for AI exit analysis: {e}"),
+                    &format!("Failed to fetch token data for LLM exit analysis: {e}"),
                 );
             }
         }

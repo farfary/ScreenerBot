@@ -1,10 +1,10 @@
 //! Token data sources and rejection origins for the filtering pipeline.
 use std::fmt;
 
-pub mod ai;
 pub(super) mod bounds;
 pub mod dexscreener;
 pub mod geckoterminal;
+pub mod llm_analysis;
 pub mod meta;
 pub mod onchain;
 pub mod rugcheck;
@@ -17,7 +17,7 @@ pub enum FilterSource {
     DexScreener,
     GeckoTerminal,
     Rugcheck,
-    Ai,
+    LlmAnalysis,
 }
 
 impl FilterSource {
@@ -28,7 +28,7 @@ impl FilterSource {
             FilterSource::DexScreener => "dexscreener",
             FilterSource::GeckoTerminal => "geckoterminal",
             FilterSource::Rugcheck => "rugcheck",
-            FilterSource::Ai => "ai",
+            FilterSource::LlmAnalysis => "llm_analysis",
         }
     }
 }
@@ -52,8 +52,8 @@ pub enum FilterRejectionReason {
     OnChainImmutableWithFreeze,
     OnChainHighRiskScore,
 
-    // AI filtering
-    AiRejected {
+    // LLM analysis filtering
+    LlmAnalysisRejected {
         reason: String,
         confidence: u8,
         provider: String,
@@ -156,7 +156,7 @@ impl FilterRejectionReason {
                 "onchain_immutable_with_freeze".to_owned()
             }
             FilterRejectionReason::OnChainHighRiskScore => "onchain_high_risk_score".to_owned(),
-            FilterRejectionReason::AiRejected { .. } => "ai_rejected".to_owned(),
+            FilterRejectionReason::LlmAnalysisRejected { .. } => "llm_analysis_rejected".to_owned(),
             FilterRejectionReason::DexScreenerEmptyName => "dex_empty_name".to_owned(),
             FilterRejectionReason::DexScreenerEmptySymbol => "dex_empty_symbol".to_owned(),
             FilterRejectionReason::DexScreenerEmptyLogoUrl => "dex_empty_logo".to_owned(),
@@ -277,13 +277,13 @@ impl FilterRejectionReason {
     /// Human-readable display label for UI
     pub fn display_label(&self) -> String {
         match self {
-            FilterRejectionReason::AiRejected {
+            FilterRejectionReason::LlmAnalysisRejected {
                 reason,
                 confidence,
                 provider,
             } => {
                 format!(
-                    "AI Rejected: {} ({}% conf, {})",
+                    "LLM Analysis Rejected: {} ({}% conf, {})",
                     reason, confidence, provider
                 )
             }
@@ -427,7 +427,7 @@ impl FilterRejectionReason {
     /// Map rejection reason to source category for UI summaries.
     pub fn source(&self) -> FilterSource {
         match self {
-            FilterRejectionReason::AiRejected { .. } => FilterSource::Ai,
+            FilterRejectionReason::LlmAnalysisRejected { .. } => FilterSource::LlmAnalysis,
             FilterRejectionReason::NoDecimalsInDatabase
             | FilterRejectionReason::TokenTooNew
             | FilterRejectionReason::CooldownFiltered

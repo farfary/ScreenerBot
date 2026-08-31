@@ -1,4 +1,4 @@
-//! Builds the LlmManager's providers from `[ai.providers]` config.
+//! Builds the `LlmManager` provider clients from `[llm.providers]` config.
 
 use crate::logger::{self, LogTag};
 

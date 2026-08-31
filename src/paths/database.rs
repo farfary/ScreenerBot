@@ -65,7 +65,7 @@ pub fn get_tools_db_path() -> PathBuf {
     get_data_directory().join("tools.db")
 }
 
-/// Returns the AI database path.
+/// Returns the legacy-named LLM-analysis database path.
 pub fn get_ai_db_path() -> PathBuf {
     get_data_directory().join("ai.db")
 }
@@ -76,7 +76,7 @@ pub fn get_agent_control_db_path() -> PathBuf {
     get_data_directory().join("agent_control.db")
 }
 
-/// Returns the AI chat database path.
+/// Returns the legacy-named Assistant chat database path.
 pub fn get_ai_chat_db_path() -> PathBuf {
     get_data_directory().join("ai_chat.db")
 }

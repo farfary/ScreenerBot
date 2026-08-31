@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-/// AI trade decision schema
+/// LLM trade-decision schema
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TradeDecision {
     pub decision: TradeAction,

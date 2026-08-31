@@ -52,7 +52,7 @@ pub async fn manual_buy(
     // for the same mint — and `update_position_state()` resolves by mint (first match),
     // so the two would corrupt each other's state and the sell/add routes could not tell
     // them apart. Adding to the existing position is the only correct interpretation.
-    // Enforced here (not in the route) so the AI trading tool is covered too.
+    // Enforced here (not in the route) so the Agent Control trading tool is covered too.
     if positions::is_open_position(mint).await {
         let error = "Position already open for this token - use add to position instead";
         action.fail_validation(error).await;

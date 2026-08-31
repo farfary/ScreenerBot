@@ -1,4 +1,4 @@
-//! AI-powered token filtering
+//! LLM-analysis token filtering
 //!
 //! Uses LLM analysis to determine if tokens pass filtering criteria.
 //! Disabled by default. Provider clients are configured under `[llm]`; this
@@ -10,13 +10,13 @@ use crate::tokens::types::Token;
 
 use super::FilterRejectionReason;
 
-/// Check token using AI analysis
+/// Check token using LLM analysis
 ///
-/// Returns `Some(FilterRejectionReason::AiRejected)` if AI rejects the token.
-/// Returns `None` if AI passes the token or if AI filtering is disabled.
+/// Returns `Err(FilterRejectionReason::LlmAnalysisRejected)` when analysis rejects the token.
+/// Returns `Ok(())` when analysis passes or the feature is disabled.
 pub async fn evaluate(token: &Token) -> Result<(), FilterRejectionReason> {
-    // Check if AI filtering is enabled
-    let (ai_enabled, filtering_enabled, min_confidence, fallback_pass) = with_config(|cfg| {
+    // Check whether LLM features and filtering analysis are enabled.
+    let (llm_enabled, filtering_enabled, min_confidence, fallback_pass) = with_config(|cfg| {
         (
             cfg.llm.enabled,
             cfg.llm_analysis.filtering_enabled,
@@ -25,17 +25,16 @@ pub async fn evaluate(token: &Token) -> Result<(), FilterRejectionReason> {
         )
     });
 
-    if !ai_enabled || !filtering_enabled {
-        return Ok(()); // AI filtering disabled, skip
+    if !llm_enabled || !filtering_enabled {
+        return Ok(());
     }
 
-    // Get global AI engine instance
-    let ai_engine = match crate::llm_analysis::try_get_analysis_engine() {
+    // Get the global model-analysis engine.
+    let analysis_engine = match crate::llm_analysis::try_get_analysis_engine() {
         Some(engine) => engine,
         None => {
-            // AI is enabled but engine not initialized - this shouldn't happen
-            // but handle gracefully
-            return Ok(()); // Skip AI filtering
+            // Model-backed features are enabled but the analysis engine is not ready.
+            return Ok(());
         }
     };
 
@@ -53,8 +52,8 @@ pub async fn evaluate(token: &Token) -> Result<(), FilterRejectionReason> {
     // Use Low priority for filtering (allows caching)
     let priority = Priority::Low;
 
-    // Call AI engine
-    match ai_engine.evaluate_filter(context, priority).await {
+    // Run the model-scored filtering stage.
+    match analysis_engine.evaluate_filter(context, priority).await {
         Ok(result) => {
             let decision = result.decision;
 
@@ -64,7 +63,7 @@ pub async fn evaluate(token: &Token) -> Result<(), FilterRejectionReason> {
                 if fallback_pass {
                     return Ok(()); // Let token pass
                 } else {
-                    return Err(FilterRejectionReason::AiRejected {
+                    return Err(FilterRejectionReason::LlmAnalysisRejected {
                         reason: format!("Low confidence ({}%)", decision.confidence),
                         confidence: decision.confidence,
                         provider: decision.provider,
@@ -74,8 +73,8 @@ pub async fn evaluate(token: &Token) -> Result<(), FilterRejectionReason> {
 
             // Check decision
             match decision.decision.as_str() {
-                "pass" => Ok(()), // AI says pass
-                "reject" => Err(FilterRejectionReason::AiRejected {
+                "pass" => Ok(()),
+                "reject" => Err(FilterRejectionReason::LlmAnalysisRejected {
                     reason: decision.reasoning,
                     confidence: decision.confidence,
                     provider: decision.provider,
@@ -85,8 +84,8 @@ pub async fn evaluate(token: &Token) -> Result<(), FilterRejectionReason> {
                     if fallback_pass {
                         Ok(())
                     } else {
-                        Err(FilterRejectionReason::AiRejected {
-                            reason: format!("Unknown AI decision: {}", decision.decision),
+                        Err(FilterRejectionReason::LlmAnalysisRejected {
+                            reason: format!("Unknown LLM analysis decision: {}", decision.decision),
                             confidence: decision.confidence,
                             provider: decision.provider,
                         })
@@ -95,12 +94,12 @@ pub async fn evaluate(token: &Token) -> Result<(), FilterRejectionReason> {
             }
         }
         Err(e) => {
-            // AI error - use fallback
+            // Analysis error: apply the configured fallback posture.
             if fallback_pass {
                 Ok(())
             } else {
-                Err(FilterRejectionReason::AiRejected {
-                    reason: format!("AI analysis failed: {e}"),
+                Err(FilterRejectionReason::LlmAnalysisRejected {
+                    reason: format!("LLM analysis failed: {e}"),
                     confidence: 0,
                     provider: "unknown".to_owned(),
                 })

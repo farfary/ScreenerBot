@@ -390,7 +390,7 @@ pub fn reorder_instructions(db: &Connection, ids: &[i64]) -> Result<()> {
 // DECISION HISTORY OPERATIONS
 // =============================================================================
 
-/// Record an AI decision
+/// Record an LLM-analysis decision
 pub fn record_decision(db: &Connection, record: &DecisionRecord) -> Result<i64> {
     let now = chrono::Utc::now().to_rfc3339();
 

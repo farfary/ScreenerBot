@@ -92,7 +92,7 @@ pub async fn get_analysis_status(State(state): State<Arc<AppState>>) -> Response
     success_response(response)
 }
 
-/// GET /api/llm-analysis/stats - Get AI usage statistics
+/// GET /api/llm-analysis/stats - Get LLM-analysis usage statistics
 pub async fn get_analysis_stats(State(_state): State<Arc<AppState>>) -> Response {
     // Return promotional fixtures only for owner-initiated media capture.
     if crate::webserver::promo::are_promo_fixtures_enabled() {
@@ -134,7 +134,7 @@ pub async fn get_analysis_config(State(_state): State<Arc<AppState>>) -> Respons
     success_response(response)
 }
 
-/// PATCH /api/llm-analysis/config - Update AI configuration
+/// PATCH /api/llm-analysis/config - Update model-analysis configuration
 pub async fn update_analysis_config(
     State(_state): State<Arc<AppState>>,
     Json(req): Json<UpdateAnalysisConfigRequest>,
@@ -232,11 +232,11 @@ fn apply_analysis_config_update(
     }
 }
 
-/// POST /api/llm-analysis/cache/clear - Clear AI cache
+/// POST /api/llm-analysis/cache/clear - Clear the analysis cache
 pub async fn clear_cache(State(state): State<Arc<AppState>>) -> Response {
     if let Some(engine) = &state.analysis_engine {
         engine.clear_cache();
-        logger::info(LogTag::Api, "AI cache cleared via API");
+        logger::info(LogTag::Api, "Analysis cache cleared via API");
         success_response(serde_json::json!({
             "message": "Cache cleared successfully"
         }))
@@ -244,7 +244,7 @@ pub async fn clear_cache(State(state): State<Arc<AppState>>) -> Response {
         error_response(
             StatusCode::SERVICE_UNAVAILABLE,
             "ANALYSIS_NOT_INITIALIZED",
-            "AI engine not initialized",
+            "Analysis engine not initialized",
             None,
         )
     }
@@ -270,36 +270,36 @@ pub async fn get_cache_stats(State(state): State<Arc<AppState>>) -> Response {
         error_response(
             StatusCode::SERVICE_UNAVAILABLE,
             "ANALYSIS_NOT_INITIALIZED",
-            "AI engine not initialized",
+            "Analysis engine not initialized",
             None,
         )
     }
 }
 
-/// POST /api/llm-analysis/test/evaluate - Test AI evaluation with a mint address
+/// POST /api/llm-analysis/test/evaluate - Test model analysis with a mint address
 pub async fn test_evaluate(
     State(state): State<Arc<AppState>>,
     Json(req): Json<TestEvaluateRequest>,
 ) -> Response {
-    // Check if AI is enabled
-    let ai_enabled = with_config(|cfg| cfg.llm.enabled);
-    if !ai_enabled {
+    // Check whether model-backed features are enabled.
+    let llm_enabled = with_config(|cfg| cfg.llm.enabled);
+    if !llm_enabled {
         return error_response(
             StatusCode::BAD_REQUEST,
             "ANALYSIS_DISABLED",
-            "AI module is disabled. Enable it in configuration first.",
+            "LLM features are disabled. Enable [llm] first.",
             None,
         );
     }
 
-    // Get AI engine
+    // Get the model-analysis engine.
     let engine = match &state.analysis_engine {
         Some(e) => e,
         None => {
             return error_response(
                 StatusCode::SERVICE_UNAVAILABLE,
                 "ANALYSIS_NOT_INITIALIZED",
-                "AI engine not initialized",
+                "Analysis engine not initialized",
                 None,
             );
         }
@@ -370,13 +370,13 @@ pub async fn test_evaluate(
         Err(e) => {
             logger::error(
                 LogTag::Api,
-                &format!("AI test evaluation failed for {}: {}", req.mint, e),
+                &format!("LLM test evaluation failed for {}: {}", req.mint, e),
             );
 
             error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "EVALUATION_FAILED",
-                &format!("AI evaluation failed: {e}"),
+                &format!("Model analysis failed: {e}"),
                 None,
             )
         }

@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-/// AI exit suggestion schema
+/// LLM exit-suggestion schema
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExitSuggestion {
     pub should_exit: bool,

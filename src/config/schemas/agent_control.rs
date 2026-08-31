@@ -12,10 +12,10 @@ config_struct! {
     /// in-app assistant and scheduled automation. Paired agent connections do
     /// NOT read this: each carries its own policy in the pairing store.
     pub struct AgentControlConfig {
-        /// Enable the native local MCP endpoint and stdio adapter.
+        /// Enable the loopback agent bridge and stdio MCP adapter.
         #[metadata(field_metadata! {
             label: "Enable Agent Control",
-            hint: "Enable the native local MCP endpoint and stdio adapter. Unknown clients still receive zero tools until a pairing store exists",
+            hint: "Enable the authenticated loopback agent bridge and stdio MCP adapter. Unpaired clients receive zero tools",
             category: "Master Control",
             impact: "critical",
         })]

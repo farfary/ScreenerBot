@@ -508,12 +508,12 @@ async fn pipeline_disabling_rugcheck_also_disables_its_data_requirement() {
 }
 
 // ============================================================================
-// AI STAGE
+// LLM ANALYSIS STAGE
 // ============================================================================
 
 #[tokio::test]
-async fn pipeline_ai_stage_is_inert_when_disabled() {
-    let _cfg = config_guard(); // resets the global config, where ai.enabled defaults to false
+async fn pipeline_llm_analysis_stage_is_inert_when_disabled() {
+    let _cfg = config_guard(); // resets the global config, where llm.enabled defaults to false
     let token = seeded_token();
 
     assert!(evaluate_token(&token, &filters_default_dex_only())
@@ -522,8 +522,8 @@ async fn pipeline_ai_stage_is_inert_when_disabled() {
 }
 
 #[tokio::test]
-async fn pipeline_ai_stage_fails_open_when_the_engine_is_missing() {
-    // AI is configured on, but no engine was initialised. The stage must let the token
+async fn pipeline_llm_analysis_stage_fails_open_when_the_engine_is_missing() {
+    // LLM analysis is configured on, but no engine was initialised. The stage must let the token
     // through rather than rejecting every candidate — filtering must never depend on an
     // optional subsystem being up.
     let _cfg = config_guard();

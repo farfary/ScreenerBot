@@ -79,7 +79,7 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
       <div class="empty-state" id="no-automation-tasks">
         <i class="empty-icon icon-zap"></i>
         <p class="empty-text">No scheduled tasks yet</p>
-        <p class="empty-state-subtitle">Create your first automated AI task to get started</p>
+        <p class="empty-state-subtitle">Create your first automated Assistant task to get started</p>
         <button class="btn btn-secondary" onclick="window.assistantPage.createAutomationTask()">Create Your First Task</button>
       </div>
     `;
@@ -212,7 +212,7 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
         </div>
         <div class="form-group">
           <label>Instruction</label>
-          <textarea id="auto-instruction" rows="6" class="instruction-editor" placeholder="What should the AI do? e.g., Check open positions for reversal signs and report findings."></textarea>
+          <textarea id="auto-instruction" rows="6" class="instruction-editor" placeholder="What should the Assistant do? e.g., Check open positions for reversal signs and report findings."></textarea>
         </div>
         <div class="form-row">
           <div class="form-group form-group-half">
@@ -622,7 +622,7 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
             run.ai_response
               ? `
             <div class="run-response-section">
-              <h4>AI Response</h4>
+              <h4>Assistant Response</h4>
               <div class="run-response-content">${Utils.escapeHtml(run.ai_response)}</div>
             </div>
           `

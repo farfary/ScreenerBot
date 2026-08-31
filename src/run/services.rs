@@ -56,7 +56,7 @@ pub fn register_all_services(manager: &mut ServiceManager) {
     manager.register(Box::new(TraderService::new()));
     manager.register(Box::new(WebserverService));
 
-    // AI service (background auto-blacklisting)
+    // LLM-analysis service (background auto-blacklisting)
     manager.register(Box::new(LlmAnalysisService::default()));
     manager.register(Box::new(AssistantScheduledTasksService::default()));
 

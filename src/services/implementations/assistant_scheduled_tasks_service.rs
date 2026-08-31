@@ -47,7 +47,10 @@ impl Service for AssistantScheduledTasksService {
     }
 
     async fn initialize(&mut self) -> crate::Result<()> {
-        logger::info(LogTag::System, "Scheduled AI tasks service initialized");
+        logger::info(
+            LogTag::System,
+            "Assistant scheduled-tasks service initialized",
+        );
         Ok(())
     }
 
@@ -67,7 +70,7 @@ impl Service for AssistantScheduledTasksService {
     }
 
     async fn stop(&mut self) -> crate::Result<()> {
-        logger::info(LogTag::System, "Scheduled AI tasks service stopped");
+        logger::info(LogTag::System, "Assistant scheduled-tasks service stopped");
         Ok(())
     }
 

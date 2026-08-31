@@ -555,7 +555,7 @@ pub async fn compute_snapshot(
 }
 
 /// Run the full filter pipeline for ONE token, in the order the snapshot uses:
-/// meta -> on-chain -> DexScreener -> GeckoTerminal -> Rugcheck -> AI.
+/// meta -> on-chain -> DexScreener -> GeckoTerminal -> Rugcheck -> LLM analysis.
 ///
 /// Pure with respect to the token: it reads config, the decimals cache and position
 /// cooldowns, and returns the FIRST rejection reason. Exposed so a single decision can be
@@ -626,9 +626,8 @@ pub async fn apply_all_filters(
         sources::rugcheck::evaluate(token, &config.rugcheck)?;
     }
 
-    // AI filtering runs LAST after all standard filters pass
-    // This ensures we only spend AI credits on tokens that already pass basic checks
-    sources::ai::evaluate(token).await?;
+    // LLM analysis runs LAST so model calls are spent only on tokens that pass standard filters.
+    sources::llm_analysis::evaluate(token).await?;
 
     Ok(())
 }

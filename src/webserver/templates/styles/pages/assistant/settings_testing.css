@@ -141,7 +141,7 @@
 /* NOTE: the old `.assistant-native-select` CSS-only wrapper (with its own ::after triangle)
    was removed. Its <select> is now upgraded to the shared CustomSelect by the global
    enhancer, so the wrapper's triangle painted a SECOND arrow on top of .cs-arrow
-   (the double arrow on the AI settings page). Style the dropdown via the shared
+   (the double arrow on the Assistant settings page). Style the dropdown via the shared
    .custom-select component, never a per-page select wrapper. */
 
 /* ===== IMPROVED TEXT INPUTS ===== */

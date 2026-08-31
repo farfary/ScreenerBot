@@ -149,7 +149,7 @@ impl Default for ToolPermissions {
 pub struct PendingConfirmation {
     /// Unique confirmation ID
     pub id: String,
-    /// AI session ID
+    /// Assistant session ID
     pub session_id: i64,
     /// Telegram message ID
     pub message_id: i64,

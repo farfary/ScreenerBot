@@ -88,7 +88,7 @@ pub fn init_chat_db() -> Result<Pool<SqliteConnectionManager>> {
         .build(manager)
         .map_err(|e| {
             Error::Database(DatabaseError::Connection {
-                message: format!("build the AI chat database connection pool: {e}"),
+                message: format!("build the Assistant chat database connection pool: {e}"),
             })
         })?;
 
@@ -104,7 +104,7 @@ pub fn init_chat_db() -> Result<Pool<SqliteConnectionManager>> {
 
     logger::info(
         LogTag::System,
-        &format!("AI chat database initialized at {db_path_str}"),
+        &format!("Assistant chat database initialized at {db_path_str}"),
     );
 
     // Store in global

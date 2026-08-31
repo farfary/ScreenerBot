@@ -22,7 +22,7 @@ class GlobalChat {
     this._setupEvents();
     this._updateVisibility();
 
-    // Hide button on AI page
+    // Hide the global control on the Assistant page.
     window.addEventListener("popstate", () => this._updateVisibility());
     const origPush = window.history.pushState;
     window.history.pushState = (...args) => {
@@ -36,8 +36,8 @@ class GlobalChat {
     this._btn = document.createElement("button");
     this._btn.type = "button";
     this._btn.className = "header-action-btn btn-icon global-chat-btn";
-    this._btn.setAttribute("aria-label", "AI Assistant");
-    this._btn.setAttribute("title", "AI Assistant");
+    this._btn.setAttribute("aria-label", "Assistant");
+    this._btn.setAttribute("title", "Assistant");
     this._btn.innerHTML = '<i class="action-icon icon-bot-message-square"></i>';
 
     // Overlay
@@ -46,7 +46,7 @@ class GlobalChat {
     this._overlay.setAttribute("aria-hidden", "true");
     this._overlay.innerHTML = `
       <div class="global-chat-overlay-bg"></div>
-      <div class="global-chat-dialog" role="dialog" aria-modal="true" aria-label="AI Assistant">
+      <div class="global-chat-dialog" role="dialog" aria-modal="true" aria-label="Assistant">
         <div class="global-chat-body"></div>
       </div>
     `;
@@ -131,12 +131,12 @@ class GlobalChat {
 
   _updateVisibility() {
     if (!this._btn) return;
-    // Hide on AI page since chat is already inline there
+    // Chat is already inline on the Assistant page.
     const path = window.location.pathname;
     const isAiPage = path === "/assistant" || path.startsWith("/assistant/");
     this._btn.classList.toggle("hidden", isAiPage);
 
-    // Close dialog if navigating to AI page
+    // Close the global dialog when navigating to the Assistant page.
     if (isAiPage && this._isOpen) {
       this.close();
     }

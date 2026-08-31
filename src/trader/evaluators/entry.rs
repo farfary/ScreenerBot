@@ -1,10 +1,10 @@
-//! Entry evaluation logic with integrated AI analysis
+//! Entry evaluation logic with integrated LLM analysis
 //!
 //! Evaluates whether an entry should be made for a token by checking:
 //! 1. Source-independent admission (see `trader::admission::check_entry_admission`):
 //!    force stop, loss limit, connectivity, position limits, existing position,
 //!    re-entry cooldown, blacklist
-//! 2. AI entry analysis (if enabled)
+//! 2. LLM entry analysis (if enabled)
 //! 3. Strategy signals
 
 use crate::pools::PriceResult;
@@ -15,7 +15,7 @@ use crate::trader::{evaluators, llm_analysis};
 /// Evaluate entry opportunity for a token
 ///
 /// Runs the source-independent admission gauntlet first (see
-/// [`crate::trader::admission::check_entry_admission`]), then AI entry analysis (if
+/// [`crate::trader::admission::check_entry_admission`]), then LLM entry analysis (if
 /// enabled), then strategy evaluation.
 ///
 /// Returns:
@@ -47,9 +47,9 @@ pub async fn evaluate_entry_for_token(
         };
     }
 
-    // 6. AI entry analysis - check if AI recommends entry (if enabled)
+    // 6. LLM entry analysis - check the model-scored entry decision when enabled.
     if llm_analysis::should_analyze_entry() {
-        // Get token data for AI analysis
+        // Get token data for LLM analysis
         match crate::tokens::get_full_token_async(token_mint).await {
             Ok(Some(token)) => {
                 match llm_analysis::analyze_entry(&token).await {
@@ -58,26 +58,26 @@ pub async fn evaluate_entry_for_token(
                             crate::logger::info(
                                 crate::logger::LogTag::Trader,
                                 &format!(
-                                    "AI rejected entry for {} (confidence: {}%, reason: {})",
+                                    "LLM analysis rejected entry for {} (confidence: {}%, reason: {})",
                                     token.symbol, result.confidence, result.reasoning
                                 ),
                             );
-                            return Ok(None); // AI rejected entry
+                            return Ok(None);
                         } else {
                             crate::logger::info(
                                 crate::logger::LogTag::Trader,
                                 &format!(
-                                    "AI approved entry for {} (confidence: {}%, reason: {})",
+                                    "LLM analysis approved entry for {} (confidence: {}%, reason: {})",
                                     token.symbol, result.confidence, result.reasoning
                                 ),
                             );
                         }
                     }
                     None => {
-                        // AI analysis failed or is disabled, continue with strategy checks
+                        // LLM analysis failed or is disabled, continue with strategy checks
                         crate::logger::debug(
                             crate::logger::LogTag::Trader,
-                            &format!("AI entry analysis unavailable for {token_mint}"),
+                            &format!("LLM entry analysis unavailable for {token_mint}"),
                         );
                     }
                 }
@@ -85,13 +85,13 @@ pub async fn evaluate_entry_for_token(
             Ok(None) => {
                 crate::logger::debug(
                     crate::logger::LogTag::Trader,
-                    &format!("Token data not found for AI analysis: {token_mint}"),
+                    &format!("Token data not found for LLM analysis: {token_mint}"),
                 );
             }
             Err(e) => {
                 crate::logger::warning(
                     crate::logger::LogTag::Trader,
-                    &format!("Failed to fetch token data for AI analysis: {e}"),
+                    &format!("Failed to fetch token data for LLM analysis: {e}"),
                 );
             }
         }

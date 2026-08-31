@@ -160,7 +160,7 @@ pub fn format_duration(seconds: u64) -> String {
     }
 }
 
-/// Format AI reasoning block for notifications
+/// Format LLM-analysis reasoning block for notifications
 pub fn format_ai_reasoning(reasoning: &Option<String>) -> String {
     match reasoning {
         Some(r) if !r.is_empty() => {
@@ -175,7 +175,7 @@ pub fn format_ai_reasoning(reasoning: &Option<String>) -> String {
             } else {
                 escaped
             };
-            format!("\n\n🤖 <b>AI Analysis</b>\n<i>{truncated}</i>")
+            format!("\n\n🤖 <b>LLM Analysis</b>\n<i>{truncated}</i>")
         }
         _ => String::new(),
     }

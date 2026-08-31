@@ -1669,12 +1669,12 @@ fn reason_source_pairs() -> Vec<(FilterRejectionReason, FilterSource)> {
             FilterSource::Rugcheck,
         ),
         (
-            FilterRejectionReason::AiRejected {
+            FilterRejectionReason::LlmAnalysisRejected {
                 reason: "looks like a scam".to_owned(),
                 confidence: 90,
                 provider: "test".to_owned(),
             },
-            FilterSource::Ai,
+            FilterSource::LlmAnalysis,
         ),
     ]
 }
@@ -1711,14 +1711,18 @@ fn rejection_labels_are_machine_readable_and_displayable() {
 }
 
 #[test]
-fn ai_rejection_carries_its_reasoning_into_the_display_label() {
-    let reason = FilterRejectionReason::AiRejected {
+fn llm_analysis_rejection_carries_its_reasoning_into_the_display_label() {
+    let reason = FilterRejectionReason::LlmAnalysisRejected {
         reason: "unverifiable team".to_owned(),
         confidence: 72,
         provider: "anthropic".to_owned(),
     };
 
-    assert_eq!(reason.label(), "ai_rejected", "the code stays constant");
+    assert_eq!(
+        reason.label(),
+        "llm_analysis_rejected",
+        "the code stays constant"
+    );
     let display = reason.display_label();
     assert!(display.contains("unverifiable team"));
     assert!(display.contains("72"));
@@ -1726,15 +1730,15 @@ fn ai_rejection_carries_its_reasoning_into_the_display_label() {
 }
 
 #[test]
-fn ai_rejections_with_different_details_are_distinct_values() {
-    // The engine counts rejections in a HashMap keyed by reason, so two AI rejections
+fn llm_analysis_rejections_with_different_details_are_distinct_values() {
+    // The engine counts rejections in a HashMap keyed by reason, so two LLM-analysis rejections
     // with different reasoning must not collapse into one another.
-    let first = FilterRejectionReason::AiRejected {
+    let first = FilterRejectionReason::LlmAnalysisRejected {
         reason: "a".to_owned(),
         confidence: 90,
         provider: "p".to_owned(),
     };
-    let second = FilterRejectionReason::AiRejected {
+    let second = FilterRejectionReason::LlmAnalysisRejected {
         reason: "b".to_owned(),
         confidence: 90,
         provider: "p".to_owned(),

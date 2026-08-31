@@ -11,7 +11,7 @@ config_struct! {
     /// Outbound LLM provider clients: the master enable switch, the default
     /// provider and every provider's credentials.
     pub struct LlmConfig {
-        /// Legacy master switch for every model-backed feature.
+        /// Master switch for every model-backed feature.
         #[metadata(field_metadata! {
             label: "Enable LLM",
             hint: "Master switch for all model-backed features (analysis, assistant). Feature owners additionally check their own flags",
@@ -20,10 +20,10 @@ config_struct! {
         })]
         enabled: bool = false,
 
-        /// Default provider used when a feature does not name one.
+        /// Provider used by analysis, the Assistant, and scheduled automation.
         #[metadata(field_metadata! {
             label: "Default Provider",
-            hint: "Primary provider to use (openai, anthropic, groq, deepseek, gemini, ollama, together, openrouter, mistral)",
+            hint: "Provider used by every model-backed feature (openai, anthropic, groq, deepseek, gemini, ollama, together, openrouter, mistral)",
             placeholder: "openai",
             category: "Master Control",
         })]

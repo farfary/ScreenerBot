@@ -18,11 +18,11 @@ use tokio::sync::Notify;
 ///
 /// This worker:
 /// - Polls open positions at configured intervals
-/// - Evaluates each token using the AI engine with LOW priority (uses cache)
+/// - Evaluates each token using the model-analysis engine with LOW priority (uses cache)
 /// - Auto-blacklists tokens with high-confidence reject decisions
 /// - Respects rate limits with delays between evaluations
 pub async fn background_check_loop(engine: Arc<AnalysisEngine>, shutdown: Arc<Notify>) {
-    logger::info(LogTag::System, "AI background check worker started");
+    logger::info(LogTag::System, "LLM-analysis background worker started");
 
     loop {
         // Get config values
@@ -41,7 +41,7 @@ pub async fn background_check_loop(engine: Arc<AnalysisEngine>, shutdown: Arc<No
             // Wait and check again
             tokio::select! {
                 _ = shutdown.notified() => {
-                    logger::info(LogTag::System, "AI background check worker shutting down");
+                    logger::info(LogTag::System, "LLM-analysis background worker shutting down");
                     return;
                 }
                 _ = tokio::time::sleep(Duration::from_secs(60)) => {}
@@ -62,7 +62,7 @@ pub async fn background_check_loop(engine: Arc<AnalysisEngine>, shutdown: Arc<No
         if !mints.is_empty() {
             logger::debug(
                 LogTag::Filtering,
-                &format!("AI background check: evaluating {} tokens", mints.len()),
+                &format!("LLM background check: evaluating {} tokens", mints.len()),
             );
 
             for mint in mints {
@@ -83,7 +83,7 @@ pub async fn background_check_loop(engine: Arc<AnalysisEngine>, shutdown: Arc<No
                             logger::warning(
                                 LogTag::Filtering,
                                 &format!(
-                                    "AI auto-blacklisting token {} - confidence: {}%, reason: {}",
+                                    "LLM analysis auto-blacklisting token {} - confidence: {}%, reason: {}",
                                     mint, result.decision.confidence, result.decision.reasoning
                                 ),
                             );
@@ -91,7 +91,7 @@ pub async fn background_check_loop(engine: Arc<AnalysisEngine>, shutdown: Arc<No
                             // Get database and blacklist the token
                             if let Some(db) = get_global_database() {
                                 let blacklist_reason = format!(
-                                    "AI auto-blacklist: {} ({}% confidence)",
+                                    "LLM analysis auto-blacklist: {} ({}% confidence)",
                                     result
                                         .decision
                                         .reasoning
@@ -101,9 +101,12 @@ pub async fn background_check_loop(engine: Arc<AnalysisEngine>, shutdown: Arc<No
                                     result.decision.confidence
                                 );
 
-                                if let Err(e) =
-                                    blacklist_token(&mint, &blacklist_reason, "auto_ai", &db)
-                                {
+                                if let Err(e) = blacklist_token(
+                                    &mint,
+                                    &blacklist_reason,
+                                    "auto_llm_analysis",
+                                    &db,
+                                ) {
                                     logger::error(
                                         LogTag::Filtering,
                                         &format!("Failed to blacklist token {mint}: {e}"),
@@ -120,7 +123,7 @@ pub async fn background_check_loop(engine: Arc<AnalysisEngine>, shutdown: Arc<No
                     Err(e) => {
                         logger::debug(
                             LogTag::Filtering,
-                            &format!("AI background check failed for {mint}: {e}"),
+                            &format!("LLM background check failed for {mint}: {e}"),
                         );
                     }
                 }
@@ -133,7 +136,7 @@ pub async fn background_check_loop(engine: Arc<AnalysisEngine>, shutdown: Arc<No
         // Wait for next interval
         tokio::select! {
             _ = shutdown.notified() => {
-                logger::info(LogTag::System, "AI background check worker shutting down");
+                logger::info(LogTag::System, "LLM-analysis background worker shutting down");
                 return;
             }
             _ = tokio::time::sleep(Duration::from_secs(interval_secs)) => {}

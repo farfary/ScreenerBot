@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 pub enum TradeOrigin {
     /// The trading engine acting on its own (strategies, evaluators, safety).
     Auto,
-    /// The user, via the dashboard / Telegram / AI tools.
+    /// The user, via the dashboard, Telegram, Assistant, or paired agent tools.
     Manual,
 }
 

@@ -26,7 +26,7 @@ use super::types::*;
 // CHAT HANDLERS
 // ============================================================================
 
-/// POST /api/assistant/chat - Send a message to AI chat
+/// POST /api/assistant/chat - Send a message to the Assistant
 pub async fn send_chat_message(
     State(_state): State<Arc<AppState>>,
     Json(req): Json<SendChatMessageRequest>,
@@ -495,7 +495,7 @@ pub async fn summarize_chat_session(
     }
 }
 
-/// POST /api/assistant/chat/sessions/:id/generate-title - Generate AI title for session
+/// POST /api/assistant/chat/sessions/:id/generate-title - Generate an Assistant session title
 pub async fn generate_session_title(
     State(_state): State<Arc<AppState>>,
     Path(id): Path<i64>,

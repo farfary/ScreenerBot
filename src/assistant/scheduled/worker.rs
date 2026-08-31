@@ -27,7 +27,7 @@ pub async fn scheduler_worker(
     completed: Arc<AtomicU64>,
     failed: Arc<AtomicU64>,
 ) {
-    logger::info(LogTag::System, "Scheduled AI tasks worker started");
+    logger::info(LogTag::System, "Assistant scheduled-tasks worker started");
 
     // Wait a bit for other services to be ready
     tokio::time::sleep(Duration::from_secs(5)).await;
@@ -38,7 +38,7 @@ pub async fn scheduler_worker(
             Ok(count) if count > 0 => {
                 logger::info(
                     LogTag::System,
-                    &format!("Cleaned up {count} old hidden AI sessions"),
+                    &format!("Cleaned up {count} old hidden Assistant sessions"),
                 );
             }
             Err(e) => {
@@ -114,7 +114,7 @@ pub async fn scheduler_worker(
         // Wait for next check or shutdown
         tokio::select! {
             _ = shutdown.notified() => {
-                logger::info(LogTag::System, "Scheduled AI tasks worker shutting down");
+                logger::info(LogTag::System, "Assistant scheduled-tasks worker shutting down");
                 break;
             }
             _ = tokio::time::sleep(Duration::from_secs(interval_secs)) => {

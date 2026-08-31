@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-/// AI filter decision schema
+/// LLM filter-decision schema
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FilterDecision {
     pub decision: FilterAction,

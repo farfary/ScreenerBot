@@ -196,7 +196,7 @@ pub async fn start_server(port_override: Option<u16>, host_override: Option<Stri
         &format!("Starting webserver on {host}:{port}"),
     );
 
-    // Create application state with AI engine if enabled
+    // Create application state with the model-analysis engine when available.
     let analysis_engine = if crate::config::with_config(|cfg| cfg.llm.enabled) {
         crate::llm_analysis::try_get_analysis_engine()
     } else {
@@ -247,9 +247,8 @@ pub async fn start_server(port_override: Option<u16>, host_override: Option<Stri
         &format!("API endpoints available at http://{addr}/api"),
     );
 
-    // Write MCP connection file for external tool integration
-    // This allows the ScreenerBot MCP server and other tools to auto-discover
-    // the running instance without manual configuration
+    // Write runtime discovery metadata for external tool integration. This lets
+    // the built-in stdio MCP adapter find the live loopback bridge.
     write_agent_runtime_file(port, is_gui);
 
     // Warm the boost feed in the background so the first dashboard paint already

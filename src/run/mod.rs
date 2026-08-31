@@ -12,7 +12,7 @@ mod shutdown;
 pub use boot::boot;
 pub use error::{Error, Result};
 
-use bootstrap::{initialize_ai_runtime_if_enabled, initialize_full_runtime};
+use bootstrap::{initialize_full_runtime, initialize_model_features_if_enabled};
 
 use crate::{
     errors::StartupError,
@@ -124,7 +124,7 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<()> {
     let config_exists = config_path.exists();
 
     // Dashboard-owned persistence is independent of wallet/RPC setup. Routes
-    // for actions, AI instructions, and chat exist in every dashboard mode.
+    // for actions, analysis instructions, and Assistant chat exist in every dashboard mode.
     bootstrap::initialize_dashboard_persistence().await?;
 
     if !config_exists {
@@ -198,9 +198,9 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<()> {
             global::set_explore_mode(true);
             global::INITIALIZATION_COMPLETE.store(false, std::sync::atomic::Ordering::SeqCst);
 
-            // AI chat/providers are wallet-independent. If the saved Explore Mode
-            // configuration enables AI, make the assistant usable here too.
-            initialize_ai_runtime_if_enabled().await?;
+            // Assistant chat and LLM providers are wallet-independent. If the saved Explore Mode
+            // configuration enables model-backed features, make the Assistant usable here too.
+            initialize_model_features_if_enabled().await?;
 
             services::create_and_start_services("Explore Mode").await?;
 

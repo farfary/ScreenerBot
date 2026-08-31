@@ -1,4 +1,4 @@
-/* AI Page Styles */
+/* Assistant page styles */
 
 /* Main Panel */
 .assistant-main-panel {
@@ -90,7 +90,7 @@
   --assistant-card-padding: 1rem;
 }
 
-/* AI content container - full height for chat */
+/* Assistant content container - full height for chat */
 #assistant-content {
   flex: 1;
   min-height: 0;
@@ -104,7 +104,7 @@
 }
 
 /* ============================================================================
-   AI Status Bar - AI Module Toggle Control
+   Assistant status bar - LLM master toggle
    ============================================================================ */
 
 .assistant-status-bar {

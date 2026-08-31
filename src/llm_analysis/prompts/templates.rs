@@ -1,6 +1,6 @@
 //! Get the system prompt for token filtering
 
-/// Return the static system prompt for AI-based token filtering
+/// Return the static system prompt for LLM-based token filtering
 pub fn get_filter_prompt() -> &'static str {
     r#"You are a Solana memecoin filtering expert. Analyze the provided token data and determine if it should PASS or REJECT filtering.
 

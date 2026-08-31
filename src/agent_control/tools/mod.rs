@@ -33,7 +33,7 @@ pub enum ToolCategory {
     System,
 }
 
-/// Definition of a tool that can be called by the AI
+/// Definition of a tool that can be called by an authorized agent
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolDefinition {
     pub name: String,
@@ -81,7 +81,7 @@ impl ToolResult {
     }
 }
 
-/// Trait for implementing a tool that can be called by the AI
+/// Trait for implementing a tool that can be called by an authorized agent
 #[async_trait]
 pub trait Tool: Send + Sync {
     /// Get the tool's definition (name, description, parameters schema)

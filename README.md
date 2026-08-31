@@ -103,7 +103,7 @@ Trading bots written in Python or JavaScript can't match the speed and reliabili
 - [Core Systems](#core-systems)
 - [Supported DEXs](#supported-dexs)
 - [Trading Features](#trading-features)
-- [AI Assistant](#ai-assistant)
+- [LLM Analysis and Assistant](#llm-analysis-and-assistant)
 - [Agent Connections (MCP)](#agent-connections-mcp)
 - [Dashboard](#dashboard)
 - [Configuration](#configuration)
@@ -174,9 +174,9 @@ priority-based startup, readiness gates, health monitoring, and reverse-order sh
         │                    │                    │                    │
         ▼                    ▼                    ▼                    ▼
 ┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐
-│   AI Assistant   │ │ Telegram Service │ │   SOL Price      │ │  Update Checker  │
+│  LLM + Assistant │ │ Telegram Service │ │   SOL Price      │ │  Update Checker  │
 ├──────────────────┤ ├──────────────────┤ ├──────────────────┤ ├──────────────────┤
-│ • 9 LLM provid.  │ │ • Notifications  │ │ • Jupiter feed   │ │ • Version check  │
+│ • 9 providers    │ │ • Notifications  │ │ • Jupiter feed   │ │ • Version check  │
 │ • Tool-calling   │ │ • Bot commands   │ │ • 30s refresh    │ │ • Auto-notify    │
 │ • Scheduled tasks│ │ • Inline actions │ │ • USD conversion │ │ • Release notes  │
 └──────────────────┘ └──────────────────┘ └──────────────────┘ └──────────────────┘
@@ -204,7 +204,7 @@ Full trading tier:
   - Copy Trading starts after Wallet Watch + Filtering + Positions + Wallet + Pools
 
 Control and automation tier:
-  - AI, Scheduled AI Tasks, Telegram, Account, Updates, and supporting services
+  - LLM Analysis, Assistant Scheduled Tasks, Telegram, Account, Updates, and supporting services
 ```
 
 ScreenerBot has three customer boot states: **initialization** (webserver-only setup), **Explore Mode**
@@ -361,7 +361,7 @@ Priority-ordered conditions:
 
 1. **Blacklist** (emergency): Immediate exit if token blacklisted
 2. **Risk Limits** (emergency): >90% loss protection
-3. **AI Analysis** (high, optional): Provider-backed exit decision support
+3. **LLM Analysis** (high, optional): Provider-backed exit decision support
 4. **Stop Loss** (high): Fixed loss threshold from entry
 5. **Trailing Stop** (high): Dynamic stop-loss following price peaks
 6. **ROI Target** (normal): Fixed profit target exit
@@ -398,9 +398,12 @@ Priority-ordered conditions:
 
 ---
 
-## AI Assistant
+## LLM Analysis and Assistant
 
-Multi-provider LLM integration for intelligent analysis and automated tasks. All features disabled by default.
+Nine provider clients power two separate consumers: model-scored token/trading analysis and the
+user-facing Assistant. Agent Control is the shared tool and authorization boundary used by the
+Assistant, scheduled automation, and paired MCP clients. Model-backed features are disabled by
+default; Agent Control is available by default and can be disabled independently.
 
 ### Providers
 
@@ -409,22 +412,23 @@ and Mistral.
 
 ### Features
 
-- **Token Filtering**: AI evaluates tokens during the filtering pipeline with configurable confidence thresholds
+- **Token Filtering**: LLM analysis evaluates tokens during the filtering pipeline with configurable confidence thresholds
 - **Entry/Exit Analysis**: LLM-powered trade decision support with risk assessment
 - **Interactive Chat**: Tool-calling chat interface with portfolio, trading, and system tools
-- **Custom Instructions**: User-defined prompts injected into all AI evaluations
-- **Automation**: Scheduled AI tasks with interval/daily/weekly schedules, headless tool execution, Telegram notifications, and run history tracking
+- **Custom Instructions**: User-defined prompts for model-scored evaluations
+- **Assistant**: Dashboard chat with native provider tool calling and durable conversation history
+- **Automation**: Scheduled Assistant tasks with interval/daily/weekly schedules, headless tool execution, Telegram notifications, and run history tracking
 - **Agent Connections**: Pair an external MCP client (an AI coding agent) with the running app through the native `screenerbot mcp serve` bridge — full access by default, limitable per connection, in **Settings → Agent Connections**. Full guide: [AGENT_CONNECTIONS.md](AGENT_CONNECTIONS.md)
 
 ### Automation
 
-Create scheduled tasks that run AI instructions automatically:
+Create scheduled tasks that run Assistant instructions automatically:
 
 - **Interval**: Run every N seconds (e.g., every 5 minutes)
 - **Daily**: Run at a specific time UTC (e.g., 14:00)
 - **Weekly**: Run on specific days at a time (e.g., mon,wed,fri:09:00)
 - Configurable tool permissions (read-only or full access)
-- Run history with tool call details and AI responses
+- Run history with tool call details and Assistant responses
 - Telegram notifications on completion or failure
 
 ## Agent Connections (MCP)
@@ -501,7 +505,7 @@ dynamic authenticated localhost port):
 - **Transactions**: Own-wallet and watched-wallet history with DEX classification and P&L
 - **Strategies**: Visual strategy builder with condition editor
 - **OHLCV**: Candlestick charts with multi-timeframe analysis
-- **Assistant**: AI chat, providers, instructions, automation, and testing
+- **Assistant**: Conversation, instructions, scheduled automation, and testing
 - **Wallets**: Multi-wallet management with balance monitoring
 - **Tools**: Multi-wallet trading, ATA cleanup, burn tokens
 - **Events**: System event log with filtering and search
@@ -674,13 +678,16 @@ platform dependencies, package outputs, and cross-compilation instructions.
 ```
 src/
 ├── actions/        # Operation progress tracking with SSE broadcasting
-├── ai/             # AI assistant (9 LLM providers, chat, automation)
-├── apis/           # External API clients (DexScreener, Jupiter, Rugcheck, LLM)
+├── agent_control/  # Shared tool registry, authorization, pairings, approvals
+├── apis/           # External API clients, including nine LLM providers
+├── assistant/      # Dashboard chat and scheduled automation
 ├── config/         # Macro-driven configuration system with hot-reload
 ├── connectivity/   # Endpoint health monitoring with fallback strategies
 ├── errors/         # Structured error types with blockchain-aware parsing
 ├── events/         # Structured JSON event logging (SQLite)
 ├── filtering/      # Multi-criteria token evaluation engine
+├── llm_analysis/   # Model-scored filtering and trading analysis
+├── mcp/            # Thin stdio adapter to the live app's agent bridge
 ├── ohlcvs/         # OHLCV candlestick data (7 timeframes)
 ├── pools/          # Pool service with 11 native DEX decoders
 ├── positions/      # Position lifecycle (DCA, partial exits, P&L)

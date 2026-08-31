@@ -99,7 +99,7 @@ impl Tool for BuyTokenTool {
             ));
         }
 
-        // AI-initiated buys are manual in provenance but opt into auto-trader ownership.
+        // Agent-initiated buys are manual in provenance but opt into auto-trader ownership.
         let result = match manual::manual_buy(
             &params.mint_address,
             params.amount_sol,

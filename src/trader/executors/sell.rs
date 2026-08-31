@@ -291,7 +291,7 @@ mod tests {
             TradeReason::TrailingStop,
             TradeReason::TimeOverride,
             TradeReason::StrategyExit,
-            TradeReason::AiExit,
+            TradeReason::LlmAnalysisExit,
         ];
         for reason in automatic {
             assert_eq!(

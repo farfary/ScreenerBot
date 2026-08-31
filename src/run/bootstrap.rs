@@ -26,13 +26,14 @@ pub(super) async fn initialize_dashboard_persistence() -> Result<(), StartupErro
     // all boot modes. Database-specific initialization still owns its schema.
     tokio::spawn(crate::database::start_db_maintenance_task());
 
-    // AI instructions and chat history are dashboard persistence, not AI
-    // execution. The databases must be available even when AI itself is off.
+    // Analysis instructions and Assistant chat history are dashboard
+    // persistence, not model execution. Their databases exist even when LLM
+    // features are off.
     if let Err(e) = crate::llm_analysis::init_analysis_database() {
         logger::warning(
             LogTag::System,
             &format!(
-                "Failed to initialize AI database: {e} - AI instructions and history will not be available"
+                "Failed to initialize analysis database: {e} - analysis instructions and history will not be available"
             ),
         );
     }
@@ -41,12 +42,12 @@ pub(super) async fn initialize_dashboard_persistence() -> Result<(), StartupErro
         logger::warning(
             LogTag::System,
             &format!(
-                "Failed to initialize AI chat database: {e} - Chat history will not be available"
+                "Failed to initialize Assistant chat database: {e} - chat history will not be available"
             ),
         );
     }
 
-    // Agent-control pairing/approval/audit store. Dashboard persistence, not AI
+    // Agent-control pairing/approval/audit store. Dashboard persistence, not LLM
     // execution: the management API and the live-app bridge must work in every
     // boot state that serves the webserver. A failure here leaves the bridge
     // fail-closed (no pairings resolvable) rather than aborting boot.
@@ -70,29 +71,35 @@ pub(super) async fn initialize_dashboard_persistence() -> Result<(), StartupErro
     Ok(())
 }
 
-/// Initialize AI execution when configured.
+/// Initialize model-backed execution when configured.
 ///
-/// AI providers and chat do not require a wallet or Solana RPC, so this phase
-/// is valid in Explore Mode. The wallet/position-dependent AI background
+/// LLM providers, analysis, and Assistant chat do not require a wallet or
+/// Solana RPC, so this phase
+/// is valid in Explore Mode. The wallet/position-dependent LLM-analysis background
 /// services remain gated separately on full initialization.
-pub(crate) async fn initialize_ai_runtime_if_enabled() -> Result<(), StartupError> {
+pub(crate) async fn initialize_model_features_if_enabled() -> Result<(), StartupError> {
     if !crate::config::with_config(|cfg| cfg.llm.enabled) {
         return Ok(());
     }
 
     if crate::llm_analysis::try_get_analysis_engine().is_none() {
-        logger::info(LogTag::System, "Initializing AI engine...");
+        logger::info(LogTag::System, "Initializing analysis engine...");
         crate::llm_analysis::init_analysis_engine()
             .await
-            .map_err(|e| StartupError::generic(format!("Failed to initialize AI engine: {e}")))?;
-        logger::info(LogTag::System, "AI engine initialized successfully");
+            .map_err(|e| {
+                StartupError::generic(format!("Failed to initialize analysis engine: {e}"))
+            })?;
+        logger::info(LogTag::System, "Analysis engine initialized successfully");
     }
 
     if crate::assistant::try_get_chat_engine().is_none() {
         crate::assistant::init_chat_engine().await.map_err(|e| {
-            StartupError::generic(format!("Failed to initialize AI chat engine: {e}"))
+            StartupError::generic(format!("Failed to initialize Assistant chat engine: {e}"))
         })?;
-        logger::info(LogTag::System, "AI chat engine initialized successfully");
+        logger::info(
+            LogTag::System,
+            "Assistant chat engine initialized successfully",
+        );
     }
 
     if crate::apis::llm::try_get_llm_manager().is_none() {
@@ -138,5 +145,5 @@ pub(crate) async fn initialize_full_runtime() -> Result<(), StartupError> {
         }
     }
 
-    initialize_ai_runtime_if_enabled().await
+    initialize_model_features_if_enabled().await
 }
