@@ -25,6 +25,7 @@ import { fetchCandles, triggerRefresh } from "./chart_data.js";
 import { applyUtilitiesMixin } from "./token_details/utilities.js";
 import { applyStateHandlingMixin, renderTabState } from "./token_details/state_handling.js";
 import { applyPositionsTabMixin } from "./token_details/positions_tab.js";
+import { resolvedTokenName, resolvedTokenSymbol } from "./token_identity.js";
 
 // Data source status constants
 const DATA_SOURCE_STATUS = {
@@ -266,7 +267,18 @@ export class TokenDetailsDialog {
 
       if (newData) {
         const isInitialLoad = !this._initialLoadComplete;
-        this.fullTokenData = newData;
+        // The detail request can overlap a just-resolved featured identity. Never
+        // let its older placeholder snapshot replace a real name/symbol already
+        // visible in the dialog; later polls still replace these fields once they
+        // carry resolved values.
+        const previous = this.fullTokenData || this.tokenData || {};
+        this.fullTokenData = {
+          ...newData,
+          symbol:
+            resolvedTokenSymbol(newData.symbol) || resolvedTokenSymbol(previous.symbol) || null,
+          name: resolvedTokenName(newData.name) || resolvedTokenName(previous.name) || null,
+          logo_url: newData.logo_url || previous.logo_url || previous.image_url || null,
+        };
         this._updateHeader(this.fullTokenData);
         this._initialLoadComplete = true;
         this._retryCount = 0;
@@ -1004,16 +1016,18 @@ export class TokenDetailsDialog {
     // search, only carries {mint, symbol}); without refreshing here the name
     // stays "Unknown Token" and the logo a placeholder even after full data loads.
     const symbolEl = this.dialogEl.querySelector(".title-main");
-    if (symbolEl && token.symbol && token.symbol !== "NOT_FOUND") {
-      if (symbolEl.textContent !== token.symbol) symbolEl.textContent = token.symbol;
+    const symbol = resolvedTokenSymbol(token.symbol);
+    if (symbolEl && symbol) {
+      if (symbolEl.textContent !== symbol) symbolEl.textContent = symbol;
     }
     const nameEl = this.dialogEl.querySelector(".title-sub");
-    if (nameEl && token.name && token.name !== "Token not in cache") {
-      if (nameEl.textContent !== token.name) nameEl.textContent = token.name;
+    const name = resolvedTokenName(token.name);
+    if (nameEl && name) {
+      if (nameEl.textContent !== name) nameEl.textContent = name;
     }
     const logoEl = this.dialogEl.querySelector(".header-logo");
     if (logoEl) {
-      const sym = token.symbol && token.symbol !== "NOT_FOUND" ? token.symbol : "?";
+      const sym = resolvedTokenSymbol(token.symbol) || "?";
       const logoUrl = token.logo_url || token.image_url || "";
       const logoHtml = logoUrl
         ? `<img src="${this._escapeHtml(logoUrl)}" alt="${this._escapeHtml(sym)}" onerror="this.parentElement.innerHTML='<div class=\\'logo-placeholder\\'>${this._escapeHtml(sym.charAt(0))}</div>'" />`

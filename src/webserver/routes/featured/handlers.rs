@@ -12,12 +12,15 @@ use axum::response::Response;
 ///
 /// A boost is bought for a mint the app may never have seen; without this the card
 /// would stay identity-only forever and the token would never appear in the tokens
-/// table the user can act on. Runs in the background and never blocks the response.
+/// table the user can act on. The blocking SQLite work runs off the async executor,
+/// but the featured response waits for it: otherwise a detail request opened from
+/// the returned card can snapshot the old placeholder identity and repaint the
+/// correct card name as "Unknown Token" a few seconds later.
 ///
 /// Only OUR boosted tokens are tracked. The discovery boards are third-party
 /// rankings that change every couple of minutes — tracking those would grow the
 /// database by hundreds of tokens the user never asked about.
-fn ensure_boosted_tokens_tracked(cards: &[FeaturedCard]) {
+async fn ensure_boosted_tokens_tracked(cards: &[FeaturedCard]) {
     let tracked: Vec<(String, Option<String>, Option<String>)> = cards
         .iter()
         .map(|card| {
@@ -33,7 +36,7 @@ fn ensure_boosted_tokens_tracked(cards: &[FeaturedCard]) {
         return;
     }
 
-    tokio::task::spawn_blocking(move || {
+    let _ = tokio::task::spawn_blocking(move || {
         let Some(db) = tokens::get_global_database() else {
             return;
         };
@@ -41,13 +44,14 @@ fn ensure_boosted_tokens_tracked(cards: &[FeaturedCard]) {
             // upsert_token creates the tracking entry when the token is unknown.
             let _ = db.upsert_token(mint, symbol.as_deref(), name.as_deref(), None);
         }
-    });
+    })
+    .await;
 }
 
 /// Our boosted tokens, ranked and enriched.
 async fn boosted_cards() -> Vec<FeaturedCard> {
     let cards = build_cards(boosts::active_boosts().await).await;
-    ensure_boosted_tokens_tracked(&cards);
+    ensure_boosted_tokens_tracked(&cards).await;
     cards
 }
 

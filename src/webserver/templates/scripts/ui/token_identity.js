@@ -45,6 +45,21 @@ const identityCache = new Map();
 /** mint -> in-flight promise, so N chips for one mint make ONE request. */
 const inFlight = new Map();
 
+const UNKNOWN_SYMBOLS = new Set(["UNKNOWN", "NOT_FOUND"]);
+const UNKNOWN_NAMES = new Set(["UNKNOWN TOKEN", "TOKEN NOT IN CACHE"]);
+
+/** Return a displayable symbol, or null for an internal missing-value marker. */
+export function resolvedTokenSymbol(value) {
+  const symbol = typeof value === "string" ? value.trim() : "";
+  return symbol && !UNKNOWN_SYMBOLS.has(symbol.toUpperCase()) ? symbol : null;
+}
+
+/** Return a displayable name, or null for an internal missing-value marker. */
+export function resolvedTokenName(value) {
+  const name = typeof value === "string" ? value.trim() : "";
+  return name && !UNKNOWN_NAMES.has(name.toUpperCase()) ? name : null;
+}
+
 /** True for wSOL and for the native-SOL pseudo-mint the UI uses in transfers. */
 export function isSolMint(mint) {
   return mint === SOL_MINT || mint === "SOL" || mint === "native";
@@ -54,8 +69,8 @@ function makeIdentity(mint, source = {}) {
   const known = KNOWN_IDENTITIES[mint] || {};
   return {
     mint,
-    symbol: source.symbol || known.symbol || null,
-    name: source.name || known.name || null,
+    symbol: resolvedTokenSymbol(source.symbol) || known.symbol || null,
+    name: resolvedTokenName(source.name) || known.name || null,
     // A known asset's logo (SOL) always wins: it is the brand asset, not a
     // provider's guess at what wSOL looks like.
     logoUrl: known.logoUrl || Utils.resolveTokenLogoUrl(source) || null,
