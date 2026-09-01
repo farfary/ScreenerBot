@@ -1,0 +1,17 @@
+# Line endings are LF in the repository and LF in every working tree, on every
+# platform. The build depends on it: the Electron shell revision that decides
+# whether a release can install as a silent core-only update is a hash of the
+# shell sources, computed on the Linux runner and re-asserted on the macOS and
+# Windows packaging runners. A checkout that materialised CRLF there would fail
+# that assertion and take the whole release build down with it.
+* text=auto eol=lf
+
+# Binaries are never touched. Git detects these on its own; naming them removes
+# the guess for the assets that feed the shell revision.
+*.png binary
+*.ico binary
+*.icns binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.exe binary

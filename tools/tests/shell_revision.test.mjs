@@ -42,6 +42,23 @@ test("changing a shell source changes the revision", () => {
   assert.equal(computeShellRevision(), before);
 });
 
+test("line endings are not part of the revision", () => {
+  // The revision is computed on the Linux runner and re-asserted on the macOS
+  // and Windows packaging runners. A Windows checkout may materialise CRLF,
+  // which changes nothing about the shell — but before the revision normalised
+  // line endings it changed the hash, failing the assertion and taking the whole
+  // release build down with it.
+  const before = computeShellRevision();
+  const original = fs.readFileSync(MAIN);
+  try {
+    fs.writeFileSync(MAIN, original.toString("latin1").replace(/\n/g, "\r\n"), "latin1");
+    assert.equal(computeShellRevision(), before);
+  } finally {
+    fs.writeFileSync(MAIN, original);
+  }
+  assert.equal(computeShellRevision(), before);
+});
+
 test("the release version is not part of the revision", () => {
   const manifestPath = path.join(path.dirname(REVISION_FILE), "..", "package.json");
   const before = computeShellRevision();
