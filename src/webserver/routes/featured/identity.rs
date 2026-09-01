@@ -26,6 +26,10 @@ use serde::Deserialize;
 use std::collections::HashMap;
 use std::time::Duration;
 
+/// Direct providers are a last-resort presentation fallback. Their internal
+/// rate-limit queues must not delay the entire Featured surface.
+const DIRECT_PROVIDER_TIMEOUT: Duration = Duration::from_secs(2);
+
 /// Normalize a provider-supplied logo URL, or return `None` if it is unusable.
 ///
 /// Providers are inconsistent: Jupiter serves some icons with a capitalized scheme
@@ -83,31 +87,38 @@ pub(super) async fn fill_identity(cards: &mut [FeaturedCard]) {
         return;
     }
 
-    // Stage 1: our own database — free, already holds DexScreener + GeckoTerminal
-    // images for every token we have ever fetched market data for.
-    match tokens::database::get_token_images_batch_async(missing.clone()).await {
-        Ok(logos) => {
-            let images = logos
+    // Stage 1: our own database — free and authoritative for identity already
+    // persisted by an earlier featured request, even when the token has no market
+    // row yet. Read name/symbol and artwork together in one batch.
+    match tokens::database::get_token_info_batch_async(missing.clone()).await {
+        Ok(info) => {
+            let identities = info
                 .into_iter()
-                .map(|(mint, logo)| {
+                .map(|(mint, (symbol, name, logo))| {
                     (
                         mint,
                         TokenIdentity {
-                            logo: Some(logo),
-                            ..TokenIdentity::default()
+                            name,
+                            symbol,
+                            logo,
+                            banner: None,
                         },
                     )
                 })
                 .collect();
-            apply_identity(cards, &images);
+            apply_identity(cards, &identities);
         }
         Err(e) => logger::debug(
             LogTag::Webserver,
-            &format!("[FEATURED] DB logo lookup failed: {e}"),
+            &format!("[FEATURED] DB identity lookup failed: {e}"),
         ),
     }
 
-    missing = incomplete_mints(cards);
+    // Optional artwork must never hold the featured endpoint hostage. Network
+    // fallbacks exist to make a card readable, so only a missing name or symbol
+    // proceeds beyond the local database. A token with no banner is still fully
+    // usable and should render immediately.
+    missing = unreadable_mints(cards);
     if missing.is_empty() {
         return;
     }
@@ -118,7 +129,7 @@ pub(super) async fn fill_identity(cards: &mut [FeaturedCard]) {
     let resolved = fetch_server_identity(&missing).await;
     apply_identity(cards, &resolved);
 
-    missing = incomplete_mints(cards);
+    missing = unreadable_mints(cards);
     if missing.is_empty() {
         return;
     }
@@ -127,7 +138,7 @@ pub(super) async fn fill_identity(cards: &mut [FeaturedCard]) {
     let resolved = fetch_dexscreener_identity(&missing).await;
     apply_identity(cards, &resolved);
 
-    missing = incomplete_mints(cards);
+    missing = unreadable_mints(cards);
     if missing.is_empty() {
         return;
     }
@@ -146,6 +157,18 @@ fn incomplete_mints(cards: &[FeaturedCard]) -> Vec<String> {
             c.logo.is_none() || c.banner.is_none() || c.name.is_empty() || c.symbol.is_empty()
         })
         .map(|c| c.mint.clone())
+        .collect();
+    mints.sort_unstable();
+    mints.dedup();
+    mints
+}
+
+/// Mints that still cannot be labeled for a user. Optional artwork does not count.
+fn unreadable_mints(cards: &[FeaturedCard]) -> Vec<String> {
+    let mut mints: Vec<String> = cards
+        .iter()
+        .filter(|card| card.name.is_empty() || card.symbol.is_empty())
+        .map(|card| card.mint.clone())
         .collect();
     mints.sort_unstable();
     mints.dedup();
@@ -250,12 +273,14 @@ async fn fetch_dexscreener_identity(mints: &[String]) -> HashMap<String, TokenId
     }
 
     for chunk in mints.chunks(MAX_TOKENS_PER_REQUEST) {
-        match api
-            .dexscreener
-            .fetch_token_batch(chunk, Some(crate::chains::adapter().market_data_network()))
-            .await
+        match tokio::time::timeout(
+            DIRECT_PROVIDER_TIMEOUT,
+            api.dexscreener
+                .fetch_token_batch(chunk, Some(crate::chains::adapter().market_data_network())),
+        )
+        .await
         {
-            Ok(pools) => {
+            Ok(Ok(pools)) => {
                 for pool in pools {
                     let entry = resolved.entry(pool.base_token_address).or_default();
                     if entry.logo.is_none() {
@@ -272,10 +297,17 @@ async fn fetch_dexscreener_identity(mints: &[String]) -> HashMap<String, TokenId
                     }
                 }
             }
-            Err(e) => {
+            Ok(Err(e)) => {
                 logger::debug(
                     LogTag::Webserver,
                     &format!("[FEATURED] DexScreener identity lookup failed: {e}"),
+                );
+                break;
+            }
+            Err(_) => {
+                logger::debug(
+                    LogTag::Webserver,
+                    "[FEATURED] DexScreener identity lookup timed out",
                 );
                 break;
             }
@@ -300,17 +332,18 @@ async fn fetch_geckoterminal_identity(mints: &[String]) -> HashMap<String, Token
 
     for chunk in mints.chunks(MAX_TOKENS_PER_REQUEST) {
         let addresses = chunk.join(",");
-        match api
-            .geckoterminal
-            .fetch_tokens_multi(
+        match tokio::time::timeout(
+            DIRECT_PROVIDER_TIMEOUT,
+            api.geckoterminal.fetch_tokens_multi(
                 crate::chains::adapter().market_data_network(),
                 &addresses,
                 None,
                 None,
-            )
-            .await
+            ),
+        )
+        .await
         {
-            Ok(response) => {
+            Ok(Ok(response)) => {
                 for token in response.data {
                     let attrs = token.attributes;
                     resolved.insert(
@@ -324,10 +357,17 @@ async fn fetch_geckoterminal_identity(mints: &[String]) -> HashMap<String, Token
                     );
                 }
             }
-            Err(e) => {
+            Ok(Err(e)) => {
                 logger::debug(
                     LogTag::Webserver,
                     &format!("[FEATURED] GeckoTerminal identity lookup failed: {e}"),
+                );
+                break;
+            }
+            Err(_) => {
+                logger::debug(
+                    LogTag::Webserver,
+                    "[FEATURED] GeckoTerminal identity lookup timed out",
                 );
                 break;
             }
@@ -389,6 +429,21 @@ mod tests {
         assert_eq!(cards[0].name, "Boosted Token");
         assert_eq!(cards[0].symbol, "BOOST");
         assert!(incomplete_mints(&cards).is_empty());
+        assert!(unreadable_mints(&cards).is_empty());
+    }
+
+    #[test]
+    fn missing_optional_artwork_does_not_trigger_network_identity_fallbacks() {
+        let cards = vec![FeaturedCard {
+            name: "Readable Token".to_owned(),
+            symbol: "READ".to_owned(),
+            logo: None,
+            banner: None,
+            ..boosted("mint1")
+        }];
+
+        assert_eq!(incomplete_mints(&cards), vec!["mint1".to_owned()]);
+        assert!(unreadable_mints(&cards).is_empty());
     }
 
     #[test]

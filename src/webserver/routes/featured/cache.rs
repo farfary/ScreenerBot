@@ -27,6 +27,9 @@ static DEXSCREENER_TRENDING_CACHE: LazyLock<Arc<RwLock<Option<ExternalTokensCach
     LazyLock::new(|| Arc::new(RwLock::new(None)));
 
 const EXTERNAL_CACHE_TTL: Duration = Duration::from_secs(120);
+/// Discovery boards are optional UI content. A shared provider client's
+/// rate-limit queue or retry backoff must never hold `/featured/all` open.
+const EXTERNAL_FETCH_TIMEOUT: Duration = Duration::from_secs(3);
 
 /// Fetch Jupiter top organic score tokens
 async fn fetch_jupiter_organic() -> Result<Vec<ExternalToken>> {
@@ -191,16 +194,22 @@ where
     F: FnOnce() -> Fut,
     Fut: std::future::Future<Output = Result<Vec<ExternalToken>>>,
 {
-    {
+    let stale = {
         let cache = slot.read().await;
         if let Some(cached) = cache.as_ref() {
             if cached.fetched_at.elapsed() < EXTERNAL_CACHE_TTL {
                 return cached.tokens.clone();
             }
+            cached.tokens.clone()
+        } else {
+            Vec::new()
         }
-    }
+    };
 
-    let tokens = fetch().await.unwrap_or_default();
+    let tokens = match tokio::time::timeout(EXTERNAL_FETCH_TIMEOUT, fetch()).await {
+        Ok(Ok(tokens)) => tokens,
+        Ok(Err(_)) | Err(_) => stale,
+    };
 
     {
         let mut cache = slot.write().await;
