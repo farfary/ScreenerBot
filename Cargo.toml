@@ -190,6 +190,9 @@ objc2-app-kit = { version = "0.3", features = [
   "NSColor",
 ] }
 machine-uid = "0.5"
+# Vendored OpenSSL so the x86_64 cross-compile does not depend on a system
+# install. openssl-sys is pulled in unconditionally by solana-secp256r1-program.
+openssl = { version = "0.10", features = ["vendored"] }
 
 # Windows-specific dependencies - vendored OpenSSL for Windows builds
 [target.'cfg(target_os = "windows")'.dependencies]
