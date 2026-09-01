@@ -1,6 +1,6 @@
 {
   "name": "ScreenerBot",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "ScreenerBot Electron Edition - Automated Solana DeFi Trading Bot",
   "main": "src/main.js",
   "author": "ScreenerBot",
