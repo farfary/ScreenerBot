@@ -19,6 +19,7 @@ pub mod assistant;
 pub mod chains;
 pub mod config;
 pub mod connectivity;
+pub mod data_server;
 pub mod database;
 pub mod errors;
 pub mod events;

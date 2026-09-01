@@ -375,36 +375,15 @@ async fn get_from_db(chain: ChainId, mint: &str) -> Option<u8> {
 /// extraction. Gated by the shared `[tokens.sources.screenerbot_server]` config;
 /// deliberately at the request layer so no provider rate limiter is consumed.
 async fn get_from_server(mint: &str) -> Option<u8> {
-    use crate::config::with_config;
-    use std::time::Duration;
-
-    let (enabled, endpoint, timeout_secs) = with_config(|c| {
-        let s = &c.tokens.sources.screenerbot_server;
-        (s.enabled, s.endpoint.clone(), s.timeout_seconds)
-    });
-    if !enabled || endpoint.trim().is_empty() {
-        return None;
-    }
-
-    let url = format!(
-        "{}/v1/decimals?mint={}",
-        endpoint.trim_end_matches('/'),
-        mint
-    );
-    let resp = crate::net::client()
-        .get(&url)
-        .timeout(Duration::from_secs(timeout_secs))
-        .send()
-        .await
-        .ok()?;
-    if !resp.status().is_success() {
-        return None;
-    }
-
     // Response shape: { "decimals": { "<mint>": <n> }, "requested": N }.
     // A cold token returns an empty map (fetch scheduled server-side); treat that
     // as a miss and fall back to chain, warming the server cache for next time.
-    let body: serde_json::Value = resp.json().await.ok()?;
+    let body: serde_json::Value = crate::data_server::get_json(
+        crate::data_server::Surface::Tokens,
+        "/v1/decimals",
+        &[("mint", mint.to_string())],
+    )
+    .await?;
     let value = body.pointer(&format!("/decimals/{mint}"))?.as_u64()?;
     (value <= u8::MAX as u64).then_some(value as u8)
 }

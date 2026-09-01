@@ -30,7 +30,12 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
 
 /// What the app asks to be allowed to do. The user sees each of these spelled
 /// out on the consent screen before anything is granted.
-pub const SCOPES: &str = "rpc:submit vote referral:read account:read";
+///
+/// `data:read` must be requested explicitly even though the server grants the
+/// full default set to a request it cannot parse: scopes are FROZEN on the
+/// device at grant time, so a build that asks for the old four and is granted
+/// exactly those has no path to data access short of signing in again.
+pub const SCOPES: &str = "data:read rpc:submit vote referral:read account:read";
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct TokenResponse {

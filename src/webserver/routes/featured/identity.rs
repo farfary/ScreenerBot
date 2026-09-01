@@ -209,53 +209,28 @@ fn apply_identity(cards: &mut [FeaturedCard], resolved: &HashMap<String, TokenId
 /// Look up identity in the Data Server's normalized market cache.
 async fn fetch_server_identity(mints: &[String]) -> HashMap<String, TokenIdentity> {
     let mut resolved = HashMap::new();
-    if connectivity::is_network_offline() {
+    // One question before a loop over chunks: without access every chunk would
+    // be refused identically, and the reason is already published once.
+    if !crate::data_server::is_usable(crate::data_server::Surface::Tokens) {
         return resolved;
     }
 
-    let cfg = crate::config::get_config_clone();
-    let server = &cfg.tokens.sources.screenerbot_server;
-    if !server.enabled || server.endpoint.trim().is_empty() {
-        return resolved;
-    }
-
-    let url = format!("{}/v1/market", server.endpoint.trim_end_matches('/'));
     for chunk in mints.chunks(MAX_TOKENS_PER_REQUEST) {
-        let joined = chunk.join(",");
-        let request = crate::net::client()
-            .get(&url)
-            .query(&[("mints", joined)])
-            .timeout(Duration::from_secs(server.timeout_seconds));
-
-        match request.send().await {
-            Ok(response) if response.status().is_success() => {
-                match response.json::<ServerMarketResponse>().await {
-                    Ok(payload) => {
-                        resolved.extend(
-                            payload
-                                .markets
-                                .into_iter()
-                                .map(|(mint, identity)| (mint, identity.into())),
-                        );
-                    }
-                    Err(e) => logger::debug(
-                        LogTag::Webserver,
-                        &format!("[FEATURED] Data Server identity response invalid: {e}"),
-                    ),
-                }
-            }
-            Ok(response) => logger::debug(
-                LogTag::Webserver,
-                &format!(
-                    "[FEATURED] Data Server identity lookup returned HTTP {}",
-                    response.status()
-                ),
-            ),
-            Err(e) => logger::debug(
-                LogTag::Webserver,
-                &format!("[FEATURED] Data Server identity lookup failed: {e}"),
-            ),
-        }
+        let Some(payload) = crate::data_server::get_json::<ServerMarketResponse>(
+            crate::data_server::Surface::Tokens,
+            "/v1/market",
+            &[("mints", chunk.join(","))],
+        )
+        .await
+        else {
+            continue;
+        };
+        resolved.extend(
+            payload
+                .markets
+                .into_iter()
+                .map(|(mint, identity)| (mint, identity.into())),
+        );
     }
 
     resolved

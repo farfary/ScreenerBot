@@ -11,9 +11,8 @@
 //! client's rate limiter; the server enforces its own per-IP limit upstream.
 
 use crate::apis::rugcheck::{RugcheckInfo, RugcheckResponse};
-use crate::config::with_config;
+use crate::data_server::{get_json, Surface};
 use std::collections::HashMap;
-use std::time::Duration;
 
 /// Max mints per batch call to the server's `/v1/rugcheck?mints=` endpoint. Matches
 /// the server-side cap.
@@ -27,30 +26,12 @@ pub const SERVER_RUGCHECK_BATCH: usize = 30;
 /// the `report` is the byte-identical upstream payload, so it deserializes into
 /// the same `RugcheckResponse` and converts via the shared `from_response`.
 pub async fn fetch_report_from_server(mint: &str) -> Option<RugcheckInfo> {
-    let (enabled, endpoint, timeout_secs) = with_config(|c| {
-        let s = &c.tokens.sources.screenerbot_server;
-        (s.enabled, s.endpoint.clone(), s.timeout_seconds)
-    });
-    if !enabled || endpoint.trim().is_empty() {
-        return None;
-    }
-
-    let url = format!(
-        "{}/v1/rugcheck?mint={}",
-        endpoint.trim_end_matches('/'),
-        mint
-    );
-    let resp = crate::net::client()
-        .get(&url)
-        .timeout(Duration::from_secs(timeout_secs))
-        .send()
-        .await
-        .ok()?;
-    if !resp.status().is_success() {
-        return None;
-    }
-
-    let body: serde_json::Value = resp.json().await.ok()?;
+    let body: serde_json::Value = get_json(
+        Surface::Tokens,
+        "/v1/rugcheck",
+        &[("mint", mint.to_string())],
+    )
+    .await?;
     let report = body.get("report")?.clone();
     let api_response: RugcheckResponse = serde_json::from_value(report).ok()?;
     Some(RugcheckInfo::from_response(api_response))
@@ -68,30 +49,20 @@ pub async fn fetch_report_from_server(mint: &str) -> Option<RugcheckInfo> {
 /// empty map when the source is disabled/unconfigured or every call misses.
 pub async fn fetch_reports_from_server(mints: &[String]) -> HashMap<String, RugcheckInfo> {
     let mut out = HashMap::new();
-    let (enabled, endpoint, timeout_secs) = with_config(|c| {
-        let s = &c.tokens.sources.screenerbot_server;
-        (s.enabled, s.endpoint.clone(), s.timeout_seconds)
-    });
-    if !enabled || endpoint.trim().is_empty() || mints.is_empty() {
+    // One question before a loop of up to N chunks: an install with no access
+    // must not spend a refused round trip per chunk to learn the same thing.
+    if mints.is_empty() || !crate::data_server::is_usable(Surface::Tokens) {
         return out;
     }
-    let base = endpoint.trim_end_matches('/');
 
     for chunk in mints.chunks(SERVER_RUGCHECK_BATCH) {
-        let joined = chunk.join(",");
-        let url = format!("{base}/v1/rugcheck?mints={joined}");
-        let Ok(resp) = crate::net::client()
-            .get(&url)
-            .timeout(Duration::from_secs(timeout_secs))
-            .send()
-            .await
+        let Some(body) = get_json::<serde_json::Value>(
+            Surface::Tokens,
+            "/v1/rugcheck",
+            &[("mints", chunk.join(","))],
+        )
+        .await
         else {
-            continue;
-        };
-        if !resp.status().is_success() {
-            continue;
-        }
-        let Ok(body): Result<serde_json::Value, _> = resp.json().await else {
             continue;
         };
         let Some(reports) = body.get("reports").and_then(|v| v.as_object()) else {

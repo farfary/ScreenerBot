@@ -279,6 +279,69 @@
   gap: 8px;
 }
 
+/* ScreenerBot data availability. A statement of fact, not an alert: a plain
+ * surface with a bare leading glyph, tinted only enough to separate "working"
+ * from "needs something from you". */
+.account-data {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px;
+  gap: 4px;
+  background: var(--bg-card-hover);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+}
+
+.account-data-headline {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+  gap: 7px;
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.account-data-headline i {
+  flex: none;
+  color: var(--text-muted);
+  font-size: 0.86rem;
+  line-height: 1;
+}
+
+.account-data[data-state="ready"] .account-data-headline i {
+  color: var(--semantic-success-text);
+}
+
+.account-data[data-state="unreachable"] .account-data-headline i,
+.account-data[data-state="version_unsupported"] .account-data-headline i,
+.account-data[data-state="reauthorization_required"] .account-data-headline i {
+  color: var(--semantic-warning-text);
+}
+
+/* The closing line under the setup screen's panel: quieter than the panel's own
+ * copy, because it is context rather than an instruction. */
+.account-footnote {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  line-height: 1.5;
+}
+
+/* The same block inside a Settings section, which owns its own rhythm. */
+.settings-data-access:not(:empty) {
+  margin-block: 10px;
+}
+
+.account-data-detail {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+
 .account-error,
 .account-notice {
   margin: 0;
@@ -316,6 +379,14 @@
   .account-note,
   .account-option-title {
     font-size: 0.78rem;
+  }
+
+  .account-data {
+    padding: 8px 10px;
+  }
+
+  .account-data-detail {
+    font-size: 0.74rem;
   }
 }
 

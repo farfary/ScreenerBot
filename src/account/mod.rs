@@ -75,6 +75,13 @@ pub struct AccountStatus {
     pub online: bool,
     /// The persisted preference shown by the setup screen's gateway checkbox.
     pub use_gateway_rpc: bool,
+    /// Where this install stands with the ScreenerBot data service.
+    ///
+    /// Carried on the account status rather than on a route of its own because
+    /// it is the SAME question the panel is already asking — the setup screen and
+    /// Settings both need "are you signed in, and what does that get you" in one
+    /// answer, and two fetches would let the two halves disagree on screen.
+    pub data_access: crate::data_server::DataAccessStatus,
 }
 
 // ---------------------------------------------------------------------------
@@ -132,7 +139,27 @@ pub fn status() -> AccountStatus {
         wallet_has_account: false,
         online: !crate::connectivity::is_network_offline(),
         use_gateway_rpc: crate::config::with_config(|config| config.account.use_gateway_rpc),
+        data_access: data_access_status(),
     }
+}
+
+/// The data-service state, corrected for what this module already knows.
+///
+/// The recorded state is whatever the last CALL established, and there may not
+/// have been one — on a cold launch, or because every caller checked
+/// `is_usable` first and correctly declined to ask. Without a session the answer
+/// is knowable without asking anybody, and saying so beats both "not checked
+/// yet" and a stale "active" left over from before the user signed out.
+fn data_access_status() -> crate::data_server::DataAccessStatus {
+    let recorded = crate::data_server::status();
+    if is_signed_in() {
+        return recorded;
+    }
+
+    crate::data_server::access::describe(
+        crate::data_server::DataAccess::SignedOut,
+        recorded.checked_at,
+    )
 }
 
 /// Does the signed-in device hold this permission?
@@ -237,6 +264,10 @@ fn adopt_tokens(tokens: TokenResponse, name: Option<String>, email: Option<Strin
         account_label: name.clone(),
         account_email: email.clone(),
     })?;
+
+    // A "sign in again" refusal recorded under the previous grant is exactly
+    // what this sign-in answers, so it must not outlive it.
+    crate::data_server::access::forget_refusals();
 
     write_session(Some(Session {
         access_token: tokens.access_token,
@@ -470,6 +501,7 @@ pub fn sign_out() -> Result<()> {
 
 fn sign_out_locally() {
     write_session(None);
+    crate::data_server::access::forget_refusals();
     if let Err(error) = store::clear() {
         log::debug!("Account: could not clear stored session: {error}");
     }

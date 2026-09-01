@@ -10,34 +10,19 @@
 //! "no local pool → OHLCV/chart stuck" case). On any disabled/miss/timeout/error
 //! it returns `None` so the direct providers remain the fallback.
 
-use crate::config::with_config;
 use crate::tokens::types::TokenPoolInfo;
 use chrono::Utc;
-use std::time::Duration;
 
 /// Fetch a token's pools from the data server's `/v1/pools`. Returns `None` when
-/// the source is disabled/unconfigured or the request misses/times out/errors.
+/// the source is unavailable for any reason, so the direct providers remain the
+/// fallback; `data_server::access` carries the reason.
 pub async fn fetch_pools_from_server(mint: &str) -> Option<Vec<TokenPoolInfo>> {
-    let (enabled, endpoint, timeout_secs) = with_config(|c| {
-        let s = &c.tokens.sources.screenerbot_server;
-        (s.enabled, s.endpoint.clone(), s.timeout_seconds)
-    });
-    if !enabled || endpoint.trim().is_empty() {
-        return None;
-    }
-
-    let url = format!("{}/v1/pools?mint={}", endpoint.trim_end_matches('/'), mint);
-    let resp = crate::net::client()
-        .get(&url)
-        .timeout(Duration::from_secs(timeout_secs))
-        .send()
-        .await
-        .ok()?;
-    if !resp.status().is_success() {
-        return None;
-    }
-
-    let body: serde_json::Value = resp.json().await.ok()?;
+    let body: serde_json::Value = crate::data_server::get_json(
+        crate::data_server::Surface::Tokens,
+        "/v1/pools",
+        &[("mint", mint.to_string())],
+    )
+    .await?;
     let arr = body.get("pools")?.as_array()?;
     let now = Utc::now();
     let mut out = Vec::new();

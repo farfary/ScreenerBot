@@ -6,7 +6,6 @@
 //! 2. GeckoTerminal — uses pool address, rate-limited 30/min, free
 
 use crate::apis::{get_api_manager, ApiManager, Error as ApiError};
-use crate::config::with_config;
 use crate::errors::NetworkError;
 use crate::events::{record_ohlcv_event, Severity};
 use crate::ohlcvs::types::{Candle, OhlcvError, OhlcvResult, Priority, Timeframe};
@@ -352,8 +351,9 @@ impl OhlcvFetcher {
         }
     }
 
-    /// Try the self-hosted ScreenerBot OHLCV server. Returns None on disabled /
-    /// miss / timeout / any error so the caller falls back to the providers.
+    /// Try the ScreenerBot data service. `None` on anything at all — switched
+    /// off, signed out, refused, missed or timed out — so the caller falls back
+    /// to the providers. The reason is published once by `data_server::access`.
     async fn fetch_from_screenerbot_server(
         &self,
         mint: &str,
@@ -362,33 +362,19 @@ impl OhlcvFetcher {
         aggregate: u32,
         limit: usize,
     ) -> Option<Vec<Candle>> {
-        let (enabled, endpoint, timeout_secs) = with_config(|c| {
-            let s = &c.ohlcv.sources.screenerbot_server;
-            (s.enabled, s.endpoint.clone(), s.timeout_seconds)
-        });
-        if !enabled || endpoint.trim().is_empty() {
-            return None;
-        }
         let tf = Self::server_timeframe(api_endpoint, aggregate)?;
-        let url = format!(
-            "{}/v1/ohlcv?mint={}&pool={}&timeframe={}&limit={}",
-            endpoint.trim_end_matches('/'),
-            mint,
-            pool_address,
-            tf,
-            limit.min(MAX_CANDLES_PER_REQUEST)
-        );
-        let resp = crate::net::client()
-            .get(&url)
-            .timeout(Duration::from_secs(timeout_secs))
-            .send()
-            .await
-            .ok()?;
-        if !resp.status().is_success() {
-            return None;
-        }
         // The server returns a JSON array of candles with identical field names.
-        resp.json::<Vec<Candle>>().await.ok()
+        crate::data_server::get_json::<Vec<Candle>>(
+            crate::data_server::Surface::Ohlcv,
+            "/v1/ohlcv",
+            &[
+                ("mint", mint.to_string()),
+                ("pool", pool_address.to_string()),
+                ("timeframe", tf.to_string()),
+                ("limit", limit.min(MAX_CANDLES_PER_REQUEST).to_string()),
+            ],
+        )
+        .await
     }
 
     pub async fn fetch_multi_source(

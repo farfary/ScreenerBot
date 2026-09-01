@@ -6,6 +6,7 @@
     '<img class="account-google-mark" src="/assets/google-g.png" alt="" aria-hidden="true" />';
 
   const SCOPE_LABELS = {
+    "data:read": "ScreenerBot market data",
     "rpc:submit": "Free signed-transaction submission",
     vote: "Token voting",
     "referral:read": "Referral earnings",
@@ -264,6 +265,7 @@
             </div>
           </div>
           ${scopes ? `<ul class="account-scopes" aria-label="Account features">${scopes}</ul>` : ""}
+          ${this.renderDataAccess()}
           <div class="account-actions">
             <button type="button" class="account-btn account-btn-ghost" data-action="signout"
               ${this.busyAction ? "disabled" : ""}>
@@ -287,7 +289,8 @@
       return `
         <div class="account-panel-signed-out">
           <p class="account-lead">
-            An account adds free transaction sending, token voting, and referral rewards.
+            An account unlocks ScreenerBot market data, free transaction sending, token voting
+            and referral rewards. It is free, and ScreenerBot runs without one.
           </p>
           <div class="account-options">
             <button type="button" class="account-option" data-action="browser" ${disabled}>
@@ -299,6 +302,7 @@
             </button>
             ${walletOption}
           </div>
+          ${this.renderDataAccess()}
           <p class="account-note account-signup-note">
             <span>New to ScreenerBot?</span>
             <button type="button" class="account-link" data-action="signup">
@@ -338,6 +342,32 @@
           </p>
           ${this.renderError()}
         </form>`;
+    }
+
+    /**
+     * What ScreenerBot data does for this install right now.
+     *
+     * Rendered in BOTH the signed-out and signed-in states, because the honest
+     * answer differs in both directions: signing out costs the shared cache, and
+     * a device authorised before data access existed is signed in and still
+     * without it. The backend composes every sentence (`data_server::access`) so
+     * this panel, Settings and the introduction cannot drift apart.
+     */
+    renderDataAccess() {
+      const access = this.status?.data_access;
+      if (!access) return "";
+
+      const state = escapeHtml(access.state || "unknown");
+      const detail = access.detail ? `<p class="account-data-detail">${escapeHtml(access.detail)}</p>` : "";
+
+      return `
+        <div class="account-data" data-state="${state}">
+          <p class="account-data-headline">
+            <i class="${access.available ? "icon-circle-check" : "icon-info"}" aria-hidden="true"></i>
+            <span>${escapeHtml(access.headline || "")}</span>
+          </p>
+          ${detail}
+        </div>`;
     }
 
     renderError() {

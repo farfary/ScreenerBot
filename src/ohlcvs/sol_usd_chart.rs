@@ -8,7 +8,6 @@
 //! periodically. Purely SOL/USD — this is the ONE deliberately USD series; token
 //! candles stay SOL-denominated elsewhere.
 
-use crate::config::with_config;
 use crate::ohlcvs::types::{Candle, Timeframe};
 use arc_swap::ArcSwap;
 use std::collections::HashMap;
@@ -132,34 +131,26 @@ struct SolUsdResponse {
 }
 
 /// Fetch one timeframe from the data server. Returns None on any miss/error.
-async fn fetch_tf(endpoint: &str, tf: Timeframe, timeout_secs: u64) -> Option<Vec<Candle>> {
-    let url = format!(
-        "{}/v1/sol_usd?timeframe={}&limit={}",
-        endpoint.trim_end_matches('/'),
-        tf_str(tf),
-        pull_limit(tf)
-    );
-    let resp = crate::net::client()
-        .get(&url)
-        .timeout(Duration::from_secs(timeout_secs))
-        .send()
-        .await
-        .ok()?;
-    if !resp.status().is_success() {
-        return None;
-    }
-    let body = resp.json::<SolUsdResponse>().await.ok()?;
+async fn fetch_tf(tf: Timeframe) -> Option<Vec<Candle>> {
+    let body = crate::data_server::get_json::<SolUsdResponse>(
+        crate::data_server::Surface::Ohlcv,
+        "/v1/sol_usd",
+        &[
+            ("timeframe", tf_str(tf).to_string()),
+            ("limit", pull_limit(tf).to_string()),
+        ],
+    )
+    .await?;
     Some(body.candles)
 }
 
 /// Refresh all timeframes from the server and atomically swap the cache in. Keeps
 /// any timeframe the server couldn't serve this round (partial refresh is fine).
 async fn refresh_once() {
-    let (enabled, endpoint, timeout_secs) = with_config(|c| {
-        let s = &c.ohlcv.sources.screenerbot_server;
-        (s.enabled, s.endpoint.clone(), s.timeout_seconds)
-    });
-    if !enabled || endpoint.trim().is_empty() {
+    // Seven timeframes in a row: ask once whether the source is usable at all
+    // rather than discovering it seven times. `is_usable` is optimistic on an
+    // unknown or transient state, so a first run and a blip both still try.
+    if !crate::data_server::is_usable(crate::data_server::Surface::Ohlcv) {
         return;
     }
 
@@ -169,7 +160,7 @@ async fn refresh_once() {
     let mut any = false;
 
     for tf in TIMEFRAMES {
-        if let Some(candles) = fetch_tf(&endpoint, tf, timeout_secs).await {
+        if let Some(candles) = fetch_tf(tf).await {
             if candles.is_empty() {
                 continue;
             }

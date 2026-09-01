@@ -18,12 +18,27 @@ export function buildAccountTab() {
     <div class="settings-section">
       <h3 class="settings-section-title">ScreenerBot account</h3>
       <p class="settings-section-description">
-        Optional. Signing in adds free transaction sending, token voting and your referral
-        earnings. Nothing in ScreenerBot requires an account, and nothing stops working without
-        one.
+        Free, and optional. Signing in adds ScreenerBot market data, free transaction sending,
+        token voting and your referral earnings. ScreenerBot trades, discovers and charts
+        without an account — it just does it against the public providers.
       </p>
 
       <div class="account-panel" id="settingsAccountPanel"></div>
+    </div>
+
+    <div class="settings-section">
+      <h3 class="settings-section-title">ScreenerBot data</h3>
+      <p class="settings-section-description">
+        We run a shared market-data service at screenerbot.io: pooled candles across seven
+        timeframes, a resolved pool registry, cached security reports and normalised token
+        identity. It exists so every install is not separately rate limited by the public
+        providers, and using it needs an account so that shared cost has a name against it.
+      </p>
+      <div class="settings-data-access" id="settingsDataAccess" aria-live="polite"></div>
+      <p class="settings-section-description">
+        When it is unavailable ScreenerBot falls back to the public providers automatically.
+        Nothing stops; charts fill more slowly and carry less history.
+      </p>
     </div>
 
     <div class="settings-section">
@@ -63,7 +78,12 @@ export function attachAccountHandlers() {
   const container = document.getElementById("settingsAccountPanel");
   if (container && window.AccountPanel) {
     instance = window.AccountPanel.mount(container, {
-      onChange: () => void syncGatewayToggle(),
+      // The panel already fetched the status this section renders, so it hands
+      // it over rather than making Settings fetch the same thing again.
+      onChange: (status) => {
+        renderDataAccess(status?.data_access);
+        void syncGatewayToggle();
+      },
     });
   }
 
@@ -95,6 +115,39 @@ export function attachAccountHandlers() {
       });
     });
   }
+}
+
+/**
+ * Paint the data-service state.
+ *
+ * Every sentence comes from the backend (`data_server::access`), so this section,
+ * the account panel and the first-run introduction cannot describe the same
+ * state three different ways.
+ */
+function renderDataAccess(access) {
+  const host = document.getElementById("settingsDataAccess");
+  if (!host) return;
+
+  if (!access) {
+    host.innerHTML = "";
+    return;
+  }
+
+  const escape = (value) =>
+    String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+
+  host.innerHTML = `
+    <div class="account-data" data-state="${escape(access.state)}">
+      <p class="account-data-headline">
+        <i class="${access.available ? "icon-circle-check" : "icon-info"}" aria-hidden="true"></i>
+        <span>${escape(access.headline)}</span>
+      </p>
+      <p class="account-data-detail">${escape(access.detail)}</p>
+    </div>`;
 }
 
 /** Read the current flag so the checkbox reflects config rather than a guess. */
