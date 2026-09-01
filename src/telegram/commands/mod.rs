@@ -8,6 +8,7 @@ mod callbacks;
 mod menu;
 mod status;
 mod trading;
+mod updates;
 
 pub use callback_tokens::{send_token_detail, send_tokens_list, send_tokens_menu};
 pub use callbacks::handle_callback_query;
@@ -20,6 +21,7 @@ pub use trading::{
     handle_pause_entries_command, handle_resume_command, handle_resume_entries_command,
     handle_start_command, handle_stop_command,
 };
+pub use updates::handle_update_command;
 
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
@@ -143,6 +145,7 @@ pub async fn handle_command(bot: &Bot, chat_id: ChatId, user_id: i64, text: &str
         "/pause" | "/pause_entries" => handle_pause_entries_command().await,
         "/resume" | "/resume_entries" => handle_resume_entries_command().await,
         "/resume_trading" => handle_resume_command().await,
+        "/update" | "/updates" => handle_update_command().await,
         "/help" => handle_help_command(),
         _ => format!(
             "❓ Unknown command: {}\n\nUse /help to see available commands.",

@@ -103,9 +103,6 @@ config_struct! {
         /// Default page to show on startup
         default_page: String = "dashboard".to_owned(),
 
-        /// Check for updates on startup (disabled - for future use)
-        check_updates_on_startup: bool = false,
-
         /// Show notifications for background events
         show_background_notifications: bool = true,
 

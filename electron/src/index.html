@@ -140,6 +140,64 @@
       transition: opacity 0.3s ease;
     }
     
+    /* Update panel — shown only while a staged update is being applied at launch.
+       A silent update's whole visible life is this moment, so it says what is
+       being installed rather than leaving the generic spinner to explain it. */
+    .splash-update {
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+      width: 280px;
+      margin-top: 0.25rem;
+      animation: splashFadeIn 0.4s ease-out;
+    }
+
+    .splash-update-label {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 0.75rem;
+      font-size: 0.75rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    .splash-update-version {
+      font-family: 'Orbitron', sans-serif;
+      color: var(--accent);
+      letter-spacing: 0.04em;
+    }
+
+    .splash-update-track {
+      position: relative;
+      height: 3px;
+      border-radius: 3px;
+      background: var(--border-color);
+      overflow: hidden;
+    }
+
+    .splash-update-fill {
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 40%;
+      border-radius: 3px;
+      background: linear-gradient(90deg, transparent, var(--accent), transparent);
+      animation: splashSweep 1.4s ease-in-out infinite;
+    }
+
+    /* A known percentage replaces the sweep with a real bar. */
+    .splash-update-fill.determinate {
+      background: var(--accent);
+      animation: none;
+      transition: width 0.3s ease;
+    }
+
+    @keyframes splashSweep {
+      from { transform: translateX(-100%); }
+      to { transform: translateX(250%); }
+    }
+
     /* Version badge */
     .splash-version {
       position: fixed;
@@ -319,6 +377,15 @@
       <div class="splash-loader">
         <div class="splash-spinner"></div>
         <div class="splash-status" id="status">Initializing...</div>
+        <div class="splash-update" id="splashUpdate" hidden>
+          <div class="splash-update-label">
+            <span id="splashUpdateTitle">Installing update</span>
+            <span class="splash-update-version" id="splashUpdateVersion"></span>
+          </div>
+          <div class="splash-update-track">
+            <div class="splash-update-fill" id="splashUpdateFill"></div>
+          </div>
+        </div>
       </div>
     </div>
     

@@ -28,6 +28,7 @@ pub struct FullConfigResponse {
     pub tokens: config::TokensConfig,
     pub pools: config::PoolsConfig,
     pub maintenance: config::MaintenanceConfig,
+    pub updates: config::UpdatesConfig,
     pub sol_price: config::SolPriceConfig,
     pub events: config::EventsConfig,
     pub services: config::ServicesConfig,

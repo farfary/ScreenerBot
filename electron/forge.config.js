@@ -161,5 +161,18 @@ module.exports = {
       name: '@electron-forge/plugin-auto-unpack-natives',
       config: {}
     }
-  ]
+  ],
+  hooks: {
+    // Stamp the shell's identity into the bundle before anything is packaged.
+    // The updater compares this revision against the one a release was built
+    // with; when they match, Electron did not change and the release installs as
+    // a core-only update instead of a whole installer. Running it here means
+    // `start`, `package` and `make` all produce a build that knows its own
+    // revision — a build without it simply never takes the silent path.
+    generateAssets: async () => {
+      const { computeShellRevision, writeShellRevision } = require('./tools/shell-revision.js');
+      const revision = writeShellRevision(computeShellRevision());
+      console.log(`[forge] shell revision ${revision}`);
+    }
+  }
 };

@@ -28,8 +28,8 @@ use getters::{
     get_ohlcv_config, get_performance_config, get_pools_config, get_positions_config,
     get_referral_config, get_rpc_config, get_services_config, get_sol_price_config,
     get_strategies_config, get_summary_config, get_swaps_config, get_telegram_config,
-    get_tokens_config, get_trader_config, get_wallet_config, get_webserver_config,
-    patch_any_config,
+    get_tokens_config, get_trader_config, get_updates_config, get_wallet_config,
+    get_webserver_config, patch_any_config,
 };
 use import_export::{export_config, import_config, import_config_preview};
 use operations::{get_config_diff, reload_config_from_disk, reset_config_to_defaults};
@@ -53,6 +53,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/config/tokens", get(get_tokens_config))
         .route("/config/pools", get(get_pools_config))
         .route("/config/maintenance", get(get_maintenance_config))
+        .route("/config/updates", get(get_updates_config))
         .route("/config/sol_price", get(get_sol_price_config))
         .route("/config/summary", get(get_summary_config))
         .route("/config/events", get(get_events_config))
@@ -104,6 +105,10 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route(
             "/config/maintenance",
             patch(patch_any_config::<config::MaintenanceConfig>),
+        )
+        .route(
+            "/config/updates",
+            patch(patch_any_config::<config::UpdatesConfig>),
         )
         .route("/config/rpc", patch(patch_any_config::<config::RpcConfig>))
         .route(

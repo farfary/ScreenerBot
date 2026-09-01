@@ -6,12 +6,16 @@ import * as Utils from "../core/utils.js";
 import { createFocusTrap } from "../core/utils.js";
 import { pushEscapeHandler } from "../core/escape_stack.js";
 import { getCurrentPage } from "../core/router.js";
-import { setInterval as setPollingInterval, Poller } from "../core/poller.js";
+import { setInterval as setPollingInterval } from "../core/poller.js";
 import { enhanceAllSelects } from "./custom_select.js";
 import { playTabSwitch } from "../core/sounds.js";
 import { loadSecurityTab } from "./settings/security_tab.js";
 import { buildDataTab, attachDataHandlers } from "./settings/data_tab.js";
-import { buildUpdatesTab, attachUpdatesHandlers } from "./settings/updates_tab.js";
+import {
+  buildUpdatesTab,
+  attachUpdatesHandlers,
+  teardownUpdatesTab,
+} from "./settings/updates_tab.js";
 import { buildInterfaceTab, attachInterfaceHandlers } from "./settings/interface_tab.js";
 import { buildHintsTab, attachHintsHandlers } from "./settings/hints_tab.js";
 import {
@@ -27,18 +31,10 @@ import {
   teardownAccountTab,
 } from "./settings/account_tab.js";
 
-// Global update state to persist across dialog opens
-let globalUpdateState = {
-  checked: false,
-  checking: false,
-  available: false,
-  info: null, // { version, release_notes, download_url, ... }
-  downloading: false,
-  progress: 0,
-  downloaded: false,
-  error: null,
-  statusPoller: null,
-};
+// Whether an update is waiting, for the nav badge. Everything else about the
+// update lifecycle is owned by settings/updates_tab.js and read straight from
+// the backend, so there is only ever one description of it.
+let updateAvailable = false;
 
 export class SettingsDialog {
   constructor(options = {}) {
@@ -51,7 +47,13 @@ export class SettingsDialog {
     this.isSaving = false;
     this.pathsInfo = null;
     // Version info fetched from /api/version
-    this.versionInfo = { version: "...", build_number: "...", platform: "..." };
+    this.versionInfo = {
+      version: "...",
+      build_number: "...",
+      platform: "...",
+      shell_revision: null,
+      core_staged: false,
+    };
     this._focusTrap = null;
     this._discoveryPoller = null;
   }
@@ -90,126 +92,35 @@ export class SettingsDialog {
   }
 
   /**
-   * Sync update status with server
+   * Read whether an update is waiting, purely so the nav item can show its dot.
    */
   async _syncUpdateStatus() {
-    // If we already know we are downloading, just resume polling
-    if (globalUpdateState.downloading) {
-      this._startDownloadPoller();
-      return;
-    }
-
-    // Otherwise check status from server
     try {
       const response = await fetch("/api/updates/status");
-      if (response.ok) {
-        const data = await response.json();
-        // API returns { state: { available_update, download_progress, ... } }
-        const state = data.state || data;
-        const progress = state.download_progress || {};
-        globalUpdateState.checked = Boolean(state.last_check_attempt || state.last_check);
-        globalUpdateState.error = state.check_error || progress.error || null;
-
-        if (progress.downloading) {
-          globalUpdateState.downloading = true;
-          globalUpdateState.progress = progress.progress_percent || 0;
-          globalUpdateState.available = true;
-          if (!globalUpdateState.info && state.available_update) {
-            globalUpdateState.info = state.available_update;
-          }
-          this._startDownloadPoller();
-        } else if (progress.completed && progress.downloaded_path) {
-          globalUpdateState.downloading = false;
-          globalUpdateState.downloaded = true;
-          globalUpdateState.progress = 100;
-          globalUpdateState.available = true;
-          if (!globalUpdateState.info && state.available_update) {
-            globalUpdateState.info = state.available_update;
-          }
-        } else if (state.available_update) {
-          // Update available but not downloading yet
-          globalUpdateState.available = true;
-          globalUpdateState.info = state.available_update;
-        } else {
-          globalUpdateState.available = false;
-          globalUpdateState.info = null;
-          globalUpdateState.downloaded = false;
-        }
-      }
+      if (!response.ok) return;
+      const body = await response.json();
+      const payload = body.data || body;
+      const state = payload.state || payload;
+      this._setUpdateBadge(Boolean(state.available_update));
     } catch (err) {
-      console.warn("Failed to sync update status:", err);
-    }
-
-    // If not downloading/ready, maybe check for updates if not checked yet
-    if (
-      !globalUpdateState.checked &&
-      !globalUpdateState.checking &&
-      !globalUpdateState.downloading &&
-      !globalUpdateState.downloaded
-    ) {
-      this._performBackgroundUpdateCheck();
-    } else {
-      this._updateUpdatesBadge();
-      if (this.currentTab === "updates") {
-        this._updateUpdatesTabUI();
-      }
+      console.warn("Failed to read update status:", err);
     }
   }
 
   /**
-   * Perform background update check
+   * Show or clear the dot on the Updates nav item.
    */
-  async _performBackgroundUpdateCheck() {
-    globalUpdateState.checking = true;
-    globalUpdateState.checked = true;
-    this._updateUpdatesBadge(); // Might show spinner or nothing
-
-    try {
-      const response = await fetch("/api/updates/check");
-      const data = await response.json();
-      if (!response.ok || data.success === false) {
-        throw new Error(data.error?.message || data.error || "Failed to check for updates");
-      }
-
-      globalUpdateState.checking = false;
-      globalUpdateState.error = null;
-
-      if (data.update_available) {
-        globalUpdateState.available = true;
-        globalUpdateState.info = data.update; // API returns 'update' not 'update_info'
-      } else {
-        globalUpdateState.available = false;
-        globalUpdateState.info = null;
-        globalUpdateState.downloaded = false;
-      }
-    } catch (err) {
-      console.error("Background update check failed:", err);
-      globalUpdateState.checking = false;
-      globalUpdateState.error = err.message;
-    }
-
-    this._updateUpdatesBadge();
-
-    // If user is currently on updates tab, refresh it
-    if (this.currentTab === "updates") {
-      this._updateUpdatesTabUI();
-    }
-  }
-
-  /**
-   * Update the badge on the Updates tab button
-   */
-  _updateUpdatesBadge() {
+  _setUpdateBadge(available) {
+    updateAvailable = available;
     if (!this.dialogEl) return;
 
     const updatesBtn = this.dialogEl.querySelector('.settings-nav-item[data-tab="updates"]');
     if (!updatesBtn) return;
 
-    // Remove existing indicator
     const existingIndicator = updatesBtn.querySelector(".settings-nav-indicator");
     if (existingIndicator) existingIndicator.remove();
 
-    if (globalUpdateState.available) {
+    if (updateAvailable) {
       const indicator = document.createElement("span");
       indicator.className = "settings-nav-indicator";
       indicator.title = "New update available";
@@ -229,6 +140,8 @@ export class SettingsDialog {
           version: data.version || "0.0.0",
           build_number: data.build_number || "?",
           platform: data.platform || "Unknown",
+          shell_revision: data.shell_revision || null,
+          core_staged: Boolean(data.core_staged),
         };
       }
     } catch (error) {
@@ -265,11 +178,8 @@ export class SettingsDialog {
       this._focusTrap = null;
     }
 
-    // Stop any active pollers
-    if (this.downloadPoller) {
-      this.downloadPoller.cleanup();
-      this.downloadPoller = null;
-    }
+    // The Updates tab polls only while a download or install is in flight.
+    teardownUpdatesTab();
 
     // Stop discovery poller if active
     if (this._discoveryPoller) {
@@ -346,7 +256,6 @@ export class SettingsDialog {
         startup: {
           auto_start_trader: false,
           default_page: "dashboard",
-          check_updates_on_startup: false,
           show_background_notifications: true,
         },
         navigation: {
@@ -784,14 +693,8 @@ export class SettingsDialog {
         loadAgentConnectionsTab(this, content);
         break;
       case "updates":
-        content.innerHTML = buildUpdatesTab(this, this.versionInfo, globalUpdateState);
-        attachUpdatesHandlers(
-          this,
-          globalUpdateState,
-          () => this._updateUpdatesTabUI(),
-          () => this._startDownloadPoller(),
-          () => this._updateUpdatesBadge()
-        );
+        content.innerHTML = buildUpdatesTab(this, this.versionInfo);
+        attachUpdatesHandlers(this, content, (available) => this._setUpdateBadge(available));
         break;
       case "licenses":
         content.innerHTML = buildLicensesTab();
@@ -859,24 +762,6 @@ export class SettingsDialog {
         </div>
       </div>
 
-      <div class="settings-section">
-        <h3 class="settings-section-title">Update Checks</h3>
-        <div class="settings-group">
-          <div class="settings-field settings-field--disabled">
-            <div class="settings-field-info">
-              <label>Check for Updates on Startup</label>
-              <span class="settings-field-hint">Automatically check for new versions</span>
-              <span class="settings-field-badge">Coming Soon</span>
-            </div>
-            <div class="settings-field-control">
-              <label class="toggle">
-                <input type="checkbox" id="settingCheckUpdates" ${startup.check_updates_on_startup ? "checked" : ""} disabled>
-                <span class="toggle-track"></span>
-              </label>
-            </div>
-          </div>
-        </div>
-      </div>
     `;
   }
 
@@ -932,24 +817,6 @@ export class SettingsDialog {
     const sizes = ["B", "KB", "MB", "GB"];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
-  }
-
-  /**
-   * Update the Updates tab UI without full rebuild
-   */
-  _updateUpdatesTabUI() {
-    if (!this.dialogEl) return;
-    const updatesTab = this.dialogEl.querySelector('.settings-tab[data-tab-content="updates"]');
-    if (updatesTab) {
-      updatesTab.innerHTML = buildUpdatesTab(this, this.versionInfo, globalUpdateState);
-      attachUpdatesHandlers(
-        this,
-        globalUpdateState,
-        () => this._updateUpdatesTabUI(),
-        () => this._startDownloadPoller(),
-        () => this._updateUpdatesBadge()
-      );
-    }
   }
 
   /**
@@ -1144,122 +1011,6 @@ export class SettingsDialog {
     }
   }
 
-  /**
-   * Start the download progress poller
-   */
-  _startDownloadPoller() {
-    if (this.downloadPoller) this.downloadPoller.cleanup();
-
-    // Track download speed
-    let lastProgress = 0;
-    let lastTime = Date.now();
-    let speedHistory = [];
-
-    this.downloadPoller = new Poller(
-      async () => {
-        try {
-          const statusRes = await fetch("/api/updates/status");
-          const data = await statusRes.json();
-          if (!statusRes.ok || data.success === false) {
-            throw new Error(data.error?.message || data.error || "Failed to read update status");
-          }
-          // API returns { state: { download_progress: { downloading, progress_percent, completed, error, downloaded_bytes, total_bytes } } }
-          const state = data.state || data;
-          const progress = state.download_progress || {};
-
-          if (progress.downloading) {
-            const currentProgress = progress.progress_percent || 0;
-            const now = Date.now();
-            const elapsed = (now - lastTime) / 1000; // seconds
-
-            // Calculate speed (using progress percentage and total size if available)
-            let speedMBps = 0;
-            let etaText = "";
-
-            if (progress.downloaded_bytes && progress.total_bytes) {
-              const bytesDiff =
-                progress.downloaded_bytes - (lastProgress / 100) * progress.total_bytes;
-              if (elapsed > 0 && bytesDiff > 0) {
-                const bytesPerSec = bytesDiff / elapsed;
-                speedMBps = bytesPerSec / (1024 * 1024);
-
-                // Smooth speed using moving average
-                speedHistory.push(speedMBps);
-                if (speedHistory.length > 5) speedHistory.shift();
-                const avgSpeed = speedHistory.reduce((a, b) => a + b, 0) / speedHistory.length;
-
-                // Calculate ETA
-                const remainingBytes = progress.total_bytes - progress.downloaded_bytes;
-                const etaSeconds = remainingBytes / (avgSpeed * 1024 * 1024);
-                if (etaSeconds < 60) {
-                  etaText = `${Math.round(etaSeconds)}s remaining`;
-                } else if (etaSeconds < 3600) {
-                  etaText = `${Math.round(etaSeconds / 60)}m remaining`;
-                } else {
-                  etaText = `${Math.round(etaSeconds / 3600)}h remaining`;
-                }
-
-                speedMBps = avgSpeed;
-              }
-            } else {
-              // Fallback: estimate speed from progress change
-              const progressDiff = currentProgress - lastProgress;
-              if (elapsed > 0 && progressDiff > 0 && globalUpdateState.info?.file_size) {
-                const totalBytes = globalUpdateState.info.file_size;
-                const bytesDiff = (progressDiff / 100) * totalBytes;
-                speedMBps = bytesDiff / elapsed / (1024 * 1024);
-              }
-            }
-
-            lastProgress = currentProgress;
-            lastTime = now;
-            globalUpdateState.progress = currentProgress;
-
-            // Update UI elements directly for smoothness
-            if (this.dialogEl) {
-              const bar = this.dialogEl.querySelector("#downloadProgressBar");
-              const percentText = this.dialogEl.querySelector("#download-percent-text");
-              const speedText = this.dialogEl.querySelector("#download-speed-text");
-              const etaElement = this.dialogEl.querySelector("#downloadEtaText");
-              const sizeText = this.dialogEl.querySelector("#downloadSizeText");
-
-              if (bar) bar.style.width = `${currentProgress}%`;
-              if (percentText) percentText.textContent = `${Math.round(currentProgress)}%`;
-              if (speedText && speedMBps > 0) {
-                speedText.textContent = `${speedMBps.toFixed(1)} MB/s`;
-              }
-              if (etaElement && etaText) {
-                etaElement.textContent = etaText;
-              }
-              if (sizeText && progress.downloaded_bytes && progress.total_bytes) {
-                sizeText.textContent = `${this._formatBytes(progress.downloaded_bytes)} / ${this._formatBytes(progress.total_bytes)}`;
-              }
-            }
-          } else if (progress.completed && progress.downloaded_path) {
-            globalUpdateState.downloading = false;
-            globalUpdateState.downloaded = true;
-            globalUpdateState.progress = 100;
-            if (this.downloadPoller) this.downloadPoller.cleanup();
-            this.downloadPoller = null;
-            this._updateUpdatesTabUI();
-          } else if (progress.error) {
-            throw new Error(progress.error || "Download failed");
-          }
-        } catch (err) {
-          console.error("Download poll error:", err);
-          globalUpdateState.downloading = false;
-          globalUpdateState.error = err.message;
-          if (this.downloadPoller) this.downloadPoller.cleanup();
-          this.downloadPoller = null;
-          this._updateUpdatesTabUI();
-        }
-      },
-      { label: "UpdateDownload", intervalMs: 1000, pauseWhenHidden: false }
-    );
-
-    this.downloadPoller.start();
-  }
-
   // ===========================================================================
   // TELEGRAM TAB
   // ===========================================================================
@@ -1324,43 +1075,34 @@ export async function checkAndShowUpdateDialog() {
 
   try {
     // First check current status
-    let response = await fetch("/api/updates/status");
+    const response = await fetch("/api/updates/status");
     if (!response.ok) return;
 
-    let data = await response.json();
-    let state = data.state || data;
+    const body = await response.json();
+    const payload = body.data || body;
+    let state = payload.state || payload;
+    state.blocked_reason = payload.blocked_reason || null;
 
     // If no check has happened yet, trigger one
     if (!state.last_check && !state.available_update) {
-      console.log("[SettingsDialog] No update check done yet, triggering check...");
       const checkResponse = await fetch("/api/updates/check");
       if (checkResponse.ok) {
-        const checkData = await checkResponse.json();
-        // Update state from check response
-        if (checkData.update_available && checkData.update) {
-          state = {
-            available_update: checkData.update,
-            last_check: checkData.last_check,
-            download_progress: state.download_progress || {},
-          };
+        const refreshed = await fetch("/api/updates/status");
+        if (refreshed.ok) {
+          const refreshedBody = await refreshed.json();
+          const refreshedPayload = refreshedBody.data || refreshedBody;
+          state = refreshedPayload.state || refreshedPayload;
+          state.blocked_reason = refreshedPayload.blocked_reason || null;
         }
       }
     }
 
-    // Check if update is available or downloading
-    if (state.available_update || state.download_progress?.downloading) {
-      console.log("[SettingsDialog] Update available, showing dialog...");
-
-      // Update global state
-      globalUpdateState.available = true;
-      globalUpdateState.info = state.available_update;
-
-      if (state.download_progress?.downloading) {
-        globalUpdateState.downloading = true;
-        globalUpdateState.progress = state.download_progress.progress_percent || 0;
-      }
-
-      // Show settings dialog with Updates tab selected
+    // Only surface the panel for an update that still needs a decision. A core
+    // update that installs itself must not steal the screen on every launch.
+    const needsAttention =
+      state.available_update &&
+      (state.blocked_reason || state.phase === "ready_to_install" || state.phase === "failed");
+    if (needsAttention) {
       await showSettingsDialog({ tab: "updates" });
     }
   } catch (err) {

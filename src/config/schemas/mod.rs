@@ -30,6 +30,7 @@ mod swaps;
 mod telegram;
 mod tokens;
 mod trader;
+mod updates;
 mod wallet;
 mod webserver;
 
@@ -60,6 +61,7 @@ pub use swaps::*;
 pub use telegram::*;
 pub use tokens::*;
 pub use trader::*;
+pub use updates::*;
 pub use wallet::*;
 pub use webserver::*;
 
@@ -150,6 +152,9 @@ config_struct! {
 
         /// Automatic maintenance and data retention
         maintenance: MaintenanceConfig = MaintenanceConfig::default(),
+
+        /// Automatic update checking, downloading and installation
+        updates: UpdatesConfig = UpdatesConfig::default(),
 
         /// Network proxy configuration
         network: NetworkConfig = NetworkConfig::default(),

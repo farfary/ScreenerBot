@@ -107,7 +107,7 @@ pub use schemas::{
     MaintenanceConfig, MonitoringConfig, NetworkConfig, OhlcvConfig, OllamaConfig,
     PerformanceConfig, PoolsConfig, PositionsConfig, ReferralConfig, RpcConfig, ServicesConfig,
     SolPriceConfig, StartupConfig, StrategiesConfig, SwapsConfig, TelegramConfig, TimeUnit,
-    TokensConfig, TraderConfig, WalletConfig, WebserverConfig,
+    TokensConfig, TraderConfig, UpdatesConfig, WalletConfig, WebserverConfig,
 };
 
 pub use utils::{

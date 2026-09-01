@@ -150,6 +150,7 @@ pub fn handle_help_command() -> String {
      /force_stop — <b>EMERGENCY HALT</b>\n\
      /resume_trading — Clear emergency status\n\n\
      <b>⚙️ System</b>\n\
+     /update — Update status & install\n\
      /login — 2FA Authentication\n\n\
      <i>Tip: Tap a command to run it.</i>"
         .to_string()

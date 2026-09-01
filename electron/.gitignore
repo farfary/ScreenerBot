@@ -33,3 +33,7 @@ Thumbs.db
 # Environment
 .env
 .env.local
+
+# Generated at package time by tools/shell-revision.js — never committed, so a
+# stale value can never claim a shell build it does not describe.
+src/shell_revision.json

@@ -5,6 +5,8 @@ const http = require('http');
 const fs = require('fs');
 const os = require('os');
 const { pathToFileURL } = require('url');
+const appPaths = require('./paths');
+const coreResolver = require('./core_resolver');
 
 // ============================================================================
 // EPIPE PROTECTION - Prevent crashes when stdout/stderr pipes break
@@ -61,6 +63,43 @@ let dashboardLoaded = false; // True once the dashboard URL has been loaded succ
 let currentTheme = 'dark'; // Last-run UI theme ('light'|'dark'), persisted in window-state.json
 let backendRestartRequested = false;
 let backendRestartTarget = '/home';
+
+// Which core binary the current backend child was launched from. A staged core
+// that never reports ready is quarantined and the bundled binary takes over, so
+// a bad silent update can cost one extra launch and nothing more.
+let activeCore = { path: null, version: null, staged: false, reason: '' };
+
+// Every backend spawn takes the next generation. A boot sequence that is still
+// awaiting an older generation has been superseded (by a restart, a recovery, or
+// a staged-core rollback) and must not report its own failure — otherwise its
+// 120s timeout later overwrites the screen the newer launch already painted.
+let launchGeneration = 0;
+
+/**
+ * Revision of this shell build, generated at package time by
+ * `electron/tools/shell-revision.js`. The backend compares it against the
+ * revision a release was built with: equal means Electron did not change and the
+ * update is core-only. Read directly (not through tools/) so it works from the
+ * packaged asar.
+ */
+const SHELL_REVISION = (() => {
+  try {
+    const value = JSON.parse(
+      fs.readFileSync(path.join(__dirname, 'shell_revision.json'), 'utf8')
+    ).revision;
+    return typeof value === 'string' && /^[0-9a-f]{8,64}$/.test(value) ? value : 'dev';
+  } catch (_) {
+    return 'dev';
+  }
+})();
+
+const SCREENERBOT_BASE_DIR = appPaths.resolveBaseDirectory();
+const CORE_DIR = appPaths.coreDirectory(SCREENERBOT_BASE_DIR);
+
+function openScreenerBotLogs() {
+  const logsPath = appPaths.logsDirectory(SCREENERBOT_BASE_DIR);
+  shell.openPath(fs.existsSync(logsPath) ? logsPath : SCREENERBOT_BASE_DIR);
+}
 
 function isSafeExternalUrl(rawUrl) {
   try {
@@ -196,19 +235,12 @@ function createTray() {
     {
       label: 'Open Data Folder',
       click: () => {
-        shell.openPath(app.getPath('userData'));
+        shell.openPath(appPaths.dataDirectory(SCREENERBOT_BASE_DIR));
       }
     },
     {
       label: 'Open Logs Folder',
-      click: () => {
-        const logsPath = path.join(app.getPath('userData'), 'logs');
-        if (fs.existsSync(logsPath)) {
-          shell.openPath(logsPath);
-        } else {
-          shell.openPath(app.getPath('userData'));
-        }
-      }
+      click: openScreenerBotLogs
     },
     { type: 'separator' },
     {
@@ -280,7 +312,34 @@ async function showExitDialog() {
 }
 
 /**
- * Get the path to the screenerbot binary
+ * Pick the core binary for this launch: the one staged by a silent update when
+ * it verifies and is newer, otherwise the one shipped inside this bundle.
+ *
+ * Resolution happens immediately before every spawn, which is what makes a
+ * backend restart the activation step of a core update.
+ */
+async function resolveBackendBinary() {
+  const bundledPath = getBinaryPath();
+  try {
+    const resolved = await coreResolver.resolveCore({
+      coreDir: CORE_DIR,
+      bundledPath,
+      bundledVersion: app.getVersion(),
+    });
+    if (resolved.staged) {
+      console.log(`[Electron] Launching staged core v${resolved.version} (${resolved.path})`);
+    } else if (resolved.reason) {
+      console.log(`[Electron] Launching bundled core: ${resolved.reason}`);
+    }
+    return resolved;
+  } catch (err) {
+    console.error('[Electron] Core resolution failed, using bundled binary:', err.message);
+    return { path: bundledPath, version: app.getVersion(), staged: false, reason: 'resolution failed' };
+  }
+}
+
+/**
+ * Get the path to the screenerbot binary shipped inside this application bundle
  */
 function getBinaryPath() {
   const binaryName = process.platform === 'win32' ? 'screenerbot.exe' : 'screenerbot';
@@ -405,8 +464,9 @@ async function waitForBackend() {
 /**
  * Start the screenerbot backend process
  */
-function startBackend(extraArgs = []) {
-  const binaryPath = getBinaryPath();
+function startBackend(extraArgs = [], core = null) {
+  activeCore = core || { path: getBinaryPath(), version: app.getVersion(), staged: false, reason: '' };
+  const binaryPath = activeCore.path;
 
   // Check if binary exists
   if (!fs.existsSync(binaryPath)) {
@@ -417,6 +477,7 @@ function startBackend(extraArgs = []) {
   const args = ['--gui', ...extraArgs];
   console.log('[Electron] Starting backend:', binaryPath, args.join(' '));
   backendReadySignal = false;
+  launchGeneration += 1;
 
   try {
     // Spawn the backend process
@@ -425,7 +486,12 @@ function startBackend(extraArgs = []) {
       detached: false,
       env: {
         ...process.env,
-        RUST_BACKTRACE: '1'
+        RUST_BACKTRACE: '1',
+        // The backend cannot discover these on its own: the shell revision is
+        // what makes a core-only update decidable, and the staged flag tells the
+        // dashboard it is running an update that was applied without an installer.
+        SCREENERBOT_SHELL_REVISION: SHELL_REVISION,
+        SCREENERBOT_CORE_STAGED: activeCore.staged ? '1' : '0'
       }
     });
 
@@ -519,6 +585,26 @@ function startBackend(extraArgs = []) {
         return;
       }
 
+      // A staged core that dies before reporting ready is not usable — the most
+      // likely causes (a truncated file, a binary the OS refuses to execute) are
+      // exactly the ones a digest cannot catch. Quarantine it so neither this
+      // launch nor the updater picks it up again, and fall back to the bundle.
+      if (activeCore.staged && !backendReadySignal && !isRecovering) {
+        const failedVersion = activeCore.version;
+        console.error(`[Electron] Staged core v${failedVersion} failed to start; rolling back`);
+        // Release whoever is still awaiting this launch so it stops waiting out
+        // its timeout; the generation check keeps it from reporting a failure.
+        if (backendReadyResolve) {
+          backendReadyResolve(false);
+          backendReadyResolve = null;
+        }
+        setImmediate(async () => {
+          await coreResolver.quarantineStagedCore(CORE_DIR, failedVersion);
+          restartBackendFromDashboard(backendRestartTarget, `Update v${failedVersion} did not start — restoring the previous version...`);
+        });
+        return;
+      }
+
       // Ignore exits while a separate recovery relaunch is in flight.
       if (isRecovering) return;
 
@@ -577,6 +663,21 @@ function stopBackend() {
 function updateLoadingStatus(status) {
   if (mainWindow && mainWindow.webContents) {
     mainWindow.webContents.send('loading:status', status);
+  }
+}
+
+/**
+ * Drive the splash screen's update panel.
+ *
+ * A silent update is applied by restarting the backend, which means the only
+ * moment the owner sees it is the splash. Rather than a bare spinner, the splash
+ * shows what is being installed and how far along it is.
+ *
+ * @param {{phase:'applying'|'verifying'|'done', version?:string, percent?:number}} payload
+ */
+function sendUpdateProgress(payload) {
+  if (mainWindow && mainWindow.webContents && !mainWindow.webContents.isDestroyed()) {
+    mainWindow.webContents.send('update:progress', payload);
   }
 }
 
@@ -999,19 +1100,12 @@ function createApplicationMenu() {
           label: 'Open Data Folder',
           accelerator: isMac ? 'Cmd+Shift+D' : 'Ctrl+Shift+D',
           click: () => {
-            shell.openPath(app.getPath('userData'));
+            shell.openPath(appPaths.dataDirectory(SCREENERBOT_BASE_DIR));
           }
         },
         {
           label: 'Open Logs Folder',
-          click: () => {
-            const logsPath = path.join(app.getPath('userData'), 'logs');
-            if (fs.existsSync(logsPath)) {
-              shell.openPath(logsPath);
-            } else {
-              shell.openPath(app.getPath('userData'));
-            }
-          }
+          click: openScreenerBotLogs
         },
         { type: 'separator' },
         isMac ? { role: 'close' } : { role: 'quit' }
@@ -1229,7 +1323,7 @@ function loadMainApp(route = '/') {
  * Relaunch after a dashboard-requested graceful restart. The old backend has
  * already stopped its services and released its process lock before this runs.
  */
-async function restartBackendFromDashboard(targetRoute) {
+async function restartBackendFromDashboard(targetRoute, statusLabel) {
   if (isRecovering || isQuitting || !mainWindow) return;
   isRecovering = true;
   startupError = null;
@@ -1240,13 +1334,25 @@ async function restartBackendFromDashboard(targetRoute) {
   if (mainWindow.webContents.isLoading()) {
     await new Promise(resolve => mainWindow.webContents.once('did-finish-load', resolve));
   }
-  updateLoadingStatus('Restarting ScreenerBot...');
 
   CONFIG.port = null;
   global.SCREENERBOT_TOKEN = null;
   backendReadyResolve = null;
 
-  const backend = startBackend(getBackendExtraArgs());
+  // Resolving the core here is what actually applies a staged update: the
+  // backend that comes back is the new version.
+  const core = await resolveBackendBinary();
+  if (statusLabel) {
+    updateLoadingStatus(statusLabel);
+  } else if (core.staged && core.version !== app.getVersion()) {
+    sendUpdateProgress({ phase: 'applying', version: core.version });
+    updateLoadingStatus(`Installing update v${core.version}...`);
+  } else {
+    updateLoadingStatus('Restarting ScreenerBot...');
+  }
+
+  const backend = startBackend(getBackendExtraArgs(), core);
+  const generation = launchGeneration;
   isRecovering = false;
   if (!backend) {
     showBootError(genericBootError('Could not relaunch the backend after setup.'));
@@ -1255,7 +1361,9 @@ async function restartBackendFromDashboard(targetRoute) {
 
   updateLoadingStatus('Waiting for backend...');
   const isReady = await waitForBackend();
+  if (generation !== launchGeneration) return;
   if (isReady) {
+    if (core.staged) sendUpdateProgress({ phase: 'done', version: core.version });
     updateLoadingStatus('Loading dashboard...');
     await new Promise(resolve => setTimeout(resolve, 500));
     loadMainApp(targetRoute || '/home');
@@ -1271,7 +1379,7 @@ async function restartBackendFromDashboard(targetRoute) {
  * the structured SCREENERBOT_ERROR shape so the renderer can treat both alike.
  */
 function genericBootError(detail) {
-  const logsPath = path.join(app.getPath('userData'), 'logs', 'latest.log');
+  const logsPath = path.join(appPaths.logsDirectory(SCREENERBOT_BASE_DIR), 'latest.log');
   return {
     code: 'generic',
     title: 'ScreenerBot could not start',
@@ -1361,10 +1469,18 @@ async function initialize() {
   const dependenciesOk = await checkAndInstallVCRedist();
   if (!dependenciesOk) return;
 
-  // Start the backend
-  updateLoadingStatus('Starting backend services...');
-  const backend = startBackend(getBackendExtraArgs());
-  
+  // Resolving the core is where a silently staged update is adopted: an update
+  // that finished downloading in a previous session is simply what launches now.
+  const core = await resolveBackendBinary();
+  if (core.staged && core.version !== app.getVersion()) {
+    sendUpdateProgress({ phase: 'applying', version: core.version });
+    updateLoadingStatus(`Installing update v${core.version}...`);
+  } else {
+    updateLoadingStatus('Starting backend services...');
+  }
+  const backend = startBackend(getBackendExtraArgs(), core);
+  const generation = launchGeneration;
+
   if (!backend) {
     console.error('[Electron] Failed to start backend process');
     showBootError(genericBootError(
@@ -1376,8 +1492,11 @@ async function initialize() {
   // Wait for backend to be ready
   updateLoadingStatus('Waiting for backend...');
   const isReady = await waitForBackend();
+  // A staged-core rollback (or any relaunch) supersedes this boot sequence.
+  if (generation !== launchGeneration) return;
 
   if (isReady) {
+    if (core.staged) sendUpdateProgress({ phase: 'done', version: core.version });
     updateLoadingStatus('Loading dashboard...');
     // Small delay to ensure everything is ready
     await new Promise(resolve => setTimeout(resolve, 500));
@@ -1502,7 +1621,8 @@ async function recoverAndRestart(extraArgs, statusLabel) {
     backendProcess = null;
   }
 
-  const backend = startBackend(extraArgs);
+  const backend = startBackend(extraArgs, await resolveBackendBinary());
+  const generation = launchGeneration;
   isRecovering = false;
   if (!backend) {
     showBootError(genericBootError('Could not relaunch the backend for recovery.'));
@@ -1511,6 +1631,7 @@ async function recoverAndRestart(extraArgs, statusLabel) {
 
   updateLoadingStatus('Waiting for backend...');
   const isReady = await waitForBackend();
+  if (generation !== launchGeneration) return;
   if (isReady) {
     updateLoadingStatus('Loading dashboard...');
     await new Promise(resolve => setTimeout(resolve, 500));
@@ -1529,12 +1650,7 @@ ipcMain.handle('boot:reset-wallet-data', async () => {
 });
 
 ipcMain.handle('boot:open-logs', () => {
-  const logsPath = path.join(app.getPath('userData'), 'logs');
-  if (fs.existsSync(logsPath)) {
-    shell.openPath(logsPath);
-  } else {
-    shell.openPath(app.getPath('userData'));
-  }
+  openScreenerBotLogs();
   return true;
 });
 
@@ -1605,6 +1721,15 @@ ipcMain.handle('app:get-zoom-level', () => {
 ipcMain.handle('app:get-version', () => {
   return app.getVersion();
 });
+
+// What the dashboard needs to describe this installation: the shell it is
+// running inside, and which core actually launched.
+ipcMain.handle('app:get-shell-info', () => ({
+  shellVersion: app.getVersion(),
+  shellRevision: SHELL_REVISION,
+  coreVersion: activeCore.version,
+  coreStaged: activeCore.staged
+}));
 
 ipcMain.handle('app:quit-for-update', () => {
   console.log('[Electron] Verified installer opened; quitting cleanly for update');

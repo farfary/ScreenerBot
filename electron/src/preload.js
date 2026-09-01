@@ -33,6 +33,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   // App info
   getVersion: () => ipcRenderer.invoke('app:get-version'),
+  getShellInfo: () => ipcRenderer.invoke('app:get-shell-info'),
   quitForUpdate: () => ipcRenderer.invoke('app:quit-for-update'),
   onCheckForUpdates: (callback) => {
     const handler = () => callback();
@@ -48,6 +49,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = (event, status) => callback(status);
     ipcRenderer.on('loading:status', handler);
     return () => ipcRenderer.removeListener('loading:status', handler);
+  },
+
+  // Splash update panel: progress of a staged update being applied at launch
+  onUpdateProgress: (callback) => {
+    const handler = (event, payload) => callback(payload);
+    ipcRenderer.on('update:progress', handler);
+    return () => ipcRenderer.removeListener('update:progress', handler);
   },
 
   // Boot-error screen: receive a structured fatal startup error payload

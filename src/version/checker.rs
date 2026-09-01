@@ -1,57 +1,16 @@
-//! Update checking against the strict production release contract.
+//! Update checking against the strict production release contract, and the
+//! decision of which components a release actually has to replace.
 
+use super::manifest;
 use super::types::*;
 use super::{
-    current_platform_key, mutate_state, Error, Result, UPDATE_AVAILABLE,
-    UPDATE_CHECK_INTERVAL_SECS, UPDATE_SERVER_URL, VERSION,
+    core_platform_key, current_platform_key, local_shell_revision, mutate_state, Error, Result,
+    UPDATE_AVAILABLE, UPDATE_SERVER_URL, VERSION,
 };
 use crate::logger::{self, LogTag};
 use chrono::Utc;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
-
-pub fn start_update_check_service(
-    shutdown: std::sync::Arc<tokio::sync::Notify>,
-    monitor: tokio_metrics::TaskMonitor,
-) -> tokio::task::JoinHandle<()> {
-    tokio::spawn(monitor.instrument(async move {
-        logger::info(
-            LogTag::System,
-            &format!(
-                "Update check service started (interval: {} hours)",
-                UPDATE_CHECK_INTERVAL_SECS / 3600
-            ),
-        );
-
-        tokio::select! {
-            _ = tokio::time::sleep(Duration::from_secs(30)) => {}
-            _ = shutdown.notified() => return,
-        }
-
-        if !crate::connectivity::is_network_offline() {
-            if let Err(error) = check_for_update().await {
-                logger::warning(LogTag::System, &format!("Initial update check failed: {error}"));
-            }
-        }
-
-        let mut interval = tokio::time::interval(Duration::from_secs(UPDATE_CHECK_INTERVAL_SECS));
-        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-        interval.tick().await;
-
-        loop {
-            tokio::select! {
-                _ = interval.tick() => {
-                    if !crate::connectivity::is_network_offline() {
-                        if let Err(error) = check_for_update().await {
-                            logger::warning(LogTag::System, &format!("Periodic update check failed: {error}"));
-                        }
-                    }
-                }
-                _ = shutdown.notified() => break,
-            }
-        }
-    }))
-}
 
 pub async fn check_for_update() -> Result<Option<UpdateInfo>> {
     check_for_update_from(
@@ -78,15 +37,99 @@ async fn check_for_update_from(
 
     let result = request_update(&client, server_url, current_version, platform).await;
     match result {
-        Ok(update) => {
-            record_check_success(update.clone()).await;
-            Ok(update)
+        Ok(Some(update)) => {
+            let update = plan_components(update).await;
+            record_check_success(Some(update.clone())).await;
+            Ok(Some(update))
+        }
+        Ok(None) => {
+            record_check_success(None).await;
+            Ok(None)
         }
         Err(error) => {
             record_check_failure(&error).await;
             Err(error)
         }
     }
+}
+
+/// Decide whether the offered release can be applied as a core-only update.
+///
+/// This is deliberately fail-soft: any doubt about the shell — no manifest, an
+/// unreadable one, no core artifact for this machine, or a shell revision this
+/// process cannot even know (headless, development run) — resolves to
+/// [`UpdateKind::Full`], which is always correct, just larger.
+async fn plan_components(mut update: UpdateInfo) -> UpdateInfo {
+    update.kind = UpdateKind::Full;
+
+    let Some(local_revision) = local_shell_revision() else {
+        return update;
+    };
+    let client = match super::download::build_update_client() {
+        Ok(client) => client,
+        Err(error) => {
+            logger::debug(
+                LogTag::System,
+                &format!("Update planning could not build a client: {error}"),
+            );
+            return update;
+        }
+    };
+
+    let manifest = match manifest::fetch_release_for(&client, &update.version).await {
+        Ok(release) => manifest::fetch_manifest(&client, &release, &update.version).await,
+        Err(error) => Err(error),
+    };
+    let manifest = match manifest {
+        Ok(manifest) => manifest,
+        Err(error) => {
+            logger::info(
+                LogTag::System,
+                &format!(
+                    "Release v{} has no usable update manifest ({error}); the full installer will be used",
+                    update.version
+                ),
+            );
+            return update;
+        }
+    };
+
+    update.shell_revision = Some(manifest.shell_revision.clone());
+    if manifest.shell_revision != local_revision {
+        logger::info(
+            LogTag::System,
+            &format!(
+                "Release v{} rebuilds the desktop shell ({} -> {}); the installer is required",
+                update.version, local_revision, manifest.shell_revision
+            ),
+        );
+        return update;
+    }
+
+    let Some(core) = manifest.core.get(core_platform_key()).cloned() else {
+        logger::info(
+            LogTag::System,
+            &format!(
+                "Release v{} publishes no core artifact for {}; the full installer will be used",
+                update.version,
+                core_platform_key()
+            ),
+        );
+        return update;
+    };
+
+    logger::info(
+        LogTag::System,
+        &format!(
+            "Release v{} only changes the core ({} MB instead of {} MB); it installs silently",
+            update.version,
+            core.size / (1024 * 1024),
+            update.file_size / (1024 * 1024)
+        ),
+    );
+    update.core = Some(core);
+    update.kind = UpdateKind::Core;
+    update
 }
 
 async fn request_update(
@@ -183,7 +226,7 @@ fn parse_update_response(body: &[u8], current_version: &str) -> Result<Option<Up
         }));
     }
     validate_checksum(&update.checksum)?;
-    validate_filename(&update.filename, &update.version)?;
+    validate_release_filename(&update.filename, &update.version)?;
     if update.file_size == 0 || update.file_size > super::MAX_UPDATE_BYTES {
         return Err(Error::Data(crate::errors::DataError::ValidationError {
             field: "update.file_size".to_owned(),
@@ -201,6 +244,9 @@ fn parse_update_response(body: &[u8], current_version: &str) -> Result<Option<Up
         checksum: update.checksum.to_ascii_lowercase(),
         release_notes: update.release_notes,
         release_date: update.published_at.unwrap_or_default(),
+        kind: UpdateKind::Full,
+        core: None,
+        shell_revision: None,
     }))
 }
 
@@ -216,7 +262,9 @@ pub(super) fn validate_checksum(checksum: &str) -> Result<()> {
     }
 }
 
-fn validate_filename(filename: &str, version: &str) -> Result<()> {
+/// A release asset name is used as a filename on disk, so it must contain no
+/// path syntax and must belong to the version actually being offered.
+pub(super) fn validate_release_filename(filename: &str, version: &str) -> Result<()> {
     let safe = !filename.is_empty()
         && filename.len() <= 255
         && !filename.contains('/')
@@ -262,18 +310,31 @@ async fn record_check_success(update: Option<UpdateInfo>) {
         state.check_error = None;
         state.available_update = update.clone();
 
-        if let Some(ref candidate) = update {
-            let same_ready_download = state.download_progress.completed
-                && state.download_progress.version.as_deref() == Some(candidate.version.as_str())
-                && state.download_progress.checksum.as_deref() == Some(candidate.checksum.as_str());
-            if same_ready_download {
-                state.phase = UpdatePhase::Ready;
-            } else {
-                state.phase = UpdatePhase::Available;
-                state.download_progress = DownloadProgress::default();
-            }
-        } else {
+        let Some(candidate) = update else {
             state.phase = UpdatePhase::UpToDate;
+            state.deferred = None;
+            state.download_progress = DownloadProgress::default();
+            return;
+        };
+
+        // A staged core survives a re-check: the artifact is already verified and
+        // waiting, so re-downloading it would be pure waste.
+        if candidate.kind == UpdateKind::Core
+            && super::core_install::staged_core_version().as_deref()
+                == Some(candidate.version.as_str())
+        {
+            state.phase = UpdatePhase::ReadyToApply;
+            return;
+        }
+
+        let same_ready_download = state.download_progress.completed
+            && state.download_progress.version.as_deref() == Some(candidate.version.as_str())
+            && state.download_progress.checksum.as_deref() == Some(candidate.checksum.as_str());
+        if same_ready_download && candidate.kind == UpdateKind::Full {
+            state.phase = UpdatePhase::ReadyToInstall;
+        } else {
+            state.phase = UpdatePhase::Available;
+            state.deferred = None;
             state.download_progress = DownloadProgress::default();
         }
     })
@@ -320,6 +381,9 @@ mod tests {
         let update = parse_update_response(&body, "0.1.121").unwrap().unwrap();
         assert_eq!(update.version, "0.1.122");
         assert_eq!(update.file_size, 42);
+        // The website contract alone never authorises the silent path.
+        assert_eq!(update.kind, UpdateKind::Full);
+        assert!(update.core.is_none());
     }
 
     #[test]
@@ -366,5 +430,15 @@ mod tests {
         assert!(validate_download_url("http://screenerbot.io/file").is_err());
         assert!(validate_download_url("https://evil.example/file").is_err());
         assert!(validate_download_url("https://screenerbot.io/file").is_ok());
+    }
+
+    #[test]
+    fn release_filenames_cannot_carry_path_syntax_or_a_foreign_version() {
+        assert!(
+            validate_release_filename("ScreenerBot-v0.2.2-macOS-arm64-core.gz", "0.2.2").is_ok()
+        );
+        assert!(validate_release_filename("ScreenerBot-v0.2.3-macOS-arm64.dmg", "0.2.2").is_err());
+        assert!(validate_release_filename("../ScreenerBot-v0.2.2-x.dmg", "0.2.2").is_err());
+        assert!(validate_release_filename("ScreenerBot-v0.2.2-a/b.dmg", "0.2.2").is_err());
     }
 }

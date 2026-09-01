@@ -30,6 +30,7 @@ pub async fn get_full_config() -> Response {
         tokens: cfg.tokens.clone(),
         pools: cfg.pools.clone(),
         maintenance: cfg.maintenance.clone(),
+        updates: cfg.updates.clone(),
         sol_price: cfg.sol_price.clone(),
         events: cfg.events.clone(),
         services: cfg.services.clone(),
@@ -150,6 +151,16 @@ pub async fn get_pools_config() -> Response {
 pub async fn get_maintenance_config() -> Response {
     let data = config::with_config(|cfg| ConfigResponse {
         data: cfg.maintenance.clone(),
+        timestamp: chrono::Utc::now().to_rfc3339(),
+    });
+
+    success_response(data)
+}
+
+/// GET /api/config/updates - Get automatic update configuration
+pub async fn get_updates_config() -> Response {
+    let data = config::with_config(|cfg| ConfigResponse {
+        data: cfg.updates.clone(),
         timestamp: chrono::Utc::now().to_rfc3339(),
     });
 
@@ -400,6 +411,7 @@ where
             "TokensConfig" => serde_json::to_value(&cfg.tokens).ok(),
             "PoolsConfig" => serde_json::to_value(&cfg.pools).ok(),
             "MaintenanceConfig" => serde_json::to_value(&cfg.maintenance).ok(),
+            "UpdatesConfig" => serde_json::to_value(&cfg.updates).ok(),
             "RpcConfig" => serde_json::to_value(&cfg.rpc).ok(),
             "SolPriceConfig" => serde_json::to_value(&cfg.sol_price).ok(),
             "EventsConfig" => serde_json::to_value(&cfg.events).ok(),
@@ -523,6 +535,18 @@ where
                 config::update_config_section(
                     |cfg| {
                         cfg.maintenance = new_config;
+                    },
+                    true,
+                )?;
+            }
+            "UpdatesConfig" => {
+                let new_config: config::UpdatesConfig = serde_json::from_value(section_json)
+                    .map_err(|e| Error::InvalidImport {
+                        detail: format!("Invalid UpdatesConfig: {e}"),
+                    })?;
+                config::update_config_section(
+                    |cfg| {
+                        cfg.updates = new_config;
                     },
                     true,
                 )?;

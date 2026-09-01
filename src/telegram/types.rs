@@ -89,11 +89,32 @@ pub enum NotificationType {
     /// Bot shutdown notification
     BotStopped { reason: String },
 
+    /// Progress of an application update
+    UpdateStatus {
+        version: String,
+        stage: UpdateStage,
+        /// Whether the release installs without any operating-system dialog.
+        silent: bool,
+        /// Bytes that have to be transferred to apply it.
+        transfer_bytes: u64,
+    },
+
     /// Notification when new tokens are found by filtering
     NewTokensFound {
         session_id: String,
         new_count: usize,
     },
+}
+
+/// Where an update has reached in its lifecycle.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub enum UpdateStage {
+    /// A newer release was found.
+    Available,
+    /// Its artifact is downloaded and verified, waiting to be applied.
+    Staged,
+    /// The backend is restarting onto it.
+    Applying,
 }
 
 /// Severity levels for system errors
@@ -146,6 +167,21 @@ impl Notification {
             trade_type: trade_type.to_string(),
             amount_sol,
             wallet,
+        })
+    }
+
+    /// Create an update-status notification
+    pub fn update_status(
+        version: String,
+        stage: UpdateStage,
+        silent: bool,
+        transfer_bytes: u64,
+    ) -> Self {
+        Self::new(NotificationType::UpdateStatus {
+            version,
+            stage,
+            silent,
+            transfer_bytes,
         })
     }
 

@@ -1,711 +1,244 @@
 /* =============================================================================
-   UPDATES TAB - Clean Card Style
+   SETTINGS — UPDATES TAB
+
+   The panel answers one question ("what is this installation about to become?")
+   so it is typeset as one column of prose and rows rather than a set of cards:
+   a headline, the version it moves to, one accent line of progress, and the
+   switches that govern it. The preference rows reuse .settings-group /
+   .settings-field verbatim, so this file only styles what is genuinely new.
    ============================================================================= */
 
-.settings-updates-section {
+.updates {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 32px;
 }
 
-.settings-update-card {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 14px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-}
+/* -----------------------------------------------------------------------------
+   Status
+   -------------------------------------------------------------------------- */
 
-.settings-update-icon {
-  width: 48px;
-  height: 48px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--success-alpha-10);
-  border-radius: var(--radius-xl);
-  color: var(--success-color);
-  font-size: 1.4rem;
-  flex-shrink: 0;
-}
-
-.settings-update-info {
-  flex: 1;
-}
-
-.settings-update-info h4 {
-  margin: 0 0 3px;
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.settings-update-info p {
-  margin: 0;
-  font-size: 0.8rem;
-  color: var(--text-secondary);
-}
-
-.settings-update-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 14px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  color: var(--text-primary);
-  font-size: 0.8rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.settings-update-btn:hover {
-  background: var(--bg-card-hover);
-  border-color: var(--text-secondary);
-  transform: translateY(-1px);
-}
-
-.settings-update-btn i {
-  font-size: 0.9rem;
-}
-
-/* Release Notes - Refined */
-.settings-release-notes {
+.updates-status {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
-.settings-release {
-  padding: 12px 14px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
+.updates-headline {
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
 }
 
-.settings-release-header {
+.updates-detail {
+  font-size: 0.85rem;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  max-width: 62ch;
+}
+
+/* Current version, and where it is going. Monospace so the digits line up. */
+.updates-versions {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.settings-release-version {
+  gap: 10px;
+  margin-top: 2px;
+  font-family: var(--font-mono);
   font-size: 0.9rem;
-  font-weight: 700;
-  color: var(--text-primary);
 }
 
-.settings-release-date {
-  font-size: 0.75rem;
-  color: var(--text-secondary);
+.updates-version-from {
+  color: var(--text-muted);
 }
 
-.settings-release-badge {
-  padding: 2px 8px;
-  background: var(--primary-alpha-10);
-  border-radius: var(--radius-sm);
+.updates-versions i {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.updates-version-to {
   color: var(--primary-color);
+  font-weight: 600;
+}
+
+/* Says the release needs nothing from the user. Not a button, so it must not
+   look like one: lowercase text on a hairline, no fill. */
+.updates-tag {
+  padding: 1px 7px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-full);
+  font-family: inherit;
   font-size: 0.65rem;
-  font-weight: 600;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-.settings-release-changes {
-  margin: 0;
-  padding-left: 16px;
-  font-size: 0.8rem;
-  color: var(--text-secondary);
-  line-height: 1.8;
-}
-
-.settings-release-changes li {
-  margin-bottom: 2px;
-}
-
-/* =============================================================================
-   UPDATES TAB - Update Status and Download Progress
-   ============================================================================= */
-
-.updates-container {
-  display: grid;
-  grid-template-columns: 1fr 420px;
-  gap: var(--spacing-lg);
-  height: 100%;
-  width: 100%;
-}
-
-@media (width <= 900px) {
-  .updates-container {
-    grid-template-columns: 1fr;
-  }
-
-  .updates-sidebar {
-    order: -1;
-  }
-}
-
-/* Main Content Area */
-.updates-main {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-md);
-  min-height: 0;
-}
-
-/* Sidebar */
-.updates-sidebar {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-md);
-}
-
-/* Status Cards */
-.updates-status-card {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  padding: var(--spacing-xl);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: var(--spacing-lg);
-  position: relative;
-  overflow: hidden;
-  flex: 1;
-  min-height: 320px;
-  justify-content: center;
-}
-
-.updates-status-card.available {
-  border-color: var(--primary-color);
-  background: linear-gradient(135deg, var(--primary-alpha-5) 0%, var(--bg-secondary) 100%);
-}
-
-.updates-status-card.success {
-  border-color: var(--success-color);
-  background: linear-gradient(135deg, var(--success-alpha-5) 0%, var(--bg-secondary) 100%);
-}
-
-.updates-status-card.error {
-  border-color: var(--error-color);
-  background: linear-gradient(135deg, var(--danger-alpha-5) 0%, var(--bg-secondary) 100%);
-}
-
-.update-badge {
-  position: absolute;
-  top: var(--spacing-sm);
-  right: var(--spacing-sm);
-  background: linear-gradient(135deg, var(--primary-color), #58c4dc);
-  color: white;
-  font-size: 0.625rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  padding: 4px 10px;
-  border-radius: var(--radius-xl);
-  box-shadow: 0 2px 8px var(--primary-alpha-40);
-}
-
-/* Status Visual */
-.status-visual {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-}
-
-.status-icon-wrapper {
-  width: 80px;
-  height: 80px;
-  border-radius: var(--radius-full);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--bg-card-hover);
-  font-size: 36px;
-  color: var(--text-secondary);
-  box-shadow: 0 4px 16px rgb(0, 0, 0, 0.1);
-}
-
-.status-icon-wrapper.success {
-  background: var(--success-alpha-10);
-  color: var(--success-color);
-  box-shadow: 0 4px 16px var(--success-alpha-20);
-}
-
-.status-icon-wrapper.error {
-  background: var(--danger-alpha-10);
-  color: var(--error-color);
-  box-shadow: 0 4px 16px var(--danger-alpha-20);
-}
-
-.pulse-ring {
-  position: absolute;
-  width: 100px;
-  height: 100px;
-  border-radius: var(--radius-full);
-  border: 2px solid var(--primary-color);
-  opacity: 0;
-  animation: settings-pulse-ring 2s ease-out infinite;
-}
-
-@keyframes settings-pulse-ring {
-  0% {
-    transform: scale(0.8);
-    opacity: 0.7;
-  }
-
-  100% {
-    transform: scale(1.4);
-    opacity: 0;
-  }
-}
-
-/* Version Transition */
-.version-transition {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-md);
-  font-family: var(--font-mono);
-  margin: var(--spacing-md) 0;
-  padding: var(--spacing-sm) var(--spacing-lg);
-  background: var(--bg-primary);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-color);
-}
-
-.version-transition .old-version {
   color: var(--text-muted);
-  text-decoration: line-through;
-  opacity: 0.7;
-  font-size: 0.875rem;
-  font-weight: 500;
 }
 
-.version-transition .new-version {
-  color: var(--success-color);
-  font-weight: 700;
-  font-size: 1.125rem;
+/* -----------------------------------------------------------------------------
+   Progress
+   -------------------------------------------------------------------------- */
+
+.updates-progress {
+  position: relative;
+  height: 3px;
+  margin-top: 6px;
+  border-radius: 3px;
+  background: var(--border-color);
+  overflow: hidden;
 }
 
-.version-transition i {
-  color: var(--text-secondary);
-  font-size: 0.875rem;
-  opacity: 0.6;
-}
-
-/* Status Content */
-.updates-status-card .status-content h3 {
-  margin: 0;
-  font-size: 1.5rem;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.updates-status-card .status-content p {
-  margin: var(--spacing-xs) 0 0;
-  color: var(--text-secondary);
-  font-size: var(--font-size-base);
-  max-width: 420px;
-}
-
-.error-message {
-  color: var(--error-color) !important;
-  font-family: var(--font-mono);
-  font-size: var(--font-size-sm) !important;
-}
-
-/* Release Notes Preview */
-.release-notes-preview {
-  width: 100%;
-  max-width: 400px;
-  text-align: left;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: var(--spacing-sm) var(--spacing-md);
-}
-
-.release-notes-preview h4 {
-  margin: 0 0 var(--spacing-xs);
-  font-size: 0.625rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-secondary);
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-}
-
-.release-notes-preview h4::before {
-  content: "";
-  display: inline-block;
-  width: 2px;
-  height: 10px;
+.updates-progress-fill {
+  height: 100%;
+  border-radius: 3px;
   background: var(--primary-color);
-  border-radius: 1px;
+  transition: width 0.3s ease;
 }
 
-.release-notes-preview .notes-text {
-  font-size: 0.8125rem;
-  color: var(--text-primary);
-  line-height: 1.5;
-  white-space: pre-wrap;
-  max-height: 80px;
-  overflow-y: auto;
+/* Verifying and installing have no measurable percentage — sweep instead of
+   parking a full bar that is not telling the truth. The renderer omits the
+   inline width in this state, so nothing here has to out-shout it. */
+.updates-progress.is-indeterminate .updates-progress-fill {
+  width: 40%;
+  background: linear-gradient(90deg, transparent, var(--primary-color), transparent);
+  animation: updates-sweep 1.4s ease-in-out infinite;
+  transition: none;
 }
 
-/* Status Actions */
-.status-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-sm);
-  margin-top: var(--spacing-lg);
-  justify-content: center;
-}
-
-/* Download Progress */
-.download-progress {
-  width: 100%;
-  max-width: 400px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: var(--spacing-md);
-}
-
-.progress-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: var(--spacing-sm);
-}
-
-.progress-status {
-  font-size: 0.8125rem;
-  color: var(--text-primary);
-  font-weight: 500;
-}
-
-.progress-stats {
-  display: flex;
-  gap: var(--spacing-sm);
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  align-items: center;
-}
-
-#download-percent-text {
-  color: var(--primary-color);
-  font-weight: 600;
-}
-
-#download-speed-text {
-  color: var(--text-secondary);
-}
-
-.progress-track {
-  height: 8px;
-  background: var(--bg-card-hover);
-  border-radius: var(--radius-md);
-  overflow: hidden;
-}
-
-.progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--primary-color), #58c4dc);
-  border-radius: var(--radius-sm);
-  transition: width var(--transition-normal);
-  position: relative;
-}
-
-.progress-glow {
-  position: absolute;
-  right: 0;
-  top: 0;
-  bottom: 0;
-  width: 40px;
-  background: linear-gradient(90deg, transparent, rgb(255, 255, 255, 0.3), transparent);
-  animation: settings-progress-shimmer 1.5s ease-in-out infinite;
-}
-
-@keyframes settings-progress-shimmer {
-  0% {
+@keyframes updates-sweep {
+  from {
     transform: translateX(-100%);
-    opacity: 0;
   }
 
-  50% {
-    opacity: 1;
-  }
-
-  100% {
-    transform: translateX(100%);
-    opacity: 0;
+  to {
+    transform: translateX(250%);
   }
 }
 
-.progress-footer {
+/* -----------------------------------------------------------------------------
+   Actions
+   -------------------------------------------------------------------------- */
+
+.updates-actions {
   display: flex;
-  justify-content: space-between;
-  margin-top: var(--spacing-xs);
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  font-family: var(--font-mono);
-}
-
-/* Download Success */
-.download-success {
-  display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: var(--spacing-md);
+  gap: 10px;
+  margin-top: 6px;
 }
 
-.success-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-sm) var(--spacing-lg);
-  background: var(--success-alpha-10);
-  color: var(--success-color);
-  border: 1px solid var(--success-alpha-30);
-  border-radius: var(--radius-xl);
-  font-weight: 600;
-  font-size: var(--font-size-base);
-}
-
-.success-badge i {
-  font-size: 1.25rem;
-}
-
-.install-hint {
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-  text-align: center;
-  max-width: 380px;
-  line-height: 1.6;
-}
-
-/* Update Buttons */
 .updates-btn {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: var(--spacing-sm);
-  padding: 12px 24px;
-  border: none;
+  gap: 7px;
+  padding: 8px 16px;
+  border: 1px solid transparent;
   border-radius: var(--radius-lg);
-  font-size: var(--font-size-base);
+  font-family: inherit;
+  font-size: 0.82rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all var(--transition-base);
-  white-space: nowrap;
+  transition:
+    background var(--transition-base),
+    border-color var(--transition-base),
+    color var(--transition-base);
 }
 
 .updates-btn i {
-  font-size: 1.1rem;
-}
-
-.updates-btn .btn-meta {
-  font-size: var(--font-size-sm);
-  opacity: 0.85;
-  font-weight: 400;
+  font-size: 0.9rem;
 }
 
 .updates-btn.primary {
   background: var(--primary-color);
-  color: white;
-  box-shadow: 0 2px 8px var(--primary-alpha-20);
+  color: #fff;
 }
 
 .updates-btn.primary:hover {
-  background: var(--primary-hover);
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px var(--primary-alpha-30);
+  filter: brightness(1.08);
 }
 
-.updates-btn.secondary {
-  background: var(--bg-card-hover);
-  color: var(--text-primary);
-  border: 1px solid var(--border-color);
-}
-
-.updates-btn.secondary:hover {
-  background: var(--bg-card-hover);
-  border-color: var(--text-secondary);
-  transform: translateY(-1px);
-}
-
-.updates-btn.success {
-  background: var(--success-color);
-  color: white;
-  box-shadow: 0 2px 8px var(--success-alpha-20);
-}
-
-.updates-btn.success:hover {
-  background: var(--success-hover);
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px var(--success-alpha-30);
-}
-
-/* Version Card */
-.updates-version-card {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-}
-
-.version-card-header {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-md);
-  background: var(--bg-card-hover);
-  border-bottom: 1px solid var(--border-color);
-}
-
-.version-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: var(--radius-md);
-  background: var(--primary-alpha-10);
-  color: var(--primary-color);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.4rem;
-  flex-shrink: 0;
-}
-
-.updates-version-card .version-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.updates-version-card .version-info h4 {
-  margin: 0 0 2px;
-  font-size: 0.625rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+.updates-btn.ghost {
+  background: transparent;
+  border-color: var(--border-color);
   color: var(--text-secondary);
 }
 
-.version-number {
+.updates-btn.ghost:hover {
+  border-color: var(--text-muted);
+  color: var(--text-primary);
+}
+
+.updates-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* -----------------------------------------------------------------------------
+   Sections
+   -------------------------------------------------------------------------- */
+
+.updates-subhead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* Bare glyph, inline with its heading — no tile, ring or glow behind it. */
+.updates-subhead i {
+  font-size: 1rem;
+  color: var(--text-muted);
+}
+
+.updates-notes-body {
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  max-width: 72ch;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+/* -----------------------------------------------------------------------------
+   Installation details
+   -------------------------------------------------------------------------- */
+
+.updates-detail-list {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.updates-detail-row {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  font-size: 0.8rem;
+}
+
+.updates-detail-row dt {
+  flex: 0 0 148px;
+  color: var(--text-muted);
+}
+
+.updates-detail-row dd {
+  margin: 0;
+  color: var(--text-secondary);
   font-family: var(--font-mono);
-  font-size: var(--font-size-lg);
-  font-weight: 700;
-  color: var(--text-primary);
+  overflow-wrap: anywhere;
 }
 
-.updates-version-card .version-details {
-  padding: var(--spacing-md);
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-sm);
-}
+@media (width <= 720px) {
+  .updates-detail-row {
+    flex-direction: column;
+    gap: 2px;
+  }
 
-.detail-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: var(--spacing-xs) 0;
-}
-
-.detail-label {
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
-  font-weight: 500;
-}
-
-.detail-value {
-  font-size: var(--font-size-sm);
-  font-weight: 600;
-  color: var(--text-primary);
-  font-family: var(--font-mono);
-}
-
-.channel-badge {
-  background: var(--success-alpha-10);
-  color: var(--success-color);
-  padding: 4px 12px;
-  border-radius: var(--radius-xl);
-  font-size: 0.625rem;
-  font-weight: 700;
-  font-family: var(--font-sans);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-/* System Info Section */
-.updates-system-section {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-}
-
-.system-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--spacing-md);
-  background: var(--bg-card-hover);
-  border-bottom: 1px solid var(--border-color);
-  flex-shrink: 0;
-}
-
-.system-title {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  font-weight: 600;
-  font-size: var(--font-size-base);
-  color: var(--text-primary);
-}
-
-.system-title i {
-  color: var(--text-secondary);
-  font-size: 1.1rem;
-}
-
-.system-details {
-  padding: var(--spacing-lg);
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-md);
-}
-
-/* Spinner animations */
-.spinner-small {
-  width: 18px;
-  height: 18px;
-  border: 2px solid var(--bg-card-hover);
-  border-top-color: var(--primary-color);
-  border-radius: var(--radius-full);
-  animation: settings-spin 0.8s linear infinite;
-}
-
-.spinning {
-  animation: settings-spin 1s linear infinite;
-}
-
-@keyframes settings-spin {
-  to {
-    transform: rotate(360deg);
+  .updates-detail-row dt {
+    flex: none;
   }
 }
-

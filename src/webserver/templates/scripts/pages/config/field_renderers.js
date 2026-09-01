@@ -109,6 +109,7 @@ export const SECTION_ICONS = {
   services: "icon-wrench",
   monitoring: "icon-trending-up",
   maintenance: "icon-settings",
+  updates: "icon-arrow-down-to-line",
   ohlcv: "icon-clock",
   summary: "icon-file-text",
   telegram: "icon-send",

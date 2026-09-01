@@ -34,6 +34,36 @@
     if (el) el.textContent = status;
   });
 
+  // A staged update is applied by relaunching the backend, so the splash is the
+  // only place it is ever visible. Show what is being installed, and a real bar
+  // when the main process can report one.
+  window.electronAPI.onUpdateProgress((payload) => {
+    const panel = document.getElementById('splashUpdate');
+    if (!panel) return;
+
+    const phase = payload && payload.phase;
+    if (phase === 'done') {
+      panel.hidden = true;
+      return;
+    }
+
+    const titles = { applying: 'Installing update', verifying: 'Verifying update' };
+    document.getElementById('splashUpdateTitle').textContent = titles[phase] || 'Updating';
+    document.getElementById('splashUpdateVersion').textContent =
+      payload && payload.version ? 'v' + payload.version : '';
+
+    const fill = document.getElementById('splashUpdateFill');
+    const percent = payload && typeof payload.percent === 'number' ? payload.percent : null;
+    if (percent === null) {
+      fill.classList.remove('determinate');
+      fill.style.width = '';
+    } else {
+      fill.classList.add('determinate');
+      fill.style.width = Math.max(0, Math.min(100, percent)) + '%';
+    }
+    panel.hidden = false;
+  });
+
   // Fatal startup error → show the boot-error screen.
   window.electronAPI.onBootError((payload) => {
     renderBootError(payload || {});

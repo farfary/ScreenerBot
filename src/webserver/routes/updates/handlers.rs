@@ -26,6 +26,8 @@ pub(super) async fn get_version() -> Response {
         version: info.version,
         platform: info.platform,
         build_number,
+        shell_revision: info.shell_revision,
+        core_staged: info.core_staged,
     };
 
     success_response(response)
@@ -109,14 +111,54 @@ pub(super) async fn download_update(Json(body): Json<DownloadRequest>) -> Respon
 }
 
 /// GET /api/updates/status
-/// Returns current update/download status
+/// Returns current update/download status plus what the dashboard needs to
+/// describe the next step without re-deriving the rules.
 pub(super) async fn get_status() -> Response {
     let state = version::get_update_state().await;
-    success_response(UpdateStatusResponse { state })
+
+    let kind = state
+        .available_update
+        .as_ref()
+        .map(|update| update.kind)
+        .unwrap_or_default();
+    let readiness = if state.phase == version::UpdatePhase::ReadyToApply {
+        version::apply_readiness(kind).await.reason()
+    } else {
+        None
+    };
+
+    success_response(UpdateStatusResponse {
+        staged_core: version::read_staged_core(),
+        blocked_reason: readiness
+            .or(state.deferred)
+            .map(|reason| reason.message().to_owned()),
+        state,
+    })
+}
+
+/// POST /api/updates/apply
+/// Restarts the backend onto a staged core update. No operating-system
+/// interaction: the running process stops and the new binary takes over.
+pub(super) async fn apply_update() -> Response {
+    logger::info(LogTag::Webserver, "Apply staged update requested");
+
+    match version::apply_now().await {
+        Ok(()) => success_response(ApplyResponse {
+            applying: true,
+            message: "Installing the update. ScreenerBot restarts and reconnects automatically."
+                .to_owned(),
+        }),
+        Err(e) => error_response(
+            StatusCode::CONFLICT,
+            "APPLY_FAILED",
+            &format!("Could not apply the update: {e}"),
+            None,
+        ),
+    }
 }
 
 /// POST /api/updates/install
-/// Opens the downloaded update for installation
+/// Opens the downloaded installer for a release that also replaces the shell
 pub(super) async fn install_update() -> Response {
     logger::info(LogTag::Webserver, "Install update requested");
 

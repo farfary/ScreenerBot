@@ -41,6 +41,7 @@ jobs:
     outputs:
       version: ${{ steps.v.outputs.version }}
       do_release: ${{ steps.v.outputs.do_release }}
+      shell_revision: ${{ steps.shell.outputs.revision }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -70,6 +71,17 @@ jobs:
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "do_release=${DO_RELEASE}" >> "$GITHUB_OUTPUT"
           echo "Resolved version=${VERSION} do_release=${DO_RELEASE}"
+      # The shell revision decides whether this release can install as a
+      # core-only update. It is computed once here and asserted in every package
+      # job, so the value baked into the app and the value published in the
+      # manifest can never disagree.
+      - id: shell
+        shell: bash
+        working-directory: electron
+        run: |
+          REVISION="$(node tools/shell-revision.js)"
+          echo "revision=${REVISION}" >> "$GITHUB_OUTPUT"
+          echo "Shell revision ${REVISION}"
 
   # ===========================================================================
   # Build Rust binaries for all platforms
@@ -93,6 +105,10 @@ jobs:
         run: |
           node --check electron/src/main.js
           node --check electron/src/preload.js
+          node --check electron/src/core_resolver.js
+          node --check electron/src/paths.js
+      - name: Run desktop-shell updater tests
+        run: node --test tools/tests/*.test.mjs
 
   build-rust:
     needs: [prepare, test-updater]
@@ -199,6 +215,71 @@ jobs:
           path: ${{ steps.binary.outputs.path }}
           retention-days: 7
 
+      # ---------------------------------------------------------------------
+      # Core artifact — the silent-update payload
+      #
+      # Most releases change only this binary (the dashboard is embedded in it),
+      # so it is published on its own: a gzip stream of the executable plus the
+      # digests the updater verifies before and after decompression.
+      #
+      # macOS is ad-hoc signed first. An unsigned Mach-O cannot be executed at
+      # all on Apple Silicon, and the signature lives inside the binary, so it
+      # has to be applied before the digests are taken.
+      # ---------------------------------------------------------------------
+      - name: Sign core binary (macOS)
+        if: matrix.platform == 'macOS'
+        run: codesign --force --sign - --timestamp=none "${{ steps.binary.outputs.path }}"
+
+      - name: Package core artifact
+        id: core
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN="${{ steps.binary.outputs.path }}"
+          NAME="ScreenerBot-${{ needs.prepare.outputs.version }}-${{ matrix.platform }}-${{ matrix.arch }}-core.gz"
+          gzip -9 -c "$BIN" > "$NAME"
+
+          if command -v sha256sum >/dev/null 2>&1; then
+            sum() { sha256sum "$1" | cut -d' ' -f1; }
+          else
+            sum() { shasum -a 256 "$1" | cut -d' ' -f1; }
+          fi
+          if stat -c%s "$NAME" >/dev/null 2>&1; then
+            size() { stat -c%s "$1"; }
+          else
+            size() { stat -f%z "$1"; }
+          fi
+
+          # The platform key omits the packaging variant: desktop and headless
+          # on the same machine run the identical core binary.
+          case "${{ matrix.platform }}" in
+            macOS) KEY="macos-${{ matrix.arch }}" ;;
+            Linux) KEY="linux-${{ matrix.arch }}" ;;
+            Windows) KEY="windows-${{ matrix.arch }}" ;;
+          esac
+
+          node -e "
+            const fs = require('fs');
+            fs.writeFileSync('core-meta.json', JSON.stringify({
+              platform: process.argv[1],
+              filename: process.argv[2],
+              size: Number(process.argv[3]),
+              sha256: process.argv[4],
+              binarySize: Number(process.argv[5]),
+              binarySha256: process.argv[6],
+            }, null, 2));
+          " "$KEY" "$NAME" "$(size "$NAME")" "$(sum "$NAME")" "$(size "$BIN")" "$(sum "$BIN")"
+          cat core-meta.json
+
+      - name: Upload core artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: core-${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            ScreenerBot-${{ needs.prepare.outputs.version }}-${{ matrix.platform }}-${{ matrix.arch }}-core.gz
+            core-meta.json
+          retention-days: 7
+
       # Also upload headless tarball for Linux
       - name: Package headless binary (Linux)
         if: matrix.platform == 'Linux'
@@ -259,6 +340,21 @@ jobs:
       - name: Install Electron dependencies
         working-directory: electron
         run: npm ci
+
+      # The packaged app carries its own revision (written by the forge
+      # generateAssets hook). Assert it matches what the manifest will publish —
+      # a mismatch would make every release look like a shell change and quietly
+      # disable silent updates.
+      - name: Stamp and verify shell revision
+        shell: bash
+        working-directory: electron
+        run: |
+          node tools/shell-revision.js --write
+          BAKED="$(node -p "require('./src/shell_revision.json').revision")"
+          [ "$BAKED" = "${{ needs.prepare.outputs.shell_revision }}" ] || {
+            echo "Shell revision drift: packaged $BAKED, manifest ${{ needs.prepare.outputs.shell_revision }}" >&2
+            exit 1
+          }
 
       - name: Build Electron app
         working-directory: electron
@@ -339,6 +435,21 @@ jobs:
         working-directory: electron
         run: npm ci
 
+      # The packaged app carries its own revision (written by the forge
+      # generateAssets hook). Assert it matches what the manifest will publish —
+      # a mismatch would make every release look like a shell change and quietly
+      # disable silent updates.
+      - name: Stamp and verify shell revision
+        shell: bash
+        working-directory: electron
+        run: |
+          node tools/shell-revision.js --write
+          BAKED="$(node -p "require('./src/shell_revision.json').revision")"
+          [ "$BAKED" = "${{ needs.prepare.outputs.shell_revision }}" ] || {
+            echo "Shell revision drift: packaged $BAKED, manifest ${{ needs.prepare.outputs.shell_revision }}" >&2
+            exit 1
+          }
+
       - name: Build Electron app
         working-directory: electron
         run: npx electron-forge make --arch=${{ matrix.electron-arch }}
@@ -404,6 +515,21 @@ jobs:
         working-directory: electron
         run: npm ci
 
+      # The packaged app carries its own revision (written by the forge
+      # generateAssets hook). Assert it matches what the manifest will publish —
+      # a mismatch would make every release look like a shell change and quietly
+      # disable silent updates.
+      - name: Stamp and verify shell revision
+        shell: bash
+        working-directory: electron
+        run: |
+          node tools/shell-revision.js --write
+          BAKED="$(node -p "require('./src/shell_revision.json').revision")"
+          [ "$BAKED" = "${{ needs.prepare.outputs.shell_revision }}" ] || {
+            echo "Shell revision drift: packaged $BAKED, manifest ${{ needs.prepare.outputs.shell_revision }}" >&2
+            exit 1
+          }
+
       - name: Build Electron app
         working-directory: electron
         run: npx electron-forge make --arch=${{ matrix.electron-arch }}
@@ -460,8 +586,34 @@ jobs:
           find artifacts/package-* -type f \( -name "*.dmg" -o -name "*.zip" -o -name "*.deb" -o -name "*.rpm" -o -name "*.msi" \) -exec cp {} release/ \;
           # Copy headless tarballs
           find artifacts/headless-* -type f -name "*.tar.gz" -exec cp {} release/ \;
+          # Copy core artifacts — the payload of a silent update
+          find artifacts/core-* -type f -name "*-core.gz" -exec cp {} release/ \;
           echo "Release artifacts:"
           ls -la release/
+
+      # The update manifest is the only record of which Electron shell a release
+      # was built with, and of the digests of its core artifacts. Without it a
+      # client can never prove the shell is unchanged, so it falls back to the
+      # full installer — which is why this is generated from the build's own
+      # outputs rather than written by hand.
+      - name: Build update manifest
+        run: |
+          node -e "
+            const fs = require('fs');
+            const path = require('path');
+            const version = process.argv[1].replace(/^v/, '');
+            const shellRevision = process.argv[2];
+            const core = {};
+            for (const dir of fs.readdirSync('artifacts').filter((d) => d.startsWith('core-'))) {
+              const meta = JSON.parse(fs.readFileSync(path.join('artifacts', dir, 'core-meta.json'), 'utf8'));
+              const { platform, ...artifact } = meta;
+              core[platform] = artifact;
+            }
+            const manifest = { schema: 1, version, shellRevision, core };
+            const name = \`ScreenerBot-v\${version}-update-manifest.json\`;
+            fs.writeFileSync(path.join('release', name), JSON.stringify(manifest, null, 2) + '\n');
+            console.log(JSON.stringify(manifest, null, 2));
+          " "${{ needs.prepare.outputs.version }}" "${{ needs.prepare.outputs.shell_revision }}"
 
       - name: Enforce complete immutable release
         env:
@@ -474,20 +626,27 @@ jobs:
           cd release
           VERSION="${{ needs.prepare.outputs.version }}"
           expected="$(printf '%s\n' \
+            "ScreenerBot-${VERSION}-Linux-arm64-core.gz" \
             "ScreenerBot-${VERSION}-Linux-arm64-headless.tar.gz" \
             "ScreenerBot-${VERSION}-Linux-arm64.deb" \
             "ScreenerBot-${VERSION}-Linux-arm64.zip" \
+            "ScreenerBot-${VERSION}-Linux-x64-core.gz" \
             "ScreenerBot-${VERSION}-Linux-x64-headless.tar.gz" \
             "ScreenerBot-${VERSION}-Linux-x64.deb" \
             "ScreenerBot-${VERSION}-Linux-x64.zip" \
+            "ScreenerBot-${VERSION}-macOS-arm64-core.gz" \
             "ScreenerBot-${VERSION}-macOS-arm64.dmg" \
             "ScreenerBot-${VERSION}-macOS-arm64.zip" \
+            "ScreenerBot-${VERSION}-macOS-x64-core.gz" \
             "ScreenerBot-${VERSION}-macOS-x64.dmg" \
             "ScreenerBot-${VERSION}-macOS-x64.zip" \
+            "ScreenerBot-${VERSION}-Windows-arm64-core.gz" \
             "ScreenerBot-${VERSION}-Windows-arm64.msi" \
             "ScreenerBot-${VERSION}-Windows-arm64.zip" \
+            "ScreenerBot-${VERSION}-Windows-x64-core.gz" \
             "ScreenerBot-${VERSION}-Windows-x64.msi" \
-            "ScreenerBot-${VERSION}-Windows-x64.zip" | sort)"
+            "ScreenerBot-${VERSION}-Windows-x64.zip" \
+            "ScreenerBot-${VERSION}-update-manifest.json" | sort)"
           actual="$(find . -maxdepth 1 -type f -exec basename {} \; | sort)"
           [ "$actual" = "$expected" ] || {
             echo "Release asset matrix is incomplete or contains unexpected files" >&2

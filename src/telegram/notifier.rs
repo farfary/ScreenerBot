@@ -7,7 +7,7 @@ use crate::logger::{self, LogTag};
 use crate::telegram::formatters;
 use crate::telegram::keyboards;
 use crate::telegram::pagination::PAGINATION_MANAGER;
-use crate::telegram::types::{ErrorSeverity, Notification, NotificationType};
+use crate::telegram::types::{ErrorSeverity, Notification, NotificationType, UpdateStage};
 use crate::telegram::{Error, Result};
 use teloxide::prelude::*;
 use teloxide::types::{ChatId, InlineKeyboardButton, InlineKeyboardMarkup, ParseMode};
@@ -310,6 +310,36 @@ impl TelegramNotifier {
                 formatters::msg_bot_stopped(reason, 0, 0, 0.0)
             }
 
+            NotificationType::UpdateStatus {
+                version,
+                stage,
+                silent,
+                transfer_bytes,
+            } => {
+                let megabytes = *transfer_bytes as f64 / (1024.0 * 1024.0);
+                match stage {
+                    UpdateStage::Available => format!(
+                        "\u{2b06}\u{fe0f} <b>Update v{version} available</b>\n\n{}\nDownload size: {megabytes:.1} MB",
+                        if *silent {
+                            "Installs silently with a short restart."
+                        } else {
+                            "This release also updates the desktop app, so its installer has to run once."
+                        }
+                    ),
+                    UpdateStage::Staged => format!(
+                        "\u{2705} <b>Update v{version} ready</b>\n\n{}",
+                        if *silent {
+                            "Send /update to apply it now, or it installs the next time ScreenerBot starts."
+                        } else {
+                            "Open Settings \u{2192} Updates to run the installer."
+                        }
+                    ),
+                    UpdateStage::Applying => format!(
+                        "\u{1f504} <b>Installing v{version}</b>\n\nThe backend is restarting; trading resumes automatically."
+                    ),
+                }
+            }
+
             NotificationType::NewTokensFound { new_count, .. } => {
                 format!(
                     "🔍 <b>Filtering Alert</b>\n\nFound {} new tokens matching your criteria.",
@@ -467,6 +497,7 @@ fn should_send_notification(notification: &Notification) -> bool {
         NotificationType::BotStarted { .. } => config.notify_on_startup,
         NotificationType::BotStopped { .. } => config.notify_on_shutdown,
         NotificationType::NewTokensFound { .. } => config.notify_filtering_alerts,
+        NotificationType::UpdateStatus { .. } => with_config(|c| c.updates.notify_telegram),
     }
 }
 
