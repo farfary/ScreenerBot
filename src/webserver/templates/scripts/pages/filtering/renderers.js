@@ -891,11 +891,11 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
             <span id="filtering-status-message">${Utils.escapeHtml(statusMsg)}</span>
           </div>
           <div class="footer-actions">
-            <button class="ghost" id="reset-config-btn"><i class="icon-rotate-ccw"></i> Reset</button>
-            <button class="ghost" id="refresh-snapshot-btn"><i class="icon-refresh-cw"></i> Refresh</button>
-            <button class="ghost" id="export-config-btn"><i class="icon-download"></i> Export</button>
-            <button class="ghost" id="import-config-btn"><i class="icon-upload"></i> Import</button>
-            <button class="primary" id="save-config-btn"><i class="icon-save"></i> Save</button>
+            <button class="filtering-footer-btn ghost" id="reset-config-btn"><i class="icon-rotate-ccw"></i> Reset</button>
+            <button class="filtering-footer-btn ghost" id="refresh-snapshot-btn"><i class="icon-refresh-cw"></i> Refresh</button>
+            <button class="filtering-footer-btn ghost" id="export-config-btn"><i class="icon-download"></i> Export</button>
+            <button class="filtering-footer-btn ghost" id="import-config-btn"><i class="icon-upload"></i> Import</button>
+            <button class="filtering-footer-btn primary" id="save-config-btn"><i class="icon-save"></i> Save</button>
           </div>
         </footer>
       </div>

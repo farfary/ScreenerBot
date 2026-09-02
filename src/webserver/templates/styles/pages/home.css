@@ -84,6 +84,7 @@
   color: var(--text-muted);
   background: transparent;
   font-size: 0.7rem;
+  cursor: pointer;
   opacity: 0.75;
   transition:
     color var(--transition-fast),

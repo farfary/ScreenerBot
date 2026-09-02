@@ -278,6 +278,7 @@
   border-radius: var(--radius-full);
   background: rgb(255 255 255 / 0.15);
   border: none;
+  color: inherit;
   cursor: pointer;
   transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   padding: 0;

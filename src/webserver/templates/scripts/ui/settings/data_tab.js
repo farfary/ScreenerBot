@@ -23,6 +23,13 @@ export function buildDataTab() {
         <div class="data-overview-card" id="dataOverviewCard">
           <div class="data-stats-loading"><i class="icon-loader"></i> Loading database statistics...</div>
         </div>
+
+        <div class="config-info-box">
+          <div class="config-info-item">
+            <span class="config-info-label">Data Directory</span>
+            <span class="config-info-value" id="dataPathDisplay">Loading...</span>
+          </div>
+        </div>
       </div>
 
       <!-- Configuration Backup Section -->
@@ -139,28 +146,42 @@ export function buildDataTab() {
 }
 
 /**
+ * Fill one path row and let a click copy it. A path we do not have yet says so
+ * rather than leaving the placeholder claiming it is still loading.
+ */
+function bindPathRow(content, selector, path, label) {
+  const row = content.querySelector(selector);
+  if (!row) return;
+
+  if (!path) {
+    row.textContent = "Unavailable";
+    return;
+  }
+
+  row.textContent = path;
+  row.title = "Click to copy path";
+  row.addEventListener("click", async () => {
+    try {
+      await Utils.copyToClipboard(path);
+      Utils.notifyCopied(label);
+    } catch {
+      Utils.showToast("Failed to copy path", "error");
+    }
+  });
+}
+
+/**
  * Attach handlers for Data tab
  */
 export function attachDataHandlers(dialog, content, pathsInfo) {
   // Load data overview
   loadDataOverview(content);
 
-  // Display config path with copy on click
-  if (pathsInfo?.config_path) {
-    const pathDisplay = content.querySelector("#configPathDisplay");
-    if (pathDisplay) {
-      pathDisplay.textContent = pathsInfo.config_path;
-      pathDisplay.title = "Click to copy path";
-      pathDisplay.addEventListener("click", async () => {
-        try {
-          await Utils.copyToClipboard(pathsInfo.config_path);
-          Utils.notifyCopied("Config path");
-        } catch {
-          Utils.showToast("Failed to copy path", "error");
-        }
-      });
-    }
-  }
+  /* Both locations are click-to-copy rows of the same component. This tab is
+     their only home: About used to print the data directory a second time,
+     with a second #openDataFolderBtn of its own. */
+  bindPathRow(content, "#dataPathDisplay", pathsInfo?.data_directory, "Data directory");
+  bindPathRow(content, "#configPathDisplay", pathsInfo?.config_path, "Config path");
 
   // Export config button
   const exportBtn = content.querySelector("#exportConfigBtn");

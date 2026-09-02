@@ -29,7 +29,7 @@ export function createOhlcvModule(deps) {
           return `<span class="ohlcv-token-cell">
             <span class="mint-cell" title="${Utils.escapeHtml(value)}">${short}</span>
             <span class="ohlcv-token-actions">
-              <button class="btn btn-small btn-danger ohlcv-delete-btn" data-mint="${Utils.escapeHtml(row.mint)}" title="Delete OHLCV data" aria-label="Delete OHLCV data">
+              <button class="btn btn-sm btn-danger ohlcv-delete-btn" data-mint="${Utils.escapeHtml(row.mint)}" title="Delete OHLCV data" aria-label="Delete OHLCV data">
                 <i class="icon-trash-2"></i>
               </button>
             </span>

@@ -8,8 +8,12 @@
  * - Validation callback support
  * - Keyboard support (Enter = confirm, Esc = cancel)
  * - Focus trap within dialog
- * - Glassmorphic design matching confirmation dialog
  * - Sound feedback on actions
+ *
+ * Presentation lives entirely in `styles/ui/input_dialog.css`. This module
+ * writes markup and state classes and nothing else - it used to assign every
+ * colour, box and hover effect as an inline style, which no stylesheet could
+ * override and which left the dialog dark-only.
  */
 
 import { playClick, playError } from "../core/sounds.js";
@@ -152,9 +156,6 @@ class InputDialog {
     // Attach event listeners
     this._attachEventListeners();
 
-    // Apply inline styles (using CSS variables from foundation.css)
-    this._applyStyles();
-
     // Add to DOM
     document.body.appendChild(this.backdrop);
     document.body.appendChild(this.element);
@@ -177,199 +178,12 @@ class InputDialog {
     this._trapFocus();
   }
 
-  _applyStyles() {
-    // Backdrop styles
-    Object.assign(this.backdrop.style, {
-      position: "fixed",
-      inset: "0",
-      background: "rgba(0, 0, 0, 0.6)",
-      backdropFilter: "blur(4px)",
-      zIndex: "10002",
-      opacity: "0",
-      transition: "opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
-    });
-
-    // Dialog styles
-    Object.assign(this.element.style, {
-      position: "fixed",
-      top: "50%",
-      left: "50%",
-      transform: "translate(-50%, -50%) scale(0.9)",
-      width: "90%",
-      maxWidth: "440px",
-      background: "rgba(18, 24, 39, 0.95)",
-      backdropFilter: "blur(20px)",
-      border: "1px solid rgba(255, 255, 255, 0.1)",
-      borderRadius: "12px",
-      boxShadow: "0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05) inset",
-      zIndex: "10003",
-      padding: "24px",
-      opacity: "0",
-      transition:
-        "opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
-    });
-
-    // Header styles
-    const header = this.element.querySelector(".input-dialog__header");
-    if (header) {
-      Object.assign(header.style, {
-        display: "flex",
-        alignItems: "center",
-        gap: "12px",
-        marginBottom: "16px",
-      });
-    }
-
-    // Icon styles
-    const iconEl = this.element.querySelector(".input-dialog__icon");
-    if (iconEl) {
-      const isWarning = this.config.variant === "warning";
-      Object.assign(iconEl.style, {
-        flexShrink: "0",
-        width: "40px",
-        height: "40px",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        fontSize: "24px",
-        borderRadius: "8px",
-        background: isWarning ? "rgba(210, 153, 34, 0.1)" : "rgba(88, 166, 255, 0.1)",
-        color: isWarning ? "#d29922" : "#58a6ff",
-      });
-    }
-
-    // Title styles
-    const title = this.element.querySelector(".input-dialog__title");
-    if (title) {
-      Object.assign(title.style, {
-        margin: "0",
-        fontSize: "18px",
-        fontWeight: "600",
-        color: "rgba(255, 255, 255, 0.95)",
-        lineHeight: "1.4",
-        letterSpacing: "-0.01em",
-      });
-    }
-
-    // Content styles
-    const content = this.element.querySelector(".input-dialog__content");
-    if (content) {
-      Object.assign(content.style, {
-        marginBottom: "24px",
-      });
-    }
-
-    // Message styles
-    const message = this.element.querySelector(".input-dialog__message");
-    if (message) {
-      Object.assign(message.style, {
-        margin: "0 0 16px 0",
-        fontSize: "14px",
-        color: "rgba(255, 255, 255, 0.75)",
-        lineHeight: "1.6",
-      });
-    }
-
-    // Field container styles
-    const field = this.element.querySelector(".input-dialog__field");
-    if (field) {
-      Object.assign(field.style, {
-        display: "flex",
-        flexDirection: "column",
-        gap: "6px",
-      });
-    }
-
-    // Input styles
-    if (this.inputElement) {
-      Object.assign(this.inputElement.style, {
-        width: "100%",
-        padding: "12px 14px",
-        fontSize: "14px",
-        fontFamily: "'JetBrains Mono', monospace",
-        color: "rgba(255, 255, 255, 0.95)",
-        background: "rgba(255, 255, 255, 0.05)",
-        border: "1px solid rgba(255, 255, 255, 0.15)",
-        borderRadius: "8px",
-        outline: "none",
-        transition: "all 0.2s ease",
-        boxSizing: "border-box",
-      });
-    }
-
-    // Error styles
-    if (this.errorElement) {
-      Object.assign(this.errorElement.style, {
-        fontSize: "12px",
-        color: "#f85149",
-        minHeight: "18px",
-        opacity: "0",
-        transition: "opacity 0.2s ease",
-      });
-    }
-
-    // Footer styles
-    const footer = this.element.querySelector(".input-dialog__footer");
-    if (footer) {
-      Object.assign(footer.style, {
-        display: "flex",
-        gap: "12px",
-        justifyContent: "flex-end",
-      });
-    }
-
-    // Button base styles
-    const buttons = this.element.querySelectorAll(".input-dialog__button");
-    buttons.forEach((btn) => {
-      Object.assign(btn.style, {
-        padding: "10px 20px",
-        fontSize: "14px",
-        fontWeight: "600",
-        border: "none",
-        borderRadius: "8px",
-        cursor: "pointer",
-        transition: "all 0.2s ease",
-        letterSpacing: "0.01em",
-        lineHeight: "1.4",
-        minWidth: "100px",
-      });
-    });
-
-    // Cancel button styles
-    const cancelBtn = this.element.querySelector(".input-dialog__button--cancel");
-    if (cancelBtn) {
-      Object.assign(cancelBtn.style, {
-        background: "rgba(255, 255, 255, 0.08)",
-        color: "rgba(255, 255, 255, 0.9)",
-        border: "1px solid rgba(255, 255, 255, 0.15)",
-      });
-    }
-
-    // Confirm button styles
-    const confirmBtn = this.element.querySelector(".input-dialog__button--confirm");
-    if (confirmBtn) {
-      const isWarning = this.config.variant === "warning";
-      Object.assign(confirmBtn.style, {
-        background: isWarning ? "#d29922" : "#58a6ff",
-        color: "#fff",
-      });
-    }
-  }
-
   _attachEventListeners() {
-    // Confirm button
+    // Confirm button - hover and focus are the stylesheet's, not ours.
     const confirmBtn = this.element.querySelector('[data-action="confirm"]');
     if (confirmBtn) {
       this._confirmHandler = () => this._handleConfirm();
       confirmBtn.addEventListener("click", this._confirmHandler);
-
-      // Hover effects for confirm button
-      confirmBtn.addEventListener("mouseenter", () => {
-        confirmBtn.style.filter = "brightness(1.1)";
-      });
-      confirmBtn.addEventListener("mouseleave", () => {
-        confirmBtn.style.filter = "brightness(1)";
-      });
     }
 
     // Cancel button
@@ -377,37 +191,14 @@ class InputDialog {
     if (cancelBtn) {
       this._cancelHandler = () => this._handleCancel();
       cancelBtn.addEventListener("click", this._cancelHandler);
-
-      // Hover effects for cancel button
-      cancelBtn.addEventListener("mouseenter", () => {
-        cancelBtn.style.background = "rgba(255, 255, 255, 0.12)";
-        cancelBtn.style.borderColor = "rgba(255, 255, 255, 0.25)";
-      });
-      cancelBtn.addEventListener("mouseleave", () => {
-        cancelBtn.style.background = "rgba(255, 255, 255, 0.08)";
-        cancelBtn.style.borderColor = "rgba(255, 255, 255, 0.15)";
-      });
     }
 
     // Backdrop click cancels
     this._backdropHandler = () => this._handleCancel();
     this.backdrop.addEventListener("click", this._backdropHandler);
 
-    // Input focus/blur effects
+    // Clear error on input
     if (this.inputElement) {
-      this._inputFocusHandler = () => {
-        this.inputElement.style.borderColor = "#58a6ff";
-        this.inputElement.style.boxShadow = "0 0 0 2px rgba(88, 166, 255, 0.2)";
-      };
-      this._inputBlurHandler = () => {
-        const hasError = this.errorElement && this.errorElement.style.opacity === "1";
-        this.inputElement.style.borderColor = hasError ? "#f85149" : "rgba(255, 255, 255, 0.15)";
-        this.inputElement.style.boxShadow = "none";
-      };
-      this.inputElement.addEventListener("focus", this._inputFocusHandler);
-      this.inputElement.addEventListener("blur", this._inputBlurHandler);
-
-      // Clear error on input
       this._inputChangeHandler = () => {
         this._clearError();
       };
@@ -453,30 +244,31 @@ class InputDialog {
   _showError(message) {
     if (this.errorElement) {
       this.errorElement.textContent = message;
-      this.errorElement.style.opacity = "1";
+      this.errorElement.classList.add("input-dialog__error--visible");
     }
     if (this.inputElement) {
-      this.inputElement.style.borderColor = "#f85149";
+      this.inputElement.classList.add("input-dialog__input--invalid");
     }
   }
 
   _clearError() {
     if (this.errorElement) {
       this.errorElement.textContent = "";
-      this.errorElement.style.opacity = "0";
+      this.errorElement.classList.remove("input-dialog__error--visible");
     }
-    if (this.inputElement && document.activeElement !== this.inputElement) {
-      this.inputElement.style.borderColor = "rgba(255, 255, 255, 0.15)";
+    if (this.inputElement) {
+      this.inputElement.classList.remove("input-dialog__input--invalid");
     }
   }
 
   _handleConfirm() {
     if (!this._validateInput()) {
       playError();
-      // Shake the input on validation error
-      this.inputElement.style.animation = "none";
-      void this.inputElement.offsetHeight; // Trigger reflow
-      this.inputElement.style.animation = "input-dialog-shake 0.4s ease";
+      // Restart the shake: removing the class and reading a layout property
+      // forces the animation to run again on a second failed attempt.
+      this.inputElement.classList.remove("input-dialog__input--shake");
+      void this.inputElement.offsetHeight;
+      this.inputElement.classList.add("input-dialog__input--shake");
       return;
     }
 
@@ -539,19 +331,9 @@ class InputDialog {
       this._backdropHandler = null;
     }
 
-    if (this.inputElement) {
-      if (this._inputFocusHandler) {
-        this.inputElement.removeEventListener("focus", this._inputFocusHandler);
-        this._inputFocusHandler = null;
-      }
-      if (this._inputBlurHandler) {
-        this.inputElement.removeEventListener("blur", this._inputBlurHandler);
-        this._inputBlurHandler = null;
-      }
-      if (this._inputChangeHandler) {
-        this.inputElement.removeEventListener("input", this._inputChangeHandler);
-        this._inputChangeHandler = null;
-      }
+    if (this.inputElement && this._inputChangeHandler) {
+      this.inputElement.removeEventListener("input", this._inputChangeHandler);
+      this._inputChangeHandler = null;
     }
 
     // Remove focus trap handler
@@ -560,15 +342,12 @@ class InputDialog {
       this._trapFocusHandler = null;
     }
 
-    // Animate out
+    // Animate out: the resting rule already holds the closed state.
     if (this.backdrop) {
       this.backdrop.classList.remove("input-dialog-backdrop--visible");
-      this.backdrop.style.opacity = "0";
     }
     if (this.element) {
       this.element.classList.remove("input-dialog--visible");
-      this.element.style.opacity = "0";
-      this.element.style.transform = "translate(-50%, -50%) scale(0.9)";
     }
 
     // Remove from DOM after animation

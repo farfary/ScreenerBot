@@ -126,14 +126,17 @@
   margin-top: 6px;
 }
 
+/* The base carries a complete skin, not just a shape: a `.updates-btn` written
+   without a variant used to inherit the browser's ButtonFace and ButtonText. */
 .updates-btn {
   display: inline-flex;
   align-items: center;
   gap: 7px;
   padding: 8px 16px;
-  border: 1px solid transparent;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
-  font-family: inherit;
+  color: var(--text-primary);
   font-size: 0.82rem;
   font-weight: 600;
   cursor: pointer;
@@ -149,6 +152,7 @@
 
 .updates-btn.primary {
   background: var(--primary-color);
+  border-color: transparent;
   color: #fff;
 }
 

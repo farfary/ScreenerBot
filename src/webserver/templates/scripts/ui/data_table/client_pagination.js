@@ -349,7 +349,7 @@ export function applyClientPaginationMixin(DataTable) {
    */
   proto._generateClientPaginationButtons = function (current, total) {
     if (total <= 1) {
-      return '<button class="dt-client-pagination-btn dt-client-pagination-page active" data-page="1">1</button>';
+      return '<button class="dt-client-pagination-btn active" data-page="1">1</button>';
     }
 
     const buttons = [];
@@ -366,9 +366,7 @@ export function applyClientPaginationMixin(DataTable) {
 
     // Always show first page
     if (startPage > 1) {
-      buttons.push(
-        '<button class="dt-client-pagination-btn dt-client-pagination-page" data-page="1">1</button>'
-      );
+      buttons.push('<button class="dt-client-pagination-btn" data-page="1">1</button>');
       if (startPage > 2) {
         buttons.push('<span class="dt-client-pagination-ellipsis">…</span>');
       }
@@ -378,7 +376,7 @@ export function applyClientPaginationMixin(DataTable) {
     for (let i = startPage; i <= endPage; i++) {
       const activeClass = i === current ? "active" : "";
       buttons.push(
-        `<button class="dt-client-pagination-btn dt-client-pagination-page ${activeClass}" data-page="${i}">${i}</button>`
+        `<button class="dt-client-pagination-btn ${activeClass}" data-page="${i}">${i}</button>`
       );
     }
 
@@ -388,7 +386,7 @@ export function applyClientPaginationMixin(DataTable) {
         buttons.push('<span class="dt-client-pagination-ellipsis">…</span>');
       }
       buttons.push(
-        `<button class="dt-client-pagination-btn dt-client-pagination-page" data-page="${total}">${total}</button>`
+        `<button class="dt-client-pagination-btn" data-page="${total}">${total}</button>`
       );
     }
 

@@ -1,4 +1,182 @@
-/* Input dialog state and validation motion */
+/* The prompt replacement: title, one field, cancel/confirm.
+   Every rule here used to live in `input_dialog.js` as `Object.assign(el.style,
+   …)` with hardcoded hexes, which meant the dialog was dark-only, its buttons
+   were native OS controls until the script had run, and no stylesheet could
+   say otherwise - an inline style outranks all of them. */
+
+/* The prompt shares the confirmation layer (10002/10003), ABOVE `--z-dialog`:
+   like a confirmation it can be raised from inside any dialog, and it carried
+   exactly those two numbers as inline z-indexes before this file existed. */
+.input-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-confirmation);
+  background: rgb(0, 0, 0, 0.6);
+  opacity: 0;
+  backdrop-filter: blur(4px);
+  transition: opacity var(--transition-base);
+}
+
+.input-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: var(--z-confirmation-dialog);
+  width: 90%;
+  max-width: 440px;
+  padding: 24px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl);
+  box-shadow: 0 20px 60px rgb(0, 0, 0, 0.3);
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.9);
+  transition:
+    opacity var(--transition-base),
+    transform var(--transition-base);
+}
+
+.input-dialog-backdrop--visible,
+.input-dialog--visible {
+  opacity: 1;
+}
+
+.input-dialog--visible {
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.input-dialog__header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+/* A bare glyph - no tile, no ring, no tint behind it. */
+.input-dialog__icon {
+  flex-shrink: 0;
+  font-size: 20px;
+  color: var(--primary-color);
+}
+
+.input-dialog--warning .input-dialog__icon {
+  color: var(--warning-color);
+}
+
+.input-dialog__title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+.input-dialog__content {
+  margin-bottom: 24px;
+}
+
+.input-dialog__message {
+  margin: 0 0 16px;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.input-dialog__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* The shared control rule (`input[type="text"], …` in form_controls.css) is
+   0,1,1, so this must be at least as specific to own the box - hence the
+   dialog scope rather than a bare class. */
+.input-dialog .input-dialog__input {
+  width: 100%;
+  padding: 12px 14px;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.input-dialog .input-dialog__input:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px var(--primary-alpha-20);
+}
+
+.input-dialog .input-dialog__input--invalid,
+.input-dialog .input-dialog__input--invalid:focus {
+  border-color: var(--error-color);
+  box-shadow: none;
+}
+
+.input-dialog__input--shake {
+  animation: input-dialog-shake 0.4s ease;
+}
+
+.input-dialog__error {
+  min-height: 18px;
+  font-size: 0.75rem;
+  color: var(--error-color);
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.input-dialog__error--visible {
+  opacity: 1;
+}
+
+.input-dialog__footer {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.input-dialog__button {
+  min-width: 100px;
+  padding: 10px 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0.01em;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.input-dialog__button--cancel:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--text-secondary);
+}
+
+.input-dialog__button--confirm {
+  background: var(--primary-color);
+  border-color: transparent;
+  color: #fff;
+}
+
+.input-dialog--warning .input-dialog__button--confirm {
+  background: var(--warning-color);
+}
+
+.input-dialog__button--confirm:hover {
+  filter: brightness(1.1);
+}
+
+.input-dialog__button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 
 @keyframes input-dialog-shake {
   0%,
@@ -20,13 +198,4 @@
   80% {
     transform: translateX(4px);
   }
-}
-
-.input-dialog-backdrop--visible {
-  opacity: 1 !important;
-}
-
-.input-dialog--visible {
-  opacity: 1 !important;
-  transform: translate(-50%, -50%) scale(1) !important;
 }

@@ -454,7 +454,7 @@ class FeaturedDialog {
       <button class="feat-card-link" data-action="solscan" data-mint="${safeMint}" title="Solscan">
         <i class="icon-search"></i>
       </button>
-      <button class="feat-card-link feat-card-copy" data-action="copy" data-mint="${safeMint}" title="Copy mint">
+      <button class="feat-card-link" data-action="copy" data-mint="${safeMint}" title="Copy mint">
         <i class="icon-copy"></i>
       </button>
     `;

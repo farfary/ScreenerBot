@@ -655,14 +655,14 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
     menu.className = "automation-context-menu";
     menu.setAttribute("role", "menu");
     menu.innerHTML = `
-    <button type="button" role="menuitem" data-action="edit">
+    <button class="context-menu-item" type="button" role="menuitem" data-action="edit">
       <i class="icon-square-pen"></i> Edit
     </button>
-    <button type="button" role="menuitem" data-action="runs">
+    <button class="context-menu-item" type="button" role="menuitem" data-action="runs">
       <i class="icon-clock"></i> View Runs
     </button>
     <hr>
-    <button class="danger" type="button" role="menuitem" data-action="delete">
+    <button class="context-menu-item danger" type="button" role="menuitem" data-action="delete">
       <i class="icon-trash"></i> Delete
     </button>
   `;

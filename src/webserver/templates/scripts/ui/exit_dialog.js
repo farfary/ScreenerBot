@@ -88,7 +88,7 @@ class ExitDialog {
       </div>
 
       <div class="exit-dialog__options">
-        <button class="exit-dialog__option exit-dialog__option--minimize" data-action="minimize" type="button">
+        <button class="exit-dialog__option" data-action="minimize" type="button">
           <div class="exit-dialog__option-icon">
             <i class="icon-minimize-2"></i>
           </div>
@@ -101,7 +101,7 @@ class ExitDialog {
           </div>
         </button>
 
-        <button class="exit-dialog__option exit-dialog__option--exit" data-action="exit" type="button">
+        <button class="exit-dialog__option" data-action="exit" type="button">
           <div class="exit-dialog__option-icon exit-dialog__option-icon--danger">
             <i class="icon-power-off"></i>
           </div>

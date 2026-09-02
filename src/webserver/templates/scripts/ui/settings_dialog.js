@@ -820,10 +820,12 @@ export class SettingsDialog {
   }
 
   /**
-   * Attach handlers for About tab
+   * Attach handlers for About tab.
+   *
+   * About answers "what is this and where do I find it"; every data location
+   * and the actions on it belong to the Data tab, which already owns them.
    */
   _attachAboutHandlers(content) {
-    // External links (GitHub, Docs, Discord)
     const externalLinks = content.querySelectorAll("[data-external-url]");
     externalLinks.forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -833,71 +835,6 @@ export class SettingsDialog {
         }
       });
     });
-
-    const openBtn = content.querySelector("#openDataFolderBtn");
-    if (openBtn) {
-      openBtn.addEventListener("click", async () => {
-        openBtn.disabled = true;
-        const originalLabel = openBtn.innerHTML;
-        openBtn.innerHTML = '<i class="icon-loader spinning"></i><span>Opening...</span>';
-
-        try {
-          const response = await fetch("/api/system/paths/open-data", {
-            method: "POST",
-          });
-
-          if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            throw new Error(error.error?.message || "Failed to open data folder");
-          }
-
-          Utils.showToast({
-            type: "success",
-            title: "Data folder opened",
-            message: this.pathsInfo?.data_directory || "",
-          });
-        } catch (err) {
-          console.error("Failed to open data folder:", err);
-          Utils.showToast({
-            type: "error",
-            title: "Unable to open data folder",
-            message: err.message,
-          });
-        } finally {
-          openBtn.disabled = false;
-          openBtn.innerHTML = originalLabel;
-        }
-      });
-    }
-
-    const copyBtn = content.querySelector("#copyDataFolderBtn");
-    if (copyBtn) {
-      copyBtn.addEventListener("click", async () => {
-        if (!this.pathsInfo?.data_directory) {
-          Utils.showToast({
-            type: "warning",
-            title: "Path not available",
-            message: "Data path is still loading",
-          });
-          return;
-        }
-
-        try {
-          await Utils.copyToClipboard(this.pathsInfo.data_directory);
-          Utils.showToast({
-            type: "success",
-            title: "Data path copied",
-          });
-        } catch (err) {
-          console.error("Failed to copy data path:", err);
-          Utils.showToast({
-            type: "error",
-            title: "Copy failed",
-            message: err.message,
-          });
-        }
-      });
-    }
   }
 
   /**
@@ -905,9 +842,6 @@ export class SettingsDialog {
    */
   _buildAboutTab() {
     const { version } = this.versionInfo;
-    const paths = this.pathsInfo || {};
-    const dataPath = Utils.escapeHtml(paths.data_directory || "Loading data path...");
-    const basePath = paths.base_directory ? Utils.escapeHtml(paths.base_directory) : "";
     return `
       <div class="settings-about">
         <div class="settings-about-logo">
@@ -938,42 +872,8 @@ export class SettingsDialog {
           </button>
         </div>
 
-        <div class="settings-about-separator"></div>
-
-        <div class="settings-about-path-card" style="text-align: center; cursor: pointer;" onclick="navigator.clipboard.writeText('')">
-          <div class="settings-about-path-icon">
-            <i class="icon-heart" style="color: #9945FF;"></i>
-          </div>
-          <div class="settings-about-path-details">
-            <p class="settings-about-path-label">Support Development — Donate SOL</p>
-            <p class="settings-about-path-value" style="font-size: 11px; word-break: break-all;"></p>
-            <p class="settings-about-path-hint">Click to copy address</p>
-          </div>
-        </div>
-
-        <div class="settings-about-path-card">
-          <div class="settings-about-path-icon">
-            <i class="icon-folder"></i>
-          </div>
-          <div class="settings-about-path-details">
-            <p class="settings-about-path-label">Data Directory</p>
-            <p class="settings-about-path-value">${dataPath}</p>
-            ${basePath ? `<p class="settings-about-path-hint">Base directory: ${basePath}</p>` : ""}
-          </div>
-          <div class="settings-about-path-actions">
-            <button class="settings-update-btn" id="openDataFolderBtn">
-              <i class="icon-folder-open"></i>
-              <span>Open Data Folder</span>
-            </button>
-            <button class="settings-update-btn" id="copyDataFolderBtn">
-              <i class="icon-copy"></i>
-              <span>Copy Path</span>
-            </button>
-          </div>
-        </div>
-
         <div class="settings-about-credits">
-          <p>Built with <i class="icon-heart" style="color: #ef4444;"></i> for Solana traders</p>
+          <p>Built for Solana traders</p>
           <p class="settings-about-copyright">© ${new Date().getFullYear()} ScreenerBot. All rights reserved.</p>
         </div>
       </div>

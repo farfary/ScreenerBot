@@ -171,16 +171,16 @@ export class TableSettingsDialog {
             <section class="table-settings-controls-group" aria-label="Visibility controls">
               <h3 class="table-settings-controls-title">Visibility</h3>
               <div class="table-settings-controls-buttons">
-                <button type="button" class="btn tertiary" data-quick-action="show-all">Show All</button>
-                <button type="button" class="btn tertiary" data-quick-action="hide-all">Hide All</button>
-                <button type="button" class="btn tertiary" data-quick-action="invert-visibility">Invert</button>
+                <button type="button" class="btn btn-outline" data-quick-action="show-all">Show All</button>
+                <button type="button" class="btn btn-outline" data-quick-action="hide-all">Hide All</button>
+                <button type="button" class="btn btn-outline" data-quick-action="invert-visibility">Invert</button>
               </div>
             </section>
             <section class="table-settings-controls-group" aria-label="Ordering controls">
               <h3 class="table-settings-controls-title">Ordering</h3>
               <div class="table-settings-controls-buttons">
-                <button type="button" class="btn tertiary" data-quick-action="reset-order">Reset Order</button>
-                <button type="button" class="btn tertiary" data-quick-action="alphabetical">Sort A→Z</button>
+                <button type="button" class="btn btn-outline" data-quick-action="reset-order">Reset Order</button>
+                <button type="button" class="btn btn-outline" data-quick-action="alphabetical">Sort A→Z</button>
               </div>
             </section>
           </div>
@@ -190,10 +190,10 @@ export class TableSettingsDialog {
           <div class="table-settings-column-list" role="list"></div>
         </div>
         <footer class="table-settings-footer">
-          <button type="button" class="btn secondary" data-action="reset">Reset to Defaults</button>
+          <button type="button" class="btn btn-secondary" data-action="reset">Reset to Defaults</button>
           <div class="table-settings-footer-actions">
-            <button type="button" class="btn" data-action="cancel">Cancel</button>
-            <button type="button" class="btn primary" data-action="apply">Apply</button>
+            <button type="button" class="btn btn-ghost" data-action="cancel">Cancel</button>
+            <button type="button" class="btn btn-primary" data-action="apply">Apply</button>
           </div>
         </footer>
       </div>

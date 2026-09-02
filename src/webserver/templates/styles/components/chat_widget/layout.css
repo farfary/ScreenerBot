@@ -27,8 +27,15 @@
     overflow: hidden;
   }
 
+  /* A button, so it declares a button's skin even where it is not shown: the
+     host-scoped rules below only move it and tint it. */
   .chat-sessions-scrim {
     display: none;
+    padding: 0;
+    background: transparent;
+    border: 0;
+    color: inherit;
+    cursor: pointer;
   }
 
   :scope.cw-host-dialog .chat-sessions-sidebar {

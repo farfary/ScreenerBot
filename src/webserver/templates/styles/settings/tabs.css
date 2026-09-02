@@ -59,80 +59,12 @@
   font-family: var(--font-mono);
 }
 
-.settings-about-separator {
-  opacity: 0.4;
-}
-
 .settings-about-links {
   display: flex;
   gap: 8px;
   margin-bottom: 28px;
   flex-wrap: wrap;
   justify-content: center;
-}
-
-.settings-about-path-card {
-  width: 100%;
-  max-width: 720px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-xl);
-  margin-bottom: 20px;
-}
-
-.settings-about-path-icon {
-  width: 42px;
-  height: 42px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--primary-alpha-10);
-  color: var(--primary-color);
-  border-radius: var(--radius-xl);
-  font-size: 1.1rem;
-  flex-shrink: 0;
-}
-
-.settings-about-path-details {
-  flex: 1;
-  text-align: left;
-}
-
-.settings-about-path-label {
-  margin: 0 0 4px;
-  font-weight: 600;
-  font-size: 0.85rem;
-  color: var(--text-primary);
-}
-
-.settings-about-path-value {
-  margin: 0;
-  font-family: var(--font-mono);
-  font-size: 0.8rem;
-  color: var(--text-secondary);
-  word-break: break-all;
-}
-
-.settings-about-path-hint {
-  margin: 4px 0 0;
-  color: var(--text-secondary);
-  font-size: 0.75rem;
-}
-
-.settings-about-path-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-.settings-about-path-actions .settings-update-btn {
-  background: var(--bg-primary);
 }
 
 .settings-about-link {
@@ -146,6 +78,7 @@
   color: var(--text-primary);
   font-size: 0.8rem;
   font-weight: 500;
+  cursor: pointer;
   text-decoration: none;
   transition: all var(--transition-fast);
 }

@@ -502,7 +502,7 @@ function renderSegmented(item) {
 }
 
 function buttonClassList(item, extra = []) {
-  const classes = ["dt-btn", "table-toolbar-btn", ...extra];
+  const classes = ["table-toolbar-btn", ...extra];
   if (item.variant) {
     classes.push(`table-toolbar-btn--${item.variant}`);
   }
@@ -768,7 +768,7 @@ export class TableToolbarView {
         <div class="table-toolbar-overflow">
           <button
             type="button"
-            class="dt-btn table-toolbar-btn table-toolbar-btn--icon table-toolbar-overflow__trigger"
+            class="table-toolbar-btn table-toolbar-btn--icon table-toolbar-overflow__trigger"
             title="More actions"
             aria-label="More actions"
             aria-haspopup="menu"
@@ -786,7 +786,7 @@ export class TableToolbarView {
     const settingsMarkup = settings
       ? `
         <div class="dt-column-toggle table-toolbar-settings">
-          <button class="dt-btn dt-btn-columns table-toolbar-btn table-toolbar-btn--icon" type="button" title="${escapeHtml(
+          <button class="dt-btn-columns table-toolbar-btn table-toolbar-btn--icon" type="button" title="${escapeHtml(
             settings.tooltip
           )}" aria-label="${escapeHtml(settings.tooltip)}">
             ${renderIconMarkup(settings.icon, "dt-btn-icon")}

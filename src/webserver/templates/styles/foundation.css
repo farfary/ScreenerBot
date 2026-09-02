@@ -438,6 +438,19 @@
     border-color 0.3s ease;
 }
 
+/* Form controls do not inherit type. The UA gives every button, input, select
+   and textarea its own `-webkit-small-control` font, so a control that never
+   names a family renders in the OS font next to our Inter copy - which is why
+   two dozen components had each written `font-family: inherit` for themselves.
+   Only the family is inherited: size and line-height stay with the component,
+   so restoring the family cannot change a single control's height. */
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
 /* =============================================================================
    Global Focus - Completely customized and owned by us.
    We never rely on browser default outlines for our UI.

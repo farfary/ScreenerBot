@@ -1,12 +1,16 @@
 /* global console, process */
 
-import { readFile, readdir } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { relative, resolve } from "node:path";
 
-const root = resolve(import.meta.dirname, "..");
-const stylesRoot = resolve(root, "src/webserver/templates/styles");
-const scriptsRoot = resolve(root, "src/webserver/templates/scripts");
-const pagesRoot = resolve(root, "src/webserver/templates/pages");
+import {
+  PAGES_ROOT as pagesRoot,
+  REPO_ROOT as root,
+  SCRIPTS_ROOT as scriptsRoot,
+  STYLES_ROOT as stylesRoot,
+  rulesIn as parseRules,
+  walk,
+} from "./lib/dashboard_ui.mjs";
 
 const canonicalOwners = new Map([
   [".metric-card", "components.css"],
@@ -47,62 +51,15 @@ const canonicalOwners = new Map([
   [".sub-tab", "ui/tab_bar.css"],
 ]);
 
-async function walk(directory) {
-  const entries = await readdir(directory, { withFileTypes: true });
-  const files = await Promise.all(
-    entries.map((entry) => {
-      const path = resolve(directory, entry.name);
-      return entry.isDirectory() ? walk(path) : [path];
-    })
-  );
-  return files.flat();
+/* Selector + declaration body per rule, so a check can look at what a rule
+   actually draws and not only at what it targets. Parsing itself lives in
+   `lib/dashboard_ui.mjs`, shared with the button contract tests. */
+function rulesIn(css) {
+  return parseRules(css).map((rule) => [rule.selector, rule.body]);
 }
 
 function selectorsIn(css) {
-  const withoutComments = css.replace(/\/\*[\s\S]*?\*\//g, "");
-  const selectors = [];
-  const ruleStart = /([^{}]+)\{/g;
-  let match;
-  while ((match = ruleStart.exec(withoutComments))) {
-    const candidate = match[1].slice(match[1].lastIndexOf(";") + 1).trim();
-    if (!candidate || candidate.startsWith("@")) continue;
-    selectors.push(...splitSelectorList(candidate));
-  }
-  return selectors;
-}
-
-function splitSelectorList(value) {
-  const selectors = [];
-  let start = 0;
-  let depth = 0;
-
-  for (let index = 0; index < value.length; index += 1) {
-    const char = value[index];
-    if (char === "(" || char === "[") depth += 1;
-    else if (char === ")" || char === "]") depth = Math.max(0, depth - 1);
-    else if (char === "," && depth === 0) {
-      selectors.push(value.slice(start, index).trim());
-      start = index + 1;
-    }
-  }
-
-  selectors.push(value.slice(start).trim());
-  return selectors.filter(Boolean);
-}
-
-/* Selector + declaration body per rule, so a check can look at what a rule
-   actually draws and not only at what it targets. */
-function rulesIn(css) {
-  const withoutComments = css.replace(/\/\*[\s\S]*?\*\//g, "");
-  const rules = [];
-  const pattern = /([^{}]+)\{([^{}]*)\}/g;
-  let match;
-  while ((match = pattern.exec(withoutComments))) {
-    const selector = match[1].slice(match[1].lastIndexOf(";") + 1).trim();
-    if (!selector || selector.startsWith("@")) continue;
-    splitSelectorList(selector).forEach((part) => rules.push([part, match[2]]));
-  }
-  return rules;
+  return parseRules(css).map((rule) => rule.selector);
 }
 
 /* Where a control sits against its label text is one calculation, in one place:
