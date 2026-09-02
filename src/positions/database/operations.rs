@@ -70,6 +70,10 @@ impl PositionsDatabase {
     async fn initialize_schema(&mut self, log_initialization: bool) -> Result<()> {
         let conn = self.get_connection()?;
 
+        // Provenance introduced `round_key`, which the chain migration needs when it
+        // replaces the legacy uniqueness index. Historical databases can predate both
+        // migrations, so add the provenance columns before rebuilding chain indexes.
+        migrate_position_provenance(&conn)?;
         Self::migrate_chain_identity(&conn)?;
 
         // Create all tables
@@ -173,8 +177,6 @@ impl PositionsDatabase {
                 }
             }
         }
-
-        migrate_position_provenance(&conn)?;
 
         match merge_ledger_duplicates(&conn)? {
             0 => {}
@@ -952,9 +954,173 @@ impl PositionsDatabase {
 
 #[cfg(test)]
 mod tests {
+    use r2d2::Pool;
+    use r2d2_sqlite::SqliteConnectionManager;
     use rusqlite::{params, Connection};
 
-    use super::PositionsDatabase;
+    use super::{PositionsDatabase, POSITIONS_INDEXES, POSITIONS_SCHEMA_VERSION};
+
+    fn test_database() -> (PositionsDatabase, tempfile::TempDir) {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("positions.db");
+        let manager = SqliteConnectionManager::file(&path);
+        let pool = Pool::builder().max_size(1).build(manager).unwrap();
+        (
+            PositionsDatabase {
+                pool,
+                database_path: path.to_string_lossy().into_owned(),
+                schema_version: POSITIONS_SCHEMA_VERSION,
+                chain: crate::chains::ChainId::Solana,
+            },
+            directory,
+        )
+    }
+
+    fn assert_current_schema(connection: &Connection) {
+        for column in [
+            "chain_id",
+            "origin_kind",
+            "origin_ref",
+            "management",
+            "round_key",
+            "basis_complete",
+            "history_complete",
+            "holding_state",
+        ] {
+            let exists = connection
+                .query_row(
+                    "SELECT COUNT(*) FROM pragma_table_info('positions') WHERE name = ?1",
+                    [column],
+                    |row| row.get::<_, i64>(0),
+                )
+                .unwrap();
+            assert_eq!(exists, 1, "missing positions.{column}");
+        }
+        for index_sql in POSITIONS_INDEXES {
+            let index_name = index_sql
+                .split("INDEX IF NOT EXISTS ")
+                .nth(1)
+                .and_then(|tail| tail.split_whitespace().next())
+                .expect("position index statement");
+            let exists = connection
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = ?1",
+                    [index_name],
+                    |row| row.get::<_, i64>(0),
+                )
+                .unwrap();
+            assert_eq!(exists, 1, "missing index {index_name}");
+        }
+        assert_eq!(
+            connection
+                .query_row("PRAGMA integrity_check", [], |row| row.get::<_, String>(0))
+                .unwrap(),
+            "ok"
+        );
+        assert_eq!(
+            connection
+                .query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |row| {
+                    row.get::<_, i64>(0)
+                })
+                .unwrap(),
+            0
+        );
+    }
+
+    #[tokio::test]
+    async fn full_schema_initialization_upgrades_pre_provenance_database_and_is_idempotent() {
+        let (mut database, _directory) = test_database();
+        {
+            let legacy = database.get_connection().unwrap();
+            legacy
+                .execute_batch(
+                "PRAGMA foreign_keys = ON;
+                 CREATE TABLE positions (
+                    id INTEGER PRIMARY KEY,
+                    wallet_address TEXT NOT NULL,
+                    mint TEXT NOT NULL,
+                    symbol TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    entry_price REAL NOT NULL,
+                    entry_time TEXT NOT NULL,
+                    exit_time TEXT,
+                    position_type TEXT NOT NULL,
+                    entry_size_sol REAL NOT NULL,
+                    total_size_sol REAL NOT NULL,
+                    price_highest REAL NOT NULL,
+                    price_lowest REAL NOT NULL,
+                    entry_transaction_signature TEXT,
+                    exit_transaction_signature TEXT,
+                    token_amount INTEGER,
+                    effective_entry_price REAL,
+                    remaining_token_amount INTEGER,
+                    average_entry_price REAL NOT NULL DEFAULT 0,
+                    manual_management BOOLEAN NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+                 );
+                 CREATE TABLE position_states (
+                    id INTEGER PRIMARY KEY,
+                    position_id INTEGER NOT NULL REFERENCES positions(id),
+                    state TEXT NOT NULL,
+                    changed_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    reason TEXT
+                 );
+                 INSERT INTO positions (
+                    id, wallet_address, mint, symbol, name, entry_price, entry_time,
+                    position_type, entry_size_sol, total_size_sol, price_highest,
+                    price_lowest, token_amount, effective_entry_price,
+                    remaining_token_amount, average_entry_price, manual_management
+                 ) VALUES (
+                    41, 'wallet', 'mint', 'SYM', 'Token', 0.5, '2026-01-01',
+                    'buy', 1.0, 1.0, 0.5, 0.5, 2, 0.5, 2, 0.5, 1
+                 );
+                 INSERT INTO position_states (id, position_id, state)
+                 VALUES (7, 41, 'Open');
+                 CREATE INDEX idx_positions_wallet ON positions(wallet_address);
+                 CREATE INDEX idx_positions_mint ON positions(mint);
+                 CREATE INDEX idx_positions_entry_signature ON positions(entry_transaction_signature);
+                 CREATE INDEX idx_positions_exit_signature ON positions(exit_transaction_signature);",
+                )
+                .unwrap();
+        }
+
+        database.initialize_schema(false).await.unwrap();
+        database.initialize_schema(false).await.unwrap();
+
+        let connection = database.get_connection().unwrap();
+        assert_current_schema(&connection);
+        assert_eq!(
+            connection
+                .query_row(
+                    "SELECT chain_id, origin_kind, management FROM positions WHERE id = 41",
+                    [],
+                    |row| {
+                        Ok((
+                            row.get::<_, String>(0)?,
+                            row.get::<_, String>(1)?,
+                            row.get::<_, String>(2)?,
+                        ))
+                    },
+                )
+                .unwrap(),
+            (
+                "solana".to_owned(),
+                "manual".to_owned(),
+                "user_only".to_owned()
+            )
+        );
+        assert_eq!(
+            connection
+                .query_row(
+                    "SELECT position_id FROM position_states WHERE id = 7",
+                    [],
+                    |row| row.get::<_, i64>(0),
+                )
+                .unwrap(),
+            41
+        );
+    }
 
     #[test]
     fn chain_migration_preserves_legacy_roots_and_children_and_is_idempotent() {
