@@ -30,6 +30,14 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  # Every CI build is a clean build of a new commit, so incremental compilation
+  # can never be reused — it only writes thousands of small files into
+  # target/<triple>/release/incremental (gigabytes), which are then dragged
+  # through the target cache. On the Windows runners that write amplification is
+  # the most likely cause of the "lost communication with the runner" death seen
+  # on a cold x64 build. This overrides `incremental = true` in Cargo.toml, which
+  # stays on for local rebuilds where the artifacts are actually reused.
+  CARGO_INCREMENTAL: 0
 
 jobs:
   # ===========================================================================
