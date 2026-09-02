@@ -38,6 +38,11 @@ env:
   # on a cold x64 build. This overrides `incremental = true` in Cargo.toml, which
   # stays on for local rebuilds where the artifacts are actually reused.
   CARGO_INCREMENTAL: 0
+  # A tag build is six ~20-40 minute jobs deep before it produces anything, and
+  # a single dropped crates.io or rustup download would otherwise fail the whole
+  # release. Retry instead.
+  CARGO_NET_RETRY: 10
+  RUSTUP_MAX_RETRIES: 10
 
 jobs:
   # ===========================================================================
@@ -169,15 +174,17 @@ jobs:
           toolchain: 1.89.0
           targets: ${{ matrix.target }}
 
-      - name: Cache Cargo registry & build
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      # Caches the registry and the compiled dependencies, and — unlike a raw
+      # actions/cache on `target` — prunes what the current lockfile no longer
+      # needs before saving, so the entry cannot grow without bound across
+      # releases. `key` differentiates the six matrix legs, which otherwise
+      # share one job id. Cached on failure too: the Windows runners die
+      # environmentally often enough that the re-run should start warm.
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: rust-${{ matrix.target }}-${{ hashFiles('Cargo.lock') }}
-          restore-keys: rust-${{ matrix.target }}-
+          key: ${{ matrix.target }}
+          cache-on-failure: true
 
       # Linux arm64 cross-compilation setup
       - name: Install cross-compilation tools (Linux arm64)
