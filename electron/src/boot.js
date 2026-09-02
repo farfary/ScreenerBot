@@ -28,40 +28,18 @@
     })
     .catch(() => {});
 
-  // Loading status updates.
+  // Launch state: `{ message, detail }`. The headline says what the launch is
+  // doing; the detail is only present when there is something worth adding, and
+  // its row is reserved in the layout either way so text never moves the mark.
   window.electronAPI.onLoadingStatus((status) => {
-    const el = document.getElementById('status');
-    if (el) el.textContent = status;
-  });
+    const message = status && status.message ? status.message : '';
+    const detail = status && status.detail ? status.detail : '';
 
-  // A staged update is applied by relaunching the backend, so the splash is the
-  // only place it is ever visible. Show what is being installed, and a real bar
-  // when the main process can report one.
-  window.electronAPI.onUpdateProgress((payload) => {
-    const panel = document.getElementById('splashUpdate');
-    if (!panel) return;
+    const statusEl = document.getElementById('status');
+    if (statusEl && message) statusEl.textContent = message;
 
-    const phase = payload && payload.phase;
-    if (phase === 'done') {
-      panel.hidden = true;
-      return;
-    }
-
-    const titles = { applying: 'Installing update', verifying: 'Verifying update' };
-    document.getElementById('splashUpdateTitle').textContent = titles[phase] || 'Updating';
-    document.getElementById('splashUpdateVersion').textContent =
-      payload && payload.version ? 'v' + payload.version : '';
-
-    const fill = document.getElementById('splashUpdateFill');
-    const percent = payload && typeof payload.percent === 'number' ? payload.percent : null;
-    if (percent === null) {
-      fill.classList.remove('determinate');
-      fill.style.width = '';
-    } else {
-      fill.classList.add('determinate');
-      fill.style.width = Math.max(0, Math.min(100, percent)) + '%';
-    }
-    panel.hidden = false;
+    const detailEl = document.getElementById('statusDetail');
+    if (detailEl) detailEl.textContent = detail;
   });
 
   // Fatal startup error → show the boot-error screen.
@@ -79,7 +57,7 @@
   };
 
   function renderBootError(payload) {
-    document.querySelector('.splash-screen').classList.add('hidden');
+    document.getElementById('splashScreen').classList.add('hidden');
 
     document.getElementById('bootErrorTitle').textContent =
       payload.title || 'ScreenerBot could not start';

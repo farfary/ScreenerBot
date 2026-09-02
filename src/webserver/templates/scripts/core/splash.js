@@ -1,36 +1,36 @@
 // Splash Screen Controller
-// Shows on every app start, handles initialization check and routing
+// Shows on every browser app start, handles the initialization check and routing.
+//
+// Electron paints its own launch window and hides this one, so everything below
+// is the browser launch. The screen reports only what the backend has actually
+// told us: it used to narrate five invented phases on timers and hold the
+// dashboard for a fixed three seconds, which made a fast launch slower than a
+// slow one and described work that was never happening.
 
-const SPLASH_MIN_DURATION = 3000; // Minimum splash display time in ms
-
-// Status messages shown sequentially (not rotating)
-const SPLASH_PHASES = [
-  { message: "Starting ScreenerBot...", duration: 600 },
-  { message: "Loading configuration...", duration: 500 },
-  { message: "Opening the local core...", duration: 700 },
-  { message: "Checking dashboard mode...", duration: 600 },
-  { message: "Preparing dashboard...", duration: 500 },
-];
+// Shortest time the screen stays up. Long enough that a launch which answers
+// instantly reads as a screen rather than a flash, short enough not to be a wait.
+const SPLASH_MIN_DURATION = 500;
+// How long the screen fades before it is taken out of the layout. Matches the
+// `transition` on `.splash-screen` in splash.css.
+const SPLASH_FADE_MS = 400;
+// A backend that has not answered by now is worth explaining rather than
+// leaving the user with a spinner and no reason for it.
+const SPLASH_SLOW_AFTER_MS = 4000;
 
 class SplashController {
   constructor() {
     this.splashEl = null;
     this.statusEl = null;
+    this.detailEl = null;
     this.startTime = Date.now();
-    this.phaseIndex = 0;
-    this.phaseTimeout = null;
-    this.forceOnboarding = false;
-    this.initializationRequired = false;
-    this.readyToTransition = false;
-    this.transitionTarget = null;
+    this.retryTimeout = null;
     this.launchFailed = false;
   }
 
   /**
    * The bootstrap manager settles every launch. An unreachable backend must end
    * the splash in a stated failure rather than in the retry loop below, which
-   * would otherwise show "Waiting for local core..." for as long as the window
-   * stays open.
+   * would otherwise keep waiting for as long as the window stays open.
    */
   watchLaunchOutcome() {
     window.addEventListener("screenerbot:bootstrap-settled", (event) => {
@@ -38,11 +38,15 @@ class SplashController {
         return;
       }
       this.launchFailed = true;
-      this.stopPhaseSequence();
-      if (this.statusEl) {
-        this.statusEl.textContent =
-          "ScreenerBot could not start. Check the log file, then restart the app.";
+      if (this.retryTimeout) {
+        clearTimeout(this.retryTimeout);
+        this.retryTimeout = null;
       }
+      this.splashEl?.classList.add("settled");
+      this.setState(
+        "ScreenerBot could not start",
+        "Check the log file, then restart the app."
+      );
     });
   }
 
@@ -67,6 +71,7 @@ class SplashController {
 
     this.splashEl = document.getElementById("splashScreen");
     this.statusEl = document.getElementById("splashStatus");
+    this.detailEl = document.getElementById("splashDetail");
 
     if (!this.splashEl) {
       console.warn("[Splash] Splash screen element not found");
@@ -77,9 +82,6 @@ class SplashController {
 
     // Load and display version
     this.loadVersion();
-
-    // Start sequential status messages
-    this.startPhaseSequence();
 
     // Check initialization status
     this.checkInitialization();
@@ -100,45 +102,9 @@ class SplashController {
     }
   }
 
-  startPhaseSequence() {
-    if (!this.statusEl) return;
-
-    // Show first phase immediately
-    this.statusEl.textContent = SPLASH_PHASES[0].message;
-    this.phaseIndex = 0;
-
-    this.advancePhase();
-  }
-
-  advancePhase() {
-    const currentPhase = SPLASH_PHASES[this.phaseIndex];
-
-    this.phaseTimeout = setTimeout(() => {
-      this.phaseIndex++;
-
-      if (this.phaseIndex < SPLASH_PHASES.length) {
-        // Show next phase message
-        this.statusEl.textContent = SPLASH_PHASES[this.phaseIndex].message;
-        this.advancePhase();
-      } else {
-        // All phases complete - show ready or wait
-        this.statusEl.textContent = "Ready";
-        this.checkReadyToTransition();
-      }
-    }, currentPhase.duration);
-  }
-
-  stopPhaseSequence() {
-    if (this.phaseTimeout) {
-      clearTimeout(this.phaseTimeout);
-      this.phaseTimeout = null;
-    }
-  }
-
-  checkReadyToTransition() {
-    if (this.readyToTransition && this.transitionTarget) {
-      this.transitionTo(this.transitionTarget);
-    }
+  setState(status, detail = "") {
+    if (this.statusEl && status) this.statusEl.textContent = status;
+    if (this.detailEl) this.detailEl.textContent = detail;
   }
 
   async checkInitialization() {
@@ -149,26 +115,22 @@ class SplashController {
       }
 
       const result = await response.json();
-      this.forceOnboarding = !!result.force_onboarding;
-      this.initializationRequired = !!result.required;
 
       // Determine transition target
-      if (this.forceOnboarding) {
-        this.transitionTarget = "onboarding";
+      let target;
+      if (result.force_onboarding) {
+        target = "onboarding";
       } else if (result.required) {
-        this.transitionTarget = result.onboarding_complete ? "setup" : "onboarding";
+        target = result.onboarding_complete ? "setup" : "onboarding";
       } else {
-        this.transitionTarget = "dashboard";
+        target = "dashboard";
       }
 
-      // Wait for minimum duration
       const elapsed = Date.now() - this.startTime;
       const remainingTime = Math.max(0, SPLASH_MIN_DURATION - elapsed);
       await new Promise((resolve) => setTimeout(resolve, remainingTime));
 
-      this.readyToTransition = true;
-      this.stopPhaseSequence();
-      this.checkReadyToTransition();
+      this.transitionTo(target);
     } catch (error) {
       console.error("[Splash] Failed to check initialization:", error);
       if (this.launchFailed) {
@@ -177,8 +139,10 @@ class SplashController {
       }
       // Initialization state is authoritative. Never guess "dashboard" on a
       // transient failure because that can bypass first-run onboarding.
-      if (this.statusEl) this.statusEl.textContent = "Waiting for local core...";
-      setTimeout(() => this.checkInitialization(), 1500);
+      if (Date.now() - this.startTime >= SPLASH_SLOW_AFTER_MS) {
+        this.setState("Starting ScreenerBot", "Waiting for the local core to answer.");
+      }
+      this.retryTimeout = setTimeout(() => this.checkInitialization(), 1500);
     }
   }
 
@@ -211,7 +175,7 @@ class SplashController {
     // Wait for animation then hide splash
     setTimeout(() => {
       this.splashEl.style.display = "none";
-    }, 500);
+    }, SPLASH_FADE_MS);
   }
 
   showOnboarding() {
@@ -242,9 +206,6 @@ class SplashController {
     }
   }
 
-  needsSetupAfterOnboarding() {
-    return this.initializationRequired;
-  }
 }
 
 // Export for use

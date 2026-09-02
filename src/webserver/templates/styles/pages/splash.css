@@ -1,4 +1,6 @@
-/* Splash Screen Styles - Full viewport loading screen */
+/* Splash Screen Styles - Full viewport loading screen.
+   Electron hides this outright (`.electron-mode #splashScreen`) because the
+   shell paints its own launch window; what remains here is the browser launch. */
 
 .splash-screen {
   position: fixed;
@@ -8,9 +10,9 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #0d1117 0%, #161b22 50%, #1c2128 100%);
+  background: var(--bg-primary);
   opacity: 1;
-  transition: opacity 0.5s ease-out;
+  transition: opacity 0.4s ease-out;
   -webkit-app-region: drag; /* Allow window dragging during load */
   user-select: none;
   isolation: isolate; /* Create new stacking context */
@@ -25,79 +27,76 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2rem;
-  animation: splashFadeIn 0.6s ease-out;
+  gap: 1.75rem;
+  animation: splash-fade-in 0.5s ease-out;
 }
 
-@keyframes splashFadeIn {
+@keyframes splash-fade-in {
   from {
     opacity: 0;
-    transform: scale(0.95);
   }
 
   to {
     opacity: 1;
-    transform: scale(1);
   }
 }
 
-/* Logo container with glow effect */
-.splash-logo-container {
-  position: relative;
-  width: 120px;
-  height: 120px;
-}
-
+/* The mark is a bare glyph: no tile, no ring, no glow behind it. */
 .splash-logo {
-  width: 100%;
-  height: 100%;
-  filter: drop-shadow(0 0 20px rgb(88 166 255 / 0.4));
-  animation: splashPulse 2s ease-in-out infinite;
-}
-
-@keyframes splashPulse {
-  0%,
-  100% {
-    filter: drop-shadow(0 0 20px rgb(88 166 255 / 0.4));
-  }
-
-  50% {
-    filter: drop-shadow(0 0 40px rgb(88 166 255 / 0.6));
-  }
+  display: block;
+  width: 104px;
+  height: 104px;
 }
 
 /* Brand text */
 .splash-brand {
   font-family: var(--font-brand);
-  font-size: 2.5rem;
-  font-weight: 900;
-  letter-spacing: 0.05em;
+  font-size: 1.875rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: #e6edf3;
-  text-shadow:
-    0 0 20px rgb(88 166 255 / 0.5),
-    0 0 40px rgb(88 166 255 / 0.3);
+  color: var(--text-primary);
+
+  /* The letter-spacing above adds trailing space; pull it back so the wordmark
+     stays optically centred under the mark. */
+  margin-right: -0.16em;
 }
 
-/* Loading indicator */
-.splash-loader {
+/* Launch state. One line for what is happening, one quiet line under it for
+   anything worth adding — with space reserved for both, so text that appears
+   later never shifts the mark above it. */
+.splash-state {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1rem;
-  margin-top: 1rem;
+  gap: 0.4rem;
+  min-height: 3.25rem;
+  max-width: 30rem;
+  text-align: center;
+}
+
+.splash-status-row {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
 }
 
 .splash-spinner {
-  width: 40px;
-  height: 40px;
-  border: 3px solid #30363d;
-  border-top-color: #58a6ff;
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  border: 2px solid var(--border-color);
+  border-top-color: var(--primary-color);
   border-radius: var(--radius-full);
-  animation: splashSpin 0.8s linear infinite;
+  animation: splash-spin 0.9s linear infinite;
 }
 
-@keyframes splashSpin {
+/* Nothing is starting any more — the message on screen is the final word. */
+.splash-screen.settled .splash-spinner {
+  display: none;
+}
+
+@keyframes splash-spin {
   to {
     transform: rotate(360deg);
   }
@@ -105,9 +104,19 @@
 
 .splash-status {
   font-size: 0.875rem;
-  color: #8b949e;
   font-weight: 500;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.02em;
+  color: var(--text-primary);
+}
+
+.splash-detail {
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.splash-detail:empty {
+  display: none;
 }
 
 /* Version badge */
@@ -115,6 +124,31 @@
   position: absolute;
   bottom: 2rem;
   font-size: 0.75rem;
-  color: #6e7681;
+  color: var(--text-muted);
   font-family: var(--font-mono);
+}
+
+/* Rotation is the one thing that has to go for a reduced-motion viewer; the
+   ring keeps breathing so the launch still shows a sign of life. */
+@media (prefers-reduced-motion: reduce) {
+  .splash-screen,
+  .splash-content {
+    transition: none;
+    animation: none;
+  }
+
+  .splash-spinner {
+    animation: splash-breathe 1.8s ease-in-out infinite;
+  }
+
+  @keyframes splash-breathe {
+    0%,
+    100% {
+      opacity: 1;
+    }
+
+    50% {
+      opacity: 0.35;
+    }
+  }
 }

@@ -138,6 +138,72 @@ test("a verified staged core is what gets launched", async (t) => {
   assert.equal(resolved.staged, true);
   assert.equal(resolved.path, binaryPath);
   assert.equal(resolved.version, "0.2.2");
+  assert.equal(resolved.firstRun, true);
+});
+
+// ---------------------------------------------------------------------------
+// Adoption — what separates "applying an update" from "this is the version I run"
+// ---------------------------------------------------------------------------
+
+test("a staged core is a first run only until it has actually come up", async (t) => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sb-core-"));
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+
+  await stage(dir);
+  const options = {
+    coreDir: dir,
+    bundledPath: "/bundled/screenerbot",
+    bundledVersion: "0.2.1",
+  };
+
+  const first = await resolver.resolveCore(options);
+  assert.equal(first.firstRun, true, "the launch that adopts the update announces it");
+
+  await resolver.markCoreAdopted(dir, "0.2.2");
+
+  const second = await resolver.resolveCore(options);
+  assert.equal(second.staged, true, "the staged core still runs");
+  assert.equal(second.firstRun, false, "but it is no longer news");
+});
+
+test("the bundled binary is never reported as a first run", async (t) => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sb-core-"));
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+
+  const resolved = await resolver.resolveCore({
+    coreDir: dir,
+    bundledPath: "/bundled/screenerbot",
+    bundledVersion: "0.2.1",
+  });
+  assert.equal(resolved.staged, false);
+  assert.equal(resolved.firstRun, false);
+});
+
+test("only well-formed versions are ever recorded as adopted", async (t) => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sb-core-"));
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+
+  await resolver.markCoreAdopted(dir, "../../etc/passwd");
+  await resolver.markCoreAdopted(dir, "0.2.2");
+  assert.deepEqual(await resolver.readAdoptedCores(dir), ["0.2.2"]);
+});
+
+test("dropping the stage drops the adoption record with it", async (t) => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sb-core-"));
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+
+  await stage(dir);
+  await resolver.markCoreAdopted(dir, "0.2.2");
+
+  // A full installer overtook the staged core: the stage is pruned, and the
+  // record of what was adopted from it must not outlive it.
+  const resolved = await resolver.resolveCore({
+    coreDir: dir,
+    bundledPath: "/bundled/screenerbot",
+    bundledVersion: "0.2.2",
+  });
+  assert.equal(resolved.staged, false);
+  assert.deepEqual(await resolver.readAdoptedCores(dir), []);
 });
 
 test("a staged core whose bytes changed is quarantined, not launched", async (t) => {

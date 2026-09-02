@@ -44,18 +44,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Persist the UI theme so the next launch's splash + window match it.
   saveTheme: (theme) => ipcRenderer.invoke('theme:set', theme),
 
-  // Loading status listener (returns cleanup function)
+  // Splash state: `{ message, detail }` describing what the launch is doing.
   onLoadingStatus: (callback) => {
     const handler = (event, status) => callback(status);
     ipcRenderer.on('loading:status', handler);
     return () => ipcRenderer.removeListener('loading:status', handler);
-  },
-
-  // Splash update panel: progress of a staged update being applied at launch
-  onUpdateProgress: (callback) => {
-    const handler = (event, payload) => callback(payload);
-    ipcRenderer.on('update:progress', handler);
-    return () => ipcRenderer.removeListener('update:progress', handler);
   },
 
   // Boot-error screen: receive a structured fatal startup error payload

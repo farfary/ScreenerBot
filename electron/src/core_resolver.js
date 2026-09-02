@@ -14,6 +14,13 @@
 // If the adopted core then fails to come up, `quarantineStagedCore` records the
 // version so neither this launch nor the updater will try it again, and the
 // caller relaunches with the bundled binary.
+//
+// A staged core stays staged for good — the pointer is what makes it the version
+// the machine runs, so it is still there on every later launch. `adopted.json`
+// records the versions that have actually come up, which is the only way the
+// shell can tell "this update is being applied right now" from "this has been
+// the installed version for weeks". Without it every launch looks like an
+// install.
 
 const fs = require('fs');
 const fsp = require('fs/promises');
@@ -22,6 +29,7 @@ const crypto = require('crypto');
 
 const POINTER_FILE = 'current.json';
 const QUARANTINE_FILE = 'quarantine.json';
+const ADOPTED_FILE = 'adopted.json';
 
 /** Plain `MAJOR.MINOR.PATCH` with an optional pre-release/build suffix. */
 const VERSION_RE = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/;
@@ -89,9 +97,43 @@ async function readJson(filePath) {
   }
 }
 
-async function readQuarantine(coreDir) {
-  const data = await readJson(path.join(coreDir, QUARANTINE_FILE));
+async function readVersionList(coreDir, file) {
+  const data = await readJson(path.join(coreDir, file));
   return Array.isArray(data?.versions) ? data.versions.filter(isValidVersion) : [];
+}
+
+async function writeVersionList(coreDir, file, versions) {
+  await fsp.mkdir(coreDir, { recursive: true });
+  await fsp.writeFile(
+    path.join(coreDir, file),
+    JSON.stringify({ versions: versions.slice(-8) }, null, 2)
+  );
+}
+
+async function readQuarantine(coreDir) {
+  return readVersionList(coreDir, QUARANTINE_FILE);
+}
+
+/** Staged versions that have already started successfully at least once. */
+async function readAdoptedCores(coreDir) {
+  return readVersionList(coreDir, ADOPTED_FILE);
+}
+
+/**
+ * Record that a staged core actually came up. The caller does this once the
+ * backend reports ready, so the launch that adopts an update is the only one
+ * that presents itself as an update.
+ */
+async function markCoreAdopted(coreDir, version) {
+  if (!isValidVersion(version)) return;
+  const existing = await readAdoptedCores(coreDir);
+  if (existing.includes(version)) return;
+  existing.push(version);
+  try {
+    await writeVersionList(coreDir, ADOPTED_FILE, existing);
+  } catch (err) {
+    console.error('[Electron] Could not record the adopted core:', err.message);
+  }
 }
 
 async function sha256File(filePath) {
@@ -107,11 +149,21 @@ async function sha256File(filePath) {
 /**
  * Resolve the binary to launch.
  *
+ * `firstRun` is true only when the staged core has never reported ready before,
+ * which is what makes this launch an actual update rather than an ordinary start
+ * of the version already in use.
+ *
  * @param {{coreDir:string, bundledPath:string, bundledVersion:string}} options
- * @returns {Promise<{path:string, version:string|null, staged:boolean, reason:string}>}
+ * @returns {Promise<{path:string, version:string|null, staged:boolean, firstRun:boolean, reason:string}>}
  */
 async function resolveCore({ coreDir, bundledPath, bundledVersion }) {
-  const bundled = { path: bundledPath, version: bundledVersion, staged: false, reason: '' };
+  const bundled = {
+    path: bundledPath,
+    version: bundledVersion,
+    staged: false,
+    firstRun: false,
+    reason: ''
+  };
 
   const staged = await readJson(path.join(coreDir, POINTER_FILE));
   const quarantined = await readQuarantine(coreDir);
@@ -138,7 +190,14 @@ async function resolveCore({ coreDir, bundledPath, bundledVersion }) {
     return { ...bundled, reason: `staged core unreadable (${err.message})` };
   }
 
-  return { path: stagedPath, version: staged.version, staged: true, reason: decision.reason };
+  const adopted = await readAdoptedCores(coreDir);
+  return {
+    path: stagedPath,
+    version: staged.version,
+    staged: true,
+    firstRun: !adopted.includes(staged.version),
+    reason: decision.reason
+  };
 }
 
 /**
@@ -150,11 +209,7 @@ async function quarantineStagedCore(coreDir, version) {
   const existing = await readQuarantine(coreDir);
   if (!existing.includes(version)) existing.push(version);
   try {
-    await fsp.mkdir(coreDir, { recursive: true });
-    await fsp.writeFile(
-      path.join(coreDir, QUARANTINE_FILE),
-      JSON.stringify({ versions: existing.slice(-8) }, null, 2)
-    );
+    await writeVersionList(coreDir, QUARANTINE_FILE, existing);
     await fsp.rm(path.join(coreDir, POINTER_FILE), { force: true });
   } catch (err) {
     console.error('[Electron] Could not quarantine staged core:', err.message);
@@ -181,7 +236,12 @@ async function pruneStagedCores(coreDir, keep) {
     } catch (_) { /* another launch may already have removed it */ }
   }));
   if (!keep) {
-    await fsp.rm(path.join(coreDir, POINTER_FILE), { force: true }).catch(() => {});
+    // The adoption record only describes the stage that is going away; leaving
+    // it behind would suppress the announcement of a future staged core that
+    // happens to reuse one of those version numbers.
+    await Promise.all([POINTER_FILE, ADOPTED_FILE].map((file) =>
+      fsp.rm(path.join(coreDir, file), { force: true }).catch(() => {})
+    ));
   }
 }
 
@@ -191,7 +251,9 @@ module.exports = {
   coreBinaryName,
   isValidPointerPath,
   isValidVersion,
+  markCoreAdopted,
   pruneStagedCores,
   quarantineStagedCore,
+  readAdoptedCores,
   resolveCore,
 };

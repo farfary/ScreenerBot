@@ -43,6 +43,9 @@ const CONFIG = {
 // the backend child (and can still stop it when the desktop app quits).
 const BACKEND_RESTART_EXIT_CODE = 75;
 
+// How long a launch may sit on the same splash state before it explains itself.
+const SLOW_LAUNCH_HINT_MS = 15000;
+
 // Promo Studio: the owner-only capture driver sets this before launching the app. Nothing
 // about the capture bridge is loaded, listening or reachable without it.
 const PROMO_CONTROL = process.env.SCREENERBOT_PROMO_CONTROL === '1';
@@ -160,8 +163,13 @@ function getBackendExtraArgs() {
 // so this color is what shows under the traffic lights in any unpainted frame
 // (pre-paint, renderer reload, resize) — keeping it identical to the title-bar
 // element means the top of the window never changes color, in either theme.
+/**
+ * The window's own paint colour. Must equal the dashboard's `--bg-primary` (and
+ * the splash background, which uses the same value) or the frame flashes a
+ * different shade before and between page loads.
+ */
 function themeBackgroundColor(theme) {
-  return theme === 'light' ? '#f1f5f9' : '#0d1117';
+  return theme === 'light' ? '#f8f9fb' : '#0d1117';
 }
 
 /**
@@ -327,15 +335,50 @@ async function resolveBackendBinary() {
       bundledVersion: app.getVersion(),
     });
     if (resolved.staged) {
-      console.log(`[Electron] Launching staged core v${resolved.version} (${resolved.path})`);
+      const adoption = resolved.firstRun ? 'first run' : 'already adopted';
+      console.log(`[Electron] Launching staged core v${resolved.version} (${adoption}, ${resolved.path})`);
     } else if (resolved.reason) {
       console.log(`[Electron] Launching bundled core: ${resolved.reason}`);
     }
     return resolved;
   } catch (err) {
     console.error('[Electron] Core resolution failed, using bundled binary:', err.message);
-    return { path: bundledPath, version: app.getVersion(), staged: false, reason: 'resolution failed' };
+    return {
+      path: bundledPath,
+      version: app.getVersion(),
+      staged: false,
+      firstRun: false,
+      reason: 'resolution failed'
+    };
   }
+}
+
+/**
+ * What the splash says about the core this launch runs.
+ *
+ * A staged core is news exactly once: the launch that first brings it up IS the
+ * update being applied. Every launch after that is an ordinary start of the
+ * version already in use, and saying "installing update" there would describe
+ * work that finished days ago.
+ */
+function describeCoreLaunch(core, fallbackMessage = 'Starting ScreenerBot') {
+  if (core.staged && core.firstRun) {
+    return {
+      message: `Updating to v${core.version}`,
+      detail: 'Your settings and data stay exactly as they are.'
+    };
+  }
+  return { message: fallbackMessage, detail: null };
+}
+
+/**
+ * Remember that this core came up, so it stops being announced as an update.
+ * Only called once the backend has actually reported ready — a core that never
+ * starts is quarantined instead.
+ */
+async function recordCoreAdoption(core) {
+  if (!core || !core.staged || !core.firstRun) return;
+  await coreResolver.markCoreAdopted(CORE_DIR, core.version);
 }
 
 /**
@@ -404,8 +447,23 @@ function checkBackendHealth() {
  * First waits for SCREENERBOT_READY signal (to get dynamic port), then health checks
  */
 async function waitForBackend() {
+  // A backend can legitimately take a long time (first run, a schema migration,
+  // a cold database). Past this point a motionless spinner reads as a hang, so
+  // the splash says what the wait is instead of leaving the user to guess.
+  const hintTimer = setTimeout(
+    () => updateLoadingDetail('This is taking longer than usual. A first run or a database upgrade can do that.'),
+    SLOW_LAUNCH_HINT_MS
+  );
+  try {
+    return await awaitBackendReady();
+  } finally {
+    clearTimeout(hintTimer);
+  }
+}
+
+async function awaitBackendReady() {
   const startTime = Date.now();
-  
+
   console.log('[Electron] Waiting for backend to report ready (SCREENERBOT_READY signal)...');
   
   // Phase 1: Wait for SCREENERBOT_READY with port and token. The latch covers
@@ -600,7 +658,10 @@ function startBackend(extraArgs = [], core = null) {
         }
         setImmediate(async () => {
           await coreResolver.quarantineStagedCore(CORE_DIR, failedVersion);
-          restartBackendFromDashboard(backendRestartTarget, `Update v${failedVersion} did not start — restoring the previous version...`);
+          restartBackendFromDashboard(backendRestartTarget, {
+            message: `Restoring v${app.getVersion()}`,
+            detail: `Update v${failedVersion} did not start, so the previous version is taking over.`
+          });
         });
         return;
       }
@@ -658,27 +719,33 @@ function stopBackend() {
 }
 
 /**
- * Send loading status to the renderer
+ * The splash carries one headline and, when there is something worth adding, one
+ * quiet line under it. Both are kept here so a detail can be revised without
+ * losing the headline it belongs to.
  */
-function updateLoadingStatus(status) {
-  if (mainWindow && mainWindow.webContents) {
-    mainWindow.webContents.send('loading:status', status);
+let loadingMessage = 'Starting ScreenerBot';
+let loadingDetail = null;
+
+function pushLoadingStatus() {
+  if (mainWindow && mainWindow.webContents && !mainWindow.webContents.isDestroyed()) {
+    mainWindow.webContents.send('loading:status', {
+      message: loadingMessage,
+      detail: loadingDetail
+    });
   }
 }
 
-/**
- * Drive the splash screen's update panel.
- *
- * A silent update is applied by restarting the backend, which means the only
- * moment the owner sees it is the splash. Rather than a bare spinner, the splash
- * shows what is being installed and how far along it is.
- *
- * @param {{phase:'applying'|'verifying'|'done', version?:string, percent?:number}} payload
- */
-function sendUpdateProgress(payload) {
-  if (mainWindow && mainWindow.webContents && !mainWindow.webContents.isDestroyed()) {
-    mainWindow.webContents.send('update:progress', payload);
-  }
+/** Set what the splash is doing. Clears any detail that belonged to the old state. */
+function updateLoadingStatus(message, detail = null) {
+  loadingMessage = message;
+  loadingDetail = detail;
+  pushLoadingStatus();
+}
+
+/** Add or replace the secondary line without disturbing the headline. */
+function updateLoadingDetail(detail) {
+  loadingDetail = detail;
+  pushLoadingStatus();
 }
 
 /**
@@ -787,7 +854,7 @@ async function checkAndInstallVCRedist() {
   }
 
   console.log('[Electron] VCRedist check: DLL missing, prompting user...');
-  updateLoadingStatus('Checking dependencies...');
+  updateLoadingStatus('Checking dependencies');
 
   // 2. Prompt User
   const { response } = await dialog.showMessageBox(mainWindow, {
@@ -829,7 +896,10 @@ async function checkAndInstallVCRedist() {
 
   // 4. Run Installer
   // /install /passive /norestart -> Installs with progress bar but no user interaction required
-  updateLoadingStatus('Installing system dependencies...');
+  updateLoadingStatus(
+    'Installing system dependencies',
+    'ScreenerBot needs the Microsoft Visual C++ Redistributable to run.'
+  );
   
   try {
     await new Promise((resolve, reject) => {
@@ -1323,7 +1393,7 @@ function loadMainApp(route = '/') {
  * Relaunch after a dashboard-requested graceful restart. The old backend has
  * already stopped its services and released its process lock before this runs.
  */
-async function restartBackendFromDashboard(targetRoute, statusLabel) {
+async function restartBackendFromDashboard(targetRoute, statusOverride) {
   if (isRecovering || isQuitting || !mainWindow) return;
   isRecovering = true;
   startupError = null;
@@ -1335,6 +1405,12 @@ async function restartBackendFromDashboard(targetRoute, statusLabel) {
     await new Promise(resolve => mainWindow.webContents.once('did-finish-load', resolve));
   }
 
+  // Claim the screen before resolving the core, which can spend a moment hashing
+  // a staged binary. Otherwise the splash sits on its "Starting ScreenerBot"
+  // default and then jumps, which reads as a stutter rather than a restart.
+  const opening = statusOverride || { message: 'Restarting ScreenerBot', detail: null };
+  updateLoadingStatus(opening.message, opening.detail);
+
   CONFIG.port = null;
   global.SCREENERBOT_TOKEN = null;
   backendReadyResolve = null;
@@ -1342,13 +1418,9 @@ async function restartBackendFromDashboard(targetRoute, statusLabel) {
   // Resolving the core here is what actually applies a staged update: the
   // backend that comes back is the new version.
   const core = await resolveBackendBinary();
-  if (statusLabel) {
-    updateLoadingStatus(statusLabel);
-  } else if (core.staged && core.version !== app.getVersion()) {
-    sendUpdateProgress({ phase: 'applying', version: core.version });
-    updateLoadingStatus(`Installing update v${core.version}...`);
-  } else {
-    updateLoadingStatus('Restarting ScreenerBot...');
+  if (!statusOverride) {
+    const launch = describeCoreLaunch(core, 'Restarting ScreenerBot');
+    updateLoadingStatus(launch.message, launch.detail);
   }
 
   const backend = startBackend(getBackendExtraArgs(), core);
@@ -1359,13 +1431,11 @@ async function restartBackendFromDashboard(targetRoute, statusLabel) {
     return;
   }
 
-  updateLoadingStatus('Waiting for backend...');
   const isReady = await waitForBackend();
   if (generation !== launchGeneration) return;
   if (isReady) {
-    if (core.staged) sendUpdateProgress({ phase: 'done', version: core.version });
-    updateLoadingStatus('Loading dashboard...');
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await recordCoreAdoption(core);
+    updateLoadingStatus('Opening dashboard');
     loadMainApp(targetRoute || '/home');
   } else if (startupError) {
     showBootError(startupError);
@@ -1463,8 +1533,6 @@ async function initialize() {
     await new Promise(resolve => mainWindow.webContents.once('did-finish-load', resolve));
   }
   
-  updateLoadingStatus('Initializing...');
-
   // Check dependencies (Windows)
   const dependenciesOk = await checkAndInstallVCRedist();
   if (!dependenciesOk) return;
@@ -1472,12 +1540,9 @@ async function initialize() {
   // Resolving the core is where a silently staged update is adopted: an update
   // that finished downloading in a previous session is simply what launches now.
   const core = await resolveBackendBinary();
-  if (core.staged && core.version !== app.getVersion()) {
-    sendUpdateProgress({ phase: 'applying', version: core.version });
-    updateLoadingStatus(`Installing update v${core.version}...`);
-  } else {
-    updateLoadingStatus('Starting backend services...');
-  }
+  const launch = describeCoreLaunch(core);
+  updateLoadingStatus(launch.message, launch.detail);
+
   const backend = startBackend(getBackendExtraArgs(), core);
   const generation = launchGeneration;
 
@@ -1489,18 +1554,16 @@ async function initialize() {
     return;
   }
 
-  // Wait for backend to be ready
-  updateLoadingStatus('Waiting for backend...');
+  // Wait for backend to be ready. The splash keeps the state it is already in —
+  // "starting" and "waiting for the backend" are the same thing to the user, and
+  // swapping the wording twice a second only makes the launch look restless.
   const isReady = await waitForBackend();
   // A staged-core rollback (or any relaunch) supersedes this boot sequence.
   if (generation !== launchGeneration) return;
 
   if (isReady) {
-    if (core.staged) sendUpdateProgress({ phase: 'done', version: core.version });
-    updateLoadingStatus('Loading dashboard...');
-    // Small delay to ensure everything is ready
-    await new Promise(resolve => setTimeout(resolve, 500));
-    // Load the main application
+    await recordCoreAdoption(core);
+    updateLoadingStatus('Opening dashboard');
     loadMainApp();
   } else if (startupError) {
     // Backend reported a structured fatal error — show the dedicated screen.
@@ -1601,7 +1664,7 @@ app.on('window-all-closed', () => {
  * the backend with the matching CLI flag. The Rust binary backs up the affected
  * data before clearing it, then continues into a normal boot.
  */
-async function recoverAndRestart(extraArgs, statusLabel) {
+async function recoverAndRestart(extraArgs, statusOverride) {
   if (isRecovering) return;
   isRecovering = true;
   startupError = null;
@@ -1613,7 +1676,8 @@ async function recoverAndRestart(extraArgs, statusLabel) {
   if (mainWindow.webContents.isLoading()) {
     await new Promise(resolve => mainWindow.webContents.once('did-finish-load', resolve));
   }
-  updateLoadingStatus(statusLabel || 'Recovering...');
+  const recovery = statusOverride || { message: 'Recovering', detail: null };
+  updateLoadingStatus(recovery.message, recovery.detail);
 
   // Ensure any prior backend is gone before relaunching.
   if (backendProcess) {
@@ -1621,7 +1685,8 @@ async function recoverAndRestart(extraArgs, statusLabel) {
     backendProcess = null;
   }
 
-  const backend = startBackend(extraArgs, await resolveBackendBinary());
+  const core = await resolveBackendBinary();
+  const backend = startBackend(extraArgs, core);
   const generation = launchGeneration;
   isRecovering = false;
   if (!backend) {
@@ -1629,12 +1694,13 @@ async function recoverAndRestart(extraArgs, statusLabel) {
     return;
   }
 
-  updateLoadingStatus('Waiting for backend...');
   const isReady = await waitForBackend();
   if (generation !== launchGeneration) return;
   if (isReady) {
-    updateLoadingStatus('Loading dashboard...');
-    await new Promise(resolve => setTimeout(resolve, 500));
+    // A recovery launch adopts a staged core just like any other, so it counts:
+    // without this the next ordinary launch would announce the update again.
+    await recordCoreAdoption(core);
+    updateLoadingStatus('Opening dashboard');
     loadMainApp();
   } else if (startupError) {
     showBootError(startupError);
@@ -1645,7 +1711,10 @@ async function recoverAndRestart(extraArgs, statusLabel) {
 
 ipcMain.handle('boot:reset-wallet-data', async () => {
   console.log('[Electron] Boot recovery requested: reset wallet data');
-  await recoverAndRestart(['--clean-wallet-data'], 'Backing up and resetting wallet data...');
+  await recoverAndRestart(['--clean-wallet-data'], {
+    message: 'Resetting wallet data',
+    detail: 'The existing wallet data is backed up before it is cleared.'
+  });
   return true;
 });
 
