@@ -11,7 +11,11 @@
 .updates {
   display: flex;
   flex-direction: column;
-  gap: 32px;
+  gap: var(--spacing-xl);
+}
+
+.updates-section-host:empty {
+  display: none;
 }
 
 /* -----------------------------------------------------------------------------
@@ -21,7 +25,7 @@
 .updates-status {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--spacing-sm);
 }
 
 .updates-headline {
@@ -42,7 +46,7 @@
 .updates-versions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--spacing-sm);
   margin-top: 2px;
   font-family: var(--font-mono);
   font-size: 0.9rem;
@@ -60,19 +64,6 @@
 .updates-version-to {
   color: var(--primary-color);
   font-weight: 600;
-}
-
-/* Says the release needs nothing from the user. Not a button, so it must not
-   look like one: lowercase text on a hairline, no fill. */
-.updates-tag {
-  padding: 1px 7px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-full);
-  font-family: inherit;
-  font-size: 0.65rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-muted);
 }
 
 /* -----------------------------------------------------------------------------
@@ -122,58 +113,8 @@
 .updates-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--spacing-sm);
   margin-top: 6px;
-}
-
-/* The base carries a complete skin, not just a shape: a `.updates-btn` written
-   without a variant used to inherit the browser's ButtonFace and ButtonText. */
-.updates-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 8px 16px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  color: var(--text-primary);
-  font-size: 0.82rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition:
-    background var(--transition-base),
-    border-color var(--transition-base),
-    color var(--transition-base);
-}
-
-.updates-btn i {
-  font-size: 0.9rem;
-}
-
-.updates-btn.primary {
-  background: var(--primary-color);
-  border-color: transparent;
-  color: #fff;
-}
-
-.updates-btn.primary:hover {
-  filter: brightness(1.08);
-}
-
-.updates-btn.ghost {
-  background: transparent;
-  border-color: var(--border-color);
-  color: var(--text-secondary);
-}
-
-.updates-btn.ghost:hover {
-  border-color: var(--text-muted);
-  color: var(--text-primary);
-}
-
-.updates-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 /* -----------------------------------------------------------------------------
@@ -183,8 +124,8 @@
 .updates-subhead {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin: 0 0 12px;
+  gap: var(--spacing-sm);
+  margin: 0 0 var(--spacing-sm);
   font-size: 0.85rem;
   font-weight: 600;
   color: var(--text-primary);
@@ -214,13 +155,13 @@
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--spacing-sm);
 }
 
 .updates-detail-row {
   display: flex;
   align-items: baseline;
-  gap: 16px;
+  gap: var(--spacing-md);
   font-size: 0.8rem;
 }
 
@@ -244,5 +185,16 @@
 
   .updates-detail-row dt {
     flex: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .updates-progress-fill {
+    transition: none;
+  }
+
+  .updates-progress.is-indeterminate .updates-progress-fill {
+    width: 100%;
+    animation: none;
   }
 }

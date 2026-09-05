@@ -564,53 +564,12 @@
 }
 
 /* =============================================================================
-   NAV INDICATOR - Update Badge Pulse Animation
+   NAV INDICATOR
    ============================================================================= */
 
 .settings-nav-indicator {
-  width: 8px;
-  height: 8px;
-  border-radius: var(--radius-full);
-  background: var(--primary-color);
   margin-left: auto;
-  position: relative;
-  animation: settings-nav-pulse 2s ease-in-out infinite;
-}
-
-.settings-nav-indicator::before {
-  content: "";
-  position: absolute;
-  inset: -4px;
-  border-radius: var(--radius-full);
-  border: 2px solid var(--primary-color);
-  opacity: 0;
-  animation: settings-nav-pulse-ring 2s ease-in-out infinite;
-}
-
-@keyframes settings-nav-pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-
-  50% {
-    opacity: 0.6;
-  }
-}
-
-@keyframes settings-nav-pulse-ring {
-  0% {
-    transform: scale(0.8);
-    opacity: 0.8;
-  }
-
-  50% {
-    transform: scale(1.2);
-    opacity: 0.4;
-  }
-
-  100% {
-    transform: scale(1.4);
-    opacity: 0;
-  }
+  display: inline-flex;
+  color: var(--primary-color);
+  font-size: 0.8rem;
 }

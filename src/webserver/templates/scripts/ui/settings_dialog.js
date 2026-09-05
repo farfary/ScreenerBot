@@ -108,7 +108,7 @@ export class SettingsDialog {
   }
 
   /**
-   * Show or clear the dot on the Updates nav item.
+   * Show or clear the status indicator on the Updates nav item.
    */
   _setUpdateBadge(available) {
     updateAvailable = available;
@@ -118,12 +118,14 @@ export class SettingsDialog {
     if (!updatesBtn) return;
 
     const existingIndicator = updatesBtn.querySelector(".settings-nav-indicator");
+    if (existingIndicator && updateAvailable) return;
     if (existingIndicator) existingIndicator.remove();
 
     if (updateAvailable) {
       const indicator = document.createElement("span");
       indicator.className = "settings-nav-indicator";
-      indicator.title = "New update available";
+      indicator.innerHTML =
+        '<i class="icon-circle-alert" aria-hidden="true"></i><span class="sr-only">Update available</span>';
       updatesBtn.appendChild(indicator);
     }
   }
@@ -635,6 +637,9 @@ export class SettingsDialog {
     if (this.currentTab === "agent-connections") {
       teardownAgentConnectionsTab();
     }
+    if (this.currentTab === "updates") {
+      teardownUpdatesTab();
+    }
 
     // Update nav buttons
     this.dialogEl.querySelectorAll(".settings-nav-item").forEach((btn) => {
@@ -693,8 +698,8 @@ export class SettingsDialog {
         loadAgentConnectionsTab(this, content);
         break;
       case "updates":
-        content.innerHTML = buildUpdatesTab(this, this.versionInfo);
-        attachUpdatesHandlers(this, content, (available) => this._setUpdateBadge(available));
+        content.innerHTML = buildUpdatesTab(this.versionInfo);
+        attachUpdatesHandlers(content, (available) => this._setUpdateBadge(available));
         break;
       case "licenses":
         content.innerHTML = buildLicensesTab();
@@ -807,17 +812,6 @@ export class SettingsDialog {
   // ==========================================================================
   // UPDATES TAB - Version checking and auto-update (extracted to settings/updates_tab.js)
   // ==========================================================================
-
-  /**
-   * Format bytes to human readable size
-   */
-  _formatBytes(bytes) {
-    if (bytes === 0) return "0 B";
-    const k = 1024;
-    const sizes = ["B", "KB", "MB", "GB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
-  }
 
   /**
    * Attach handlers for About tab.

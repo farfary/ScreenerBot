@@ -18,45 +18,81 @@ import { Poller } from "../../core/poller.js";
 const BUSY_PHASES = new Set(["checking", "downloading", "verifying", "applying"]);
 
 let poller = null;
-let versionInfo = { version: "0.0.0", platform: "", shell_revision: null, core_staged: false };
+let activeSession = null;
+let versionInfo = { version: "0.0.0", platform: "" };
 
 /**
  * Initial markup. Content is filled in by the first status read, so the tab
  * never renders a guess it then has to correct.
  */
-export function buildUpdatesTab(dialog, info) {
+export function buildUpdatesTab(info) {
   versionInfo = info || versionInfo;
   return `
     <div class="updates" id="updatesRoot">
-      <div class="updates-status" id="updatesStatus">
+      <div class="updates-status" id="updatesStatus" role="status" aria-live="polite" aria-atomic="true">
         <div class="updates-headline">Checking this installation...</div>
       </div>
+      <div class="updates-section-host" id="updatesNotes"></div>
+      <div class="updates-preferences updates-section-host" id="updatesPreferences"></div>
+      <div class="updates-section-host" id="updatesDetails"></div>
     </div>
   `;
 }
 
 /** Wire the tab up and start its loop. */
-export function attachUpdatesHandlers(dialog, content, onBadgeChange) {
+export function attachUpdatesHandlers(content, onBadgeChange) {
+  teardownUpdatesTab();
+
   const root = content.querySelector("#updatesRoot");
   if (!root) return;
 
+  const session = {
+    controller: new AbortController(),
+    root,
+    statusHtml: null,
+    notesHtml: null,
+    detailsHtml: null,
+    refreshing: false,
+  };
+  activeSession = session;
+
   const refresh = async ({ recheck = false } = {}) => {
-    if (recheck) {
-      renderBusy(root, "Checking for updates...");
-      await request("/api/updates/check");
+    if (session.refreshing) return;
+    session.refreshing = true;
+    try {
+      if (recheck) {
+        renderBusy(root, "Checking for updates...");
+        await request(
+          "/api/updates/check",
+          { signal: session.controller.signal },
+          "Could not check for updates"
+        );
+        if (activeSession !== session) return;
+      }
+      const state = await readStatus(session.controller.signal);
+      if (activeSession !== session) return;
+      if (!state) {
+        renderLoadError(root, refresh);
+        return;
+      }
+      render(session, state, refresh);
+      if (onBadgeChange) onBadgeChange(Boolean(state.available_update));
+      syncPoller(state, refresh, session);
+    } finally {
+      session.refreshing = false;
     }
-    const state = await readStatus();
-    if (!state) return;
-    render(root, state, refresh);
-    if (onBadgeChange) onBadgeChange(Boolean(state.available_update));
-    syncPoller(state, refresh);
   };
 
-  refresh();
+  void renderPreferences(root.querySelector("#updatesPreferences"), session);
+  void refresh();
 }
 
-/** Stop polling when the dialog closes. */
+/** Stop polling and invalidate requests when the tab deactivates. */
 export function teardownUpdatesTab() {
+  if (activeSession) {
+    activeSession.controller.abort();
+    activeSession = null;
+  }
   if (poller) {
     poller.cleanup();
     poller = null;
@@ -67,14 +103,13 @@ export function teardownUpdatesTab() {
 // Data
 // ===========================================================================
 
-async function readStatus() {
+async function readStatus(signal) {
   try {
-    const response = await fetch("/api/updates/status");
+    const response = await fetch("/api/updates/status", { signal });
     const body = await response.json();
     if (!response.ok || body.success === false) return null;
     const payload = body.data || body;
     const state = payload.state || payload;
-    state.staged_core = payload.staged_core || null;
     state.blocked_reason = payload.blocked_reason || null;
     return state;
   } catch {
@@ -82,7 +117,7 @@ async function readStatus() {
   }
 }
 
-async function request(url, options) {
+async function request(url, options = {}, errorTitle = "Update action failed") {
   try {
     const response = await fetch(url, options);
     const body = await response.json().catch(() => ({}));
@@ -91,14 +126,15 @@ async function request(url, options) {
     }
     return body;
   } catch (err) {
-    Utils.showToast({ type: "error", title: "Update", message: err.message });
+    if (err.name === "AbortError") return null;
+    Utils.showToast({ type: "error", title: errorTitle, message: err.message });
     return null;
   }
 }
 
-async function readPreferences() {
+async function readPreferences(signal) {
   try {
-    const response = await fetch("/api/config/updates");
+    const response = await fetch("/api/config/updates", { signal });
     if (!response.ok) return null;
     const body = await response.json();
     return body.data?.data || body.data || null;
@@ -107,14 +143,20 @@ async function readPreferences() {
   }
 }
 
-function syncPoller(state, refresh) {
+function syncPoller(state, refresh, session) {
   const busy = BUSY_PHASES.has(state.phase);
   if (busy && !poller) {
-    poller = new Poller(() => refresh(), {
-      label: "UpdateStatus",
-      intervalMs: 1000,
-      pauseWhenHidden: false,
-    });
+    poller = new Poller(
+      () => {
+        if (activeSession !== session) return;
+        return refresh();
+      },
+      {
+        label: "UpdateStatus",
+        intervalMs: 1000,
+        pauseWhenHidden: false,
+      }
+    );
     poller.start();
   } else if (!busy && poller) {
     poller.cleanup();
@@ -127,23 +169,46 @@ function syncPoller(state, refresh) {
 // ===========================================================================
 
 function renderBusy(root, message) {
-  root.innerHTML = `
-    <div class="updates-status">
-      <div class="updates-headline">${Utils.escapeHtml(message)}</div>
-    </div>
-  `;
+  const host = root.querySelector("#updatesStatus");
+  if (!host) return;
+  if (activeSession?.root === root) activeSession.statusHtml = null;
+  host.innerHTML = `<div class="updates-headline">${Utils.escapeHtml(message)}</div>`;
 }
 
-function render(root, state, refresh) {
-  const update = state.available_update;
-  root.innerHTML = `
-    ${renderStatus(state, update)}
-    ${update?.release_notes ? renderNotes(update.release_notes) : ""}
-    <div class="updates-preferences" id="updatesPreferences"></div>
-    ${renderDetails(state, update)}
+function renderLoadError(root, refresh) {
+  const host = root.querySelector("#updatesStatus");
+  if (!host) return;
+  if (activeSession?.root === root) activeSession.statusHtml = null;
+  host.innerHTML = `
+    <div class="updates-headline">Update status is unavailable</div>
+    <div class="updates-detail">The installation status could not be loaded.</div>
+    <div class="updates-actions">
+      ${button("updatesStatusRetry", "Try again", "icon-refresh-cw", "primary")}
+    </div>
   `;
-  attachActions(root, state, refresh);
-  renderPreferences(root.querySelector("#updatesPreferences"));
+  host.querySelector("#updatesStatusRetry")?.addEventListener("click", () => refresh());
+}
+
+function render(session, state, refresh) {
+  const { root } = session;
+  const update = state.available_update;
+  const statusHtml = renderStatus(state, update);
+  const notesHtml = update?.release_notes ? renderNotes(update.release_notes) : "";
+  const detailsHtml = renderDetails(state, update);
+
+  if (session.statusHtml !== statusHtml) {
+    root.querySelector("#updatesStatus").innerHTML = statusHtml;
+    session.statusHtml = statusHtml;
+    attachActions(root, state, refresh, session);
+  }
+  if (session.notesHtml !== notesHtml) {
+    root.querySelector("#updatesNotes").innerHTML = notesHtml;
+    session.notesHtml = notesHtml;
+  }
+  if (session.detailsHtml !== detailsHtml) {
+    root.querySelector("#updatesDetails").innerHTML = detailsHtml;
+    session.detailsHtml = detailsHtml;
+  }
 }
 
 function renderStatus(state, update) {
@@ -152,15 +217,26 @@ function renderStatus(state, update) {
 
   // headline / detail / actions per phase — one place, so the panel can only
   // ever describe a state the backend actually reported.
-  let headline = "You are up to date";
-  let detail = `ScreenerBot v${current} is the latest version.`;
+  let headline = "Update status is unavailable";
+  let detail = "The reported update state is not recognized.";
   let actions = [button("updatesCheck", "Check again", "icon-refresh-cw", "ghost")];
   let bar = "";
 
   switch (state.phase) {
+    case "idle":
+      headline = "Ready to check for updates";
+      detail = `ScreenerBot v${current} is installed.`;
+      actions = [button("updatesCheck", "Check now", "icon-refresh-cw", "primary")];
+      break;
+
+    case "up_to_date":
+      headline = "You are up to date";
+      detail = `ScreenerBot v${current} is the latest version.`;
+      break;
+
     case "checking":
       headline = "Checking for updates";
-      detail = "Asking screenerbot.io for the latest release.";
+      detail = "Looking for the latest published release.";
       actions = [];
       break;
 
@@ -178,24 +254,24 @@ function renderStatus(state, update) {
           ? "Verifying the download against its published checksum."
           : transferLine(progress);
       actions = [];
-      bar = progressBar(progress.progress_percent || 0, state.phase === "verifying");
+      bar = progressBar(
+        progress.progress_percent || 0,
+        state.phase === "verifying",
+        state.phase === "verifying" ? "Verifying update" : "Downloading update"
+      );
       break;
 
     case "ready_to_apply":
       headline = `Version ${update.version} is ready`;
       detail =
-        state.blocked_reason || "Installing takes a few seconds and needs no further confirmation.";
-      actions = [
-        button("updatesApply", "Install and restart", "icon-refresh-cw", "primary"),
-        button("updatesLater", "Install on next start", "", "ghost"),
-      ];
+        state.blocked_reason ||
+        "Installing takes a few seconds. Otherwise, it installs automatically on the next start.";
+      actions = [button("updatesApply", "Install and restart", "icon-refresh-cw", "primary")];
       break;
 
     case "ready_to_install":
       headline = `Version ${update.version} is downloaded`;
-      detail =
-        state.blocked_reason ||
-        "This release also replaces the desktop app, so its installer has to run once.";
+      detail = state.blocked_reason || "This update requires the desktop installer to finish.";
       actions = [button("updatesInstall", "Open installer and quit", "icon-package", "primary")];
       break;
 
@@ -203,7 +279,7 @@ function renderStatus(state, update) {
       headline = "Installing";
       detail = "ScreenerBot is restarting onto the new version.";
       actions = [];
-      bar = progressBar(100, true);
+      bar = progressBar(100, true, "Installing update");
       break;
 
     case "applied":
@@ -224,46 +300,47 @@ function renderStatus(state, update) {
       break;
   }
 
-  const transition =
-    update && state.phase !== "applied"
-      ? `<div class="updates-versions">
+  return `
+    <div class="updates-headline">${Utils.escapeHtml(headline)}</div>
+    <div class="updates-detail">${Utils.escapeHtml(detail)}</div>
+    ${
+      update && state.phase !== "applied"
+        ? `<div class="updates-versions">
            <span class="updates-version-from">v${Utils.escapeHtml(current)}</span>
            <i class="icon-arrow-right"></i>
            <span class="updates-version-to">v${Utils.escapeHtml(update.version)}</span>
-           ${update.kind === "core" ? '<span class="updates-tag">silent</span>' : ""}
          </div>`
-      : `<div class="updates-versions"><span class="updates-version-from">v${Utils.escapeHtml(current)}</span></div>`;
-
-  return `
-    <div class="updates-status">
-      <div class="updates-headline">${Utils.escapeHtml(headline)}</div>
-      <div class="updates-detail">${Utils.escapeHtml(detail)}</div>
-      ${transition}
-      ${bar}
-      ${actions.length ? `<div class="updates-actions">${actions.join("")}</div>` : ""}
-    </div>
+        : `<div class="updates-versions"><span class="updates-version-from">v${Utils.escapeHtml(current)}</span></div>`
+    }
+    ${bar}
+    ${actions.length ? `<div class="updates-actions">${actions.join("")}</div>` : ""}
   `;
 }
 
 function describeKind(update) {
-  const size = formatBytes(update.kind === "core" ? update.core?.size : update.file_size);
+  const size = Utils.formatBytes(
+    update.kind === "core" ? update.core?.size : update.file_size,
+    "unknown size"
+  );
   return update.kind === "core"
-    ? `Only the trading core changed, so this is a ${size} download that installs with a short restart.`
-    : `This release also rebuilds the desktop app, so the full ${size} installer is needed.`;
+    ? `This ${size} update installs with a short restart.`
+    : `This update requires the ${size} desktop installer.`;
 }
 
 function transferLine(progress) {
-  const done = formatBytes(progress.bytes_downloaded || 0);
-  const total = formatBytes(progress.total_bytes || 0);
+  const done = Utils.formatBytes(progress.bytes_downloaded || 0);
+  const total = Utils.formatBytes(progress.total_bytes || 0);
   return `${done} of ${total}`;
 }
 
-function progressBar(percent, indeterminate) {
+function progressBar(percent, indeterminate, label) {
   // No inline width while indeterminate: the sweep animation owns the element,
   // and a stray width would fight the stylesheet for it.
   const width = Math.max(0, Math.min(100, Math.round(percent)));
   return `
-    <div class="updates-progress${indeterminate ? " is-indeterminate" : ""}">
+    <div class="updates-progress${indeterminate ? " is-indeterminate" : ""}" role="progressbar" aria-label="${label}" aria-valuemin="0" aria-valuemax="100"${
+      indeterminate ? "" : ` aria-valuenow="${width}"`
+    }>
       <div class="updates-progress-fill"${indeterminate ? "" : ` style="width:${width}%"`}></div>
     </div>
   `;
@@ -271,7 +348,7 @@ function progressBar(percent, indeterminate) {
 
 function button(id, label, icon, variant) {
   return `
-    <button class="updates-btn ${variant}" id="${id}">
+    <button class="btn btn-${variant}" id="${id}" type="button">
       ${icon ? `<i class="${icon}"></i>` : ""}<span>${Utils.escapeHtml(label)}</span>
     </button>
   `;
@@ -288,31 +365,24 @@ function renderNotes(notes) {
 
 function renderDetails(state, update) {
   const rows = [
-    ["Platform", versionInfo.platform || "Unknown"],
+    ["Current version", `v${versionInfo.version}`],
+    ["System", versionInfo.platform || "Unknown"],
     [
-      "Core version",
-      `v${versionInfo.version}${versionInfo.core_staged ? " (updated in place)" : ""}`,
+      "Last checked",
+      Utils.formatTimestamp(state.last_check || state.last_check_attempt, {
+        fallback: "never",
+        includeSeconds: false,
+      }),
     ],
-    [
-      "Desktop shell",
-      versionInfo.shell_revision ? `revision ${versionInfo.shell_revision}` : "not reported",
-    ],
-    ["Last checked", formatTime(state.last_check || state.last_check_attempt)],
   ];
   if (update) {
-    rows.push([
-      "Update type",
-      update.kind === "core" ? "Core only — no installer" : "Full — installer required",
-    ]);
+    rows.push(["Update version", `v${update.version}`]);
     rows.push([
       "Download size",
-      formatBytes(update.kind === "core" ? update.core?.size : update.file_size),
-    ]);
-  }
-  if (state.staged_core) {
-    rows.push([
-      "Staged",
-      `v${state.staged_core.version}, verified ${formatTime(state.staged_core.staged_at)}`,
+      Utils.formatBytes(
+        update.kind === "core" ? update.core?.size : update.file_size,
+        "unknown size"
+      ),
     ]);
   }
 
@@ -334,9 +404,10 @@ function renderDetails(state, update) {
   `;
 }
 
-async function renderPreferences(host) {
+async function renderPreferences(host, session) {
   if (!host) return;
-  const prefs = await readPreferences();
+  const prefs = await readPreferences(session.controller.signal);
+  if (activeSession !== session) return;
   if (!prefs) {
     host.innerHTML = "";
     return;
@@ -352,7 +423,7 @@ async function renderPreferences(host) {
     [
       "auto_install",
       "Install automatically",
-      "Apply a core update on its own with a short restart. Off means ScreenerBot waits for you.",
+      "Install compatible updates with a short restart. Off means ScreenerBot waits for you.",
     ],
     [
       "defer_while_trading",
@@ -394,12 +465,21 @@ async function renderPreferences(host) {
   host.querySelectorAll("input[data-pref]").forEach((input) => {
     input.addEventListener("change", async () => {
       const key = input.dataset.pref;
+      const fieldLabel = input
+        .closest(".settings-field")
+        ?.querySelector(".settings-field-info label")
+        ?.textContent?.trim();
       const body = { [key]: input.checked };
-      const result = await request("/api/config/updates", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
+      const result = await request(
+        "/api/config/updates",
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+          signal: session.controller.signal,
+        },
+        `Could not save ${(fieldLabel || "update preference").toLowerCase()}`
+      );
       if (!result) input.checked = !input.checked;
     });
   });
@@ -409,7 +489,7 @@ async function renderPreferences(host) {
 // Actions
 // ===========================================================================
 
-function attachActions(root, state, refresh) {
+function attachActions(root, state, refresh, session) {
   const on = (id, handler) => {
     const element = root.querySelector(`#${id}`);
     if (element) element.addEventListener("click", handler);
@@ -422,12 +502,17 @@ function attachActions(root, state, refresh) {
     const update = state.available_update;
     if (!update) return;
     renderBusy(root, `Downloading v${update.version}...`);
-    await request("/api/updates/download", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ version: update.version }),
-    });
-    refresh();
+    await request(
+      "/api/updates/download",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ version: update.version }),
+        signal: session.controller.signal,
+      },
+      "Could not start update download"
+    );
+    if (activeSession === session) void refresh();
   };
   on("updatesDownload", startDownload);
 
@@ -440,18 +525,14 @@ function attachActions(root, state, refresh) {
       cancelLabel: "Cancel",
       variant: "warning",
     });
-    if (!confirmation.confirmed) return;
+    if (!confirmation.confirmed || activeSession !== session) return;
     renderBusy(root, "Installing...");
-    await request("/api/updates/apply", { method: "POST" });
-    refresh();
-  });
-
-  on("updatesLater", () => {
-    Utils.showToast({
-      type: "info",
-      title: "Update scheduled",
-      message: "The update installs the next time ScreenerBot starts.",
-    });
+    await request(
+      "/api/updates/apply",
+      { method: "POST", signal: session.controller.signal },
+      "Could not install update"
+    );
+    if (activeSession === session) void refresh();
   });
 
   on("updatesInstall", async () => {
@@ -463,9 +544,13 @@ function attachActions(root, state, refresh) {
       cancelLabel: "Cancel",
       variant: "warning",
     });
-    if (!confirmation.confirmed) return;
+    if (!confirmation.confirmed || activeSession !== session) return;
 
-    const result = await request("/api/updates/install", { method: "POST" });
+    const result = await request(
+      "/api/updates/install",
+      { method: "POST", signal: session.controller.signal },
+      "Could not open update installer"
+    );
     if (!result) return;
     Utils.showToast({
       type: "success",
@@ -476,22 +561,4 @@ function attachActions(root, state, refresh) {
     // backend exit reads as a crash to the shell.
     setTimeout(() => window.electronAPI?.quitForUpdate?.(), 1000);
   });
-}
-
-// ===========================================================================
-// Formatting
-// ===========================================================================
-
-function formatBytes(bytes) {
-  if (!bytes) return "unknown size";
-  const units = ["B", "KB", "MB", "GB"];
-  const index = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
-  return `${parseFloat((bytes / Math.pow(1024, index)).toFixed(1))} ${units[index]}`;
-}
-
-function formatTime(value) {
-  if (!value) return "never";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "never";
-  return date.toLocaleString();
 }
