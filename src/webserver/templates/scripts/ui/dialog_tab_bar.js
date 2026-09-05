@@ -68,7 +68,14 @@ export function renderDialogTabRow({ tabs, activeTab, idPrefix, ariaLabel, actio
 }
 
 export class DialogTabBar {
-  constructor({ root, tabs, activeTab, beforeChange, onChange }) {
+  constructor({
+    root,
+    tabs,
+    activeTab,
+    beforeChange,
+    onChange,
+    panelSelector = ".dialog-body > [data-tab-content]",
+  }) {
     this.root = root;
     this.tabs = Array.isArray(tabs) ? tabs : [];
     this.tabIds = new Set(this.tabs.map((tab) => tab.id));
@@ -76,9 +83,7 @@ export class DialogTabBar {
     this.beforeChange = beforeChange || (() => true);
     this.onChange = onChange || (() => {});
     this.list = this.root?.querySelector("[data-dialog-tab-list]") || null;
-    this.panels = this.root
-      ? Array.from(this.root.querySelectorAll(".dialog-body > [data-tab-content]"))
-      : [];
+    this.panels = this.root ? Array.from(this.root.querySelectorAll(panelSelector)) : [];
 
     if (!this.root || !this.list) {
       throw new Error("[DialogTabBar] Tab row not found");

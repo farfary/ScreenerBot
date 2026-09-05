@@ -35,6 +35,8 @@ pub struct UpdateStatusResponse {
     /// Why a ready update is not installing itself right now.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub blocked_reason: Option<String>,
+    /// Whether the current phase needs an explicit choice from the operator.
+    pub requires_user_action: bool,
 }
 
 #[derive(Debug, Deserialize)]

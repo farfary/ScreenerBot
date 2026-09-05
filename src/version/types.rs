@@ -113,6 +113,24 @@ impl UpdateInfo {
     }
 }
 
+/// Release information retained for the in-app notes after an update restarts.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ReleaseSummary {
+    pub version: String,
+    pub release_notes: Option<String>,
+    pub release_date: String,
+}
+
+impl From<&UpdateInfo> for ReleaseSummary {
+    fn from(update: &UpdateInfo) -> Self {
+        Self {
+            version: update.version.clone(),
+            release_notes: update.release_notes.clone(),
+            release_date: update.release_date.clone(),
+        }
+    }
+}
+
 /// API response wrapper
 #[derive(Debug, Clone, Deserialize)]
 pub(super) struct ApiResponse<T> {
@@ -245,6 +263,8 @@ pub struct UpdateState {
     pub deferred: Option<DeferReason>,
     /// Version this process is running after activating a staged core update.
     pub applied_version: Option<String>,
+    /// The most recently applied release, retained for Settings > Release Notes.
+    pub last_release: Option<ReleaseSummary>,
 }
 
 /// The record that tells the desktop shell which core binary to launch.

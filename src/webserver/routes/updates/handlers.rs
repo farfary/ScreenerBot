@@ -1,4 +1,5 @@
 use crate::{
+    config,
     logger::{self, LogTag},
     version,
     webserver::utils::{error_response, success_response},
@@ -127,13 +128,31 @@ pub(super) async fn get_status() -> Response {
         None
     };
 
+    let blocked_reason = readiness
+        .or(state.deferred)
+        .map(|reason| reason.message().to_owned());
+    let auto_download = config::with_config(|cfg| cfg.updates.auto_download);
+    let requires_user_action = needs_user_action(&state, blocked_reason.is_some(), auto_download);
+
     success_response(UpdateStatusResponse {
         staged_core: version::read_staged_core(),
-        blocked_reason: readiness
-            .or(state.deferred)
-            .map(|reason| reason.message().to_owned()),
+        blocked_reason,
+        requires_user_action,
         state,
     })
+}
+
+fn needs_user_action(state: &version::UpdateState, blocked: bool, auto_download: bool) -> bool {
+    if state.available_update.is_none() {
+        return false;
+    }
+
+    match state.phase {
+        version::UpdatePhase::Available => !auto_download,
+        version::UpdatePhase::ReadyToApply => blocked,
+        version::UpdatePhase::ReadyToInstall | version::UpdatePhase::Failed => true,
+        _ => false,
+    }
 }
 
 /// POST /api/updates/apply
@@ -174,5 +193,63 @@ pub(super) async fn install_update() -> Response {
             &format!("Failed to open update: {e}"),
             None,
         ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn state(phase: version::UpdatePhase) -> version::UpdateState {
+        version::UpdateState {
+            phase,
+            available_update: Some(version::UpdateInfo {
+                version: "99.0.0".to_owned(),
+                filename: "update".to_owned(),
+                download_url: "https://example.com/update".to_owned(),
+                file_size: 1,
+                checksum: "a".repeat(64),
+                release_notes: None,
+                release_date: String::new(),
+                kind: version::UpdateKind::Core,
+                core: None,
+                shell_revision: None,
+            }),
+            ..version::UpdateState::default()
+        }
+    }
+
+    #[test]
+    fn attention_tracks_operator_decisions_only() {
+        assert!(needs_user_action(
+            &state(version::UpdatePhase::Available),
+            false,
+            false
+        ));
+        assert!(!needs_user_action(
+            &state(version::UpdatePhase::Available),
+            false,
+            true
+        ));
+        assert!(!needs_user_action(
+            &state(version::UpdatePhase::Downloading),
+            false,
+            false
+        ));
+        assert!(needs_user_action(
+            &state(version::UpdatePhase::ReadyToApply),
+            true,
+            true
+        ));
+        assert!(needs_user_action(
+            &state(version::UpdatePhase::ReadyToInstall),
+            false,
+            true
+        ));
+        assert!(needs_user_action(
+            &state(version::UpdatePhase::Failed),
+            false,
+            true
+        ));
     }
 }

@@ -1,94 +1,153 @@
-/* =============================================================================
-   SETTINGS — UPDATES TAB
-
-   The panel answers one question ("what is this installation about to become?")
-   so it is typeset as one column of prose and rows rather than a set of cards:
-   a headline, the version it moves to, one accent line of progress, and the
-   switches that govern it. The preference rows reuse .settings-group /
-   .settings-field verbatim, so this file only styles what is genuinely new.
-   ============================================================================= */
+/* Settings > Updates: three focused views sharing one flat visual language. */
 
 .updates {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-xl);
+  gap: var(--spacing-lg);
+  min-width: 0;
 }
 
-.updates-section-host:empty {
+.updates > .details-tab-row {
+  background: transparent;
+}
+
+.updates > .details-tab-row .details-tab-list {
+  padding-inline: 0;
+}
+
+.updates-panel[hidden] {
   display: none;
 }
 
-/* -----------------------------------------------------------------------------
-   Status
-   -------------------------------------------------------------------------- */
+.updates-loading {
+  padding: var(--spacing-lg) 0;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+
+/* Status */
 
 .updates-status {
   display: flex;
   flex-direction: column;
+  gap: var(--spacing-lg);
+}
+
+.updates-status-copy {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: start;
   gap: var(--spacing-sm);
 }
 
+.updates-status-icon {
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+.updates-status[data-tone="primary"] .updates-status-icon {
+  color: var(--primary-color);
+}
+
+.updates-status[data-tone="success"] .updates-status-icon {
+  color: var(--semantic-success-text);
+}
+
+.updates-status[data-tone="error"] .updates-status-icon {
+  color: var(--semantic-error-text);
+}
+
 .updates-headline {
+  margin: 0;
+  color: var(--text-primary);
   font-size: 1.15rem;
   font-weight: 600;
-  color: var(--text-primary);
   letter-spacing: -0.01em;
 }
 
 .updates-detail {
+  max-width: 64ch;
+  margin: 4px 0 0;
+  color: var(--text-secondary);
   font-size: 0.85rem;
   line-height: 1.55;
-  color: var(--text-secondary);
-  max-width: 62ch;
 }
 
-/* Current version, and where it is going. Monospace so the digits line up. */
-.updates-versions {
-  display: flex;
+.updates-version-flow {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) auto minmax(120px, 1fr);
   align-items: center;
-  gap: var(--spacing-sm);
-  margin-top: 2px;
-  font-family: var(--font-mono);
+  gap: var(--spacing-md);
+  max-width: 460px;
+  padding-block: var(--spacing-sm);
+}
+
+.updates-version-flow--single {
+  grid-template-columns: minmax(120px, 1fr);
+  max-width: 220px;
+}
+
+.updates-version-flow > i {
+  color: var(--text-muted);
   font-size: 0.9rem;
 }
 
-.updates-version-from {
-  color: var(--text-muted);
+.updates-version-point {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 
-.updates-versions i {
-  font-size: 0.85rem;
+.updates-version-point span,
+.updates-release-header > span {
   color: var(--text-muted);
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
-.updates-version-to {
+.updates-version-point strong {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.updates-version-point--target strong {
   color: var(--primary-color);
   font-weight: 600;
 }
 
-/* -----------------------------------------------------------------------------
-   Progress
-   -------------------------------------------------------------------------- */
+.updates-progress-copy {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  max-width: 620px;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-family: var(--font-mono);
+}
 
 .updates-progress {
   position: relative;
-  height: 3px;
-  margin-top: 6px;
-  border-radius: 3px;
-  background: var(--border-color);
+  max-width: 620px;
+  height: 4px;
+  margin-top: calc(var(--spacing-sm) * -1);
   overflow: hidden;
+  background: var(--border-color);
+  border-radius: var(--radius-sm);
 }
 
 .updates-progress-fill {
   height: 100%;
-  border-radius: 3px;
   background: var(--primary-color);
+  border-radius: inherit;
   transition: width 0.3s ease;
 }
 
-/* Verifying and installing have no measurable percentage — sweep instead of
-   parking a full bar that is not telling the truth. The renderer omits the
-   inline width in this state, so nothing here has to out-shout it. */
 .updates-progress.is-indeterminate .updates-progress-fill {
   width: 40%;
   background: linear-gradient(90deg, transparent, var(--primary-color), transparent);
@@ -106,85 +165,171 @@
   }
 }
 
-/* -----------------------------------------------------------------------------
-   Actions
-   -------------------------------------------------------------------------- */
-
 .updates-actions {
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
-  margin-top: 6px;
 }
-
-/* -----------------------------------------------------------------------------
-   Sections
-   -------------------------------------------------------------------------- */
-
-.updates-subhead {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  margin: 0 0 var(--spacing-sm);
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-/* Bare glyph, inline with its heading — no tile, ring or glow behind it. */
-.updates-subhead i {
-  font-size: 1rem;
-  color: var(--text-muted);
-}
-
-.updates-notes-body {
-  font-size: 0.85rem;
-  line-height: 1.6;
-  color: var(--text-secondary);
-  white-space: pre-wrap;
-  max-width: 72ch;
-  max-height: 220px;
-  overflow-y: auto;
-}
-
-/* -----------------------------------------------------------------------------
-   Installation details
-   -------------------------------------------------------------------------- */
 
 .updates-detail-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spacing-sm) var(--spacing-xl);
   margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-sm);
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--border-color);
 }
 
 .updates-detail-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(110px, 0.8fr) minmax(0, 1.2fr);
   align-items: baseline;
-  gap: var(--spacing-md);
-  font-size: 0.8rem;
+  gap: var(--spacing-sm);
+  min-width: 0;
+  font-size: 0.75rem;
 }
 
 .updates-detail-row dt {
-  flex: 0 0 148px;
   color: var(--text-muted);
 }
 
 .updates-detail-row dd {
+  min-width: 0;
   margin: 0;
+  overflow-wrap: anywhere;
   color: var(--text-secondary);
   font-family: var(--font-mono);
-  overflow-wrap: anywhere;
 }
 
-@media (width <= 720px) {
+/* Release notes */
+
+.updates-release {
+  max-width: 76ch;
+}
+
+.updates-release-header {
+  padding-bottom: var(--spacing-lg);
+}
+
+.updates-release-header h3 {
+  margin: 4px 0 0;
+  color: var(--text-primary);
+  font-size: 1.2rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.updates-release-header time {
+  display: block;
+  margin-top: 5px;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.updates-release > p,
+.updates-release-section p,
+.updates-release-section li,
+.updates-release-empty {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  line-height: 1.65;
+}
+
+.updates-release-section {
+  padding: var(--spacing-lg) 0;
+  border-top: 1px solid var(--border-color);
+}
+
+.updates-release-section h4 {
+  margin: 0 0 var(--spacing-sm);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.updates-release-section ul {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.updates-release-section li::marker {
+  color: var(--primary-color);
+}
+
+.updates-empty {
+  max-width: 56ch;
+  padding-block: var(--spacing-lg);
+}
+
+.updates-empty h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.updates-empty p {
+  margin: 5px 0 var(--spacing-md);
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  line-height: 1.55;
+}
+
+/* Preferences */
+
+.updates-preference-section + .updates-preference-section {
+  margin-top: var(--spacing-lg);
+}
+
+.updates-subhead {
+  margin: 0 0 var(--spacing-sm);
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.updates-number-control {
+  display: grid;
+  grid-template-columns: minmax(0, 88px) auto;
+  align-items: center;
+  gap: var(--spacing-sm);
+  width: 142px;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+}
+
+.updates-number-control .number-field {
+  min-width: 0;
+  width: 88px;
+}
+
+.updates-field--inactive .settings-field-info {
+  opacity: 0.55;
+}
+
+@media (width <= 800px) {
+  .updates-detail-list {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (width <= 560px) {
+  .updates-version-flow {
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  }
+
   .updates-detail-row {
-    flex-direction: column;
+    grid-template-columns: 1fr;
     gap: 2px;
   }
 
-  .updates-detail-row dt {
-    flex: none;
+  .updates-progress-copy {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
   }
 }
 

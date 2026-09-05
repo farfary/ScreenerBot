@@ -404,6 +404,8 @@ pub const SETTINGS_ACCOUNT_TAB_UI: &str =
 pub const SETTINGS_DATA_TAB_UI: &str = include_str!("templates/scripts/ui/settings/data_tab.js");
 pub const SETTINGS_UPDATES_TAB_UI: &str =
     include_str!("templates/scripts/ui/settings/updates_tab.js");
+pub const SETTINGS_UPDATES_VIEW_UI: &str =
+    include_str!("templates/scripts/ui/settings/updates_view.js");
 pub const SETTINGS_INTERFACE_TAB_UI: &str =
     include_str!("templates/scripts/ui/settings/interface_tab.js");
 pub const SETTINGS_HINTS_TAB_UI: &str = include_str!("templates/scripts/ui/settings/hints_tab.js");

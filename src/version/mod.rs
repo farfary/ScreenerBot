@@ -93,6 +93,7 @@ fn normalize_loaded_state(state: &mut UpdateState, staged_version: Option<&str>)
 
     // The restart landed: this process IS the version the update advertised.
     if target.as_deref() == Some(VERSION) {
+        state.last_release = state.available_update.as_ref().map(ReleaseSummary::from);
         state.phase = UpdatePhase::Applied;
         state.applied_version = Some(VERSION.to_owned());
         state.available_update = None;
@@ -396,6 +397,13 @@ mod tests {
         assert_eq!(state.phase, UpdatePhase::Applied);
         assert_eq!(state.applied_version.as_deref(), Some(VERSION));
         assert!(state.available_update.is_none());
+        assert_eq!(
+            state
+                .last_release
+                .as_ref()
+                .map(|release| release.version.as_str()),
+            Some(VERSION)
+        );
     }
 
     #[test]

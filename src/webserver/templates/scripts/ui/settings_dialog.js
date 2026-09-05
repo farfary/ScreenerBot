@@ -31,10 +31,11 @@ import {
   teardownAccountTab,
 } from "./settings/account_tab.js";
 
-// Whether an update is waiting, for the nav badge. Everything else about the
+// Whether an update needs a decision, for the nav indicator. Everything else about the
 // update lifecycle is owned by settings/updates_tab.js and read straight from
 // the backend, so there is only ever one description of it.
-let updateAvailable = false;
+let updateNeedsAttention = false;
+const GUI_DRAFT_TABS = new Set(["interface", "navigation", "startup"]);
 
 export class SettingsDialog {
   constructor(options = {}) {
@@ -91,17 +92,14 @@ export class SettingsDialog {
     });
   }
 
-  /**
-   * Read whether an update is waiting, purely so the nav item can show its dot.
-   */
+  /** Read whether an update needs attention for the nav indicator. */
   async _syncUpdateStatus() {
     try {
       const response = await fetch("/api/updates/status");
       if (!response.ok) return;
       const body = await response.json();
       const payload = body.data || body;
-      const state = payload.state || payload;
-      this._setUpdateBadge(Boolean(state.available_update));
+      this._setUpdateBadge(Boolean(payload.requires_user_action));
     } catch (err) {
       console.warn("Failed to read update status:", err);
     }
@@ -110,22 +108,22 @@ export class SettingsDialog {
   /**
    * Show or clear the status indicator on the Updates nav item.
    */
-  _setUpdateBadge(available) {
-    updateAvailable = available;
+  _setUpdateBadge(needsAttention) {
+    updateNeedsAttention = needsAttention;
     if (!this.dialogEl) return;
 
     const updatesBtn = this.dialogEl.querySelector('.settings-nav-item[data-tab="updates"]');
     if (!updatesBtn) return;
 
     const existingIndicator = updatesBtn.querySelector(".settings-nav-indicator");
-    if (existingIndicator && updateAvailable) return;
+    if (existingIndicator && updateNeedsAttention) return;
     if (existingIndicator) existingIndicator.remove();
 
-    if (updateAvailable) {
+    if (updateNeedsAttention) {
       const indicator = document.createElement("span");
       indicator.className = "settings-nav-indicator";
       indicator.innerHTML =
-        '<i class="icon-circle-alert" aria-hidden="true"></i><span class="sr-only">Update available</span>';
+        '<i class="icon-circle-alert" aria-hidden="true"></i><span class="sr-only">Update needs attention</span>';
       updatesBtn.appendChild(indicator);
     }
   }
@@ -468,7 +466,7 @@ export class SettingsDialog {
             <span>Settings</span>
           </h2>
           <div class="settings-header-actions">
-            <button class="btn btn-primary" id="settingsSaveBtn" type="button" disabled>
+            <button class="btn btn-primary settings-save-btn" id="settingsSaveBtn" type="button" disabled>
               <i class="icon-save"></i>
               <span>Save Changes</span>
             </button>
@@ -652,6 +650,7 @@ export class SettingsDialog {
     });
 
     this.currentTab = tab;
+    this._updateSaveButton();
     this._loadTabContent(tab);
   }
 
@@ -891,6 +890,7 @@ export class SettingsDialog {
     const saveBtn = this.dialogEl?.querySelector("#settingsSaveBtn");
     if (!saveBtn) return;
 
+    saveBtn.hidden = !this.hasChanges && !GUI_DRAFT_TABS.has(this.currentTab);
     saveBtn.disabled = !this.hasChanges || this.isSaving;
 
     const icon = saveBtn.querySelector("i");
@@ -976,6 +976,7 @@ export async function checkAndShowUpdateDialog() {
     const payload = body.data || body;
     let state = payload.state || payload;
     state.blocked_reason = payload.blocked_reason || null;
+    state.requires_user_action = Boolean(payload.requires_user_action);
 
     // If no check has happened yet, trigger one
     if (!state.last_check && !state.available_update) {
@@ -987,15 +988,14 @@ export async function checkAndShowUpdateDialog() {
           const refreshedPayload = refreshedBody.data || refreshedBody;
           state = refreshedPayload.state || refreshedPayload;
           state.blocked_reason = refreshedPayload.blocked_reason || null;
+          state.requires_user_action = Boolean(refreshedPayload.requires_user_action);
         }
       }
     }
 
     // Only surface the panel for an update that still needs a decision. A core
     // update that installs itself must not steal the screen on every launch.
-    const needsAttention =
-      state.available_update &&
-      (state.blocked_reason || state.phase === "ready_to_install" || state.phase === "failed");
+    const needsAttention = state.requires_user_action;
     if (needsAttention) {
       await showSettingsDialog({ tab: "updates" });
     }
