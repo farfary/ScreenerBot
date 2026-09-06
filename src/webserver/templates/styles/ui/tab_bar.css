@@ -115,7 +115,7 @@
 
 .sub-tab:hover {
   color: var(--text-primary);
-  background: rgb(255, 255, 255, 0.04);
+  background: var(--primary-alpha-5);
 }
 
 .sub-tab:hover i {
@@ -141,7 +141,7 @@
      width when you switch between them. Active is already clearly marked by the
      accent color, background tint and bottom border — no weight change needed,
      so widths stay fixed across switches. */
-  background: rgb(88, 166, 255, 0.06);
+  background: var(--primary-alpha-5);
 }
 
 .sub-tab.active i {

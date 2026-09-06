@@ -172,11 +172,12 @@
   text-transform: uppercase;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  -webkit-text-stroke: 0.6px var(--brand-navy);
+  -webkit-text-stroke-width: 0.6px;
+  -webkit-text-stroke-color: var(--brand-navy);
   paint-order: stroke fill;
   transition:
     color var(--transition-base),
-    -webkit-text-stroke var(--transition-base);
+    -webkit-text-stroke-color var(--transition-base);
 }
 
 .header-brand:hover .brand-logo {
@@ -190,7 +191,7 @@
 
 [data-theme="dark"] .brand-text {
   color: var(--brand-cyan-light);
-  -webkit-text-stroke: 0.65px rgb(200, 240, 255, 0.9);
+  -webkit-text-stroke-color: rgb(200, 240, 255, 0.9);
   text-shadow: 0 0 8px rgb(6, 182, 212, 0.4);
 }
 
@@ -200,13 +201,13 @@
 
 [data-theme="light"] .brand-text {
   color: var(--brand-navy);
-  -webkit-text-stroke: 0.6px var(--brand-navy);
+  -webkit-text-stroke-color: var(--brand-navy);
   text-shadow: 0 1px 3px rgb(13, 59, 102, 0.25);
 }
 
 [data-theme="light"] .header-brand:hover .brand-text {
   color: #0a2f52;
-  -webkit-text-stroke: 0.7px #0a2f52;
+  -webkit-text-stroke-color: #0a2f52;
 }
 
 [data-theme="dark"] .header-brand:hover .brand-text {

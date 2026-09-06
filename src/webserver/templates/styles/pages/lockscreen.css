@@ -117,20 +117,23 @@
 }
 
 .lockscreen-logo-img {
+  --lockscreen-logo-filter-rest: drop-shadow(0 0 20px rgb(88, 166, 255, 0.3));
+  --lockscreen-logo-filter-peak: drop-shadow(0 0 40px rgb(88, 166, 255, 0.5));
+
   width: 100%;
   height: 100%;
-  filter: drop-shadow(0 0 30px rgb(88, 166, 255, 0.4));
+  filter: var(--lockscreen-logo-filter-rest);
   animation: lockscreenLogoPulse 3s ease-in-out infinite;
 }
 
 @keyframes lockscreenLogoPulse {
   0%,
   100% {
-    filter: drop-shadow(0 0 20px rgb(88, 166, 255, 0.3));
+    filter: var(--lockscreen-logo-filter-rest);
   }
 
   50% {
-    filter: drop-shadow(0 0 40px rgb(88, 166, 255, 0.5));
+    filter: var(--lockscreen-logo-filter-peak);
   }
 }
 
@@ -555,19 +558,8 @@
 }
 
 [data-theme="light"] .lockscreen-logo-img {
-  filter: drop-shadow(0 0 20px rgb(21, 101, 192, 0.3));
-  animation: lockscreenLogoPulseLight 3s ease-in-out infinite;
-}
-
-@keyframes lockscreenLogoPulseLight {
-  0%,
-  100% {
-    filter: drop-shadow(0 0 15px rgb(21, 101, 192, 0.2));
-  }
-
-  50% {
-    filter: drop-shadow(0 0 30px rgb(21, 101, 192, 0.4));
-  }
+  --lockscreen-logo-filter-rest: drop-shadow(0 0 15px rgb(21, 101, 192, 0.2));
+  --lockscreen-logo-filter-peak: drop-shadow(0 0 30px rgb(21, 101, 192, 0.4));
 }
 
 /* =============================================================================

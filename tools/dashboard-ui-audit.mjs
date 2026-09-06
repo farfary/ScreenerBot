@@ -106,6 +106,22 @@ function inputMayBeChoiceControl(selector) {
 const labelBoxDeclaration =
   /^\s*(display|align-items|gap|margin(?:-[a-z]+)?|font-size|line-height|font-weight)\s*:/m;
 
+/* A color theme is allowed to repaint the dashboard, never to re-typeset or
+   rearrange it. A stale dark block once replaced embedded Inter/JetBrains Mono
+   with system fonts, so every inherited label changed width and baseline when
+   the user toggled theme. Guard both direct declarations and indirect metric
+   tokens: otherwise a theme can move the UI through `--font-*`, `--spacing-*`,
+   or another geometry variable while every component rule looks innocent. */
+const themeMetricProperty =
+  /^(?:(?:-webkit-|-moz-)?font(?:-.+)?|-webkit-text-stroke(?:-width)?|line-height|letter-spacing|word-spacing|text-transform|text-indent|text-align|text-overflow|white-space|writing-mode|vertical-align|content|display|visibility|position|inset(?:-.+)?|top|right|bottom|left|(?:[\w-]+-)?(?:width|height)|(?:min-|max-)?(?:inline-size|block-size)|margin(?:-.+)?|padding(?:-.+)?|gap|row-gap|column-gap|grid(?:-.+)?|flex(?:-.+)?|align-(?:.+)|justify-(?:.+)|place-(?:.+)|order|float|clear|overflow(?:-.+)?|box-sizing|aspect-ratio|columns|column-count|border|border-(?:top|right|bottom|left|block|inline)(?:-(?:start|end))?|border-[\w-]*(?:width|radius)|outline|outline-width|outline-offset|transform|translate|rotate|scale|animation(?:-.+)?|transition(?:-.+)?)$/;
+
+const themeMetricToken =
+  /^--(?:.*-)?(?:font|spacing|radius|transition|duration|motion|width|height|inline-size|block-size|size|gap|padding|margin|offset|position|inset|line-height|letter-spacing|word-spacing|weight|family|layout|grid|flex|align|justify|order|transform|translate|rotate|scale)(?:-|$)/;
+
+function declarationsIn(body) {
+  return [...body.matchAll(/(?:^|;)\s*([\w-]+)\s*:/g)].map((match) => match[1]);
+}
+
 function genericLabelTarget(selector) {
   const compounds = selector.split(/[\s>+~](?![^(]*\))/).filter(Boolean);
   if (compounds.length < 2) return false;
@@ -154,6 +170,25 @@ function auditNativeChoiceContract(file, source) {
 for (const file of cssFiles) {
   const css = await readFile(file, "utf8");
   const path = relative(stylesRoot, file);
+
+  if (/@media\s*\(\s*prefers-color-scheme\s*:/i.test(css)) {
+    errors.push(`${path}: app themes are selected by html[data-theme], not OS color-scheme media`);
+  }
+
+  for (const { selector, body, line } of parseRules(css)) {
+    if (/\.(?:light|dark)-theme\b/.test(selector)) {
+      errors.push(
+        `${path}:${line}: ${selector} uses a dead theme class; target html[data-theme] instead`
+      );
+    }
+    if (!/\[data-theme(?:[\s=\]])/.test(selector)) continue;
+    for (const property of declarationsIn(body)) {
+      if (!themeMetricProperty.test(property) && !themeMetricToken.test(property)) continue;
+      errors.push(
+        `${path}:${line}: ${selector} sets ${property}; color themes may change paint only, not typography, geometry, layout, or motion`
+      );
+    }
+  }
 
   for (const selector of selectorsIn(css)) {
     const owner = canonicalOwners.get(selector);

@@ -268,7 +268,9 @@
 }
 
 [data-theme="dark"] {
-  /* Dark mode - Modern Graphite with Cyan accents */
+  /* Dark mode - Modern Graphite with Cyan accents.
+     Theme blocks are palette-only. Typography, spacing, sizing, radii and
+     motion live in :root so switching theme cannot change layout metrics. */
   --bg-primary: #0d1117;
   --bg-secondary: #161b22;
   --bg-card: #161b22;
@@ -374,46 +376,6 @@
 
   /* Form Control Overrides */
   --select-arrow: var(--select-arrow-dark);
-
-  /* Solana Brand Colors */
-  --solana-purple: #9945ff;
-  --solana-green: #14f195;
-  --solana-alpha-20: rgb(153, 69, 255, 0.2);
-  --solana-green-alpha-20: rgb(20, 241, 149, 0.2);
-
-  /* Spacing Scale (8px base) */
-  --spacing-xs: 4px;
-  --spacing-sm: 8px;
-  --spacing-md: 16px;
-  --spacing-lg: 24px;
-  --spacing-xl: 32px;
-  --spacing-2xl: 48px;
-
-  /* Border Radius Scale */
-  --radius-xs: 2px;
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
-  --radius-xl: 12px;
-  --radius-2xl: 16px;
-  --radius-full: 9999px;
-  --token-logo-radius: var(--radius-full);
-
-  /* Transition Timing */
-  --transition-fast: 150ms ease;
-  --transition-base: 200ms ease;
-  --transition-normal: 300ms ease;
-  --transition-slow: 500ms ease;
-
-  /* Typography System */
-  --font-sans: -apple-system, blinkmacsystemfont, "Segoe UI", roboto, sans-serif;
-  --font-mono: "SF Mono", monaco, "Cascadia Code", "Roboto Mono", "Courier New", monospace;
-  --font-size-xs: 0.75rem; /* 12px */
-  --font-size-sm: 0.875rem; /* 14px */
-  --font-size-base: 1rem; /* 16px */
-  --font-size-lg: 1.125rem; /* 18px */
-  --font-size-xl: 1.25rem; /* 20px */
-  --font-size-2xl: 1.5rem; /* 24px */
 
   /* Additional Semantic Aliases */
   --color-primary: var(--primary-color);
