@@ -146,8 +146,8 @@ function logoPlaceholder(identity) {
  * back to the letter avatar rather than a broken-image glyph.
  *
  * A brand asset (the Solana logomark) is NOT a square token avatar: it is a 101x88
- * glyph on a transparent canvas, so it gets `ti-logo-brand` — inset and letterboxed
- * inside the circle instead of cropped edge to edge like a provider's square icon.
+ * glyph on a transparent canvas, so it gets `ti-logo-brand` and remains inset rather
+ * than being cropped edge to edge like a provider's square icon.
  */
 export function renderTokenLogo(mintOrIdentity, options = {}) {
   const identity =
@@ -156,9 +156,9 @@ export function renderTokenLogo(mintOrIdentity, options = {}) {
   const alt = Utils.escapeHtml(identity.symbol || identity.mint || "");
   const brand = isBrandAsset(identity.logoUrl) ? " ti-logo-brand" : "";
   const inner = identity.logoUrl
-    ? `<img src="${Utils.escapeHtml(identity.logoUrl)}" alt="${alt}" loading="lazy" onerror="this.remove()" />${logoPlaceholder(identity)}`
+    ? `<img class="token-logo-artwork" src="${Utils.escapeHtml(identity.logoUrl)}" alt="${alt}" loading="lazy" onerror="this.remove()" />${logoPlaceholder(identity)}`
     : logoPlaceholder(identity);
-  return `<span class="ti-logo ti-logo-${size}${brand}">${inner}</span>`;
+  return `<span class="ti-logo ti-logo-${size}${brand} token-logo-frame">${inner}</span>`;
 }
 
 /** True for the brand assets we ship ourselves (transparent, non-square glyphs). */

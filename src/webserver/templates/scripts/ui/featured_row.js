@@ -432,7 +432,7 @@ class FeaturedRow {
     }
 
     const logoHtml = logoUrl
-      ? `<img src="${this._escapeHtml(logoUrl)}" alt="" class="featured-row-card-logo" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'"/><div class="featured-row-card-logo-placeholder" style="display:none"><span>${this._escapeHtml(symbol.charAt(0))}</span></div>`
+      ? `<img src="${this._escapeHtml(logoUrl)}" alt="" class="featured-row-card-logo token-logo-artwork" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'"/><div class="featured-row-card-logo-placeholder" style="display:none"><span>${this._escapeHtml(symbol.charAt(0))}</span></div>`
       : `<div class="featured-row-card-logo-placeholder"><span>${this._escapeHtml(symbol.charAt(0))}</span></div>`;
 
     return `

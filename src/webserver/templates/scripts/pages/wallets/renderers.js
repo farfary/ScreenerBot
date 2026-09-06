@@ -69,7 +69,7 @@ export function createWalletRenderers({
         const name = row.name ? Utils.escapeHtml(row.name) : null;
         const logo = row.logo_url || "";
         const logoHtml = logo
-          ? `<img class="token-logo" src="${Utils.escapeHtml(logo)}" alt="${sym}" loading="lazy"/>`
+          ? `<img class="token-logo token-logo-artwork" src="${Utils.escapeHtml(logo)}" alt="${sym}" loading="lazy"/>`
           : '<i class="token-logo icon-coins"></i>';
         return `<div class="wt-token-cell">${logoHtml}<div class="wt-token-meta"><span class="wt-symbol">${sym}</span>${name ? `<span class="wt-name">${name}</span>` : ""}</div></div>`;
       },

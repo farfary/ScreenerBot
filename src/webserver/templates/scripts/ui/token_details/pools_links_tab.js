@@ -289,11 +289,13 @@ function buildMediaSection(token, logoUrl, bannerUrl, options = {}) {
 function renderMediaItem(label, url, alt, type, options = {}) {
   const { escapeHtml } = options;
   const safeUrl = escapeHtml(url);
+  const logoClass = type === "logo" ? " token-logo-frame" : "";
+  const imageClass = type === "logo" ? ' class="token-logo-artwork"' : "";
   return `
     <div class="links-media-item">
       <div class="links-media-label">${label}</div>
-      <div class="links-media-preview ${type}">
-        <img src="${safeUrl}" alt="${alt}" />
+      <div class="links-media-preview ${type}${logoClass}">
+        <img src="${safeUrl}" alt="${alt}"${imageClass} />
       </div>
       <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" class="links-media-link">
         Open image <i class="icon-external-link" aria-hidden="true"></i>

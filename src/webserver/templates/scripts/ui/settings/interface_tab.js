@@ -40,7 +40,7 @@ export function buildInterfaceTab(settings) {
         <div class="settings-field settings-field--logo-shape">
           <div class="settings-field-info">
             <label id="tokenLogoShapeLabel">Token Logo Shape</label>
-            <span class="settings-field-hint">Choose how token artwork appears throughout the app</span>
+            <span class="settings-field-hint">Circle crops every logo; Natural preserves each artwork's own silhouette</span>
           </div>
           <fieldset class="logo-shape-options" aria-labelledby="tokenLogoShapeLabel">
             <label class="logo-shape-option">
@@ -51,7 +51,7 @@ export function buildInterfaceTab(settings) {
             <label class="logo-shape-option">
               <input type="radio" name="tokenLogoShape" value="rounded-square" ${activeLogoShape === "rounded-square" ? "checked" : ""}>
               <img class="logo-shape-option__preview logo-shape-option__preview--rounded-square" src="/assets/logo.png" alt="">
-              <span>Square Rounded</span>
+              <span>Natural</span>
             </label>
           </fieldset>
         </div>

@@ -84,7 +84,7 @@ export function getRejectionDisplayLabel(reasonCode) {
 export function tokenCell(row) {
   const src = row.logo_url || row.image_url;
   const logo = src
-    ? `<img class="token-logo clickable-logo" alt="" src="${Utils.escapeHtml(src)}" data-logo-url="${Utils.escapeHtml(src)}" data-token-symbol="${Utils.escapeHtml(row.symbol || "")}" data-token-name="${Utils.escapeHtml(row.name || "")}" data-token-mint="${Utils.escapeHtml(row.mint || "")}" title="Click to enlarge" />`
+    ? `<img class="token-logo token-logo-artwork clickable-logo" alt="" src="${Utils.escapeHtml(src)}" data-logo-url="${Utils.escapeHtml(src)}" data-token-symbol="${Utils.escapeHtml(row.symbol || "")}" data-token-name="${Utils.escapeHtml(row.name || "")}" data-token-mint="${Utils.escapeHtml(row.mint || "")}" title="Click to enlarge" />`
     : '<span class="token-logo">N/A</span>';
   const sym = Utils.escapeHtml(row.symbol || "—");
   const name = row.name ? `<div class="token-name">${Utils.escapeHtml(row.name)}</div>` : "";

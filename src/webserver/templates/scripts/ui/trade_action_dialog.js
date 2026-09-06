@@ -942,7 +942,7 @@ export class TradeActionDialog {
     const initial = Utils.escapeHtml(displaySymbol.charAt(0));
 
     const logoHtml = logo
-      ? `<img src="${Utils.escapeHtml(logo)}" alt="" class="trade-action-token-logo-img"
+      ? `<img src="${Utils.escapeHtml(logo)}" alt="" class="trade-action-token-logo-img token-logo-artwork"
            onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'trade-action-token-initial',textContent:'${initial}'}))"/>`
       : `<span class="trade-action-token-initial">${initial}</span>`;
 
@@ -951,7 +951,7 @@ export class TradeActionDialog {
 
     return `
       <div class="trade-action-token">
-        <div class="trade-action-token-logo">${logoHtml}</div>
+        <div class="trade-action-token-logo token-logo-frame">${logoHtml}</div>
         <div class="trade-action-token-meta">
           <span class="trade-action-token-symbol token-symbol-type">${Utils.escapeHtml(displaySymbol)}</span>
           ${name ? `<span class="trade-action-token-name token-name-type">${Utils.escapeHtml(name)}</span>` : ""}

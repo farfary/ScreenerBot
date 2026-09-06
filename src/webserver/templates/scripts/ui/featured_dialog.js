@@ -350,7 +350,7 @@ class FeaturedDialog {
       : "";
 
     const avatarHtml = logoUrl
-      ? `<img src="${this._escapeHtml(logoUrl)}" alt="" class="feat-card-avatar-img" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'feat-card-avatar-initial',textContent:'${initial}'}))"/>`
+      ? `<img src="${this._escapeHtml(logoUrl)}" alt="" class="feat-card-avatar-img token-logo-artwork" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'feat-card-avatar-initial',textContent:'${initial}'}))"/>`
       : `<span class="feat-card-avatar-initial">${initial}</span>`;
 
     const change = token.price_change_24h;
@@ -402,7 +402,7 @@ class FeaturedDialog {
         <div class="feat-card-banner">${bannerHtml}</div>
 
         <div class="feat-card-head">
-          <div class="feat-card-avatar">${avatarHtml}</div>
+          <div class="feat-card-avatar token-logo-frame">${avatarHtml}</div>
         </div>
 
         <div class="feat-card-identity">

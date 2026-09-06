@@ -160,7 +160,7 @@ function createLifecycle() {
     const name = row.name || "";
     const originLabel = positionOriginLabel(row);
     const logoHtml = logo
-      ? `<img class="token-logo" src="${Utils.escapeHtml(logo)}" alt="${Utils.escapeHtml(
+      ? `<img class="token-logo token-logo-artwork" src="${Utils.escapeHtml(logo)}" alt="${Utils.escapeHtml(
           symbol
         )}"/>`
       : '<i class="token-logo icon-coins"></i>';

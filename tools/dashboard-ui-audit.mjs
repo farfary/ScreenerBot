@@ -8,6 +8,8 @@ import {
   REPO_ROOT as root,
   SCRIPTS_ROOT as scriptsRoot,
   STYLES_ROOT as stylesRoot,
+  attributeParts,
+  findOpenTags,
   rulesIn as parseRules,
   walk,
 } from "./lib/dashboard_ui.mjs";
@@ -167,6 +169,34 @@ function auditNativeChoiceContract(file, source) {
   }
 }
 
+/* A loaded token image is bare artwork, not a painted avatar tile. Require the
+   shared marker anywhere a known token-logo class or a dynamic logo URL emits an
+   <img>; token_identity.css then owns crop/contain behavior across every surface. */
+const tokenLogoImageClasses = new Set([
+  "token-logo",
+  "overview-token-logo",
+  "favorite-logo",
+  "feat-card-avatar-img",
+  "featured-row-card-logo",
+  "search-result-logo",
+  "trade-action-token-logo-img",
+]);
+
+function auditTokenLogoContract(file, source) {
+  for (const { tag, index } of findOpenTags(source, "img")) {
+    const classParts = attributeParts(tag, "class");
+    const classes = (classParts?.statics || "").split(/\s+/).filter(Boolean);
+    const hasTokenLogoClass = classes.some((name) => tokenLogoImageClasses.has(name));
+    const usesDynamicLogoUrl =
+      /\bsrc\s*=\s*["'`][\s\S]*\$\{[\s\S]*\b(?:logoUrl|logo_url|image_url)\b/i.test(tag);
+    if (!hasTokenLogoClass && !usesDynamicLogoUrl) continue;
+    if (classes.includes("token-logo-artwork")) continue;
+
+    const line = source.slice(0, index).split("\n").length;
+    errors.push(`${relative(root, file)}:${line}: token logo <img> must use .token-logo-artwork`);
+  }
+}
+
 for (const file of cssFiles) {
   const css = await readFile(file, "utf8");
   const path = relative(stylesRoot, file);
@@ -290,6 +320,7 @@ for (const file of await walk(scriptsRoot)) {
   if (!file.endsWith("custom_select.js")) auditSelectContract(file, source);
   auditNativeChoiceContract(file, source);
   auditChoiceRowContract(file, source);
+  auditTokenLogoContract(file, source);
 }
 
 for (const file of await walk(pagesRoot)) {
@@ -301,6 +332,7 @@ for (const file of await walk(pagesRoot)) {
   auditSelectContract(file, source);
   auditNativeChoiceContract(file, source);
   auditChoiceRowContract(file, source);
+  auditTokenLogoContract(file, source);
 }
 
 const templatesSource = await readFile(resolve(root, "src/webserver/templates.rs"), "utf8");
@@ -315,6 +347,14 @@ const chatWidgetSource = await readFile(
 );
 const chatWidgetLayoutSource = await readFile(
   resolve(root, "src/webserver/templates/styles/components/chat_widget/layout.css"),
+  "utf8"
+);
+const foundationSource = await readFile(
+  resolve(root, "src/webserver/templates/styles/foundation.css"),
+  "utf8"
+);
+const tokenIdentityStylesSource = await readFile(
+  resolve(root, "src/webserver/templates/styles/ui/token_identity.css"),
   "utf8"
 );
 
@@ -352,6 +392,38 @@ for (const style of chatWidgetStyles) {
   if (assistantStyleManifest?.[1].includes(style)) {
     errors.push(`${style} must not depend on the Assistant route-scoped style manifest`);
   }
+}
+
+const tokenArtworkRule = parseRules(tokenIdentityStylesSource).find(
+  ({ selector }) => selector === ":root img.token-logo-artwork"
+);
+const tokenFrameRule = parseRules(tokenIdentityStylesSource).find(
+  ({ selector }) => selector === ":root .token-logo-frame:has(> img.token-logo-artwork)"
+);
+for (const [label, body] of [
+  ["loaded token artwork", tokenArtworkRule?.body],
+  ["loaded token frame", tokenFrameRule?.body],
+]) {
+  for (const declaration of [
+    /\bborder\s*:\s*0\s*;/,
+    /\bbackground\s*:\s*transparent\s*;/,
+    /\bbox-shadow\s*:\s*none\s*;/,
+  ]) {
+    if (!body || !declaration.test(body)) {
+      errors.push(`${label} must stay bare in ui/token_identity.css`);
+      break;
+    }
+  }
+}
+if (!/--token-logo-fit\s*:\s*cover\s*;/.test(foundationSource)) {
+  errors.push("Circle token logos must crop with --token-logo-fit: cover");
+}
+if (
+  !/:root\[data-token-logo-shape="rounded-square"\][^{]*\{[^}]*--token-logo-fit\s*:\s*contain\s*;/s.test(
+    foundationSource
+  )
+) {
+  errors.push("Natural token logos must preserve their canvas with --token-logo-fit: contain");
 }
 
 if (errors.length) {

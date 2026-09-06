@@ -547,8 +547,8 @@ export class PositionDetailsDialog {
         <div class="dialog-header">
           <div class="header-top-row">
             <div class="header-left">
-              <div class="header-logo">
-                ${logoUrl ? `<img src="${Utils.escapeHtml(logoUrl)}" alt="${Utils.escapeHtml(symbol)}" onerror="this.parentElement.innerHTML='<div class=\\'logo-placeholder\\'>${Utils.escapeHtml(symbol.charAt(0))}</div>'" />` : `<div class="logo-placeholder">${Utils.escapeHtml(symbol.charAt(0))}</div>`}
+              <div class="header-logo token-logo-frame">
+                ${logoUrl ? `<img class="token-logo-artwork" src="${Utils.escapeHtml(logoUrl)}" alt="${Utils.escapeHtml(symbol)}" onerror="this.parentElement.innerHTML='<div class=\\'logo-placeholder\\'>${Utils.escapeHtml(symbol.charAt(0))}</div>'" />` : `<div class="logo-placeholder">${Utils.escapeHtml(symbol.charAt(0))}</div>`}
               </div>
               <div class="header-identity">
                 <div class="header-title-row">

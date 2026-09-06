@@ -1197,7 +1197,7 @@ window.filteringPage = {
         .map((t) => {
           const src = t.image_url;
           const logo = src
-            ? `<img class="token-logo" alt="" src="${Utils.escapeHtml(src)}" loading="lazy" />`
+            ? `<img class="token-logo token-logo-artwork" alt="" src="${Utils.escapeHtml(src)}" loading="lazy" />`
             : '<div class="token-logo token-logo-placeholder">?</div>';
           const sym = Utils.escapeHtml(t.symbol || "—");
           const name = Utils.escapeHtml(t.name || "Unknown");

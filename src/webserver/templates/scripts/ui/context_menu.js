@@ -577,9 +577,10 @@ class ContextMenuManager {
         el.className = "context-menu-token-preview";
 
         const iconDiv = document.createElement("div");
-        iconDiv.className = "context-menu-token-icon";
+        iconDiv.className = "context-menu-token-icon token-logo-frame";
         if (item.icon) {
           const img = document.createElement("img");
+          img.className = "token-logo-artwork";
           img.src = item.icon;
           img.alt = "";
           img.onerror = () => img.remove();

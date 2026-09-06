@@ -195,7 +195,7 @@ export class ToolFavorites {
       <div class="favorite-item" data-id="${fav.id}">
         <button class="favorite-info" data-action="select" type="button" role="menuitem">
           <div class="favorite-token">
-            ${fav.logo_url ? `<img src="${fav.logo_url}" class="favorite-logo" alt="">` : '<i class="icon-circle"></i>'}
+            ${fav.logo_url ? `<img src="${fav.logo_url}" class="favorite-logo token-logo-artwork" alt="">` : '<i class="icon-circle"></i>'}
             <span class="favorite-symbol token-symbol-type">${fav.symbol || fav.mint.slice(0, 6)}</span>
           </div>
           <div class="favorite-label">${fav.label || "No label"}</div>

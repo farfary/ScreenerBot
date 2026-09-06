@@ -70,7 +70,7 @@ export function showImageLightbox({
     </div>
     <div class="lightbox-stage" data-media-type="${normalizedMediaType}">
       <div class="lightbox-image-wrapper">
-        <img src="${Utils.escapeHtml(imageUrl)}" alt="${Utils.escapeHtml(symbol || name || "Image")}" class="lightbox-image" draggable="false" />
+        <img src="${Utils.escapeHtml(imageUrl)}" alt="${Utils.escapeHtml(symbol || name || "Image")}" class="lightbox-image${normalizedMediaType === "logo" ? " token-logo-artwork" : ""}" draggable="false" />
       </div>
       ${captionHtml}
     </div>

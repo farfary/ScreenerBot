@@ -37,6 +37,25 @@
   object-fit: cover;
 }
 
+/* Loaded token artwork is always bare. Circle mode intentionally crops every
+   asset; Natural mode contains the original canvas so transparent round logos
+   remain round while opaque square artwork remains square. Tight wrappers keep
+   their fallback surface only when no usable image is present. */
+:root img.token-logo-artwork {
+  display: block;
+  border: 0;
+  border-radius: var(--token-logo-radius, 3px);
+  background: transparent;
+  box-shadow: none;
+  object-fit: var(--token-logo-fit, cover);
+}
+
+:root .token-logo-frame:has(> img.token-logo-artwork) {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
 /* Brand glyph (the Solana logomark) — 101x88 on a transparent canvas, so cropping it
    edge to edge like a square provider avatar cuts the mark off. Inset it and letterbox
    it inside the selected logo frame so the WHOLE mark is visible.
@@ -47,8 +66,9 @@
    zero-size content area, i.e. a huge empty circle with no logo in it. Each size class
    sets font-size equal to its box size, so 0.16em is a constant proportional inset. */
 .ti-logo-brand {
+  --token-logo-fit: contain;
+
   padding: 0.16em;
-  background: var(--bg-card-hover);
 }
 
 .ti-logo-brand img {

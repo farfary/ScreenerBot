@@ -468,11 +468,11 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
               const sym = t.symbol || "?";
               const initial = sym.charAt(0).toUpperCase();
               const logoHtml = t.image_url
-                ? `<img src="${Utils.escapeHtml(t.image_url)}" alt="${Utils.escapeHtml(sym)}" class="overview-token-logo" onerror="this.parentElement.innerHTML='<span class=\\'overview-token-initial\\'>${initial}</span>'">`
+                ? `<img src="${Utils.escapeHtml(t.image_url)}" alt="${Utils.escapeHtml(sym)}" class="overview-token-logo token-logo-artwork" onerror="this.parentElement.innerHTML='<span class=\\'overview-token-initial\\'>${initial}</span>'">`
                 : `<span class="overview-token-initial">${initial}</span>`;
               return `
               <div class="overview-list-item overview-list-item--token" onclick="window.filteringPage.selectReason('${t.reason}', '${Utils.escapeHtml(t.display_label.replace(/'/g, "\\'"))}')">
-                <div class="overview-token-avatar">${logoHtml}</div>
+                <div class="overview-token-avatar token-logo-frame">${logoHtml}</div>
                 <div class="overview-item-info">
                   <span class="overview-item-symbol">${Utils.escapeHtml(sym)}${t.name ? ` <span class="overview-item-name">${Utils.escapeHtml(t.name)}</span>` : ""}</span>
                   <span class="overview-item-reason">${Utils.escapeHtml(t.display_label)}</span>

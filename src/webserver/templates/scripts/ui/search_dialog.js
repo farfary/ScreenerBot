@@ -235,7 +235,7 @@ function renderResults() {
       <div class="search-result-main">
         ${
           token.logo_url
-            ? `<img src="${escapeHTML(token.logo_url)}" class="search-result-logo" alt="" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">`
+            ? `<img src="${escapeHTML(token.logo_url)}" class="search-result-logo token-logo-artwork" alt="" loading="lazy" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">`
             : ""
         }
         <div class="search-result-logo-placeholder" ${token.logo_url ? 'style="display:none"' : ""}>
