@@ -12,6 +12,8 @@ use chrono::Utc;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
+const MAX_UPDATE_CHECK_BYTES: u64 = 1024 * 1024;
+
 pub async fn check_for_update() -> Result<Option<UpdateInfo>> {
     check_for_update_from(
         crate::net::client(),
@@ -28,14 +30,12 @@ async fn check_for_update_from(
     current_version: &str,
     platform: &str,
 ) -> Result<Option<UpdateInfo>> {
-    mutate_state(|state| {
-        state.phase = UpdatePhase::Checking;
-        state.last_check_attempt = Some(Utc::now());
-        state.check_error = None;
+    let previous_phase = super::mutate_state_with_result(begin_check).await?;
+
+    let result = super::download::retry_update_operation("Update check", || {
+        request_update(&client, server_url, current_version, platform)
     })
     .await;
-
-    let result = request_update(&client, server_url, current_version, platform).await;
     match result {
         Ok(Some(update)) => {
             let update = plan_components(update).await;
@@ -47,10 +47,28 @@ async fn check_for_update_from(
             Ok(None)
         }
         Err(error) => {
-            record_check_failure(&error).await;
+            record_check_failure(&error, previous_phase).await;
             Err(error)
         }
     }
+}
+
+fn begin_check(state: &mut UpdateState) -> Result<UpdatePhase> {
+    if state.phase == UpdatePhase::Checking {
+        return Err(Error::CheckInProgress);
+    }
+    if matches!(
+        state.phase,
+        UpdatePhase::Downloading | UpdatePhase::Verifying | UpdatePhase::Applying
+    ) || state.download_progress.downloading
+    {
+        return Err(Error::DownloadInProgress);
+    }
+    let previous_phase = state.phase;
+    state.phase = UpdatePhase::Checking;
+    state.last_check_attempt = Some(Utc::now());
+    state.check_error = None;
+    Ok(previous_phase)
 }
 
 /// Decide whether the offered release can be applied as a core-only update.
@@ -161,12 +179,7 @@ async fn request_update(
         });
     }
 
-    let body = response.bytes().await.map_err(|error| {
-        Error::Network(crate::errors::NetworkError::RequestFailed {
-            endpoint: url,
-            detail: error.to_string(),
-        })
-    })?;
+    let body = super::download::read_limited_body(response, MAX_UPDATE_CHECK_BYTES, &url).await?;
     parse_update_response(&body, current_version)
 }
 
@@ -319,10 +332,7 @@ async fn record_check_success(update: Option<UpdateInfo>) {
 
         // A staged core survives a re-check: the artifact is already verified and
         // waiting, so re-downloading it would be pure waste.
-        if candidate.kind == UpdateKind::Core
-            && super::core_install::staged_core_version().as_deref()
-                == Some(candidate.version.as_str())
-        {
+        if staged_core_matches(&candidate, super::core_install::read_staged_core().as_ref()) {
             state.phase = UpdatePhase::ReadyToApply;
             return;
         }
@@ -341,14 +351,33 @@ async fn record_check_success(update: Option<UpdateInfo>) {
     .await;
 }
 
-async fn record_check_failure(error: &Error) {
-    UPDATE_AVAILABLE.store(false, Ordering::SeqCst);
-    mutate_state(|state| {
-        state.phase = UpdatePhase::CheckFailed;
-        state.check_error = Some(error.to_string());
-        state.available_update = None;
-    })
-    .await;
+fn staged_core_matches(candidate: &UpdateInfo, staged: Option<&StagedCore>) -> bool {
+    let (Some(core), Some(staged)) = (candidate.core.as_ref(), staged) else {
+        return false;
+    };
+    candidate.kind == UpdateKind::Core
+        && staged.version == candidate.version
+        && staged.size == core.binary_size
+        && staged.sha256 == core.binary_sha256
+}
+
+async fn record_check_failure(error: &Error, previous_phase: UpdatePhase) {
+    let snapshot = mutate_state(|state| apply_check_failure(state, error, previous_phase)).await;
+    UPDATE_AVAILABLE.store(snapshot.available_update.is_some(), Ordering::SeqCst);
+}
+
+fn apply_check_failure(state: &mut UpdateState, error: &Error, previous_phase: UpdatePhase) {
+    // A failed refresh must not discard a previously authenticated update,
+    // verified installer, or staged core. Only a check with no usable prior
+    // state becomes CheckFailed.
+    if state.phase == UpdatePhase::Checking {
+        state.phase = if state.available_update.is_some() {
+            previous_phase
+        } else {
+            UpdatePhase::CheckFailed
+        };
+    }
+    state.check_error = Some(error.to_string());
 }
 
 #[cfg(test)]
@@ -440,5 +469,87 @@ mod tests {
         assert!(validate_release_filename("ScreenerBot-v0.2.3-macOS-arm64.dmg", "0.2.2").is_err());
         assert!(validate_release_filename("../ScreenerBot-v0.2.2-x.dmg", "0.2.2").is_err());
         assert!(validate_release_filename("ScreenerBot-v0.2.2-a/b.dmg", "0.2.2").is_err());
+    }
+
+    #[test]
+    fn checks_cannot_overwrite_an_active_update_operation() {
+        let mut checking = UpdateState {
+            phase: UpdatePhase::Checking,
+            ..UpdateState::default()
+        };
+        assert!(matches!(
+            begin_check(&mut checking),
+            Err(Error::CheckInProgress)
+        ));
+
+        let mut downloading = UpdateState {
+            phase: UpdatePhase::Downloading,
+            ..UpdateState::default()
+        };
+        assert!(matches!(
+            begin_check(&mut downloading),
+            Err(Error::DownloadInProgress)
+        ));
+    }
+
+    #[test]
+    fn failed_refresh_preserves_a_previously_available_update() {
+        let candidate = UpdateInfo {
+            version: "0.2.5".to_owned(),
+            filename: "ScreenerBot-v0.2.5-macOS-x64.dmg".to_owned(),
+            download_url: "https://screenerbot.io/update".to_owned(),
+            file_size: 100,
+            checksum: "a".repeat(64),
+            release_notes: None,
+            release_date: String::new(),
+            kind: UpdateKind::Full,
+            core: None,
+            shell_revision: None,
+        };
+        let mut state = UpdateState {
+            phase: UpdatePhase::Checking,
+            available_update: Some(candidate.clone()),
+            ..UpdateState::default()
+        };
+        let error = Error::UpdateCheckFailed { status: 503 };
+
+        apply_check_failure(&mut state, &error, UpdatePhase::Available);
+
+        assert_eq!(state.phase, UpdatePhase::Available);
+        assert_eq!(state.available_update.unwrap().version, candidate.version);
+        assert!(state.check_error.is_some());
+    }
+
+    #[test]
+    fn staged_core_reuse_is_bound_to_binary_size_and_digest() {
+        let mut candidate = UpdateInfo {
+            version: "0.2.5".to_owned(),
+            filename: "ScreenerBot-v0.2.5-macOS-x64.dmg".to_owned(),
+            download_url: "https://screenerbot.io/update".to_owned(),
+            file_size: 100,
+            checksum: "a".repeat(64),
+            release_notes: None,
+            release_date: String::new(),
+            kind: UpdateKind::Core,
+            core: Some(CoreArtifact {
+                filename: "ScreenerBot-v0.2.5-macOS-x64-core.gz".to_owned(),
+                size: 20,
+                sha256: "b".repeat(64),
+                binary_size: 80,
+                binary_sha256: "c".repeat(64),
+            }),
+            shell_revision: Some("abcd1234".to_owned()),
+        };
+        let staged = StagedCore {
+            version: candidate.version.clone(),
+            path: "0.2.5/screenerbot".to_owned(),
+            sha256: "c".repeat(64),
+            size: 80,
+            staged_at: Utc::now(),
+        };
+        assert!(staged_core_matches(&candidate, Some(&staged)));
+
+        candidate.core.as_mut().unwrap().binary_sha256 = "d".repeat(64);
+        assert!(!staged_core_matches(&candidate, Some(&staged)));
     }
 }

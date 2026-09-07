@@ -12,6 +12,7 @@ use std::time::Duration;
 /// Cap the manifest read. It is a few hundred bytes of JSON; anything larger is
 /// a wrong or hostile asset, not a manifest.
 const MAX_MANIFEST_BYTES: u64 = 256 * 1024;
+const MAX_RELEASE_METADATA_BYTES: u64 = 2 * 1024 * 1024;
 const MANIFEST_SUFFIX: &str = "-update-manifest.json";
 
 #[derive(Debug, Clone, Deserialize)]
@@ -59,6 +60,17 @@ pub(super) async fn fetch_release(
     github_api: &str,
     version: &str,
 ) -> Result<GithubRelease> {
+    super::download::retry_update_operation("GitHub release metadata", || {
+        fetch_release_once(client, github_api, version)
+    })
+    .await
+}
+
+async fn fetch_release_once(
+    client: &reqwest::Client,
+    github_api: &str,
+    version: &str,
+) -> Result<GithubRelease> {
     let url = format!("{github_api}/releases/tags/v{version}");
     let response = client
         .get(&url)
@@ -81,7 +93,9 @@ pub(super) async fn fetch_release(
             body: None,
         }));
     }
-    response.json().await.map_err(|error| {
+    let body =
+        super::download::read_limited_body(response, MAX_RELEASE_METADATA_BYTES, &url).await?;
+    serde_json::from_slice(&body).map_err(|error| {
         Error::Data(crate::errors::DataError::ParseError {
             data_type: "GitHub release metadata".to_owned(),
             error: error.to_string(),
@@ -148,6 +162,20 @@ pub(super) async fn fetch_manifest(
         detail: "GitHub reports no digest for the update manifest".to_owned(),
     })?;
 
+    let body = super::download::retry_update_operation("Update manifest download", || {
+        fetch_manifest_body(client, asset)
+    })
+    .await?;
+    if super::download::sha256_bytes(&body) != expected_digest {
+        return Err(Error::DigestMismatch {
+            detail: "update manifest does not match its GitHub digest".to_owned(),
+        });
+    }
+
+    parse_manifest(&body, version)
+}
+
+async fn fetch_manifest_body(client: &reqwest::Client, asset: &GithubAsset) -> Result<Vec<u8>> {
     let url = super::download::resolve_download_url(&asset.browser_download_url)?;
     let response = client
         .get(url)
@@ -170,30 +198,29 @@ pub(super) async fn fetch_manifest(
     }
     super::download::validate_final_url(response.url())?;
 
-    let body = response.bytes().await.map_err(|error| {
-        Error::Network(crate::errors::NetworkError::RequestFailed {
-            endpoint: asset.browser_download_url.clone(),
-            detail: error.to_string(),
-        })
-    })?;
+    if let Some(actual) = response.content_length() {
+        if actual != asset.size {
+            return Err(Error::DownloadSizeMismatch {
+                expected: asset.size,
+                actual,
+            });
+        }
+    }
+    let body =
+        super::download::read_limited_body(response, asset.size, &asset.browser_download_url)
+            .await?;
     if body.len() as u64 != asset.size {
         return Err(Error::DownloadSizeMismatch {
             expected: asset.size,
             actual: body.len() as u64,
         });
     }
-    if super::download::sha256_bytes(&body) != expected_digest {
-        return Err(Error::DigestMismatch {
-            detail: "update manifest does not match its GitHub digest".to_owned(),
-        });
-    }
-
-    parse_manifest(&body, version)
+    Ok(body)
 }
 
 /// Parse and validate a manifest body against the version it must describe.
 pub(super) fn parse_manifest(body: &[u8], version: &str) -> Result<UpdateManifest> {
-    let manifest: UpdateManifest = serde_json::from_slice(body).map_err(|error| {
+    let mut manifest: UpdateManifest = serde_json::from_slice(body).map_err(|error| {
         Error::Data(crate::errors::DataError::ParseError {
             data_type: "update manifest".to_owned(),
             error: error.to_string(),
@@ -215,6 +242,10 @@ pub(super) fn parse_manifest(body: &[u8], version: &str) -> Result<UpdateManifes
     validate_shell_revision(&manifest.shell_revision)?;
     for (platform, artifact) in &manifest.core {
         validate_core_artifact(platform, artifact, version)?;
+    }
+    for artifact in manifest.core.values_mut() {
+        artifact.sha256.make_ascii_lowercase();
+        artifact.binary_sha256.make_ascii_lowercase();
     }
     Ok(manifest)
 }
@@ -301,6 +332,20 @@ mod tests {
         assert_eq!(manifest.shell_revision, "a1b2c3d4e5f6");
         assert_eq!(manifest.core.len(), 1);
         assert_eq!(manifest.core["macos-arm64"].binary_size, 80_000_000);
+    }
+
+    #[test]
+    fn canonicalizes_valid_uppercase_artifact_digests() {
+        let mut value: serde_json::Value =
+            serde_json::from_slice(&manifest_json("0.2.2", "a1b2c3d4e5f6")).unwrap();
+        value["core"]["macos-arm64"]["sha256"] = serde_json::json!("A".repeat(64));
+        value["core"]["macos-arm64"]["binarySha256"] = serde_json::json!("B".repeat(64));
+        let body = serde_json::to_vec(&value).unwrap();
+
+        let manifest = parse_manifest(&body, "0.2.2").unwrap();
+        let artifact = &manifest.core["macos-arm64"];
+        assert_eq!(artifact.sha256, "a".repeat(64));
+        assert_eq!(artifact.binary_sha256, "b".repeat(64));
     }
 
     #[test]
