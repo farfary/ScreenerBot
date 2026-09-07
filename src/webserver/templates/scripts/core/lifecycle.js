@@ -40,6 +40,14 @@ const safeInvokeAll = (callbacks) => {
 const createContext = (pageName) => {
   const deactivateCleanups = new Set();
   const disposeCleanups = new Set();
+  // Managed resources belong to the page context for its entire cached
+  // lifetime. Keep iterable identity sets so every deactivation can stop/hide
+  // them centrally; callers cannot accidentally lose cleanup by forgetting to
+  // re-register an object on a later activation.
+  const managedPollers = new Set();
+  const managedTabBars = new Set();
+  const managedActionBars = new Set();
+  const abortControllerReleases = new WeakMap();
   let active = false;
 
   const register = (store, callback) => {
@@ -66,41 +74,31 @@ const createContext = (pageName) => {
         return poller;
       }
 
-      // Track poller globally for visibility handling
-      activePollers.add(poller);
-
-      this.onDeactivate(() => {
-        if (typeof poller.stop === "function") {
-          poller.stop({ silent: true });
-        }
-      });
-      this.onDispose(() => {
-        activePollers.delete(poller);
-        if (typeof poller.cleanup === "function") {
-          poller.cleanup();
-        }
-      });
+      if (!managedPollers.has(poller)) {
+        managedPollers.add(poller);
+        activePollers.add(poller);
+        this.onDispose(() => {
+          managedPollers.delete(poller);
+          activePollers.delete(poller);
+          if (typeof poller.cleanup === "function") {
+            poller.cleanup();
+          }
+        });
+      }
       return poller;
     },
     manageTabBar(tabBar) {
       if (!tabBar || typeof tabBar !== "object") {
         return tabBar;
       }
-      // Re-register deactivate cleanup (cleanups are cleared after each deactivate)
-      // This is safe to call multiple times - the Set prevents duplicates
-      this.onDeactivate(() => {
-        if (typeof tabBar.hide === "function") {
-          tabBar.hide({ silent: true });
-        }
-      });
-      // Dispose cleanup only needs to be registered once (survives until page disposal)
-      if (!tabBar.__disposeRegistered) {
+      if (!managedTabBars.has(tabBar)) {
+        managedTabBars.add(tabBar);
         this.onDispose(() => {
+          managedTabBars.delete(tabBar);
           if (typeof tabBar.destroy === "function") {
             tabBar.destroy();
           }
         });
-        tabBar.__disposeRegistered = true;
       }
       return tabBar;
     },
@@ -108,38 +106,50 @@ const createContext = (pageName) => {
       if (!actionBar || typeof actionBar !== "object") {
         return actionBar;
       }
-      this.onDeactivate(() => {
-        if (typeof actionBar.clear === "function") {
-          actionBar.clear();
-        }
-      });
-      this.onDispose(() => {
-        if (typeof actionBar.dispose === "function") {
-          actionBar.dispose();
-        }
-      });
+      if (!managedActionBars.has(actionBar)) {
+        managedActionBars.add(actionBar);
+        this.onDispose(() => {
+          managedActionBars.delete(actionBar);
+          if (typeof actionBar.dispose === "function") {
+            actionBar.dispose();
+          }
+        });
+      }
       return actionBar;
     },
     createAbortController() {
       const controller = new AbortController();
+      let release = () => {};
       const abort = () => {
         try {
           controller.abort();
         } catch (error) {
           console.error("[PageLifecycle] Abort controller cleanup failed", error);
+        } finally {
+          release();
         }
       };
-      this.onDeactivate(abort);
-      this.onDispose(abort);
+      const unregisterDeactivate = this.onDeactivate(abort);
+      const unregisterDispose = this.onDispose(abort);
+      release = () => {
+        unregisterDeactivate();
+        unregisterDispose();
+        abortControllerReleases.delete(controller);
+      };
+      abortControllerReleases.set(controller, release);
       return controller;
+    },
+    releaseAbortController(controller) {
+      abortControllerReleases.get(controller)?.();
     },
     __setActive(value) {
       active = Boolean(value);
     },
     __runDeactivateCleanups() {
-      if (!deactivateCleanups.size) {
-        return;
-      }
+      safeInvokeAll(Array.from(managedPollers, (poller) => () => poller.stop?.({ silent: true })));
+      safeInvokeAll(Array.from(managedTabBars, (tabBar) => () => tabBar.hide?.({ silent: true })));
+      safeInvokeAll(Array.from(managedActionBars, (actionBar) => () => actionBar.clear?.()));
+
       const callbacks = Array.from(deactivateCleanups);
       deactivateCleanups.clear();
       safeInvokeAll(callbacks);
@@ -270,15 +280,15 @@ export const PageLifecycleRegistry = {
       return;
     }
     const context = getOrCreateContext(pageName);
-    if (!context.__initialized) {
+    if (!context.__initialized || !context.isActive()) {
       return;
     }
     // Leaving a page must never leave a stray dropdown/menu floating over the next.
     closeAllMenus("navigation");
+    context.__setActive(false);
     try {
       await runHook("deactivate", pageName, lifecycle.deactivate, context);
     } finally {
-      context.__setActive(false);
       context.__runDeactivateCleanups();
     }
   },

@@ -163,16 +163,34 @@ export function createOhlcvModule(deps) {
   };
 
   const fetchOhlcvData = async () => {
+    const table = deps.ohlcvTable;
     ohlcvState.isLoading = true;
+    if (!ohlcvState.hasLoadedOnce) {
+      table?.showBlockingState?.({
+        variant: "loading",
+        title: "Loading tokens…",
+        description: "Preparing the selected token view.",
+      });
+    }
     try {
       const response = await requestManager.fetch("/api/ohlcv/tokens", { priority: "normal" });
       if (response && response.tokens) {
         ohlcvState.tokens = response.tokens;
         ohlcvState.stats = response.stats;
       }
+      ohlcvState.hasLoadedOnce = true;
+      table?.hideBlockingState?.();
     } catch (err) {
       console.error("Failed to fetch OHLCV data:", err);
-      Utils.showToast({ key: "ohlcv-load", type: "error", title: "Could not load OHLCV data" });
+      if (!ohlcvState.hasLoadedOnce) {
+        table?.showBlockingState?.({
+          variant: "error",
+          title: "OHLCV data could not be loaded",
+          description: "Switch tabs or try again.",
+        });
+      } else {
+        Utils.showToast({ key: "ohlcv-load", type: "error", title: "Could not load OHLCV data" });
+      }
     } finally {
       ohlcvState.isLoading = false;
     }
@@ -294,7 +312,9 @@ export function createOhlcvModule(deps) {
       ohlcvContainer = document.createElement("div");
       ohlcvContainer.id = "ohlcv-table-container";
       ohlcvContainer.className = "ohlcv-table-container";
-      ohlcvContainer.style.display = "none";
+      // This table is created only when OHLCV becomes active. Keep it laid out
+      // for DataTable's initial measurement instead of constructing it hidden.
+      ohlcvContainer.style.display = "";
       rootEl.parentNode.insertBefore(ohlcvContainer, rootEl.nextSibling);
     }
 
@@ -350,16 +370,28 @@ export function createOhlcvModule(deps) {
     });
   };
 
-  const showOhlcvView = () => {
+  const showOhlcvView = ({ load = true } = {}) => {
     const tokensRoot = document.querySelector("#tokens-root");
-    const ohlcvContainer = document.querySelector("#ohlcv-table-container");
 
     if (tokensRoot) tokensRoot.style.display = "none";
+    if (!deps.ohlcvTable) initOhlcvTable();
+    const ohlcvContainer = document.querySelector("#ohlcv-table-container");
     if (ohlcvContainer) ohlcvContainer.style.display = "";
 
     // Pause main table poller, start OHLCV poller
-    if (deps.poller) deps.poller.pause();
-    if (deps.lastUpdatePoller) deps.lastUpdatePoller.pause();
+    if (deps.poller) deps.poller.stop({ silent: true });
+    if (deps.lastUpdatePoller) deps.lastUpdatePoller.stop({ silent: true });
+
+    if (ohlcvState.hasLoadedOnce) {
+      updateOhlcvTable();
+    } else {
+      deps.ohlcvTable?.showBlockingState?.({
+        variant: "loading",
+        title: "Loading tokens…",
+        description: "Preparing the selected token view.",
+      });
+    }
+    if (!load) return;
 
     if (!deps.ohlcvPoller) {
       deps.ohlcvPoller = new Poller(
@@ -374,10 +406,12 @@ export function createOhlcvModule(deps) {
         }
       );
     }
+    deps.managePoller?.(deps.ohlcvPoller);
     deps.ohlcvPoller.start();
 
-    // Initial load
-    fetchOhlcvData().then(() => updateOhlcvTable());
+    if (!ohlcvState.isLoading) {
+      void fetchOhlcvData().then(() => updateOhlcvTable());
+    }
   };
 
   const hideOhlcvView = () => {
@@ -388,7 +422,7 @@ export function createOhlcvModule(deps) {
     if (ohlcvContainer) ohlcvContainer.style.display = "none";
 
     // Pause OHLCV poller, resume main poller
-    if (deps.ohlcvPoller) deps.ohlcvPoller.pause();
+    if (deps.ohlcvPoller) deps.ohlcvPoller.stop({ silent: true });
     if (deps.poller) deps.poller.start();
     if (deps.lastUpdatePoller) deps.lastUpdatePoller.start();
   };

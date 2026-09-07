@@ -223,11 +223,24 @@ export function createWalletRenderers({
   // Main Render Function
   // =============================================================================
 
-  function renderCurrentPanel() {
+  function renderCurrentPanel({ loading = false } = {}) {
     const tab = currentTab();
-    if (tab === "main") renderMainWalletPanel();
-    else if (tab === "secondaries") renderSecondariesPanel();
-    else if (tab === "archive") renderArchivePanel();
+    if (tab === "main") renderMainWalletPanel({ loading });
+    else if (tab === "secondaries") renderSecondariesPanel({ loading });
+    else if (tab === "archive") renderArchivePanel({ loading });
+  }
+
+  function syncLoadingState(table, loading) {
+    if (!table) return;
+    if (loading) {
+      table.showBlockingState?.({
+        variant: "loading",
+        title: "Loading wallets…",
+        description: "Preparing the selected wallet view.",
+      });
+    } else {
+      table.hideBlockingState?.();
+    }
   }
 
   // =============================================================================
@@ -237,8 +250,8 @@ export function createWalletRenderers({
   // The main wallet IS the subject of its token-holdings table, so its name,
   // address, balances and actions live in that table's toolbar identity/stats —
   // there is no separate wallet info bar above the table.
-  function renderMainWalletPanel() {
-    renderTokenHoldingsTable();
+  function renderMainWalletPanel(options = {}) {
+    renderTokenHoldingsTable(options);
   }
 
   // =============================================================================
@@ -277,7 +290,7 @@ export function createWalletRenderers({
     tokenTable.setToolbarItem("wt-export-key", { hidden: !wallet });
   }
 
-  function renderTokenHoldingsTable() {
+  function renderTokenHoldingsTable({ loading = false } = {}) {
     const dtRoot = document.querySelector("#tokens-datatable-root");
     if (!dtRoot) return;
 
@@ -288,6 +301,7 @@ export function createWalletRenderers({
       // Silent data refresh — no DOM teardown, no visual flash, settings dialog stays open
       tokenTable.setData(tokens);
       syncMainWalletToolbar(tokens);
+      syncLoadingState(tokenTable, loading);
       return;
     }
 
@@ -354,6 +368,7 @@ export function createWalletRenderers({
 
     tokenTable.setData(tokens);
     syncMainWalletToolbar(tokens);
+    syncLoadingState(tokenTable, loading);
 
     // Event delegation for copy buttons inside DataTable cells — wired once
     tokenTableClickHandler = (e) => {
@@ -407,7 +422,7 @@ export function createWalletRenderers({
   // Secondaries Panel
   // =============================================================================
 
-  function renderSecondariesPanel() {
+  function renderSecondariesPanel({ loading = false } = {}) {
     const container = $("#secondaries-table-container");
     if (!container) return;
 
@@ -470,6 +485,7 @@ export function createWalletRenderers({
     }
 
     secondariesTable.setData(secondaryWallets);
+    syncLoadingState(secondariesTable, loading);
     secondariesTable.updateToolbarSummary?.([
       { id: "secondaries-count", value: String(secondaryWallets.length) },
     ]);
@@ -479,7 +495,7 @@ export function createWalletRenderers({
   // Archive Panel
   // =============================================================================
 
-  function renderArchivePanel() {
+  function renderArchivePanel({ loading = false } = {}) {
     const container = $("#archive-table-container");
     if (!container) return;
 
@@ -516,6 +532,7 @@ export function createWalletRenderers({
     }
 
     archiveTable.setData(archivedWallets);
+    syncLoadingState(archiveTable, loading);
     archiveTable.updateToolbarSummary?.([
       { id: "archive-count", value: String(archivedWallets.length) },
     ]);

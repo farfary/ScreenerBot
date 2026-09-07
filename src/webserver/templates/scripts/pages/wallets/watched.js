@@ -75,7 +75,9 @@ export function createWatchedWallets({
     const cancelBtn = $("#watch-cancel-btn");
     if (cancelBtn) on(cancelBtn, "click", () => hideAddModal());
 
-    ensureTable();
+    // The table is created lazily by load(), after the parent has made the
+    // restored Watched panel visible. Constructing it here would measure a
+    // display:none ancestor whenever another wallet subtab is active.
   }
 
   function showAddModal() {

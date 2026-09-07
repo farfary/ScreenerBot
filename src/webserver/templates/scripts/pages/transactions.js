@@ -110,8 +110,7 @@ function createLifecycle() {
   };
 
   let lastUserReloadAt = 0;
-  const isScrolledAwayFromTop = () =>
-    (table?.elements?.scrollContainer?.scrollTop ?? 0) > 1;
+  const isScrolledAwayFromTop = () => (table?.elements?.scrollContainer?.scrollTop ?? 0) > 1;
 
   const buildFiltersPayload = () => {
     const filters = {};
@@ -423,7 +422,7 @@ function createLifecycle() {
   };
 
   return {
-    async init(_ctx) {
+    init(_ctx) {
       const columns = [
         {
           id: "timestamp",
@@ -696,7 +695,9 @@ function createLifecycle() {
         apply: false,
       });
       updateToolbar();
-      await setupSubjectSelector();
+      // The main table is already usable with the main-wallet option. Watched
+      // subjects enhance the selector when their independent request returns.
+      void setupSubjectSelector();
     },
 
     activate(ctx) {

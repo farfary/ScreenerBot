@@ -404,8 +404,7 @@ export class DataTable {
   }
 
   _getSearchMode() {
-    const searchConfig =
-      this.toolbarView?.getItem("search") || this.options?.toolbar?.search || {};
+    const searchConfig = this.toolbarView?.getItem("search") || this.options?.toolbar?.search || {};
     return searchConfig.mode === "server" ? "server" : "client";
   }
 
@@ -545,6 +544,11 @@ export class DataTable {
         <div class="data-table-scroll-container">
           <div class="data-table-blocking-state" aria-live="polite" aria-hidden="true">
             <div class="data-table-blocking-state__inner">
+              <div
+                class="data-table-blocking-state__spinner loading-spinner inline"
+                aria-hidden="true"
+                hidden
+              ></div>
               <i class="data-table-blocking-state__icon icon-loader" aria-hidden="true"></i>
               <div class="data-table-blocking-state__text">
                 <div class="data-table-blocking-state__title"></div>
@@ -560,8 +564,7 @@ export class DataTable {
           </table>
         </div>
         <div class="dt-scroll-loader" aria-hidden="true">
-          <i class="dt-scroll-loader__icon icon-loader-circle" aria-hidden="true"></i>
-          <span class="dt-scroll-loader__text">Loading more…</span>
+          <div class="dt-scroll-loader__indicator loading-spinner inline">Loading more…</div>
         </div>
         ${this._renderClientPaginationBar()}
         ${this._renderServerPaginationBar()}
@@ -578,6 +581,9 @@ export class DataTable {
     this.elements.tbody = container.querySelector("tbody");
     this.elements.scrollLoader = container.querySelector(".dt-scroll-loader");
     this.elements.blockingState = container.querySelector(".data-table-blocking-state");
+    this.elements.blockingStateSpinner = container.querySelector(
+      ".data-table-blocking-state__spinner"
+    );
     this.elements.blockingStateIcon = container.querySelector(".data-table-blocking-state__icon");
     this.elements.blockingStateTitle = container.querySelector(".data-table-blocking-state__title");
     this.elements.blockingStateDescription = container.querySelector(
@@ -644,6 +650,7 @@ export class DataTable {
     }
 
     const iconEl = this.elements.blockingStateIcon;
+    const spinnerEl = this.elements.blockingStateSpinner;
     const titleEl = this.elements.blockingStateTitle;
     const descEl = this.elements.blockingStateDescription;
 
@@ -662,13 +669,18 @@ export class DataTable {
       if (titleEl) titleEl.textContent = "";
       if (descEl) descEl.textContent = "";
       if (iconEl) iconEl.className = "data-table-blocking-state__icon";
+      if (iconEl) iconEl.hidden = true;
+      if (spinnerEl) spinnerEl.hidden = true;
       return;
     }
 
     const state = this._blockingState;
+    const isLoading = state.variant === "loading";
     container.classList.add(`data-table-blocking-state--${state.variant}`);
+    if (spinnerEl) spinnerEl.hidden = !isLoading;
     if (iconEl) {
       iconEl.className = `data-table-blocking-state__icon ${state.icon}`.trim();
+      iconEl.hidden = isLoading;
     }
     if (titleEl) {
       titleEl.textContent = state.title;
@@ -955,10 +967,7 @@ export class DataTable {
       return `
         <tr>
           <td colspan="100" class="dt-state-cell">
-            <div class="dt-loading-state">
-              <div class="dt-loading-spinner"></div>
-              <div class="dt-loading-text">${this.options.loadingMessage}</div>
-            </div>
+            <div class="loading-spinner">${this.options.loadingMessage}</div>
           </td>
         </tr>`;
     }

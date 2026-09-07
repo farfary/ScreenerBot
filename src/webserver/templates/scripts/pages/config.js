@@ -167,7 +167,12 @@ function renderStateMessage() {
   banner.className = "config-state";
 
   if (loading) {
-    banner.innerHTML = "<strong>Loading configuration…</strong><div>Please wait</div>";
+    if (!state.draft) {
+      banner.innerHTML = '<div class="loading-spinner">Loading configuration…</div>';
+      banner.classList.add("initial-loading");
+    } else {
+      banner.innerHTML = '<div class="loading-spinner inline">Refreshing configuration…</div>';
+    }
     banner.classList.add("loading");
     banner.hidden = false;
     return;
@@ -1238,38 +1243,46 @@ function activate() {
 
 function deactivate() {}
 
-async function init(ctx) {
+async function loadInitialConfiguration() {
+  try {
+    if (!state.metadata) {
+      await loadMetadata();
+    }
+
+    syncSectionFromHash();
+    if (state.activeSection && window.location.hash !== `#${state.activeSection}`) {
+      window.history.replaceState(
+        { page: "config", subtab: state.activeSection },
+        "",
+        `#${state.activeSection}`
+      );
+    }
+
+    await loadConfig();
+  } catch (error) {
+    console.error("[Config] Metadata load failed", error);
+    setState({ loading: false });
+    Utils.showToast({
+      key: "config-load",
+      type: "error",
+      title: "Could not load configuration metadata",
+      message: error.message || null,
+    });
+  }
+}
+
+function init(ctx) {
   attachEventHandlers(ctx);
 
-  if (!state.metadata) {
-    try {
-      await loadMetadata();
-    } catch (error) {
-      console.error("[Config] Metadata load failed", error);
-      Utils.showToast({
-        key: "config-load",
-        type: "error",
-        title: "Could not load configuration metadata",
-        message: error.message || null,
-      });
-      return;
-    }
-  }
-
-  syncSectionFromHash();
-  if (state.activeSection && window.location.hash !== `#${state.activeSection}`) {
-    window.history.replaceState(
-      { page: "config", subtab: state.activeSection },
-      "",
-      `#${state.activeSection}`
-    );
-  }
   const popstateHandler = () => syncSectionFromHash();
   on(window, "popstate", popstateHandler);
   ctx.onDispose(() => off(window, "popstate", popstateHandler));
 
-  await loadConfig();
+  // Paint the shell and the shared loader before any remote metadata/config
+  // request. The lifecycle hook itself must remain synchronous.
+  state.loading = true;
   render();
+  void loadInitialConfiguration();
 }
 
 registerPage("config", {

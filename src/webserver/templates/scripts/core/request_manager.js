@@ -370,10 +370,15 @@ export function createScopedFetcher(ctx, { latestOnly = false } = {}) {
     const controller = ctx.createAbortController();
     lastController = controller;
 
-    return requestManager.fetch(url, {
-      ...options,
-      signal: controller.signal,
-    });
+    return requestManager
+      .fetch(url, {
+        ...options,
+        signal: controller.signal,
+      })
+      .finally(() => {
+        ctx.releaseAbortController?.(controller);
+        if (lastController === controller) lastController = null;
+      });
   };
 }
 

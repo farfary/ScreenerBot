@@ -202,12 +202,23 @@
   overflow: auto; /* Allow scrolling at page container level */
 }
 
-/* Router page-transition loader — only shown briefly on first (uncached) visit of a
-   tab; cached tabs reattach instantly with no loader. Uses the centralized
-   .loading-spinner (components.css). A short delayed fade-in avoids flashing the
-   spinner on fast loads. */
+/* Router page-transition loader. Every navigation releases the outgoing page and
+   mounts this as the viewport's sole child; cached transitions normally finish
+   inside the delayed fade-in and therefore never flash a spinner. */
+.content[data-loading] {
+  overflow: hidden;
+}
+
+/* Structural backstop: a future router regression must not be able to show an
+   outgoing page beside the loader in this flex column. */
+.content[data-loading] > :not(.page-loading) {
+  display: none !important;
+}
+
 .page-loading {
   flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
   display: flex;
   align-items: center;
   justify-content: center;

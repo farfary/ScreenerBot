@@ -19,15 +19,37 @@ export function createFavoritesModule(deps) {
   const { favoritesState, requestManager, DataTable, Utils } = deps;
 
   const fetchFavorites = async () => {
+    const table = deps.favoritesTable;
     favoritesState.isLoading = true;
+    if (!favoritesState.hasLoadedOnce) {
+      table?.showBlockingState?.({
+        variant: "loading",
+        title: "Loading tokens…",
+        description: "Preparing the selected token view.",
+      });
+    }
     try {
       const response = await requestManager.fetch("/api/tokens/favorites", { priority: "normal" });
       if (response && response.favorites) {
         favoritesState.favorites = response.favorites;
       }
+      favoritesState.hasLoadedOnce = true;
+      table?.hideBlockingState?.();
     } catch (err) {
       console.error("Failed to fetch favorites:", err);
-      Utils.showToast({ key: "favorites-load", type: "error", title: "Could not load favorites" });
+      if (!favoritesState.hasLoadedOnce) {
+        table?.showBlockingState?.({
+          variant: "error",
+          title: "Favorites could not be loaded",
+          description: "Switch tabs or try again.",
+        });
+      } else {
+        Utils.showToast({
+          key: "favorites-load",
+          type: "error",
+          title: "Could not load favorites",
+        });
+      }
     } finally {
       favoritesState.isLoading = false;
     }
@@ -75,7 +97,9 @@ export function createFavoritesModule(deps) {
       favoritesContainer = document.createElement("div");
       favoritesContainer.id = "favorites-table-container";
       favoritesContainer.className = "favorites-table-container";
-      favoritesContainer.style.display = "none";
+      // This table is created only when Favorites becomes active. It must be
+      // measurable before DataTable performs its first column-fit pass.
+      favoritesContainer.style.display = "";
       rootEl.parentNode.insertBefore(favoritesContainer, rootEl.nextSibling);
     }
 
@@ -137,22 +161,32 @@ export function createFavoritesModule(deps) {
     });
   };
 
-  const showFavoritesView = () => {
+  const showFavoritesView = ({ load = true } = {}) => {
     const tokensRoot = document.querySelector("#tokens-root");
-    const favoritesContainer = document.querySelector("#favorites-table-container");
     const ohlcvContainer = document.querySelector("#ohlcv-table-container");
 
     if (tokensRoot) tokensRoot.style.display = "none";
+    if (!deps.favoritesTable) initFavoritesTable();
+    const favoritesContainer = document.querySelector("#favorites-table-container");
     if (favoritesContainer) favoritesContainer.style.display = "";
     if (ohlcvContainer) ohlcvContainer.style.display = "none";
 
     // Pause main table poller
-    if (deps.poller) deps.poller.pause();
-    if (deps.lastUpdatePoller) deps.lastUpdatePoller.pause();
-    if (deps.ohlcvPoller) deps.ohlcvPoller.pause();
+    if (deps.poller) deps.poller.stop({ silent: true });
+    if (deps.lastUpdatePoller) deps.lastUpdatePoller.stop({ silent: true });
+    if (deps.ohlcvPoller) deps.ohlcvPoller.stop({ silent: true });
 
-    // Initial load
-    fetchFavorites().then(() => updateFavoritesTable());
+    if (favoritesState.hasLoadedOnce) {
+      updateFavoritesTable();
+    } else {
+      deps.favoritesTable?.showBlockingState?.({
+        variant: "loading",
+        title: "Loading tokens…",
+        description: "Preparing the selected token view.",
+      });
+    }
+    if (!load || favoritesState.isLoading) return;
+    void fetchFavorites().then(() => updateFavoritesTable());
   };
 
   const hideFavoritesView = () => {

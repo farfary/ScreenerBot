@@ -44,6 +44,8 @@ function createLifecycle() {
   let walletCopyPoller = null;
   let configPoller = null;
   let strategiesPoller = null;
+  let timestampPoller = null;
+  let lifecycleContext = null;
 
   // Hash guard — skip positions summary re-render when data is unchanged
   let _lastPositionsKey = null;
@@ -175,7 +177,7 @@ function createLifecycle() {
   /**
    * Switch to a different tab
    */
-  function switchTab(tabId) {
+  function switchTab(tabId, { load = true } = {}) {
     state.currentTab = tabId;
 
     // Hide all tab contents
@@ -209,39 +211,45 @@ function createLifecycle() {
     // padding state is deterministic on every tab switch and re-entry —
     // never left to a :has() inline-style selector that can go stale.
     const traderContent = $("#trader-content");
-    if (tabId === "strategies") {
-      traderContent?.classList.add("trader-content--fullbleed");
-      activateStrategiesSubtab();
-    } else {
-      traderContent?.classList.toggle("trader-content--fullbleed", tabId === "wallet-copy");
-      deactivateStrategiesSubtab();
+    const isStrategiesTab = tabId === "strategies";
+    traderContent?.classList.toggle(
+      "trader-content--fullbleed",
+      isStrategiesTab || tabId === "wallet-copy"
+    );
+    if (load) {
+      if (isStrategiesTab) activateStrategiesSubtab();
+      else deactivateStrategiesSubtab();
     }
     traderContent?.classList.toggle("trader-content--split-scroll", tabId === "stats");
 
+    // init() paints only. Remote loaders and embedded lifecycles start once the
+    // page is active, after the selected panel is already on screen.
+    if (!load) return;
+
     // Start/stop pollers based on tab
     if (tabId === "stats") {
-      if (statsPoller && !statsPoller.running) {
+      if (statsPoller && !statsPoller.active) {
         statsPoller.start();
       }
     } else {
-      if (statsPoller && statsPoller.running) {
+      if (statsPoller?.active) {
         statsPoller.stop();
       }
     }
 
     if (tabId === "wallet-copy") {
-      if (walletCopyPoller && !walletCopyPoller.running) walletCopyPoller.start();
-    } else if (walletCopyPoller?.running) {
+      if (walletCopyPoller && !walletCopyPoller.active) walletCopyPoller.start();
+    } else if (walletCopyPoller?.active) {
       walletCopyPoller.stop();
     }
 
     if (tabId === "strategy-control") {
       loadStrategies({ showLoading: true });
-      if (strategiesPoller && !strategiesPoller.running) {
+      if (strategiesPoller && !strategiesPoller.active) {
         strategiesPoller.start();
       }
     } else {
-      if (strategiesPoller && strategiesPoller.running) {
+      if (strategiesPoller?.active) {
         strategiesPoller.stop();
       }
     }
@@ -1260,25 +1268,13 @@ function createLifecycle() {
     }
   }
 
-  /**
-   * Setup navigation links to other pages
-   */
-  function setupNavigation() {
-    // Link to positions page
-    $$(".nav-to-positions").forEach((link) => {
-      addTrackedListener(link, "click", (e) => {
-        e.preventDefault();
-        window.dispatchEvent(new CustomEvent("navigate", { detail: { page: "positions" } }));
-      });
-    });
-
-    // Link to strategies page
-    $$(".nav-to-strategies").forEach((link) => {
-      addTrackedListener(link, "click", (e) => {
-        e.preventDefault();
-        window.dispatchEvent(new CustomEvent("navigate", { detail: { page: "strategies" } }));
-      });
-    });
+  function syncTradingFeatureUi() {
+    if (!tabBar || tabBar.container?.dataset.page !== "trader") return;
+    applyFeatureStatusToTabs(tradingFeatures, $$);
+    if (!isTabUsable(tradingFeatures, state.currentTab)) {
+      state.currentTab = DEFAULT_TAB;
+      void tabBar.setActive(DEFAULT_TAB, { skipValidation: true });
+    }
   }
 
   // ============================================================================
@@ -1289,8 +1285,9 @@ function createLifecycle() {
     /**
      * Initialize the page
      */
-    async init(ctx) {
+    init(ctx) {
       console.log("[Trader] Initializing page");
+      lifecycleContext = ctx;
 
       // Fetch feature status early (non-blocking, but before tab bar setup)
       const featurePromise = fetchFeatureStatus(requestManager);
@@ -1306,11 +1303,6 @@ function createLifecycle() {
       // loadConfig() calls configCards.snapshot() so the buttons re-hide.
       configCards = createTraderConfigCards({ saveConfig });
       configCards.setup();
-
-      // Wait for features before setting up tabs (important for initial tab selection)
-      const [features, metadataResponse] = await Promise.all([featurePromise, metadataPromise]);
-      tradingFeatures = features;
-      configCards.applyMetadata(metadataResponse?.data || metadataResponse || {});
 
       // Initialize tab bar with beforeChange hook for feature validation
       tabBar = new TabBar({
@@ -1337,9 +1329,6 @@ function createLifecycle() {
       // Show the tab bar
       tabBar.show();
 
-      // Apply feature status badges/styling to tabs
-      applyFeatureStatusToTabs(tradingFeatures, $$);
-
       // Sync state with tab bar's restored state (from server or URL hash)
       const activeTab = tabBar.getActiveTab();
       if (activeTab && activeTab !== state.currentTab) {
@@ -1354,7 +1343,7 @@ function createLifecycle() {
       }
 
       // Show the active tab content
-      switchTab(state.currentTab);
+      switchTab(state.currentTab, { load: false });
 
       // Setup form handlers
       setupFormHandlers();
@@ -1366,14 +1355,19 @@ function createLifecycle() {
       // Setup preview listeners (Phase 2)
       setupPreviewListeners();
 
-      // Setup navigation links
-      setupNavigation();
+      // Feature/config metadata enhances the already-painted shell. If it
+      // resolves while this cached page is detached, activate() reapplies it.
+      void Promise.all([featurePromise, metadataPromise]).then(([features, metadataResponse]) => {
+        tradingFeatures = features;
+        configCards?.applyMetadata(metadataResponse?.data || metadataResponse || {});
+        if (lifecycleContext?.isActive()) syncTradingFeatureUi();
+      });
     },
 
     /**
      * Activate the page (start pollers)
      */
-    async activate(ctx) {
+    activate(ctx) {
       console.log("[Trader] Activating page");
 
       // Re-register deactivate cleanup (cleanups are cleared after each deactivate)
@@ -1382,10 +1376,11 @@ function createLifecycle() {
         ctx.manageTabBar(tabBar);
         tabBar.show({ force: true });
       }
+      syncTradingFeatureUi();
 
-      // Create pollers
-      statsPoller = ctx.managePoller(
-        new Poller(
+      // Create pollers once and re-register them when a cached page is revisited.
+      if (!statsPoller) {
+        statsPoller = new Poller(
           async () => {
             if (state.currentTab === "stats") {
               await loadStats();
@@ -1393,67 +1388,67 @@ function createLifecycle() {
             }
           },
           { label: "Trader Stats", intervalMs: 5000 }
-        )
-      );
+        );
+      }
 
-      walletCopyPoller = ctx.managePoller(
-        new Poller(
+      if (!walletCopyPoller) {
+        walletCopyPoller = new Poller(
           async () => {
             if (state.currentTab === "wallet-copy") await walletCopy.load();
           },
           { label: "Wallet Copy", intervalMs: 5000 }
-        )
-      );
+        );
+      }
 
-      configPoller = ctx.managePoller(
-        new Poller(
+      if (!configPoller) {
+        configPoller = new Poller(
           async () => {
             await loadConfig({ preserveUnsavedEdits: true });
           },
           { label: "Trader Config", intervalMs: 10000 }
-        )
-      );
+        );
+      }
 
-      strategiesPoller = ctx.managePoller(
-        new Poller(
+      if (!strategiesPoller) {
+        strategiesPoller = new Poller(
           async () => {
             if (state.currentTab === "strategy-control") {
               await loadStrategies();
             }
           },
           { label: "Strategies", intervalMs: 10000 }
-        )
-      );
+        );
+      }
 
       // Poller for updating relative timestamps
-      const timestampPoller = ctx.managePoller(
-        new Poller(
+      if (!timestampPoller) {
+        timestampPoller = new Poller(
           () => {
             updateLastCheckTime();
           },
           { label: "Timestamp Updates", intervalMs: 1000 }
-        )
-      );
-
-      // Start pollers
-      if (state.currentTab === "stats") {
-        statsPoller.start();
+        );
       }
+
+      ctx.managePoller(statsPoller);
+      ctx.managePoller(walletCopyPoller);
+      ctx.managePoller(configPoller);
+      ctx.managePoller(strategiesPoller);
+      ctx.managePoller(timestampPoller);
+
+      // Paint/switch first; it starts only the selected tab's poller and loads.
+      switchTab(state.currentTab);
       configPoller.start();
       timestampPoller.start();
 
-      // Initial loads
-      await Promise.all([loadConfig(), loadStrategies()]);
+      // Independent first loads never hold the router navigation open.
+      void loadConfig();
       if (state.currentTab === "stats") {
-        await loadStats();
-        await controls.loadControlsStatus();
+        void loadStats();
+        void controls.loadControlsStatus();
+      } else if (state.currentTab !== "strategy-control") {
+        void loadStrategies();
       }
-      if (state.currentTab === "strategy-control" && strategiesPoller) {
-        strategiesPoller.start();
-      }
-
-      // Show initial tab
-      switchTab(state.currentTab);
     },
 
     /**
@@ -1487,6 +1482,11 @@ function createLifecycle() {
       state.config = null;
       state.stats = null;
       walletCopyPoller = null;
+      statsPoller = null;
+      configPoller = null;
+      strategiesPoller = null;
+      timestampPoller = null;
+      lifecycleContext = null;
       state.strategies = [];
       _lastPositionsKey = null;
       walletCopy.reset();

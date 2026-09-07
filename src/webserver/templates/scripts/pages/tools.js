@@ -23,9 +23,7 @@ import {
   renderTokenWatchTool,
   renderTokenAnalyzerTool,
 } from "./tools/token_tools.js";
-import {
-  renderTradeWatcherTool,
-} from "./tools/trading_tools.js";
+import { renderTradeWatcherTool } from "./tools/trading_tools.js";
 import {
   renderBuyMultiWalletsTool,
   renderSellMultiWalletsTool,
@@ -369,13 +367,14 @@ function loadToolState() {
 function createLifecycle() {
   let popstateHandler = null;
   return {
-    async init() {
-      // Initialize hints system
-      await Hints.init();
-
-      // Fetch feature status from API and apply to UI
-      featureStatus = await fetchFeatureStatus();
-      applyFeatureStatusToUI();
+    init() {
+      // Hints and feature flags enhance the already-painted tool shell. Neither
+      // is allowed to delay the selected tool during a main-tab transition.
+      void Hints.init();
+      void fetchFeatureStatus().then((status) => {
+        featureStatus = status;
+        applyFeatureStatusToUI();
+      });
 
       // Set up tool navigation click handler
       toolClickHandler = (event) => {
@@ -423,6 +422,8 @@ function createLifecycle() {
     },
 
     activate() {
+      // Re-apply async feature data after a cached page is reattached.
+      applyFeatureStatusToUI();
       // Refresh current tool if needed
       if (currentTool) {
         const definition = TOOL_DEFINITIONS[currentTool];

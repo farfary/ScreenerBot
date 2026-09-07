@@ -704,7 +704,7 @@ let _lastStatusKey = null;
 
 export function createLifecycle() {
   return {
-    async init() {
+    init() {
       console.log("[Filtering] Initializing");
 
       // Initialize renderers with state and dependencies
@@ -1132,7 +1132,7 @@ window.filteringPage = {
     if (page === 0 && !container.querySelector(".explorer-table-wrapper")) {
       container.innerHTML = `
         <div class="explorer-table-wrapper">
-          <div class="explorer-empty-state">Loading...</div>
+          <div class="loading-spinner small explorer-loading-full">Loading…</div>
         </div>
         <div class="pagination-controls">
           <button class="page-btn" onclick="window.filteringPage.firstPage()" disabled title="First"><i class="icon-chevrons-left"></i></button>

@@ -37,6 +37,7 @@ let tabBar = null;
 let walletsData = [];
 let tokenHoldings = [];
 let currentTab = "main";
+let hasLoadedWalletData = false;
 let currentExportWalletId = null;
 let currentArchiveWalletId = null;
 let currentDeleteWalletId = null;
@@ -52,11 +53,12 @@ let watched = null;
 
 function createLifecycle() {
   return {
-    async init(ctx) {
+    init(ctx) {
       console.log("[Wallets] Initializing...");
 
-      // Initialize hints system
-      await Hints.init();
+      // Hints are optional enhancement data; they must never delay the page
+      // shell, restored subtab, or the subtab bar.
+      void Hints.init();
 
       // Initialize sub-modules
       bulk = createBulkOperations({
@@ -121,8 +123,9 @@ function createLifecycle() {
       // widths. switchTab() already orders it this way.
       updatePanelVisibility();
 
-      // Load initial data
-      await loadActiveTab();
+      // Paint the selected panel's canonical loading state before starting I/O.
+      renderActiveTabShell();
+      void loadActiveTab();
     },
 
     activate(ctx) {
@@ -135,10 +138,16 @@ function createLifecycle() {
         tabBar.show({ force: true });
       }
 
-      // Start polling for balance updates
-      poller = new Poller(async () => {
-        await loadActiveTab();
-      }, POLL_INTERVAL);
+      // Start polling for balance updates. Reuse the same poller across page
+      // visits; lifecycle deactivation stops it and activation re-registers it.
+      if (!poller) {
+        poller = new Poller(
+          async () => {
+            await loadActiveTab();
+          },
+          { label: "Wallets", intervalMs: POLL_INTERVAL }
+        );
+      }
 
       ctx.managePoller(poller);
       poller.start();
@@ -165,8 +174,14 @@ function switchTab(tabId) {
 
   currentTab = tabId;
   updatePanelVisibility();
+  renderActiveTabShell();
 
   void loadActiveTab();
+}
+
+function renderActiveTabShell() {
+  if (currentTab === "watched") return;
+  renderers?.renderCurrentPanel({ loading: !hasLoadedWalletData });
 }
 
 function updatePanelVisibility() {
@@ -374,6 +389,7 @@ function setupDeleteModal() {
 
 async function loadAllData({ force = false } = {}) {
   await Promise.all([loadWallets(), loadTokenHoldings({ force })]);
+  hasLoadedWalletData = true;
   renderers.renderCurrentPanel();
 }
 
@@ -768,6 +784,7 @@ function cleanup() {
   watched?.reset();
   walletsData = [];
   tokenHoldings = [];
+  hasLoadedWalletData = false;
   currentTab = "main";
   currentExportWalletId = null;
   currentArchiveWalletId = null;

@@ -46,9 +46,7 @@ import { createFavoritesModule } from "./tokens/favorites.js";
 
 function createLifecycle() {
   let table = null;
-  let ohlcvTable = null; // Separate table for OHLCV data view
   let poller = null;
-  let ohlcvPoller = null; // Separate poller for OHLCV data
   let tabBar = null;
   let tokenDetailsDialog = null;
 
@@ -70,13 +68,14 @@ function createLifecycle() {
     tokens: [],
     stats: null,
     isLoading: false,
+    hasLoadedOnce: false,
   };
 
   // Favorites state
-  let favoritesTable = null;
   const favoritesState = {
     favorites: [],
     isLoading: false,
+    hasLoadedOnce: false,
   };
 
   const state = {
@@ -106,6 +105,7 @@ function createLifecycle() {
     Poller,
     ConfirmationDialog,
     InputDialog,
+    managePoller: null,
   };
 
   // Initialize sub-modules
@@ -540,11 +540,7 @@ function createLifecycle() {
     }
 
     if (!state.hasLoadedOnce && reason !== "poll" && table?.showBlockingState) {
-      table.showBlockingState({
-        variant: "loading",
-        title: "Loading tokens snapshot...",
-        description: "Large token databases can take a few seconds to warm up during startup.",
-      });
+      showTokensLoadingState();
     }
 
     const params = buildQuery({ cursor });
@@ -693,11 +689,7 @@ function createLifecycle() {
    */
   const loadTokensPageBased = async ({ page, pageSize, reason, signal }) => {
     if (!state.hasLoadedOnce && reason !== "poll" && table?.showBlockingState) {
-      table.showBlockingState({
-        variant: "loading",
-        title: "Loading tokens page...",
-        description: "Fetching page data from server.",
-      });
+      showTokensLoadingState();
     }
 
     const params = buildQuery({ page, pageSize });
@@ -1151,6 +1143,14 @@ function createLifecycle() {
   // VIEW SWITCHING
   // ═══════════════════════════════════════════════════════════════════════════
 
+  const showTokensLoadingState = () => {
+    table?.showBlockingState?.({
+      variant: "loading",
+      title: "Loading tokens…",
+      description: "Preparing the selected token view.",
+    });
+  };
+
   const switchView = (view) => {
     if (!TOKEN_VIEWS.some((v) => v.id === view)) return;
     const previousView = state.view;
@@ -1158,7 +1158,6 @@ function createLifecycle() {
 
     // Handle Favorites view specially - it has its own table
     if (view === "favorites") {
-      favorites.initFavoritesTable();
       favorites.showFavoritesView();
       return;
     }
@@ -1170,7 +1169,6 @@ function createLifecycle() {
 
     // Handle OHLCV view specially - it has its own table
     if (view === "ohlcv") {
-      ohlcv.initOhlcvTable();
       ohlcv.showOhlcvView();
       return;
     }
@@ -1185,6 +1183,7 @@ function createLifecycle() {
     state.filters = getDefaultFiltersForView(view);
     state.summary = { ...DEFAULT_SUMMARY };
     state.availableRejectionReasons = [];
+    state.hasLoadedOnce = false;
 
     if (view === "pool" && previousView !== "pool") {
       resetPriceTracking();
@@ -1194,13 +1193,17 @@ function createLifecycle() {
 
     // Update table stateKey for per-tab state persistence
     if (table) {
+      showTokensLoadingState();
       const nextStateKey = getTokensTableStateKey(view);
       table.setStateKey(nextStateKey, { render: false });
 
       // Update columns for the new view (different views have different conditional columns)
       const newColumns = buildColumns();
       table.setColumns(newColumns, {
-        preserveData: true,
+        // A row from the previous subtab is never valid under the newly-active
+        // tab. Clear synchronously and let the table's blocking state own the
+        // wait for the new query.
+        preserveData: false,
         preserveScroll: false, // Reset scroll when switching views
         resetState: false, // Keep column widths/visibility preferences within each view
       });
@@ -1575,15 +1578,15 @@ function createLifecycle() {
 
   return {
     init(ctx) {
+      deps.managePoller = (managedPoller) => ctx.managePoller(managedPoller);
+
       // Initialize token details dialog
       tokenDetailsDialog = new TokenDetailsDialog();
 
       // Registered ONCE per page instance, not per activate: the boost feed is
       // global and a second listener would repaint every row twice per change.
       window.addEventListener(BOOSTS_CHANGED_EVENT, onBoostsChanged);
-      eventCleanups.push(() =>
-        window.removeEventListener(BOOSTS_CHANGED_EVENT, onBoostsChanged)
-      );
+      eventCleanups.push(() => window.removeEventListener(BOOSTS_CHANGED_EVENT, onBoostsChanged));
 
       // Initialize tab bar for tokens page
       tabBar = new TabBar({
@@ -1728,11 +1731,7 @@ function createLifecycle() {
         },
       });
 
-      table.showBlockingState?.({
-        variant: "loading",
-        title: "Loading tokens snapshot...",
-        description: "Large token databases can take a few seconds to warm up during startup.",
-      });
+      showTokensLoadingState();
 
       // Hide rejection_reason filter immediately if not in rejected tab
       updateFilterVisibility();
@@ -1827,8 +1826,9 @@ function createLifecycle() {
 
       // Handle OHLCV view specially - it has its own table
       if (state.view === "ohlcv") {
-        ohlcv.initOhlcvTable();
-        ohlcv.showOhlcvView();
+        ohlcv.showOhlcvView({ load: false });
+      } else if (state.view === "favorites") {
+        favorites.showFavoritesView({ load: false });
       } else if (!hasSortRestored) {
         // Trigger initial data load if no sort state was restored
         // (sort restoration triggers reload via handleSortChange)
@@ -1850,21 +1850,13 @@ function createLifecycle() {
 
       // Handle OHLCV view specially - it has its own poller
       if (state.view === "ohlcv") {
-        if (deps.ohlcvPoller) {
-          deps.ohlcvPoller.start();
-        } else {
-          // OHLCV poller not initialized yet, fetch data
-          ohlcv.fetchOhlcvData().catch(() => {});
-        }
+        ohlcv.showOhlcvView();
         return;
       }
 
       // Handle Favorites view specially - refresh favorites data
       if (state.view === "favorites") {
-        favorites
-          .fetchFavorites()
-          .then(() => favorites.updateFavoritesTable())
-          .catch(() => {});
+        favorites.showFavoritesView();
         return;
       }
 
@@ -1901,8 +1893,6 @@ function createLifecycle() {
 
       table?.cancelPendingLoad();
       // Lifecycle automatically stops managed pollers
-      // Pause OHLCV poller if active
-      if (ohlcvPoller) ohlcvPoller.pause();
     },
 
     dispose() {
@@ -1928,23 +1918,20 @@ function createLifecycle() {
         table = null;
       }
       // Clean up OHLCV table
-      if (ohlcvTable) {
-        ohlcvTable.destroy();
-        ohlcvTable = null;
+      if (deps.ohlcvTable) {
+        deps.ohlcvTable.destroy();
+        deps.ohlcvTable = null;
       }
-      if (ohlcvPoller) {
-        ohlcvPoller.stop();
-        ohlcvPoller = null;
-      }
+      deps.ohlcvPoller = null;
       // Remove OHLCV container
       const ohlcvContainer = document.querySelector("#ohlcv-table-container");
       if (ohlcvContainer) {
         ohlcvContainer.remove();
       }
       // Clean up Favorites table
-      if (favoritesTable) {
-        favoritesTable.destroy();
-        favoritesTable = null;
+      if (deps.favoritesTable) {
+        deps.favoritesTable.destroy();
+        deps.favoritesTable = null;
       }
       // Remove Favorites container
       const favoritesContainer = document.querySelector("#favorites-table-container");
@@ -1952,6 +1939,8 @@ function createLifecycle() {
         favoritesContainer.remove();
       }
       poller = null;
+      deps.poller = null;
+      deps.managePoller = null;
       tabBar = null; // Cleaned up automatically by manageTabBar
       TabBarManager.unregister("tokens");
       resetPriceTracking();
@@ -1967,9 +1956,11 @@ function createLifecycle() {
       ohlcvState.tokens = [];
       ohlcvState.stats = null;
       ohlcvState.isLoading = false;
+      ohlcvState.hasLoadedOnce = false;
       // Reset Favorites state
       favoritesState.favorites = [];
       favoritesState.isLoading = false;
+      favoritesState.hasLoadedOnce = false;
     },
   };
 }

@@ -43,12 +43,13 @@ try {
 
 const _state = {
   currentPage: null,
+  pendingPage: null,
   cleanupHandlers: [],
   timeoutMs: 10000,
   pageCache: {},
-  initializedPages: {},
   navigationId: 0,
   navigationController: null,
+  pageStyleLoads: new Map(),
 };
 
 export function getCurrentPage() {
@@ -58,6 +59,8 @@ export function getCurrentPage() {
 function activatePageStyles(pageName) {
   document.head.querySelectorAll("[data-page-style]").forEach((styleEl) => {
     if (styleEl.getAttribute("data-page-style") !== pageName) {
+      const stalePage = styleEl.getAttribute("data-page-style");
+      _state.pageStyleLoads.get(stalePage)?.cancel();
       styleEl.remove();
     }
   });
@@ -67,6 +70,60 @@ function updateDocumentTitle(pageName) {
   document.title = `${PAGE_TITLES[pageName] || "Dashboard"} - ScreenerBot`;
 }
 
+function waitForPageStylesheet(pageName, link) {
+  const pending = _state.pageStyleLoads.get(pageName);
+  if (pending) {
+    return pending.promise;
+  }
+
+  let settle;
+  const promise = new Promise((resolve, reject) => {
+    let settled = false;
+    const timeoutId = setTimeout(() => {
+      settle(new Error(`Stylesheet unavailable for ${pageName}`));
+    }, _state.timeoutMs);
+
+    settle = (error = null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutId);
+      link.removeEventListener("load", onLoad);
+      link.removeEventListener("error", onError);
+      if (_state.pageStyleLoads.get(pageName)?.link === link) {
+        _state.pageStyleLoads.delete(pageName);
+      }
+      if (error) {
+        link.remove();
+        reject(error);
+      } else {
+        resolve();
+      }
+    };
+
+    const onLoad = () => {
+      link.dataset.pageStyleReady = "true";
+      settle();
+    };
+    const onError = () => {
+      settle(new Error(`Stylesheet unavailable for ${pageName}`));
+    };
+
+    link.addEventListener("load", onLoad, { once: true });
+    link.addEventListener("error", onError, { once: true });
+  });
+
+  _state.pageStyleLoads.set(pageName, {
+    link,
+    promise,
+    cancel: () => {
+      const error = new Error(`Stylesheet load superseded for ${pageName}`);
+      error.name = "AbortError";
+      settle(error);
+    },
+  });
+  return promise;
+}
+
 function ensurePageStyles(pageName) {
   if (typeof pageName !== "string" || !pageName) {
     return Promise.resolve();
@@ -74,31 +131,23 @@ function ensurePageStyles(pageName) {
 
   const existing = document.head.querySelector(`[data-page-style="${pageName}"]`);
   if (existing) {
-    return Promise.resolve();
+    if (
+      existing.tagName !== "LINK" ||
+      existing.dataset.pageStyleReady === "true" ||
+      existing.sheet
+    ) {
+      return Promise.resolve();
+    }
+    return waitForPageStylesheet(pageName, existing);
   }
 
-  return new Promise((resolve, reject) => {
-    const link = document.createElement("link");
-    link.rel = "stylesheet";
-    link.href = `/styles/pages/${encodeURIComponent(pageName)}.css${assetQuery}`;
-    link.setAttribute("data-page-style", pageName);
-    link.addEventListener(
-      "load",
-      () => {
-        resolve();
-      },
-      { once: true }
-    );
-    link.addEventListener(
-      "error",
-      () => {
-        link.remove();
-        reject(new Error(`Stylesheet unavailable for ${pageName}`));
-      },
-      { once: true }
-    );
-    document.head.appendChild(link);
-  });
+  const link = document.createElement("link");
+  link.rel = "stylesheet";
+  link.href = `/styles/pages/${encodeURIComponent(pageName)}.css${assetQuery}`;
+  link.setAttribute("data-page-style", pageName);
+  const ready = waitForPageStylesheet(pageName, link);
+  document.head.appendChild(link);
+  return ready;
 }
 
 export function setActiveTab(pageName) {
@@ -149,30 +198,39 @@ export function trackTimeout(timeoutId) {
   return timeoutId;
 }
 
-function removeCachedPageElements(mainContent) {
-  if (!mainContent) return;
-
-  // Remove ALL page containers from mainContent, not just cached ones
-  // This prevents duplicate content from WebView cache or stale renders
-  mainContent.querySelectorAll(".page-container").forEach((el) => {
-    el.style.display = "none";
-    if (el.parentElement === mainContent) {
-      mainContent.removeChild(el);
-    }
-  });
-}
-
 function displayPageElement(mainContent, pageEl) {
   if (!mainContent || !pageEl) return;
 
-  // Remove all existing page containers first
-  removeCachedPageElements(mainContent);
-
-  // Only append if not already in mainContent
-  if (pageEl.parentElement !== mainContent) {
-    mainContent.appendChild(pageEl);
-  }
+  // The content viewport has exactly one owner at a time. Replacing its children
+  // prevents the outgoing page and incoming loader from becoming flex siblings.
+  mainContent.replaceChildren(pageEl);
   pageEl.style.display = "";
+}
+
+function beginPageTransition(mainContent, navigationId) {
+  const loadingEl = document.createElement("div");
+  loadingEl.className = "page-loading";
+  loadingEl.dataset.navigationId = String(navigationId);
+  loadingEl.setAttribute("role", "status");
+  loadingEl.setAttribute("aria-live", "polite");
+  loadingEl.innerHTML = '<div class="loading-spinner">Loading…</div>';
+
+  // Navigation chrome belongs to the displayed page. Release it before any
+  // network/style/module wait so the outgoing page cannot remain half-visible.
+  closeStackedOverlays();
+  runCleanupHandlers();
+  TabBarManager?.hideAll();
+  ActionBarManager?.hideAll();
+
+  mainContent.setAttribute("data-loading", "true");
+  mainContent.setAttribute("aria-busy", "true");
+  mainContent.replaceChildren(loadingEl);
+  return loadingEl;
+}
+
+function finishPageTransition(mainContent) {
+  mainContent.removeAttribute("data-loading");
+  mainContent.removeAttribute("aria-busy");
 }
 
 async function fetchPageContent(pageName, timeoutMs, controller) {
@@ -222,20 +280,21 @@ export async function loadPage(pageName, { historyMode = "push" } = {}) {
     return;
   }
 
-  // Remove any unresolved loading placeholders
-  mainContent.querySelectorAll(".page-loading").forEach((el) => el.remove());
-
   let pageEl = _state.pageCache[pageName] || null;
-  const loadingEl = document.createElement("div");
-  loadingEl.className = "page-loading";
-  loadingEl.dataset.navigationId = String(navigationId);
-  loadingEl.innerHTML = '<div class="loading-spinner">Loading…</div>';
-  if (!pageEl) {
-    mainContent.setAttribute("data-loading", "true");
-    mainContent.appendChild(loadingEl);
-  }
+  _state.pendingPage = pageName;
+  setActiveTab(pageName);
+  const loadingEl = beginPageTransition(mainContent, navigationId);
+  const deactivatePrevious =
+    previousPage && previousPage !== pageName
+      ? PageLifecycleRegistry.deactivate(previousPage)
+      : Promise.resolve();
 
   try {
+    // Stop outgoing pollers/listeners immediately; page acquisition happens
+    // only after the old lifecycle has released its resources.
+    await deactivatePrevious;
+    if (!isCurrentNavigation()) return;
+
     if (!pageEl) {
       const html = await fetchPageContent(pageName, _state.timeoutMs, controller);
       if (!isCurrentNavigation()) return;
@@ -259,22 +318,10 @@ export async function loadPage(pageName, { historyMode = "push" } = {}) {
     }
 
     if (!isCurrentNavigation()) return;
-
-    if (previousPage && previousPage !== pageName) {
-      await PageLifecycleRegistry.deactivate(previousPage);
-    }
-    if (!isCurrentNavigation()) return;
-
-    closeStackedOverlays();
-    runCleanupHandlers();
-    loadingEl.remove();
-    mainContent.removeAttribute("data-loading");
     activatePageStyles(pageName);
     displayPageElement(mainContent, pageEl);
+    finishPageTransition(mainContent);
     _state.currentPage = pageName;
-    setActiveTab(pageName);
-    TabBarManager?.onPageSwitch(pageName, previousPage);
-    ActionBarManager?.onPageSwitch(pageName, previousPage);
     updateDocumentTitle(pageName);
 
     const targetUrl = `/${pageName}`;
@@ -288,8 +335,13 @@ export async function loadPage(pageName, { historyMode = "push" } = {}) {
     // then add their canonical hash to this same history entry without carrying
     // a hash over from the previous page or having the router erase the new one.
     await PageLifecycleRegistry.activate(pageName);
+    if (!isCurrentNavigation()) return;
+    TabBarManager?.onPageSwitch(pageName, previousPage);
+    ActionBarManager?.onPageSwitch(pageName, previousPage);
     await TabBarManager?.syncFromLocation(pageName);
+    if (!isCurrentNavigation()) return;
 
+    _state.pendingPage = null;
     AppState.save("lastTab", pageName);
     console.log("[Router] New page loaded and cached:", pageName);
   } catch (error) {
@@ -299,12 +351,23 @@ export async function loadPage(pageName, { historyMode = "push" } = {}) {
     }
     console.error("[Router] Failed to load page:", pageName, error);
 
+    try {
+      await PageLifecycleRegistry.deactivate(pageName);
+    } catch (deactivateError) {
+      console.error("[Router] Failed to release incomplete page lifecycle:", deactivateError);
+    }
+
+    if (!loadingEl.isConnected) {
+      mainContent.replaceChildren(loadingEl);
+    }
+    mainContent.setAttribute("data-loading", "true");
+    mainContent.setAttribute("aria-busy", "true");
+
     // A connection error (backend crashed / network dropped / restart in
     // progress) gets a calm, auto-recovering offline state rather than a hard
     // error — the connectivity watcher already shows the global overlay, and we
     // reload this page automatically the moment the backend answers again.
     if (isConnectionError(error)) {
-      if (!loadingEl.isConnected) mainContent.appendChild(loadingEl);
       renderOfflinePlaceholder(loadingEl, pageName);
       return;
     }
@@ -395,7 +458,7 @@ export function initRouter() {
 
     e.preventDefault();
     const pageName = link.getAttribute("data-page");
-    if (pageName && pageName !== _state.currentPage) {
+    if (pageName && (pageName !== _state.currentPage || _state.pendingPage !== null)) {
       // Play tab switch sound for main navigation
       playTabSwitch();
       loadPage(pageName);
@@ -406,7 +469,7 @@ export function initRouter() {
   window.addEventListener("popstate", (e) => {
     const pageName = e.state?.page || getPageFromPath();
     if (pageName) {
-      if (pageName === _state.currentPage) {
+      if (pageName === _state.currentPage && _state.pendingPage === null) {
         void TabBarManager?.syncFromLocation(pageName);
       } else {
         loadPage(pageName, { historyMode: "none" });

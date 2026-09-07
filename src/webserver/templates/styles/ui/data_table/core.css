@@ -137,6 +137,15 @@
   color: var(--text-secondary);
 }
 
+.data-table-blocking-state__spinner {
+  padding: 0;
+}
+
+.data-table-blocking-state__spinner[hidden],
+.data-table-blocking-state__icon[hidden] {
+  display: none;
+}
+
 .data-table-blocking-state__title {
   font-size: 1.05rem;
   font-weight: 600;
@@ -146,11 +155,6 @@
 .data-table-blocking-state__description {
   font-size: 0.95rem;
   color: var(--text-secondary);
-}
-
-.data-table-blocking-state--loading .data-table-blocking-state__icon {
-  color: var(--primary-color);
-  animation: data-table-blocking-spin 1s linear infinite;
 }
 
 .data-table-blocking-state--info .data-table-blocking-state__icon {
@@ -163,16 +167,6 @@
 
 .data-table-blocking-state--error .data-table-blocking-state__icon {
   color: var(--badge-error, #d32f2f);
-}
-
-@keyframes data-table-blocking-spin {
-  from {
-    transform: rotate(0deg);
-  }
-
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 /* Floating "Loading more…" indicator — pinned to the bottom of the scroll viewport
@@ -211,10 +205,8 @@
   transform: translate(-50%, 0);
 }
 
-.dt-scroll-loader__icon {
-  font-size: 1rem;
-  color: var(--primary-color);
-  animation: data-table-blocking-spin 0.9s linear infinite;
+.dt-scroll-loader__indicator {
+  padding: 0;
 }
 
 /* Fixed height support */
@@ -613,6 +605,7 @@ body.dt-column-resizing * {
   background: var(--border-color);
   margin: 4px 0;
 }
+
 /* ==================== State Cells (Loading & Empty) ==================== */
 
 .data-table td.dt-state-cell {
@@ -647,39 +640,6 @@ body.dt-column-resizing * {
   color: var(--text-tertiary);
   max-width: 320px;
   line-height: 1.5;
-}
-
-/* Loading State (initial load with no data) */
-.dt-loading-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16px;
-  color: var(--text-secondary);
-}
-
-.dt-loading-spinner {
-  width: 32px;
-  height: 32px;
-  border: 3px solid var(--border-color);
-  border-top-color: var(--primary-color);
-  border-radius: var(--radius-full);
-  animation: dt-loading-spin 0.8s linear infinite;
-}
-
-@keyframes dt-loading-spin {
-  from {
-    transform: rotate(0deg);
-  }
-
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.dt-loading-text {
-  font-size: 0.9375rem;
-  font-weight: 500;
 }
 
 /* Legacy empty/loading styles (backward compatibility) */
@@ -735,14 +695,6 @@ body.dt-column-resizing * {
   }
 
   .data-table thead th.is-sorting .dt-sort-icon::before {
-    animation: none;
-  }
-
-  .data-table-blocking-state--loading .data-table-blocking-state__icon {
-    animation: none;
-  }
-
-  .dt-loading-state .dt-loading-spinner {
     animation: none;
   }
 }

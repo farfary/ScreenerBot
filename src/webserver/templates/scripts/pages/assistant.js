@@ -126,7 +126,7 @@ function createLifecycle() {
   /**
    * Switch between main tabs
    */
-  function switchTab(tabId) {
+  function switchTab(tabId, { load = true } = {}) {
     // Stop all pollers to prevent memory leaks
     if (statusPoller) statusPoller.stop();
     if (providersPoller) providersPoller.stop();
@@ -145,6 +145,10 @@ function createLifecycle() {
     if (selectedPanel) {
       selectedPanel.classList.add("active");
     }
+
+    // Initialization uses this function to paint the restored panel before the
+    // page is active. Its data load is started once activate() owns the pollers.
+    if (!load) return;
 
     // Load data for the tab and start appropriate poller
     if (tabId === "stats") {
@@ -836,7 +840,7 @@ function createLifecycle() {
     /**
      * Init - called once when page is first loaded
      */
-    async init(_ctx) {
+    init(_ctx) {
       console.log("[Assistant] Initializing");
 
       const hashTab = window.location.hash.slice(1);
@@ -853,7 +857,7 @@ function createLifecycle() {
       );
 
       // Show the initial tab content
-      switchTab(state.currentTab);
+      switchTab(state.currentTab, { load: false });
 
       // Setup event handlers
       setupSettingsHandlers();
@@ -888,7 +892,7 @@ function createLifecycle() {
     /**
      * Activate the page (start pollers)
      */
-    async activate(ctx) {
+    activate(ctx) {
       console.log("[Assistant] Activating page");
 
       if (!subTabBar) {
@@ -912,56 +916,57 @@ function createLifecycle() {
       const restoredTab = subTabBar.getActiveTab();
       if (restoredTab && restoredTab !== state.currentTab) {
         state.currentTab = restoredTab;
-        switchTab(restoredTab);
+        switchTab(restoredTab, { load: false });
       }
 
-      // Create pollers
-      statusPoller = ctx.managePoller(
-        new Poller(
+      // Create pollers once, then re-register the same instances with the
+      // lifecycle when a cached page is revisited.
+      if (!statusPoller) {
+        statusPoller = new Poller(
           async () => {
             if (state.currentTab === "stats") {
               await loadAiStatus();
             }
           },
           { label: "Assistant Status", intervalMs: 5000 }
-        )
-      );
+        );
+      }
 
-      providersPoller = ctx.managePoller(
-        new Poller(
+      if (!providersPoller) {
+        providersPoller = new Poller(
           async () => {
             if (state.currentTab === "providers") {
               await providersTab.loadProviders();
             }
           },
           { label: "Assistant Providers", intervalMs: 10000 }
-        )
-      );
+        );
+      }
 
-      cachePoller = ctx.managePoller(
-        new Poller(
+      if (!cachePoller) {
+        cachePoller = new Poller(
           async () => {
             if (state.currentTab === "settings") {
               await loadCacheStats();
             }
           },
           { label: "Cache Stats", intervalMs: 5000 }
-        )
-      );
+        );
+      }
 
-      chatPoller = ctx.managePoller(
-        new Poller(
+      if (!chatPoller) {
+        chatPoller = new Poller(
           async () => {
             if (state.currentTab === "chat") {
               await loadSessions();
             }
           },
           { label: "Chat Sessions", intervalMs: 3000 }
-        )
-      );
+        );
+      }
 
-      automationPoller = ctx.managePoller(
-        new Poller(
+      if (!automationPoller) {
+        automationPoller = new Poller(
           async () => {
             if (state.currentTab === "automation" && !document.hidden) {
               await automationTab.loadAutomationTasks();
@@ -970,29 +975,18 @@ function createLifecycle() {
             }
           },
           { label: "Automation Tasks", intervalMs: 10000 }
-        )
-      );
-
-      // Load initial data immediately and start appropriate poller
-      if (state.currentTab === "stats") {
-        await loadAiStatus();
-        statusPoller.start();
-      } else if (state.currentTab === "providers") {
-        await providersTab.loadProviders();
-        providersPoller.start();
-      } else if (state.currentTab === "settings") {
-        await loadConfig();
-        await loadCacheStats();
-        cachePoller.start();
-      } else if (state.currentTab === "chat") {
-        await loadSessions();
-        chatPoller.start();
-      } else if (state.currentTab === "automation") {
-        await automationTab.loadAutomationTasks();
-        await automationTab.loadAutomationRuns();
-        await automationTab.loadAutomationStats();
-        automationPoller.start();
+        );
       }
+
+      ctx.managePoller(statusPoller);
+      ctx.managePoller(providersPoller);
+      ctx.managePoller(cachePoller);
+      ctx.managePoller(chatPoller);
+      ctx.managePoller(automationPoller);
+
+      // switchTab paints first and starts the selected tab's independent loads
+      // without holding the router's navigation transaction open.
+      switchTab(state.currentTab);
     },
 
     /**
@@ -1015,6 +1009,11 @@ function createLifecycle() {
         _chatWidget = null;
       }
       subTabBar = null;
+      statusPoller = null;
+      providersPoller = null;
+      cachePoller = null;
+      chatPoller = null;
+      automationPoller = null;
       TabBarManager.unregister("assistant");
 
       // Clean up event listeners

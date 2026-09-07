@@ -542,20 +542,19 @@ function createLifecycle() {
       }
 
       if (!poller) {
-        poller = ctx.managePoller(
-          new Poller(
-            () => {
-              fetchData();
-              calendar?.refresh();
-            },
-            {
-              label: "HomeDashboard",
-              getInterval: () => 5000,
-            }
-          )
+        poller = new Poller(
+          () => {
+            fetchData();
+            calendar?.refresh();
+          },
+          {
+            label: "HomeDashboard",
+            getInterval: () => 5000,
+          }
         );
       }
 
+      ctx.managePoller(poller);
       poller.start({ silent: true });
       fetchData();
 
@@ -569,10 +568,7 @@ function createLifecycle() {
       // Hide featured row when leaving page
       hideFeaturedRow();
 
-      if (poller) {
-        poller.stop({ silent: true });
-        poller = null;
-      }
+      // Managed pollers are stopped centrally and retained for cached re-entry.
     },
 
     dispose: () => {
@@ -588,6 +584,7 @@ function createLifecycle() {
 
       // Note: cachedData is deliberately kept — it lets a revisit paint real
       // numbers immediately instead of flashing the skeleton again.
+      poller = null;
 
       // Clear all animation intervals
       animationIntervals.forEach((interval) => clearInterval(interval));

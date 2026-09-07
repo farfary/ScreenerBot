@@ -261,6 +261,13 @@
   color: var(--text-secondary);
 }
 
+.config-state.initial-loading {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
 .config-state[hidden] {
   display: none;
 }
