@@ -21,12 +21,15 @@
 //!
 //! No network, no RPC endpoint, no wallet key, no running bot: `isolated_env`
 //! points every path at a fresh temp directory and config stays at defaults.
+//! The only persisted fixture is an account refresh token, proving the account
+//! service restores it before the dashboard can report a signed-out state.
 
 mod common;
 
 use std::time::Duration;
 
-use screenerbot::services::ServiceManager;
+use screenerbot::services::implementations::{AccountService, WebserverService};
+use screenerbot::services::{Service, ServiceManager};
 
 /// The one boot: an isolated env, no config.toml, no network — the same shape
 /// Explore Mode/pre-init boot in `src/run/mod.rs` uses before the wallet/RPC
@@ -34,6 +37,24 @@ use screenerbot::services::ServiceManager;
 #[tokio::test]
 async fn the_service_layer_boots_offline_inside_a_startup_budget() {
     let _dir = common::isolated_env();
+
+    screenerbot::account::store::save(&screenerbot::account::store::StoredSession {
+        refresh_token: "persisted-refresh-token".to_owned(),
+        device_id: "persisted-device".to_owned(),
+        scopes: vec!["account:read".to_owned(), "data:read".to_owned()],
+        account_label: Some("Persisted account".to_owned()),
+        account_email: Some("persisted@example.test".to_owned()),
+    })
+    .expect("persisted account fixture must be writable");
+
+    assert!(
+        AccountService.is_enabled(),
+        "account persistence must be enabled before setup is complete"
+    );
+    assert!(
+        AccountService.priority() < WebserverService.priority(),
+        "account restore must run before the webserver can answer status requests"
+    );
 
     let mut service_manager = ServiceManager::new()
         .await
@@ -71,6 +92,18 @@ async fn the_service_layer_boots_offline_inside_a_startup_budget() {
         !running.is_empty(),
         "not one service reached Ready — offline boot should still start the webserver"
     );
+    assert!(
+        running.contains(&"account"),
+        "account persistence must run in pre-setup mode"
+    );
+
+    let account = screenerbot::account::status();
+    assert!(
+        account.signed_in,
+        "the stored account must be restored during service startup"
+    );
+    assert_eq!(account.device_id.as_deref(), Some("persisted-device"));
+    assert_eq!(account.email.as_deref(), Some("persisted@example.test"));
 
     // (c) Process-global accessors resolve without panicking after boot.
     screenerbot::swaps::registry::get_registry()

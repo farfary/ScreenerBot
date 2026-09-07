@@ -37,18 +37,20 @@ impl Service for AccountService {
     }
 
     fn priority(&self) -> i32 {
-        210
+        // Restore the disk-backed session before the webserver (30) can answer
+        // `/api/account/status` and before market-data consumers begin work.
+        20
     }
 
     fn dependencies(&self) -> Vec<&'static str> {
         vec![]
     }
 
-    /// Runs in Explore Mode too. Signing in is one of the few useful things to
-    /// do before a wallet and RPC exist, and refusing to run until setup is
-    /// complete would make the account panel on the setup screen inert.
+    /// Runs in every boot mode. Account persistence and the account panel do
+    /// not depend on wallet/RPC setup, and a sign-in completed during setup
+    /// must still be restored after a restart.
     fn is_enabled(&self) -> bool {
-        crate::global::is_explore_or_full()
+        true
     }
 
     async fn initialize(&mut self) -> crate::Result<()> {
