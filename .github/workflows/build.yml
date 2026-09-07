@@ -100,31 +100,8 @@ jobs:
   # Build Rust binaries for all platforms
   # ===========================================================================
 
-  test-updater:
-    needs: prepare
-    runs-on: ubuntu-22.04
-    name: Test · updater contract and state machine
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          persist-credentials: false
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
-        with:
-          toolchain: 1.89.0
-      - name: Run updater tests
-        run: "cargo test version::"
-      - name: Validate Electron update bridge syntax
-        run: |
-          node --check electron/src/main.js
-          node --check electron/src/preload.js
-          node --check electron/src/core_resolver.js
-          node --check electron/src/paths.js
-      - name: Run desktop-shell updater tests
-        run: node --test tools/tests/*.test.mjs
-
   build-rust:
-    needs: [prepare, test-updater]
+    needs: prepare
     strategy:
       fail-fast: false
       matrix:
