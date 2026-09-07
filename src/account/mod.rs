@@ -27,10 +27,12 @@ pub mod client;
 pub mod pkce;
 pub mod store;
 
+use std::future::Future;
 use std::sync::{LazyLock, RwLock};
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
+use tokio::sync::Mutex;
 
 use crate::errors::{AccountError, Error, Result};
 use crate::logger::{self, LogTag};
@@ -41,6 +43,14 @@ use store::StoredSession;
 
 /// The live session. `None` means signed out, which is a perfectly good state.
 static SESSION: LazyLock<RwLock<Option<Session>>> = LazyLock::new(|| RwLock::new(None));
+
+/// Serializes refresh-token rotation.
+///
+/// A refresh token is single-use. On startup every authenticated data consumer
+/// can need an access token at once, so the session must be checked again after
+/// acquiring this lock: the first waiter rotates the token and every later
+/// waiter reuses the access token it installed.
+static TOKEN_REFRESH: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
 /// The in-flight browser authorization, if one is running.
 ///
@@ -198,14 +208,42 @@ fn write_session(session: Option<Session>) {
 /// this is an optional enhancement: the RPC gateway falls back to the user's own
 /// endpoint, and the referral panel simply shows nothing.
 pub async fn access_token() -> Option<String> {
-    let session = read_session()?;
-
     let margin = crate::config::with_config(|config| config.account.refresh_margin());
-    if !session.access_token.is_empty() && session.expires_at > Instant::now() + margin {
-        return Some(session.access_token);
+    access_token_with(&TOKEN_REFRESH, margin, read_session, refresh_session).await
+}
+
+fn usable_access_token(session: &Session, margin: Duration) -> Option<String> {
+    (!session.access_token.is_empty() && session.expires_at > Instant::now() + margin)
+        .then(|| session.access_token.clone())
+}
+
+async fn access_token_with<Read, Refresh, RefreshFuture>(
+    refresh_lock: &Mutex<()>,
+    margin: Duration,
+    read: Read,
+    refresh: Refresh,
+) -> Option<String>
+where
+    Read: Fn() -> Option<Session>,
+    Refresh: FnOnce(Session) -> RefreshFuture,
+    RefreshFuture: Future<Output = Result<String>>,
+{
+    let session = read()?;
+    if let Some(token) = usable_access_token(&session, margin) {
+        return Some(token);
     }
 
-    match refresh_now().await {
+    let _refresh_guard = refresh_lock.lock().await;
+
+    // Another caller may have completed the one permitted rotation while this
+    // caller waited. Re-reading is what turns the lock into single-flight
+    // behavior instead of merely issuing the same rotations sequentially.
+    let session = read()?;
+    if let Some(token) = usable_access_token(&session, margin) {
+        return Some(token);
+    }
+
+    match refresh(session).await {
         Ok(token) => Some(token),
         Err(error) => {
             log::debug!("Account: token refresh failed: {error}");
@@ -221,10 +259,15 @@ pub async fn access_token() -> Option<String> {
 /// device. Losing the response therefore signs this install out at the next
 /// attempt, which is why the write happens before anything else can fail.
 pub async fn refresh_now() -> Result<String> {
+    let _refresh_guard = TOKEN_REFRESH.lock().await;
     let Some(session) = read_session() else {
         return Err(Error::Account(AccountError::NotSignedIn));
     };
 
+    refresh_session(session).await
+}
+
+async fn refresh_session(session: Session) -> Result<String> {
     if crate::connectivity::is_network_offline() {
         return Err(Error::Account(AccountError::Generic {
             message: "offline".to_string(),
@@ -504,5 +547,67 @@ fn sign_out_locally() {
     crate::data_server::access::forget_refusals();
     if let Err(error) = store::clear() {
         log::debug!("Account: could not clear stored session: {error}");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{Arc, RwLock as StdRwLock};
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn concurrent_access_token_requests_rotate_refresh_token_once() {
+        const CALLERS: usize = 32;
+
+        let refresh_lock = Arc::new(Mutex::new(()));
+        let refresh_calls = Arc::new(AtomicUsize::new(0));
+        let session = Arc::new(StdRwLock::new(Some(Session {
+            access_token: String::new(),
+            expires_at: Instant::now() - Duration::from_secs(1),
+            refresh_token: "single-use-refresh-token".to_string(),
+            device_id: "device".to_string(),
+            scopes: vec!["data:read".to_string()],
+            name: None,
+            email: None,
+        })));
+
+        let mut tasks = Vec::with_capacity(CALLERS);
+        for _ in 0..CALLERS {
+            let refresh_lock = Arc::clone(&refresh_lock);
+            let refresh_calls = Arc::clone(&refresh_calls);
+            let read_state = Arc::clone(&session);
+            let write_state = Arc::clone(&session);
+
+            tasks.push(tokio::spawn(async move {
+                access_token_with(
+                    refresh_lock.as_ref(),
+                    Duration::ZERO,
+                    move || read_state.read().unwrap().clone(),
+                    move |mut current| async move {
+                        assert_eq!(current.refresh_token, "single-use-refresh-token");
+                        refresh_calls.fetch_add(1, Ordering::SeqCst);
+                        tokio::time::sleep(Duration::from_millis(25)).await;
+
+                        current.access_token = "shared-access-token".to_string();
+                        current.expires_at = Instant::now() + Duration::from_secs(900);
+                        current.refresh_token = "rotated-refresh-token".to_string();
+                        *write_state.write().unwrap() = Some(current);
+
+                        Ok("shared-access-token".to_string())
+                    },
+                )
+                .await
+            }));
+        }
+
+        for task in tasks {
+            assert_eq!(task.await.unwrap().as_deref(), Some("shared-access-token"));
+        }
+        assert_eq!(refresh_calls.load(Ordering::SeqCst), 1);
+        assert_eq!(
+            session.read().unwrap().as_ref().unwrap().refresh_token,
+            "rotated-refresh-token"
+        );
     }
 }
