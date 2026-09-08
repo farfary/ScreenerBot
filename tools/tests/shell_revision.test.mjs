@@ -89,12 +89,30 @@ test("nested package scripts and dependencies are part of the revision", () => {
   }
 });
 
+test("the lockfile root release version is not part of the revision", () => {
+  const lockPath = path.join(path.dirname(REVISION_FILE), "..", "package-lock.json");
+  const before = computeShellRevision();
+  const original = fs.readFileSync(lockPath, "utf8");
+  try {
+    const lock = JSON.parse(original);
+    lock.version = "99.99.99";
+    lock.packages[""].version = "99.99.99";
+    fs.writeFileSync(lockPath, `${JSON.stringify(lock, null, 2)}\n`);
+    assert.equal(computeShellRevision(), before);
+  } finally {
+    fs.writeFileSync(lockPath, original);
+  }
+});
+
 test("the pinned dependency graph is part of the revision", () => {
   const lockPath = path.join(path.dirname(REVISION_FILE), "..", "package-lock.json");
   const before = computeShellRevision();
-  const original = fs.readFileSync(lockPath);
+  const original = fs.readFileSync(lockPath, "utf8");
   try {
-    fs.appendFileSync(lockPath, "\n");
+    const lock = JSON.parse(original);
+    const dependency = lock.packages["node_modules/electron"];
+    dependency.integrity = `${dependency.integrity}-revision-probe`;
+    fs.writeFileSync(lockPath, `${JSON.stringify(lock, null, 2)}\n`);
     assert.notEqual(computeShellRevision(), before);
   } finally {
     fs.writeFileSync(lockPath, original);

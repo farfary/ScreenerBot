@@ -76,8 +76,14 @@ function chooseCore({ staged, bundledVersion, quarantined = [], platform = proce
   if (!isValidVersion(staged.version) || !isValidPointerPath(staged.path, platform)) {
     return { use: 'bundled', prune: true, reason: 'staged pointer is malformed' };
   }
+  if (staged.path.split('/')[0] !== staged.version) {
+    return { use: 'bundled', prune: true, reason: 'staged pointer version does not match its path' };
+  }
   if (typeof staged.sha256 !== 'string' || !/^[0-9a-f]{64}$/.test(staged.sha256)) {
     return { use: 'bundled', prune: true, reason: 'staged pointer has no usable digest' };
+  }
+  if (!Number.isSafeInteger(staged.size) || staged.size <= 0) {
+    return { use: 'bundled', prune: true, reason: 'staged pointer has no usable size' };
   }
   if (quarantined.includes(staged.version)) {
     return { use: 'bundled', prune: true, reason: `v${staged.version} previously failed to start` };
@@ -179,7 +185,7 @@ async function resolveCore({ coreDir, bundledPath, bundledVersion }) {
   const stagedPath = path.join(coreDir, staged.path);
   try {
     const stat = await fsp.stat(stagedPath);
-    if (!stat.isFile() || (typeof staged.size === 'number' && stat.size !== staged.size)) {
+    if (!stat.isFile() || stat.size !== staged.size) {
       await quarantineStagedCore(coreDir, staged.version);
       return { ...bundled, reason: 'staged core has the wrong size' };
     }

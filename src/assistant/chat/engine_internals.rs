@@ -541,7 +541,16 @@ impl ChatEngine {
 
         // Execute the tool with timeout (30 seconds)
         let execution_timeout = Duration::from_secs(30);
-        let _active_tool = crate::global::begin_tool();
+        let Some(_active_tool) = crate::global::begin_tool() else {
+            return ToolCallInfo {
+                tool_name: tool_call.name.clone(),
+                input: tool_call.arguments.clone(),
+                output: Some(serde_json::json!({
+                    "error": "An application update is restarting the tool runtime."
+                })),
+                status: ToolCallStatus::Failed,
+            };
+        };
         let result = match tokio::time::timeout(
             execution_timeout,
             tool.execute(tool_call.arguments.clone()),

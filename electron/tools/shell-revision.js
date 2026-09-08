@@ -13,7 +13,8 @@
 //   - every packaged asset,
 //   - forge.config.js — it decides what is packaged and how,
 //   - package.json WITHOUT its version field,
-//   - package-lock.json, which pins the complete packaged dependency graph.
+//   - package-lock.json, which pins the complete packaged dependency graph,
+//     excluding the root application's release version.
 //
 // Deterministic across machines: paths are POSIX-normalised and sorted, text is
 // hashed with LF line endings, and binaries are hashed byte for byte.
@@ -30,7 +31,7 @@ const REVISION_FILE = path.join(SHELL_ROOT, 'src', 'shell_revision.json');
 const REVISION_LENGTH = 12;
 
 const INPUT_DIRECTORIES = ['src', 'assets'];
-const INPUT_FILES = ['forge.config.js', 'package-lock.json'];
+const INPUT_FILES = ['forge.config.js'];
 /** Never part of the identity: generated, or noise that is not shipped. */
 const EXCLUDED = new Set(['shell_revision.json', '.DS_Store']);
 
@@ -58,6 +59,18 @@ function packageIdentity() {
   const manifest = JSON.parse(fs.readFileSync(path.join(SHELL_ROOT, 'package.json'), 'utf8'));
   delete manifest.version;
   return stableJson(manifest);
+}
+
+/**
+ * package-lock.json minus the two root-version fields npm rewrites when the app
+ * version changes. Dependency versions and integrity hashes remain covered,
+ * while a core-only release bump does not falsely look like a shell rebuild.
+ */
+function packageLockIdentity() {
+  const lock = JSON.parse(fs.readFileSync(path.join(SHELL_ROOT, 'package-lock.json'), 'utf8'));
+  delete lock.version;
+  if (lock.packages?.['']) delete lock.packages[''].version;
+  return stableJson(lock);
 }
 
 function stableJson(value) {
@@ -101,6 +114,8 @@ function computeShellRevision() {
   const hash = crypto.createHash('sha256');
   hash.update('screenerbot-shell\0');
   hash.update(packageIdentity());
+  hash.update('\0package-lock.json\0');
+  hash.update(packageLockIdentity());
   for (const entry of entries) {
     hash.update(`\0${entry.key}\0`);
     hash.update(contentForHash(entry.file));

@@ -28,8 +28,10 @@ impl Service for UpdateCheckService {
     }
 
     fn is_enabled(&self) -> bool {
-        // Only run when fully initialized
-        crate::global::is_initialization_complete()
+        // Updates belong to the desktop shell, not the wallet runtime. Setup
+        // and Explore Mode must keep checking too; otherwise one persisted
+        // frontend check prevents those installations from ever checking again.
+        crate::global::is_gui_mode()
     }
 
     async fn initialize(&mut self) -> crate::Result<()> {

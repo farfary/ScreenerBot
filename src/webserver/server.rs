@@ -16,7 +16,7 @@ use axum::{middleware::from_fn, Router};
 use std::net::{IpAddr, SocketAddr};
 use std::sync::{Arc, Mutex};
 use tokio::net::TcpListener;
-use tokio::sync::Notify;
+use tokio::sync::{watch, Notify};
 use tower_http::compression::CompressionLayer;
 
 use crate::{
@@ -34,8 +34,8 @@ const DYNAMIC_PORT_START: u16 = 49152;
 const DYNAMIC_PORT_END: u16 = 65535;
 
 /// Global shutdown notifier
-static SHUTDOWN_NOTIFY: std::sync::LazyLock<Arc<Notify>> =
-    std::sync::LazyLock::new(|| Arc::new(Notify::new()));
+static SHUTDOWN_SIGNAL: std::sync::LazyLock<(watch::Sender<bool>, watch::Receiver<bool>)> =
+    std::sync::LazyLock::new(|| watch::channel(false));
 
 struct StartupSignal {
     result: Mutex<Option<std::result::Result<(), String>>>,
@@ -49,6 +49,7 @@ static STARTUP_SIGNAL: std::sync::LazyLock<StartupSignal> =
     });
 
 pub(crate) fn prepare_startup_signal() {
+    let _ = SHUTDOWN_SIGNAL.0.send(false);
     *STARTUP_SIGNAL
         .result
         .lock()
@@ -299,7 +300,7 @@ pub async fn start_server(port_override: Option<u16>, host_override: Option<Stri
 
     // Run the server with graceful shutdown
     let shutdown_signal = async {
-        SHUTDOWN_NOTIFY.notified().await;
+        shutdown_notified().await;
         logger::debug(
             LogTag::Webserver,
             "Received shutdown signal, stopping webserver...",
@@ -340,14 +341,22 @@ fn validate_headless_bind(host: &str, auth_enabled: bool) -> Result<()> {
 /// Trigger webserver shutdown
 pub fn shutdown() {
     logger::debug(LogTag::Webserver, "Triggering webserver shutdown...");
-    SHUTDOWN_NOTIFY.notify_waiters();
+    let _ = SHUTDOWN_SIGNAL.0.send(true);
 }
 
 /// Wait for the same process-wide shutdown edge that stops Axum. Streaming
 /// handlers use this so graceful shutdown is not held open by persistent SSE
 /// responses.
 pub(crate) async fn shutdown_notified() {
-    SHUTDOWN_NOTIFY.notified().await;
+    let mut receiver = SHUTDOWN_SIGNAL.0.subscribe();
+    if *receiver.borrow_and_update() {
+        return;
+    }
+    while receiver.changed().await.is_ok() {
+        if *receiver.borrow_and_update() {
+            return;
+        }
+    }
 }
 
 /// Tell the desktop shell that the whole enabled service graph is ready.

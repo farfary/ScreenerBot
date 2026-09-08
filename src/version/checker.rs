@@ -83,6 +83,16 @@ async fn plan_components(mut update: UpdateInfo) -> UpdateInfo {
     let Some(local_revision) = local_shell_revision() else {
         return update;
     };
+    if super::core_install::is_core_quarantined(&update.version) {
+        logger::warning(
+            LogTag::System,
+            &format!(
+                "Core v{} previously failed to start on this machine; the full installer will be used",
+                update.version
+            ),
+        );
+        return update;
+    }
     let client = match super::download::build_update_client() {
         Ok(client) => client,
         Err(error) => {

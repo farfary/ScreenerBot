@@ -109,32 +109,34 @@ async fn run_cycle(announced: &mut Option<(String, UpdateStage)>) {
                     policy.notify_telegram,
                 )
                 .await;
-                if let Err(error) = apply_now().await {
+
+                // Reserve only after optional notification I/O, then repeat the
+                // activity verdict. begin_trade() and begin_tool() refuse new
+                // work under the hold; work that started just before it remains
+                // counted and makes this final verdict defer the restart.
+                let Some(restart_hold) = crate::global::try_hold_activity_for_update_restart()
+                else {
+                    return;
+                };
+                if let ApplyReadiness::Deferred(reason) = super::apply_readiness(update.kind).await
+                {
+                    drop(restart_hold);
+                    record_deferred(&state, &update, reason, announced, policy.notify_telegram)
+                        .await;
+                } else if let Err(error) = apply_now_while_held().await {
+                    drop(restart_hold);
                     logger::warning(
                         LogTag::System,
                         &format!("Automatic update could not be applied: {error}"),
                     );
+                } else {
+                    // No HTTP response is waiting on the automatic path.
+                    restart_hold.commit();
+                    crate::global::request_restart();
                 }
             }
             ApplyReadiness::Deferred(reason) => {
-                if state.deferred != Some(reason) {
-                    logger::info(
-                        LogTag::System,
-                        &format!(
-                            "Update v{} is staged but held back: {}",
-                            update.version,
-                            reason.message()
-                        ),
-                    );
-                    mutate_state(|state| state.deferred = Some(reason)).await;
-                }
-                announce(
-                    announced,
-                    &update,
-                    UpdateStage::Staged,
-                    policy.notify_telegram,
-                )
-                .await;
+                record_deferred(&state, &update, reason, announced, policy.notify_telegram).await;
             }
         }
         return;
@@ -152,12 +154,49 @@ async fn run_cycle(announced: &mut Option<(String, UpdateStage)>) {
     }
 }
 
+async fn record_deferred(
+    prior_state: &UpdateState,
+    update: &UpdateInfo,
+    reason: DeferReason,
+    announced: &mut Option<(String, UpdateStage)>,
+    notify_telegram: bool,
+) {
+    if prior_state.deferred != Some(reason) {
+        logger::info(
+            LogTag::System,
+            &format!(
+                "Update v{} is staged but held back: {}",
+                update.version,
+                reason.message()
+            ),
+        );
+        mutate_state(|state| state.deferred = Some(reason)).await;
+    }
+    announce(announced, update, UpdateStage::Staged, notify_telegram).await;
+}
+
 /// Apply a staged core update by restarting onto it.
 ///
 /// The staged binary is never swapped over a running one: the restart is what
 /// activates it, and the desktop shell re-verifies the recorded digest before it
 /// launches. A failure here therefore leaves the current version in charge.
 pub async fn apply_now() -> Result<()> {
+    let Some(restart_hold) = crate::global::try_hold_activity_for_update_restart() else {
+        return Err(Error::RestartInProgress);
+    };
+    apply_now_while_held().await?;
+    restart_hold.commit();
+
+    // Give the HTTP response that triggered this a moment to flush, then let the
+    // normal run loop stop services and release the process lock in order.
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(350)).await;
+        crate::global::request_restart();
+    });
+    Ok(())
+}
+
+async fn apply_now_while_held() -> Result<()> {
     let staged = core_install::read_staged_core().ok_or_else(|| Error::DigestMismatch {
         detail: "no verified core is staged".to_owned(),
     })?;
@@ -199,12 +238,6 @@ pub async fn apply_now() -> Result<()> {
         ),
     );
 
-    // Give the HTTP response that triggered this a moment to flush, then let the
-    // normal run loop stop services and release the process lock in order.
-    tokio::spawn(async move {
-        tokio::time::sleep(Duration::from_millis(350)).await;
-        crate::global::request_restart();
-    });
     Ok(())
 }
 

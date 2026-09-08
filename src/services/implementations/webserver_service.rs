@@ -222,11 +222,9 @@ impl Service for WebserverService {
     }
 
     async fn stop(&mut self) -> crate::Result<()> {
-        // Trigger axum's graceful shutdown. The server task awaits the webserver
-        // module's own SHUTDOWN_NOTIFY, which is a SEPARATE Notify from the one the
-        // ServiceManager broadcasts on — so without this the task never sees a
-        // shutdown signal and blocks until the 10s per-task timeout. This lets it
-        // stop cleanly (finishes in-flight requests) in milliseconds.
+        // Trigger the webserver module's latched shutdown signal. Axum and every
+        // persistent SSE handler subscribe to this same signal, so graceful
+        // shutdown cannot miss an edge or wait for stream timeouts.
         crate::webserver::shutdown();
         Ok(())
     }

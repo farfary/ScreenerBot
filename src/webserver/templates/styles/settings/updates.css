@@ -149,19 +149,18 @@
 }
 
 .updates-progress.is-indeterminate .updates-progress-fill {
-  width: 40%;
-  background: linear-gradient(90deg, transparent, var(--primary-color), transparent);
-  animation: updates-sweep 1.4s ease-in-out infinite;
+  width: 35%;
+  animation: updates-slide 1.4s ease-in-out infinite;
   transition: none;
 }
 
-@keyframes updates-sweep {
+@keyframes updates-slide {
   from {
     transform: translateX(-100%);
   }
 
   to {
-    transform: translateX(250%);
+    transform: translateX(286%);
   }
 }
 

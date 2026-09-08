@@ -29,6 +29,7 @@ pub static EXPLORE_MODE: AtomicBool = AtomicBool::new(false);
 /// Restart is coordinated by the main run loop so services shut down and the
 /// process lock is released before the executable is replaced or relaunched.
 static RESTART_REQUESTED: AtomicBool = AtomicBool::new(false);
+static UPDATE_RESTART_PENDING: AtomicBool = AtomicBool::new(false);
 static RESTART_NOTIFY: LazyLock<Notify> = LazyLock::new(Notify::new);
 
 /// Check if initialization is complete and services can start.
@@ -64,6 +65,50 @@ pub fn request_restart() {
 /// Check whether the process must restart after graceful shutdown.
 pub fn is_restart_requested() -> bool {
     RESTART_REQUESTED.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+/// Reserve the process for an update restart before the shutdown signal is
+/// emitted. New trades and tools refuse to start while this is set, closing the
+/// gap between the updater's idle check and the actual restart request.
+///
+/// Exclusive, cancellation-safe ownership of the update restart reservation.
+/// Dropping before `commit` reopens admission; a committed hold remains until
+/// the process exits through the restart it protects.
+pub struct UpdateRestartHold {
+    committed: bool,
+}
+
+impl UpdateRestartHold {
+    pub fn commit(mut self) {
+        self.committed = true;
+    }
+}
+
+impl Drop for UpdateRestartHold {
+    fn drop(&mut self) {
+        if !self.committed {
+            UPDATE_RESTART_PENDING.store(false, std::sync::atomic::Ordering::SeqCst);
+        }
+    }
+}
+
+pub fn try_hold_activity_for_update_restart() -> Option<UpdateRestartHold> {
+    UPDATE_RESTART_PENDING
+        .compare_exchange(
+            false,
+            true,
+            std::sync::atomic::Ordering::SeqCst,
+            std::sync::atomic::Ordering::SeqCst,
+        )
+        .is_ok()
+        // `then_some` evaluates eagerly: on a failed claim it would construct
+        // and immediately drop a guard, whose Drop would clear the real
+        // owner's reservation. Construct the guard only for the winning CAS.
+        .then(|| UpdateRestartHold { committed: false })
+}
+
+pub fn is_update_restart_pending() -> bool {
+    UPDATE_RESTART_PENDING.load(std::sync::atomic::Ordering::SeqCst)
 }
 
 /// Wait for a dashboard-requested process restart.
@@ -172,6 +217,7 @@ pub fn get_webserver_host() -> String {
 
 /// Number of tools currently running (0 = none, >0 = pause background services).
 pub static TOOLS_ACTIVE_COUNT: AtomicU32 = AtomicU32::new(0);
+static TRADES_ACTIVE_COUNT: AtomicU32 = AtomicU32::new(0);
 
 /// Mark a tool as started (increments counter, pauses background services).
 pub fn tool_started() {
@@ -195,9 +241,17 @@ impl Drop for ActiveToolGuard {
     }
 }
 
-pub fn begin_tool() -> ActiveToolGuard {
+pub fn begin_tool() -> Option<ActiveToolGuard> {
+    if is_update_restart_pending() {
+        return None;
+    }
     tool_started();
-    ActiveToolGuard
+    if is_update_restart_pending() {
+        tool_finished();
+        None
+    } else {
+        Some(ActiveToolGuard)
+    }
 }
 
 /// Mark a tool as finished (decrements counter, resumes when no tools running).
@@ -222,9 +276,65 @@ pub fn are_tools_active() -> bool {
     TOOLS_ACTIVE_COUNT.load(std::sync::atomic::Ordering::SeqCst) > 0
 }
 
+/// RAII ownership for one end-to-end trade submission. The guard bridges the
+/// interval before a new position or pending verification becomes visible.
+pub struct ActiveTradeGuard;
+
+impl Drop for ActiveTradeGuard {
+    fn drop(&mut self) {
+        TRADES_ACTIVE_COUNT.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+pub fn begin_trade() -> Option<ActiveTradeGuard> {
+    if is_update_restart_pending() {
+        return None;
+    }
+    TRADES_ACTIVE_COUNT.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    if is_update_restart_pending() {
+        TRADES_ACTIVE_COUNT.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+        None
+    } else {
+        Some(ActiveTradeGuard)
+    }
+}
+
+pub fn are_trades_active() -> bool {
+    TRADES_ACTIVE_COUNT.load(std::sync::atomic::Ordering::SeqCst) > 0
+}
+
 /// Get count of active tools (for diagnostics).
 pub fn active_tools_count() -> u32 {
     TOOLS_ACTIVE_COUNT.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+#[cfg(test)]
+mod update_restart_tests {
+    use super::*;
+
+    #[test]
+    fn restart_hold_is_exclusive_and_blocks_new_activity_until_released() {
+        assert!(!is_update_restart_pending());
+        assert!(!are_tools_active());
+        assert!(!are_trades_active());
+
+        let hold = try_hold_activity_for_update_restart().expect("first hold");
+        assert!(try_hold_activity_for_update_restart().is_none());
+        assert!(begin_tool().is_none());
+        assert!(begin_trade().is_none());
+        assert!(!are_tools_active());
+        assert!(!are_trades_active());
+
+        drop(hold);
+        let tool = begin_tool().expect("tool admitted after cancelled restart");
+        let trade = begin_trade().expect("trade admitted after cancelled restart");
+        assert!(are_tools_active());
+        assert!(are_trades_active());
+        drop(tool);
+        drop(trade);
+        assert!(!are_tools_active());
+        assert!(!are_trades_active());
+    }
 }
 
 // =============================================================================

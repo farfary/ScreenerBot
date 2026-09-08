@@ -245,7 +245,7 @@ impl DeferReason {
                 "Automatic installation is disabled. The update is ready and will be applied when you choose."
             }
             DeferReason::TradingActive => {
-                "Positions are open, so the restart is deferred. The update applies automatically the next time ScreenerBot starts."
+                "A position, trade, or tool operation is active, so the restart is deferred. The update applies automatically when the app is idle."
             }
             DeferReason::NeedsInstaller => {
                 "This release also updates the desktop shell, so the installer has to run once."

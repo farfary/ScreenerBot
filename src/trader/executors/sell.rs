@@ -62,6 +62,15 @@ pub(super) fn resolve_exit_size(
 
 /// Execute a sell trade
 pub async fn execute_sell(decision: &TradeDecision) -> crate::trader::Result<TradeResult> {
+    let Some(_active_trade) = crate::global::begin_trade() else {
+        return Ok(TradeResult::failure_at(
+            decision.clone(),
+            TradeStep::Validation,
+            "Cannot execute sell - an application update is restarting the trading engine"
+                .to_owned(),
+            0,
+        ));
+    };
     if crate::global::is_force_stopped() {
         return Ok(TradeResult::failure_at(
             decision.clone(),

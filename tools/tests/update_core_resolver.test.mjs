@@ -62,12 +62,24 @@ test("a pointer that could escape the core directory is refused", () => {
     pointer({ path: `../../${BINARY}` }),
     pointer({ path: `0.2.2/nested/${BINARY}` }),
     pointer({ path: "0.2.2/other" }),
+    pointer({ path: `0.2.3/${BINARY}` }),
     pointer({ version: "../etc" }),
     pointer({ version: "0.2" }),
   ]) {
     const decision = resolver.chooseCore({ staged: bad, bundledVersion: "0.2.1" });
     assert.equal(decision.use, "bundled", JSON.stringify(bad));
     assert.equal(decision.prune, true);
+  }
+});
+
+test("a pointer must declare an exact positive file size", () => {
+  for (const size of [undefined, null, 0, -1, 1.5, "10"]) {
+    const decision = resolver.chooseCore({
+      staged: pointer({ size }),
+      bundledVersion: "0.2.1",
+    });
+    assert.equal(decision.use, "bundled", String(size));
+    assert.equal(decision.prune, true, String(size));
   }
 });
 

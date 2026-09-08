@@ -51,6 +51,10 @@ pub enum Error {
     #[error("an update check is already in progress")]
     CheckInProgress,
 
+    /// An update restart is already reserved, so the runtime admits no new work.
+    #[error("an update is already being applied")]
+    RestartInProgress,
+
     /// A download's actual byte count differed from its authenticated metadata.
     #[error("downloaded size mismatch: expected {expected}, got {actual}")]
     DownloadSizeMismatch { expected: u64, actual: u64 },
@@ -77,6 +81,7 @@ impl ErrorClass for Error {
             | Error::UpdateChanged
             | Error::DownloadInProgress
             | Error::CheckInProgress
+            | Error::RestartInProgress
             | Error::DownloadSizeMismatch { .. }
             | Error::UnsupportedInstall { .. } => false,
         }
@@ -95,6 +100,7 @@ impl ErrorClass for Error {
             | Error::UpdateChanged
             | Error::DownloadInProgress
             | Error::CheckInProgress
+            | Error::RestartInProgress
             | Error::DownloadSizeMismatch { .. }
             | Error::UnsupportedInstall { .. } => None,
         }
@@ -113,9 +119,10 @@ impl ErrorClass for Error {
             | Error::UpdateChanged
             | Error::DownloadSizeMismatch { .. }
             | Error::UnsupportedInstall { .. } => Severity::Error,
-            Error::NoUpdateAvailable | Error::DownloadInProgress | Error::CheckInProgress => {
-                Severity::Warning
-            }
+            Error::NoUpdateAvailable
+            | Error::DownloadInProgress
+            | Error::CheckInProgress
+            | Error::RestartInProgress => Severity::Warning,
         }
     }
 
@@ -129,7 +136,10 @@ impl ErrorClass for Error {
             Error::UpdateCheckFailed { status } => *status,
             Error::DigestMismatch { .. } | Error::DownloadSizeMismatch { .. } => 422,
             Error::NoUpdateAvailable => 404,
-            Error::UpdateChanged | Error::DownloadInProgress | Error::CheckInProgress => 409,
+            Error::UpdateChanged
+            | Error::DownloadInProgress
+            | Error::CheckInProgress
+            | Error::RestartInProgress => 409,
             Error::UnsupportedInstall { .. } => 501,
         }
     }

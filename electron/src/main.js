@@ -7,7 +7,7 @@ const os = require('os');
 const { pathToFileURL } = require('url');
 const appPaths = require('./paths');
 const coreResolver = require('./core_resolver');
-const { shouldRollbackStagedCore } = require('./backend_launch');
+const { createLineDecoder, shouldRollbackStagedCore } = require('./backend_launch');
 
 // ============================================================================
 // EPIPE PROTECTION - Prevent crashes when stdout/stderr pipes break
@@ -68,9 +68,10 @@ let currentTheme = 'dark'; // Last-run UI theme ('light'|'dark'), persisted in w
 let backendRestartRequested = false;
 let backendRestartTarget = '/home';
 
-// Which core binary the current backend child was launched from. A staged core
-// that never reports ready is quarantined and the bundled binary takes over, so
-// a bad silent update can cost one extra launch and nothing more.
+// Which core binary the current backend child was launched from. A newly staged
+// core that never reports ready is quarantined and the bundled binary takes
+// over. Once adopted, it is the installed core; later unrelated startup
+// failures must not misdiagnose and roll back that proven version.
 let activeCore = { path: null, version: null, staged: false, reason: '' };
 
 // Every backend spawn takes the next generation. A boot sequence that is still
@@ -80,9 +81,32 @@ let activeCore = { path: null, version: null, staged: false, reason: '' };
 let launchGeneration = 0;
 let stagedRecoveryGeneration = 0;
 
-function recoverFailedStagedCore(core, generation, detail) {
+async function terminateBackendChild(child) {
+  if (!child?.pid || child.exitCode !== null || child.signalCode !== null) return;
+  await new Promise((resolve) => {
+    let finished = false;
+    let forceTimer = null;
+    let giveUpTimer = null;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      if (forceTimer) clearTimeout(forceTimer);
+      if (giveUpTimer) clearTimeout(giveUpTimer);
+      resolve();
+    };
+    child.once('close', finish);
+    try { child.kill('SIGTERM'); } catch (_) { finish(); return; }
+    forceTimer = setTimeout(() => {
+      try { child.kill('SIGKILL'); } catch (_) { /* already stopped */ }
+    }, 3000);
+    giveUpTimer = setTimeout(finish, 5000);
+  });
+}
+
+function recoverFailedStagedCore(core, generation, detail, failedChild = backendProcess) {
   if (!shouldRollbackStagedCore({
     staged: core?.staged,
+    firstRun: core?.firstRun,
     ready: backendReadySignal,
     recovering: isRecovering,
     recoveryScheduled: stagedRecoveryGeneration === generation
@@ -97,12 +121,24 @@ function recoverFailedStagedCore(core, generation, detail) {
     backendReadyResolve = null;
   }
   setImmediate(async () => {
-    await coreResolver.quarantineStagedCore(CORE_DIR, failedVersion);
-    if (generation !== launchGeneration) return;
-    restartBackendFromDashboard(backendRestartTarget, {
-      message: `Restoring v${app.getVersion()}`,
-      detail: `Update v${failedVersion} did not start, so the previous version is taking over.`
-    });
+    try {
+      await coreResolver.quarantineStagedCore(CORE_DIR, failedVersion);
+      if (generation !== launchGeneration) return;
+      await terminateBackendChild(failedChild);
+      if (backendProcess === failedChild) backendProcess = null;
+      if (generation !== launchGeneration) return;
+      await restartBackendFromDashboard(backendRestartTarget, {
+        message: `Restoring v${app.getVersion()}`,
+        detail: `Update v${failedVersion} did not start, so the previous version is taking over.`
+      }, bundledCore('rollback after staged-core startup failure'));
+    } catch (err) {
+      console.error('[Electron] Staged core recovery failed:', err);
+      if (generation === launchGeneration) {
+        showBootError(genericBootError(
+          `The updated backend failed and the previous version could not be restored (${err.message}).`
+        ));
+      }
+    }
   });
   return true;
 }
@@ -372,14 +408,18 @@ async function resolveBackendBinary() {
     return resolved;
   } catch (err) {
     console.error('[Electron] Core resolution failed, using bundled binary:', err.message);
-    return {
-      path: bundledPath,
-      version: app.getVersion(),
-      staged: false,
-      firstRun: false,
-      reason: 'resolution failed'
-    };
+    return bundledCore('resolution failed');
   }
+}
+
+function bundledCore(reason = '') {
+  return {
+    path: getBinaryPath(),
+    version: app.getVersion(),
+    staged: false,
+    firstRun: false,
+    reason
+  };
 }
 
 /**
@@ -502,13 +542,19 @@ async function awaitBackendReady() {
   if (!gotReadySignal && startupError) return false;
   if (!gotReadySignal) {
     gotReadySignal = await new Promise((resolve) => {
-      backendReadyResolve = resolve;
+      let timer = null;
+      const settle = (ready) => {
+        if (backendReadyResolve !== settle) return;
+        backendReadyResolve = null;
+        if (timer) clearTimeout(timer);
+        resolve(ready);
+      };
+      backendReadyResolve = settle;
 
-      setTimeout(() => {
-        if (backendReadyResolve) {
+      timer = setTimeout(() => {
+        if (backendReadyResolve === settle) {
           console.error('[Electron] Timeout waiting for SCREENERBOT_READY signal');
-          resolve(false);
-          backendReadyResolve = null;
+          settle(false);
         }
       }, CONFIG.maxWaitTime);
     });
@@ -552,8 +598,17 @@ async function awaitBackendReady() {
  * Start the screenerbot backend process
  */
 function startBackend(extraArgs = [], core = null) {
+  // Supersede a waiter owned by the prior child before installing a new one.
+  // Clearing the callback without invoking it leaves that async boot sequence
+  // pending forever because its own timeout correctly refuses to resolve a
+  // newer generation's waiter.
+  if (backendReadyResolve) backendReadyResolve(false);
   activeCore = core || { path: getBinaryPath(), version: app.getVersion(), staged: false, reason: '' };
   const binaryPath = activeCore.path;
+  backendReadySignal = false;
+  launchGeneration += 1;
+  const generation = launchGeneration;
+  const launchedCore = activeCore;
 
   // Check if binary exists
   if (!fs.existsSync(binaryPath)) {
@@ -563,14 +618,10 @@ function startBackend(extraArgs = [], core = null) {
 
   const args = ['--gui', ...extraArgs];
   console.log('[Electron] Starting backend:', binaryPath, args.join(' '));
-  backendReadySignal = false;
-  launchGeneration += 1;
-  const generation = launchGeneration;
-  const launchedCore = activeCore;
 
   try {
     // Spawn the backend process
-    backendProcess = spawn(binaryPath, args, {
+    const child = spawn(binaryPath, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
       detached: false,
       env: {
@@ -583,100 +634,93 @@ function startBackend(extraArgs = [], core = null) {
         SCREENERBOT_CORE_STAGED: activeCore.staged ? '1' : '0'
       }
     });
+    backendProcess = child;
 
-    backendProcess.stdout.on('error', (err) => { if (err.code === 'EPIPE') return; });
-    backendProcess.stderr.on('error', (err) => { if (err.code === 'EPIPE') return; });
+    child.stdout.on('error', (err) => { if (err.code === 'EPIPE') return; });
+    child.stderr.on('error', (err) => { if (err.code === 'EPIPE') return; });
 
-    backendProcess.stdout.on('data', (data) => {
-      const lines = data.toString().trim().split('\n');
-      lines.forEach(line => {
-        if (line.trim()) {
-          console.log('[Backend]', line);
-          // Parse SCREENERBOT_ERROR signal — a structured fatal startup failure.
-          // Symmetric with SCREENERBOT_READY: base64-encoded JSON on one line.
-          if (line.startsWith('SCREENERBOT_ERROR:')) {
-            try {
-              const encoded = line.slice('SCREENERBOT_ERROR:'.length).trim();
-              const payload = JSON.parse(Buffer.from(encoded, 'base64').toString('utf8'));
-              console.error('[Electron] Backend reported fatal startup error:', payload.code);
-              startupError = payload;
-              // Unblock waitForBackend() so the boot sequence stops waiting.
-              if (backendReadyResolve) {
-                backendReadyResolve(false);
-                backendReadyResolve = null;
-              }
-            } catch (err) {
-              console.error('[Electron] Failed to parse SCREENERBOT_ERROR payload:', err.message);
+    const stdoutLines = createLineDecoder((rawLine) => {
+      if (generation !== launchGeneration) return;
+      const line = rawLine.trim();
+      if (line) {
+        console.log('[Backend]', line);
+        // Parse SCREENERBOT_ERROR signal — a structured fatal startup failure.
+        // Symmetric with SCREENERBOT_READY: base64-encoded JSON on one line.
+        if (line.startsWith('SCREENERBOT_ERROR:')) {
+          try {
+            const encoded = line.slice('SCREENERBOT_ERROR:'.length).trim();
+            const payload = JSON.parse(Buffer.from(encoded, 'base64').toString('utf8'));
+            console.error('[Electron] Backend reported fatal startup error:', payload.code);
+            startupError = payload;
+            // Unblock waitForBackend() so the boot sequence stops waiting.
+            if (backendReadyResolve) {
+              backendReadyResolve(false);
             }
-            return;
+          } catch (err) {
+            console.error('[Electron] Failed to parse SCREENERBOT_ERROR payload:', err.message);
           }
-          if (line.trim() === 'SCREENERBOT_RESTART') {
-            backendRestartRequested = true;
-            try {
-              const currentRoute = currentDashboardRoute();
-              backendRestartTarget = currentRoute && !currentRoute.startsWith('/initialization')
-                ? currentRoute
-                : '/home';
-            } catch (_) {
-              backendRestartTarget = '/home';
-            }
-            console.log(`[Electron] Backend requested graceful restart; restore=${backendRestartTarget}`);
-            return;
+          return;
+        }
+        if (line === 'SCREENERBOT_RESTART') {
+          backendRestartRequested = true;
+          try {
+            const currentRoute = currentDashboardRoute();
+            backendRestartTarget = currentRoute && !currentRoute.startsWith('/initialization')
+              ? currentRoute
+              : '/home';
+          } catch (_) {
+            backendRestartTarget = '/home';
           }
-          // Parse SCREENERBOT_READY message for port and token
-          if (line.startsWith('SCREENERBOT_READY:')) {
-            const parts = line.split(':');
-            if (parts.length >= 3) {
-              const port = parseInt(parts[1], 10);
-              const token = parts[2];
-              console.log(`[Electron] Backend ready on port ${port} with token ${token.substring(0, 8)}...`);
-              CONFIG.port = port;
-              global.SCREENERBOT_TOKEN = token;
-              backendReadySignal = true;
-              
-              // Resolve the waitForBackend() Promise
-              if (backendReadyResolve) {
-                backendReadyResolve(true);
-                backendReadyResolve = null;
-              }
+          console.log(`[Electron] Backend requested graceful restart; restore=${backendRestartTarget}`);
+          return;
+        }
+        // Parse SCREENERBOT_READY message for port and token
+        if (line.startsWith('SCREENERBOT_READY:')) {
+          const parts = line.split(':');
+          if (parts.length >= 3) {
+            const port = parseInt(parts[1], 10);
+            const token = parts[2];
+            console.log(`[Electron] Backend ready on port ${port} with token ${token.substring(0, 8)}...`);
+            CONFIG.port = port;
+            global.SCREENERBOT_TOKEN = token;
+            backendReadySignal = true;
+
+            // Resolve the waitForBackend() Promise
+            if (backendReadyResolve) {
+              backendReadyResolve(true);
             }
           }
         }
-      });
+      }
     });
+    child.stdout.on('data', (data) => stdoutLines.push(data));
+    child.stdout.on('end', () => stdoutLines.end());
 
-    backendProcess.stderr.on('data', (data) => {
-      const lines = data.toString().trim().split('\n');
-      lines.forEach(line => {
-        if (line.trim()) {
-          console.error('[Backend]', line);
-        }
-      });
+    const stderrLines = createLineDecoder((rawLine) => {
+      const line = rawLine.trim();
+      if (line) console.error('[Backend]', line);
     });
+    child.stderr.on('data', (data) => stderrLines.push(data));
+    child.stderr.on('end', () => stderrLines.end());
 
-    backendProcess.on('error', (err) => {
+    child.on('error', (err) => {
+      if (generation !== launchGeneration) return;
       console.error('[Electron] Failed to start backend:', err.message);
       console.error('[Electron] Error code:', err.code);
       startupError = genericBootError(`The backend program could not be started (${err.code || err.message}).`);
-      recoverFailedStagedCore(launchedCore, generation, `spawn error ${err.code || err.message}`);
+      recoverFailedStagedCore(launchedCore, generation, `spawn error ${err.code || err.message}`, child);
       if (backendReadyResolve) {
         backendReadyResolve(false);
-        backendReadyResolve = null;
       }
     });
 
-    backendProcess.on('exit', (code, signal) => {
+    child.on('exit', (code, signal) => {
       console.log(`[Electron] Backend exited with code ${code}, signal ${signal}`);
-      backendProcess = null;
+      if (backendProcess === child) backendProcess = null;
+
+      if (generation !== launchGeneration) return;
 
       if (isQuitting || !mainWindow) {
-        return;
-      }
-
-      if (backendRestartRequested || code === BACKEND_RESTART_EXIT_CODE) {
-        const target = backendRestartTarget;
-        backendRestartRequested = false;
-        setImmediate(() => restartBackendFromDashboard(target));
         return;
       }
 
@@ -684,7 +728,16 @@ function startBackend(extraArgs = [], core = null) {
       // likely causes (a truncated file, a binary the OS refuses to execute) are
       // exactly the ones a digest cannot catch. Quarantine it so neither this
       // launch nor the updater picks it up again, and fall back to the bundle.
-      if (recoverFailedStagedCore(launchedCore, generation, `exit code ${code}, signal ${signal}`)) {
+      if (recoverFailedStagedCore(launchedCore, generation, `exit code ${code}, signal ${signal}`, child)) {
+        return;
+      }
+      // The recovery task may have initiated this exit itself.
+      if (stagedRecoveryGeneration === generation) return;
+
+      if (backendRestartRequested || code === BACKEND_RESTART_EXIT_CODE) {
+        const target = backendRestartTarget;
+        backendRestartRequested = false;
+        setImmediate(() => restartBackendFromDashboard(target));
         return;
       }
 
@@ -708,8 +761,8 @@ function startBackend(extraArgs = [], core = null) {
       showBootError(genericBootError(`The backend stopped ${phase} (exit code ${code}).`));
     });
 
-    console.log('[Electron] Backend process spawned with PID:', backendProcess.pid);
-    return backendProcess;
+    console.log('[Electron] Backend process spawned with PID:', child.pid);
+    return child;
     
   } catch (err) {
     console.error('[Electron] Exception starting backend:', err);
@@ -1413,7 +1466,7 @@ function loadMainApp(route = '/') {
  * Relaunch after a dashboard-requested graceful restart. The old backend has
  * already stopped its services and released its process lock before this runs.
  */
-async function restartBackendFromDashboard(targetRoute, statusOverride) {
+async function restartBackendFromDashboard(targetRoute, statusOverride, coreOverride = null) {
   if (isRecovering || isQuitting || !mainWindow) return;
   isRecovering = true;
   startupError = null;
@@ -1433,11 +1486,14 @@ async function restartBackendFromDashboard(targetRoute, statusOverride) {
 
   CONFIG.port = null;
   global.SCREENERBOT_TOKEN = null;
-  backendReadyResolve = null;
+  if (backendReadyResolve) backendReadyResolve(false);
 
   // Resolving the core here is what actually applies a staged update: the
   // backend that comes back is the new version.
-  const core = await resolveBackendBinary();
+  // Rollback passes the bundle explicitly. It must not consult the failed
+  // staged pointer again, even when filesystem permissions prevented the
+  // quarantine record or pointer removal from being persisted.
+  const core = coreOverride || await resolveBackendBinary();
   if (!statusOverride) {
     const launch = describeCoreLaunch(core, 'Restarting ScreenerBot');
     updateLoadingStatus(launch.message, launch.detail);
@@ -1447,6 +1503,7 @@ async function restartBackendFromDashboard(targetRoute, statusOverride) {
   const generation = launchGeneration;
   isRecovering = false;
   if (!backend) {
+    if (recoverFailedStagedCore(core, generation, 'spawn threw before a child was created')) return;
     showBootError(genericBootError('Could not relaunch the backend after setup.'));
     return;
   }
@@ -1457,6 +1514,14 @@ async function restartBackendFromDashboard(targetRoute, statusOverride) {
     await recordCoreAdoption(core);
     updateLoadingStatus('Opening dashboard');
     loadMainApp(targetRoute || '/home');
+  } else if (recoverFailedStagedCore(
+    core,
+    generation,
+    startupError ? `startup error ${startupError.code || 'unknown'}` : 'readiness timeout'
+  )) {
+    return;
+  } else if (stagedRecoveryGeneration === generation) {
+    return;
   } else if (startupError) {
     showBootError(startupError);
   } else {
@@ -1567,6 +1632,7 @@ async function initialize() {
   const generation = launchGeneration;
 
   if (!backend) {
+    if (recoverFailedStagedCore(core, generation, 'spawn threw before a child was created')) return;
     console.error('[Electron] Failed to start backend process');
     showBootError(genericBootError(
       'The backend program could not be started. It may be missing or blocked by security software.'
@@ -1585,6 +1651,14 @@ async function initialize() {
     await recordCoreAdoption(core);
     updateLoadingStatus('Opening dashboard');
     loadMainApp();
+  } else if (recoverFailedStagedCore(
+    core,
+    generation,
+    startupError ? `startup error ${startupError.code || 'unknown'}` : 'readiness timeout'
+  )) {
+    return;
+  } else if (stagedRecoveryGeneration === generation) {
+    return;
   } else if (startupError) {
     // Backend reported a structured fatal error — show the dedicated screen.
     showBootError(startupError);
@@ -1710,6 +1784,7 @@ async function recoverAndRestart(extraArgs, statusOverride) {
   const generation = launchGeneration;
   isRecovering = false;
   if (!backend) {
+    if (recoverFailedStagedCore(core, generation, 'spawn threw before a child was created')) return;
     showBootError(genericBootError('Could not relaunch the backend for recovery.'));
     return;
   }
@@ -1722,6 +1797,14 @@ async function recoverAndRestart(extraArgs, statusOverride) {
     await recordCoreAdoption(core);
     updateLoadingStatus('Opening dashboard');
     loadMainApp();
+  } else if (recoverFailedStagedCore(
+    core,
+    generation,
+    startupError ? `startup error ${startupError.code || 'unknown'}` : 'readiness timeout'
+  )) {
+    return;
+  } else if (stagedRecoveryGeneration === generation) {
+    return;
   } else if (startupError) {
     showBootError(startupError);
   } else {

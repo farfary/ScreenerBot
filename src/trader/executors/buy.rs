@@ -38,6 +38,15 @@ pub async fn execute_buy_managed(
     origin: PositionOrigin,
     management: PositionManagement,
 ) -> crate::trader::Result<TradeResult> {
+    let Some(_active_trade) = crate::global::begin_trade() else {
+        return Ok(TradeResult::failure_at(
+            decision.clone(),
+            TradeStep::Validation,
+            "Cannot execute buy - an application update is restarting the trading engine"
+                .to_owned(),
+            0,
+        ));
+    };
     // Check connectivity before executing trade - critical operation
     if let Some(unhealthy) = crate::connectivity::check_endpoints_healthy(&["rpc"]).await {
         let error = format!("Cannot execute buy - Unhealthy endpoints: {unhealthy}");
@@ -127,6 +136,15 @@ pub async fn execute_buy_managed(
 
 /// Execute a DCA (dollar cost averaging) buy
 pub async fn execute_dca(decision: &TradeDecision) -> crate::trader::Result<TradeResult> {
+    let Some(_active_trade) = crate::global::begin_trade() else {
+        return Ok(TradeResult::failure_at(
+            decision.clone(),
+            TradeStep::Validation,
+            "Cannot execute DCA - an application update is restarting the trading engine"
+                .to_owned(),
+            0,
+        ));
+    };
     // Check connectivity before executing DCA - critical operation
     if let Some(unhealthy) = crate::connectivity::check_endpoints_healthy(&["rpc"]).await {
         let error = format!("Cannot execute DCA - Unhealthy endpoints: {unhealthy}");

@@ -83,7 +83,7 @@ pub async fn apply_readiness(kind: UpdateKind) -> ApplyReadiness {
         policy.auto_install,
         policy.defer_while_trading,
         open_positions,
-        crate::global::are_tools_active(),
+        crate::global::are_tools_active() || crate::global::are_trades_active(),
     )
 }
 

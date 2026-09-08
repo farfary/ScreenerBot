@@ -23,6 +23,12 @@ use super::{core_binary_name, Error, Result};
 use crate::logger::{self, LogTag};
 use std::path::{Path, PathBuf};
 
+#[derive(serde::Deserialize, Default)]
+struct CoreQuarantine {
+    #[serde(default)]
+    versions: Vec<String>,
+}
+
 /// Directory holding every staged core plus the pointer.
 pub(super) fn core_dir() -> PathBuf {
     crate::paths::get_data_directory().join("core")
@@ -63,6 +69,25 @@ pub fn read_staged_core() -> Option<StagedCore> {
 /// Version of the staged core, without touching its bytes.
 pub fn staged_core_version() -> Option<String> {
     read_staged_core().map(|staged| staged.version)
+}
+
+/// Whether Electron has already proved this version cannot start on this
+/// machine. Rust reads the same durable record before planning another silent
+/// activation, otherwise its next scheduled check would re-stage the bad core
+/// and create a restart loop.
+pub(super) fn is_core_quarantined(version: &str) -> bool {
+    if !is_safe_version(version) {
+        return true;
+    }
+    std::fs::read(core_dir().join("quarantine.json"))
+        .ok()
+        .is_some_and(|bytes| quarantine_contains(&bytes, version))
+}
+
+fn quarantine_contains(bytes: &[u8], version: &str) -> bool {
+    serde_json::from_slice::<CoreQuarantine>(bytes)
+        .ok()
+        .is_some_and(|quarantine| quarantine.versions.iter().any(|item| item == version))
 }
 
 /// Decompress, verify and publish a downloaded core artifact.
@@ -282,6 +307,14 @@ mod tests {
             "0.2.2/nested/{}",
             core_binary_name()
         )));
+    }
+
+    #[test]
+    fn electron_quarantine_record_blocks_only_the_failed_version() {
+        let record = br#"{"versions":["0.2.4","0.3.0"]}"#;
+        assert!(quarantine_contains(record, "0.2.4"));
+        assert!(!quarantine_contains(record, "0.2.5"));
+        assert!(!quarantine_contains(b"not json", "0.2.4"));
     }
 
     #[test]
