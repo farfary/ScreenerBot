@@ -17,8 +17,10 @@
     <div class="onboarding-slides">
       <!-- Slide 1: Welcome -->
       <div class="onboarding-slide active" data-slide="0">
-        <i class="slide-icon icon-zap"></i>
-        <h2 class="slide-title">Welcome to ScreenerBot</h2>
+        <div class="slide-heading">
+          <i class="slide-icon icon-zap" aria-hidden="true"></i>
+          <h2 class="slide-title">Welcome to ScreenerBot</h2>
+        </div>
         <p class="slide-description">
           Your local-first Solana trading companion — built in Rust for native speed. Discover
           tokens, analyze markets, and control trading from your own machine.
@@ -57,8 +59,10 @@
 
       <!-- Slide 2: Discover & Filter -->
       <div class="onboarding-slide" data-slide="1">
-        <i class="slide-icon icon-search"></i>
-        <h2 class="slide-title">Discover &amp; Filter</h2>
+        <div class="slide-heading">
+          <i class="slide-icon icon-search" aria-hidden="true"></i>
+          <h2 class="slide-title">Discover &amp; Filter</h2>
+        </div>
         <p class="slide-description">
           Scan three data sources for new Solana pairs, decode 12+ DEX pool types on-chain, then run
           every token through configurable quality and security rules.
@@ -97,8 +101,10 @@
 
       <!-- Slide 3: Trade Smart -->
       <div class="onboarding-slide" data-slide="2">
-        <i class="slide-icon icon-target"></i>
-        <h2 class="slide-title">Trade Smart</h2>
+        <div class="slide-heading">
+          <i class="slide-icon icon-target" aria-hidden="true"></i>
+          <h2 class="slide-title">Trade Smart</h2>
+        </div>
         <p class="slide-description">
           Automated trading with a six-tier exit priority system. DCA into positions, set trailing
           stops, build strategy trees — or trade manually with one click.
@@ -137,8 +143,10 @@
 
       <!-- Slide 4: Stay Connected -->
       <div class="onboarding-slide" data-slide="3">
-        <i class="slide-icon icon-radio"></i>
-        <h2 class="slide-title">Stay Connected</h2>
+        <div class="slide-heading">
+          <i class="slide-icon icon-radio" aria-hidden="true"></i>
+          <h2 class="slide-title">Stay Connected</h2>
+        </div>
         <p class="slide-description">
           Monitor your portfolio from anywhere. An Assistant backed by nine LLM providers, Telegram
           alerts with inline trading, and a searchable event log.
@@ -177,12 +185,14 @@
 
       <!-- Slide 5: ScreenerBot Data -->
       <div class="onboarding-slide" data-slide="4">
-        <i class="slide-icon icon-database"></i>
-        <h2 class="slide-title">ScreenerBot Data</h2>
+        <div class="slide-heading">
+          <i class="slide-icon icon-database" aria-hidden="true"></i>
+          <h2 class="slide-title">ScreenerBot Data</h2>
+        </div>
         <p class="slide-description">
-          We run a shared market-data service so every install is not separately rate limited by
-          the public providers. It is free with a ScreenerBot account, and ScreenerBot works
-          without one.
+          We run a shared market-data service so every install is not separately rate limited by the
+          public providers. It is free with a ScreenerBot account, and ScreenerBot works without
+          one.
         </p>
         <div class="slide-features">
           <div class="slide-feature">
@@ -218,12 +228,14 @@
 
       <!-- Slide 6: Your Keys, Your Data -->
       <div class="onboarding-slide" data-slide="5">
-        <i class="slide-icon icon-shield"></i>
-        <h2 class="slide-title">Your Keys, Your Data</h2>
+        <div class="slide-heading">
+          <i class="slide-icon icon-shield" aria-hidden="true"></i>
+          <h2 class="slide-title">Your Keys, Your Data</h2>
+        </div>
         <p class="slide-description">
           Your configuration, keys and trading history stay on this machine. Next, choose Explore
-          Mode for discovery without credentials, or link a wallet and RPC to enable the full bot
-          — and sign in there if you want ScreenerBot data.
+          Mode for discovery without credentials, or link a wallet and RPC to enable the full bot —
+          and sign in there if you want ScreenerBot data.
         </p>
         <div class="slide-features">
           <div class="slide-feature">
@@ -257,8 +269,19 @@
         </div>
       </div>
     </div>
+  </main>
 
-    <!-- Progress dots -->
+  <!-- Footer: skip on the left, progress in the centre, navigation on the right -->
+  <footer class="onboarding-footer">
+    <button
+      type="button"
+      class="onboarding-setup-shortcut"
+      id="onboardingSetupShortcut"
+      aria-label="Go directly to wallet and RPC setup or choose Explore Mode"
+    >
+      <i class="icon-settings" aria-hidden="true"></i>
+      <span>Go to setup</span>
+    </button>
     <div class="onboarding-progress">
       <button
         type="button"
@@ -272,19 +295,6 @@
       <button type="button" class="progress-dot" data-dot="4" aria-label="Go to slide 5"></button>
       <button type="button" class="progress-dot" data-dot="5" aria-label="Go to slide 6"></button>
     </div>
-  </main>
-
-  <!-- Footer navigation -->
-  <footer class="onboarding-footer">
-    <button
-      type="button"
-      class="onboarding-setup-shortcut"
-      id="onboardingSetupShortcut"
-      aria-label="Go directly to wallet and RPC setup or choose Explore Mode"
-    >
-      <i class="icon-settings" aria-hidden="true"></i>
-      <span>Go to setup</span>
-    </button>
     <div class="onboarding-nav">
       <button
         type="button"
@@ -292,10 +302,10 @@
         id="onboardingPrev"
         disabled
       >
-        <i class="icon-chevron-left"></i> Back
+        <i class="icon-chevron-left" aria-hidden="true"></i> Back
       </button>
       <button type="button" class="onboarding-btn onboarding-btn-primary" id="onboardingNext">
-        Next <i class="icon-chevron-right"></i>
+        Next <i class="icon-chevron-right" aria-hidden="true"></i>
       </button>
     </div>
   </footer>

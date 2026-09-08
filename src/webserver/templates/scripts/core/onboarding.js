@@ -4,7 +4,7 @@
 class OnboardingControllerClass {
   constructor() {
     this.currentSlide = 0;
-    this.totalSlides = 5;
+    this.totalSlides = 0;
     this.initialized = false;
     this.completing = false;
   }
@@ -65,27 +65,16 @@ class OnboardingControllerClass {
       });
     });
 
-    // Feature card hover effect
-    document.addEventListener("mousemove", (e) => {
-      const onboardingScreen = document.getElementById("onboardingScreen");
-      if (!onboardingScreen || onboardingScreen.style.display === "none") return;
-
-      const cards = document.querySelectorAll(".onboarding-slide.active .slide-feature");
-      cards.forEach((card) => {
-        const rect = card.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-        card.style.setProperty("--x", `${x}px`);
-        card.style.setProperty("--y", `${y}px`);
-      });
-    });
-
     // Keyboard navigation
     document.addEventListener("keydown", (e) => {
       const onboardingScreen = document.getElementById("onboardingScreen");
       if (!onboardingScreen || onboardingScreen.style.display === "none") return;
 
-      if (e.key === "ArrowRight" || e.key === "Enter") {
+      // Enter on a focused control is that control's activation, not "next".
+      const onControl =
+        typeof e.target?.closest === "function" && e.target.closest("button, a, input");
+
+      if (e.key === "ArrowRight" || (e.key === "Enter" && !onControl)) {
         this.next();
       } else if (e.key === "ArrowLeft") {
         this.prev();
@@ -101,7 +90,8 @@ class OnboardingControllerClass {
     // Update theme
     const screen = document.getElementById("onboardingScreen");
     if (screen) {
-      const themes = ["blue", "purple", "green", "amber", "cyan"];
+      // One entry per slide; the closing slide bookends back to the brand blue.
+      const themes = ["blue", "purple", "green", "amber", "cyan", "blue"];
       screen.setAttribute("data-theme", themes[index] || "blue");
     }
 

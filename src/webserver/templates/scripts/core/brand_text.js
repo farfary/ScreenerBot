@@ -4,7 +4,28 @@
 
   const BRAND_NAME = "ScreenerBot";
   const BRAND_CLASS = "brand-name";
-  const SKIP_SELECTOR = `.${BRAND_CLASS}, script, style, textarea, option, svg`;
+  // Headings and wordmarks are display type that is already set deliberately:
+  // restyling the product name inside them splits one line across two
+  // typefaces ("ScreenerBot Data") or overrides the wordmark's own tracking.
+  const SKIP_SELECTOR = [
+    `.${BRAND_CLASS}`,
+    "script",
+    "style",
+    "textarea",
+    "option",
+    "svg",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    ".font-brand",
+    ".brand-text",
+    ".splash-brand",
+    ".lockscreen-brand",
+    ".onboarding-brand",
+  ].join(", ");
 
   function shouldStyle(textNode) {
     if (textNode.nodeType !== Node.TEXT_NODE || !textNode.data.includes(BRAND_NAME)) return false;
@@ -43,9 +64,7 @@
     const matches = [];
     const walker = document.createTreeWalker(root, window.NodeFilter.SHOW_TEXT, {
       acceptNode: (node) =>
-        shouldStyle(node)
-          ? window.NodeFilter.FILTER_ACCEPT
-          : window.NodeFilter.FILTER_REJECT,
+        shouldStyle(node) ? window.NodeFilter.FILTER_ACCEPT : window.NodeFilter.FILTER_REJECT,
     });
 
     while (walker.nextNode()) matches.push(walker.currentNode);
