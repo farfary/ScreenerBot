@@ -180,6 +180,7 @@ async function resolveCore({ coreDir, bundledPath, bundledVersion }) {
   try {
     const stat = await fsp.stat(stagedPath);
     if (!stat.isFile() || (typeof staged.size === 'number' && stat.size !== staged.size)) {
+      await quarantineStagedCore(coreDir, staged.version);
       return { ...bundled, reason: 'staged core has the wrong size' };
     }
     if (await sha256File(stagedPath) !== staged.sha256) {
@@ -187,6 +188,7 @@ async function resolveCore({ coreDir, bundledPath, bundledVersion }) {
       return { ...bundled, reason: 'staged core failed its digest check' };
     }
   } catch (err) {
+    await quarantineStagedCore(coreDir, staged.version);
     return { ...bundled, reason: `staged core unreadable (${err.message})` };
   }
 

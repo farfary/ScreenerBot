@@ -342,6 +342,7 @@ mod tests {
             download_url: "/api/releases/download".to_owned(),
             file_size: 1,
             checksum: "a".repeat(64),
+            manifest_checksum: None,
             release_notes: None,
             release_date: String::new(),
             kind: UpdateKind::Core,

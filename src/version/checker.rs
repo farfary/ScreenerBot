@@ -94,8 +94,21 @@ async fn plan_components(mut update: UpdateInfo) -> UpdateInfo {
         }
     };
 
+    let Some(manifest_checksum) = update.manifest_checksum.as_deref() else {
+        logger::info(
+            LogTag::System,
+            &format!(
+                "Release v{} has no website manifest attestation; the full installer will be used",
+                update.version
+            ),
+        );
+        return update;
+    };
+
     let manifest = match manifest::fetch_release_for(&client, &update.version).await {
-        Ok(release) => manifest::fetch_manifest(&client, &release, &update.version).await,
+        Ok(release) => {
+            manifest::fetch_manifest(&client, &release, &update.version, manifest_checksum).await
+        }
         Err(error) => Err(error),
     };
     let manifest = match manifest {
@@ -239,6 +252,9 @@ fn parse_update_response(body: &[u8], current_version: &str) -> Result<Option<Up
         }));
     }
     validate_checksum(&update.checksum)?;
+    if let Some(checksum) = update.manifest_checksum.as_deref() {
+        validate_checksum(checksum)?;
+    }
     validate_release_filename(&update.filename, &update.version)?;
     if update.file_size == 0 || update.file_size > super::MAX_UPDATE_BYTES {
         return Err(Error::Data(crate::errors::DataError::ValidationError {
@@ -255,6 +271,9 @@ fn parse_update_response(body: &[u8], current_version: &str) -> Result<Option<Up
         download_url: update.download_url,
         file_size: update.file_size,
         checksum: update.checksum.to_ascii_lowercase(),
+        manifest_checksum: update
+            .manifest_checksum
+            .map(|checksum| checksum.to_ascii_lowercase()),
         release_notes: update.release_notes,
         release_date: update.published_at.unwrap_or_default(),
         kind: UpdateKind::Full,
@@ -500,6 +519,7 @@ mod tests {
             download_url: "https://screenerbot.io/update".to_owned(),
             file_size: 100,
             checksum: "a".repeat(64),
+            manifest_checksum: None,
             release_notes: None,
             release_date: String::new(),
             kind: UpdateKind::Full,
@@ -528,6 +548,7 @@ mod tests {
             download_url: "https://screenerbot.io/update".to_owned(),
             file_size: 100,
             checksum: "a".repeat(64),
+            manifest_checksum: None,
             release_notes: None,
             release_date: String::new(),
             kind: UpdateKind::Core,

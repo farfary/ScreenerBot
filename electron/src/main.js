@@ -7,6 +7,7 @@ const os = require('os');
 const { pathToFileURL } = require('url');
 const appPaths = require('./paths');
 const coreResolver = require('./core_resolver');
+const { shouldRollbackStagedCore } = require('./backend_launch');
 
 // ============================================================================
 // EPIPE PROTECTION - Prevent crashes when stdout/stderr pipes break
@@ -77,6 +78,34 @@ let activeCore = { path: null, version: null, staged: false, reason: '' };
 // a staged-core rollback) and must not report its own failure — otherwise its
 // 120s timeout later overwrites the screen the newer launch already painted.
 let launchGeneration = 0;
+let stagedRecoveryGeneration = 0;
+
+function recoverFailedStagedCore(core, generation, detail) {
+  if (!shouldRollbackStagedCore({
+    staged: core?.staged,
+    ready: backendReadySignal,
+    recovering: isRecovering,
+    recoveryScheduled: stagedRecoveryGeneration === generation
+  })) {
+    return false;
+  }
+  stagedRecoveryGeneration = generation;
+  const failedVersion = core.version;
+  console.error(`[Electron] Staged core v${failedVersion} failed to start; rolling back (${detail})`);
+  if (backendReadyResolve) {
+    backendReadyResolve(false);
+    backendReadyResolve = null;
+  }
+  setImmediate(async () => {
+    await coreResolver.quarantineStagedCore(CORE_DIR, failedVersion);
+    if (generation !== launchGeneration) return;
+    restartBackendFromDashboard(backendRestartTarget, {
+      message: `Restoring v${app.getVersion()}`,
+      detail: `Update v${failedVersion} did not start, so the previous version is taking over.`
+    });
+  });
+  return true;
+}
 
 /**
  * Revision of this shell build, generated at package time by
@@ -536,6 +565,8 @@ function startBackend(extraArgs = [], core = null) {
   console.log('[Electron] Starting backend:', binaryPath, args.join(' '));
   backendReadySignal = false;
   launchGeneration += 1;
+  const generation = launchGeneration;
+  const launchedCore = activeCore;
 
   try {
     // Spawn the backend process
@@ -626,6 +657,12 @@ function startBackend(extraArgs = [], core = null) {
     backendProcess.on('error', (err) => {
       console.error('[Electron] Failed to start backend:', err.message);
       console.error('[Electron] Error code:', err.code);
+      startupError = genericBootError(`The backend program could not be started (${err.code || err.message}).`);
+      recoverFailedStagedCore(launchedCore, generation, `spawn error ${err.code || err.message}`);
+      if (backendReadyResolve) {
+        backendReadyResolve(false);
+        backendReadyResolve = null;
+      }
     });
 
     backendProcess.on('exit', (code, signal) => {
@@ -647,22 +684,7 @@ function startBackend(extraArgs = [], core = null) {
       // likely causes (a truncated file, a binary the OS refuses to execute) are
       // exactly the ones a digest cannot catch. Quarantine it so neither this
       // launch nor the updater picks it up again, and fall back to the bundle.
-      if (activeCore.staged && !backendReadySignal && !isRecovering) {
-        const failedVersion = activeCore.version;
-        console.error(`[Electron] Staged core v${failedVersion} failed to start; rolling back`);
-        // Release whoever is still awaiting this launch so it stops waiting out
-        // its timeout; the generation check keeps it from reporting a failure.
-        if (backendReadyResolve) {
-          backendReadyResolve(false);
-          backendReadyResolve = null;
-        }
-        setImmediate(async () => {
-          await coreResolver.quarantineStagedCore(CORE_DIR, failedVersion);
-          restartBackendFromDashboard(backendRestartTarget, {
-            message: `Restoring v${app.getVersion()}`,
-            detail: `Update v${failedVersion} did not start, so the previous version is taking over.`
-          });
-        });
+      if (recoverFailedStagedCore(launchedCore, generation, `exit code ${code}, signal ${signal}`)) {
         return;
       }
 
@@ -674,11 +696,9 @@ function startBackend(extraArgs = [], core = null) {
         return;
       }
 
-      // A structured startup error is only rendered by the boot sequence when
-      // waitForBackend() fails. The webserver reports SCREENERBOT_READY before
-      // the services that can still fail, so a fatal error after that point let
-      // the dashboard load and then left it in its skeleton with the backend
-      // gone. Render the reported cause here instead of dropping it.
+      // A structured startup error is normally rendered by the boot sequence
+      // when waitForBackend() fails. Keep this event-side fallback for failures
+      // outside that waiter (for example a later runtime exit).
       if (startupError) {
         showBootError(startupError);
         return;

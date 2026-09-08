@@ -541,6 +541,7 @@ impl ChatEngine {
 
         // Execute the tool with timeout (30 seconds)
         let execution_timeout = Duration::from_secs(30);
+        let _active_tool = crate::global::begin_tool();
         let result = match tokio::time::timeout(
             execution_timeout,
             tool.execute(tool_call.arguments.clone()),

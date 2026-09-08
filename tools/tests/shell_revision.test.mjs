@@ -75,6 +75,32 @@ test("the release version is not part of the revision", () => {
   }
 });
 
+test("nested package scripts and dependencies are part of the revision", () => {
+  const manifestPath = path.join(path.dirname(REVISION_FILE), "..", "package.json");
+  const before = computeShellRevision();
+  const original = fs.readFileSync(manifestPath, "utf8");
+  try {
+    const manifest = JSON.parse(original);
+    manifest.scripts.start = `${manifest.scripts.start} --revision-probe`;
+    fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    assert.notEqual(computeShellRevision(), before);
+  } finally {
+    fs.writeFileSync(manifestPath, original);
+  }
+});
+
+test("the pinned dependency graph is part of the revision", () => {
+  const lockPath = path.join(path.dirname(REVISION_FILE), "..", "package-lock.json");
+  const before = computeShellRevision();
+  const original = fs.readFileSync(lockPath);
+  try {
+    fs.appendFileSync(lockPath, "\n");
+    assert.notEqual(computeShellRevision(), before);
+  } finally {
+    fs.writeFileSync(lockPath, original);
+  }
+});
+
 test("the generated revision file is not part of its own input", () => {
   const before = computeShellRevision();
   const existed = fs.existsSync(REVISION_FILE);

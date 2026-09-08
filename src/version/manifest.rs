@@ -145,6 +145,7 @@ pub(super) async fn fetch_manifest(
     client: &reqwest::Client,
     release: &GithubRelease,
     version: &str,
+    website_digest: &str,
 ) -> Result<UpdateManifest> {
     let asset = release
         .manifest_asset()
@@ -161,6 +162,7 @@ pub(super) async fn fetch_manifest(
     let expected_digest = asset.sha256().ok_or_else(|| Error::DigestMismatch {
         detail: "GitHub reports no digest for the update manifest".to_owned(),
     })?;
+    verify_manifest_attestation(&expected_digest, website_digest)?;
 
     let body = super::download::retry_update_operation("Update manifest download", || {
         fetch_manifest_body(client, asset)
@@ -173,6 +175,15 @@ pub(super) async fn fetch_manifest(
     }
 
     parse_manifest(&body, version)
+}
+
+fn verify_manifest_attestation(github_digest: &str, website_digest: &str) -> Result<()> {
+    if github_digest != website_digest {
+        return Err(Error::DigestMismatch {
+            detail: "GitHub update-manifest digest differs from website attestation".to_owned(),
+        });
+    }
+    Ok(())
 }
 
 async fn fetch_manifest_body(client: &reqwest::Client, asset: &GithubAsset) -> Result<Vec<u8>> {
@@ -432,5 +443,15 @@ mod tests {
         };
         let asset = release.manifest_asset().unwrap();
         assert_eq!(asset.sha256().unwrap(), "c".repeat(64));
+    }
+
+    #[test]
+    fn manifest_requires_independent_website_and_github_digests_to_agree() {
+        let digest = "a".repeat(64);
+        assert!(verify_manifest_attestation(&digest, &digest).is_ok());
+        assert!(matches!(
+            verify_manifest_attestation(&digest, &"b".repeat(64)),
+            Err(Error::DigestMismatch { .. })
+        ));
     }
 }

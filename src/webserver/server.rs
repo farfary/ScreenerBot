@@ -14,7 +14,7 @@
 
 use axum::{middleware::from_fn, Router};
 use std::net::{IpAddr, SocketAddr};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tokio::net::TcpListener;
 use tokio::sync::Notify;
 use tower_http::compression::CompressionLayer;
@@ -36,6 +36,50 @@ const DYNAMIC_PORT_END: u16 = 65535;
 /// Global shutdown notifier
 static SHUTDOWN_NOTIFY: std::sync::LazyLock<Arc<Notify>> =
     std::sync::LazyLock::new(|| Arc::new(Notify::new()));
+
+struct StartupSignal {
+    result: Mutex<Option<std::result::Result<(), String>>>,
+    notify: Notify,
+}
+
+static STARTUP_SIGNAL: std::sync::LazyLock<StartupSignal> =
+    std::sync::LazyLock::new(|| StartupSignal {
+        result: Mutex::new(None),
+        notify: Notify::new(),
+    });
+
+pub(crate) fn prepare_startup_signal() {
+    *STARTUP_SIGNAL
+        .result
+        .lock()
+        .expect("webserver startup signal") = None;
+}
+
+pub(crate) fn report_startup(result: std::result::Result<(), String>) {
+    let mut current = STARTUP_SIGNAL
+        .result
+        .lock()
+        .expect("webserver startup signal");
+    if current.is_none() {
+        *current = Some(result);
+        STARTUP_SIGNAL.notify.notify_waiters();
+    }
+}
+
+pub(crate) async fn wait_for_startup() -> std::result::Result<(), String> {
+    loop {
+        let notified = STARTUP_SIGNAL.notify.notified();
+        if let Some(result) = STARTUP_SIGNAL
+            .result
+            .lock()
+            .expect("webserver startup signal")
+            .clone()
+        {
+            return result;
+        }
+        notified.await;
+    }
+}
 
 /// Find an available port in the dynamic range
 async fn find_available_port() -> Result<u16> {
@@ -121,11 +165,6 @@ pub async fn start_server(port_override: Option<u16>, host_override: Option<Stri
         let token = global::generate_security_token();
         global::set_webserver_port(dynamic_port);
         global::set_webserver_host(DEFAULT_HOST);
-
-        // Output port and token to stdout for Electron to parse
-        // Format: SCREENERBOT_READY:port:token
-        // This MUST be printed before health checks can succeed
-        println!("SCREENERBOT_READY:{}:{}", dynamic_port, token);
 
         logger::info(
             LogTag::Webserver,
@@ -237,6 +276,7 @@ pub async fn start_server(port_override: Option<u16>, host_override: Option<Stri
             detail: e.to_string(),
         },
     })?;
+    report_startup(Ok(()));
 
     logger::debug(
         LogTag::Webserver,
@@ -300,7 +340,28 @@ fn validate_headless_bind(host: &str, auth_enabled: bool) -> Result<()> {
 /// Trigger webserver shutdown
 pub fn shutdown() {
     logger::debug(LogTag::Webserver, "Triggering webserver shutdown...");
-    SHUTDOWN_NOTIFY.notify_one();
+    SHUTDOWN_NOTIFY.notify_waiters();
+}
+
+/// Wait for the same process-wide shutdown edge that stops Axum. Streaming
+/// handlers use this so graceful shutdown is not held open by persistent SSE
+/// responses.
+pub(crate) async fn shutdown_notified() {
+    SHUTDOWN_NOTIFY.notified().await;
+}
+
+/// Tell the desktop shell that the whole enabled service graph is ready.
+/// Binding the HTTP listener alone is not sufficient: later services can still
+/// fail, and adopting a staged core before they finish defeats rollback.
+pub(crate) fn announce_gui_ready() {
+    if !global::is_gui_mode() {
+        return;
+    }
+    let port = global::get_webserver_port();
+    let Some(token) = global::get_security_token() else {
+        return;
+    };
+    println!("SCREENERBOT_READY:{port}:{token}");
 }
 
 /// Build the Axum application with all routes and middleware

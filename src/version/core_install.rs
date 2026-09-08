@@ -34,12 +34,30 @@ fn pointer_path() -> PathBuf {
 
 /// The staged core the desktop shell would launch, if any.
 pub fn read_staged_core() -> Option<StagedCore> {
-    let bytes = std::fs::read(pointer_path()).ok()?;
-    let staged: StagedCore = serde_json::from_slice(&bytes).ok()?;
+    let pointer = pointer_path();
+    let bytes = std::fs::read(&pointer).ok()?;
+    let staged: StagedCore = match serde_json::from_slice(&bytes) {
+        Ok(staged) => staged,
+        Err(_) => {
+            let _ = std::fs::remove_file(pointer);
+            return None;
+        }
+    };
     if !is_safe_version(&staged.version) || !is_safe_relative_path(&staged.path) {
+        let _ = std::fs::remove_file(pointer);
         return None;
     }
-    core_dir().join(&staged.path).is_file().then_some(staged)
+    let binary = core_dir().join(&staged.path);
+    // Keep status reads cheap: Electron performs the full digest check at the
+    // activation boundary. Here the authenticated size is enough to reject a
+    // missing/truncated pointer without hashing a large binary on every poll.
+    let valid = std::fs::metadata(&binary)
+        .is_ok_and(|metadata| metadata.is_file() && metadata.len() == staged.size);
+    if !valid {
+        let _ = std::fs::remove_file(pointer);
+        return None;
+    }
+    Some(staged)
 }
 
 /// Version of the staged core, without touching its bytes.

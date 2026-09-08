@@ -184,6 +184,22 @@ pub fn tool_started() {
     }
 }
 
+/// RAII ownership for one in-flight tool. Cancellation, timeout and early
+/// returns all release the count through Drop, so update policy never observes
+/// a stale or missing execution state.
+pub struct ActiveToolGuard;
+
+impl Drop for ActiveToolGuard {
+    fn drop(&mut self) {
+        tool_finished();
+    }
+}
+
+pub fn begin_tool() -> ActiveToolGuard {
+    tool_started();
+    ActiveToolGuard
+}
+
 /// Mark a tool as finished (decrements counter, resumes when no tools running).
 pub fn tool_finished() {
     let prev = TOOLS_ACTIVE_COUNT.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);

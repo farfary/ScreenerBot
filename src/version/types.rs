@@ -90,6 +90,10 @@ pub struct UpdateInfo {
     pub download_url: String,
     pub file_size: u64,
     pub checksum: String,
+    /// Website-published digest of the release's update manifest. This is the
+    /// independent authority for silent-update metadata.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub manifest_checksum: Option<String>,
     pub release_notes: Option<String>,
     pub release_date: String,
     /// Whether this update can be applied silently or needs the OS installer.
@@ -160,6 +164,7 @@ pub(super) struct UpdateResponseData {
     pub filename: String,
     pub file_size: u64,
     pub checksum: String,
+    pub manifest_checksum: Option<String>,
 }
 
 /// Where an update currently is in its lifecycle.

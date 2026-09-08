@@ -161,6 +161,7 @@ pub async fn call_tool(
         }
         Decision::Execute => {
             audit::record(AuditKind::AuthzDecision, &ctx, "execute", None);
+            let _active_tool = crate::global::begin_tool();
             let result = tool.execute(arguments).await;
             audit::record(
                 AuditKind::Execution,
@@ -250,6 +251,7 @@ pub async fn execute_approved(approval_id: &str) -> Result<()> {
     }
 
     approvals::mark_executing(approval_id)?;
+    let _active_tool = crate::global::begin_tool();
     let result = tool.execute(claimed.canonical_args.clone()).await;
     let value = serde_json::to_value(&result).unwrap_or(Value::Null);
     approvals::finish(approval_id, result.success, &value)?;

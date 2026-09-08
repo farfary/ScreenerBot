@@ -158,32 +158,38 @@ async fn run_cycle(announced: &mut Option<(String, UpdateStage)>) {
 /// activates it, and the desktop shell re-verifies the recorded digest before it
 /// launches. A failure here therefore leaves the current version in charge.
 pub async fn apply_now() -> Result<()> {
-    let state = super::get_update_state().await;
-    let update = state.available_update.ok_or(Error::NoUpdateAvailable)?;
-
-    if update.kind != UpdateKind::Core {
-        return Err(Error::UnsupportedInstall {
-            detail: "this release replaces the desktop shell and needs its installer".to_owned(),
-        });
-    }
-    if state.phase != UpdatePhase::ReadyToApply {
-        return Err(Error::NoUpdateAvailable);
-    }
     let staged = core_install::read_staged_core().ok_or_else(|| Error::DigestMismatch {
         detail: "no verified core is staged".to_owned(),
     })?;
-    if staged.version != update.version {
-        return Err(Error::UpdateChanged);
-    }
     if !super::is_newer_version(super::VERSION, &staged.version) {
         return Err(Error::UpdateChanged);
     }
 
-    mutate_state(|state| {
+    // Validate and claim the apply slot under the same writer lock used by
+    // downloads. No caller can begin a transfer between this verdict and the
+    // Applying transition.
+    super::mutate_state_with_result(|state| {
+        let update = state
+            .available_update
+            .as_ref()
+            .ok_or(Error::NoUpdateAvailable)?;
+        if update.kind != UpdateKind::Core {
+            return Err(Error::UnsupportedInstall {
+                detail: "this release replaces the desktop shell and needs its installer"
+                    .to_owned(),
+            });
+        }
+        if state.phase != UpdatePhase::ReadyToApply {
+            return Err(Error::NoUpdateAvailable);
+        }
+        if staged.version != update.version {
+            return Err(Error::UpdateChanged);
+        }
         state.phase = UpdatePhase::Applying;
         state.deferred = None;
+        Ok(())
     })
-    .await;
+    .await?;
 
     logger::info(
         LogTag::System,

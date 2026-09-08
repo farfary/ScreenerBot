@@ -16,6 +16,9 @@ pub mod totp;
 pub mod utils;
 
 // Public API for starting/stopping the webserver
+pub(crate) use server::{
+    announce_gui_ready, prepare_startup_signal, report_startup, shutdown_notified, wait_for_startup,
+};
 pub use server::{shutdown, start_server, test_port_binding};
 
 // Crate-visible defaults for service logging and tests

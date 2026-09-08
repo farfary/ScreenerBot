@@ -67,6 +67,7 @@ export function attachUpdatesHandlers(content, onAttentionChange) {
     notesHtml: null,
     lastPhase: null,
     refreshing: false,
+    pendingRecheck: false,
   };
   activeSession = session;
 
@@ -81,7 +82,12 @@ export function attachUpdatesHandlers(content, onAttentionChange) {
   });
 
   const refresh = async ({ recheck = false } = {}) => {
-    if (session.refreshing) return;
+    if (session.refreshing) {
+      // Opening the tab starts a status read immediately. A native/manual check
+      // arriving during that read must run next, not disappear as a no-op.
+      if (recheck) session.pendingRecheck = true;
+      return;
+    }
     session.refreshing = true;
     try {
       if (recheck) {
@@ -107,8 +113,13 @@ export function attachUpdatesHandlers(content, onAttentionChange) {
       syncPoller(state, refresh, session);
     } finally {
       session.refreshing = false;
+      if (session.pendingRecheck && activeSession === session) {
+        session.pendingRecheck = false;
+        void refresh({ recheck: true });
+      }
     }
   };
+  session.refresh = refresh;
 
   void renderPreferences(root.querySelector("#updatesPreferences"), session);
   void refresh();
@@ -124,6 +135,10 @@ export function teardownUpdatesTab() {
     poller.cleanup();
     poller = null;
   }
+}
+
+export function requestUpdateCheck() {
+  return activeSession?.refresh?.({ recheck: true });
 }
 
 async function readStatus(signal) {
@@ -332,7 +347,23 @@ function attachActions(root, state, refresh, session) {
   const on = (id, handler) => root.querySelector(`#${id}`)?.addEventListener("click", handler);
 
   on("updatesCheck", () => refresh({ recheck: true }));
-  on("updatesRetry", () => refresh({ recheck: true }));
+  on("updatesRetry", async () => {
+    const update = state.available_update;
+    if (!update) return refresh({ recheck: true });
+    setButtonBusy(root, "updatesRetry", "Resuming download...");
+    await request(
+      "/api/updates/download",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ version: update.version }),
+        signal: session.controller.signal,
+      },
+      "Could not resume update download",
+      "updates:retry"
+    );
+    if (activeSession === session) void refresh();
+  });
 
   on("updatesDownload", async () => {
     const update = state.available_update;

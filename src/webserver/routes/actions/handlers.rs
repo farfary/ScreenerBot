@@ -25,7 +25,11 @@ pub(super) async fn stream_actions(
     // Create stream that converts ActionUpdate to SSE Event
     let stream = async_stream::stream! {
         loop {
-            match rx.recv().await {
+            let received = tokio::select! {
+                update = rx.recv() => update,
+                _ = crate::webserver::shutdown_notified() => break,
+            };
+            match received {
                 Ok(update) => {
                     // Serialize update to JSON
                     match serde_json::to_string(&update) {

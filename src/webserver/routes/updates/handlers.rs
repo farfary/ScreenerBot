@@ -2,7 +2,7 @@ use crate::{
     config,
     logger::{self, LogTag},
     version,
-    webserver::utils::{error_response, success_response},
+    webserver::utils::{error_response, status_for, success_response},
 };
 use axum::{http::StatusCode, response::Response, Json};
 
@@ -54,12 +54,7 @@ pub(super) async fn check_updates() -> Response {
         }
         Err(e) => {
             logger::warning(LogTag::Webserver, &format!("Update check failed: {e}"));
-            error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "UPDATE_CHECK_FAILED",
-                &e.to_string(),
-                None,
-            )
+            update_error_response("UPDATE_CHECK_FAILED", &e)
         }
     }
 }
@@ -97,12 +92,7 @@ pub(super) async fn download_update(Json(body): Json<DownloadRequest>) -> Respon
     let version_str = update.version.clone();
 
     if let Err(e) = version::start_download(update).await {
-        return error_response(
-            StatusCode::CONFLICT,
-            "DOWNLOAD_NOT_STARTED",
-            &e.to_string(),
-            None,
-        );
+        return update_error_response("DOWNLOAD_NOT_STARTED", &e);
     }
 
     success_response(DownloadResponse {
@@ -167,12 +157,7 @@ pub(super) async fn apply_update() -> Response {
             message: "Installing the update. ScreenerBot restarts and reconnects automatically."
                 .to_owned(),
         }),
-        Err(e) => error_response(
-            StatusCode::CONFLICT,
-            "APPLY_FAILED",
-            &format!("Could not apply the update: {e}"),
-            None,
-        ),
+        Err(e) => update_error_response("APPLY_FAILED", &e),
     }
 }
 
@@ -187,13 +172,12 @@ pub(super) async fn install_update() -> Response {
             message: "Verified update installer opened. Complete the operating-system installer."
                 .to_owned(),
         }),
-        Err(e) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "INSTALL_FAILED",
-            &format!("Failed to open update: {e}"),
-            None,
-        ),
+        Err(e) => update_error_response("INSTALL_FAILED", &e),
     }
+}
+
+fn update_error_response(code: &str, error: &version::Error) -> Response {
+    error_response(status_for(error), code, &error.to_string(), None)
 }
 
 #[cfg(test)]
@@ -209,6 +193,7 @@ mod tests {
                 download_url: "https://example.com/update".to_owned(),
                 file_size: 1,
                 checksum: "a".repeat(64),
+                manifest_checksum: None,
                 release_notes: None,
                 release_date: String::new(),
                 kind: version::UpdateKind::Core,

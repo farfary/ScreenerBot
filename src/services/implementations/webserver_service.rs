@@ -128,6 +128,7 @@ impl Service for WebserverService {
             "[PRE-FLIGHT] Spawning background webserver task...",
         );
 
+        crate::webserver::prepare_startup_signal();
         let handle = tokio::spawn(monitor.instrument(async move {
             logger::debug(
                 LogTag::System,
@@ -135,6 +136,7 @@ impl Service for WebserverService {
             );
 
             if let Err(e) = crate::webserver::start_server(port_override, host_override).await {
+                crate::webserver::report_startup(Err(e.to_string()));
                 logger::error(
                     LogTag::System,
                     &format!("[WEBSERVER] ❌ start_server() FAILED: {e}"),
@@ -147,8 +149,23 @@ impl Service for WebserverService {
             }
         }));
 
-        // Brief delay to let server initialize
-        tokio::time::sleep(Duration::from_millis(200)).await;
+        tokio::time::timeout(
+            Duration::from_secs(10),
+            crate::webserver::wait_for_startup(),
+        )
+        .await
+        .map_err(|_| {
+            crate::Error::Service(crate::errors::ServiceError::Start {
+                service: "webserver".to_owned(),
+                message: "Timed out waiting for the HTTP listener to bind".to_owned(),
+            })
+        })?
+        .map_err(|message| {
+            crate::Error::Service(crate::errors::ServiceError::Start {
+                service: "webserver".to_owned(),
+                message,
+            })
+        })?;
 
         // Get actual configured host and port (not the defaults)
         let host = crate::global::get_webserver_host();

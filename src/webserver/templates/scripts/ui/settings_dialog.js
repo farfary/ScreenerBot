@@ -14,6 +14,7 @@ import { buildDataTab, attachDataHandlers } from "./settings/data_tab.js";
 import {
   buildUpdatesTab,
   attachUpdatesHandlers,
+  requestUpdateCheck,
   teardownUpdatesTab,
 } from "./settings/updates_tab.js";
 import { buildInterfaceTab, attachInterfaceHandlers } from "./settings/interface_tab.js";
@@ -35,6 +36,7 @@ import {
 // update lifecycle is owned by settings/updates_tab.js and read straight from
 // the backend, so there is only ever one description of it.
 let updateNeedsAttention = false;
+let lastSurfacedUpdateKey = null;
 const GUI_DRAFT_TABS = new Set(["interface", "navigation", "startup"]);
 
 export class SettingsDialog {
@@ -935,12 +937,10 @@ export async function showSettingsDialog(options = {}) {
   }
   await settingsDialogInstance.show();
 
-  // Switch to specific tab if requested (after dialog is shown)
+  // show() creates the complete dialog DOM before it resolves. Switch directly
+  // so callers can safely invoke tab-owned actions after awaiting this function.
   if (options.tab) {
-    // Small delay to ensure DOM is ready
-    setTimeout(() => {
-      settingsDialogInstance.switchToTab(options.tab);
-    }, 100);
+    settingsDialogInstance.switchToTab(options.tab);
   }
 }
 
@@ -953,7 +953,7 @@ export function closeSettingsDialog() {
 if (window.electronAPI?.onCheckForUpdates) {
   window.electronAPI.onCheckForUpdates(async () => {
     await showSettingsDialog({ tab: "updates" });
-    setTimeout(() => settingsDialogInstance?._performBackgroundUpdateCheck(), 150);
+    await requestUpdateCheck();
   });
 }
 
@@ -978,8 +978,10 @@ export async function checkAndShowUpdateDialog() {
     state.blocked_reason = payload.blocked_reason || null;
     state.requires_user_action = Boolean(payload.requires_user_action);
 
-    // If no check has happened yet, trigger one
-    if (!state.last_check && !state.available_update) {
+    // If no check has even been attempted yet, trigger the startup check. A
+    // failed attempt is retried by the backend policy; the observer must not add
+    // another manual request every minute while the network remains unavailable.
+    if (!state.last_check_attempt && !state.available_update) {
       const checkResponse = await fetch("/api/updates/check");
       if (checkResponse.ok) {
         const refreshed = await fetch("/api/updates/status");
@@ -996,7 +998,11 @@ export async function checkAndShowUpdateDialog() {
     // Only surface the panel for an update that still needs a decision. A core
     // update that installs itself must not steal the screen on every launch.
     const needsAttention = state.requires_user_action;
-    if (needsAttention) {
+    const attentionKey = needsAttention
+      ? `${state.available_update?.version || "unknown"}:${state.phase}:${state.download_progress?.error || ""}`
+      : null;
+    if (attentionKey && attentionKey !== lastSurfacedUpdateKey) {
+      lastSurfacedUpdateKey = attentionKey;
       await showSettingsDialog({ tab: "updates" });
     }
   } catch (err) {
@@ -1020,6 +1026,9 @@ export async function checkAndShowUpdateDialog() {
 
     // Small delay to ensure UI is fully rendered
     setTimeout(checkAndShowUpdateDialog, 1500);
+    // The backend checker runs after the dashboard opens. Observe its durable
+    // state so a later discovered update is surfaced without reopening Settings.
+    window.setInterval(checkAndShowUpdateDialog, 60_000);
   } catch (err) {
     console.warn("[SettingsDialog] Failed to initialize update check:", err);
   }

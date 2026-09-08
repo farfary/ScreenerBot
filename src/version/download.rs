@@ -75,6 +75,9 @@ fn claim_download(state: &mut UpdateState, update: &UpdateInfo) -> Result<()> {
             Error::DownloadInProgress
         });
     }
+    if !matches!(state.phase, UpdatePhase::Available | UpdatePhase::Failed) {
+        return Err(Error::DownloadInProgress);
+    }
 
     state.phase = UpdatePhase::Downloading;
     state.deferred = None;
@@ -312,7 +315,10 @@ where
             Ok(()) => return Ok(()),
             Err(error) if error.is_retryable() && attempt < policy.max_attempts => {
                 let retained = prepare_partial(destination, expected_size).await?;
-                let delay = transfer_retry_delay(policy.base_delay, attempt);
+                let delay = std::cmp::max(
+                    transfer_retry_delay(policy.base_delay, attempt),
+                    error.retry_after().unwrap_or_default(),
+                );
                 logger::warning(
                     LogTag::System,
                     &format!(
@@ -364,6 +370,18 @@ where
         }));
     }
     if !response.status().is_success() {
+        if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+            let retry_after_ms = response
+                .headers()
+                .get(reqwest::header::RETRY_AFTER)
+                .and_then(|value| value.to_str().ok())
+                .and_then(|value| value.parse::<u64>().ok())
+                .map(|seconds| seconds.saturating_mul(1000));
+            return Err(Error::Network(crate::errors::NetworkError::RateLimited {
+                endpoint: response.url().to_string(),
+                retry_after_ms,
+            }));
+        }
         return Err(Error::Network(crate::errors::NetworkError::HttpStatus {
             endpoint: response.url().to_string(),
             status: response.status().as_u16(),
@@ -839,6 +857,7 @@ mod tests {
                 .to_owned(),
             file_size: 4,
             checksum: "a".repeat(64),
+            manifest_checksum: None,
             release_notes: None,
             release_date: String::new(),
             kind: UpdateKind::Full,
@@ -863,6 +882,9 @@ mod tests {
         let mut other = candidate.clone();
         other.version = "0.1.123".to_owned();
         assert!(claim_download(&mut state, &other).is_err());
+
+        state.phase = UpdatePhase::ReadyToApply;
+        assert!(claim_download(&mut state, &candidate).is_err());
     }
 
     #[test]
@@ -897,6 +919,46 @@ mod tests {
         assert!(validate_content_length(Some(5), 4).is_err());
         assert!(validate_content_length(Some(4), 4).is_ok());
         assert!(validate_content_length(None, 4).is_ok());
+    }
+
+    #[tokio::test]
+    async fn rate_limit_response_preserves_the_server_retry_delay() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut request = [0_u8; 1024];
+            let _ = socket.read(&mut request).await.unwrap();
+            socket
+                .write_all(
+                    b"HTTP/1.1 429 Too Many Requests\r\nRetry-After: 7\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                )
+                .await
+                .unwrap();
+        });
+
+        let directory = tempfile::tempdir().unwrap();
+        let destination = directory.path().join("update.part");
+        let mut progress = |_| async {};
+        let error = stream_attempt(
+            &reqwest::Client::new(),
+            format!("http://{address}/update").parse().unwrap(),
+            &destination,
+            4,
+            0,
+            &mut progress,
+            false,
+        )
+        .await
+        .unwrap_err();
+
+        assert!(matches!(
+            error,
+            Error::Network(crate::errors::NetworkError::RateLimited {
+                retry_after_ms: Some(7_000),
+                ..
+            })
+        ));
     }
 
     #[test]

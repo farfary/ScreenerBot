@@ -225,6 +225,26 @@ test("a staged core whose bytes changed is quarantined, not launched", async (t)
   await assert.rejects(fs.access(path.join(dir, "current.json")));
 });
 
+test("a missing or wrong-sized staged core is quarantined once", async (t) => {
+  for (const mode of ["missing", "wrong-size"]) {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sb-core-"));
+    t.after(() => fs.rm(dir, { recursive: true, force: true }));
+    const binaryPath = await stage(dir);
+    if (mode === "missing") await fs.rm(binaryPath);
+    else await fs.appendFile(binaryPath, "extra");
+
+    const resolved = await resolver.resolveCore({
+      coreDir: dir,
+      bundledPath: "/bundled/screenerbot",
+      bundledVersion: "0.2.1",
+    });
+    assert.equal(resolved.staged, false, mode);
+    await assert.rejects(fs.access(path.join(dir, "current.json")), mode);
+    const quarantine = JSON.parse(await fs.readFile(path.join(dir, "quarantine.json"), "utf8"));
+    assert.deepEqual(quarantine.versions, ["0.2.2"], mode);
+  }
+});
+
 test("a quarantined version stays quarantined across relaunches", async (t) => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "sb-core-"));
   t.after(() => fs.rm(dir, { recursive: true, force: true }));
