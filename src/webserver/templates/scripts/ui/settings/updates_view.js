@@ -295,21 +295,8 @@ export function createUpdatesView(Utils) {
     };
   }
 
-  function renderReleaseNotes(release) {
-    if (!release) {
-      return `
-        <div class="updates-empty">
-          <h3>No release notes yet</h3>
-          <p>Release notes will appear here when a new version is available.</p>
-        </div>
-      `;
-    }
-
+  function releaseBodyHtml(release) {
     const parsed = parseReleaseNotes(release.release_notes);
-    const date = Utils.formatTimestamp(release.release_date, {
-      fallback: "",
-      includeSeconds: false,
-    });
     const intro = parsed.intro.map((paragraph) => `<p>${escape(paragraph)}</p>`).join("");
     const sections = parsed.sections
       .map((section) => {
@@ -328,15 +315,108 @@ export function createUpdatesView(Utils) {
       })
       .join("");
 
+    return {
+      changeCount: parsed.sections.reduce((total, section) => total + section.bullets.length, 0),
+      html:
+        intro + sections ||
+        '<p class="updates-release-empty">No changes were listed for this release.</p>',
+    };
+  }
+
+  /**
+   * One release in the history list.
+   *
+   * `state` is what this version is to this installation — the build running
+   * right now, the update waiting to be installed, or an earlier release — and
+   * it is the only thing that earns a tag. The newest entry carries no "latest"
+   * tag of its own: it is already first in the list.
+   */
+  function releaseEntryHtml(release, state, expanded) {
+    const body = releaseBodyHtml(release);
+    const date = Utils.formatDate(release.release_date, { fallback: "" });
+    const tag = { installed: "Installed", available: "Available" }[state];
+    const changes = body.changeCount
+      ? `${body.changeCount} ${body.changeCount === 1 ? "change" : "changes"}`
+      : "";
+
     return `
-      <article class="updates-release">
-        <header class="updates-release-header">
-          <span>Release notes</span>
-          <h3>What’s new in v${escape(release.version)}</h3>
-          ${date ? `<time datetime="${escape(release.release_date)}">Released ${escape(date)}</time>` : ""}
-        </header>
-        ${intro}${sections || '<p class="updates-release-empty">No changes were listed for this release.</p>'}
-      </article>
+      <li class="updates-release-item">
+        <details class="updates-release" data-state="${escape(state)}"${expanded ? " open" : ""}>
+          <summary class="updates-release-summary">
+            <span class="updates-release-version">v${escape(release.version)}</span>
+            ${tag ? `<span class="updates-release-tag">${escape(tag)}</span>` : ""}
+            <span class="updates-release-facts">
+              ${date ? `<time datetime="${escape(release.release_date)}">${escape(date)}</time>` : ""}
+              ${changes ? `<span>${escape(changes)}</span>` : ""}
+            </span>
+            <i class="updates-release-chevron icon-chevron-down" aria-hidden="true"></i>
+          </summary>
+          <div class="updates-release-body">${body.html}</div>
+        </details>
+      </li>
+    `;
+  }
+
+  /**
+   * The Release Notes panel: every published release, newest first.
+   *
+   * `releases` comes from screenerbot.io, which owns the editorial record. When
+   * it cannot be read the panel still shows whatever single release the updater
+   * itself knows about, so an offline machine is never left with nothing.
+   */
+  function renderReleaseNotes({ releases, currentVersion, availableVersion, loading, error }) {
+    if (loading) {
+      return '<div class="updates-loading">Loading release notes...</div>';
+    }
+
+    if (!releases.length) {
+      return `
+        <div class="updates-empty">
+          <h3>No release notes yet</h3>
+          <p>
+            ${
+              error
+                ? "The release history could not be loaded. Check the connection and try again."
+                : "Release notes will appear here once a release has been published."
+            }
+          </p>
+          ${button("updatesNotesRetry", "Try again", "icon-refresh-cw", "ghost")}
+        </div>
+      `;
+    }
+
+    const stateFor = (version) => {
+      if (version === currentVersion) return "installed";
+      if (version === availableVersion) return "available";
+      return "past";
+    };
+    // One entry starts open, and it is the one the reader came for: the update
+    // waiting to be installed if there is one, otherwise the build they are
+    // running, otherwise the newest release.
+    const preference = ["available", "installed"];
+    const expandedIndex = Math.max(
+      0,
+      preference
+        .map((wanted) => releases.findIndex((release) => stateFor(release.version) === wanted))
+        .find((index) => index >= 0) ?? -1
+    );
+
+    return `
+      <div class="updates-history">
+        ${
+          error
+            ? '<p class="updates-history-notice">Showing what this installation already knows' +
+              " &mdash; the release history could not be loaded.</p>"
+            : ""
+        }
+        <ol class="updates-release-list">
+          ${releases
+            .map((release, index) =>
+              releaseEntryHtml(release, stateFor(release.version), index === expandedIndex)
+            )
+            .join("")}
+        </ol>
+      </div>
     `;
   }
 

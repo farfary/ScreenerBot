@@ -68,6 +68,8 @@ export function attachUpdatesHandlers(content, onAttentionChange) {
     lastPhase: null,
     refreshing: false,
     pendingRecheck: false,
+    lastState: null,
+    history: { status: "idle", releases: [] },
   };
   activeSession = session;
 
@@ -78,6 +80,7 @@ export function attachUpdatesHandlers(content, onAttentionChange) {
     panelSelector: ".updates-panels > [data-tab-content]",
     onChange: (tabId) => {
       activeUpdatesTab = tabId;
+      if (tabId === "release-notes") void loadHistory(session);
     },
   });
 
@@ -99,6 +102,10 @@ export function attachUpdatesHandlers(content, onAttentionChange) {
           "updates:check"
         );
         if (activeSession !== session) return;
+        // A check can be the moment a new release exists at all, so the notes
+        // the panel is holding are the ones that just went stale.
+        if (session.history.status === "ready") session.history.status = "idle";
+        if (activeUpdatesTab === "release-notes") void loadHistory(session);
       }
 
       const state = await readStatus(session.controller.signal);
@@ -122,6 +129,7 @@ export function attachUpdatesHandlers(content, onAttentionChange) {
   session.refresh = refresh;
 
   void renderPreferences(root.querySelector("#updatesPreferences"), session);
+  if (activeUpdatesTab === "release-notes") void loadHistory(session);
   void refresh();
 }
 
@@ -217,6 +225,70 @@ function releaseForState(state) {
   return state.last_release || null;
 }
 
+/**
+ * Read the published release history from screenerbot.io, through the backend.
+ *
+ * Loaded the first time the panel is opened rather than with the dialog: a
+ * reader who never opens Release Notes never pays for the request. The backend
+ * caches the answer, so a re-open is free.
+ */
+async function loadHistory(session, { force = false } = {}) {
+  if (!force && session.history.status !== "idle") return;
+  // A reload keeps what is already on screen: replacing a read list with a
+  // spinner would make a manual retry look like the panel lost its content.
+  session.history = { status: "loading", releases: session.history.releases };
+  renderNotes(session);
+
+  let history = null;
+  try {
+    const response = await fetch("/api/updates/history", { signal: session.controller.signal });
+    const body = await response.json();
+    if (response.ok && body.success !== false) history = body.data || body;
+  } catch (err) {
+    if (err.name === "AbortError") return;
+  }
+  if (activeSession !== session) return;
+
+  session.history = history?.releases?.length
+    ? { status: "ready", releases: history.releases }
+    : { status: "error", releases: [] };
+  renderNotes(session);
+}
+
+/**
+ * The panel shows the website's full history. When that cannot be read it falls
+ * back to the one release the updater itself knows about, which is all an
+ * offline installation has.
+ */
+function renderNotes(session) {
+  const host = session.root.querySelector("#updatesNotes");
+  if (!host) return;
+
+  const state = session.lastState;
+  const fallback = state ? releaseForState(state) : null;
+  const failed = session.history.status === "error";
+  const releases = session.history.releases.length
+    ? session.history.releases
+    : fallback
+      ? [fallback]
+      : [];
+
+  const html = view.renderReleaseNotes({
+    releases,
+    currentVersion: versionInfo.version,
+    availableVersion: state?.available_update?.version || null,
+    loading: session.history.status === "loading" && !releases.length,
+    error: failed,
+  });
+  if (session.notesHtml === html) return;
+
+  host.innerHTML = html;
+  session.notesHtml = html;
+  host
+    .querySelector("#updatesNotesRetry")
+    ?.addEventListener("click", () => void loadHistory(session, { force: true }));
+}
+
 function render(session, state, refresh) {
   const displayState = {
     ...state,
@@ -224,17 +296,14 @@ function render(session, state, refresh) {
     platform: versionInfo.platform,
   };
   const status = view.renderStatus(displayState);
-  const notesHtml = view.renderReleaseNotes(releaseForState(state));
+  session.lastState = state;
 
   if (session.statusHtml !== status.html) {
     session.root.querySelector("#updatesStatus").innerHTML = status.html;
     session.statusHtml = status.html;
     attachActions(session.root, state, refresh, session);
   }
-  if (session.notesHtml !== notesHtml) {
-    session.root.querySelector("#updatesNotes").innerHTML = notesHtml;
-    session.notesHtml = notesHtml;
-  }
+  renderNotes(session);
   if (session.lastPhase !== state.phase) {
     session.root.querySelector("#updatesAnnouncement").textContent = status.announcement;
     session.lastPhase = state.phase;

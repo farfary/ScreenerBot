@@ -1,4 +1,4 @@
-use crate::version::{StagedCore, UpdateInfo, UpdateState};
+use crate::version::{ReleaseSummary, StagedCore, UpdateInfo, UpdateState};
 use serde::{Deserialize, Serialize};
 
 // =============================================================================
@@ -37,6 +37,14 @@ pub struct UpdateStatusResponse {
     pub blocked_reason: Option<String>,
     /// Whether the current phase needs an explicit choice from the operator.
     pub requires_user_action: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ReleaseHistoryResponse {
+    /// Every published release that has notes, newest first.
+    pub releases: Vec<ReleaseSummary>,
+    /// The version this process is running, so the list can mark it.
+    pub current_version: String,
 }
 
 #[derive(Debug, Deserialize)]

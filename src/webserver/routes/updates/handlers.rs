@@ -101,6 +101,18 @@ pub(super) async fn download_update(Json(body): Json<DownloadRequest>) -> Respon
     })
 }
 
+/// GET /api/updates/history
+/// The published release notes for every version, straight from screenerbot.io.
+pub(super) async fn get_history() -> Response {
+    match version::release_history().await {
+        Ok(releases) => success_response(ReleaseHistoryResponse {
+            releases,
+            current_version: version::VERSION.to_owned(),
+        }),
+        Err(e) => update_error_response("HISTORY_UNAVAILABLE", &e),
+    }
+}
+
 /// GET /api/updates/status
 /// Returns current update/download status plus what the dashboard needs to
 /// describe the next step without re-deriving the rules.

@@ -422,6 +422,22 @@
     return date.toLocaleString(locale, options);
   }
 
+  /**
+   * Calendar day only. A release date, a report day or an expiry is about the
+   * day itself, and formatTimestamp's time-of-day is noise there.
+   */
+  function formatDate(value, { fallback = "N/A", locale = "en-US" } = {}) {
+    const date = toDate(value);
+    if (!date) {
+      return fallback;
+    }
+    return date.toLocaleDateString(locale, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  }
+
   function formatTimeAgo(value, { fallback = "-" } = {}) {
     const date = toDate(value);
     if (!date) {
@@ -1391,6 +1407,7 @@
     formatPnL,
     formatTimeFromSeconds,
     formatTimestamp,
+    formatDate,
     formatTimeAgo,
     formatTimeUntil,
     formatUptime,
@@ -1457,6 +1474,7 @@ export const {
   formatPnL,
   formatTimeFromSeconds,
   formatTimestamp,
+  formatDate,
   formatTimeAgo,
   formatTimeUntil,
   formatUptime,

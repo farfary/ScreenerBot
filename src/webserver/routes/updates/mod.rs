@@ -26,6 +26,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/updates/check", get(handlers::check_updates))
         .route("/updates/download", post(handlers::download_update))
         .route("/updates/status", get(handlers::get_status))
+        .route("/updates/history", get(handlers::get_history))
         .route("/updates/apply", post(handlers::apply_update))
         .route("/updates/install", post(handlers::install_update))
 }

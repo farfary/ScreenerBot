@@ -151,6 +151,19 @@ pub(super) struct UpdateCheckData {
     pub current_version: String,
     pub latest_version: Option<String>,
     pub update: Option<UpdateResponseData>,
+    /// Release the server considers current. Present when no update is offered,
+    /// so the app can still show the notes for the version it is running.
+    #[serde(default)]
+    pub latest_release: Option<LatestReleaseData>,
+}
+
+/// Published release described without any downloadable artifact.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct LatestReleaseData {
+    pub version: String,
+    pub release_notes: Option<String>,
+    pub published_at: Option<String>,
 }
 
 /// Update data from server

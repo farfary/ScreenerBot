@@ -14,6 +14,16 @@ use std::time::Duration;
 
 const MAX_UPDATE_CHECK_BYTES: u64 = 1024 * 1024;
 
+/// What one update check established about the release catalogue.
+///
+/// A check that offers nothing still carries information worth keeping: the
+/// release the server considers current, whose notes describe the build this
+/// process is already running.
+pub(super) enum CheckOutcome {
+    Update(Box<UpdateInfo>),
+    UpToDate(Option<ReleaseSummary>),
+}
+
 pub async fn check_for_update() -> Result<Option<UpdateInfo>> {
     check_for_update_from(
         crate::net::client(),
@@ -37,13 +47,13 @@ async fn check_for_update_from(
     })
     .await;
     match result {
-        Ok(Some(update)) => {
-            let update = plan_components(update).await;
-            record_check_success(Some(update.clone())).await;
+        Ok(CheckOutcome::Update(update)) => {
+            let update = plan_components(*update).await;
+            record_check_success(Some(update.clone()), None).await;
             Ok(Some(update))
         }
-        Ok(None) => {
-            record_check_success(None).await;
+        Ok(CheckOutcome::UpToDate(release)) => {
+            record_check_success(None, release).await;
             Ok(None)
         }
         Err(error) => {
@@ -178,7 +188,7 @@ async fn request_update(
     server_url: &str,
     current_version: &str,
     platform: &str,
-) -> Result<Option<UpdateInfo>> {
+) -> Result<CheckOutcome> {
     let url = format!(
         "{}/releases/check?version={}&platform={}",
         server_url, current_version, platform
@@ -206,7 +216,7 @@ async fn request_update(
     parse_update_response(&body, current_version)
 }
 
-fn parse_update_response(body: &[u8], current_version: &str) -> Result<Option<UpdateInfo>> {
+fn parse_update_response(body: &[u8], current_version: &str) -> Result<CheckOutcome> {
     let api_response: ApiResponse<UpdateCheckData> =
         serde_json::from_slice(body).map_err(|error| {
             Error::Data(crate::errors::DataError::ParseError {
@@ -237,7 +247,9 @@ fn parse_update_response(body: &[u8], current_version: &str) -> Result<Option<Up
     }
 
     if !data.update_available {
-        return Ok(None);
+        return Ok(CheckOutcome::UpToDate(current_release_summary(
+            data.latest_release,
+        )));
     }
 
     let update = data.update.ok_or_else(|| {
@@ -275,7 +287,7 @@ fn parse_update_response(body: &[u8], current_version: &str) -> Result<Option<Up
     }
     validate_download_url(&update.download_url)?;
 
-    Ok(Some(UpdateInfo {
+    Ok(CheckOutcome::Update(Box::new(UpdateInfo {
         version: update.version,
         filename: update.filename,
         download_url: update.download_url,
@@ -289,7 +301,19 @@ fn parse_update_response(body: &[u8], current_version: &str) -> Result<Option<Up
         kind: UpdateKind::Full,
         core: None,
         shell_revision: None,
-    }))
+    })))
+}
+
+/// Keep only a release the server actually named. An empty version would render
+/// as `What's new in v` in the dashboard, so it is treated as no release at all.
+fn current_release_summary(release: Option<LatestReleaseData>) -> Option<ReleaseSummary> {
+    release
+        .filter(|release| !release.version.trim().is_empty())
+        .map(|release| ReleaseSummary {
+            version: release.version,
+            release_notes: release.release_notes,
+            release_date: release.published_at.unwrap_or_default(),
+        })
 }
 
 pub(super) fn validate_checksum(checksum: &str) -> Result<()> {
@@ -344,7 +368,7 @@ fn validate_download_url(download_url: &str) -> Result<()> {
     }
 }
 
-async fn record_check_success(update: Option<UpdateInfo>) {
+async fn record_check_success(update: Option<UpdateInfo>, current_release: Option<ReleaseSummary>) {
     let available = update.is_some();
     UPDATE_AVAILABLE.store(available, Ordering::SeqCst);
     mutate_state(|state| {
@@ -356,6 +380,11 @@ async fn record_check_success(update: Option<UpdateInfo>) {
             state.phase = UpdatePhase::UpToDate;
             state.deferred = None;
             state.download_progress = DownloadProgress::default();
+            // The notes for the running build only ever arrive on this branch;
+            // a server that omits them must not erase what we already showed.
+            if current_release.is_some() {
+                state.last_release = current_release.clone();
+            }
             return;
         };
 
@@ -436,12 +465,56 @@ mod tests {
                 }
             }
         }));
-        let update = parse_update_response(&body, "0.1.121").unwrap().unwrap();
+        let CheckOutcome::Update(update) = parse_update_response(&body, "0.1.121").unwrap() else {
+            panic!("a complete contract must offer the update");
+        };
         assert_eq!(update.version, "0.1.122");
         assert_eq!(update.file_size, 42);
         // The website contract alone never authorises the silent path.
         assert_eq!(update.kind, UpdateKind::Full);
         assert!(update.core.is_none());
+    }
+
+    #[test]
+    fn keeps_the_running_release_notes_when_up_to_date() {
+        let body = response(serde_json::json!({
+            "success": true,
+            "data": {
+                "updateAvailable": false,
+                "currentVersion": "0.1.121",
+                "latestVersion": "0.1.121",
+                "latestRelease": {
+                    "version": "0.1.121",
+                    "releaseNotes": "## What's New in v0.1.121",
+                    "publishedAt": "2026-08-21T00:00:00Z"
+                }
+            }
+        }));
+        let CheckOutcome::UpToDate(Some(release)) =
+            parse_update_response(&body, "0.1.121").unwrap()
+        else {
+            panic!("the current release must survive an up-to-date check");
+        };
+        assert_eq!(release.version, "0.1.121");
+        assert_eq!(
+            release.release_notes.as_deref(),
+            Some("## What's New in v0.1.121")
+        );
+        assert_eq!(release.release_date, "2026-08-21T00:00:00Z");
+
+        let unnamed = response(serde_json::json!({
+            "success": true,
+            "data": {
+                "updateAvailable": false,
+                "currentVersion": "0.1.121",
+                "latestRelease": { "version": "  ", "releaseNotes": "notes" }
+            }
+        }));
+        let CheckOutcome::UpToDate(release) = parse_update_response(&unnamed, "0.1.121").unwrap()
+        else {
+            panic!("no update must not be reported as one");
+        };
+        assert!(release.is_none());
     }
 
     #[test]
@@ -472,9 +545,11 @@ mod tests {
             "success": true,
             "data": { "updateAvailable": false, "currentVersion": "0.1.121" }
         }));
-        assert!(parse_update_response(&no_update, "0.1.121")
-            .unwrap()
-            .is_none());
+        let CheckOutcome::UpToDate(release) = parse_update_response(&no_update, "0.1.121").unwrap()
+        else {
+            panic!("no update must not be reported as one");
+        };
+        assert!(release.is_none());
 
         let missing_build = response(serde_json::json!({
             "success": true,

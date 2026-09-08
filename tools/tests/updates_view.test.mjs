@@ -23,6 +23,9 @@ const view = createUpdatesView({
   formatTimestamp(value, { fallback = "—" } = {}) {
     return value ? "Sep 5, 2026" : fallback;
   },
+  formatDate(value, { fallback = "—" } = {}) {
+    return value ? "Sep 5, 2026" : fallback;
+  },
 });
 
 test("release notes become titled sections and bullets", () => {
@@ -52,17 +55,82 @@ test("release notes become titled sections and bullets", () => {
   ]);
 });
 
+const release = (version, notes) => ({
+  version,
+  release_date: "2026-09-05T00:00:00Z",
+  release_notes: notes,
+});
+
 test("release-note rendering escapes supplied content", () => {
   const html = view.renderReleaseNotes({
-    version: "0.2.4",
-    release_date: "2026-09-05T00:00:00Z",
-    release_notes: "### Safety\n- Fixed <script>alert(1)</script>.",
+    releases: [release("0.2.4", "### Safety\n- Fixed <script>alert(1)</script>.")],
+    currentVersion: "0.2.4",
+    availableVersion: null,
   });
 
-  assert.match(html, /What’s new in v0\.2\.4/);
+  assert.match(html, /v0\.2\.4/);
   assert.match(html, /<h4>Safety<\/h4>/);
   assert.match(html, /<li>Fixed &lt;script&gt;alert\(1\)&lt;\/script&gt;\.<\/li>/);
   assert.doesNotMatch(html, /<script>/);
+});
+
+test("the history opens this installation's release and tags only what it must", () => {
+  const html = view.renderReleaseNotes({
+    releases: [
+      release("0.2.6", "### New\n- Newest."),
+      release("0.2.5", "### New\n- Running."),
+      release("0.2.4", "### New\n- Older."),
+    ],
+    currentVersion: "0.2.5",
+    availableVersion: "0.2.6",
+  });
+
+  const entries = html.split("<details");
+  assert.equal(entries.length, 4);
+  assert.match(entries[1], /data-state="available"/);
+  assert.match(entries[1], />Available</);
+  // The pending update is the decision in front of the reader, so it opens.
+  assert.match(entries[1], / open>/);
+  assert.match(entries[2], /data-state="installed"/);
+  assert.match(entries[2], />Installed</);
+  assert.match(entries[3], /data-state="past"/);
+  assert.doesNotMatch(entries[3], /updates-release-tag/);
+  // Only one entry may start expanded.
+  assert.equal(html.match(/ open>/g).length, 1);
+  assert.match(html, /1 change</);
+});
+
+test("with nothing pending, the running build is the entry that opens", () => {
+  const html = view.renderReleaseNotes({
+    releases: [release("0.2.6", "### New\n- Newest."), release("0.2.5", "### New\n- Running.")],
+    currentVersion: "0.2.5",
+    availableVersion: null,
+  });
+
+  const entries = html.split("<details");
+  assert.doesNotMatch(entries[1], / open>/);
+  assert.match(entries[2], / open>/);
+});
+
+test("an unreadable history still shows what the updater knows", () => {
+  const html = view.renderReleaseNotes({
+    releases: [release("0.2.5", "### New\n- Running.")],
+    currentVersion: "0.2.5",
+    availableVersion: null,
+    error: true,
+  });
+
+  assert.match(html, /updates-history-notice/);
+  assert.match(html, /v0\.2\.5/);
+
+  const empty = view.renderReleaseNotes({
+    releases: [],
+    currentVersion: "0.2.5",
+    availableVersion: null,
+    error: true,
+  });
+  assert.match(empty, /No release notes yet/);
+  assert.match(empty, /updatesNotesRetry/);
 });
 
 test("preferences use metadata and include the check interval", () => {
