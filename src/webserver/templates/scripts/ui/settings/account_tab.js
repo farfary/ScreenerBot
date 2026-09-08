@@ -18,9 +18,8 @@ export function buildAccountTab() {
     <div class="settings-section">
       <h3 class="settings-section-title">ScreenerBot account</h3>
       <p class="settings-section-description">
-        Free, and optional. Signing in adds ScreenerBot market data, free transaction sending,
-        token voting and your referral earnings. ScreenerBot trades, discovers and charts
-        without an account — it just does it against the public providers.
+        Free, and optional. ScreenerBot trades, discovers and charts without an account — it
+        just does it against the public providers. The panel below lists what signing in adds.
       </p>
 
       <div class="account-panel" id="settingsAccountPanel"></div>
@@ -78,6 +77,9 @@ export function attachAccountHandlers() {
   const container = document.getElementById("settingsAccountPanel");
   if (container && window.AccountPanel) {
     instance = window.AccountPanel.mount(container, {
+      // Settings has a "ScreenerBot data" section of its own below, so the panel
+      // must not paint the same availability block a second time here.
+      showDataAccess: false,
       // The panel already fetched the status this section renders, so it hands
       // it over rather than making Settings fetch the same thing again.
       onChange: (status) => {

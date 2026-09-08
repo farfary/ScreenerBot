@@ -6,9 +6,9 @@
   grid-template-areas: "back alternate next";
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  height: 72px;
+  height: var(--setup-footer-h);
   min-width: 0;
-  padding: 10px 24px;
+  padding: 8px 24px;
   gap: 1rem;
   background: rgb(13 17 23 / 0.3);
   border-top: 1px solid rgb(255 255 255 / 0.08);
@@ -186,13 +186,6 @@ html[data-input="keyboard"] .setup-screen [tabindex="-1"]:focus-visible {
   .setup-provider-links {
     justify-content: flex-start;
     margin-top: 3px;
-  }
-}
-
-@media (max-height: 720px) {
-  .setup-footer {
-    height: 60px;
-    padding-block: 8px;
   }
 }
 

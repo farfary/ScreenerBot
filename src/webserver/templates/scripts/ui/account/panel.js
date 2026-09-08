@@ -13,6 +13,12 @@
     "account:read": "Account details",
   };
 
+  // What signing in adds BEYOND the data service. The data block above the list
+  // already states where market data comes from for this install, so repeating
+  // "ScreenerBot market data" here would be the third sentence about the same
+  // thing rather than a reason to sign in.
+  const UNLOCKS = [SCOPE_LABELS["rpc:submit"], SCOPE_LABELS.vote, SCOPE_LABELS["referral:read"]];
+
   async function request(path, options = {}) {
     const response = await fetch(path, options);
     let body = null;
@@ -288,10 +294,8 @@
 
       return `
         <div class="account-panel-signed-out">
-          <p class="account-lead">
-            An account unlocks ScreenerBot market data, free transaction sending, token voting
-            and referral rewards. It is free, and ScreenerBot runs without one.
-          </p>
+          ${this.renderDataAccess()}
+          ${this.renderUnlocks()}
           <div class="account-options">
             <button type="button" class="account-option" data-action="browser" ${disabled}>
               ${GOOGLE_MARK}
@@ -302,7 +306,6 @@
             </button>
             ${walletOption}
           </div>
-          ${this.renderDataAccess()}
           <p class="account-note account-signup-note">
             <span>New to ScreenerBot?</span>
             <button type="button" class="account-link" data-action="signup">
@@ -311,6 +314,16 @@
           </p>
           ${this.renderNotice()}
           ${this.renderError()}
+        </div>`;
+    }
+
+    renderUnlocks() {
+      const items = UNLOCKS.map((label) => `<li class="account-scope">${escapeHtml(label)}</li>`);
+
+      return `
+        <div class="account-unlocks">
+          <p class="account-unlocks-title">Included with an account</p>
+          <ul class="account-scopes">${items.join("")}</ul>
         </div>`;
     }
 
@@ -354,11 +367,15 @@
      * this panel, Settings and the introduction cannot drift apart.
      */
     renderDataAccess() {
+      if (this.options.showDataAccess === false) return "";
+
       const access = this.status?.data_access;
       if (!access) return "";
 
       const state = escapeHtml(access.state || "unknown");
-      const detail = access.detail ? `<p class="account-data-detail">${escapeHtml(access.detail)}</p>` : "";
+      const detail = access.detail
+        ? `<p class="account-data-detail">${escapeHtml(access.detail)}</p>`
+        : "";
 
       return `
         <div class="account-data" data-state="${state}">

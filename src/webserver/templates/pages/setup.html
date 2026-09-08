@@ -41,7 +41,6 @@
                 <label class="setup-card-header" for="wallet-private-key">
                   <i class="setup-card-icon icon-key" aria-hidden="true"></i>
                   <span class="setup-card-title">Wallet private key</span>
-                  <span class="setup-card-required" aria-hidden="true">Required</span>
                 </label>
 
                 <div class="setup-field">
@@ -97,7 +96,6 @@
                 <label class="setup-card-header" for="rpc-urls">
                   <i class="setup-card-icon icon-globe" aria-hidden="true"></i>
                   <span class="setup-card-title">RPC endpoints</span>
-                  <span class="setup-card-required" aria-hidden="true">Required</span>
                 </label>
 
                 <div class="setup-field">
@@ -155,18 +153,13 @@
 
           <aside class="setup-split-aside" aria-labelledby="account-panel-title">
             <div class="account-panel">
-              <div class="account-panel-title" id="account-panel-title">
+              <h2 class="account-panel-title" id="account-panel-title">
                 <span>ScreenerBot account</span>
                 <span class="account-optional">Optional</span>
-              </div>
+              </h2>
               <div id="setupAccountPanel" aria-live="polite">
                 <p class="account-loading">Checking account status…</p>
               </div>
-              <p class="account-footnote">
-                An account is never required to trade. It is what makes the shared ScreenerBot
-                market-data service available to this install; without one, ScreenerBot reads
-                from the public providers instead.
-              </p>
             </div>
           </aside>
         </div>
@@ -177,6 +170,7 @@
         data-step="2"
         aria-labelledby="verification-title"
         aria-hidden="true"
+        hidden
       >
         <header class="verification-header">
           <i class="verification-header-icon icon-shield-check" aria-hidden="true"></i>
@@ -252,6 +246,7 @@
         data-step="3"
         aria-labelledby="complete-title"
         aria-hidden="true"
+        hidden
       >
         <div class="setup-complete" id="setup-complete-state" data-state="waiting">
           <i class="setup-complete-icon icon-circle-check" aria-hidden="true"></i>
@@ -300,7 +295,11 @@
     <button type="button" class="setup-btn setup-btn-secondary" id="setup-back" disabled>
       <i class="icon-chevron-left" aria-hidden="true"></i> Back
     </button>
-    <button type="button" class="setup-btn setup-btn-secondary setup-btn-explore" id="setup-explore">
+    <button
+      type="button"
+      class="setup-btn setup-btn-secondary setup-btn-explore"
+      id="setup-explore"
+    >
       <i class="icon-eye" aria-hidden="true"></i> Explore dashboard
     </button>
     <button type="button" class="setup-btn setup-btn-primary" id="setup-next">
