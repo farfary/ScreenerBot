@@ -175,8 +175,20 @@ pub async fn preflight_balance(plan: &SwapPlan, owner: &Pubkey) -> DirectSwapRes
         .as_ref()
         .map(|a| a.lamports)
         .unwrap_or(0);
-    let input_account = accounts.get(1).and_then(|a| a.as_ref());
-    let output_exists = accounts.get(2).and_then(|a| a.as_ref()).is_some();
+    let input_account = accounts
+        .get(1)
+        .ok_or_else(|| DirectSwapError::AccountUnavailable {
+            address: plan.input_account,
+            detail: "getMultipleAccounts returned no input token-account entry".to_owned(),
+        })?
+        .as_ref();
+    let output_exists = accounts
+        .get(2)
+        .ok_or_else(|| DirectSwapError::AccountUnavailable {
+            address: plan.output_account,
+            detail: "getMultipleAccounts returned no output token-account entry".to_owned(),
+        })?
+        .is_some();
 
     // Both ATA creations are idempotent, so only the ones that are genuinely
     // MISSING will actually draw rent. Charging for both unconditionally would
@@ -207,9 +219,15 @@ pub async fn preflight_balance(plan: &SwapPlan, owner: &Pubkey) -> DirectSwapRes
         return Ok(());
     }
 
-    let token_balance = input_account
-        .map(|a| super::venues::layout::token_account_amount(&a.data).unwrap_or(0))
-        .unwrap_or(0);
+    let token_balance =
+        match input_account {
+            None => 0,
+            Some(account) => super::venues::layout::token_account_amount(&account.data)
+                .ok_or_else(|| DirectSwapError::AccountUnavailable {
+                    address: plan.input_account,
+                    detail: "source token-account data is malformed".to_owned(),
+                })?,
+        };
     if token_balance < plan.quote.amount_in {
         return Err(DirectSwapError::InsufficientBalance {
             mint: plan.quote.input_mint,
@@ -353,47 +371,46 @@ pub async fn execute_plan(
         blockhash,
     ));
 
-    if with_config(|cfg| cfg.swaps.direct.simulate_before_send) {
-        let outcome = rpc.simulate_transaction(&transaction).await.map_err(|e| {
-            DirectSwapError::SimulationUnavailable {
-                detail: format!("simulation could not be run: {e}"),
-            }
-        })?;
-        if !outcome.succeeded() {
-            return Err(DirectSwapError::SimulationRejected {
-                detail: outcome.failure_detail(),
-                logs: outcome.logs,
-            });
+    // Simulation is not optional. It is the last point at which a mis-built
+    // instruction, a wrong account or an unaffordable swap costs nothing, and
+    // its measured compute is what keeps the prioritization fee honest.
+    let outcome = rpc.simulate_transaction(&transaction).await.map_err(|e| {
+        DirectSwapError::SimulationUnavailable {
+            detail: format!("simulation could not be run: {e}"),
         }
-        if let Some(units) = outcome.units_consumed {
-            logger::debug(
-                LogTag::System,
-                &format!(
-                    "Direct swap simulation consumed {units} CU against a {} CU venue estimate",
-                    plan.venue_compute_units
-                ),
-            );
+    })?;
+    if !outcome.succeeded() {
+        return Err(DirectSwapError::SimulationRejected {
+            detail: outcome.failure_detail(),
+            logs: outcome.logs,
+        });
+    }
+    if let Some(units) = outcome.units_consumed {
+        logger::debug(
+            LogTag::System,
+            &format!(
+                "Direct swap simulation consumed {units} CU against a {} CU venue estimate",
+                plan.venue_compute_units
+            ),
+        );
 
-            // The prioritization fee is charged on the LIMIT the transaction
-            // requests, not on what it actually consumes. The venue's static
-            // estimate carries 30% headroom for the worst case; simulation just
-            // measured the real cost for THIS swap, so a tighter limit sized off
-            // that measurement stops paying for compute units the transaction
-            // never uses. Only ever tighten, never raise: simulation runs
-            // against slightly older state, and a real execution can cost more.
-            let measured_limit = super::compute::compute_unit_limit_from_measured(units);
-            if let Some(requested_limit) =
-                super::compute::requested_compute_unit_limit(&instructions)
-            {
-                if measured_limit < requested_limit {
-                    instructions[0] = crate::chains::solana::solana_sdk::compute_budget::ComputeBudgetInstruction::set_compute_unit_limit(measured_limit);
-                    transaction = VersionedTransaction::from(Transaction::new_signed_with_payer(
-                        &instructions,
-                        Some(&owner),
-                        &[keypair],
-                        blockhash,
-                    ));
-                }
+        // The prioritization fee is charged on the LIMIT the transaction
+        // requests, not on what it actually consumes. The venue's static
+        // estimate carries 30% headroom for the worst case; simulation just
+        // measured the real cost for THIS swap, so a tighter limit sized off
+        // that measurement stops paying for compute units the transaction
+        // never uses. Only ever tighten, never raise: simulation runs
+        // against slightly older state, and a real execution can cost more.
+        let measured_limit = super::compute::compute_unit_limit_from_measured(units);
+        if let Some(requested_limit) = super::compute::requested_compute_unit_limit(&instructions) {
+            if measured_limit < requested_limit {
+                instructions[0] = crate::chains::solana::solana_sdk::compute_budget::ComputeBudgetInstruction::set_compute_unit_limit(measured_limit);
+                transaction = VersionedTransaction::from(Transaction::new_signed_with_payer(
+                    &instructions,
+                    Some(&owner),
+                    &[keypair],
+                    blockhash,
+                ));
             }
         }
     }

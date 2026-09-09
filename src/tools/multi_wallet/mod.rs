@@ -30,8 +30,8 @@ mod types;
 
 // Re-export types
 pub use types::{
-    ConsolidateConfig, MultiBuyConfig, MultiSellConfig, SessionResult, SessionStatus,
-    WalletOpResult, WalletPlan,
+    ConsolidateConfig, MultiBuyConfig, MultiSellConfig, SessionProgress, SessionResult,
+    SessionStatus, WalletOpResult, WalletPlan,
 };
 
 // Re-export bulk transfer orchestration. Single-transfer/close mechanics live

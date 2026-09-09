@@ -577,10 +577,32 @@ pub fn validate_config(config: &Config) -> Result<()> {
         .into());
     }
 
-    // Router availability check - Jupiter is the primary user-configurable router
-    if !config.swaps.jupiter.enabled {
+    // At least one router must remain available. Direct-only operation is a
+    // supported, deliberate configuration; the runtime has the same defense
+    // for a stale/externally-mutated config.
+    if !config.swaps.jupiter.enabled && !config.swaps.direct.enabled {
         return Err(ConfigurationError::Generic {
-            message: "Jupiter router must be enabled (primary swap router)".to_owned(),
+            message: "at least one swap router (Jupiter or Direct Pool) must be enabled".to_owned(),
+        }
+        .into());
+    }
+
+    // Matches the field's own declared range. A ceiling of zero would disable
+    // the router silently, and one above the slider's maximum would let a
+    // hand-edited config trade at a size the UI cannot even express.
+    if !config.swaps.direct.max_price_impact_pct.is_finite()
+        || config.swaps.direct.max_price_impact_pct < 0.1
+        || config.swaps.direct.max_price_impact_pct > 50.0
+    {
+        return Err(ConfigurationError::Generic {
+            message: "swaps.direct.max_price_impact_pct must be between 0.1 and 50".to_owned(),
+        }
+        .into());
+    }
+
+    if !(10..=180).contains(&config.swaps.direct.confirmation_timeout_secs) {
+        return Err(ConfigurationError::Generic {
+            message: "swaps.direct.confirmation_timeout_secs must be between 10 and 180".to_owned(),
         }
         .into());
     }

@@ -1,23 +1,30 @@
 //! Wallet-scoped swap orchestration.
 //!
-//! The router that produced a quote owns execution of that quote. Selection
-//! uses the registry primary-router policy (lowest `priority()` among enabled
-//! routers), never enabled-vector position.
+//! The router that produced a quote owns execution of that quote: a payload is
+//! built by one adapter and must never be handed to another.
+//!
+//! Selection is [`RouterChoice`]. `Auto` runs the SAME best-net-output
+//! comparison the trading engine uses — there is one definition of "best route"
+//! in the app — while an explicit choice deliberately asks one router and never
+//! silently probes another, because a caller who named a router wants that
+//! router or an error.
 
+use crate::swaps::operations::{best_quote_on, validate_quote};
 use crate::swaps::registry::{get_registry, RouterRegistry};
-use crate::swaps::types::{Quote, QuoteRequest, SwapResult};
+use crate::swaps::types::{Quote, QuoteRequest, RouterChoice, SwapResult};
 use crate::{Error, Result};
 
-/// Quote through the registry primary router and execute that same router
-/// instance's quote for `wallet_id`. Missing registry initialization becomes
-/// a structured service-init error; a router that cannot execute for a
-/// wallet returns [`Error::unsupported_capability`] without submitting.
+/// Quote for `wallet_id` under `choice` and execute that quote on the router
+/// that produced it. Missing registry initialization becomes a structured
+/// service-init error; a router that cannot execute for a wallet returns
+/// [`Error::unsupported_capability`] without submitting.
 pub async fn quote_and_execute_for_wallet(
     request: QuoteRequest,
     wallet_id: i64,
+    choice: RouterChoice,
 ) -> Result<(Quote, SwapResult)> {
     let registry = get_registry()?;
-    quote_and_execute_for_wallet_on(registry, request, wallet_id).await
+    quote_and_execute_for_wallet_on(registry, request, wallet_id, choice).await
 }
 
 /// Same as [`quote_and_execute_for_wallet`], against an explicit registry.
@@ -27,12 +34,45 @@ pub(crate) async fn quote_and_execute_for_wallet_on(
     registry: &RouterRegistry,
     request: QuoteRequest,
     wallet_id: i64,
+    choice: RouterChoice,
 ) -> Result<(Quote, SwapResult)> {
-    let router = registry
-        .get_primary_router_for(request.chain)
-        .ok_or_else(|| Error::configuration_error("No swap routers enabled in config"))?;
-    router.accept_own_chain(&request)?;
-    let quote = router.get_quote(&request).await.map_err(Error::from)?;
+    let quote = match &choice {
+        RouterChoice::Auto => best_quote_on(registry, request)
+            .await
+            .map_err(Error::from)?,
+        RouterChoice::Specific(id) => {
+            let router = registry
+                .get_router(id)
+                .ok_or_else(|| Error::configuration_error(format!("Unknown swap router '{id}'")))?;
+            if !router.is_enabled() {
+                return Err(Error::configuration_error(format!(
+                    "Swap router '{}' is disabled",
+                    router.name()
+                )));
+            }
+            router.accept_own_chain(&request)?;
+            let quote = router.get_quote(&request).await.map_err(Error::from)?;
+            // An explicitly chosen router's answer gets exactly the same
+            // untrusted-input treatment as one that won a comparison.
+            validate_quote(router.as_ref(), &request, quote).map_err(Error::from)?
+        }
+    };
+
+    // The quote names its own router, and the registry answers live: one that
+    // was disabled while we were quoting must not still execute.
+    let router = registry.get_router(&quote.router_id).ok_or_else(|| {
+        Error::internal_error(format!(
+            "Router {} produced a quote but is no longer registered",
+            quote.router_id
+        ))
+    })?;
+    if !router.is_enabled() {
+        return Err(Error::configuration_error(format!(
+            "Router {} was disabled before its quote could be executed",
+            quote.router_name
+        )));
+    }
+
     let result = router.execute_swap_for_wallet(&quote, wallet_id).await?;
     Ok((quote, result))
 }
@@ -66,6 +106,7 @@ mod tests {
         enabled: bool,
         priority: u8,
         supports_wallet: bool,
+        output_amount: u64,
         log: Arc<CallLog>,
     }
 
@@ -109,13 +150,16 @@ mod tests {
                 input_mint: request.input_mint.clone(),
                 output_mint: request.output_mint.clone(),
                 input_amount: request.input_amount,
-                output_amount: 42,
+                output_amount: self.output_amount,
+                minimum_output_amount: self.output_amount,
                 price_impact_pct: 0.1,
-                fee_lamports: 0,
+                platform_fee_lamports: None,
+                estimated_network_fee_lamports: None,
                 slippage_bps: 100,
                 route_plan: self.id.to_owned(),
                 swap_mode: request.swap_mode,
                 wallet_address: request.wallet_address.clone(),
+                exclude_dexes: request.exclude_dexes.clone(),
                 execution_data: self.id.as_bytes().to_vec(),
             })
         }
@@ -150,7 +194,7 @@ mod tests {
                 input_amount: quote.input_amount,
                 output_amount: quote.output_amount,
                 price_impact_pct: quote.price_impact_pct,
-                fee_lamports: quote.fee_lamports,
+                fee_lamports: 0,
                 execution_time_ms: 1,
                 effective_price_sol: None,
             })
@@ -175,6 +219,7 @@ mod tests {
                 enabled: false,
                 priority: 0,
                 supports_wallet: true,
+                output_amount: 42,
                 log: Arc::clone(&log),
             },
             StubRouter {
@@ -182,13 +227,15 @@ mod tests {
                 enabled: true,
                 priority: 1,
                 supports_wallet: true,
+                output_amount: 42,
                 log: Arc::clone(&log),
             },
         ]);
 
-        let (quote, result) = quote_and_execute_for_wallet_on(&registry, request(), 7)
-            .await
-            .expect("alt_router should quote and execute");
+        let (quote, result) =
+            quote_and_execute_for_wallet_on(&registry, request(), 7, RouterChoice::Auto)
+                .await
+                .expect("alt_router should quote and execute");
 
         assert_eq!(quote.router_id, "alt_router");
         assert_eq!(result.router_id, "alt_router");
@@ -211,6 +258,7 @@ mod tests {
                 enabled: false,
                 priority: 0,
                 supports_wallet: true,
+                output_amount: 42,
                 log: Arc::clone(&log),
             },
             StubRouter {
@@ -218,11 +266,12 @@ mod tests {
                 enabled: true,
                 priority: 1,
                 supports_wallet: true,
+                output_amount: 42,
                 log: Arc::clone(&log),
             },
         ]);
 
-        quote_and_execute_for_wallet_on(&registry, request(), 3)
+        quote_and_execute_for_wallet_on(&registry, request(), 3, RouterChoice::Auto)
             .await
             .expect("alt_router path");
 
@@ -234,8 +283,11 @@ mod tests {
         assert_eq!(execs[0].2, b"alt_router");
     }
 
+    /// Two routers that quote the SAME output must not pick a winner by
+    /// registration order: the tie goes to the lower configured priority, so the
+    /// same market state always routes the same way.
     #[tokio::test]
-    async fn primary_priority_wins_over_registration_order() {
+    async fn a_tie_on_output_goes_to_the_lower_priority_number() {
         let log = CallLog::new();
         let registry = registry(vec![
             StubRouter {
@@ -243,6 +295,7 @@ mod tests {
                 enabled: true,
                 priority: 1,
                 supports_wallet: true,
+                output_amount: 42,
                 log: Arc::clone(&log),
             },
             StubRouter {
@@ -250,18 +303,124 @@ mod tests {
                 enabled: true,
                 priority: 0,
                 supports_wallet: true,
+                output_amount: 42,
                 log: Arc::clone(&log),
             },
         ]);
 
-        let (quote, result) = quote_and_execute_for_wallet_on(&registry, request(), 1)
-            .await
-            .expect("jupiter is primary");
+        let (quote, result) =
+            quote_and_execute_for_wallet_on(&registry, request(), 1, RouterChoice::Auto)
+                .await
+                .expect("a tie resolves to jupiter");
 
         assert_eq!(quote.router_id, "jupiter");
         assert_eq!(result.router_id, "jupiter");
-        assert_eq!(*log.quotes.lock().expect("quotes"), vec!["jupiter"]);
+        // Auto compares every enabled router rather than asking only the primary.
+        assert_eq!(log.quotes.lock().expect("quotes").len(), 2);
         assert_eq!(log.wallet_execs.lock().expect("execs")[0].0, "jupiter");
+    }
+
+    /// "Auto (Best Route)" must mean what it says: a better net output wins even
+    /// against the router the registry would otherwise prefer.
+    #[tokio::test]
+    async fn a_better_output_beats_a_lower_priority_number() {
+        let log = CallLog::new();
+        let registry = registry(vec![
+            StubRouter {
+                id: "jupiter",
+                enabled: true,
+                priority: 0,
+                supports_wallet: true,
+                output_amount: 42,
+                log: Arc::clone(&log),
+            },
+            StubRouter {
+                id: "direct",
+                enabled: true,
+                priority: 1,
+                supports_wallet: true,
+                output_amount: 43,
+                log: Arc::clone(&log),
+            },
+        ]);
+
+        let (quote, result) =
+            quote_and_execute_for_wallet_on(&registry, request(), 1, RouterChoice::Auto)
+                .await
+                .expect("direct quotes more");
+
+        assert_eq!(quote.router_id, "direct");
+        assert_eq!(result.router_id, "direct");
+        assert_eq!(log.wallet_execs.lock().expect("execs")[0].2, b"direct");
+    }
+
+    /// An explicit choice is a request for ONE router. Probing another would
+    /// execute a route the caller did not ask for.
+    #[tokio::test]
+    async fn an_explicit_choice_asks_only_that_router() {
+        let log = CallLog::new();
+        let registry = registry(vec![
+            StubRouter {
+                id: "jupiter",
+                enabled: true,
+                priority: 0,
+                supports_wallet: true,
+                output_amount: 100,
+                log: Arc::clone(&log),
+            },
+            StubRouter {
+                id: "direct",
+                enabled: true,
+                priority: 1,
+                supports_wallet: true,
+                output_amount: 1,
+                log: Arc::clone(&log),
+            },
+        ]);
+
+        let (quote, _) = quote_and_execute_for_wallet_on(
+            &registry,
+            request(),
+            1,
+            RouterChoice::Specific("direct".to_owned()),
+        )
+        .await
+        .expect("direct executes its own quote");
+
+        assert_eq!(quote.router_id, "direct");
+        assert_eq!(*log.quotes.lock().expect("quotes"), vec!["direct"]);
+    }
+
+    /// A disabled or unknown explicit choice fails loudly instead of quietly
+    /// trading through whatever else happens to be enabled.
+    #[tokio::test]
+    async fn an_unavailable_explicit_choice_is_refused_without_quoting() {
+        let log = CallLog::new();
+        let registry = registry(vec![StubRouter {
+            id: "direct",
+            enabled: false,
+            priority: 1,
+            supports_wallet: true,
+            output_amount: 42,
+            log: Arc::clone(&log),
+        }]);
+
+        for id in ["direct", "no_such_router"] {
+            let err = quote_and_execute_for_wallet_on(
+                &registry,
+                request(),
+                1,
+                RouterChoice::Specific(id.to_owned()),
+            )
+            .await
+            .expect_err("an unavailable router cannot trade");
+            assert!(
+                matches!(err, Error::Configuration(_)),
+                "expected a configuration error, got {err}"
+            );
+        }
+        assert!(log.quotes.lock().expect("quotes").is_empty());
+        assert!(log.wallet_execs.lock().expect("execs").is_empty());
     }
 
     #[tokio::test]
@@ -272,10 +431,11 @@ mod tests {
             enabled: true,
             priority: 2,
             supports_wallet: false,
+            output_amount: 42,
             log: Arc::clone(&log),
         }]);
 
-        let err = quote_and_execute_for_wallet_on(&registry, request(), 9)
+        let err = quote_and_execute_for_wallet_on(&registry, request(), 9, RouterChoice::Auto)
             .await
             .expect_err("raydium cannot execute for a wallet");
 
@@ -320,12 +480,15 @@ mod tests {
                     output_mint: request.output_mint.clone(),
                     input_amount: request.input_amount,
                     output_amount: 1,
+                    minimum_output_amount: 1,
                     price_impact_pct: 0.0,
-                    fee_lamports: 0,
+                    platform_fee_lamports: None,
+                    estimated_network_fee_lamports: None,
                     slippage_bps: 100,
                     route_plan: "none".to_owned(),
                     swap_mode: request.swap_mode,
                     wallet_address: request.wallet_address.clone(),
+                    exclude_dexes: request.exclude_dexes.clone(),
                     execution_data: b"raydium".to_vec(),
                 })
             }
@@ -335,7 +498,7 @@ mod tests {
         }
 
         let registry = RouterRegistry::new(vec![Arc::new(DefaultRouter)]);
-        let err = quote_and_execute_for_wallet_on(&registry, request(), 1)
+        let err = quote_and_execute_for_wallet_on(&registry, request(), 1, RouterChoice::Auto)
             .await
             .expect_err("default wallet execution");
         match err {

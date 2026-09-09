@@ -107,10 +107,23 @@ struct JupiterQuoteResponse {
     output_mint: String,
     #[serde(rename = "outAmount")]
     out_amount: String,
+    #[serde(rename = "otherAmountThreshold")]
+    other_amount_threshold: String,
     #[serde(rename = "priceImpactPct")]
     price_impact_pct: String,
+    /// Present only because the quote request sets `platformFeeBps`. Jupiter
+    /// sizes it on the leg its own routing takes the fee from, which is not
+    /// necessarily the leg our `feeAccount` collects -- see
+    /// [`JupiterRouter::platform_fee_lamports`].
+    #[serde(rename = "platformFee")]
+    platform_fee: Option<JupiterPlatformFee>,
     #[serde(rename = "routePlan")]
     route_plan: Vec<RoutePlanStep>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct JupiterPlatformFee {
+    amount: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -483,10 +496,30 @@ impl JupiterRouter {
         }
     }
 
+    /// The platform fee in WSOL lamports, when that is what it provably is.
+    ///
+    /// The quote sizes the fee on the OUTPUT leg for an ExactIn swap, so the
+    /// number is lamports exactly when the output mint is wrapped SOL -- a sell.
+    /// On a buy the same field is denominated in the token being bought while
+    /// our fee account collects SOL, and no honest conversion exists here, so
+    /// the dialog is told the rate and not a fabricated amount.
+    fn platform_fee_lamports(response: &JupiterQuoteResponse) -> Option<u64> {
+        if response.output_mint != SOL_MINT {
+            return None;
+        }
+        response
+            .platform_fee
+            .as_ref()
+            .and_then(|fee| fee.amount.parse::<u64>().ok())
+    }
+
     /// Build route plan summary from Jupiter response
     fn build_route_plan(route_plan: &[RoutePlanStep]) -> String {
+        // An empty path is not a claim about the venue. Naming it "Direct" read
+        // as our own Direct Pool router in the trade dialog; an empty string
+        // simply hides the path row and leaves the router name to speak.
         if route_plan.is_empty() {
-            return "Direct".to_owned();
+            return String::new();
         }
 
         let labels: Vec<String> = route_plan
@@ -596,19 +629,34 @@ impl SwapRouter for JupiterRouter {
                     detail: format!("invalid output amount '{}': {e}", quote_response.out_amount),
                 })?;
 
+        // Price impact drives the confirm-time gate and the dialog's warning, so
+        // an unparseable value must fail the quote. It used to default to 0.0,
+        // which showed the user a perfect fill and traded on it.
         let price_impact = quote_response
             .price_impact_pct
             .parse::<f64>()
-            .unwrap_or_else(|_| {
-                logger::warning(
-                    LogTag::Swap,
-                    &format!(
-                        "Jupiter: Failed to parse price_impact_pct '{}', defaulting to 0.0",
-                        quote_response.price_impact_pct
-                    ),
-                );
-                0.0
-            });
+            .ok()
+            .filter(|impact| impact.is_finite() && *impact >= 0.0)
+            .ok_or_else(|| QuoteError::RouterRejected {
+                router: self.name().to_owned(),
+                detail: format!(
+                    "unusable price impact '{}'",
+                    quote_response.price_impact_pct
+                ),
+            })?;
+
+        // Jupiter's own floor, after slippage and its fee. Deriving one from
+        // `outAmount` here would disagree with the transaction it builds.
+        let minimum_output_amount = quote_response
+            .other_amount_threshold
+            .parse::<u64>()
+            .map_err(|e| QuoteError::RouterRejected {
+                router: self.name().to_owned(),
+                detail: format!(
+                    "invalid otherAmountThreshold '{}': {e}",
+                    quote_response.other_amount_threshold
+                ),
+            })?;
 
         let route_plan = Self::build_route_plan(&quote_response.route_plan);
 
@@ -632,12 +680,20 @@ impl SwapRouter for JupiterRouter {
             output_mint: request.output_mint.clone(),
             input_amount: request.input_amount,
             output_amount,
+            minimum_output_amount,
             price_impact_pct: price_impact,
-            fee_lamports: 0, // Fee taken from output via referral system
+            platform_fee_lamports: Self::platform_fee_lamports(&quote_response),
+            // One signature plus the prioritization fee this router asks for at
+            // swap-build time -- the two components the wallet actually pays.
+            estimated_network_fee_lamports: Some(
+                crate::chains::solana::swaps::direct::compute::BASE_SIGNATURE_FEE_LAMPORTS
+                    .saturating_add(with_config(|cfg| cfg.swaps.jupiter.default_priority_fee)),
+            ),
             slippage_bps,
             route_plan,
             swap_mode: request.swap_mode,
             wallet_address: request.wallet_address.clone(),
+            exclude_dexes: request.exclude_dexes.clone(),
             execution_data,
         })
     }
@@ -731,7 +787,9 @@ impl SwapRouter for JupiterRouter {
             input_amount: quote.input_amount,
             output_amount: quote.output_amount,
             price_impact_pct: quote.price_impact_pct,
-            fee_lamports: 0,
+            // Only when the quote could establish it in lamports; a buy's fee is
+            // collected in SOL but reported by Jupiter in the bought token.
+            fee_lamports: quote.platform_fee_lamports.unwrap_or(0),
             execution_time_ms: elapsed.as_millis() as u64,
             effective_price_sol: None,
         })
@@ -750,7 +808,9 @@ impl SwapRouter for JupiterRouter {
             input_amount: quote.input_amount,
             output_amount: quote.output_amount,
             price_impact_pct: quote.price_impact_pct,
-            fee_lamports: quote.fee_lamports,
+            // Only when the quote could establish it in lamports; a buy's fee is
+            // collected in SOL but reported by Jupiter in the bought token.
+            fee_lamports: quote.platform_fee_lamports.unwrap_or(0),
             execution_time_ms: start.elapsed().as_millis() as u64,
             effective_price_sol: None,
         })
@@ -815,14 +875,20 @@ mod tests {
         );
     }
 
+    /// `otherAmountThreshold` and `platformFee` are read off the same response
+    /// as the output amount: the threshold is the floor Jupiter's own swap
+    /// instruction enforces, and reconstructing either in our code would
+    /// disagree with the transaction it builds.
     #[test]
-    fn quote_response_json_decodes_and_bad_price_impact_is_recoverable() {
+    fn a_quote_response_carries_its_own_floor_and_fee() {
         let json = r#"{
             "inputMint": "So11111111111111111111111111111111111111112",
             "inAmount": "1000000000",
-            "outputMint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            "outputMint": "So11111111111111111111111111111111111111112",
             "outAmount": "123456789",
+            "otherAmountThreshold": "122222222",
             "priceImpactPct": "0.42",
+            "platformFee": {"amount": "617283"},
             "routePlan": [
                 {"swapInfo": {"ammKey": "Amm11111111111111111111111111111111111111", "label": "Raydium"}}
             ]
@@ -830,6 +896,10 @@ mod tests {
         let parsed: JupiterQuoteResponse =
             serde_json::from_str(json).expect("well-formed Jupiter quote JSON must decode");
         assert_eq!(parsed.out_amount.parse::<u64>().unwrap(), 123_456_789);
+        assert_eq!(
+            parsed.other_amount_threshold.parse::<u64>().unwrap(),
+            122_222_222
+        );
         assert_eq!(parsed.price_impact_pct.parse::<f64>().unwrap(), 0.42);
         assert_eq!(parsed.route_plan.len(), 1);
         assert_eq!(
@@ -837,11 +907,27 @@ mod tests {
             Some("Raydium")
         );
 
-        // A malformed priceImpactPct must not fail the whole quote — callers
-        // fall back to 0.0 rather than propagate the parse error.
+        // The fee amount is lamports only when the output leg IS wrapped SOL.
+        assert_eq!(
+            JupiterRouter::platform_fee_lamports(&parsed),
+            Some(617_283),
+            "a sell collects the fee in SOL, so the amount is reportable"
+        );
+
+        // A buy prices the same field in the token being bought while our fee
+        // account collects SOL: there is no honest lamports figure to report.
+        let buy = json.replace(
+            r#""outputMint": "So11111111111111111111111111111111111111112""#,
+            r#""outputMint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v""#,
+        );
+        let parsed: JupiterQuoteResponse = serde_json::from_str(&buy).unwrap();
+        assert_eq!(JupiterRouter::platform_fee_lamports(&parsed), None);
+
+        // A malformed priceImpactPct is not recoverable: it used to default to
+        // 0.0, which showed a perfect fill and then traded on it.
         let bad_impact = json.replace("\"0.42\"", "\"not-a-number\"");
         let parsed: JupiterQuoteResponse = serde_json::from_str(&bad_impact).unwrap();
-        assert_eq!(parsed.price_impact_pct.parse::<f64>().unwrap_or(0.0), 0.0);
+        assert!(parsed.price_impact_pct.parse::<f64>().is_err());
     }
 
     #[test]

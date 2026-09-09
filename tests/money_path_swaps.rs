@@ -166,12 +166,15 @@ impl SwapRouter for ScenarioRouter {
             output_mint: request.output_mint.clone(),
             input_amount: request.input_amount,
             output_amount: 1,
+            minimum_output_amount: 1,
             price_impact_pct: 0.0,
-            fee_lamports: 0,
+            platform_fee_lamports: None,
+            estimated_network_fee_lamports: None,
             slippage_bps: 100,
             route_plan: self.id.to_owned(),
             swap_mode: request.swap_mode,
             wallet_address: request.wallet_address.clone(),
+            exclude_dexes: request.exclude_dexes.clone(),
             execution_data: self.id.as_bytes().to_vec(),
         };
         match (current_scenario(), self.id) {

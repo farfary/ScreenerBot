@@ -31,7 +31,13 @@ pub async fn execute_multi_sell(config: MultiSellConfig) -> Result<SessionResult
     // Validate configuration
     config.validate()?;
 
-    let session_id = Uuid::new_v4().to_string();
+    // See the note in `buy.rs`: the caller's identifier wins so the status
+    // endpoint keeps reporting the session it was asked about.
+    let session_id = config
+        .progress
+        .as_ref()
+        .map(|progress| progress.session_id().to_owned())
+        .unwrap_or_else(|| Uuid::new_v4().to_string());
     let mut result = SessionResult::new(session_id.clone());
 
     logger::info(
@@ -95,6 +101,11 @@ pub async fn execute_multi_sell(config: MultiSellConfig) -> Result<SessionResult
         }
     }
 
+    // See the note in `buy.rs`: the plans carry RAW balances because the sell
+    // size is computed from them, so the display conversion happens once here.
+    let token_decimals =
+        crate::tokens::decimals::get(crate::chains::active_chain(), &config.token_mint).await;
+
     // Execute sells - track successful sells for ATA closure
     let wallet_map: HashMap<String, &Wallet> =
         wallets.iter().map(|w| (w.address.clone(), w)).collect();
@@ -126,6 +137,7 @@ pub async fn execute_multi_sell(config: MultiSellConfig) -> Result<SessionResult
                     sell_amount,
                     config.slippage_bps,
                     config.router.as_deref(),
+                    token_decimals,
                 )
                 .await;
 
@@ -134,6 +146,9 @@ pub async fn execute_multi_sell(config: MultiSellConfig) -> Result<SessionResult
                     successful_full_sells.insert(plan.wallet_address.clone());
                 }
 
+                if let Some(progress) = &config.progress {
+                    progress.publish(&op_result);
+                }
                 result.add_operation(op_result);
 
                 // Apply delay between operations
@@ -306,7 +321,8 @@ async fn execute_single_sell(
     token_mint: &str,
     amount: u64,
     slippage_bps: u64,
-    _router: Option<&str>,
+    router: Option<&str>,
+    token_decimals: Option<u8>,
 ) -> WalletOpResult {
     let wallet_id = wallet.id;
     let wallet_address = wallet.address.clone();
@@ -324,7 +340,7 @@ async fn execute_single_sell(
     // Convert bps to percentage
     let slippage_pct = slippage_bps as f64 / 100.0;
 
-    match tool_sell(wallet, token_mint, amount, Some(slippage_pct)).await {
+    match tool_sell(wallet, token_mint, amount, Some(slippage_pct), router).await {
         Ok(swap_result) => {
             // output_amount is in lamports, convert to SOL
             let sol_received = adapter().raw_to_native(swap_result.output_amount);
@@ -333,7 +349,9 @@ async fn execute_single_sell(
                 wallet_address,
                 swap_result.signature,
                 sol_received,
-                Some(amount as f64),
+                token_decimals.map(|decimals| amount as f64 / 10f64.powi(i32::from(decimals))),
+                Some(swap_result.router_name),
+                Some(swap_result.route_plan),
             )
         }
         Err(e) => WalletOpResult::failure(wallet_id, wallet_address, e.to_string()),

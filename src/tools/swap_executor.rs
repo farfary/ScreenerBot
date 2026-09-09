@@ -26,18 +26,24 @@ pub struct ToolSwapResult {
     pub price_impact_pct: f64,
     /// Router used for the swap
     pub router_name: String,
+    /// Actual route/venue from the quote that was executed.
+    pub route_plan: String,
 }
 
 /// Execute a tool swap with a custom keypair
 ///
 /// This function gets a quote and executes the swap using the provided wallet.
 /// Unlike regular swaps, this does NOT create positions or track in position system.
+///
+/// `router` is a router id (`"jupiter"`, `"direct"`), or `None`/`"auto"` to take
+/// the best quote across every enabled router.
 pub async fn execute_tool_swap(
     wallet: &Wallet,
     input_mint: &str,
     output_mint: &str,
     input_amount: u64,
     slippage_pct: Option<f64>,
+    router: Option<&str>,
 ) -> Result<ToolSwapResult> {
     let wallet_address = wallet.address.clone();
     let slippage =
@@ -55,10 +61,15 @@ pub async fn execute_tool_swap(
         exclude_dexes: None,
     };
 
-    // Quote and execute through the same primary router instance. The quoting
-    // router owns execution; payloads never cross into another adapter.
-    let (quote, result) =
-        crate::swaps::quote_and_execute_for_wallet(quote_request, wallet.id).await?;
+    // `router` is the caller's selection: `None`/"auto" compares every enabled
+    // router, a router id asks that one. Either way the quoting router owns
+    // execution; payloads never cross into another adapter.
+    let (quote, result) = crate::swaps::quote_and_execute_for_wallet(
+        quote_request,
+        wallet.id,
+        crate::swaps::RouterChoice::parse(router),
+    )
+    .await?;
 
     logger::debug(
         LogTag::Tools,
@@ -75,10 +86,11 @@ pub async fn execute_tool_swap(
 
     Ok(ToolSwapResult {
         signature: result.transaction_signature,
-        input_amount: quote.input_amount,
-        output_amount: quote.output_amount,
+        input_amount: result.input_amount,
+        output_amount: result.output_amount,
         price_impact_pct: quote.price_impact_pct,
         router_name: result.router_name,
+        route_plan: quote.route_plan,
     })
 }
 
@@ -91,6 +103,7 @@ pub async fn tool_buy(
     token_mint: &str,
     amount_sol: f64,
     slippage_pct: Option<f64>,
+    router: Option<&str>,
 ) -> Result<ToolSwapResult> {
     // Validate token mint
     crate::chains::adapter()
@@ -129,6 +142,7 @@ pub async fn tool_buy(
         token_mint,
         lamports,
         slippage_pct,
+        router,
     )
     .await
 }
@@ -142,6 +156,7 @@ pub async fn tool_sell(
     token_mint: &str,
     token_amount: u64,
     slippage_pct: Option<f64>,
+    router: Option<&str>,
 ) -> Result<ToolSwapResult> {
     // Validate token mint
     crate::chains::adapter()
@@ -174,6 +189,7 @@ pub async fn tool_sell(
         adapter().native_asset_address(),
         token_amount,
         slippage_pct,
+        router,
     )
     .await
 }

@@ -61,7 +61,7 @@ config_struct! {
     pub struct DirectSwapConfig {
         #[metadata(field_metadata! {
             label: "Enabled",
-            hint: "Swap straight against the pool instead of through an aggregator",
+            hint: "Quote the pool directly as well as through Jupiter, and take whichever returns more. Jupiter stays enabled.",
             impact: "high",
             category: "Router",
         })]
@@ -77,13 +77,6 @@ config_struct! {
             category: "Fees",
         })]
         priority_fee_micro_lamports: u64 = 50_000,
-        #[metadata(field_metadata! {
-            label: "Simulate Before Send",
-            hint: "Run the swap against a node first so a broken build fails for free",
-            impact: "high",
-            category: "Safety",
-        })]
-        simulate_before_send: bool = true,
         #[metadata(field_metadata! {
             label: "Confirmation Timeout",
             hint: "How long to wait for the swap to confirm before reporting an unknown outcome",
@@ -171,7 +164,7 @@ config_struct! {
         /// Direct pool-swap engine configuration
         #[metadata(field_metadata! {
             label: "Direct Pool Swaps",
-            hint: "Build DEX instructions directly against the pool",
+            hint: "Build the DEX instruction ourselves instead of routing through an aggregator",
             impact: "high",
             category: "Routers",
         })]

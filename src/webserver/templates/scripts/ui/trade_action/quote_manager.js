@@ -257,16 +257,21 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
       this.quoteImpactEl.classList.add("impact-low");
     }
 
-    // Guaranteed minimum (what survives max slippage)
+    // Router-authored minimum: output-side fees and aggregator thresholds mean
+    // this cannot be reconstructed from expected output and slippage. It is an
+    // exact floor, so it carries no "≈" and needs no "≥" — the row is already
+    // labelled "Guaranteed minimum".
     if (this.quoteMinReceivedEl) {
-      const slipFrac = (quote.slippage_bps || 0) / 10000;
-      const minOut = (quote.output_amount ?? 0) * (1 - slipFrac);
-      this.quoteMinReceivedEl.textContent = `≈ ${formatAmount(minOut, outUnit)}`;
+      this.quoteMinReceivedEl.textContent = formatAmount(quote.minimum_output_amount, outUnit);
     }
 
     // Fees
-    this.quotePlatformFeeEl.textContent = `${quote.platform_fee_pct}% · ${trimSol(quote.platform_fee_sol)} SOL`;
-    this.quoteNetworkFeeEl.textContent = `≈ ${trimSol(quote.network_fee_sol)} SOL`;
+    this.quotePlatformFeeEl.textContent =
+      quote.platform_fee_sol == null
+        ? `${quote.platform_fee_pct}%`
+        : `${quote.platform_fee_pct}% · ${trimSol(quote.platform_fee_sol)} SOL`;
+    this.quoteNetworkFeeEl.textContent =
+      quote.network_fee_sol == null ? "—" : `≈ ${trimSol(quote.network_fee_sol)} SOL`;
 
     this.quoteSlippageEl.textContent = `${(quote.slippage_bps / 100).toFixed(1)}%`;
 

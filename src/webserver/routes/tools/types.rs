@@ -88,7 +88,8 @@ pub struct MultiBuyStartRequest {
     /// Slippage in basis points
     #[serde(default = "default_slippage")]
     pub slippage_bps: u64,
-    /// Router to use (jupiter, raydium)
+    /// Router id to use (`jupiter`, `direct`); omitted or `"auto"` compares
+    /// every enabled router.
     pub router: Option<String>,
 }
 
@@ -185,7 +186,8 @@ pub struct MultiSellStartRequest {
     /// Close token ATAs after selling
     #[serde(default = "default_close_atas")]
     pub close_atas_after: bool,
-    /// Router to use
+    /// Router id to use (`jupiter`, `direct`); omitted or `"auto"` compares
+    /// every enabled router.
     pub router: Option<String>,
 }
 
@@ -241,6 +243,9 @@ pub struct SessionStatusResponse {
     pub is_complete: bool,
     /// Error message if failed
     pub error: Option<String>,
+    /// Completed per-wallet outcomes; omitted only while there are none.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub operations: Vec<crate::tools::multi_wallet::WalletOpResult>,
 }
 
 /// Response for wallets summary

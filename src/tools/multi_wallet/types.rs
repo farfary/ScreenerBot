@@ -6,9 +6,51 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
+use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 
 use crate::tools::types::DelayConfig;
 use crate::tools::Error;
+
+/// A caller's live view of a running multi-wallet session.
+///
+/// Carries the identifier the caller is polling under -- the executor used to
+/// mint its own, so the id in the status response changed the moment the run
+/// finished -- and a channel that receives every per-wallet outcome the instant
+/// it completes. Without the channel a run is a black box until it returns:
+/// nothing about which wallets traded, or which router actually executed, is
+/// visible while a session that takes minutes is still going.
+#[derive(Clone, Debug)]
+pub struct SessionProgress {
+    session_id: String,
+    completed: UnboundedSender<WalletOpResult>,
+}
+
+impl SessionProgress {
+    /// Build a sink for `session_id` and the receiver that drains it. The sink
+    /// closes when the executor returns and drops its config, so a drain task
+    /// ends on its own.
+    pub fn channel(session_id: String) -> (Self, UnboundedReceiver<WalletOpResult>) {
+        let (completed, receiver) = unbounded_channel();
+        (
+            Self {
+                session_id,
+                completed,
+            },
+            receiver,
+        )
+    }
+
+    /// The identifier the caller registered this session under.
+    pub fn session_id(&self) -> &str {
+        &self.session_id
+    }
+
+    /// Publish one finished operation. A closed receiver is not an error: the
+    /// caller simply stopped watching, and the run must not be affected.
+    pub fn publish(&self, result: &WalletOpResult) {
+        let _ = self.completed.send(result.clone());
+    }
+}
 
 // =============================================================================
 // CONFIGURATION TYPES
@@ -35,11 +77,15 @@ pub struct MultiBuyConfig {
     pub concurrency: usize,
     /// Slippage tolerance in basis points
     pub slippage_bps: u64,
-    /// Optional: specific router to use (jupiter, raydium)
+    /// Optional: specific router id to use (`jupiter`, `direct`); `None` or
+    /// `"auto"` compares every enabled router.
     pub router: Option<String>,
     /// Abort flag for cancellation (not serialized)
     #[serde(skip)]
     pub abort_flag: Option<Arc<AtomicBool>>,
+    /// Session identity and live per-wallet progress for the caller.
+    #[serde(skip)]
+    pub progress: Option<SessionProgress>,
 }
 
 impl Default for MultiBuyConfig {
@@ -56,6 +102,7 @@ impl Default for MultiBuyConfig {
             slippage_bps: 500,
             router: None,
             abort_flag: None,
+            progress: None,
         }
     }
 }
@@ -125,11 +172,15 @@ pub struct MultiSellConfig {
     pub consolidate_after: bool,
     /// Close token ATAs after selling (reclaim rent)
     pub close_atas_after: bool,
-    /// Optional: specific router to use (jupiter, raydium)
+    /// Optional: specific router id to use (`jupiter`, `direct`); `None` or
+    /// `"auto"` compares every enabled router.
     pub router: Option<String>,
     /// Abort flag for cancellation (not serialized)
     #[serde(skip)]
     pub abort_flag: Option<Arc<AtomicBool>>,
+    /// Session identity and live per-wallet progress for the caller.
+    #[serde(skip)]
+    pub progress: Option<SessionProgress>,
 }
 
 impl Default for MultiSellConfig {
@@ -147,6 +198,7 @@ impl Default for MultiSellConfig {
             close_atas_after: true,
             router: None,
             abort_flag: None,
+            progress: None,
         }
     }
 }
@@ -300,6 +352,10 @@ pub struct WalletOpResult {
     pub amount_sol: Option<f64>,
     /// Token amount involved (bought or sold)
     pub token_amount: Option<f64>,
+    /// Router that actually executed this operation after Auto selection.
+    pub router: Option<String>,
+    /// Venue/route reported by the executed quote when available.
+    pub venue: Option<String>,
     /// Error message (if failed)
     pub error: Option<String>,
 }
@@ -312,6 +368,8 @@ impl WalletOpResult {
         signature: String,
         amount_sol: f64,
         token_amount: Option<f64>,
+        router: Option<String>,
+        venue: Option<String>,
     ) -> Self {
         Self {
             wallet_id,
@@ -320,6 +378,8 @@ impl WalletOpResult {
             signature: Some(signature),
             amount_sol: Some(amount_sol),
             token_amount,
+            router,
+            venue,
             error: None,
         }
     }
@@ -333,6 +393,8 @@ impl WalletOpResult {
             signature: None,
             amount_sol: None,
             token_amount: None,
+            router: None,
+            venue: None,
             error: Some(error),
         }
     }

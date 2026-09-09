@@ -6,10 +6,13 @@ use axum::{http::StatusCode, response::Response};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, LazyLock};
+use tokio::sync::mpsc::UnboundedReceiver;
 use tokio::sync::RwLock;
+use tokio::task::JoinHandle;
 
 use crate::logger::{self, LogTag};
-use crate::tools::multi_wallet::{SessionResult, SessionStatus};
+use crate::swaps::RouterChoice;
+use crate::tools::multi_wallet::{SessionResult, SessionStatus, WalletOpResult};
 use crate::webserver::utils::{error_response, success_response};
 
 use super::super::types::*;
@@ -129,6 +132,67 @@ pub async fn get_multi_wallet_sessions() -> Response {
 // Session Helper Functions
 // =============================================================================
 
+/// Refuse a router the user cannot actually trade through, before a session
+/// starts.
+///
+/// Without this the choice fails once per wallet inside the run, after funding
+/// has already moved, and the reason is buried in a per-wallet error string.
+/// `None` and `"auto"` are always valid: they mean "compare every enabled
+/// router".
+pub fn validate_router_choice(router: Option<&str>) -> Result<(), Response> {
+    let RouterChoice::Specific(id) = RouterChoice::parse(router) else {
+        return Ok(());
+    };
+    let Some(registry) = crate::swaps::try_get_registry() else {
+        return Err(error_response(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "ROUTERS_UNAVAILABLE",
+            "Swap routers are not ready yet",
+            None,
+        ));
+    };
+    match registry.get_router(&id) {
+        Some(router) if router.is_enabled() => Ok(()),
+        Some(router) => Err(error_response(
+            StatusCode::BAD_REQUEST,
+            "ROUTER_DISABLED",
+            &format!("{} is disabled in Settings > Swaps", router.name()),
+            None,
+        )),
+        None => Err(error_response(
+            StatusCode::BAD_REQUEST,
+            "UNKNOWN_ROUTER",
+            &format!("Unknown swap router '{id}'"),
+            None,
+        )),
+    }
+}
+
+/// Mirror a running session's finished operations into the shared session map
+/// as they complete.
+///
+/// The executors return their whole `SessionResult` only when the run ends, so
+/// without this the progress bar and the per-wallet results table -- including
+/// which router actually executed each wallet under "Auto" -- stay empty for
+/// the minutes a session takes. The task ends by itself when the executor
+/// returns and drops its sink.
+pub fn spawn_progress_drain(
+    session_id: String,
+    mut completed: UnboundedReceiver<WalletOpResult>,
+) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        while let Some(operation) = completed.recv().await {
+            let mut sessions = MULTI_WALLET_SESSIONS.write().await;
+            let Some(session) = sessions.get_mut(&session_id) else {
+                // The session was cleaned up under us; there is nothing left to
+                // report progress to.
+                break;
+            };
+            session.result.add_operation(operation);
+        }
+    })
+}
+
 /// Get session status by ID
 pub async fn get_session_status(id: &str, expected_type: &str) -> Response {
     let sessions = MULTI_WALLET_SESSIONS.read().await;
@@ -165,6 +229,7 @@ pub async fn get_session_status(id: &str, expected_type: &str) -> Response {
                 started_at: session.started_at.to_rfc3339(),
                 is_complete,
                 error: session.result.error.clone(),
+                operations: session.result.operations.clone(),
             })
         }
         None => error_response(

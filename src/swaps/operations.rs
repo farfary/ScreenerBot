@@ -3,7 +3,8 @@
 
 use crate::logger::{self, LogTag};
 use crate::swaps::error::{QuoteError, QuoteResult};
-use crate::swaps::registry::{get_registry, try_get_registry};
+use crate::swaps::registry::{get_registry, try_get_registry, RouterRegistry};
+use crate::swaps::router::SwapRouter;
 use crate::swaps::types::{Quote, QuoteRequest, SwapResult};
 use crate::tokens::Token;
 use crate::{Error, Result};
@@ -35,6 +36,18 @@ pub async fn try_get_best_quote(request: QuoteRequest) -> QuoteResult<Quote> {
             message: "router factory has not been registered".to_owned(),
         })
     })?;
+    best_quote_on(registry, request).await
+}
+
+/// The same comparison against an explicit registry.
+///
+/// Every path that picks a router for the user — the trading engine, the trade
+/// dialog, the wallet tools' "Auto" — goes through THIS function, so "best" can
+/// only ever mean one thing. Tests drive it with stub routers.
+pub(crate) async fn best_quote_on(
+    registry: &RouterRegistry,
+    request: QuoteRequest,
+) -> QuoteResult<Quote> {
     let enabled = registry.enabled_routers_for(request.chain);
 
     if enabled.is_empty() {
@@ -75,7 +88,7 @@ pub async fn try_get_best_quote(request: QuoteRequest) -> QuoteResult<Quote> {
                                 quote.price_impact_pct
                             ),
                         );
-                        Ok(quote)
+                        validate_quote(r.as_ref(), &req, quote)
                     }
                     Err(e) => {
                         logger::warning(LogTag::Swap, &format!("{} quote failed: {e}", r.name()));
@@ -92,11 +105,18 @@ pub async fn try_get_best_quote(request: QuoteRequest) -> QuoteResult<Quote> {
     // Partition into successful quotes and per-router failures. Keeping the
     // failures lets us report the ACTUAL reason (e.g. token not tradable) to the
     // trade dialog instead of a generic "all routers failed" that hides it.
-    let mut quotes: Vec<Quote> = Vec::new();
+    let mut quotes: Vec<(u8, Quote)> = Vec::new();
     let mut errors: Vec<QuoteError> = Vec::new();
     for res in results {
         match res {
-            Ok(q) => quotes.push(q),
+            Ok(q) => {
+                let priority = enabled
+                    .iter()
+                    .find(|router| router.id() == q.router_id)
+                    .map(|router| router.priority())
+                    .unwrap_or(u8::MAX);
+                quotes.push((priority, q));
+            }
             Err(e) => errors.push(e),
         }
     }
@@ -108,31 +128,15 @@ pub async fn try_get_best_quote(request: QuoteRequest) -> QuoteResult<Quote> {
     // Select best quote (highest output)
     let best = quotes
         .into_iter()
-        .max_by_key(|q| q.output_amount)
+        .max_by(|(left_priority, left), (right_priority, right)| {
+            left.output_amount
+                .cmp(&right.output_amount)
+                // `max_by` wins a greater ordering; reverse priority so the
+                // lower configured priority deterministically wins a tie.
+                .then_with(|| right_priority.cmp(left_priority))
+        })
+        .map(|(_, quote)| quote)
         .expect("quotes is non-empty, guaranteed by check above");
-
-    // A router's response is untrusted input on a money path. A quote that
-    // would spend the input for nothing, or that prices a pair we never asked
-    // for, must never reach the builder — selection is the last point where
-    // either is still cheap to refuse.
-    if best.output_amount == 0 {
-        return Err(QuoteError::RouterRejected {
-            router: best.router_name.clone(),
-            detail: format!(
-                "zero-output quote for {} -> {}",
-                best.input_mint, best.output_mint
-            ),
-        });
-    }
-    if best.input_mint != request.input_mint || best.output_mint != request.output_mint {
-        return Err(QuoteError::RouterRejected {
-            router: best.router_name.clone(),
-            detail: format!(
-                "quoted {} -> {} but {} -> {} was requested",
-                best.input_mint, best.output_mint, request.input_mint, request.output_mint
-            ),
-        });
-    }
 
     logger::info(
         LogTag::Swap,
@@ -151,25 +155,64 @@ pub async fn try_get_best_quote(request: QuoteRequest) -> QuoteResult<Quote> {
 /// Reduce the per-router failures to the one verdict that best describes the
 /// attempt as a whole.
 ///
-/// Routers disagree: Jupiter may say the token is not tradable while Raydium
-/// times out. The most specific answer wins, because that is the one a caller
-/// can act on — a token no provider can trade is a durable fact, whereas one
-/// router's timeout says nothing about the token. Ordering is therefore by how
-/// much the variant licenses the caller to conclude, most-concluding first.
+/// Routers disagree: Jupiter may say the token is not tradable while the direct
+/// engine merely found no pool it can build against. A verdict about the TOKEN
+/// (`NotTradable`, then `NoRoute`) is returned only when every router that
+/// answered supports it, because the opening path retires a token on exactly
+/// that answer. Any other mix is an operational failure and is reported as the
+/// most specific one, so a rate limit or a build fault can never be mistaken for
+/// a dead market.
 ///
 /// This replaced a function that re-read its own output: it rendered a friendly
 /// message for the "no route" case, and the opening path then searched that
 /// message for the word "no route" — which the friendly wording no longer
 /// contained, so no token was ever blacklisted for having no market.
-fn select_quote_failure(errors: Vec<QuoteError>) -> QuoteError {
+fn select_quote_failure(mut errors: Vec<QuoteError>) -> QuoteError {
+    // A verdict ABOUT THE TOKEN may only be returned when every router that
+    // answered agreed on it. One router saying "not tradable" while another
+    // merely timed out is not evidence about the mint -- and the opening path
+    // retires a token on exactly this answer, so a mixed result must degrade to
+    // the operational failure it really was.
+    let unanimous = |all: fn(&QuoteError) -> bool, errors: &[QuoteError]| {
+        !errors.is_empty() && errors.iter().all(all)
+    };
+    if unanimous(
+        |error| matches!(error, QuoteError::NotTradable { .. }),
+        &errors,
+    ) {
+        return errors.remove(0);
+    }
+    if unanimous(
+        |error| {
+            matches!(
+                error,
+                QuoteError::NotTradable { .. } | QuoteError::NoRoute { .. }
+            )
+        },
+        &errors,
+    ) {
+        // Every router could price nothing, but not all of them called the mint
+        // dead: "no route" is the strongest claim the set supports.
+        return errors
+            .iter()
+            .position(|error| matches!(error, QuoteError::NoRoute { .. }))
+            .map(|index| errors.remove(index))
+            .unwrap_or_else(|| errors.remove(0));
+    }
+
+    // Mixed set: report the most specific OPERATIONAL failure, and never a
+    // token verdict -- a caller must not conclude anything about the mint from
+    // a set that contains one router's rate limit or build fault.
     fn specificity(err: &QuoteError) -> u8 {
         match err {
-            QuoteError::NotTradable { .. } => 0,
-            QuoteError::NoRoute { .. } => 1,
-            QuoteError::RouterRejected { .. } => 2,
-            QuoteError::RateLimited { .. } => 3,
-            QuoteError::Timeout { .. } => 4,
-            QuoteError::Unavailable { .. } => 5,
+            QuoteError::RouterRejected { .. } => 0,
+            QuoteError::RateLimited { .. } => 1,
+            QuoteError::Timeout { .. } => 2,
+            QuoteError::Unavailable { .. } => 3,
+            // Token verdicts rank last here BECAUSE the set is mixed: they are
+            // the two variants a caller is licensed to act on permanently.
+            QuoteError::NoRoute { .. } => 4,
+            QuoteError::NotTradable { .. } => 5,
             QuoteError::NoRoutersEnabled { .. } => 6,
             // Unreachable from the per-router loop (the registry is resolved
             // before any router is asked), and least specific if it ever is.
@@ -184,6 +227,84 @@ fn select_quote_failure(errors: Vec<QuoteError>) -> QuoteError {
             router: "all".to_owned(),
             detail: "no router returned a quote or an error".to_owned(),
         })
+}
+
+/// A router's answer is untrusted input on a money path.
+///
+/// Selection is the last point at which a quote that prices a different pair,
+/// spends a different amount, or guarantees nothing is still cheap to refuse --
+/// after it, the quote becomes a signed transaction. Each check names what it
+/// rejected so a real provider regression is diagnosable from one log line.
+pub(crate) fn validate_quote(
+    router: &dyn SwapRouter,
+    request: &QuoteRequest,
+    quote: Quote,
+) -> QuoteResult<Quote> {
+    let reject = |detail: String| {
+        Err(QuoteError::RouterRejected {
+            router: router.name().to_owned(),
+            detail,
+        })
+    };
+
+    if quote.router_id != router.id() {
+        return reject(format!(
+            "quote claims router '{}' but came from '{}'",
+            quote.router_id,
+            router.id()
+        ));
+    }
+    if quote.chain != request.chain {
+        return reject(format!(
+            "quoted chain {:?} but {:?} was requested",
+            quote.chain, request.chain
+        ));
+    }
+    if quote.input_mint != request.input_mint || quote.output_mint != request.output_mint {
+        return reject(format!(
+            "quoted {} -> {} but {} -> {} was requested",
+            quote.input_mint, quote.output_mint, request.input_mint, request.output_mint
+        ));
+    }
+    if quote.wallet_address != request.wallet_address {
+        return reject("quote is addressed to a different wallet".to_owned());
+    }
+    if quote.input_amount != request.input_amount {
+        return reject(format!(
+            "quote spends {} but {} was requested",
+            quote.input_amount, request.input_amount
+        ));
+    }
+    if quote.swap_mode != request.swap_mode {
+        return reject(format!(
+            "quoted {:?} but {:?} was requested",
+            quote.swap_mode, request.swap_mode
+        ));
+    }
+    if quote.output_amount == 0 {
+        return reject(format!(
+            "zero-output quote for {} -> {}",
+            quote.input_mint, quote.output_mint
+        ));
+    }
+    // A quote with no floor is a swap with no protection: the guaranteed
+    // minimum is what the instruction (or the aggregator's threshold) enforces
+    // on chain, and comparing routers on expected output alone would let an
+    // unprotected quote win.
+    if quote.minimum_output_amount == 0 {
+        return reject("quote guarantees no minimum output".to_owned());
+    }
+    if quote.minimum_output_amount > quote.output_amount {
+        return reject(format!(
+            "guaranteed minimum {} exceeds the expected output {}",
+            quote.minimum_output_amount, quote.output_amount
+        ));
+    }
+    if !quote.price_impact_pct.is_finite() || quote.price_impact_pct < 0.0 {
+        return reject(format!("unusable price impact {}", quote.price_impact_pct));
+    }
+
+    Ok(quote)
 }
 
 // ============================================================================
@@ -206,6 +327,14 @@ pub async fn execute_swap_with_fallback(token: &Token, quote: Quote) -> Result<S
     let primary = registry
         .get_router(&quote.router_id)
         .ok_or_else(|| Error::internal_error(format!("Router {} not found", quote.router_id)))?;
+    // The registry answers live: a router disabled between quoting and
+    // execution must not still execute the quote it produced.
+    if !primary.is_enabled() {
+        return Err(Error::configuration_error(format!(
+            "Router {} was disabled before its quote could be executed",
+            quote.router_name
+        )));
+    }
 
     logger::info(
         LogTag::Swap,
@@ -313,10 +442,19 @@ pub async fn execute_swap_with_fallback(token: &Token, quote: Quote) -> Result<S
                     wallet_address: quote.wallet_address.clone(),
                     slippage_pct: (quote.slippage_bps as f64) / 100.0,
                     swap_mode: quote.swap_mode,
-                    exclude_dexes: None,
+                    exclude_dexes: quote.exclude_dexes.clone(),
                 };
 
-                let fallback_quote = match fallback_router.get_quote(&fallback_request).await {
+                // The fallback's answer is untrusted input exactly like the
+                // one that won the original comparison: a quote that prices
+                // another pair or guarantees nothing must not reach the
+                // builder just because it arrived on the retry path.
+                let fallback_quote = match fallback_router
+                    .get_quote(&fallback_request)
+                    .await
+                    .and_then(|quote| {
+                        validate_quote(fallback_router.as_ref(), &fallback_request, quote)
+                    }) {
                     Ok(q) => q,
                     Err(e) => {
                         logger::warning(
@@ -500,6 +638,12 @@ fn is_retryable_error(error: &Error) -> bool {
     match error {
         Error::Rpc(e) => e.is_retryable(),
         Error::Network(_) | Error::RpcProvider(_) => true,
+        // The direct engine answers this from its own typed outcome rather than
+        // from prose: only a failure that PROVES nothing moved (and nothing can
+        // still land) may be re-sent through another router.
+        Error::Solana(crate::chains::solana::Error::DirectSwap(direct)) => {
+            direct.safe_to_fallback()
+        }
         _ => false,
     }
 }
@@ -619,6 +763,8 @@ mod tests {
     use super::*;
     use crate::chains::ChainId;
     use crate::errors::ErrorClass;
+    use crate::swaps::types::SwapMode;
+    use async_trait::async_trait;
 
     fn not_tradable(router: &str) -> QuoteError {
         QuoteError::NotTradable {
@@ -648,13 +794,49 @@ mod tests {
     #[test]
     fn a_no_market_verdict_survives_aggregation() {
         assert!(matches!(
-            select_quote_failure(vec![timeout("Raydium"), not_tradable("Jupiter")]),
+            select_quote_failure(vec![not_tradable("Direct Pool"), not_tradable("Jupiter")]),
             QuoteError::NotTradable { .. }
         ));
         assert!(matches!(
-            select_quote_failure(vec![timeout("Raydium"), no_route("Jupiter")]),
+            select_quote_failure(vec![no_route("Direct Pool"), no_route("Jupiter")]),
             QuoteError::NoRoute { .. }
         ));
+    }
+
+    /// Retiring a token is permanent, so it takes agreement: only a set in
+    /// which every router that answered spoke about the MINT may return a
+    /// verdict about the mint. One router calling it dead while another merely
+    /// had no pool is worth a no-route strike, never retirement.
+    #[test]
+    fn a_token_verdict_requires_every_router_to_agree() {
+        assert!(matches!(
+            select_quote_failure(vec![not_tradable("Jupiter"), no_route("Direct Pool")]),
+            QuoteError::NoRoute { .. }
+        ));
+    }
+
+    /// The case that must never blacklist: the direct engine having no pool
+    /// says nothing about a token whose aggregator quote merely timed out, and
+    /// neither does an aggregator verdict beside a rate-limited second router.
+    #[test]
+    fn an_operational_failure_never_becomes_a_token_verdict() {
+        for errors in [
+            vec![no_route("Direct Pool"), timeout("Jupiter")],
+            vec![not_tradable("Jupiter"), timeout("Direct Pool")],
+            vec![
+                not_tradable("Jupiter"),
+                QuoteError::RateLimited {
+                    router: "Direct Pool".to_owned(),
+                    retry_after: None,
+                },
+            ],
+        ] {
+            let verdict = select_quote_failure(errors);
+            assert!(
+                !verdict.is_route_failure(),
+                "a mixed set must not license a token verdict, got {verdict}"
+            );
+        }
     }
 
     /// One router timing out says nothing about the token, so it must not be
@@ -752,5 +934,114 @@ mod tests {
         assert_eq!(rejected.severity(), crate::errors::Severity::Critical);
         assert!(!rejected.is_retryable());
         assert!(rejected.permanent_token_verdict().is_none());
+    }
+
+    struct StubRouter;
+
+    #[async_trait]
+    impl SwapRouter for StubRouter {
+        fn id(&self) -> &'static str {
+            "direct"
+        }
+        fn name(&self) -> &'static str {
+            "Direct Pool"
+        }
+        fn is_enabled(&self) -> bool {
+            true
+        }
+        fn priority(&self) -> u8 {
+            1
+        }
+        fn chain(&self) -> ChainId {
+            ChainId::Solana
+        }
+        async fn get_quote(&self, _request: &QuoteRequest) -> crate::swaps::QuoteResult<Quote> {
+            Err(QuoteError::NoRoute {
+                router: self.name().to_owned(),
+                detail: "stub".to_owned(),
+            })
+        }
+        async fn execute_swap(&self, _token: &Token, _quote: &Quote) -> crate::Result<SwapResult> {
+            Err(crate::Error::internal_error("stub"))
+        }
+    }
+
+    fn request() -> QuoteRequest {
+        QuoteRequest {
+            chain: ChainId::Solana,
+            input_mint: "So11111111111111111111111111111111111111112".to_owned(),
+            output_mint: "TokenMint111111111111111111111111111111111".to_owned(),
+            input_amount: 1_000_000,
+            wallet_address: "Wallet1111111111111111111111111111111111111".to_owned(),
+            slippage_pct: 1.0,
+            swap_mode: SwapMode::ExactIn,
+            exclude_dexes: None,
+        }
+    }
+
+    fn quote_for(request: &QuoteRequest) -> Quote {
+        Quote {
+            chain: request.chain,
+            router_id: "direct".to_owned(),
+            router_name: "Direct Pool".to_owned(),
+            input_mint: request.input_mint.clone(),
+            output_mint: request.output_mint.clone(),
+            input_amount: request.input_amount,
+            output_amount: 1_000,
+            minimum_output_amount: 950,
+            price_impact_pct: 0.5,
+            platform_fee_lamports: None,
+            estimated_network_fee_lamports: None,
+            slippage_bps: 100,
+            route_plan: "RAYDIUM CLMM".to_owned(),
+            swap_mode: request.swap_mode,
+            wallet_address: request.wallet_address.clone(),
+            exclude_dexes: request.exclude_dexes.clone(),
+            execution_data: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_well_formed_quote_survives_validation() {
+        let request = request();
+        assert!(validate_quote(&StubRouter, &request, quote_for(&request)).is_ok());
+    }
+
+    /// Each of these would reach the transaction builder if selection let it
+    /// through: a quote for another pair, another wallet, another size, or one
+    /// that guarantees nothing at all.
+    #[test]
+    fn a_quote_that_does_not_answer_the_request_is_refused() {
+        let request = request();
+        let mutations: Vec<(&str, fn(&mut Quote))> = vec![
+            ("wrong pair", |quote| {
+                std::mem::swap(&mut quote.input_mint, &mut quote.output_mint)
+            }),
+            ("wrong wallet", |quote| {
+                quote.wallet_address = "OtherWallet11111111111111111111111111111111".to_owned()
+            }),
+            ("wrong size", |quote| quote.input_amount += 1),
+            ("zero output", |quote| quote.output_amount = 0),
+            ("no floor", |quote| quote.minimum_output_amount = 0),
+            ("floor above output", |quote| {
+                quote.minimum_output_amount = quote.output_amount + 1
+            }),
+            ("unusable impact", |quote| quote.price_impact_pct = f64::NAN),
+            ("foreign router", |quote| {
+                quote.router_id = "jupiter".to_owned()
+            }),
+        ];
+
+        for (case, mutate) in mutations {
+            let mut quote = quote_for(&request);
+            mutate(&mut quote);
+            assert!(
+                matches!(
+                    validate_quote(&StubRouter, &request, quote),
+                    Err(QuoteError::RouterRejected { .. })
+                ),
+                "{case} must be refused before it can be built"
+            );
+        }
     }
 }

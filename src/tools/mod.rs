@@ -73,6 +73,7 @@ pub use multi_wallet::{
     MultiBuyConfig,
     MultiSellConfig,
     // Result types
+    SessionProgress,
     SessionResult,
     SessionStatus as MultiWalletSessionStatus,
     WalletOpResult,

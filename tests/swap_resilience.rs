@@ -247,7 +247,7 @@ async fn uninitialized_quote_returns_a_domain_error() {
 #[tokio::test]
 async fn uninitialized_execution_returns_a_domain_error() {
     use screenerbot::swaps::{
-        execute_swap_with_fallback, quote_and_execute_for_wallet, Quote, SwapMode,
+        execute_swap_with_fallback, quote_and_execute_for_wallet, Quote, RouterChoice, SwapMode,
     };
 
     let quote = Quote {
@@ -258,12 +258,15 @@ async fn uninitialized_execution_returns_a_domain_error() {
         output_mint: "TokenMint111111111111111111111111111111111".to_owned(),
         input_amount: 1_000_000,
         output_amount: 1,
+        minimum_output_amount: 1,
         price_impact_pct: 0.0,
-        fee_lamports: 0,
+        platform_fee_lamports: None,
+        estimated_network_fee_lamports: None,
         slippage_bps: 100,
         route_plan: "none".to_owned(),
         swap_mode: SwapMode::ExactIn,
         wallet_address: "Wallet1111111111111111111111111111111111111".to_owned(),
+        exclude_dexes: None,
         execution_data: b"jupiter".to_vec(),
     };
 
@@ -272,7 +275,7 @@ async fn uninitialized_execution_returns_a_domain_error() {
         .expect_err("execute without a factory");
     assert_registry_uninitialized(err);
 
-    let err = quote_and_execute_for_wallet(uninitialized_quote_request(), 1)
+    let err = quote_and_execute_for_wallet(uninitialized_quote_request(), 1, RouterChoice::Auto)
         .await
         .expect_err("wallet execute without a factory");
     assert_registry_uninitialized(err);

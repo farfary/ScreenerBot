@@ -10,7 +10,7 @@ use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::logger::{self, LogTag};
 use crate::tokens::decimals;
 use crate::tools::multi_wallet::{
-    execute_multi_sell, MultiSellConfig, SessionResult, SessionStatus,
+    execute_multi_sell, MultiSellConfig, SessionProgress, SessionResult, SessionStatus,
 };
 use crate::tools::DelayConfig;
 use crate::wallets;
@@ -18,8 +18,8 @@ use crate::webserver::utils::{error_response, success_response};
 
 use super::super::types::*;
 use super::session::{
-    cleanup_old_sessions, get_session_status, has_active_multi_wallet_session, MultiWalletSession,
-    MULTI_WALLET_SESSIONS,
+    cleanup_old_sessions, get_session_status, has_active_multi_wallet_session,
+    spawn_progress_drain, validate_router_choice, MultiWalletSession, MULTI_WALLET_SESSIONS,
 };
 
 // =============================================================================
@@ -190,6 +190,10 @@ pub async fn start_multi_sell(Json(request): Json<MultiSellStartRequest>) -> Res
         );
     }
 
+    if let Err(response) = validate_router_choice(request.router.as_deref()) {
+        return response;
+    }
+
     // Build delay config
     let delay = if let Some(max_ms) = request.delay_max_ms {
         DelayConfig::Random {
@@ -207,6 +211,10 @@ pub async fn start_multi_sell(Json(request): Json<MultiSellStartRequest>) -> Res
     let abort_flag = Arc::new(AtomicBool::new(false));
     let token_mint = request.token_mint.clone();
 
+    // The caller owns the session identity, and the sink carries each
+    // per-wallet outcome back while the run is still going.
+    let (progress, completed) = SessionProgress::channel(session_id.clone());
+
     // Build config with abort flag
     let config = MultiSellConfig {
         token_mint: request.token_mint.clone(),
@@ -221,6 +229,7 @@ pub async fn start_multi_sell(Json(request): Json<MultiSellStartRequest>) -> Res
         close_atas_after: request.close_atas_after,
         router: request.router.clone(),
         abort_flag: Some(abort_flag.clone()),
+        progress: Some(progress),
     };
 
     // Validate config
@@ -233,13 +242,17 @@ pub async fn start_multi_sell(Json(request): Json<MultiSellStartRequest>) -> Res
         );
     }
 
-    // Create session entry
+    // Create session entry. When the caller named the wallets, progress has a
+    // real denominator from the start; `finalize` later replaces it with what
+    // actually ran.
     {
+        let mut result = SessionResult::new(session_id.clone());
+        result.total_wallets = request.wallet_ids.as_ref().map_or(0, Vec::len);
         let mut sessions = MULTI_WALLET_SESSIONS.write().await;
         sessions.insert(
             session_id.clone(),
             MultiWalletSession {
-                result: SessionResult::new(session_id.clone()),
+                result,
                 status: SessionStatus::Pending,
                 abort_flag: abort_flag.clone(),
                 operation_type: "multi_sell".to_owned(),
@@ -260,8 +273,14 @@ pub async fn start_multi_sell(Json(request): Json<MultiSellStartRequest>) -> Res
             }
         }
 
+        // Mirror finished operations into the session while the run is going.
+        let drain = spawn_progress_drain(session_id_clone.clone(), completed);
+
         // Execute multi-sell
         let result = execute_multi_sell(config).await;
+        // The executor has dropped its sink, so the drain is finishing its last
+        // operation; wait for it before replacing the session's result.
+        let _ = drain.await;
 
         // Update session with result
         {

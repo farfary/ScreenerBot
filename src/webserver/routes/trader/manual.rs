@@ -603,16 +603,25 @@ pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Re
                 (input_fmt, output_sol, output_fmt, price)
             };
 
-            // Platform fee (0.5%) - calculated on SOL side
-            let platform_fee_pct = 0.5;
-            let platform_fee_sol = if direction == "buy" {
-                input_amount_display * (platform_fee_pct / 100.0)
-            } else {
-                output_display * (platform_fee_pct / 100.0)
-            };
+            // The rate is a platform constant; the AMOUNT is only shown when the
+            // router that produced this quote could state it in SOL honestly.
+            let platform_fee_pct =
+                f64::from(crate::chains::solana::swaps::revenue::PLATFORM_FEE_BPS) / 100.0;
+            let platform_fee_sol = quote
+                .platform_fee_lamports
+                .map(|lamports| crate::chains::adapter().raw_to_native(lamports));
+            let network_fee_sol = quote
+                .estimated_network_fee_lamports
+                .map(|lamports| crate::chains::adapter().raw_to_native(lamports));
 
-            // Network fee estimate (approx 0.000005 SOL)
-            let network_fee_sol = 0.000005;
+            // The floor the wallet is guaranteed, as the router enforces it --
+            // reconstructing it from the expected output and slippage ignores
+            // the fee leg and overstates a sell.
+            let minimum_output_amount = if direction == "buy" {
+                quote.minimum_output_amount as f64 / 10f64.powi(token_decimals as i32)
+            } else {
+                crate::chains::adapter().raw_to_native(quote.minimum_output_amount)
+            };
 
             let response = QuotePreviewResponse {
                 success: true,
@@ -621,6 +630,7 @@ pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Re
                 input_amount: input_amount_display,
                 input_formatted,
                 output_amount: output_display,
+                minimum_output_amount,
                 output_formatted,
                 price_per_token_sol: price_per_token,
                 price_impact_pct: quote.price_impact_pct,

@@ -48,7 +48,7 @@ pub async fn fund_wallets(targets: Vec<(String, f64)>, concurrency: usize) -> Ve
     let results: Vec<WalletOpResult> = stream::iter(targets)
         .map(|(address, amount)| async move {
             match transfer_sol_from_main(&address, amount).await {
-                Ok(sig) => WalletOpResult::success(0, address, sig, amount, None),
+                Ok(sig) => WalletOpResult::success(0, address, sig, amount, None, None, None),
                 Err(e) => WalletOpResult::failure(0, address, e.to_string()),
             }
         })
@@ -159,6 +159,8 @@ pub async fn collect_sol(
                     wallet_address,
                     sig,
                     transfer_amount,
+                    None,
+                    None,
                     None,
                 ));
             }

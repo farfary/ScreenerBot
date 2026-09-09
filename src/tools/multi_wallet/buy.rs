@@ -28,7 +28,14 @@ pub async fn execute_multi_buy(config: MultiBuyConfig) -> Result<SessionResult, 
     // Validate configuration
     config.validate()?;
 
-    let session_id = Uuid::new_v4().to_string();
+    // The caller owns the identity of the run when it registered one: minting a
+    // second id here made the status endpoint report a different session the
+    // moment the run finished.
+    let session_id = config
+        .progress
+        .as_ref()
+        .map(|progress| progress.session_id().to_owned())
+        .unwrap_or_else(|| Uuid::new_v4().to_string());
     let mut result = SessionResult::new(session_id.clone());
 
     logger::info(
@@ -97,6 +104,13 @@ pub async fn execute_multi_buy(config: MultiBuyConfig) -> Result<SessionResult, 
     let wallet_map: HashMap<String, &Wallet> =
         wallets.iter().map(|w| (w.address.clone(), w)).collect();
 
+    // Raw amounts are what the chain returns; the results table shows people
+    // token counts. Resolve the mint's decimals ONCE for the whole session -- a
+    // mint we cannot resolve reports no token amount rather than a raw figure
+    // that reads as a thousand-fold larger buy than it was.
+    let token_decimals =
+        crate::tokens::decimals::get(crate::chains::active_chain(), &config.token_mint).await;
+
     for plan in plans {
         // Check abort flag before each operation
         if let Some(ref abort_flag) = config.abort_flag {
@@ -118,9 +132,13 @@ pub async fn execute_multi_buy(config: MultiBuyConfig) -> Result<SessionResult, 
                 plan.planned_amount_sol,
                 config.slippage_bps,
                 config.router.as_deref(),
+                token_decimals,
             )
             .await;
 
+            if let Some(progress) = &config.progress {
+                progress.publish(&op_result);
+            }
             result.add_operation(op_result);
 
             // Apply delay between operations
@@ -233,7 +251,8 @@ async fn execute_single_buy(
     token_mint: &str,
     amount_sol: f64,
     slippage_bps: u64,
-    _router: Option<&str>,
+    router: Option<&str>,
+    token_decimals: Option<u8>,
 ) -> WalletOpResult {
     let wallet_id = wallet.id;
     let wallet_address = wallet.address.clone();
@@ -251,13 +270,16 @@ async fn execute_single_buy(
     // Convert bps to percentage
     let slippage_pct = slippage_bps as f64 / 100.0;
 
-    match tool_buy(wallet, token_mint, amount_sol, Some(slippage_pct)).await {
+    match tool_buy(wallet, token_mint, amount_sol, Some(slippage_pct), router).await {
         Ok(swap_result) => WalletOpResult::success(
             wallet_id,
             wallet_address,
             swap_result.signature,
             amount_sol,
-            Some(swap_result.output_amount as f64),
+            token_decimals
+                .map(|decimals| swap_result.output_amount as f64 / 10f64.powi(i32::from(decimals))),
+            Some(swap_result.router_name),
+            Some(swap_result.route_plan),
         ),
         Err(e) => WalletOpResult::failure(wallet_id, wallet_address, e.to_string()),
     }

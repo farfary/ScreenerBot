@@ -152,11 +152,27 @@ impl DirectSwapError {
     /// The on-chain signature, when one exists.
     pub fn signature(&self) -> Option<&str> {
         match self {
-            DirectSwapError::ConfirmationTimeout { signature, .. }
+            DirectSwapError::BlockhashExpired { signature, .. }
+            | DirectSwapError::ConfirmationTimeout { signature, .. }
             | DirectSwapError::TransactionFailed { signature, .. }
             | DirectSwapError::OutputNotReceived { signature, .. } => Some(signature),
             _ => None,
         }
+    }
+
+    /// A fallback is safe only when this typed outcome proves no ambiguous
+    /// wallet state remains.  Never infer that from provider/error prose.
+    pub fn safe_to_fallback(&self) -> bool {
+        matches!(
+            self,
+            DirectSwapError::MarketMoved { .. }
+                | DirectSwapError::Build { .. }
+                | DirectSwapError::SimulationRejected { .. }
+                | DirectSwapError::SimulationUnavailable { .. }
+                | DirectSwapError::SubmitFailed { .. }
+                | DirectSwapError::BlockhashExpired { .. }
+                | DirectSwapError::TransactionFailed { .. }
+        )
     }
 }
 
@@ -268,11 +284,8 @@ impl DirectSwapError {
         use crate::swaps::error::QuoteError;
         let detail = self.to_string();
         match self {
-            DirectSwapError::PoolNotTradable { .. } => QuoteError::NotTradable {
-                router: router.to_owned(),
-                detail,
-            },
-            DirectSwapError::PairNotInPool { .. }
+            DirectSwapError::PoolNotTradable { .. }
+            | DirectSwapError::PairNotInPool { .. }
             | DirectSwapError::InsufficientLiquidity { .. } => QuoteError::NoRoute {
                 router: router.to_owned(),
                 detail,

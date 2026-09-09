@@ -90,21 +90,6 @@ impl RouterRegistry {
             .any(|r| r.is_enabled() && r.chain() == chain)
     }
 
-    /// Get primary router (lowest priority number among enabled routers) for
-    /// the currently active chain. Thin delegate over
-    /// [`Self::get_primary_router_for`].
-    pub fn get_primary_router(&self) -> Option<Arc<dyn SwapRouter>> {
-        self.get_primary_router_for(active_chain())
-    }
-
-    /// Get the primary router for `chain` — the lowest-`priority()` ENABLED
-    /// router serving that chain, never the first registered.
-    pub fn get_primary_router_for(&self, chain: ChainId) -> Option<Arc<dyn SwapRouter>> {
-        self.enabled_routers_for(chain)
-            .into_iter()
-            .min_by_key(|r| r.priority())
-    }
-
     /// Get all routers (enabled and disabled)
     pub fn all_routers(&self) -> &[Arc<dyn SwapRouter>] {
         &self.routers
@@ -203,32 +188,12 @@ mod tests {
         })
     }
 
+    /// Routing order is a property of `priority()`, never of the order routers
+    /// were registered in: the fallback chain is the only place the registry
+    /// still expresses that order, and a comparison tie leans on the same
+    /// number (`swaps::operations::best_quote_on`).
     #[test]
-    fn primary_router_is_the_enabled_router_with_lowest_priority() {
-        let registry = RouterRegistry::new(vec![
-            stub("alt_router", true, 1),
-            stub("jupiter", true, 0),
-            stub("raydium", true, 2),
-        ]);
-        let primary = registry.get_primary_router().expect("enabled routers");
-        assert_eq!(primary.id(), "jupiter");
-    }
-
-    #[test]
-    fn primary_router_skips_disabled_routers_regardless_of_registration_order() {
-        let registry = RouterRegistry::new(vec![
-            stub("jupiter", false, 0),
-            stub("alt_router", true, 1),
-            stub("raydium", false, 2),
-        ]);
-        let primary = registry.get_primary_router().expect("alt_router enabled");
-        assert_eq!(primary.id(), "alt_router");
-        let enabled: Vec<_> = registry.enabled_routers().iter().map(|r| r.id()).collect();
-        assert_eq!(enabled, vec!["alt_router"]);
-    }
-
-    #[test]
-    fn primary_selection_is_deterministic_across_shuffled_registration() {
+    fn router_order_comes_from_priority_not_registration_order() {
         let orders = [
             vec![
                 stub("raydium", true, 2),
@@ -248,11 +213,25 @@ mod tests {
         ];
         for routers in orders {
             let registry = RouterRegistry::new(routers);
-            assert_eq!(
-                registry.get_primary_router().expect("enabled").id(),
-                "jupiter"
-            );
+            let order: Vec<_> = registry
+                .get_fallback_chain("no_such_router")
+                .iter()
+                .map(|r| r.id())
+                .collect();
+            assert_eq!(order, vec!["jupiter", "alt_router", "raydium"]);
         }
+    }
+
+    #[test]
+    fn a_disabled_router_neither_competes_nor_serves_as_a_fallback() {
+        let registry = RouterRegistry::new(vec![
+            stub("jupiter", false, 0),
+            stub("alt_router", true, 1),
+            stub("raydium", false, 2),
+        ]);
+        let enabled: Vec<_> = registry.enabled_routers().iter().map(|r| r.id()).collect();
+        assert_eq!(enabled, vec!["alt_router"]);
+        assert!(registry.get_fallback_chain("alt_router").is_empty());
     }
 
     #[test]

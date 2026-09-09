@@ -97,12 +97,15 @@ fn quote_from(router: &StubRouter, request: &QuoteRequest) -> Quote {
         output_mint: request.output_mint.clone(),
         input_amount: request.input_amount,
         output_amount: 1,
+        minimum_output_amount: 1,
         price_impact_pct: 0.0,
-        fee_lamports: 0,
+        platform_fee_lamports: None,
+        estimated_network_fee_lamports: None,
         slippage_bps: 100,
         route_plan: router.id.to_owned(),
         swap_mode: request.swap_mode,
         wallet_address: request.wallet_address.clone(),
+        exclude_dexes: request.exclude_dexes.clone(),
         execution_data: router.id.as_bytes().to_vec(),
     }
 }
@@ -162,32 +165,34 @@ fn accept_own_chain_accepts_a_request_for_its_own_chain() {
 }
 
 // ============================================================================
-// 3. get_primary_router_for: lowest-priority ENABLED router wins, not the
-//    first registered; None when every router for the chain is disabled.
+// 3. Enabled routers for a chain: a disabled router never competes, and the
+//    fallback chain is ordered by priority, not by registration.
 // ============================================================================
 
 #[test]
-fn primary_router_for_chain_is_lowest_priority_enabled_router() {
+fn only_enabled_routers_compete_and_the_fallback_chain_is_priority_ordered() {
     let registry = RouterRegistry::new(vec![
         arc(StubRouter::new("raydium", 2)),
         arc(StubRouter::new("alt_router", 1)),
         arc(StubRouter::new("jupiter", 0)),
     ]);
 
-    let primary = registry
-        .get_primary_router_for(ChainId::Solana)
-        .expect("an enabled router exists");
-    assert_eq!(primary.id(), "jupiter");
+    let fallbacks: Vec<_> = registry
+        .get_fallback_chain_for(ChainId::Solana, "jupiter")
+        .iter()
+        .map(|r| r.id())
+        .collect();
+    assert_eq!(fallbacks, vec!["alt_router", "raydium"]);
 }
 
 #[test]
-fn primary_router_for_chain_is_none_when_all_routers_for_that_chain_are_disabled() {
+fn a_chain_with_every_router_disabled_has_none_enabled() {
     let registry = RouterRegistry::new(vec![
         arc(StubRouter::new("jupiter", 0).disabled()),
         arc(StubRouter::new("alt_router", 1).disabled()),
     ]);
 
-    assert!(registry.get_primary_router_for(ChainId::Solana).is_none());
+    assert!(registry.enabled_routers_for(ChainId::Solana).is_empty());
     assert!(!registry.has_enabled_routers_for(ChainId::Solana));
 }
 
@@ -248,13 +253,6 @@ fn no_chain_delegates_match_the_active_chain_forms() {
         .map(|r| r.id())
         .collect();
     assert_eq!(enabled_ids, enabled_for_ids);
-
-    assert_eq!(
-        registry.get_primary_router().map(|r| r.id()),
-        registry
-            .get_primary_router_for(active_chain())
-            .map(|r| r.id())
-    );
 
     let fallback_ids: Vec<_> = registry
         .get_fallback_chain("jupiter")

@@ -19,7 +19,7 @@ pub use operations::{
 pub use operations_wallet::quote_and_execute_for_wallet;
 pub use registry::{get_registry, try_get_registry, RouterRegistry};
 pub use router::SwapRouter;
-pub use types::{ExitType, Quote, QuoteRequest, SwapMode, SwapResult};
+pub use types::{ExitType, Quote, QuoteRequest, RouterChoice, SwapMode, SwapResult};
 
 /// Calculate the token amount for a partial exit
 /// Returns 0 if total_amount is 0 or percentage is <= 0

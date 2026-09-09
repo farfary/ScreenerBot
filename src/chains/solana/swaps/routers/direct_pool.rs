@@ -34,6 +34,7 @@ use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use std::time::Instant;
 
+use crate::chains::solana::pools::types::ProgramKind;
 use crate::chains::solana::solana_sdk::{pubkey::Pubkey, signature::Keypair};
 
 /// What a direct quote carries forward to execution. `execute_with_keypair`
@@ -47,11 +48,12 @@ struct DirectExecutionData {
     /// Total input including the platform fee.
     amount_in: u64,
     slippage_bps: u16,
-    /// The venue the quote was priced against, for the log line.
-    venue: String,
     /// The guaranteed net output the caller accepted this quote for. Execution
     /// refuses to proceed if the fresh quote has fallen below this.
     accepted_min_net_out: u64,
+    /// The gross pool floor accepted by the caller.  Reusing a fresh quote's
+    /// floor would apply slippage twice and can weaken the accepted trade.
+    accepted_min_out: u64,
 }
 
 /// The direct pool-swap router.
@@ -151,24 +153,72 @@ impl DirectPoolRouter {
             slippage_bps: data.slippage_bps,
         };
 
-        let (fresh_quote, market) = direct::quote(&intent).await?;
+        let (mut fresh_quote, market) = direct::quote(&intent).await?;
+        let moved = |fresh: u64| direct::DirectSwapError::MarketMoved {
+            pool: intent.pool,
+            accepted_min_net_out: data.accepted_min_net_out,
+            fresh_expected_net_out: fresh,
+        };
 
-        if fresh_quote.expected_net_out < data.accepted_min_net_out {
-            return Err(direct::DirectSwapError::MarketMoved {
-                pool: intent.pool,
-                accepted_min_net_out: data.accepted_min_net_out,
-                fresh_expected_net_out: fresh_quote.expected_net_out,
-            }
-            .into());
+        // The ceiling is a property of the CURRENT pool, so it is re-applied to
+        // the fresh quote: an accepted quote is not a licence to move the pool
+        // by more than the configured limit a block later.
+        let max_impact = with_config(|cfg| cfg.swaps.direct.max_price_impact_pct);
+        if !fresh_quote.price_impact_pct.is_finite()
+            || fresh_quote.price_impact_pct < 0.0
+            || fresh_quote.price_impact_pct > max_impact
+        {
+            logger::warning(
+                LogTag::Swap,
+                &format!(
+                    "Direct pool execution refused: price impact {:.2}% now exceeds the \
+                     {max_impact:.2}% ceiling (pool {})",
+                    fresh_quote.price_impact_pct, intent.pool
+                ),
+            );
+            return Err(moved(fresh_quote.expected_net_out).into());
         }
 
-        if fresh_quote.expected_net_out != data.accepted_min_net_out {
+        // The caller accepted a GUARANTEED floor, and a fresh quote re-derives
+        // its own floor from the new mid price -- taking that one would apply
+        // slippage a second time and execute below what was accepted. So the
+        // accepted floor is carried into the instruction, and the output-side
+        // fee is re-sized from the floor that will actually be enforced.
+        if fresh_quote.expected_out < data.accepted_min_out
+            || fresh_quote.expected_net_out < data.accepted_min_net_out
+        {
+            return Err(moved(fresh_quote.expected_net_out).into());
+        }
+
+        let natural_min_out = fresh_quote.min_out;
+        let enforced_min_out = natural_min_out.max(data.accepted_min_out);
+        fresh_quote.min_out = enforced_min_out;
+        if fresh_quote.fee.side == direct::FeeSide::Output {
+            fresh_quote.fee = direct::PlatformFee::resolve(
+                direct::FeeSide::Output,
+                &fresh_quote.input_mint,
+                &fresh_quote.output_mint,
+                enforced_min_out,
+            )?;
+            fresh_quote.expected_net_out = fresh_quote
+                .expected_out
+                .saturating_sub(fresh_quote.fee.amount);
+            fresh_quote.min_net_out = enforced_min_out.saturating_sub(fresh_quote.fee.amount);
+        } else {
+            fresh_quote.min_net_out = enforced_min_out;
+        }
+        if fresh_quote.min_net_out < data.accepted_min_net_out {
+            return Err(moved(fresh_quote.min_net_out).into());
+        }
+
+        if enforced_min_out > natural_min_out {
             logger::info(
                 LogTag::Swap,
                 &format!(
-                    "Direct pool market moved before execution: accepted floor {}, fresh \
-                     expected net out {} (pool {})",
-                    data.accepted_min_net_out, fresh_quote.expected_net_out, intent.pool
+                    "Direct pool market moved before execution: holding the accepted gross \
+                     floor {enforced_min_out} (a fresh quote would have guaranteed only \
+                     {natural_min_out}), net floor {}, expected net out {} (pool {})",
+                    fresh_quote.min_net_out, fresh_quote.expected_net_out, intent.pool
                 ),
             );
         }
@@ -212,6 +262,19 @@ impl SwapRouter for DirectPoolRouter {
                 router: self.name().to_owned(),
                 detail: e.to_string(),
             })?;
+        // A pool swap is priced forward from the input, and the engine has no
+        // ExactOut path. This is a refusal by THIS router, never a verdict on
+        // the pair: `RouterRejected` keeps it out of the no-route strikes that
+        // retire a token.
+        if request.swap_mode != crate::swaps::types::SwapMode::ExactIn {
+            return Err(QuoteError::RouterRejected {
+                router: self.name().to_owned(),
+                detail: format!(
+                    "{:?} is not supported; the direct engine prices ExactIn only",
+                    request.swap_mode
+                ),
+            });
+        }
 
         let pool =
             Self::resolve_pool(&request.input_mint, &request.output_mint).ok_or_else(|| {
@@ -226,8 +289,21 @@ impl SwapRouter for DirectPoolRouter {
             .await
             .map_err(|e| e.into_quote_error(self.name()))?;
 
+        // A caller that excluded a DEX excluded it from EVERY router. The
+        // aggregator applies the exclusion while routing; here the pool is
+        // already chosen, so the only correct answer is to decline it.
+        if let Some(label) = excluded_venue(request.exclude_dexes.as_deref(), market.program()) {
+            return Err(QuoteError::NoRoute {
+                router: self.name().to_owned(),
+                detail: format!("this pool is a {label} pool, which the request excluded"),
+            });
+        }
+
         let max_price_impact_pct = with_config(|cfg| cfg.swaps.direct.max_price_impact_pct);
-        if quote.price_impact_pct > max_price_impact_pct {
+        if !quote.price_impact_pct.is_finite()
+            || quote.price_impact_pct < 0.0
+            || quote.price_impact_pct > max_price_impact_pct
+        {
             return Err(QuoteError::NoRoute {
                 router: self.name().to_owned(),
                 detail: format!(
@@ -242,8 +318,8 @@ impl SwapRouter for DirectPoolRouter {
             pool: pool.to_string(),
             amount_in: intent.amount_in,
             slippage_bps: intent.slippage_bps,
-            venue: format!("{:?}", market.program()),
             accepted_min_net_out: quote.min_net_out,
+            accepted_min_out: quote.min_out,
         })
         .map_err(|e| QuoteError::RouterRejected {
             router: self.name().to_owned(),
@@ -261,12 +337,21 @@ impl SwapRouter for DirectPoolRouter {
             // overstate every sell by the platform fee and make the comparison
             // against an aggregator quote dishonest.
             output_amount: quote.expected_net_out,
+            minimum_output_amount: quote.min_net_out,
             price_impact_pct: quote.price_impact_pct,
-            fee_lamports: 0,
+            platform_fee_lamports: quote
+                .fee
+                .mint
+                .filter(direct::intent::is_wsol)
+                .map(|_| quote.fee.amount),
+            estimated_network_fee_lamports: direct::build_plan(&intent, market.as_ref(), &quote)
+                .ok()
+                .map(|plan| direct::compute::network_fee_lamports(&plan.instructions)),
             slippage_bps: quote.slippage_bps,
-            route_plan: format!("{:?}", market.program()),
+            route_plan: market.program().display_name().to_owned(),
             swap_mode: request.swap_mode,
             wallet_address: request.wallet_address.clone(),
+            exclude_dexes: request.exclude_dexes.clone(),
             execution_data,
         })
     }
@@ -280,7 +365,8 @@ impl SwapRouter for DirectPoolRouter {
         logger::info(
             LogTag::Swap,
             &format!(
-                "Direct pool swap executed: sig={}, in={}, received={}, fee={}, {}ms",
+                "Direct pool swap executed on {}: sig={}, in={}, received={}, fee={}, {}ms",
+                quote.route_plan,
                 outcome.signature,
                 outcome.amount_in,
                 outcome.receipt.received,
@@ -312,7 +398,8 @@ impl SwapRouter for DirectPoolRouter {
         logger::info(
             LogTag::Swap,
             &format!(
-                "Direct pool swap executed for wallet {wallet_id}: sig={}, in={}, received={}, fee={}, {}ms",
+                "Direct pool swap executed for wallet {wallet_id} on {}: sig={}, in={}, received={}, fee={}, {}ms",
+                quote.route_plan,
                 outcome.signature,
                 outcome.amount_in,
                 outcome.receipt.received,
@@ -339,6 +426,36 @@ impl SwapRouter for DirectPoolRouter {
 fn is_reference_mint(mint: &str) -> bool {
     mint == crate::chains::solana::constants::SOL_MINT
         || mint == crate::chains::solana::constants::USDC_MINT
+}
+
+/// The exclusion label that rules this pool's program out, if any.
+///
+/// `exclude_dexes` speaks the aggregator's vocabulary (the labels Jupiter uses
+/// in a route step), because that is what the callers already send -- today
+/// `"Pump.fun Amm"` on the graduated-token retry. Matching is case-insensitive
+/// and covers every program the label names: excluding Pump.fun must exclude the
+/// bonding curve as well as the AMM, or the retry lands right back on the venue
+/// it was told to avoid.
+fn excluded_venue(exclusions: Option<&[String]>, program: ProgramKind) -> Option<&'static str> {
+    let labels: &[&str] = match program {
+        ProgramKind::PumpFunAmm | ProgramKind::PumpFunLegacy => &["Pump.fun", "Pump.fun Amm"],
+        ProgramKind::RaydiumCpmm => &["Raydium CP"],
+        ProgramKind::RaydiumLegacyAmm => &["Raydium"],
+        ProgramKind::RaydiumClmm => &["Raydium CLMM"],
+        ProgramKind::OrcaWhirlpool => &["Whirlpool", "Orca V2"],
+        ProgramKind::MeteoraDamm => &["Meteora DAMM v2", "Meteora"],
+        ProgramKind::MeteoraDlmm => &["Meteora DLMM"],
+        ProgramKind::MeteoraDbc => &["Meteora DBC"],
+        ProgramKind::Moonit => &["Moonshot", "Moonit"],
+        ProgramKind::FluxbeamAmm => &["FluxBeam"],
+        ProgramKind::Unknown => &[],
+    };
+    let exclusions = exclusions.unwrap_or_default();
+    labels.iter().copied().find(|label| {
+        exclusions
+            .iter()
+            .any(|excluded| excluded.trim().eq_ignore_ascii_case(label))
+    })
 }
 
 fn parse_mint(mint: &str) -> QuoteResult<Pubkey> {
@@ -400,26 +517,37 @@ mod tests {
         );
     }
 
+    /// This engine only ever looks at ONE pool, so nothing it sees is a verdict
+    /// on the mint: a pool it cannot trade is a fact about that pool, and
+    /// `NotTradable` -- which retires a token permanently -- must never come
+    /// from here. `NoRoute` is the strongest claim the direct path can make.
     #[test]
-    fn only_pool_side_failures_become_a_verdict_on_the_token() {
+    fn a_pool_side_failure_is_at_most_a_no_route() {
         let pool = Pubkey::new_unique();
-        assert!(matches!(
+        for error in [
             DirectSwapError::PoolNotTradable {
                 pool,
-                detail: String::new()
-            }
-            .into_quote_error("Direct Pool"),
-            QuoteError::NotTradable { .. }
-        ));
-        assert!(matches!(
+                detail: String::new(),
+            },
+            DirectSwapError::PairNotInPool {
+                pool,
+                input_mint: Pubkey::new_unique(),
+                output_mint: Pubkey::new_unique(),
+            },
             DirectSwapError::InsufficientLiquidity {
                 pool,
                 amount_in: 1,
-                detail: String::new()
-            }
-            .into_quote_error("Direct Pool"),
-            QuoteError::NoRoute { .. }
-        ));
+                detail: String::new(),
+            },
+        ] {
+            assert!(
+                matches!(
+                    error.into_quote_error("Direct Pool"),
+                    QuoteError::NoRoute { .. }
+                ),
+                "a single pool's refusal must not retire the mint"
+            );
+        }
     }
 
     #[test]
@@ -458,6 +586,24 @@ mod tests {
             .into_quote_error("Direct Pool"),
             QuoteError::RouterRejected { .. }
         ));
+    }
+
+    /// The graduated-token retry excludes `"Pump.fun Amm"` so the sell stops
+    /// being routed through the venue that just rejected it. That exclusion has
+    /// to reach the bonding curve too, and must not quietly rule out an
+    /// unrelated venue.
+    #[test]
+    fn an_excluded_dex_label_covers_its_whole_program_family() {
+        let excluded = [String::from("Pump.fun Amm")];
+        assert!(excluded_venue(Some(&excluded), ProgramKind::PumpFunAmm).is_some());
+        assert!(excluded_venue(Some(&excluded), ProgramKind::PumpFunLegacy).is_some());
+        assert!(excluded_venue(Some(&excluded), ProgramKind::RaydiumClmm).is_none());
+        assert!(excluded_venue(None, ProgramKind::PumpFunAmm).is_none());
+
+        // Labels come from a provider's vocabulary, so casing and padding are
+        // not something a caller should have to get exactly right.
+        let padded = [String::from("  pump.fun  ")];
+        assert!(excluded_venue(Some(&padded), ProgramKind::PumpFunLegacy).is_some());
     }
 
     #[test]

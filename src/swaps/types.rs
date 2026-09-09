@@ -52,13 +52,48 @@ pub struct Quote {
     pub output_mint: String,
     pub input_amount: u64,
     pub output_amount: u64,
+    /// The minimum amount the receiving wallet is guaranteed to keep.  This is
+    /// router-authored: it is not derivable from `output_amount` when a fee is
+    /// collected on the output leg.
+    pub minimum_output_amount: u64,
     pub price_impact_pct: f64,
-    pub fee_lamports: u64,
+    /// A platform fee expressed in WSOL lamports, only when the router can
+    /// honestly establish both the fee amount and mint.
+    pub platform_fee_lamports: Option<u64>,
+    /// The router's estimate of the network fee for this quote, in lamports.
+    pub estimated_network_fee_lamports: Option<u64>,
     pub slippage_bps: u16,
     pub route_plan: String,
     pub swap_mode: SwapMode,
     pub wallet_address: String,
+    /// Constraints from the request which must survive a fallback/re-quote.
+    pub exclude_dexes: Option<Vec<String>>,
     pub execution_data: Vec<u8>,
+}
+
+/// Which router a caller intends to use.
+///
+/// `Auto` compares every enabled router and takes the best net output;
+/// `Specific` asks exactly one registered router and fails if it cannot serve
+/// the trade. This is a routing decision, not a wire type: an API surface
+/// carries the router id as a plain string and parses it here, so an unknown
+/// id is refused by the registry rather than by a deserializer.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RouterChoice {
+    Auto,
+    Specific(String),
+}
+
+impl RouterChoice {
+    /// Read a caller's selection. Absent, blank and `"auto"` all mean `Auto`;
+    /// anything else names a router id the registry must resolve.
+    pub fn parse(value: Option<&str>) -> Self {
+        match value.map(str::trim).filter(|value| !value.is_empty()) {
+            None => Self::Auto,
+            Some(id) if id.eq_ignore_ascii_case("auto") => Self::Auto,
+            Some(id) => Self::Specific(id.to_owned()),
+        }
+    }
 }
 
 /// Swap execution result (router-agnostic)

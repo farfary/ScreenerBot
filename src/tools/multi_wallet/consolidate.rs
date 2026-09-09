@@ -196,6 +196,8 @@ async fn transfer_token_to_main(
             sig,
             0.0, // No SOL spent
             Some(balance as f64),
+            None,
+            None,
         )),
         Err(e) => Some(WalletOpResult::failure(
             wallet_id,
@@ -248,6 +250,8 @@ async fn close_wallet_atas(wallet: &Wallet, include_token_2022: bool) -> Vec<Wal
                     wallet_address.clone(),
                     sig,
                     0.00203, // Approximate rent reclaimed
+                    None,
+                    None,
                     None,
                 ));
             }
