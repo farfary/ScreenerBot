@@ -24,28 +24,16 @@
   margin-bottom: 0.75rem;
 }
 
+/* Bare glyph: no tile and no pulse. The banner's own colour and its "TRADING
+   HALTED" label already say the state, and a blinking icon says it in a way a
+   colour-blind or motion-sensitive reader cannot read at all. */
 .force-stop-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-lg);
-  background: var(--danger-alpha-20);
   color: var(--error-color);
-  font-size: 1.1rem;
-  animation: force-stop-pulse 1.5s ease-in-out infinite;
-}
-
-@keyframes force-stop-pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-
-  50% {
-    opacity: 0.6;
-  }
+  font-size: 1.5rem;
+  flex-shrink: 0;
 }
 
 .force-stop-info {
@@ -252,108 +240,25 @@
 
 /* .btn-sm is now in components.css */
 
-.config-overview-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.875rem;
-  padding: 0.25rem 0;
-}
-
-@media (width <= 1400px) {
-  .config-overview-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 1.25rem;
-  }
-}
-
-@media (width <= 768px) {
-  .config-overview-grid {
-    grid-template-columns: 1fr;
-    gap: 1rem;
-  }
-}
-
-.config-column {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.config-column-header {
-  font-weight: 600;
-  font-size: 0.6875rem;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  padding-bottom: 0.375rem;
-  border-bottom: 1px solid var(--primary-alpha-20);
-}
-
-.config-items-compact {
-  display: flex;
-  flex-direction: column;
-  gap: 0.375rem;
-}
-
-.config-item-compact {
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-  font-size: 0.6875rem;
-  padding: 0.125rem 0;
-}
-
-.config-item-compact .status-icon {
-  width: 13px;
-  height: 13px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  font-size: 11px;
-}
-
-.config-item-compact .status-icon.enabled {
-  color: var(--success);
-}
-
-.config-item-compact .status-icon.disabled {
-  color: var(--text-tertiary);
-  opacity: 0.5;
-}
-
-.config-item-compact .label {
-  color: var(--text-secondary);
-  flex-shrink: 0;
-  min-width: fit-content;
-}
-
-.config-item-compact .value {
-  color: var(--text-primary);
-  font-weight: 500;
-  margin-left: auto;
-  text-align: right;
-  font-family: var(--font-data);
-  font-feature-settings:
-    "tnum" 1,
-    "zero" 1;
-}
-
 /* Metrics Grid */
 .metrics-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.5rem; /* Reduced from 0.625rem for tighter spacing */
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 0.5rem;
 }
 
-@media (width <= 1400px) {
-  .metrics-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
+/* Loss limit recovery actions — shown only once the limit has actually tripped. */
+.loss-limit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.625rem;
 }
 
-@media (width <= 768px) {
-  .metrics-grid {
-    grid-template-columns: 1fr;
-  }
+.loss-limit-actions .btn {
+  flex: 1 1 auto;
+}
+
+.loss-limit-panel--off {
+  opacity: 0.75;
 }

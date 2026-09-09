@@ -22,7 +22,7 @@ export function createTraderControls({
   state: _state,
   $,
   Utils,
-  requestManager: _requestManager,
+  requestManager,
   ConfirmationDialog,
   playToggleOn,
   playToggleOff,
@@ -52,7 +52,13 @@ export function createTraderControls({
     const isRunning = status?.running === true;
     const isAvailable = status?.available !== false && status !== undefined && status !== null;
     traderAvailable = isAvailable;
-    const statusText = !isAvailable ? "Setup required" : isRunning ? "Running" : "Stopped";
+    // The backend owns the wording for why the trader cannot run; substituting our
+    // own "Setup required" hid the actual blocker.
+    const statusText = !isAvailable
+      ? status?.unavailable_reason || "Setup required"
+      : isRunning
+        ? "Running"
+        : "Stopped";
     const statusAttr = isRunning ? "running" : "stopped";
     const toggleLabel = !isAvailable ? "UNAVAILABLE" : isRunning ? "ON" : "OFF";
 
@@ -147,11 +153,9 @@ export function createTraderControls({
    */
   async function fetchTraderStatus() {
     try {
-      const response = await fetch("/api/trader/status");
-      if (response.ok) {
-        const data = await response.json();
-        updateAutoTraderStatusBars(data);
-      }
+      updateAutoTraderStatusBars(
+        await requestManager.fetch("/api/trader/status", { priority: "normal" })
+      );
     } catch (error) {
       console.warn("[Trader] Failed to fetch trader status:", error);
     }
@@ -165,26 +169,27 @@ export function createTraderControls({
    * Load trading controls status from API
    */
   async function loadControlsStatus() {
-    try {
-      // These endpoints return the status object directly (success_response =
-      // raw Json(data), no { success, data } envelope), so pass it as-is.
-      const forceStopRes = await fetch("/api/trader/force-stop/status");
-      if (forceStopRes.ok) {
-        updateForceStopBanner(await forceStopRes.json());
-      }
+    // These endpoints return the status object directly (success_response =
+    // raw Json(data), no { success, data } envelope), so pass it as-is.
+    //
+    // Three independent reads, so they go out together and through requestManager —
+    // awaiting raw fetches one after another cost three round trips every 5s with no
+    // dedupe, no priority and no cancellation on tab switch.
+    const read = (url) =>
+      requestManager.fetch(url, { priority: "normal" }).catch((err) => {
+        console.error(`[Trader] Failed to load ${url}:`, err);
+        return null;
+      });
 
-      const monitorsRes = await fetch("/api/trader/monitors/status");
-      if (monitorsRes.ok) {
-        updateMonitorControls(await monitorsRes.json());
-      }
+    const [forceStop, monitors, lossLimit] = await Promise.all([
+      read("/api/trader/force-stop/status"),
+      read("/api/trader/monitors/status"),
+      read("/api/trader/loss-limit/status"),
+    ]);
 
-      const lossLimitRes = await fetch("/api/trader/loss-limit/status");
-      if (lossLimitRes.ok) {
-        updateLossLimitPanel(await lossLimitRes.json());
-      }
-    } catch (err) {
-      console.error("[Trader] Failed to load controls status:", err);
-    }
+    if (forceStop) updateForceStopBanner(forceStop);
+    if (monitors) updateMonitorControls(monitors);
+    updateLossLimitPanel(lossLimit);
   }
 
   /**
@@ -231,17 +236,26 @@ export function createTraderControls({
       exitToggle.disabled = !available || (data.force_stopped ?? false);
     }
 
-    if (entryStatus) {
-      const running = data.entry_monitor?.running ?? false;
-      entryStatus.textContent = !available ? "Setup required" : running ? "Running" : "Stopped";
-      entryStatus.className = "control-status " + (running ? "status-running" : "status-stopped");
-    }
+    // A monitor can be enabled and still not be running because the Auto Trader
+    // master switch is off. Saying "Stopped" for both conflated a user's own setting
+    // with a monitor that failed to start.
+    const masterOff = data.master_enabled === false;
+    const paint = (el, monitor) => {
+      if (!el) return;
+      const running = monitor?.running ?? false;
+      const text = !available
+        ? "Setup required"
+        : running
+          ? "Running"
+          : masterOff
+            ? "Auto Trader off"
+            : "Stopped";
+      el.textContent = text;
+      el.className = "control-status " + (running ? "status-running" : "status-stopped");
+    };
 
-    if (exitStatus) {
-      const running = data.exit_monitor?.running ?? false;
-      exitStatus.textContent = !available ? "Setup required" : running ? "Running" : "Stopped";
-      exitStatus.className = "control-status " + (running ? "status-running" : "status-stopped");
-    }
+    paint(entryStatus, data.entry_monitor);
+    paint(exitStatus, data.exit_monitor);
   }
 
   /**
@@ -249,25 +263,38 @@ export function createTraderControls({
    */
   function updateLossLimitPanel(data) {
     const panel = $("#loss-limit-panel");
-
     if (!panel) return;
-
-    if (!data || !data.enabled) {
-      panel.style.display = "none";
-      return;
-    }
-
-    panel.style.display = "block";
 
     const value = $("#loss-limit-value");
     const progress = $("#loss-limit-progress");
     const period = $("#loss-limit-period");
     const status = $("#loss-limit-status");
+    const actions = $("#loss-limit-actions");
+
+    // The panel stays on screen when the limit is off. Hiding it made the safety net
+    // invisible, so a user could not tell whether it existed or was simply disabled.
+    const enabled = Boolean(data?.enabled);
+    panel.classList.toggle("loss-limit-panel--off", !enabled);
+
+    if (!enabled) {
+      if (value) value.textContent = "Off";
+      if (progress) {
+        progress.style.width = "0%";
+        progress.classList.remove("limit-exceeded", "limit-warning");
+      }
+      if (period) period.textContent = "No period loss limit configured";
+      if (status) {
+        status.textContent = "";
+        status.className = "loss-limit-status";
+      }
+      if (actions) actions.hidden = true;
+      return;
+    }
 
     if (value) {
-      const currentLoss = data.current_loss_sol?.toFixed(4) ?? "0.0000";
-      const limitSol = data.limit_sol?.toFixed(4) ?? "0.0000";
-      value.textContent = `${currentLoss} / ${limitSol} SOL`;
+      const currentLoss = Utils.formatSol(data.current_loss_sol, { suffix: "", fallback: "—" });
+      const limitSol = Utils.formatSol(data.limit_sol, { fallback: "—" });
+      value.textContent = `${currentLoss} / ${limitSol}`;
     }
 
     if (progress) {
@@ -290,14 +317,13 @@ export function createTraderControls({
     }
 
     if (status) {
-      if (data.is_limited) {
-        status.textContent = "LIMIT REACHED";
-        status.className = "loss-limit-status status-limited";
-      } else {
-        status.textContent = "";
-        status.className = "loss-limit-status";
-      }
+      status.textContent = data.is_limited ? "LIMIT REACHED" : "";
+      status.className = data.is_limited ? "loss-limit-status status-limited" : "loss-limit-status";
     }
+
+    // /loss-limit/resume and /loss-limit/reset existed with no caller, so a tripped
+    // limit was a dead end: the panel said "LIMIT REACHED" and offered no way out.
+    if (actions) actions.hidden = !data.is_limited;
   }
 
   /**
@@ -323,12 +349,20 @@ export function createTraderControls({
             body: JSON.stringify({ reason: "Manual force stop from dashboard" }),
           });
           if (res.ok) {
-            Utils.showToast("Force stop activated", "warning");
+            Utils.showToast({
+              key: "trader-force-stop",
+              type: "warning",
+              title: "Force stop activated",
+            });
             playToggleOff();
             await loadControlsStatus();
           } else {
             const data = await res.json().catch(() => null);
-            Utils.showToast({ type: "error", title: "Could not activate force stop", message: data?.error?.message || null });
+            Utils.showToast({
+              type: "error",
+              title: "Could not activate force stop",
+              message: data?.error?.message || null,
+            });
             playError();
           }
         } catch {
@@ -345,18 +379,79 @@ export function createTraderControls({
         try {
           const res = await fetch("/api/trader/resume", { method: "POST" });
           if (res.ok) {
-            Utils.showToast("Force stop cleared", "success");
+            Utils.showToast({
+              key: "trader-force-stop",
+              type: "success",
+              title: "Force stop cleared",
+            });
             playToggleOn();
             await loadControlsStatus();
           } else {
             const data = await res.json().catch(() => null);
-            Utils.showToast({ type: "error", title: "Could not resume trading", message: data?.error?.message || null });
+            Utils.showToast({
+              type: "error",
+              title: "Could not resume trading",
+              message: data?.error?.message || null,
+            });
             playError();
           }
         } catch {
           Utils.showToast({ type: "error", title: "Could not resume trading" });
           playError();
         }
+      });
+    }
+
+    // Loss limit recovery. Both endpoints already existed; nothing called them.
+    const lossLimitAction = async (endpoint, failureTitle) => {
+      try {
+        const res = await fetch(endpoint, { method: "POST" });
+        if (res.ok) {
+          playToggleOn();
+          await loadControlsStatus();
+        } else {
+          const data = await res.json().catch(() => null);
+          Utils.showToast({
+            key: "loss-limit-action",
+            type: "error",
+            title: failureTitle,
+            message: data?.error?.message || null,
+          });
+          playError();
+        }
+      } catch {
+        Utils.showToast({ key: "loss-limit-action", type: "error", title: failureTitle });
+        playError();
+      }
+    };
+
+    const lossLimitResumeBtn = $("#loss-limit-resume-btn");
+    if (lossLimitResumeBtn) {
+      addTrackedListener(lossLimitResumeBtn, "click", async () => {
+        const result = await ConfirmationDialog.show({
+          title: "Resume After Loss Limit",
+          message:
+            "The period loss limit stopped new entries. Resuming lets the trader open positions again before the period resets. Continue?",
+          confirmLabel: "Resume trading",
+          variant: "warning",
+        });
+        if (!result.confirmed) return;
+        await lossLimitAction("/api/trader/loss-limit/resume", "Could not resume trading");
+      });
+    }
+
+    const lossLimitResetBtn = $("#loss-limit-reset-btn");
+    if (lossLimitResetBtn) {
+      addTrackedListener(lossLimitResetBtn, "click", async () => {
+        const result = await ConfirmationDialog.show({
+          title: "Reset Loss Limit Period",
+          message:
+            "This clears the accumulated loss for the current period and starts a new one. Continue?",
+          confirmLabel: "Reset period",
+          variant: "warning",
+        });
+        if (!result.confirmed) return;
+        await lossLimitAction("/api/trader/loss-limit/reset", "Could not reset the loss limit");
       });
     }
 
@@ -373,14 +468,23 @@ export function createTraderControls({
           if (!res.ok) {
             e.target.checked = !e.target.checked; // Revert
             const data = await res.json().catch(() => null);
-            Utils.showToast({ key: "monitor-toggle", type: "error", title: "Could not toggle the entry monitor", message: data?.error?.message || null });
+            Utils.showToast({
+              key: "monitor-toggle",
+              type: "error",
+              title: "Could not toggle the entry monitor",
+              message: data?.error?.message || null,
+            });
             playError();
           } else {
             e.target.checked ? playToggleOn() : playToggleOff();
           }
         } catch {
           e.target.checked = !e.target.checked;
-          Utils.showToast({ key: "monitor-toggle", type: "error", title: "Could not toggle the entry monitor" });
+          Utils.showToast({
+            key: "monitor-toggle",
+            type: "error",
+            title: "Could not toggle the entry monitor",
+          });
           playError();
         }
       });
@@ -399,14 +503,23 @@ export function createTraderControls({
           if (!res.ok) {
             e.target.checked = !e.target.checked; // Revert
             const data = await res.json().catch(() => null);
-            Utils.showToast({ key: "monitor-toggle", type: "error", title: "Could not toggle the exit monitor", message: data?.error?.message || null });
+            Utils.showToast({
+              key: "monitor-toggle",
+              type: "error",
+              title: "Could not toggle the exit monitor",
+              message: data?.error?.message || null,
+            });
             playError();
           } else {
             e.target.checked ? playToggleOn() : playToggleOff();
           }
         } catch {
           e.target.checked = !e.target.checked;
-          Utils.showToast({ key: "monitor-toggle", type: "error", title: "Could not toggle the exit monitor" });
+          Utils.showToast({
+            key: "monitor-toggle",
+            type: "error",
+            title: "Could not toggle the exit monitor",
+          });
           playError();
         }
       });

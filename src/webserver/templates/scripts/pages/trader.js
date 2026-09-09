@@ -44,11 +44,16 @@ function createLifecycle() {
   let walletCopyPoller = null;
   let configPoller = null;
   let strategiesPoller = null;
-  let timestampPoller = null;
   let lifecycleContext = null;
 
-  // Hash guard — skip positions summary re-render when data is unchanged
-  let _lastPositionsKey = null;
+  // Realized window for the Stats tab, in days. Owned here and sent to the API —
+  // the tab never labels a window it did not ask for.
+  let statsPeriodDays = 30;
+
+  // Hash guards — a 5s poll must not rewrite innerHTML that has not changed, or it
+  // destroys the user's text selection on every tick.
+  let _lastDailyKey = null;
+  let _lastExitKey = null;
 
   // Event cleanup tracking
   const eventCleanups = [];
@@ -294,9 +299,6 @@ function createLifecycle() {
         configCards?.snapshot();
       }
 
-      // Update config overview in stats tab
-      updateConfigOverview();
-
       // Update visual examples with loaded values
       examples.updateStopLossExample();
       examples.updateRoiExample();
@@ -308,83 +310,6 @@ function createLifecycle() {
         title: "Load Failed",
         message: "Failed to load trader configuration",
       });
-    }
-  }
-
-  /**
-   * Update config overview section in stats tab
-   */
-  function updateConfigOverview() {
-    if (!state.config) return;
-
-    const trader = state.config.trader || {};
-    const positions = state.config.positions || {};
-
-    // Exit Strategies
-    updateConfigItem(
-      "stop-loss-status",
-      trader.stop_loss_enabled,
-      `${trader.stop_loss_threshold_pct || 50}%`
-    );
-    updateConfigItem("roi-status", trader.roi_exit_enabled, `${trader.roi_target_percent || 20}%`);
-    updateConfigItem(
-      "trailing-status",
-      positions.trailing_stop_enabled,
-      `${positions.trailing_stop_activation_pct || 10}%→${positions.trailing_stop_distance_pct || 5}%`
-    );
-    updateConfigItem(
-      "time-status",
-      trader.time_override_enabled,
-      `${trader.time_override_duration || 168}${trader.time_override_unit?.[0] || "h"} @ ${trader.time_override_loss_threshold_percent || -40}%`
-    );
-
-    // Position Management
-    const maxPositionsEl = $("#config-max-positions");
-    if (maxPositionsEl) maxPositionsEl.textContent = trader.max_open_positions || 2;
-
-    const tradeSizeEl = $("#config-trade-size");
-    if (tradeSizeEl) tradeSizeEl.textContent = `${trader.trade_size_sol || 0.005} SOL`;
-
-    updateConfigItem(
-      "dca-status",
-      trader.dca_enabled,
-      `${trader.dca_threshold_pct || -10}% (${trader.dca_max_count || 2}x, ${trader.dca_size_percentage || 50}%)`
-    );
-
-    // Risk Controls
-    const closeCooldownEl = $("#config-close-cooldown");
-    if (closeCooldownEl) {
-      const seconds = Number.isFinite(trader.close_cooldown_seconds)
-        ? trader.close_cooldown_seconds
-        : 600;
-      const minutes = seconds / 60;
-      closeCooldownEl.textContent = minutes < 1 ? "<1m" : `${Math.round(minutes)}m`;
-    }
-
-    const entryConcurrencyEl = $("#config-entry-concurrency");
-    if (entryConcurrencyEl) entryConcurrencyEl.textContent = trader.entry_monitor_concurrency || 10;
-  }
-
-  /**
-   * Update individual config item with enable/disable status
-   */
-  function updateConfigItem(id, enabled, value) {
-    const el = $(`#${id}`);
-    if (!el) return;
-
-    const icon = enabled
-      ? '<i class="icon-circle-check status-icon enabled"></i>'
-      : '<i class="icon-circle status-icon disabled"></i>';
-    const displayValue = enabled ? value : "Disabled";
-    const labelEl = el.querySelector(".label");
-    const valueEl = el.querySelector(".value");
-
-    if (labelEl && valueEl) {
-      const iconEl = el.querySelector("i");
-      if (iconEl) {
-        iconEl.outerHTML = icon;
-      }
-      valueEl.textContent = displayValue;
     }
   }
 
@@ -491,113 +416,268 @@ function createLifecycle() {
   }
 
   /**
-   * Load statistics for Stats tab
+   * Load statistics for the Stats tab.
+   *
+   * The handler is the only place that aggregates: every figure below is read from
+   * the response as-is. Nothing is re-derived here, and a `null` means the window
+   * holds nothing to derive the figure from, so it renders as an em dash rather
+   * than a fabricated zero.
    */
   async function loadStats() {
     try {
-      const data = await requestManager.fetch("/api/trader/stats", {
+      const data = await requestManager.fetch(`/api/trader/stats?days=${statsPeriodDays}`, {
         priority: "normal",
       });
 
-      // Update stats period
-      const statsPeriod = $("#stats-period");
-      if (statsPeriod) {
-        statsPeriod.textContent = "Last 30 days";
+      const pct = (value, decimals = 1) =>
+        Utils.formatPercentValue(value, { decimals, fallback: "—" });
+      const sol = (value, decimals = 4) => Utils.formatSol(value, { decimals, fallback: "—" });
+      const setValue = (id, text, tone) => {
+        const el = $(`#${id}`);
+        if (!el) return;
+        el.textContent = text;
+        el.className = tone ? `metric-value ${tone}` : "metric-value";
+      };
+      const setDetail = (id, text) => {
+        const el = $(`#${id}`);
+        if (el) el.textContent = text;
+      };
+      const tone = (value) => {
+        if (!Number.isFinite(value) || value === 0) return null;
+        return value > 0 ? "positive" : "negative";
+      };
+
+      // Net P&L — the booked, fee- and DCA-aware SOL the window actually returned.
+      setValue(
+        "net-pnl",
+        Number.isFinite(data.total_pnl_sol)
+          ? `${data.total_pnl_sol > 0 ? "+" : ""}${sol(data.total_pnl_sol)}`
+          : "—",
+        tone(data.total_pnl_sol)
+      );
+      setDetail(
+        "net-pnl-detail",
+        data.total_trades > 0
+          ? `${sol(data.gross_profit_sol)} won · ${sol(data.gross_loss_sol)} lost`
+          : "No closed trades in this window"
+      );
+
+      setValue(
+        "win-rate",
+        pct(data.win_rate_pct, 1),
+        Number.isFinite(data.win_rate_pct) && data.win_rate_pct >= 50 ? "positive" : null
+      );
+      setDetail(
+        "win-rate-detail",
+        data.total_trades > 0 ? `${data.winners} wins · ${data.losers} losses` : "—"
+      );
+
+      setValue(
+        "profit-factor",
+        Number.isFinite(data.profit_factor) ? data.profit_factor.toFixed(2) : "—",
+        Number.isFinite(data.profit_factor)
+          ? data.profit_factor >= 1
+            ? "positive"
+            : "negative"
+          : null
+      );
+      setDetail(
+        "profit-factor-detail",
+        Number.isFinite(data.expectancy_sol)
+          ? `${sol(data.expectancy_sol)} expected per trade`
+          : "Gross won ÷ gross lost"
+      );
+
+      setValue(
+        "max-drawdown",
+        data.total_trades > 0 ? sol(data.max_drawdown_sol) : "—",
+        data.max_drawdown_sol > 0 ? "negative" : null
+      );
+      setDetail("max-drawdown-detail", "Deepest realized peak-to-trough");
+
+      setValue("capital-at-work", sol(data.locked_sol));
+      setDetail(
+        "capital-at-work-detail",
+        `${data.open_positions_count} of ${data.max_open_positions} position slots used`
+      );
+
+      const hasWin = Number.isFinite(data.avg_win_pct);
+      const hasLoss = Number.isFinite(data.avg_loss_pct);
+      setValue(
+        "avg-win-loss",
+        hasWin || hasLoss ? `${pct(data.avg_win_pct)} / ${pct(data.avg_loss_pct)}` : "—"
+      );
+      setDetail("avg-win-loss-detail", "Average outcome of a winning vs losing trade");
+
+      setValue("total-trades", data.total_trades > 0 ? String(data.total_trades) : "—");
+      setDetail(
+        "total-trades-detail",
+        data.total_trades === 1 ? "1 position closed" : `${data.total_trades} positions closed`
+      );
+
+      const holdText = (hours) =>
+        Number.isFinite(hours) ? Utils.formatUptime(hours * 3600, { style: "short" }) : "—";
+      setValue("median-hold", holdText(data.median_hold_time_hours));
+      setDetail(
+        "median-hold-detail",
+        Number.isFinite(data.avg_hold_time_hours)
+          ? `${holdText(data.avg_hold_time_hours)} average`
+          : "—"
+      );
+
+      // Rounds with an incomplete cost basis carry no honest P&L and are left out of
+      // every figure above. Saying so is the difference between a filtered number and
+      // a wrong one.
+      const excludedEl = $("#stats-excluded");
+      if (excludedEl) {
+        const n = data.excluded_untrusted || 0;
+        excludedEl.hidden = n === 0;
+        excludedEl.textContent =
+          n === 0
+            ? ""
+            : `${n} closed ${n === 1 ? "round" : "rounds"} excluded — no complete cost basis, so no honest P&L.`;
       }
 
-      // Update performance metrics
-      const winRate = $("#win-rate");
-      const winRateDetail = $("#win-rate-detail");
-      const totalPnl = $("#total-pnl");
-      const totalPnlDetail = $("#total-pnl-detail");
-      const totalTrades = $("#total-trades");
-      const totalTradesDetail = $("#total-trades-detail");
-      const avgHoldTime = $("#avg-hold-time");
-      const avgHoldTimeDetail = $("#avg-hold-time-detail");
-      const bestTrade = $("#best-trade");
-      const bestTradeDetail = $("#best-trade-detail");
-      const worstTrade = $("#worst-trade");
-      const worstTradeDetail = $("#worst-trade-detail");
-
-      // Win Rate
-      if (winRate) {
-        const rate = data.win_rate_pct.toFixed(1);
-        winRate.textContent = `${rate}%`;
-        winRate.className = `metric-value ${data.win_rate_pct >= 50 ? "positive" : ""}`;
-      }
-      if (winRateDetail) {
-        const wins = Math.round((data.total_trades * data.win_rate_pct) / 100);
-        const losses = data.total_trades - wins;
-        winRateDetail.textContent = `${wins} wins, ${losses} losses`;
-      }
-
-      // Total P&L (calculated from exit breakdown)
-      if (totalPnl && data.exit_breakdown) {
-        const totalProfit = data.exit_breakdown.reduce((sum, exit) => {
-          return sum + exit.avg_profit_pct * exit.count;
-        }, 0);
-        const avgProfit = data.total_trades > 0 ? totalProfit / data.total_trades : 0;
-        totalPnl.textContent = `${avgProfit >= 0 ? "+" : ""}${avgProfit.toFixed(1)}%`;
-        totalPnl.className = `metric-value ${avgProfit >= 0 ? "positive" : "negative"}`;
-      }
-      if (totalPnlDetail) {
-        totalPnlDetail.textContent = "Average profit per trade";
-      }
-
-      // Total Trades
-      if (totalTrades) {
-        totalTrades.textContent = data.total_trades;
-      }
-      if (totalTradesDetail) {
-        totalTradesDetail.textContent =
-          data.total_trades === 1 ? "1 position closed" : `${data.total_trades} positions closed`;
-      }
-
-      // Avg Hold Time
-      if (avgHoldTime) {
-        const seconds = data.avg_hold_time_hours * 3600;
-        avgHoldTime.textContent = Utils.formatUptime(seconds, { style: "short" });
-      }
-      if (avgHoldTimeDetail) {
-        const seconds = data.avg_hold_time_hours * 3600;
-        avgHoldTimeDetail.textContent = Utils.formatUptime(seconds, { style: "detailed" });
-      }
-
-      // Best Trade
-      if (bestTrade) {
-        const pct = data.best_trade_pct;
-        bestTrade.textContent = `${pct > 0 ? "+" : ""}${pct.toFixed(1)}%`;
-        bestTrade.className = `metric-value ${pct >= 0 ? "positive" : ""}`;
-      }
-      if (bestTradeDetail) {
-        bestTradeDetail.textContent = data.best_trade_token || "No trades yet";
-      }
-
-      // Worst Trade (calculate from exit breakdown or set placeholder)
-      if (worstTrade) {
-        const worstPct = data.worst_trade_pct ?? 0;
-        worstTrade.textContent = `${worstPct > 0 ? "+" : ""}${worstPct.toFixed(1)}%`;
-        worstTrade.className = `metric-value ${worstPct < 0 ? "negative" : ""}`;
-      }
-      if (worstTradeDetail) {
-        worstTradeDetail.textContent = data.worst_trade_token || "No trades yet";
-      }
-
-      // Render the exit strategy breakdown (was previously never rendered)
-      renderExitBreakdown(data.exit_breakdown);
-
-      // Update positions summary (if we have active positions)
-      await updatePositionsSummary();
+      renderDailyPnl(data.daily_pnl, data.total_pnl_sol);
+      renderExtremes(data);
+      renderExitBreakdown(data.exit_breakdown, data.period_days);
     } catch (error) {
       console.error("[Trader] Failed to load stats:", error);
-      // Show error state in UI
-      const winRate = $("#win-rate");
-      const totalTrades = $("#total-trades");
-      const avgHoldTime = $("#avg-hold-time");
-      if (winRate) winRate.textContent = "—";
-      if (totalTrades) totalTrades.textContent = "—";
-      if (avgHoldTime) avgHoldTime.textContent = "—";
+      for (const id of [
+        "net-pnl",
+        "win-rate",
+        "profit-factor",
+        "max-drawdown",
+        "capital-at-work",
+        "avg-win-loss",
+        "total-trades",
+        "median-hold",
+      ]) {
+        const el = $(`#${id}`);
+        if (el) {
+          el.textContent = "—";
+          el.className = "metric-value";
+        }
+      }
     }
+  }
+
+  /**
+   * Switch the realized window and reload immediately, so the click is answered by
+   * the panel rather than by the next poll tick.
+   */
+  function setStatsPeriod(days) {
+    if (days === statsPeriodDays) return;
+    statsPeriodDays = days;
+    for (const btn of $$("#stats-period .stats-period-btn")) {
+      btn.classList.toggle("active", Number(btn.dataset.days) === days);
+    }
+    _lastDailyKey = null;
+    _lastExitKey = null;
+    void loadStats();
+  }
+
+  /**
+   * Render the daily realized P&L: one bar per day plus the cumulative line.
+   *
+   * Hand-built SVG on purpose — this is a fixed-size, non-interactive shape, and a
+   * charting library would cost more than the whole panel.
+   */
+  function renderDailyPnl(days, totalPnlSol) {
+    const container = $("#daily-pnl");
+    if (!container) return;
+
+    const totalEl = $("#daily-pnl-total");
+    if (totalEl) {
+      const finite = Number.isFinite(totalPnlSol);
+      totalEl.textContent = finite
+        ? `${totalPnlSol > 0 ? "+" : ""}${Utils.formatSol(totalPnlSol, { fallback: "—" })}`
+        : "—";
+      totalEl.className = `daily-pnl-total${finite && totalPnlSol !== 0 ? (totalPnlSol > 0 ? " positive" : " negative") : ""}`;
+    }
+
+    if (!Array.isArray(days) || days.every((d) => (d.trades || 0) === 0)) {
+      container.innerHTML =
+        '<div class="info-state"><i class="icon-inbox"></i><span>No closed trades in this window</span></div>';
+      _lastDailyKey = null;
+      return;
+    }
+
+    const key = days.map((d) => `${d.date}:${d.net_pnl_sol.toFixed(6)}`).join("|");
+    if (key === _lastDailyKey) return;
+    _lastDailyKey = key;
+
+    const W = 100;
+    const H = 40;
+    const slot = W / days.length;
+    const barW = Math.max(slot * 0.62, 0.35);
+
+    const peak = Math.max(...days.map((d) => Math.abs(d.net_pnl_sol)), 1e-9);
+    const mid = H / 2;
+    const bars = days
+      .map((d, i) => {
+        const h = (Math.abs(d.net_pnl_sol) / peak) * (mid - 1);
+        const x = i * slot + (slot - barW) / 2;
+        const y = d.net_pnl_sol >= 0 ? mid - h : mid;
+        const cls = d.net_pnl_sol >= 0 ? "positive" : "negative";
+        return `<rect class="daily-pnl-bar ${cls}" x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${barW.toFixed(2)}" height="${Math.max(h, 0.4).toFixed(2)}"></rect>`;
+      })
+      .join("");
+
+    // Cumulative line on its own scale, so a flat run of small days stays readable.
+    let running = 0;
+    const cumulative = days.map((d) => (running += d.net_pnl_sol));
+    const cMin = Math.min(0, ...cumulative);
+    const cMax = Math.max(0, ...cumulative);
+    const cSpan = cMax - cMin || 1e-9;
+    const points = cumulative
+      .map((v, i) => {
+        const x = i * slot + slot / 2;
+        const y = H - ((v - cMin) / cSpan) * (H - 2) - 1;
+        return `${x.toFixed(2)},${y.toFixed(2)}`;
+      })
+      .join(" ");
+
+    const first = days[0];
+    const last = days[days.length - 1];
+    container.innerHTML = `
+      <svg class="daily-pnl-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img"
+           aria-label="Daily realized profit and loss in SOL">
+        <line class="daily-pnl-zero" x1="0" y1="${mid}" x2="${W}" y2="${mid}"></line>
+        ${bars}
+        <polyline class="daily-pnl-line" points="${points}"></polyline>
+      </svg>
+      <div class="daily-pnl-axis">
+        <span>${Utils.escapeHtml(first.date)}</span>
+        <span>${Utils.escapeHtml(last.date)}</span>
+      </div>`;
+  }
+
+  /**
+   * Best and worst closed round in the window.
+   */
+  function renderExtremes(data) {
+    const wrap = $("#stats-extremes");
+    if (!wrap) return;
+
+    const hasAny = Number.isFinite(data.best_trade_pct) || Number.isFinite(data.worst_trade_pct);
+    wrap.hidden = !hasAny;
+    if (!hasAny) return;
+
+    const paint = (valueId, tokenId, value, token) => {
+      const valueEl = $(`#${valueId}`);
+      const tokenEl = $(`#${tokenId}`);
+      if (valueEl) {
+        valueEl.textContent = Utils.formatPercentValue(value, { decimals: 1, fallback: "—" });
+        valueEl.className = `stats-extreme-value${
+          Number.isFinite(value) && value !== 0 ? (value > 0 ? " positive" : " negative") : ""
+        }`;
+      }
+      if (tokenEl) tokenEl.textContent = token || "—";
+    };
+
+    paint("best-trade", "best-trade-token", data.best_trade_pct, data.best_trade_token);
+    paint("worst-trade", "worst-trade-token", data.worst_trade_pct, data.worst_trade_token);
   }
 
   // Humanize a closed_reason / exit_type into a readable label.
@@ -624,124 +704,52 @@ function createLifecycle() {
 
   /**
    * Render the exit strategy breakdown list (how positions were closed).
+   *
+   * Guarded by a content hash: without it the 5s poll rewrote this innerHTML on
+   * every tick and destroyed any text the user had selected in it.
    */
-  function renderExitBreakdown(breakdown) {
+  function renderExitBreakdown(breakdown, periodDays) {
     const container = $("#exit-breakdown");
     if (!container) return;
 
     if (!Array.isArray(breakdown) || breakdown.length === 0) {
-      container.innerHTML =
-        '<div class="info-state"><i class="icon-inbox"></i><span>No closed trades in the last 30 days</span></div>';
+      const label = periodDays === 1 ? "24 hours" : `${periodDays} days`;
+      container.innerHTML = `<div class="info-state"><i class="icon-inbox"></i><span>No closed trades in the last ${Utils.escapeHtml(label)}</span></div>`;
+      _lastExitKey = null;
       return;
     }
 
+    const key = breakdown
+      .map((e) => `${e.exit_type}:${e.count}:${(e.net_pnl_sol || 0).toFixed(6)}`)
+      .join("|");
+    if (key === _lastExitKey) return;
+    _lastExitKey = key;
+
     const totalCount = breakdown.reduce((sum, e) => sum + (e.count || 0), 0) || 1;
 
-    const rows = breakdown
+    container.innerHTML = breakdown
       .map((e) => {
         const count = e.count || 0;
-        const pct = e.avg_profit_pct || 0;
+        const avgPct = e.avg_profit_pct || 0;
+        const netSol = e.net_pnl_sol || 0;
         const share = Math.round((count / totalCount) * 100);
-        const profitClass = pct >= 0 ? "positive" : "negative";
-        const profitText = `${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%`;
+        const barClass = netSol >= 0 ? "positive" : "negative";
         return `
           <div class="exit-breakdown-row">
             <div class="exit-breakdown-head">
               <span class="exit-breakdown-type">${Utils.escapeHtml(formatExitType(e.exit_type))}</span>
-              <span class="exit-breakdown-count">${count} ${count === 1 ? "trade" : "trades"}</span>
+              <span class="exit-breakdown-pnl ${barClass}">${netSol > 0 ? "+" : ""}${Utils.formatSol(netSol, { fallback: "—" })}</span>
             </div>
             <div class="exit-breakdown-bar">
-              <div class="exit-breakdown-fill ${profitClass}" style="width: ${share}%"></div>
+              <div class="exit-breakdown-fill ${barClass}" style="width: ${share}%"></div>
             </div>
             <div class="exit-breakdown-meta">
-              <span class="exit-breakdown-share">${share}% of exits</span>
-              <span class="exit-breakdown-profit ${profitClass}">${profitText} avg</span>
+              <span class="exit-breakdown-share">${count} ${count === 1 ? "trade" : "trades"} · ${share}% of exits</span>
+              <span class="exit-breakdown-profit ${avgPct >= 0 ? "positive" : "negative"}">${Utils.formatPercentValue(avgPct, { decimals: 1 })} avg</span>
             </div>
           </div>`;
       })
       .join("");
-
-    container.innerHTML = rows;
-  }
-
-  /**
-   * Update positions summary section
-   */
-  async function updatePositionsSummary() {
-    const positionsSummary = $("#positions-summary");
-    if (!positionsSummary) return;
-
-    try {
-      // The endpoint answers with a bare array of PositionResponse; asking for the open
-      // tab keeps this summary off the wallet's entire closed history.
-      const open = await requestManager.fetch("/api/positions?status=open&limit=0", {
-        priority: "normal",
-      });
-      const data = { positions: Array.isArray(open) ? open : [] };
-
-      const key = JSON.stringify(
-        data.positions.map((p) => ({
-          id: p.id,
-          roi: p.unrealized_pnl_percent,
-          size: p.total_size_sol,
-        }))
-      );
-      if (key === _lastPositionsKey) return;
-      _lastPositionsKey = key;
-
-      if (data.positions.length === 0) {
-        positionsSummary.innerHTML = `
-          <div class="info-state">
-            <i class="icon-inbox"></i>
-            <span>No open positions</span>
-          </div>
-        `;
-        return;
-      }
-
-      const cardsHtml = data.positions
-        .map((pos) => {
-          const roi = pos.unrealized_pnl_percent ?? 0;
-          const roiClass = roi >= 0 ? "positive" : "negative";
-          const holdTime = pos.entry_time
-            ? Utils.formatDuration(Date.now() / 1000 - pos.entry_time)
-            : "—";
-
-          return `
-          <div class="position-summary-card">
-            <div class="position-summary-header">
-              <div class="position-summary-token">${Utils.escapeHtml(pos.symbol || "Unknown")}</div>
-              <div class="position-summary-roi ${roiClass}">${roi >= 0 ? "+" : ""}${roi.toFixed(2)}%</div>
-            </div>
-            <div class="position-summary-details">
-              <div class="position-summary-row">
-                <span class="position-summary-label">Size:</span>
-                <span class="position-summary-value">${(pos.total_size_sol || 0).toFixed(4)} SOL</span>
-              </div>
-              <div class="position-summary-row">
-                <span class="position-summary-label">Hold Time:</span>
-                <span class="position-summary-value">${holdTime}</span>
-              </div>
-              <div class="position-summary-row">
-                <span class="position-summary-label">Entry:</span>
-                <span class="position-summary-value">${Utils.formatPrice(pos.average_entry_price || 0)}</span>
-              </div>
-            </div>
-          </div>
-        `;
-        })
-        .join("");
-
-      positionsSummary.innerHTML = `<div class="positions-grid">${cardsHtml}</div>`;
-    } catch (error) {
-      console.error("[Trader] Failed to load positions summary:", error);
-      positionsSummary.innerHTML = `
-        <div class="info-state">
-          <i class="icon-circle-alert"></i>
-          <span>Failed to load positions</span>
-        </div>
-      `;
-    }
   }
 
   /**
@@ -868,10 +876,6 @@ function createLifecycle() {
       state.strategies = [...entryStrategies, ...exitStrategies];
 
       updateStrategyLaneCounts(entryStrategies, exitStrategies);
-
-      if (state.config) {
-        updateConfigOverview();
-      }
 
       renderStrategiesList("#entry-strategies", entryStrategies);
       renderStrategiesList("#exit-strategies", exitStrategies);
@@ -1162,24 +1166,10 @@ function createLifecycle() {
       });
     }
 
-    // Config overview "View Details" button
-    const expandConfigBtn = $("#expand-config");
-    if (expandConfigBtn) {
-      addTrackedListener(expandConfigBtn, "click", () => {
-        if (tabBar) {
-          tabBar.switchTo("general-settings");
-        }
-      });
+    // Realized-window segmented control
+    for (const btn of $$("#stats-period .stats-period-btn")) {
+      addTrackedListener(btn, "click", () => setStatsPeriod(Number(btn.dataset.days)));
     }
-  }
-
-  /**
-   * Update relative time display for last check
-   * NOTE: Removed - config-last-check element no longer exists after System Status column removal
-   */
-  function updateLastCheckTime() {
-    // Deprecated: System Status column removed from Stats tab
-    return;
   }
 
   /**
@@ -1252,7 +1242,6 @@ function createLifecycle() {
             ...fields,
           };
         });
-        updateConfigOverview();
         examples.updateStopLossExample();
         examples.updateRoiExample();
         examples.updateTimeLossExample();
@@ -1382,10 +1371,16 @@ function createLifecycle() {
       if (!statsPoller) {
         statsPoller = new Poller(
           async () => {
-            if (state.currentTab === "stats") {
-              await loadStats();
-              await controls.loadControlsStatus();
-            }
+            if (state.currentTab !== "stats") return;
+            // Independent reads, so they go out together instead of queueing behind
+            // each other. The status bar is polled here because nothing else polls
+            // it: fetched once at init, it kept reporting "Running" forever after
+            // the trader had stopped itself.
+            await Promise.all([
+              loadStats(),
+              controls.loadControlsStatus(),
+              controls.fetchTraderStatus(),
+            ]);
           },
           { label: "Trader Stats", intervalMs: 5000 }
         );
@@ -1420,26 +1415,14 @@ function createLifecycle() {
         );
       }
 
-      // Poller for updating relative timestamps
-      if (!timestampPoller) {
-        timestampPoller = new Poller(
-          () => {
-            updateLastCheckTime();
-          },
-          { label: "Timestamp Updates", intervalMs: 1000 }
-        );
-      }
-
       ctx.managePoller(statsPoller);
       ctx.managePoller(walletCopyPoller);
       ctx.managePoller(configPoller);
       ctx.managePoller(strategiesPoller);
-      ctx.managePoller(timestampPoller);
 
       // Paint/switch first; it starts only the selected tab's poller and loads.
       switchTab(state.currentTab);
       configPoller.start();
-      timestampPoller.start();
 
       // Independent first loads never hold the router navigation open.
       void loadConfig();
@@ -1485,10 +1468,10 @@ function createLifecycle() {
       statsPoller = null;
       configPoller = null;
       strategiesPoller = null;
-      timestampPoller = null;
       lifecycleContext = null;
       state.strategies = [];
-      _lastPositionsKey = null;
+      _lastDailyKey = null;
+      _lastExitKey = null;
       walletCopy.reset();
     },
   };

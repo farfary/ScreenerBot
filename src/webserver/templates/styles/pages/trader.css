@@ -115,7 +115,7 @@
 
 .trader-status-bar[data-status="running"] {
   border-color: var(--success-alpha-40);
-  background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--success-alpha-5) 100%);
+  background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--success-alpha-10) 100%);
 }
 
 .trader-status-bar[data-status="stopped"] {
@@ -128,39 +128,23 @@
   gap: 0.75rem;
 }
 
+/* Bare glyph: no tile, no ring, no glow. The state is carried by the colour and by
+   the text beside it, never by a box or by motion. */
 .status-bar-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-xl);
-  background: var(--bg-tertiary);
   color: var(--text-muted);
-  font-size: 1.25rem;
-  transition: all 0.25s ease;
+  font-size: 1.5rem;
+  transition: color 0.25s ease;
 }
 
 .trader-status-bar[data-status="running"] .status-bar-icon {
-  background: var(--success-alpha-15);
   color: var(--success-color);
-  animation: status-icon-activity 2s ease-in-out infinite;
 }
 
 .trader-status-bar[data-status="stopped"] .status-bar-icon {
-  background: var(--danger-alpha-15);
-  color: var(--danger-color);
-}
-
-@keyframes status-icon-activity {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 var(--success-alpha-30);
-  }
-
-  50% {
-    box-shadow: 0 0 12px 3px var(--success-alpha-20);
-  }
+  color: var(--error-color);
 }
 
 .status-bar-info {
@@ -188,7 +172,7 @@
 }
 
 .trader-status-bar[data-status="stopped"] .status-bar-status {
-  color: var(--danger-color);
+  color: var(--error-color);
 }
 
 /* ============================================================================
@@ -395,13 +379,51 @@
   border: 1px solid var(--primary-alpha-20);
 }
 
-.stats-period {
-  font-size: 0.813rem;
-  color: var(--text-secondary);
-  background: var(--background-secondary);
-  padding: 0.375rem 0.75rem;
+/* The realized window is a fixed choice set, so it reads as one segmented track
+   rather than a row of competing buttons. */
+.stats-period-seg {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  flex-shrink: 0;
+}
+
+.stats-period-btn {
+  padding: 0.25rem 0.625rem;
+  background: transparent;
+  border: none;
   border-radius: var(--radius-sm);
-  white-space: nowrap;
+  color: var(--text-secondary);
+  font-family: var(--font-data);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  transition:
+    color var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.stats-period-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-card-hover);
+}
+
+.stats-period-btn.active {
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+}
+
+/* Qualifier under the metric grid — why some closed rounds are not counted. */
+.stats-note {
+  margin: 0.75rem 0 0;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  line-height: 1.4;
 }
 
 .stats-section h3 {
@@ -409,16 +431,6 @@
   font-size: 1.1rem;
   font-weight: 600;
   color: var(--text-primary);
-}
-
-/* Configuration Snapshot Section */
-.stats-section-config {
-  background: linear-gradient(135deg, var(--card-bg) 0%, var(--primary-alpha-5) 100%);
-  border: 1px solid var(--border-color);
-}
-
-.stats-section-config .section-header {
-  margin-bottom: 1rem;
 }
 
 /* ============================================================================
@@ -969,26 +981,18 @@
     --trader-card-padding: 1rem;
   }
 
-  .metrics-grid {
-    grid-template-columns: 1fr;
-  }
-
   .trader-page .section-header {
     flex-direction: column;
     align-items: flex-start;
   }
 
-  .stats-period {
+  .stats-period-seg {
     align-self: flex-start;
   }
 
   .exit-bar-header {
     flex-direction: column;
     align-items: flex-start;
-  }
-
-  .positions-grid {
-    grid-template-columns: 1fr;
   }
 
   .form-actions {

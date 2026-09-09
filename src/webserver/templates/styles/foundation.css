@@ -360,6 +360,7 @@
   --success-alpha-15: rgb(63, 185, 80, 0.15);
   --success-alpha-20: rgb(63, 185, 80, 0.2);
   --success-alpha-30: rgb(63, 185, 80, 0.3);
+  --success-alpha-40: rgb(63, 185, 80, 0.4);
   --warning-alpha-10: rgb(210, 153, 34, 0.1);
   --warning-alpha-20: rgb(210, 153, 34, 0.2);
   --warning-alpha-30: rgb(210, 153, 34, 0.3);
@@ -367,6 +368,7 @@
   --danger-alpha-15: rgb(248, 81, 73, 0.15);
   --danger-alpha-20: rgb(248, 81, 73, 0.2);
   --danger-alpha-30: rgb(248, 81, 73, 0.3);
+  --danger-alpha-40: rgb(248, 81, 73, 0.4);
 
   /* Custom selection (text highlight) - fully owned by us */
   --selection-bg: rgba(6, 182, 212, 0.35);

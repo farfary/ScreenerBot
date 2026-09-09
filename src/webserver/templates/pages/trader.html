@@ -70,20 +70,30 @@
               </div>
             </div>
 
-            <!-- Loss Limit Panel -->
-            <div class="loss-limit-panel" id="loss-limit-panel" style="display: none">
+            <!-- Loss Limit Panel — always rendered. Hiding it while the limit is
+                 off left no way to tell the safety net existed, and hiding it while
+                 the limit had tripped left no way to clear it. -->
+            <div class="loss-limit-panel" id="loss-limit-panel">
               <div class="loss-limit-header">
                 <span class="loss-limit-label">
                   <i class="icon-shield"></i> Period Loss Limit
                 </span>
-                <span class="loss-limit-value" id="loss-limit-value">0.00 / 0.10 SOL</span>
+                <span class="loss-limit-value" id="loss-limit-value">—</span>
               </div>
               <div class="loss-limit-bar">
                 <div class="loss-limit-progress" id="loss-limit-progress" style="width: 0%"></div>
               </div>
               <div class="loss-limit-footer">
-                <span class="loss-limit-period" id="loss-limit-period">Resets in —</span>
+                <span class="loss-limit-period" id="loss-limit-period">—</span>
                 <span class="loss-limit-status" id="loss-limit-status"></span>
+              </div>
+              <div class="loss-limit-actions" id="loss-limit-actions" hidden>
+                <button type="button" class="btn btn-sm btn-success" id="loss-limit-resume-btn">
+                  <i class="icon-play"></i> Resume trading
+                </button>
+                <button type="button" class="btn btn-sm btn-secondary" id="loss-limit-reset-btn">
+                  <i class="icon-rotate-ccw"></i> Reset period
+                </button>
               </div>
             </div>
 
@@ -98,19 +108,35 @@
         <!-- RIGHT COLUMN — Analysis & Current Config -->
         <div class="stats-col stats-col-right">
           <div class="stats-grid">
-            <!-- Key Performance Indicators -->
+            <!-- Realized performance over the selected window -->
             <div class="stats-section stats-section-primary">
               <div class="section-header">
-                <div>
-                  <h3><i class="icon-chart-bar"></i> Performance Overview</h3>
-                  <p class="section-subtitle">Last 30 days trading performance</p>
+                <h3><i class="icon-chart-column"></i> Realized Performance</h3>
+                <div
+                  class="stats-period-seg"
+                  id="stats-period"
+                  role="group"
+                  aria-label="Statistics window"
+                >
+                  <button type="button" class="stats-period-btn" data-days="1">24H</button>
+                  <button type="button" class="stats-period-btn" data-days="7">7D</button>
+                  <button type="button" class="stats-period-btn active" data-days="30">30D</button>
                 </div>
-                <div class="stats-period" id="stats-period">Loading...</div>
               </div>
               <div class="metrics-grid">
                 <div class="metric-card metric-card--with-icon metric-card-primary">
                   <div class="metric-icon">
-                    <i class="icon-trending-up"></i>
+                    <i class="icon-wallet"></i>
+                  </div>
+                  <div class="metric-content">
+                    <div class="metric-label">Net P&amp;L</div>
+                    <div class="metric-value" id="net-pnl">—</div>
+                    <div class="metric-detail" id="net-pnl-detail">—</div>
+                  </div>
+                </div>
+                <div class="metric-card metric-card--with-icon metric-card-primary">
+                  <div class="metric-icon">
+                    <i class="icon-percent"></i>
                   </div>
                   <div class="metric-content">
                     <div class="metric-label">Win Rate</div>
@@ -118,14 +144,44 @@
                     <div class="metric-detail" id="win-rate-detail">—</div>
                   </div>
                 </div>
-                <div class="metric-card metric-card--with-icon metric-card-primary">
+                <div class="metric-card metric-card--with-icon">
                   <div class="metric-icon">
-                    <i class="icon-activity"></i>
+                    <i class="icon-scale"></i>
                   </div>
                   <div class="metric-content">
-                    <div class="metric-label">Total P&amp;L</div>
-                    <div class="metric-value" id="total-pnl">—</div>
-                    <div class="metric-detail" id="total-pnl-detail">—</div>
+                    <div class="metric-label">Profit Factor</div>
+                    <div class="metric-value" id="profit-factor">—</div>
+                    <div class="metric-detail" id="profit-factor-detail">—</div>
+                  </div>
+                </div>
+                <div class="metric-card metric-card--with-icon metric-highlight-danger">
+                  <div class="metric-icon">
+                    <i class="icon-trending-down"></i>
+                  </div>
+                  <div class="metric-content">
+                    <div class="metric-label">Max Drawdown</div>
+                    <div class="metric-value" id="max-drawdown">—</div>
+                    <div class="metric-detail" id="max-drawdown-detail">—</div>
+                  </div>
+                </div>
+                <div class="metric-card metric-card--with-icon">
+                  <div class="metric-icon">
+                    <i class="icon-layers"></i>
+                  </div>
+                  <div class="metric-content">
+                    <div class="metric-label">Capital at Work</div>
+                    <div class="metric-value" id="capital-at-work">—</div>
+                    <div class="metric-detail" id="capital-at-work-detail">—</div>
+                  </div>
+                </div>
+                <div class="metric-card metric-card--with-icon">
+                  <div class="metric-icon">
+                    <i class="icon-arrow-up-down"></i>
+                  </div>
+                  <div class="metric-content">
+                    <div class="metric-label">Avg Win / Loss</div>
+                    <div class="metric-value" id="avg-win-loss">—</div>
+                    <div class="metric-detail" id="avg-win-loss-detail">—</div>
                   </div>
                 </div>
                 <div class="metric-card metric-card--with-icon">
@@ -133,7 +189,7 @@
                     <i class="icon-repeat"></i>
                   </div>
                   <div class="metric-content">
-                    <div class="metric-label">Total Trades</div>
+                    <div class="metric-label">Closed Trades</div>
                     <div class="metric-value" id="total-trades">—</div>
                     <div class="metric-detail" id="total-trades-detail">—</div>
                   </div>
@@ -143,113 +199,42 @@
                     <i class="icon-clock"></i>
                   </div>
                   <div class="metric-content">
-                    <div class="metric-label">Avg Hold Time</div>
-                    <div class="metric-value" id="avg-hold-time">—</div>
-                    <div class="metric-detail" id="avg-hold-time-detail">—</div>
-                  </div>
-                </div>
-                <div class="metric-card metric-card--with-icon metric-highlight-success">
-                  <div class="metric-icon">
-                    <i class="icon-arrow-up"></i>
-                  </div>
-                  <div class="metric-content">
-                    <div class="metric-label">Best Trade</div>
-                    <div class="metric-value" id="best-trade">—</div>
-                    <div class="metric-detail" id="best-trade-detail">—</div>
-                  </div>
-                </div>
-                <div class="metric-card metric-card--with-icon metric-highlight-danger">
-                  <div class="metric-icon">
-                    <i class="icon-arrow-down"></i>
-                  </div>
-                  <div class="metric-content">
-                    <div class="metric-label">Worst Trade</div>
-                    <div class="metric-value" id="worst-trade">—</div>
-                    <div class="metric-detail" id="worst-trade-detail">—</div>
+                    <div class="metric-label">Median Hold</div>
+                    <div class="metric-value" id="median-hold">—</div>
+                    <div class="metric-detail" id="median-hold-detail">—</div>
                   </div>
                 </div>
               </div>
+              <p class="stats-note" id="stats-excluded" hidden></p>
             </div>
 
-            <!-- Configuration Snapshot -->
-            <div class="stats-section stats-section-config">
+            <!-- Daily realized P&L across the window -->
+            <div class="stats-section">
               <div class="section-header">
-                <h3><i class="icon-settings"></i> Active Configuration</h3>
-                <button
-                  type="button"
-                  class="btn btn-link btn-sm"
-                  id="expand-config"
-                  title="View details in other tabs"
-                >
-                  <i class="icon-maximize-2"></i>
-                  <span>View Details</span>
-                </button>
+                <div>
+                  <h3><i class="icon-calendar"></i> Daily P&amp;L</h3>
+                  <p class="section-subtitle">Realized SOL per day, with the running total</p>
+                </div>
+                <div class="daily-pnl-total" id="daily-pnl-total">—</div>
               </div>
-              <div class="config-overview-grid">
-                <!-- Exit Strategies Column -->
-                <div class="config-column">
-                  <div class="config-column-header">Exit Strategies</div>
-                  <div class="config-items-compact">
-                    <div class="config-item-compact" id="stop-loss-status">
-                      <i class="icon-circle status-icon"></i>
-                      <span class="label">Stop Loss:</span>
-                      <span class="value">—</span>
-                    </div>
-                    <div class="config-item-compact" id="roi-status">
-                      <i class="icon-circle status-icon"></i>
-                      <span class="label">ROI Exit:</span>
-                      <span class="value">—</span>
-                    </div>
-                    <div class="config-item-compact" id="trailing-status">
-                      <i class="icon-circle status-icon"></i>
-                      <span class="label">Trailing Stop:</span>
-                      <span class="value">—</span>
-                    </div>
-                    <div class="config-item-compact" id="time-status">
-                      <i class="icon-circle status-icon"></i>
-                      <span class="label">Time Override:</span>
-                      <span class="value">—</span>
-                    </div>
-                  </div>
+              <div id="daily-pnl" class="daily-pnl">
+                <div class="loading-state">
+                  <i class="icon-loader"></i>
+                  <span>Loading daily P&amp;L...</span>
                 </div>
-
-                <!-- Position Management Column -->
-                <div class="config-column">
-                  <div class="config-column-header">Position Management</div>
-                  <div class="config-items-compact">
-                    <div class="config-item-compact">
-                      <i class="icon-layers status-icon enabled"></i>
-                      <span class="label">Max Positions:</span>
-                      <span class="value" id="config-max-positions">—</span>
-                    </div>
-                    <div class="config-item-compact">
-                      <i class="icon-dollar-sign status-icon enabled"></i>
-                      <span class="label">Trade Size:</span>
-                      <span class="value" id="config-trade-size">—</span>
-                    </div>
-                    <div class="config-item-compact" id="dca-status">
-                      <i class="icon-circle status-icon"></i>
-                      <span class="label">DCA:</span>
-                      <span class="value">—</span>
-                    </div>
-                  </div>
+              </div>
+              <div class="stats-extremes" id="stats-extremes" hidden>
+                <div class="stats-extreme">
+                  <span class="stats-extreme-label"><i class="icon-arrow-up"></i> Best trade</span>
+                  <span class="stats-extreme-token" id="best-trade-token">—</span>
+                  <span class="stats-extreme-value" id="best-trade">—</span>
                 </div>
-
-                <!-- Risk Controls Column -->
-                <div class="config-column">
-                  <div class="config-column-header">Risk Controls</div>
-                  <div class="config-items-compact">
-                    <div class="config-item-compact">
-                      <i class="icon-pause status-icon enabled"></i>
-                      <span class="label">Close Cooldown:</span>
-                      <span class="value" id="config-close-cooldown">—</span>
-                    </div>
-                    <div class="config-item-compact">
-                      <i class="icon-zap status-icon enabled"></i>
-                      <span class="label">Entry Concurrency:</span>
-                      <span class="value" id="config-entry-concurrency">—</span>
-                    </div>
-                  </div>
+                <div class="stats-extreme">
+                  <span class="stats-extreme-label"
+                    ><i class="icon-arrow-down"></i> Worst trade</span
+                  >
+                  <span class="stats-extreme-token" id="worst-trade-token">—</span>
+                  <span class="stats-extreme-value" id="worst-trade">—</span>
                 </div>
               </div>
             </div>
@@ -257,27 +242,17 @@
             <!-- Exit Strategy Performance -->
             <div class="stats-section">
               <div class="section-header">
-                <h3><i class="icon-trending-up"></i> Exit Strategy Breakdown</h3>
-                <p class="section-subtitle">How positions were closed and their outcomes</p>
+                <div>
+                  <h3><i class="icon-log-out"></i> Exit Strategy Breakdown</h3>
+                  <p class="section-subtitle">
+                    How positions were closed, and what each exit returned
+                  </p>
+                </div>
               </div>
               <div id="exit-breakdown" class="exit-breakdown">
                 <div class="loading-state">
                   <i class="icon-loader"></i>
                   <span>Loading exit data...</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Active Positions Summary -->
-            <div class="stats-section">
-              <div class="section-header">
-                <h3><i class="icon-target"></i> Active Positions Summary</h3>
-                <p class="section-subtitle">Current open positions and risk exposure</p>
-              </div>
-              <div id="positions-summary" class="positions-summary">
-                <div class="info-state">
-                  <i class="icon-inbox"></i>
-                  <span>No open positions</span>
                 </div>
               </div>
             </div>
