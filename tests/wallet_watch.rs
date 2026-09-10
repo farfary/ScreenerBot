@@ -19,7 +19,12 @@ fn a_complete_range_is_replayed_oldest_first() {
     );
 
     let completed = state.completed().expect("range complete");
-    assert_eq!(completed.signatures, ["oldest", "middle", "newest"]);
+    let names: Vec<&str> = completed
+        .signatures
+        .iter()
+        .map(|seen| seen.signature.as_str())
+        .collect();
+    assert_eq!(names, ["oldest", "middle", "newest"]);
     assert_eq!(completed.newest_signature.as_deref(), Some("newest"));
 }
 
@@ -36,8 +41,8 @@ fn a_capped_range_resumes_without_exposing_a_cursor() {
     state.ingest_page(vec!["tail".to_owned()], 100);
     let completed = state.completed().expect("range completed on next tick");
     assert_eq!(completed.signatures.len(), 501);
-    assert_eq!(completed.signatures.first().unwrap(), "tail");
-    assert_eq!(completed.signatures.last().unwrap(), "page-0-000");
+    assert_eq!(completed.signatures.first().unwrap().signature, "tail");
+    assert_eq!(completed.signatures.last().unwrap().signature, "page-0-000");
 }
 
 #[test]
@@ -57,8 +62,8 @@ fn multiple_pages_keep_global_oldest_first_order() {
     state.ingest_page(vec!["old-1".to_owned(), "old-2".to_owned()], 100);
 
     let completed = state.completed().expect("range complete");
-    assert_eq!(completed.signatures.first().unwrap(), "old-2");
-    assert_eq!(completed.signatures.last().unwrap(), "new-000");
+    assert_eq!(completed.signatures.first().unwrap().signature, "old-2");
+    assert_eq!(completed.signatures.last().unwrap().signature, "new-000");
 }
 
 #[test]

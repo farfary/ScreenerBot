@@ -32,6 +32,7 @@ mod poller;
 mod recorder;
 pub mod runtime;
 mod service;
+mod service_state;
 mod service_targets;
 mod source_registry;
 mod types;
@@ -250,14 +251,22 @@ pub async fn get_status(id: i64) -> Result<WatchStatus, Error> {
     let last_signature = db.get_cursor(&target.address).await?;
     let last_activity_at = db.get_cursor_updated_at(&target.address).await?;
     let subscribed = runtime::try_get_runtime().is_some_and(|runtime| runtime.is_connected());
+    let last_error = service_state::saturation_reason(&target.address);
 
     Ok(WatchStatus {
         target,
         subscribed,
         last_activity_at,
         last_signature,
-        last_error: None,
+        last_error,
     })
+}
+
+/// Whether the running observation loop currently watches `address`. `None` while
+/// the loop is stopped or still building its target set -- callers must treat that
+/// as unknown, never as "not observed".
+pub fn is_observing(address: &str) -> Option<bool> {
+    service_state::is_observing(address)
 }
 
 #[cfg(test)]

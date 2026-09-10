@@ -474,6 +474,26 @@ impl WatchDatabase {
         }))
     }
 
+    /// Delete every cursor that belongs to neither the own wallet nor a persisted
+    /// target. A poll already in flight when its target is removed can write its
+    /// cursor after `remove_source` deleted it; this sweep, run on every target
+    /// reload, is what makes that write harmless.
+    pub async fn purge_orphan_cursors(&self, own_address: &str) -> Result<usize, Error> {
+        let db = self.clone();
+        let own_address = own_address.to_owned();
+        tokio::task::spawn_blocking(move || {
+            let conn = db.conn()?;
+            conn.execute(
+                "DELETE FROM watch_cursors WHERE chain_id = ?1 AND address != ?2 \
+                 AND address NOT IN (SELECT address FROM watch_targets WHERE chain_id = ?1)",
+                params![db.chain.as_str(), own_address],
+            )
+            .map_err(|e| Error::Database(DatabaseError::from(e)))
+        })
+        .await
+        .map_err(|e| Error::Internal(InternalError::from(e)))?
+    }
+
     pub async fn set_cursor(&self, address: &str, last_signature: &str) -> Result<(), Error> {
         let db = self.clone();
         let address = address.to_owned();
@@ -692,6 +712,21 @@ mod tests {
             db.get_cursor("Addr2222").await.unwrap(),
             Some("sig2".to_owned())
         );
+    }
+
+    #[tokio::test]
+    async fn orphan_cursors_are_purged_but_own_and_target_cursors_survive() {
+        let (db, _dir) = temp_db();
+        db.insert_alert_target("Kept1111", None).await.unwrap();
+        db.set_cursor("Kept1111", "sig").await.unwrap();
+        db.set_cursor("Own1111", "sig").await.unwrap();
+        // A poll that finished after its target was removed.
+        db.set_cursor("Removed1111", "sig").await.unwrap();
+
+        assert_eq!(db.purge_orphan_cursors("Own1111").await.unwrap(), 1);
+        assert!(db.has_cursor_row("Kept1111").await.unwrap());
+        assert!(db.has_cursor_row("Own1111").await.unwrap());
+        assert!(!db.has_cursor_row("Removed1111").await.unwrap());
     }
 
     #[tokio::test]

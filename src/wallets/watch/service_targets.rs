@@ -32,6 +32,59 @@ pub(super) struct TargetRuntime {
     /// First registration establishes a current head without replaying historical
     /// trades as new alerts.
     pub(super) baseline_only: bool,
+    /// Consecutive polls whose range did not fit in one tick's page budget.
+    pub(super) overflow_streak: u32,
+}
+
+/// Consecutive over-budget polls after which a non-own target is disabled.
+const SATURATION_STREAK: u32 = 2;
+
+/// A non-own target produced more signatures than one tick can page
+/// (`MAX_PAGES` x `PAGE_SIZE`). Holding the range open would starve it forever and
+/// replaying it later only yields stale history, so the first overflow skips the
+/// gap to the current head, and a second one in a row means the wallet out-trades
+/// the poll budget: it is disabled with the reason surfaced in its status.
+pub(super) async fn handle_overflow(target_runtime: &mut TargetRuntime, watch_db: &WatchDatabase) {
+    let address = target_runtime.target.address.clone();
+    let Some(state) = target_runtime.catch_up.take() else {
+        return;
+    };
+    target_runtime.overflow_streak += 1;
+    let skipped = state.pending_len();
+
+    if target_runtime.overflow_streak >= SATURATION_STREAK {
+        let reason = format!(
+            "Disabled: more than {skipped} transactions per poll interval in {} consecutive polls exceeds the watch budget",
+            target_runtime.overflow_streak
+        );
+        logger::warning(LogTag::WalletWatch, &format!("{address}: {reason}"));
+        if let Some(id) = target_runtime.target.id {
+            match watch_db.set_enabled(id, false).await {
+                Ok(()) => {
+                    super::service_state::mark_saturated(&address, reason);
+                    super::service::request_reload();
+                }
+                Err(e) => logger::warning(
+                    LogTag::WalletWatch,
+                    &format!("Failed to disable saturated target {address}: {e}"),
+                ),
+            }
+        }
+        return;
+    }
+
+    if let Some(newest) = state.newest_signature() {
+        match watch_db.set_cursor(&address, newest).await {
+            Ok(()) => logger::warning(
+                LogTag::WalletWatch,
+                &format!("{address} exceeded the poll budget; skipped {skipped}+ older transactions to the current head"),
+            ),
+            Err(e) => logger::warning(
+                LogTag::WalletWatch,
+                &format!("Failed to re-baseline overflowing target {address}: {e}"),
+            ),
+        }
+    }
 }
 
 /// Spawn the per-target WS forwarder: subscribes through the shared transport and
@@ -78,6 +131,7 @@ fn register(
             last_poll: Instant::now(),
             catch_up: None,
             baseline_only: false,
+            overflow_streak: 0,
         },
     );
 }
@@ -99,6 +153,15 @@ pub(super) async fn reload_targets(
     }
     runtimes.clear();
 
+    // Runs after any in-flight poll has finished, so a cursor such a poll wrote for
+    // a target that was just removed is swept here rather than left behind.
+    if let Err(e) = watch_db.purge_orphan_cursors(&own_subject.address()).await {
+        logger::warning(
+            LogTag::WalletWatch,
+            &format!("Failed to purge orphan watch cursors: {e}"),
+        );
+    }
+
     // The own wallet is always watched, regardless of `wallet.watch_enabled` -- that
     // switch is the master control for TARGET watching (pasted addresses), not for
     // the own-wallet observation `TransactionsService` now structurally depends on.
@@ -118,12 +181,16 @@ pub(super) async fn reload_targets(
     );
 
     if !with_config(|cfg| cfg.wallet.watch_enabled) {
+        super::service_state::set_observed(runtimes.keys().cloned());
         return;
     }
 
     match watch_db.list_targets().await {
         Ok(targets) => {
             for target in targets.into_iter().filter(|t| t.enabled) {
+                // Enabled again (by the user or a re-added source): any earlier
+                // saturation verdict no longer describes it.
+                super::service_state::clear_saturation(&target.address);
                 register(runtimes, ws_tx, chain_runtime, target);
             }
         }
@@ -132,4 +199,5 @@ pub(super) async fn reload_targets(
             &format!("Failed to load watch targets: {e}"),
         ),
     }
+    super::service_state::set_observed(runtimes.keys().cloned());
 }
