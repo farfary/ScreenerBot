@@ -166,6 +166,15 @@ pub use favorites::{
 /// }
 /// ```
 pub async fn request_immediate_update(mint: &str) -> TokenResult<UpdateResult> {
+    // Every caller (dashboard refresh, agent tools, position pricing) funnels
+    // through here, so a value that is not an address is refused before any
+    // external provider sees it.
+    if crate::chains::adapter().validate_address(mint).is_err() {
+        return Err(Error::InvalidMint {
+            value: mint.to_owned(),
+        });
+    }
+
     let db = get_global_database().ok_or_else(|| Error::NotInitialized {
         resource: "Token database not initialized".to_owned(),
     })?;
