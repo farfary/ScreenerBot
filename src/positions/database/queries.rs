@@ -474,6 +474,8 @@ impl PositionsDatabase {
                         net_pnl_sol: total_pnl,
                         drawdown_percent: max_dd,
                         win_rate,
+                        closed_positions: trade_count,
+                        wins: wins.unwrap_or_default(),
                     })
                 },
             )
@@ -509,6 +511,8 @@ impl PositionsDatabase {
                         net_pnl_sol: total_pnl,
                         drawdown_percent: max_dd,
                         win_rate,
+                        closed_positions: trade_count,
+                        wins: wins.unwrap_or_default(),
                     })
                 },
             )

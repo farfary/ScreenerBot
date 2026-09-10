@@ -410,6 +410,10 @@ pub struct PeriodTradingStats {
     pub net_pnl_sol: f64,
     pub drawdown_percent: f64,
     pub win_rate: f64,
+    /// Closed positions in the period (the win-rate denominator).
+    pub closed_positions: i64,
+    /// Closed positions with a positive P&L.
+    pub wins: i64,
 }
 
 /// Realized trading statistics for a single calendar day (UTC), grouped by exit_time.

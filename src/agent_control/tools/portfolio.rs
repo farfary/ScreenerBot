@@ -264,7 +264,8 @@ struct PnLStats {
     total_pnl_sol: f64,
     total_wins: usize,
     total_losses: usize,
-    win_rate_percent: f64,
+    /// Null when no position closed in the period.
+    win_rate_percent: Option<f64>,
     total_trades: usize,
     open_positions: usize,
 }
@@ -328,18 +329,15 @@ impl Tool for GetPnLTool {
             }
         }
 
-        let win_rate = if stats.sells > 0 { stats.win_rate } else { 0.0 };
-
         let pnl_stats = PnLStats {
             period: period.clone(),
             total_realized_pnl_sol: stats.net_pnl_sol,
             total_unrealized_pnl_sol: total_unrealized,
             total_pnl_sol: stats.net_pnl_sol + total_unrealized,
-            total_wins: (stats.win_rate * stats.sells as f64 / 100.0) as usize,
-            total_losses: stats.sells as usize
-                - (stats.win_rate * stats.sells as f64 / 100.0) as usize,
-            win_rate_percent: win_rate,
-            total_trades: stats.sells as usize,
+            total_wins: stats.wins as usize,
+            total_losses: (stats.closed_positions - stats.wins) as usize,
+            win_rate_percent: (stats.closed_positions > 0).then_some(stats.win_rate),
+            total_trades: stats.closed_positions as usize,
             open_positions: open_positions.len(),
         };
 

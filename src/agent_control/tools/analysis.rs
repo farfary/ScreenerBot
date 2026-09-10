@@ -108,7 +108,21 @@ impl Tool for AnalyzeTokenTool {
                     token
                         .security_risks
                         .iter()
-                        .map(|r| format!("{}: {}", r.name, r.value))
+                        .map(|r| {
+                            // Rugcheck leaves `value` empty for flag-style risks
+                            // (mutable metadata, freeze authority); the
+                            // description then carries the detail.
+                            let detail = if r.value.is_empty() {
+                                &r.description
+                            } else {
+                                &r.value
+                            };
+                            if detail.is_empty() {
+                                r.name.clone()
+                            } else {
+                                format!("{}: {}", r.name, detail)
+                            }
+                        })
                         .collect(),
                 )
             },
@@ -234,7 +248,10 @@ struct CheckSecurityParams {
 #[derive(Serialize)]
 struct SecurityData {
     mint: String,
+    /// Normalised 0-100 risk score, the same figure `analyze_token` reports.
     score: Option<String>,
+    /// Rugcheck's unbounded raw risk score (higher is riskier).
+    raw_score: Option<i32>,
     level: Option<String>,
     risks: Vec<SecurityRisk>,
     freeze_authority_enabled: Option<bool>,
@@ -278,8 +295,13 @@ impl Tool for CheckSecurityTool {
             Err(e) => return ToolResult::error(format!("Invalid parameters: {e}")),
         };
 
-        // Request immediate update to get fresh security data
-        let _ = tokens::request_immediate_update(&params.mint_address).await;
+        // Refresh first; a provider failure still falls back to the stored row,
+        // but a value that is not an address has nothing to fall back to.
+        if let Err(e @ tokens::Error::InvalidMint { .. }) =
+            tokens::request_immediate_update(&params.mint_address).await
+        {
+            return ToolResult::error(e.to_string());
+        }
 
         // Get token security data
         let token = match tokens::get_full_token_async(&params.mint_address).await {
@@ -292,7 +314,8 @@ impl Tool for CheckSecurityTool {
 
         let security_data = SecurityData {
             mint: token.mint.clone(),
-            score: token.security_score.map(|s| s.to_string()),
+            score: token.security_score_normalised.map(|s| format!("{s}/100")),
+            raw_score: token.security_score,
             level: token.security_score_normalised.map(|s| {
                 if s < 30 {
                     "Low Risk".to_owned()

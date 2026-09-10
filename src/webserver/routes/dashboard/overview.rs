@@ -64,6 +64,8 @@ pub async fn get_dashboard_overview(State(state): State<Arc<AppState>>) -> Json<
             net_pnl_sol: 0.0,
             drawdown_percent: 0.0,
             win_rate: 0.0,
+            closed_positions: 0,
+            wins: 0,
         });
 
     let total_pnl = all_time_stats.net_pnl_sol;
