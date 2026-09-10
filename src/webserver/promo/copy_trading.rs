@@ -11,11 +11,11 @@
 use chrono::{Duration, Utc};
 
 use crate::chains::active_chain;
+use crate::trader::copy::control::{CopyTaskSummary, CopyTradingOverview, CopyTradingStatus};
 use crate::trader::copy::{
     ArrivalDistanceStats, CopyActivityRow, CopyBook, CopyMode, CopyOutcome, CopySkip, CopyTask,
     CopyTaskStats, CopyTelemetry, ExitMode, PaperDecision, PaperFill, SizingMode,
 };
-use crate::webserver::routes::copy_trading::{OverviewResponse, StatusResponse, TaskSummary};
 
 use super::data::PROMO_OPEN_TOKENS;
 
@@ -242,14 +242,14 @@ fn activity() -> Vec<CopyActivityRow> {
 }
 
 /// Generate the Copy Trading overview: status header, task summaries, decision feed.
-pub fn get_promo_copy_trading_overview() -> OverviewResponse {
+pub fn get_promo_copy_trading_overview() -> CopyTradingOverview {
     let tasks: Vec<CopyTask> = PROMO_TASKS.iter().map(task).collect();
     let live_tasks = tasks
         .iter()
         .filter(|task| task.mode == CopyMode::Live)
         .count();
 
-    let status = StatusResponse {
+    let status = CopyTradingStatus {
         enabled: true,
         live_available: true,
         blocked_reason: None,
@@ -267,7 +267,7 @@ pub fn get_promo_copy_trading_overview() -> OverviewResponse {
         .zip(tasks)
         .map(|(entry, task)| {
             let spent = spent_sol(entry);
-            TaskSummary {
+            CopyTaskSummary {
                 stats: stats(entry),
                 spent_sol: spent,
                 remaining_budget_sol: (task.total_budget_sol - spent).max(0.0),
@@ -281,7 +281,7 @@ pub fn get_promo_copy_trading_overview() -> OverviewResponse {
         })
         .collect();
 
-    OverviewResponse {
+    CopyTradingOverview {
         status,
         tasks: summaries,
         activity: activity(),

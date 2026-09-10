@@ -1,6 +1,7 @@
 //! Copy-trading decision core with paper simulation and guarded live submission.
 
 mod analytics;
+pub mod control;
 mod database;
 mod exits;
 mod live;

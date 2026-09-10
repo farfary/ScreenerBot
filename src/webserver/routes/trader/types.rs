@@ -8,19 +8,10 @@ use serde::{Deserialize, Serialize};
 // =============================================================================
 
 #[derive(Debug, Serialize)]
-pub struct TraderStatusResponse {
-    pub enabled: bool,
-    pub running: bool,
-    pub available: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub unavailable_reason: Option<&'static str>,
-}
-
-#[derive(Debug, Serialize)]
 pub struct TraderControlResponse {
     pub success: bool,
     pub message: String,
-    pub status: TraderStatusResponse,
+    pub status: crate::trader::TraderStatus,
 }
 
 #[derive(Debug, Deserialize)]
@@ -93,73 +84,6 @@ pub struct ManualTradeSuccess {
 pub struct TraderStatsQuery {
     #[serde(default)]
     pub days: Option<u32>,
-}
-
-/// Realized performance over a closed window, plus the live exposure that window
-/// does not cover.
-///
-/// Every derived figure is `Option` and is `None` when the window holds nothing to
-/// derive it from. A fresh install has no win rate and no best trade, and `0.0`
-/// there is a fabricated claim (a green `+0.0%` "best trade") rather than an empty
-/// state, so the absence travels to the dashboard instead of a zero.
-#[derive(Debug, Serialize)]
-pub struct TraderStatsResponse {
-    /// Length of the realized window, echoed back so the UI labels what it shows.
-    pub period_days: u32,
-
-    // Live exposure (not window-bound).
-    pub open_positions_count: usize,
-    pub max_open_positions: usize,
-    pub locked_sol: f64,
-
-    // Trade counts.
-    pub total_trades: usize,
-    pub winners: usize,
-    pub losers: usize,
-    /// Closed rounds excluded because their cost basis or history is incomplete, so
-    /// no honest P&L exists for them. Surfaced rather than silently dropped.
-    pub excluded_untrusted: usize,
-
-    // Realized money, in SOL — the single monetary unit.
-    pub total_pnl_sol: f64,
-    pub gross_profit_sol: f64,
-    pub gross_loss_sol: f64,
-    pub profit_factor: Option<f64>,
-    pub expectancy_sol: Option<f64>,
-    pub max_drawdown_sol: f64,
-
-    // Quality.
-    pub win_rate_pct: Option<f64>,
-    pub avg_win_pct: Option<f64>,
-    pub avg_loss_pct: Option<f64>,
-    pub avg_hold_time_hours: Option<f64>,
-    pub median_hold_time_hours: Option<f64>,
-    pub best_trade_pct: Option<f64>,
-    pub best_trade_token: Option<String>,
-    pub worst_trade_pct: Option<f64>,
-    pub worst_trade_token: Option<String>,
-
-    /// One entry per day in the window, oldest first, including days with no trades
-    /// so the curve keeps a true time axis.
-    pub daily_pnl: Vec<DailyPnlPoint>,
-    pub exit_breakdown: Vec<ExitBreakdown>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct DailyPnlPoint {
-    /// UTC calendar day, `YYYY-MM-DD`.
-    pub date: String,
-    pub net_pnl_sol: f64,
-    pub trades: usize,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ExitBreakdown {
-    pub exit_type: String,
-    pub count: usize,
-    pub avg_profit_pct: f64,
-    /// Realized SOL attributable to this exit reason.
-    pub net_pnl_sol: f64,
 }
 
 // =============================================================================
@@ -270,29 +194,7 @@ pub struct QuotePreviewResponse {
 
 #[derive(Debug, Serialize)]
 pub struct TemplateListResponse {
-    pub templates: Vec<Template>,
-}
-
-#[derive(Debug, Serialize, Clone)]
-pub struct Template {
-    pub id: String,
-    pub name: String,
-    pub description: String,
-    pub trading_style: String,
-    pub config: TemplateConfig,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct TemplateConfig {
-    pub trailing_stop_enabled: bool,
-    pub trailing_stop_activation_pct: f64,
-    pub trailing_stop_distance_pct: f64,
-    pub roi_exit_enabled: bool,
-    pub roi_target_pct: f64,
-    pub time_override_enabled: bool,
-    pub time_override_duration: f64,
-    pub time_override_unit: String,
-    pub time_override_loss_threshold_pct: f64,
+    pub templates: Vec<crate::trader::templates::Template>,
 }
 
 #[derive(Debug, Deserialize)]

@@ -39,11 +39,18 @@ pub mod manual;
 pub mod monitors;
 pub mod policy;
 pub mod safety;
+pub mod stats;
+pub mod templates;
 mod types;
 
 // Re-exports for common usage
 pub use constants::*;
-pub use controller::{is_trader_running, start_trader, stop_trader_gracefully};
+pub use controller::{
+    clear_force_stop, engage_force_stop, is_trader_running, loss_limit_snapshot, monitors_status,
+    set_monitor_enabled, start_trader, start_trader_checked, stop_trader_checked,
+    stop_trader_gracefully, trader_status, LossLimitSnapshot, Monitor, MonitorsStatus,
+    TraderStatus,
+};
 pub use error::{Error, Result};
 pub use executors::execute_trade;
 pub use types::{

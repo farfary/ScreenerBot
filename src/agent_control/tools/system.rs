@@ -269,35 +269,9 @@ impl Tool for ForceStopTool {
             Err(e) => return ToolResult::error(format!("Invalid parameters: {e}")),
         };
 
-        // Set force stop flag, then disable the trader so the stop survives a
-        // restart — the same pair of effects as the dashboard force stop.
-        global::set_force_stopped(true, Some(&params.reason));
-        if let Err(e) = crate::config::update_config_section(
-            |cfg| {
-                cfg.trader.enabled = false;
-            },
-            true,
-        ) {
-            return ToolResult::error(format!(
-                "Force stop activated but disabling the trader failed: {e}"
-            ));
+        if let Err(e) = crate::trader::engage_force_stop(&params.reason).await {
+            return ToolResult::error(e.to_string());
         }
-
-        // Log the event
-        let _ = events::record(events::Event {
-            id: None,
-            event_time: chrono::Utc::now(),
-            category: events::EventCategory::System,
-            subtype: Some("ForceStop".to_owned()),
-            severity: events::Severity::Warn,
-            mint: None,
-            reference_id: None,
-            payload: serde_json::json!({
-                "reason": params.reason,
-            }),
-            created_at: None,
-        })
-        .await;
 
         ToolResult::success(json!({
             "message": "Bot force stopped successfully",
@@ -344,24 +318,7 @@ impl Tool for ClearForceStopTool {
             Err(e) => return ToolResult::error(format!("Invalid parameters: {e}")),
         };
 
-        let was_stopped = global::is_force_stopped();
-        global::set_force_stopped(false, None);
-
-        let _ = events::record(events::Event {
-            id: None,
-            event_time: chrono::Utc::now(),
-            category: events::EventCategory::System,
-            subtype: Some("ForceStopCleared".to_owned()),
-            severity: events::Severity::Warn,
-            mint: None,
-            reference_id: None,
-            payload: serde_json::json!({
-                "reason": params.reason,
-                "was_stopped": was_stopped,
-            }),
-            created_at: None,
-        })
-        .await;
+        let was_stopped = crate::trader::clear_force_stop(params.reason.as_deref()).await;
 
         ToolResult::success(json!({
             "message": "Force stop cleared. The trader stays off until trader.enabled is set.",

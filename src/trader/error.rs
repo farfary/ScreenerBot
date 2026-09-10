@@ -13,6 +13,25 @@ pub enum Error {
     AlreadyStopped,
     #[error("trader config update failed: {detail}")]
     ConfigUpdate { detail: String },
+    /// Setup (wallet, RPC) is incomplete or the app runs in Explore Mode.
+    #[error("complete wallet and RPC setup before using the auto trader")]
+    TraderUnavailable,
+    #[error("the emergency stop is active; clear it first")]
+    ForceStopActive,
+    #[error("no trader template named {template_id}")]
+    TemplateNotFound { template_id: String },
+    #[error("manual trading is disabled while the emergency stop is active")]
+    ForceStopped,
+    #[error("core services are not ready for trading: {pending}")]
+    CoreServicesNotReady { pending: String },
+    #[error("invalid token mint address {mint}")]
+    InvalidMint { mint: String },
+    #[error("token {mint} is blacklisted")]
+    Blacklisted { mint: String },
+    #[error("slippage {slippage_pct}% must be in (0, {maximum_pct}]")]
+    InvalidSlippage { slippage_pct: f64, maximum_pct: f64 },
+    #[error("sell percentage {percentage} must be in (0, 100]")]
+    InvalidPercentage { percentage: f64 },
     #[error(transparent)]
     Database(#[from] crate::errors::DatabaseError),
     #[error(transparent)]
@@ -38,6 +57,19 @@ pub enum Error {
     CopyValidation { detail: String },
     #[error("copy database task failed: {detail}")]
     CopyDatabaseUnavailable { detail: String },
+    /// The copy task failed domain validation; the reason is the typed skip value.
+    #[error("invalid copy task: {reason:?}")]
+    CopyTaskRejected {
+        reason: crate::trader::copy::CopySkip,
+    },
+    #[error("maximum of {maximum} active copy tasks reached")]
+    CopyTaskLimit { maximum: usize },
+    #[error("copy target could not be watched: {detail}")]
+    CopyWatchRejected { detail: String },
+    #[error("copy task {task_id} is live and enabled; pause it first")]
+    CopyTaskLive { task_id: i64 },
+    #[error("copy task {task_id} still owns {open_positions} open position(s); close them first")]
+    CopyTaskOwnsPositions { task_id: i64, open_positions: usize },
     /// Registering the trade's action entry failed. The actions module's own typed
     /// error is kept as the source rather than flattened into text, so callers keep
     /// its classification.
@@ -78,6 +110,18 @@ impl ErrorClass for Error {
         match self {
             Error::AlreadyRunning | Error::AlreadyStopped => false,
             Error::ConfigUpdate { .. } => false,
+            Error::TraderUnavailable | Error::ForceStopActive | Error::ForceStopped => false,
+            Error::TemplateNotFound { .. } => false,
+            Error::CoreServicesNotReady { .. } => true,
+            Error::InvalidMint { .. }
+            | Error::Blacklisted { .. }
+            | Error::InvalidSlippage { .. }
+            | Error::InvalidPercentage { .. } => false,
+            Error::CopyTaskRejected { .. }
+            | Error::CopyTaskLimit { .. }
+            | Error::CopyWatchRejected { .. }
+            | Error::CopyTaskLive { .. }
+            | Error::CopyTaskOwnsPositions { .. } => false,
             Error::Database(e) => e.is_retryable(),
             Error::Positions(e) => e.is_retryable(),
             Error::Transactions(e) => e.is_retryable(),
@@ -104,6 +148,7 @@ impl ErrorClass for Error {
             Error::Transactions(e) => e.retry_after(),
             Error::CopyReconciliation { .. } => Some(Duration::from_secs(2)),
             Error::CopyDatabaseUnavailable { .. } => Some(Duration::from_secs(1)),
+            Error::CoreServicesNotReady { .. } => Some(Duration::from_secs(5)),
             Error::TokenDataMissing { .. } => Some(Duration::from_secs(1)),
             Error::UnhealthyEndpoints { .. } => Some(Duration::from_secs(5)),
             _ => None,
@@ -114,6 +159,20 @@ impl ErrorClass for Error {
         match self {
             Error::AlreadyRunning | Error::AlreadyStopped => Severity::Info,
             Error::ConfigUpdate { .. } => Severity::Error,
+            Error::TraderUnavailable | Error::ForceStopActive | Error::ForceStopped => {
+                Severity::Warning
+            }
+            Error::TemplateNotFound { .. } => Severity::Warning,
+            Error::CoreServicesNotReady { .. } => Severity::Warning,
+            Error::InvalidMint { .. }
+            | Error::Blacklisted { .. }
+            | Error::InvalidSlippage { .. }
+            | Error::InvalidPercentage { .. } => Severity::Warning,
+            Error::CopyTaskRejected { .. }
+            | Error::CopyTaskLimit { .. }
+            | Error::CopyWatchRejected { .. }
+            | Error::CopyTaskLive { .. }
+            | Error::CopyTaskOwnsPositions { .. } => Severity::Warning,
             Error::Database(e) => e.severity(),
             Error::Positions(e) => e.severity(),
             Error::Transactions(e) => e.severity(),
@@ -138,6 +197,17 @@ impl ErrorClass for Error {
         match self {
             Error::AlreadyRunning | Error::AlreadyStopped => 400,
             Error::ConfigUpdate { .. } => 500,
+            Error::TraderUnavailable | Error::ForceStopActive => 409,
+            Error::TemplateNotFound { .. } => 400,
+            Error::ForceStopped | Error::Blacklisted { .. } => 403,
+            Error::CoreServicesNotReady { .. } => 503,
+            Error::InvalidMint { .. }
+            | Error::InvalidSlippage { .. }
+            | Error::InvalidPercentage { .. } => 400,
+            Error::CopyTaskRejected { .. }
+            | Error::CopyTaskLimit { .. }
+            | Error::CopyWatchRejected { .. } => 400,
+            Error::CopyTaskLive { .. } | Error::CopyTaskOwnsPositions { .. } => 409,
             Error::Database(e) => e.http_status(),
             Error::Positions(e) => e.http_status(),
             Error::Transactions(e) => e.http_status(),

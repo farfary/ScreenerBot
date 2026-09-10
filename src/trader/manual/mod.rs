@@ -2,6 +2,7 @@
 
 mod api;
 mod force;
+pub mod guard;
 mod tracking;
 
 pub use api::{manual_add, manual_buy, manual_sell};

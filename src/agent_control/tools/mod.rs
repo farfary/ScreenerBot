@@ -7,15 +7,25 @@ use std::sync::Arc;
 // Import tool implementations
 mod analysis;
 mod config;
+mod copy_trading;
 mod portfolio;
 mod system;
+mod trader;
 mod trading;
 
 use analysis::{AnalyzeTokenTool, CheckSecurityTool, GetMarketDataTool};
 use config::{DescribeConfigTool, GetConfigTool, UpdateConfigTool};
+use copy_trading::{
+    CreateCopyTaskTool, DeleteCopyTaskTool, GetCopyActivityTool, GetCopyTaskTool,
+    GetCopyTradingOverviewTool, SetCopyTaskModeTool, UpdateCopyTaskTool,
+};
 use portfolio::{GetBalanceTool, GetPnLTool, GetPositionTool, GetPositionsTool};
 use system::{ClearForceStopTool, ForceStopTool, GetEventsTool, GetStatusTool};
-use trading::{BuyTokenTool, ClosePositionTool, SellTokenTool};
+use trader::{
+    ApplyTraderTemplateTool, GetTraderStatsTool, GetTraderStatusTool, ListTraderTemplatesTool,
+    ManageLossLimitTool, SetTraderEnabledTool, SetTraderMonitorTool,
+};
+use trading::{AddToPositionTool, BuyTokenTool, ClosePositionTool, SellTokenTool};
 
 /// Category of tool for organization and UI display
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
@@ -183,6 +193,7 @@ pub fn create_tool_registry() -> ToolRegistry {
 
     // Trading tools
     registry.register(Arc::new(BuyTokenTool));
+    registry.register(Arc::new(AddToPositionTool));
     registry.register(Arc::new(SellTokenTool));
     registry.register(Arc::new(ClosePositionTool));
 
@@ -197,6 +208,24 @@ pub fn create_tool_registry() -> ToolRegistry {
     registry.register(Arc::new(ForceStopTool));
     registry.register(Arc::new(ClearForceStopTool));
 
+    // Auto-trader tools
+    registry.register(Arc::new(GetTraderStatusTool));
+    registry.register(Arc::new(GetTraderStatsTool));
+    registry.register(Arc::new(SetTraderEnabledTool));
+    registry.register(Arc::new(SetTraderMonitorTool));
+    registry.register(Arc::new(ManageLossLimitTool));
+    registry.register(Arc::new(ListTraderTemplatesTool));
+    registry.register(Arc::new(ApplyTraderTemplateTool));
+
+    // Copy-trading tools
+    registry.register(Arc::new(GetCopyTradingOverviewTool));
+    registry.register(Arc::new(GetCopyTaskTool));
+    registry.register(Arc::new(GetCopyActivityTool));
+    registry.register(Arc::new(CreateCopyTaskTool));
+    registry.register(Arc::new(UpdateCopyTaskTool));
+    registry.register(Arc::new(DeleteCopyTaskTool));
+    registry.register(Arc::new(SetCopyTaskModeTool));
+
     registry
 }
 
@@ -210,7 +239,7 @@ mod tests {
         let definitions = registry.list_definitions();
 
         // Should have all registered tools
-        assert_eq!(definitions.len(), 17);
+        assert_eq!(definitions.len(), 32);
 
         // Check that we have tools in each category
         let by_category = registry.get_tools_by_category();
@@ -229,6 +258,21 @@ mod tests {
         let tool = registry.get("analyze_token");
         assert!(tool.is_some());
 
+        for name in [
+            "get_copy_trading_overview",
+            "get_copy_task",
+            "get_copy_activity",
+            "get_trader_status",
+            "get_trader_stats",
+            "list_trader_templates",
+        ] {
+            let def = registry
+                .get(name)
+                .unwrap_or_else(|| panic!("{name} is registered"))
+                .definition();
+            assert!(!def.mutating, "{name} only reads");
+        }
+
         let tool = registry.get("nonexistent_tool");
         assert!(tool.is_none());
     }
@@ -241,7 +285,7 @@ mod tests {
         // Should be an array
         assert!(schema.is_array());
         let tools = schema.as_array().unwrap();
-        assert_eq!(tools.len(), 17);
+        assert_eq!(tools.len(), 32);
 
         // Check format
         let first_tool = &tools[0];
@@ -267,12 +311,21 @@ mod tests {
         assert_eq!(
             mutating,
             vec![
+                "add_to_position",
+                "apply_trader_template",
                 "buy_token",
                 "clear_force_stop",
                 "close_position",
+                "create_copy_task",
+                "delete_copy_task",
                 "force_stop",
+                "manage_loss_limit",
                 "sell_token",
+                "set_copy_task_mode",
+                "set_trader_enabled",
+                "set_trader_monitor",
                 "update_config",
+                "update_copy_task",
             ]
         );
     }

@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use chrono::Utc;
 
-use crate::webserver::routes::trader::types::{DailyPnlPoint, ExitBreakdown, TraderStatsResponse};
+use crate::trader::stats::{DailyPnlPoint, ExitBreakdown, TraderStats};
 
 use super::aggregates;
 
@@ -12,7 +12,7 @@ use super::aggregates;
 const PROMO_PERIOD_DAYS: u32 = 30;
 
 /// Generate promo trader stats response, fully derived from the closed/open arrays.
-pub fn get_promo_trader_stats() -> TraderStatsResponse {
+pub fn get_promo_trader_stats() -> TraderStats {
     let now = Utc::now();
     let open = aggregates::open_agg();
     let mut trades = aggregates::closed_trades(now);
@@ -98,7 +98,7 @@ pub fn get_promo_trader_stats() -> TraderStatsResponse {
         }
     });
 
-    TraderStatsResponse {
+    TraderStats {
         period_days: PROMO_PERIOD_DAYS,
         open_positions_count: open.count,
         max_open_positions: open.count.max(1),

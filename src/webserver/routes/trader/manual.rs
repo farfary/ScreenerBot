@@ -4,11 +4,9 @@ use axum::{extract::Query, http::StatusCode, response::Response, Json};
 
 use crate::config::with_config;
 use crate::errors::ErrorClass;
-use crate::global::{are_core_services_ready, get_pending_services};
 use crate::logger::{self, LogTag};
-use crate::positions;
 use crate::swaps::{try_get_best_quote, QuoteError};
-use crate::trader::MAX_MANUAL_SLIPPAGE_PCT;
+use crate::trader::manual::guard::{self, BlacklistPolicy, ManualTradeKind};
 use crate::webserver::utils::{error_response, success_response};
 
 use super::types::*;
@@ -17,97 +15,70 @@ use super::types::*;
 // MANUAL TRADING HANDLERS
 // =============================================================================
 
-/// Validate a per-trade slippage override.
-///
-/// `None` (the common case) means "follow the configured slippage" and is always
-/// valid. A value must be finite and within (0, MAX_MANUAL_SLIPPAGE_PCT] — an
-/// override is a deliberate escape hatch for illiquid tokens, not a licence to
-/// submit an unbounded one.
-fn validate_slippage(slippage_pct: Option<f64>) -> Result<Option<f64>, Response> {
-    let Some(pct) = slippage_pct else {
-        return Ok(None);
+/// Map a refused or failed manual trade to its response; the codes are the ones
+/// the dashboard trade dialog has always received.
+fn manual_error(fallback_code: &str, error: &crate::trader::Error) -> Response {
+    use crate::trader::Error;
+    let code = match error {
+        Error::ForceStopped => "ForceStopped",
+        Error::CoreServicesNotReady { .. } => "CoreServicesNotReady",
+        Error::InvalidMint { .. } => "InvalidMint",
+        Error::Blacklisted { .. } => "Blacklisted",
+        Error::NoOpenPosition { .. } => "NoOpenPosition",
+        Error::InvalidSlippage { .. } => "InvalidSlippage",
+        Error::InvalidPercentage { .. } => "InvalidPercentage",
+        _ => fallback_code,
     };
+    let status =
+        StatusCode::from_u16(error.http_status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+    error_response(status, code, &error.to_string(), None)
+}
 
-    if !pct.is_finite() || pct <= 0.0 || pct > MAX_MANUAL_SLIPPAGE_PCT {
-        return Err(error_response(
+fn trade_response(
+    result: Result<crate::trader::TradeResult, crate::trader::Error>,
+    mint: String,
+    failed_code: &str,
+    error_code: &str,
+    message: String,
+) -> Response {
+    match result {
+        Ok(tr) if !tr.success => error_response(
             StatusCode::BAD_REQUEST,
-            "InvalidSlippage",
-            &format!("slippage_pct must be in (0, {MAX_MANUAL_SLIPPAGE_PCT}]"),
-            Some("Omit slippage_pct to use the configured default"),
-        ));
+            failed_code,
+            tr.error.as_deref().unwrap_or("Manual trade failed"),
+            None,
+        ),
+        Ok(tr) => success_response(ManualTradeSuccess {
+            success: true,
+            mint,
+            signature: tr.tx_signature,
+            effective_price_sol: tr.executed_price_sol,
+            size_sol: tr.executed_size_sol,
+            position_id: tr.position_id,
+            message,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        }),
+        Err(error) => manual_error(error_code, &error),
     }
-
-    Ok(Some(pct))
 }
 
 pub async fn manual_buy_handler(Json(req): Json<ManualBuyRequest>) -> Response {
-    // Check force stop
-    if crate::global::is_force_stopped() {
-        return error_response(
-            StatusCode::FORBIDDEN,
-            "ForceStopped",
-            "Manual trading disabled - Force stop is active",
-            None,
-        );
+    let blacklist = if req.force.unwrap_or_default() {
+        BlacklistPolicy::Override
+    } else {
+        BlacklistPolicy::Enforce
+    };
+    if let Err(error) = guard::preflight(ManualTradeKind::Buy, &req.mint, blacklist).await {
+        return manual_error("ManualBuyError", &error);
     }
-
-    // Check services ready
-    if !are_core_services_ready() {
-        let pending = get_pending_services().join(", ");
-        let error_msg = format!("Core services not ready: {pending}");
-        // Create failed action for visibility
-        crate::trader::actions::create_failed_buy_action(&req.mint, &error_msg).await;
-        return error_response(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "CoreServicesNotReady",
-            "Core services are not ready for trading operations",
-            Some(&format!("pending={pending}")),
-        );
-    }
-
-    // Validate mint
-    if crate::chains::adapter()
-        .validate_address(&req.mint)
-        .is_err()
-    {
-        let error_msg = "Invalid token mint address";
-        crate::trader::actions::create_failed_buy_action(&req.mint, error_msg).await;
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "InvalidMint",
-            error_msg,
-            Some("Mint must be a valid base58 pubkey"),
-        );
-    }
-
-    // Server-side blacklist enforcement with optional force override
-    if let Some(db) = crate::tokens::database::get_global_database() {
-        if let Ok(true) = tokio::task::spawn_blocking({
-            let db = db.clone();
-            let mint = req.mint.clone();
-            move || db.is_blacklisted(&mint)
-        })
-        .await
-        .unwrap_or(Ok(false))
-        {
-            if !req.force.unwrap_or_default() {
-                let error_msg = "Token is blacklisted";
-                crate::trader::actions::create_failed_buy_action(&req.mint, error_msg).await;
-                return error_response(
-                    StatusCode::FORBIDDEN,
-                    "Blacklisted",
-                    "Token is blacklisted; set force=true to override",
-                    None,
-                );
-            }
-        }
-    }
-
+    let slippage_pct = match guard::validate_slippage(req.slippage_pct) {
+        Ok(v) => v,
+        Err(error) => return manual_error("ManualBuyError", &error),
+    };
     let size = match req.size_sol {
         Some(v) if v.is_finite() && v > 0.0 => v,
         _ => with_config(|cfg| cfg.trader.trade_size_sol),
     };
-
     logger::info(
         LogTag::Webserver,
         &format!(
@@ -117,113 +88,29 @@ pub async fn manual_buy_handler(Json(req): Json<ManualBuyRequest>) -> Response {
             req.force.unwrap_or_default()
         ),
     );
-
     let management = req
         .management
         .unwrap_or(crate::positions::PositionManagement::UserOnly);
-
-    // Use standard manual_buy - action tracking is handled inside
-    let slippage_pct = match validate_slippage(req.slippage_pct) {
-        Ok(v) => v,
-        Err(resp) => return resp,
-    };
-
     let result = crate::trader::manual::manual_buy(&req.mint, size, management, slippage_pct).await;
-
-    match result {
-        Ok(tr) => {
-            if !tr.success {
-                return error_response(
-                    StatusCode::BAD_REQUEST,
-                    "ManualBuyFailed",
-                    tr.error.as_deref().unwrap_or("Manual buy failed"),
-                    None,
-                );
-            }
-            let resp = ManualTradeSuccess {
-                success: true,
-                mint: req.mint,
-                signature: tr.tx_signature,
-                effective_price_sol: tr.executed_price_sol,
-                size_sol: tr.executed_size_sol,
-                position_id: tr.position_id,
-                message: "Manual buy executed".to_owned(),
-                timestamp: chrono::Utc::now().to_rfc3339(),
-            };
-            success_response(resp)
-        }
-        Err(e) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "ManualBuyError",
-            &e.to_string(),
-            None,
-        ),
-    }
+    trade_response(
+        result,
+        req.mint,
+        "ManualBuyFailed",
+        "ManualBuyError",
+        "Manual buy executed".to_owned(),
+    )
 }
 
 pub async fn manual_add_handler(Json(req): Json<ManualAddRequest>) -> Response {
-    // Check force stop
-    if crate::global::is_force_stopped() {
-        return error_response(
-            StatusCode::FORBIDDEN,
-            "ForceStopped",
-            "Manual trading disabled - Force stop is active",
-            None,
-        );
-    }
-
-    // Enforce blacklist for add (no override)
-    if let Some(db) = crate::tokens::database::get_global_database() {
-        if let Ok(true) = tokio::task::spawn_blocking({
-            let db = db.clone();
-            let mint = req.mint.clone();
-            move || db.is_blacklisted(&mint)
-        })
-        .await
-        .unwrap_or(Ok(false))
-        {
-            let error_msg = "Token is blacklisted; cannot add to position";
-            crate::trader::actions::create_failed_add_action(&req.mint, error_msg).await;
-            return error_response(StatusCode::FORBIDDEN, "Blacklisted", error_msg, None);
-        }
-    }
-
-    // Check services ready
-    if !are_core_services_ready() {
-        let pending = get_pending_services().join(", ");
-        let error_msg = format!("Core services not ready: {pending}");
-        crate::trader::actions::create_failed_add_action(&req.mint, &error_msg).await;
-        return error_response(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "CoreServicesNotReady",
-            "Core services are not ready for trading operations",
-            Some(&format!("pending={pending}")),
-        );
-    }
-
-    // Validate mint
-    if crate::chains::adapter()
-        .validate_address(&req.mint)
-        .is_err()
+    if let Err(error) =
+        guard::preflight(ManualTradeKind::Add, &req.mint, BlacklistPolicy::Enforce).await
     {
-        let error_msg = "Invalid token mint address";
-        crate::trader::actions::create_failed_add_action(&req.mint, error_msg).await;
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "InvalidMint",
-            error_msg,
-            Some("Mint must be a valid base58 pubkey"),
-        );
+        return manual_error("ManualAddError", &error);
     }
-
-    // Ensure there's an open position for this mint
-    let has_open = positions::is_open_position(&req.mint).await;
-    if !has_open {
-        let error_msg = "Cannot add to position: no open position for this token";
-        crate::trader::actions::create_failed_add_action(&req.mint, error_msg).await;
-        return error_response(StatusCode::BAD_REQUEST, "NoOpenPosition", error_msg, None);
-    }
-
+    let slippage_pct = match guard::validate_slippage(req.slippage_pct) {
+        Ok(v) => v,
+        Err(error) => return manual_error("ManualAddError", &error),
+    };
     // Default add size = the configured DCA size (a fraction of the trade size). The
     // fraction must come from `trader.dca_size_percentage`, never a hardcoded 0.5.
     let size = match req.size_sol {
@@ -232,122 +119,41 @@ pub async fn manual_add_handler(Json(req): Json<ManualAddRequest>) -> Response {
             with_config(|cfg| cfg.trader.trade_size_sol * (cfg.trader.dca_size_percentage / 100.0))
         }
     };
-
     logger::info(
         LogTag::Webserver,
         &format!("mint={} size_sol={}", req.mint, size),
     );
-
-    // Use trader module - action tracking is handled inside
-    let slippage_pct = match validate_slippage(req.slippage_pct) {
-        Ok(v) => v,
-        Err(resp) => return resp,
-    };
-
     let result = crate::trader::manual::manual_add(&req.mint, size, slippage_pct).await;
-
-    match result {
-        Ok(tr) => {
-            if !tr.success {
-                return error_response(
-                    StatusCode::BAD_REQUEST,
-                    "ManualAddFailed",
-                    tr.error.as_deref().unwrap_or("Manual add failed"),
-                    None,
-                );
-            }
-            let resp = ManualTradeSuccess {
-                success: true,
-                mint: req.mint,
-                signature: tr.tx_signature,
-                effective_price_sol: tr.executed_price_sol,
-                size_sol: tr.executed_size_sol,
-                position_id: tr.position_id,
-                message: "Added to position".to_owned(),
-                timestamp: chrono::Utc::now().to_rfc3339(),
-            };
-            success_response(resp)
-        }
-        Err(e) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "ManualAddError",
-            &e.to_string(),
-            None,
-        ),
-    }
+    trade_response(
+        result,
+        req.mint,
+        "ManualAddFailed",
+        "ManualAddError",
+        "Added to position".to_owned(),
+    )
 }
 
 pub async fn manual_sell_handler(Json(req): Json<ManualSellRequest>) -> Response {
-    // Check force stop
-    if crate::global::is_force_stopped() {
-        return error_response(
-            StatusCode::FORBIDDEN,
-            "ForceStopped",
-            "Manual trading disabled - Force stop is active",
-            None,
-        );
-    }
-
-    // Check services ready
-    if !are_core_services_ready() {
-        let pending = get_pending_services().join(", ");
-        let error_msg = format!("Core services not ready: {pending}");
-        crate::trader::actions::create_failed_sell_action(&req.mint, &error_msg).await;
-        return error_response(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "CoreServicesNotReady",
-            "Core services are not ready for trading operations",
-            Some(&format!("pending={pending}")),
-        );
-    }
-
-    // Validate mint
-    if crate::chains::adapter()
-        .validate_address(&req.mint)
-        .is_err()
+    if let Err(error) =
+        guard::preflight(ManualTradeKind::Sell, &req.mint, BlacklistPolicy::Ignore).await
     {
-        let error_msg = "Invalid token mint address";
-        crate::trader::actions::create_failed_sell_action(&req.mint, error_msg).await;
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "InvalidMint",
-            error_msg,
-            Some("Mint must be a valid base58 pubkey"),
-        );
+        return manual_error("ManualSellError", &error);
     }
-
-    let is_open = positions::is_open_position(&req.mint).await;
-    if !is_open {
-        let error_msg = "Cannot sell: no open position for this token";
-        crate::trader::actions::create_failed_sell_action(&req.mint, error_msg).await;
-        return error_response(StatusCode::BAD_REQUEST, "NoOpenPosition", error_msg, None);
-    }
-
-    // Determine percentage
-    let close_all = req.close_all.unwrap_or_default();
-    let pct = if close_all {
+    let pct = if req.close_all.unwrap_or_default() {
         None // Full exit (100%)
     } else {
-        Some(
-            req.percentage
-                .unwrap_or_else(|| with_config(|cfg| cfg.positions.partial_exit_default_pct)),
-        )
-    };
-
-    // Validate percentage if provided
-    if let Some(percentage) = pct {
-        if !percentage.is_finite() || percentage <= 0.0 || percentage > 100.0 {
-            let error_msg = format!("Invalid percentage: {percentage}. Must be in (0, 100]");
-            crate::trader::actions::create_failed_sell_action(&req.mint, &error_msg).await;
-            return error_response(
-                StatusCode::BAD_REQUEST,
-                "InvalidPercentage",
-                "percentage must be in (0, 100]",
-                None,
-            );
+        let requested = req
+            .percentage
+            .unwrap_or_else(|| with_config(|cfg| cfg.positions.partial_exit_default_pct));
+        match guard::validate_percentage(requested) {
+            Ok(pct) => Some(pct),
+            Err(error) => return manual_error("ManualSellError", &error),
         }
-    }
-
+    };
+    let slippage_pct = match guard::validate_slippage(req.slippage_pct) {
+        Ok(v) => v,
+        Err(error) => return manual_error("ManualSellError", &error),
+    };
     logger::info(
         LogTag::Webserver,
         &format!(
@@ -357,52 +163,22 @@ pub async fn manual_sell_handler(Json(req): Json<ManualSellRequest>) -> Response
             req.force.unwrap_or_default()
         ),
     );
-
-    // Route to trader module - action tracking is handled inside
-    let slippage_pct = match validate_slippage(req.slippage_pct) {
-        Ok(v) => v,
-        Err(resp) => return resp,
-    };
-
     let result = if req.force.unwrap_or_default() {
         crate::trader::manual::force_sell(&req.mint, pct, slippage_pct).await
     } else {
         crate::trader::manual::manual_sell(&req.mint, pct, slippage_pct).await
     };
-
-    match result {
-        Ok(tr) => {
-            if !tr.success {
-                return error_response(
-                    StatusCode::BAD_REQUEST,
-                    "ManualSellFailed",
-                    tr.error.as_deref().unwrap_or("Manual sell failed"),
-                    None,
-                );
-            }
-            let resp = ManualTradeSuccess {
-                success: true,
-                mint: req.mint,
-                signature: tr.tx_signature,
-                effective_price_sol: tr.executed_price_sol,
-                size_sol: tr.executed_size_sol,
-                position_id: tr.position_id,
-                message: if pct.unwrap_or(100.0) == 100.0 {
-                    "Full position closed".to_owned()
-                } else {
-                    format!("Partial position closed ({}%)", pct.unwrap_or(100.0))
-                },
-                timestamp: chrono::Utc::now().to_rfc3339(),
-            };
-            success_response(resp)
-        }
-        Err(e) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "ManualSellError",
-            &e.to_string(),
-            None,
-        ),
-    }
+    let message = match pct {
+        Some(pct) if pct < 100.0 => format!("Partial position closed ({pct}%)"),
+        _ => "Full position closed".to_owned(),
+    };
+    trade_response(
+        result,
+        req.mint,
+        "ManualSellFailed",
+        "ManualSellError",
+        message,
+    )
 }
 
 // =============================================================================
@@ -548,10 +324,10 @@ pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Re
         wallet_address,
         // Price the preview at the slippage the trade will actually use, so the quote
         // the user confirms is the quote they get.
-        slippage_pct: match validate_slippage(req.slippage_pct) {
+        slippage_pct: match guard::validate_slippage(req.slippage_pct) {
             Ok(Some(pct)) => pct,
             Ok(None) => with_config(|cfg| cfg.swaps.slippage.quote_default_pct),
-            Err(resp) => return resp,
+            Err(error) => return manual_error("InvalidSlippage", &error),
         },
         swap_mode: SwapMode::ExactIn,
         exclude_dexes: None,
