@@ -101,6 +101,9 @@ pub struct WalletActivity {
     /// set avoids an event-time database lookup and keeps alert/copy dispatch out of
     /// the detection hot path.
     pub sources: Vec<WatchSource>,
+    /// Replayed by a gap-fill (service start or transport reconnect) rather than
+    /// seen live. Its arrival distance measures downtime, not pipeline latency.
+    pub backfill: bool,
 }
 
 /// One realtime notification from the injected chain runtime's subscription

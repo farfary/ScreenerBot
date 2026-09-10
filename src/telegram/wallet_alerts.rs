@@ -94,6 +94,7 @@ mod tests {
             success: true,
             kind,
             sources,
+            backfill: false,
         }
     }
 

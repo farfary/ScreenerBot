@@ -80,6 +80,7 @@ pub fn run_paper_pipeline(
                     confirmed_at: Some(decided_at),
                     target_price_sol: *target_price_sol,
                     fill_price_sol: Some(fill.fill_price_sol),
+                    backfill: activity.backfill,
                 },
             })
         })
@@ -108,6 +109,7 @@ fn skipped(
             confirmed_at: None,
             target_price_sol: None,
             fill_price_sol: None,
+            backfill: activity.backfill,
         }),
     }
 }

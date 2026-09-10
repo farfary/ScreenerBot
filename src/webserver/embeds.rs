@@ -464,6 +464,10 @@ pub const TRADER_CONFIG_CARDS_JS: &str =
 pub const TRADER_FEATURES_JS: &str = include_str!("templates/scripts/pages/trader/features.js");
 pub const TRADER_WALLET_COPY_JS: &str =
     include_str!("templates/scripts/pages/trader/wallet_copy.js");
+pub const TRADER_WALLET_COPY_VIEW_JS: &str =
+    include_str!("templates/scripts/pages/trader/wallet_copy_view.js");
+pub const TRADER_WALLET_COPY_SETTINGS_JS: &str =
+    include_str!("templates/scripts/pages/trader/wallet_copy_settings.js");
 pub const WALLETS_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/wallets.js");
 pub const WALLETS_BULK_OPERATIONS_JS: &str =
     include_str!("templates/scripts/pages/wallets/bulk_operations.js");

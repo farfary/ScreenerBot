@@ -10,7 +10,7 @@ use screenerbot::chains::ChainId;
 use screenerbot::positions::{PositionManagement, PositionOrigin};
 use screenerbot::trader::copy::{
     execute_copy_sell_with, paper_sell_outcome, prepare_copy_sell, CopyMode, CopyOutcome,
-    CopySellSubmitResult, CopySkip, CopyTask, ExitMode, SizingMode,
+    CopySellSubmitResult, CopySkip, CopyTask, ExitMode, PaperCosts, SizingMode,
 };
 use screenerbot::trader::{TradeAction, TradeReason};
 use screenerbot::wallets::watch::{ActivityKind, SwapSide, WalletActivity, WatchSource};
@@ -57,6 +57,7 @@ fn sell_activity() -> WalletActivity {
             price_sol: Some(0.01),
         },
         sources: vec![WatchSource::Copy { task_id: 7 }],
+        backfill: false,
     }
 }
 
@@ -156,17 +157,49 @@ fn exit_mode_force_stop_and_user_ownership_are_typed_skips() {
     .is_ok());
 }
 
+const PAPER_COSTS: PaperCosts = PaperCosts {
+    network_fee_sol: 0.000005,
+    priority_fee_sol: 0.0,
+};
+
 #[test]
-fn paper_mode_records_sell_observation_without_claiming_a_position() {
+fn paper_mode_sells_the_targets_fraction_of_the_paper_holding() {
+    // The target sold 30 of its 100 tokens; the paper book holds 50.
     let outcome = paper_sell_outcome(
         &sell_activity(),
         &task(ExitMode::Mirror, CopyMode::Paper),
         false,
         100.0,
+        50.0,
+        0.01,
+        PAPER_COSTS,
         Utc::now(),
     )
     .unwrap();
-    assert!(matches!(outcome, CopyOutcome::PaperSellObserved(_)));
+    let CopyOutcome::PaperSellObserved(decision) = outcome else {
+        panic!("expected a paper sell");
+    };
+    let fill = decision.paper_fill.expect("paper sell books a fill");
+    assert!((fill.token_amount - 15.0).abs() < 1e-9);
+    assert!((fill.fill_price_sol - 0.0098).abs() < 1e-12);
+    assert!(fill.net_proceeds_sol < fill.gross_sol);
+}
+
+#[test]
+fn paper_sell_without_a_paper_holding_is_skipped() {
+    assert_eq!(
+        paper_sell_outcome(
+            &sell_activity(),
+            &task(ExitMode::Hybrid, CopyMode::Paper),
+            false,
+            100.0,
+            0.0,
+            0.01,
+            PAPER_COSTS,
+            Utc::now(),
+        ),
+        Err(CopySkip::CopyPositionNotFound)
+    );
 }
 
 #[tokio::test]

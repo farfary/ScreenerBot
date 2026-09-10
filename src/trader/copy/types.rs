@@ -180,6 +180,29 @@ impl CopyTaskInput {
     }
 }
 
+impl From<&CopyTask> for CopyTaskInput {
+    /// The editable surface of a stored task, so a partial update can be merged
+    /// onto it and re-validated through the same path as a full one.
+    fn from(task: &CopyTask) -> Self {
+        Self {
+            target_address: task.target_address.clone(),
+            label: task.label.clone(),
+            enabled: task.enabled,
+            mode: task.mode,
+            sizing: task.sizing.clone(),
+            exit_mode: task.exit_mode,
+            exit_policy_overrides: task.exit_policy_overrides.clone(),
+            max_sol_per_trade: task.max_sol_per_trade,
+            max_sol_per_token: task.max_sol_per_token,
+            total_budget_sol: task.total_budget_sol,
+            min_target_trade_sol: task.min_target_trade_sol,
+            max_target_trade_sol: task.max_target_trade_sol,
+            buy_once_per_token: task.buy_once_per_token,
+            slippage_pct: task.slippage_pct,
+        }
+    }
+}
+
 pub fn confirm_mode_transition(
     current: CopyMode,
     requested: CopyMode,
@@ -260,6 +283,12 @@ pub enum CopySkip {
     },
     InvalidExitPolicy,
     InvalidPrice,
+    /// A gap-fill replayed this trade after downtime; copying it now would trade
+    /// on a price that no longer exists.
+    StaleObservation {
+        arrival_ms: u64,
+        threshold_ms: u64,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -274,6 +303,46 @@ pub struct PaperFill {
     pub total_cost_sol: f64,
 }
 
+/// A simulated sell against the paper book: the tokens it held, sold at the
+/// decision-time price less slippage, the referral fee and network costs.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PaperSellFill {
+    pub token_amount: f64,
+    pub market_price_sol: f64,
+    pub fill_price_sol: f64,
+    pub gross_sol: f64,
+    pub referral_fee_sol: f64,
+    pub network_fee_sol: f64,
+    pub priority_fee_sol: f64,
+    pub net_proceeds_sol: f64,
+}
+
+/// One task's paper holding in one token, accumulated across its buys and sells.
+/// `cost_basis_sol` is the cost of the tokens still held; realized figures only
+/// ever grow.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct PaperPosition {
+    pub task_id: i64,
+    pub mint: String,
+    pub token_amount: f64,
+    pub cost_basis_sol: f64,
+    pub invested_sol: f64,
+    pub realized_proceeds_sol: f64,
+    pub realized_cost_sol: f64,
+    pub buys: u64,
+    pub sells: u64,
+    pub last_price_sol: Option<f64>,
+    pub last_price_at: Option<DateTime<Utc>>,
+    pub opened_at: DateTime<Utc>,
+    pub closed_at: Option<DateTime<Utc>>,
+}
+
+impl PaperPosition {
+    pub fn is_open(&self) -> bool {
+        self.closed_at.is_none() && self.token_amount > 0.0
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CopyTelemetry {
     pub target_block_time: Option<i64>,
@@ -284,6 +353,10 @@ pub struct CopyTelemetry {
     pub confirmed_at: Option<DateTime<Utc>>,
     pub target_price_sol: Option<f64>,
     pub fill_price_sol: Option<f64>,
+    /// The observation came from a gap-fill replay; its arrival distance measures
+    /// downtime and never feeds the latency kill switch.
+    #[serde(default)]
+    pub backfill: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -328,6 +401,9 @@ pub struct CopySellDecision {
     pub transaction_signature: Option<String>,
     pub error: Option<String>,
     pub telemetry: CopyTelemetry,
+    /// The simulated sell a paper task booked. `None` on live sells.
+    #[serde(default)]
+    pub paper_fill: Option<PaperSellFill>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -364,6 +440,19 @@ impl CopyOutcome {
             Self::Skipped { task_id, .. } => *task_id,
         }
     }
+
+    pub fn telemetry(&self) -> Option<&CopyTelemetry> {
+        match self {
+            Self::PaperFilled(decision) => Some(&decision.telemetry),
+            Self::LiveSubmitted(decision)
+            | Self::LiveConfirmed(decision)
+            | Self::LiveFailed(decision) => Some(&decision.telemetry),
+            Self::PaperSellObserved(decision)
+            | Self::LiveSellSubmitted(decision)
+            | Self::LiveSellFailed(decision) => Some(&decision.telemetry),
+            Self::Skipped { telemetry, .. } => telemetry.as_ref(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -385,6 +474,16 @@ pub struct ArrivalDistanceStats {
     pub average_ms: Option<u64>,
 }
 
+/// Which book a task's position and P&L figures come from: its paper ledger while
+/// it runs in paper mode, the real positions it opened while live.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CopyBook {
+    Paper,
+    #[default]
+    Live,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct CopyTaskStats {
     pub task_id: i64,
@@ -398,6 +497,9 @@ pub struct CopyTaskStats {
     pub closed_positions: usize,
     pub realized_pnl_sol: f64,
     pub unrealized_pnl_sol: f64,
+    pub book: CopyBook,
+    /// Open positions with no price to mark them at; excluded from unrealized P&L.
+    pub unpriced_positions: usize,
     pub arrival_distance: ArrivalDistanceStats,
 }
 

@@ -262,11 +262,16 @@ pub async fn get_status(id: i64) -> Result<WatchStatus, Error> {
     })
 }
 
-/// Whether the running observation loop currently watches `address`. `None` while
-/// the loop is stopped or still building its target set -- callers must treat that
-/// as unknown, never as "not observed".
-pub fn is_observing(address: &str) -> Option<bool> {
-    service_state::is_observing(address)
+/// Whether `address` is persisted as an enabled watch target carrying this copy
+/// task as a source. Persisted state, not the loop's runtime set, so a reload in
+/// flight is never mistaken for a missing target.
+pub async fn copy_source_active(task_id: i64, address: &str) -> Result<bool, Error> {
+    Ok(watch_db()?
+        .get_target_by_address(address)
+        .await?
+        .is_some_and(|target| {
+            target.enabled && target.sources.contains(&WatchSource::Copy { task_id })
+        }))
 }
 
 #[cfg(test)]

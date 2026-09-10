@@ -34,6 +34,7 @@ fn idle_target_runtime(target: WatchTarget) -> TargetRuntime {
         catch_up: None,
         baseline_only: false,
         overflow_streak: 0,
+        backfill: false,
     }
 }
 
@@ -59,7 +60,7 @@ async fn poll_target_rejects_an_invalid_address_before_any_observation_starts() 
     );
 
     let mut target_runtime = idle_target_runtime(own_watch_target("NotAValidTarget1111"));
-    poll_target(&mut target_runtime, &chain_runtime, &watch_db, own).await;
+    poll_target(&mut target_runtime, &chain_runtime, &watch_db, own, false).await;
 
     assert!(
         target_runtime.catch_up.is_none(),
@@ -90,7 +91,7 @@ async fn first_observation_establishes_a_bounded_baseline_without_replaying_hist
 
     // No cursor row yet and not the own wallet -- this is the baseline-only path.
     let mut target_runtime = idle_target_runtime(alert_watch_target(address, 1));
-    poll_target(&mut target_runtime, &chain_runtime, &watch_db, own).await;
+    poll_target(&mut target_runtime, &chain_runtime, &watch_db, own, false).await;
 
     assert_eq!(
         watch_db.get_cursor(address).await.unwrap().as_deref(),
@@ -119,7 +120,7 @@ async fn a_processing_failure_never_advances_the_durable_cursor() {
     );
 
     let mut target_runtime = idle_target_runtime(alert_watch_target(address, 2));
-    poll_target(&mut target_runtime, &chain_runtime, &watch_db, own).await;
+    poll_target(&mut target_runtime, &chain_runtime, &watch_db, own, false).await;
 
     // No global transaction database is installed in this unit test, so dedupe
     // admission fails and `process_signature` returns `Retryable` -- exactly the
@@ -148,6 +149,7 @@ async fn process_signature_resolves_the_exact_target_identity_before_dedupe() {
         ),
         "some-signature",
         Utc::now(),
+        false,
     )
     .await;
 
@@ -175,6 +177,7 @@ async fn process_signature_rejects_a_wrong_chain_target_before_any_call() {
         ),
         "some-signature",
         Utc::now(),
+        false,
     )
     .await;
 
@@ -204,7 +207,14 @@ async fn an_overflowing_target_skips_to_the_head_then_is_disabled_when_it_repeat
     );
 
     let mut target_runtime = idle_target_runtime(target);
-    poll_target(&mut target_runtime, &chain_runtime, &watch_db, own.clone()).await;
+    poll_target(
+        &mut target_runtime,
+        &chain_runtime,
+        &watch_db,
+        own.clone(),
+        false,
+    )
+    .await;
     assert_eq!(
         watch_db.get_cursor(address).await.unwrap().as_deref(),
         Some("first-0-000"),
@@ -216,7 +226,7 @@ async fn an_overflowing_target_skips_to_the_head_then_is_disabled_when_it_repeat
     for page in 0..poller::MAX_PAGES {
         fake.queue_page(address, full(&format!("second-{page}")));
     }
-    poll_target(&mut target_runtime, &chain_runtime, &watch_db, own).await;
+    poll_target(&mut target_runtime, &chain_runtime, &watch_db, own, false).await;
     assert!(
         !watch_db.get_target(id).await.unwrap().unwrap().enabled,
         "a second consecutive overflow disables the target"

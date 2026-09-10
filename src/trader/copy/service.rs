@@ -15,8 +15,12 @@ use super::{
     arrival_distance_ms, execute_copy_sell_with, execute_live_with, latency_should_pause,
     matching_tasks, paper_sell_outcome, prepare_copy_sell, prepare_live_entry, run_paper_pipeline,
     CopyDatabase, CopyMode, CopyOutcome, CopySellSubmitResult, CopySkip, CopyTelemetry,
-    LiveSubmitResult, PaperCosts, PipelinePolicy, RiskContext,
+    LiveSubmitResult, PaperCosts, PaperPosition, PipelinePolicy, RiskContext,
 };
+
+/// A task edited this recently may still be attaching its watch source, so the
+/// reconciler never judges it detached.
+const SOURCE_SETTLE_SECS: i64 = 120;
 
 pub async fn run(shutdown: Arc<Notify>, database: CopyDatabase) {
     let mut receiver = subscribe_activity();
@@ -86,6 +90,35 @@ async fn reconcile_runtime_state(database: &CopyDatabase) -> crate::trader::Resu
                 .await?;
         }
     }
+    pause_detached_tasks(database).await
+}
+
+/// An enabled task whose target is no longer an enabled watch source (the watcher
+/// disabled it as saturated, or it was removed) receives nothing, yet would still
+/// read as running. Pause it so the task state tells the truth.
+async fn pause_detached_tasks(database: &CopyDatabase) -> crate::trader::Result<()> {
+    let settled_before = Utc::now() - chrono::Duration::seconds(SOURCE_SETTLE_SECS);
+    for task in database.list_tasks().await? {
+        if !task.enabled || task.updated_at > settled_before {
+            continue;
+        }
+        match crate::wallets::watch::copy_source_active(task.id, &task.target_address).await {
+            Ok(true) => {}
+            Ok(false) => {
+                if database.pause_task(task.id).await? {
+                    logger::warning(
+                        LogTag::Trader,
+                        &format!(
+                            "Paused copy task {}: target {} is no longer watched",
+                            task.id, task.target_address
+                        ),
+                    );
+                }
+            }
+            // The watch service is not up yet; nothing can be judged this pass.
+            Err(_) => return Ok(()),
+        }
+    }
     Ok(())
 }
 
@@ -126,6 +159,9 @@ async fn process_activity(
         return Ok(());
     }
     let target_holdings_before = observe_target_inventory(database, activity, &tasks).await?;
+    if reject_stale_backfill(database, activity, &tasks, mint).await? {
+        return Ok(());
+    }
     apply_latency_kill_switch(database, activity, &mut tasks).await?;
     if tasks.is_empty() {
         return Ok(());
@@ -164,7 +200,10 @@ async fn process_activity(
         .map(|wallet| wallet.address)
         .collect::<Vec<_>>();
     for task in &tasks {
-        spend.insert(task.id, database.spend_state(task.id, mint).await?);
+        spend.insert(
+            task.id,
+            database.spend_state(task.id, task.mode, mint).await?,
+        );
         risk.insert(
             task.id,
             RiskContext {
@@ -177,12 +216,7 @@ async fn process_activity(
             },
         );
     }
-    let (trade_size_sol, priority_lamports) = with_config(|config| {
-        (
-            config.trader.trade_size_sol,
-            config.swaps.jupiter.default_priority_fee,
-        )
-    });
+    let trade_size_sol = with_config(|config| config.trader.trade_size_sol);
     let policy = PipelinePolicy {
         require_filter_pass,
         engine_trade_size_sol: trade_size_sol,
@@ -193,10 +227,7 @@ async fn process_activity(
         .cloned()
         .collect::<Vec<_>>();
     if !paper_tasks.is_empty() {
-        let decision_price = crate::pools::get_pool_price(mint)
-            .map(|price| price.price_sol)
-            .or(*price_sol)
-            .unwrap_or(f64::NAN);
+        let decision_price = decision_price(mint, *price_sol);
         let paper_outcomes = if let Err(block) =
             crate::trader::admission::check_entry_admission(mint, &["rpc"]).await
         {
@@ -221,10 +252,7 @@ async fn process_activity(
                 &risk,
                 policy,
                 decision_price,
-                PaperCosts {
-                    network_fee_sol: 0.000005,
-                    priority_fee_sol: crate::chains::adapter().raw_to_native(priority_lamports),
-                },
+                paper_costs(),
                 Utc::now(),
             )
         };
@@ -324,20 +352,11 @@ async fn apply_latency_kill_switch(
     if !enabled {
         return Ok(());
     }
-    let current = CopyTelemetry {
-        target_block_time: activity.block_time,
-        detected_at: activity.detected_at,
-        decoded_at: activity.decoded_at,
-        decided_at: Utc::now(),
-        submitted_at: None,
-        confirmed_at: None,
-        target_price_sol: match &activity.kind {
-            ActivityKind::Swap { price_sol, .. } => *price_sol,
-            _ => None,
-        },
-        fill_price_sol: None,
-    };
-    let Some(current_distance) = arrival_distance_ms(&current) else {
+    // A replayed observation measures downtime, not pipeline latency.
+    if activity.backfill {
+        return Ok(());
+    }
+    let Some(current_distance) = arrival_distance_ms(&observation_telemetry(activity)) else {
         return Ok(());
     };
     let mut retained = Vec::with_capacity(tasks.len());
@@ -345,18 +364,9 @@ async fn apply_latency_kill_switch(
         let rows = database.list_task_activity(task.id, window_size).await?;
         let mut samples = rows
             .iter()
-            .filter_map(|row| match &row.outcome {
-                CopyOutcome::PaperFilled(value) => arrival_distance_ms(&value.telemetry),
-                CopyOutcome::LiveSubmitted(value)
-                | CopyOutcome::LiveConfirmed(value)
-                | CopyOutcome::LiveFailed(value) => arrival_distance_ms(&value.telemetry),
-                CopyOutcome::PaperSellObserved(value)
-                | CopyOutcome::LiveSellSubmitted(value)
-                | CopyOutcome::LiveSellFailed(value) => arrival_distance_ms(&value.telemetry),
-                CopyOutcome::Skipped { telemetry, .. } => {
-                    telemetry.as_ref().and_then(arrival_distance_ms)
-                }
-            })
+            .filter_map(|row| row.outcome.telemetry())
+            .filter(|telemetry| !telemetry.backfill)
+            .filter_map(arrival_distance_ms)
             .collect::<Vec<_>>();
         samples.reverse();
         samples.push(current_distance);
@@ -410,16 +420,35 @@ async fn process_sell_activity(
     target_holdings_before: &HashMap<i64, f64>,
 ) -> crate::trader::Result<()> {
     let force_stopped = crate::global::is_force_stopped();
+    let target_price = match &activity.kind {
+        ActivityKind::Swap { price_sol, .. } => *price_sol,
+        _ => None,
+    };
+    let market_price = decision_price(mint, target_price);
+    let costs = paper_costs();
     for task in tasks.iter().filter(|task| task.mode == CopyMode::Paper) {
         let target_holding = target_holdings_before
             .get(&task.id)
             .copied()
             .unwrap_or_default();
-        let outcome =
-            match paper_sell_outcome(activity, task, force_stopped, target_holding, Utc::now()) {
-                Ok(outcome) => outcome,
-                Err(reason) => skipped(task.id, activity, mint, reason),
-            };
+        let paper_held = database
+            .paper_position(task.id, mint)
+            .await?
+            .filter(PaperPosition::is_open)
+            .map_or(0.0, |position| position.token_amount);
+        let outcome = match paper_sell_outcome(
+            activity,
+            task,
+            force_stopped,
+            target_holding,
+            paper_held,
+            market_price,
+            costs,
+            Utc::now(),
+        ) {
+            Ok(outcome) => outcome,
+            Err(reason) => skipped(task.id, activity, mint, reason),
+        };
         database.record_outcome(outcome).await?;
     }
 
@@ -462,25 +491,85 @@ async fn process_sell_activity(
     Ok(())
 }
 
+/// A gap-fill replays trades made while the bot was down or disconnected. Their
+/// inventory effect is kept (recorded before this runs), but copying one that
+/// arrived later than the arrival limit would trade on a price that no longer
+/// exists, so each task records an explicit skip instead.
+async fn reject_stale_backfill(
+    database: &CopyDatabase,
+    activity: &WalletActivity,
+    tasks: &[super::CopyTask],
+    mint: &str,
+) -> crate::trader::Result<bool> {
+    if !activity.backfill {
+        return Ok(false);
+    }
+    let threshold_ms = with_config(|config| config.copy_trading.max_arrival_distance_ms);
+    let Some(arrival_ms) = arrival_distance_ms(&observation_telemetry(activity)) else {
+        return Ok(false);
+    };
+    if arrival_ms <= threshold_ms {
+        return Ok(false);
+    }
+    for task in tasks {
+        database
+            .record_outcome(skipped(
+                task.id,
+                activity,
+                mint,
+                CopySkip::StaleObservation {
+                    arrival_ms,
+                    threshold_ms,
+                },
+            ))
+            .await?;
+    }
+    Ok(true)
+}
+
+/// Pool price first (the trading price system); the target's own swap price when
+/// the pool service does not track the token. NaN means no price at all, which
+/// the paper simulators refuse as `InvalidPrice`.
+fn decision_price(mint: &str, target_price_sol: Option<f64>) -> f64 {
+    crate::pools::get_pool_price(mint)
+        .map(|price| price.price_sol)
+        .or(target_price_sol)
+        .unwrap_or(f64::NAN)
+}
+
+fn paper_costs() -> PaperCosts {
+    let priority_lamports = with_config(|config| config.swaps.jupiter.default_priority_fee);
+    PaperCosts {
+        network_fee_sol: 0.000005,
+        priority_fee_sol: crate::chains::adapter().raw_to_native(priority_lamports),
+    }
+}
+
+fn observation_telemetry(activity: &WalletActivity) -> CopyTelemetry {
+    CopyTelemetry {
+        target_block_time: activity.block_time,
+        detected_at: activity.detected_at,
+        decoded_at: activity.decoded_at,
+        decided_at: Utc::now(),
+        submitted_at: None,
+        confirmed_at: None,
+        target_price_sol: match &activity.kind {
+            ActivityKind::Swap { price_sol, .. } => *price_sol,
+            _ => None,
+        },
+        fill_price_sol: None,
+        backfill: activity.backfill,
+    }
+}
+
 fn skipped(task_id: i64, activity: &WalletActivity, mint: &str, reason: CopySkip) -> CopyOutcome {
+    let telemetry = observation_telemetry(activity);
     CopyOutcome::Skipped {
         task_id,
         signature: activity.signature.clone(),
         mint: Some(mint.to_owned()),
         reason,
-        decided_at: Utc::now(),
-        telemetry: Some(CopyTelemetry {
-            target_block_time: activity.block_time,
-            detected_at: activity.detected_at,
-            decoded_at: activity.decoded_at,
-            decided_at: Utc::now(),
-            submitted_at: None,
-            confirmed_at: None,
-            target_price_sol: match &activity.kind {
-                ActivityKind::Swap { price_sol, .. } => *price_sol,
-                _ => None,
-            },
-            fill_price_sol: None,
-        }),
+        decided_at: telemetry.decided_at,
+        telemetry: Some(telemetry),
     }
 }

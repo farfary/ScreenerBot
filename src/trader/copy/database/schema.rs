@@ -1,8 +1,9 @@
 use rusqlite::{Connection, OptionalExtension};
 
+use crate::trader::copy::types::CopyOutcome;
 use crate::trader::error::Error;
 
-pub(super) const SCHEMA_VERSION: i64 = 4;
+pub(super) const SCHEMA_VERSION: i64 = 5;
 
 pub(super) const SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS copy_metadata (
@@ -33,9 +34,28 @@ CREATE INDEX IF NOT EXISTS idx_copy_tasks_target_enabled
     ON copy_tasks(target_address, enabled);
 CREATE TABLE IF NOT EXISTS copy_spend (
     task_id INTEGER NOT NULL,
+    mode TEXT NOT NULL,
     mint TEXT NOT NULL,
     spent_sol REAL NOT NULL DEFAULT 0,
     buy_count INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (task_id, mode, mint),
+    FOREIGN KEY (task_id) REFERENCES copy_tasks(id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS copy_paper_positions (
+    task_id INTEGER NOT NULL,
+    mint TEXT NOT NULL,
+    token_amount REAL NOT NULL DEFAULT 0,
+    cost_basis_sol REAL NOT NULL DEFAULT 0,
+    invested_sol REAL NOT NULL DEFAULT 0,
+    realized_proceeds_sol REAL NOT NULL DEFAULT 0,
+    realized_cost_sol REAL NOT NULL DEFAULT 0,
+    buys INTEGER NOT NULL DEFAULT 0,
+    sells INTEGER NOT NULL DEFAULT 0,
+    last_price_sol REAL,
+    last_price_at TEXT,
+    opened_at TEXT NOT NULL,
+    closed_at TEXT,
     updated_at TEXT NOT NULL,
     PRIMARY KEY (task_id, mint),
     FOREIGN KEY (task_id) REFERENCES copy_tasks(id) ON DELETE CASCADE
@@ -178,5 +198,93 @@ pub(super) fn migrate(connection: &Connection) -> crate::trader::Result<()> {
             .commit()
             .map_err(crate::errors::DatabaseError::from)?;
     }
+    migrate_mode_scoped_spend(connection)?;
+    Ok(())
+}
+
+fn table_columns(connection: &Connection, table: &str) -> crate::trader::Result<Vec<String>> {
+    let mut statement = connection
+        .prepare(&format!("PRAGMA table_info({table})"))
+        .map_err(crate::errors::DatabaseError::from)?;
+    let columns = statement
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(crate::errors::DatabaseError::from)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(crate::errors::DatabaseError::from)?;
+    Ok(columns)
+}
+
+/// v5: spend was one ledger shared by paper and live, so paper fills consumed the
+/// live budget and a task armed for live started half spent. Rebuild it keyed by
+/// mode from the recorded decisions (the source of every spend increment); spend no
+/// decision explains is kept under the task's current mode rather than dropped.
+/// Every recorded paper fill is booked into the new paper position ledger.
+fn migrate_mode_scoped_spend(connection: &Connection) -> crate::trader::Result<()> {
+    if table_columns(connection, "copy_spend")?
+        .iter()
+        .any(|column| column == "mode")
+    {
+        return Ok(());
+    }
+    let transaction = connection
+        .unchecked_transaction()
+        .map_err(crate::errors::DatabaseError::from)?;
+    transaction
+        .execute_batch(
+            "CREATE TABLE copy_spend_v5 (
+                task_id INTEGER NOT NULL,
+                mode TEXT NOT NULL,
+                mint TEXT NOT NULL,
+                spent_sol REAL NOT NULL DEFAULT 0,
+                buy_count INTEGER NOT NULL DEFAULT 0,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (task_id, mode, mint),
+                FOREIGN KEY (task_id) REFERENCES copy_tasks(id) ON DELETE CASCADE
+            );
+            INSERT INTO copy_spend_v5 (task_id, mode, mint, spent_sol, buy_count, updated_at)
+                SELECT task_id,
+                       CASE json_extract(outcome_json, '$.outcome') WHEN 'paper_filled' THEN 'paper' ELSE 'live' END,
+                       mint,
+                       SUM(json_extract(outcome_json, '$.sized_sol')),
+                       COUNT(*),
+                       MAX(decided_at)
+                FROM copy_decisions
+                WHERE mint IS NOT NULL
+                  AND json_extract(outcome_json, '$.outcome') IN ('paper_filled', 'live_submitted', 'live_confirmed')
+                GROUP BY 1, 2, 3;
+            INSERT INTO copy_spend_v5 (task_id, mode, mint, spent_sol, buy_count, updated_at)
+                SELECT s.task_id,
+                       CASE json_extract(t.mode_json, '$') WHEN 'live' THEN 'live' ELSE 'paper' END,
+                       s.mint, s.spent_sol, s.buy_count, s.updated_at
+                FROM copy_spend s JOIN copy_tasks t ON t.id = s.task_id
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM copy_spend_v5 v WHERE v.task_id = s.task_id AND v.mint = s.mint
+                );
+            DROP TABLE copy_spend;
+            ALTER TABLE copy_spend_v5 RENAME TO copy_spend;",
+        )
+        .map_err(crate::errors::DatabaseError::from)?;
+    let fills = {
+        let mut statement = transaction
+            .prepare(
+                "SELECT outcome_json FROM copy_decisions \
+                 WHERE json_extract(outcome_json, '$.outcome') = 'paper_filled' ORDER BY id",
+            )
+            .map_err(crate::errors::DatabaseError::from)?;
+        let rows = statement
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(crate::errors::DatabaseError::from)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(crate::errors::DatabaseError::from)?;
+        rows
+    };
+    for json in fills {
+        if let Ok(CopyOutcome::PaperFilled(decision)) = serde_json::from_str(&json) {
+            super::ledger::apply_paper_buy(&transaction, &decision)?;
+        }
+    }
+    transaction
+        .commit()
+        .map_err(crate::errors::DatabaseError::from)?;
     Ok(())
 }

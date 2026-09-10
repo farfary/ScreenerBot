@@ -176,6 +176,7 @@ pub fn prepare_live_entry(
             confirmed_at: None,
             target_price_sol: *target_price_sol,
             fill_price_sol: None,
+            backfill: activity.backfill,
         },
     })
 }

@@ -77,6 +77,7 @@ fn activity() -> WalletActivity {
             price_sol: Some(0.004),
         },
         sources: vec![WatchSource::Copy { task_id: 7 }],
+        backfill: false,
     }
 }
 

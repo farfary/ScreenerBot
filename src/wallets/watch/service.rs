@@ -95,6 +95,7 @@ async fn poll_target(
     chain_runtime: &Arc<dyn WalletWatchRuntime>,
     watch_db: &WatchDatabase,
     own_subject: Subject,
+    backfill: bool,
 ) {
     if chain_runtime
         .resolve_subject(&target_runtime.target.address)
@@ -117,6 +118,10 @@ async fn poll_target(
                 .await
                 .unwrap_or(false);
         target_runtime.catch_up = Some(poller::CatchUpState::new(cursor));
+        target_runtime.backfill = backfill;
+    } else {
+        // A range a gap-fill opened stays a backfill when a cadence tick finishes it.
+        target_runtime.backfill |= backfill;
     }
 
     let completed = match poller::advance_catch_up(
@@ -189,6 +194,7 @@ async fn poll_target(
             own_subject.clone(),
             &seen.signature,
             seen.detected_at,
+            target_runtime.backfill,
         )
         .await
             == ProcessOutcome::Retryable
@@ -267,6 +273,7 @@ async fn process_signature(
     _own_subject: Subject,
     signature: &str,
     detected_at: chrono::DateTime<Utc>,
+    backfill: bool,
 ) -> ProcessOutcome {
     let Ok(subject) = chain_runtime.resolve_subject(&target.address) else {
         return ProcessOutcome::Terminal;
@@ -390,6 +397,7 @@ async fn process_signature(
         success: true,
         kind,
         sources: target.sources.clone(),
+        backfill,
     });
 
     ProcessOutcome::Terminal
@@ -432,6 +440,7 @@ pub(super) async fn run(
                 &chain_runtime,
                 &watch_db,
                 own_subject.clone(),
+                true,
             )
             .await;
         }
@@ -463,7 +472,7 @@ pub(super) async fn run(
                         );
                     }
                     let detected_at = Utc::now();
-                    let outcome = process_signature(&chain_runtime, &target_runtime.target, own_subject.clone(), &event.signature, detected_at).await;
+                    let outcome = process_signature(&chain_runtime, &target_runtime.target, own_subject.clone(), &event.signature, detected_at, false).await;
                     if outcome == ProcessOutcome::Retryable {
                         // Usually the RPC has not indexed the transaction yet. Retry
                         // on a short backoff instead of waiting a full poll interval.
@@ -478,7 +487,7 @@ pub(super) async fn run(
             }
             Some(retry) = retry_rx.recv() => {
                 if let Some(target_runtime) = runtimes.get(&retry.address) {
-                    let outcome = process_signature(&chain_runtime, &target_runtime.target, own_subject.clone(), &retry.signature, retry.detected_at).await;
+                    let outcome = process_signature(&chain_runtime, &target_runtime.target, own_subject.clone(), &retry.signature, retry.detected_at, false).await;
                     if outcome == ProcessOutcome::Retryable
                         && !service_state::schedule_ws_retry(&retry_tx, retry.clone())
                     {
@@ -504,7 +513,7 @@ pub(super) async fn run(
                     let addresses: Vec<String> = runtimes.keys().cloned().collect();
                     for address in addresses {
                         if let Some(target_runtime) = runtimes.get_mut(&address) {
-                            poll_target(target_runtime, &chain_runtime, &watch_db, own_subject.clone()).await;
+                            poll_target(target_runtime, &chain_runtime, &watch_db, own_subject.clone(), true).await;
                         }
                     }
                 }
@@ -537,7 +546,7 @@ pub(super) async fn run(
                     .collect();
                 for address in due {
                     if let Some(target_runtime) = runtimes.get_mut(&address) {
-                        poll_target(target_runtime, &chain_runtime, &watch_db, own_subject.clone()).await;
+                        poll_target(target_runtime, &chain_runtime, &watch_db, own_subject.clone(), false).await;
                     }
                 }
             }
@@ -547,7 +556,6 @@ pub(super) async fn run(
     for runtime in runtimes.values() {
         runtime.ws_task.abort();
     }
-    service_state::clear_observed();
     *SERVICE_STARTED_AT
         .write()
         .unwrap_or_else(|p| p.into_inner()) = None;

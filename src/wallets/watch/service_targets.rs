@@ -34,6 +34,8 @@ pub(super) struct TargetRuntime {
     pub(super) baseline_only: bool,
     /// Consecutive polls whose range did not fit in one tick's page budget.
     pub(super) overflow_streak: u32,
+    /// The open catch-up range was started by a gap-fill.
+    pub(super) backfill: bool,
 }
 
 /// Consecutive over-budget polls after which a non-own target is disabled.
@@ -132,6 +134,7 @@ fn register(
             catch_up: None,
             baseline_only: false,
             overflow_streak: 0,
+            backfill: false,
         },
     );
 }
@@ -181,7 +184,6 @@ pub(super) async fn reload_targets(
     );
 
     if !with_config(|cfg| cfg.wallet.watch_enabled) {
-        super::service_state::set_observed(runtimes.keys().cloned());
         return;
     }
 
@@ -199,5 +201,4 @@ pub(super) async fn reload_targets(
             &format!("Failed to load watch targets: {e}"),
         ),
     }
-    super::service_state::set_observed(runtimes.keys().cloned());
 }

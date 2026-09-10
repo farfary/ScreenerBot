@@ -13,7 +13,8 @@ mod sizing;
 mod types;
 
 pub use analytics::{
-    arrival_distance_ms, build_task_stats, latency_should_pause, summarize_arrival_distances,
+    apply_paper_book, arrival_distance_ms, build_task_stats, latency_should_pause,
+    summarize_arrival_distances,
 };
 pub use database::CopyDatabase;
 pub use exits::{
@@ -25,7 +26,7 @@ pub use live::{
     LiveSubmitResult, PreparedLiveEntry,
 };
 pub use matcher::matching_tasks;
-pub use paper::{simulate_fill, PaperCosts, PAPER_REFERRAL_FEE_BPS};
+pub use paper::{simulate_fill, simulate_sell, PaperCosts, PAPER_REFERRAL_FEE_BPS};
 pub use pipeline::run_paper_pipeline;
 pub use risk::precheck;
 pub use service::run;

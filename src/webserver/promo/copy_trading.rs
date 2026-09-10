@@ -12,7 +12,7 @@ use chrono::{Duration, Utc};
 
 use crate::chains::active_chain;
 use crate::trader::copy::{
-    ArrivalDistanceStats, CopyActivityRow, CopyMode, CopyOutcome, CopySkip, CopyTask,
+    ArrivalDistanceStats, CopyActivityRow, CopyBook, CopyMode, CopyOutcome, CopySkip, CopyTask,
     CopyTaskStats, CopyTelemetry, ExitMode, PaperDecision, PaperFill, SizingMode,
 };
 use crate::webserver::routes::copy_trading::{OverviewResponse, StatusResponse, TaskSummary};
@@ -91,6 +91,7 @@ fn telemetry(age_secs: i64, arrival_ms: i64, price_sol: f64) -> CopyTelemetry {
         confirmed_at: Some(decided_at + Duration::milliseconds(640)),
         target_price_sol: Some(price_sol),
         fill_price_sol: Some(price_sol * 1.004),
+        backfill: false,
     }
 }
 
@@ -149,6 +150,12 @@ fn stats(entry: &PromoTask) -> CopyTaskStats {
         closed_positions: closed,
         realized_pnl_sol: spent * 0.09,
         unrealized_pnl_sol: spent * 0.04,
+        book: if live {
+            CopyBook::Live
+        } else {
+            CopyBook::Paper
+        },
+        unpriced_positions: 0,
         arrival_distance: ArrivalDistanceStats {
             samples: filled_buys,
             minimum_ms: Some(310),

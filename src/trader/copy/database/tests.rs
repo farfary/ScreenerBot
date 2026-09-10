@@ -1,7 +1,7 @@
 use chrono::Utc;
 
 use super::*;
-use crate::trader::copy::{CopyMode, ExitMode, SizingMode};
+use crate::trader::copy::{CopyMode, ExitMode, SizingMode, SpendState};
 
 fn task() -> CopyTask {
     CopyTask {
@@ -68,20 +68,30 @@ async fn task_and_outcome_round_trip_with_idempotent_spend() {
             confirmed_at: Some(now),
             target_price_sol: Some(0.01),
             fill_price_sol: Some(0.0101),
+            backfill: false,
         },
     });
     db.record_outcome(outcome.clone()).await.unwrap();
     db.record_outcome(outcome).await.unwrap();
 
     assert_eq!(
-        db.spend_state(task.id, "mint").await.unwrap(),
+        db.spend_state(task.id, CopyMode::Paper, "mint")
+            .await
+            .unwrap(),
         SpendState {
             total_spent_sol: 0.1,
             token_spent_sol: 0.1,
             token_buy_count: 1,
         }
     );
-    assert_eq!(db.task_total_spent(task.id).await.unwrap(), 0.1);
+    assert_eq!(
+        db.task_total_spent(task.id, CopyMode::Paper).await.unwrap(),
+        0.1
+    );
+    assert_eq!(
+        db.task_total_spent(task.id, CopyMode::Live).await.unwrap(),
+        0.0
+    );
 }
 
 fn live_outcome(task: &CopyTask, pending: bool) -> CopyOutcome {
@@ -105,6 +115,7 @@ fn live_outcome(task: &CopyTask, pending: bool) -> CopyOutcome {
             confirmed_at: (!pending).then_some(now),
             target_price_sol: Some(0.01),
             fill_price_sol: Some(0.011),
+            backfill: false,
         },
     };
     if pending {
@@ -150,7 +161,9 @@ async fn live_submission_consumes_spend_once_and_confirmation_only_upgrades_stat
         .unwrap();
 
     assert_eq!(
-        db.spend_state(configured.id, "live-mint").await.unwrap(),
+        db.spend_state(configured.id, CopyMode::Live, "live-mint")
+            .await
+            .unwrap(),
         SpendState {
             total_spent_sol: 0.1,
             token_spent_sol: 0.1,
@@ -332,12 +345,13 @@ async fn chain_migration_preserves_legacy_task_children_and_allows_chain_qualifi
     assert_eq!(
         connection
             .query_row(
-                "SELECT task_id FROM copy_spend WHERE mint='mint'",
+                "SELECT task_id, mode FROM copy_spend WHERE mint='mint'",
                 [],
-                |row| row.get::<_, i64>(0)
+                |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
             )
             .unwrap(),
-        9
+        (9, "paper".to_owned()),
+        "legacy spend no decision explains is kept under the task's mode"
     );
 }
 
@@ -361,6 +375,7 @@ async fn sell_activity_is_idempotent_and_never_increments_entry_spend() {
         exit_percentage: None,
         transaction_signature: None,
         error: None,
+        paper_fill: None,
         telemetry: super::super::types::CopyTelemetry {
             target_block_time: Some(1),
             detected_at: now,
@@ -370,13 +385,209 @@ async fn sell_activity_is_idempotent_and_never_increments_entry_spend() {
             confirmed_at: None,
             target_price_sol: Some(0.02),
             fill_price_sol: None,
+            backfill: false,
         },
     });
     db.record_outcome(outcome.clone()).await.unwrap();
     db.record_outcome(outcome).await.unwrap();
     assert_eq!(
-        db.spend_state(configured.id, "mint").await.unwrap(),
+        db.spend_state(configured.id, CopyMode::Paper, "mint")
+            .await
+            .unwrap(),
         SpendState::default()
     );
     assert_eq!(db.list_activity(10).await.unwrap().len(), 1);
+}
+
+fn paper_buy(task: &CopyTask, signature: &str, tokens: f64, cost: f64) -> CopyOutcome {
+    let now = Utc::now();
+    CopyOutcome::PaperFilled(super::super::types::PaperDecision {
+        task_id: task.id,
+        target_address: task.target_address.clone(),
+        signature: signature.to_owned(),
+        mint: "book-mint".to_owned(),
+        target_size_sol: 0.2,
+        target_token_amount: 20.0,
+        sized_sol: 0.1,
+        fill: super::super::types::PaperFill {
+            input_sol: 0.1,
+            market_price_sol: 0.01,
+            fill_price_sol: 0.0101,
+            token_amount: tokens,
+            referral_fee_sol: 0.0005,
+            network_fee_sol: 0.000005,
+            priority_fee_sol: 0.0,
+            total_cost_sol: cost,
+        },
+        telemetry: super::super::types::CopyTelemetry {
+            target_block_time: Some(1),
+            detected_at: now,
+            decoded_at: now,
+            decided_at: now,
+            submitted_at: None,
+            confirmed_at: Some(now),
+            target_price_sol: Some(0.01),
+            fill_price_sol: Some(0.0101),
+            backfill: false,
+        },
+    })
+}
+
+fn paper_sell(task: &CopyTask, signature: &str, tokens: f64, proceeds: f64) -> CopyOutcome {
+    let now = Utc::now();
+    CopyOutcome::PaperSellObserved(super::super::types::CopySellDecision {
+        task_id: task.id,
+        target_address: task.target_address.clone(),
+        target_signature: signature.to_owned(),
+        mint: "book-mint".to_owned(),
+        target_token_amount: 10.0,
+        target_sol_amount: 0.2,
+        exit_percentage: None,
+        transaction_signature: None,
+        error: None,
+        paper_fill: Some(super::super::types::PaperSellFill {
+            token_amount: tokens,
+            market_price_sol: 0.012,
+            fill_price_sol: 0.0119,
+            gross_sol: proceeds,
+            referral_fee_sol: 0.0,
+            network_fee_sol: 0.0,
+            priority_fee_sol: 0.0,
+            net_proceeds_sol: proceeds,
+        }),
+        telemetry: super::super::types::CopyTelemetry {
+            target_block_time: Some(1),
+            detected_at: now,
+            decoded_at: now,
+            decided_at: now,
+            submitted_at: None,
+            confirmed_at: None,
+            target_price_sol: Some(0.012),
+            fill_price_sol: Some(0.0119),
+            backfill: false,
+        },
+    })
+}
+
+#[tokio::test]
+async fn the_paper_book_books_buys_and_partial_then_full_sells_exactly_once() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = CopyDatabase::open(
+        dir.path().join("copy_trading.db"),
+        crate::chains::ChainId::Solana,
+    )
+    .unwrap();
+    let configured = db.insert_task(task()).await.unwrap();
+
+    db.record_outcome(paper_buy(&configured, "buy-1", 100.0, 1.0))
+        .await
+        .unwrap();
+    db.record_outcome(paper_buy(&configured, "buy-2", 100.0, 1.0))
+        .await
+        .unwrap();
+    let half = paper_sell(&configured, "sell-1", 100.0, 1.5);
+    db.record_outcome(half.clone()).await.unwrap();
+    db.record_outcome(half).await.unwrap();
+
+    let position = db
+        .paper_position(configured.id, "book-mint")
+        .await
+        .unwrap()
+        .expect("paper position");
+    assert!(position.is_open());
+    assert_eq!((position.buys, position.sells), (2, 1));
+    assert!((position.token_amount - 100.0).abs() < 1e-9);
+    assert!((position.cost_basis_sol - 1.0).abs() < 1e-9);
+    assert!((position.realized_proceeds_sol - 1.5).abs() < 1e-9);
+    assert!((position.realized_cost_sol - 1.0).abs() < 1e-9);
+
+    db.record_outcome(paper_sell(&configured, "sell-2", 100.0, 0.5))
+        .await
+        .unwrap();
+    let closed = db
+        .paper_position(configured.id, "book-mint")
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(!closed.is_open());
+    assert_eq!(closed.token_amount, 0.0);
+    assert!((closed.realized_proceeds_sol - closed.realized_cost_sol - 0.0).abs() < 1e-9);
+
+    assert_eq!(
+        db.spend_state(configured.id, CopyMode::Paper, "book-mint")
+            .await
+            .unwrap()
+            .token_buy_count,
+        2
+    );
+    assert_eq!(
+        db.spend_state(configured.id, CopyMode::Live, "book-mint")
+            .await
+            .unwrap(),
+        SpendState::default(),
+        "paper fills never consume the live budget"
+    );
+}
+
+#[tokio::test]
+async fn schema_v5_splits_shared_spend_by_mode_and_rebuilds_the_paper_book() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("copy_trading.db");
+    let db = CopyDatabase::open(&path, crate::chains::ChainId::Solana).unwrap();
+    let configured = db.insert_task(task()).await.unwrap();
+    db.record_outcome(paper_buy(&configured, "buy-1", 50.0, 0.5))
+        .await
+        .unwrap();
+    db.record_outcome(live_outcome(&configured, true))
+        .await
+        .unwrap();
+    drop(db);
+    {
+        // Put the file back into the v4 shape: one shared spend ledger, no book.
+        let connection = rusqlite::Connection::open(&path).unwrap();
+        connection
+            .execute_batch(
+                "DROP TABLE copy_spend;
+                 CREATE TABLE copy_spend (task_id INTEGER NOT NULL, mint TEXT NOT NULL,
+                    spent_sol REAL NOT NULL DEFAULT 0, buy_count INTEGER NOT NULL DEFAULT 0,
+                    updated_at TEXT NOT NULL, PRIMARY KEY (task_id, mint),
+                    FOREIGN KEY (task_id) REFERENCES copy_tasks(id) ON DELETE CASCADE);
+                 DELETE FROM copy_paper_positions;",
+            )
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO copy_spend VALUES (?1, 'book-mint', 0.1, 1, '2026-01-01T00:00:00Z'), \
+                 (?1, 'live-mint', 0.1, 1, '2026-01-01T00:00:00Z')",
+                [configured.id],
+            )
+            .unwrap();
+    }
+
+    let db = CopyDatabase::open(&path, crate::chains::ChainId::Solana).unwrap();
+    assert_eq!(
+        db.task_total_spent(configured.id, CopyMode::Paper)
+            .await
+            .unwrap(),
+        0.1
+    );
+    assert_eq!(
+        db.task_total_spent(configured.id, CopyMode::Live)
+            .await
+            .unwrap(),
+        0.1
+    );
+    let position = db
+        .paper_position(configured.id, "book-mint")
+        .await
+        .unwrap()
+        .expect("paper fill rebuilt into the book");
+    assert_eq!(
+        (position.token_amount, position.cost_basis_sol),
+        (50.0, 0.5)
+    );
+    drop(db);
+    // Re-running the initializer is a no-op.
+    let db = CopyDatabase::open(&path, crate::chains::ChainId::Solana).unwrap();
+    assert_eq!(db.paper_positions(configured.id).await.unwrap().len(), 1);
 }

@@ -171,6 +171,8 @@ pub async fn get_page_script(Path(file): Path<String>) -> Response {
         "trader/config_cards.js" => Some(embeds::TRADER_CONFIG_CARDS_JS),
         "trader/features.js" => Some(embeds::TRADER_FEATURES_JS),
         "trader/wallet_copy.js" => Some(embeds::TRADER_WALLET_COPY_JS),
+        "trader/wallet_copy_view.js" => Some(embeds::TRADER_WALLET_COPY_VIEW_JS),
+        "trader/wallet_copy_settings.js" => Some(embeds::TRADER_WALLET_COPY_SETTINGS_JS),
         "wallets.js" => Some(embeds::WALLETS_PAGE_SCRIPT),
         "wallets/bulk_operations.js" => Some(embeds::WALLETS_BULK_OPERATIONS_JS),
         "wallets/renderers.js" => Some(embeds::WALLETS_RENDERERS_JS),

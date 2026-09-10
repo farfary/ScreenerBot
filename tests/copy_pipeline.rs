@@ -52,6 +52,7 @@ fn observed_buy_matches_sizes_and_produces_costed_paper_fill_with_telemetry() {
             price_sol: Some(0.004),
         },
         sources: vec![WatchSource::Copy { task_id: 7 }],
+        backfill: false,
     };
     let outcomes = run_paper_pipeline(
         &activity,

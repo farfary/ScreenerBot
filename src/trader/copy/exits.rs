@@ -8,6 +8,7 @@ use crate::positions::{Position, PositionManagement, PositionOrigin};
 use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeReason, TradeResult};
 use crate::wallets::watch::{ActivityKind, SwapSide, WalletActivity};
 
+use super::paper::{simulate_sell, PaperCosts};
 use super::types::{
     CopyMode, CopyOutcome, CopySellDecision, CopySkip, CopyTask, CopyTelemetry, ExitMode,
 };
@@ -51,11 +52,18 @@ impl CopySellSubmitResult {
     }
 }
 
+/// Mirror a target sell against the task's paper book: sell the same fraction of
+/// the paper holding the target sold of its own, at the decision-time price, so
+/// paper mode books the realized result a live copy sell would.
+#[allow(clippy::too_many_arguments)]
 pub fn paper_sell_outcome(
     activity: &WalletActivity,
     task: &CopyTask,
     force_stopped: bool,
     target_holding_before_sell: f64,
+    paper_tokens_held: f64,
+    market_price_sol: f64,
+    costs: PaperCosts,
     decided_at: DateTime<Utc>,
 ) -> Result<CopyOutcome, CopySkip> {
     if task.exit_mode == ExitMode::BuyOnly {
@@ -65,15 +73,29 @@ pub fn paper_sell_outcome(
         return Err(CopySkip::ForceStopped);
     }
     let (mint, target_token_amount, target_sol_amount, target_price_sol) = sell_activity(activity)?;
-    Ok(CopyOutcome::PaperSellObserved(sell_decision(
+    if !paper_tokens_held.is_finite() || paper_tokens_held <= 0.0 {
+        return Err(CopySkip::CopyPositionNotFound);
+    }
+    let exit_percentage =
+        proportional_exit_percentage(target_token_amount, target_holding_before_sell);
+    let sell_amount = match exit_percentage {
+        Some(pct) if pct < 100.0 => paper_tokens_held * pct / 100.0,
+        _ => paper_tokens_held,
+    };
+    let fill = simulate_sell(sell_amount, market_price_sol, task.slippage_pct, costs)?;
+    let mut telemetry = telemetry(activity, target_price_sol, decided_at);
+    telemetry.fill_price_sol = Some(fill.fill_price_sol);
+    let mut decision = sell_decision(
         task,
         &activity.signature,
         mint,
         target_token_amount,
         target_sol_amount,
-        proportional_exit_percentage(target_token_amount, target_holding_before_sell),
-        telemetry(activity, target_price_sol, decided_at),
-    )))
+        exit_percentage,
+        telemetry,
+    );
+    decision.paper_fill = Some(fill);
+    Ok(CopyOutcome::PaperSellObserved(decision))
 }
 
 pub fn prepare_copy_sell(
@@ -200,6 +222,7 @@ fn sell_decision(
         transaction_signature: None,
         error: None,
         telemetry,
+        paper_fill: None,
     }
 }
 
@@ -234,5 +257,6 @@ fn telemetry(
         confirmed_at: None,
         target_price_sol,
         fill_price_sol: None,
+        backfill: activity.backfill,
     }
 }

@@ -1,11 +1,11 @@
-//! Observation-loop state other modules read: which addresses the loop is actually
-//! observing, which targets it gave up on as saturated, and the short WS retry
-//! schedule for signatures the RPC has not indexed yet.
+//! Observation-loop state other modules read: which targets the loop gave up on as
+//! saturated, and the short WS retry schedule for signatures the RPC has not
+//! indexed yet.
 //!
 //! Kept out of `service.rs` (module-size limit) and behind plain accessors so the
-//! copy-trading reconciler and the status API never reach into the loop itself.
+//! status API never reaches into the loop itself.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::{LazyLock, RwLock};
 use std::time::Duration;
 
@@ -46,28 +46,6 @@ pub(super) fn schedule_ws_retry(tx: &mpsc::UnboundedSender<WsRetry>, retry: WsRe
 
 fn ws_retry_delay(attempt: u32) -> Option<Duration> {
     (attempt < WS_RETRY_ATTEMPTS).then(|| WS_RETRY_BASE * 2u32.pow(attempt))
-}
-
-/// `None` until the loop has built its target set once, so a consumer never mistakes
-/// "not started yet" for "not observed".
-static OBSERVED: LazyLock<RwLock<Option<HashSet<String>>>> = LazyLock::new(|| RwLock::new(None));
-
-pub(super) fn set_observed(addresses: impl IntoIterator<Item = String>) {
-    *OBSERVED.write().unwrap_or_else(|p| p.into_inner()) = Some(addresses.into_iter().collect());
-}
-
-pub(super) fn clear_observed() {
-    *OBSERVED.write().unwrap_or_else(|p| p.into_inner()) = None;
-}
-
-/// Whether the running loop observes `address`; `None` while the loop is not
-/// running or has not loaded its targets yet.
-pub(super) fn is_observing(address: &str) -> Option<bool> {
-    OBSERVED
-        .read()
-        .unwrap_or_else(|p| p.into_inner())
-        .as_ref()
-        .map(|set| set.contains(address))
 }
 
 /// Why the loop disabled a target, by address. In memory on purpose: a restart

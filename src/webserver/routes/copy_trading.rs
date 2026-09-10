@@ -11,8 +11,10 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+use crate::positions::{Position, PositionOrigin};
 use crate::trader::copy::{
-    build_task_stats, confirm_mode_transition, CopyDatabase, CopyMode, CopyTask, CopyTaskInput,
+    apply_paper_book, build_task_stats, confirm_mode_transition, CopyDatabase, CopyMode, CopyTask,
+    CopyTaskInput, CopyTaskStats,
 };
 use crate::wallets::watch;
 use crate::webserver::state::AppState;
@@ -23,7 +25,10 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/overview", get(overview))
         .route("/status", get(status))
         .route("/tasks", get(list_tasks).post(create_task))
-        .route("/tasks/:id", get(get_task).patch(update_task))
+        .route(
+            "/tasks/:id",
+            get(get_task).patch(update_task).delete(delete_task),
+        )
         .route("/tasks/:id/mode", axum::routing::post(set_task_mode))
         .route("/tasks/:id/stats", get(task_stats))
         .route("/activity", get(list_activity))
@@ -130,11 +135,11 @@ async fn overview() -> Response {
     let status = build_status(&tasks);
     let mut summaries = Vec::with_capacity(tasks.len());
     for task in tasks {
-        let task_activity = match db.list_task_activity(task.id, 10_000).await {
-            Ok(activity) => activity,
+        let stats = match task_stats_for(&db, &task, &positions).await {
+            Ok(stats) => stats,
             Err(error) => return internal_error(error.to_string()),
         };
-        let spent_sol = match db.task_total_spent(task.id).await {
+        let spent_sol = match db.task_total_spent(task.id, task.mode).await {
             Ok(spent) => spent,
             Err(error) => return internal_error(error.to_string()),
         };
@@ -152,7 +157,7 @@ async fn overview() -> Response {
             "paper"
         };
         summaries.push(TaskSummary {
-            stats: build_task_stats(task.id, &task_activity, &positions),
+            stats,
             remaining_budget_sol: (task.total_budget_sol - spent_sol).max(0.0),
             spent_sol,
             effective_state,
@@ -164,6 +169,28 @@ async fn overview() -> Response {
         tasks: summaries,
         activity,
     })
+}
+
+/// Decision counts and latency come from the task's activity; position and P&L
+/// figures come from the book of the mode it runs in -- its paper ledger while in
+/// paper mode (marked at the pool price, else the last observed trade price),
+/// the real positions it opened while live.
+async fn task_stats_for(
+    db: &CopyDatabase,
+    task: &CopyTask,
+    positions: &[Position],
+) -> crate::trader::Result<CopyTaskStats> {
+    let activity = db.list_task_activity(task.id, 10_000).await?;
+    let mut stats = build_task_stats(task.id, &activity, positions);
+    if task.mode == CopyMode::Paper {
+        let book = db.paper_positions(task.id).await?;
+        apply_paper_book(&mut stats, &book, |position| {
+            crate::pools::get_pool_price(&position.mint)
+                .map(|price| price.price_sol)
+                .or(position.last_price_sol)
+        });
+    }
+    Ok(stats)
 }
 
 fn build_status(tasks: &[CopyTask]) -> StatusResponse {
@@ -279,7 +306,31 @@ async fn create_task(Json(input): Json<CopyTaskInput>) -> Response {
     success_response(TaskResponse { task: inserted })
 }
 
-async fn update_task(Path(id): Path<i64>, Json(input): Json<CopyTaskInput>) -> Response {
+/// PATCH semantics: fields present in the body replace the stored ones, absent
+/// fields keep their value, and an unknown field is refused rather than silently
+/// dropped. The merged input then runs the full task validation.
+fn merge_task_patch(
+    original: &CopyTask,
+    patch: serde_json::Value,
+) -> Result<CopyTaskInput, String> {
+    let serde_json::Value::Object(fields) = patch else {
+        return Err("request body must be a JSON object".to_owned());
+    };
+    let mut merged =
+        serde_json::to_value(CopyTaskInput::from(original)).map_err(|e| e.to_string())?;
+    let target = merged
+        .as_object_mut()
+        .ok_or_else(|| "stored task did not serialize to an object".to_owned())?;
+    for (key, value) in fields {
+        if !target.contains_key(&key) {
+            return Err(format!("unknown field `{key}`"));
+        }
+        target.insert(key, value);
+    }
+    serde_json::from_value(merged).map_err(|e| e.to_string())
+}
+
+async fn update_task(Path(id): Path<i64>, Json(patch): Json<serde_json::Value>) -> Response {
     let db = match open_database().await {
         Ok(db) => db,
         Err(error) => return internal_error(error.to_string()),
@@ -288,6 +339,17 @@ async fn update_task(Path(id): Path<i64>, Json(input): Json<CopyTaskInput>) -> R
         Ok(Some(task)) => task,
         Ok(None) => return not_found(id),
         Err(error) => return internal_error(error.to_string()),
+    };
+    let input = match merge_task_patch(&original, patch) {
+        Ok(input) => input,
+        Err(detail) => {
+            return error_response(
+                StatusCode::BAD_REQUEST,
+                "INVALID_TASK",
+                "Invalid copy task",
+                Some(&detail),
+            )
+        }
     };
     let mut task = match input.into_task_for_update(
         crate::chains::active_chain(),
@@ -376,6 +438,55 @@ async fn update_task(Path(id): Path<i64>, Json(input): Json<CopyTaskInput>) -> R
     }
 }
 
+/// Delete a task and detach its watch source. Its decisions, spend and paper book
+/// go with it (foreign-key cascade). Refused while it could still move money: an
+/// enabled live task must be paused first, and a task whose live positions are
+/// still open keeps them until they are closed.
+async fn delete_task(Path(id): Path<i64>) -> Response {
+    let db = match open_database().await {
+        Ok(db) => db,
+        Err(error) => return internal_error(error.to_string()),
+    };
+    let task = match db.get_task(id).await {
+        Ok(Some(task)) => task,
+        Ok(None) => return not_found(id),
+        Err(error) => return internal_error(error.to_string()),
+    };
+    if task.enabled && task.mode == CopyMode::Live {
+        return error_response(
+            StatusCode::CONFLICT,
+            "TASK_LIVE",
+            "Pause the live task before deleting it",
+            None,
+        );
+    }
+    let open_positions = crate::positions::get_open_positions()
+        .await
+        .into_iter()
+        .filter(|position| {
+            matches!(position.origin, PositionOrigin::Copy { task_id, .. } if task_id == id)
+        })
+        .count();
+    if open_positions > 0 {
+        return error_response(
+            StatusCode::CONFLICT,
+            "OPEN_POSITIONS",
+            "Copy task still owns open positions",
+            Some(&format!(
+                "Close the {open_positions} open position(s) this task opened first"
+            )),
+        );
+    }
+    if let Err(error) = watch::remove_copy_source(id, &task.target_address).await {
+        return internal_error(format!("Failed to detach the copy target: {error}"));
+    }
+    match db.delete_task(id).await {
+        Ok(true) => success_response(serde_json::json!({ "deleted": id })),
+        Ok(false) => not_found(id),
+        Err(error) => internal_error(error.to_string()),
+    }
+}
+
 async fn set_task_mode(Path(id): Path<i64>, Json(request): Json<ModeRequest>) -> Response {
     let db = match open_database().await {
         Ok(db) => db,
@@ -422,19 +533,18 @@ async fn task_stats(Path(id): Path<i64>) -> Response {
         Ok(db) => db,
         Err(error) => return internal_error(error.to_string()),
     };
-    match db.get_task(id).await {
-        Ok(Some(_)) => {}
+    let task = match db.get_task(id).await {
+        Ok(Some(task)) => task,
         Ok(None) => return not_found(id),
-        Err(error) => return internal_error(error.to_string()),
-    }
-    let activity = match db.list_task_activity(id, 10_000).await {
-        Ok(activity) => activity,
         Err(error) => return internal_error(error.to_string()),
     };
     let mut positions = crate::positions::get_open_positions().await;
     positions.extend(crate::positions::get_closed_positions().await);
     positions.extend(crate::positions::get_archived_positions().await);
-    success_response(build_task_stats(id, &activity, &positions))
+    match task_stats_for(&db, &task, &positions).await {
+        Ok(stats) => success_response(stats),
+        Err(error) => internal_error(error.to_string()),
+    }
 }
 
 fn invalid_task(reason: impl std::fmt::Debug) -> Response {
@@ -474,3 +584,7 @@ async fn active_task_limit_reached(database: &CopyDatabase) -> crate::trader::Re
     let maximum = crate::config::with_config(|config| config.copy_trading.max_active_tasks);
     Ok(active >= maximum)
 }
+
+#[cfg(test)]
+#[path = "copy_trading/tests.rs"]
+mod tests;
