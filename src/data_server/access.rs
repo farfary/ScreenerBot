@@ -18,6 +18,7 @@
 //! what is missing and what to do about it; it does not raise an alarm.
 
 use std::sync::LazyLock;
+use std::time::{Duration, Instant};
 
 use arc_swap::ArcSwap;
 use serde::Serialize;
@@ -142,6 +143,8 @@ struct Snapshot {
     checked_at: Option<i64>,
     /// Transport failures in a row since the last answered request.
     transport_failures: u32,
+    /// When the current run of failures began; `None` while requests answer.
+    failing_since: Option<Instant>,
 }
 
 static STATE: LazyLock<ArcSwap<Snapshot>> = LazyLock::new(|| {
@@ -149,6 +152,7 @@ static STATE: LazyLock<ArcSwap<Snapshot>> = LazyLock::new(|| {
         access: DataAccess::Unknown,
         checked_at: None,
         transport_failures: 0,
+        failing_since: None,
     })
 });
 
@@ -161,14 +165,30 @@ static STATE: LazyLock<ArcSwap<Snapshot>> = LazyLock::new(|| {
 /// hour while data was flowing.
 const UNREACHABLE_AFTER_FAILURES: u32 = 3;
 
+/// How long a run of failures must last before it counts as an outage.
+///
+/// A count alone is not enough: requests issued together fail together when one
+/// connection hiccups, so a burst of simultaneous timeouts reached the count in
+/// the same instant and flipped the badge to Unreachable for the two seconds
+/// until the next answer. A real outage keeps failing across this window.
+const UNREACHABLE_AFTER_FAILING_FOR: Duration = Duration::from_secs(10);
+
 /// Record a request that never got an answer (connect error, timeout, 5xx).
 ///
-/// Only a run of them with no answered request in between moves the state to
-/// `Unreachable`; an isolated failure leaves the last answered state standing.
+/// Only a run of them with no answered request in between, lasting at least
+/// `UNREACHABLE_AFTER_FAILING_FOR`, moves the state to `Unreachable`; isolated or
+/// simultaneous failures leave the last answered state standing.
 pub fn record_transport_failure() {
+    record_transport_failure_at(Instant::now());
+}
+
+fn record_transport_failure_at(now: Instant) {
     let previous = STATE.load();
     let failures = previous.transport_failures.saturating_add(1);
-    if previous.access == DataAccess::Unreachable || failures >= UNREACHABLE_AFTER_FAILURES {
+    let failing_since = previous.failing_since.unwrap_or(now);
+    let outage = failures >= UNREACHABLE_AFTER_FAILURES
+        && now.saturating_duration_since(failing_since) >= UNREACHABLE_AFTER_FAILING_FOR;
+    if previous.access == DataAccess::Unreachable || outage {
         record(DataAccess::Unreachable);
         return;
     }
@@ -176,16 +196,20 @@ pub fn record_transport_failure() {
         access: previous.access.clone(),
         checked_at: previous.checked_at,
         transport_failures: failures,
+        failing_since: Some(failing_since),
     }));
 }
 
 /// Record the outcome of a call. Cheap enough to run on every request.
 pub fn record(access: DataAccess) {
     let previous = STATE.load();
-    let transport_failures = if access == DataAccess::Unreachable {
-        previous.transport_failures.saturating_add(1)
+    let (transport_failures, failing_since) = if access == DataAccess::Unreachable {
+        (
+            previous.transport_failures.saturating_add(1),
+            Some(previous.failing_since.unwrap_or_else(Instant::now)),
+        )
     } else {
-        0
+        (0, None)
     };
     if previous.access == access {
         // Same answer as last time: refresh the timestamp only. Logging every
@@ -194,6 +218,7 @@ pub fn record(access: DataAccess) {
             access,
             checked_at: Some(chrono::Utc::now().timestamp()),
             transport_failures,
+            failing_since,
         }));
         return;
     }
@@ -211,6 +236,7 @@ pub fn record(access: DataAccess) {
         access,
         checked_at: Some(chrono::Utc::now().timestamp()),
         transport_failures,
+        failing_since,
     }));
 }
 
@@ -242,6 +268,7 @@ pub fn forget_refusals() {
         access: DataAccess::Unknown,
         checked_at: current.checked_at,
         transport_failures: 0,
+        failing_since: None,
     }));
 }
 
@@ -343,18 +370,25 @@ mod tests {
     fn an_isolated_transport_failure_does_not_mark_a_working_service_down() {
         let _guard = SERIALIZE.lock().unwrap_or_else(|e| e.into_inner());
 
+        let start = Instant::now();
         record(DataAccess::Ready);
-        record_transport_failure();
-        record_transport_failure();
+        record_transport_failure_at(start);
+        record_transport_failure_at(start);
         assert_eq!(current(), DataAccess::Ready);
 
         // An answered request in between resets the run.
         record(DataAccess::Ready);
-        record_transport_failure();
-        record_transport_failure();
+        record_transport_failure_at(start);
+        record_transport_failure_at(start);
         assert_eq!(current(), DataAccess::Ready);
 
-        record_transport_failure();
+        // Simultaneous failures past the count are one hiccup, not an outage.
+        record_transport_failure_at(start);
+        record_transport_failure_at(start);
+        assert_eq!(current(), DataAccess::Ready);
+
+        // The same run still failing once the window has passed is an outage.
+        record_transport_failure_at(start + UNREACHABLE_AFTER_FAILING_FOR);
         assert_eq!(current(), DataAccess::Unreachable);
 
         record(DataAccess::Ready);
