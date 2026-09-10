@@ -140,24 +140,60 @@ pub struct DataAccessStatus {
 struct Snapshot {
     access: DataAccess,
     checked_at: Option<i64>,
+    /// Transport failures in a row since the last answered request.
+    transport_failures: u32,
 }
 
 static STATE: LazyLock<ArcSwap<Snapshot>> = LazyLock::new(|| {
     ArcSwap::from_pointee(Snapshot {
         access: DataAccess::Unknown,
         checked_at: None,
+        transport_failures: 0,
     })
 });
+
+/// Consecutive transport failures before a working service is called unreachable.
+///
+/// Many subsystems call the service concurrently with different timeouts, so one
+/// slow endpoint timing out while its neighbours answer is routine. Declaring the
+/// whole service down on a single failure made the state — and the services
+/// badge that reads it — flap between Ready and Unreachable dozens of times an
+/// hour while data was flowing.
+const UNREACHABLE_AFTER_FAILURES: u32 = 3;
+
+/// Record a request that never got an answer (connect error, timeout, 5xx).
+///
+/// Only a run of them with no answered request in between moves the state to
+/// `Unreachable`; an isolated failure leaves the last answered state standing.
+pub fn record_transport_failure() {
+    let previous = STATE.load();
+    let failures = previous.transport_failures.saturating_add(1);
+    if previous.access == DataAccess::Unreachable || failures >= UNREACHABLE_AFTER_FAILURES {
+        record(DataAccess::Unreachable);
+        return;
+    }
+    STATE.store(std::sync::Arc::new(Snapshot {
+        access: previous.access.clone(),
+        checked_at: previous.checked_at,
+        transport_failures: failures,
+    }));
+}
 
 /// Record the outcome of a call. Cheap enough to run on every request.
 pub fn record(access: DataAccess) {
     let previous = STATE.load();
+    let transport_failures = if access == DataAccess::Unreachable {
+        previous.transport_failures.saturating_add(1)
+    } else {
+        0
+    };
     if previous.access == access {
         // Same answer as last time: refresh the timestamp only. Logging every
         // repeat would fill the log with "still signed out" while a bot polls.
         STATE.store(std::sync::Arc::new(Snapshot {
             access,
             checked_at: Some(chrono::Utc::now().timestamp()),
+            transport_failures,
         }));
         return;
     }
@@ -174,6 +210,7 @@ pub fn record(access: DataAccess) {
     STATE.store(std::sync::Arc::new(Snapshot {
         access,
         checked_at: Some(chrono::Utc::now().timestamp()),
+        transport_failures,
     }));
 }
 
@@ -204,6 +241,7 @@ pub fn forget_refusals() {
     STATE.store(std::sync::Arc::new(Snapshot {
         access: DataAccess::Unknown,
         checked_at: current.checked_at,
+        transport_failures: 0,
     }));
 }
 
@@ -299,6 +337,28 @@ mod tests {
         });
         forget_refusals();
         assert_eq!(current(), DataAccess::Unknown);
+    }
+
+    #[test]
+    fn an_isolated_transport_failure_does_not_mark_a_working_service_down() {
+        let _guard = SERIALIZE.lock().unwrap_or_else(|e| e.into_inner());
+
+        record(DataAccess::Ready);
+        record_transport_failure();
+        record_transport_failure();
+        assert_eq!(current(), DataAccess::Ready);
+
+        // An answered request in between resets the run.
+        record(DataAccess::Ready);
+        record_transport_failure();
+        record_transport_failure();
+        assert_eq!(current(), DataAccess::Ready);
+
+        record_transport_failure();
+        assert_eq!(current(), DataAccess::Unreachable);
+
+        record(DataAccess::Ready);
+        assert_eq!(current(), DataAccess::Ready);
     }
 
     #[test]

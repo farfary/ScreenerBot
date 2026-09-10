@@ -177,7 +177,7 @@ pub async fn get_json<T: DeserializeOwned>(
         Ok(response) => response,
         Err(error) => {
             log::debug!("Data Server: {path} failed: {error}");
-            access::record(DataAccess::Unreachable);
+            access::record_transport_failure();
             return None;
         }
     };
@@ -188,7 +188,10 @@ pub async fn get_json<T: DeserializeOwned>(
         // as the status alone rather than as a transport failure.
         let body: serde_json::Value = response.json().await.unwrap_or(serde_json::Value::Null);
         let (code, minimum) = refusal_code(&body);
-        access::record(access_for_refusal(status, &code, minimum));
+        match access_for_refusal(status, &code, minimum) {
+            DataAccess::Unreachable => access::record_transport_failure(),
+            refusal => access::record(refusal),
+        }
         return None;
     }
 
