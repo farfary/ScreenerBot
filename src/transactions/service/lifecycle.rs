@@ -155,6 +155,16 @@ pub async fn start_global_transaction_service(
         ),
     );
 
+    // Bring rows written by an older analyzer forward, from their cached raw
+    // responses. Detached and rate-limited: it is history repair, never a gate on
+    // the service being ready, and it needs no network.
+    {
+        let subject = subject.clone();
+        tokio::spawn(async move {
+            crate::transactions::service::reclassify::reclassify_stale_rows(subject).await;
+        });
+    }
+
     // Signal that transactions system is ready
     crate::global::TRANSACTIONS_SYSTEM_READY.store(true, std::sync::atomic::Ordering::SeqCst);
     logger::info(

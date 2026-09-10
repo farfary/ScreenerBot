@@ -52,7 +52,7 @@ impl TransactionDatabase {
             "SELECT
                 r.signature, r.timestamp, r.slot, r.status, r.success,
                 r.fee_lamports, r.instructions_count,
-                p.transaction_type, p.direction, p.token_swap_info,
+                p.type_kind, p.direction, p.token_swap_info,
                 p.token_transfers, p.ata_operations,
                 p.fee_sol, p.sol_delta
             FROM raw_transactions r
@@ -173,6 +173,8 @@ impl TransactionDatabase {
                 let instructions_count =
                     row.get::<_, Option<i64>>(6)?.unwrap_or_default().max(0) as usize;
 
+                // `type_kind` -- the stable discriminant -- not the serialized
+                // payload, which no consumer of a list row can read.
                 let transaction_type: Option<String> = row.get(7)?;
                 let direction: Option<String> = row.get(8)?;
                 let token_swap_info_json: Option<String> = row.get(9)?;
@@ -395,14 +397,48 @@ impl TransactionDatabase {
         let wallet_address = subject.address();
         let chain_id = self.require_subject_chain(&subject)?;
 
-        let mut query =
-            "SELECT COUNT(*) FROM raw_transactions r WHERE r.chain_id = ?1 AND r.wallet_address = ?2".to_owned();
+        // Joined to the processed row so the count answers the same question the
+        // list does. Counting `raw_transactions` alone reported the whole wallet
+        // total no matter which type or direction was selected.
+        let mut query = "SELECT COUNT(*) FROM raw_transactions r \
+             LEFT JOIN processed_transactions p \
+               ON r.chain_id = p.chain_id AND r.signature = p.signature AND p.wallet_address = ?2 \
+             WHERE r.chain_id = ?1 AND r.wallet_address = ?2"
+            .to_owned();
 
         let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
         params_vec.push(Box::new(chain_id));
         params_vec.push(Box::new(wallet_address));
 
-        // Apply coarse filters (can't filter by JSON columns efficiently)
+        // Type filter: `failed` is a status, every other filter is a set of kinds.
+        if !filters.types.is_empty() {
+            let mut clauses: Vec<String> = Vec::new();
+            for filter in &filters.types {
+                if filter.trim().eq_ignore_ascii_case("failed") {
+                    clauses.push("r.success = 0".to_owned());
+                    continue;
+                }
+                if let Some(kinds) = kinds_for_filter(filter) {
+                    let mut placeholders = Vec::new();
+                    for kind in kinds {
+                        placeholders.push(format!("?{}", params_vec.len() + 1));
+                        params_vec.push(Box::new((*kind).to_owned()));
+                    }
+                    clauses.push(format!("p.type_kind IN ({})", placeholders.join(", ")));
+                }
+            }
+            if !clauses.is_empty() {
+                query.push_str(&format!(" AND ({})", clauses.join(" OR ")));
+            }
+        }
+
+        if let Some(ref direction) = filters.direction {
+            if let Some(expected) = canonical_direction(direction) {
+                query.push_str(&format!(" AND p.direction = ?{}", params_vec.len() + 1));
+                params_vec.push(Box::new(expected));
+            }
+        }
+
         if let Some(ref from) = filters.time_from {
             query.push_str(&format!(" AND r.timestamp >= ?{}", params_vec.len() + 1));
             params_vec.push(Box::new(from.to_rfc3339()));
@@ -479,23 +515,58 @@ fn canonical_direction(value: &str) -> Option<String> {
     Some(normalized.to_string())
 }
 
+/// The `TransactionType::kind()` values one UI filter selects.
+///
+/// Most filters are a single kind; a few deliberately span kinds (`swap` covers
+/// both trade directions, `transfer` covers SOL and token movements, `ata` covers
+/// both ends of an account's lifecycle). `failed` returns `None` because it is a
+/// property of the transaction's status, not of its type.
+fn kinds_for_filter(filter: &str) -> Option<&'static [&'static str]> {
+    match filter.trim().to_ascii_lowercase().as_str() {
+        "buy" => Some(&["buy"]),
+        "sell" => Some(&["sell"]),
+        "swap" => Some(&["buy", "sell", "swap"]),
+        "transfer" => Some(&["transfer", "sol_transfer", "token_transfer"]),
+        "ata" => Some(&["ata", "ata_create", "ata_close"]),
+        "dust" => Some(&["dust"]),
+        "spam" => Some(&["spam"]),
+        "liquidity" => Some(&["liquidity_add", "liquidity_remove"]),
+        "nft" => Some(&["nft"]),
+        "program" => Some(&["program", "compute"]),
+        "unknown" => Some(&["unknown"]),
+        _ => None,
+    }
+}
+
+/// Matches a UI filter against a row's `TransactionType::kind()`.
 fn matches_transaction_type(filter: &str, row_type: &str, success: bool) -> bool {
     let filter_norm = filter.trim().to_ascii_lowercase();
     if filter_norm.is_empty() {
         return false;
     }
 
-    let row_lower = row_type.to_ascii_lowercase();
+    let kind = row_type.to_ascii_lowercase();
 
-    match filter_norm.as_str() {
-        "buy" => row_lower.contains("swapsoltotoken") || row_lower == "buy",
-        "sell" => row_lower.contains("swaptokentosol") || row_lower == "sell",
-        "swap" => row_lower.contains("swap") || row_lower == "buy" || row_lower == "sell",
-        "transfer" => row_lower.contains("transfer"),
-        "ata" => row_lower.contains("ata"),
-        "failed" => !success || row_lower.contains("fail"),
-        "unknown" => row_lower.contains("unknown"),
-        _ => false,
+    if filter_norm == "failed" {
+        return !success || kind == "failed";
+    }
+
+    match kinds_for_filter(&filter_norm) {
+        Some(kinds) => {
+            if kinds.contains(&kind.as_str()) {
+                return true;
+            }
+            // Rows written before the reclassification sweep still hold a `Debug`
+            // rendering; keep the trade filters working on those until it runs.
+            match filter_norm.as_str() {
+                "buy" => kind.contains("swapsoltotoken"),
+                "sell" => kind.contains("swaptokentosol"),
+                "swap" => kind.contains("swap"),
+                "ata" => kind.contains("ata"),
+                _ => false,
+            }
+        }
+        None => kind == filter_norm,
     }
 }
 
@@ -536,6 +607,63 @@ mod tests {
             ata_rents: 0.0,
             instructions_count: 0,
         }
+    }
+
+    #[tokio::test]
+    async fn a_rich_transaction_type_survives_a_storage_round_trip() {
+        // Rich variants were persisted with `Debug`, which is not valid JSON, so
+        // every payload-carrying type read back as `Unknown` and its kind was lost.
+        let dir = tempdir().expect("create temp dir");
+        let db_path = dir.path().join("transactions.db");
+        let db = TransactionDatabase::new_with_path(&db_path, crate::chains::ChainId::Solana)
+            .await
+            .expect("create database");
+
+        let mut transaction = Transaction::new("rich_signature".to_owned());
+        transaction.timestamp = Utc::now();
+        transaction.status = TransactionStatus::Finalized;
+        transaction.success = true;
+        transaction.transaction_type = TransactionType::AtaClose {
+            recovered_sol: 0.00203928,
+            token_mint: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263".to_owned(),
+        };
+        transaction.direction = TransactionDirection::Incoming;
+        transaction.sol_balance_change = 0.00203428;
+        transaction.raw_transaction_data = Some(json!({ "signature": transaction.signature }));
+
+        let subject = Subject::from_account(
+            crate::chains::AccountId::new(crate::chains::active_chain(), "ReportingTestWallet111")
+                .unwrap(),
+        );
+        db.upsert_full_transaction(subject.clone(), &transaction)
+            .await
+            .expect("upsert transaction");
+
+        let fetched = db
+            .get_transaction_for_subject(subject.clone(), &transaction.signature)
+            .await
+            .expect("fetch transaction")
+            .expect("transaction exists");
+        match fetched.transaction_type {
+            TransactionType::AtaClose { token_mint, .. } => {
+                assert_eq!(token_mint, "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263");
+            }
+            other => panic!("expected AtaClose, got {other:?}"),
+        }
+
+        // The list path reads the stable discriminant column, and the delta column
+        // holds the wallet's own change rather than the transaction's fee.
+        let conn = Connection::open(&db_path).expect("open sqlite connection");
+        let (kind, direction, sol_delta): (String, String, f64) = conn
+            .query_row(
+                "SELECT type_kind, direction, sol_delta FROM processed_transactions WHERE signature = ?1",
+                [transaction.signature.as_str()],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("query processed row");
+        assert_eq!(kind, "ata_close");
+        assert_eq!(direction, "Incoming");
+        assert!((sol_delta - 0.00203428).abs() < 1e-12);
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]

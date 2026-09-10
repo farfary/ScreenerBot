@@ -19,10 +19,12 @@
 pub mod ata;
 pub mod balance;
 pub mod classify;
+pub mod classify_intent;
 mod classify_patterns;
 pub mod dex;
 pub mod patterns;
 pub mod pnl;
+pub mod wallet_view;
 
 // Re-export public types for external use
 pub use ata::AtaAnalysis;
@@ -31,6 +33,7 @@ pub use classify::TransactionClass;
 pub use dex::DexAnalysis;
 pub use patterns::PatternAnalysis;
 pub use pnl::PnLAnalysis;
+pub use wallet_view::WalletView;
 
 use serde::{Deserialize, Serialize};
 

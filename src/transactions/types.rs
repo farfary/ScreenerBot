@@ -11,7 +11,7 @@ use tabled::Tabled;
 pub use super::subject::Subject;
 
 // Analysis cache versioning (bump when snapshot schema changes)
-pub const ANALYSIS_CACHE_VERSION: u32 = 2;
+pub const ANALYSIS_CACHE_VERSION: u32 = 3;
 
 /// Deferred retry record for signatures that timed out/dropped
 /// Used for both manager-level retries and service-level deferred queue
@@ -297,15 +297,136 @@ pub enum TransactionType {
         recovered_sol: f64,
         token_mint: String,
     },
+    AtaCreate {
+        rent_paid: f64,
+        token_mint: String,
+    },
+    /// An unsolicited inbound crumb of SOL: we did not sign, we did not pay, and the
+    /// credit is below `DUST_LAMPORTS`. Address-poisoning blasters send thousands of
+    /// these; they are real ledger entries, not noise to hide, but they are never a
+    /// transfer the owner made.
+    Dust {
+        sol_amount: f64,
+        from: String,
+    },
+    /// An unsolicited inbound token credit on a transaction we did not sign.
+    SpamAirdrop {
+        mint: String,
+        amount: f64,
+        from: String,
+    },
+    LiquidityAdd {
+        pool: String,
+        router: String,
+    },
+    LiquidityRemove {
+        pool: String,
+        router: String,
+    },
+    NftOperation {
+        program: String,
+        detail: String,
+    },
+    /// A program call with no value flow we can attribute (approvals, memos,
+    /// registrations). `program` is the top-level program that owned the call.
+    ProgramInteraction {
+        program: String,
+        detail: String,
+    },
     Other {
         description: String,
         details: String,
     },
 }
 
+/// A credit at or below this many lamports, received on a transaction we did not
+/// sign, is dust rather than a transfer. One lamport is the address-poisoning
+/// standard; 10_000 lamports (0.00001 SOL) is still an order of magnitude under a
+/// single base fee, so nothing an owner would deliberately send lands here.
+pub const DUST_LAMPORTS: u64 = 10_000;
+
 impl Default for TransactionType {
     fn default() -> Self {
         TransactionType::Unknown
+    }
+}
+
+impl TransactionType {
+    /// Stable, storage- and filter-safe discriminant.
+    ///
+    /// The rich variants carry payloads, so neither `Debug` nor the serde
+    /// representation is usable as a column value to group or filter on. This is the
+    /// one string the database column, the API row, the UI badge and the type filter
+    /// all agree on; it never changes for a variant once shipped.
+    pub fn kind(&self) -> &'static str {
+        match self {
+            Self::Buy | Self::SwapSolToToken { .. } => "buy",
+            Self::Sell | Self::SwapTokenToSol { .. } => "sell",
+            Self::SwapTokenToToken { .. } => "swap",
+            Self::SolTransfer { .. } => "sol_transfer",
+            Self::TokenTransfer { .. } => "token_transfer",
+            Self::Transfer => "transfer",
+            Self::Dust { .. } => "dust",
+            Self::SpamAirdrop { .. } => "spam",
+            Self::AtaCreate { .. } => "ata_create",
+            Self::AtaClose { .. } => "ata_close",
+            Self::AtaOperation => "ata",
+            Self::LiquidityAdd { .. } => "liquidity_add",
+            Self::LiquidityRemove { .. } => "liquidity_remove",
+            Self::NftOperation { .. } => "nft",
+            Self::ProgramInteraction { .. } | Self::Other { .. } => "program",
+            Self::Compute => "compute",
+            Self::Failed => "failed",
+            Self::Unknown => "unknown",
+        }
+    }
+
+    /// Human label for the dashboard badge and the details dialog.
+    pub fn label(&self) -> &'static str {
+        match self.kind() {
+            "buy" => "Buy",
+            "sell" => "Sell",
+            "swap" => "Swap",
+            "sol_transfer" => "SOL transfer",
+            "token_transfer" => "Token transfer",
+            "transfer" => "Transfer",
+            "dust" => "Dust",
+            "spam" => "Spam airdrop",
+            "ata_create" => "Account opened",
+            "ata_close" => "Rent reclaimed",
+            "ata" => "Token account",
+            "liquidity_add" => "Add liquidity",
+            "liquidity_remove" => "Remove liquidity",
+            "nft" => "NFT",
+            "program" => "Program call",
+            "compute" => "Compute",
+            "failed" => "Failed",
+            _ => "Unclassified",
+        }
+    }
+
+    /// Reads a persisted discriminant back into a coarse variant.
+    ///
+    /// Rows written before the JSON encoding landed hold a `Debug` rendering
+    /// (`Sell`, or `AtaClose { recovered_sol: 0.002, .. }`), which no deserializer
+    /// accepts. This maps whatever is in the column onto the closest simple variant
+    /// so a legacy row still lists and filters correctly until it is re-analyzed.
+    pub fn from_stored_kind(stored: &str) -> Option<Self> {
+        let head = stored
+            .split(|c: char| c == ' ' || c == '{' || c == '(')
+            .next()
+            .unwrap_or(stored)
+            .trim();
+        match head.to_ascii_lowercase().as_str() {
+            "buy" | "swapsoltotoken" => Some(Self::Buy),
+            "sell" | "swaptokentosol" => Some(Self::Sell),
+            "transfer" | "soltransfer" | "tokentransfer" => Some(Self::Transfer),
+            "ataoperation" | "atacreate" => Some(Self::AtaOperation),
+            "compute" => Some(Self::Compute),
+            "failed" => Some(Self::Failed),
+            "unknown" => Some(Self::Unknown),
+            _ => None,
+        }
     }
 }
 
@@ -320,6 +441,40 @@ pub enum TransactionDirection {
 impl Default for TransactionDirection {
     fn default() -> Self {
         TransactionDirection::Internal
+    }
+}
+
+impl TransactionDirection {
+    /// Direction as the wallet experienced it.
+    ///
+    /// Direction is a property of the SUBJECT wallet, not of the swap leg: a sell is
+    /// outgoing because tokens left, an ATA close is incoming because rent came back,
+    /// and a transaction that only cost a fee is internal. Deriving it from the
+    /// classifier's swap direction alone is what left every transfer, every rent
+    /// reclaim and every failed attempt reading `Unknown`.
+    pub fn from_wallet_flow(lamport_delta_excluding_fee: i64, token_delta_raw: i128) -> Self {
+        if token_delta_raw > 0 {
+            return Self::Incoming;
+        }
+        if token_delta_raw < 0 {
+            return Self::Outgoing;
+        }
+        if lamport_delta_excluding_fee > 0 {
+            return Self::Incoming;
+        }
+        if lamport_delta_excluding_fee < 0 {
+            return Self::Outgoing;
+        }
+        Self::Internal
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Incoming => "Incoming",
+            Self::Outgoing => "Outgoing",
+            Self::Internal => "Internal",
+            Self::Unknown => "Unknown",
+        }
     }
 }
 

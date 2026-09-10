@@ -6,6 +6,7 @@
 import * as Utils from "../../core/utils.js";
 import { requestManager } from "../../core/request_manager.js";
 import { renderTabState } from "./state_handling.js";
+import { typeKind, typeLabel } from "../transaction_type.js";
 
 /**
  * Apply transactions tab mixin to TokenDetailsDialog class
@@ -217,8 +218,7 @@ export function applyTransactionsTabMixin(DialogClass) {
     // Simple HTML table for speed
     const rows = recent
       .map((tx) => {
-        const txType = (tx.transaction_type || tx.type || "UNKNOWN").toLowerCase();
-        const typeLabel = txType.toUpperCase();
+        const label = typeLabel(tx.transaction_type || tx.type);
         const kind = transactionKind(tx);
         const timeDisplay = new Date(tx.timestamp).toLocaleTimeString();
         const price = tx.price_sol
@@ -229,7 +229,7 @@ export function applyTransactionsTabMixin(DialogClass) {
 
         const rowInner = `
           <span class="transaction-time">${this._escapeHtml(timeDisplay)}</span>
-          <strong class="transaction-kind ${kind}">${this._escapeHtml(typeLabel)}</strong>
+          <strong class="transaction-kind ${kind}">${this._escapeHtml(label)}</strong>
           <span class="transaction-price-cell">${price}</span>
           <span class="transaction-total">${total} SOL</span>
           <i class="icon-external-link transaction-external" aria-hidden="true"></i>
@@ -253,11 +253,12 @@ export function applyTransactionsTabMixin(DialogClass) {
   };
 }
 
+/** The buy/sell/other colour class, from the shared type discriminant. */
 function transactionKind(transaction) {
-  const type = (transaction.transaction_type || transaction.type || "").toLowerCase();
+  const kind = typeKind(transaction.transaction_type || transaction.type);
   const direction = (transaction.direction || "").toLowerCase();
-  if (type.includes("buy") || (type === "swap" && direction === "incoming")) return "buy";
-  if (type.includes("sell") || (type === "swap" && direction === "outgoing")) return "sell";
+  if (kind === "buy" || (kind === "swap" && direction === "incoming")) return "buy";
+  if (kind === "sell" || (kind === "swap" && direction === "outgoing")) return "sell";
   return "other";
 }
 

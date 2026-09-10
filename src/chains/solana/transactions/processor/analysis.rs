@@ -25,48 +25,36 @@ impl TransactionProcessor {
         analysis: &crate::chains::solana::transactions::analyzer::CompleteAnalysis,
         tx_data: &crate::chains::solana::rpc::TransactionDetails,
     ) -> crate::chains::solana::Result<()> {
-        // Map classification results
-        transaction.transaction_type = match analysis.classification.transaction_type {
-            crate::chains::solana::transactions::analyzer::classify::ClassifiedType::Buy => TransactionType::Buy,
-            crate::chains::solana::transactions::analyzer::classify::ClassifiedType::Sell => TransactionType::Sell,
-            crate::chains::solana::transactions::analyzer::classify::ClassifiedType::Swap => {
-                TransactionType::Unknown
-            } // Could be Buy or Sell depending on direction
-            crate::chains::solana::transactions::analyzer::classify::ClassifiedType::Transfer => {
-                TransactionType::Transfer
-            }
-            crate::chains::solana::transactions::analyzer::classify::ClassifiedType::AddLiquidity => {
-                TransactionType::Unknown
-            }
-            crate::chains::solana::transactions::analyzer::classify::ClassifiedType::RemoveLiquidity => {
-                TransactionType::Unknown
-            }
-            crate::chains::solana::transactions::analyzer::classify::ClassifiedType::NftOperation => {
-                TransactionType::Unknown
-            }
-            crate::chains::solana::transactions::analyzer::classify::ClassifiedType::ProgramInteraction => {
-                TransactionType::Compute
-            }
-            crate::chains::solana::transactions::analyzer::classify::ClassifiedType::Failed => {
-                TransactionType::Failed
-            }
-            crate::chains::solana::transactions::analyzer::classify::ClassifiedType::Unknown => {
-                TransactionType::Unknown
-            }
-        };
+        // The subject wallet's own view of this transaction. Every figure below that
+        // describes "what happened to us" is read from here, never from a sum over
+        // the transaction's accounts: lamports are conserved, so an all-account sum
+        // is always exactly the fee.
+        let view = crate::chains::solana::transactions::analyzer::WalletView::build(
+            tx_data,
+            &self.wallet_pubkey.to_string(),
+        );
 
-        transaction.direction = match analysis.classification.direction {
-            Some(crate::chains::solana::transactions::analyzer::classify::SwapDirection::SolToToken) => {
-                TransactionDirection::Incoming
-            }
-            Some(crate::chains::solana::transactions::analyzer::classify::SwapDirection::TokenToSol) => {
-                TransactionDirection::Outgoing
-            }
-            Some(crate::chains::solana::transactions::analyzer::classify::SwapDirection::TokenToToken) => {
-                TransactionDirection::Internal
-            }
-            None => TransactionDirection::Unknown,
-        };
+        // Map classification results. The graph classifier owns the swap verdict;
+        // `classify_intent` turns everything else -- rent reclaims, transfers, dust,
+        // spam airdrops, bare program calls -- into a type instead of `Unknown`.
+        transaction.transaction_type =
+            crate::chains::solana::transactions::analyzer::classify_intent::refine(
+                &analysis.classification.transaction_type,
+                &view,
+                tx_data,
+                &analysis.dex,
+                transaction.success,
+            );
+
+        // Direction is a property of the wallet, not of the swap leg. Deriving it
+        // from `classification.direction` alone left every transfer, rent reclaim and
+        // failed attempt reading `Unknown`.
+        transaction.direction = crate::transactions::types::TransactionDirection::from_wallet_flow(
+            view.lamport_delta_excluding_fee(),
+            view.token_delta_raw(),
+        );
+        transaction.wallet_lamport_change = view.lamport_delta;
+        transaction.wallet_signed = view.signed;
 
         // Map balance changes
         transaction.sol_balance_changes = analysis.balance.sol_changes.values().cloned().collect();
@@ -77,12 +65,7 @@ impl TransactionProcessor {
             .flatten()
             .cloned()
             .collect();
-        transaction.sol_balance_change = analysis
-            .balance
-            .sol_changes
-            .values()
-            .map(|change| change.change)
-            .sum();
+        transaction.sol_balance_change = view.sol_delta();
 
         // Map ATA analysis
         transaction.ata_analysis = Some(crate::transactions::types::AtaAnalysis {
@@ -207,6 +190,15 @@ impl TransactionProcessor {
                 })
                 .collect(),
         });
+
+        // The ATA operations themselves are what the list row's rent column and the
+        // details dialog read; only the aggregate summary above was ever mapped, so
+        // every row reported zero rent regardless of what it opened or closed.
+        transaction.ata_operations = transaction
+            .ata_analysis
+            .as_ref()
+            .map(|analysis| analysis.detected_operations.clone())
+            .unwrap_or_default();
 
         // Map token swap info and swap PnL info based on analysis outputs
         // This fills Transaction.token_swap_info and swap_pnl_info so downstream tools (CSV verifier)

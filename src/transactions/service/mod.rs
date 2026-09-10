@@ -18,6 +18,7 @@ pub mod config;
 pub mod health;
 pub mod lifecycle;
 pub mod processing;
+pub mod reclassify;
 
 // Re-export public API for backward compatibility
 pub use lifecycle::{

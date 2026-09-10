@@ -209,23 +209,40 @@ fn describe_direction(direction: &TransactionDirection) -> String {
     }
 }
 
+/// Names a transaction for the position activity feed.
+///
+/// The label itself comes from `TransactionType::label()` so the feed, the list
+/// badge and the details dialog cannot drift apart; only the payload detail that
+/// makes an entry identifiable is added here.
 fn describe_type(transaction_type: &TransactionType) -> String {
+    let label = transaction_type.label();
     match transaction_type {
-        TransactionType::Buy => "Buy".to_owned(),
-        TransactionType::Sell => "Sell".to_owned(),
-        TransactionType::Transfer => "Transfer".to_owned(),
-        TransactionType::Compute => "Compute".to_owned(),
-        TransactionType::AtaOperation => "ATA Operation".to_owned(),
-        TransactionType::Failed => "Failed".to_owned(),
-        TransactionType::Unknown => "Unknown".to_owned(),
-        TransactionType::SwapSolToToken { router, .. } => format!("Swap SOL→Token ({router})"),
-        TransactionType::SwapTokenToSol { router, .. } => format!("Swap Token→SOL ({router})"),
-        TransactionType::SwapTokenToToken { router, .. } => format!("Swap Token→Token ({router})"),
-        TransactionType::SolTransfer { .. } => "SOL Transfer".to_owned(),
-        TransactionType::TokenTransfer { mint, amount, .. } => {
-            format!("Token Transfer {mint} ({amount:.4})")
+        TransactionType::SwapSolToToken { router, .. }
+        | TransactionType::SwapTokenToSol { router, .. }
+        | TransactionType::SwapTokenToToken { router, .. }
+        | TransactionType::LiquidityAdd { router, .. }
+        | TransactionType::LiquidityRemove { router, .. }
+            if !router.is_empty() =>
+        {
+            format!("{label} ({router})")
         }
-        TransactionType::AtaClose { token_mint, .. } => format!("ATA Close ({token_mint})"),
+        TransactionType::TokenTransfer { mint, amount, .. } => {
+            format!("{label} {mint} ({amount:.4})")
+        }
+        TransactionType::SpamAirdrop { mint, .. } => format!("{label} ({mint})"),
+        TransactionType::AtaClose { token_mint, .. }
+        | TransactionType::AtaCreate { token_mint, .. }
+            if !token_mint.is_empty() =>
+        {
+            format!("{label} ({token_mint})")
+        }
+        TransactionType::NftOperation { detail, .. }
+        | TransactionType::ProgramInteraction { detail, .. }
+            if !detail.is_empty() =>
+        {
+            format!("{label} ({detail})")
+        }
         TransactionType::Other { description, .. } => description.clone(),
+        _ => label.to_owned(),
     }
 }

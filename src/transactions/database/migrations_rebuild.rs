@@ -96,6 +96,7 @@ impl TransactionDatabase {
                 signature TEXT NOT NULL,
                 wallet_address TEXT NOT NULL,
                 transaction_type TEXT NOT NULL,
+                type_kind TEXT NOT NULL DEFAULT 'unknown',
                 direction TEXT NOT NULL,
                 sol_balance_change TEXT,
                 token_balance_changes TEXT,
@@ -124,12 +125,12 @@ impl TransactionDatabase {
 
         tx.execute(
             "INSERT INTO processed_transactions__v5
-                (signature, wallet_address, transaction_type, direction, sol_balance_change,
+                (signature, wallet_address, transaction_type, type_kind, direction, sol_balance_change,
                  token_balance_changes, token_swap_info, swap_pnl_info, ata_operations,
                  token_transfers, instruction_info, analysis_duration_ms, cached_analysis,
                  analysis_version, fee_sol, sol_delta, processed_at, updated_at)
              SELECT signature, COALESCE(NULLIF(wallet_address, ''), ?1), transaction_type,
-                    direction, sol_balance_change, token_balance_changes, token_swap_info,
+                    type_kind, direction, sol_balance_change, token_balance_changes, token_swap_info,
                     swap_pnl_info, ata_operations, token_transfers, instruction_info,
                     analysis_duration_ms, cached_analysis, analysis_version, fee_sol,
                     sol_delta, processed_at, updated_at

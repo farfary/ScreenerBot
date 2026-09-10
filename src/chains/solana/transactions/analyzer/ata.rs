@@ -127,6 +127,10 @@ const STANDARD_RENTS: &[(u64, &str)] = &[
     (5616720, "Metadata Account"), // NFT metadata account
 ];
 
+const ATA_PROGRAM_ID: &str = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL";
+const TOKEN_PROGRAM_ID: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+const TOKEN_2022_PROGRAM_ID: &str = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
+
 /// Maximum expected rent for validation (10 SOL)
 const MAX_EXPECTED_RENT: u64 = 10_000_000_000;
 
@@ -326,41 +330,80 @@ async fn analyze_instruction_for_ata(
     instruction: &Value,
     account_keys: &[String],
 ) -> crate::chains::solana::Result<Option<AtaOperation>> {
-    let program_id_index = instruction
-        .get("programIdIndex")
-        .and_then(|v| v.as_u64())
-        .unwrap_or_default() as usize;
+    // jsonParsed sends `programId` as an address and only the raw encoding sends
+    // `programIdIndex`. Reading the index alone resolved every instruction to
+    // account 0 -- the fee payer -- so this whole path matched nothing.
+    let program_id = instruction
+        .get("programId")
+        .and_then(|v| v.as_str())
+        .map(str::to_owned)
+        .or_else(|| {
+            instruction
+                .get("programIdIndex")
+                .and_then(|v| v.as_u64())
+                .and_then(|index| account_keys.get(index as usize).cloned())
+        });
+    let Some(program_id) = program_id else {
+        return Ok(None);
+    };
 
-    if program_id_index >= account_keys.len() {
+    // ATA-program creations are read from balance changes instead: the rent amount
+    // and the funded account are exact there, and matching both would double-count.
+    if program_id == ATA_PROGRAM_ID {
         return Ok(None);
     }
 
-    let program_id = &account_keys[program_id_index];
-
-    // Check for ATA program
-    if program_id == "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL" {
-        // ATA operations are better detected from balance changes (more accurate account info)
-        // Skip instruction-based detection to avoid duplicates
-        return Ok(None);
-    }
-
-    // Check for Token program operations
-    if program_id == "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" {
-        // Parse instruction data for token operations
-        return parse_token_instruction(instruction, account_keys).await;
+    if program_id == TOKEN_PROGRAM_ID || program_id == TOKEN_2022_PROGRAM_ID {
+        return Ok(parse_token_instruction(instruction));
     }
 
     Ok(None)
 }
 
-/// Parse Token program instruction for ATA-related operations
-async fn parse_token_instruction(
-    _instruction: &Value,
-    _account_keys: &[String],
-) -> crate::chains::solana::Result<Option<AtaOperation>> {
-    // This would implement detailed Token program instruction parsing
-    // For now, return a placeholder
-    Ok(None)
+/// Reads an SPL Token instruction for the account lifecycle it performs.
+///
+/// This carries the mint and owner that the balance-change pass cannot see, which is
+/// what lets a rent reclaim name the token whose account was closed.
+fn parse_token_instruction(instruction: &Value) -> Option<AtaOperation> {
+    let parsed = instruction.get("parsed")?;
+    let info = parsed.get("info");
+    let account = info
+        .and_then(|info| info.get("account"))
+        .and_then(|v| v.as_str())
+        .unwrap_or_default()
+        .to_owned();
+    if account.is_empty() {
+        return None;
+    }
+    let mint = info
+        .and_then(|info| info.get("mint"))
+        .and_then(|v| v.as_str())
+        .map(str::to_owned);
+    let owner = info
+        .and_then(|info| info.get("owner"))
+        .and_then(|v| v.as_str())
+        .map(str::to_owned);
+
+    let operation_type = match parsed.get("type").and_then(|v| v.as_str())? {
+        "closeAccount" => AtaOperationType::Close,
+        "initializeAccount" | "initializeAccount2" | "initializeAccount3" => {
+            AtaOperationType::Initialize
+        }
+        "syncNative" => AtaOperationType::CreateNative,
+        "setAuthority" => AtaOperationType::SetAuthority,
+        _ => return None,
+    };
+
+    Some(AtaOperation {
+        operation_type,
+        account_address: account,
+        mint,
+        owner,
+        // The lamport figure belongs to the balance-change pass; consolidation keeps
+        // whichever record carries it.
+        rent_amount: 0.0,
+        success: true,
+    })
 }
 
 // =============================================================================
@@ -369,26 +412,43 @@ async fn parse_token_instruction(
 
 /// Consolidate and deduplicate ATA operations
 fn consolidate_operations(operations: Vec<AtaOperation>) -> Vec<AtaOperation> {
-    let mut consolidated = Vec::new();
-    let mut seen_keys: std::collections::HashSet<String> = std::collections::HashSet::new();
+    // The same close is seen twice: once by the balance pass, which knows the exact
+    // rent, and once by the instruction pass, which knows the mint and owner. Keying
+    // on the rent amount kept both as separate operations and double-counted the
+    // rent; merging on account + operation keeps one record that carries everything.
+    let mut order: Vec<String> = Vec::new();
+    let mut merged: std::collections::HashMap<String, AtaOperation> =
+        std::collections::HashMap::new();
 
     for operation in operations {
-        // Create a unique key from account + operation type + rent amount
-        // This prevents duplicates from balance analysis + instruction parsing
         let key = format!(
-            "{}::{:?}::{}",
-            operation.account_address,
-            operation.operation_type,
-            (operation.rent_amount * 1_000_000_000.0).round() as u64
+            "{}::{:?}",
+            operation.account_address, operation.operation_type
         );
-
-        if !seen_keys.contains(&key) {
-            seen_keys.insert(key);
-            consolidated.push(operation);
+        match merged.get_mut(&key) {
+            Some(existing) => {
+                if existing.mint.is_none() {
+                    existing.mint = operation.mint;
+                }
+                if existing.owner.is_none() {
+                    existing.owner = operation.owner;
+                }
+                if operation.rent_amount > existing.rent_amount {
+                    existing.rent_amount = operation.rent_amount;
+                }
+                existing.success = existing.success && operation.success;
+            }
+            None => {
+                order.push(key.clone());
+                merged.insert(key, operation);
+            }
         }
     }
 
-    consolidated
+    order
+        .into_iter()
+        .filter_map(|key| merged.remove(&key))
+        .collect()
 }
 
 // =============================================================================

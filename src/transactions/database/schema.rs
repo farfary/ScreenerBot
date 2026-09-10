@@ -50,7 +50,8 @@ CREATE TABLE IF NOT EXISTS processed_transactions (
     chain_id TEXT NOT NULL DEFAULT 'solana',
     signature TEXT NOT NULL,
     wallet_address TEXT NOT NULL,
-    transaction_type TEXT NOT NULL, -- Serialized TransactionType enum
+    transaction_type TEXT NOT NULL, -- serde JSON of the TransactionType enum (rich variants round-trip)
+    type_kind TEXT NOT NULL DEFAULT 'unknown', -- TransactionType::kind(): the stable value the UI filters and groups on
     direction TEXT NOT NULL, -- 'Incoming', 'Outgoing', 'Internal', 'Unknown'
 
     -- Balance change data (calculated fresh, not cached)
@@ -182,6 +183,7 @@ pub(super) const INDEXES: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_raw_transactions_success ON raw_transactions(success);",
     "CREATE INDEX IF NOT EXISTS idx_processed_transactions_chain_wallet ON processed_transactions(chain_id, wallet_address);",
     "CREATE INDEX IF NOT EXISTS idx_processed_transactions_type ON processed_transactions(transaction_type);",
+    "CREATE INDEX IF NOT EXISTS idx_processed_transactions_type_kind ON processed_transactions(chain_id, wallet_address, type_kind);",
     "CREATE INDEX IF NOT EXISTS idx_processed_transactions_direction ON processed_transactions(direction);",
     "CREATE INDEX IF NOT EXISTS idx_processed_transactions_analysis_version ON processed_transactions(analysis_version);",
     "CREATE INDEX IF NOT EXISTS idx_deferred_retries_next_retry ON deferred_retries(next_retry_at);",

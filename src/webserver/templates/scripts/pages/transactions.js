@@ -4,6 +4,7 @@ import * as Utils from "../core/utils.js";
 import { DataTable } from "../ui/data_table.js";
 import { requestManager } from "../core/request_manager.js";
 import { TransactionDetailsDialog } from "../ui/transaction_details_dialog.js";
+import { TYPE_FILTER_OPTIONS, typeLabel, typeVariant } from "../ui/transaction_type.js";
 
 const PAGE_LIMIT = 100;
 const DEFAULT_FILTERS = {
@@ -27,21 +28,7 @@ function formatSignatureLink(signature) {
 
 function formatTypeBadge(value) {
   if (!value) return "—";
-  const key = String(value).toLowerCase();
-  const types = {
-    buy: { label: "Buy", variant: "success" },
-    sell: { label: "Sell", variant: "error" },
-    swap: { label: "Swap", variant: "info" },
-    transfer: { label: "Transfer", variant: "secondary" },
-    ata: { label: "ATA", variant: "secondary" },
-    failed: { label: "Failed", variant: "error" },
-    unknown: { label: "Unknown", variant: "secondary" },
-  };
-  const info = types[key];
-  if (!info) {
-    return Utils.escapeHtml(value);
-  }
-  return `<span class="badge ${info.variant}">${info.label}</span>`;
+  return `<span class="badge ${typeVariant(value)}">${Utils.escapeHtml(typeLabel(value))}</span>`;
 }
 
 function formatDirectionBadge(value) {
@@ -50,7 +37,9 @@ function formatDirectionBadge(value) {
     Incoming: { text: "↓ Incoming", variant: "success" },
     Outgoing: { text: "↑ Outgoing", variant: "error" },
     Internal: { text: "⟲ Internal", variant: "secondary" },
-    Unknown: { text: "? Unknown", variant: "secondary" },
+    // Only rows written before the wallet-relative direction landed can still be
+    // Unknown; the reclassification sweep clears them.
+    Unknown: { text: "Unclassified", variant: "secondary" },
   };
   const info = map[value] ?? null;
   if (!info) {
@@ -440,7 +429,7 @@ function createLifecycle() {
         {
           id: "transaction_type",
           label: "Type",
-          minWidth: 120,
+          minWidth: 150,
           render: (value) => formatTypeBadge(value),
         },
         {
@@ -575,16 +564,7 @@ function createLifecycle() {
               mode: "server",
               defaultValue: state.filters.type,
               autoApply: false,
-              options: [
-                { value: "all", label: "All Types" },
-                { value: "buy", label: "Buy" },
-                { value: "sell", label: "Sell" },
-                { value: "swap", label: "Swap" },
-                { value: "transfer", label: "Transfer" },
-                { value: "ata", label: "ATA" },
-                { value: "failed", label: "Failed" },
-                { value: "unknown", label: "Unknown" },
-              ],
+              options: TYPE_FILTER_OPTIONS,
               onChange: (value, el, options) => {
                 state.filters.type = value || "all";
                 // Skip reload if this is state restoration
@@ -609,7 +589,6 @@ function createLifecycle() {
                 { value: "Incoming", label: "Incoming" },
                 { value: "Outgoing", label: "Outgoing" },
                 { value: "Internal", label: "Internal" },
-                { value: "Unknown", label: "Unknown" },
               ],
               onChange: (value, el, options) => {
                 state.filters.direction = value || "all";

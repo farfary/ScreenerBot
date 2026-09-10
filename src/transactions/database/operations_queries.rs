@@ -246,32 +246,35 @@ impl TransactionDatabase {
         let cached_analysis_json = serde_json::to_string(&transaction.cached_analysis)
             .unwrap_or_else(|_| "null".to_owned());
 
-        let tx_type = format!("{:?}", transaction.transaction_type);
-        let dir = format!("{:?}", transaction.direction);
+        // Serde, not `Debug`: a `Debug` rendering of a rich variant
+        // (`AtaClose { recovered_sol: 0.002, .. }`) is not valid JSON, so every
+        // payload-carrying type read back as `Unknown` and the rich variants could
+        // never round-trip at all.
+        let tx_type = serde_json::to_string(&transaction.transaction_type)
+            .unwrap_or_else(|_| "\"Unknown\"".to_owned());
+        let type_kind = transaction.transaction_type.kind();
+        let dir = transaction.direction.as_str();
 
-        let sol_delta = if !transaction.sol_balance_changes.is_empty() {
-            transaction
-                .sol_balance_changes
-                .iter()
-                .map(|change| change.change)
-                .sum()
-        } else {
-            transaction.sol_balance_change
-        };
+        // The SUBJECT wallet's own change. Summing `sol_balance_changes` sums every
+        // account the transaction touched, and lamports are conserved, so that total
+        // is always exactly the fee -- which is what the dashboard's delta column
+        // showed on 627 of 629 recorded transactions.
+        let sol_delta = transaction.sol_balance_change;
 
         conn
             .execute(
                 r#"INSERT OR REPLACE INTO processed_transactions
-                   (chain_id, signature, wallet_address, transaction_type, direction, sol_balance_change, token_balance_changes,
+                   (chain_id, signature, wallet_address, transaction_type, type_kind, direction, sol_balance_change, token_balance_changes,
                     token_swap_info, swap_pnl_info, ata_operations, token_transfers, instruction_info,
                     analysis_duration_ms, cached_analysis, analysis_version, fee_sol, sol_delta, updated_at)
                  VALUES
-                   (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, datetime('now'))"#,
+                   (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, datetime('now'))"#,
                 params![
                     chain_id,
                     transaction.signature,
                     wallet_address,
                     tx_type,
+                    type_kind,
                     dir,
                     sol_balance_change_json,
                     token_balance_changes_json,
@@ -289,6 +292,67 @@ impl TransactionDatabase {
             )
             .map_err(crate::errors::DatabaseError::from)?;
 
+        Ok(())
+    }
+
+    /// Signatures whose processed row predates the current analyzer.
+    ///
+    /// Ordered newest-first so the history the dashboard opens on is corrected
+    /// first, and restricted to rows that still have a cached raw response, since
+    /// those are the only ones re-analyzable without an RPC round trip.
+    pub async fn stale_analysis_signatures(
+        &self,
+        subject: Subject,
+        current_version: u32,
+        limit: usize,
+    ) -> Result<Vec<String>, Error> {
+        let conn = self.get_connection()?;
+        let chain_id = self.require_subject_chain(&subject)?;
+        let wallet_address = subject.address();
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT p.signature FROM processed_transactions p \
+                 JOIN raw_transactions r \
+                   ON r.chain_id = p.chain_id AND r.signature = p.signature AND r.wallet_address = p.wallet_address \
+                 WHERE p.chain_id = ?1 AND p.wallet_address = ?2 AND p.analysis_version < ?3 \
+                   AND r.raw_transaction_data IS NOT NULL AND r.raw_transaction_data != '' \
+                 ORDER BY r.timestamp DESC LIMIT ?4",
+            )
+            .map_err(crate::errors::DatabaseError::from)?;
+
+        let rows = stmt
+            .query_map(
+                params![chain_id, wallet_address, current_version, limit as i64],
+                |row| row.get::<_, String>(0),
+            )
+            .map_err(crate::errors::DatabaseError::from)?;
+
+        let mut signatures = Vec::new();
+        for row in rows {
+            signatures.push(row.map_err(crate::errors::DatabaseError::from)?);
+        }
+        Ok(signatures)
+    }
+
+    /// Stamps one row's analyzer version without re-analyzing it.
+    ///
+    /// Used only when the cached raw response cannot be read back: without it the
+    /// sweep would reselect the same unreadable row on every start.
+    pub async fn mark_analysis_version(
+        &self,
+        subject: Subject,
+        signature: &str,
+        version: u32,
+    ) -> Result<(), Error> {
+        let conn = self.get_connection()?;
+        let chain_id = self.require_subject_chain(&subject)?;
+        conn.execute(
+            "UPDATE processed_transactions SET analysis_version = ?1 \
+             WHERE chain_id = ?2 AND signature = ?3 AND wallet_address = ?4",
+            params![version, chain_id, signature, subject.address()],
+        )
+        .map_err(crate::errors::DatabaseError::from)?;
         Ok(())
     }
 
@@ -392,12 +456,15 @@ impl TransactionDatabase {
                 let transaction_type_str: Option<String> = row.get(12)?;
                 let transaction_type = transaction_type_str
                     .as_ref()
-                    .and_then(|s| {
-                        // First try parsing as JSON object (for rich variants like SwapSolToToken)
-                        serde_json::from_str(s)
+                    .and_then(|stored| {
+                        // Current rows are serde JSON. Rows written before that hold a
+                        // `Debug` rendering, which no deserializer accepts -- map those
+                        // onto the closest simple variant instead of dropping them all
+                        // into `Unknown`.
+                        serde_json::from_str(stored)
                             .ok()
-                            // Then try as quoted string (for simple variants like "Sell")
-                            .or_else(|| serde_json::from_str(&format!("\"{}\"", s)).ok())
+                            .or_else(|| serde_json::from_str(&format!("\"{stored}\"")).ok())
+                            .or_else(|| TransactionType::from_stored_kind(stored))
                     })
                     .unwrap_or(TransactionType::Unknown);
 

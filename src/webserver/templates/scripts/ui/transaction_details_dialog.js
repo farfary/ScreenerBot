@@ -6,6 +6,7 @@ import * as Utils from "../core/utils.js";
 import { createFocusTrap } from "../core/utils.js";
 import { requestManager } from "../core/request_manager.js";
 import { DialogTabBar, renderDialogTabRow } from "./dialog_tab_bar.js";
+import { typeIcon, typeLabel } from "./transaction_type.js";
 import {
   getIdentity,
   isSolMint,
@@ -1110,50 +1111,11 @@ export class TransactionDetailsDialog {
   // =========================================================================
 
   _getTypeLabel(type) {
-    if (!type) return "Unknown";
-    if (typeof type === "string") {
-      const labels = {
-        Buy: "Buy",
-        Sell: "Sell",
-        Transfer: "Transfer",
-        Compute: "Compute",
-        AtaOperation: "ATA Operation",
-        Failed: "Failed",
-        Unknown: "Unknown",
-      };
-      return labels[type] || type;
-    }
-    // Handle rich enum variants
-    if (type.SwapSolToToken) return "Buy (SOL → Token)";
-    if (type.SwapTokenToSol) return "Sell (Token → SOL)";
-    if (type.SwapTokenToToken) return "Swap (Token → Token)";
-    if (type.SolTransfer) return "SOL Transfer";
-    if (type.TokenTransfer) return "Token Transfer";
-    if (type.AtaClose) return "ATA Close";
-    if (type.Other) return type.Other.description || "Other";
-    return "Unknown";
+    return typeLabel(type);
   }
 
   _getTypeIcon(type) {
-    if (!type) return "icon-info";
-    const typeStr = typeof type === "string" ? type : Object.keys(type)[0] || "Unknown";
-    const icons = {
-      Buy: "icon-shopping-cart",
-      Sell: "icon-dollar-sign",
-      Transfer: "icon-send",
-      Compute: "icon-cpu",
-      AtaOperation: "icon-layers",
-      Failed: "icon-circle-x",
-      Unknown: "icon-info",
-      SwapSolToToken: "icon-shopping-cart",
-      SwapTokenToSol: "icon-dollar-sign",
-      SwapTokenToToken: "icon-repeat",
-      SolTransfer: "icon-send",
-      TokenTransfer: "icon-send",
-      AtaClose: "icon-layers",
-      Other: "icon-ellipsis",
-    };
-    return icons[typeStr] || "icon-info";
+    return typeIcon(type);
   }
 
   _getStatusBadge(status, success) {

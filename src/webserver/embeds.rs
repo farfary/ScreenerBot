@@ -369,6 +369,7 @@ pub const TOKEN_DETAILS_STATE_HANDLING_UI: &str =
     include_str!("templates/scripts/ui/token_details/state_handling.js");
 pub const TOKEN_DETAILS_POSITIONS_TAB_UI: &str =
     include_str!("templates/scripts/ui/token_details/positions_tab.js");
+pub const TRANSACTION_TYPE_UI: &str = include_str!("templates/scripts/ui/transaction_type.js");
 pub const TRANSACTION_DETAILS_DIALOG_UI: &str =
     include_str!("templates/scripts/ui/transaction_details_dialog.js");
 pub const POSITION_DETAILS_DIALOG_UI: &str =

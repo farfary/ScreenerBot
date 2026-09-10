@@ -17,6 +17,7 @@ impl TransactionDatabase {
         // Ensure processed_transactions has fee_sol column for MCP tools compatibility
         let mut has_fee_sol = false;
         let mut has_sol_delta = false;
+        let mut has_type_kind = false;
         let mut stmt = conn
             .prepare("PRAGMA table_info(processed_transactions)")
             .map_err(|e| Error::SchemaInspect {
@@ -38,6 +39,8 @@ impl TransactionDatabase {
                 has_fee_sol = true;
             } else if name.eq_ignore_ascii_case("sol_delta") {
                 has_sol_delta = true;
+            } else if name.eq_ignore_ascii_case("type_kind") {
+                has_type_kind = true;
             }
         }
         drop(stmt);
@@ -63,7 +66,47 @@ impl TransactionDatabase {
             })?;
         }
 
+        if !has_type_kind {
+            conn.execute(
+                "ALTER TABLE processed_transactions ADD COLUMN type_kind TEXT NOT NULL DEFAULT 'unknown'",
+                [],
+            )
+            .map_err(|e| Error::Migration {
+                step: "add type_kind column".to_owned(),
+                detail: e.to_string(),
+            })?;
+            // Existing rows hold a `Debug` rendering in `transaction_type`; map what
+            // can be mapped so the list stays filterable before the reclassification
+            // sweep re-derives every row from its cached raw transaction.
+            Self::backfill_type_kind(conn)?;
+        }
+
         Ok(!has_sol_delta)
+    }
+
+    /// Seed `type_kind` for rows written before the column existed.
+    fn backfill_type_kind(conn: &mut Connection) -> Result<(), Error> {
+        conn.execute(
+            "UPDATE processed_transactions SET type_kind = CASE \
+                WHEN transaction_type LIKE 'Buy%' OR transaction_type LIKE 'SwapSolToToken%' THEN 'buy' \
+                WHEN transaction_type LIKE 'Sell%' OR transaction_type LIKE 'SwapTokenToSol%' THEN 'sell' \
+                WHEN transaction_type LIKE 'SwapTokenToToken%' THEN 'swap' \
+                WHEN transaction_type LIKE 'SolTransfer%' THEN 'sol_transfer' \
+                WHEN transaction_type LIKE 'TokenTransfer%' THEN 'token_transfer' \
+                WHEN transaction_type LIKE 'Transfer%' THEN 'transfer' \
+                WHEN transaction_type LIKE 'AtaClose%' THEN 'ata_close' \
+                WHEN transaction_type LIKE 'AtaCreate%' THEN 'ata_create' \
+                WHEN transaction_type LIKE 'AtaOperation%' THEN 'ata' \
+                WHEN transaction_type LIKE 'Compute%' THEN 'compute' \
+                WHEN transaction_type LIKE 'Failed%' THEN 'failed' \
+                ELSE 'unknown' END",
+            [],
+        )
+        .map_err(|e| Error::Migration {
+            step: "backfill type_kind".to_owned(),
+            detail: e.to_string(),
+        })?;
+        Ok(())
     }
 
     /// Ensure the chain-scoped bootstrap row after the v7 table rebuild.
@@ -287,7 +330,7 @@ impl TransactionDatabase {
             })?;
             let tables = [
                 ("raw_transactions", SCHEMA_RAW_TRANSACTIONS, "chain_id, signature, wallet_address, slot, block_time, timestamp, status, success, error_message, fee_lamports, compute_units_consumed, instructions_count, accounts_count, raw_transaction_data, created_at, updated_at"),
-                ("processed_transactions", SCHEMA_PROCESSED_TRANSACTIONS, "chain_id, signature, wallet_address, transaction_type, direction, sol_balance_change, token_balance_changes, token_swap_info, swap_pnl_info, ata_operations, token_transfers, instruction_info, analysis_duration_ms, cached_analysis, analysis_version, fee_sol, sol_delta, processed_at, updated_at"),
+                ("processed_transactions", SCHEMA_PROCESSED_TRANSACTIONS, "chain_id, signature, wallet_address, transaction_type, type_kind, direction, sol_balance_change, token_balance_changes, token_swap_info, swap_pnl_info, ata_operations, token_transfers, instruction_info, analysis_duration_ms, cached_analysis, analysis_version, fee_sol, sol_delta, processed_at, updated_at"),
                 ("known_signatures", SCHEMA_KNOWN_SIGNATURES, "chain_id, signature, wallet_address, status, added_at"),
                 ("deferred_retries", SCHEMA_DEFERRED_RETRIES, "chain_id, signature, wallet_address, next_retry_at, remaining_attempts, current_delay_secs, last_error, created_at, updated_at"),
                 ("pending_transactions", SCHEMA_PENDING_TRANSACTIONS, "chain_id, signature, wallet_address, added_at, last_checked_at, check_count"),
