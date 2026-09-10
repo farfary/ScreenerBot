@@ -85,10 +85,12 @@
 
       // RPC Success Rate
       if (elements.rpcSuccess && elements.rpcHealth) {
-        // success_rate is already 0-1 range, multiply by 100 for percentage
-        const successRate = (rpc.success_rate || 0) * 100;
-        // Cap at 100% to avoid display issues
-        const displayRate = Math.min(successRate, 100);
+        // success_rate is a 0-100 percentage; scaling it again pinned the badge
+        // at 100% and "good" however many calls were failing.
+        const successRate = Number(rpc.success_rate);
+        const displayRate = Number.isFinite(successRate)
+          ? Math.min(Math.max(successRate, 0), 100)
+          : 0;
         elements.rpcSuccess.textContent = `${displayRate.toFixed(1)}%`;
 
         // Set health indicator

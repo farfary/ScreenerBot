@@ -221,9 +221,13 @@ impl StatsManager {
         let session = self.get_session_stats();
         let calls_per_minute = self.get_calls_per_minute();
 
+        // Buckets are newest first and the newest is the minute still in progress;
+        // reporting it as "the last minute" understated the rate by up to 60s of calls.
+        let current_minute = chrono::Utc::now().timestamp() / 60;
         let calls_last_minute = calls_per_minute
-            .first()
-            .map(|b| b.call_count)
+            .iter()
+            .find(|bucket| bucket.bucket_start.timestamp() / 60 < current_minute)
+            .map(|bucket| bucket.call_count)
             .unwrap_or_default();
 
         match session {
@@ -245,6 +249,10 @@ impl StatsManager {
                 provider_count,
                 healthy_provider_count: healthy_count,
                 calls_last_minute,
+                breakdown: self
+                    .db
+                    .get_call_breakdown(&self.session_id)
+                    .unwrap_or_default(),
             },
             None => RpcStatsResponse {
                 session_id: self.session_id.clone(),
@@ -256,6 +264,7 @@ impl StatsManager {
                 provider_count,
                 healthy_provider_count: healthy_count,
                 calls_last_minute: 0,
+                breakdown: RpcCallBreakdown::default(),
             },
         }
     }

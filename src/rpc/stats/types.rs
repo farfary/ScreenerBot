@@ -1,5 +1,7 @@
 //! Statistics types for RPC module
 
+use std::collections::HashMap;
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -207,6 +209,17 @@ pub struct RpcStatsResponse {
     pub provider_count: usize,
     /// Healthy provider count
     pub healthy_provider_count: usize,
-    /// Calls in last minute
+    /// Calls in the most recent complete minute
     pub calls_last_minute: u64,
+    /// Session calls and errors split by method and by provider
+    pub breakdown: RpcCallBreakdown,
+}
+
+/// Session calls and errors grouped by method and by (masked) provider URL.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct RpcCallBreakdown {
+    pub calls_per_method: HashMap<String, u64>,
+    pub errors_per_method: HashMap<String, u64>,
+    pub calls_per_url: HashMap<String, u64>,
+    pub errors_per_url: HashMap<String, u64>,
 }

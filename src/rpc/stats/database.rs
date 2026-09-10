@@ -494,6 +494,56 @@ impl RpcStatsDatabase {
         Ok(results)
     }
 
+    /// Every call of the session grouped by method and by masked provider URL.
+    pub fn get_call_breakdown(&self, session_id: &str) -> crate::Result<RpcCallBreakdown> {
+        let conn = self.conn()?;
+        let mut breakdown = RpcCallBreakdown::default();
+
+        let mut stmt = conn.prepare(
+            "SELECT method, COUNT(*), SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END) \
+             FROM calls WHERE session_id = ?1 GROUP BY method",
+        )?;
+        let rows = stmt.query_map(params![session_id], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, i64>(2)?,
+            ))
+        })?;
+        for row in rows {
+            let (method, calls, errors) = row?;
+            breakdown
+                .errors_per_method
+                .insert(method.clone(), errors.max(0) as u64);
+            breakdown
+                .calls_per_method
+                .insert(method, calls.max(0) as u64);
+        }
+
+        let mut stmt = conn.prepare(
+            "SELECT COALESCE(p.url_masked, c.provider_id), COUNT(*), \
+             SUM(CASE WHEN c.success = 0 THEN 1 ELSE 0 END) \
+             FROM calls c LEFT JOIN providers p ON p.id = c.provider_id \
+             WHERE c.session_id = ?1 GROUP BY 1",
+        )?;
+        let rows = stmt.query_map(params![session_id], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, i64>(2)?,
+            ))
+        })?;
+        for row in rows {
+            let (url, calls, errors) = row?;
+            breakdown
+                .errors_per_url
+                .insert(url.clone(), errors.max(0) as u64);
+            breakdown.calls_per_url.insert(url, calls.max(0) as u64);
+        }
+
+        Ok(breakdown)
+    }
+
     /// Cleanup old data (retention)
     pub fn cleanup(&self, retention_hours: u64) -> crate::Result<u64> {
         let conn = self.conn()?;

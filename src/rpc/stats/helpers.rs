@@ -59,13 +59,13 @@ pub struct RpcStats {
     pub provider_count: usize,
     /// Healthy provider count
     pub healthy_provider_count: usize,
-    /// Calls per URL (simplified - just provider counts)
+    /// Session calls per masked provider URL
     pub calls_per_url: HashMap<String, u64>,
-    /// Errors per URL (simplified)
+    /// Session errors per masked provider URL
     pub errors_per_url: HashMap<String, u64>,
-    /// Calls per method (simplified)
+    /// Session calls per RPC method
     pub calls_per_method: HashMap<String, u64>,
-    /// Errors per method (simplified)
+    /// Session errors per RPC method
     pub errors_per_method: HashMap<String, u64>,
     /// Minute buckets (empty in current implementation)
     pub minute_buckets: Vec<RpcMinuteBucket>,
@@ -87,10 +87,10 @@ impl RpcStats {
             calls_last_minute: response.calls_last_minute,
             provider_count: response.provider_count,
             healthy_provider_count: response.healthy_provider_count,
-            calls_per_url: HashMap::new(),
-            errors_per_url: HashMap::new(),
-            calls_per_method: HashMap::new(),
-            errors_per_method: HashMap::new(),
+            calls_per_url: response.breakdown.calls_per_url,
+            errors_per_url: response.breakdown.errors_per_url,
+            calls_per_method: response.breakdown.calls_per_method,
+            errors_per_method: response.breakdown.errors_per_method,
             minute_buckets: Vec::new(),
             last_session: None,
         }
@@ -169,9 +169,8 @@ pub async fn start_rpc_stats_auto_save_service(shutdown: std::sync::Arc<tokio::s
 
     let mut interval = tokio::time::interval(Duration::from_secs(60));
     let mut cleanup_counter: u32 = 0;
-    // Run cleanup every ~60 ticks (60 min) with 72h retention
+    // Run cleanup every ~60 ticks (60 min) with the configured retention
     const CLEANUP_EVERY_TICKS: u32 = 60;
-    const RETENTION_HOURS: u64 = 72;
 
     loop {
         tokio::select! {
@@ -199,7 +198,10 @@ pub async fn start_rpc_stats_auto_save_service(shutdown: std::sync::Arc<tokio::s
                     cleanup_counter += 1;
                     if cleanup_counter >= CLEANUP_EVERY_TICKS {
                         cleanup_counter = 0;
-                        manager.cleanup_stats(RETENTION_HOURS).await;
+                        let retention_hours = crate::config::with_config(|config| {
+                            config.maintenance.rpc_stats_retention_hours
+                        });
+                        manager.cleanup_stats(retention_hours).await;
                         logger::info(LogTag::Rpc, "RPC stats cleanup completed");
                     }
                 }
