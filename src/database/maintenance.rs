@@ -164,6 +164,12 @@ pub fn ensure_auto_vacuum_mode(path: &Path) -> Result<bool, DatabaseError> {
 // INCREMENTAL VACUUM
 // =============================================================================
 
+/// Pages reclaimed per `incremental_vacuum` statement (16 MB at 4 KB pages).
+const VACUUM_CHUNK_PAGES: u32 = 4096;
+
+/// Pause between chunks so concurrent writers get the lock back.
+const VACUUM_CHUNK_PAUSE: Duration = Duration::from_millis(25);
+
 /// Runs incremental vacuum on a database to reclaim free pages.
 ///
 /// Incremental vacuum removes pages from the database freelist in batches,
@@ -173,7 +179,6 @@ pub fn ensure_auto_vacuum_mode(path: &Path) -> Result<bool, DatabaseError> {
 /// ## Arguments
 ///
 /// * `path` - Path to the database file
-/// * `pages` - Number of pages to free (0 = free all available pages)
 ///
 /// ## Returns
 ///
@@ -182,10 +187,12 @@ pub fn ensure_auto_vacuum_mode(path: &Path) -> Result<bool, DatabaseError> {
 ///
 /// ## Notes
 ///
-/// - Each page is 4 KB (SQLite default)
-/// - Batch size controls I/O impact (500 pages = ~2 MB)
+/// - The WHOLE freelist is reclaimed, in `VACUUM_CHUNK_PAGES` steps with a short
+///   pause between them so writers are never locked out for long. A fixed small
+///   batch per cycle cannot keep up with retention deletes: at 500 pages a day,
+///   a database that shed 2.5 GB of rows would take decades to shrink.
 /// - Only works if auto_vacuum mode is INCREMENTAL
-pub fn run_incremental_vacuum(path: &Path, pages: u32) -> Result<u64, DatabaseError> {
+pub fn run_incremental_vacuum(path: &Path) -> Result<u64, DatabaseError> {
     let conn = Connection::open(path).map_err(|e| DatabaseError::Query {
         operation: format!("open database {} for incremental vacuum", path.display()),
         message: e.to_string(),
@@ -210,22 +217,29 @@ pub fn run_incremental_vacuum(path: &Path, pages: u32) -> Result<u64, DatabaseEr
         return Ok(0); // Nothing to free
     }
 
-    // Run incremental vacuum
     let start = std::time::Instant::now();
-    let sql = format!("PRAGMA incremental_vacuum({pages});");
-    conn.execute_batch(&sql).map_err(|e| DatabaseError::Query {
-        operation: "execute incremental vacuum".to_owned(),
-        message: e.to_string(),
-    })?;
-    let elapsed = start.elapsed();
-
-    // Get freelist count after vacuum
-    let freelist_after: u64 = conn
-        .pragma_query_value(None, "freelist_count", |row| row.get(0))
-        .map_err(|e| DatabaseError::Query {
-            operation: "query freelist after incremental vacuum".to_owned(),
+    let sql = format!("PRAGMA incremental_vacuum({VACUUM_CHUNK_PAGES});");
+    let mut freelist_after = freelist_before;
+    while freelist_after > 0 {
+        conn.execute_batch(&sql).map_err(|e| DatabaseError::Query {
+            operation: "execute incremental vacuum".to_owned(),
             message: e.to_string(),
         })?;
+        let remaining: u64 = conn
+            .pragma_query_value(None, "freelist_count", |row| row.get(0))
+            .map_err(|e| DatabaseError::Query {
+                operation: "query freelist after incremental vacuum".to_owned(),
+                message: e.to_string(),
+            })?;
+        // A step that frees nothing means the rest is not reclaimable right now
+        // (a reader holds the tail); the next cycle picks it up.
+        if remaining >= freelist_after {
+            break;
+        }
+        freelist_after = remaining;
+        std::thread::sleep(VACUUM_CHUNK_PAUSE);
+    }
+    let elapsed = start.elapsed();
 
     let freed = freelist_before.saturating_sub(freelist_after);
 
@@ -443,7 +457,7 @@ async fn run_vacuum_cycle() {
         let name_clone = name.clone();
         let path_clone = path.clone();
 
-        match tokio::task::spawn_blocking(move || run_incremental_vacuum(&path_clone, 500)).await {
+        match tokio::task::spawn_blocking(move || run_incremental_vacuum(&path_clone)).await {
             Ok(Ok(freed)) => {
                 total_freed += freed;
                 if freed > 0 {

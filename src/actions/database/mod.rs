@@ -26,9 +26,6 @@ use std::time::Duration;
 // CONSTANTS
 // =============================================================================
 
-/// Maximum age for actions (30 days)
-const MAX_ACTION_AGE_DAYS: i64 = 30;
-
 /// Connection pool configuration
 const WRITE_POOL_MAX_SIZE: u32 = 2;
 const READ_POOL_MAX_SIZE: u32 = 4;

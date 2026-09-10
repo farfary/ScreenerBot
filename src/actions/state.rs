@@ -607,25 +607,27 @@ pub async fn query_action_history(
 /// Call once at startup after init_database().
 pub fn spawn_cleanup_task() {
     tokio::spawn(async {
-        const RETENTION_DAYS: i64 = 30;
         const MEMORY_RETENTION_HOURS: i64 = 24;
         // Wait 5 minutes after startup before first cleanup
         tokio::time::sleep(Duration::from_secs(300)).await;
         let mut interval = tokio::time::interval(Duration::from_secs(86400));
         loop {
             interval.tick().await;
+            let retention_days = i64::from(crate::config::with_config(|config| {
+                config.maintenance.actions_retention_days
+            }));
 
             // Clean old actions from database
             if let Some(db_arc) = get_db().await {
                 let db_lock = db_arc.read().await;
                 if let Some(db) = db_lock.as_ref() {
-                    match db.cleanup_old_actions(RETENTION_DAYS).await {
+                    match db.cleanup_old_actions(retention_days).await {
                         Ok(count) if count > 0 => {
                             logger::info(
                                 LogTag::System,
                                 &format!(
                                     "Cleaned up {} old actions (>{} days)",
-                                    count, RETENTION_DAYS
+                                    count, retention_days
                                 ),
                             );
                         }

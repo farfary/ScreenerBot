@@ -25,9 +25,6 @@ use std::time::Duration;
 // CONSTANTS
 // =============================================================================
 
-/// Maximum age for events (30 days)
-const MAX_EVENT_AGE_DAYS: i64 = 30;
-
 /// Connection pool configuration
 const WRITE_POOL_MAX_SIZE: u32 = 2;
 const READ_POOL_MAX_SIZE: u32 = 4;
@@ -660,11 +657,13 @@ impl EventsDatabase {
         Ok(counts)
     }
 
-    /// Cleanup old events (older than MAX_EVENT_AGE_DAYS)
+    /// Delete events older than `maintenance.events_retention_days`.
     pub async fn cleanup_old_events(&self) -> Result<usize> {
         let conn = self.get_write_connection()?;
 
-        let cutoff_time = Utc::now() - chrono::Duration::days(MAX_EVENT_AGE_DAYS);
+        let retention_days =
+            crate::config::with_config(|config| config.maintenance.events_retention_days);
+        let cutoff_time = Utc::now() - chrono::Duration::days(i64::from(retention_days));
         let cutoff_str = cutoff_time.to_rfc3339();
 
         let deleted_count = conn
