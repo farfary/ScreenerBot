@@ -355,8 +355,16 @@ impl Tool for UpdateCopyTaskTool {
         let serde_json::Value::Object(mut fields) = params else {
             return ToolResult::error("Invalid parameters: expected an object".to_owned());
         };
-        let Some(task_id) = fields.remove("task_id").and_then(|v| v.as_i64()) else {
-            return ToolResult::error("Invalid parameters: task_id is required".to_owned());
+        let task_id = match fields.remove("task_id") {
+            Some(value) => match value.as_i64() {
+                Some(id) => id,
+                None => {
+                    return ToolResult::error(
+                        "Invalid parameters: task_id must be an integer".to_owned(),
+                    )
+                }
+            },
+            None => return ToolResult::error("Invalid parameters: task_id is required".to_owned()),
         };
         if fields.contains_key("mode") {
             return ToolResult::error(

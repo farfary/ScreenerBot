@@ -155,7 +155,9 @@ impl Tool for SetTraderEnabledTool {
             name: "set_trader_enabled".to_owned(),
             description: "Start or stop the auto trader. Starting lets it open REAL positions \
                           with trader.trade_size_sol each; refused while setup is incomplete or \
-                          the emergency stop is active. Stopping leaves open positions in place."
+                          the emergency stop is active. Stopping leaves open positions in place. \
+                          Idempotent: a trader already in the requested state returns \
+                          changed=false."
                 .to_owned(),
             category: ToolCategory::Trading,
             parameters: json!({
@@ -179,7 +181,11 @@ impl Tool for SetTraderEnabledTool {
             trader::stop_trader_checked().await
         };
         match result {
-            Ok(status) => ToolResult::success(json!({ "trader": status })),
+            Ok(status) => ToolResult::success(json!({ "trader": status, "changed": true })),
+            // Already in the requested state: the outcome the caller asked for holds.
+            Err(trader::Error::AlreadyRunning | trader::Error::AlreadyStopped) => {
+                ToolResult::success(json!({ "trader": trader::trader_status(), "changed": false }))
+            }
             Err(e) => ToolResult::error(e.to_string()),
         }
     }
