@@ -794,6 +794,13 @@ pub(super) async fn fetch_and_add_token_from_external(mint: &str) -> Option<crat
     use crate::apis::get_api_manager;
     use crate::tokens::database::get_global_database;
 
+    // `/tokens/:mint` catches every unrouted segment (`/tokens/passed`, a typo),
+    // so a value that is not an address must never reach the external providers
+    // or be inserted into the token database.
+    if crate::chains::adapter().validate_address(mint).is_err() {
+        return None;
+    }
+
     logger::debug(
         LogTag::Webserver,
         &format!("Token not in DB, attempting external fetch: mint={mint}"),
