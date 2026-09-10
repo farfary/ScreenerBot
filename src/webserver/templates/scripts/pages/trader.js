@@ -464,7 +464,11 @@ function createLifecycle() {
 
       setValue(
         "win-rate",
-        pct(data.win_rate_pct, 1),
+        Utils.formatPercentValue(data.win_rate_pct, {
+          decimals: 1,
+          fallback: "—",
+          includeSign: false,
+        }),
         Number.isFinite(data.win_rate_pct) && data.win_rate_pct >= 50 ? "positive" : null
       );
       setDetail(
