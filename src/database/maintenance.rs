@@ -170,6 +170,11 @@ const VACUUM_CHUNK_PAGES: u32 = 4096;
 /// Pause between chunks so concurrent writers get the lock back.
 const VACUUM_CHUNK_PAUSE: Duration = Duration::from_millis(25);
 
+/// Largest live content a full `VACUUM` may rewrite in place of the incremental
+/// path. Rewriting this much finishes well inside the 5 s `busy_timeout`, so
+/// writers wait rather than fail; larger databases keep the chunked path.
+const REBUILD_MAX_LIVE_BYTES: u64 = 64 * 1024 * 1024;
+
 /// Runs incremental vacuum on a database to reclaim free pages.
 ///
 /// Incremental vacuum removes pages from the database freelist in batches,
@@ -192,6 +197,10 @@ const VACUUM_CHUNK_PAUSE: Duration = Duration::from_millis(25);
 ///   batch per cycle cannot keep up with retention deletes: at 500 pages a day,
 ///   a database that shed 2.5 GB of rows would take decades to shrink.
 /// - Only works if auto_vacuum mode is INCREMENTAL
+/// - A database that is mostly free pages around a small live core (events.db
+///   after retention: 2.6 GB file, 177 rows) is rebuilt with one `VACUUM`
+///   instead. Incremental vacuum relocates pages one chunk at a time and ran for
+///   hours on such a file, holding every other database's cycle behind it.
 pub fn run_incremental_vacuum(path: &Path) -> Result<u64, DatabaseError> {
     let conn = Connection::open(path).map_err(|e| DatabaseError::Query {
         operation: format!("open database {} for incremental vacuum", path.display()),
@@ -215,6 +224,23 @@ pub fn run_incremental_vacuum(path: &Path) -> Result<u64, DatabaseError> {
 
     if freelist_before == 0 {
         return Ok(0); // Nothing to free
+    }
+
+    let page_count: u64 = conn
+        .pragma_query_value(None, "page_count", |row| row.get(0))
+        .map_err(|e| DatabaseError::Query {
+            operation: "query page count before vacuum".to_owned(),
+            message: e.to_string(),
+        })?;
+    let page_size: u64 = conn
+        .pragma_query_value(None, "page_size", |row| row.get(0))
+        .map_err(|e| DatabaseError::Query {
+            operation: "query page size before vacuum".to_owned(),
+            message: e.to_string(),
+        })?;
+    let live_bytes = page_count.saturating_sub(freelist_before) * page_size;
+    if freelist_before * 2 >= page_count && live_bytes <= REBUILD_MAX_LIVE_BYTES {
+        return rebuild_database(&conn, path, page_count, page_size);
     }
 
     let start = std::time::Instant::now();
@@ -256,6 +282,52 @@ pub fn run_incremental_vacuum(path: &Path) -> Result<u64, DatabaseError> {
         );
     }
 
+    Ok(freed)
+}
+
+/// Rewrites a mostly-empty database with a full `VACUUM`, then truncates the WAL
+/// so the reclaimed space actually leaves the disk. Returns the pages freed.
+fn rebuild_database(
+    conn: &Connection,
+    path: &Path,
+    page_count_before: u64,
+    page_size: u64,
+) -> Result<u64, DatabaseError> {
+    let start = std::time::Instant::now();
+    conn.execute_batch("VACUUM;")
+        .map_err(|e| DatabaseError::Query {
+            operation: "rebuild database with VACUUM".to_owned(),
+            message: e.to_string(),
+        })?;
+    // In WAL mode the rebuilt image sits in the WAL until a checkpoint; a busy
+    // reader only defers it to the periodic checkpoint cycle.
+    if let Err(e) = conn.pragma_update(None, "wal_checkpoint", "TRUNCATE") {
+        logger::warning(
+            LogTag::System,
+            &format!(
+                "WAL checkpoint after rebuilding {} deferred: {e}",
+                path.display()
+            ),
+        );
+    }
+    let page_count_after: u64 = conn
+        .pragma_query_value(None, "page_count", |row| row.get(0))
+        .map_err(|e| DatabaseError::Query {
+            operation: "query page count after vacuum".to_owned(),
+            message: e.to_string(),
+        })?;
+
+    let freed = page_count_before.saturating_sub(page_count_after);
+    logger::info(
+        LogTag::System,
+        &format!(
+            "Rebuilt {} with VACUUM: freed {} pages ({:.2} MB) in {:.2}s",
+            path.display(),
+            freed,
+            (freed * page_size) as f64 / (1024.0 * 1024.0),
+            start.elapsed().as_secs_f64()
+        ),
+    );
     Ok(freed)
 }
 
@@ -394,22 +466,22 @@ pub async fn start_maintenance_task() {
                 if converted {
                     logger::info(
                         LogTag::System,
-                        &format!("✓ Migrated {name} to INCREMENTAL mode"),
+                        &format!("Migrated {name} to INCREMENTAL mode"),
                     );
                 } else {
                     logger::info(
                         LogTag::System,
-                        &format!("✓ {name} already in INCREMENTAL mode"),
+                        &format!("{name} already in INCREMENTAL mode"),
                     );
                 }
             }
             Ok(Err(e)) => {
-                logger::warning(LogTag::System, &format!("✗ Failed to migrate {name}: {e}"));
+                logger::warning(LogTag::System, &format!("Failed to migrate {name}: {e}"));
             }
             Err(e) => {
                 logger::warning(
                     LogTag::System,
-                    &format!("✗ Task panic during migration of {name_clone}: {e}"),
+                    &format!("Task panic during migration of {name_clone}: {e}"),
                 );
             }
         }
@@ -461,17 +533,17 @@ async fn run_vacuum_cycle() {
             Ok(Ok(freed)) => {
                 total_freed += freed;
                 if freed > 0 {
-                    logger::info(LogTag::System, &format!("✓ {name} freed {freed} pages"));
+                    logger::info(LogTag::System, &format!("{name} freed {freed} pages"));
                 }
                 successful += 1;
             }
             Ok(Err(e)) => {
-                logger::warning(LogTag::System, &format!("✗ Failed to vacuum {name}: {e}"));
+                logger::warning(LogTag::System, &format!("Failed to vacuum {name}: {e}"));
             }
             Err(e) => {
                 logger::warning(
                     LogTag::System,
-                    &format!("✗ Task panic during vacuum of {name_clone}: {e}"),
+                    &format!("Task panic during vacuum of {name_clone}: {e}"),
                 );
             }
         }
@@ -505,17 +577,14 @@ async fn run_wal_cycle() {
             Ok(Err(e)) => {
                 logger::warning(
                     LogTag::System,
-                    &format!("✗ WAL checkpoint failed for {name}: {e}"),
+                    &format!("WAL checkpoint failed for {name}: {e}"),
                 );
                 errors += 1;
             }
             Err(e) => {
                 logger::warning(
                     LogTag::System,
-                    &format!(
-                        "✗ Task panic during WAL checkpoint of {}: {}",
-                        name_clone, e
-                    ),
+                    &format!("Task panic during WAL checkpoint of {}: {}", name_clone, e),
                 );
                 errors += 1;
             }
