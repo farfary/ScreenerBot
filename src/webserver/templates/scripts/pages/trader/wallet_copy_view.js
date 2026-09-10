@@ -133,6 +133,15 @@ export function renderActivityRow(item, Utils) {
     live_sell_failed: "Copy sell failed",
     skipped: "Skipped",
   };
+  const exitRuleLabels = {
+    stop_loss: "Stop loss",
+    trailing_stop: "Trailing stop",
+    take_profit: "Take profit",
+    time_override: "Time override",
+  };
+  const title = outcome.exit_rule
+    ? `Paper exit · ${exitRuleLabels[outcome.exit_rule] || "Exit policy"}`
+    : titles[outcome.outcome] || "Decision";
   const isSkip = outcome.outcome === "skipped";
   const blockKind = outcome.reason?.block?.kind;
   const isSell = outcome.outcome?.includes("sell");
@@ -164,5 +173,5 @@ export function renderActivityRow(item, Utils) {
       : "";
   const identity = outcome.mint || outcome.signature || "—";
   const timestamp = telemetry?.decided_at || outcome.decided_at || item.created_at;
-  return `<div class="wallet-copy-activity-row"><strong>${Utils.escapeHtml(titles[outcome.outcome] || "Decision")}</strong><span class="wallet-copy-activity-detail"><span class="wallet-copy-activity-mint" title="${Utils.escapeHtml(identity)}">${Utils.escapeHtml(identity)}</span><span class="wallet-copy-activity-result">${Utils.escapeHtml(detail + arrival)}</span></span><time class="wallet-copy-activity-time">${Utils.escapeHtml(formatActivityTime(timestamp))}</time></div>`;
+  return `<div class="wallet-copy-activity-row"><strong>${Utils.escapeHtml(title)}</strong><span class="wallet-copy-activity-detail"><span class="wallet-copy-activity-mint" title="${Utils.escapeHtml(identity)}">${Utils.escapeHtml(identity)}</span><span class="wallet-copy-activity-result">${Utils.escapeHtml(detail + arrival)}</span></span><time class="wallet-copy-activity-time">${Utils.escapeHtml(formatActivityTime(timestamp))}</time></div>`;
 }

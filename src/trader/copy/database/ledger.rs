@@ -23,7 +23,7 @@ fn mode_key(mode: CopyMode) -> &'static str {
 
 const PAPER_POSITION_COLUMNS: &str = "task_id, mint, token_amount, cost_basis_sol, invested_sol, \
      realized_proceeds_sol, realized_cost_sol, buys, sells, last_price_sol, last_price_at, \
-     opened_at, closed_at";
+     opened_at, closed_at, peak_price_sol";
 
 impl CopyDatabase {
     /// Spend in one execution mode. Paper and live budgets are separate ledgers:
@@ -111,6 +111,32 @@ impl CopyDatabase {
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(crate::errors::DatabaseError::from)?;
             Ok(rows)
+        })
+        .await
+        .map_err(|e| Error::CopyDatabaseUnavailable {
+            detail: e.to_string(),
+        })?
+    }
+
+    /// Raise an open paper holding's running peak to `price_sol` when it is higher.
+    pub async fn raise_paper_peak(
+        &self,
+        task_id: i64,
+        mint: &str,
+        price_sol: f64,
+    ) -> crate::trader::Result<()> {
+        let db = self.clone();
+        let mint = mint.to_owned();
+        tokio::task::spawn_blocking(move || {
+            db.connection()?
+                .execute(
+                    "UPDATE copy_paper_positions \
+                     SET peak_price_sol = MAX(COALESCE(peak_price_sol, ?3), ?3) \
+                     WHERE task_id = ?1 AND mint = ?2 AND closed_at IS NULL",
+                    params![task_id, mint, price_sol],
+                )
+                .map(|_| ())
+                .map_err(|e| Error::from(crate::errors::DatabaseError::from(e)))
         })
         .await
         .map_err(|e| Error::CopyDatabaseUnavailable {
@@ -373,8 +399,8 @@ pub(super) fn apply_paper_buy(
     transaction
         .execute(
             "INSERT INTO copy_paper_positions (task_id, mint, token_amount, cost_basis_sol, invested_sol, \
-             buys, last_price_sol, last_price_at, opened_at, updated_at) \
-             VALUES (?1, ?2, ?3, ?4, ?4, 1, ?5, ?6, ?6, ?6) \
+             buys, last_price_sol, last_price_at, opened_at, updated_at, peak_price_sol) \
+             VALUES (?1, ?2, ?3, ?4, ?4, 1, ?5, ?6, ?6, ?6, ?5) \
              ON CONFLICT(task_id, mint) DO UPDATE SET \
              token_amount = token_amount + excluded.token_amount, \
              cost_basis_sol = cost_basis_sol + excluded.cost_basis_sol, \
@@ -382,6 +408,9 @@ pub(super) fn apply_paper_buy(
              buys = buys + 1, \
              last_price_sol = excluded.last_price_sol, last_price_at = excluded.last_price_at, \
              opened_at = CASE WHEN closed_at IS NULL THEN opened_at ELSE excluded.opened_at END, \
+             peak_price_sol = CASE WHEN closed_at IS NULL \
+                 THEN MAX(COALESCE(peak_price_sol, excluded.peak_price_sol), excluded.peak_price_sol) \
+                 ELSE excluded.peak_price_sol END, \
              closed_at = NULL, updated_at = excluded.updated_at",
             params![
                 decision.task_id,
@@ -473,5 +502,6 @@ fn row_to_paper_position(row: &rusqlite::Row<'_>) -> rusqlite::Result<PaperPosit
         last_price_at: optional_time(10)?,
         opened_at: parse_datetime(&row.get::<_, String>(11)?, 11)?,
         closed_at: optional_time(12)?,
+        peak_price_sol: row.get(13)?,
     })
 }

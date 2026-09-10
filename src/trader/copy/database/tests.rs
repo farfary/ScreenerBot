@@ -375,6 +375,7 @@ async fn sell_activity_is_idempotent_and_never_increments_entry_spend() {
         exit_percentage: None,
         transaction_signature: None,
         error: None,
+        exit_rule: None,
         paper_fill: None,
         telemetry: super::super::types::CopyTelemetry {
             target_block_time: Some(1),
@@ -445,6 +446,7 @@ fn paper_sell(task: &CopyTask, signature: &str, tokens: f64, proceeds: f64) -> C
         exit_percentage: None,
         transaction_signature: None,
         error: None,
+        exit_rule: None,
         paper_fill: Some(super::super::types::PaperSellFill {
             token_amount: tokens,
             market_price_sol: 0.012,

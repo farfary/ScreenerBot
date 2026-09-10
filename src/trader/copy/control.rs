@@ -65,6 +65,8 @@ pub struct PaperHolding {
     pub sells: u64,
     pub opened_at: DateTime<Utc>,
     pub closed_at: Option<DateTime<Utc>>,
+    /// Highest pool price of the open round; what arms the paper trailing stop.
+    pub peak_price_sol: Option<f64>,
 }
 
 /// Everything known about one task: its summary, paper book and recent decisions.
@@ -96,8 +98,7 @@ pub fn build_status(tasks: &[CopyTask]) -> CopyTradingStatus {
         });
     CopyTradingStatus {
         enabled,
-        live_available: crate::global::is_initialization_complete()
-            && !crate::global::is_force_stopped(),
+        live_available: live_block_reason().is_none(),
         blocked_reason: if crate::global::is_force_stopped() {
             Some("force_stop")
         } else if crate::trader::safety::loss_limit::is_entry_blocked_by_loss_limit() {
@@ -118,6 +119,20 @@ pub fn build_status(tasks: &[CopyTask]) -> CopyTradingStatus {
             .iter()
             .filter(|task| task.enabled && task.mode == CopyMode::Live)
             .count(),
+    }
+}
+
+/// Why a task cannot be armed for live right now, if it cannot: the one gate
+/// behind both the status flag and the paper-to-live transition.
+pub fn live_block_reason() -> Option<&'static str> {
+    if !crate::global::is_initialization_complete() || crate::global::is_explore_mode() {
+        Some("setup_incomplete")
+    } else if crate::global::is_force_stopped() {
+        Some("force_stop")
+    } else if !crate::config::with_config(|config| config.copy_trading.enabled) {
+        Some("copy_trading_disabled")
+    } else {
+        None
     }
 }
 
@@ -276,6 +291,7 @@ fn paper_holding(position: &PaperPosition) -> PaperHolding {
         sells: position.sells,
         opened_at: position.opened_at,
         closed_at: position.closed_at,
+        peak_price_sol: position.peak_price_sol.filter(|_| open),
     }
 }
 
@@ -466,7 +482,8 @@ pub async fn delete_task(id: i64) -> Result<()> {
 }
 
 /// The guarded paper/live transition. Arming live requires the exact
-/// `LIVE_ARM_CONFIRMATION` phrase; returning to paper never does.
+/// `LIVE_ARM_CONFIRMATION` phrase and a runtime that could execute live copies
+/// (`live_block_reason`); returning to paper is always allowed.
 pub async fn set_task_mode(
     id: i64,
     mode: CopyMode,
@@ -477,6 +494,11 @@ pub async fn set_task_mode(
         .get_task(id)
         .await?
         .ok_or(Error::CopyTaskNotFound { task_id: id })?;
+    if mode == CopyMode::Live && current.mode != CopyMode::Live {
+        if let Some(reason) = live_block_reason() {
+            return Err(Error::CopyLiveUnavailable { reason });
+        }
+    }
     let mode = confirm_mode_transition(current.mode, mode, confirmation.as_deref())
         .map_err(|reason| Error::CopyTaskRejected { reason })?;
     db.set_task_mode(id, mode, confirmation).await

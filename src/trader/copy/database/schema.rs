@@ -3,7 +3,7 @@ use rusqlite::{Connection, OptionalExtension};
 use crate::trader::copy::types::CopyOutcome;
 use crate::trader::error::Error;
 
-pub(super) const SCHEMA_VERSION: i64 = 5;
+pub(super) const SCHEMA_VERSION: i64 = 6;
 
 pub(super) const SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS copy_metadata (
@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS copy_paper_positions (
     opened_at TEXT NOT NULL,
     closed_at TEXT,
     updated_at TEXT NOT NULL,
+    peak_price_sol REAL,
     PRIMARY KEY (task_id, mint),
     FOREIGN KEY (task_id) REFERENCES copy_tasks(id) ON DELETE CASCADE
 );
@@ -196,6 +197,19 @@ pub(super) fn migrate(connection: &Connection) -> crate::trader::Result<()> {
         }
         transaction
             .commit()
+            .map_err(crate::errors::DatabaseError::from)?;
+    }
+    // v6: the paper book tracks each round's peak for the trailing stop. Added
+    // before the v5 rebuild, which books paper fills through `apply_paper_buy`.
+    if !table_columns(connection, "copy_paper_positions")?
+        .iter()
+        .any(|column| column == "peak_price_sol")
+    {
+        connection
+            .execute(
+                "ALTER TABLE copy_paper_positions ADD COLUMN peak_price_sol REAL",
+                [],
+            )
             .map_err(crate::errors::DatabaseError::from)?;
     }
     migrate_mode_scoped_spend(connection)?;

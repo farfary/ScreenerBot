@@ -28,8 +28,10 @@ fn respond<T: serde::Serialize>(result: crate::trader::Result<T>) -> ToolResult 
 const EXIT_SEMANTICS: &str = "exit_mode: buy_only never copies the target's sells; mirror sells \
 the same fraction of the holding the target sold; hybrid mirrors target sells AND lets the auto \
 trader's exit policy manage the position. exit_policy_overrides (stop_loss, trailing, roi, time) \
-tune that policy for this task's LIVE positions only -- paper mode books only mirrored target \
-sells, so in paper a buy_only task never realizes anything.";
+tune that policy for this task. The policy applies in both books: live positions through the \
+auto trader's exit monitor (which needs the trader running), paper holdings through the copy \
+service's own sweep at pool price; paper exit activity carries exit_rule. mirror tasks exit only \
+on target sells in both modes.";
 
 /// Schema of every editable task field, shared by create and update so the two
 /// can never describe the same field differently.
@@ -448,7 +450,9 @@ impl Tool for SetCopyTaskModeTool {
             description: format!(
                 "Switch a copy task between paper and live. Live copies trades with REAL \
                  money and requires confirmation set to exactly \"{LIVE_ARM_CONFIRMATION}\"; \
-                 returning to paper needs no confirmation."
+                 it is refused (LIVE_UNAVAILABLE) while setup is incomplete, copy trading is \
+                 disabled or the emergency stop is on. Returning to paper is always allowed \
+                 and needs no confirmation."
             ),
             category: ToolCategory::Trading,
             parameters: json!({

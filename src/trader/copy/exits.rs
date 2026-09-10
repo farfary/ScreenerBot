@@ -223,6 +223,7 @@ fn sell_decision(
         error: None,
         telemetry,
         paper_fill: None,
+        exit_rule: None,
     }
 }
 

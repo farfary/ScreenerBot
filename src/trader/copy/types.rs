@@ -335,6 +335,8 @@ pub struct PaperPosition {
     pub last_price_at: Option<DateTime<Utc>>,
     pub opened_at: DateTime<Utc>,
     pub closed_at: Option<DateTime<Utc>>,
+    /// Highest pool price seen while this round was open; arms the trailing stop.
+    pub peak_price_sol: Option<f64>,
 }
 
 impl PaperPosition {
@@ -404,6 +406,21 @@ pub struct CopySellDecision {
     /// The simulated sell a paper task booked. `None` on live sells.
     #[serde(default)]
     pub paper_fill: Option<PaperSellFill>,
+    /// Set when the task's own exit policy closed a paper holding rather than a
+    /// mirrored target sell.
+    #[serde(default)]
+    pub exit_rule: Option<PaperExitRule>,
+}
+
+/// The exit-policy rule that sold a paper holding, mirroring the live exit
+/// monitor's reasons.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PaperExitRule {
+    StopLoss,
+    TrailingStop,
+    TakeProfit,
+    TimeOverride,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

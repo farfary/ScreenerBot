@@ -70,6 +70,10 @@ pub enum Error {
     CopyTaskLive { task_id: i64 },
     #[error("copy task {task_id} still owns {open_positions} open position(s); close them first")]
     CopyTaskOwnsPositions { task_id: i64, open_positions: usize },
+    /// Arming live is refused while live copies could not run: setup incomplete,
+    /// copy trading disabled, or the emergency stop engaged.
+    #[error("live copy trading is unavailable: {reason}")]
+    CopyLiveUnavailable { reason: &'static str },
     /// Registering the trade's action entry failed. The actions module's own typed
     /// error is kept as the source rather than flattened into text, so callers keep
     /// its classification.
@@ -129,6 +133,7 @@ impl ErrorClass for Error {
             Error::CopyTaskDecode { .. } | Error::CopySerialize { .. } => false,
             Error::CopyReconciliation { .. } => true,
             Error::CopyValidation { .. } => false,
+            Error::CopyLiveUnavailable { .. } => false,
             Error::CopyDatabaseUnavailable { .. } => true,
             Error::ManualTradeRecord { .. } => false,
             Error::NoOpenPosition { .. } => false,
@@ -181,6 +186,7 @@ impl ErrorClass for Error {
             Error::CopySerialize { .. } => Severity::Error,
             Error::CopyReconciliation { .. } => Severity::Error,
             Error::CopyValidation { .. } => Severity::Warning,
+            Error::CopyLiveUnavailable { .. } => Severity::Warning,
             Error::CopyDatabaseUnavailable { .. } => Severity::Error,
             Error::ManualTradeRecord { .. } => Severity::Critical,
             Error::NoOpenPosition { .. } => Severity::Warning,
@@ -218,6 +224,7 @@ impl ErrorClass for Error {
             | Error::CopyDatabaseUnavailable { .. }
             | Error::ManualTradeRecord { .. } => 500,
             Error::CopyValidation { .. } => 400,
+            Error::CopyLiveUnavailable { .. } => 409,
             Error::NoOpenPosition { .. } => 404,
             Error::InvalidSolAmount { .. } => 400,
             Error::InvalidManagement { .. } => 400,

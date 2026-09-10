@@ -33,12 +33,21 @@ pub async fn run(shutdown: Arc<Notify>, database: CopyDatabase) {
     let mut reconciliation = tokio::time::interval(std::time::Duration::from_secs(60));
     reconciliation.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     reconciliation.reset();
+    let mut paper_exits = tokio::time::interval(std::time::Duration::from_secs(
+        crate::trader::POSITION_MONITOR_INTERVAL_SECS,
+    ));
+    paper_exits.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     loop {
         tokio::select! {
             _ = shutdown.notified() => return,
             _ = reconciliation.tick() => {
                 if let Err(error) = reconcile_runtime_state(&database).await {
                     logger::warning(LogTag::Trader, &format!("Copy reconciliation failed: {error}"));
+                }
+            }
+            _ = paper_exits.tick() => {
+                if let Err(error) = super::paper_exits::sweep(&database, paper_costs()).await {
+                    logger::warning(LogTag::Trader, &format!("Paper exit sweep failed: {error}"));
                 }
             }
             received = receiver.recv() => match received {

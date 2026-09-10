@@ -146,6 +146,9 @@ fn copy_error(error: &crate::trader::Error) -> Response {
         }
         Error::CopyTaskLimit { .. } => ("TASK_LIMIT", "Maximum active copy tasks reached"),
         Error::CopyWatchRejected { .. } => ("WATCH_REJECTED", "Copy target could not be watched"),
+        Error::CopyLiveUnavailable { .. } => {
+            ("LIVE_UNAVAILABLE", "Live copy trading is unavailable")
+        }
         Error::CopyTaskLive { .. } => ("TASK_LIVE", "Pause the live task before deleting it"),
         Error::CopyTaskOwnsPositions { .. } => {
             ("OPEN_POSITIONS", "Copy task still owns open positions")

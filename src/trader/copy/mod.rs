@@ -7,6 +7,7 @@ mod exits;
 mod live;
 mod matcher;
 mod paper;
+mod paper_exits;
 mod pipeline;
 mod risk;
 mod service;
