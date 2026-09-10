@@ -3,7 +3,7 @@
 //! Maintenance tasks and configuration checks for the events system.
 //! Event recording functions live in the sibling `recorders` module.
 use crate::config;
-use crate::events::{Error, Event, EventCategory, Result, Severity};
+use crate::events::{Event, EventCategory, Result, Severity};
 use crate::logger::{self, LogTag};
 use serde_json::json;
 use std::collections::HashMap;
@@ -82,10 +82,7 @@ pub async fn start_maintenance_task() {
 
 /// Perform maintenance operations on events database
 async fn perform_maintenance() -> Result<()> {
-    let db = crate::events::EVENTS_DB
-        .get()
-        .ok_or(Error::NotInitialized)?
-        .clone();
+    let db = crate::events::database()?.clone();
 
     // Cleanup old events
     let deleted_count = db.cleanup_old_events().await?;
@@ -122,10 +119,7 @@ async fn perform_maintenance() -> Result<()> {
 
 /// Get events summary for MCP tools
 pub async fn get_events_summary(hours: u64) -> Result<HashMap<String, serde_json::Value>> {
-    let db = crate::events::EVENTS_DB
-        .get()
-        .ok_or(Error::NotInitialized)?
-        .clone();
+    let db = crate::events::database()?.clone();
 
     // Get counts by category
     let counts = db.get_event_counts_by_category(hours).await?;
@@ -168,10 +162,7 @@ pub async fn search_events(
     _since_hours: Option<u64>,
     limit: usize,
 ) -> Result<Vec<Event>> {
-    let db = crate::events::EVENTS_DB
-        .get()
-        .ok_or(Error::NotInitialized)?
-        .clone();
+    let db = crate::events::database()?.clone();
 
     if let Some(ref_id) = reference_id {
         return db.get_events_by_reference(ref_id, limit).await;

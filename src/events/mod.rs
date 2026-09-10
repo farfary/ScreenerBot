@@ -86,6 +86,19 @@ static EVENT_WRITER: LazyLock<Arc<Mutex<Option<EventWriter>>>> =
 /// Global database handle
 pub static EVENTS_DB: OnceLock<Arc<EventsDatabase>> = OnceLock::new();
 
+/// The events store, or why there is none: switched off in settings reads
+/// differently from a store that has not started yet.
+pub(crate) fn database() -> Result<&'static Arc<EventsDatabase>> {
+    if let Some(db) = EVENTS_DB.get() {
+        return Ok(db);
+    }
+    if crate::config::with_config(|c| c.events.enabled) {
+        Err(Error::NotInitialized)
+    } else {
+        Err(Error::Disabled)
+    }
+}
+
 /// Global broadcaster for real-time event delivery
 static EVENTS_BROADCAST_TX: OnceLock<broadcast::Sender<Event>> = OnceLock::new();
 
@@ -173,37 +186,37 @@ pub async fn record_safe(event: Event) {
 
 /// Get recent events by category
 pub async fn recent(category: EventCategory, limit: usize) -> Result<Vec<Event>> {
-    let db = EVENTS_DB.get().ok_or(Error::NotInitialized)?;
+    let db = database()?;
     db.get_recent_events(Some(category), limit).await
 }
 
 /// Get recent events across all categories
 pub async fn recent_all(limit: usize) -> Result<Vec<Event>> {
-    let db = EVENTS_DB.get().ok_or(Error::NotInitialized)?;
+    let db = database()?;
     db.get_recent_events(None, limit).await
 }
 
 /// Get event counts by category for the last N hours
 pub async fn count_by_category(since_hours: u64) -> Result<HashMap<String, u64>> {
-    let db = EVENTS_DB.get().ok_or(Error::NotInitialized)?;
+    let db = database()?;
     db.get_event_counts_by_category(since_hours).await
 }
 
 /// Get events for a specific reference ID (e.g., transaction signature, pool address)
 pub async fn by_reference(reference_id: &str, limit: usize) -> Result<Vec<Event>> {
-    let db = EVENTS_DB.get().ok_or(Error::NotInitialized)?;
+    let db = database()?;
     db.get_events_by_reference(reference_id, limit).await
 }
 
 /// Get events for a specific token mint
 pub async fn by_mint(mint: &str, limit: usize) -> Result<Vec<Event>> {
-    let db = EVENTS_DB.get().ok_or(Error::NotInitialized)?;
+    let db = database()?;
     db.get_events_by_mint(mint, limit).await
 }
 
 /// Force cleanup of old events (normally handled automatically)
 pub async fn cleanup_old_events() -> Result<usize> {
-    let db = EVENTS_DB.get().ok_or(Error::NotInitialized)?;
+    let db = database()?;
     db.cleanup_old_events().await
 }
 

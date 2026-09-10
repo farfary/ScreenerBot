@@ -23,6 +23,11 @@ pub enum Error {
     #[error("events system is not initialized")]
     NotInitialized,
 
+    /// Event recording is switched off in settings (`events.enabled`), so there
+    /// is no events store to query.
+    #[error("events are disabled in settings (events.enabled = false)")]
+    Disabled,
+
     /// A stored event row could not be decoded.
     #[error("could not decode column {column} of an event row: {detail}")]
     RowDecode {
@@ -40,7 +45,7 @@ impl ErrorClass for Error {
             Error::Database(error) => error.is_retryable(),
             Error::Data(error) => error.is_retryable(),
             Error::Internal(error) => error.is_retryable(),
-            Error::NotInitialized | Error::RowDecode { .. } => false,
+            Error::NotInitialized | Error::Disabled | Error::RowDecode { .. } => false,
         }
     }
 
@@ -49,7 +54,7 @@ impl ErrorClass for Error {
             Error::Database(error) => error.retry_after(),
             Error::Data(error) => error.retry_after(),
             Error::Internal(error) => error.retry_after(),
-            Error::NotInitialized | Error::RowDecode { .. } => None,
+            Error::NotInitialized | Error::Disabled | Error::RowDecode { .. } => None,
         }
     }
 
@@ -58,7 +63,7 @@ impl ErrorClass for Error {
             Error::Database(error) => error.severity(),
             Error::Data(error) => error.severity(),
             Error::Internal(error) => error.severity(),
-            Error::NotInitialized => Severity::Warning,
+            Error::NotInitialized | Error::Disabled => Severity::Warning,
             Error::RowDecode { .. } => Severity::Error,
         }
     }
@@ -68,7 +73,7 @@ impl ErrorClass for Error {
             Error::Database(error) => error.http_status(),
             Error::Data(error) => error.http_status(),
             Error::Internal(error) => error.http_status(),
-            Error::NotInitialized => 503,
+            Error::NotInitialized | Error::Disabled => 503,
             Error::RowDecode { .. } => 500,
         }
     }
