@@ -60,9 +60,9 @@ pub fn get_promo_header_metrics() -> HeaderMetricsResponse {
     };
 
     let rpc = RpcHeaderInfo {
-        success_rate_percent: 99.7,
-        avg_latency_ms: 142,
-        calls_per_minute: 284.5,
+        success_rate_percent: PROMO_RPC_SUCCESS_PERCENT as f32,
+        avg_latency_ms: PROMO_RPC_LATENCY_MS,
+        calls_per_minute: PROMO_RPC_CALLS_PER_MINUTE,
         healthy: true,
     };
 

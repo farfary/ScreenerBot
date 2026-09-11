@@ -15,10 +15,6 @@ use crate::webserver::routes::dashboard::{
 use super::aggregates::{self, PeriodAgg};
 use super::data::*;
 
-/// Promo uptime shared by every "system" block (3d 7h 23m 45s).
-const PROMO_UPTIME_SECS: u64 = 3 * 24 * 3600 + 7 * 3600 + 23 * 60 + 45;
-const PROMO_UPTIME_STR: &str = "3d 7h 23m 45s";
-
 /// Build a `TradingPeriodStats` from a realized-P&L bucket plus buys that
 /// occurred in the same window (round-trip sells + still-open entries).
 fn period_stats(agg: &PeriodAgg, extra_open_buys: i64) -> TradingPeriodStats {
@@ -99,8 +95,8 @@ pub fn get_promo_home_dashboard() -> HomeDashboardResponse {
         memory_mb: PROMO_MEMORY_MB,
         memory_percent: 2.4,
         cpu_percent: PROMO_CPU_PERCENT,
-        rpc_calls_per_min: 847.3,
-        rpc_success_rate: 99.7,
+        rpc_calls_per_min: PROMO_RPC_CALLS_PER_MINUTE,
+        rpc_success_rate: PROMO_RPC_SUCCESS_PERCENT,
         websocket_connected: true,
         services_healthy: 12,
         services_total: 12,
@@ -185,8 +181,8 @@ pub fn get_promo_dashboard_overview() -> DashboardOverview {
     };
 
     let rpc = RpcInfo {
-        total_calls: 847_234,
-        calls_per_second: 4.7,
+        total_calls: PROMO_RPC_TOTAL_CALLS,
+        calls_per_second: PROMO_RPC_CALLS_PER_MINUTE / 60.0,
         uptime_seconds: PROMO_UPTIME_SECS,
     };
 

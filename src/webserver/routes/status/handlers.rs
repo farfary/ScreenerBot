@@ -4,6 +4,7 @@ use chrono::Utc;
 use crate::{
     logger::{self, LogTag},
     webserver::{
+        promo,
         snapshot::{
             collect_service_status_snapshot, gather_status_snapshot, get_cached_system_metrics,
         },
@@ -31,7 +32,10 @@ pub(super) async fn health_check() -> Response {
 pub(super) async fn system_status() -> Response {
     logger::info(LogTag::Webserver, "Fetching system status snapshot");
 
-    let snapshot = gather_status_snapshot().await;
+    let mut snapshot = gather_status_snapshot().await;
+    if promo::are_promo_fixtures_enabled() {
+        promo::apply_promo_status(&mut snapshot);
+    }
 
     logger::info(
         LogTag::Webserver,

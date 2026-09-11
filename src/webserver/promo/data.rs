@@ -17,6 +17,15 @@ pub(super) const PROMO_MEMORY_MB: f64 = 384.5;
 pub(super) const PROMO_CPU_PERCENT: f64 = 12.3;
 pub(super) const PROMO_TOKENS_TRACKED: usize = 2847;
 pub(super) const PROMO_BLACKLISTED: usize = 1253;
+/// Uptime shared by every "system" block and the status bar (3d 7h 23m 45s).
+pub(super) const PROMO_UPTIME_SECS: u64 = 3 * 24 * 3600 + 7 * 3600 + 23 * 60 + 45;
+pub(super) const PROMO_UPTIME_STR: &str = "3d 7h 23m 45s";
+/// RPC health shared by the header, the status bar and the dashboard system
+/// blocks, so no two surfaces of one session report a different call rate.
+pub(super) const PROMO_RPC_CALLS_PER_MINUTE: f64 = 284.5;
+pub(super) const PROMO_RPC_SUCCESS_PERCENT: f64 = 99.7;
+pub(super) const PROMO_RPC_LATENCY_MS: u64 = 142;
+pub(super) const PROMO_RPC_TOTAL_CALLS: u64 = 847_234;
 
 /// Promo open positions - Top liquidity real tokens with logos
 /// (symbol, name, mint, logo_url, entry_price_sol, current_price_sol, size_sol, hold_minutes)
