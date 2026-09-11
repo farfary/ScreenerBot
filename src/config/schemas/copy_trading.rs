@@ -24,6 +24,8 @@ config_struct! {
         max_arrival_distance_ms: u64 = 4000,
         #[metadata(field_metadata! { label: "Latency Sample Window", hint: "Number of recent observations used by the latency kill switch", min: 3, max: 100, step: 1, impact: "medium", category: "Copy Trading", })]
         latency_window_size: usize = 10,
+        #[metadata(field_metadata! { label: "Live Readiness Rounds", hint: "Closed paper rounds a task needs before its live-readiness checklist passes", min: 1, max: 500, step: 1, impact: "low", category: "Copy Trading", })]
+        readiness_min_closed_rounds: usize = 10,
     }
 }
 
@@ -69,6 +71,12 @@ impl CopyTradingConfig {
         if !(3..=100).contains(&self.latency_window_size) {
             return Err(ConfigurationError::Generic {
                 message: "Copy latency sample window must be between 3 and 100".to_owned(),
+            }
+            .into());
+        }
+        if !(1..=500).contains(&self.readiness_min_closed_rounds) {
+            return Err(ConfigurationError::Generic {
+                message: "Live readiness rounds must be between 1 and 500".to_owned(),
             }
             .into());
         }

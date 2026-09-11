@@ -4,7 +4,7 @@ use crate::positions::{Position, PositionOrigin};
 
 use super::types::{
     ArrivalDistanceStats, CopyActivityRow, CopyBook, CopyOutcome, CopyTaskStats, CopyTelemetry,
-    PaperPosition,
+    PaperExitRule, PaperPosition,
 };
 
 pub fn arrival_distance_ms(telemetry: &CopyTelemetry) -> Option<u64> {
@@ -76,11 +76,15 @@ pub fn build_task_stats(
                 Some(&decision.telemetry)
             }
             CopyOutcome::PaperSellObserved(decision) => {
-                stats.observed_sells += 1;
+                match decision.exit_rule {
+                    None => stats.target_sells += 1,
+                    Some(PaperExitRule::Manual) => stats.manual_closes += 1,
+                    Some(_) => stats.policy_exits += 1,
+                }
                 Some(&decision.telemetry)
             }
             CopyOutcome::LiveSellSubmitted(decision) => {
-                stats.observed_sells += 1;
+                stats.target_sells += 1;
                 stats.submitted += 1;
                 Some(&decision.telemetry)
             }
@@ -93,7 +97,12 @@ pub fn build_task_stats(
                 telemetry.as_ref()
             }
         };
-        if let Some(distance) = telemetry.and_then(arrival_distance_ms) {
+        // Backfilled trades arrive by design long after their block; like the
+        // latency kill switch, the arrival figures measure the live stream only.
+        if let Some(distance) = telemetry
+            .filter(|telemetry| !telemetry.backfill)
+            .and_then(arrival_distance_ms)
+        {
             arrival.push(distance);
         }
     }

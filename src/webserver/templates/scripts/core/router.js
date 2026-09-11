@@ -21,6 +21,7 @@ const PAGE_TITLES = Object.freeze({
   assistant: "Assistant",
   config: "Configuration",
   trader: "Auto Trader",
+  copy: "Copy Trading",
 });
 
 // Import TabBarManager for coordinated tab bar management

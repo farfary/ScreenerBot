@@ -172,7 +172,8 @@ impl CopyDatabase {
 
     /// Persist one outcome and, in the same transaction, commit its spend and its
     /// paper-book effect -- exactly once per decision, never on a status upgrade.
-    pub async fn record_outcome(&self, outcome: CopyOutcome) -> crate::trader::Result<()> {
+    /// `true` when the outcome is new (a first decision or a confirmation upgrade).
+    pub async fn record_outcome(&self, outcome: CopyOutcome) -> crate::trader::Result<bool> {
         let db = self.clone();
         tokio::task::spawn_blocking(move || db.record_outcome_sync(outcome))
             .await
@@ -181,7 +182,7 @@ impl CopyDatabase {
             })?
     }
 
-    fn record_outcome_sync(&self, outcome: CopyOutcome) -> crate::trader::Result<()> {
+    fn record_outcome_sync(&self, outcome: CopyOutcome) -> crate::trader::Result<bool> {
         let mut connection = self.connection()?;
         let transaction = connection
             .write_tx()
@@ -319,6 +320,7 @@ impl CopyDatabase {
         }
         transaction
             .commit()
+            .map(|()| inserted || confirmation_upgrade)
             .map_err(|e| Error::from(crate::errors::DatabaseError::from(e)))
     }
 }

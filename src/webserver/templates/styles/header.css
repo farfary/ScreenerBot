@@ -255,6 +255,10 @@
     filter var(--transition-fast);
 }
 
+.modern-header .header-card[hidden] {
+  display: none;
+}
+
 .modern-header .header-card:hover:not(:disabled) {
   background: var(--primary-alpha-5);
 }
@@ -313,7 +317,9 @@
 .modern-header .card-change {
   color: var(--text-primary);
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
   white-space: nowrap;
 }
 

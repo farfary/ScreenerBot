@@ -1,6 +1,7 @@
 /** Wallet observation UI for Wallets > Watched. */
 
 import { DataTable } from "../../ui/data_table.js";
+import { openCopyForWallet } from "../../ui/copy_handoff.js";
 
 const SOLANA_ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
@@ -54,6 +55,7 @@ export function createWatchedWallets({
       sortable: false,
       render: (value, row) => `
         <div class="watched-wallet-actions">
+          <button class="btn" type="button" data-watch-action="copy" data-watch-id="${row.id}" title="Open this wallet in Copy Trading">Copy trade</button>
           <button class="btn" type="button" data-watch-action="toggle" data-watch-id="${row.id}">${row.enabled ? "Pause" : "Enable"}</button>
           <button class="btn-icon danger" type="button" data-watch-action="delete" data-watch-id="${row.id}" title="Remove" aria-label="Remove ${Utils.escapeHtml(row.label || "wallet")}"><i class="icon-trash-2"></i></button>
         </div>`,
@@ -245,6 +247,10 @@ export function createWatchedWallets({
     const action = button.dataset.watchAction;
     const target = targets.find((item) => item.id === id);
     if (!target) return;
+    if (action === "copy") {
+      openCopyForWallet(target.address, target.label || null);
+      return;
+    }
     button.disabled = true;
     try {
       if (action === "toggle") {

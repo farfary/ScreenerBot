@@ -100,6 +100,19 @@
   color: var(--info-color);
 }
 
+/* A copied position links back to the copy task that opened it. */
+.position-origin-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.position-origin-link:hover {
+  text-decoration: underline;
+}
+
 /* Derived from the wallet's own on-chain history rather than traded by the bot. */
 .position-origin-wallet {
   color: var(--text-secondary);

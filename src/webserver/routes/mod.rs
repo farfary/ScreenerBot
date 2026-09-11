@@ -54,6 +54,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/tokens", get(tokens_page))
         .route("/positions", get(positions_page))
         .route("/events", get(events_page))
+        .route("/copy", get(copy_page))
         .route("/transactions", get(transactions_page))
         .route("/filtering", get(filtering_page))
         .route("/wallets", get(wallets_page))
@@ -98,6 +99,12 @@ async fn positions_page() -> Html<String> {
 async fn events_page() -> Html<String> {
     let content = templates::events_content();
     Html(templates::base_template("Events", "events", &content))
+}
+
+/// Copy Trading page handler
+async fn copy_page() -> Html<String> {
+    let content = templates::copy_content();
+    Html(templates::base_template("Copy Trading", "copy", &content))
 }
 
 /// Services page handler
@@ -219,6 +226,7 @@ async fn get_page_content(AxumPath(page): AxumPath<String>) -> Html<String> {
         "tokens" => templates::tokens_content(),
         "positions" => templates::positions_content(),
         "events" => templates::events_content(),
+        "copy" => templates::copy_content(),
         "services" => templates::services_content(),
         "transactions" => templates::transactions_content(),
         "filtering" => templates::filtering_content(),

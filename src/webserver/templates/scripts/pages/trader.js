@@ -16,13 +16,11 @@ import {
   handleFeatureRestrictedTab,
 } from "./trader/features.js";
 import { createLifecycle as createStrategiesLifecycle } from "./strategies.js";
-import { createWalletCopy } from "./trader/wallet_copy.js";
 
 // Sub-tabs configuration. Strategy Control is second and the embedded Strategies
 // editor is third (Strategies was formerly its own top-level tab).
 const SUB_TABS = [
   { id: "stats", label: '<i class="icon-chart-bar"></i> Stats' },
-  { id: "wallet-copy", label: '<i class="icon-copy"></i> Copy Trading' },
   { id: "strategy-control", label: '<i class="icon-puzzle"></i> Strategy Control' },
   { id: "strategies", label: '<i class="icon-square-pen"></i> Strategies' },
   { id: "stop-loss", label: '<i class="icon-shield-off"></i> Stop Loss' },
@@ -41,7 +39,6 @@ function createLifecycle() {
   let tabBar = null;
   let configCards = null;
   let statsPoller = null;
-  let walletCopyPoller = null;
   let configPoller = null;
   let strategiesPoller = null;
   let lifecycleContext = null;
@@ -83,7 +80,6 @@ function createLifecycle() {
     playError,
     eventCleanups,
   });
-  const walletCopy = createWalletCopy({ $, Utils, requestManager, ConfirmationDialog });
 
   // Embedded Strategies subtab — drives the strategies page module's lifecycle.
   // A local ctx adapter owns the strategies pollers so they start when the
@@ -193,7 +189,6 @@ function createLifecycle() {
     // Show selected tab
     const tabMap = {
       stats: "stats-tab",
-      "wallet-copy": "wallet-copy-tab",
       "stop-loss": "stop-loss-tab",
       "trailing-stop": "trailing-stop-tab",
       roi: "roi-tab",
@@ -217,10 +212,7 @@ function createLifecycle() {
     // never left to a :has() inline-style selector that can go stale.
     const traderContent = $("#trader-content");
     const isStrategiesTab = tabId === "strategies";
-    traderContent?.classList.toggle(
-      "trader-content--fullbleed",
-      isStrategiesTab || tabId === "wallet-copy"
-    );
+    traderContent?.classList.toggle("trader-content--fullbleed", isStrategiesTab);
     if (load) {
       if (isStrategiesTab) activateStrategiesSubtab();
       else deactivateStrategiesSubtab();
@@ -240,12 +232,6 @@ function createLifecycle() {
       if (statsPoller?.active) {
         statsPoller.stop();
       }
-    }
-
-    if (tabId === "wallet-copy") {
-      if (walletCopyPoller && !walletCopyPoller.active) walletCopyPoller.start();
-    } else if (walletCopyPoller?.active) {
-      walletCopyPoller.stop();
     }
 
     if (tabId === "strategy-control") {
@@ -275,7 +261,6 @@ function createLifecycle() {
     if (tabId === "time-rules") {
       updateTimeRulesStatus();
     }
-    if (tabId === "wallet-copy") walletCopy.load();
   }
 
   /**
@@ -1340,7 +1325,6 @@ function createLifecycle() {
 
       // Setup form handlers
       setupFormHandlers();
-      walletCopy.setup(addTrackedListener);
 
       // Setup trading controls event handlers
       controls.setupControlsEventHandlers();
@@ -1390,15 +1374,6 @@ function createLifecycle() {
         );
       }
 
-      if (!walletCopyPoller) {
-        walletCopyPoller = new Poller(
-          async () => {
-            if (state.currentTab === "wallet-copy") await walletCopy.load();
-          },
-          { label: "Wallet Copy", intervalMs: 5000 }
-        );
-      }
-
       if (!configPoller) {
         configPoller = new Poller(
           async () => {
@@ -1420,7 +1395,6 @@ function createLifecycle() {
       }
 
       ctx.managePoller(statsPoller);
-      ctx.managePoller(walletCopyPoller);
       ctx.managePoller(configPoller);
       ctx.managePoller(strategiesPoller);
 
@@ -1468,7 +1442,6 @@ function createLifecycle() {
       tabBar = null;
       state.config = null;
       state.stats = null;
-      walletCopyPoller = null;
       statsPoller = null;
       configPoller = null;
       strategiesPoller = null;
@@ -1476,7 +1449,6 @@ function createLifecycle() {
       state.strategies = [];
       _lastDailyKey = null;
       _lastExitKey = null;
-      walletCopy.reset();
     },
   };
 }

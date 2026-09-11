@@ -67,8 +67,12 @@ pub(super) const TRADER_CONTROLS_STYLES: &str =
     include_str!("templates/styles/pages/trader/controls.css");
 pub(super) const TRADER_METRICS_STYLES: &str =
     include_str!("templates/styles/pages/trader/metrics.css");
-pub(super) const TRADER_WALLET_COPY_STYLES: &str =
-    include_str!("templates/styles/pages/trader/wallet_copy.css");
+pub(super) const COPY_PAGE_STYLES: &str = include_str!("templates/styles/pages/copy.css");
+pub(super) const COPY_WORKSPACE_STYLES: &str =
+    include_str!("templates/styles/pages/copy/workspace.css");
+pub(super) const COPY_DIALOGS_STYLES: &str =
+    include_str!("templates/styles/pages/copy/dialogs.css");
+pub(super) const COPY_CHARTS_STYLES: &str = include_str!("templates/styles/pages/copy/charts.css");
 pub(super) const WALLETS_PAGE_STYLES: &str = include_str!("templates/styles/pages/wallets.css");
 pub(super) const WALLETS_MAIN_WALLET_STYLES: &str =
     include_str!("templates/styles/pages/wallets/main_wallet.css");
@@ -351,6 +355,7 @@ pub const TOKEN_DETAILS_DIALOG_UI: &str =
     include_str!("templates/scripts/ui/token_details_dialog.js");
 pub const IMAGE_LIGHTBOX_UI: &str = include_str!("templates/scripts/ui/image_lightbox.js");
 pub const TOKEN_IDENTITY_UI: &str = include_str!("templates/scripts/ui/token_identity.js");
+pub const COPY_HANDOFF_UI: &str = include_str!("templates/scripts/ui/copy_handoff.js");
 pub const TOKEN_DETAILS_OVERVIEW_TAB_UI: &str =
     include_str!("templates/scripts/ui/token_details/overview_tab.js");
 pub const TOKEN_DETAILS_SECURITY_TAB_UI: &str =
@@ -462,12 +467,27 @@ pub const TRADER_CONTROLS_JS: &str = include_str!("templates/scripts/pages/trade
 pub const TRADER_CONFIG_CARDS_JS: &str =
     include_str!("templates/scripts/pages/trader/config_cards.js");
 pub const TRADER_FEATURES_JS: &str = include_str!("templates/scripts/pages/trader/features.js");
-pub const TRADER_WALLET_COPY_JS: &str =
-    include_str!("templates/scripts/pages/trader/wallet_copy.js");
-pub const TRADER_WALLET_COPY_VIEW_JS: &str =
-    include_str!("templates/scripts/pages/trader/wallet_copy_view.js");
-pub const TRADER_WALLET_COPY_SETTINGS_JS: &str =
-    include_str!("templates/scripts/pages/trader/wallet_copy_settings.js");
+pub const COPY_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/copy.js");
+pub const COPY_API_JS: &str = include_str!("templates/scripts/pages/copy/api.js");
+pub const COPY_FORMAT_JS: &str = include_str!("templates/scripts/pages/copy/format.js");
+pub const COPY_CHARTS_JS: &str = include_str!("templates/scripts/pages/copy/charts.js");
+pub const COPY_DIALOGS_JS: &str = include_str!("templates/scripts/pages/copy/dialogs.js");
+pub const COPY_TOKENS_JS: &str = include_str!("templates/scripts/pages/copy/tokens.js");
+pub const COPY_SUMMARY_JS: &str = include_str!("templates/scripts/pages/copy/summary.js");
+pub const COPY_LIST_JS: &str = include_str!("templates/scripts/pages/copy/list.js");
+pub const COPY_WORKSPACE_JS: &str = include_str!("templates/scripts/pages/copy/workspace.js");
+pub const COPY_OVERVIEW_JS: &str = include_str!("templates/scripts/pages/copy/overview.js");
+pub const COPY_EXECUTION_JS: &str = include_str!("templates/scripts/pages/copy/execution.js");
+pub const COPY_RULES_JS: &str = include_str!("templates/scripts/pages/copy/rules.js");
+pub const COPY_POLICY_JS: &str = include_str!("templates/scripts/pages/copy/policy.js");
+pub const COPY_HOLDINGS_JS: &str = include_str!("templates/scripts/pages/copy/holdings.js");
+pub const COPY_ACTIVITY_JS: &str = include_str!("templates/scripts/pages/copy/activity.js");
+pub const COPY_COMPARE_JS: &str = include_str!("templates/scripts/pages/copy/compare.js");
+pub const COPY_EDITOR_JS: &str = include_str!("templates/scripts/pages/copy/editor.js");
+pub const COPY_EDITOR_STEPS_JS: &str = include_str!("templates/scripts/pages/copy/editor_steps.js");
+pub const COPY_ARM_GATE_JS: &str = include_str!("templates/scripts/pages/copy/arm_gate.js");
+pub const COPY_SETTINGS_JS: &str = include_str!("templates/scripts/pages/copy/settings.js");
+pub const COPY_PROFILE_JS: &str = include_str!("templates/scripts/pages/copy/profile.js");
 pub const WALLETS_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/wallets.js");
 pub const WALLETS_BULK_OPERATIONS_JS: &str =
     include_str!("templates/scripts/pages/wallets/bulk_operations.js");
@@ -497,6 +517,7 @@ pub const LOGIN_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/login.
 // HTML Page Templates
 pub(super) const TOKENS_PAGE: &str = include_str!("templates/pages/tokens.html");
 pub(super) const EVENTS_PAGE: &str = include_str!("templates/pages/events.html");
+pub(super) const COPY_PAGE: &str = include_str!("templates/pages/copy.html");
 pub(super) const SERVICES_PAGE: &str = include_str!("templates/pages/services.html");
 pub(super) const TRANSACTIONS_PAGE: &str = include_str!("templates/pages/transactions.html");
 pub(super) const POSITIONS_PAGE: &str = include_str!("templates/pages/positions.html");

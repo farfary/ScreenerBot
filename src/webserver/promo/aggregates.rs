@@ -113,6 +113,11 @@ pub(super) fn closed_exit_offset_hours(i: usize) -> i64 {
     }
 }
 
+/// Minutes the i-th closed trade was held: 90m..315m, varied.
+pub(super) fn closed_hold_minutes(i: usize) -> i64 {
+    90 + (i as i64 % 6) * 45
+}
+
 pub(super) fn closed_trades(now: DateTime<Utc>) -> Vec<ClosedTrade> {
     PROMO_CLOSED_TOKENS
         .iter()
@@ -120,7 +125,7 @@ pub(super) fn closed_trades(now: DateTime<Utc>) -> Vec<ClosedTrade> {
         .map(
             |(i, (symbol, _name, _mint, _logo, entry, exit, size, reason))| {
                 let exit_time = now - Duration::hours(closed_exit_offset_hours(i));
-                let hold = 90 + (i as i64 % 6) * 45; // 90m..315m, varied
+                let hold = closed_hold_minutes(i);
                 let entry_time = exit_time - Duration::minutes(hold);
                 ClosedTrade {
                     symbol,

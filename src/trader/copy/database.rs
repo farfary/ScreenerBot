@@ -11,18 +11,24 @@ use rusqlite::{params, OptionalExtension};
 use crate::database;
 use crate::trader::error::Error;
 
-use super::types::{confirm_mode_transition, CopyActivityRow, CopyMode, CopyOutcome, CopyTask};
+use super::types::{
+    confirm_mode_transition, CopyActivityRow, CopyMode, CopyOutcome, CopyPauseReason, CopyTask,
+};
 
 #[path = "database/claims.rs"]
 mod claims;
 #[path = "database/ledger.rs"]
 mod ledger;
+#[path = "database/maintenance.rs"]
+mod maintenance;
+
+pub use maintenance::{ActivityQuery, TargetObservations};
 #[path = "database/rows.rs"]
 mod rows;
 #[path = "database/schema.rs"]
 mod schema;
 
-use rows::{json_error, parse_datetime, row_to_task};
+use rows::{json_error, parse_datetime, row_to_task, TASK_COLUMNS};
 use schema::{migrate, SCHEMA, SCHEMA_VERSION};
 
 #[derive(Clone)]
@@ -161,8 +167,8 @@ impl CopyDatabase {
                 "INSERT INTO copy_tasks (chain_id, target_address, label, enabled, mode_json, sizing_json, \
                  exit_mode_json, exit_policy_json, max_sol_per_trade, max_sol_per_token, total_budget_sol, \
                  min_target_trade_sol, max_target_trade_sol, buy_once_per_token, slippage_pct, \
-                 created_at, updated_at) VALUES \
-                 (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
+                 created_at, updated_at, require_filter_pass, pause_reason_json, paused_at) VALUES \
+                 (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)",
                 params![
                     self.chain.as_str(), task.target_address,
                     task.label,
@@ -180,6 +186,9 @@ impl CopyDatabase {
                     task.slippage_pct,
                     task.created_at.to_rfc3339(),
                     task.updated_at.to_rfc3339(),
+                    task.require_filter_pass,
+                    pause_reason_json(&task)?,
+                    task.paused_at.map(|at| at.to_rfc3339()),
                 ],
             )
             .map_err(crate::errors::DatabaseError::from)?;
@@ -212,12 +221,9 @@ impl CopyDatabase {
     fn list_tasks_sync(&self) -> crate::trader::Result<Vec<CopyTask>> {
         let connection = self.connection()?;
         let mut statement = connection
-            .prepare(
-                "SELECT id, chain_id, target_address, label, enabled, mode_json, sizing_json, exit_mode_json, \
-                 exit_policy_json, max_sol_per_trade, max_sol_per_token, total_budget_sol, min_target_trade_sol, \
-                 max_target_trade_sol, buy_once_per_token, slippage_pct, created_at, updated_at \
-                 FROM copy_tasks WHERE chain_id=?1 ORDER BY id DESC",
-            )
+            .prepare(&format!(
+                "SELECT {TASK_COLUMNS} FROM copy_tasks WHERE chain_id=?1 ORDER BY id DESC"
+            ))
             .map_err(crate::errors::DatabaseError::from)?;
         let rows = statement
             .query_map(params![self.chain.as_str()], row_to_task)
@@ -240,10 +246,7 @@ impl CopyDatabase {
         let connection = self.connection()?;
         connection
             .query_row(
-                "SELECT id, chain_id, target_address, label, enabled, mode_json, sizing_json, exit_mode_json, \
-                 exit_policy_json, max_sol_per_trade, max_sol_per_token, total_budget_sol, min_target_trade_sol, \
-                 max_target_trade_sol, buy_once_per_token, slippage_pct, created_at, updated_at \
-                 FROM copy_tasks WHERE id = ?1 AND chain_id=?2",
+                &format!("SELECT {TASK_COLUMNS} FROM copy_tasks WHERE id = ?1 AND chain_id=?2"),
                 params![id, self.chain.as_str()],
                 row_to_task,
             )
@@ -260,13 +263,15 @@ impl CopyDatabase {
             })?
     }
 
+    /// Write a task's editable fields. The target wallet is the task's identity,
+    /// not a setting, so it is never rewritten; another wallet is a new task.
     fn update_task_sync(&self, mut task: CopyTask) -> crate::trader::Result<CopyTask> {
         let connection = self.connection()?;
-        let (current_mode, current_address): (String, String) = connection
+        let current_mode: String = connection
             .query_row(
-                "SELECT mode_json, target_address FROM copy_tasks WHERE id=?1 AND chain_id=?2",
+                "SELECT mode_json FROM copy_tasks WHERE id=?1 AND chain_id=?2",
                 params![task.id, self.chain.as_str()],
-                |row| Ok((row.get(0)?, row.get(1)?)),
+                |row| row.get(0),
             )
             .optional()
             .map_err(crate::errors::DatabaseError::from)?
@@ -283,24 +288,26 @@ impl CopyDatabase {
             });
         }
         task.updated_at = Utc::now();
+        let serialize = |field: &'static str, value: Result<String, serde_json::Error>| {
+            value.map_err(|e| Error::CopySerialize {
+                field,
+                detail: e.to_string(),
+            })
+        };
         let affected = connection
             .execute(
-                "UPDATE copy_tasks SET target_address=?1, label=?2, enabled=?3, mode_json=?4, \
-                 sizing_json=?5, exit_mode_json=?6, exit_policy_json=?7, max_sol_per_trade=?8, max_sol_per_token=?9, \
-                 total_budget_sol=?10, min_target_trade_sol=?11, max_target_trade_sol=?12, \
-                 buy_once_per_token=?13, slippage_pct=?14, updated_at=?15 WHERE id=?16 AND chain_id=?17",
+                "UPDATE copy_tasks SET label=?1, enabled=?2, mode_json=?3, sizing_json=?4, \
+                 exit_mode_json=?5, exit_policy_json=?6, max_sol_per_trade=?7, max_sol_per_token=?8, \
+                 total_budget_sol=?9, min_target_trade_sol=?10, max_target_trade_sol=?11, \
+                 buy_once_per_token=?12, slippage_pct=?13, updated_at=?14, require_filter_pass=?15, \
+                 pause_reason_json=?16, paused_at=?17 WHERE id=?18 AND chain_id=?19",
                 params![
-                    task.target_address,
                     task.label,
                     task.enabled,
-                    serde_json::to_string(&task.mode)
-                        .map_err(|e| Error::CopySerialize { field: "mode", detail: e.to_string() })?,
-                    serde_json::to_string(&task.sizing)
-                        .map_err(|e| Error::CopySerialize { field: "sizing", detail: e.to_string() })?,
-                    serde_json::to_string(&task.exit_mode)
-                        .map_err(|e| Error::CopySerialize { field: "exit_mode", detail: e.to_string() })?,
-                    serde_json::to_string(&task.exit_policy_overrides)
-                        .map_err(|e| Error::CopySerialize { field: "exit_policy", detail: e.to_string() })?,
+                    serialize("mode", serde_json::to_string(&task.mode))?,
+                    serialize("sizing", serde_json::to_string(&task.sizing))?,
+                    serialize("exit_mode", serde_json::to_string(&task.exit_mode))?,
+                    serialize("exit_policy", serde_json::to_string(&task.exit_policy_overrides))?,
                     task.max_sol_per_trade,
                     task.max_sol_per_token,
                     task.total_budget_sol,
@@ -309,26 +316,16 @@ impl CopyDatabase {
                     task.buy_once_per_token,
                     task.slippage_pct,
                     task.updated_at.to_rfc3339(),
-                    task.id, self.chain.as_str(),
+                    task.require_filter_pass,
+                    pause_reason_json(&task)?,
+                    task.paused_at.map(|at| at.to_rfc3339()),
+                    task.id,
+                    self.chain.as_str(),
                 ],
             )
             .map_err(crate::errors::DatabaseError::from)?;
         if affected == 0 {
             return Err(Error::CopyTaskNotFound { task_id: task.id });
-        }
-        if current_address != task.target_address {
-            connection
-                .execute(
-                    "DELETE FROM copy_target_events WHERE task_id=?1",
-                    params![task.id],
-                )
-                .map_err(crate::errors::DatabaseError::from)?;
-            connection
-                .execute(
-                    "DELETE FROM copy_target_holdings WHERE task_id=?1",
-                    params![task.id],
-                )
-                .map_err(crate::errors::DatabaseError::from)?;
         }
         Ok(task)
     }
@@ -415,13 +412,25 @@ impl CopyDatabase {
         })?
     }
 
-    pub async fn pause_task(&self, id: i64) -> crate::trader::Result<bool> {
+    /// Stand an enabled task down with the reason a guard gave; `false` when it
+    /// was not enabled.
+    pub async fn pause_task(
+        &self,
+        id: i64,
+        reason: CopyPauseReason,
+    ) -> crate::trader::Result<bool> {
         let db = self.clone();
+        let reason = serde_json::to_string(&reason).map_err(|e| Error::CopySerialize {
+            field: "pause_reason",
+            detail: e.to_string(),
+        })?;
         tokio::task::spawn_blocking(move || {
+            let now = Utc::now().to_rfc3339();
             db.connection()?
                 .execute(
-                    "UPDATE copy_tasks SET enabled=0, updated_at=?2 WHERE id=?1 AND chain_id=?3 AND enabled=1",
-                    params![id, Utc::now().to_rfc3339(), db.chain.as_str()],
+                    "UPDATE copy_tasks SET enabled=0, updated_at=?2, paused_at=?2, pause_reason_json=?4 \
+                     WHERE id=?1 AND chain_id=?3 AND enabled=1",
+                    params![id, now, db.chain.as_str(), reason],
                 )
                 .map(|affected| affected > 0)
                 .map_err(|e| Error::from(crate::errors::DatabaseError::from(e)))
@@ -546,10 +555,7 @@ impl CopyDatabase {
         let connection = self.connection()?;
         let mut statement = connection
             .prepare(
-                "SELECT id, chain_id, target_address, label, enabled, mode_json, sizing_json, exit_mode_json, \
-                 exit_policy_json, max_sol_per_trade, max_sol_per_token, total_budget_sol, min_target_trade_sol, \
-                 max_target_trade_sol, buy_once_per_token, slippage_pct, created_at, updated_at \
-                 FROM copy_tasks WHERE target_address = ?1 AND chain_id=?2 AND enabled = 1 ORDER BY id",
+                &format!("SELECT {TASK_COLUMNS} FROM copy_tasks WHERE target_address = ?1 AND chain_id=?2 AND enabled = 1 ORDER BY id"),
             )
             .map_err(crate::errors::DatabaseError::from)?;
         let rows = statement
@@ -559,6 +565,17 @@ impl CopyDatabase {
             .map_err(crate::errors::DatabaseError::from)?;
         Ok(rows)
     }
+}
+
+fn pause_reason_json(task: &CopyTask) -> crate::trader::Result<Option<String>> {
+    task.pause_reason
+        .as_ref()
+        .map(serde_json::to_string)
+        .transpose()
+        .map_err(|e| Error::CopySerialize {
+            field: "pause_reason",
+            detail: e.to_string(),
+        })
 }
 
 #[cfg(test)]

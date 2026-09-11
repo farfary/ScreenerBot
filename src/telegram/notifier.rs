@@ -282,6 +282,34 @@ impl TelegramNotifier {
                 formatters::msg_system_error(&severity.to_string(), message)
             }
 
+            NotificationType::CopyTrading {
+                task,
+                title,
+                token_symbol,
+                token_mint,
+                detail,
+                paper,
+            } => {
+                let token = match (token_symbol, token_mint) {
+                    (Some(symbol), Some(mint)) => format!(
+                        "\n<b>{}</b> <code>{}</code>",
+                        formatters::html_escape(symbol),
+                        formatters::format_mint_display(mint)
+                    ),
+                    (None, Some(mint)) => format!("\n<code>{}</code>", mint),
+                    _ => String::new(),
+                };
+                format!(
+                    "{} <b>{}</b>{}\nTask: {}{}\n{}",
+                    if *paper { "🧪" } else { "🔁" },
+                    formatters::html_escape(title),
+                    if *paper { " (paper)" } else { "" },
+                    formatters::html_escape(task),
+                    token,
+                    formatters::html_escape(detail)
+                )
+            }
+
             NotificationType::DailySummary {
                 date,
                 total_trades,
@@ -497,6 +525,13 @@ fn should_send_notification(notification: &Notification) -> bool {
         NotificationType::BotStarted { .. } => config.notify_on_startup,
         NotificationType::BotStopped { .. } => config.notify_on_shutdown,
         NotificationType::NewTokensFound { .. } => config.notify_filtering_alerts,
+        NotificationType::CopyTrading { paper, .. } => {
+            if *paper {
+                config.notify_copy_paper
+            } else {
+                config.notify_copy_trading
+            }
+        }
         NotificationType::UpdateStatus { .. } => with_config(|c| c.updates.notify_telegram),
     }
 }

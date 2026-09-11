@@ -36,6 +36,9 @@ fn task(exit_mode: ExitMode) -> CopyTask {
         slippage_pct: 2.0,
         created_at: now,
         updated_at: now,
+        require_filter_pass: None,
+        pause_reason: None,
+        paused_at: None,
     }
 }
 
@@ -56,6 +59,7 @@ fn input(mode: CopyMode) -> CopyTaskInput {
         max_target_trade_sol: task.max_target_trade_sol,
         buy_once_per_token: task.buy_once_per_token,
         slippage_pct: task.slippage_pct,
+        require_filter_pass: None,
     }
 }
 

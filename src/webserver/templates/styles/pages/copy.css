@@ -1,0 +1,521 @@
+/* Copy Trading page: frame, status strip, onboarding, totals, wallet list and the
+   shared primitives (segmented control, tones, meters, notes) its panels use. */
+
+.copy-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  padding: var(--spacing-lg);
+  min-width: 0;
+}
+
+/* Panels here set their own display, which outranks the bare [hidden] attribute:
+   the onboarding card and the compare view stayed on screen while hidden. */
+.copy-page [hidden] {
+  display: none;
+}
+
+.copy-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm) var(--spacing-md);
+}
+
+.copy-strip-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--spacing-xs) var(--spacing-md);
+  min-width: 0;
+}
+
+.copy-strip-title h1 {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin: 0;
+  font-size: var(--font-size-lg);
+  color: var(--text-primary);
+}
+
+.copy-strip-title h1 i {
+  color: var(--primary-color);
+}
+
+.copy-strip-feature {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--warning-color);
+}
+
+.copy-strip-state {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+}
+
+.copy-strip-state[data-state="running"] {
+  color: var(--success-color);
+}
+
+.copy-strip-state[data-state="paused"] {
+  color: var(--warning-color);
+}
+
+.copy-strip-state[data-state="blocked"] {
+  color: var(--error-color);
+}
+
+.copy-strip-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+}
+
+.copy-load-error {
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid var(--danger-alpha-30);
+  border-radius: var(--radius-md);
+  background: var(--danger-alpha-10);
+  color: var(--error-color);
+  font-size: var(--font-size-sm);
+}
+
+.copy-onboarding {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: var(--spacing-xl);
+  padding: var(--spacing-xl);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+}
+
+.copy-onboarding-copy h2 {
+  margin: 0 0 var(--spacing-sm);
+  font-size: var(--font-size-lg);
+}
+
+.copy-onboarding-copy p {
+  margin: 0 0 var(--spacing-lg);
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.copy-onboarding-steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  margin: 0;
+  padding-left: 1.25rem;
+  color: var(--text-secondary);
+}
+
+.copy-onboarding-steps li strong {
+  display: block;
+  color: var(--text-primary);
+}
+
+.copy-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  min-width: 0;
+}
+
+.copy-figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: var(--spacing-sm);
+}
+
+.copy-figure {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--spacing-md);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  min-width: 0;
+}
+
+.copy-figure-label,
+.copy-metric-label {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.copy-figure-value {
+  font-family: var(--font-data);
+  font-size: var(--font-size-lg);
+  color: var(--text-primary);
+}
+
+.copy-figure-note,
+.copy-metric-note {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+}
+
+.copy-meter {
+  display: block;
+  height: 4px;
+  border-radius: var(--radius-xs);
+  background: var(--bg-tertiary);
+  overflow: hidden;
+}
+
+.copy-meter > span {
+  display: block;
+  height: 100%;
+  background: var(--primary-color);
+}
+
+.copy-body {
+  display: grid;
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+  gap: var(--spacing-md);
+  align-items: start;
+}
+
+.copy-list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+  min-width: 0;
+}
+
+/* Beside the workspace the list stays in view while a long tab scrolls. */
+@media (width > 1100px) {
+  .copy-list {
+    position: sticky;
+    top: var(--spacing-md);
+  }
+}
+
+.copy-list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.copy-list-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.copy-list-title h2 {
+  margin: 0;
+  font-size: var(--font-size-base);
+}
+
+.copy-list-title span {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+}
+
+#copy-compare-open.is-active {
+  color: var(--primary-color);
+}
+
+.copy-list-sort {
+  padding: var(--spacing-sm) var(--spacing-md) 0;
+}
+
+.copy-list-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--spacing-sm);
+  max-height: calc(100vh - 320px);
+  min-height: 120px;
+  overflow-y: auto;
+}
+
+.copy-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.copy-row:hover {
+  background: var(--bg-hover);
+}
+
+.copy-row.is-selected {
+  border-color: var(--primary-alpha-30);
+  background: var(--primary-alpha-10);
+}
+
+.copy-row-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  min-width: 0;
+}
+
+.copy-row-name {
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.copy-row-mode {
+  flex-shrink: 0;
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.copy-mode-paper {
+  color: var(--info-color);
+}
+
+.copy-mode-live {
+  color: var(--error-color);
+}
+
+.copy-row-state {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+}
+
+.copy-row-state.is-paper,
+.copy-row-state.is-live {
+  color: var(--success-color);
+}
+
+.copy-row-state.is-paused,
+.copy-row-state.is-system_paused,
+.copy-row-state.is-entries_blocked {
+  color: var(--warning-color);
+}
+
+.copy-row-state.is-force_stopped {
+  color: var(--error-color);
+}
+
+.copy-row-pnl {
+  font-family: var(--font-data);
+  font-size: var(--font-size-sm);
+}
+
+.copy-row-detail {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+}
+
+.copy-row-budget {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.copy-row-budget .copy-meter {
+  width: 56px;
+}
+
+.copy-spark {
+  flex-shrink: 0;
+  overflow: visible;
+}
+
+.copy-spark polyline {
+  fill: none;
+  stroke-width: 1.5;
+}
+
+.copy-spark.is-positive polyline {
+  stroke: var(--success-color);
+}
+
+.copy-spark.is-negative polyline {
+  stroke: var(--error-color);
+}
+
+.copy-spark-empty {
+  color: var(--text-muted);
+}
+
+.copy-chart-zero {
+  stroke: var(--border-color);
+  stroke-dasharray: 3 3;
+}
+
+/* Segmented control: a small fixed choice set, never a row of pills. */
+.copy-seg {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+  max-width: 100%;
+}
+
+.copy-seg-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-family: var(--font-data);
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
+}
+
+/* The radio covers its segment as the hit target; the segment is the paint. */
+.copy-seg-btn > input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.copy-seg-btn:hover {
+  color: var(--text-primary);
+}
+
+.copy-seg-btn.is-active {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.copy-page .is-positive {
+  color: var(--success-color);
+}
+
+.copy-page .is-negative {
+  color: var(--error-color);
+}
+
+.copy-panel-message {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-xl) var(--spacing-lg);
+  color: var(--text-muted);
+  font-size: var(--font-size-sm);
+  text-align: center;
+}
+
+.copy-panel-message.is-error {
+  color: var(--error-color);
+}
+
+.copy-note {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.copy-muted {
+  color: var(--text-muted);
+}
+
+.copy-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  margin: 0;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid var(--warning-alpha-30);
+  border-radius: var(--radius-md);
+  background: var(--warning-alpha-10);
+  color: var(--warning-color);
+  font-size: var(--font-size-sm);
+  line-height: 1.45;
+}
+
+.copy-warning i {
+  margin-top: 2px;
+}
+
+.copy-warning-text {
+  color: var(--warning-color);
+}
+
+.copy-danger-action,
+.copy-danger-action:hover {
+  color: var(--error-color);
+}
+
+.copy-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--primary-color);
+  text-decoration: none;
+}
+
+.copy-link:hover {
+  text-decoration: underline;
+}
+
+.copy-token-link {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.copy-token-link:hover {
+  color: var(--primary-color);
+  text-decoration: underline;
+}
+
+@media (width <= 1100px) {
+  .copy-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .copy-list-rows {
+    max-height: 320px;
+  }
+}
+
+@media (width <= 800px) {
+  .copy-onboarding {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

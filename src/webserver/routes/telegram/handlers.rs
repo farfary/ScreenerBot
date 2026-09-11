@@ -98,6 +98,8 @@ pub(super) async fn get_settings(State(_state): State<Arc<AppState>>) -> Respons
             filtering_alerts: config.notify_filtering_alerts,
             trade_alerts: config.notify_trade_alerts,
             daily_summary: config.notify_daily_summary,
+            copy_trading: config.notify_copy_trading,
+            copy_paper: config.notify_copy_paper,
         },
         commands_enabled: config.commands_enabled,
         inline_actions: config.inline_actions_enabled,
@@ -160,6 +162,12 @@ pub(super) async fn update_settings(
                 }
                 if let Some(v) = notif.daily_summary {
                     cfg.telegram.notify_daily_summary = v;
+                }
+                if let Some(v) = notif.copy_trading {
+                    cfg.telegram.notify_copy_trading = v;
+                }
+                if let Some(v) = notif.copy_paper {
+                    cfg.telegram.notify_copy_paper = v;
                 }
             }
             if let Some(commands) = req.commands_enabled {

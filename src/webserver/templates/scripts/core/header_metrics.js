@@ -1,7 +1,7 @@
 // Live metrics and effective Auto Trader state for the global dashboard header.
 import { Poller } from "./poller.js";
 import { requestManager } from "./request_manager.js";
-import { formatNumber } from "./utils.js";
+import { formatNumber, showToast } from "./utils.js";
 
 const METRICS_POLL_INTERVAL = 5000;
 
@@ -157,6 +157,56 @@ function updateSolPriceCard(sol) {
   }
 }
 
+function updateCopyCard(copy) {
+  const card = document.getElementById("copyCard");
+  const value = document.getElementById("copyCardValue");
+  const sub = document.getElementById("copyCardSub");
+  if (!card || !value || !sub) return;
+  if (!copy?.total_tasks) {
+    card.hidden = true;
+    return;
+  }
+  card.hidden = false;
+  const active = copy.live_tasks + copy.paper_tasks;
+  const running = [
+    copy.live_tasks ? `${copy.live_tasks} live` : "",
+    copy.paper_tasks ? `${copy.paper_tasks} paper` : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  value.textContent = !copy.enabled ? "Paused" : running || "Idle";
+  sub.textContent = `${active} of ${copy.total_tasks} active`;
+}
+
+// Copy notices carry a per-process sequence; the first poll only sets the
+// baseline so a reload does not replay old notices. Paper fills and exits stay
+// on the Copy Trading page and in Events; a toast is for what needs attention:
+// auto-pauses, failures and live trades.
+let copyNoticeSeq = null;
+
+function announceCopyNotices(copy) {
+  if (!copy) return;
+  const notices = copy.notices || [];
+  const newest = notices.reduce((max, notice) => Math.max(max, notice.seq), 0);
+  if (copyNoticeSeq === null || newest < copyNoticeSeq) {
+    copyNoticeSeq = newest;
+    return;
+  }
+  notices
+    .filter((notice) => notice.seq > copyNoticeSeq && (notice.warning || !notice.paper))
+    .sort((a, b) => a.seq - b.seq)
+    .slice(-3)
+    .forEach((notice) =>
+      showToast({
+        key: `copy-notice-${notice.seq}`,
+        type: notice.warning ? "warning" : "info",
+        title: `${notice.task}: ${notice.title}`,
+        message: notice.detail,
+      })
+    );
+  copyNoticeSeq = newest;
+}
+
 function updateTicker(metrics) {
   const monitoringCount = document.getElementById("tickerMonitoringCount");
   const passedCount = document.getElementById("tickerPassedCount");
@@ -226,6 +276,8 @@ export function createHeaderMetrics({ state, setAvailability }) {
         updateBotCard(metrics.trader, state);
         updateWalletCard(metrics.wallet, state);
         updateSolPriceCard(metrics.sol);
+        updateCopyCard(metrics.copy);
+        announceCopyNotices(metrics.copy);
         updateTicker(metrics);
         setAvailability(true);
         syncBotControlState();

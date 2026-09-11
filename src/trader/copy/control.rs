@@ -3,16 +3,23 @@
 //! are both transports over these functions, so a guard added here (task limit,
 //! watch attach/detach with rollback, live-delete refusal) covers every caller.
 
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use serde::Serialize;
 
 use super::{
-    apply_paper_book, build_task_stats, confirm_mode_transition, sync_open_position_management,
-    CopyActivityRow, CopyDatabase, CopyMode, CopyTask, CopyTaskInput, CopyTaskStats, PaperPosition,
+    apply_paper_book, arrival_distance_ms, build_task_stats, closed_rounds,
+    confirm_mode_transition, summarize_arrival_distances, sync_open_position_management,
+    ArrivalDistanceStats, CopyActivityRow, CopyDatabase, CopyMode, CopyPauseReason, CopyRound,
+    CopyTask, CopyTaskInput, CopyTaskStats, PaperPosition,
 };
 use crate::positions::{Position, PositionOrigin};
 use crate::trader::{Error, Result};
 use crate::wallets::watch;
+
+/// Decisions read per task for its stats, rounds and analytics.
+pub(super) const TASK_ACTIVITY_WINDOW: usize = 10_000;
+/// Points of the per-task cumulative P&L trend the task list draws.
+const PNL_TREND_POINTS: usize = 30;
 
 /// System-wide copy-trading state derived from config, safety gates and the task set.
 #[derive(Clone, Serialize)]
@@ -38,43 +45,58 @@ pub struct CopyTaskSummary {
     pub spent_sol: f64,
     pub remaining_budget_sol: f64,
     pub effective_state: &'static str,
+    /// The filter rule the task runs under after its own override.
+    pub effective_require_filter_pass: bool,
+    /// Cumulative realized P&L after each of the latest closed rounds.
+    pub pnl_trend: Vec<f64>,
+}
+
+/// Figures across every task. P&L and holdings count paused tasks too (they
+/// still hold what they bought); budget and arrival count enabled tasks only.
+#[derive(Debug, Default, Serialize)]
+pub struct CopyTotals {
+    pub realized_pnl_sol: f64,
+    pub unrealized_pnl_sol: f64,
+    pub open_holdings: usize,
+    pub unpriced_holdings: usize,
+    pub wins: usize,
+    pub losses: usize,
+    pub win_rate_pct: Option<f64>,
+    pub active_budget_sol: f64,
+    pub active_spent_sol: f64,
+    pub active_arrival: ArrivalDistanceStats,
+}
+
+impl CopyTotals {
+    /// Totals over every task summary; `active_samples` are the live-stream
+    /// arrival samples of the enabled tasks.
+    pub fn from_summaries(summaries: &[CopyTaskSummary], active_samples: Vec<u64>) -> Self {
+        let mut totals = Self::default();
+        for summary in summaries {
+            let stats = &summary.stats;
+            totals.realized_pnl_sol += stats.realized_pnl_sol;
+            totals.unrealized_pnl_sol += stats.unrealized_pnl_sol;
+            totals.open_holdings += stats.open_positions;
+            totals.unpriced_holdings += stats.unpriced_positions;
+            totals.wins += stats.wins;
+            totals.losses += stats.losses;
+            if summary.task.enabled {
+                totals.active_budget_sol += summary.task.total_budget_sol;
+                totals.active_spent_sol += summary.spent_sol;
+            }
+        }
+        let rounds = totals.wins + totals.losses;
+        totals.win_rate_pct = (rounds > 0).then(|| totals.wins as f64 / rounds as f64 * 100.0);
+        totals.active_arrival = summarize_arrival_distances(active_samples);
+        totals
+    }
 }
 
 #[derive(Serialize)]
 pub struct CopyTradingOverview {
     pub status: CopyTradingStatus,
+    pub totals: CopyTotals,
     pub tasks: Vec<CopyTaskSummary>,
-    pub activity: Vec<CopyActivityRow>,
-}
-
-/// One paper-ledger holding marked at the same price the task stats use.
-#[derive(Serialize)]
-pub struct PaperHolding {
-    pub mint: String,
-    pub open: bool,
-    pub token_amount: f64,
-    pub cost_basis_sol: f64,
-    pub invested_sol: f64,
-    pub realized_proceeds_sol: f64,
-    pub realized_pnl_sol: f64,
-    pub mark_price_sol: Option<f64>,
-    pub market_value_sol: Option<f64>,
-    pub unrealized_pnl_sol: Option<f64>,
-    pub unrealized_pnl_pct: Option<f64>,
-    pub buys: u64,
-    pub sells: u64,
-    pub opened_at: DateTime<Utc>,
-    pub closed_at: Option<DateTime<Utc>>,
-    /// Highest pool price of the open round; what arms the paper trailing stop.
-    pub peak_price_sol: Option<f64>,
-}
-
-/// Everything known about one task: its summary, paper book and recent decisions.
-#[derive(Serialize)]
-pub struct CopyTaskDetail {
-    #[serde(flatten)]
-    pub summary: CopyTaskSummary,
-    pub paper_holdings: Vec<PaperHolding>,
     pub activity: Vec<CopyActivityRow>,
 }
 
@@ -154,36 +176,60 @@ pub async fn get_task(id: i64) -> Result<CopyTask> {
 }
 
 /// Every position the stats may attribute to a live task, whatever its state.
-async fn all_positions() -> Vec<Position> {
+pub(super) async fn all_positions() -> Vec<Position> {
     let mut positions = crate::positions::get_open_positions().await;
     positions.extend(crate::positions::get_closed_positions().await);
     positions.extend(crate::positions::get_archived_positions().await);
     positions
 }
 
-/// The price a paper holding is marked at: the live pool price, else the last
-/// observed trade price.
-fn paper_mark(position: &PaperPosition) -> Option<f64> {
-    crate::pools::get_pool_price(&position.mint)
-        .map(|price| price.price_sol)
-        .or(position.last_price_sol)
+/// The price a paper holding is marked at: the live pool price only, the same
+/// price its exits trade on. Without one the holding counts as unpriced; the last
+/// observed trade price is usually its own entry and would hide the real move.
+pub(super) fn paper_mark(position: &PaperPosition) -> Option<f64> {
+    crate::pools::get_pool_price(&position.mint).map(|price| price.price_sol)
 }
 
+/// A task's stats and the closed rounds of its book, from what was already read.
 /// Decision counts and latency come from the task's activity; position and P&L
 /// figures come from the book of the mode it runs in -- its paper ledger while in
-/// paper mode, the real positions it opened while live.
+/// paper mode, the real positions it opened while live -- and wins and losses are
+/// that book's closed rounds. Every path that reports a task's stats goes through
+/// here, so no endpoint reports a partial set.
+pub fn book_stats(
+    task: &CopyTask,
+    activity: &[CopyActivityRow],
+    positions: &[Position],
+    paper_book: &[PaperPosition],
+    mark: impl Fn(&PaperPosition) -> Option<f64>,
+) -> (CopyTaskStats, Vec<CopyRound>) {
+    let mut stats = build_task_stats(task.id, activity, positions);
+    if task.mode == CopyMode::Paper {
+        apply_paper_book(&mut stats, paper_book, mark);
+    }
+    let rounds = closed_rounds(task.id, stats.book, activity, positions);
+    stats.wins = rounds.iter().filter(|round| round.pnl_sol > 0.0).count();
+    stats.losses = rounds.len() - stats.wins;
+    (stats, rounds)
+}
+
+/// The paper ledger a task's stats read; a live task's figures never come from it.
+async fn stats_book(db: &CopyDatabase, task: &CopyTask) -> Result<Vec<PaperPosition>> {
+    if task.mode == CopyMode::Paper {
+        db.paper_positions(task.id).await
+    } else {
+        Ok(Vec::new())
+    }
+}
+
 pub async fn task_stats_for(
     db: &CopyDatabase,
     task: &CopyTask,
     positions: &[Position],
 ) -> Result<CopyTaskStats> {
-    let activity = db.list_task_activity(task.id, 10_000).await?;
-    let mut stats = build_task_stats(task.id, &activity, positions);
-    if task.mode == CopyMode::Paper {
-        let book = db.paper_positions(task.id).await?;
-        apply_paper_book(&mut stats, &book, paper_mark);
-    }
-    Ok(stats)
+    let activity = db.list_task_activity(task.id, TASK_ACTIVITY_WINDOW).await?;
+    let book = stats_book(db, task).await?;
+    Ok(book_stats(task, &activity, positions, &book, paper_mark).0)
 }
 
 pub async fn task_stats(id: i64) -> Result<CopyTaskStats> {
@@ -211,21 +257,48 @@ fn effective_state(status: &CopyTradingStatus, task: &CopyTask) -> &'static str 
     }
 }
 
-async fn summarize(
-    db: &CopyDatabase,
+/// One task's summary from what was already read, with the live-stream arrival
+/// samples the overview aggregates across enabled tasks.
+pub fn summarize(
     status: &CopyTradingStatus,
     task: CopyTask,
+    activity: &[CopyActivityRow],
     positions: &[Position],
-) -> Result<CopyTaskSummary> {
-    let stats = task_stats_for(db, &task, positions).await?;
-    let spent_sol = db.task_total_spent(task.id, task.mode).await?;
-    Ok(CopyTaskSummary {
-        stats,
-        remaining_budget_sol: (task.total_budget_sol - spent_sol).max(0.0),
-        spent_sol,
-        effective_state: effective_state(status, &task),
-        task,
-    })
+    paper_book: &[PaperPosition],
+    spent_sol: f64,
+    mark: impl Fn(&PaperPosition) -> Option<f64>,
+) -> (CopyTaskSummary, Vec<u64>) {
+    let (stats, rounds) = book_stats(&task, activity, positions, paper_book, mark);
+    let mut cumulative = 0.0;
+    let mut pnl_trend = rounds
+        .iter()
+        .map(|round| {
+            cumulative += round.pnl_sol;
+            cumulative
+        })
+        .collect::<Vec<_>>();
+    pnl_trend.drain(..pnl_trend.len().saturating_sub(PNL_TREND_POINTS));
+    let samples = activity
+        .iter()
+        .filter(|row| row.task_id == task.id)
+        .filter_map(|row| row.outcome.telemetry())
+        .filter(|telemetry| !telemetry.backfill)
+        .filter_map(arrival_distance_ms)
+        .collect();
+    let global_filter =
+        crate::config::with_config(|config| config.copy_trading.require_filter_pass);
+    (
+        CopyTaskSummary {
+            stats,
+            remaining_budget_sol: (task.total_budget_sol - spent_sol).max(0.0),
+            spent_sol,
+            effective_state: effective_state(status, &task),
+            effective_require_filter_pass: task.requires_filter_pass(global_filter),
+            pnl_trend,
+            task,
+        },
+        samples,
+    )
 }
 
 pub async fn overview(activity_limit: usize) -> Result<CopyTradingOverview> {
@@ -234,65 +307,42 @@ pub async fn overview(activity_limit: usize) -> Result<CopyTradingOverview> {
     let activity = db.list_activity(activity_limit).await?;
     let positions = all_positions().await;
     let status = build_status(&tasks);
+    // Each task's reads are independent of every other task's; the pool serves
+    // them concurrently instead of one task after another on every poll.
+    let reads = futures::future::try_join_all(tasks.iter().map(|task| {
+        let db = &db;
+        async move {
+            Ok::<_, Error>((
+                db.list_task_activity(task.id, TASK_ACTIVITY_WINDOW).await?,
+                stats_book(db, task).await?,
+                db.task_total_spent(task.id, task.mode).await?,
+            ))
+        }
+    }))
+    .await?;
+    let mut active_samples = Vec::new();
     let mut summaries = Vec::with_capacity(tasks.len());
-    for task in tasks {
-        summaries.push(summarize(&db, &status, task, &positions).await?);
+    for (task, (task_activity, book, spent_sol)) in tasks.into_iter().zip(reads) {
+        let (summary, samples) = summarize(
+            &status,
+            task,
+            &task_activity,
+            &positions,
+            &book,
+            spent_sol,
+            paper_mark,
+        );
+        if summary.task.enabled {
+            active_samples.extend(samples);
+        }
+        summaries.push(summary);
     }
     Ok(CopyTradingOverview {
         status,
+        totals: CopyTotals::from_summaries(&summaries, active_samples),
         tasks: summaries,
         activity,
     })
-}
-
-pub async fn task_detail(id: i64, activity_limit: usize) -> Result<CopyTaskDetail> {
-    let db = open_database().await?;
-    let tasks = db.list_tasks().await?;
-    let status = build_status(&tasks);
-    let task = tasks
-        .into_iter()
-        .find(|task| task.id == id)
-        .ok_or(Error::CopyTaskNotFound { task_id: id })?;
-    let summary = summarize(&db, &status, task, &all_positions().await).await?;
-    let paper_holdings = db
-        .paper_positions(id)
-        .await?
-        .iter()
-        .map(paper_holding)
-        .collect();
-    let activity = db.list_task_activity(id, activity_limit).await?;
-    Ok(CopyTaskDetail {
-        summary,
-        paper_holdings,
-        activity,
-    })
-}
-
-fn paper_holding(position: &PaperPosition) -> PaperHolding {
-    let open = position.is_open();
-    let mark = if open { paper_mark(position) } else { None };
-    let market_value = mark.map(|price| position.token_amount * price);
-    let unrealized = market_value.map(|value| value - position.cost_basis_sol);
-    PaperHolding {
-        mint: position.mint.clone(),
-        open,
-        token_amount: position.token_amount,
-        cost_basis_sol: position.cost_basis_sol,
-        invested_sol: position.invested_sol,
-        realized_proceeds_sol: position.realized_proceeds_sol,
-        realized_pnl_sol: position.realized_proceeds_sol - position.realized_cost_sol,
-        mark_price_sol: mark,
-        market_value_sol: market_value,
-        unrealized_pnl_sol: unrealized,
-        unrealized_pnl_pct: unrealized
-            .filter(|_| position.cost_basis_sol > 0.0)
-            .map(|pnl| pnl / position.cost_basis_sol * 100.0),
-        buys: position.buys,
-        sells: position.sells,
-        opened_at: position.opened_at,
-        closed_at: position.closed_at,
-        peak_price_sol: position.peak_price_sol.filter(|_| open),
-    }
 }
 
 pub async fn list_activity(task_id: Option<i64>, limit: usize) -> Result<Vec<CopyActivityRow>> {
@@ -373,8 +423,11 @@ pub fn merge_task_patch(original: &CopyTask, patch: serde_json::Value) -> Result
 }
 
 /// Apply a partial update, keeping the watch source and the ownership of the
-/// task's open positions consistent with the stored task; any failure after the
-/// write rolls the task back.
+/// task's open positions consistent with the stored task. The task is written
+/// first and every watch or position change after it rolls the task back on
+/// failure, so a failed write never leaves the watch source carrying values the
+/// task does not. The target wallet is the task's identity: a different wallet
+/// is a new task (clone this one).
 pub async fn update_task(id: i64, patch: serde_json::Value) -> Result<CopyTask> {
     let db = open_database().await?;
     let original = db
@@ -384,43 +437,52 @@ pub async fn update_task(id: i64, patch: serde_json::Value) -> Result<CopyTask> 
     let mut task = merge_task_patch(&original, patch)?
         .into_task_for_update(crate::chains::active_chain(), Utc::now(), original.mode)
         .map_err(|reason| Error::CopyTaskRejected { reason })?;
+    if task.target_address != original.target_address {
+        return Err(Error::CopyValidation {
+            detail:
+                "the target wallet of a task cannot change; clone the task to copy another wallet"
+                    .to_owned(),
+        });
+    }
     task.id = id;
     task.created_at = original.created_at;
+    (task.pause_reason, task.paused_at) = if task.enabled {
+        (None, None)
+    } else if original.enabled {
+        (Some(CopyPauseReason::User), Some(Utc::now()))
+    } else {
+        (original.pause_reason.clone(), original.paused_at)
+    };
     if task.enabled && !original.enabled {
         ensure_active_slot(&db).await?;
     }
-    if task.enabled {
-        watch::add_copy_source(id, &task.target_address, task.label.as_deref())
-            .await
-            .map_err(|e| Error::CopyWatchRejected {
-                detail: e.to_string(),
-            })?;
-    }
-    let new_address = task.target_address.clone();
-    let source_was_added =
-        task.enabled && (!original.enabled || original.target_address != new_address);
-    let updated = match db.update_task(task).await {
-        Ok(updated) => updated,
-        Err(error) => {
-            if source_was_added {
-                let _ = watch::remove_copy_source(id, &new_address).await;
-            }
-            return Err(error);
+    let updated = db.update_task(task).await?;
+    if updated.enabled {
+        if let Err(error) =
+            watch::add_copy_source(id, &updated.target_address, updated.label.as_deref()).await
+        {
+            return Err(match db.update_task(original.clone()).await {
+                Ok(_) => Error::CopyWatchRejected {
+                    detail: error.to_string(),
+                },
+                Err(rollback) => Error::CopyReconciliation {
+                    detail: format!(
+                        "failed to attach the copy target ({error}) and roll back the task ({rollback})"
+                    ),
+                },
+            });
         }
-    };
-    if original.enabled && (original.target_address != updated.target_address || !updated.enabled) {
+    }
+    if original.enabled && !updated.enabled {
         if let Err(error) = watch::remove_copy_source(id, &original.target_address).await {
-            let database_rollback = db.update_task(original.clone()).await;
-            if source_was_added {
-                let _ = watch::remove_copy_source(id, &new_address).await;
-            }
+            let rollback = db.update_task(original.clone()).await;
             return Err(Error::CopyReconciliation {
-                detail: match database_rollback {
+                detail: match rollback {
                     Ok(_) => format!(
-                        "failed to detach the previous copy target; task update was rolled back: {error}"
+                        "failed to detach the copy target; task update was rolled back: {error}"
                     ),
                     Err(rollback) => format!(
-                        "failed to detach the previous copy target ({error}) and roll back the task ({rollback})"
+                        "failed to detach the copy target ({error}) and roll back the task ({rollback})"
                     ),
                 },
             });
@@ -529,6 +591,9 @@ mod tests {
             slippage_pct: 1.0,
             created_at: Utc::now(),
             updated_at: Utc::now(),
+            require_filter_pass: None,
+            pause_reason: None,
+            paused_at: None,
         }
     }
 
@@ -539,6 +604,119 @@ mod tests {
         assert_eq!(merged.label.as_deref(), Some("Kept"));
         assert_eq!(merged.exit_mode, ExitMode::Mirror);
         assert_eq!(merged.total_budget_sol, 5.0);
+    }
+
+    #[test]
+    fn the_filter_override_is_patchable_and_inherits_when_null() {
+        let merged = merge_task_patch(
+            &stored(),
+            serde_json::json!({ "require_filter_pass": false }),
+        )
+        .unwrap();
+        assert_eq!(merged.require_filter_pass, Some(false));
+        let merged = merge_task_patch(
+            &stored(),
+            serde_json::json!({ "require_filter_pass": null }),
+        )
+        .unwrap();
+        assert_eq!(merged.require_filter_pass, None);
+    }
+
+    fn paper_row(
+        id: i64,
+        mint: &str,
+        at: chrono::DateTime<Utc>,
+        sell: Option<f64>,
+    ) -> CopyActivityRow {
+        use crate::trader::copy::{
+            CopyOutcome, CopySellDecision, CopyTelemetry, PaperDecision, PaperFill, PaperSellFill,
+        };
+        let telemetry = CopyTelemetry {
+            target_block_time: Some(at.timestamp() - 1),
+            detected_at: at,
+            decoded_at: at,
+            decided_at: at,
+            submitted_at: None,
+            confirmed_at: None,
+            target_price_sol: None,
+            fill_price_sol: None,
+            backfill: false,
+        };
+        let (kind, outcome) = match sell {
+            None => (
+                "paper_filled",
+                CopyOutcome::PaperFilled(PaperDecision {
+                    task_id: 3,
+                    target_address: "target".to_owned(),
+                    signature: format!("buy-{id}"),
+                    mint: mint.to_owned(),
+                    target_size_sol: 1.0,
+                    target_token_amount: 100.0,
+                    sized_sol: 1.0,
+                    fill: PaperFill {
+                        input_sol: 1.0,
+                        market_price_sol: 0.01,
+                        fill_price_sol: 0.01,
+                        token_amount: 100.0,
+                        referral_fee_sol: 0.0,
+                        network_fee_sol: 0.0,
+                        priority_fee_sol: 0.0,
+                        total_cost_sol: 1.0,
+                    },
+                    telemetry,
+                }),
+            ),
+            Some(proceeds) => (
+                "paper_sell_observed",
+                CopyOutcome::PaperSellObserved(CopySellDecision {
+                    task_id: 3,
+                    target_address: "target".to_owned(),
+                    target_signature: format!("sell-{id}"),
+                    mint: mint.to_owned(),
+                    target_token_amount: 100.0,
+                    target_sol_amount: proceeds,
+                    exit_percentage: None,
+                    transaction_signature: None,
+                    error: None,
+                    telemetry,
+                    paper_fill: Some(PaperSellFill {
+                        token_amount: 100.0,
+                        market_price_sol: proceeds / 100.0,
+                        fill_price_sol: proceeds / 100.0,
+                        gross_sol: proceeds,
+                        referral_fee_sol: 0.0,
+                        network_fee_sol: 0.0,
+                        priority_fee_sol: 0.0,
+                        net_proceeds_sol: proceeds,
+                    }),
+                    exit_rule: None,
+                }),
+            ),
+        };
+        CopyActivityRow {
+            id,
+            task_id: 3,
+            kind: kind.to_owned(),
+            outcome,
+            created_at: at,
+        }
+    }
+
+    #[test]
+    fn book_stats_count_wins_and_losses_from_the_closed_rounds() {
+        let now = Utc::now();
+        let activity = [
+            paper_row(1, "won", now, None),
+            paper_row(2, "won", now, Some(1.4)),
+            paper_row(3, "lost", now, None),
+            paper_row(4, "lost", now, Some(0.7)),
+            paper_row(5, "open", now, None),
+        ];
+        let (stats, rounds) = book_stats(&stored(), &activity, &[], &[], |_| None);
+        assert_eq!(rounds.len(), 2);
+        assert_eq!((stats.wins, stats.losses), (1, 1));
+        assert_eq!(stats.filled_buys, 3);
+        assert_eq!(stats.target_sells, 2);
     }
 
     #[test]

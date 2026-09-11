@@ -94,6 +94,7 @@ pub fn get_promo_header_metrics() -> HeaderMetricsResponse {
                 crate::ohlcvs::sol_usd_chart::change_24h_percent().or(Some(2.3))
             },
         },
+        copy: Some(super::copy_trading::get_promo_copy_header()),
         timestamp: now.to_rfc3339(),
     }
 }

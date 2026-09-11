@@ -8,6 +8,7 @@ use std::sync::Arc;
 mod analysis;
 mod config;
 mod copy_trading;
+mod copy_trading_workspace;
 mod portfolio;
 mod system;
 mod trader;
@@ -18,6 +19,10 @@ use config::{DescribeConfigTool, GetConfigTool, UpdateConfigTool};
 use copy_trading::{
     CreateCopyTaskTool, DeleteCopyTaskTool, GetCopyActivityTool, GetCopyTaskTool,
     GetCopyTradingOverviewTool, SetCopyTaskModeTool, UpdateCopyTaskTool,
+};
+use copy_trading_workspace::{
+    CloneCopyTaskTool, CloseCopyPaperHoldingTool, GetCopyInsightsTool, GetCopyWalletProfileTool,
+    ResetCopyPaperBookTool,
 };
 use portfolio::{GetBalanceTool, GetPnLTool, GetPositionTool, GetPositionsTool};
 use system::{ClearForceStopTool, ForceStopTool, GetEventsTool, GetStatusTool};
@@ -225,6 +230,11 @@ pub fn create_tool_registry() -> ToolRegistry {
     registry.register(Arc::new(UpdateCopyTaskTool));
     registry.register(Arc::new(DeleteCopyTaskTool));
     registry.register(Arc::new(SetCopyTaskModeTool));
+    registry.register(Arc::new(GetCopyInsightsTool));
+    registry.register(Arc::new(GetCopyWalletProfileTool));
+    registry.register(Arc::new(CloneCopyTaskTool));
+    registry.register(Arc::new(ResetCopyPaperBookTool));
+    registry.register(Arc::new(CloseCopyPaperHoldingTool));
 
     registry
 }
@@ -239,7 +249,7 @@ mod tests {
         let definitions = registry.list_definitions();
 
         // Should have all registered tools
-        assert_eq!(definitions.len(), 32);
+        assert_eq!(definitions.len(), 37);
 
         // Check that we have tools in each category
         let by_category = registry.get_tools_by_category();
@@ -262,6 +272,8 @@ mod tests {
             "get_copy_trading_overview",
             "get_copy_task",
             "get_copy_activity",
+            "get_copy_insights",
+            "get_copy_wallet_profile",
             "get_trader_status",
             "get_trader_stats",
             "list_trader_templates",
@@ -285,7 +297,7 @@ mod tests {
         // Should be an array
         assert!(schema.is_array());
         let tools = schema.as_array().unwrap();
-        assert_eq!(tools.len(), 32);
+        assert_eq!(tools.len(), 37);
 
         // Check format
         let first_tool = &tools[0];
@@ -315,11 +327,14 @@ mod tests {
                 "apply_trader_template",
                 "buy_token",
                 "clear_force_stop",
+                "clone_copy_task",
+                "close_copy_paper_holding",
                 "close_position",
                 "create_copy_task",
                 "delete_copy_task",
                 "force_stop",
                 "manage_loss_limit",
+                "reset_copy_paper_book",
                 "sell_token",
                 "set_copy_task_mode",
                 "set_trader_enabled",

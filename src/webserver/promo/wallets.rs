@@ -124,11 +124,11 @@ pub fn get_promo_wallets(include_inactive: bool) -> Vec<Wallet> {
 /// One watch target: (id, label, address, copy task id, enabled, age days,
 /// last-activity minutes, last signature).
 ///
-/// The first three addresses are exactly the wallets the Copy Trading fixture
-/// copies, carrying the matching `WatchSource::Copy` — a copy task consumes its
-/// target's activity through this list, so a Watched tab that did not contain them
-/// would contradict the Auto Trader tab. The fourth is alert-only, which is what
-/// makes the two source kinds visible side by side.
+/// The first three are exactly the wallets the Copy Trading fixture copies
+/// (`PROMO_COPY_WALLETS`), carrying the matching `WatchSource::Copy` — a copy task
+/// consumes its target's activity through this list, so a Watched tab that did
+/// not contain them would contradict the Copy Trading page. The fourth is
+/// alert-only, which is what makes the two source kinds visible side by side.
 type PromoTarget = (
     i64,
     &'static str,
@@ -142,32 +142,32 @@ type PromoTarget = (
 
 const PROMO_TARGETS: &[PromoTarget] = &[
     (
-        1,
-        "Whale · early rotations",
-        "GDfnEsia2WLAW5t8yx2X5j2mkfA74i5kY9dGZZ2q5wG7",
-        Some(1),
+        PROMO_COPY_WALLETS[0].0,
+        PROMO_COPY_WALLETS[0].1,
+        PROMO_COPY_WALLETS[0].2,
+        Some(PROMO_COPY_WALLETS[0].0),
         true,
-        11,
+        PROMO_COPY_WALLETS[0].3,
         Some(4),
         Some("4vJ9JU1bJJE96FbKdjWTnPjPCLu3B1Kt3Zi9Cf8mLpKzKxWQXsAoUqRnMH4kSXtGDb1kZ3aQGvSbXbNQAaCu7T2m"),
     ),
     (
-        2,
-        "Launch sniper",
-        "5tzFkiKscXHK5ZXCGbXZxdw7gTjjD1mBwuoFbhUvuAi9",
-        Some(2),
+        PROMO_COPY_WALLETS[1].0,
+        PROMO_COPY_WALLETS[1].1,
+        PROMO_COPY_WALLETS[1].2,
+        Some(PROMO_COPY_WALLETS[1].0),
         true,
-        9,
+        PROMO_COPY_WALLETS[1].3,
         Some(17),
         Some("2sBqQ4rE1WjKPBd8Nz6nAmVhX7uFyTgLcR3JdWvKp9SxHnQaZmU5oYt6DcEbLfGiRw8PkVnT1MzXyAbCdEfGh3Jk"),
     ),
     (
-        3,
-        "Momentum desk",
-        "3nMFwZXwY1s1M5s8vYAHqd4wGs4iSxXE4LRoUMMYqEgF",
-        Some(3),
+        PROMO_COPY_WALLETS[2].0,
+        PROMO_COPY_WALLETS[2].1,
+        PROMO_COPY_WALLETS[2].2,
+        Some(PROMO_COPY_WALLETS[2].0),
         true,
-        21,
+        PROMO_COPY_WALLETS[2].3,
         Some(38),
         Some("5hKpTnQ2XcVbNm8RwEyUiOpAsDfGhJkLzXcVbNm4QwErTyUiOpAsDfGhJkL7ZxCvBnM2QwErTyUiOpAsDfGh6JkL"),
     ),
@@ -182,6 +182,8 @@ const PROMO_TARGETS: &[PromoTarget] = &[
         None,
     ),
 ];
+
+use super::copy_trading::PROMO_COPY_WALLETS;
 
 fn target(entry: &PromoTarget) -> WatchTarget {
     let (id, label, address, copy_task, enabled, age_days, ..) = *entry;

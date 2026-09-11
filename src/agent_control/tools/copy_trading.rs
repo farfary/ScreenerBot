@@ -8,6 +8,7 @@ use serde_json::json;
 
 use super::{Tool, ToolCategory, ToolDefinition, ToolResult};
 use crate::config::with_config;
+use crate::trader::copy::workspace::{self, ActivityFilter};
 use crate::trader::copy::{
     control, CopyMode, CopyTaskInput, ExitMode, SizingMode, LIVE_ARM_CONFIRMATION,
 };
@@ -75,7 +76,8 @@ fn task_field_schema() -> serde_json::Value {
         "min_target_trade_sol": { "type": ["number", "null"], "description": "Ignore target buys smaller than this (filters noise)" },
         "max_target_trade_sol": { "type": ["number", "null"], "description": "Ignore target buys larger than this" },
         "buy_once_per_token": { "type": "boolean", "description": "Copy only the first buy of each token" },
-        "slippage_pct": { "type": "number", "description": "Slippage for copied trades in percent" }
+        "slippage_pct": { "type": "number", "description": "Slippage for copied trades in percent" },
+        "require_filter_pass": { "type": ["boolean", "null"], "description": "Per-task override of copy_trading.require_filter_pass (only copy tokens the filtering pipeline passed); null inherits the global setting" }
     })
 }
 
@@ -136,8 +138,6 @@ pub struct GetCopyTaskTool;
 #[derive(Deserialize)]
 struct TaskParams {
     task_id: i64,
-    #[serde(default = "default_activity")]
-    activity_limit: usize,
 }
 
 #[async_trait]
@@ -145,17 +145,17 @@ impl Tool for GetCopyTaskTool {
     fn definition(&self) -> ToolDefinition {
         ToolDefinition {
             name: "get_copy_task".to_owned(),
-            description: "One copy task in depth: full settings, stats, budget use, every paper \
-                          holding marked at the live pool price (value, unrealized and realized \
-                          P&L in SOL and percent) and its recent copy decisions, including why \
-                          trades were skipped."
+            description: "One copy task in depth: full settings, stats (fills, target sells vs \
+                          policy exits, wins/losses), budget use, pause reason, the effective \
+                          exit rules next to the inherited Trader defaults, every paper holding \
+                          marked at the live pool price with entry, peak and the prices its exit \
+                          rules act at, the live-readiness checklist and the 20 newest decisions."
                 .to_owned(),
             category: ToolCategory::Portfolio,
             parameters: json!({
                 "type": "object",
                 "properties": {
-                    "task_id": { "type": "integer" },
-                    "activity_limit": { "type": "integer", "minimum": 1, "maximum": 1000, "description": "Recent decisions to include (default 20)" }
+                    "task_id": { "type": "integer" }
                 },
                 "required": ["task_id"]
             }),
@@ -169,7 +169,7 @@ impl Tool for GetCopyTaskTool {
             Ok(p) => p,
             Err(e) => return e,
         };
-        respond(control::task_detail(params.task_id, params.activity_limit.clamp(1, 1_000)).await)
+        respond(workspace::task_workspace(params.task_id).await)
     }
 }
 
@@ -183,12 +183,8 @@ pub struct GetCopyActivityTool;
 struct ActivityParams {
     #[serde(default)]
     task_id: Option<i64>,
-    #[serde(default = "default_activity_page")]
-    limit: usize,
-}
-
-fn default_activity_page() -> usize {
-    50
+    #[serde(flatten)]
+    filter: ActivityFilter,
 }
 
 #[async_trait]
@@ -199,14 +195,18 @@ impl Tool for GetCopyActivityTool {
             description:
                 "Copy decisions newest first: each observed target trade with the \
                           outcome (paper fill, live submit, or the typed skip reason such as \
-                          budget_exhausted, already_bought, target_below_minimum, filter_required)."
+                          budget_exhausted, already_bought, target_below_minimum, filter_required). \
+                          Pages with `before` = the returned next_before."
                     .to_owned(),
             category: ToolCategory::Portfolio,
             parameters: json!({
                 "type": "object",
                 "properties": {
                     "task_id": { "type": "integer", "description": "Only this task (default: all tasks)" },
-                    "limit": { "type": "integer", "minimum": 1, "maximum": 1000, "description": "Rows to return (default 50)" }
+                    "filter": { "type": "string", "enum": ["all", "fills", "exits", "skips", "errors"], "description": "Decision category (default all)" },
+                    "mint": { "type": "string", "description": "Only decisions on this token" },
+                    "before": { "type": "integer", "description": "Page cursor: rows older than this activity id" },
+                    "limit": { "type": "integer", "minimum": 1, "maximum": 500, "description": "Rows to return (default 50)" }
                 },
                 "required": []
             }),
@@ -220,11 +220,7 @@ impl Tool for GetCopyActivityTool {
             Ok(p) => p,
             Err(e) => return e,
         };
-        respond(
-            control::list_activity(params.task_id, params.limit.clamp(1, 1_000))
-                .await
-                .map(|activity| json!({ "count": activity.len(), "activity": activity })),
-        )
+        respond(workspace::activity_page(params.task_id, params.filter).await)
     }
 }
 
@@ -259,6 +255,8 @@ struct CreateParams {
     buy_once_per_token: bool,
     #[serde(default)]
     slippage_pct: Option<f64>,
+    #[serde(default)]
+    require_filter_pass: Option<bool>,
 }
 
 fn enabled_default() -> bool {
@@ -314,6 +312,7 @@ impl Tool for CreateCopyTaskTool {
             slippage_pct: p
                 .slippage_pct
                 .unwrap_or_else(|| with_config(|cfg| cfg.copy_trading.default_slippage_pct)),
+            require_filter_pass: p.require_filter_pass,
         };
         respond(
             control::create_task(input)
@@ -339,7 +338,8 @@ impl Tool for UpdateCopyTaskTool {
             description: format!(
                 "Change any fields of a copy task (only the fields given change; set \
                  enabled=false to pause, true to resume). exit_policy_overrides replaces the \
-                 whole override object. Mode is changed only by set_copy_task_mode. \
+                 whole override object. Mode is changed only by set_copy_task_mode; the \
+                 target wallet cannot change (clone_copy_task copies another wallet). \
                  {EXIT_SEMANTICS}"
             ),
             category: ToolCategory::Trading,

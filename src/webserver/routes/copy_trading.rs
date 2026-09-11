@@ -5,16 +5,27 @@ use axum::{
     extract::{Path, Query},
     http::StatusCode,
     response::Response,
-    routing::get,
+    routing::{get, post},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use crate::errors::ErrorClass;
+use crate::trader::copy::workspace::{self, ActivityFilter, CloneRequest, RangeQuery};
 use crate::trader::copy::{control, CopyMode, CopySkip, CopyTask, CopyTaskInput};
+use crate::webserver::promo;
 use crate::webserver::state::AppState;
 use crate::webserver::utils::{error_response, success_response};
+
+/// Decisions the overview carries.
+const OVERVIEW_ACTIVITY: usize = 50;
+
+/// Every read answers from the promotional fixtures during owner-initiated media
+/// capture, so no page of a capture shows the operator's own copy tasks.
+fn fixtures() -> bool {
+    promo::are_promo_fixtures_enabled()
+}
 
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
@@ -25,8 +36,17 @@ pub fn routes() -> Router<Arc<AppState>> {
             "/tasks/:id",
             get(get_task).patch(update_task).delete(delete_task),
         )
-        .route("/tasks/:id/mode", axum::routing::post(set_task_mode))
+        .route("/tasks/:id/mode", post(set_task_mode))
         .route("/tasks/:id/stats", get(task_stats))
+        .route("/tasks/:id/workspace", get(task_workspace))
+        .route("/tasks/:id/activity", get(task_activity))
+        .route("/tasks/:id/insights", get(task_insights))
+        .route("/tasks/:id/clone", post(clone_task))
+        .route("/tasks/:id/reset", post(reset_paper_book))
+        .route("/tasks/:id/holdings/:mint/close", post(close_holding))
+        .route("/insights", get(compare_tasks))
+        .route("/defaults", get(defaults))
+        .route("/wallets/:address", get(wallet_profile))
         .route("/activity", get(list_activity))
 }
 
@@ -57,27 +77,35 @@ fn default_limit() -> usize {
 }
 
 async fn status() -> Response {
+    if fixtures() {
+        return success_response(promo::get_promo_copy_status());
+    }
     respond(control::status().await)
 }
 
 async fn overview() -> Response {
-    // Return promotional fixtures only for owner-initiated media capture.
-    if crate::webserver::promo::are_promo_fixtures_enabled() {
-        return success_response(crate::webserver::promo::get_promo_copy_trading_overview());
+    if fixtures() {
+        return success_response(promo::get_promo_copy_trading_overview(OVERVIEW_ACTIVITY));
     }
-    respond(control::overview(50).await)
+    respond(control::overview(OVERVIEW_ACTIVITY).await)
 }
 
 async fn list_tasks() -> Response {
+    if fixtures() {
+        return success_response(TaskList {
+            tasks: promo::get_promo_copy_tasks(),
+        });
+    }
     respond(control::list_tasks().await.map(|tasks| TaskList { tasks }))
 }
 
 async fn get_task(Path(id): Path<i64>) -> Response {
-    respond(
-        control::get_task(id)
-            .await
-            .map(|task| TaskResponse { task }),
-    )
+    let task = if fixtures() {
+        promo::get_promo_copy_task(id)
+    } else {
+        control::get_task(id).await
+    };
+    respond(task.map(|task| TaskResponse { task }))
 }
 
 async fn create_task(Json(input): Json<CopyTaskInput>) -> Response {
@@ -113,15 +141,77 @@ async fn set_task_mode(Path(id): Path<i64>, Json(request): Json<ModeRequest>) ->
 }
 
 async fn list_activity(Query(query): Query<ActivityQuery>) -> Response {
-    respond(
-        control::list_activity(None, query.limit)
-            .await
-            .map(|activity| serde_json::json!({ "activity": activity })),
-    )
+    let activity = if fixtures() {
+        Ok(promo::get_promo_copy_recent_activity(query.limit))
+    } else {
+        control::list_activity(None, query.limit).await
+    };
+    respond(activity.map(|activity| serde_json::json!({ "activity": activity })))
 }
 
 async fn task_stats(Path(id): Path<i64>) -> Response {
+    if fixtures() {
+        return respond(promo::get_promo_copy_task_stats(id));
+    }
     respond(control::task_stats(id).await)
+}
+
+async fn task_workspace(Path(id): Path<i64>) -> Response {
+    if fixtures() {
+        return respond(promo::get_promo_copy_workspace(id));
+    }
+    respond(workspace::task_workspace(id).await)
+}
+
+async fn task_activity(Path(id): Path<i64>, Query(filter): Query<ActivityFilter>) -> Response {
+    if fixtures() {
+        return respond(promo::get_promo_copy_activity(Some(id), filter));
+    }
+    respond(workspace::activity_page(Some(id), filter).await)
+}
+
+async fn task_insights(Path(id): Path<i64>, Query(range): Query<RangeQuery>) -> Response {
+    if fixtures() {
+        return respond(promo::get_promo_copy_insights(id, range.into()));
+    }
+    respond(workspace::task_insights(id, range.into()).await)
+}
+
+async fn compare_tasks(Query(range): Query<RangeQuery>) -> Response {
+    let tasks = if fixtures() {
+        Ok(promo::get_promo_copy_comparison(range.into()))
+    } else {
+        workspace::compare_tasks(range.into()).await
+    };
+    respond(tasks.map(|tasks| serde_json::json!({ "tasks": tasks })))
+}
+
+async fn clone_task(Path(id): Path<i64>, body: Option<Json<CloneRequest>>) -> Response {
+    let request = body.map(|Json(request)| request).unwrap_or_default();
+    respond(
+        workspace::clone_task(id, request)
+            .await
+            .map(|task| TaskResponse { task }),
+    )
+}
+
+async fn reset_paper_book(Path(id): Path<i64>) -> Response {
+    respond(workspace::reset_paper_book(id).await)
+}
+
+async fn close_holding(Path((id, mint)): Path<(i64, String)>) -> Response {
+    respond(workspace::close_paper_holding(id, &mint).await)
+}
+
+async fn defaults() -> Response {
+    success_response(workspace::defaults())
+}
+
+async fn wallet_profile(Path(address): Path<String>) -> Response {
+    if fixtures() {
+        return respond(promo::get_promo_copy_wallet_profile(&address));
+    }
+    respond(workspace::wallet_profile(&address).await)
 }
 
 fn respond<T: Serialize>(result: crate::trader::Result<T>) -> Response {
@@ -135,15 +225,15 @@ fn copy_error(error: &crate::trader::Error) -> Response {
     use crate::trader::Error;
     let (code, message) = match error {
         Error::CopyTaskNotFound { .. } => ("NOT_FOUND", "Copy task not found"),
+        Error::CopyHoldingNotFound { .. } => ("NOT_FOUND", "No open paper holding in this token"),
         Error::CopyTaskRejected {
             reason: CopySkip::LiveConfirmationRequired,
         } => (
             "LIVE_CONFIRMATION_REQUIRED",
             "Arming live copy trading requires explicit confirmation",
         ),
-        Error::CopyTaskRejected { .. } | Error::CopyValidation { .. } => {
-            ("INVALID_TASK", "Invalid copy task")
-        }
+        Error::CopyTaskRejected { .. } => ("INVALID_TASK", "Invalid copy task"),
+        Error::CopyValidation { .. } => ("INVALID_REQUEST", "Copy trading request rejected"),
         Error::CopyTaskLimit { .. } => ("TASK_LIMIT", "Maximum active copy tasks reached"),
         Error::CopyWatchRejected { .. } => ("WATCH_REJECTED", "Copy target could not be watched"),
         Error::CopyLiveUnavailable { .. } => {

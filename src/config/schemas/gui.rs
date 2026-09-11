@@ -186,6 +186,13 @@ pub fn default_tabs() -> Vec<TabConfig> {
             enabled: true,
         },
         TabConfig {
+            id: "copy".into(),
+            label: "Copy Trading".into(),
+            icon: "icon-copy".into(),
+            order: 6,
+            enabled: true,
+        },
+        TabConfig {
             id: "wallets".into(),
             label: "Wallets".into(),
             icon: "icon-wallet".into(),
@@ -272,23 +279,25 @@ pub fn ensure_all_tabs_present(mut tabs: Vec<TabConfig>) -> Vec<TabConfig> {
         }
     }
 
-    // Find max order to add new tabs after existing ones
-    let max_order = tabs.iter().map(|t| t.order).max().unwrap_or_default();
-    let mut next_order = max_order + 1;
-
-    // Add any missing tabs from defaults
-    for default_tab in defaults {
-        let exists = tabs.iter().any(|t| t.id == default_tab.id);
-        if !exists {
-            let mut new_tab = default_tab;
-            new_tab.order = next_order;
-            next_order += 1;
-            tabs.push(new_tab);
+    // A tab the saved layout lacks goes right after its nearest default predecessor
+    // the layout does have, so a saved layout gains it where a fresh install shows it
+    // (Copy Trading beside Auto Trader) rather than after every other tab.
+    tabs.sort_by_key(|t| t.order);
+    for (index, default_tab) in defaults.iter().enumerate() {
+        if tabs.iter().any(|t| t.id == default_tab.id) {
+            continue;
         }
+        let position = defaults[..index]
+            .iter()
+            .rev()
+            .find_map(|previous| tabs.iter().position(|t| t.id == previous.id))
+            .map_or(0, |found| found + 1);
+        tabs.insert(position, default_tab.clone());
     }
 
-    // Sort by order
-    tabs.sort_by_key(|t| t.order);
+    for (order, tab) in tabs.iter_mut().enumerate() {
+        tab.order = order as u32;
+    }
 
     tabs
 }
@@ -329,6 +338,56 @@ mod tests {
             1,
             "exactly one assistant tab"
         );
+    }
+
+    #[test]
+    fn a_missing_default_tab_lands_after_its_default_predecessor() {
+        // A layout saved before Copy Trading existed, with the user's own order
+        // (Wallets moved ahead of Tokens) and a disabled tab.
+        let saved = [
+            "home",
+            "assistant",
+            "positions",
+            "wallets",
+            "tokens",
+            "filtering",
+            "trader",
+            "transactions",
+            "tools",
+            "services",
+            "events",
+            "config",
+        ];
+        let merged = ensure_all_tabs_present(
+            saved
+                .iter()
+                .enumerate()
+                .map(|(order, id)| tab(id, order as u32, *id != "tools"))
+                .collect(),
+        );
+        let ids: Vec<&str> = merged.iter().map(|t| t.id.as_str()).collect();
+        assert_eq!(
+            ids,
+            [
+                "home",
+                "assistant",
+                "positions",
+                "wallets",
+                "tokens",
+                "filtering",
+                "trader",
+                "copy",
+                "transactions",
+                "tools",
+                "services",
+                "events",
+                "config",
+            ]
+        );
+        let orders: Vec<u32> = merged.iter().map(|t| t.order).collect();
+        assert_eq!(orders, (0..13).collect::<Vec<u32>>());
+        assert!(!merged.iter().find(|t| t.id == "tools").unwrap().enabled);
+        assert!(merged.iter().find(|t| t.id == "copy").unwrap().enabled);
     }
 
     #[test]

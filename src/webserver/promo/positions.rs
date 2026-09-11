@@ -4,7 +4,8 @@ use chrono::{Duration, Utc};
 
 use crate::webserver::routes::positions::types::{PositionResponse, PositionsStatsResponse};
 
-use super::aggregates::{self, closed_exit_offset_hours};
+use super::aggregates::{self, closed_exit_offset_hours, closed_hold_minutes};
+use super::copy_trading::position_owner;
 use super::data::*;
 
 /// Generate promo positions list (open, closed, archived, or the working set).
@@ -25,6 +26,7 @@ pub fn get_promo_positions(status: Option<&str>) -> Vec<PositionResponse> {
             let entry_time = now - Duration::minutes(*hold_min);
             let pnl_pct = (current - entry) / entry * 100.0;
             let unrealized_pnl = (current - entry) / entry * size;
+            let (origin, management) = position_owner(mint);
 
             positions.push(PositionResponse {
                 id: Some(id_counter),
@@ -72,8 +74,8 @@ pub fn get_promo_positions(status: Option<&str>) -> Vec<PositionResponse> {
                 token_decimals: Some(9),
                 archived: false,
                 archived_at: None,
-                origin: crate::positions::PositionOrigin::Auto { strategy_id: None },
-                management: crate::positions::PositionManagement::AutoTrader,
+                origin,
+                management,
                 round_key: None,
                 basis_complete: true,
                 history_complete: true,
@@ -90,7 +92,8 @@ pub fn get_promo_positions(status: Option<&str>) -> Vec<PositionResponse> {
             // Exit schedule + hold time MUST match aggregates so the list, the period
             // stats and the calendar all reconcile.
             let exit_time = now - Duration::hours(closed_exit_offset_hours(i));
-            let hold_minutes = 90 + (i as i64 % 6) * 45;
+            let hold_minutes = closed_hold_minutes(i);
+            let (origin, management) = position_owner(mint);
             let entry_time = exit_time - Duration::minutes(hold_minutes);
             let pnl = (exit - entry) / entry * size;
             let pnl_pct = (exit - entry) / entry * 100.0;
@@ -141,8 +144,8 @@ pub fn get_promo_positions(status: Option<&str>) -> Vec<PositionResponse> {
                 token_decimals: Some(9),
                 archived: false,
                 archived_at: None,
-                origin: crate::positions::PositionOrigin::Auto { strategy_id: None },
-                management: crate::positions::PositionManagement::AutoTrader,
+                origin,
+                management,
                 round_key: None,
                 basis_complete: true,
                 history_complete: true,

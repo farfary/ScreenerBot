@@ -1,0 +1,220 @@
+/* Copy Trading inline SVG charts: P&L curve, comparison curves, bar lists,
+   the arrival histogram and the series palette. No glow, no fills behind lines. */
+
+/* A chart frame: value labels | stretched plot, time labels under the plot. */
+.copy-chart {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: 180px auto;
+  gap: 4px var(--spacing-sm);
+  margin: 0;
+}
+
+.copy-chart--tall {
+  grid-template-rows: 220px auto;
+}
+
+.copy-chart-y,
+.copy-chart-x {
+  font-family: var(--font-data);
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.copy-chart-y {
+  position: relative;
+  min-width: 7ch;
+}
+
+.copy-chart-y span {
+  position: absolute;
+  right: 0;
+  transform: translateY(-50%);
+}
+
+.copy-chart-plot {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.copy-chart-plot line,
+.copy-chart-plot polyline {
+  vector-effect: non-scaling-stroke;
+}
+
+.copy-chart-x {
+  display: flex;
+  grid-column: 2;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+}
+
+.copy-curve-line {
+  fill: none;
+  stroke-width: 2;
+}
+
+.copy-curve-line.is-positive {
+  stroke: var(--success-color);
+}
+
+.copy-curve-line.is-negative {
+  stroke: var(--error-color);
+}
+
+.copy-chart-empty {
+  padding: var(--spacing-lg);
+  font-size: var(--font-size-sm);
+  text-align: center;
+  color: var(--text-muted);
+}
+
+/* One column set for the whole list, so every track starts at the same x. */
+.copy-bars {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(60px, 1fr) auto;
+  gap: var(--spacing-xs) var(--spacing-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.copy-bar {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: center;
+  font-size: var(--font-size-sm);
+}
+
+.copy-bar-label {
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+}
+
+.copy-bar-track {
+  height: 6px;
+  border-radius: var(--radius-xs);
+  background: var(--bg-tertiary);
+  overflow: hidden;
+}
+
+.copy-bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--primary-color);
+}
+
+.copy-bar-fill.is-positive {
+  background: var(--success-color);
+}
+
+.copy-bar-fill.is-negative {
+  background: var(--error-color);
+}
+
+.copy-bar-value {
+  font-family: var(--font-data);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+}
+
+.copy-histogram {
+  display: flex;
+  align-items: stretch;
+  gap: var(--spacing-sm);
+  height: 150px;
+}
+
+.copy-histogram-col {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.copy-histogram-bar {
+  display: flex;
+  flex: 1;
+  align-items: flex-end;
+  width: 100%;
+}
+
+.copy-histogram-bar > span {
+  display: block;
+  width: 100%;
+  border-radius: var(--radius-xs) var(--radius-xs) 0 0;
+  background: var(--primary-color);
+}
+
+.copy-histogram-bar > span.is-late {
+  background: var(--warning-color);
+}
+
+.copy-histogram-count {
+  font-family: var(--font-data);
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+}
+
+.copy-histogram-label {
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.copy-series-0 {
+  --copy-series: var(--primary-color);
+}
+
+.copy-series-1 {
+  --copy-series: var(--success-color);
+}
+
+.copy-series-2 {
+  --copy-series: var(--warning-color);
+}
+
+.copy-series-3 {
+  --copy-series: var(--info-color);
+}
+
+.copy-series-4 {
+  --copy-series: var(--error-color);
+}
+
+.copy-series-5 {
+  --copy-series: var(--text-secondary);
+}
+
+.copy-compare-line {
+  fill: none;
+  stroke: var(--copy-series);
+  stroke-width: 2;
+}
+
+.copy-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-xs) var(--spacing-md);
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+}
+
+.copy-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.copy-legend-swatch {
+  display: inline-block;
+  width: 14px;
+  height: 2px;
+  background: var(--copy-series);
+}

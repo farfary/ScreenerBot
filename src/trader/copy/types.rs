@@ -42,6 +42,16 @@ pub enum ExitMode {
     Hybrid,
 }
 
+/// Why a task stopped copying, stored with the pause so the task list can tell
+/// a user pause from a guard that stood the task down.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum CopyPauseReason {
+    User,
+    LatencyKillSwitch { average_ms: u64, threshold_ms: u64 },
+    WatchDetached,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CopyTask {
     pub id: i64,
@@ -62,6 +72,19 @@ pub struct CopyTask {
     pub slippage_pct: f64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    /// Per-task override of `copy_trading.require_filter_pass`; `None` inherits.
+    #[serde(default)]
+    pub require_filter_pass: Option<bool>,
+    #[serde(default)]
+    pub pause_reason: Option<CopyPauseReason>,
+    #[serde(default)]
+    pub paused_at: Option<DateTime<Utc>>,
+}
+
+impl CopyTask {
+    pub fn requires_filter_pass(&self, global: bool) -> bool {
+        self.require_filter_pass.unwrap_or(global)
+    }
 }
 
 /// API/repository creation input. Server-assigned identity and timestamps cannot be
@@ -83,6 +106,8 @@ pub struct CopyTaskInput {
     pub max_target_trade_sol: Option<f64>,
     pub buy_once_per_token: bool,
     pub slippage_pct: f64,
+    #[serde(default)]
+    pub require_filter_pass: Option<bool>,
 }
 
 impl CopyTaskInput {
@@ -176,6 +201,9 @@ impl CopyTaskInput {
             slippage_pct: self.slippage_pct,
             created_at: now,
             updated_at: now,
+            require_filter_pass: self.require_filter_pass,
+            pause_reason: (!self.enabled).then_some(CopyPauseReason::User),
+            paused_at: (!self.enabled).then_some(now),
         })
     }
 }
@@ -199,6 +227,7 @@ impl From<&CopyTask> for CopyTaskInput {
             max_target_trade_sol: task.max_target_trade_sol,
             buy_once_per_token: task.buy_once_per_token,
             slippage_pct: task.slippage_pct,
+            require_filter_pass: task.require_filter_pass,
         }
     }
 }
@@ -421,6 +450,8 @@ pub enum PaperExitRule {
     TrailingStop,
     TakeProfit,
     TimeOverride,
+    /// Closed by hand from the dashboard or an agent tool.
+    Manual,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -506,7 +537,15 @@ pub struct CopyTaskStats {
     pub task_id: i64,
     pub decisions: usize,
     pub filled_buys: usize,
-    pub observed_sells: usize,
+    /// Sells mirrored from the target wallet.
+    pub target_sells: usize,
+    /// Paper sells made by the task's own exit policy.
+    pub policy_exits: usize,
+    /// Paper holdings closed by hand.
+    pub manual_closes: usize,
+    /// Closed rounds with a positive / non-positive realized result.
+    pub wins: usize,
+    pub losses: usize,
     pub skipped: usize,
     pub submitted: usize,
     pub failed: usize,

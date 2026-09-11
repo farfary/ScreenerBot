@@ -34,6 +34,9 @@ fn observed_buy_matches_sizes_and_produces_costed_paper_fill_with_telemetry() {
         slippage_pct: 1.0,
         created_at: detected,
         updated_at: detected,
+        require_filter_pass: None,
+        pause_reason: None,
+        paused_at: None,
     };
     let activity = WalletActivity {
         subject: "target".to_owned(),

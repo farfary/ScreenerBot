@@ -28,6 +28,9 @@ fn task(sizing: SizingMode) -> CopyTask {
         slippage_pct: 1.0,
         created_at: Utc::now(),
         updated_at: Utc::now(),
+        require_filter_pass: None,
+        pause_reason: None,
+        paused_at: None,
     }
 }
 
@@ -202,6 +205,7 @@ fn task_input_rejects_invalid_mode_sizing_ranges_and_slippage() {
         max_target_trade_sol: None,
         buy_once_per_token: true,
         slippage_pct: 1.0,
+        require_filter_pass: None,
     };
 
     assert_eq!(

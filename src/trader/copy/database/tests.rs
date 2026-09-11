@@ -23,6 +23,9 @@ fn task() -> CopyTask {
         slippage_pct: 1.0,
         created_at: Utc::now(),
         updated_at: Utc::now(),
+        require_filter_pass: None,
+        pause_reason: None,
+        paused_at: None,
     }
 }
 

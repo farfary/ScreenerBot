@@ -1,0 +1,269 @@
+<div class="copy-page" id="copy-page">
+  <header class="copy-strip">
+    <div class="copy-strip-title">
+      <h1><i class="icon-copy"></i>Copy Trading</h1>
+      <span class="copy-strip-feature" id="copy-feature-label" hidden>Beta</span>
+      <span class="copy-strip-state" id="copy-system-state" aria-live="polite">Loading</span>
+    </div>
+    <div class="copy-strip-actions">
+      <button class="btn btn-outline btn-sm" id="copy-global-action" type="button" disabled>
+        Pause all
+      </button>
+      <button class="btn btn-ghost btn-sm" id="copy-settings-open" type="button">
+        <i class="icon-settings"></i> Settings
+      </button>
+      <button class="btn btn-primary btn-sm" id="copy-add" type="button">
+        <i class="icon-plus"></i> Add wallet
+      </button>
+    </div>
+  </header>
+
+  <div class="copy-load-error" id="copy-load-error" role="alert" hidden></div>
+
+  <section class="copy-onboarding" id="copy-onboarding" hidden>
+    <div class="copy-onboarding-copy">
+      <h2>Copy the wallets you trust, prove them in Paper first</h2>
+      <p>
+        Every task starts in Paper: target trades are simulated at the pool price with your slippage
+        and fees, and your exit rules run on the paper book. Arm Live per wallet once its paper
+        results earn it.
+      </p>
+      <button class="btn btn-primary" id="copy-onboarding-add" type="button">
+        <i class="icon-plus"></i> Add your first wallet
+      </button>
+    </div>
+    <ol class="copy-onboarding-steps">
+      <li><strong>Observe</strong><span>Detect the wallet's swaps without spending SOL.</span></li>
+      <li>
+        <strong>Evaluate</strong
+        ><span>Read paper P&amp;L, win rate, skips, detection speed and slippage.</span>
+      </li>
+      <li><strong>Arm</strong><span>Pass the readiness checks, then enable real swaps.</span></li>
+    </ol>
+  </section>
+
+  <div class="copy-main" id="copy-main" hidden>
+    <section class="copy-figures" id="copy-figures" aria-label="Copy trading totals"></section>
+    <div class="copy-body">
+      <aside class="copy-list" aria-label="Copied wallets">
+        <div class="copy-list-head">
+          <div class="copy-list-title">
+            <h2>Wallets</h2>
+            <span id="copy-list-count">—</span>
+          </div>
+          <button class="btn btn-ghost btn-sm" id="copy-compare-open" type="button">
+            <i class="icon-chart-bar"></i> Compare
+          </button>
+        </div>
+        <div class="copy-list-sort" id="copy-list-sort"></div>
+        <div class="copy-list-rows" id="copy-list-rows"></div>
+      </aside>
+      <main class="copy-workspace" id="copy-workspace"></main>
+      <section class="copy-compare" id="copy-compare" aria-label="Compare wallets" hidden></section>
+    </div>
+  </div>
+
+  <div class="modal-overlay hidden copy-dialog" id="copy-editor">
+    <div
+      class="modal-dialog copy-editor-panel"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="copy-editor-title"
+    >
+      <div class="modal-header">
+        <div class="copy-dialog-title">
+          <h2 id="copy-editor-title">Add wallet</h2>
+          <span id="copy-editor-sub">New tasks start in Paper</span>
+        </div>
+        <button class="modal-close" type="button" data-dialog-close aria-label="Close">
+          <i class="icon-x"></i>
+        </button>
+      </div>
+      <ol class="copy-steps" id="copy-editor-steps"></ol>
+      <div class="modal-body copy-editor-body" id="copy-editor-body"></div>
+      <div class="copy-dialog-footer">
+        <small class="copy-dialog-error" id="copy-editor-error" aria-live="polite"></small>
+        <button class="btn btn-secondary" type="button" id="copy-editor-back">Back</button>
+        <button class="btn btn-secondary" type="button" id="copy-editor-next">Next</button>
+        <button class="btn btn-primary" type="button" id="copy-editor-save">Save task</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay hidden copy-dialog" id="copy-arm">
+    <div
+      class="modal-dialog copy-arm-panel"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="copy-arm-title"
+    >
+      <div class="modal-header">
+        <div class="copy-dialog-title">
+          <h2 id="copy-arm-title">Arm live copying</h2>
+          <span id="copy-arm-sub">Real swaps from your wallet</span>
+        </div>
+        <button class="modal-close" type="button" data-dialog-close aria-label="Close">
+          <i class="icon-x"></i>
+        </button>
+      </div>
+      <div class="modal-body" id="copy-arm-body"></div>
+      <div class="copy-dialog-footer">
+        <small class="copy-dialog-error" id="copy-arm-error" aria-live="polite"></small>
+        <small class="copy-dialog-hint" id="copy-arm-hint"></small>
+        <button class="btn btn-secondary" type="button" data-dialog-close>Keep Paper</button>
+        <button class="btn btn-danger" type="button" id="copy-arm-confirm" disabled>
+          Arm live
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay hidden copy-dialog" id="copy-settings">
+    <div
+      class="modal-dialog copy-settings-panel"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="copy-settings-title"
+    >
+      <div class="modal-header">
+        <div class="copy-dialog-title">
+          <h2 id="copy-settings-title">Copy trading settings</h2>
+          <span>Global policy for every task</span>
+        </div>
+        <button class="modal-close" type="button" data-dialog-close aria-label="Close">
+          <i class="icon-x"></i>
+        </button>
+      </div>
+      <form class="copy-settings-form" id="copy-settings-form">
+        <div class="modal-body">
+          <label class="copy-switch-row">
+            <span class="copy-field-text">
+              <strong>Require a Filtering pass</strong>
+              <small
+                >Copy only tokens the Filtering pipeline currently passes. Tasks can override
+                it.</small
+              >
+              <small class="copy-warning" id="copy-settings-filter-warning">
+                With the default Filtering setup this rejects almost every token, so nothing is
+                copied. Leave it off unless your filters pass the tokens your wallets trade.
+              </small>
+            </span>
+            <span class="toggle"
+              ><input id="copy-settings-filter" type="checkbox" /><span class="toggle-track"></span
+            ></span>
+          </label>
+          <label class="copy-switch-row">
+            <span class="copy-field-text">
+              <strong>Latency kill switch</strong>
+              <small>Pause a task when its recent trades are detected too late to copy well.</small>
+            </span>
+            <span class="toggle"
+              ><input id="copy-settings-latency" type="checkbox" /><span class="toggle-track"></span
+            ></span>
+          </label>
+          <div class="copy-fields">
+            <label class="copy-field">
+              <span>Arrival limit</span>
+              <span class="copy-number-row"
+                ><input
+                  id="copy-settings-delay"
+                  type="number"
+                  min="0.25"
+                  max="30"
+                  step="0.25"
+                  required
+                /><span class="input-unit">seconds</span></span
+              >
+              <small>Average delay from the target's block to detection that pauses a task.</small>
+            </label>
+            <label class="copy-field">
+              <span>Latency sample window</span>
+              <span class="copy-number-row"
+                ><input
+                  id="copy-settings-window"
+                  type="number"
+                  min="3"
+                  max="100"
+                  step="1"
+                  required
+                /><span class="input-unit">trades</span></span
+              >
+            </label>
+            <label class="copy-field">
+              <span>Default slippage</span>
+              <span class="copy-number-row"
+                ><input
+                  id="copy-settings-slippage"
+                  type="number"
+                  min="0.1"
+                  max="50"
+                  step="0.1"
+                  required
+                /><span class="input-unit">%</span></span
+              >
+            </label>
+            <label class="copy-field">
+              <span>Maximum active tasks</span>
+              <span class="copy-number-row"
+                ><input
+                  id="copy-settings-max-tasks"
+                  type="number"
+                  min="1"
+                  max="50"
+                  step="1"
+                  required
+                /><span class="input-unit">tasks</span></span
+              >
+            </label>
+            <label class="copy-field">
+              <span>Live readiness</span>
+              <span class="copy-number-row"
+                ><input
+                  id="copy-settings-readiness"
+                  type="number"
+                  min="1"
+                  max="500"
+                  step="1"
+                  required
+                /><span class="input-unit">closed rounds</span></span
+              >
+              <small>Paper rounds a task needs before its readiness check passes.</small>
+            </label>
+          </div>
+        </div>
+        <div class="copy-dialog-footer">
+          <small class="copy-dialog-error" id="copy-settings-error" aria-live="polite"></small>
+          <button class="btn btn-secondary" type="button" data-dialog-close>Cancel</button>
+          <button class="btn btn-primary" type="submit">Save settings</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-overlay hidden copy-dialog" id="copy-profile">
+    <div
+      class="modal-dialog copy-profile-panel"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="copy-profile-title"
+    >
+      <div class="modal-header">
+        <div class="copy-dialog-title">
+          <h2 id="copy-profile-title">Wallet profile</h2>
+          <span id="copy-profile-sub">What this bot has seen of the wallet</span>
+        </div>
+        <button class="modal-close" type="button" data-dialog-close aria-label="Close">
+          <i class="icon-x"></i>
+        </button>
+      </div>
+      <div class="modal-body" id="copy-profile-body"></div>
+      <div class="copy-dialog-footer">
+        <small class="copy-dialog-error" id="copy-profile-error" aria-live="polite"></small>
+        <button class="btn btn-secondary" type="button" data-dialog-close>Close</button>
+        <button class="btn btn-primary" type="button" id="copy-profile-copy">
+          Copy this wallet
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

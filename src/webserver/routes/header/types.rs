@@ -10,7 +10,19 @@ pub struct HeaderMetricsResponse {
     pub filtering: FilteringHeaderInfo,
     pub system: SystemHeaderInfo,
     pub sol: SolHeaderInfo,
+    /// Copy-trading chip and in-app copy notices; absent when the copy
+    /// database cannot be read.
+    pub copy: Option<CopyHeaderInfo>,
     pub timestamp: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CopyHeaderInfo {
+    pub enabled: bool,
+    pub total_tasks: usize,
+    pub paper_tasks: usize,
+    pub live_tasks: usize,
+    pub notices: Vec<crate::trader::copy::CopyNotice>,
 }
 
 /// SOL/USD price for the header price card (click opens the SOL chart dialog).

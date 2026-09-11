@@ -250,11 +250,17 @@ impl PoolDiscovery {
         // These are the mints whose price the reported worth depends on, so they rank
         // with position tokens, not with the discovery tail.
         let held_mints: Vec<String> = crate::wallet::get_held_mints();
+        // Paper copy holdings are marked and exited at the pool price, so they rank here too.
+        let paper_mints: Vec<String> = crate::trader::copy::held_paper_mints();
         let initial_count = tokens.len();
 
         let mut token_set: std::collections::HashSet<String> = tokens.iter().cloned().collect();
 
-        for mint in open_position_mints.iter().chain(held_mints.iter()) {
+        for mint in open_position_mints
+            .iter()
+            .chain(held_mints.iter())
+            .chain(paper_mints.iter())
+        {
             if !is_stablecoin_mint(mint) && !token_set.contains(mint) {
                 token_set.insert(mint.clone());
                 tokens.push(mint.clone());
@@ -280,13 +286,15 @@ impl PoolDiscovery {
         // Early stablecoin filtering
         tokens.retain(|m| !is_stablecoin_mint(m));
 
-        // Cap to max_watched, prioritizing tokens we hold or have a position in — those
-        // are the ones a missing price actually costs the user (a wrong P&L, an
-        // understated wallet worth). Discovery candidates take what is left.
+        // Cap to max_watched, prioritizing tokens we hold, have a position in, or hold
+        // in a paper copy book — those are the ones a missing price actually costs the
+        // user (a wrong P&L, an understated wallet worth, a paper exit rule that never
+        // fires). Discovery candidates take what is left.
         if tokens.len() > max_watched {
             let priority_mints: std::collections::HashSet<String> = open_position_mints
                 .iter()
                 .chain(held_mints.iter())
+                .chain(paper_mints.iter())
                 .cloned()
                 .collect();
 

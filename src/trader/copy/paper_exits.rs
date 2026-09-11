@@ -4,6 +4,8 @@
 //! the evaluators' pure cores, so paper results predict what live would have done.
 //! `mirror` tasks hand exits to the target's sells alone, exactly as live does.
 
+use std::sync::{LazyLock, RwLock};
+
 use chrono::{DateTime, Utc};
 
 use crate::logger::{self, LogTag};
@@ -110,24 +112,48 @@ pub fn paper_exit_outcome(
     }))
 }
 
+/// Mints held open by any paper task, refreshed every sweep. Pool discovery watches
+/// them like position tokens: without it a paper holding the filters never passed
+/// has no pool price, so it can be neither marked nor exited.
+static HELD_PAPER_MINTS: LazyLock<RwLock<Vec<String>>> = LazyLock::new(Default::default);
+
+pub fn held_paper_mints() -> Vec<String> {
+    HELD_PAPER_MINTS
+        .read()
+        .map(|mints| mints.clone())
+        .unwrap_or_default()
+}
+
 /// One pass over every paper task whose exits the policy manages. Like the live
 /// exit monitor it covers paused tasks too (pausing stops new copies, not the
 /// management of what is held) and stands down under the emergency stop. Holdings
 /// are marked at the pool price only; a token without one is left for the next
 /// pass rather than sold on a stale trade price.
 pub async fn sweep(database: &CopyDatabase, costs: PaperCosts) -> crate::trader::Result<()> {
+    let tasks = database.list_tasks().await?;
+    let mut books = Vec::new();
+    for task in tasks.iter().filter(|task| task.mode == CopyMode::Paper) {
+        let holdings = database.paper_positions(task.id).await?;
+        if holdings.iter().any(PaperPosition::is_open) {
+            books.push((task, holdings));
+        }
+    }
+    let mut held: Vec<String> = books
+        .iter()
+        .flat_map(|(_, holdings)| holdings.iter().filter(|position| position.is_open()))
+        .map(|position| position.mint.clone())
+        .collect();
+    held.sort_unstable();
+    held.dedup();
+    if let Ok(mut mints) = HELD_PAPER_MINTS.write() {
+        *mints = held;
+    }
     if crate::global::is_force_stopped() {
         return Ok(());
     }
-    let tasks = database.list_tasks().await?;
-    for task in tasks.iter().filter(|task| {
-        task.mode == CopyMode::Paper
-            && management_for_exit_mode(task.exit_mode) != PositionManagement::CopyTask
+    for (task, holdings) in books.iter().filter(|(task, _)| {
+        management_for_exit_mode(task.exit_mode) != PositionManagement::CopyTask
     }) {
-        let holdings = database.paper_positions(task.id).await?;
-        if !holdings.iter().any(PaperPosition::is_open) {
-            continue;
-        }
         let mut policy = ExitPolicy::from_config();
         policy.apply_overrides(&task.exit_policy_overrides);
         for position in holdings.iter().filter(|position| position.is_open()) {
@@ -163,7 +189,7 @@ pub async fn sweep(database: &CopyDatabase, costs: PaperCosts) -> crate::trader:
                             task.id, position.mint
                         ),
                     );
-                    database.record_outcome(outcome).await?;
+                    super::notify::record(database, outcome).await?;
                 }
                 Err(reason) => logger::debug(
                     LogTag::Trader,
@@ -320,6 +346,9 @@ mod tests {
             slippage_pct: 1.0,
             created_at: Utc::now(),
             updated_at: Utc::now(),
+            require_filter_pass: None,
+            pause_reason: None,
+            paused_at: None,
         };
         let costs = PaperCosts {
             network_fee_sol: 0.0,

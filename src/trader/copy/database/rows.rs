@@ -4,6 +4,12 @@ use chrono::Utc;
 
 use crate::trader::copy::types::CopyTask;
 
+/// Column order `row_to_task` decodes; every task SELECT interpolates it.
+pub(super) const TASK_COLUMNS: &str = "id, chain_id, target_address, label, enabled, mode_json, \
+     sizing_json, exit_mode_json, exit_policy_json, max_sol_per_trade, max_sol_per_token, \
+     total_budget_sol, min_target_trade_sol, max_target_trade_sol, buy_once_per_token, \
+     slippage_pct, created_at, updated_at, require_filter_pass, pause_reason_json, paused_at";
+
 pub(super) fn row_to_task(row: &rusqlite::Row<'_>) -> rusqlite::Result<CopyTask> {
     let parse_json = |index| -> rusqlite::Result<String> { row.get(index) };
     let created: String = row.get(16)?;
@@ -33,6 +39,16 @@ pub(super) fn row_to_task(row: &rusqlite::Row<'_>) -> rusqlite::Result<CopyTask>
         slippage_pct: row.get(15)?,
         created_at: parse_datetime(&created, 16)?,
         updated_at: parse_datetime(&updated, 17)?,
+        require_filter_pass: row.get(18)?,
+        pause_reason: row
+            .get::<_, Option<String>>(19)?
+            .map(|json| serde_json::from_str(&json))
+            .transpose()
+            .map_err(json_error)?,
+        paused_at: row
+            .get::<_, Option<String>>(20)?
+            .map(|value| parse_datetime(&value, 20))
+            .transpose()?,
     })
 }
 

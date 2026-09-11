@@ -331,6 +331,8 @@ function initCardHandlers() {
   // SOL price card - open the SOL/USD chart in the shared token-details dialog.
   // WSOL is charted as SOL's USD price (special-cased server-side), so the same
   // dialog every other token uses works unchanged here.
+  document.getElementById("copyCard")?.addEventListener("click", () => loadPage("copy"));
+
   const solPriceCard = document.getElementById("solPriceCard");
   if (solPriceCard) {
     const openSolDetails = () => {

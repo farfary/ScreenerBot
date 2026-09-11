@@ -36,6 +36,9 @@ fn task(exit_mode: ExitMode, mode: CopyMode) -> CopyTask {
         slippage_pct: 2.0,
         created_at: now,
         updated_at: now,
+        require_filter_pass: None,
+        pause_reason: None,
+        paused_at: None,
     }
 }
 

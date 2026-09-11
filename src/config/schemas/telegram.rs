@@ -152,6 +152,22 @@ config_struct! {
         })]
         notify_dca_executed: bool = true,
 
+        /// Notify on live copy-trading fills, exits and copy-task auto-pauses
+        #[metadata(field_metadata! {
+            label: "Copy Trading",
+            hint: "Notify on live copy fills, copy exits, failed copy swaps and copy-task auto-pauses",
+            category: "Notifications",
+        })]
+        notify_copy_trading: bool = true,
+
+        /// Notify on paper copy-trading fills and exits
+        #[metadata(field_metadata! {
+            label: "Paper Copy Trades",
+            hint: "Also notify on simulated paper copy fills and exits (can be frequent)",
+            category: "Notifications",
+        })]
+        notify_copy_paper: bool = false,
+
         /// Notify on startup
         #[metadata(field_metadata! {
             label: "Bot Startup",

@@ -59,6 +59,8 @@ pub struct NotificationSettings {
     pub filtering_alerts: bool,
     pub trade_alerts: bool,
     pub daily_summary: bool,
+    pub copy_trading: bool,
+    pub copy_paper: bool,
 }
 
 #[derive(Deserialize)]
@@ -84,6 +86,8 @@ pub struct UpdateNotificationSettings {
     pub filtering_alerts: Option<bool>,
     pub trade_alerts: Option<bool>,
     pub daily_summary: Option<bool>,
+    pub copy_trading: Option<bool>,
+    pub copy_paper: Option<bool>,
 }
 
 #[derive(Serialize)]

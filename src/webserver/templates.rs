@@ -46,7 +46,13 @@ pub fn page_styles(page: &str) -> Option<String> {
             TRADER_CONFIG_COMPONENTS_STYLES,
             TRADER_CONTROLS_STYLES,
             TRADER_METRICS_STYLES,
-            TRADER_WALLET_COPY_STYLES,
+        ]
+        .join("\n"),
+        "copy" => [
+            COPY_PAGE_STYLES,
+            COPY_WORKSPACE_STYLES,
+            COPY_CHARTS_STYLES,
+            COPY_DIALOGS_STYLES,
         ]
         .join("\n"),
         "wallets" => [
@@ -321,6 +327,10 @@ pub fn events_content() -> String {
     render_page(EVENTS_PAGE)
 }
 
+pub fn copy_content() -> String {
+    render_page(COPY_PAGE)
+}
+
 pub fn services_content() -> String {
     render_page(SERVICES_PAGE)
 }
@@ -427,6 +437,7 @@ mod tests {
             "filtering",
             "config",
             "trader",
+            "copy",
             "wallets",
             "tools",
             "assistant",

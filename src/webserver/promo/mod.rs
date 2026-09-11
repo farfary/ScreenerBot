@@ -15,7 +15,8 @@
 //! - /api/llm-analysis/stats, /api/llm-analysis/cache/stats, /api/llm/providers,
 //!   /api/llm-analysis/instructions, /api/llm-analysis/history,
 //!   /api/assistant/automation*, /api/assistant/chat/sessions*
-//! - /api/copy-trading/overview
+//! - /api/copy-trading reads: overview, status, tasks, task, stats, workspace,
+//!   activity, insights, comparison, wallet profile
 //! - /api/events/head
 //! - /api/wallet/current, /api/wallet/tokens
 //! - /api/trader/stats
@@ -43,7 +44,12 @@ pub use assistant::{
     get_promo_chat_sessions, get_promo_decision_history, get_promo_instructions,
     get_promo_providers,
 };
-pub use copy_trading::get_promo_copy_trading_overview;
+pub use copy_trading::{
+    get_promo_copy_activity, get_promo_copy_comparison, get_promo_copy_insights,
+    get_promo_copy_recent_activity, get_promo_copy_status, get_promo_copy_task,
+    get_promo_copy_task_stats, get_promo_copy_tasks, get_promo_copy_trading_overview,
+    get_promo_copy_wallet_profile, get_promo_copy_workspace,
+};
 pub use dashboard::{
     get_promo_dashboard_overview, get_promo_home_dashboard, get_promo_portfolio_calendar,
 };

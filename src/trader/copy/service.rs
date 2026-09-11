@@ -12,15 +12,11 @@ use crate::logger::{self, LogTag};
 use crate::wallets::watch::{subscribe_activity, ActivityKind, WalletActivity, WatchSource};
 
 use super::{
-    arrival_distance_ms, execute_copy_sell_with, execute_live_with, latency_should_pause,
-    matching_tasks, paper_sell_outcome, prepare_copy_sell, prepare_live_entry, run_paper_pipeline,
-    CopyDatabase, CopyMode, CopyOutcome, CopySellSubmitResult, CopySkip, CopyTelemetry,
-    LiveSubmitResult, PaperCosts, PaperPosition, PipelinePolicy, RiskContext,
+    execute_copy_sell_with, execute_live_with, matching_tasks, notify, paper_sell_outcome,
+    prepare_copy_sell, prepare_live_entry, run_paper_pipeline, CopyDatabase, CopyMode, CopyOutcome,
+    CopySellSubmitResult, CopySkip, CopyTelemetry, LiveSubmitResult, PaperCosts, PaperPosition,
+    PipelinePolicy, RiskContext,
 };
-
-/// A task edited this recently may still be attaching its watch source, so the
-/// reconciler never judges it detached.
-const SOURCE_SETTLE_SECS: i64 = 120;
 
 pub async fn run(shutdown: Arc<Notify>, database: CopyDatabase) {
     let mut receiver = subscribe_activity();
@@ -94,41 +90,10 @@ async fn reconcile_runtime_state(database: &CopyDatabase) -> crate::trader::Resu
         });
         if confirmed {
             decision.telemetry.confirmed_at = Some(Utc::now());
-            database
-                .record_outcome(CopyOutcome::LiveConfirmed(decision))
-                .await?;
+            notify::record(database, CopyOutcome::LiveConfirmed(decision)).await?;
         }
     }
-    pause_detached_tasks(database).await
-}
-
-/// An enabled task whose target is no longer an enabled watch source (the watcher
-/// disabled it as saturated, or it was removed) receives nothing, yet would still
-/// read as running. Pause it so the task state tells the truth.
-async fn pause_detached_tasks(database: &CopyDatabase) -> crate::trader::Result<()> {
-    let settled_before = Utc::now() - chrono::Duration::seconds(SOURCE_SETTLE_SECS);
-    for task in database.list_tasks().await? {
-        if !task.enabled || task.updated_at > settled_before {
-            continue;
-        }
-        match crate::wallets::watch::copy_source_active(task.id, &task.target_address).await {
-            Ok(true) => {}
-            Ok(false) => {
-                if database.pause_task(task.id).await? {
-                    logger::warning(
-                        LogTag::Trader,
-                        &format!(
-                            "Paused copy task {}: target {} is no longer watched",
-                            task.id, task.target_address
-                        ),
-                    );
-                }
-            }
-            // The watch service is not up yet; nothing can be judged this pass.
-            Err(_) => return Ok(()),
-        }
-    }
-    Ok(())
+    super::guards::pause_detached_tasks(database).await
 }
 
 async fn process_activity(
@@ -168,10 +133,10 @@ async fn process_activity(
         return Ok(());
     }
     let target_holdings_before = observe_target_inventory(database, activity, &tasks).await?;
-    if reject_stale_backfill(database, activity, &tasks, mint).await? {
+    if super::guards::reject_stale_backfill(database, activity, &tasks, mint).await? {
         return Ok(());
     }
-    apply_latency_kill_switch(database, activity, &mut tasks).await?;
+    super::guards::apply_latency_kill_switch(database, activity, &mut tasks).await?;
     if tasks.is_empty() {
         return Ok(());
     }
@@ -185,7 +150,12 @@ async fn process_activity(
         return process_sell_activity(database, activity, &tasks, mint, &target_holdings_before)
             .await;
     }
-    let filter_passed = if require_filter_pass {
+    // The filter check is fetched once for the tasks that require it; a task
+    // that does not require it sees a pass.
+    let any_requires_filter = tasks
+        .iter()
+        .any(|task| task.requires_filter_pass(require_filter_pass));
+    let filter_passed = if any_requires_filter {
         crate::filtering::get_filtered_token_mints()
             .await
             .map_err(|e| crate::trader::Error::Dependency {
@@ -220,14 +190,14 @@ async fn process_activity(
                     .iter()
                     .any(|address| address == &task.target_address),
                 mint_blacklisted: crate::trader::safety::is_blacklisted(mint).await,
-                filter_passed,
+                filter_passed: filter_passed || !task.requires_filter_pass(require_filter_pass),
                 ..RiskContext::default()
             },
         );
     }
     let trade_size_sol = with_config(|config| config.trader.trade_size_sol);
     let policy = PipelinePolicy {
-        require_filter_pass,
+        require_filter_pass: any_requires_filter,
         engine_trade_size_sol: trade_size_sol,
     };
     let paper_tasks = tasks
@@ -266,7 +236,7 @@ async fn process_activity(
             )
         };
         for outcome in paper_outcomes {
-            database.record_outcome(outcome).await?;
+            notify::record(database, outcome).await?;
         }
     }
 
@@ -282,9 +252,7 @@ async fn process_activity(
         ) {
             Ok(plan) => plan,
             Err(reason) => {
-                database
-                    .record_outcome(skipped(task.id, activity, mint, reason))
-                    .await?;
+                notify::record(database, skipped(task.id, activity, mint, reason)).await?;
                 continue;
             }
         };
@@ -311,7 +279,7 @@ async fn process_activity(
             },
         )
         .await;
-        database.record_outcome(outcome).await?;
+        notify::record(database, outcome).await?;
     }
     Ok(())
 }
@@ -344,81 +312,6 @@ async fn observe_target_inventory(
         );
     }
     Ok(before)
-}
-
-async fn apply_latency_kill_switch(
-    database: &CopyDatabase,
-    activity: &WalletActivity,
-    tasks: &mut Vec<super::CopyTask>,
-) -> crate::trader::Result<()> {
-    let (enabled, window_size, threshold_ms) = with_config(|config| {
-        (
-            config.copy_trading.latency_kill_switch_enabled,
-            config.copy_trading.latency_window_size,
-            config.copy_trading.max_arrival_distance_ms,
-        )
-    });
-    if !enabled {
-        return Ok(());
-    }
-    // A replayed observation measures downtime, not pipeline latency.
-    if activity.backfill {
-        return Ok(());
-    }
-    let Some(current_distance) = arrival_distance_ms(&observation_telemetry(activity)) else {
-        return Ok(());
-    };
-    let mut retained = Vec::with_capacity(tasks.len());
-    for task in tasks.drain(..) {
-        let rows = database.list_task_activity(task.id, window_size).await?;
-        let mut samples = rows
-            .iter()
-            .filter_map(|row| row.outcome.telemetry())
-            .filter(|telemetry| !telemetry.backfill)
-            .filter_map(arrival_distance_ms)
-            .collect::<Vec<_>>();
-        samples.reverse();
-        samples.push(current_distance);
-        if latency_should_pause(&samples, window_size, threshold_ms) {
-            let window = &samples[samples.len() - window_size..];
-            let average_ms = (window.iter().map(|value| u128::from(*value)).sum::<u128>()
-                / window_size as u128) as u64;
-            if database.pause_task(task.id).await? {
-                crate::wallets::watch::remove_copy_source(task.id, &task.target_address)
-                    .await
-                    .map_err(|e| crate::trader::Error::Dependency {
-                        dependency: "wallets",
-                        detail: e.to_string(),
-                    })?;
-            }
-            let mint = match &activity.kind {
-                ActivityKind::Swap { mint, .. } => mint.clone(),
-                _ => String::new(),
-            };
-            database
-                .record_outcome(skipped(
-                    task.id,
-                    activity,
-                    &mint,
-                    CopySkip::LatencyKillSwitch {
-                        average_ms,
-                        threshold_ms,
-                    },
-                ))
-                .await?;
-            logger::warning(
-                LogTag::Trader,
-                &format!(
-                    "Paused copy task {}: trailing arrival delay {}ms exceeds {}ms",
-                    task.id, average_ms, threshold_ms
-                ),
-            );
-        } else {
-            retained.push(task);
-        }
-    }
-    *tasks = retained;
-    Ok(())
 }
 
 async fn process_sell_activity(
@@ -458,7 +351,7 @@ async fn process_sell_activity(
             Ok(outcome) => outcome,
             Err(reason) => skipped(task.id, activity, mint, reason),
         };
-        database.record_outcome(outcome).await?;
+        notify::record(database, outcome).await?;
     }
 
     for task in tasks.iter().filter(|task| task.mode == CopyMode::Live) {
@@ -483,9 +376,7 @@ async fn process_sell_activity(
         ) {
             Ok(plan) => plan,
             Err(reason) => {
-                database
-                    .record_outcome(skipped(task.id, activity, mint, reason))
-                    .await?;
+                notify::record(database, skipped(task.id, activity, mint, reason)).await?;
                 continue;
             }
         };
@@ -495,45 +386,9 @@ async fn process_sell_activity(
             )
         })
         .await;
-        database.record_outcome(outcome).await?;
+        notify::record(database, outcome).await?;
     }
     Ok(())
-}
-
-/// A gap-fill replays trades made while the bot was down or disconnected. Their
-/// inventory effect is kept (recorded before this runs), but copying one that
-/// arrived later than the arrival limit would trade on a price that no longer
-/// exists, so each task records an explicit skip instead.
-async fn reject_stale_backfill(
-    database: &CopyDatabase,
-    activity: &WalletActivity,
-    tasks: &[super::CopyTask],
-    mint: &str,
-) -> crate::trader::Result<bool> {
-    if !activity.backfill {
-        return Ok(false);
-    }
-    let threshold_ms = with_config(|config| config.copy_trading.max_arrival_distance_ms);
-    let Some(arrival_ms) = arrival_distance_ms(&observation_telemetry(activity)) else {
-        return Ok(false);
-    };
-    if arrival_ms <= threshold_ms {
-        return Ok(false);
-    }
-    for task in tasks {
-        database
-            .record_outcome(skipped(
-                task.id,
-                activity,
-                mint,
-                CopySkip::StaleObservation {
-                    arrival_ms,
-                    threshold_ms,
-                },
-            ))
-            .await?;
-    }
-    Ok(true)
 }
 
 /// Pool price first (the trading price system); the target's own swap price when
@@ -546,7 +401,7 @@ fn decision_price(mint: &str, target_price_sol: Option<f64>) -> f64 {
         .unwrap_or(f64::NAN)
 }
 
-fn paper_costs() -> PaperCosts {
+pub(super) fn paper_costs() -> PaperCosts {
     let priority_lamports = with_config(|config| config.swaps.jupiter.default_priority_fee);
     PaperCosts {
         network_fee_sol: 0.000005,
@@ -554,7 +409,7 @@ fn paper_costs() -> PaperCosts {
     }
 }
 
-fn observation_telemetry(activity: &WalletActivity) -> CopyTelemetry {
+pub(super) fn observation_telemetry(activity: &WalletActivity) -> CopyTelemetry {
     CopyTelemetry {
         target_block_time: activity.block_time,
         detected_at: activity.detected_at,
@@ -571,7 +426,12 @@ fn observation_telemetry(activity: &WalletActivity) -> CopyTelemetry {
     }
 }
 
-fn skipped(task_id: i64, activity: &WalletActivity, mint: &str, reason: CopySkip) -> CopyOutcome {
+pub(super) fn skipped(
+    task_id: i64,
+    activity: &WalletActivity,
+    mint: &str,
+    reason: CopySkip,
+) -> CopyOutcome {
     let telemetry = observation_telemetry(activity);
     CopyOutcome::Skipped {
         task_id,

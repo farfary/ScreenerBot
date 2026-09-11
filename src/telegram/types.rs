@@ -99,6 +99,17 @@ pub enum NotificationType {
         transfer_bytes: u64,
     },
 
+    /// A copy-trading fill, exit, failure or auto-pause
+    CopyTrading {
+        task: String,
+        title: String,
+        token_symbol: Option<String>,
+        token_mint: Option<String>,
+        detail: String,
+        /// Paper decisions are gated by their own preference.
+        paper: bool,
+    },
+
     /// Notification when new tokens are found by filtering
     NewTokensFound {
         session_id: String,

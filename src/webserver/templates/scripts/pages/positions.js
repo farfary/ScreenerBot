@@ -9,6 +9,7 @@ import { manualTrade } from "../ui/manual_trade.js";
 import { PositionDetailsDialog } from "../ui/position_details_dialog.js";
 import { PositionRemoveDialog } from "../ui/position_remove_dialog.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
+import { openCopyTask } from "../ui/copy_handoff.js";
 import { notificationManager } from "../core/notifications.js";
 
 const SUB_TABS = [
@@ -171,7 +172,9 @@ function createLifecycle() {
           <div class="token-symbol">${Utils.escapeHtml(symbol)}</div>
           <div class="token-name"><span>${Utils.escapeHtml(name)}</span>${
             originLabel
-              ? `<span class="position-origin-label position-origin-${originLabel.toLowerCase()}">${originLabel}</span>`
+              ? row?.origin?.kind === "copy" && row.origin.task_id != null
+                ? `<button type="button" class="position-origin-label position-origin-copy position-origin-link" data-copy-task="${Utils.escapeHtml(String(row.origin.task_id))}" title="Open the copy task that opened this position">${originLabel}</button>`
+                : `<span class="position-origin-label position-origin-${originLabel.toLowerCase()}">${originLabel}</span>`
               : ""
           }${
             row?.holding_state === "frozen"
@@ -926,6 +929,20 @@ function createLifecycle() {
             mode: "client",
             placeholder: "Search by symbol or mint...",
           },
+          filters: [
+            {
+              id: "origin",
+              label: "Origin",
+              options: [
+                { value: "all", label: "All origins" },
+                { value: "auto", label: "Auto Trader" },
+                { value: "copy", label: "Copy Trading" },
+                { value: "manual", label: "Manual" },
+                { value: "external", label: "Wallet" },
+              ],
+              filterFn: (row, value) => value === "all" || (row?.origin?.kind || "auto") === value,
+            },
+          ],
           buttons: [
             {
               id: "delete-all-archived",
@@ -987,6 +1004,16 @@ function createLifecycle() {
 
       if (containerEl) {
         containerEl.addEventListener("click", handleRowActionClick);
+
+        // A copied position's origin label opens the copy task that bought it.
+        const handleCopyOriginClick = (e) => {
+          const origin = e.target?.closest?.("[data-copy-task]");
+          if (!origin) return;
+          e.stopPropagation();
+          openCopyTask(Number(origin.dataset.copyTask));
+        };
+        containerEl.addEventListener("click", handleCopyOriginClick);
+        ctx.onDispose(() => containerEl.removeEventListener("click", handleCopyOriginClick));
         ctx.onDispose(() => containerEl.removeEventListener("click", handleRowActionClick));
 
         // Row click handler for position details dialog

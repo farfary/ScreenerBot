@@ -154,7 +154,19 @@ pub(super) async fn get_header_metrics() -> Json<HeaderMetricsResponse> {
         filtering,
         system,
         sol,
+        copy: copy_header().await,
         timestamp: now.to_rfc3339(),
+    })
+}
+
+async fn copy_header() -> Option<CopyHeaderInfo> {
+    let status = crate::trader::copy::control::status().await.ok()?;
+    Some(CopyHeaderInfo {
+        enabled: status.enabled,
+        total_tasks: status.total_tasks,
+        paper_tasks: status.paper_tasks,
+        live_tasks: status.live_tasks,
+        notices: crate::trader::copy::recent_notices(),
     })
 }
 

@@ -40,6 +40,8 @@ pub enum Error {
     Transactions(#[from] crate::transactions::Error),
     #[error("no copy-trading task with id {task_id}")]
     CopyTaskNotFound { task_id: i64 },
+    #[error("copy task {task_id} holds no open paper position in {mint}")]
+    CopyHoldingNotFound { task_id: i64, mint: String },
     #[error("could not decode field {field} of copy task {task_id}: {detail}")]
     CopyTaskDecode {
         task_id: i64,
@@ -129,7 +131,7 @@ impl ErrorClass for Error {
             Error::Database(e) => e.is_retryable(),
             Error::Positions(e) => e.is_retryable(),
             Error::Transactions(e) => e.is_retryable(),
-            Error::CopyTaskNotFound { .. } => false,
+            Error::CopyTaskNotFound { .. } | Error::CopyHoldingNotFound { .. } => false,
             Error::CopyTaskDecode { .. } | Error::CopySerialize { .. } => false,
             Error::CopyReconciliation { .. } => true,
             Error::CopyValidation { .. } => false,
@@ -181,7 +183,7 @@ impl ErrorClass for Error {
             Error::Database(e) => e.severity(),
             Error::Positions(e) => e.severity(),
             Error::Transactions(e) => e.severity(),
-            Error::CopyTaskNotFound { .. } => Severity::Info,
+            Error::CopyTaskNotFound { .. } | Error::CopyHoldingNotFound { .. } => Severity::Info,
             Error::CopyTaskDecode { .. } => Severity::Critical,
             Error::CopySerialize { .. } => Severity::Error,
             Error::CopyReconciliation { .. } => Severity::Error,
@@ -217,7 +219,7 @@ impl ErrorClass for Error {
             Error::Database(e) => e.http_status(),
             Error::Positions(e) => e.http_status(),
             Error::Transactions(e) => e.http_status(),
-            Error::CopyTaskNotFound { .. } => 404,
+            Error::CopyTaskNotFound { .. } | Error::CopyHoldingNotFound { .. } => 404,
             Error::CopyTaskDecode { .. }
             | Error::CopySerialize { .. }
             | Error::CopyReconciliation { .. }

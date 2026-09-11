@@ -3,7 +3,7 @@ use rusqlite::{Connection, OptionalExtension};
 use crate::trader::copy::types::CopyOutcome;
 use crate::trader::error::Error;
 
-pub(super) const SCHEMA_VERSION: i64 = 6;
+pub(super) const SCHEMA_VERSION: i64 = 7;
 
 pub(super) const SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS copy_metadata (
@@ -28,7 +28,10 @@ CREATE TABLE IF NOT EXISTS copy_tasks (
     buy_once_per_token INTEGER NOT NULL,
     slippage_pct REAL NOT NULL,
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    require_filter_pass INTEGER,
+    pause_reason_json TEXT,
+    paused_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_copy_tasks_target_enabled
     ON copy_tasks(target_address, enabled);
@@ -211,6 +214,22 @@ pub(super) fn migrate(connection: &Connection) -> crate::trader::Result<()> {
                 [],
             )
             .map_err(crate::errors::DatabaseError::from)?;
+    }
+    // v7: the per-task filter override and the stored reason for a pause.
+    let task_columns = table_columns(connection, "copy_tasks")?;
+    for (column, definition) in [
+        ("require_filter_pass", "INTEGER"),
+        ("pause_reason_json", "TEXT"),
+        ("paused_at", "TEXT"),
+    ] {
+        if !task_columns.iter().any(|existing| existing == column) {
+            connection
+                .execute(
+                    &format!("ALTER TABLE copy_tasks ADD COLUMN {column} {definition}"),
+                    [],
+                )
+                .map_err(crate::errors::DatabaseError::from)?;
+        }
     }
     migrate_mode_scoped_spend(connection)?;
     Ok(())
