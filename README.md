@@ -38,28 +38,34 @@
 
 <table>
   <tr>
-    <td align="center"><strong>Dashboard Overview</strong></td>
-    <td align="center"><strong>Transaction Monitor</strong></td>
+    <td align="center" width="33%"><strong>Dashboard Overview</strong></td>
+    <td align="center" width="33%"><strong>Copy Trading</strong></td>
+    <td align="center" width="33%"><strong>Token Details</strong></td>
   </tr>
   <tr>
-    <td><a href="https://screenerbot.io/api/screenshots/current/home?full=1"><img src="https://screenerbot.io/api/screenshots/current/home" alt="Dashboard Overview" width="400"></a></td>
-    <td><a href="https://screenerbot.io/api/screenshots/current/transactions?full=1"><img src="https://screenerbot.io/api/screenshots/current/transactions" alt="Transaction Monitor" width="400"></a></td>
+    <td><a href="https://screenerbot.io/api/screenshots/current/home?full=1"><img src="https://screenerbot.io/api/screenshots/current/home" alt="ScreenerBot Dashboard Overview" width="280"></a></td>
+    <td><a href="https://screenerbot.io/api/screenshots/current/auto-trader-copy-trading?full=1"><img src="https://screenerbot.io/api/screenshots/current/auto-trader-copy-trading" alt="ScreenerBot Copy Trading" width="280"></a></td>
+    <td><a href="https://screenerbot.io/api/screenshots/current/token-details?full=1"><img src="https://screenerbot.io/api/screenshots/current/token-details" alt="ScreenerBot Token Details" width="280"></a></td>
   </tr>
   <tr>
-    <td align="center"><strong>Open Positions</strong></td>
-    <td align="center"><strong>Position History</strong></td>
+    <td align="center" width="33%"><strong>Strategy Builder</strong></td>
+    <td align="center" width="33%"><strong>Strategy Conditions</strong></td>
+    <td align="center" width="33%"><strong>Auto Trader</strong></td>
   </tr>
   <tr>
-    <td><a href="https://screenerbot.io/api/screenshots/current/positions-open?full=1"><img src="https://screenerbot.io/api/screenshots/current/positions-open" alt="Open Positions" width="400"></a></td>
-    <td><a href="https://screenerbot.io/api/screenshots/current/positions-closed?full=1"><img src="https://screenerbot.io/api/screenshots/current/positions-closed" alt="Position History" width="400"></a></td>
+    <td><a href="https://screenerbot.io/api/screenshots/current/strategies-manage?full=1"><img src="https://screenerbot.io/api/screenshots/current/strategies-manage" alt="ScreenerBot Strategy Builder" width="280"></a></td>
+    <td><a href="https://screenerbot.io/api/screenshots/current/strategies-conditions?full=1"><img src="https://screenerbot.io/api/screenshots/current/strategies-conditions" alt="ScreenerBot Strategy Conditions" width="280"></a></td>
+    <td><a href="https://screenerbot.io/api/screenshots/current/trader?full=1"><img src="https://screenerbot.io/api/screenshots/current/trader" alt="ScreenerBot Auto Trader" width="280"></a></td>
   </tr>
   <tr>
-    <td align="center"><strong>Trader Interface</strong></td>
-    <td align="center"><strong>Token Details</strong></td>
+    <td align="center" width="33%"><strong>Open Positions</strong></td>
+    <td align="center" width="33%"><strong>Token Discovery</strong></td>
+    <td align="center" width="33%"><strong>Filtering Analytics</strong></td>
   </tr>
   <tr>
-    <td><a href="https://screenerbot.io/api/screenshots/current/trader?full=1"><img src="https://screenerbot.io/api/screenshots/current/trader" alt="Trader Interface" width="400"></a></td>
-    <td><a href="https://screenerbot.io/api/screenshots/current/token-details?full=1"><img src="https://screenerbot.io/api/screenshots/current/token-details" alt="Token Details" width="400"></a></td>
+    <td><a href="https://screenerbot.io/api/screenshots/current/positions-open?full=1"><img src="https://screenerbot.io/api/screenshots/current/positions-open" alt="ScreenerBot Open Positions" width="280"></a></td>
+    <td><a href="https://screenerbot.io/api/screenshots/current/tokens-passed?full=1"><img src="https://screenerbot.io/api/screenshots/current/tokens-passed" alt="ScreenerBot Token Discovery" width="280"></a></td>
+    <td><a href="https://screenerbot.io/api/screenshots/current/filtering-analytics?full=1"><img src="https://screenerbot.io/api/screenshots/current/filtering-analytics" alt="ScreenerBot Filtering Analytics" width="280"></a></td>
   </tr>
 </table>
 
@@ -307,9 +313,13 @@ Condition-based trading logic with configurable rules.
 Task-based wallet copy built on the same observation, admission, swap, position, and verification
 components used elsewhere in ScreenerBot.
 
-- Every task begins in Paper mode; Live mode requires an explicit per-task confirmation
+- Every task begins in Paper mode on a simulated book: buys, mirrored sells, and the task's own
+  exit rules run through the same evaluators Live uses, producing realized paper P&L
+- Live mode is armed per task behind readiness checks (paper history, paper P&L, detection latency,
+  pricing, runtime) and explicit acknowledgements
 - Fixed-SOL or ratio-of-target sizing
 - Per-trade, per-token, and total task limits
+- Guards that pause detached or late tasks and skip stale gap-fill replays before any sizing
 - Optional target-size filters, buy-once behavior, and filtering-pipeline requirement
 - Buy-only, mirror-sell, and hybrid exit ownership modes
 - Durable decisions, skip reasons, task spend, and activity history
@@ -390,11 +400,14 @@ Priority-ordered conditions:
 ### Wallet Copy Trading
 
 - Watch multiple target wallets through the shared, restart-safe observation pipeline
-- New tasks are Paper by default; Live execution is armed separately with confirmation
+- New tasks are Paper by default; Live execution is armed separately with readiness checks and confirmation
 - Fixed or proportional sizing with per-trade, per-token, and total task limits
 - Optional filtering, blacklist, target-size, self-copy, duplicate, cooldown, and position-capacity gates
-- Buy-only, mirror-sell, or hybrid exit management
+- Buy-only, mirror-sell, or hybrid exit management with per-task stop loss, trailing stop, take profit and time overrides
+- Latency kill switch pauses a task whose recent arrival delay exceeds the configured limit
+- Per-task insights: win rate, profit factor, P&L curve, exit and skip reasons, latency histogram, slippage
 - Recent activity shows paper fills, live submissions, copied sells, failures, and typed skip reasons
+- Copy fills, exits, failures and auto-pauses reach the dashboard header and Telegram
 
 ---
 
@@ -501,7 +514,8 @@ dynamic authenticated localhost port):
 - **Positions**: Open/closed positions with P&L tracking and detailed analytics
 - **Tokens**: Database browser with market data, security analysis, and pool info
 - **Filtering**: Passed/rejected tokens with detailed rejection reasons
-- **Trader**: Automated trading controls, wallet copy, monitors, safety gates, and loss limits
+- **Trader**: Automated trading controls, monitors, safety gates, and loss limits
+- **Copy Trading**: Copied wallets, per-task paper books, live readiness, insights, and wallet comparison
 - **Transactions**: Own-wallet and watched-wallet history with DEX classification and P&L
 - **Strategies**: Visual strategy builder with condition editor
 - **OHLCV**: Candlestick charts with multi-timeframe analysis
