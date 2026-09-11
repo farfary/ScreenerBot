@@ -68,15 +68,29 @@ function installActivityTracking() {
  * never sends its end at all — a counter built on them drifts upward until
  * nothing is ever considered settled again. Two classes are deliberately not
  * page activity: the capture layer's own annotations (they ARE the shot), and
- * infinite animations, which are ambient and never resolve.
+ * infinite animations, which are ambient and never resolve. A finite animation
+ * that the product restarts on a clock (a quote countdown) is ambient too; the
+ * product declares it with `data-ambient-motion` on the element or an ancestor.
+ *
+ * Returns a description of the first busy animation, or null, so a timeout
+ * names what never finished instead of just "animations".
  */
-function animationsBusy() {
-  return document.getAnimations().some((animation) => {
-    if (animation.playState !== "running") return false;
+function busyAnimation() {
+  for (const animation of document.getAnimations()) {
+    if (animation.playState !== "running") continue;
     const target = animation.effect?.target;
-    if (target?.closest?.(".promo-layer")) return false;
-    return animation.effect?.getTiming?.().iterations !== Infinity;
-  });
+    if (target?.closest?.(".promo-layer, [data-ambient-motion]")) continue;
+    if (animation.effect?.getTiming?.().iterations === Infinity) continue;
+    const name = animation.animationName || animation.transitionProperty || "script";
+    const where = target
+      ? `${target.tagName.toLowerCase()}${target.id ? `#${target.id}` : ""}${[...target.classList]
+          .slice(0, 2)
+          .map((cls) => `.${cls}`)
+          .join("")}`
+      : "document";
+    return `animations: ${name} on ${where}`;
+  }
+  return null;
 }
 
 /**
@@ -237,7 +251,7 @@ export async function waitStable({
     const reason =
       (networkBusy() && "network") ||
       (loadingVisible() && "loading-ui") ||
-      (animationsBusy() && "animations") ||
+      busyAnimation() ||
       (imagesPending() && "images") ||
       (state.mutations > 0 && "dom-mutations") ||
       null;

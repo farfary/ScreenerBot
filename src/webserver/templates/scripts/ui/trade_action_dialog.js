@@ -273,7 +273,7 @@ export class TradeActionDialog {
           </div>
           <div class="trade-action-pane trade-action-pane-preview">
           <div class="trade-action-quote-section" data-state="idle" data-refreshing="false">
-            <div class="trade-action-quote-refresh-bar"></div>
+            <div class="trade-action-quote-refresh-bar" data-ambient-motion></div>
             <div class="trade-action-quote-header">
               <span class="trade-action-quote-title">Swap Preview</span>
               <button type="button" class="trade-action-quote-refresh" aria-label="Refresh quote" title="Refresh quote">
