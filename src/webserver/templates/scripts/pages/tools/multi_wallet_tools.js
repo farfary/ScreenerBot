@@ -33,7 +33,11 @@ async function syncRouterChoices(container) {
     if (!response.ok) return;
     const swaps = (await response.json())?.data;
     if (!swaps) return;
-    enabled = { jupiter: swaps.jupiter?.enabled === true, direct: swaps.direct?.enabled === true };
+    enabled = {
+      jupiter: swaps.jupiter?.enabled === true,
+      direct: swaps.direct?.enabled === true,
+      raptor: swaps.raptor?.enabled === true,
+    };
   } catch (error) {
     // Availability is a refinement: leave every option selectable rather than
     // blocking the tool because one config read failed.
@@ -170,6 +174,7 @@ function renderBuyMultiWalletsTool(container, actionsContainer) {
                   <option value="auto" selected>Auto (Best Route)</option>
                   <option value="jupiter" data-router="jupiter">Jupiter</option>
                   <option value="direct" data-router="direct">Direct Pool</option>
+                  <option value="raptor" data-router="raptor">Raptor</option>
                 </select>
               </div>
             </div>
@@ -669,6 +674,7 @@ function renderSellMultiWalletsTool(container, actionsContainer) {
                   <option value="auto" selected>Auto (Best Route)</option>
                   <option value="jupiter" data-router="jupiter">Jupiter</option>
                   <option value="direct" data-router="direct">Direct Pool</option>
+                  <option value="raptor" data-router="raptor">Raptor</option>
                 </select>
               </div>
             </div>
