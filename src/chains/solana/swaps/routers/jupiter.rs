@@ -10,6 +10,7 @@
 //! retrying it is safe (on-chain submission happens later via RPC).
 //! Docs: https://developers.jup.ag/docs/swap/add-fees-to-swap
 
+use super::http::RouterHttpFailure;
 use crate::chains::solana::constants::{SOL_MINT, USDC_MINT};
 use crate::chains::solana::rpc::RpcClientMethods;
 use crate::config::with_config;
@@ -185,208 +186,98 @@ const JUPITER_MAX_ATTEMPTS: u32 = 4;
 /// already stale. Without it a stalled socket parked the whole sell indefinitely.
 const JUPITER_HTTP_TIMEOUT: Duration = Duration::from_secs(15);
 
-/// Compute a backoff delay. Honors a server `Retry-After` (seconds) when present,
-/// otherwise exponential (~0.4s, 0.8s, 1.6s, 3.2s) capped at 4s, plus small jitter.
-fn jupiter_backoff_delay(attempt: u32, retry_after_secs: Option<u64>) -> Duration {
-    if let Some(secs) = retry_after_secs {
-        return Duration::from_millis(secs.clamp(1, 5) * 1000);
+/// Fold a failed Jupiter call into the crate error channel, preserving rate
+/// limiting as `NetworkError::RateLimited` so `ErrorClass::is_rate_limited()`
+/// still answers correctly downstream (the exit monitor backs off on it).
+fn jupiter_error(failure: RouterHttpFailure) -> Error {
+    match failure.status {
+        Some(429) => Error::Network(NetworkError::RateLimited {
+            endpoint: format!("jupiter/{}", failure.label),
+            retry_after_ms: failure.retry_after.map(|d| d.as_millis() as u64),
+        }),
+        Some(status) => Error::Network(NetworkError::HttpStatus {
+            endpoint: format!("jupiter/{}", failure.label),
+            status,
+            body: Some(failure.body),
+        }),
+        None => Error::Network(NetworkError::RequestFailed {
+            endpoint: format!("jupiter/{}", failure.label),
+            detail: failure.body,
+        }),
     }
-    let exp = 400u64.saturating_mul(1u64 << attempt.saturating_sub(1).min(4));
-    let capped = exp.min(4000);
-    let jitter = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| (d.subsec_nanos() as u64) % 200)
-        .unwrap_or(0);
-    Duration::from_millis(capped + jitter)
 }
 
-/// Send a Jupiter HTTP request with retry+backoff on transient failures.
-/// `build` is invoked fresh per attempt (a RequestBuilder is single-use).
-/// Returns the success body text on 2xx, or a domain Error. Retries only on
-/// HTTP 429, 5xx, and network/transport errors — never on 4xx (e.g. 400 = no
-/// route), which are deterministic and surfaced immediately to the caller.
-/// A Jupiter HTTP call that failed, kept structured.
+/// Classify a failed Jupiter call into the quote vocabulary.
 ///
-/// The quote path and the swap path need different things from the same
-/// failure — one decides whether to retire a token, the other only reports —
-/// so the transport hands back the status and the raw body and lets each
-/// caller classify for its own channel. Rendering a message here and having
-/// callers search it is what silently broke no-route blacklisting.
-struct JupiterHttpFailure {
-    label: String,
-    /// `None` when the request never got a response (DNS, TCP, TLS, timeout).
-    status: Option<u16>,
-    /// Response body, or the transport error when `status` is `None`.
-    body: String,
-    /// `Retry-After`, when the endpoint sent one.
-    retry_after: Option<Duration>,
-    /// The request never completed rather than completing unsuccessfully.
-    timed_out: bool,
-}
+/// Reading the provider's own body is correct HERE and nowhere else: this is
+/// the boundary where Jupiter's wire format is translated into our vocabulary,
+/// so a Jupiter rewording breaks one function that exists to track it rather
+/// than a trading decision three modules away.
+fn jupiter_quote_error(failure: RouterHttpFailure, router: &str) -> QuoteError {
+    let router = router.to_owned();
+    match failure.status {
+        Some(429) => QuoteError::RateLimited {
+            router,
+            retry_after: failure.retry_after,
+        },
+        Some(status) if (400..500).contains(&status) => {
+            // Jupiter reports the reason as a stable machine `errorCode`;
+            // fall back to the raw body only when the shape is unexpected.
+            let code = serde_json::from_str::<serde_json::Value>(&failure.body)
+                .ok()
+                .and_then(|v| {
+                    v.get("errorCode")
+                        .and_then(|c| c.as_str())
+                        .map(str::to_owned)
+                })
+                .unwrap_or_default()
+                .to_ascii_uppercase();
+            let body_lower = failure.body.to_lowercase();
 
-impl JupiterHttpFailure {
-    /// Fold into the crate error channel, preserving rate limiting as
-    /// `NetworkError::RateLimited` so `ErrorClass::is_rate_limited()` still
-    /// answers correctly downstream (the exit monitor backs off on it).
-    fn into_error(self) -> Error {
-        match self.status {
-            Some(429) => Error::Network(NetworkError::RateLimited {
-                endpoint: format!("jupiter/{}", self.label),
-                retry_after_ms: self.retry_after.map(|d| d.as_millis() as u64),
-            }),
-            Some(status) => Error::Network(NetworkError::HttpStatus {
-                endpoint: format!("jupiter/{}", self.label),
-                status,
-                body: Some(self.body),
-            }),
-            None => Error::Network(NetworkError::RequestFailed {
-                endpoint: format!("jupiter/{}", self.label),
-                detail: self.body,
-            }),
-        }
-    }
-
-    /// Classify into the quote vocabulary.
-    ///
-    /// Reading the provider's own body is correct HERE and nowhere else: this
-    /// is the boundary where Jupiter's wire format is translated into our
-    /// vocabulary, so a Jupiter rewording breaks one function that exists to
-    /// track it rather than a trading decision three modules away.
-    fn into_quote_error(self, router: &str) -> QuoteError {
-        let router = router.to_owned();
-        match self.status {
-            Some(429) => QuoteError::RateLimited {
-                router,
-                retry_after: self.retry_after,
-            },
-            Some(status) if (400..500).contains(&status) => {
-                // Jupiter reports the reason as a stable machine `errorCode`;
-                // fall back to the raw body only when the shape is unexpected.
-                let code = serde_json::from_str::<serde_json::Value>(&self.body)
-                    .ok()
-                    .and_then(|v| {
-                        v.get("errorCode")
-                            .and_then(|c| c.as_str())
-                            .map(str::to_owned)
-                    })
-                    .unwrap_or_default()
-                    .to_ascii_uppercase();
-                let body_lower = self.body.to_lowercase();
-
-                if code == "TOKEN_NOT_TRADABLE" || body_lower.contains("not tradable") {
-                    QuoteError::NotTradable {
-                        router,
-                        detail: self.body,
-                    }
-                } else if code == "COULD_NOT_FIND_ANY_ROUTE"
-                    || body_lower.contains("could not find any route")
-                    || body_lower.contains("no route")
-                    || body_lower.contains("no routes")
-                {
-                    QuoteError::NoRoute {
-                        router,
-                        detail: self.body,
-                    }
-                } else {
-                    // A 4xx we do not recognise is a request WE got wrong, not
-                    // a verdict on the token — it must never retire one.
-                    QuoteError::Unavailable {
-                        router,
-                        detail: format!("HTTP {status}: {}", self.body),
-                    }
+            if code == "TOKEN_NOT_TRADABLE" || body_lower.contains("not tradable") {
+                QuoteError::NotTradable {
+                    router,
+                    detail: failure.body,
+                }
+            } else if code == "COULD_NOT_FIND_ANY_ROUTE"
+                || body_lower.contains("could not find any route")
+                || body_lower.contains("no route")
+                || body_lower.contains("no routes")
+            {
+                QuoteError::NoRoute {
+                    router,
+                    detail: failure.body,
+                }
+            } else {
+                // A 4xx we do not recognise is a request WE got wrong, not
+                // a verdict on the token — it must never retire one.
+                QuoteError::Unavailable {
+                    router,
+                    detail: format!("HTTP {status}: {}", failure.body),
                 }
             }
-            Some(status) => QuoteError::Unavailable {
-                router,
-                detail: format!("HTTP {status}: {}", self.body),
-            },
-            None if self.timed_out => QuoteError::Timeout { router },
-            None => QuoteError::Unavailable {
-                router,
-                detail: self.body,
-            },
         }
+        Some(status) => QuoteError::Unavailable {
+            router,
+            detail: format!("HTTP {status}: {}", failure.body),
+        },
+        None if failure.timed_out => QuoteError::Timeout { router },
+        None => QuoteError::Unavailable {
+            router,
+            detail: failure.body,
+        },
     }
 }
 
+/// Send a Jupiter HTTP request over the shared router transport.
 async fn jupiter_send_with_retry<F>(
     label: &str,
     build: F,
-) -> std::result::Result<String, JupiterHttpFailure>
+) -> std::result::Result<String, RouterHttpFailure>
 where
     F: Fn() -> reqwest::RequestBuilder,
 {
-    let mut attempt = 0u32;
-    loop {
-        attempt += 1;
-        match build().send().await {
-            Ok(resp) => {
-                let status = resp.status();
-                if status.is_success() {
-                    return resp.text().await.map_err(|e| JupiterHttpFailure {
-                        label: label.to_owned(),
-                        status: None,
-                        body: format!("failed to read response: {e}"),
-                        retry_after: None,
-                        timed_out: e.is_timeout(),
-                    });
-                }
-                let is_transient = status.as_u16() == 429 || status.is_server_error();
-                let retry_after = resp
-                    .headers()
-                    .get(reqwest::header::RETRY_AFTER)
-                    .and_then(|v| v.to_str().ok())
-                    .and_then(|s| s.trim().parse::<u64>().ok());
-                let body = resp.text().await.unwrap_or_else(|_| "Unknown".to_owned());
-                if is_transient && attempt < JUPITER_MAX_ATTEMPTS {
-                    let delay = jupiter_backoff_delay(attempt, retry_after);
-                    logger::warning(
-                        LogTag::Swap,
-                        &format!(
-                            "Jupiter {label} transient {} (attempt {}/{}), retrying in {}ms",
-                            status,
-                            attempt,
-                            JUPITER_MAX_ATTEMPTS,
-                            delay.as_millis()
-                        ),
-                    );
-                    tokio::time::sleep(delay).await;
-                    continue;
-                }
-                return Err(JupiterHttpFailure {
-                    label: label.to_owned(),
-                    status: Some(status.as_u16()),
-                    body,
-                    retry_after: retry_after.map(Duration::from_secs),
-                    timed_out: false,
-                });
-            }
-            Err(e) => {
-                if attempt < JUPITER_MAX_ATTEMPTS {
-                    let delay = jupiter_backoff_delay(attempt, None);
-                    logger::warning(
-                        LogTag::Swap,
-                        &format!(
-                            "Jupiter {label} network error (attempt {}/{}): {} - retrying in {}ms",
-                            attempt,
-                            JUPITER_MAX_ATTEMPTS,
-                            e,
-                            delay.as_millis()
-                        ),
-                    );
-                    tokio::time::sleep(delay).await;
-                    continue;
-                }
-                return Err(JupiterHttpFailure {
-                    label: label.to_owned(),
-                    status: None,
-                    body: format!("request failed after {attempt} attempts: {e}"),
-                    retry_after: None,
-                    timed_out: e.is_timeout(),
-                });
-            }
-        }
-    }
+    super::http::send_with_retry("Jupiter", label, JUPITER_MAX_ATTEMPTS, build).await
 }
 
 /// Get the referral token account for a swap based on input or output mint
@@ -465,7 +356,7 @@ pub(crate) async fn execute_with_keypair(
             .timeout(JUPITER_HTTP_TIMEOUT)
     })
     .await
-    .map_err(JupiterHttpFailure::into_error)?;
+    .map_err(jupiter_error)?;
 
     let swap_response: JupiterSwapResponse = serde_json::from_str(&response_text)
         .map_err(|e| Error::parse_error(format!("Jupiter swap response parse failed: {e}")))?;
@@ -611,7 +502,7 @@ impl SwapRouter for JupiterRouter {
             req.query(&quote_req).timeout(JUPITER_HTTP_TIMEOUT)
         })
         .await
-        .map_err(|f| f.into_quote_error(self.name()))?;
+        .map_err(|f| jupiter_quote_error(f, self.name()))?;
 
         // Parse into our limited struct just to extract key values
         let quote_response: JupiterQuoteResponse =
@@ -752,7 +643,7 @@ impl SwapRouter for JupiterRouter {
                 .timeout(JUPITER_HTTP_TIMEOUT)
         })
         .await
-        .map_err(JupiterHttpFailure::into_error)?;
+        .map_err(jupiter_error)?;
 
         let swap_response: JupiterSwapResponse = serde_json::from_str(&response_text)
             .map_err(|e| Error::parse_error(format!("Jupiter swap response parse failed: {e}")))?;
@@ -847,31 +738,6 @@ mod tests {
         assert_eq!(
             get_referral_token_account_for_swap(other_mint, "AnotherTokenMint111111111111"),
             None
-        );
-    }
-
-    #[test]
-    fn backoff_delay_honors_retry_after_and_otherwise_grows_exponentially_with_a_cap() {
-        assert_eq!(
-            jupiter_backoff_delay(1, Some(2)),
-            Duration::from_millis(2000)
-        );
-        // Clamped into [1, 5] seconds even for an extreme server value.
-        assert_eq!(
-            jupiter_backoff_delay(1, Some(999)),
-            Duration::from_millis(5000)
-        );
-
-        let d1 = jupiter_backoff_delay(1, None);
-        let d2 = jupiter_backoff_delay(2, None);
-        let d4 = jupiter_backoff_delay(4, None);
-        assert!(
-            d1 <= d2 && d2 <= d4,
-            "delay must not shrink as attempts grow"
-        );
-        assert!(
-            d4 <= Duration::from_millis(4000 + 200),
-            "delay is capped near 4s plus jitter, got {d4:?}"
         );
     }
 

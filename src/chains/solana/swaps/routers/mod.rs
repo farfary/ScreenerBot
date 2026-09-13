@@ -1,6 +1,7 @@
 //! Solana implementations of `crate::swaps::SwapRouter`.
 
 mod direct_pool;
+mod http;
 mod jupiter;
 
 pub use direct_pool::DirectPoolRouter;

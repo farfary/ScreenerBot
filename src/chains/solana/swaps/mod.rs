@@ -5,7 +5,8 @@
 //! Two execution mechanisms live here and they are deliberately different:
 //!
 //! * `routers::JupiterRouter` — an aggregator quotes and builds the transaction
-//!   for us; we sign and send it.
+//!   for us; we sign and send it. Its HTTP transport (`routers::http`) is shared
+//!   with any future aggregator router, so a second one need not reinvent retry.
 //! * `direct` — we decode the pool, compute the curve, build the instruction and
 //!   attach our own fee. No third party in the money path.
 //!
