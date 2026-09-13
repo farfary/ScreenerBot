@@ -24,6 +24,10 @@ pub const JUPITER_V3_PROGRAM_ID: &str = "JUP3c2Uh3WA4Ng34tw6kPd2G4C5BB21Xo36Je1s
 /// GMGN - Gaming and social trading platform
 pub const GMGN_PROGRAM_ID: &str = "GMGNjvGr7ddxt2u1XSf8Zo6LLnDjDm9mJahGfhq7j6gk";
 
+/// Raptor (Solana Tracker) - the aggregator program our `raptor` router routes
+/// through. Without this, our OWN Raptor swaps analyse as an unknown program.
+pub const RAPTOR_PROGRAM_ID: &str = "RaptorD5ojtsqDDtJeRsunPLg6GvLYNnwKJWxYE4m87";
+
 // =============================================================================
 // DIRECT DEX PROGRAM IDS
 // =============================================================================
@@ -43,6 +47,9 @@ pub fn detect_router_from_program_id(program_id: &str) -> Option<&'static str> {
 
         // GMGN
         GMGN_PROGRAM_ID => Some("gmgn"),
+
+        // Raptor (Solana Tracker)
+        RAPTOR_PROGRAM_ID => Some("raptor"),
 
         // Raydium variants
         RAYDIUM_CPMM_PROGRAM_ID | RAYDIUM_LEGACY_AMM_PROGRAM_ID | RAYDIUM_CLMM_PROGRAM_ID => {
@@ -78,6 +85,9 @@ pub fn detect_router_from_logs(log_messages: &[String]) -> Option<&'static str> 
         }
         if log_lower.contains("gmgn") {
             return Some("gmgn");
+        }
+        if log_lower.contains("raptor") {
+            return Some("raptor");
         }
         if log_lower.contains("raydium") {
             return Some("raydium");

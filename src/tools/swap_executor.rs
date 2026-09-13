@@ -35,7 +35,7 @@ pub struct ToolSwapResult {
 /// This function gets a quote and executes the swap using the provided wallet.
 /// Unlike regular swaps, this does NOT create positions or track in position system.
 ///
-/// `router` is a router id (`"jupiter"`, `"direct"`), or `None`/`"auto"` to take
+/// `router` is a router id (`"jupiter"`, `"direct"`, `"raptor"`), or `None`/`"auto"` to take
 /// the best quote across every enabled router.
 pub async fn execute_tool_swap(
     wallet: &Wallet,

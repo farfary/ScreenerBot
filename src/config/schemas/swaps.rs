@@ -103,6 +103,44 @@ config_struct! {
 }
 
 config_struct! {
+    /// Raptor aggregator router configuration.
+    ///
+    /// Raptor (Solana Tracker) is a second aggregator that competes with Jupiter
+    /// on every quote. It needs no API key and publishes no rate limit, but it is
+    /// served from a beta host, which is why it ships disabled.
+    pub struct RaptorConfig {
+        #[metadata(field_metadata! {
+            label: "Enabled",
+            hint: "Quote Raptor alongside Jupiter and take whichever returns more. Jupiter stays enabled.",
+            impact: "high",
+            category: "Router",
+        })]
+        enabled: bool = false,
+        #[metadata(field_metadata! {
+            label: "Priority Fee",
+            hint: "Compute-unit price in micro-lamports. Higher lands faster in a busy block.",
+            min: 0,
+            max: 10000000,
+            step: 1000,
+            unit: "micro-lamports/CU",
+            impact: "medium",
+            category: "Fees",
+        })]
+        priority_fee_micro_lamports: u64 = 50_000,
+        #[metadata(field_metadata! {
+            label: "Max Hops",
+            hint: "Longest route Raptor may build. More hops can find a better price but cost more compute.",
+            min: 1,
+            max: 4,
+            step: 1,
+            impact: "low",
+            category: "Routing",
+        })]
+        max_hops: u8 = 4,
+    }
+}
+
+config_struct! {
     /// Slippage configuration
     pub struct SlippageConfig {
         #[metadata(field_metadata! {
@@ -169,6 +207,15 @@ config_struct! {
             category: "Routers",
         })]
         direct: DirectSwapConfig = DirectSwapConfig::default(),
+
+        /// Raptor router configuration
+        #[metadata(field_metadata! {
+            label: "Raptor",
+            hint: "Solana Tracker's aggregator, quoted alongside Jupiter",
+            impact: "high",
+            category: "Routers",
+        })]
+        raptor: RaptorConfig = RaptorConfig::default(),
 
         /// Slippage configuration
         #[metadata(field_metadata! {

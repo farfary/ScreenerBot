@@ -3,9 +3,11 @@
 mod direct_pool;
 mod http;
 mod jupiter;
+mod raptor;
 
 pub use direct_pool::DirectPoolRouter;
 pub use jupiter::JupiterRouter;
+pub use raptor::RaptorRouter;
 
 /// Build the Solana swap router set for `crate::swaps::registry::RouterRegistry`.
 /// This is the factory the application composition root registers via
@@ -17,5 +19,6 @@ pub fn build_routers() -> Vec<std::sync::Arc<dyn crate::swaps::router::SwapRoute
     vec![
         std::sync::Arc::new(JupiterRouter::new()),
         std::sync::Arc::new(DirectPoolRouter::new()),
+        std::sync::Arc::new(RaptorRouter::new()),
     ]
 }

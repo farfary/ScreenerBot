@@ -88,7 +88,7 @@ pub struct MultiBuyStartRequest {
     /// Slippage in basis points
     #[serde(default = "default_slippage")]
     pub slippage_bps: u64,
-    /// Router id to use (`jupiter`, `direct`); omitted or `"auto"` compares
+    /// Router id to use (`jupiter`, `direct`, `raptor`); omitted or `"auto"` compares
     /// every enabled router.
     pub router: Option<String>,
 }
@@ -186,7 +186,7 @@ pub struct MultiSellStartRequest {
     /// Close token ATAs after selling
     #[serde(default = "default_close_atas")]
     pub close_atas_after: bool,
-    /// Router id to use (`jupiter`, `direct`); omitted or `"auto"` compares
+    /// Router id to use (`jupiter`, `direct`, `raptor`); omitted or `"auto"` compares
     /// every enabled router.
     pub router: Option<String>,
 }
