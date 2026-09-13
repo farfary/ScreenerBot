@@ -91,6 +91,12 @@ config_struct! {
             enabled: true,
             timeout_secs: 5,
         },
+
+        /// Raptor (Solana Tracker) swap API monitoring
+        raptor: EndpointMonitorConfig = EndpointMonitorConfig {
+            enabled: true,
+            timeout_secs: 5,
+        },
     }
 }
 

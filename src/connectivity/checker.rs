@@ -3,8 +3,8 @@
 use crate::config::get_config_clone;
 use crate::connectivity::monitor::EndpointMonitor;
 use crate::connectivity::monitors::{
-    DexScreenerMonitor, GeckoTerminalMonitor, InternetMonitor, JupiterMonitor, RpcMonitor,
-    RugcheckMonitor,
+    DexScreenerMonitor, GeckoTerminalMonitor, InternetMonitor, JupiterMonitor, RaptorMonitor,
+    RpcMonitor, RugcheckMonitor,
 };
 use crate::connectivity::state;
 use crate::events::{record_connectivity_event, Severity};
@@ -20,7 +20,7 @@ use tokio::time::Duration;
 /// This checker runs continuous health checks on:
 /// - Internet connectivity (DNS, HTTP)
 /// - RPC endpoints
-/// - API endpoints (DexScreener, GeckoTerminal, Rugcheck, Jupiter)
+/// - API endpoints (DexScreener, GeckoTerminal, Rugcheck, Jupiter, Raptor)
 ///
 /// Critical endpoints (Internet, RPC) will cause system pause when unavailable.
 /// Important endpoints (DexScreener, Jupiter) will trigger warnings and degraded mode.
@@ -40,6 +40,7 @@ impl ConnectivityChecker {
             Box::new(GeckoTerminalMonitor::new()),
             Box::new(RugcheckMonitor::new()),
             Box::new(JupiterMonitor::new()),
+            Box::new(RaptorMonitor::new()),
         ];
 
         Self { monitors }
