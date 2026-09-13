@@ -734,6 +734,7 @@ function createLifecycle() {
     if (!table) return;
 
     const options = [{ value: "", label: "Main wallet" }];
+    let targetsLoaded = false;
     try {
       const data = await requestManager.fetch("/api/wallets/watch", { priority: "normal" });
       for (const target of data.targets || []) {
@@ -743,11 +744,37 @@ function createLifecycle() {
           label: target.label ? `${target.label} · ${short}` : short,
         });
       }
+      targetsLoaded = true;
     } catch (error) {
       console.warn("[Transactions] Failed to load watched-wallet subjects:", error);
     }
+    if (!table) return;
+
+    // A persisted subject can outlive its watch target. The API rejects an unwatched
+    // subject with 403 SUBJECT_NOT_WATCHED on the list, summary and detail routes, and
+    // the selector cannot display the stale value, so the page would silently freeze
+    // while showing "Main wallet". Fall back to the main wallet and persist that.
+    const staleSubject =
+      targetsLoaded && state.subject && !options.some((option) => option.value === state.subject);
+    if (staleSubject) {
+      console.warn(
+        "[Transactions] Saved wallet filter is no longer watched; using main wallet:",
+        state.subject
+      );
+      state.subject = "";
+      state.summary = null;
+      state.totalEstimate = null;
+    }
 
     table.setToolbarSelectOptions("subject", options, state.subject);
+
+    if (staleSubject) {
+      table.setToolbarFilterValue("subject", "", { apply: false });
+      Promise.all([
+        fetchSummary({}),
+        requestReload("subject", { silent: false, resetScroll: true }),
+      ]).catch(() => {});
+    }
   }
 }
 

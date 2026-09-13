@@ -88,6 +88,9 @@ export class TransactionDetailsDialog {
           priority: "high",
         }
       );
+      if (!data) {
+        throw new Error("Transaction not found");
+      }
       this.fullTransactionData = data;
       // Resolve every asset the transaction touches BEFORE the first render, so no
       // tab ever paints a bare mint and then swaps in a logo underneath the user.
@@ -96,9 +99,24 @@ export class TransactionDetailsDialog {
       this._updateDialogContent();
     } catch (error) {
       console.error("Error loading transaction details:", error);
-      this._showError("Failed to load transaction details");
+      this._showError(await this._describeLoadError(error));
     } finally {
       this.isLoading = false;
+    }
+  }
+
+  /** The API's own error message when the response carries one, else a generic line. */
+  async _describeLoadError(error) {
+    const fallback = "Failed to load transaction details";
+    if (!error?.response) {
+      return error?.message === "Transaction not found" ? error.message : fallback;
+    }
+    try {
+      const body = await error.response.json();
+      const message = body?.error?.message || body?.message;
+      return message ? `${fallback}: ${message}` : fallback;
+    } catch {
+      return fallback;
     }
   }
 
