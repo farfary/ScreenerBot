@@ -1,0 +1,213 @@
+/* =============================================================================
+   POSITION DETAILS — summary rail
+   Flat sections of label/value facts, separated only at section boundaries.
+   ============================================================================= */
+
+.position-details-dialog .pdd-section {
+  padding: 14px var(--pdd-gutter) 16px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.position-details-dialog .pdd-section:last-child {
+  border-bottom: 0;
+}
+
+.position-details-dialog .pdd-section-title {
+  margin: 0 0 6px;
+  color: var(--text-muted);
+  font-size: 0.62rem;
+  font-weight: 650;
+  letter-spacing: 0.07em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.position-details-dialog .pdd-facts {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+.position-details-dialog .pdd-fact {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 12px;
+  padding: 5px 0;
+}
+
+.position-details-dialog .pdd-fact dt {
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.position-details-dialog .pdd-fact dd {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  min-width: 0;
+  margin: 0;
+  text-align: right;
+}
+
+.position-details-dialog :where(.pdd-fact-value) {
+  color: var(--text-primary);
+}
+
+.position-details-dialog .pdd-fact-value {
+  font-family: var(--font-data);
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.position-details-dialog .pdd-fact-sub {
+  color: var(--text-muted);
+  font-family: var(--font-data);
+  font-size: 0.68rem;
+  line-height: 1.3;
+}
+
+.position-details-dialog .pdd-change + .pdd-change {
+  margin-left: 10px;
+}
+
+/* Price path range ---------------------------------------------------------- */
+
+.position-details-dialog .pdd-range {
+  margin: 8px 0 10px;
+}
+
+.position-details-dialog .pdd-range-track {
+  position: relative;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--bg-card-hover);
+}
+
+.position-details-dialog .pdd-range-span {
+  position: absolute;
+  inset: 0 calc(100% - var(--to)) 0 var(--from);
+  border-radius: inherit;
+  background: currentcolor;
+  opacity: 0.35;
+}
+
+.position-details-dialog .pdd-range-tick {
+  position: absolute;
+  top: -4px;
+  left: var(--at);
+  width: 2px;
+  height: 14px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: currentcolor;
+}
+
+.position-details-dialog .pdd-range .is-entry {
+  color: var(--text-secondary);
+}
+
+.position-details-dialog .pdd-range .is-up {
+  color: var(--success-color);
+}
+
+.position-details-dialog .pdd-range .is-down {
+  color: var(--danger);
+}
+
+.position-details-dialog .pdd-range-scale {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+  color: var(--text-muted);
+  font-size: 0.6rem;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.position-details-dialog .pdd-range-key {
+  display: inline-flex;
+  gap: 12px;
+}
+
+.position-details-dialog .pdd-range-key > span::before {
+  content: "";
+  display: inline-block;
+  width: 2px;
+  height: 9px;
+  margin-right: 5px;
+  vertical-align: -1px;
+  background: currentcolor;
+}
+
+/* Risk and links ------------------------------------------------------------ */
+
+.position-details-dialog .pdd-risk-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.position-details-dialog .pdd-risk-list li {
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+
+.position-details-dialog .pdd-risk-list li::before {
+  content: "–";
+  margin-right: 6px;
+  color: var(--text-muted);
+}
+
+.position-details-dialog .pdd-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  padding-top: 2px;
+}
+
+.position-details-dialog .pdd-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--primary-color);
+  font-size: 0.76rem;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.position-details-dialog .pdd-link:hover {
+  text-decoration: underline;
+}
+
+.position-details-dialog .pdd-link i {
+  font-size: 11px;
+}
+
+/* Under the chart at narrower widths the rail runs full width: two columns keep each
+   label near its value. */
+@media (width <= 1100px) and (width > 640px) {
+  .position-details-dialog .pdd-rail {
+    column-gap: 0;
+    columns: 2;
+  }
+
+  .position-details-dialog .pdd-section {
+    break-inside: avoid;
+  }
+}

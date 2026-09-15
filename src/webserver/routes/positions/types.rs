@@ -1,6 +1,7 @@
 //! Position route types — data structures for position API responses.
 
-use crate::positions::{PositionManagement, PositionOrigin};
+use crate::positions::state::is_position_open;
+use crate::positions::{Position, PositionManagement, PositionOrigin};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize)]
@@ -8,6 +9,31 @@ pub struct PositionsQuery {
     pub status: Option<String>, // "open", "closed", "all"
     pub limit: Option<usize>,
     pub mint: Option<String>,
+}
+
+/// Where a position is in its life — the same split the Open, Closed and Archived lists use.
+///
+/// `position_type` is the trade side (a real position is always "buy") and says nothing
+/// about whether the position is still held. Reading it as a lifecycle made every closed
+/// and archived position render as open, trade controls included.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PositionStatus {
+    Open,
+    Closed,
+    Archived,
+}
+
+impl PositionStatus {
+    pub fn of(position: &Position) -> Self {
+        if position.archived {
+            Self::Archived
+        } else if is_position_open(position) {
+            Self::Open
+        } else {
+            Self::Closed
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -22,6 +48,7 @@ pub struct PositionResponse {
     pub exit_price: Option<f64>,
     pub exit_time: Option<i64>,
     pub position_type: String,
+    pub status: PositionStatus,
     pub entry_size_sol: f64,
     pub total_size_sol: f64,
     pub price_highest: f64,

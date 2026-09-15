@@ -190,8 +190,8 @@ pub(super) const POSITION_DETAILS_HEADER_STYLES: &str =
     include_str!("templates/styles/ui/position_details/header.css");
 pub(super) const POSITION_DETAILS_BASE_STYLES: &str =
     include_str!("templates/styles/ui/position_details/base.css");
-pub(super) const POSITION_DETAILS_OVERVIEW_STYLES: &str =
-    include_str!("templates/styles/ui/position_details/overview.css");
+pub(super) const POSITION_DETAILS_SUMMARY_STYLES: &str =
+    include_str!("templates/styles/ui/position_details/summary.css");
 pub(super) const POSITION_DETAILS_CHART_STYLES: &str =
     include_str!("templates/styles/ui/position_details/chart.css");
 pub(super) const POSITION_DETAILS_ACTIVITY_STYLES: &str =
@@ -379,14 +379,16 @@ pub const TRANSACTION_DETAILS_DIALOG_UI: &str =
     include_str!("templates/scripts/ui/transaction_details_dialog.js");
 pub const POSITION_DETAILS_DIALOG_UI: &str =
     include_str!("templates/scripts/ui/position_details_dialog.js");
-pub const POSITION_DETAILS_ACTIVITY_TAB_JS: &str =
-    include_str!("templates/scripts/ui/position_details/activity_tab.js");
+pub const POSITION_DETAILS_HEADER_JS: &str =
+    include_str!("templates/scripts/ui/position_details/header.js");
+pub const POSITION_DETAILS_SUMMARY_JS: &str =
+    include_str!("templates/scripts/ui/position_details/summary.js");
+pub const POSITION_DETAILS_CHART_JS: &str =
+    include_str!("templates/scripts/ui/position_details/chart.js");
+pub const POSITION_DETAILS_ACTIVITY_JS: &str =
+    include_str!("templates/scripts/ui/position_details/activity.js");
 pub const POSITION_DETAILS_ACTIVITY_EVENT_JS: &str =
     include_str!("templates/scripts/ui/position_details/activity_event.js");
-pub const POSITION_DETAILS_OVERVIEW_TAB_JS: &str =
-    include_str!("templates/scripts/ui/position_details/overview_tab.js");
-pub const POSITION_DETAILS_CHART_TAB_JS: &str =
-    include_str!("templates/scripts/ui/position_details/chart_tab.js");
 pub const POSITION_DETAILS_UTILITIES_JS: &str =
     include_str!("templates/scripts/ui/position_details/utilities.js");
 pub const TOOL_FAVORITES_UI: &str = include_str!("templates/scripts/ui/tool_favorites.js");

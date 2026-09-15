@@ -100,6 +100,7 @@ fn map_position_to_response_with_logo(
         exit_price: p.exit_price,
         exit_time: exit_time_ts,
         position_type: p.position_type.clone(),
+        status: PositionStatus::of(p),
         entry_size_sol: p.entry_size_sol,
         total_size_sol: p.total_size_sol,
         price_highest: p.price_highest,

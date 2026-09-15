@@ -90,7 +90,6 @@
             id: context.id,
             mint: context.mint,
             symbol: context.symbol,
-            position_type: context.position_type,
           },
         })
       );

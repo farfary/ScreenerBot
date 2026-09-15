@@ -1,454 +1,444 @@
 /* =============================================================================
-   POSITION DETAILS — identity, metrics and header metadata
+   POSITION DETAILS — header
+   identity | headline figures | controls, then one quiet strip of status facts.
+   The controls sit on the shared 32px grid of `.dialog-header-action`.
    ============================================================================= */
 
 .position-details-dialog .dialog-header {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
+  flex-shrink: 0;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
-  flex-shrink: 0;
 }
 
 .position-details-dialog .header-top-row {
   display: grid;
-  grid-template-columns: minmax(420px, 1fr) auto auto;
-  align-items: start;
-  width: 100%;
-  column-gap: 20px;
-  row-gap: 8px;
-  padding: 14px 20px 12px;
-  min-height: 110px;
-}
-
-.position-details-dialog .meta-token-group {
-  display: flex;
+  grid-template-areas:
+    "identity metrics actions"
+    "strip strip strip";
+  grid-template-columns: minmax(200px, 1fr) auto auto;
   align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
+  gap: 8px clamp(16px, 1.6vw, 32px);
+  padding: 12px var(--pdd-gutter) 10px;
+  -webkit-app-region: no-drag;
 }
 
-.position-details-dialog .meta-metric {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 4px;
+.electron-macos .position-details-dialog .header-top-row {
+  padding-top: 40px;
 }
 
-.position-details-dialog .meta-metric-label {
-  font-size: 0.65rem;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.position-details-dialog .meta-metric-value {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-  font-family: var(--font-data);
-  font-feature-settings:
-    "tnum" 1,
-    "zero" 1;
-}
-
-.position-details-dialog .meta-security-group {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.position-details-dialog .meta-security-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-height: 24px;
-  padding: 4px 10px;
-  border-radius: var(--radius-md);
-  font-size: 0.65rem;
-  font-weight: 700;
-  line-height: 1;
-  letter-spacing: 0.01em;
-}
-
-.position-details-dialog .meta-security-badge i {
-  font-size: 12px;
-  opacity: 0.85;
-}
-
-.position-details-dialog .meta-security-badge.pdd-risk-low {
-  background: var(--success-alpha-20);
-  color: var(--success-color);
-}
-
-.position-details-dialog .meta-security-badge.pdd-risk-medium {
-  background: var(--warning-alpha-20);
-  color: var(--warning-color);
-}
-
-.position-details-dialog .meta-security-badge.pdd-risk-high {
-  background: var(--danger-alpha-15);
-  color: var(--danger);
-}
-
-.position-details-dialog .meta-security-badge.pdd-risk-unknown {
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
-  border: 1px solid var(--border-color);
-}
-
-.position-details-dialog .meta-authority-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
-  font-size: 0.56rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
-  background: var(--danger-alpha-10);
-  color: var(--danger);
-}
-
-.position-details-dialog .meta-authority-badge i {
-  font-size: 11px;
-}
+/* Identity ----------------------------------------------------------------- */
 
 .position-details-dialog .header-left {
+  grid-area: identity;
   display: flex;
-  align-items: flex-start;
-  gap: 16px;
+  align-items: center;
+  gap: 12px;
   min-width: 0;
-  grid-column: 1;
-  grid-row: 1;
 }
 
 .position-details-dialog .header-logo {
-  width: 52px;
-  height: 52px;
-  border-radius: var(--token-logo-radius, 3px);
-  overflow: hidden;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  overflow: hidden;
+  border-radius: var(--token-logo-radius, 3px);
+  background: var(--bg-card-hover);
 }
 
 .position-details-dialog .header-logo img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: var(--token-logo-fit, cover);
 }
 
-.position-details-dialog .header-logo .logo-placeholder {
-  font-size: 12px;
-  font-weight: 700;
+.position-details-dialog .logo-placeholder {
   color: var(--text-muted);
-  text-transform: uppercase;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.position-details-dialog .logo-placeholder[hidden] {
+  display: none;
 }
 
 .position-details-dialog .header-identity {
   display: flex;
   flex-direction: column;
-  justify-content: flex-start;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
-  flex: 1;
-}
-
-.position-details-dialog .header-title-row,
-.position-details-dialog .header-token-context-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  flex-wrap: wrap;
-}
-
-.position-details-dialog .header-token-context-row:empty {
-  display: none;
 }
 
 .position-details-dialog .header-title {
   display: flex;
-  flex-flow: row nowrap;
-  align-items: baseline;
-  gap: 7px;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
 }
 
-.position-details-dialog .header-title .title-main {
-  max-width: 220px;
+.position-details-dialog .title-main {
+  min-width: 0;
   overflow: hidden;
-  font-size: 1.25rem;
-  font-weight: 800;
   color: var(--text-primary);
+  font-size: clamp(1.08rem, 1.1vw, 1.22rem);
+  font-weight: 800;
   letter-spacing: -0.01em;
+  line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.position-details-dialog .header-title .title-symbol {
-  font-size: 0.85rem;
+.position-details-dialog .title-symbol {
+  flex-shrink: 0;
   color: var(--text-secondary);
   font-family: var(--font-data);
+  font-size: 0.8rem;
   font-weight: 600;
-  white-space: nowrap;
 }
 
-.position-details-dialog .header-security {
-  min-width: 0;
-}
-
+/* A mint is never cropped: it wraps when the column is too narrow for it. */
 .position-details-dialog .header-mint-full {
   color: var(--text-muted);
-  font: 500 0.75rem/1.35 var(--font-mono);
+  font: 500 0.72rem/1.3 var(--font-mono);
   letter-spacing: -0.015em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
 
-.position-details-dialog .header-shortcuts {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 3px 5px;
-  min-width: 0;
-  flex-wrap: wrap;
-  margin-left: auto;
-}
+/* Headline figures --------------------------------------------------------- */
 
-.position-details-dialog .pdd-header-shortcut {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  min-height: 24px;
-  padding: 3px 6px;
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 0.7rem;
-  font-weight: 600;
-  line-height: 1;
-  text-decoration: none;
-  white-space: nowrap;
-  transition: all var(--transition-fast);
-}
-
-.position-details-dialog .pdd-header-shortcut:hover {
-  background: var(--bg-card-hover);
-  color: var(--text-primary);
-}
-
-.position-details-dialog .pdd-header-shortcut i {
-  font-size: 0.7rem;
-}
-
-/* Header Center - Price Section */
 .position-details-dialog .header-center {
-  display: flex;
-  align-items: flex-start;
-  justify-content: flex-end;
+  grid-area: metrics;
   min-width: 0;
-  grid-column: 2;
-  grid-row: 1;
-}
-
-.position-details-dialog .header-badges {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  min-height: 24px;
-}
-
-.position-details-dialog .header-badges > .hint-trigger {
-  margin-left: 0;
 }
 
 .position-details-dialog .header-price {
   display: grid;
-  grid-template-columns: repeat(4, max-content);
-  align-items: stretch;
-  gap: 22px;
-  width: auto;
-}
-
-.position-details-dialog .price-loading {
-  font-size: 0.875rem;
-  color: var(--text-secondary);
+  grid-template-columns: repeat(4, minmax(96px, max-content));
+  gap: 10px clamp(16px, 1.6vw, 32px);
 }
 
 .position-details-dialog .header-metric {
   display: flex;
   flex-direction: column;
-  justify-content: flex-start;
-  gap: 3px;
-  min-width: 132px;
-  padding: 2px 0;
+  gap: 2px;
+  min-width: 0;
 }
 
 .position-details-dialog .header-metric-label {
-  font-size: 0.65rem;
-  font-weight: 600;
   color: var(--text-muted);
+  font-size: 0.62rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
   text-transform: uppercase;
-  letter-spacing: 0.055em;
+  white-space: nowrap;
 }
 
 .position-details-dialog .header-metric-value {
   overflow: hidden;
-  font-size: 1rem;
-  font-weight: 700;
+  color: var(--text-primary);
   font-family: var(--font-data);
+  font-size: clamp(0.92rem, 1vw, 1.05rem);
+  font-weight: 700;
   font-feature-settings:
     "tnum" 1,
     "zero" 1;
-  color: var(--text-primary);
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.position-details-dialog .header-metric-value small {
+  margin-left: 4px;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
+.position-details-dialog .header-metric-sub {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-family: var(--font-data);
+  font-size: 0.68rem;
+  line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .position-details-dialog .header-metric.pdd-positive .header-metric-value,
 .position-details-dialog .header-metric.pdd-positive .header-metric-sub {
-  color: var(--success-color);
+  color: var(--semantic-success-text);
 }
 
 .position-details-dialog .header-metric.pdd-negative .header-metric-value,
 .position-details-dialog .header-metric.pdd-negative .header-metric-sub {
-  color: var(--danger);
+  color: var(--semantic-error-text);
 }
 
-.position-details-dialog .header-metric-value small {
-  margin-left: 4px;
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: var(--text-secondary);
-}
-
-.position-details-dialog .header-metric-sub {
-  min-height: 0.85rem;
-  font-size: 0.75rem;
-  font-family: var(--font-data);
-  color: var(--text-muted);
-}
+/* Controls ----------------------------------------------------------------- */
 
 .position-details-dialog .header-right {
+  grid-area: actions;
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
-  flex: 0 0 auto;
-  padding-top: 10px;
-  grid-column: 3;
-  grid-row: 1;
+  gap: 12px;
 }
 
-.position-details-dialog .header-lower-row {
+.position-details-dialog .pdd-trade-actions {
   display: flex;
   align-items: center;
-  grid-column: 1 / -1;
-  grid-row: 2;
-  gap: 16px;
-  min-width: 0;
-  min-height: 24px;
-  padding-left: 68px;
+  gap: 6px;
 }
 
-/* Badges */
+.position-details-dialog .pdd-trade-actions:empty {
+  display: none;
+}
+
+/* The position's own controls are divided from the dialog's controls. */
+.position-details-dialog .pdd-trade-actions:not(:empty) + .dialog-header-actions {
+  padding-left: 12px;
+  border-left: 1px solid var(--border-color);
+}
+
+/* Same box as `.dialog-header-action` — 32px, 1px border, --radius-md — with a label and
+   a semantic colour, so every control in the header shares one grid. */
+.position-details-dialog .pdd-trade-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  box-sizing: border-box;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    color var(--transition-fast),
+    border-color var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.position-details-dialog .pdd-trade-btn i {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.position-details-dialog .pdd-trade-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.position-details-dialog .pdd-trade-btn.is-add {
+  color: var(--semantic-success-text);
+}
+
+.position-details-dialog .pdd-trade-btn.is-add:hover:not(:disabled) {
+  border-color: var(--success-color);
+  background: var(--success-alpha-10);
+}
+
+.position-details-dialog .pdd-trade-btn.is-sell {
+  color: var(--semantic-warning-text);
+}
+
+.position-details-dialog .pdd-trade-btn.is-sell:hover:not(:disabled) {
+  border-color: var(--warning-color);
+  background: var(--warning-alpha-20);
+}
+
+.position-details-dialog .pdd-trade-btn.is-close {
+  color: var(--semantic-error-text);
+}
+
+.position-details-dialog .pdd-trade-btn.is-close:hover:not(:disabled) {
+  border-color: var(--danger);
+  background: var(--danger-alpha-15);
+}
+
+.position-details-dialog .pdd-trade-btn.is-neutral:hover:not(:disabled) {
+  border-color: var(--text-muted);
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+/* Status strip ------------------------------------------------------------- */
+
+.position-details-dialog .header-lower-row {
+  grid-area: strip;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  min-width: 0;
+  min-height: 24px;
+
+  /* Aligned with the name, past the logo. */
+  padding-left: 56px;
+}
+
+.position-details-dialog .header-badges,
+.position-details-dialog .pdd-pending-swaps {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.position-details-dialog .pdd-pending-swaps {
+  gap: 6px 14px;
+}
+
+.position-details-dialog .header-badges:empty,
+.position-details-dialog .pdd-pending-swaps:empty {
+  display: none;
+}
+
 .position-details-dialog .pdd-badge {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
   box-sizing: border-box;
   min-height: 24px;
-  padding: 4px 10px;
-  border: 1px solid transparent;
+  padding: 3px 8px;
   border-radius: var(--radius-md);
-  font-size: 0.65rem;
-  font-weight: 700;
-  line-height: 1;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-.position-details-dialog .pdd-badge-success {
-  background: var(--success-alpha-20);
-  border-color: var(--success-alpha-30);
-  color: var(--success-color);
-}
-
-.position-details-dialog .pdd-badge-secondary {
-  background: var(--bg-secondary);
+  background: var(--bg-card-hover);
   color: var(--text-secondary);
-  border: 1px solid var(--border-color);
+  font-size: 0.64rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
-.position-details-dialog .pdd-badge-info {
-  background: var(--primary-alpha-20);
-  color: var(--primary-color);
+.position-details-dialog .pdd-badge.is-success,
+.position-details-dialog .pdd-status.is-open {
+  background: var(--success-alpha-20);
+  color: var(--semantic-success-text);
 }
 
-.position-details-dialog .pdd-badge-warning {
+.position-details-dialog .pdd-badge.is-warning {
   background: var(--warning-alpha-20);
-  color: var(--warning-color);
+  color: var(--semantic-warning-text);
 }
 
-/* Submitted-but-unverified swap. The spinner is the state, not decoration: it marks the
-   window where the position's figures are still the pre-trade ones. */
-.position-details-dialog .pdd-pending-swaps {
-  display: contents;
+.position-details-dialog .pdd-badge.is-danger {
+  background: var(--danger-alpha-20);
+  color: var(--semantic-error-text);
 }
 
-.position-details-dialog .pdd-badge-pending {
-  background: var(--primary-alpha-20);
-  border-color: var(--primary-color);
-  color: var(--primary-color);
+.position-details-dialog .pdd-status {
+  flex-shrink: 0;
+  min-height: 20px;
+  padding: 2px 7px;
 }
 
-.position-details-dialog .pdd-badge-pending i {
-  font-size: 0.85em;
-}
-
-/* Manual management: position opened by a manual/force buy; auto-trader skips it. */
-.position-details-dialog .pdd-badge-manual {
-  background: var(--warning-alpha-20);
-  color: var(--warning-color);
-  border-color: var(--warning-alpha-30);
-}
-
-/* Interactive manual-management toggle (open positions). */
-.position-details-dialog .pdd-manual-toggle {
+.position-details-dialog .pdd-management {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  cursor: pointer;
-  transition: all var(--transition-fast, 0.15s ease);
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 0.64rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
-.position-details-dialog .pdd-manual-toggle i {
-  font-size: 0.85em;
+/* The select keeps its own skin; this only fits it to the 24px strip. */
+.position-details-dialog .pdd-management .custom-select {
+  color: var(--text-primary);
+  letter-spacing: normal;
+  text-transform: none;
 }
 
-/* ON: manually managed (auto-trader off) — warning accent like the row badge. */
-.position-details-dialog .pdd-manual-toggle.is-on {
-  background: var(--warning-alpha-20);
-  color: var(--warning-color);
-  border-color: var(--warning-alpha-30);
+.position-details-dialog .pdd-management .custom-select .cs-trigger {
+  box-sizing: border-box;
+  height: 24px;
+  min-height: 0;
+  padding: 0 8px;
 }
 
-/* OFF: auto-managed — muted/neutral so it reads as the non-protected state. */
-.position-details-dialog .pdd-manual-toggle.is-off {
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
-  border-color: var(--border-color);
+.position-details-dialog .pdd-pending {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--semantic-info-text);
+  font-size: 0.7rem;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
-.position-details-dialog .pdd-manual-toggle:hover {
-  filter: brightness(1.1);
+.position-details-dialog .pdd-pending i {
+  font-size: 12px;
+}
+
+/* Responsive --------------------------------------------------------------- */
+
+/* Labels go before the row structure changes: a zoomed desktop keeps one header row. */
+@media (width <= 1320px) {
+  .position-details-dialog .pdd-trade-btn {
+    width: 32px;
+    padding: 0;
+  }
+
+  .position-details-dialog .pdd-trade-btn span {
+    display: none;
+  }
+}
+
+@media (width <= 1100px) {
+  .position-details-dialog .header-top-row {
+    grid-template-areas:
+      "identity actions"
+      "metrics metrics"
+      "strip strip";
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .position-details-dialog .header-price {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .position-details-dialog .header-lower-row {
+    padding-left: 0;
+  }
+}
+
+@media (width <= 640px) {
+  .position-details-dialog .header-top-row {
+    grid-template-areas:
+      "identity"
+      "actions"
+      "metrics"
+      "strip";
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .position-details-dialog .header-right {
+    justify-content: space-between;
+  }
+
+  .position-details-dialog .header-price {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (pointer: coarse) {
+  .position-details-dialog .pdd-trade-btn {
+    min-width: 40px;
+    height: 40px;
+  }
 }

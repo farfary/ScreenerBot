@@ -2,7 +2,9 @@
 
 use chrono::{Duration, Utc};
 
-use crate::webserver::routes::positions::types::{PositionResponse, PositionsStatsResponse};
+use crate::webserver::routes::positions::types::{
+    PositionResponse, PositionStatus, PositionsStatsResponse,
+};
 
 use super::aggregates::{self, closed_exit_offset_hours, closed_hold_minutes};
 use super::copy_trading::position_owner;
@@ -39,6 +41,7 @@ pub fn get_promo_positions(status: Option<&str>) -> Vec<PositionResponse> {
                 exit_price: None,
                 exit_time: None,
                 position_type: "long".to_owned(),
+                status: PositionStatus::Open,
                 entry_size_sol: *size,
                 total_size_sol: *size,
                 price_highest: current * 1.05,
@@ -109,6 +112,7 @@ pub fn get_promo_positions(status: Option<&str>) -> Vec<PositionResponse> {
                 exit_price: Some(*exit),
                 exit_time: Some(exit_time.timestamp()),
                 position_type: "long".to_owned(),
+                status: PositionStatus::Closed,
                 entry_size_sol: *size,
                 total_size_sol: *size,
                 price_highest: exit.max(*entry) * 1.02,
@@ -179,6 +183,7 @@ pub fn get_promo_positions(status: Option<&str>) -> Vec<PositionResponse> {
                 exit_price: Some(*exit),
                 exit_time: Some(exit_time.timestamp()),
                 position_type: "long".to_owned(),
+                status: PositionStatus::Archived,
                 entry_size_sol: *size,
                 total_size_sol: *size,
                 price_highest: exit.max(*entry) * 1.02,

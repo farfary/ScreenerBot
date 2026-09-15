@@ -1,14 +1,14 @@
-/* Position Details Activity — expanded accounting and chain records. */
+/* =============================================================================
+   POSITION DETAILS — activity event details
+   The expanded accounting and chain record of one event, indented under its row.
+   ============================================================================= */
 
 .position-details-dialog .pdd-act-details {
+  grid-column: 2;
   display: none;
   flex-direction: column;
   gap: 12px;
-  margin-bottom: 10px;
-  padding: 12px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  background: var(--bg-secondary);
+  padding: 2px 0 14px;
 }
 
 .position-details-dialog .pdd-act-card.is-open .pdd-act-details {
@@ -19,27 +19,23 @@
 .position-details-dialog .pdd-act-xfers {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 6px;
 }
 
 .position-details-dialog .pdd-act-position-after h4,
 .position-details-dialog .pdd-act-xfers h4 {
   margin: 0;
   color: var(--text-muted);
-  font-size: 0.62rem;
+  font-size: 0.6rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.position-details-dialog .pdd-act-position-after {
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--border-subtle);
 }
 
 .position-details-dialog .pdd-act-detail-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
-  gap: 10px var(--spacing-md);
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px 16px;
 }
 
 .position-details-dialog .pdd-act-detail-metric {
@@ -52,14 +48,18 @@
 .position-details-dialog .pdd-act-detail-metric > span {
   color: var(--text-muted);
   font-size: 0.58rem;
+  font-weight: 650;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+}
+
+.position-details-dialog :where(.pdd-act-detail-metric > strong) {
+  color: var(--text-primary);
 }
 
 .position-details-dialog .pdd-act-detail-metric > strong {
   overflow: hidden;
-  color: var(--text-primary);
-  font: 600 0.72rem/1.35 var(--font-data);
+  font: 600 0.74rem/1.35 var(--font-data);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -68,30 +68,29 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 7px 9px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
   color: var(--text-secondary);
-  font-size: 0.7rem;
+  font-size: 0.72rem;
 }
 
-.position-details-dialog .pdd-act-note.is-error {
-  border-color: var(--danger-alpha-30);
-  background: var(--danger-alpha-10);
-  color: var(--danger);
+.position-details-dialog .pdd-act-note i {
+  color: var(--text-muted);
+}
+
+.position-details-dialog .pdd-act-note.is-error,
+.position-details-dialog .pdd-act-note.is-error i {
+  color: var(--semantic-error-text);
 }
 
 .position-details-dialog .pdd-act-signature {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-  padding-top: 10px;
-  border-top: 1px solid var(--border-subtle);
+  gap: 4px 14px;
 }
 
 .position-details-dialog .pdd-act-sig {
-  color: var(--link-color);
-  font: 500 0.68rem/1.3 var(--font-mono);
+  color: var(--primary-color);
+  font: 500 0.7rem/1.3 var(--font-mono);
   cursor: pointer;
 }
 
@@ -99,27 +98,24 @@
 .position-details-dialog .pdd-act-sig-link {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 3px 7px;
-  border: none;
-  border-radius: var(--radius-md);
+  gap: 4px;
+  padding: 0;
+  border: 0;
   background: transparent;
   color: var(--text-secondary);
-  font-size: 0.66rem;
+  font-size: 0.68rem;
   text-decoration: none;
   cursor: pointer;
 }
 
 .position-details-dialog .pdd-act-sig-copy:hover,
 .position-details-dialog .pdd-act-sig-link:hover {
-  background: var(--bg-card-hover);
-  color: var(--link-color);
+  color: var(--primary-color);
 }
 
 .position-details-dialog .pdd-act-sig-na {
   color: var(--text-muted);
-  font-size: 0.68rem;
-  font-style: italic;
+  font-size: 0.7rem;
 }
 
 .position-details-dialog .pdd-act-xfers {
@@ -135,7 +131,7 @@
 .position-details-dialog .pdd-act-xfer-table th,
 .position-details-dialog .pdd-act-xfer-table td {
   padding: 5px 8px;
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-color);
   color: var(--text-secondary);
   text-align: left;
   white-space: nowrap;
@@ -153,7 +149,7 @@
 }
 
 .position-details-dialog .pdd-act-filter-empty {
-  padding: var(--spacing-xl);
+  padding: 24px var(--pdd-gutter);
   color: var(--text-muted);
   font-size: 0.78rem;
   text-align: center;

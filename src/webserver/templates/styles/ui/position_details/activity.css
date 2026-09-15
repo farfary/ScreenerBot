@@ -1,192 +1,136 @@
-/* Position Details — round-grouped token activity timeline. */
+/* =============================================================================
+   POSITION DETAILS — activity
+   The token's history under the chart: a sticky toolbar strip, optional all-round
+   totals, then rounds of events. Rows are separated by rules; glyphs are bare.
+   ============================================================================= */
 
 .position-details-dialog .pdd-activity {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-md);
-}
-
-/* All-time summary */
-.position-details-dialog .pdd-act-summary {
-  display: grid;
-  grid-template-columns: minmax(190px, 0.8fr) minmax(420px, 2fr);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  background: var(--bg-secondary);
-  overflow: hidden;
-}
-
-.position-details-dialog .pdd-act-summary-lead {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 3px;
-  padding: var(--spacing-md);
-  border-right: 1px solid var(--border-color);
-}
-
-.position-details-dialog .pdd-act-summary-eyebrow,
-.position-details-dialog .pdd-act-summary-item > span {
-  font-size: 0.62rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-muted);
-}
-
-.position-details-dialog .pdd-act-summary-pnl {
-  font: 700 1.15rem/1.3 var(--font-data);
-}
-
-.position-details-dialog .is-positive {
-  color: var(--success-color);
-}
-
-.position-details-dialog .is-negative {
-  color: var(--danger);
-}
-
-.position-details-dialog .pdd-act-summary-caption {
-  font-size: 0.72rem;
-  color: var(--text-secondary);
-}
-
-.position-details-dialog .pdd-act-summary-facts {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
-.position-details-dialog .pdd-act-summary-item {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 3px;
   min-width: 0;
-  padding: 12px var(--spacing-md);
-  border-right: 1px solid var(--border-subtle);
 }
 
-.position-details-dialog .pdd-act-summary-item:last-child {
-  border-right: none;
+/* The same strip as the chart toolbar above it. */
+.position-details-dialog .pdd-activity-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 16px;
+  box-sizing: border-box;
+  min-height: var(--pdd-activity-head);
+  padding: 7px var(--pdd-gutter);
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
 }
 
-.position-details-dialog .pdd-act-summary-item strong {
-  overflow: hidden;
-  font: 700 0.84rem/1.3 var(--font-data);
+.position-details-dialog .pdd-activity-title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.position-details-dialog .pdd-activity-title h3 {
+  margin: 0;
   color: var(--text-primary);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.position-details-dialog .pdd-activity-meta {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-family: var(--font-data);
+  font-size: 0.68rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.position-details-dialog .pdd-act-summary-item small {
-  font-size: 0.66rem;
-  color: var(--text-secondary);
-}
-
-.position-details-dialog .pdd-act-summary-meta {
-  grid-column: 1 / -1;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-md);
-  padding: 7px var(--spacing-md);
-  border-top: 1px solid var(--border-color);
-  background: var(--bg-primary);
-  font-size: 0.68rem;
-  color: var(--text-muted);
-}
-
-.position-details-dialog .pdd-act-summary-meta span {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.position-details-dialog .pdd-act-summary-alert {
-  color: var(--warning-color);
-}
-
-/* Sticky browsing controls */
-.position-details-dialog .pdd-act-toolbar {
-  position: sticky;
-  top: -16px;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-md);
-  padding: 10px 0;
-  background: var(--bg-primary);
-}
-
-.position-details-dialog .pdd-act-filters {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.position-details-dialog .pdd-act-filter {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 30px;
-  padding: 5px 11px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-full);
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
-  font-size: 0.7rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition:
-    color var(--transition-fast),
-    border-color var(--transition-fast),
-    background var(--transition-fast);
-}
-
-.position-details-dialog .pdd-act-filter:hover {
-  border-color: var(--border-hover);
-  color: var(--text-primary);
-}
-
-.position-details-dialog .pdd-act-filter.active {
-  border-color: var(--primary);
-  background: var(--primary-alpha-15);
-  color: var(--primary);
+.position-details-dialog .pdd-activity-alert {
+  color: var(--semantic-warning-text);
 }
 
 .position-details-dialog .pdd-act-filter > span {
-  min-width: 18px;
-  padding: 0 5px;
-  border-radius: var(--radius-full);
-  background: var(--bg-primary);
+  margin-left: 5px;
   color: var(--text-muted);
-  font: 700 0.65rem/1.35 var(--font-data);
-  text-align: center;
+  font-family: var(--font-data);
 }
 
 .position-details-dialog .pdd-act-filter.active > span {
-  background: var(--primary-alpha-20);
-  color: var(--primary);
+  color: inherit;
 }
 
-/* Trading-round chapters */
+.position-details-dialog .pdd-activity .loading-spinner {
+  height: 96px;
+}
+
+.position-details-dialog .pdd-activity-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 20px var(--pdd-gutter);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+
+.position-details-dialog .pdd-activity-notice i {
+  color: var(--text-muted);
+  font-size: 16px;
+}
+
+/* All-round totals ---------------------------------------------------------- */
+
+.position-details-dialog .pdd-act-totals {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  padding: 10px var(--pdd-gutter);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.position-details-dialog .pdd-act-total {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.position-details-dialog .pdd-act-total > span {
+  color: var(--text-muted);
+  font-size: 0.6rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.position-details-dialog :where(.pdd-act-total > strong) {
+  color: var(--text-primary);
+}
+
+.position-details-dialog .pdd-act-total > strong {
+  overflow: hidden;
+  font: 600 0.8rem/1.3 var(--font-data);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Rounds -------------------------------------------------------------------- */
+
 .position-details-dialog .pdd-act-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
 }
 
 .position-details-dialog .pdd-act-round {
-  overflow: hidden;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
 }
 
-.position-details-dialog .pdd-act-round.is-current {
-  border-color: var(--primary-alpha-30);
+.position-details-dialog .pdd-act-round:last-child {
+  border-bottom: 0;
 }
 
 .position-details-dialog .pdd-act-round.is-filtered-out,
@@ -198,10 +142,10 @@
 .position-details-dialog .pdd-act-round-toggle {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
   width: 100%;
-  padding: 12px 14px;
-  border: none;
+  padding: 10px var(--pdd-gutter);
+  border: 0;
   background: transparent;
   color: inherit;
   text-align: left;
@@ -212,64 +156,42 @@
   background: var(--bg-card-hover);
 }
 
-.position-details-dialog .pdd-act-round-index {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  flex-shrink: 0;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-full);
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  font: 700 0.78rem/1 var(--font-data);
-}
-
-.position-details-dialog .is-current .pdd-act-round-index {
-  border-color: var(--primary);
-  color: var(--primary);
-}
-
 .position-details-dialog .pdd-act-round-main {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
   min-width: 0;
 }
 
 .position-details-dialog .pdd-act-round-title {
   display: flex;
   align-items: center;
-  gap: 7px;
-  font-size: 0.82rem;
-  font-weight: 700;
+  gap: 8px;
   color: var(--text-primary);
+  font-size: 0.8rem;
+  font-weight: 700;
 }
 
-.position-details-dialog .pdd-act-current-badge,
-.position-details-dialog .pdd-act-round-status {
+.position-details-dialog .pdd-act-tag {
   padding: 2px 6px;
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card-hover);
+  color: var(--text-secondary);
   font-size: 0.58rem;
   font-weight: 700;
-  text-transform: uppercase;
   letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 
-.position-details-dialog .pdd-act-current-badge {
-  background: var(--primary-alpha-15);
-  color: var(--primary);
+.position-details-dialog .pdd-act-tag.is-open {
+  background: var(--success-alpha-20);
+  color: var(--semantic-success-text);
 }
 
-.position-details-dialog .pdd-act-round-status {
-  color: var(--text-muted);
-}
-
-.position-details-dialog .pdd-act-round-status.is-open {
-  background: var(--success-alpha-15);
-  color: var(--success-color);
+.position-details-dialog .pdd-act-tag.is-current {
+  background: var(--primary-alpha-20);
+  color: var(--semantic-info-text);
 }
 
 .position-details-dialog .pdd-act-round-date {
@@ -282,35 +204,37 @@
 
 .position-details-dialog .pdd-act-round-facts {
   display: flex;
-  align-items: center;
-  gap: var(--spacing-md);
   flex-shrink: 0;
-  font: 600 0.72rem/1.3 var(--font-data);
+  align-items: center;
+  gap: 20px;
+}
+
+.position-details-dialog .pdd-act-round-fact {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+}
+
+.position-details-dialog .pdd-act-round-fact small {
+  color: var(--text-muted);
+  font-size: 0.56rem;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.position-details-dialog :where(.pdd-act-round-fact strong) {
   color: var(--text-secondary);
 }
 
-.position-details-dialog .pdd-act-round-facts > span:not(.pdd-act-round-count) {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.position-details-dialog .pdd-act-round-facts small {
-  color: var(--text-muted);
-  font: 600 0.56rem/1.2 var(--font-ui);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.position-details-dialog .pdd-act-round-count {
-  padding: 2px 7px;
-  border-radius: var(--radius-full);
-  background: var(--bg-primary);
-  color: var(--text-muted);
-  font-size: 0.65rem;
+.position-details-dialog .pdd-act-round-fact strong {
+  font: 600 0.74rem/1.3 var(--font-data);
+  white-space: nowrap;
 }
 
 .position-details-dialog .pdd-act-round-facts > i {
+  color: var(--text-muted);
   transition: transform var(--transition-fast);
 }
 
@@ -319,96 +243,60 @@
 }
 
 .position-details-dialog .pdd-act-round-body {
-  position: relative;
   display: none;
-  padding: 6px 14px 12px 46px;
-  border-top: 1px solid var(--border-color);
-  background: var(--bg-primary);
+  padding: 0 var(--pdd-gutter) 4px;
 }
 
 .position-details-dialog .pdd-act-round.is-open .pdd-act-round-body {
   display: block;
 }
 
-/* Compact event rows */
-.position-details-dialog .pdd-act-card,
-.position-details-dialog .pdd-act-milestone {
-  position: relative;
-  border-bottom: 1px solid var(--border-subtle);
+.position-details-dialog .pdd-act-round:not(.is-single) .pdd-act-round-body {
+  border-top: 1px solid var(--border-color);
 }
 
-.position-details-dialog .pdd-act-card::before,
-.position-details-dialog .pdd-act-milestone::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: -17px;
-  width: 1px;
-  background: var(--border-color);
-}
+/* Events -------------------------------------------------------------------- */
 
-.position-details-dialog .pdd-act-card:first-child::before {
-  top: 30px;
-}
-
-.position-details-dialog .pdd-act-card:last-child::before {
-  bottom: calc(100% - 30px);
-}
-
-.position-details-dialog .pdd-act-milestone:first-child::before {
-  top: 22px;
-}
-
-.position-details-dialog .pdd-act-milestone:last-child::before {
-  bottom: calc(100% - 22px);
+.position-details-dialog .pdd-act-card {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  column-gap: 12px;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .position-details-dialog .pdd-act-card:last-child,
 .position-details-dialog .pdd-act-milestone:last-child {
-  border-bottom: none;
+  border-bottom: 0;
 }
 
-.position-details-dialog .pdd-act-node,
-.position-details-dialog .pdd-act-milestone-node {
-  position: absolute;
-  z-index: 1;
-  top: 17px;
-  left: -30px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-full);
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
-}
-
-.position-details-dialog .pdd-act-card[data-side="entry"] .pdd-act-node {
-  border-color: var(--primary-alpha-30);
-  background: var(--primary-alpha-15);
-  color: var(--primary);
-}
-
-.position-details-dialog .pdd-act-card[data-side="wallet"] .pdd-act-node {
-  border-style: dashed;
+/* A bare glyph in the gutter, coloured like the chart marker for the same event. */
+.position-details-dialog .pdd-act-glyph {
+  padding-top: 13px;
   color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1;
+  text-align: center;
 }
 
-.position-details-dialog .pdd-act-node i,
-.position-details-dialog .pdd-act-milestone-node i {
-  font-size: 12px;
+.position-details-dialog .pdd-act-card[data-kind="entry"] .pdd-act-glyph {
+  color: var(--semantic-success-text);
+}
+
+.position-details-dialog .pdd-act-card[data-kind="dca"] .pdd-act-glyph {
+  color: var(--semantic-warning-text);
+}
+
+.position-details-dialog .pdd-act-card[data-side="exit"] .pdd-act-glyph {
+  color: var(--semantic-error-text);
 }
 
 .position-details-dialog .pdd-act-expand {
   display: flex;
   align-items: center;
-  gap: var(--spacing-md);
+  gap: 16px;
   width: 100%;
-  padding: 11px 0;
-  border: none;
+  padding: 10px 0;
+  border: 0;
   background: transparent;
   color: inherit;
   text-align: left;
@@ -416,14 +304,14 @@
 }
 
 .position-details-dialog .pdd-act-expand:hover .pdd-act-description {
-  color: var(--primary);
+  color: var(--primary-color);
 }
 
 .position-details-dialog .pdd-act-main {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
   min-width: 0;
 }
 
@@ -435,9 +323,10 @@
 
 .position-details-dialog .pdd-act-event-topline > strong {
   color: var(--text-secondary);
-  font-size: 0.62rem;
-  text-transform: uppercase;
+  font-size: 0.6rem;
+  font-weight: 700;
   letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 
 .position-details-dialog .pdd-act-description {
@@ -456,41 +345,44 @@
 }
 
 .position-details-dialog .pdd-act-state {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 6px;
-  border-radius: var(--radius-full);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
   font-size: 0.58rem;
   font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .position-details-dialog .pdd-act-state.is-pending {
-  background: var(--warning-alpha-15);
-  color: var(--warning-color);
+  background: var(--warning-alpha-20);
+  color: var(--semantic-warning-text);
 }
 
 .position-details-dialog .pdd-act-state.is-failed {
-  background: var(--danger-alpha-15);
-  color: var(--danger);
+  background: var(--danger-alpha-20);
+  color: var(--semantic-error-text);
 }
 
 .position-details-dialog .pdd-act-state.is-synthetic {
-  border: 1px solid var(--border-color);
+  background: var(--bg-card-hover);
   color: var(--text-secondary);
 }
 
 .position-details-dialog .pdd-act-event-side {
   display: flex;
-  align-items: flex-end;
-  flex-direction: column;
-  gap: 5px;
   flex-shrink: 0;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.position-details-dialog :where(.pdd-act-outcome) {
+  color: var(--text-secondary);
 }
 
 .position-details-dialog .pdd-act-outcome {
-  color: var(--text-secondary);
-  font: 700 0.74rem/1.3 var(--font-data);
+  font: 600 0.74rem/1.3 var(--font-data);
+  white-space: nowrap;
 }
 
 .position-details-dialog .pdd-act-details-label {
@@ -511,24 +403,23 @@
 
 /* State milestones share the timeline without competing with trades. */
 .position-details-dialog .pdd-act-milestone {
-  display: flex;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
   align-items: center;
-  gap: var(--spacing-md);
-  min-height: 48px;
-  padding: 8px 0;
+  column-gap: 12px;
+  min-height: 40px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border-color);
   color: var(--text-muted);
 }
 
-.position-details-dialog .pdd-act-milestone-node {
-  top: 11px;
-  width: 22px;
-  height: 22px;
-  left: -28px;
+.position-details-dialog .pdd-act-milestone .pdd-act-glyph {
+  padding-top: 0;
+  font-size: 13px;
 }
 
 .position-details-dialog .pdd-act-milestone-main {
   display: flex;
-  flex: 1;
   align-items: baseline;
   gap: 8px;
   min-width: 0;
@@ -536,71 +427,40 @@
 
 .position-details-dialog .pdd-act-milestone-main strong {
   color: var(--text-secondary);
-  font-size: 0.68rem;
-  text-transform: capitalize;
+  font-size: 0.7rem;
+  font-weight: 600;
 }
 
 .position-details-dialog .pdd-act-milestone-main span,
 .position-details-dialog .pdd-act-milestone time {
   overflow: hidden;
-  font: 500 0.64rem/1.35 var(--font-data);
+  font: 500 0.66rem/1.35 var(--font-data);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 @media (width <= 1100px) {
-  .position-details-dialog .pdd-act-summary {
-    grid-template-columns: 1fr;
-  }
-
-  .position-details-dialog .pdd-act-summary-lead {
-    border-right: none;
-    border-bottom: 1px solid var(--border-color);
-  }
-
-  .position-details-dialog .pdd-act-round-facts > span:not(.pdd-act-round-count) {
+  .position-details-dialog .pdd-act-round-fact:not(.is-pnl) {
     display: none;
   }
 }
 
 @media (width <= 640px) {
-  .position-details-dialog .pdd-act-summary-facts {
+  .position-details-dialog .pdd-act-totals {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .position-details-dialog .pdd-act-summary-item:nth-child(2) {
-    border-right: none;
-  }
-
-  .position-details-dialog .pdd-act-summary-item:nth-child(-n + 2) {
-    border-bottom: 1px solid var(--border-subtle);
-  }
-
-  .position-details-dialog .pdd-act-toolbar,
-  .position-details-dialog .pdd-act-summary-meta {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .position-details-dialog .pdd-act-round-count {
-    display: none;
-  }
-
-  .position-details-dialog .pdd-act-round-body {
-    padding-right: 8px;
-  }
-
   .position-details-dialog .pdd-act-expand {
-    align-items: flex-start;
     flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
   }
 
   .position-details-dialog .pdd-act-event-side {
     align-items: flex-start;
   }
 
-  .position-details-dialog .pdd-act-milestone {
-    align-items: flex-start;
-    flex-direction: column;
+  .position-details-dialog .pdd-act-description {
+    white-space: normal;
   }
 }

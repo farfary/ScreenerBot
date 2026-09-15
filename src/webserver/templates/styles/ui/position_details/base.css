@@ -1,14 +1,20 @@
-/* Position Details Dialog - Base Structure */
-
 /* =============================================================================
-   BASE DIALOG STRUCTURE - Full Screen Desktop App Style
-   Platform-aware layout:
-   - Browser/Windows/Linux: No title bar offset, full height
-   - macOS Electron: 28px title bar for traffic lights + window drag
-   Status bar (24px) at bottom
+   POSITION DETAILS — dialog shell and the one-view body
+
+   Full-screen like Token and Transaction Details: the status bar stays visible below,
+   and on macOS Electron the header paints the title-bar pixels itself (header.css).
+   The body is one view, no sub-tabs: the chart and the activity share a scrolling
+   main column, the summary rail scrolls beside it.
    ============================================================================= */
 
 .position-details-dialog {
+  --pdd-gutter: clamp(14px, 1.4vw, 22px);
+  --pdd-rail-width: clamp(300px, 24vw, 380px);
+
+  /* The activity heading stays in view under the chart, so the history reads as part
+     of the same page rather than as something hidden below it. */
+  --pdd-activity-head: 48px;
+
   position: fixed;
   inset: 0;
   z-index: var(--z-dialog);
@@ -24,190 +30,110 @@
   pointer-events: auto;
 }
 
-/* Title bar area - hidden by default (browser/Windows/Linux) */
+/* Transparent window-drag target over the title-bar pixels the header paints. */
 .position-details-dialog::before {
   content: "";
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
+  inset: 0 0 auto;
+  z-index: 3;
   height: 0;
-  background: var(--bg-secondary);
-  z-index: 1;
-  transition: height 0.15s ease;
+  pointer-events: none;
 }
 
-/* macOS Electron: Show title bar background */
 .electron-macos .position-details-dialog::before {
   height: 28px;
+  -webkit-app-region: drag;
+  pointer-events: auto;
 }
-
-/* =============================================================================
-   BACKDROP
-   ============================================================================= */
-
-.position-details-dialog .dialog-backdrop {
-  position: absolute;
-  inset: 0;
-  background: rgb(0, 0, 0, 0.6);
-  z-index: 0;
-}
-
-/* macOS Electron: Backdrop starts below title bar */
-.electron-macos .position-details-dialog .dialog-backdrop {
-  top: 28px;
-}
-
-/* =============================================================================
-   CONTENT CONTAINER
-   ============================================================================= */
 
 .position-details-dialog .dialog-container {
   position: relative;
-  margin-top: 0;
-  margin-bottom: 24px;
-  background: var(--bg-primary);
-  border: none;
-  border-radius: 0;
-  box-shadow: none;
-  width: 100%;
-  flex: 1;
-  max-width: none;
-  max-height: none;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  animation: pdd-fade-in 0.25s ease-out;
   z-index: 2;
-}
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
 
-/* macOS Electron: Content starts below title bar */
-.electron-macos .position-details-dialog .dialog-container {
-  margin-top: 28px;
+  /* The status bar stays visible under every full-screen dialog. */
+  margin-bottom: 24px;
+  overflow: hidden;
+  background: var(--bg-primary);
+  animation: pdd-fade-in 0.25s ease-out;
 }
 
 @keyframes pdd-fade-in {
-  0% {
+  from {
     opacity: 0;
   }
 
-  100% {
+  to {
     opacity: 1;
   }
 }
 
-/* Trade actions live on the right of the tab bar (top of the dialog). */
-.position-details-dialog .pdd-trade-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-.position-details-dialog .pdd-trade-actions-label {
-  margin-right: 2px;
-  color: var(--text-muted);
-  font-size: 0.625rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.position-details-dialog .pdd-trade-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
-  font-size: 0.75rem;
-  font-weight: 700;
-  border-radius: var(--radius-md);
-  border: 1px solid transparent;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: all var(--transition-fast);
-}
-
-.position-details-dialog .pdd-trade-btn i {
-  font-size: 14px;
-}
-
-.position-details-dialog .pdd-trade-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.position-details-dialog .pdd-trade-add {
-  color: var(--success-color);
-  background: var(--success-alpha-10);
-  border-color: var(--success-alpha-30);
-}
-
-.position-details-dialog .pdd-trade-add:hover:not(:disabled) {
-  background: var(--success-alpha-20);
-}
-
-.position-details-dialog .pdd-trade-partial {
-  color: var(--warning-color);
-  background: var(--warning-alpha-10);
-  border-color: var(--warning-alpha-30);
-}
-
-.position-details-dialog .pdd-trade-partial:hover:not(:disabled) {
-  background: var(--warning-alpha-20);
-}
-
-.position-details-dialog .pdd-trade-close {
-  color: var(--danger);
-  background: var(--danger-alpha-10);
-  border-color: var(--danger-alpha-30);
-}
-
-.position-details-dialog .pdd-trade-close:hover:not(:disabled) {
-  background: var(--danger-alpha-20);
-}
-
-.position-details-dialog .pdd-trade-view {
-  color: var(--link-color);
-  background: var(--bg-card-hover);
-  border-color: var(--border-color);
-}
-
-.position-details-dialog .pdd-trade-view:hover:not(:disabled) {
-  border-color: var(--link-color);
-}
-
 /* =============================================================================
-   BODY & TAB CONTENT
+   BODY LAYOUT
    ============================================================================= */
 
 .position-details-dialog .dialog-body {
-  flex: 1;
-  overflow: hidden;
   position: relative;
+  flex: 1;
+  min-height: 0;
   background: var(--bg-primary);
 }
 
-.position-details-dialog .tab-content {
+.position-details-dialog .pdd-layout {
   position: absolute;
   inset: 0;
-  padding: 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--pdd-rail-width);
+}
+
+.position-details-dialog .pdd-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* A column rule between two regions, not an accent on a card. */
+.position-details-dialog .pdd-rail {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-left: 1px solid var(--border-color);
+}
+
+.position-details-dialog .pdd-body-state {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-primary);
+}
+
+.position-details-dialog .pdd-body-state[hidden] {
   display: none;
 }
 
-.position-details-dialog .tab-content.active {
-  display: block;
-}
+/* =============================================================================
+   SHARED STATES AND TONES
+   ============================================================================= */
 
-/* Loading spinner */
 .position-details-dialog .loading-spinner {
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: var(--spacing-sm);
   height: 200px;
   color: var(--text-secondary);
-  font-size: 0.9rem;
-  gap: var(--spacing-sm);
+  font-size: 0.85rem;
 }
 
 .position-details-dialog .loading-spinner::before {
@@ -226,18 +152,15 @@
   }
 }
 
-/* Shared empty state (every tab) */
 .position-details-dialog .pdd-empty-state {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 100%;
-  min-height: 200px;
-  color: var(--text-secondary);
-  text-align: center;
   gap: var(--spacing-md);
   padding: var(--spacing-lg);
+  color: var(--text-secondary);
+  text-align: center;
 }
 
 .position-details-dialog .pdd-empty-state i {
@@ -250,90 +173,60 @@
   font-size: 0.9rem;
 }
 
+/* Tones win over any element's default colour: components set their own colour through
+   :where() so these two-class rules always apply. */
+.position-details-dialog .pdd-positive {
+  color: var(--semantic-success-text);
+}
+
+.position-details-dialog .pdd-negative {
+  color: var(--semantic-error-text);
+}
+
+.position-details-dialog .pdd-caution {
+  color: var(--semantic-warning-text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .position-details-dialog,
+  .position-details-dialog .dialog-container {
+    transition: none;
+    animation: none;
+  }
+}
+
 /* =============================================================================
-   RESPONSIVE — dialog shell
+   RESPONSIVE — one scroll for the whole body: chart, then summary, then history
    ============================================================================= */
 
-@media (width <= 1500px) {
-  .position-details-dialog .header-top-row {
-    grid-template-columns: minmax(360px, 1fr) auto auto;
-    column-gap: 16px;
-    row-gap: 8px;
-  }
-}
-
 @media (width <= 1100px) {
-  .position-details-dialog .header-top-row {
-    grid-template-columns: minmax(0, 1fr) auto;
+  .position-details-dialog .pdd-layout {
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
 
-  .position-details-dialog .header-center {
-    grid-column: 1 / -1;
-    grid-row: 2;
+  .position-details-dialog .pdd-main {
+    display: contents;
   }
 
-  .position-details-dialog .header-right {
-    grid-column: 2;
-    grid-row: 1;
+  .position-details-dialog .pdd-chart-section {
+    order: 1;
   }
 
-  .position-details-dialog .header-lower-row {
-    grid-row: 3;
-  }
-}
-
-@media (width <= 800px) {
-  .position-details-dialog .header-top-row {
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 14px;
-    padding: 10px 12px;
+  /* Nothing in a scrolling flex column may shrink: the two-column rail has almost no
+     min-content height, so it collapsed to 1px and painted over the activity. */
+  .position-details-dialog .pdd-rail {
+    flex: 0 0 auto;
+    order: 2;
+    overflow: visible;
+    border-bottom: 1px solid var(--border-color);
+    border-left: 0;
   }
 
-  .position-details-dialog .header-left {
-    min-width: 0;
-  }
-
-  .position-details-dialog .header-center {
-    grid-column: 1 / -1;
-    grid-row: 2;
-  }
-
-  .position-details-dialog .header-price {
-    width: 100%;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px 20px;
-  }
-
-  .position-details-dialog .tab-content {
-    padding: 12px;
-  }
-}
-
-@media (width <= 500px) {
-  .position-details-dialog .pdd-trade-actions-label {
-    display: none;
-  }
-
-  .position-details-dialog .header-price {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 14px 20px;
-  }
-
-  .position-details-dialog .header-logo {
-    width: 40px;
-    height: 40px;
-  }
-
-  .position-details-dialog .header-mint-full {
-    white-space: normal;
-    overflow-wrap: anywhere;
-  }
-
-  .position-details-dialog .header-right {
-    padding-top: 4px;
-  }
-
-  .position-details-dialog .header-lower-row {
-    padding-left: 56px;
+  .position-details-dialog .pdd-activity {
+    flex: 0 0 auto;
+    order: 3;
   }
 }
