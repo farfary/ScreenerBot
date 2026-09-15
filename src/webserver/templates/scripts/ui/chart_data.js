@@ -110,22 +110,27 @@ export async function fetchOhlcvStatus(mint, range) {
 }
 
 /**
- * Pick the timeframe that renders a span of time as a readable number of
- * candles — a position open for 20 minutes wants 1m, one open for a month
- * wants 1d. Without this the chart opened on a fixed 5m for every position and
- * a week-old position's entry sat thousands of candles off-screen.
+ * Most candles a span may take on its opening timeframe. A frame squeezes the whole span into
+ * the pane, so a longer run shrinks candles toward the chart's minimum width, where
+ * lightweight-charts stops shrinking and the entry or exit falls off the edge.
+ */
+const MAX_SPAN_CANDLES = 180;
+
+/**
+ * Pick the finest timeframe that renders a span of time in at most MAX_SPAN_CANDLES candles — a
+ * position open for 20 minutes gets 1m, one open for a month gets 1d. Without this the chart
+ * opened on a fixed 5m for every position and a week-old position's entry sat thousands of
+ * candles off-screen. The old rule aimed at a target from BELOW, so a span just short of the
+ * next timeframe came out at up to four times the target and did not fit the pane.
  * @param {number} spanSeconds
  * @returns {string} one of CHART_TIMEFRAMES
  */
 export function timeframeForSpan(spanSeconds) {
-  // Aim for roughly this many candles across the span.
-  const target = 120;
-  const ideal = Math.max(1, spanSeconds) / target;
-  let chosen = CHART_TIMEFRAMES[0];
-  for (const tf of CHART_TIMEFRAMES) {
-    if (TIMEFRAME_SECONDS[tf] <= ideal) chosen = tf;
-  }
-  return chosen;
+  const span = Math.max(1, spanSeconds);
+  return (
+    CHART_TIMEFRAMES.find((tf) => Math.ceil(span / TIMEFRAME_SECONDS[tf]) <= MAX_SPAN_CANDLES) ||
+    CHART_TIMEFRAMES[CHART_TIMEFRAMES.length - 1]
+  );
 }
 
 /** Seconds in one candle of a timeframe, or null for an unknown one. */

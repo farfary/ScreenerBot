@@ -15,6 +15,7 @@
  * - lightweight-charts (TradingView) v4
  * - advanced_chart/themes.js (CHART_THEMES)
  * - advanced_chart/indicators.js (technical indicator calculations)
+ * - advanced_chart/framing.js (ChartFraming — where the view goes, as pure functions)
  * - core/utils.js (Utils.formatPriceSubscript — the one price format policy)
  */
 
@@ -28,25 +29,18 @@
   // These are loaded from separate script files and exposed on window
   const { CHART_THEMES } = window.ChartThemes || {};
   const Indicators = window.ChartIndicators || {};
+  const Framing = window.ChartFraming;
 
   // Validate dependencies are loaded
-  if (!CHART_THEMES || !Indicators) {
+  if (!CHART_THEMES || !Indicators || !Framing) {
     console.error(
-      "AdvancedChart: Missing dependencies. Ensure themes.js and indicators.js are loaded first."
+      "AdvancedChart: Missing dependencies. Ensure themes.js, indicators.js and framing.js are loaded first."
     );
   }
 
   // ==========================================================================
   // CONSTANTS & DEFAULTS
   // ==========================================================================
-
-  /**
-   * Floor on how few bars a range frame may show. setVisibleRange() derives
-   * candle WIDTH from the span, so framing a position that lived three candles
-   * would stretch those three into pane-wide slabs. Widening the window to at
-   * least this many bars keeps candles readable at any position duration.
-   */
-  const MIN_FRAME_BARS = 40;
 
   const DEFAULT_OPTIONS = {
     theme: "dark",
@@ -57,7 +51,6 @@
     showTooltip: true,
     barSpacing: 12,
     minBarSpacing: 4,
-    rightOffset: 5,
     indicators: [], // ['ema9', 'ema21']
     locale: "en-US",
     // Significant digits for every price this chart prints (axis, tooltip).
@@ -110,15 +103,18 @@
       this.positionMarkers = [];
       this.data = [];
       this.volumeData = [];
+      // Ascending bar times, for framing.
+      this._times = [];
+      this._reframeFrame = null;
       // Time -> bar index for O(1) crosshair lookups, and the detected bar
       // interval (seconds) used to label the hovered bar.
       this._barByTime = new Map();
       this._barSeconds = null;
       // How the view is framed when data lands and the user has not taken over.
       this._frame = { mode: "latest" };
-      // Prices that must stay inside the visible price range even though they
-      // are drawn as price lines (which do not extend the scale on their own).
-      this._autoscalePrices = [];
+      // Reference prices ({ price, from, to }) kept inside the price range while the
+      // view overlaps their time window. Price lines do not extend the scale on their own.
+      this._autoscaleRefs = [];
 
       // UI elements
       this.tooltipEl = null;
@@ -229,7 +225,6 @@
           secondsVisible: false,
           barSpacing: this.options.barSpacing,
           minBarSpacing: this.options.minBarSpacing,
-          rightOffset: this.options.rightOffset,
           // lightweight-charts renders axis ticks in UTC by default, but the
           // crosshair tooltip formats in local time — that mismatch made the
           // axis label and the popup show different times for the same candle.
@@ -351,13 +346,20 @@
      * scale. A position whose average entry sits well outside the visible candle
      * range therefore drew its "Avg Entry" line off-pane and the chart looked
      * like it had no position on it at all. Prices registered through
-     * setOverlayLines({ autoscale: true }) are folded into the range here.
+     * setOverlayLines({ autoscale }) are folded into the range here — but only
+     * while the visible time range overlaps the line's window. A closed
+     * position's entry from weeks ago otherwise stretched the scale over empty
+     * price space and squashed today's candles into the bottom of the pane.
+     * lightweight-charts re-runs this on every visible-range change.
      */
     _autoscaleInfo(baseImplementation) {
       const base = baseImplementation();
-      if (!this._autoscalePrices.length) return base;
+      if (!this._autoscaleRefs.length || !this.chart) return base;
 
-      const values = this._autoscalePrices.filter((p) => Number.isFinite(p) && p > 0);
+      const visible = this.chart.timeScale().getVisibleRange();
+      const values = this._autoscaleRefs
+        .filter((ref) => ref.price > 0 && Framing.referenceInView(ref, visible))
+        .map((ref) => ref.price);
       if (!values.length) return base;
 
       let minValue = Math.min(...values);
@@ -478,6 +480,7 @@
       // smallest gap between consecutive bars, so missing bars (no-trade candles
       // are never stored) cannot inflate it.
       this._barByTime = new Map(this.data.map((d) => [d.time, d]));
+      this._times = this.data.map((d) => d.time);
       this._barSeconds = this.data.reduce((smallest, bar, idx) => {
         if (idx === 0) return smallest;
         const gap = bar.time - this.data[idx - 1].time;
@@ -665,12 +668,15 @@
 
     /**
      * Replace every horizontal reference line in one pass.
+     * `autoscale: true` keeps a level inside the price scale at all times;
+     * `autoscale: { from, to }` (unix seconds, either end may be Infinity) only
+     * while the view overlaps that window.
      * @param {Array} lines - [{ price, color, label, style, lineWidth, showLabel, autoscale }]
      */
     setOverlayLines(lines = []) {
       if (!this.mainSeries) {
         this.overlayLines = [];
-        this._autoscalePrices = [];
+        this._autoscaleRefs = [];
         return;
       }
 
@@ -690,7 +696,13 @@
         this.overlayLines.push({ line, options });
       });
 
-      this._autoscalePrices = lines.filter((o) => o.autoscale).map((o) => o.price);
+      this._autoscaleRefs = lines
+        .filter((o) => o.autoscale && Number.isFinite(o.price))
+        .map((o) => ({
+          price: o.price,
+          from: o.autoscale === true ? -Infinity : (o.autoscale.from ?? -Infinity),
+          to: o.autoscale === true ? Infinity : (o.autoscale.to ?? Infinity),
+        }));
       this._invalidateAutoscale();
     }
 
@@ -982,6 +994,10 @@
             this.chart.applyOptions({ width, height });
           }
         }
+        // A frame is laid out in pixels (the latest view's empty share, a span
+        // squeezed into the pane), so a resized pane re-frames unless the user
+        // has taken the view over.
+        if (!this._userHasInteracted) this._scheduleReframe();
       });
 
       // Observe the chartArea which has flex: 1
@@ -1144,8 +1160,8 @@
     }
 
     /**
-     * Anchor the view to the newest candle at a FIXED bar width, showing as many
-     * candles as fit the pane.
+     * Anchor the view to the newest candle at a FIXED bar width, with
+     * ChartFraming.RIGHT_MARGIN of the pane left empty after it.
      *
      * This is the deliberate alternative to fitContent(): that derives candle
      * WIDTH from the data span, so a token with only a handful of candles gets a
@@ -1161,7 +1177,10 @@
      * Frame a specific span — the position chart uses this to show a position's
      * lifetime instead of "the last pane-worth of candles", which for anything
      * older than a few hours contained none of the position's events at all.
-     * The frame survives data refreshes until the user takes over the view.
+     * ChartFraming.planRangeFrame decides the view: the span itself, or the
+     * latest view when the span sits on the live edge and fits, or when no
+     * loaded candle lies inside it. The frame survives data refreshes and
+     * resizes until the user takes over the view.
      * @param {number} from - Unix seconds
      * @param {number} to - Unix seconds
      */
@@ -1173,53 +1192,38 @@
     _applyFrame() {
       if (!this.chart || !this.data.length) return;
       const ts = this.chart.timeScale();
+      const width = ts.width() || this.chartArea.clientWidth;
 
       if (this._frame.mode === "range") {
-        this._applyRangeFrame(ts, this._frame.from, this._frame.to);
-        return;
-      }
-
-      // Reset any bar spacing a previous range frame applied, then pin the
-      // newest candle to the right edge. scrollToRealTime keeps that anchor as
-      // live candles arrive.
-      ts.applyOptions({
-        barSpacing: this.options.barSpacing,
-        rightOffset: this.options.rightOffset,
-      });
-      ts.scrollToRealTime();
-    }
-
-    /**
-     * Show the bars covering [from, to] plus a margin, in LOGICAL coordinates so
-     * a span that starts before the loaded data still frames correctly (the
-     * leading whitespace is the honest answer: those candles do not exist here).
-     */
-    _applyRangeFrame(ts, from, to) {
-      const bars = this.data;
-      let startIdx = bars.findIndex((b) => b.time >= from);
-      if (startIdx < 0) startIdx = bars.length - 1;
-
-      let endIdx = startIdx;
-      for (let i = bars.length - 1; i >= startIdx; i--) {
-        if (bars[i].time <= to) {
-          endIdx = i;
-          break;
+        const plan = Framing.planRangeFrame({
+          times: this._times,
+          from: this._frame.from,
+          to: this._frame.to,
+          width,
+          barSpacing: this.options.barSpacing,
+          barSeconds: this._barSeconds || 0,
+        });
+        if (plan?.mode === "logical") {
+          ts.setVisibleLogicalRange({ from: plan.from, to: plan.to });
+          return;
         }
       }
-      if (endIdx < startIdx) endIdx = startIdx;
 
-      const pad = Math.max(2, Math.round((endIdx - startIdx + 1) * 0.08));
-      let lo = startIdx - pad;
-      let hi = endIdx + pad;
+      // Latest: reset any bar spacing a range frame applied and scroll the
+      // newest candle to its margin. `rightOffset` is in bar slots, so it is
+      // re-derived from the current width every time.
+      const view = Framing.latestView(width, this.options.barSpacing);
+      ts.applyOptions({ barSpacing: view.barSpacing, rightOffset: view.rightOffset });
+      ts.scrollToPosition(view.rightOffset, false);
+    }
 
-      const shortfall = MIN_FRAME_BARS - (hi - lo + 1);
-      if (shortfall > 0) {
-        const grow = Math.ceil(shortfall / 2);
-        lo -= grow;
-        hi += grow;
-      }
-
-      ts.setVisibleLogicalRange({ from: lo, to: hi });
+    /** Re-frame once per animation frame, after lightweight-charts has resized itself. */
+    _scheduleReframe() {
+      if (this._reframeFrame) return;
+      this._reframeFrame = requestAnimationFrame(() => {
+        this._reframeFrame = null;
+        if (!this._userHasInteracted) this._applyFrame();
+      });
     }
 
     /**
@@ -1234,6 +1238,10 @@
       if (this._interactionTimeout) {
         clearTimeout(this._interactionTimeout);
         this._interactionTimeout = null;
+      }
+      if (this._reframeFrame) {
+        cancelAnimationFrame(this._reframeFrame);
+        this._reframeFrame = null;
       }
 
       // Stop observers
@@ -1264,7 +1272,8 @@
       this.volumeData = [];
       this._barByTime = new Map();
       this._barSeconds = null;
-      this._autoscalePrices = [];
+      this._times = [];
+      this._autoscaleRefs = [];
     }
   }
 

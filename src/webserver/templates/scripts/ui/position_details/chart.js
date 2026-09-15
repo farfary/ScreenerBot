@@ -7,7 +7,8 @@
  *
  * The defining difference from the token chart: this one is framed on the POSITION, not on
  * "now". It loads the full candle history, opens on a timeframe chosen from the position's
- * duration, frames entry→exit, keeps the average entry inside the price scale, and never drags
+ * duration, frames entry→exit (or the latest candles while an open position fits them), keeps
+ * the average entry inside the price scale while the position is on screen, and never drags
  * the view back to the newest candle behind the user's back.
  */
 import { Poller } from "../../core/poller.js";
@@ -267,7 +268,16 @@ export function applyChartMixin(PositionDetailsDialog) {
       // for THIS position: the span-ideal timeframe of a weeks-old position can hold only
       // candles from after it closed. Once candles are on screen the timeframe stays put, so
       // history arriving later cannot swap the chart under the user.
-      if (this._pddTfAuto && !this._pddChartData?.length && status) {
+      const spanCounted = status?.timeframes?.some((row) => Number.isFinite(row.range_candles));
+      if (this._pddTfAuto && !this._pddChartData?.length && !spanCounted) {
+        // Without per-span counts the timeframe is only the duration guess, and the first candles
+        // drawn pin it for good: a status read missed right after startup opened a closed
+        // position on a timeframe whose stored history began after it closed. Wait a few polls
+        // for the counts, then draw the guess rather than nothing.
+        this._pddStatusMisses = (this._pddStatusMisses || 0) + 1;
+        if (this._pddStatusMisses < WAITING_POLLS_BEFORE_BACKOFF) return;
+      }
+      if (this._pddTfAuto && !this._pddChartData?.length && spanCounted) {
         const { from, to } = this._positionSpan();
         const has = (tf) => status.timeframes?.some((row) => row.timeframe === tf && row.candles > 0);
         const next =
@@ -495,6 +505,7 @@ export function applyChartMixin(PositionDetailsDialog) {
     if (!bars.length) return;
 
     const avgEntry = pos.average_entry_price || pos.entry_price;
+    const span = this._positionSpan();
     const signature = JSON.stringify([
       bars[0].time,
       bars[bars.length - 1].time,
@@ -565,8 +576,10 @@ export function applyChartMixin(PositionDetailsDialog) {
               label: "Avg Entry",
               style: 2,
               // Price lines do not extend the price scale on their own, so a deeply red or
-              // green position drew its entry off-pane.
-              autoscale: true,
+              // green position drew its entry off-pane. Only while the view overlaps the
+              // position's lifetime, though: a closed position's entry from weeks ago squashed
+              // today's candles into the bottom of the pane.
+              autoscale: { from: span.from, to: this._isSettled() ? span.to : Infinity },
             },
           ]
         : []
@@ -688,6 +701,7 @@ export function applyChartMixin(PositionDetailsDialog) {
     this._pddMarkerSignature = null;
     this._pddMarkerBars = null;
     this._pddEmptyPolls = 0;
+    this._pddStatusMisses = 0;
     this._pddRefreshAsked = null;
     this._pddRefreshing = false;
   };

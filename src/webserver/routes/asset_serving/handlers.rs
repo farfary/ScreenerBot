@@ -270,6 +270,7 @@ pub async fn get_ui_script(Path(file): Path<String>) -> Response {
         "advanced_chart.js" => Some(embeds::ADVANCED_CHART_UI),
         "advanced_chart/indicators.js" => Some(embeds::ADVANCED_CHART_INDICATORS_JS),
         "advanced_chart/themes.js" => Some(embeds::ADVANCED_CHART_THEMES_JS),
+        "advanced_chart/framing.js" => Some(embeds::ADVANCED_CHART_FRAMING_JS),
         "chart_data.js" => Some(embeds::CHART_DATA_JS),
         "settings_dialog.js" => Some(embeds::SETTINGS_DIALOG_UI),
         "account/panel.js" => Some(embeds::ACCOUNT_PANEL_UI),

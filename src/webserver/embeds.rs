@@ -404,6 +404,8 @@ pub const ADVANCED_CHART_INDICATORS_JS: &str =
     include_str!("templates/scripts/ui/advanced_chart/indicators.js");
 pub const ADVANCED_CHART_THEMES_JS: &str =
     include_str!("templates/scripts/ui/advanced_chart/themes.js");
+pub const ADVANCED_CHART_FRAMING_JS: &str =
+    include_str!("templates/scripts/ui/advanced_chart/framing.js");
 pub const CHART_DATA_JS: &str = include_str!("templates/scripts/ui/chart_data.js");
 pub const SETTINGS_DIALOG_UI: &str = include_str!("templates/scripts/ui/settings_dialog.js");
 pub const SETTINGS_SECURITY_TAB_UI: &str =

@@ -28,27 +28,42 @@ const status = (rows) => ({
 
 test("timeframeCoveringSpan leaves the span-ideal timeframe when stored depth has rolled past", async () => {
   const { timeframeCoveringSpan, timeframeForSpan } = await mod();
-  // Position #192 shape: ~4.4 days, ideal 15m, but 15m storage starts two weeks after it closed.
+  // Position #192 shape: ~4.4 days, ideal 1h, but 1h storage starts after it closed.
   const from = 1786813818;
   const to = 1787196103;
-  assert.equal(timeframeForSpan(to - from), "15m");
+  assert.equal(timeframeForSpan(to - from), "1h");
   const picked = timeframeCoveringSpan(
-    status({ "1m": 0, "5m": 0, "15m": 0, "1h": 107, "4h": 27, "12h": 9, "1d": 5 }),
+    status({ "1m": 0, "5m": 0, "15m": 0, "1h": 0, "4h": 27, "12h": 9, "1d": 5 }),
     from,
     to
   );
-  assert.equal(picked, "1h");
+  assert.equal(picked, "4h");
 });
 
 test("timeframeCoveringSpan keeps the ideal timeframe when it covers the span", async () => {
   const { timeframeCoveringSpan } = await mod();
   const from = 1_000_000_020;
-  const to = from + 3600 * 4;
-  // Ideal for 4h is 1m; a fully stored 1m series wins over coarser ones.
+  const to = from + 3600 * 2;
+  // Ideal for 2h is 1m; a fully stored 1m series wins over coarser ones.
   assert.equal(
-    timeframeCoveringSpan(status({ "1m": 241, "5m": 49, "15m": 17, "1h": 5 }), from, to),
+    timeframeCoveringSpan(status({ "1m": 121, "5m": 25, "15m": 9, "1h": 3 }), from, to),
     "1m"
   );
+});
+
+test("timeframeForSpan picks the finest timeframe that fits the span in the pane", async () => {
+  const { timeframeForSpan } = await mod();
+  const hour = 3600;
+  const day = 86400;
+  assert.equal(timeframeForSpan(0), "1m");
+  assert.equal(timeframeForSpan(3 * hour), "1m");
+  // One second more needs 181 one-minute candles.
+  assert.equal(timeframeForSpan(3 * hour + 1), "5m");
+  // ORCA #188: 3 days 17 hours. The old from-below rule chose 15m, 356 candles.
+  assert.equal(timeframeForSpan(3 * day + 17 * hour), "1h");
+  assert.equal(timeframeForSpan(30 * day), "4h");
+  assert.equal(timeframeForSpan(90 * day), "12h");
+  assert.equal(timeframeForSpan(1000 * day), "1d");
 });
 
 test("timeframeCoveringSpan walks coarser before finer, and settles for sparse coverage", async () => {
