@@ -259,6 +259,7 @@ pub async fn get_ui_script(Path(file): Path<String>) -> Response {
         "position_details/header.js" => Some(embeds::POSITION_DETAILS_HEADER_JS),
         "position_details/summary.js" => Some(embeds::POSITION_DETAILS_SUMMARY_JS),
         "position_details/chart.js" => Some(embeds::POSITION_DETAILS_CHART_JS),
+        "position_details/panes.js" => Some(embeds::POSITION_DETAILS_PANES_JS),
         "position_details/activity.js" => Some(embeds::POSITION_DETAILS_ACTIVITY_JS),
         "position_details/activity_event.js" => Some(embeds::POSITION_DETAILS_ACTIVITY_EVENT_JS),
         "position_details/utilities.js" => Some(embeds::POSITION_DETAILS_UTILITIES_JS),

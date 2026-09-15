@@ -3,8 +3,8 @@
  *
  * One full-screen view of a position. The header carries identity, the four headline figures
  * and the controls that act on the position; the body sets the position chart and the
- * token's activity in one scrolling column beside a summary rail. There are no sub-tabs:
- * everything the position has to say is on screen together.
+ * token's activity as two fixed panes (panes.js) beside a summary rail. There are no sub-tabs
+ * and no page scroll: everything the position has to say is on screen together.
  */
 import * as Utils from "../core/utils.js";
 import { createFocusTrap } from "../core/utils.js";
@@ -17,6 +17,7 @@ import { applyHeaderMixin } from "./position_details/header.js";
 import { applySummaryMixin } from "./position_details/summary.js";
 import { applyChartMixin } from "./position_details/chart.js";
 import { applyActivityMixin } from "./position_details/activity.js";
+import { applyPanesMixin } from "./position_details/panes.js";
 import { applyUtilitiesMixin } from "./position_details/utilities.js";
 
 // Refresh cadence. `/details` is a heavy endpoint (full token assembly, decimals batch, pool
@@ -328,11 +329,28 @@ export class PositionDetailsDialog {
 
         <div class="dialog-body">
           <div class="pdd-layout">
-            <div class="pdd-main">
+            <div class="pdd-main" data-split="balanced">
               <section class="pdd-chart-section" id="pddChartSection" aria-label="Price chart">
                 <div class="loading-spinner">Loading chart...</div>
               </section>
-              <section class="pdd-activity" id="pddActivity" aria-label="Activity"></section>
+              <section class="pdd-activity" id="pddActivity" aria-label="Activity">
+                <div class="pdd-activity-head" id="pddActivityHead">
+                  <div class="pdd-split-handle" id="pddSplitHandle" role="separator" tabindex="0" aria-orientation="horizontal" aria-controls="pddChartSection" aria-label="Resize chart and activity" aria-valuemin="0" aria-valuemax="100"></div>
+                  <div class="pdd-activity-title">
+                    <h3>Activity</h3>
+                    <span class="pdd-activity-meta" id="pddActivityMeta"></span>
+                  </div>
+                  <div class="pdd-activity-controls">
+                    <div class="pdd-act-filter-slot" id="pddActivityFilters"></div>
+                    <div class="timeframe-buttons" role="group" aria-label="Activity pane">
+                      <button type="button" class="timeframe-btn pdd-pane-btn" id="pddActivityToggle" aria-controls="pddActivityBody" aria-expanded="true" title="Expand activity" aria-label="Expand activity"><i class="icon-chevron-up"></i></button>
+                    </div>
+                  </div>
+                </div>
+                <div class="pdd-activity-body" id="pddActivityBody">
+                  <div id="pddActivityContent"></div>
+                </div>
+              </section>
             </div>
             <aside class="pdd-rail" id="pddSummary" aria-label="Position summary">
               <div class="loading-spinner">Loading position...</div>
@@ -379,11 +397,13 @@ export class PositionDetailsDialog {
     );
 
     this._bindActivityHandlers();
+    this._initPanes();
     // Activate the hint trigger's delegated click handler.
     HintTrigger.initAll();
   }
 
   _removeWindowListeners() {
+    this._teardownPanes();
     if (this._managementChangedHandler) {
       window.removeEventListener(
         "screenerbot:position-management-changed",
@@ -425,6 +445,7 @@ applyHeaderMixin(PositionDetailsDialog);
 applySummaryMixin(PositionDetailsDialog);
 applyChartMixin(PositionDetailsDialog);
 applyActivityMixin(PositionDetailsDialog);
+applyPanesMixin(PositionDetailsDialog);
 
 // ============================================================================
 // Global "open position details" event

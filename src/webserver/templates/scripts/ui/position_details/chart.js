@@ -101,6 +101,9 @@ export function applyChartMixin(PositionDetailsDialog) {
             <div class="timeframe-buttons" id="pddTimeframes" role="group" aria-label="Timeframe">
               ${CHART_TIMEFRAMES.map((tf) => segment(`data-tf="${tf}"`, tf.toUpperCase(), tf === this._chartTimeframe)).join("")}
             </div>
+            <div class="timeframe-buttons pdd-pane-group" role="group" aria-label="Chart pane">
+              <button type="button" class="timeframe-btn pdd-pane-btn" id="pddChartFocusBtn" aria-controls="pddActivity" aria-pressed="false" title="Expand chart" aria-label="Expand chart"><i class="icon-maximize-2"></i></button>
+            </div>
           </div>
         </div>
         <div id="pddChart" class="tradingview-chart pdd-chart-canvas"></div>
@@ -160,6 +163,9 @@ export function applyChartMixin(PositionDetailsDialog) {
     this._pddChart.onCrosshairMove = (_param, bar) => {
       this._updatePddOhlc(bar || this._pddLatestCandle);
     };
+    // A click restores an activity-focused layout or finds a marked event (panes.js).
+    this._pddChart.onClick = (param) => this._onPositionChartClick(param);
+    this._syncPaneControls();
 
     // Record the frame before the first candles land so the initial paint is already on the
     // position rather than on the newest bars.
@@ -412,26 +418,11 @@ export function applyChartMixin(PositionDetailsDialog) {
     // lightweight-charts renders a marker only when its `time` matches a bar, so snap each
     // event to the candle that CONTAINS it. Events outside the loaded window are counted, not
     // faked: clamping a sell onto the last bar claimed it happened in a candle it did not.
-    const firstBar = bars[0].time;
-    const lastBar = bars[bars.length - 1].time;
-    const barSeconds = bars.length > 1 ? bars[1].time - bars[0].time : 60;
     let dropped = 0;
-
     const snapToBar = (ts) => {
-      if (!Number.isFinite(ts) || ts < firstBar || ts > lastBar + barSeconds) {
-        dropped += 1;
-        return null;
-      }
-      if (ts >= lastBar) return lastBar;
-      // Bars are ascending: binary-search the last one at or before the event.
-      let lo = 0;
-      let hi = bars.length - 1;
-      while (lo < hi) {
-        const mid = Math.ceil((lo + hi) / 2);
-        if (bars[mid].time <= ts) lo = mid;
-        else hi = mid - 1;
-      }
-      return bars[lo].time;
+      const bar = this._barForTimestamp(ts);
+      if (!bar) dropped += 1;
+      return bar ? bar.time : null;
     };
 
     const markers = [];
@@ -459,6 +450,15 @@ export function applyChartMixin(PositionDetailsDialog) {
         timestamp: barTime,
         label: exits.length > 1 ? `Exit ${i + 1}` : "Exit",
       });
+    });
+
+    // Candles that carry a marker, with their labels: the tooltip offers them, and a click on
+    // one finds the event in the activity list (panes.js).
+    this._pddMarkerBars = new Map();
+    markers.forEach((marker) => {
+      const labels = this._pddMarkerBars.get(marker.timestamp) || [];
+      labels.push(marker.label);
+      this._pddMarkerBars.set(marker.timestamp, labels);
     });
 
     // Bar markers only. One dashed price line per DCA and partial exit turned the price scale
@@ -518,23 +518,51 @@ export function applyChartMixin(PositionDetailsDialog) {
   };
 
   /**
-   * Extra tooltip rows: what this position looked like at the hovered bar. Nothing when there
-   * is no average entry to compare against — an unanswerable row is worse than no row.
+   * The loaded candle that contains a unix-seconds timestamp, or null when it falls outside the
+   * loaded window. Shared by the markers and the activity links, so both agree on the candle.
+   */
+  proto._barForTimestamp = function (ts) {
+    const bars = this._pddChartData || [];
+    if (!bars.length || !Number.isFinite(ts)) return null;
+    const barSeconds = bars.length > 1 ? bars[1].time - bars[0].time : 60;
+    if (ts < bars[0].time || ts > bars[bars.length - 1].time + barSeconds) return null;
+
+    // Bars are ascending: binary-search the last one at or before the timestamp.
+    let lo = 0;
+    let hi = bars.length - 1;
+    while (lo < hi) {
+      const mid = Math.ceil((lo + hi) / 2);
+      if (bars[mid].time <= ts) lo = mid;
+      else hi = mid - 1;
+    }
+    return bars[lo];
+  };
+
+  /**
+   * Extra tooltip rows: what this position looked like at the hovered bar, and on a marked bar
+   * that a click finds the event. No P&L rows without an average entry to compare against — an
+   * unanswerable row is worse than no row.
    */
   proto._positionTooltipRows = function (bar) {
+    const rows = [];
     const pos = this._position() || {};
     const avgEntry = pos.average_entry_price || pos.entry_price;
-    if (!avgEntry || !bar?.close) return [];
 
-    const pnlPct = ((bar.close - avgEntry) / avgEntry) * 100;
-    return [
-      { label: "Avg Entry", value: this._formatPrice(avgEntry) },
-      {
-        label: "P&L @ Bar",
-        value: `${pnlPct >= 0 ? "+" : "-"}${Math.abs(pnlPct).toFixed(2)}%`,
-        cls: pnlPct >= 0 ? "positive" : "negative",
-      },
-    ];
+    if (avgEntry && bar?.close) {
+      const pnlPct = ((bar.close - avgEntry) / avgEntry) * 100;
+      rows.push(
+        { label: "Avg Entry", value: this._formatPrice(avgEntry) },
+        {
+          label: "P&L @ Bar",
+          value: `${pnlPct >= 0 ? "+" : "-"}${Math.abs(pnlPct).toFixed(2)}%`,
+          cls: pnlPct >= 0 ? "positive" : "negative",
+        }
+      );
+    }
+
+    const marks = bar ? this._pddMarkerBars?.get(bar.time) : null;
+    if (marks) rows.push({ label: marks.join(" · "), value: "Click to locate" });
+    return rows;
   };
 
   /** Update the O/H/L/C header from one candle (hovered bar, or the latest). */
@@ -579,6 +607,7 @@ export function applyChartMixin(PositionDetailsDialog) {
     this._pddRenderedTf = null;
     this._pddLatestCandle = null;
     this._pddMarkerSignature = null;
+    this._pddMarkerBars = null;
     this._pddFallbackTried = false;
     this._pddIndicatorAt = 0;
     this._pddDataAt = 0;

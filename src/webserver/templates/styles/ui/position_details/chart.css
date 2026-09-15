@@ -4,27 +4,64 @@
    loading overlay; this file only sizes the section and adds the marker key.
    ============================================================================= */
 
+/* The chart pane. Its height is the mode (panes.js sets `data-split` and, for balanced and
+   custom, `--pdd-chart-share`); it may shrink so the activity header strip always fits. */
 .position-details-dialog .pdd-chart-section {
   position: relative;
   display: flex;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   flex-direction: column;
-  height: calc(100% - var(--pdd-activity-head));
-  min-height: 340px;
+  height: calc((100% - var(--pdd-activity-head)) * var(--pdd-chart-share));
+  min-height: var(--pdd-chart-strip);
   border-bottom: 1px solid var(--border-color);
+  transition: height 0.18s ease;
 }
 
-/* A token with no candles gets a short notice, not a screen-high empty frame. */
-.position-details-dialog .pdd-chart-section.is-empty {
+.position-details-dialog .pdd-main[data-split="chart"] .pdd-chart-section {
+  height: 100%;
+}
+
+/* A token with no candles gets a short notice, not a pane-high empty frame. */
+.position-details-dialog .pdd-main .pdd-chart-section.is-empty {
   height: 200px;
-  min-height: 0;
 }
 
-/* Confirmed empty is a notice, not a load: no spinner, no O/H/L/C, no key for absent marks. */
+/* The glance strip: canvas only, and a click on it brings the chart back. */
+.position-details-dialog .pdd-main[data-split="activity"] .pdd-chart-section {
+  height: var(--pdd-chart-strip);
+  cursor: pointer;
+}
+
+.position-details-dialog .pdd-main[data-split="activity"] .pdd-chart-header,
+.position-details-dialog .pdd-main[data-split="activity"] .pdd-chart-legend {
+  display: none;
+}
+
+.position-details-dialog .pdd-main.is-resizing .pdd-chart-section {
+  transition: none;
+}
+
+/* Confirmed empty is a notice, not a load: no spinner, no O/H/L/C, no key for absent marks,
+   and nothing to expand or resize. */
 .position-details-dialog .pdd-chart-section.is-empty .chart-loading-spinner,
 .position-details-dialog .pdd-chart-section.is-empty .chart-ohlcv-display,
-.position-details-dialog .pdd-chart-section.is-empty .pdd-chart-legend {
+.position-details-dialog .pdd-chart-section.is-empty .pdd-chart-legend,
+.position-details-dialog .pdd-chart-section.is-empty .pdd-pane-group,
+.position-details-dialog .pdd-main:has(.pdd-chart-section.is-empty) .pdd-split-handle {
   display: none;
+}
+
+/* Pane controls: icon-only members of the segment family they sit beside. */
+.position-details-dialog .pdd-pane-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+}
+
+.position-details-dialog .pdd-pane-btn i {
+  font-size: 13px;
+  line-height: 1;
 }
 
 .position-details-dialog .pdd-chart-container {
@@ -124,13 +161,6 @@
   margin: 0;
   color: var(--text-primary);
   font-size: 0.875rem;
-}
-
-@media (width <= 1100px) {
-  .position-details-dialog .pdd-chart-section {
-    height: clamp(300px, 56vh, 480px);
-    min-height: 0;
-  }
 }
 
 @media (width <= 640px) {

@@ -89,32 +89,40 @@ export function applyActivityMixin(PositionDetailsDialog) {
     if (seq === this._openSeq) this._paintActivity();
   };
 
+  /**
+   * The pane's frame (header strip, scroll body) is static markup in the dialog; only these
+   * slots repaint, so the list keeps its scroll position and the header its pane controls.
+   */
   proto._paintActivity = function () {
     const section = this.dialogEl?.querySelector("#pddActivity");
     if (!section) return;
     const fingerprint = this._activityFingerprint();
     if (fingerprint === this._activityRenderedFp) return;
     this._activityRenderedFp = fingerprint;
-    section.innerHTML = this._buildActivity();
+
+    const { meta, filters, body } = this._buildActivity();
+    const fill = (selector, html) => {
+      const el = section.querySelector(selector);
+      if (el) el.innerHTML = html;
+    };
+    fill("#pddActivityMeta", meta);
+    fill("#pddActivityFilters", filters);
+    fill("#pddActivityContent", body);
     this._applyActivityFilter(section);
   };
 
+  /** @returns {{meta: string, filters: string, body: string}} */
   proto._buildActivity = function () {
-    const head = (meta = "", controls = "") => `
-      <div class="pdd-activity-head">
-        <div class="pdd-activity-title">
-          <h3>Activity</h3>
-          ${meta ? `<span class="pdd-activity-meta">${meta}</span>` : ""}
-        </div>
-        ${controls}
-      </div>`;
+    const parts = (body, meta = "", filters = "") => ({ body, meta, filters });
     const notice = (icon, text) =>
       `<div class="pdd-activity-notice"><i class="${icon}"></i><span>${Utils.escapeHtml(text)}</span></div>`;
 
     if (!this._activity) {
-      return this._activityError
-        ? head() + notice("icon-circle-alert", this._activityError)
-        : `${head()}<div class="loading-spinner">Loading activity...</div>`;
+      return parts(
+        this._activityError
+          ? notice("icon-circle-alert", this._activityError)
+          : '<div class="loading-spinner">Loading activity...</div>'
+      );
     }
 
     const events = this._activity.events || [];
@@ -123,7 +131,7 @@ export function applyActivityMixin(PositionDetailsDialog) {
     const stateHistory = this._activity.state_history || [];
 
     if (!events.length && !stateHistory.length) {
-      return head() + notice("icon-activity", "Nothing has happened to this token in this wallet yet");
+      return parts(notice("icon-activity", "Nothing has happened to this token in this wallet yet"));
     }
 
     const currentPositionId = this._position()?.id ?? null;
@@ -138,10 +146,11 @@ export function applyActivityMixin(PositionDetailsDialog) {
 
     this._initializeActivityRounds(positions, currentPositionId);
 
-    return (
-      head(this._activityMeta(totals, events, positions), this._buildActivityFilters(totals, events)) +
+    return parts(
       this._buildActivityTotals(totals, positions) +
-      this._buildActivityTimeline(positions, events, stateHistory, ctx)
+        this._buildActivityTimeline(positions, events, stateHistory, ctx),
+      this._activityMeta(totals, events, positions),
+      this._buildActivityFilters(totals, events)
     );
   };
 
@@ -399,13 +408,8 @@ export function applyActivityMixin(PositionDetailsDialog) {
 
       const roundBtn = event.target.closest(".pdd-act-round-toggle");
       if (roundBtn) {
-        const key = roundBtn.dataset.roundToggle;
         const round = roundBtn.closest(".pdd-act-round");
-        const open = !round.classList.contains("is-open");
-        round.classList.toggle("is-open", open);
-        roundBtn.setAttribute("aria-expanded", String(open));
-        if (open) this._activityOpenRounds.add(key);
-        else this._activityOpenRounds.delete(key);
+        this._setRoundOpen(round, !round.classList.contains("is-open"));
         return;
       }
 
@@ -424,15 +428,29 @@ export function applyActivityMixin(PositionDetailsDialog) {
       }
 
       const filterBtn = event.target.closest(".pdd-act-filter");
-      if (filterBtn) {
-        this._activityFilter = filterBtn.dataset.filter;
-        section.querySelectorAll(".pdd-act-filter").forEach((button) => {
-          button.classList.toggle("active", button === filterBtn);
-          button.setAttribute("aria-pressed", String(button === filterBtn));
-        });
-        this._applyActivityFilter(section);
-      }
+      if (filterBtn) this._setActivityFilter(filterBtn.dataset.filter);
     });
+  };
+
+  proto._setActivityFilter = function (filter) {
+    const section = this.dialogEl?.querySelector("#pddActivity");
+    if (!section) return;
+    this._activityFilter = filter;
+    section.querySelectorAll(".pdd-act-filter").forEach((button) => {
+      const active = button.dataset.filter === filter;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
+    this._applyActivityFilter(section);
+  };
+
+  /** Open or fold a round, remembered so a repaint keeps it that way. */
+  proto._setRoundOpen = function (round, open) {
+    const key = round.dataset.round;
+    round.classList.toggle("is-open", open);
+    round.querySelector(".pdd-act-round-toggle")?.setAttribute("aria-expanded", String(open));
+    if (open) this._activityOpenRounds.add(key);
+    else this._activityOpenRounds.delete(key);
   };
 
   proto._activityFingerprint = function () {

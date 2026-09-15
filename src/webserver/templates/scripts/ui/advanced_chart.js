@@ -131,6 +131,10 @@
 
       // Callbacks
       this.onCrosshairMove = null;
+      // (param) => void on a click in the pane, with lightweight-charts' click param.
+      this.onClick = null;
+      // Folded to a glance strip (see setCompact).
+      this._compact = false;
 
       this._init();
     }
@@ -700,7 +704,7 @@
      * pass and one measurement, never a re-parse.
      */
     _scheduleTooltip(param) {
-      if (!this.tooltipEl) return;
+      if (!this.tooltipEl || this._compact) return;
       this._tooltipParam = param;
       if (this._tooltipFrame) return;
       this._tooltipFrame = requestAnimationFrame(() => {
@@ -859,6 +863,10 @@
         }
       });
 
+      this.chart.subscribeClick((param) => {
+        this.onClick?.(param);
+      });
+
       // Track real view changes. A bare click must NOT count: with decay
       // disabled it would freeze the frame forever, so a drag is only recorded
       // once the pointer actually moves with the button down.
@@ -917,6 +925,51 @@
         clearTimeout(this._interactionTimeout);
         this._interactionTimeout = null;
       }
+    }
+
+    /**
+     * Fold the chart to a glance strip, or unfold it. Axes, volume and the tooltip go, and so
+     * do wheel, drag and pinch: a strip that zoomed under a passing wheel would steal the
+     * gesture from whatever the surface put beside it. Data, markers and the visible range are
+     * untouched, so unfolding returns the exact chart the user left.
+     */
+    setCompact(compact) {
+      if (!this.chart || compact === this._compact) return;
+      this._compact = compact;
+      const on = !compact;
+      if (compact) this._hideTooltip();
+
+      this.chart.applyOptions({
+        handleScroll: {
+          mouseWheel: on,
+          pressedMouseMove: on,
+          horzTouchDrag: on,
+          vertTouchDrag: on,
+        },
+        handleScale: {
+          mouseWheel: on,
+          pinch: on,
+          axisPressedMouseMove: { time: on, price: on },
+        },
+        rightPriceScale: { visible: on },
+        timeScale: { visible: on },
+        crosshair: {
+          horzLine: { visible: on, labelVisible: on },
+          vertLine: { labelVisible: on },
+        },
+      });
+      this.volumeSeries?.applyOptions({ visible: on });
+    }
+
+    /** Put the crosshair on a candle from outside the chart, e.g. a hovered list row. */
+    showCrosshairAt(time, price) {
+      if (!this.chart || !this.mainSeries || !this._barByTime.has(time)) return;
+      if (!Number.isFinite(price)) return;
+      this.chart.setCrosshairPosition(price, time, this.mainSeries);
+    }
+
+    clearCrosshair() {
+      this.chart?.clearCrosshairPosition();
     }
 
     _setupResizeObserver() {

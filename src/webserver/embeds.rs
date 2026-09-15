@@ -385,6 +385,8 @@ pub const POSITION_DETAILS_SUMMARY_JS: &str =
     include_str!("templates/scripts/ui/position_details/summary.js");
 pub const POSITION_DETAILS_CHART_JS: &str =
     include_str!("templates/scripts/ui/position_details/chart.js");
+pub const POSITION_DETAILS_PANES_JS: &str =
+    include_str!("templates/scripts/ui/position_details/panes.js");
 pub const POSITION_DETAILS_ACTIVITY_JS: &str =
     include_str!("templates/scripts/ui/position_details/activity.js");
 pub const POSITION_DETAILS_ACTIVITY_EVENT_JS: &str =

@@ -217,7 +217,7 @@ export function renderActivityCard(event, ctx) {
   const relative = event.timestamp ? Utils.formatTimeAgo(event.timestamp) : "";
 
   return `
-    <article class="pdd-act-card${expanded ? " is-open" : ""}" data-side="${Utils.escapeHtml(event.side)}" data-kind="${Utils.escapeHtml(event.kind)}" data-state="${Utils.escapeHtml(event.state)}" data-key="${key}">
+    <article class="pdd-act-card${expanded ? " is-open" : ""}" data-side="${Utils.escapeHtml(event.side)}" data-kind="${Utils.escapeHtml(event.kind)}" data-state="${Utils.escapeHtml(event.state)}" data-key="${key}" data-ts="${Number(event.timestamp) || ""}" data-price="${Number(event.price) || ""}">
       <i class="pdd-act-glyph ${meta.icon}" aria-hidden="true"></i>
       <button type="button" class="pdd-act-expand" data-expand="${key}" aria-expanded="${expanded}">
         <span class="pdd-act-main">
