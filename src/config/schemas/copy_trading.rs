@@ -8,7 +8,7 @@ config_struct! {
     pub struct CopyTradingConfig {
         #[metadata(field_metadata! { label: "Wallet Copy", hint: "Enable copy task processing", impact: "high", category: "Copy Trading", })]
         enabled: bool = false,
-        #[metadata(field_metadata! { label: "Maximum Active Tasks", hint: "Maximum simultaneously enabled copy tasks", min: 1, max: 50, step: 1, impact: "high", category: "Copy Trading", })]
+        #[metadata(field_metadata! { label: "Maximum Active Tasks", hint: "Maximum simultaneously enabled copy tasks; paper and live tasks both count, as each watches its wallet", min: 1, max: 50, step: 1, impact: "high", category: "Copy Trading", })]
         max_active_tasks: usize = 10,
         #[metadata(field_metadata! { label: "Default Slippage", hint: "Default paper and future live copy slippage", min: 0.1, max: 50.0, step: 0.1, unit: "%", impact: "high", category: "Copy Trading", })]
         default_slippage_pct: f64 = 2.0,
@@ -37,13 +37,14 @@ impl CopyTradingConfig {
             }
             .into());
         }
+        let minimum_slippage = crate::trader::copy::MIN_COPY_SLIPPAGE_PCT;
         if !self.default_slippage_pct.is_finite()
-            || self.default_slippage_pct <= 0.0
+            || self.default_slippage_pct < minimum_slippage
             || self.default_slippage_pct > crate::trader::MAX_MANUAL_SLIPPAGE_PCT
         {
             return Err(Error::Configuration(ConfigurationError::Generic {
                 message: format!(
-                    "Default copy slippage must be greater than 0 and at most {}%",
+                    "Default copy slippage must be between {minimum_slippage}% and {}%",
                     crate::trader::MAX_MANUAL_SLIPPAGE_PCT
                 ),
             }));

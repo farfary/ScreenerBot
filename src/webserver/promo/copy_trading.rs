@@ -77,6 +77,7 @@ fn insights(desk: &Desk, task: &CopyTask, range: InsightRange) -> CopyInsights {
         &desk.task_activity(task.id),
         &desk.positions,
         range,
+        Some(workspace::arrival_limit_ms()),
     )
 }
 
@@ -145,8 +146,13 @@ pub fn get_promo_copy_workspace(id: i64) -> Result<CopyTaskWorkspace> {
         desk::mark,
     );
     // Nothing blocks live execution in a capture, as `status` reports.
+    let live_spent_sol = match task.mode {
+        crate::trader::copy::CopyMode::Live => desk.spent_sol(id),
+        crate::trader::copy::CopyMode::Paper => 0.0,
+    };
     Ok(workspace::build_workspace(
         summary,
+        live_spent_sol,
         &activity,
         &desk.positions,
         &paper_book,

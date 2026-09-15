@@ -9,13 +9,15 @@ use tokio::sync::Notify;
 
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
-use crate::wallets::watch::{subscribe_activity, ActivityKind, WalletActivity, WatchSource};
+use crate::wallets::watch::{
+    subscribe_activity, ActivityKind, SwapSide, WalletActivity, WatchSource,
+};
 
 use super::{
     execute_copy_sell_with, execute_live_with, matching_tasks, notify, paper_sell_outcome,
     prepare_copy_sell, prepare_live_entry, run_paper_pipeline, CopyDatabase, CopyMode, CopyOutcome,
-    CopySellSubmitResult, CopySkip, CopyTelemetry, LiveSubmitResult, PaperCosts, PaperPosition,
-    PipelinePolicy, RiskContext,
+    CopySellSubmitResult, CopySkip, CopyTelemetry, ExitMode, LiveSubmitResult, PaperCosts,
+    PaperMarket, PaperPosition, PipelinePolicy, RiskContext,
 };
 
 pub async fn run(shutdown: Arc<Notify>, database: CopyDatabase) {
@@ -93,7 +95,8 @@ async fn reconcile_runtime_state(database: &CopyDatabase) -> crate::trader::Resu
             notify::record(database, CopyOutcome::LiveConfirmed(decision)).await?;
         }
     }
-    super::guards::pause_detached_tasks(database).await
+    super::guards::pause_detached_tasks(database).await?;
+    super::guards::sync_paused_watches(database).await
 }
 
 async fn process_activity(
@@ -106,9 +109,6 @@ async fn process_activity(
             config.copy_trading.require_filter_pass,
         )
     });
-    if !copy_enabled {
-        return Ok(());
-    }
     if !activity
         .sources
         .iter()
@@ -117,22 +117,48 @@ async fn process_activity(
         return Ok(());
     }
     let ActivityKind::Swap {
-        mint, price_sol, ..
+        mint,
+        side,
+        price_sol,
+        ..
     } = &activity.kind
     else {
         return Ok(());
     };
-    let tasks = database
-        .enabled_tasks_for_subject(&activity.subject)
-        .await?;
-    let mut tasks = matching_tasks(activity, &tasks)
+    let watching = database.tasks_for_subject(&activity.subject).await?;
+    let watching = matching_tasks(activity, &watching)
         .into_iter()
         .cloned()
         .collect::<Vec<_>>();
+    if watching.is_empty() {
+        return Ok(());
+    }
+    // Every watching task keeps the wallet's inventory, paused or not, so a later
+    // proportional exit still sells the right fraction.
+    let target_holdings_before = observe_target_inventory(database, activity, &watching).await?;
+    // Pausing, one task or copy processing as a whole, stops new copies; the
+    // wallet's sells still close what a mirror or hybrid task holds. A task on its
+    // own exit rules ignores the wallet's sells, so they are no decision of it.
+    let selling = matches!(side, SwapSide::Sell);
+    if !selling && !copy_enabled {
+        return Ok(());
+    }
+    let mut tasks = Vec::with_capacity(watching.len());
+    for task in watching {
+        let acts = if selling {
+            task.exit_mode != ExitMode::BuyOnly
+                && ((task.enabled && copy_enabled)
+                    || super::control::holds_open_copies(database, &task, Some(mint)).await?)
+        } else {
+            task.enabled
+        };
+        if acts {
+            tasks.push(task);
+        }
+    }
     if tasks.is_empty() {
         return Ok(());
     }
-    let target_holdings_before = observe_target_inventory(database, activity, &tasks).await?;
     if super::guards::reject_stale_backfill(database, activity, &tasks, mint).await? {
         return Ok(());
     }
@@ -140,13 +166,7 @@ async fn process_activity(
     if tasks.is_empty() {
         return Ok(());
     }
-    if matches!(
-        activity.kind,
-        ActivityKind::Swap {
-            side: crate::wallets::watch::SwapSide::Sell,
-            ..
-        }
-    ) {
+    if selling {
         return process_sell_activity(database, activity, &tasks, mint, &target_holdings_before)
             .await;
     }
@@ -394,11 +414,11 @@ async fn process_sell_activity(
 /// Pool price first (the trading price system); the target's own swap price when
 /// the pool service does not track the token. NaN means no price at all, which
 /// the paper simulators refuse as `InvalidPrice`.
-fn decision_price(mint: &str, target_price_sol: Option<f64>) -> f64 {
-    crate::pools::get_pool_price(mint)
-        .map(|price| price.price_sol)
-        .or(target_price_sol)
-        .unwrap_or(f64::NAN)
+fn decision_price(mint: &str, target_price_sol: Option<f64>) -> PaperMarket {
+    match crate::pools::get_pool_price(mint) {
+        Some(price) => PaperMarket::pool(price.price_sol),
+        None => PaperMarket::observed(target_price_sol.unwrap_or(f64::NAN)),
+    }
 }
 
 pub(super) fn paper_costs() -> PaperCosts {

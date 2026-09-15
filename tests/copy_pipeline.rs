@@ -5,8 +5,8 @@ use std::collections::HashMap;
 use chrono::{TimeZone, Utc};
 use screenerbot::chains::ChainId;
 use screenerbot::trader::copy::{
-    run_paper_pipeline, CopyMode, CopyOutcome, CopyTask, ExitMode, PaperCosts, PipelinePolicy,
-    RiskContext, SizingMode, SpendState,
+    run_paper_pipeline, CopyMode, CopyOutcome, CopyTask, ExitMode, PaperCosts, PaperMarket,
+    PipelinePolicy, RiskContext, SizingMode, SpendState,
 };
 use screenerbot::wallets::watch::{ActivityKind, SwapSide, WalletActivity, WatchSource};
 
@@ -72,7 +72,7 @@ fn observed_buy_matches_sizes_and_produces_costed_paper_fill_with_telemetry() {
             require_filter_pass: true,
             engine_trade_size_sol: 1.0,
         },
-        0.005,
+        PaperMarket::pool(0.005),
         PaperCosts {
             network_fee_sol: 0.000005,
             priority_fee_sol: 0.00001,
@@ -85,6 +85,7 @@ fn observed_buy_matches_sizes_and_produces_costed_paper_fill_with_telemetry() {
     };
     assert_eq!(decision.sized_sol, 0.2);
     assert_eq!(decision.fill.fill_price_sol, 0.00505);
+    assert!(decision.fill.priced_from_pool);
     assert_eq!(decision.fill.referral_fee_sol, 0.001);
     assert!((decision.fill.total_cost_sol - 0.200015).abs() < 1e-12);
     assert_eq!(decision.telemetry.target_block_time, Some(9));

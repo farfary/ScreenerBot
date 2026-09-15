@@ -3,6 +3,7 @@
 import { barList, pnlCurve } from "./charts.js";
 import {
   EXIT_LABELS,
+  MODE_LABELS,
   RANGES,
   duration,
   fixed,
@@ -13,6 +14,7 @@ import {
   skipLabel,
   sol,
   toneClass,
+  unrealizedFigure,
 } from "./format.js";
 
 export function metric(label, value, note, tone, esc) {
@@ -39,7 +41,7 @@ function results(insights, esc) {
   const exits = (insights.exit_breakdown || []).map((bucket) => ({
     label: EXIT_LABELS[bucket.exit] || bucket.exit,
     value: bucket.pnl_sol,
-    display: `${bucket.legs}× · ${signedSol(bucket.pnl_sol, 3)}`,
+    display: `${plural(bucket.legs, "sell")} · ${signedSol(bucket.pnl_sol, 3)}`,
     tone: toneClass(bucket.pnl_sol),
   }));
   const skips = (insights.skip_breakdown || []).map((bucket) => ({
@@ -81,7 +83,7 @@ function results(insights, esc) {
   ].join("")}</div>
   <section class="copy-card"><h4>Cumulative P&amp;L</h4>${pnlCurve(insights.pnl_curve, { escapeHtml: esc })}</section>
   <div class="copy-split">
-    <section class="copy-card"><h4>How rounds ended</h4>${barList(exits, esc)}</section>
+    <section class="copy-card"><h4>Sells by exit</h4>${barList(exits, esc)}</section>
     <section class="copy-card"><h4>Why trades were skipped</h4>${barList(skips, esc)}</section>
   </div>`;
 }
@@ -101,15 +103,18 @@ function book(ws, esc) {
       ([count, label]) => `<span><strong>${esc(String(count ?? 0))}</strong> ${esc(label)}</span>`
     )
     .join("");
+  const marked = unrealizedFigure(
+    stats.unrealized_pnl_sol,
+    stats.open_positions,
+    stats.unpriced_positions
+  );
   return `<section class="copy-card"><h4>${esc(title)} <span class="copy-card-sub">All time</span></h4>
     <div class="copy-metrics copy-metrics--compact">${[
       metric(
         "Unrealized P&L",
-        signedSol(stats.unrealized_pnl_sol),
-        stats.unpriced_positions
-          ? `${plural(stats.unpriced_positions, "holding")} without a pool price`
-          : plural(stats.open_positions ?? 0, "open holding"),
-        toneClass(stats.unrealized_pnl_sol),
+        signedSol(marked.value),
+        marked.note || plural(stats.open_positions ?? 0, "open holding"),
+        toneClass(marked.value),
         esc
       ),
       metric(
@@ -120,9 +125,9 @@ function book(ws, esc) {
         esc
       ),
       metric(
-        "Budget used",
+        "Budget spent",
         sol(ws.spent_sol, 3),
-        `of ${fixed(ws.total_budget_sol, 3)} · ${fixed(ws.remaining_budget_sol, 3)} left`,
+        `${MODE_LABELS[ws.mode] || ws.mode} spend of ${fixed(ws.total_budget_sol, 3)} · ${fixed(ws.remaining_budget_sol, 3)} left`,
         "",
         esc
       ),

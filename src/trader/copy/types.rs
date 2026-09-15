@@ -18,6 +18,10 @@ pub enum CopyMode {
 /// Explicit acknowledgement required by the dedicated mode-transition endpoint.
 pub const LIVE_ARM_CONFIRMATION: &str = "ARM LIVE COPY TRADING";
 
+/// The lowest slippage a task or the copy default may run with; the one bound
+/// behind task validation, the pipeline's precheck and the config section.
+pub const MIN_COPY_SLIPPAGE_PCT: f64 = 0.1;
+
 /// How this bot derives its SOL input from the target's SOL input.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -171,8 +175,16 @@ impl CopyTaskInput {
             }
             _ => {}
         }
+        // Sizing clamps every copy to the per-trade cap and refuses one below the
+        // minimum trade size, so a smaller cap or fixed size could never copy.
+        let minimum_sol = crate::trader::constants::MIN_TRADE_SIZE_SOL;
+        if self.max_sol_per_trade < minimum_sol
+            || matches!(self.sizing, SizingMode::Fixed { sol } if sol < minimum_sol)
+        {
+            return Err(CopySkip::BelowMinimumSize { minimum_sol });
+        }
         if !self.slippage_pct.is_finite()
-            || self.slippage_pct <= 0.0
+            || self.slippage_pct < MIN_COPY_SLIPPAGE_PCT
             || self.slippage_pct > crate::trader::constants::MAX_MANUAL_SLIPPAGE_PCT
         {
             return Err(CopySkip::InvalidSlippage {
@@ -324,6 +336,9 @@ pub enum CopySkip {
 pub struct PaperFill {
     pub input_sol: f64,
     pub market_price_sol: f64,
+    /// `market_price_sol` is the pool's price, not the observed trade's own.
+    #[serde(default)]
+    pub priced_from_pool: bool,
     pub fill_price_sol: f64,
     pub token_amount: f64,
     pub referral_fee_sol: f64,
@@ -338,6 +353,9 @@ pub struct PaperFill {
 pub struct PaperSellFill {
     pub token_amount: f64,
     pub market_price_sol: f64,
+    /// `market_price_sol` is the pool's price, not the observed trade's own.
+    #[serde(default)]
+    pub priced_from_pool: bool,
     pub fill_price_sol: f64,
     pub gross_sol: f64,
     pub referral_fee_sol: f64,
@@ -569,6 +587,70 @@ pub enum ClaimReconciliation {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn input() -> CopyTaskInput {
+        CopyTaskInput {
+            target_address: "target".to_owned(),
+            label: None,
+            enabled: true,
+            mode: CopyMode::Paper,
+            sizing: SizingMode::Fixed { sol: 0.05 },
+            exit_mode: ExitMode::BuyOnly,
+            exit_policy_overrides: Default::default(),
+            max_sol_per_trade: 0.1,
+            max_sol_per_token: 0.5,
+            total_budget_sol: 2.0,
+            min_target_trade_sol: None,
+            max_target_trade_sol: None,
+            buy_once_per_token: true,
+            slippage_pct: 2.0,
+            require_filter_pass: None,
+        }
+    }
+
+    fn validate(input: CopyTaskInput) -> Result<CopyTask, CopySkip> {
+        input.into_task(ChainId::Solana, Utc::now())
+    }
+
+    #[test]
+    fn a_task_that_could_never_place_a_copy_is_refused() {
+        let minimum_sol = crate::trader::constants::MIN_TRADE_SIZE_SOL;
+        assert!(validate(input()).is_ok());
+        let tiny_size = CopyTaskInput {
+            sizing: SizingMode::Fixed { sol: 0.0005 },
+            ..input()
+        };
+        assert_eq!(
+            validate(tiny_size),
+            Err(CopySkip::BelowMinimumSize { minimum_sol })
+        );
+        let tiny_cap = CopyTaskInput {
+            sizing: SizingMode::RatioOfTarget { pct: 10.0 },
+            max_sol_per_trade: 0.0005,
+            ..input()
+        };
+        assert_eq!(
+            validate(tiny_cap),
+            Err(CopySkip::BelowMinimumSize { minimum_sol })
+        );
+    }
+
+    #[test]
+    fn slippage_below_the_copy_minimum_is_refused() {
+        let low = CopyTaskInput {
+            slippage_pct: MIN_COPY_SLIPPAGE_PCT / 2.0,
+            ..input()
+        };
+        assert!(matches!(
+            validate(low),
+            Err(CopySkip::InvalidSlippage { .. })
+        ));
+        let lowest = CopyTaskInput {
+            slippage_pct: MIN_COPY_SLIPPAGE_PCT,
+            ..input()
+        };
+        assert!(validate(lowest).is_ok());
+    }
 
     #[test]
     fn legacy_skip_without_telemetry_still_decodes() {

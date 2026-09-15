@@ -15,7 +15,7 @@ import {
   taskName,
   toneClass,
 } from "./format.js";
-import { ensureIdentities, openTokenDetails, tokenInline } from "./tokens.js";
+import { ensureIdentities, openTokenDetails, sharedSymbols, tokenInline } from "./tokens.js";
 import { panelMessage } from "./overview.js";
 
 const relative = (trigger, entry) =>
@@ -56,8 +56,14 @@ export function createHoldings(page, { rerender, showActivityFor }) {
     return getIdentity(mint).symbol || shortAddress(mint);
   }
 
-  function tokenCell(mint) {
-    return `<button class="copy-token-link" type="button" data-holding-action="details" data-mint="${esc(mint)}" title="${esc(`Open token details · ${mint}`)}">${tokenInline(mint)}</button>`;
+  function tokenCell(mint, shared) {
+    return `<button class="copy-token-link" type="button" data-holding-action="details" data-mint="${esc(mint)}" title="${esc(`Open token details · ${mint}`)}">${tokenInline(mint, shared)}</button>`;
+  }
+
+  /** A price relative to the entry, with the price itself on hover. */
+  function relativeCell(value, entry) {
+    if (value == null) return '<td class="num">—</td>';
+    return `<td class="num" title="${esc(`${price(value)} SOL`)}">${esc(signedPct(relative(value, entry)))}</td>`;
   }
 
   function exitCell(holding, ws) {
@@ -108,6 +114,7 @@ export function createHoldings(page, { rerender, showActivityFor }) {
     if (!holdings.length) {
       return panelMessage("No open paper holdings. Buys copied from the wallet appear here.", esc);
     }
+    const shared = sharedSymbols(holdings.map((holding) => holding.mint));
     const rows = holdings
       .map((holding) => {
         const priced = holding.mark_price_sol != null;
@@ -115,11 +122,11 @@ export function createHoldings(page, { rerender, showActivityFor }) {
           ? `<span class="${toneClass(holding.unrealized_pnl_sol)}">${esc(signedSol(holding.unrealized_pnl_sol))}</span><small>${esc(signedPct(holding.unrealized_pnl_pct))}</small>`
           : '<span class="copy-warning-text">No pool price</span>';
         return `<tr>
-          <td>${tokenCell(holding.mint)}</td>
+          <td>${tokenCell(holding.mint, shared)}</td>
           <td class="num">${esc(sol(holding.cost_basis_sol))}</td>
           <td class="num">${esc(price(holding.entry_price_sol))}</td>
           <td class="num">${esc(price(holding.mark_price_sol))}</td>
-          <td class="num">${esc(price(holding.peak_price_sol))}</td>
+          ${relativeCell(holding.peak_price_sol, holding.entry_price_sol)}
           <td class="num copy-cell-stack">${pnl}</td>
           <td>${exitCell(holding, ws)}</td>
           <td class="num" title="${esc(`Opened ${dateTime(holding.opened_at)}`)}">${esc(duration(holding.held_seconds))}</td>
@@ -131,7 +138,19 @@ export function createHoldings(page, { rerender, showActivityFor }) {
       })
       .join("");
     return `<div class="copy-table-wrap"><table class="copy-table"><thead><tr><th scope="col">Token</th><th scope="col" class="num">Cost</th><th scope="col" class="num">Entry</th><th scope="col" class="num">Mark</th><th scope="col" class="num">Peak</th><th scope="col" class="num">P&amp;L</th><th scope="col">Exit rules</th><th scope="col" class="num">Held</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead><tbody>${rows}</tbody></table></div>
-    <p class="copy-note">Prices are SOL per token at the pool. Exit levels are relative to the entry price; hover one for its price.</p>`;
+    ${pausedNote(ws)}<p class="copy-note">Prices are SOL per token. Entry includes the buy's slippage and fees; the peak and the exit levels are relative to it, so a holding opens with its peak below entry. Hover one for its pool price.</p>`;
+  }
+
+  /** A paused task still closes what it holds; say by what. */
+  function pausedNote(ws) {
+    if (ws.enabled) return "";
+    const closer =
+      ws.exit_mode === "buy_only"
+        ? "Your exit rules"
+        : ws.exit_mode === "mirror"
+          ? "The wallet's sells"
+          : "The wallet's sells and your exit rules";
+    return `<p class="copy-note">${esc(`Paused: no new copies. ${closer} still close these holdings.`)}</p>`;
   }
 
   function closedTable(insights, error) {
@@ -142,10 +161,11 @@ export function createHoldings(page, { rerender, showActivityFor }) {
     }
     const rounds = insights.recent_rounds || [];
     if (!rounds.length) return panelMessage("No closed rounds yet.", esc);
+    const shared = sharedSymbols(rounds.map((round) => round.mint));
     const rows = rounds
       .map(
         (round) => `<tr>
-          <td>${tokenCell(round.mint)}</td>
+          <td>${tokenCell(round.mint, shared)}</td>
           <td class="num">${esc(sol(round.invested_sol))}</td>
           <td class="num">${esc(sol(round.proceeds_sol))}</td>
           <td class="num copy-cell-stack"><span class="${toneClass(round.pnl_sol)}">${esc(signedSol(round.pnl_sol))}</span><small>${esc(signedPct(round.pnl_pct))}</small></td>

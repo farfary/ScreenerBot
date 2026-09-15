@@ -64,7 +64,7 @@ pub enum Error {
     CopyTaskRejected {
         reason: crate::trader::copy::CopySkip,
     },
-    #[error("maximum of {maximum} active copy tasks reached")]
+    #[error("maximum of {maximum} active copy tasks reached; paper and live tasks both count")]
     CopyTaskLimit { maximum: usize },
     #[error("copy target could not be watched: {detail}")]
     CopyWatchRejected { detail: String },

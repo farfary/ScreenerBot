@@ -8,7 +8,7 @@ use crate::positions::{Position, PositionManagement, PositionOrigin};
 use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeReason, TradeResult};
 use crate::wallets::watch::{ActivityKind, SwapSide, WalletActivity};
 
-use super::paper::{simulate_sell, PaperCosts};
+use super::paper::{simulate_sell, PaperCosts, PaperMarket};
 use super::types::{
     CopyMode, CopyOutcome, CopySellDecision, CopySkip, CopyTask, CopyTelemetry, ExitMode,
 };
@@ -62,7 +62,7 @@ pub fn paper_sell_outcome(
     force_stopped: bool,
     target_holding_before_sell: f64,
     paper_tokens_held: f64,
-    market_price_sol: f64,
+    market: PaperMarket,
     costs: PaperCosts,
     decided_at: DateTime<Utc>,
 ) -> Result<CopyOutcome, CopySkip> {
@@ -82,7 +82,7 @@ pub fn paper_sell_outcome(
         Some(pct) if pct < 100.0 => paper_tokens_held * pct / 100.0,
         _ => paper_tokens_held,
     };
-    let fill = simulate_sell(sell_amount, market_price_sol, task.slippage_pct, costs)?;
+    let fill = simulate_sell(sell_amount, market, task.slippage_pct, costs)?;
     let mut telemetry = telemetry(activity, target_price_sol, decided_at);
     telemetry.fill_price_sol = Some(fill.fill_price_sol);
     let mut decision = sell_decision(
@@ -116,17 +116,9 @@ pub fn prepare_copy_sell(
     if force_stopped {
         return Err(CopySkip::ForceStopped);
     }
-    let position = position.ok_or(CopySkip::CopyPositionNotFound)?;
-    let owns_position = matches!(
-        &position.origin,
-        PositionOrigin::Copy {
-            task_id,
-            source_wallet,
-        } if *task_id == task.id && source_wallet == &task.target_address
-    );
-    if !owns_position {
-        return Err(CopySkip::CopyPositionNotFound);
-    }
+    let position = position
+        .filter(|position| owns_copy_position(position, task))
+        .ok_or(CopySkip::CopyPositionNotFound)?;
     if position.management == PositionManagement::UserOnly {
         return Err(CopySkip::PositionUserOnly);
     }
@@ -157,6 +149,17 @@ pub fn prepare_copy_sell(
         },
         telemetry,
     })
+}
+
+/// Whether this task opened `position` from its own target wallet.
+pub fn owns_copy_position(position: &Position, task: &CopyTask) -> bool {
+    matches!(
+        &position.origin,
+        PositionOrigin::Copy {
+            task_id,
+            source_wallet,
+        } if *task_id == task.id && source_wallet == &task.target_address
+    )
 }
 
 pub async fn execute_copy_sell_with<S, SFut>(plan: PreparedCopySell, submit: S) -> CopyOutcome

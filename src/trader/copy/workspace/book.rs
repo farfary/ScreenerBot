@@ -114,6 +114,7 @@ fn write_off(task: &CopyTask, position: &PaperPosition, now: DateTime<Utc>) -> C
         paper_fill: Some(PaperSellFill {
             token_amount: position.token_amount,
             market_price_sol: 0.0,
+            priced_from_pool: false,
             fill_price_sol: 0.0,
             gross_sol: 0.0,
             referral_fee_sol: 0.0,

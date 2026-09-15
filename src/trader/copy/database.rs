@@ -196,13 +196,14 @@ impl CopyDatabase {
         Ok(task)
     }
 
-    pub async fn enabled_tasks_for_subject(
+    /// Every task copying `target_address`, paused ones included.
+    pub async fn tasks_for_subject(
         &self,
         target_address: &str,
     ) -> crate::trader::Result<Vec<CopyTask>> {
         let db = self.clone();
         let address = target_address.to_owned();
-        tokio::task::spawn_blocking(move || db.enabled_tasks_for_subject_sync(&address))
+        tokio::task::spawn_blocking(move || db.tasks_for_subject_sync(&address))
             .await
             .map_err(|e| Error::CopyDatabaseUnavailable {
                 detail: e.to_string(),
@@ -548,14 +549,11 @@ impl CopyDatabase {
         Ok(rows)
     }
 
-    fn enabled_tasks_for_subject_sync(
-        &self,
-        address: &str,
-    ) -> crate::trader::Result<Vec<CopyTask>> {
+    fn tasks_for_subject_sync(&self, address: &str) -> crate::trader::Result<Vec<CopyTask>> {
         let connection = self.connection()?;
         let mut statement = connection
             .prepare(
-                &format!("SELECT {TASK_COLUMNS} FROM copy_tasks WHERE target_address = ?1 AND chain_id=?2 AND enabled = 1 ORDER BY id"),
+                &format!("SELECT {TASK_COLUMNS} FROM copy_tasks WHERE target_address = ?1 AND chain_id=?2 ORDER BY id"),
             )
             .map_err(crate::errors::DatabaseError::from)?;
         let rows = statement

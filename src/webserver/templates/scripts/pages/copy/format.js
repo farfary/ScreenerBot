@@ -20,7 +20,7 @@ export const EXIT_MODE_LABELS = {
 };
 
 export const EXIT_LABELS = {
-  target_sell: "Target sell",
+  target_sell: "Wallet sold",
   stop_loss: "Stop loss",
   trailing_stop: "Trailing stop",
   take_profit: "Take profit",
@@ -29,14 +29,14 @@ export const EXIT_LABELS = {
 };
 
 const SKIP_LABELS = {
-  not_buy_swap: "Target activity was not a buy",
+  not_buy_swap: "Wallet activity was not a buy",
   task_disabled: "Task is paused",
   mode_transition_required: "Execution mode must be changed separately",
   live_confirmation_required: "Live execution needs confirmation",
   unsupported_sizing_mode: "Sizing mode is not supported yet",
-  self_copy: "Target is one of your wallets",
-  target_below_minimum: "Target trade below the minimum",
-  target_above_maximum: "Target trade above the maximum",
+  self_copy: "The wallet is one of your own",
+  target_below_minimum: "Wallet trade below the minimum",
+  target_above_maximum: "Wallet trade above the maximum",
   already_bought: "Already bought this token (buy once)",
   blacklisted: "Token is blocked by risk controls",
   filter_required: "Token did not pass Filtering",
@@ -47,8 +47,8 @@ const SKIP_LABELS = {
   invalid_slippage: "Task slippage is invalid",
   invalid_exit_policy: "Task exit rules are invalid",
   invalid_price: "No usable market price",
-  not_sell_swap: "Target activity was not a sell",
-  exit_mode_disabled: "Target sell ignored by the exit setting",
+  not_sell_swap: "Wallet activity was not a sell",
+  exit_mode_disabled: "Wallet sell ignored: the task sells by its own rules",
   force_stopped: "Trading is force-stopped",
   copy_position_not_found: "No position owned by this task",
   position_user_only: "Position is managed by you",
@@ -148,6 +148,24 @@ export function signedPct(value, decimals = 1) {
 export function pct(value, decimals = 1) {
   const number = finite(value);
   return number === null ? "—" : `${number.toFixed(decimals)}%`;
+}
+
+/**
+ * Unrealized P&L covers priced holdings only: with none priced there is no
+ * figure, and a partial one says what it leaves out.
+ */
+export function unrealizedFigure(pnlSol, openHoldings, unpricedHoldings) {
+  const open = Number(openHoldings) || 0;
+  const unpriced = Number(unpricedHoldings) || 0;
+  const priced = open - unpriced;
+  if (!unpriced) return { value: pnlSol, note: null };
+  return {
+    value: priced > 0 ? pnlSol : null,
+    note:
+      priced > 0
+        ? `${plural(priced, "priced holding")} · ${unpriced} without a price`
+        : `${plural(unpriced, "holding")} without a price`,
+  };
 }
 
 export function toneClass(value) {

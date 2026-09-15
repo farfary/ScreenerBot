@@ -5,6 +5,7 @@ import {
   MODE_LABELS,
   STATE_LABELS,
   pauseReasonText,
+  plural,
   rangeQuery,
   taskName,
   timeAgo,
@@ -30,7 +31,7 @@ const TABS = [
 const RUNNING_DETAIL = {
   paper: "Running in Paper · trades are simulated, nothing is spent",
   live: "Running live · wallet trades are copied with real swaps",
-  system_paused: "Waiting · copy processing is paused globally",
+  system_paused: "Waiting · copy processing is paused globally, exits still run",
   entries_blocked: "Entries blocked by the loss limit · exits still run",
   force_stopped: "Force stopped · nothing is copied",
 };
@@ -171,12 +172,22 @@ export function createWorkspace(page) {
     }
     const since = task.paused_at ? ` · ${timeAgo(task.paused_at)}` : "";
     const kind = task.pause_reason?.kind;
-    const hint =
+    const resume =
       kind === "latency_kill_switch"
         ? "Resuming keeps the same limit, so it pauses again while trades still arrive late. Check the RPC stream or raise the arrival limit in Settings."
         : kind === "watch_detached"
           ? "Resuming watches the wallet again."
           : "";
+    // Pausing stops new copies only; say what still closes the holdings.
+    const open = Number(task.stats?.open_positions) || 0;
+    const closer =
+      task.exit_mode === "buy_only"
+        ? "Its exit rules"
+        : task.exit_mode === "mirror"
+          ? "The wallet's sells"
+          : "The wallet's sells and its exit rules";
+    const holdings = open ? `${closer} still close its ${plural(open, "open holding")}.` : "";
+    const hint = [resume, holdings].filter(Boolean).join(" ");
     return `${esc(pauseReasonText(task.pause_reason) + since)}${hint ? `<small>${esc(hint)}</small>` : ""}`;
   }
 
@@ -285,6 +296,16 @@ export function createWorkspace(page) {
     if (!task) return;
     if (action === "pause" || action === "resume") {
       const enabled = action === "resume";
+      if (enabled && task.mode === "live") {
+        const result = await confirm({
+          title: "Resume live copying",
+          message: `“${taskName(task)}” will submit real swaps from your wallet when this wallet trades again.`,
+          confirmLabel: "Resume live",
+          cancelLabel: "Keep paused",
+          variant: "danger",
+        });
+        if (!result.confirmed) return;
+      }
       await run(
         button,
         () => api.update(task.id, { enabled }),

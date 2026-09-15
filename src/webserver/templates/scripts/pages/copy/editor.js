@@ -7,6 +7,7 @@ import {
   STEPS,
   collect,
   costPreview,
+  duplicateNote,
   exitWarningsHtml,
   stepHtml,
   validate,
@@ -21,17 +22,24 @@ const NEW_TASK = {
 };
 
 export function createEditor(page) {
-  const { $, Utils, api, state, on, toast, dialogs } = page;
+  const { $, Utils, api, state, on, toast, confirm, dialogs } = page;
   const esc = Utils.escapeHtml;
   let mode = "create";
   let source = null;
   let draft = null;
+  let baseline = "";
   let step = 0;
   let visited = 0;
   let shownStep = null;
   const sizingMemory = { fixed: null, ratio_of_target: null };
 
-  const context = () => ({ draft, mode, source, defaults: state.defaults });
+  const context = () => ({
+    draft,
+    mode,
+    source,
+    defaults: state.defaults,
+    tasks: state.overview?.tasks || [],
+  });
   const body = () => $("#copy-editor-body");
 
   function setup() {
@@ -88,11 +96,34 @@ export function createEditor(page) {
     };
   }
 
-  async function start(stepId) {
-    if (!state.defaults) await page.reloadDefaults();
+  /** A new task starts from the copy default slippage once the defaults are known. */
+  function fillDefaults() {
     if (mode !== "edit" && draft.slippage_pct == null) {
       draft.slippage_pct = state.defaults?.default_slippage_pct ?? null;
     }
+  }
+
+  const dirty = () => JSON.stringify(draft) !== baseline;
+
+  /** Closing by Escape, the backdrop or the close button keeps unsaved work unless confirmed. */
+  async function confirmDiscard() {
+    readStep();
+    if (!dirty()) return true;
+    const result = await confirm({
+      title: mode === "edit" ? "Discard changes" : "Discard this task",
+      message:
+        mode === "edit"
+          ? `Your changes to “${taskName(source)}” are not saved.`
+          : "The wallet and rules entered so far are not saved.",
+      confirmLabel: "Discard",
+      cancelLabel: "Keep editing",
+      variant: "warning",
+    });
+    return result.confirmed;
+  }
+
+  function start(stepId) {
+    fillDefaults();
     step = Math.max(
       0,
       STEPS.findIndex((item) => item.id === stepId)
@@ -121,8 +152,20 @@ export function createEditor(page) {
     }
     shownStep = null;
     render();
-    dialogs.show("copy-editor");
+    baseline = JSON.stringify(draft);
+    dialogs.show("copy-editor", { beforeClose: confirmDiscard });
     body()?.querySelector("input, select, button")?.focus();
+    // The page loads the defaults at start; the editor never waits for them to open.
+    if (!state.defaults) {
+      void page.reloadDefaults().then(() => {
+        if (!state.defaults || !dialogs.isOpen("copy-editor")) return;
+        readStep();
+        const untouched = !dirty();
+        fillDefaults();
+        if (untouched) baseline = JSON.stringify(draft);
+        render();
+      });
+    }
   }
 
   function openCreate(prefill = {}) {
@@ -142,21 +185,21 @@ export function createEditor(page) {
       }),
       ...prefill,
     };
-    void start("wallet");
+    start("wallet");
   }
 
   function openEdit(task, stepId = "wallet") {
     mode = "edit";
     source = task;
     draft = fromTask(task);
-    void start(stepId);
+    start(stepId);
   }
 
   function openClone(task) {
     mode = "clone";
     source = task;
     draft = { ...fromTask(task), label: `${taskName(task)} (copy)`, enabled: false, mode: "paper" };
-    void start("wallet");
+    start("wallet");
   }
 
   function setError(text) {
@@ -271,9 +314,12 @@ export function createEditor(page) {
   function onInput() {
     if (!draft) return;
     const id = STEPS[step].id;
-    if (id !== "sizing" && id !== "exits") return;
+    if (!["wallet", "sizing", "exits"].includes(id)) return;
     readStep();
-    if (id === "sizing") {
+    if (id === "wallet") {
+      const note = $("#copy-editor-duplicate");
+      if (note) note.innerHTML = duplicateNote(context(), esc);
+    } else if (id === "sizing") {
       const preview = $("#copy-editor-preview");
       if (preview) preview.innerHTML = costPreview(draft);
     } else {
@@ -312,6 +358,7 @@ export function createEditor(page) {
           taskName(response.task)
         );
         state.view = "task";
+        state.tab = "overview";
         state.selectedId = response.task?.id ?? state.selectedId;
       }
       await page.reload();

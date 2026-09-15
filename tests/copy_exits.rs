@@ -10,7 +10,7 @@ use screenerbot::chains::ChainId;
 use screenerbot::positions::{PositionManagement, PositionOrigin};
 use screenerbot::trader::copy::{
     execute_copy_sell_with, paper_sell_outcome, prepare_copy_sell, CopyMode, CopyOutcome,
-    CopySellSubmitResult, CopySkip, CopyTask, ExitMode, PaperCosts, SizingMode,
+    CopySellSubmitResult, CopySkip, CopyTask, ExitMode, PaperCosts, PaperMarket, SizingMode,
 };
 use screenerbot::trader::{TradeAction, TradeReason};
 use screenerbot::wallets::watch::{ActivityKind, SwapSide, WalletActivity, WatchSource};
@@ -174,7 +174,7 @@ fn paper_mode_sells_the_targets_fraction_of_the_paper_holding() {
         false,
         100.0,
         50.0,
-        0.01,
+        PaperMarket::pool(0.01),
         PAPER_COSTS,
         Utc::now(),
     )
@@ -197,7 +197,7 @@ fn paper_sell_without_a_paper_holding_is_skipped() {
             false,
             100.0,
             0.0,
-            0.01,
+            PaperMarket::pool(0.01),
             PAPER_COSTS,
             Utc::now(),
         ),

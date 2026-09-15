@@ -34,7 +34,7 @@ pub use live::{
 };
 pub use matcher::matching_tasks;
 pub use notify::{recent_notices, CopyNotice};
-pub use paper::{simulate_fill, simulate_sell, PaperCosts, PAPER_REFERRAL_FEE_BPS};
+pub use paper::{simulate_fill, simulate_sell, PaperCosts, PaperMarket, PAPER_REFERRAL_FEE_BPS};
 pub use paper_exits::held_paper_mints;
 pub use pipeline::run_paper_pipeline;
 pub use risk::precheck;

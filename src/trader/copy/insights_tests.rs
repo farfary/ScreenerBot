@@ -36,6 +36,7 @@ fn buy(id: i64, mint: &str, tokens: f64, cost: f64, at: DateTime<Utc>) -> CopyAc
             fill: PaperFill {
                 input_sol: cost,
                 market_price_sol: cost / tokens,
+                priced_from_pool: true,
                 fill_price_sol: cost / tokens * 1.01,
                 token_amount: tokens,
                 referral_fee_sol: 0.0,
@@ -75,6 +76,7 @@ fn sell(
             paper_fill: Some(PaperSellFill {
                 token_amount: tokens,
                 market_price_sol: proceeds / tokens,
+                priced_from_pool: true,
                 fill_price_sol: proceeds / tokens,
                 gross_sol: proceeds,
                 referral_fee_sol: 0.0,
@@ -112,7 +114,14 @@ fn paper_rounds_replay_partial_exits_into_one_closed_round() {
         ),
         buy(6, "c", 10.0, 1.0, t0 + Duration::hours(2)),
     ];
-    let insights = build_insights(1, CopyBook::Paper, &activity, &[], InsightRange::default());
+    let insights = build_insights(
+        1,
+        CopyBook::Paper,
+        &activity,
+        &[],
+        InsightRange::default(),
+        None,
+    );
     assert_eq!(insights.rounds, 2, "the open round in c is not closed");
     assert_eq!((insights.wins, insights.losses), (1, 1));
     assert!((insights.realized_pnl_sol - 0.1).abs() < 1e-9);
@@ -151,18 +160,60 @@ fn a_range_keeps_rounds_that_closed_inside_it() {
         from: Some(t0 + Duration::hours(12)),
         to: None,
     };
-    let insights = build_insights(1, CopyBook::Paper, &activity, &[], range);
+    let insights = build_insights(1, CopyBook::Paper, &activity, &[], range, None);
     assert_eq!(insights.rounds, 1);
     assert!((insights.realized_pnl_sol + 0.5).abs() < 1e-9);
     assert_eq!(insights.decisions.fills, 1);
 }
 
 #[test]
+fn a_fill_priced_at_the_observed_trade_is_no_slippage_sample() {
+    let t0 = Utc::now();
+    let mut observed = buy(1, "a", 100.0, 1.0, t0);
+    if let CopyOutcome::PaperFilled(decision) = &mut observed.outcome {
+        decision.fill.priced_from_pool = false;
+    }
+    let activity = vec![observed, buy(2, "b", 100.0, 1.0, t0)];
+    let insights = build_insights(
+        1,
+        CopyBook::Paper,
+        &activity,
+        &[],
+        InsightRange::default(),
+        None,
+    );
+    assert_eq!(insights.slippage.samples, 1);
+}
+
+#[test]
 fn arrival_buckets_are_upper_exclusive() {
-    let buckets = latency_histogram(&[100, 500, 999, 9_000]);
+    let buckets = latency_histogram(&[100, 500, 999, 9_000], None);
     let counts = buckets
         .iter()
         .map(|bucket| bucket.count)
         .collect::<Vec<_>>();
     assert_eq!(counts, [1, 2, 0, 0, 0, 1]);
+}
+
+#[test]
+fn the_arrival_limit_is_always_a_bucket_edge() {
+    let buckets = latency_histogram(&[9_000, 11_000], Some(10_000));
+    let edges = buckets
+        .iter()
+        .map(|bucket| bucket.upper_ms)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        edges,
+        [
+            Some(500),
+            Some(1_000),
+            Some(2_000),
+            Some(4_000),
+            Some(8_000),
+            Some(10_000),
+            None
+        ]
+    );
+    assert_eq!((buckets[5].count, buckets[6].count), (1, 1));
+    assert_eq!(latency_histogram(&[], Some(4_000)).len(), 6);
 }

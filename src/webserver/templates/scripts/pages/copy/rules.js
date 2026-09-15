@@ -1,6 +1,6 @@
 // The Rules tab and the editor's review: every field with the value that applies
 // and where it comes from (a task override or the inherited Trader default).
-import { EXIT_MODE_LABELS, definitionRows, fixed } from "./format.js";
+import { EXIT_MODE_LABELS, MODE_LABELS, definitionRows, fixed } from "./format.js";
 import { RULES, exitWarnings, fieldText, isOverridden } from "./policy.js";
 
 function sizeText(task) {
@@ -39,7 +39,12 @@ function ruleTable({ task, effective, traderDefaults, managesExits }, esc) {
         const source = isOverridden(overrides, rule.group, field.key)
           ? `Task override · Trader ${fieldText(field, traderDefaults?.[rule.group]?.[field.key])}`
           : "Trader default";
-        return `<tr class="${inactive ? "is-inactive" : ""}"><td>${esc(field.label)}</td><td>${esc(fieldText(field, effective?.[rule.group]?.[field.key]))}</td><td class="copy-rules-source">${esc(source)}</td></tr>`;
+        // A rule that is on but never runs must not read as running.
+        const applies =
+          !managesExits && field.key === "enabled"
+            ? "Not used: the wallet's sells decide"
+            : fieldText(field, effective?.[rule.group]?.[field.key]);
+        return `<tr class="${inactive ? "is-inactive" : ""}"><td>${esc(field.label)}</td><td>${esc(applies)}</td><td class="copy-rules-source">${esc(source)}</td></tr>`;
       })
       .join("");
     return `<tr class="copy-rules-group"><th colspan="3" scope="rowgroup">${esc(rule.title)}</th></tr>${fields}`;
@@ -49,9 +54,9 @@ function ruleTable({ task, effective, traderDefaults, managesExits }, esc) {
 
 /** Sizing, entry and exit sections for a task-shaped object. */
 export function rulesHtml(context, esc) {
-  const { task, effective, managesExits, requireFilter, globalRequireFilter } = context;
+  const { task, effective, managesExits, requireFilter, globalRequireFilter, feePct } = context;
   const budgetNote = Number.isFinite(Number(task.spent_sol))
-    ? `${fixed(task.spent_sol, 3)} spent · ${fixed(task.remaining_budget_sol, 3)} left`
+    ? `${fixed(task.spent_sol, 3)} spent in ${MODE_LABELS[task.mode] || task.mode} · ${fixed(task.remaining_budget_sol, 3)} left`
     : "";
   const perToken = Number(task.max_sol_per_token);
   const perTrade = Number(task.max_sol_per_trade);
@@ -99,12 +104,12 @@ export function rulesHtml(context, esc) {
   </div>
   <section class="copy-card copy-rules-exits">
     <h4>Exits <span class="copy-card-sub">${esc(EXIT_MODE_LABELS[task.exit_mode] || task.exit_mode)}</span></h4>
-    ${warningList(exitWarnings(effective, task.exit_mode), esc)}${exitNote}
+    ${warningList(exitWarnings(effective, task.exit_mode, { slippagePct: task.slippage_pct, feePct }), esc)}${exitNote}
     ${ruleTable(context, esc)}
   </section>`;
 }
 
-export function renderRules({ ws }, esc) {
+export function renderRules({ ws, defaults }, esc) {
   return `<div class="copy-panel-head"><h3>Rules in effect</h3><button class="btn btn-secondary btn-sm" type="button" data-ws-action="edit" data-step="exits"><i class="icon-pencil" aria-hidden="true"></i> Edit rules</button></div>${rulesHtml(
     {
       task: ws,
@@ -113,6 +118,7 @@ export function renderRules({ ws }, esc) {
       managesExits: ws.policy_manages_exits,
       requireFilter: ws.effective_require_filter_pass,
       globalRequireFilter: ws.global_require_filter_pass,
+      feePct: defaults?.swap_fee_pct,
     },
     esc
   )}`;

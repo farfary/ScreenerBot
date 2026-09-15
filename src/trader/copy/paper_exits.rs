@@ -15,7 +15,7 @@ use crate::trader::policy::ExitPolicy;
 
 use super::{
     management_for_exit_mode, simulate_sell, CopyDatabase, CopyMode, CopyOutcome, CopySellDecision,
-    CopySkip, CopyTask, CopyTelemetry, PaperCosts, PaperExitRule, PaperPosition,
+    CopySkip, CopyTask, CopyTelemetry, PaperCosts, PaperExitRule, PaperMarket, PaperPosition,
 };
 
 /// Which rule, if any, closes this holding at `mark_price_sol`, checked in the
@@ -80,7 +80,12 @@ pub fn paper_exit_outcome(
         Some(pct) if pct < 100.0 => position.token_amount * pct / 100.0,
         _ => position.token_amount,
     };
-    let fill = simulate_sell(sell_amount, mark_price_sol, task.slippage_pct, costs)?;
+    let fill = simulate_sell(
+        sell_amount,
+        PaperMarket::pool(mark_price_sol),
+        task.slippage_pct,
+        costs,
+    )?;
     Ok(CopyOutcome::PaperSellObserved(CopySellDecision {
         task_id: task.id,
         target_address: task.target_address.clone(),
@@ -124,11 +129,13 @@ pub fn held_paper_mints() -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// One pass over every paper task whose exits the policy manages. Like the live
-/// exit monitor it covers paused tasks too (pausing stops new copies, not the
-/// management of what is held) and stands down under the emergency stop. Holdings
-/// are marked at the pool price only; a token without one is left for the next
-/// pass rather than sold on a stale trade price.
+/// One pass over every paper book with open holdings. Each holding's peak follows
+/// the pool price whoever sells it; the exit rules then run on the holdings of the
+/// tasks whose exits the policy manages (a `mirror` holding is sold by the
+/// wallet's sells alone). Like the live exit monitor it covers paused tasks too
+/// (pausing stops new copies, not the management of what is held) and stands down
+/// under the emergency stop. Holdings are marked at the pool price only; a token
+/// without one is left for the next pass rather than sold on a stale trade price.
 pub async fn sweep(database: &CopyDatabase, costs: PaperCosts) -> crate::trader::Result<()> {
     let tasks = database.list_tasks().await?;
     let mut books = Vec::new();
@@ -151,11 +158,13 @@ pub async fn sweep(database: &CopyDatabase, costs: PaperCosts) -> crate::trader:
     if crate::global::is_force_stopped() {
         return Ok(());
     }
-    for (task, holdings) in books.iter().filter(|(task, _)| {
-        management_for_exit_mode(task.exit_mode) != PositionManagement::CopyTask
-    }) {
-        let mut policy = ExitPolicy::from_config();
-        policy.apply_overrides(&task.exit_policy_overrides);
+    for (task, holdings) in &books {
+        let policy = (management_for_exit_mode(task.exit_mode) != PositionManagement::CopyTask)
+            .then(|| {
+                let mut policy = ExitPolicy::from_config();
+                policy.apply_overrides(&task.exit_policy_overrides);
+                policy
+            });
         for position in holdings.iter().filter(|position| position.is_open()) {
             let Some(mark) = crate::pools::get_pool_price(&position.mint)
                 .map(|price| price.price_sol)
@@ -167,9 +176,12 @@ pub async fn sweep(database: &CopyDatabase, costs: PaperCosts) -> crate::trader:
             database
                 .raise_paper_peak(task.id, &position.mint, peak)
                 .await?;
+            let Some(policy) = &policy else {
+                continue;
+            };
             let now = Utc::now();
             let (rule, exit_percentage) =
-                match evaluate_paper_exit(position, mark, peak, &policy, now) {
+                match evaluate_paper_exit(position, mark, peak, policy, now) {
                     Ok(Some(triggered)) => triggered,
                     Ok(None) => continue,
                     Err(detail) => {

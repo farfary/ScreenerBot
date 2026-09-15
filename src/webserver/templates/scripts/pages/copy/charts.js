@@ -93,11 +93,13 @@ export function pnlCurve(points, { escapeHtml = String } = {}) {
 /** Horizontal bars: `[{ label, value, display, tone }]`. */
 export function barList(items, escapeHtml) {
   if (!items?.length) return '<div class="copy-chart-empty">Nothing recorded in this range.</div>';
-  const max = Math.max(...items.map((item) => Math.abs(item.value) || 0), 1);
+  // Bars scale to the largest magnitude whatever its unit, so 0.03 SOL fills its track.
+  const max = Math.max(...items.map((item) => Math.abs(item.value) || 0));
+  const width = (value) => (max > 0 ? (Math.abs(value) || 0) / max : 0) * 100;
   return `<ul class="copy-bars">${items
     .map(
       (item) =>
-        `<li class="copy-bar"><span class="copy-bar-label">${escapeHtml(item.label)}</span><span class="copy-bar-track"><span class="copy-bar-fill ${item.tone || ""}" style="width:${((Math.abs(item.value) / max) * 100).toFixed(1)}%"></span></span><span class="copy-bar-value ${item.tone || ""}">${escapeHtml(item.display)}</span></li>`
+        `<li class="copy-bar"><span class="copy-bar-label">${escapeHtml(item.label)}</span><span class="copy-bar-track"><span class="copy-bar-fill ${item.tone || ""}" style="width:${width(item.value).toFixed(1)}%"></span></span><span class="copy-bar-value ${item.tone || ""}">${escapeHtml(item.display)}</span></li>`
     )
     .join("")}</ul>`;
 }

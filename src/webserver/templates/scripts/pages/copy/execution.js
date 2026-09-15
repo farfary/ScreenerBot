@@ -1,7 +1,7 @@
 // The Execution tab: how late the target's trades are detected and how far the
 // copies fill from the target's own price.
 import { histogram } from "./charts.js";
-import { definitionRows, seconds, signedPct } from "./format.js";
+import { definitionRows, plural, seconds, signedPct } from "./format.js";
 import { insightsBody, metric, rangeHead } from "./overview.js";
 
 function bucketLabel(bucket, index, buckets) {
@@ -29,7 +29,7 @@ function body(insights, defaults, esc) {
     metric(
       "Median arrival",
       seconds(arrival.median_ms),
-      `${arrival.samples || 0} live-detected trades`,
+      `${plural(arrival.samples || 0, "trade")} seen as they happened`,
       "",
       esc
     ),
@@ -37,7 +37,7 @@ function body(insights, defaults, esc) {
     metric(
       "Median slippage",
       signedPct(slippage.median_pct, 2),
-      `${slippage.samples || 0} priced fills`,
+      plural(slippage.samples || 0, "measured fill"),
       "",
       esc
     ),
@@ -50,7 +50,7 @@ function body(insights, defaults, esc) {
     ),
   ].join("")}</div>
   <div class="copy-split">
-    <section class="copy-card"><h4>Detection delay</h4><p class="copy-note">Time from the target's block to this bot seeing the trade. Replays after downtime are excluded.${limitMs != null ? esc(` Bars past the ${seconds(limitMs)} arrival limit are amber.`) : ""}</p>${histogram(buckets, esc)}
+    <section class="copy-card"><h4>Detection delay</h4><p class="copy-note">Time from the wallet's block to this bot seeing the trade. Replays after downtime are excluded.${limitMs != null ? esc(` Bars past the ${seconds(limitMs)} arrival limit are amber.`) : ""}</p>${histogram(buckets, esc)}
       <dl class="copy-defs">${definitionRows(
         [
           ["Fastest", seconds(arrival.minimum_ms)],
@@ -59,7 +59,7 @@ function body(insights, defaults, esc) {
         ],
         esc
       )}</dl></section>
-    <section class="copy-card"><h4>Fill against the target</h4><p class="copy-note">Positive means worse than the target: paid more on a buy, received less on a mirrored sell.</p>
+    <section class="copy-card"><h4>Fill against the wallet</h4><p class="copy-note">Positive means worse than the wallet: paid more on a buy, received less on a mirrored sell. A paper fill of a token without a pool price is priced at the wallet's own trade, so it measures nothing and is left out.</p>
       <dl class="copy-defs">${definitionRows(
         [
           ["Samples", String(slippage.samples || 0)],

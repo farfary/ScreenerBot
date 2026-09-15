@@ -76,7 +76,7 @@ export function createProfile(page) {
     const observed = seen.swaps
       ? definitionRows(
           [
-            ["Swaps seen", String(seen.swaps)],
+            ["Swaps seen", String(seen.swaps), "Distinct wallet swaps across your tasks"],
             ["Buys / sells", `${seen.buys} / ${seen.sells}`],
             ["Tokens traded", String(seen.tokens)],
             ["First seen", dateTime(seen.first_seen)],
@@ -112,7 +112,7 @@ export function createProfile(page) {
       paint(body, render(profile));
       if (copy) {
         copy.disabled = profile.own_wallet;
-        copy.textContent = profile.tasks?.length ? "Copy again" : "Copy this wallet";
+        copy.textContent = profile.tasks?.length ? "Copy with other rules" : "Copy this wallet";
       }
     } catch (failure) {
       if (current?.address !== address) return;

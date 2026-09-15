@@ -1,5 +1,6 @@
 // Token identities for the Copy Trading panels: each mint is looked up once, and
 // the panel repaints when names and logos arrive.
+import { escapeHtml } from "../../core/utils.js";
 import { getIdentity, renderAssetInline, resolveIdentities } from "../../ui/token_identity.js";
 import { shortAddress } from "./format.js";
 
@@ -16,12 +17,28 @@ export function ensureIdentities(mints, onResolved) {
     .catch(() => missing.forEach((mint) => requested.delete(mint)));
 }
 
-/** A mint's inline identity; without metadata it reads as its short mint, not "Unknown". */
-export function tokenInline(mint) {
+/** The symbols more than one of these mints resolves to. */
+export function sharedSymbols(mints) {
+  const counts = new Map();
+  new Set((mints || []).filter(Boolean)).forEach((mint) => {
+    const symbol = getIdentity(mint).symbol;
+    if (symbol) counts.set(symbol, (counts.get(symbol) || 0) + 1);
+  });
+  return new Set([...counts].filter(([, count]) => count > 1).map(([symbol]) => symbol));
+}
+
+/**
+ * A mint's inline identity; without metadata it reads as its short mint, not
+ * "Unknown". A symbol in `shared` names several tokens, so the mint follows it.
+ */
+export function tokenInline(mint, shared = null) {
   const identity = getIdentity(mint);
-  return renderAssetInline(
+  const inline = renderAssetInline(
     identity.symbol ? identity : { ...identity, symbol: shortAddress(mint) }
   );
+  return identity.symbol && shared?.has(identity.symbol)
+    ? `${inline}<small class="copy-token-mint">${escapeHtml(shortAddress(mint))}</small>`
+    : inline;
 }
 
 export function openTokenDetails(mint) {

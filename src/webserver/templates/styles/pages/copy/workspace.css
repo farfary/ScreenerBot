@@ -349,6 +349,14 @@
   margin-left: var(--spacing-xs);
 }
 
+/* The mint beside a symbol that several listed tokens share. */
+.copy-token-mint {
+  margin-left: var(--spacing-xs);
+  font-family: var(--font-data);
+  font-size: var(--font-size-xs);
+  color: var(--text-muted);
+}
+
 .copy-exit-list {
   display: flex;
   flex-wrap: wrap;

@@ -1,5 +1,5 @@
 // The status strip and the totals row above the wallet list.
-import { fixed, plural, pct, seconds, signedSol, toneClass } from "./format.js";
+import { fixed, plural, pct, seconds, signedSol, toneClass, unrealizedFigure } from "./format.js";
 
 export function renderStrip(page) {
   const { $, state } = page;
@@ -16,7 +16,7 @@ export function renderStrip(page) {
   let label;
   let tone;
   if (!status.enabled) {
-    label = "Paused globally · nothing is copied";
+    label = "Paused globally · no new copies, exits still run";
     tone = "paused";
   } else if (status.blocked_reason === "force_stop") {
     label = "Force stopped · nothing is copied";
@@ -57,6 +57,11 @@ export function renderFigures(page) {
   const spent = Number(totals.active_spent_sol) || 0;
   const budgetPct = budget > 0 ? Math.min(100, (spent / budget) * 100) : 0;
   const arrival = totals.active_arrival || {};
+  const marked = unrealizedFigure(
+    totals.unrealized_pnl_sol,
+    totals.open_holdings,
+    totals.unpriced_holdings
+  );
   root.innerHTML = [
     figure(
       "Realized P&L",
@@ -66,12 +71,10 @@ export function renderFigures(page) {
     ),
     figure(
       "Unrealized P&L",
-      signedSol(totals.unrealized_pnl_sol),
+      signedSol(marked.value),
       {
-        tone: toneClass(totals.unrealized_pnl_sol),
-        note: totals.unpriced_holdings
-          ? `${plural(totals.unpriced_holdings, "holding")} without a price`
-          : "Marked at the pool price",
+        tone: toneClass(marked.value),
+        note: marked.note || "Marked at the pool price",
       },
       esc
     ),
@@ -83,10 +86,10 @@ export function renderFigures(page) {
     ),
     figure("Open holdings", String(totals.open_holdings), { note: "Across all tasks" }, esc),
     figure(
-      "Budget in use",
+      "Budget spent",
       budget > 0 ? `${fixed(spent, 2)} / ${fixed(budget, 2)} SOL` : "—",
       {
-        note: budget > 0 ? "Enabled tasks only" : "No enabled tasks",
+        note: budget > 0 ? "Lifetime spend of enabled tasks" : "No enabled tasks",
         extra: `<span class="copy-meter" aria-hidden="true"><span style="width:${budgetPct.toFixed(1)}%"></span></span>`,
       },
       esc

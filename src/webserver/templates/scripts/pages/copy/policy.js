@@ -1,6 +1,6 @@
 // The four exit rules as the editor and the Rules tab present them: field specs,
 // the policy a task runs under after its overrides, presets, and validation.
-import { duration, fixed, signedPct } from "./format.js";
+import { duration, finite, fixed, signedPct } from "./format.js";
 
 const status = { key: "enabled", label: "Status", bool: true, text: (on) => (on ? "On" : "Off") };
 
@@ -229,10 +229,19 @@ export function validateOverrides(overrides) {
   return null;
 }
 
-/** What a reader must know about the rules in effect. */
-export function exitWarnings(policy, exitMode) {
+/**
+ * What a reader must know about the rules in effect. `slippagePct` and `feePct`
+ * are the task's own selling costs: an exit rule measures from the entry price,
+ * which already carries the buy's costs, so a sell still pays both again.
+ */
+export function exitWarnings(policy, exitMode, { slippagePct = null, feePct = null } = {}) {
   const warnings = [];
-  if (exitMode === "mirror") return warnings;
+  if (exitMode === "mirror") {
+    warnings.push(
+      "Only the wallet's sells close holdings: no stop loss protects them, and a token the wallet never sells stays held."
+    );
+    return warnings;
+  }
   const anyRule = ["stop_loss", "trailing", "roi", "time"].some(
     (group) => policy?.[group]?.enabled
   );
@@ -242,6 +251,23 @@ export function exitWarnings(policy, exitMode) {
     warnings.push(
       "No stop loss applies: a falling token is held until another rule or the wallet sells."
     );
+  }
+  const stop = policy?.stop_loss;
+  if (stop?.enabled && Number(stop.min_hold_seconds) > 0) {
+    warnings.push(
+      `The stop loss waits ${duration(stop.min_hold_seconds)} after each buy: a token that falls faster closes well past ${signedPct(-Number(stop.threshold_pct), 1)}.`
+    );
+  }
+  const roi = policy?.roi;
+  const slippage = finite(slippagePct);
+  const fee = finite(feePct);
+  if (roi?.enabled && slippage !== null && fee !== null) {
+    const sellCost = slippage + fee;
+    if (Number(roi.target_profit_pct) <= sellCost) {
+      warnings.push(
+        `Take profit at +${fixed(roi.target_profit_pct, 1)}% does not cover selling (${fixed(slippage, 1)}% slippage and a ${fixed(fee, 1)}% swap fee), so it closes rounds at a loss.`
+      );
+    }
   }
   const trailing = policy?.trailing;
   if (trailing?.enabled && Number(trailing.distance_pct) >= Number(trailing.activation_pct)) {

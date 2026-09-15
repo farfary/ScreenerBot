@@ -1,7 +1,15 @@
 // Arming live is its own step: the readiness evidence from the paper book, what
 // real exposure the task carries, and explicit acknowledgements before the
 // confirmation phrase is sent.
-import { EXIT_MODE_LABELS, definitionRows, fixed, plural, taskName } from "./format.js";
+import {
+  EXIT_MODE_LABELS,
+  MODE_LABELS,
+  definitionRows,
+  duration,
+  fixed,
+  plural,
+  taskName,
+} from "./format.js";
 import { RULES, ruleSummary } from "./policy.js";
 
 export function createArmGate(page) {
@@ -41,14 +49,20 @@ export function createArmGate(page) {
       ws.sizing?.kind === "ratio_of_target"
         ? `${fixed(ws.sizing.pct, 1)}% of the wallet's trade`
         : `${fixed(ws.sizing?.sol, 3)} SOL`;
+    const stop = ws.effective_policy?.stop_loss;
+    const stopNote =
+      ws.policy_manages_exits && stop?.enabled && Number(stop.min_hold_seconds) > 0
+        ? `Not before a ${duration(stop.min_hold_seconds)} hold: a faster fall closes lower`
+        : "";
     const exposure = definitionRows(
       [
         ["Per copy", size],
         ["Per-trade cap", `${fixed(ws.max_sol_per_trade, 3)} SOL`],
         ["Per-token cap", `${fixed(ws.max_sol_per_token, 3)} SOL`],
         [
-          "Budget left",
-          `${fixed(ws.remaining_budget_sol, 3)} of ${fixed(ws.total_budget_sol, 3)} SOL`,
+          "Live budget left",
+          `${fixed(ws.live_remaining_budget_sol, 3)} of ${fixed(ws.total_budget_sol, 3)} SOL`,
+          "Paper spend is counted separately and does not use it",
         ],
         ["Slippage", `${fixed(ws.slippage_pct, 1)}%`],
         ["Exits", EXIT_MODE_LABELS[ws.exit_mode] || ws.exit_mode],
@@ -57,17 +71,28 @@ export function createArmGate(page) {
           ws.policy_manages_exits
             ? ruleSummary(RULES[0], ws.effective_policy)
             : "Wallet sells only",
+          stopNote,
         ],
       ],
       esc
     );
+    const siblings = (state.overview?.tasks || []).filter(
+      (other) => other.id !== ws.id && other.enabled && other.target_address === ws.target_address
+    );
+    const shared = siblings.length
+      ? `<p class="copy-warning" role="note"><i class="icon-triangle-alert" aria-hidden="true"></i>${esc(
+          `This wallet is also copied by ${siblings
+            .map((other) => `“${taskName(other)}” (${MODE_LABELS[other.mode] || other.mode})`)
+            .join(", ")}: each task copies its trades on its own budget.`
+        )}</p>`
+      : "";
     const ack = (text) =>
       `<label class="copy-ack"><input type="checkbox" data-ack /><span>${esc(text)}</span></label>`;
     const acks = runtimeBlocked()
       ? '<p class="copy-warning" role="alert"><i class="icon-triangle-alert" aria-hidden="true"></i>Live execution is unavailable right now; see the last check.</p>'
       : [
           ack(
-            `Real SOL: this task can spend up to ${fixed(ws.remaining_budget_sol, 3)} SOL from your wallet, at most ${fixed(ws.max_sol_per_trade, 3)} SOL per copy.`
+            `Real SOL: this task can spend up to ${fixed(ws.live_remaining_budget_sol, 3)} SOL from your wallet, at most ${fixed(ws.max_sol_per_trade, 3)} SOL per copy.`
           ),
           ack(
             "Live copies pay real network fees and slippage; paper results do not promise live results."
@@ -78,7 +103,7 @@ export function createArmGate(page) {
         ].join("");
     return `<p class="copy-arm-lead">${esc(`“${taskName(ws)}” will copy this wallet's trades with real swaps from your wallet.`)}</p>
       <h4>Readiness from the paper book</h4><ul class="copy-checks">${checks}</ul>
-      <h4>Exposure</h4><dl class="copy-defs">${exposure}</dl>
+      <h4>Exposure</h4><dl class="copy-defs">${exposure}</dl>${shared}
       <div class="copy-acks">${acks}</div>`;
   }
 

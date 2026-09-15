@@ -279,10 +279,13 @@ fn skip_key(reason: &CopySkip) -> String {
     }
 }
 
-/// Target-relative execution cost of a fill, if both prices are known.
+/// Target-relative execution cost of a fill, if both prices are known. A paper
+/// fill priced at the observed trade's own price (the pool service does not track
+/// the token) sits exactly the configured slippage from the target by
+/// construction, so it measures nothing and is left out.
 fn slippage_pct(outcome: &CopyOutcome) -> Option<f64> {
     let (target, fill, buy) = match outcome {
-        CopyOutcome::PaperFilled(decision) => (
+        CopyOutcome::PaperFilled(decision) if decision.fill.priced_from_pool => (
             decision.telemetry.target_price_sol,
             Some(decision.fill.fill_price_sol),
             true,
@@ -294,7 +297,11 @@ fn slippage_pct(outcome: &CopyOutcome) -> Option<f64> {
         ),
         CopyOutcome::PaperSellObserved(decision) if decision.exit_rule.is_none() => (
             decision.telemetry.target_price_sol,
-            decision.paper_fill.as_ref().map(|fill| fill.fill_price_sol),
+            decision
+                .paper_fill
+                .as_ref()
+                .filter(|fill| fill.priced_from_pool)
+                .map(|fill| fill.fill_price_sol),
             false,
         ),
         _ => return None,
@@ -327,8 +334,14 @@ fn summarize_slippage(mut samples: Vec<f64>) -> SlippageStats {
     }
 }
 
-fn latency_histogram(samples: &[u64]) -> Vec<LatencyBucket> {
-    let mut buckets = LATENCY_BUCKETS_MS
+/// The arrival histogram over the fixed bucket edges plus the arrival limit, so
+/// the limit is always an edge and every bucket lies wholly under or over it.
+fn latency_histogram(samples: &[u64], limit_ms: Option<u64>) -> Vec<LatencyBucket> {
+    let mut edges = LATENCY_BUCKETS_MS.to_vec();
+    edges.extend(limit_ms);
+    edges.sort_unstable();
+    edges.dedup();
+    let mut buckets = edges
         .iter()
         .map(|upper| LatencyBucket {
             upper_ms: Some(*upper),
@@ -340,23 +353,25 @@ fn latency_histogram(samples: &[u64]) -> Vec<LatencyBucket> {
         }))
         .collect::<Vec<_>>();
     for sample in samples {
-        let index = LATENCY_BUCKETS_MS
+        let index = edges
             .iter()
             .position(|upper| sample < upper)
-            .unwrap_or(LATENCY_BUCKETS_MS.len());
+            .unwrap_or(edges.len());
         buckets[index].count += 1;
     }
     buckets
 }
 
 /// The task's full analytics for `book` within `range`: rounds count by close
-/// time, decisions by record time.
+/// time, decisions by record time. `arrival_limit_ms` becomes an arrival
+/// histogram edge.
 pub fn build_insights(
     task_id: i64,
     book: CopyBook,
     activity: &[CopyActivityRow],
     positions: &[Position],
     range: InsightRange,
+    arrival_limit_ms: Option<u64>,
 ) -> CopyInsights {
     let rows = ordered(task_id, activity);
     let (paper_rounds, legs) = replay_paper(&rows);
@@ -470,7 +485,7 @@ pub fn build_insights(
         .collect::<Vec<_>>();
     skip_breakdown.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.key.cmp(&b.key)));
     insights.skip_breakdown = skip_breakdown;
-    insights.arrival_histogram = latency_histogram(&arrival);
+    insights.arrival_histogram = latency_histogram(&arrival, arrival_limit_ms);
     insights.arrival = summarize_arrival_distances(arrival);
     insights.slippage = summarize_slippage(slippage);
     insights.recent_rounds = rounds.iter().rev().take(RECENT_ROUNDS).cloned().collect();

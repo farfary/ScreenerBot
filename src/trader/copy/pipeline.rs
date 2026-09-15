@@ -7,7 +7,7 @@ use chrono::{DateTime, Utc};
 use crate::wallets::watch::{ActivityKind, SwapSide, WalletActivity};
 
 use super::matcher::matching_tasks;
-use super::paper::{simulate_fill, PaperCosts};
+use super::paper::{simulate_fill, PaperCosts, PaperMarket};
 use super::risk::precheck;
 use super::sizing::size_for;
 use super::types::{
@@ -21,7 +21,7 @@ pub fn run_paper_pipeline(
     spend_by_task: &HashMap<i64, SpendState>,
     risk_by_task: &HashMap<i64, RiskContext>,
     policy: PipelinePolicy,
-    market_price_sol: f64,
+    market: PaperMarket,
     costs: PaperCosts,
     decided_at: DateTime<Utc>,
 ) -> Vec<CopyOutcome> {
@@ -52,7 +52,7 @@ pub fn run_paper_pipeline(
                         return skipped(task, activity, Some(mint.clone()), reason, decided_at)
                     }
                 };
-            let fill = match simulate_fill(sized_sol, market_price_sol, task.slippage_pct, costs) {
+            let fill = match simulate_fill(sized_sol, market, task.slippage_pct, costs) {
                 Ok(fill) => fill,
                 Err(reason) => {
                     return skipped(task, activity, Some(mint.clone()), reason, decided_at)

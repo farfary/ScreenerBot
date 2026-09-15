@@ -58,14 +58,15 @@ struct Announcement {
     paper: bool,
 }
 
+/// A task's name as the dashboard writes it: its label, or the wallet address
+/// shortened to its first five and last four characters.
 pub fn task_name(task: &CopyTask) -> String {
     task.label.clone().unwrap_or_else(|| {
         let address = &task.target_address;
-        format!(
-            "{}...{}",
-            &address[..address.len().min(6)],
-            &address[address.len().saturating_sub(4)..]
-        )
+        if address.len() <= 12 || !address.is_ascii() {
+            return address.clone();
+        }
+        format!("{}…{}", &address[..5], &address[address.len() - 4..])
     })
 }
 

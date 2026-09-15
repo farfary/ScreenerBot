@@ -39,7 +39,7 @@ async fn task_and_outcome_round_trip_with_idempotent_spend() {
     .unwrap();
     let task = db.insert_task(task()).await.unwrap();
     assert_eq!(
-        db.enabled_tasks_for_subject("target").await.unwrap(),
+        db.tasks_for_subject("target").await.unwrap(),
         [task.clone()]
     );
 
@@ -55,6 +55,7 @@ async fn task_and_outcome_round_trip_with_idempotent_spend() {
         fill: super::super::types::PaperFill {
             input_sol: 0.1,
             market_price_sol: 0.01,
+            priced_from_pool: true,
             fill_price_sol: 0.0101,
             token_amount: 9.85,
             referral_fee_sol: 0.0005,
@@ -416,6 +417,7 @@ fn paper_buy(task: &CopyTask, signature: &str, tokens: f64, cost: f64) -> CopyOu
         fill: super::super::types::PaperFill {
             input_sol: 0.1,
             market_price_sol: 0.01,
+            priced_from_pool: true,
             fill_price_sol: 0.0101,
             token_amount: tokens,
             referral_fee_sol: 0.0005,
@@ -453,6 +455,7 @@ fn paper_sell(task: &CopyTask, signature: &str, tokens: f64, proceeds: f64) -> C
         paper_fill: Some(super::super::types::PaperSellFill {
             token_amount: tokens,
             market_price_sol: 0.012,
+            priced_from_pool: true,
             fill_price_sol: 0.0119,
             gross_sol: proceeds,
             referral_fee_sol: 0.0,

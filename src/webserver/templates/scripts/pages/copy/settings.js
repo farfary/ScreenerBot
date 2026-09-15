@@ -28,10 +28,22 @@ export function createSettings(page) {
     if (node) node.textContent = text;
   }
 
+  /** Every control stays disabled until the stored settings fill the form. */
+  function setLoading(loading) {
+    $("#copy-settings-form")
+      ?.querySelectorAll('input, button[type="submit"]')
+      .forEach((control) => {
+        control.disabled = loading;
+      });
+  }
+
   async function open() {
     setError("");
+    setLoading(true);
+    dialogs.show("copy-settings");
     try {
       const config = await api.config();
+      if (!dialogs.isOpen("copy-settings")) return;
       $("#copy-settings-filter").checked = Boolean(config.require_filter_pass);
       $("#copy-settings-latency").checked = Boolean(config.latency_kill_switch_enabled);
       $("#copy-settings-delay").value = String(Number(config.max_arrival_distance_ms) / 1000);
@@ -39,11 +51,12 @@ export function createSettings(page) {
       $("#copy-settings-slippage").value = String(config.default_slippage_pct);
       $("#copy-settings-max-tasks").value = String(config.max_active_tasks);
       $("#copy-settings-readiness").value = String(config.readiness_min_closed_rounds);
+      setLoading(false);
       syncWarning();
       syncLatency();
-      dialogs.show("copy-settings");
-      $("#copy-settings-delay")?.focus();
+      $("#copy-settings-filter")?.focus();
     } catch (error) {
+      dialogs.hide("copy-settings");
       toast("error", "Copy settings could not be loaded", error.detail);
     }
   }

@@ -10,7 +10,7 @@ use super::{
     apply_paper_book, arrival_distance_ms, build_task_stats, closed_rounds,
     confirm_mode_transition, summarize_arrival_distances, sync_open_position_management,
     ArrivalDistanceStats, CopyActivityRow, CopyDatabase, CopyMode, CopyPauseReason, CopyRound,
-    CopyTask, CopyTaskInput, CopyTaskStats, PaperPosition,
+    CopyTask, CopyTaskInput, CopyTaskStats, ExitMode, PaperPosition,
 };
 use crate::positions::{Position, PositionOrigin};
 use crate::trader::{Error, Result};
@@ -367,6 +367,58 @@ async fn ensure_active_slot(db: &CopyDatabase) -> Result<()> {
     Ok(())
 }
 
+/// Whether the task still holds an open copy of `mint` (of any token when `None`)
+/// in either book: its paper ledger, or a real position it opened while live.
+pub(super) async fn holds_open_copies(
+    db: &CopyDatabase,
+    task: &CopyTask,
+    mint: Option<&str>,
+) -> Result<bool> {
+    let wanted = |held: &str| mint.is_none_or(|mint| mint == held);
+    if db
+        .paper_positions(task.id)
+        .await?
+        .iter()
+        .any(|position| position.is_open() && wanted(&position.mint))
+    {
+        return Ok(true);
+    }
+    Ok(crate::positions::get_open_positions()
+        .await
+        .iter()
+        .any(|position| {
+            wanted(&position.mint)
+                && matches!(position.origin, PositionOrigin::Copy { task_id, .. } if task_id == task.id)
+        }))
+}
+
+/// A task watches its wallet while it copies, and while paused for as long as the
+/// wallet's sells still close something it holds: pausing stops new copies, never
+/// the exits of what is already held.
+pub(super) async fn wants_watch(db: &CopyDatabase, task: &CopyTask) -> Result<bool> {
+    Ok(task.enabled
+        || (task.exit_mode != ExitMode::BuyOnly && holds_open_copies(db, task, None).await?))
+}
+
+/// Attach or release the task's watch source so it matches `wants_watch`. Both
+/// directions are idempotent.
+pub(super) async fn sync_task_watch(db: &CopyDatabase, task: &CopyTask) -> Result<()> {
+    if wants_watch(db, task).await? {
+        watch::add_copy_source(task.id, &task.target_address, task.label.as_deref())
+            .await
+            .map(|_| ())
+            .map_err(|error| Error::CopyWatchRejected {
+                detail: error.to_string(),
+            })
+    } else {
+        watch::remove_copy_source(task.id, &task.target_address)
+            .await
+            .map_err(|error| Error::CopyReconciliation {
+                detail: format!("failed to detach the copy target: {error}"),
+            })
+    }
+}
+
 /// Create a task. New tasks always start in paper mode; arming live is a
 /// separate confirmed transition (`set_task_mode`).
 pub async fn create_task(input: CopyTaskInput) -> Result<CopyTask> {
@@ -457,36 +509,13 @@ pub async fn update_task(id: i64, patch: serde_json::Value) -> Result<CopyTask> 
         ensure_active_slot(&db).await?;
     }
     let updated = db.update_task(task).await?;
-    if updated.enabled {
-        if let Err(error) =
-            watch::add_copy_source(id, &updated.target_address, updated.label.as_deref()).await
-        {
-            return Err(match db.update_task(original.clone()).await {
-                Ok(_) => Error::CopyWatchRejected {
-                    detail: error.to_string(),
-                },
-                Err(rollback) => Error::CopyReconciliation {
-                    detail: format!(
-                        "failed to attach the copy target ({error}) and roll back the task ({rollback})"
-                    ),
-                },
-            });
-        }
-    }
-    if original.enabled && !updated.enabled {
-        if let Err(error) = watch::remove_copy_source(id, &original.target_address).await {
-            let rollback = db.update_task(original.clone()).await;
-            return Err(Error::CopyReconciliation {
-                detail: match rollback {
-                    Ok(_) => format!(
-                        "failed to detach the copy target; task update was rolled back: {error}"
-                    ),
-                    Err(rollback) => format!(
-                        "failed to detach the copy target ({error}) and roll back the task ({rollback})"
-                    ),
-                },
-            });
-        }
+    if let Err(error) = sync_task_watch(&db, &updated).await {
+        return Err(match db.update_task(original.clone()).await {
+            Ok(_) => error,
+            Err(rollback) => Error::CopyReconciliation {
+                detail: format!("{error}; rolling the task update back failed too: {rollback}"),
+            },
+        });
     }
     if let Err(error) = sync_open_position_management(id, updated.exit_mode).await {
         let rollback = db.update_task(original.clone()).await;
@@ -656,6 +685,7 @@ mod tests {
                     fill: PaperFill {
                         input_sol: 1.0,
                         market_price_sol: 0.01,
+                        priced_from_pool: true,
                         fill_price_sol: 0.01,
                         token_amount: 100.0,
                         referral_fee_sol: 0.0,
@@ -682,6 +712,7 @@ mod tests {
                     paper_fill: Some(PaperSellFill {
                         token_amount: 100.0,
                         market_price_sol: proceeds / 100.0,
+                        priced_from_pool: true,
                         fill_price_sol: proceeds / 100.0,
                         gross_sol: proceeds,
                         referral_fee_sol: 0.0,

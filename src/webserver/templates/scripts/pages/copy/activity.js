@@ -13,7 +13,7 @@ import {
   skipLabel,
   sol,
 } from "./format.js";
-import { ensureIdentities, tokenInline } from "./tokens.js";
+import { ensureIdentities, sharedSymbols, tokenInline } from "./tokens.js";
 import { panelMessage } from "./overview.js";
 
 const PAGE = 50;
@@ -89,6 +89,7 @@ export function createActivity(page, { rerender }) {
   let loaded = false;
   let error = null;
   let loadingOlder = false;
+  let shared = new Set();
   const openGroups = new Set();
 
   function reset(id) {
@@ -215,8 +216,15 @@ export function createActivity(page, { rerender }) {
         const fill = outcome.fill || {};
         const target = outcome.telemetry?.target_price_sol;
         const slip =
-          target > 0 && fill.fill_price_sol > 0 ? (fill.fill_price_sol / target - 1) * 100 : null;
-        return `${sol(fill.input_sol)} at ${price(fill.fill_price_sol)} · wallet bought ${sol(outcome.target_size_sol, 3)}${slip === null ? "" : ` · slippage ${signedPct(slip, 2)}`}`;
+          fill.priced_from_pool && target > 0 && fill.fill_price_sol > 0
+            ? (fill.fill_price_sol / target - 1) * 100
+            : null;
+        const priced = fill.priced_from_pool
+          ? slip === null
+            ? ""
+            : ` · slippage ${signedPct(slip, 2)}`
+          : " · priced at the wallet's trade, no pool price";
+        return `${sol(fill.input_sol)} at ${price(fill.fill_price_sol)} · wallet bought ${sol(outcome.target_size_sol, 3)}${priced}`;
       }
       case "live_submitted":
       case "live_confirmed":
@@ -259,7 +267,7 @@ export function createActivity(page, { rerender }) {
     const outcome = row.outcome || {};
     const at = outcome.telemetry?.decided_at || outcome.decided_at || row.created_at;
     const token = outcome.mint
-      ? `<button class="copy-token-link" type="button" data-activity-mint="${esc(outcome.mint)}" title="${esc(`Only this token · ${outcome.mint}`)}">${tokenInline(outcome.mint)}</button>`
+      ? `<button class="copy-token-link" type="button" data-activity-mint="${esc(outcome.mint)}" title="${esc(`Only this token · ${outcome.mint}`)}">${tokenInline(outcome.mint, shared)}</button>`
       : "";
     const arrival = arrivalText(outcome.telemetry);
     return `<li class="copy-event ${TONES[outcome.outcome] || ""}">
@@ -329,6 +337,7 @@ export function createActivity(page, { rerender }) {
         )
       );
     }
+    shared = sharedSymbols(rows.map((row) => row.outcome?.mint));
     const more = nextBefore
       ? '<div class="copy-more"><button class="btn btn-secondary btn-sm" type="button" data-activity-older>Load older</button></div>'
       : '<p class="copy-note copy-end">Start of history</p>';

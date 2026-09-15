@@ -2,7 +2,9 @@
 
 use crate::trader::constants::MAX_MANUAL_SLIPPAGE_PCT;
 
-use super::types::{CopySkip, CopyTask, PipelinePolicy, RiskContext, SpendState};
+use super::types::{
+    CopySkip, CopyTask, PipelinePolicy, RiskContext, SpendState, MIN_COPY_SLIPPAGE_PCT,
+};
 
 pub fn precheck(
     task: &CopyTask,
@@ -40,7 +42,7 @@ pub fn precheck(
         return Err(CopySkip::FilterRequired);
     }
     if !task.slippage_pct.is_finite()
-        || task.slippage_pct <= 0.0
+        || task.slippage_pct < MIN_COPY_SLIPPAGE_PCT
         || task.slippage_pct > MAX_MANUAL_SLIPPAGE_PCT
     {
         return Err(CopySkip::InvalidSlippage {

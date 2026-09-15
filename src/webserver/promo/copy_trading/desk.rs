@@ -469,7 +469,13 @@ fn paper_buy(
     n: usize,
     decisions: &mut Decisions,
 ) -> Option<(PaperFill, DateTime<Utc>)> {
-    let fill = simulate_fill(size, market, task.slippage_pct, COSTS).ok()?;
+    let fill = simulate_fill(
+        size,
+        crate::trader::copy::PaperMarket::pool(market),
+        task.slippage_pct,
+        COSTS,
+    )
+    .ok()?;
     let arrival = arrival_ms(task.id, n);
     let target_price = market * (1.0 + (n % 4) as f64 * 0.0015);
     let telemetry = observed(
@@ -523,7 +529,12 @@ fn paper_desk(
         };
         spent += size;
         let exit = entry * (1.0 + move_pct / 100.0);
-        let Ok(sell) = simulate_sell(fill.token_amount, exit, task.slippage_pct, COSTS) else {
+        let Ok(sell) = simulate_sell(
+            fill.token_amount,
+            crate::trader::copy::PaperMarket::pool(exit),
+            task.slippage_pct,
+            COSTS,
+        ) else {
             continue;
         };
         let (telemetry, target_signature, target_tokens, target_sol) = match rule {

@@ -207,6 +207,23 @@ pub struct Readiness {
     pub checks: Vec<ReadinessCheck>,
 }
 
+/// "1 round", "3 rounds": a count with its noun in agreement.
+fn plural(count: usize, noun: &str) -> String {
+    format!("{count} {noun}{}", if count == 1 { "" } else { "s" })
+}
+
+/// A signed SOL figure as the dashboard writes one, with a true minus sign.
+fn signed_sol(value: f64) -> String {
+    let sign = if value > 0.0 {
+        "+"
+    } else if value < 0.0 {
+        "\u{2212}"
+    } else {
+        ""
+    };
+    format!("{sign}{:.4}", value.abs())
+}
+
 fn live_block_text(reason: &str) -> &'static str {
     match reason {
         "setup_incomplete" => "Finish wallet and RPC setup first",
@@ -241,15 +258,23 @@ fn readiness(
             id: "history",
             label: "Paper history",
             passed: rounds.len() >= min_rounds,
-            detail: format!("{} of {min_rounds} closed paper rounds", rounds.len()),
+            detail: if rounds.len() >= min_rounds {
+                format!(
+                    "{}, {min_rounds} needed",
+                    plural(rounds.len(), "closed paper round")
+                )
+            } else {
+                format!("{} of {min_rounds} closed paper rounds", rounds.len())
+            },
         },
         ReadinessCheck {
             id: "profit",
             label: "Profitable in paper",
             passed: realized > 0.0,
             detail: format!(
-                "{realized:+.4} SOL realized over {} rounds, {wins} won",
-                rounds.len()
+                "{} SOL realized over {}, {wins} won",
+                signed_sol(realized),
+                plural(rounds.len(), "round")
             ),
         },
         ReadinessCheck {
@@ -272,7 +297,7 @@ fn readiness(
             detail: if unpriced == 0 {
                 "Every open paper holding has a pool price".to_owned()
             } else {
-                format!("{unpriced} open holding(s) have no pool price")
+                format!("{} without a pool price", plural(unpriced, "open holding"))
             },
         },
         ReadinessCheck {
@@ -300,6 +325,9 @@ pub struct CopyTaskWorkspace {
     pub trader_defaults: EffectiveExitPolicy,
     /// The rules after this task's overrides.
     pub effective_policy: EffectiveExitPolicy,
+    /// What the task may still spend once live. Paper and live spend are separate
+    /// ledgers, so this is the budget less live spend only, whatever paper spent.
+    pub live_remaining_budget_sol: f64,
     pub policy_manages_exits: bool,
     pub global_require_filter_pass: bool,
     pub paper_holdings: Vec<PaperHolding>,
@@ -319,6 +347,7 @@ pub async fn task_workspace(id: i64) -> Result<CopyTaskWorkspace> {
     let activity = db.list_task_activity(id, TASK_ACTIVITY_WINDOW).await?;
     let paper_book = db.paper_positions(id).await?;
     let spent_sol = db.task_total_spent(id, task.mode).await?;
+    let live_spent_sol = db.task_total_spent(id, CopyMode::Live).await?;
     let (summary, _) = control::summarize(
         &status,
         task,
@@ -330,6 +359,7 @@ pub async fn task_workspace(id: i64) -> Result<CopyTaskWorkspace> {
     );
     Ok(build_workspace(
         summary,
+        live_spent_sol,
         &activity,
         &positions,
         &paper_book,
@@ -339,11 +369,14 @@ pub async fn task_workspace(id: i64) -> Result<CopyTaskWorkspace> {
     ))
 }
 
-/// The workspace from what was already read: `activity` newest first, the task's
-/// paper ledger (read in either mode; a live task can still hold paper history),
-/// `mark` pricing a paper holding and `block` why live execution is unavailable.
+/// The workspace from what was already read: the task's `live_spent_sol`,
+/// `activity` newest first, the task's paper ledger (read in either mode; a live
+/// task can still hold paper history), `mark` pricing a paper holding and `block`
+/// why live execution is unavailable.
+#[allow(clippy::too_many_arguments)]
 pub fn build_workspace(
     summary: CopyTaskSummary,
+    live_spent_sol: f64,
     activity: &[CopyActivityRow],
     positions: &[Position],
     paper_book: &[PaperPosition],
@@ -360,6 +393,7 @@ pub fn build_workspace(
     let paper_rounds = closed_rounds(summary.task.id, CopyBook::Paper, activity, positions);
     let readiness = readiness(&summary, &paper_rounds, &paper_holdings, block);
     CopyTaskWorkspace {
+        live_remaining_budget_sol: (summary.task.total_budget_sol - live_spent_sol).max(0.0),
         summary,
         trader_defaults: (&ExitPolicy::from_config()).into(),
         effective_policy: (&policy).into(),
@@ -468,7 +502,13 @@ pub async fn task_insights(id: i64, range: InsightRange) -> Result<CopyInsights>
         &activity,
         &positions,
         range,
+        Some(arrival_limit_ms()),
     ))
+}
+
+/// The arrival limit the latency kill switch and the readiness check hold trades to.
+pub fn arrival_limit_ms() -> u64 {
+    with_config(|config| config.copy_trading.max_arrival_distance_ms)
 }
 
 /// One row of the task comparison.
@@ -526,7 +566,8 @@ async fn compare(tasks: &[CopyTask], range: InsightRange) -> Result<Vec<TaskComp
         .iter()
         .zip(activities)
         .map(|(task, activity)| {
-            let insights = build_insights(task.id, book_of(task), &activity, &positions, range);
+            let insights =
+                build_insights(task.id, book_of(task), &activity, &positions, range, None);
             comparison(task, insights)
         })
         .collect())
@@ -543,7 +584,12 @@ pub struct CopyDefaults {
     pub trader_defaults: EffectiveExitPolicy,
     pub require_filter_pass: bool,
     pub default_slippage_pct: f64,
+    pub min_slippage_pct: f64,
     pub max_slippage_pct: f64,
+    /// The smallest copy sizing will place; a smaller size or per-trade cap never copies.
+    pub min_trade_size_sol: f64,
+    /// The swap fee every paper and live fill pays on each side, in percent.
+    pub swap_fee_pct: f64,
     pub max_active_tasks: usize,
     pub latency_kill_switch_enabled: bool,
     pub max_arrival_distance_ms: u64,
@@ -558,7 +604,10 @@ pub fn defaults() -> CopyDefaults {
         trader_defaults: (&ExitPolicy::from_config()).into(),
         require_filter_pass: config.require_filter_pass,
         default_slippage_pct: config.default_slippage_pct,
+        min_slippage_pct: super::MIN_COPY_SLIPPAGE_PCT,
         max_slippage_pct: crate::trader::constants::MAX_MANUAL_SLIPPAGE_PCT,
+        min_trade_size_sol: crate::trader::constants::MIN_TRADE_SIZE_SOL,
+        swap_fee_pct: f64::from(super::PAPER_REFERRAL_FEE_BPS) / 100.0,
         max_active_tasks: config.max_active_tasks,
         latency_kill_switch_enabled: config.latency_kill_switch_enabled,
         max_arrival_distance_ms: config.max_arrival_distance_ms,

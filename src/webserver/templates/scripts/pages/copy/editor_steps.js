@@ -2,7 +2,7 @@
 // filters, Exits (presets and every rule field, inherited values shown) and a
 // Review of what the task will run under. Pure markup, collection and checks.
 import { renderAddress } from "../../ui/token_identity.js";
-import { SOLANA_ADDRESS_RE, fixed, segmented, sol } from "./format.js";
+import { MODE_LABELS, SOLANA_ADDRESS_RE, fixed, segmented, sol, taskName } from "./format.js";
 import {
   PRESETS,
   RULES,
@@ -77,7 +77,21 @@ function toggleRow(esc, { name, title, help, checked }) {
   return `<label class="copy-switch-row"><span class="copy-field-text"><strong>${esc(title)}</strong><small>${esc(help)}</small></span><span class="toggle"><input type="checkbox" data-field="${name}"${checked ? " checked" : ""} /><span class="toggle-track"></span></span></label>`;
 }
 
-function walletStep({ draft, mode, source }, esc) {
+/** The tasks already copying the draft's wallet: another task copies the same trades again. */
+export function duplicateNote({ draft, mode, source, tasks }, esc) {
+  const address = mode === "edit" ? null : draft.target_address;
+  const others = address
+    ? (tasks || []).filter((task) => task.target_address === address && task.id !== source?.id)
+    : [];
+  if (!others.length) return "";
+  const names = others
+    .map((task) => `“${taskName(task)}” (${MODE_LABELS[task.mode] || task.mode})`)
+    .join(", ");
+  return `<p class="copy-warning" role="note"><i class="icon-triangle-alert" aria-hidden="true"></i>${esc(`Already copied by ${names}. This task copies the same trades again, with its own rules and budget.`)}</p>`;
+}
+
+function walletStep(context, esc) {
+  const { draft, mode, source } = context;
   const address =
     mode === "edit"
       ? `<div class="copy-field"><span>Wallet</span>${renderAddress(source.target_address, { explorer: "account" })}<small>A task's wallet is its identity. To copy another wallet with these rules, clone the task.</small></div>`
@@ -85,7 +99,7 @@ function walletStep({ draft, mode, source }, esc) {
           mode === "clone"
             ? "Same rules with an empty paper book. Keep this wallet to test other rules on it, or enter another wallet."
             : "The wallet whose buys (and, if you choose, sells) this task copies."
-        )}</small></label>`;
+        )}</small></label><div id="copy-editor-duplicate">${duplicateNote(context, esc)}</div>`;
   const note =
     mode === "edit" && source.mode === "live"
       ? "This task is live: changes apply to its next real copies."
@@ -116,12 +130,16 @@ export function costPreview(draft) {
   const unit = draft.sizing.kind === "fixed" ? Math.min(amount, cap) : cap;
   const perTokenCopies = Math.max(1, Math.floor(perToken / unit));
   const budgetCopies = Math.floor(budget / unit);
-  return `<ul>${examples}</ul><p>One token takes at most ${perTokenCopies} cop${perTokenCopies === 1 ? "y" : "ies"} of ${sol(unit, 3)}; the budget covers ${draft.sizing.kind === "fixed" ? "about" : "at least"} ${budgetCopies} of them. Network and priority fees come on top.</p>`;
+  const perTokenText = draft.buy_once_per_token
+    ? `One token takes a single copy of ${sol(unit, 3)}, as each token is bought once`
+    : `One token takes at most ${perTokenCopies} cop${perTokenCopies === 1 ? "y" : "ies"} of ${sol(unit, 3)}`;
+  return `<ul>${examples}</ul><p>${perTokenText}; the budget covers ${draft.sizing.kind === "fixed" ? "about" : "at least"} ${budgetCopies} of them. Network and priority fees come on top.</p>`;
 }
 
 function sizingStep({ draft, defaults }, esc) {
   const fixedKind = draft.sizing.kind === "fixed";
   const maxSlippage = defaults?.max_slippage_pct ?? null;
+  const minSol = defaults?.min_trade_size_sol ?? 0;
   return `<div class="copy-field"><span>Copy size</span>${segmented(
     "sizing-kind",
     [
@@ -132,11 +150,11 @@ function sizingStep({ draft, defaults }, esc) {
     esc
   )}</div>
     <div class="copy-fields">
-      ${numberInput(esc, { attr: "data-field", name: "sizing_amount", label: fixedKind ? "Amount per copy" : "Share of each trade", unit: fixedKind ? "SOL" : "%", value: valueAttr(fixedKind ? draft.sizing.sol : draft.sizing.pct), min: 0, required: true, help: fixedKind ? "Spent on each copied buy." : "Of the wallet's own buy, up to the per-trade cap." })}
-      ${numberInput(esc, { attr: "data-field", name: "max_sol_per_trade", label: "Per-trade cap", unit: "SOL", value: valueAttr(draft.max_sol_per_trade), min: 0, required: true, help: "No single copy spends more." })}
-      ${numberInput(esc, { attr: "data-field", name: "max_sol_per_token", label: "Per-token cap", unit: "SOL", value: valueAttr(draft.max_sol_per_token), min: 0, required: true, help: "Total spent on one token." })}
-      ${numberInput(esc, { attr: "data-field", name: "total_budget_sol", label: "Total budget", unit: "SOL", value: valueAttr(draft.total_budget_sol), min: 0, required: true, help: "Everything this task may spend." })}
-      ${numberInput(esc, { attr: "data-field", name: "slippage_pct", label: "Slippage", unit: "%", value: valueAttr(draft.slippage_pct), min: 0, max: maxSlippage, required: true, placeholder: defaults ? String(defaults.default_slippage_pct) : "" })}
+      ${numberInput(esc, { attr: "data-field", name: "sizing_amount", label: fixedKind ? "Amount per copy" : "Share of each trade", unit: fixedKind ? "SOL" : "%", value: valueAttr(fixedKind ? draft.sizing.sol : draft.sizing.pct), min: fixedKind ? minSol : 0, required: true, help: fixedKind ? `Spent on each copied buy, at least ${sol(minSol, 3)}.` : "Of the wallet's own buy, up to the per-trade cap." })}
+      ${numberInput(esc, { attr: "data-field", name: "max_sol_per_trade", label: "Per-trade cap", unit: "SOL", value: valueAttr(draft.max_sol_per_trade), min: minSol, required: true, help: "No single copy spends more." })}
+      ${numberInput(esc, { attr: "data-field", name: "max_sol_per_token", label: "Per-token cap", unit: "SOL", value: valueAttr(draft.max_sol_per_token), min: minSol, required: true, help: "Total spent on one token." })}
+      ${numberInput(esc, { attr: "data-field", name: "total_budget_sol", label: "Total budget", unit: "SOL", value: valueAttr(draft.total_budget_sol), min: minSol, required: true, help: "Everything this task may spend over its life; Paper and Live each count their own spend." })}
+      ${numberInput(esc, { attr: "data-field", name: "slippage_pct", label: "Slippage", unit: "%", value: valueAttr(draft.slippage_pct), min: defaults?.min_slippage_pct ?? 0, max: maxSlippage, required: true, placeholder: defaults ? String(defaults.default_slippage_pct) : "" })}
     </div>
     <section class="copy-preview" aria-live="polite"><h4>What a copy costs</h4><div id="copy-editor-preview">${costPreview(draft)}</div></section>`;
 }
@@ -215,7 +233,10 @@ function ruleCard(rule, { draft, defaults }, esc) {
 
 export function exitWarningsHtml({ draft, defaults }, esc) {
   const policy = effectivePolicy(defaults?.trader_defaults, draft.exit_policy_overrides);
-  return exitWarnings(policy, draft.exit_mode)
+  return exitWarnings(policy, draft.exit_mode, {
+    slippagePct: draft.slippage_pct,
+    feePct: defaults?.swap_fee_pct,
+  })
     .map(
       (text) =>
         `<p class="copy-warning" role="note"><i class="icon-triangle-alert" aria-hidden="true"></i>${esc(text)}</p>`
@@ -234,6 +255,7 @@ function exitsStep(context, esc) {
   return `<div class="copy-field"><span>Who sells</span>${segmented("exit-mode", EXIT_MODES, draft.exit_mode, esc)}<small>${esc(mode.help)}</small></div>
     <div class="copy-field"><span>Preset</span>${segmented("preset", presets, preset, esc)}<small>A preset fills every rule below; adjust any of them after.</small></div>
     <div id="copy-editor-warnings">${exitWarningsHtml(context, esc)}</div>
+    ${draft.exit_mode === "mirror" ? '<p class="copy-note">These rules do not run while the wallet\'s sells decide. They apply if you switch to My exit rules or Both.</p>' : ""}
     <div class="copy-rule-cards${draft.exit_mode === "mirror" ? " is-inactive" : ""}">${RULES.map((rule) => ruleCard(rule, context, esc)).join("")}</div>`;
 }
 
@@ -256,6 +278,7 @@ function reviewStep({ draft, defaults, mode, source }, esc) {
         managesExits: draft.exit_mode !== "mirror",
         requireFilter: draft.require_filter_pass ?? global,
         globalRequireFilter: global,
+        feePct: defaults?.swap_fee_pct,
       },
       esc
     )
@@ -322,13 +345,23 @@ export function validate(id, draft, { mode, defaults }) {
     ) {
       return "Every sizing value must be above zero.";
     }
+    const minSol = defaults?.min_trade_size_sol ?? 0;
+    if (draft.sizing.kind === "fixed" && draft.sizing.sol < minSol)
+      return `A copy must be at least ${sol(minSol, 3)}: raise the amount per copy.`;
+    if (draft.max_sol_per_trade < minSol)
+      return `A copy must be at least ${sol(minSol, 3)}: raise the per-trade cap.`;
     if (draft.max_sol_per_trade > draft.max_sol_per_token)
       return "The per-trade cap cannot exceed the per-token cap.";
     if (draft.max_sol_per_token > draft.total_budget_sol)
       return "The per-token cap cannot exceed the total budget.";
+    const minSlippage = defaults?.min_slippage_pct ?? 0;
     const maxSlippage = defaults?.max_slippage_pct ?? Infinity;
-    if (!positive(draft.slippage_pct) || draft.slippage_pct > maxSlippage) {
-      return `Slippage must be above 0% and at most ${fixed(maxSlippage, 0)}%.`;
+    if (
+      !positive(draft.slippage_pct) ||
+      draft.slippage_pct < minSlippage ||
+      draft.slippage_pct > maxSlippage
+    ) {
+      return `Slippage must be between ${fixed(minSlippage, 1)}% and ${fixed(maxSlippage, 0)}%.`;
     }
   } else if (id === "entry") {
     const { min_target_trade_sol: min, max_target_trade_sol: max } = draft;
