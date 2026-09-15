@@ -95,10 +95,12 @@ export async function findTimeframeWithData(mint, exclude) {
  * Per-timeframe OHLCV state for a token (candle counts, backfill, freshness).
  * Returns null on failure so callers keep their last rendered state.
  * @param {string} mint
+ * @param {{ from: number, to: number }} [range] - unix seconds; adds `range_candles` per timeframe
  */
-export async function fetchOhlcvStatus(mint) {
+export async function fetchOhlcvStatus(mint, range) {
+  const query = range ? `?from=${Math.floor(range.from)}&to=${Math.ceil(range.to)}` : "";
   try {
-    const status = await requestManager.fetch(`/api/tokens/${mint}/ohlcv/status`, {
+    const status = await requestManager.fetch(`/api/tokens/${mint}/ohlcv/status${query}`, {
       priority: "low",
     });
     return status && typeof status === "object" ? status : null;
@@ -124,6 +126,73 @@ export function timeframeForSpan(spanSeconds) {
     if (TIMEFRAME_SECONDS[tf] <= ideal) chosen = tf;
   }
   return chosen;
+}
+
+/** Seconds in one candle of a timeframe, or null for an unknown one. */
+export function timeframeSeconds(timeframe) {
+  return TIMEFRAME_SECONDS[timeframe] || null;
+}
+
+/**
+ * The bar whose candle CONTAINS a unix-seconds timestamp, or null when that candle is not
+ * loaded. Candles sit on the canonical UTC grid, so the containing bar is the one at
+ * floor(ts / bucket) * bucket. A missing bucket is a real gap — no-trade candles are never
+ * stored — so it answers null rather than borrowing the previous bar, which can be hours or
+ * days away on an illiquid token.
+ * @param {Array<{time:number}>} bars - ascending
+ * @param {number} ts
+ * @param {number} bucketSeconds
+ */
+export function barForTimestamp(bars, ts, bucketSeconds) {
+  if (!bars?.length || !Number.isFinite(ts) || !(bucketSeconds > 0)) return null;
+  const bucket = Math.floor(ts / bucketSeconds) * bucketSeconds;
+  let lo = 0;
+  let hi = bars.length - 1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const time = bars[mid].time;
+    if (time === bucket) return bars[mid];
+    if (time < bucket) lo = mid + 1;
+    else hi = mid - 1;
+  }
+  return null;
+}
+
+/**
+ * The timeframe that shows a span from what is actually STORED. Stored depth is capped per
+ * timeframe, so the span-ideal timeframe of a position from weeks ago can hold only candles
+ * from after it closed; a coarser one still covers it.
+ *
+ * Reads `range_candles` from a status fetched for the span. Starts at the span-ideal timeframe
+ * and walks coarser, then finer: first the timeframe that covers at least half of the span's
+ * buckets, else the first holding any candle in the span. Null when none does, or when the
+ * status carries no range counts.
+ * @param {Object|null} status - fetchOhlcvStatus(mint, { from, to })
+ * @param {number} from - unix seconds
+ * @param {number} to - unix seconds
+ * @returns {string|null}
+ */
+export function timeframeCoveringSpan(status, from, to) {
+  const counts = new Map(
+    (status?.timeframes || [])
+      .filter((tf) => Number.isFinite(tf.range_candles))
+      .map((tf) => [tf.timeframe, tf.range_candles])
+  );
+  if (!counts.size) return null;
+
+  const idealIdx = CHART_TIMEFRAMES.indexOf(timeframeForSpan(to - from));
+  const order = [
+    ...CHART_TIMEFRAMES.slice(idealIdx),
+    ...CHART_TIMEFRAMES.slice(0, idealIdx).reverse(),
+  ];
+  const coverage = (tf) => {
+    const seconds = TIMEFRAME_SECONDS[tf];
+    const buckets = Math.floor(to / seconds) - Math.floor(from / seconds) + 1;
+    return (counts.get(tf) || 0) / buckets;
+  };
+  return (
+    order.find((tf) => coverage(tf) >= 0.5) || order.find((tf) => counts.get(tf) > 0) || null
+  );
 }
 
 /**

@@ -57,26 +57,9 @@ impl PoolManager {
     }
 
     /// Get the default pool for a token
-    pub async fn get_default_pool(&self, mint: &str) -> OhlcvResult<Option<PoolConfig>> {
+    pub async fn series_pool(&self, mint: &str) -> OhlcvResult<Option<PoolConfig>> {
         let pools = self.db.get_pools(mint)?;
-        Ok(pools.into_iter().find(|p| p.is_default))
-    }
-
-    /// Get the best available pool (highest liquidity, healthy)
-    pub async fn get_best_pool(&self, mint: &str) -> OhlcvResult<Option<PoolConfig>> {
-        let pools = self.db.get_pools(mint)?;
-
-        // Find highest liquidity pool that's healthy
-        let best = pools
-            .into_iter()
-            .filter(|p| p.is_healthy() && p.liquidity.is_finite())
-            .max_by(|a, b| {
-                a.liquidity
-                    .partial_cmp(&b.liquidity)
-                    .unwrap_or(Ordering::Less)
-            });
-
-        Ok(best)
+        Ok(PoolConfig::series_pool(&pools).cloned())
     }
 
     /// Set a pool as default
@@ -121,14 +104,16 @@ impl PoolManager {
         )
         .await;
 
-        // Check if we need to switch default
-        let default_pool = self.get_default_pool(mint).await?;
-        if let Some(pool) = default_pool {
-            if pool.address == pool_address && !pool.is_healthy() {
-                // Switch to best alternative
-                if let Some(best) = self.get_best_pool(mint).await? {
-                    self.set_default_pool(mint, &best.address).await?;
-                }
+        // A default that just went unhealthy hands the default to the pool the series now
+        // resolves to, so the choice survives a restart.
+        let pools = self.db.get_pools(mint)?;
+        let default_failed = pools
+            .iter()
+            .any(|p| p.is_default && p.address == pool_address && !p.is_healthy());
+        if default_failed {
+            if let Some(next) = PoolConfig::series_pool(&pools) {
+                let next_address = next.address.clone();
+                self.set_default_pool(mint, &next_address).await?;
             }
         }
 
@@ -138,24 +123,6 @@ impl PoolManager {
     /// Mark a pool as successful
     pub async fn mark_success(&self, mint: &str, pool_address: &str) -> OhlcvResult<()> {
         self.db.mark_pool_success(mint, pool_address)
-    }
-
-    /// Select the best pool for fetching
-    /// Returns (pool_address, should_set_as_default)
-    pub async fn select_pool_for_fetch(&self, mint: &str) -> OhlcvResult<Option<(String, bool)>> {
-        // Try default pool first
-        if let Some(default) = self.get_default_pool(mint).await? {
-            if default.is_healthy() {
-                return Ok(Some((default.address, false)));
-            }
-        }
-
-        // Fall back to best pool
-        if let Some(best) = self.get_best_pool(mint).await? {
-            return Ok(Some((best.address, true))); // Should set as new default
-        }
-
-        Ok(None)
     }
 
     /// Discover and register pools for a token using centralized token snapshots.

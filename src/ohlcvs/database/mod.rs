@@ -8,7 +8,7 @@ mod maintenance;
 mod migrations;
 pub mod types;
 
-pub use types::{ClearAllResult, DatabaseStats, DeleteResult, OhlcvTokenStatus};
+pub use types::{ClearAllResult, DatabaseStats, DeleteResult, OhlcvTokenStatus, TimeframeSummary};
 
 use crate::ohlcvs::types::{OhlcvError, OhlcvResult, PoolConfig};
 use crate::{chains::ChainId, database};
@@ -357,6 +357,63 @@ mod tests {
     use super::migrations::test_path;
     use super::*;
     use crate::ohlcvs::types::{Candle, Timeframe};
+
+    #[test]
+    fn status_queries_are_pool_scoped_and_count_the_bucket_containing_the_span_start() {
+        let path = test_path("status_range");
+        let _ = std::fs::remove_file(&path);
+        let db = OhlcvDatabase::new(&path, ChainId::Solana).unwrap();
+        let candle = |ts| Candle::new(ts, 1.0, 1.0, 1.0, 1.0, 1.0);
+        // Hourly candles at 0h, 1h, 3h on the series pool; one at 2h on another pool.
+        db.insert_candles_batch(
+            "mint",
+            "pool",
+            Timeframe::Hour1,
+            &[candle(0), candle(3600), candle(10800)],
+            "test",
+        )
+        .unwrap();
+        db.insert_candles_batch("mint", "other", Timeframe::Hour1, &[candle(7200)], "test")
+            .unwrap();
+
+        let summary = db.get_timeframe_summary("mint", "pool").unwrap();
+        assert_eq!(
+            summary,
+            vec![TimeframeSummary {
+                timeframe: "1h".to_string(),
+                candles: 3,
+                earliest: Some(0),
+                latest: Some(10800),
+            }]
+        );
+
+        let hourly = |from, to| {
+            db.count_candles_in_range("mint", "pool", from, to)
+                .unwrap()
+                .into_iter()
+                .find(|(tf, _)| tf == "1h")
+                .map(|(_, n)| n)
+        };
+        // A span starting mid-bucket still counts that bucket's candle.
+        assert_eq!(hourly(3700, 3705), Some(1));
+        // The other pool's 2h candle never counts; the gap is an honest zero.
+        assert_eq!(hourly(7300, 10000), Some(0));
+        assert_eq!(hourly(0, 10800), Some(3));
+        // Every timeframe is answered, empty ones with zero.
+        assert_eq!(
+            db.count_candles_in_range("mint", "pool", 0, 1)
+                .unwrap()
+                .len(),
+            7
+        );
+        assert_eq!(
+            db.get_timeframe_last_new_data("mint", "missing").unwrap(),
+            Vec::new()
+        );
+
+        drop(db);
+        let _ = std::fs::remove_file(path);
+    }
 
     #[test]
     fn chain_bound_database_ignores_raw_foreign_rows_and_keeps_user_version() {

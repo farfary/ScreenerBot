@@ -304,6 +304,29 @@ impl PoolConfig {
     pub fn is_healthy(&self) -> bool {
         self.failure_count < 5
     }
+
+    /// The ONE pool a token's candle series lives on: the healthy default, else the deepest
+    /// healthy pool. Every writer (monitor fetch, backfill) and every reader (chart, status)
+    /// resolves through this, because two rules drifted before: the chart read the default
+    /// while the monitor wrote the deepest pool, so a token whose default was not its deepest
+    /// pool collected candles the chart never showed.
+    pub fn series_pool(pools: &[PoolConfig]) -> Option<&PoolConfig> {
+        if let Some(default) = pools.iter().find(|p| p.is_default && p.is_healthy()) {
+            return Some(default);
+        }
+        pools.iter().filter(|p| p.is_healthy()).max_by(|a, b| {
+            let depth = |p: &PoolConfig| {
+                if p.liquidity.is_finite() {
+                    p.liquidity
+                } else {
+                    0.0
+                }
+            };
+            depth(a)
+                .partial_cmp(&depth(b))
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+    }
 }
 
 /// Priority level for monitoring
@@ -389,16 +412,9 @@ impl TokenOhlcvConfig {
         self.last_fetch = Some(Utc::now());
     }
 
-    pub fn get_default_pool(&self) -> Option<&PoolConfig> {
-        self.pools.iter().find(|p| p.is_default)
-    }
-
-    pub fn get_best_pool(&self) -> Option<&PoolConfig> {
-        self.pools.iter().filter(|p| p.is_healthy()).max_by(|a, b| {
-            a.liquidity
-                .partial_cmp(&b.liquidity)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        })
+    /// See [`PoolConfig::series_pool`].
+    pub fn series_pool(&self) -> Option<&PoolConfig> {
+        PoolConfig::series_pool(&self.pools)
     }
 
     pub fn mark_activity(&mut self) {
@@ -649,8 +665,15 @@ pub struct OhlcvTimeframeStatus {
     pub timeframe: String,
     pub candles: i64,
     pub backfill_complete: bool,
+    /// Timestamp (unix secs) of the oldest candle for this timeframe.
+    pub earliest_timestamp: Option<i64>,
     /// Timestamp (unix secs) of the newest candle for this timeframe.
     pub latest_timestamp: Option<i64>,
+    /// Candles whose bucket overlaps the requested `[from, to]` span, when the status was
+    /// asked about one. Stored depth is capped per timeframe, so the newest candles of a
+    /// timeframe say nothing about whether it still holds a position from weeks ago.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub range_candles: Option<i64>,
     /// When new candles were last written for this timeframe (unix secs) — i.e.
     /// the last successful fetch that produced data.
     pub last_new_data_at: Option<i64>,
@@ -675,4 +698,50 @@ pub struct OhlcvStatus {
     /// When new candles were last written across any timeframe (unix secs).
     pub last_new_data_at: Option<i64>,
     pub timeframes: Vec<OhlcvTimeframeStatus>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PoolConfig;
+
+    fn pool(address: &str, liquidity: f64, is_default: bool, failure_count: u32) -> PoolConfig {
+        PoolConfig {
+            is_default,
+            failure_count,
+            ..PoolConfig::new(address.to_string(), "dex".to_string(), liquidity)
+        }
+    }
+
+    fn resolved(pools: &[PoolConfig]) -> Option<&str> {
+        PoolConfig::series_pool(pools).map(|p| p.address.as_str())
+    }
+
+    #[test]
+    fn a_healthy_default_wins_over_a_deeper_pool() {
+        // The shape that hid a token's candles: a shallow default and a deep non-default.
+        let pools = [
+            pool("deep", 61_364.0, false, 0),
+            pool("default", 476.0, true, 0),
+        ];
+        assert_eq!(resolved(&pools), Some("default"));
+    }
+
+    #[test]
+    fn an_unhealthy_default_falls_back_to_the_deepest_healthy_pool() {
+        let pools = [
+            pool("default", 90_000.0, true, 5),
+            pool("mid", 5_000.0, false, 0),
+            pool("deep_but_failing", 80_000.0, false, 7),
+            pool("deep", 20_000.0, false, 4),
+        ];
+        assert_eq!(resolved(&pools), Some("deep"));
+    }
+
+    #[test]
+    fn non_finite_liquidity_ranks_last_and_no_healthy_pool_resolves_to_none() {
+        let pools = [pool("nan", f64::NAN, false, 0), pool("real", 1.0, false, 0)];
+        assert_eq!(resolved(&pools), Some("real"));
+        assert_eq!(resolved(&[pool("dead", 1.0, true, 5)]), None);
+        assert_eq!(resolved(&[]), None);
+    }
 }

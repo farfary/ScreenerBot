@@ -68,8 +68,10 @@ pub async fn has_data(mint: &str) -> OhlcvResult<bool> {
     service_api::has_data(mint).await
 }
 
-pub async fn get_status(mint: &str) -> OhlcvResult<OhlcvStatus> {
-    service_api::get_status(mint).await
+/// Per-timeframe OHLCV state for a token; `range` (unix secs) adds each timeframe's candle
+/// count over that span.
+pub async fn get_status(mint: &str, range: Option<(i64, i64)>) -> OhlcvResult<OhlcvStatus> {
+    service_api::get_status(mint, range).await
 }
 
 pub async fn get_mints_with_data(mints: &[String]) -> OhlcvResult<HashSet<String>> {

@@ -107,17 +107,11 @@ impl OhlcvServiceImpl {
         let pool = if let Some(addr) = pool_address {
             addr.to_string()
         } else {
-            // Use default pool, falling back to best available option
-            let mut selected_pool = self.pool_manager.get_default_pool(mint).await?;
-
-            if selected_pool.is_none() {
-                selected_pool = self.pool_manager.get_best_pool(mint).await?;
-            }
-
-            let default_pool =
-                selected_pool.ok_or_else(|| OhlcvError::PoolNotFound(mint.to_string()))?;
-
-            default_pool.address.clone()
+            self.pool_manager
+                .series_pool(mint)
+                .await?
+                .ok_or_else(|| OhlcvError::PoolNotFound(mint.to_string()))?
+                .address
         };
 
         // Try cache first
@@ -250,25 +244,34 @@ impl OhlcvServiceImpl {
 
     /// Assemble the per-timeframe OHLCV process status for a token (monitoring
     /// state + candle counts + backfill flags). Cheap: one grouped candle query
-    /// plus per-timeframe backfill flags from the monitor config row.
-    pub(super) async fn get_status(&self, mint: &str) -> OhlcvResult<OhlcvStatus> {
-        // Scope the summary to the SAME single pool the chart reads
-        // (`get_ohlcv_data`): default pool, else the best available. Without this
-        // the counts would sum every pool_address and diverge from the chart the
-        // moment a token has candles under more than one pool. No pool yet =>
-        // no data (empty summary), which is the correct "collecting" state.
-        let mut selected_pool = self.pool_manager.get_default_pool(mint).await?;
-        if selected_pool.is_none() {
-            selected_pool = self.pool_manager.get_best_pool(mint).await?;
-        }
-        let summary = match selected_pool.as_ref() {
-            Some(pool) => self.db.get_timeframe_summary(mint, &pool.address)?,
-            None => Vec::new(),
+    /// plus per-timeframe backfill flags from the monitor config row. `range`
+    /// adds how many candles of each timeframe overlap that span.
+    pub(super) async fn get_status(
+        &self,
+        mint: &str,
+        range: Option<(i64, i64)>,
+    ) -> OhlcvResult<OhlcvStatus> {
+        // Every figure is scoped to the SAME single pool the chart reads
+        // (`get_ohlcv_data`). Counting across pools would report candles the chart
+        // never shows. No pool yet => no data (empty summary), which is the correct
+        // "collecting" state.
+        let selected_pool = self.pool_manager.series_pool(mint).await?;
+        let (summary, last_new_by_tf, range_by_tf) = match selected_pool.as_ref() {
+            Some(pool) => (
+                self.db.get_timeframe_summary(mint, &pool.address)?,
+                self.db
+                    .get_timeframe_last_new_data(mint, &pool.address)
+                    .unwrap_or_default(),
+                match range {
+                    Some((from, to)) => {
+                        self.db
+                            .count_candles_in_range(mint, &pool.address, from, to)?
+                    }
+                    None => Vec::new(),
+                },
+            ),
+            None => (Vec::new(), Vec::new(), Vec::new()),
         };
-        let last_new_by_tf = self
-            .db
-            .get_timeframe_last_new_data(mint)
-            .unwrap_or_default();
         let last_checked_at = self.db.get_last_checked_at(mint).unwrap_or(None);
         let monitored = self.monitor.is_monitored(mint).await;
 
@@ -282,11 +285,17 @@ impl OhlcvServiceImpl {
         // the finest available — the chart's preferred default target.
         for tf in Timeframe::all() {
             let tf_str = tf.as_str().to_string();
-            let (candles, latest) = summary
+            let (candles, earliest, latest) = summary
                 .iter()
-                .find(|(name, _, _)| name == &tf_str)
-                .map(|(_, count, latest)| (*count, *latest))
-                .unwrap_or((0, None));
+                .find(|row| row.timeframe == tf_str)
+                .map(|row| (row.candles, row.earliest, row.latest))
+                .unwrap_or((0, None, None));
+            let range_candles = range.map(|_| {
+                range_by_tf
+                    .iter()
+                    .find(|(name, _)| name == &tf_str)
+                    .map_or(0, |(_, count)| *count)
+            });
 
             let backfill_complete = self.db.is_backfill_complete(mint, tf).unwrap_or(false);
             if !backfill_complete {
@@ -310,7 +319,9 @@ impl OhlcvServiceImpl {
                 timeframe: tf_str,
                 candles,
                 backfill_complete,
+                earliest_timestamp: earliest,
                 latest_timestamp: latest,
+                range_candles,
                 last_new_data_at,
             });
         }
@@ -432,14 +443,11 @@ impl OhlcvServiceImpl {
 
         let start = Instant::now();
 
-        // Get default pool
-        let pool = {
-            let mut selected_pool = self.pool_manager.get_default_pool(mint).await?;
-            if selected_pool.is_none() {
-                selected_pool = self.pool_manager.get_best_pool(mint).await?;
-            }
-            selected_pool.ok_or_else(|| OhlcvError::PoolNotFound(mint.to_string()))?
-        };
+        let pool = self
+            .pool_manager
+            .series_pool(mint)
+            .await?
+            .ok_or_else(|| OhlcvError::PoolNotFound(mint.to_string()))?;
 
         let pool_address = pool.address.clone();
 

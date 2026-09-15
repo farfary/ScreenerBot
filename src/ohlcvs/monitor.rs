@@ -174,15 +174,24 @@ impl OhlcvMonitor {
             }
         };
 
+        let has_stored_pools = !pools.is_empty();
         config.pools = pools;
 
         // Store in database
         self.db.upsert_monitor_config(&config)?;
 
         // Add to active tokens
-        {
+        let newly_active = {
             let mut active = self.active_tokens.write().await;
-            active.insert(mint.clone(), config.clone());
+            active.insert(mint.clone(), config.clone()).is_none()
+        };
+
+        // Stored pool rows (liquidity, the canonical default) are a snapshot from the last
+        // discovery, and discovery otherwise only runs for a token with NO pools — so a default
+        // chosen by a since-fixed ranking, or a market that moved, never healed. Re-resolve in the
+        // background when a token starts being monitored; the series pool follows on the next read.
+        if newly_active && has_stored_pools {
+            self.spawn_pool_discovery(&mint);
         }
 
         // Trigger multi-timeframe backfill for new token.
@@ -192,7 +201,7 @@ impl OhlcvMonitor {
         // timeframes — that previously hammered GeckoTerminal far past its limit
         // and produced bursts of "Rate limit exceeded" warnings for the same
         // mint+timeframe within the same second.
-        if let Some(pool) = config.get_best_pool() {
+        if let Some(pool) = config.series_pool() {
             if self.try_start_backfill(&mint) {
                 let runner = self.clone();
                 let mint_owned = mint.clone();
@@ -317,8 +326,10 @@ impl OhlcvMonitor {
         Ok(())
     }
 
-    /// Force refresh for a token
+    /// Force refresh for a token. An explicit refresh also re-resolves the token's pools in the
+    /// background, so a stale default is corrected by the one action that asks for fresh data.
     pub async fn force_refresh(&self, mint: &str) -> OhlcvResult<()> {
+        self.spawn_pool_discovery(mint);
         self.fetch_token_data(mint).await
     }
 
@@ -595,7 +606,7 @@ impl OhlcvMonitor {
             let config = active
                 .get(mint)
                 .ok_or_else(|| OhlcvError::NotFound(mint.to_string()))?;
-            let has = config.get_best_pool().is_some();
+            let has = config.series_pool().is_some();
             let should_retry = !has && config.should_retry_pool_discovery();
             (has, should_retry)
         };
@@ -716,28 +727,25 @@ impl OhlcvMonitor {
             )));
         }
 
-        // Get token config with pools
-        let (pool_address, pool_is_sol, priority, batch_size) = {
+        let (priority, batch_size) = {
             let active = self.active_tokens.read().await;
             let config = active
                 .get(mint)
                 .ok_or_else(|| OhlcvError::NotFound(mint.to_string()))?;
-
-            // Get best pool
-            let pool = config
-                .get_best_pool()
-                .ok_or_else(|| OhlcvError::PoolNotFound(mint.to_string()))?;
-
-            // Calculate batch size based on priority
-            let batch_size = PriorityManager::calculate_batch_size(config.priority);
-
             (
-                pool.address.clone(),
-                pool.is_sol_pair,
                 config.priority,
-                batch_size,
+                PriorityManager::calculate_batch_size(config.priority),
             )
         };
+
+        // Resolve the pool from the stored pool rows — the same source and rule the chart and
+        // status read — so a default the pool manager moved after failures is the pool written.
+        let pool = self
+            .pool_manager
+            .series_pool(mint)
+            .await?
+            .ok_or_else(|| OhlcvError::PoolNotFound(mint.to_string()))?;
+        let (pool_address, pool_is_sol) = (pool.address, pool.is_sol_pair);
 
         // Fetch 1-minute data (base timeframe) with multi-source fallback
         let data = self

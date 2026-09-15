@@ -10,23 +10,31 @@
  * duration, frames entry→exit, keeps the average entry inside the price scale, and never drags
  * the view back to the newest candle behind the user's back.
  */
+import { Poller } from "../../core/poller.js";
 import * as Utils from "../../core/utils.js";
 import {
   CHART_TIMEFRAMES,
+  barForTimestamp,
   fetchCandles,
   fetchOhlcvStatus,
-  findTimeframeWithData,
   renderOhlcvStatus,
+  timeframeCoveringSpan,
   timeframeForSpan,
+  timeframeSeconds,
   triggerRefresh,
 } from "../chart_data.js";
 
-// Candles are refetched on the dialog's refresh tick, but they move far slower than the
-// position figures: the finest timeframe is 1m and every read pulls the FULL stored history.
-// Throttling decouples the two, so the tighter cadence while a swap confirms cannot become a
-// candle refetch per tick.
-const CHART_REFRESH_MS = 10000;
-const INDICATOR_REFRESH_MS = 30000;
+// The chart polls candles on its OWN cadence. It used to ride the dialog's details poll, and a
+// closed or archived position has no details poll — so a token opened before its candles were
+// collected said "No chart data" forever while the backend filled it within seconds.
+const WAITING_POLL_MS = 3000;
+// A token that stays empty this many polls is probably not getting data soon; stop asking
+// every 3s but keep asking.
+const WAITING_POLLS_BEFORE_BACKOFF = 6;
+const EMPTY_POLL_MS = 15000;
+// Candles move far slower than position figures, and every read pulls the full history.
+const OPEN_POLL_MS = 10000;
+const SETTLED_POLL_MS = 30000;
 
 const CHART_TYPES = [
   ["candlestick", "Candles"],
@@ -38,10 +46,10 @@ export function applyChartMixin(PositionDetailsDialog) {
   const proto = PositionDetailsDialog.prototype;
 
   /**
-   * Build the chart on the first details response and refresh it in place on every later one.
-   * Rebuilding per poll flickered and reset the user's view. Checking the bound node, not just
-   * the id, matters: a repaint that swapped the container would leave the chart drawing into a
-   * detached node.
+   * Build the chart on the first details response; every later one only refreshes the markers
+   * (candles have their own poller). Rebuilding per poll flickered and reset the user's view.
+   * Checking the bound node, not just the id, matters: a repaint that swapped the container
+   * would leave the chart drawing into a detached node.
    */
   proto._renderChart = async function () {
     const section = this.dialogEl?.querySelector("#pddChartSection");
@@ -50,24 +58,19 @@ export function applyChartMixin(PositionDetailsDialog) {
 
     const liveContainer = section.querySelector("#pddChart");
     if (this._pddChart && liveContainer && this._pddChart.container === liveContainer) {
-      const now = Date.now();
-      if (now - (this._pddDataAt || 0) > CHART_REFRESH_MS) {
-        await this._loadPositionChartData(mint, this._chartTimeframe, false);
-      } else {
-        // Markers still track the position, which CAN change on any tick (a verified DCA
-        // adds an entry) even when the candles are not refetched.
-        this._updatePositionChartMarkers();
-      }
-      if (now - (this._pddIndicatorAt || 0) > INDICATOR_REFRESH_MS) {
-        this._updatePositionDataIndicator(mint);
-      }
+      // Markers track the position, which CAN change on any tick (a verified DCA adds an entry).
+      this._updatePositionChartMarkers();
       return;
     }
 
     this._destroyPositionChart();
-    // Open on a timeframe that renders THIS position as a readable number of candles. A fixed
-    // 5m default put a week-old entry thousands of candles off the left edge.
-    this._chartTimeframe = this._chartTimeframe || timeframeForSpan(this._positionSpanSeconds());
+    // Start on a timeframe that renders THIS position as a readable number of candles (a fixed
+    // 5m default put a week-old entry thousands of candles off the left edge); the first
+    // status read may move it to one whose stored candles still cover the position.
+    if (!this._chartTimeframe) {
+      this._chartTimeframe = timeframeForSpan(this._positionSpanSeconds());
+      this._pddTfAuto = true;
+    }
     this._pddChartType = this._pddChartType || "candlestick";
 
     const segment = (attrs, label, active) =>
@@ -172,8 +175,8 @@ export function applyChartMixin(PositionDetailsDialog) {
     this._framePosition();
     this._renderChartLegend();
 
-    await this._loadPositionChartData(mint, this._chartTimeframe, true);
-    this._updatePositionDataIndicator(mint);
+    await this._refreshPositionChart(mint);
+    this._startPositionChartPoller(mint);
 
     const setPressed = (group, active) => {
       group.querySelectorAll(".timeframe-btn").forEach((b) => {
@@ -188,11 +191,12 @@ export function applyChartMixin(PositionDetailsDialog) {
       if (!btn || btn.dataset.tf === this._chartTimeframe) return;
       setPressed(tfWrap, btn);
       this._chartTimeframe = btn.dataset.tf;
+      this._pddTfAuto = false;
+      this._pddEmptyPolls = 0;
       // Kick the backend before reading: a timeframe that has never been collected otherwise
       // sits on "Waiting for chart data" until ordinary monitoring gets around to it.
       triggerRefresh(mint);
-      await this._loadPositionChartData(mint, this._chartTimeframe, true);
-      this._updatePositionDataIndicator(mint);
+      await this._refreshPositionChart(mint);
     });
 
     const ctWrap = this.dialogEl?.querySelector("#pddChartType");
@@ -246,13 +250,48 @@ export function applyChartMixin(PositionDetailsDialog) {
     });
   };
 
+  /**
+   * One chart refresh: read the status for this position's span, settle the timeframe while
+   * nothing is drawn yet, then load candles. Shared by the first paint, the poller and a manual
+   * timeframe switch, so all three follow the same rules. Overlapping calls are dropped — a
+   * slow read must not stack a second one behind it.
+   */
+  proto._refreshPositionChart = async function (mint) {
+    if (this._pddRefreshing) return;
+    this._pddRefreshing = true;
+    try {
+      const status = await this._updatePositionDataIndicator(mint);
+      if (!this._pddChart) return;
+
+      // Until the user picks a timeframe and while nothing is drawn, follow what storage holds
+      // for THIS position: the span-ideal timeframe of a weeks-old position can hold only
+      // candles from after it closed. Once candles are on screen the timeframe stays put, so
+      // history arriving later cannot swap the chart under the user.
+      if (this._pddTfAuto && !this._pddChartData?.length && status) {
+        const { from, to } = this._positionSpan();
+        const has = (tf) => status.timeframes?.some((row) => row.timeframe === tf && row.candles > 0);
+        const next =
+          timeframeCoveringSpan(status, from, to) ||
+          (has(this._chartTimeframe) ? null : status.best_timeframe);
+        if (next && next !== this._chartTimeframe) {
+          this._chartTimeframe = next;
+          this._syncPddTimeframeButtons(next);
+        }
+      }
+
+      const timeframe = this._chartTimeframe;
+      await this._loadPositionChartData(mint, timeframe, this._pddRenderedTf !== timeframe, status);
+    } finally {
+      this._pddRefreshing = false;
+      this._syncPositionChartPoller();
+    }
+  };
+
   /** Fetch OHLCV and push it into the chart. */
-  proto._loadPositionChartData = async function (mint, timeframe, isInitial) {
+  proto._loadPositionChartData = async function (mint, timeframe, isInitial, status) {
     // Sequence guard: OHLCV reads are slow enough to resolve after the user switched
     // timeframe, which painted the previous timeframe's candles over the current chart.
     const seq = (this._pddLoadSeq = (this._pddLoadSeq || 0) + 1);
-    // Stamped here, not at the call site, so every entry point feeds the poll-path throttle.
-    this._pddDataAt = Date.now();
 
     try {
       const chartData = await fetchCandles(mint, timeframe, {
@@ -263,31 +302,28 @@ export function applyChartMixin(PositionDetailsDialog) {
       if (this._chartTimeframe !== timeframe) return;
 
       if (!chartData.length) {
-        // This timeframe has no candles; another may (only daily fetched so far, say). On the
-        // first load, switch to one that does. Runs once per open and never overrides a manual
-        // timeframe choice.
-        if (isInitial && !this._pddFallbackTried) {
-          this._pddFallbackTried = true;
-          const altTf = await findTimeframeWithData(mint, timeframe);
-          if (altTf && altTf !== timeframe && this._chartTimeframe === timeframe) {
-            this._chartTimeframe = altTf;
-            this._syncPddTimeframeButtons(altTf);
-            await this._loadPositionChartData(mint, altTf, true);
-            return;
-          }
-        }
-        if (this._pddChartData?.length) {
-          this._showPositionChartOverlay(timeframe, "Waiting for chart data...");
-          return;
-        }
+        this._pddEmptyPolls = (this._pddEmptyPolls || 0) + 1;
+        if (this._pddChartData?.length && this._pddRenderedTf === timeframe) return;
         // A settled position's token is usually no longer monitored, so candles never arrive on
-        // their own: ask for a collection once per chart, and say plainly that there is none.
-        if (isInitial && this._pddRenderedTf == null) triggerRefresh(mint);
-        this._showPositionChartOverlay(timeframe, "No chart data for this token yet");
+        // their own: ask for a collection once per timeframe.
+        this._pddRefreshAsked ??= new Set();
+        if (!this._pddRefreshAsked.has(timeframe)) {
+          this._pddRefreshAsked.add(timeframe);
+          triggerRefresh(mint);
+        }
+        // Say which of the two it is: still being collected, or collected and empty.
+        const row = status?.timeframes?.find((tf) => tf.timeframe === timeframe);
+        const collecting = !status || (status.monitored && !row?.backfill_complete);
+        this._showPositionChartOverlay(
+          timeframe,
+          collecting ? "Collecting chart data…" : "No chart data for this token yet"
+        );
         this._setChartEmpty(true);
         return;
       }
 
+      this._pddEmptyPolls = 0;
+      this._pddTfAuto = false;
       this._pddChart.setData(chartData);
       this._pddChartData = chartData;
       this._pddRenderedTf = timeframe;
@@ -303,6 +339,42 @@ export function applyChartMixin(PositionDetailsDialog) {
       if (seq !== this._pddLoadSeq) return;
       this._showPositionChartOverlay(timeframe, "Waiting for chart data...");
     }
+  };
+
+  /** Cadence the chart warrants now: fast while waiting, slow once drawn or long empty. */
+  proto._positionChartPollMs = function () {
+    if (!this._pddChartData?.length) {
+      return (this._pddEmptyPolls || 0) >= WAITING_POLLS_BEFORE_BACKOFF
+        ? EMPTY_POLL_MS
+        : WAITING_POLL_MS;
+    }
+    return this._isSettled() ? SETTLED_POLL_MS : OPEN_POLL_MS;
+  };
+
+  proto._startPositionChartPoller = function (mint) {
+    this._stopPositionChartPoller();
+    const intervalMs = this._positionChartPollMs();
+    this._pddPoller = new Poller(() => this._refreshPositionChart(mint), {
+      label: "PositionChart",
+      intervalMs,
+    });
+    this._pddPoller.start({ silent: true });
+  };
+
+  /** `Poller` reads its interval when it starts, so a new cadence needs a restart. */
+  proto._syncPositionChartPoller = function () {
+    if (!this._pddPoller) return;
+    const next = this._positionChartPollMs();
+    if (next === this._pddPoller.intervalMs) return;
+    this._pddPoller.intervalMs = next;
+    this._pddPoller.start({ silent: true });
+  };
+
+  proto._stopPositionChartPoller = function () {
+    if (!this._pddPoller) return;
+    this._pddPoller.stop();
+    this._pddPoller.cleanup();
+    this._pddPoller = null;
   };
 
   /**
@@ -338,29 +410,49 @@ export function applyChartMixin(PositionDetailsDialog) {
       });
   };
 
-  /** Refresh the per-timeframe data-status chip. Never throws. */
+  /**
+   * Read the status for this position's span and refresh the data-status chip from it. Returns
+   * the status (null on failure). Never throws.
+   */
   proto._updatePositionDataIndicator = async function (mint) {
+    const status = await fetchOhlcvStatus(mint, this._positionSpan());
     const indicator = this.dialogEl?.querySelector("#pddDataIndicator");
-    if (!indicator) return;
-    this._pddIndicatorAt = Date.now();
-    const status = await fetchOhlcvStatus(mint);
-    if (!status || !this.dialogEl?.contains(indicator)) return;
-    renderOhlcvStatus(
-      { indicator, tip: this.dialogEl.querySelector("#pddDataTip") },
-      status,
-      Utils.formatTimeAgo
-    );
+    if (status && indicator) {
+      renderOhlcvStatus(
+        { indicator, tip: this.dialogEl.querySelector("#pddDataTip") },
+        status,
+        Utils.formatTimeAgo
+      );
+    }
+    return status;
   };
 
   // ===========================================================================
   // POSITION OVERLAY
   // ===========================================================================
 
+  /**
+   * The position's buys and sells for the chart. A position rebuilt from wallet history has no
+   * per-fill records, only the entry and exit on the position itself — its chart drew no markers
+   * at all while the activity listed both trades. Those recorded fields stand in, never a guess.
+   */
+  proto._positionEvents = function () {
+    const pos = this._position() || {};
+    let entries = this.fullDetails?.entries || [];
+    let exits = this.fullDetails?.exits || [];
+    if (!entries.length && pos.entry_time && pos.entry_price) {
+      entries = [{ timestamp: pos.entry_time, price: pos.entry_price, is_dca: false }];
+    }
+    if (!exits.length && this._isSettled() && pos.exit_time && pos.exit_price) {
+      exits = [{ timestamp: pos.exit_time, price: pos.exit_price }];
+    }
+    return { entries, exits };
+  };
+
   /** First and last moment this position was alive, in unix seconds. */
   proto._positionSpan = function () {
     const pos = this._position() || {};
-    const entries = this.fullDetails?.entries || [];
-    const exits = this.fullDetails?.exits || [];
+    const { entries, exits } = this._positionEvents();
     const now = Math.floor(Date.now() / 1000);
 
     const stamps = [
@@ -398,8 +490,7 @@ export function applyChartMixin(PositionDetailsDialog) {
   proto._updatePositionChartMarkers = function () {
     if (!this._pddChart) return;
     const pos = this._position() || {};
-    const entries = this.fullDetails?.entries || [];
-    const exits = this.fullDetails?.exits || [];
+    const { entries, exits } = this._positionEvents();
     const bars = this._pddChartData || [];
     if (!bars.length) return;
 
@@ -416,8 +507,9 @@ export function applyChartMixin(PositionDetailsDialog) {
     this._pddMarkerSignature = signature;
 
     // lightweight-charts renders a marker only when its `time` matches a bar, so snap each
-    // event to the candle that CONTAINS it. Events outside the loaded window are counted, not
-    // faked: clamping a sell onto the last bar claimed it happened in a candle it did not.
+    // event to the candle that CONTAINS it. Events with no such candle loaded — outside the
+    // window, or in a no-trade gap — are counted, not faked: clamping a sell onto a
+    // neighbouring bar claimed it happened in a candle it did not.
     let dropped = 0;
     const snapToBar = (ts) => {
       const bar = this._barForTimestamp(ts);
@@ -484,7 +576,7 @@ export function applyChartMixin(PositionDetailsDialog) {
     const note = this.dialogEl?.querySelector("#pddChartNote");
     if (note) {
       note.textContent = dropped
-        ? `${dropped} event${dropped > 1 ? "s" : ""} outside the loaded range`
+        ? `${dropped} event${dropped > 1 ? "s" : ""} without a candle on this timeframe`
         : "";
     }
   };
@@ -499,8 +591,7 @@ export function applyChartMixin(PositionDetailsDialog) {
     if (!items || !colors) return;
 
     const pos = this._position() || {};
-    const entries = this.fullDetails?.entries || [];
-    const exits = this.fullDetails?.exits || [];
+    const { entries, exits } = this._positionEvents();
     const legend = [
       ["Entry", colors.entry, "", entries.some((e) => !e.is_dca)],
       ["DCA", colors.dca, "", entries.some((e) => e.is_dca)],
@@ -522,20 +613,7 @@ export function applyChartMixin(PositionDetailsDialog) {
    * loaded window. Shared by the markers and the activity links, so both agree on the candle.
    */
   proto._barForTimestamp = function (ts) {
-    const bars = this._pddChartData || [];
-    if (!bars.length || !Number.isFinite(ts)) return null;
-    const barSeconds = bars.length > 1 ? bars[1].time - bars[0].time : 60;
-    if (ts < bars[0].time || ts > bars[bars.length - 1].time + barSeconds) return null;
-
-    // Bars are ascending: binary-search the last one at or before the timestamp.
-    let lo = 0;
-    let hi = bars.length - 1;
-    while (lo < hi) {
-      const mid = Math.ceil((lo + hi) / 2);
-      if (bars[mid].time <= ts) lo = mid;
-      else hi = mid - 1;
-    }
-    return bars[lo];
+    return barForTimestamp(this._pddChartData, ts, timeframeSeconds(this._pddRenderedTf));
   };
 
   /**
@@ -591,6 +669,7 @@ export function applyChartMixin(PositionDetailsDialog) {
 
   /** Tear down the chart and its observers. */
   proto._destroyPositionChart = function () {
+    this._stopPositionChartPoller();
     if (this._pddThemeObserver) {
       this._pddThemeObserver.disconnect();
       this._pddThemeObserver = null;
@@ -608,8 +687,8 @@ export function applyChartMixin(PositionDetailsDialog) {
     this._pddLatestCandle = null;
     this._pddMarkerSignature = null;
     this._pddMarkerBars = null;
-    this._pddFallbackTried = false;
-    this._pddIndicatorAt = 0;
-    this._pddDataAt = 0;
+    this._pddEmptyPolls = 0;
+    this._pddRefreshAsked = null;
+    this._pddRefreshing = false;
   };
 }

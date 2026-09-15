@@ -417,6 +417,14 @@ pub struct OhlcvQuery {
     pub timeframe: String,
 }
 
+/// `GET /api/tokens/:mint/ohlcv/status` — an optional `[from, to]` span (unix secs) asks how
+/// many candles of each timeframe cover it.
+#[derive(Debug, Deserialize)]
+pub struct OhlcvStatusQuery {
+    pub from: Option<i64>,
+    pub to: Option<i64>,
+}
+
 pub(super) fn default_ohlcv_limit() -> u32 {
     100
 }

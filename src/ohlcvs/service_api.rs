@@ -121,9 +121,9 @@ pub async fn has_data(mint: &str) -> OhlcvResult<bool> {
         .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {e}")))?
 }
 
-pub async fn get_status(mint: &str) -> OhlcvResult<OhlcvStatus> {
+pub async fn get_status(mint: &str, range: Option<(i64, i64)>) -> OhlcvResult<OhlcvStatus> {
     let service = get_or_init_service().await?;
-    service.get_status(mint).await
+    service.get_status(mint, range).await
 }
 
 pub async fn get_mints_with_data(mints: &[String]) -> OhlcvResult<HashSet<String>> {

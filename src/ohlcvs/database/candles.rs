@@ -3,7 +3,7 @@
 use crate::ohlcvs::types::{Candle, OhlcvError, OhlcvResult, Timeframe};
 use rusqlite::{params, OptionalExtension};
 
-use super::OhlcvDatabase;
+use super::{OhlcvDatabase, TimeframeSummary};
 
 impl OhlcvDatabase {
     // ==================== Time Bounds ====================
@@ -223,12 +223,12 @@ impl OhlcvDatabase {
     /// scoped to the same pool the chart reads (`get_ohlcv_data`) — counting
     /// across every pool_address would combine candles from different pools
     /// (e.g. an old pool the token has since migrated away from) and report a
-    /// count the chart never shows. Returns (timeframe_str, count, latest_ts).
+    /// count the chart never shows.
     pub fn get_timeframe_summary(
         &self,
         mint: &str,
         pool_address: &str,
-    ) -> OhlcvResult<Vec<(String, i64, Option<i64>)>> {
+    ) -> OhlcvResult<Vec<TimeframeSummary>> {
         let conn = self
             .conn
             .lock()
@@ -236,7 +236,7 @@ impl OhlcvDatabase {
 
         let mut stmt = conn
             .prepare(
-                "SELECT timeframe, COUNT(*) AS cnt, MAX(timestamp) AS latest
+                "SELECT timeframe, COUNT(*) AS cnt, MIN(timestamp) AS earliest, MAX(timestamp) AS latest
                  FROM ohlcv_candles
                  WHERE chain_id = ?1 AND mint = ?2 AND pool_address = ?3
                  GROUP BY timeframe",
@@ -245,16 +245,62 @@ impl OhlcvDatabase {
 
         let rows = stmt
             .query_map(params![self.chain_id(), mint, pool_address], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, i64>(1)?,
-                    row.get::<_, Option<i64>>(2)?,
-                ))
+                Ok(TimeframeSummary {
+                    timeframe: row.get(0)?,
+                    candles: row.get(1)?,
+                    earliest: row.get(2)?,
+                    latest: row.get(3)?,
+                })
             })
             .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {e}")))?;
 
         rows.collect::<Result<Vec<_>, _>>()
             .map_err(|e| OhlcvError::DatabaseError(format!("Collect failed: {e}")))
+    }
+
+    /// Per-timeframe count of candles on one pool whose bucket overlaps `[from, to]` (unix
+    /// secs). A bucket overlaps when it starts after `from - bucket_seconds`, so the candle
+    /// that CONTAINS `from` counts. Answers "does this timeframe still hold that span?", which
+    /// the newest-candle summary cannot once stored depth has rolled past it.
+    pub fn count_candles_in_range(
+        &self,
+        mint: &str,
+        pool_address: &str,
+        from: i64,
+        to: i64,
+    ) -> OhlcvResult<Vec<(String, i64)>> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT COUNT(*) FROM ohlcv_candles
+                 WHERE chain_id = ?1 AND mint = ?2 AND pool_address = ?3 AND timeframe = ?4
+                   AND timestamp > ?5 AND timestamp <= ?6",
+            )
+            .map_err(|e| OhlcvError::DatabaseError(format!("Prepare failed: {e}")))?;
+
+        Timeframe::all()
+            .into_iter()
+            .map(|tf| {
+                let seconds = tf.to_seconds();
+                stmt.query_row(
+                    params![
+                        self.chain_id(),
+                        mint,
+                        pool_address,
+                        tf.as_str(),
+                        from - seconds,
+                        to
+                    ],
+                    |row| row.get::<_, i64>(0),
+                )
+                .map(|count| (tf.as_str().to_string(), count))
+                .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {e}")))
+            })
+            .collect()
     }
 
     /// Delete every candle stored under a pool that is no longer the token's
@@ -280,7 +326,11 @@ impl OhlcvDatabase {
     /// Per-timeframe time of the most recent candle write (unix secs), i.e. the
     /// last successful fetch that produced new candles. `fetched_at` is stored as
     /// a TEXT timestamp, so convert to epoch in SQL.
-    pub fn get_timeframe_last_new_data(&self, mint: &str) -> OhlcvResult<Vec<(String, i64)>> {
+    pub fn get_timeframe_last_new_data(
+        &self,
+        mint: &str,
+        pool_address: &str,
+    ) -> OhlcvResult<Vec<(String, i64)>> {
         let conn = self
             .conn
             .lock()
@@ -290,13 +340,13 @@ impl OhlcvDatabase {
             .prepare(
                 "SELECT timeframe, CAST(strftime('%s', MAX(fetched_at)) AS INTEGER) AS last_new
                  FROM ohlcv_candles
-                 WHERE chain_id = ?1 AND mint = ?2
+                 WHERE chain_id = ?1 AND mint = ?2 AND pool_address = ?3
                  GROUP BY timeframe",
             )
             .map_err(|e| OhlcvError::DatabaseError(format!("Prepare failed: {e}")))?;
 
         let rows = stmt
-            .query_map(params![self.chain_id(), mint], |row| {
+            .query_map(params![self.chain_id(), mint, pool_address], |row| {
                 Ok((row.get::<_, String>(0)?, row.get::<_, Option<i64>>(1)?))
             })
             .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {e}")))?;

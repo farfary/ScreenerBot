@@ -138,7 +138,14 @@ pub async fn get_token_ohlcv(
 /// firing a probe request per timeframe.
 pub async fn get_token_ohlcv_status(
     Path(mint): Path<String>,
+    Query(query): Query<OhlcvStatusQuery>,
 ) -> Result<Json<crate::ohlcvs::OhlcvStatus>, StatusCode> {
+    // A span only counts when both ends are given and ordered; anything else is a plain status.
+    let range = match (query.from, query.to) {
+        (Some(from), Some(to)) if from <= to => Some((from, to)),
+        _ => None,
+    };
+
     // WSOL/SOL uses the globally-maintained SOL/USD reference chart, so synthesize
     // its status from that in-memory series (it isn't in the per-token monitor).
     if crate::chains::adapter().is_native_asset(&mint) {
@@ -163,11 +170,19 @@ pub async fn get_token_ohlcv_status(
             if count > 0 && best.is_none() {
                 best = Some(tf.to_string());
             }
+            let range_candles = range.map(|(from, to)| {
+                let seconds = tf.to_seconds();
+                s.iter()
+                    .filter(|c| c.timestamp > from - seconds && c.timestamp <= to)
+                    .count() as i64
+            });
             timeframes.push(crate::ohlcvs::OhlcvTimeframeStatus {
                 timeframe: tf.to_string(),
                 candles: count,
                 backfill_complete: count > 0,
+                earliest_timestamp: s.first().map(|c| c.timestamp),
                 latest_timestamp: latest,
+                range_candles,
                 last_new_data_at: latest,
             });
         }
@@ -184,7 +199,7 @@ pub async fn get_token_ohlcv_status(
         }));
     }
 
-    match crate::ohlcvs::get_status(&mint).await {
+    match crate::ohlcvs::get_status(&mint, range).await {
         Ok(status) => Ok(Json(status)),
         Err(e) => {
             logger::debug(

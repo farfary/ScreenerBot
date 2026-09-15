@@ -1,5 +1,14 @@
 //! OHLCV database types — row structs for SQLite serialization.
 
+/// Stored candles of one timeframe on one pool.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TimeframeSummary {
+    pub timeframe: String,
+    pub candles: i64,
+    pub earliest: Option<i64>,
+    pub latest: Option<i64>,
+}
+
 /// Status information for a single OHLCV token
 #[derive(Debug, Clone)]
 pub struct OhlcvTokenStatus {
