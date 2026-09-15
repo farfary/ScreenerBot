@@ -17,6 +17,7 @@
 //! the `SwapRouter` contract stay in `crate::swaps` — this module implements that
 //! contract, it does not own it.
 
+pub mod cost_guard;
 pub mod direct;
 pub mod revenue;
 pub mod routers;

@@ -16,6 +16,15 @@ use std::sync::Arc;
 pub enum SwapStage {
     /// Quoting is finished and `router` is about to submit the transaction.
     Submitting { router: String },
+    /// A built transaction was refused before signing because it would have
+    /// spent `extra_lamports` of the wallet's SOL on an account owned by
+    /// `venue`, outside the trade. The swap continues down another route, so
+    /// this reports a decision rather than a failure.
+    CostRejected {
+        router: String,
+        venue: String,
+        extra_lamports: u64,
+    },
 }
 
 /// Receives stages; the returned future is awaited before the swap continues,

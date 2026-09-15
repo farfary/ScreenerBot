@@ -47,30 +47,53 @@ fn swap_stage_listener(action_id: &str, slot: &RouterSlot) -> crate::swaps::Swap
     let action_id = action_id.to_owned();
     let slot = slot.clone();
     std::sync::Arc::new(move |stage: crate::swaps::SwapStage| {
-        let crate::swaps::SwapStage::Submitting { router } = stage;
-        if let Ok(mut current) = slot.lock() {
-            *current = Some(router.clone());
-        }
         let action_id = action_id.clone();
-        Box::pin(async move {
-            let metadata = json!({"router": router});
-            update_step(
-                &action_id,
-                STEP_QUOTE,
-                StepStatus::Completed,
-                None,
-                Some(metadata.clone()),
-            )
-            .await;
-            update_step(
-                &action_id,
-                STEP_SWAP,
-                StepStatus::InProgress,
-                None,
-                Some(metadata),
-            )
-            .await;
-        })
+        match stage {
+            crate::swaps::SwapStage::Submitting { router } => {
+                if let Ok(mut current) = slot.lock() {
+                    *current = Some(router.clone());
+                }
+                Box::pin(async move {
+                    let metadata = json!({"router": router});
+                    update_step(
+                        &action_id,
+                        STEP_QUOTE,
+                        StepStatus::Completed,
+                        None,
+                        Some(metadata.clone()),
+                    )
+                    .await;
+                    update_step(
+                        &action_id,
+                        STEP_SWAP,
+                        StepStatus::InProgress,
+                        None,
+                        Some(metadata),
+                    )
+                    .await;
+                }) as futures::future::BoxFuture<'static, ()>
+            }
+            // The trade is still running: say what was refused and why, so a
+            // longer swap reads as a deliberate re-route rather than a stall.
+            crate::swaps::SwapStage::CostRejected {
+                router,
+                venue,
+                extra_lamports,
+            } => Box::pin(async move {
+                let metadata = json!({
+                    "router": router,
+                    "cost_guard": {"venue": venue, "extra_lamports": extra_lamports},
+                });
+                update_step(
+                    &action_id,
+                    STEP_SWAP,
+                    StepStatus::InProgress,
+                    None,
+                    Some(metadata),
+                )
+                .await;
+            }),
+        }
     })
 }
 

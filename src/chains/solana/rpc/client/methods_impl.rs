@@ -307,13 +307,18 @@ impl RpcClientMethods for RpcClient {
         // run even when the blockhash has aged out between build and simulate --
         // the point here is whether the INSTRUCTIONS are correct, not whether this
         // exact blockhash is still current.
+        // `innerInstructions` is what makes the run auditable: the CPIs a
+        // third-party route performs -- including any account it funds out of the
+        // wallet -- are invisible in the transaction's own message when the route
+        // builds them, and invisible in the quote entirely.
         let params = serde_json::json!([
             tx_base64,
             {
                 "encoding": "base64",
                 "commitment": "confirmed",
                 "sigVerify": false,
-                "replaceRecentBlockhash": true
+                "replaceRecentBlockhash": true,
+                "innerInstructions": true
             }
         ]);
 
@@ -337,6 +342,11 @@ impl RpcClientMethods for RpcClient {
             units_consumed: value
                 .get("unitsConsumed")
                 .and_then(serde_json::Value::as_u64),
+            inner_instructions: value
+                .get("innerInstructions")
+                .and_then(|v| v.as_array())
+                .cloned()
+                .unwrap_or_default(),
         })
     }
 

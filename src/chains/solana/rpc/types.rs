@@ -90,6 +90,13 @@ pub struct SimulationOutcome {
     /// Compute units the simulated run consumed — the ground truth for sizing
     /// a venue's `compute_units()` estimate.
     pub units_consumed: Option<u64>,
+    /// The `jsonParsed` inner instructions the run would execute, when the call
+    /// asked for them. This is the only pre-submission view of what a
+    /// third-party-built transaction does with the wallet's lamports: an
+    /// aggregator's route can fund an account for a venue mid-swap, and the
+    /// quote says nothing about it.
+    #[serde(default)]
+    pub inner_instructions: Vec<serde_json::Value>,
 }
 
 impl SimulationOutcome {

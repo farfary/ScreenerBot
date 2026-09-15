@@ -9,6 +9,8 @@ pub use direct_pool::DirectPoolRouter;
 pub use jupiter::JupiterRouter;
 pub use raptor::RaptorRouter;
 
+pub(crate) use jupiter::venue_label_for_program;
+
 /// Build the Solana swap router set for `crate::swaps::registry::RouterRegistry`.
 /// This is the factory the application composition root registers via
 /// `crate::swaps::registry::set_router_factory` — add new Solana routers here.

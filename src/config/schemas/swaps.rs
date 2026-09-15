@@ -141,6 +141,55 @@ config_struct! {
 }
 
 config_struct! {
+    /// Guard against a built swap spending SOL on anything but the trade.
+    ///
+    /// Slippage protects the OUTPUT: it guarantees a minimum number of tokens.
+    /// It says nothing about lamports that leave the wallet alongside the swap,
+    /// so a route through a venue that makes the trader pay rent for one of its
+    /// own accounts passes every slippage check ever written. This guard
+    /// simulates the built transaction and refuses it when that cost is out of
+    /// proportion to the trade.
+    pub struct SwapCostGuardConfig {
+        #[metadata(field_metadata! {
+            label: "Enabled",
+            hint: "Simulate every aggregator transaction before sending it and refuse one that parks SOL in an account the wallet cannot close. Off means a route may lock rent without warning.",
+            impact: "high",
+            category: "Safety",
+        })]
+        enabled: bool = true,
+        #[metadata(field_metadata! {
+            label: "Max Extra Cost",
+            hint: "Share of the trade that may be spent on accounts the wallet will never get back. A venue that charges a one-off deposit is accepted only when the trade is large enough to justify it.",
+            min: 0,
+            max: 100,
+            step: 0.1,
+            unit: "% of trade",
+            impact: "high",
+            category: "Safety",
+        })]
+        max_extra_cost_pct: f64 = 1.0,
+        #[metadata(field_metadata! {
+            label: "Always Allow Below",
+            hint: "Extra cost small enough to ignore whatever the trade size, so ordinary rounding and dust never block a swap.",
+            min: 0,
+            max: 100000000,
+            step: 10000,
+            unit: "lamports",
+            impact: "medium",
+            category: "Safety",
+        })]
+        always_allow_below_lamports: u64 = 100_000,
+        #[metadata(field_metadata! {
+            label: "Retry Without The Venue",
+            hint: "When a venue is refused, ask the same aggregator again with that venue excluded before falling back to another router.",
+            impact: "medium",
+            category: "Safety",
+        })]
+        retry_excluding_venue: bool = true,
+    }
+}
+
+config_struct! {
     /// Slippage configuration
     pub struct SlippageConfig {
         #[metadata(field_metadata! {
@@ -216,6 +265,15 @@ config_struct! {
             category: "Routers",
         })]
         raptor: RaptorConfig = RaptorConfig::default(),
+
+        /// Cost guard configuration
+        #[metadata(field_metadata! {
+            label: "Cost Guard",
+            hint: "Refuse a swap that would spend SOL on accounts the wallet cannot reclaim, whichever router built it",
+            impact: "high",
+            category: "Safety",
+        })]
+        cost_guard: SwapCostGuardConfig = SwapCostGuardConfig::default(),
 
         /// Slippage configuration
         #[metadata(field_metadata! {

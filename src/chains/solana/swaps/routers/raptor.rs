@@ -303,42 +303,17 @@ impl RaptorRouter {
         Ok(swap_response.swap_transaction)
     }
 
-    /// Simulate a built transaction before it is signed and sent.
+    /// Check a built transaction before it is signed and sent.
     ///
     /// Raptor builds the transaction on its own host, so nothing on our side has
-    /// checked its instructions. A transaction that would fail on chain still
-    /// pays its priority fee; simulating first turns that into a free,
-    /// pre-submission refusal that the fallback chain may act on.
-    async fn simulate_built(transaction_base64: &str) -> Result<()> {
-        use crate::chains::solana::solana_sdk::transaction::VersionedTransaction;
-        use base64::Engine;
-
-        let bytes = base64::engine::general_purpose::STANDARD
-            .decode(transaction_base64)
-            .map_err(|e| Error::parse_error(format!("Raptor transaction base64: {e}")))?;
-        let transaction: VersionedTransaction = bincode::deserialize(&bytes)
-            .map_err(|e| Error::parse_error(format!("Raptor transaction decode: {e}")))?;
-
-        let outcome = crate::chains::solana::rpc::get_rpc_client()
-            .simulate_transaction(&transaction)
-            .await?;
-        if let Some(err) = outcome.err {
-            let last_logs = outcome
-                .logs
-                .iter()
-                .rev()
-                .take(3)
-                .rev()
-                .cloned()
-                .collect::<Vec<_>>()
-                .join(" | ");
-            return Err(crate::chains::solana::Error::SimulationRejected {
-                router: "Raptor",
-                detail: format!("{err} {last_logs}").trim().to_owned(),
-            }
-            .into());
-        }
-        Ok(())
+    /// checked its instructions or what they do with the wallet's lamports. The
+    /// shared preflight in [`crate::chains::solana::swaps::cost_guard`] rejects
+    /// both a transaction that would fail on chain and one that would spend SOL
+    /// outside the trade — for free, before anything is signed.
+    async fn preflight(transaction_base64: &str, quote: &Quote) -> Result<()> {
+        crate::chains::solana::swaps::cost_guard::preflight("Raptor", transaction_base64, quote)
+            .await
+            .map_err(Into::into)
     }
 }
 
@@ -525,7 +500,7 @@ impl SwapRouter for RaptorRouter {
         let start = Instant::now();
 
         let transaction = self.build_transaction(quote, &quote.wallet_address).await?;
-        Self::simulate_built(&transaction).await?;
+        Self::preflight(&transaction, quote).await?;
 
         // Propagate the send/confirm error UNCHANGED so a submitted-but-
         // unconfirmed signature stays recoverable by
@@ -568,7 +543,7 @@ impl SwapRouter for RaptorRouter {
         let transaction = self
             .build_transaction(quote, &keypair.pubkey().to_string())
             .await?;
-        Self::simulate_built(&transaction).await?;
+        Self::preflight(&transaction, quote).await?;
         let signature = crate::chains::solana::rpc::get_rpc_client()
             .sign_send_and_confirm_with_keypair(&transaction, &keypair)
             .await?;
