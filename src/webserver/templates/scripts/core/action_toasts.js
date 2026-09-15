@@ -21,6 +21,8 @@
 
 import { notificationManager } from "./notifications.js";
 import { toastManager } from "./toast.js";
+// The wording lives in its own module so it can be tested without a DOM.
+import { outcomeMessage, stepMessage, symbolOf } from "./action_message.js";
 
 /** Actions whose terminal state has already been announced. */
 const resolved = new Set();
@@ -42,12 +44,6 @@ const SUBJECTS = {
 
 const FALLBACK_SUBJECT = { live: "Trade", done: "Trade done", failed: "Trade failed" };
 
-/** The backend writes the literal "Unknown" when it could not resolve a symbol. */
-function symbolOf(action) {
-  const symbol = action?.metadata?.symbol;
-  return symbol && symbol !== "Unknown" ? symbol : "";
-}
-
 /** A trade the user asked for, as opposed to one the auto-trader decided on. */
 function isUserInitiated(action) {
   return String(action?.metadata?.operation || "").startsWith("manual");
@@ -61,45 +57,6 @@ function titleFor(action, phase) {
   const symbol = symbolOf(action);
   const label = subjectOf(action)[phase];
   return symbol ? `${label} ${symbol}` : label;
-}
-
-/** "Executing Swap · 3/4" — what the trade is actually doing right now. */
-function stepMessage(action) {
-  const state = action?.state;
-  if (!state || state.status !== "in_progress") return null;
-
-  const step = state.current_step;
-  const total = Number(state.total_steps) || 0;
-  const index = Number(state.current_step_index) || 0;
-  if (!step) return null;
-
-  const router = routerOf(action);
-  const label = router ? `${step} via ${router}` : step;
-  return total > 0 ? `${label} · ${index + 1}/${total}` : label;
-}
-
-/** The router that submitted the trade, once the backend has recorded it. */
-function routerOf(action) {
-  const steps = Array.isArray(action?.steps) ? action.steps : [];
-  const router = steps.find((step) => typeof step?.metadata?.router === "string")?.metadata
-    ?.router;
-  return router || "";
-}
-
-/** What the trade committed, when the backend recorded it. */
-function outcomeMessage(action) {
-  const meta = action?.metadata || {};
-  const router = routerOf(action);
-  const via = router ? ` via ${router}` : "";
-  const size = Number(meta.size_sol);
-  if (Number.isFinite(size) && size > 0) return `${size} SOL${via}`;
-
-  const percentage = Number(meta.percentage);
-  if (Number.isFinite(percentage) && percentage > 0) {
-    return `${percentage >= 100 ? "Full exit" : `${percentage}% exit`}${via}`;
-  }
-
-  return typeof meta.reason === "string" && meta.reason ? meta.reason : null;
 }
 
 function markResolved(actionId) {
