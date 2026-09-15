@@ -425,12 +425,15 @@ pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Re
             // part of that answer — status, code, headline, hint — comes from
             // the QuoteError variant the router produced, so a provider
             // rewording its response cannot change what the user is told.
-            // `Unavailable` is the only case that shows the raw detail, and
-            // even then only as supporting text.
+            // `Unavailable` shows the raw detail as supporting text; a refused
+            // quote adds which router was refused and why after the hint.
             let status =
                 StatusCode::from_u16(e.http_status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
             let details = match &e {
                 QuoteError::Unavailable { .. } => e.to_string(),
+                QuoteError::RouterRejected { router, detail } => {
+                    format!("{} {router}: {detail}", e.hint())
+                }
                 _ => e.hint().to_owned(),
             };
             error_response(status, e.code(), e.title(), Some(&details))

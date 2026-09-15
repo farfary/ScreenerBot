@@ -574,7 +574,7 @@ export class ConfigImportDialog {
                 ${statusIcon}
                 ${changesBadge}
               </div>
-              <span class="config-import-section-hint">${section.present ? `${section.field_count} fields` : "Not included in file"}</span>
+              <span class="config-import-section-hint">${section.present ? `${section.field_count} ${section.field_count === 1 ? "field" : "fields"}` : "Not included in file"}</span>
             </div>
           </div>
         </label>

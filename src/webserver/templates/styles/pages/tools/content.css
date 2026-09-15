@@ -32,13 +32,8 @@
 .tool-badge {
   display: flex;
   align-items: center;
-  justify-content: center;
-  width: 48px;
-  height: 48px;
-  border-radius: var(--radius-lg);
-  background: linear-gradient(135deg, var(--primary-alpha-20), var(--primary-alpha-5));
   color: var(--primary-color);
-  font-size: 1.25rem;
+  font-size: 1.5rem;
 }
 
 .tool-info {
@@ -212,19 +207,8 @@
   padding: var(--spacing-xl);
 }
 
-.placeholder-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 80px;
-  height: 80px;
-  border-radius: var(--radius-xl);
-  background: var(--bg-secondary);
-  border: 2px dashed var(--border-color);
-}
-
-.placeholder-icon i {
-  font-size: 2rem;
+.tool-placeholder h3 i {
+  margin-right: var(--spacing-sm);
   color: var(--text-muted);
 }
 

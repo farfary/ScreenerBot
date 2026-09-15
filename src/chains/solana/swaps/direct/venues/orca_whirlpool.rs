@@ -70,6 +70,15 @@
 //! `start_tick_index + i * tick_spacing`, unlike Raydium's `TickState` which
 //! stores its own `tick` field.
 //!
+//! Newer pools use a `DynamicTickArray` instead, and the programme accepts
+//! either: `start_tick_index i32` at 8, `whirlpool` at 12, `tick_bitmap u128` at
+//! 44, then 88 ticks from offset 60, each a tag byte (0 = uninitialised, 1 =
+//! initialised) followed, only when initialised, by 112 bytes whose first two
+//! fields are `liquidity_net: i128` and `liquidity_gross: u128`. Its length is
+//! `148 + 112 * initialised_ticks`; the PUMP pool
+//! `BofA2ViUSudPBTUms2KRuG6AHNeMawjNfwqTJDgx5BKW` passed an 8,548-byte array
+//! (75 initialised ticks) that the fixed-only decoder refused.
+//!
 //! **The tick-array PDA seed is the DECIMAL STRING of `start_tick_index`, not
 //! its big-endian bytes.** Raydium CLMM uses `start_index.to_be_bytes()`;
 //! Orca's own programme uses `start_tick_index.to_string().as_bytes()`. Live
@@ -163,6 +172,21 @@ const TICKS_OFFSET: usize = 12;
 /// against a live account: `TICKS_OFFSET + 88*113 + 32 == 9988`, the real
 /// fetched `TickArray` length.
 const TICK_STATE_SIZE: usize = 113;
+
+/// Exact length of a classic fixed-size tick array.
+const FIXED_TICK_ARRAY_LEN: usize =
+    TICKS_OFFSET + (TICK_ARRAY_SIZE as usize) * TICK_STATE_SIZE + 32;
+
+/// `DynamicTickArray`: `tick_bitmap: u128` after the discriminator(8),
+/// `start_tick_index`(4) and `whirlpool`(32).
+const DYNAMIC_TICK_BITMAP_OFFSET: usize = 44;
+
+/// `DynamicTickArray`: first tick tag byte, right after the bitmap.
+const DYNAMIC_TICKS_OFFSET: usize = 60;
+
+/// `DynamicTickData`: `liquidity_net: i128`, `liquidity_gross: u128`,
+/// `fee_growth_outside_a/b: u128`, `reward_growths_outside: [u128; 3]`.
+const DYNAMIC_TICK_DATA_SIZE: usize = 112;
 
 /// Tick arrays a swap instruction carries. Orca's own client passes three,
 /// matching Raydium CLMM's convention.
@@ -844,15 +868,69 @@ pub fn oracle_address(program: &Pubkey, pool: &Pubkey) -> Pubkey {
     Pubkey::find_program_address(&[ORACLE_SEED, pool.as_ref()], program).0
 }
 
-/// Decode the initialised ticks out of a live `TickArray` account.
+/// Decode the initialised ticks out of a live tick-array account, in either of
+/// the two layouts Orca's programme accepts (see module docs).
 ///
-/// Returns `None` when the account is too short to hold a full array -- a
-/// decode failure, never a partially-wrong swap. Unlike Raydium's
-/// `TickArrayState`, a `Tick` entry carries no `pool_id` to cross-check and
-/// no explicit tick index, so `start` and `tick_spacing` (both already known
-/// from the pool state and the derivation that produced this address) supply
-/// the index instead.
+/// Returns `None` when the account matches neither layout -- a decode failure,
+/// never a partially-wrong swap. Neither layout stores a tick's own index, so
+/// `start` and `tick_spacing` (both already known from the pool state and the
+/// derivation that produced this address) supply it instead.
 pub fn decode_tick_array(
+    data: &[u8],
+    start: i32,
+    tick_spacing: u16,
+) -> Option<Vec<InitializedTick>> {
+    if data.len() == FIXED_TICK_ARRAY_LEN {
+        decode_fixed_tick_array(data, start, tick_spacing)
+    } else {
+        decode_dynamic_tick_array(data, start, tick_spacing)
+    }
+}
+
+/// A `DynamicTickArray`: variable length, one tag byte per tick, and a bitmap
+/// that must agree with those tags.
+///
+/// Every structural fact is checked rather than assumed -- the stored start
+/// index, each tag against its bitmap bit, `liquidity_gross >= |liquidity_net|`
+/// for every initialised tick, and that the ticks consume the account exactly.
+/// A layout that drifted by one field fails at least one of those.
+fn decode_dynamic_tick_array(
+    data: &[u8],
+    start: i32,
+    tick_spacing: u16,
+) -> Option<Vec<InitializedTick>> {
+    if i32_at(data, 8)? != start {
+        return None;
+    }
+    let bitmap = u128_at(data, DYNAMIC_TICK_BITMAP_OFFSET)?;
+    let mut offset = DYNAMIC_TICKS_OFFSET;
+    let mut ticks = Vec::new();
+    for i in 0..(TICK_ARRAY_SIZE as usize) {
+        let tag = *data.get(offset)?;
+        offset += 1;
+        let flagged = bitmap & (1u128 << i) != 0;
+        match (tag, flagged) {
+            (0, false) => {}
+            (1, true) => {
+                let liquidity_net = i128_at(data, offset)?;
+                let liquidity_gross = u128_at(data, offset + 16)?;
+                if liquidity_gross < liquidity_net.unsigned_abs() {
+                    return None;
+                }
+                ticks.push(InitializedTick {
+                    tick: start + (i as i32) * (tick_spacing as i32),
+                    liquidity_net,
+                });
+                offset += DYNAMIC_TICK_DATA_SIZE;
+            }
+            _ => return None,
+        }
+    }
+    (offset == data.len()).then_some(ticks)
+}
+
+/// A classic fixed-size `TickArray`.
+fn decode_fixed_tick_array(
     data: &[u8],
     start: i32,
     tick_spacing: u16,
@@ -886,6 +964,54 @@ fn memo_program_id() -> Pubkey {
 mod tests {
     use super::*;
     use crate::chains::solana::swaps::direct::venues::clmm_ticks::get_sqrt_price_at_tick;
+
+    /// A dynamic array with initialised ticks at slots 2 and 40.
+    fn dynamic_tick_array(start: i32, corrupt_bitmap: bool) -> Vec<u8> {
+        let mut data = vec![0u8; DYNAMIC_TICKS_OFFSET];
+        data[8..12].copy_from_slice(&start.to_le_bytes());
+        let mut bitmap: u128 = (1 << 2) | (1 << 40);
+        if corrupt_bitmap {
+            bitmap |= 1 << 7;
+        }
+        data[DYNAMIC_TICK_BITMAP_OFFSET..DYNAMIC_TICKS_OFFSET]
+            .copy_from_slice(&bitmap.to_le_bytes());
+        for i in 0..TICK_ARRAY_SIZE as usize {
+            if i == 2 || i == 40 {
+                data.push(1);
+                let net: i128 = if i == 2 { 5_000 } else { -5_000 };
+                let mut tick = vec![0u8; DYNAMIC_TICK_DATA_SIZE];
+                tick[0..16].copy_from_slice(&net.to_le_bytes());
+                tick[16..32].copy_from_slice(&5_000u128.to_le_bytes());
+                data.extend_from_slice(&tick);
+            } else {
+                data.push(0);
+            }
+        }
+        data
+    }
+
+    #[test]
+    fn a_dynamic_tick_array_decodes_and_a_malformed_one_is_refused() {
+        let data = dynamic_tick_array(-880, false);
+        assert_eq!(data.len(), 148 + 2 * DYNAMIC_TICK_DATA_SIZE);
+        let ticks = decode_tick_array(&data, -880, 10).expect("well-formed dynamic array");
+        assert_eq!(ticks.len(), 2);
+        assert_eq!((ticks[0].tick, ticks[0].liquidity_net), (-860, 5_000));
+        assert_eq!((ticks[1].tick, ticks[1].liquidity_net), (-480, -5_000));
+
+        assert!(
+            decode_tick_array(&data, 0, 10).is_none(),
+            "wrong start index"
+        );
+        assert!(
+            decode_tick_array(&dynamic_tick_array(-880, true), -880, 10).is_none(),
+            "a bitmap that disagrees with the tags"
+        );
+        assert!(
+            decode_tick_array(&data[..data.len() - 1], -880, 10).is_none(),
+            "a truncated account"
+        );
+    }
 
     fn market(
         liquidity: u128,

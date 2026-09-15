@@ -298,6 +298,13 @@ impl TransactionProcessor {
                         input_mint = SOL_MINT.to_string();
                         output_mint = primary_mint.clone();
 
+                        // True when one of the WSOL measurements below found the swap's
+                        // input. Only an estimate may be reconciled upward afterwards: a
+                        // measured wrap is the swap, and every larger outflow from the wallet
+                        // is something else -- a route program charging the wallet rent for
+                        // its own account booked a 0.005 SOL buy as 0.013 SOL.
+                        let mut wrap_measured = true;
+
                         // Prefer authoritative WSOL wrap deposit:
                         // 1) Sum of system transfers from wallet -> wallet-owned WSOL ATA(s)
                         if let Some(lamports) =
@@ -343,6 +350,7 @@ impl TransactionProcessor {
                                 .clamp(0.0, u64::MAX as f64)
                                 as u64;
                         } else {
+                            wrap_measured = false;
                             // Fallbacks: instruction-derived system transfer, then SOL delta for swap calculation
                             if let Some(lamports) =
                                 find_largest_system_transfer_from_wallet(&tx_data, &wallet_key)
@@ -365,8 +373,12 @@ impl TransactionProcessor {
                             }
                         }
 
-                        // Reconcile with SOL delta minus non-swap costs to capture any missed micro outflows
-                        if let Some(sol_delta_ui) = sol_change_wallet.map(|v| v.abs()) {
+                        // Reconcile an ESTIMATED input with SOL delta minus non-swap costs to
+                        // capture any missed micro outflows. Skipped when the wrap was measured.
+                        if let Some(sol_delta_ui) = sol_change_wallet
+                            .filter(|_| !wrap_measured)
+                            .map(|v| v.abs())
+                        {
                             let fb = &analysis.pnl.fee_breakdown;
                             let non_swap_costs =
                                 fb.base_fee + fb.priority_fee + fb.mev_tips + fb.rent_costs;
@@ -401,8 +413,9 @@ impl TransactionProcessor {
                                 let account = sol_change.1.account.clone();
                                 let change = sol_change.1.change;
 
-                                // Look specifically for the user wallet outflow
-                                if account == wallet_key && change < 0.0 {
+                                // Look specifically for the user wallet outflow, and only
+                                // when the input is still an estimate.
+                                if !wrap_measured && account == wallet_key && change < 0.0 {
                                     let total_outflow = change.abs();
                                     let fb = &analysis.pnl.fee_breakdown;
                                     let transaction_costs =
@@ -650,40 +663,6 @@ impl TransactionProcessor {
                         .cloned()
                         .unwrap_or_default(),
                 };
-
-                // Add sanity checks for unreasonable swap amounts (user trades max 0.01 SOL)
-                if self.debug_enabled {
-                    match direction {
-                        crate::chains::solana::transactions::analyzer::classify::SwapDirection::SolToToken => {
-                            if input_ui > 0.011 {
-                                // Allow small buffer above 0.01
-                                logger::info(
-                                    LogTag::Transactions,
-                                    &format!(
-                    "Buy amount {:.9} SOL exceeds expected max of 0.01 SOL for wallet {}",
-                    input_ui,
-                    self.wallet_pubkey
-                  ),
-                                );
-                            }
-                        }
-                        crate::chains::solana::transactions::analyzer::classify::SwapDirection::TokenToSol => {
-                            // For sells, allow larger amounts due to profit/loss but warn if extremely large
-                            if output_ui > 0.1 {
-                                // 10x the normal buy amount
-                                logger::info(
-                                    LogTag::Transactions,
-                                    &format!(
-                    "Sell output {:.9} SOL is unusually large for wallet {} (expected < 0.1 SOL)",
-                    output_ui,
-                    self.wallet_pubkey
-                  ),
-                                );
-                            }
-                        }
-                        _ => {}
-                    }
-                }
 
                 // Map PnL main component if present
                 let swap_pnl_info = if let Some(main) = &analysis.pnl.main_pnl {

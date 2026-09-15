@@ -46,6 +46,13 @@ pub enum Error {
         instruction: &'static str,
         detail: String,
     },
+    /// A built transaction failed its pre-send simulation. Nothing was
+    /// submitted, so another router may safely try the same trade.
+    #[error("{router} transaction failed simulation: {detail}")]
+    SimulationRejected {
+        router: &'static str,
+        detail: String,
+    },
     /// A direct pool swap failed. Wrapped transparently so the engine's own
     /// typed cause survives the trip up to the caller: whether anything was
     /// submitted, and whether the failure says anything about the token, are
@@ -81,7 +88,8 @@ impl ErrorClass for Error {
             | Error::SecureStorage(_)
             | Error::AccountNotFound { .. }
             | Error::Decode { .. }
-            | Error::InstructionBuild { .. } => false,
+            | Error::InstructionBuild { .. }
+            | Error::SimulationRejected { .. } => false,
             // A direct swap is never retried from here. The engine already
             // distinguishes "nothing was submitted" from "something may have
             // landed", and only the caller holding the position knows which of
@@ -106,7 +114,9 @@ impl ErrorClass for Error {
             | Error::KeypairUnavailable { .. }
             | Error::SecureStorage(_) => Severity::Critical,
             Error::Rpc { .. } => Severity::Warning,
-            Error::Decode { .. } | Error::InstructionBuild { .. } => Severity::Error,
+            Error::Decode { .. }
+            | Error::InstructionBuild { .. }
+            | Error::SimulationRejected { .. } => Severity::Error,
             // A swap that may have landed needs an operator's eyes on it.
             Error::DirectSwap(e) if e.submitted() => Severity::Critical,
             Error::DirectSwap(_) => Severity::Error,
@@ -123,6 +133,7 @@ impl ErrorClass for Error {
             Error::AccountNotFound { .. } => 404,
             Error::Rpc { .. } => 503,
             Error::Decode { .. } | Error::InstructionBuild { .. } => 500,
+            Error::SimulationRejected { .. } => 422,
             Error::DirectSwap(_) => 502,
         }
     }

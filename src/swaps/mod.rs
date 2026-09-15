@@ -6,6 +6,7 @@
 pub mod error;
 pub mod operations;
 mod operations_wallet;
+pub mod progress;
 pub mod registry;
 pub mod router;
 pub mod types;
@@ -17,6 +18,7 @@ pub use operations::{
     unconfirmed_swap_signature, unconfirmed_swap_signature_from_message,
 };
 pub use operations_wallet::quote_and_execute_for_wallet;
+pub use progress::{with_swap_stage_listener, SwapStage, SwapStageListener};
 pub use registry::{get_registry, try_get_registry, RouterRegistry};
 pub use router::SwapRouter;
 pub use types::{ExitType, Quote, QuoteRequest, RouterChoice, SwapMode, SwapResult};

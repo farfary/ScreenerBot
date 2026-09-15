@@ -432,6 +432,11 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                  // Handle expired entry transactions by removing orphan positions or flagging DCA failures
                  for item in expired_items {
                    if item.kind == VerificationKind::Entry {
+                     crate::actions::settle_verification(
+                       &item.signature,
+                       Err("Verification expired: the transaction never landed".to_owned()),
+                     )
+                     .await;
                      if item.is_dca {
                        if let Some(position_id) = item.position_id {
                          let transition = super::transitions::PositionTransition::DcaFailed {
@@ -505,9 +510,13 @@ async fn verification_worker(shutdown: Arc<Notify>) {
 
                    match verify_transaction(&item).await {
                      VerificationOutcome::Transition(transition) => {
+                       let verdict = verification_verdict(&transition);
                        match apply_transition(transition).await {
                          Ok(effects) => {
                            remove_verification(&item.signature).await;
+                           if let Some(verdict) = verdict {
+                             crate::actions::settle_verification(&item.signature, verdict).await;
+                           }
 
                            // Update verification metrics
                            {
@@ -724,6 +733,12 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                            }
                          }
 
+                         crate::actions::settle_verification(
+                           &item.signature,
+                           Err(format!("Verification gave up: {give_up_reason:?}")),
+                         )
+                         .await;
+
                          // Don't requeue - abandon this verification
                          continue;
                        }
@@ -778,6 +793,11 @@ async fn verification_worker(shutdown: Arc<Notify>) {
 
                        let _ = apply_transition(transition).await;
                        remove_verification(&item.signature).await;
+                       crate::actions::settle_verification(
+                         &item.signature,
+                         Err("The transaction failed on chain".to_owned()),
+                       )
+                       .await;
 
                        // Emit verification_finished (permanent_failure)
                        crate::events::record_position_event_flexible(
@@ -802,5 +822,26 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                }
              }
            }
+    }
+}
+
+/// What a verified transition means for a trade action waiting on its
+/// signature. `None` for transitions that settle nothing a user is waiting on.
+fn verification_verdict(
+    transition: &super::transitions::PositionTransition,
+) -> Option<crate::actions::VerificationVerdict> {
+    use super::transitions::PositionTransition as T;
+    match transition {
+        T::EntryVerified { .. }
+        | T::ExitVerified { .. }
+        | T::PartialExitVerified { .. }
+        | T::DcaVerified { .. }
+        // The sell landed and was verified; only a residual is left to retry.
+        | T::ExitResidualClearForRetry { .. } => Some(Ok(())),
+        T::DcaFailed { reason, .. } => Some(Err(reason.clone())),
+        T::ExitFailedClearForRetry { .. } => {
+            Some(Err("The sell transaction failed on chain".to_owned()))
+        }
+        _ => None,
     }
 }

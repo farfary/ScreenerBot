@@ -140,6 +140,29 @@ struct SwapInfo {
     label: Option<String>,
 }
 
+/// Nominal compute units used to ESTIMATE a Jupiter swap's priority fee before
+/// the transaction is built. Jupiter sizes the real limit when
+/// `dynamicComputeUnitLimit` is on; this only fills the advisory estimate the
+/// router comparison and the paper simulator use.
+const JUPITER_ESTIMATED_COMPUTE_UNITS: u64 = 300_000;
+
+impl JupiterRouter {
+    /// The priority fee a Jupiter swap is expected to pay, in lamports.
+    pub fn estimated_priority_fee_lamports() -> u64 {
+        JUPITER_ESTIMATED_COMPUTE_UNITS
+            .saturating_mul(with_config(|cfg| {
+                cfg.swaps.jupiter.priority_fee_micro_lamports
+            }))
+            .div_ceil(1_000_000)
+    }
+
+    /// One signature plus the expected priority fee.
+    pub fn estimated_network_fee_lamports() -> u64 {
+        crate::chains::solana::swaps::direct::compute::BASE_SIGNATURE_FEE_LAMPORTS
+            .saturating_add(Self::estimated_priority_fee_lamports())
+    }
+}
+
 #[derive(Debug, Serialize)]
 struct JupiterSwapRequest {
     #[serde(rename = "userPublicKey")]
@@ -152,10 +175,10 @@ struct JupiterSwapRequest {
     )]
     dynamic_compute_unit_limit: Option<bool>,
     #[serde(
-        rename = "prioritizationFeeLamports",
+        rename = "computeUnitPriceMicroLamports",
         skip_serializing_if = "Option::is_none"
     )]
-    prioritization_fee_lamports: Option<u64>,
+    compute_unit_price_micro_lamports: Option<u64>,
     #[serde(rename = "platformFeeBps", skip_serializing_if = "Option::is_none")]
     platform_fee_bps: Option<u16>,
     #[serde(rename = "feeAccount", skip_serializing_if = "Option::is_none")]
@@ -331,9 +354,11 @@ pub(crate) async fn execute_with_keypair(
     let swap_req = JupiterSwapRequest {
         user_public_key: keypair.pubkey().to_string(),
         quote_response,
-        dynamic_compute_unit_limit: Some(true),
-        prioritization_fee_lamports: Some(with_config(|cfg| {
-            cfg.swaps.jupiter.default_priority_fee
+        dynamic_compute_unit_limit: Some(with_config(|cfg| {
+            cfg.swaps.jupiter.dynamic_compute_unit_limit
+        })),
+        compute_unit_price_micro_lamports: Some(with_config(|cfg| {
+            cfg.swaps.jupiter.priority_fee_micro_lamports
         })),
         platform_fee_bps: None, // Already set in quote request
         fee_account,
@@ -576,10 +601,7 @@ impl SwapRouter for JupiterRouter {
             platform_fee_lamports: Self::platform_fee_lamports(&quote_response),
             // One signature plus the prioritization fee this router asks for at
             // swap-build time -- the two components the wallet actually pays.
-            estimated_network_fee_lamports: Some(
-                crate::chains::solana::swaps::direct::compute::BASE_SIGNATURE_FEE_LAMPORTS
-                    .saturating_add(with_config(|cfg| cfg.swaps.jupiter.default_priority_fee)),
-            ),
+            estimated_network_fee_lamports: Some(Self::estimated_network_fee_lamports()),
             slippage_bps,
             route_plan,
             swap_mode: request.swap_mode,
@@ -611,8 +633,8 @@ impl SwapRouter for JupiterRouter {
             dynamic_compute_unit_limit: Some(with_config(|cfg| {
                 cfg.swaps.jupiter.dynamic_compute_unit_limit
             })),
-            prioritization_fee_lamports: Some(with_config(|cfg| {
-                cfg.swaps.jupiter.default_priority_fee
+            compute_unit_price_micro_lamports: Some(with_config(|cfg| {
+                cfg.swaps.jupiter.priority_fee_micro_lamports
             })),
             platform_fee_bps: None, // Already set in quote request
             fee_account: fee_account.clone(),

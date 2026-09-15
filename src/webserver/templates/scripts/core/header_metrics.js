@@ -243,10 +243,13 @@ function updateTicker(metrics) {
     } else {
       const count = metrics.system.unhealthy_services?.length ?? 0;
       const dotClass = metrics.system.critical_degraded ? "error" : "warning";
-      servicesText.innerHTML = `<span class="status-dot ${dotClass}"></span>Services: <strong>${count} Issues</strong>`;
+      servicesText.innerHTML = `<span class="status-dot ${dotClass}"></span>Services: <strong>${count} ${count === 1 ? "Issue" : "Issues"}</strong>`;
     }
   }
 }
+
+/** Dispatched by `core/action_toasts.js` when a trade completes or fails. */
+const TRADE_SETTLED_EVENT = "screenerbot:trade-settled";
 
 export function createHeaderMetrics({ state, setAvailability }) {
   let metricsPoller = null;
@@ -316,6 +319,10 @@ export function createHeaderMetrics({ state, setAvailability }) {
           metricsPoller.resume();
           fetchHeaderMetrics().catch(() => {});
         }
+      });
+      // A settled trade moves the wallet; show it now instead of on the next poll.
+      window.addEventListener(TRADE_SETTLED_EVENT, () => {
+        fetchHeaderMetrics().catch(() => {});
       });
       visibilityHandlerAdded = true;
     }

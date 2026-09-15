@@ -125,12 +125,12 @@ pub(crate) async fn best_quote_on(
         return Err(select_quote_failure(errors));
     }
 
-    // Select best quote (highest output)
+    // Select best quote: the most output the wallet keeps after network fees.
     let best = quotes
         .into_iter()
         .max_by(|(left_priority, left), (right_priority, right)| {
-            left.output_amount
-                .cmp(&right.output_amount)
+            output_after_network_fee(left)
+                .cmp(&output_after_network_fee(right))
                 // `max_by` wins a greater ordering; reverse priority so the
                 // lower configured priority deterministically wins a tie.
                 .then_with(|| right_priority.cmp(left_priority))
@@ -150,6 +150,31 @@ pub(crate) async fn best_quote_on(
     );
 
     Ok(best)
+}
+
+/// A quote's output with its estimated network fee taken out, so routers that
+/// ask for different priority fees are compared on what the wallet keeps.
+///
+/// The fee is lamports of the native asset. When the native asset is the output
+/// it is subtracted directly; when it is the input it is converted into output
+/// units at the quote's own rate. A pair with no native leg, or a quote with no
+/// estimate, compares on its raw output.
+fn output_after_network_fee(quote: &Quote) -> u64 {
+    let Some(fee) = quote.estimated_network_fee_lamports else {
+        return quote.output_amount;
+    };
+    let adapter = crate::chains::adapter();
+    if adapter.is_native_asset(&quote.output_mint) {
+        quote.output_amount.saturating_sub(fee)
+    } else if adapter.is_native_asset(&quote.input_mint) && quote.input_amount > 0 {
+        let fee_in_output =
+            u128::from(quote.output_amount) * u128::from(fee) / u128::from(quote.input_amount);
+        quote
+            .output_amount
+            .saturating_sub(u64::try_from(fee_in_output).unwrap_or(u64::MAX))
+    } else {
+        quote.output_amount
+    }
 }
 
 /// Reduce the per-router failures to the one verdict that best describes the
@@ -349,8 +374,13 @@ pub async fn execute_swap_with_fallback(token: &Token, quote: Quote) -> Result<S
     let start = Instant::now();
 
     // Try primary router
+    super::progress::report_swap_stage(super::progress::SwapStage::Submitting {
+        router: primary.name().to_owned(),
+    })
+    .await;
     match primary.execute_swap(token, &quote).await {
         Ok(mut result) => {
+            schedule_post_swap_cleanup(&quote);
             result.execution_time_ms = start.elapsed().as_millis() as u64;
             logger::info(
                 LogTag::Swap,
@@ -466,8 +496,13 @@ pub async fn execute_swap_with_fallback(token: &Token, quote: Quote) -> Result<S
                 };
 
                 // Execute fallback swap
+                super::progress::report_swap_stage(super::progress::SwapStage::Submitting {
+                    router: fallback_router.name().to_owned(),
+                })
+                .await;
                 match fallback_router.execute_swap(token, &fallback_quote).await {
                     Ok(mut result) => {
+                        schedule_post_swap_cleanup(&fallback_quote);
                         result.execution_time_ms = start.elapsed().as_millis() as u64;
                         logger::info(
                             LogTag::Swap,
@@ -513,6 +548,15 @@ pub async fn execute_swap_with_fallback(token: &Token, quote: Quote) -> Result<S
 // ============================================================================
 // HELPER FUNCTIONS
 // ============================================================================
+
+/// Hand a confirmed swap with a native-asset leg to the post-swap cleanup,
+/// which reclaims the wrapped-SOL account a router may have left open.
+fn schedule_post_swap_cleanup(quote: &Quote) {
+    let adapter = crate::chains::adapter();
+    if adapter.is_native_asset(&quote.input_mint) || adapter.is_native_asset(&quote.output_mint) {
+        crate::chains::solana::assets::ata::schedule_wsol_sweep();
+    }
+}
 
 /// The signature of a swap that WAS SUBMITTED but whose confirmation timed out.
 ///
@@ -644,6 +688,8 @@ fn is_retryable_error(error: &Error) -> bool {
         Error::Solana(crate::chains::solana::Error::DirectSwap(direct)) => {
             direct.safe_to_fallback()
         }
+        // A pre-send simulation failure proves nothing was submitted.
+        Error::Solana(crate::chains::solana::Error::SimulationRejected { .. }) => true,
         _ => false,
     }
 }

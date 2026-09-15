@@ -19,9 +19,65 @@ const SELL_STEPS: &[&str] = &["Validating", "Getting Quote", "Executing Swap", "
 /// Steps for manual DCA/add action
 const ADD_STEPS: &[&str] = &["Validating", "Getting Quote", "Executing Swap", "Verifying"];
 
+/// The router that submitted a trade, written by the swap-stage listener.
+type RouterSlot = std::sync::Arc<std::sync::Mutex<Option<String>>>;
+
+/// Wait for verification of `signature`. Without a signature there is nothing
+/// the verifier can settle, so the action completes on the swap alone.
+async fn await_verification_or_complete(action_id: &str, signature: Option<&str>) {
+    match signature {
+        Some(signature) => {
+            crate::actions::await_verification(action_id, STEP_VERIFY, signature).await
+        }
+        None => {
+            update_step(
+                action_id,
+                STEP_VERIFY,
+                StepStatus::Completed,
+                None,
+                Some(json!({"verification": "unavailable"})),
+            )
+            .await;
+            complete_action_success(action_id).await;
+        }
+    }
+}
+
+fn swap_stage_listener(action_id: &str, slot: &RouterSlot) -> crate::swaps::SwapStageListener {
+    let action_id = action_id.to_owned();
+    let slot = slot.clone();
+    std::sync::Arc::new(move |stage: crate::swaps::SwapStage| {
+        let crate::swaps::SwapStage::Submitting { router } = stage;
+        if let Ok(mut current) = slot.lock() {
+            *current = Some(router.clone());
+        }
+        let action_id = action_id.clone();
+        Box::pin(async move {
+            let metadata = json!({"router": router});
+            update_step(
+                &action_id,
+                STEP_QUOTE,
+                StepStatus::Completed,
+                None,
+                Some(metadata.clone()),
+            )
+            .await;
+            update_step(
+                &action_id,
+                STEP_SWAP,
+                StepStatus::InProgress,
+                None,
+                Some(metadata),
+            )
+            .await;
+        })
+    })
+}
+
 /// Action tracker for manual buy operation
 pub struct ManualBuyAction {
     pub action_id: String,
+    router: RouterSlot,
 }
 
 impl ManualBuyAction {
@@ -47,7 +103,10 @@ impl ManualBuyAction {
         register_action(action)
             .await
             .map_err(|e| Error::ManualTradeRecord { source: e })?;
-        Ok(Self { action_id })
+        Ok(Self {
+            action_id,
+            router: RouterSlot::default(),
+        })
     }
 
     /// Start validation step
@@ -101,7 +160,10 @@ impl ManualBuyAction {
 
     /// Complete quote step
     pub async fn complete_quote(&self, router: Option<&str>) {
-        let metadata = router.map(|r| json!({"router": r}));
+        let metadata = router
+            .map(str::to_owned)
+            .or_else(|| self.executed_router())
+            .map(|r| json!({"router": r}));
         update_step(
             &self.action_id,
             STEP_QUOTE,
@@ -189,21 +251,21 @@ impl ManualBuyAction {
         complete_action_success(&self.action_id).await;
     }
 
-    /// Skip verification (for async verification)
-    pub async fn skip_verify_async(&self, signature: &str) {
-        let metadata = json!({
-            "verification": "async",
-            "signature": signature
-        });
-        update_step(
-            &self.action_id,
-            STEP_VERIFY,
-            StepStatus::Completed,
-            None,
-            Some(metadata),
-        )
-        .await;
-        complete_action_success(&self.action_id).await;
+    /// Leave the verification step running until the verifier settles
+    /// `signature`; the action then completes or fails on that verdict.
+    pub async fn await_verification(&self, signature: Option<&str>) {
+        await_verification_or_complete(&self.action_id, signature).await;
+    }
+
+    /// Listener that marks the quote done and the swap running, naming the
+    /// router, the moment a router starts submitting.
+    pub fn swap_stage_listener(&self) -> crate::swaps::SwapStageListener {
+        swap_stage_listener(&self.action_id, &self.router)
+    }
+
+    /// The router that submitted this trade, once one has.
+    fn executed_router(&self) -> Option<String> {
+        self.router.lock().ok().and_then(|router| router.clone())
     }
 
     /// Fail the action with error
@@ -215,6 +277,7 @@ impl ManualBuyAction {
 /// Action tracker for manual sell operation
 pub struct ManualSellAction {
     pub action_id: String,
+    router: RouterSlot,
 }
 
 impl ManualSellAction {
@@ -246,7 +309,10 @@ impl ManualSellAction {
         register_action(action)
             .await
             .map_err(|e| Error::ManualTradeRecord { source: e })?;
-        Ok(Self { action_id })
+        Ok(Self {
+            action_id,
+            router: RouterSlot::default(),
+        })
     }
 
     /// Start validation step
@@ -300,7 +366,10 @@ impl ManualSellAction {
 
     /// Complete quote step
     pub async fn complete_quote(&self, router: Option<&str>) {
-        let metadata = router.map(|r| json!({"router": r}));
+        let metadata = router
+            .map(str::to_owned)
+            .or_else(|| self.executed_router())
+            .map(|r| json!({"router": r}));
         update_step(
             &self.action_id,
             STEP_QUOTE,
@@ -390,21 +459,21 @@ impl ManualSellAction {
         complete_action_success(&self.action_id).await;
     }
 
-    /// Skip verification (for async verification)
-    pub async fn skip_verify_async(&self, signature: &str) {
-        let metadata = json!({
-            "verification": "async",
-            "signature": signature
-        });
-        update_step(
-            &self.action_id,
-            STEP_VERIFY,
-            StepStatus::Completed,
-            None,
-            Some(metadata),
-        )
-        .await;
-        complete_action_success(&self.action_id).await;
+    /// Leave the verification step running until the verifier settles
+    /// `signature`; the action then completes or fails on that verdict.
+    pub async fn await_verification(&self, signature: Option<&str>) {
+        await_verification_or_complete(&self.action_id, signature).await;
+    }
+
+    /// Listener that marks the quote done and the swap running, naming the
+    /// router, the moment a router starts submitting.
+    pub fn swap_stage_listener(&self) -> crate::swaps::SwapStageListener {
+        swap_stage_listener(&self.action_id, &self.router)
+    }
+
+    /// The router that submitted this trade, once one has.
+    fn executed_router(&self) -> Option<String> {
+        self.router.lock().ok().and_then(|router| router.clone())
     }
 
     /// Fail the action with error
@@ -416,6 +485,7 @@ impl ManualSellAction {
 /// Action tracker for manual DCA/add operation
 pub struct ManualAddAction {
     pub action_id: String,
+    router: RouterSlot,
 }
 
 impl ManualAddAction {
@@ -447,7 +517,10 @@ impl ManualAddAction {
         register_action(action)
             .await
             .map_err(|e| Error::ManualTradeRecord { source: e })?;
-        Ok(Self { action_id })
+        Ok(Self {
+            action_id,
+            router: RouterSlot::default(),
+        })
     }
 
     /// Start validation step
@@ -501,7 +574,10 @@ impl ManualAddAction {
 
     /// Complete quote step
     pub async fn complete_quote(&self, router: Option<&str>) {
-        let metadata = router.map(|r| json!({"router": r}));
+        let metadata = router
+            .map(str::to_owned)
+            .or_else(|| self.executed_router())
+            .map(|r| json!({"router": r}));
         update_step(
             &self.action_id,
             STEP_QUOTE,
@@ -589,21 +665,21 @@ impl ManualAddAction {
         complete_action_success(&self.action_id).await;
     }
 
-    /// Skip verification (for async verification)
-    pub async fn skip_verify_async(&self, signature: &str) {
-        let metadata = json!({
-            "verification": "async",
-            "signature": signature
-        });
-        update_step(
-            &self.action_id,
-            STEP_VERIFY,
-            StepStatus::Completed,
-            None,
-            Some(metadata),
-        )
-        .await;
-        complete_action_success(&self.action_id).await;
+    /// Leave the verification step running until the verifier settles
+    /// `signature`; the action then completes or fails on that verdict.
+    pub async fn await_verification(&self, signature: Option<&str>) {
+        await_verification_or_complete(&self.action_id, signature).await;
+    }
+
+    /// Listener that marks the quote done and the swap running, naming the
+    /// router, the moment a router starts submitting.
+    pub fn swap_stage_listener(&self) -> crate::swaps::SwapStageListener {
+        swap_stage_listener(&self.action_id, &self.router)
+    }
+
+    /// The router that submitted this trade, once one has.
+    fn executed_router(&self) -> Option<String> {
+        self.router.lock().ok().and_then(|router| router.clone())
     }
 
     /// Fail the action with error

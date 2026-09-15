@@ -1613,6 +1613,12 @@ export class TradeActionDialog {
       return;
     }
 
+    // The quote panel is showing why this trade cannot be priced right now.
+    if (this.quoteSection?.dataset.state === "error") {
+      this.confirmBtn.disabled = true;
+      return;
+    }
+
     const value = this._getInputValue();
 
     if (value === null || value === "") {

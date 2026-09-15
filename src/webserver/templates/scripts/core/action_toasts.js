@@ -73,18 +73,30 @@ function stepMessage(action) {
   const index = Number(state.current_step_index) || 0;
   if (!step) return null;
 
-  return total > 0 ? `${step} · ${index + 1}/${total}` : step;
+  const router = routerOf(action);
+  const label = router ? `${step} via ${router}` : step;
+  return total > 0 ? `${label} · ${index + 1}/${total}` : label;
+}
+
+/** The router that submitted the trade, once the backend has recorded it. */
+function routerOf(action) {
+  const steps = Array.isArray(action?.steps) ? action.steps : [];
+  const router = steps.find((step) => typeof step?.metadata?.router === "string")?.metadata
+    ?.router;
+  return router || "";
 }
 
 /** What the trade committed, when the backend recorded it. */
 function outcomeMessage(action) {
   const meta = action?.metadata || {};
+  const router = routerOf(action);
+  const via = router ? ` via ${router}` : "";
   const size = Number(meta.size_sol);
-  if (Number.isFinite(size) && size > 0) return `${size} SOL`;
+  if (Number.isFinite(size) && size > 0) return `${size} SOL${via}`;
 
   const percentage = Number(meta.percentage);
   if (Number.isFinite(percentage) && percentage > 0) {
-    return percentage >= 100 ? "Full exit" : `${percentage}% exit`;
+    return `${percentage >= 100 ? "Full exit" : `${percentage}% exit`}${via}`;
   }
 
   return typeof meta.reason === "string" && meta.reason ? meta.reason : null;
@@ -124,6 +136,9 @@ function showLive(action) {
 
 function showResolved(action, status) {
   markResolved(action.id);
+  if (status === "completed" || status === "failed") {
+    window.dispatchEvent(new CustomEvent("screenerbot:trade-settled"));
+  }
 
   if (status === "completed") {
     toastManager.show({

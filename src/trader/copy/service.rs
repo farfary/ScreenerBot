@@ -422,7 +422,8 @@ fn decision_price(mint: &str, target_price_sol: Option<f64>) -> PaperMarket {
 }
 
 pub(super) fn paper_costs() -> PaperCosts {
-    let priority_lamports = with_config(|config| config.swaps.jupiter.default_priority_fee);
+    let priority_lamports =
+        crate::chains::solana::swaps::routers::JupiterRouter::estimated_priority_fee_lamports();
     PaperCosts {
         network_fee_sol: 0.000005,
         priority_fee_sol: crate::chains::adapter().raw_to_native(priority_lamports),

@@ -49,6 +49,7 @@ pub mod database;
 pub use database as db;
 pub mod state;
 pub mod types;
+pub mod verification;
 
 // Re-export commonly used types
 pub use types::{
@@ -62,6 +63,8 @@ pub use state::{
     get_unread_count, init_database, mark_action_read, mark_all_actions_read, query_action_history,
     register_action, spawn_cleanup_task, sync_from_db, update_step,
 };
+
+pub use verification::{await_verification, settle_verification, VerificationVerdict};
 
 // Re-export broadcast functions
 pub use broadcast::{broadcast_update, subscribe, subscriber_count};

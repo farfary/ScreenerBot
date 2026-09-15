@@ -6,11 +6,13 @@
 //!
 //! # Pool resolution
 //!
-//! The pool comes from the live pool-price cache — the same pool whose price the
-//! trader made its decision on. That is the point of a direct swap: the price a
-//! decision was made on is the price the decision trades at. A resolved pool is
-//! still checked against the requested pair before anything is built, because a
-//! mint-keyed lookup only proves the pool holds ONE of the two mints.
+//! The live pool-price cache comes first — the same pool whose price the trader
+//! made its decision on, so the price a decision was made on is the price the
+//! decision trades at. When the token has no live price, the pools the pool
+//! service discovered for the pair are tried instead, canonical first and then
+//! by liquidity, up to [`MAX_CANDIDATE_POOLS`]; the first one that quotes wins.
+//! Every candidate is still checked against the requested pair before anything
+//! is built.
 //!
 //! # Failure classification
 //!
@@ -56,6 +58,10 @@ struct DirectExecutionData {
     accepted_min_out: u64,
 }
 
+/// Most pools one direct quote tries. Each costs an account batch, and a pair
+/// whose best few pools cannot be traded is better left to an aggregator.
+const MAX_CANDIDATE_POOLS: usize = 3;
+
 /// The direct pool-swap router.
 pub struct DirectPoolRouter;
 
@@ -65,24 +71,124 @@ impl DirectPoolRouter {
         Self
     }
 
-    /// The pool to trade a pair in, from the live pool-price cache.
+    /// The pools to try for a pair, best first, at most [`MAX_CANDIDATE_POOLS`].
     ///
-    /// Tries the non-reference mint first: a pool is keyed in the cache by the
-    /// token it prices, and for a SOL or USDC pair that is the other leg.
-    fn resolve_pool(input_mint: &str, output_mint: &str) -> Option<Pubkey> {
-        let ordered = if is_reference_mint(input_mint) {
-            [output_mint, input_mint]
+    /// The live pool-price cache comes first: it is the pool the trader's
+    /// decision was priced on. A token with no live pool price yet -- a first
+    /// buy, or a holding priced from elsewhere -- falls back to the pools the
+    /// pool service has discovered for it, canonical first and then by
+    /// liquidity, so a direct swap is not limited to the tokens that happen to
+    /// be priced right now. The pool is keyed by the non-reference leg, which
+    /// is the token for a SOL or USDC pair.
+    fn candidate_pools(input_mint: &str, output_mint: &str) -> Vec<Pubkey> {
+        let (token, other) = if is_reference_mint(input_mint) {
+            (output_mint, input_mint)
         } else {
-            [input_mint, output_mint]
+            (input_mint, output_mint)
         };
-        for mint in ordered {
-            if let Some(price) = crate::pools::get_pool_price(mint) {
-                if let Ok(pool) = Pubkey::from_str(&price.pool_address) {
-                    return Some(pool);
+
+        let mut candidates: Vec<Pubkey> = Vec::new();
+        let mut push = |address: &str| {
+            if let Ok(pool) = Pubkey::from_str(address) {
+                if !candidates.contains(&pool) {
+                    candidates.push(pool);
                 }
             }
+        };
+
+        if let Some(price) = crate::pools::get_pool_price(token) {
+            push(&price.pool_address);
         }
-        None
+
+        let mut discovered = crate::chains::solana::pools::service::get_token_pools(token);
+        discovered.retain(|pool| {
+            let (base, quote) = (pool.base_mint.address(), pool.quote_mint.address());
+            (base == token && quote == other) || (base == other && quote == token)
+        });
+        // `get_token_pools` already puts the canonical pool first.
+        if discovered.len() > 1 {
+            discovered[1..].sort_by(|a, b| b.liquidity_usd.total_cmp(&a.liquidity_usd));
+        }
+        for pool in &discovered {
+            push(pool.pool_id.address());
+        }
+
+        candidates.truncate(MAX_CANDIDATE_POOLS);
+        candidates
+    }
+
+    /// Quote one pool, with every refusal a single pool can produce.
+    async fn quote_pool(&self, request: &QuoteRequest, pool: Pubkey) -> QuoteResult<Quote> {
+        let intent = Self::intent_for(request, pool)?;
+        let (quote, market) = direct::quote(&intent)
+            .await
+            .map_err(|e| e.into_quote_error(self.name()))?;
+
+        // A caller that excluded a DEX excluded it from EVERY router. The
+        // aggregator applies the exclusion while routing; here the pool is
+        // already chosen, so the only correct answer is to decline it.
+        if let Some(label) = excluded_venue(request.exclude_dexes.as_deref(), market.program()) {
+            return Err(QuoteError::NoRoute {
+                router: self.name().to_owned(),
+                detail: format!("this pool is a {label} pool, which the request excluded"),
+            });
+        }
+
+        let max_price_impact_pct = with_config(|cfg| cfg.swaps.direct.max_price_impact_pct);
+        if !quote.price_impact_pct.is_finite()
+            || quote.price_impact_pct < 0.0
+            || quote.price_impact_pct > max_price_impact_pct
+        {
+            return Err(QuoteError::NoRoute {
+                router: self.name().to_owned(),
+                detail: format!(
+                    "price impact {:.2}% exceeds the {max_price_impact_pct:.2}% ceiling -- an \
+                     aggregator that can split the order is the safer choice at this size",
+                    quote.price_impact_pct
+                ),
+            });
+        }
+
+        let execution_data = serde_json::to_vec(&DirectExecutionData {
+            pool: pool.to_string(),
+            amount_in: intent.amount_in,
+            slippage_bps: intent.slippage_bps,
+            accepted_min_net_out: quote.min_net_out,
+            accepted_min_out: quote.min_out,
+        })
+        .map_err(|e| QuoteError::RouterRejected {
+            router: self.name().to_owned(),
+            detail: format!("quote could not be serialised: {e}"),
+        })?;
+
+        Ok(Quote {
+            chain: request.chain,
+            router_id: self.id().to_string(),
+            router_name: self.name().to_string(),
+            input_mint: request.input_mint.clone(),
+            output_mint: request.output_mint.clone(),
+            input_amount: quote.amount_in,
+            // What the WALLET keeps. Reporting the pool's gross output here would
+            // overstate every sell by the platform fee and make the comparison
+            // against an aggregator quote dishonest.
+            output_amount: quote.expected_net_out,
+            minimum_output_amount: quote.min_net_out,
+            price_impact_pct: quote.price_impact_pct,
+            platform_fee_lamports: quote
+                .fee
+                .mint
+                .filter(direct::intent::is_wsol)
+                .map(|_| quote.fee.amount),
+            estimated_network_fee_lamports: direct::build_plan(&intent, market.as_ref(), &quote)
+                .ok()
+                .map(|plan| direct::compute::network_fee_lamports(&plan.instructions)),
+            slippage_bps: quote.slippage_bps,
+            route_plan: market.program().display_name().to_owned(),
+            swap_mode: request.swap_mode,
+            wallet_address: request.wallet_address.clone(),
+            exclude_dexes: request.exclude_dexes.clone(),
+            execution_data,
+        })
     }
 
     /// Build the intent a request describes.
@@ -276,84 +382,24 @@ impl SwapRouter for DirectPoolRouter {
             });
         }
 
-        let pool =
-            Self::resolve_pool(&request.input_mint, &request.output_mint).ok_or_else(|| {
-                QuoteError::NoRoute {
-                    router: self.name().to_owned(),
-                    detail: "no live pool is known for either side of the pair".to_owned(),
-                }
-            })?;
-
-        let intent = Self::intent_for(request, pool)?;
-        let (quote, market) = direct::quote(&intent)
-            .await
-            .map_err(|e| e.into_quote_error(self.name()))?;
-
-        // A caller that excluded a DEX excluded it from EVERY router. The
-        // aggregator applies the exclusion while routing; here the pool is
-        // already chosen, so the only correct answer is to decline it.
-        if let Some(label) = excluded_venue(request.exclude_dexes.as_deref(), market.program()) {
-            return Err(QuoteError::NoRoute {
-                router: self.name().to_owned(),
-                detail: format!("this pool is a {label} pool, which the request excluded"),
-            });
-        }
-
-        let max_price_impact_pct = with_config(|cfg| cfg.swaps.direct.max_price_impact_pct);
-        if !quote.price_impact_pct.is_finite()
-            || quote.price_impact_pct < 0.0
-            || quote.price_impact_pct > max_price_impact_pct
-        {
-            return Err(QuoteError::NoRoute {
-                router: self.name().to_owned(),
-                detail: format!(
-                    "price impact {:.2}% exceeds the {max_price_impact_pct:.2}% ceiling -- an \
-                     aggregator that can split the order is the safer choice at this size",
-                    quote.price_impact_pct
-                ),
-            });
-        }
-
-        let execution_data = serde_json::to_vec(&DirectExecutionData {
-            pool: pool.to_string(),
-            amount_in: intent.amount_in,
-            slippage_bps: intent.slippage_bps,
-            accepted_min_net_out: quote.min_net_out,
-            accepted_min_out: quote.min_out,
-        })
-        .map_err(|e| QuoteError::RouterRejected {
+        let candidates = Self::candidate_pools(&request.input_mint, &request.output_mint);
+        let mut last_error = QuoteError::NoRoute {
             router: self.name().to_owned(),
-            detail: format!("quote could not be serialised: {e}"),
-        })?;
-
-        Ok(Quote {
-            chain: request.chain,
-            router_id: self.id().to_string(),
-            router_name: self.name().to_string(),
-            input_mint: request.input_mint.clone(),
-            output_mint: request.output_mint.clone(),
-            input_amount: quote.amount_in,
-            // What the WALLET keeps. Reporting the pool's gross output here would
-            // overstate every sell by the platform fee and make the comparison
-            // against an aggregator quote dishonest.
-            output_amount: quote.expected_net_out,
-            minimum_output_amount: quote.min_net_out,
-            price_impact_pct: quote.price_impact_pct,
-            platform_fee_lamports: quote
-                .fee
-                .mint
-                .filter(direct::intent::is_wsol)
-                .map(|_| quote.fee.amount),
-            estimated_network_fee_lamports: direct::build_plan(&intent, market.as_ref(), &quote)
-                .ok()
-                .map(|plan| direct::compute::network_fee_lamports(&plan.instructions)),
-            slippage_bps: quote.slippage_bps,
-            route_plan: market.program().display_name().to_owned(),
-            swap_mode: request.swap_mode,
-            wallet_address: request.wallet_address.clone(),
-            exclude_dexes: request.exclude_dexes.clone(),
-            execution_data,
-        })
+            detail: "the pool service knows no pool for this pair yet".to_owned(),
+        };
+        for pool in candidates {
+            match self.quote_pool(request, pool).await {
+                Ok(quote) => return Ok(quote),
+                Err(error) => {
+                    logger::debug(
+                        LogTag::Swap,
+                        &format!("Direct pool {pool} could not quote this trade: {error}"),
+                    );
+                    last_error = error;
+                }
+            }
+        }
+        Err(last_error)
     }
 
     async fn execute_swap(&self, _token: &Token, quote: &Quote) -> Result<SwapResult> {

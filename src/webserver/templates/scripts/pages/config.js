@@ -423,7 +423,7 @@ function renderSectionSummary(metadata) {
   if (metadata.summary) {
     if (typeof metadata.summary.total === "number") {
       summaryItems.push(
-        `<span class="config-summary-badge">${metadata.summary.total} fields</span>`
+        `<span class="config-summary-badge">${fieldCountLabel(metadata.summary.total)}</span>`
       );
     }
     if (typeof metadata.summary.critical === "number" && metadata.summary.critical > 0) {
@@ -455,13 +455,23 @@ function renderSectionSummary(metadata) {
  */
 function sortCategoriesByVisibility(categories) {
   const visibilityOrder = { primary: 0, secondary: 1, technical: 2 };
+  // The category holding a section's on/off switch leads it: nothing below it
+  // matters until it is on.
+  const holdsSwitch = (fields) => fields.some(([key]) => key === "enabled");
   return categories.sort(([catA, fieldsA], [catB, fieldsB]) => {
     const visA = fieldsA[0]?.[1]?.visibility ?? "secondary";
     const visB = fieldsB[0]?.[1]?.visibility ?? "secondary";
     const orderDiff = visibilityOrder[visA] - visibilityOrder[visB];
     if (orderDiff !== 0) return orderDiff;
+    const switchDiff = Number(holdsSwitch(fieldsB)) - Number(holdsSwitch(fieldsA));
+    if (switchDiff !== 0) return switchDiff;
     return catA.localeCompare(catB);
   });
+}
+
+/** "1 field" / "3 fields". */
+function fieldCountLabel(count) {
+  return `${count} ${count === 1 ? "field" : "fields"}`;
 }
 
 /**
@@ -485,13 +495,13 @@ function updateCategoryChip(categoryEl, totalCount, pendingCount, visibleCount) 
   if (!chipEl) return;
   if (pendingCount > 0) {
     chipEl.classList.add("pending");
-    chipEl.textContent = `${totalCount} fields · ${pendingCount} pending`;
+    chipEl.textContent = `${fieldCountLabel(totalCount)} · ${pendingCount} pending`;
   } else {
     chipEl.classList.remove("pending");
-    chipEl.textContent = `${totalCount} fields`;
+    chipEl.textContent = `${fieldCountLabel(totalCount)}`;
   }
   if (typeof visibleCount === "number" && visibleCount !== totalCount) {
-    chipEl.textContent = `${visibleCount} of ${totalCount} fields`;
+    chipEl.textContent = `${visibleCount} of ${fieldCountLabel(totalCount)}`;
   }
 }
 
@@ -568,7 +578,7 @@ function renderCategories(sectionId) {
         <span>${Utils.escapeHtml(category)}</span>
       </div>
       <div class="config-category-meta">
-        <span class="config-category-chip">${fieldsList.length} fields</span>
+        <span class="config-category-chip">${fieldCountLabel(fieldsList.length)}</span>
       </div>
     `;
 
@@ -714,10 +724,10 @@ function renderCategories(sectionId) {
     if (chipEl) {
       if (pendingCount > 0) {
         chipEl.classList.add("pending");
-        chipEl.textContent = `${fieldsList.length} fields · ${pendingCount} pending`;
+        chipEl.textContent = `${fieldCountLabel(fieldsList.length)} · ${pendingCount} pending`;
       } else {
         chipEl.classList.remove("pending");
-        chipEl.textContent = `${fieldsList.length} fields`;
+        chipEl.textContent = `${fieldCountLabel(fieldsList.length)}`;
       }
     }
 
@@ -735,7 +745,7 @@ function renderCategories(sectionId) {
     if (searchTerm.length > 0 && visibleFieldCount !== fieldsList.length) {
       const chipEl = header.querySelector(".config-category-chip");
       if (chipEl) {
-        chipEl.textContent = `${visibleFieldCount} of ${fieldsList.length} fields`;
+        chipEl.textContent = `${visibleFieldCount} of ${fieldCountLabel(fieldsList.length)}`;
       }
     }
 

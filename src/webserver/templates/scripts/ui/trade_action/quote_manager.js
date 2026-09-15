@@ -247,7 +247,9 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
 
     // Price impact with color
     const impactPct = quote.price_impact_pct ?? 0;
-    this.quoteImpactEl.textContent = `${impactPct.toFixed(2)}%`;
+    // A real but sub-basis-point impact must not read as a flat 0.00%.
+    this.quoteImpactEl.textContent =
+      impactPct > 0 && impactPct < 0.01 ? "<0.01%" : `${impactPct.toFixed(2)}%`;
     this.quoteImpactEl.className = "quote-value quote-impact";
     if (impactPct > 5) {
       this.quoteImpactEl.classList.add("impact-high");
@@ -339,6 +341,8 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
     if (state !== "loaded") {
       this.quoteSection.classList.remove("quote-counting");
     }
+    // A failed quote gates the confirm button; a recovered one releases it.
+    this._updateConfirmButton?.();
   };
 
   /**

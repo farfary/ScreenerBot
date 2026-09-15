@@ -322,6 +322,9 @@ function selectTool(toolId, { historyMode = "push" } = {}) {
   const descEl = $("#tool-description");
 
   if (iconEl) iconEl.innerHTML = `<i class="${definition.icon}"></i>`;
+  // The "select a tool" prompt is only true while nothing is selected.
+  const hintEl = $(".sidebar-hint");
+  if (hintEl) hintEl.hidden = true;
   if (titleEl) titleEl.textContent = definition.title;
   if (descEl) descEl.textContent = definition.description;
 

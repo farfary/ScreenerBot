@@ -297,6 +297,12 @@ body.trade-action-dialog-open {
 }
 
 /* Preset Buttons Section */
+.trade-action-presets {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
 .trade-action-preset-section {
   display: flex;
   flex-direction: column;

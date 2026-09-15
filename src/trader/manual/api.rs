@@ -128,10 +128,9 @@ pub async fn manual_buy(
 
     // Execute trade (includes quote + swap). A manual buy is always a Buy, so route
     // straight to the buy executor with the explicit ownership choice.
-    let result = match executors::execute_buy_managed(
-        &decision,
-        positions::PositionOrigin::Manual,
-        management,
+    let result = match crate::swaps::with_swap_stage_listener(
+        action.swap_stage_listener(),
+        executors::execute_buy_managed(&decision, positions::PositionOrigin::Manual, management),
     )
     .await
     {
@@ -156,10 +155,10 @@ pub async fn manual_buy(
     if let Some(ref sig) = result.tx_signature {
         action.complete_swap(sig).await;
         // Verification is async, mark as complete with pending verification
-        action.skip_verify_async(sig).await;
+        action.await_verification(Some(sig)).await;
     } else {
         action.complete_swap("unknown").await;
-        action.skip_verify_async("unknown").await;
+        action.await_verification(None).await;
     }
 
     // Record manual trade
@@ -265,7 +264,12 @@ pub async fn manual_sell(
     };
 
     // Execute trade (includes quote + swap)
-    let result = match executors::execute_trade(&decision).await {
+    let result = match crate::swaps::with_swap_stage_listener(
+        action.swap_stage_listener(),
+        executors::execute_trade(&decision),
+    )
+    .await
+    {
         Ok(result) => result,
         Err(e) => {
             crate::trader::actions::fail_from_error(&action, &e).await;
@@ -286,10 +290,10 @@ pub async fn manual_sell(
 
     if let Some(ref sig) = result.tx_signature {
         action.complete_swap(sig, result.executed_size_sol).await;
-        action.skip_verify_async(sig).await;
+        action.await_verification(Some(sig)).await;
     } else {
         action.complete_swap("unknown", None).await;
-        action.skip_verify_async("unknown").await;
+        action.await_verification(None).await;
     }
 
     // Record manual trade
@@ -414,7 +418,12 @@ pub async fn manual_add(
     };
 
     // Execute trade (includes quote + swap)
-    let result = match executors::execute_trade(&decision).await {
+    let result = match crate::swaps::with_swap_stage_listener(
+        action.swap_stage_listener(),
+        executors::execute_trade(&decision),
+    )
+    .await
+    {
         Ok(result) => result,
         Err(e) => {
             crate::trader::actions::fail_from_error(&action, &e).await;
@@ -435,10 +444,10 @@ pub async fn manual_add(
 
     if let Some(ref sig) = result.tx_signature {
         action.complete_swap(sig).await;
-        action.skip_verify_async(sig).await;
+        action.await_verification(Some(sig)).await;
     } else {
         action.complete_swap("unknown").await;
-        action.skip_verify_async("unknown").await;
+        action.await_verification(None).await;
     }
 
     // Record manual trade
