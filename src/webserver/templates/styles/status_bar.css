@@ -105,7 +105,34 @@
   color: var(--text-muted, #8b949e);
 }
 
-/* The following block is a duplicate and contains syntax errors, so it is removed. */
+/* A narrow window keeps the values and drops the words and dividers, then the
+   version, uptime and RPC detail, so the three groups never run into each other. */
+@media (width <= 760px) {
+  .status-bar {
+    gap: var(--spacing-sm, 8px);
+    padding: 0 var(--spacing-sm, 8px);
+  }
+
+  .status-bar-left,
+  .status-bar-center,
+  .status-bar-right {
+    gap: var(--spacing-sm, 8px);
+    min-width: 0;
+  }
+
+  .status-bar .status-label,
+  .status-bar .status-separator {
+    display: none;
+  }
+}
+
+@media (width <= 520px) {
+  .status-bar-center,
+  .status-item:has(#statusBarVersion),
+  .status-item:has(#statusBarUptime) {
+    display: none;
+  }
+}
 
 /* Reserve space for the fixed status bar at the bottom.
    The status bar is 26px tall, so we need to reduce available

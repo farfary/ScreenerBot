@@ -94,6 +94,9 @@
   --header-text: #fff;
   --link-color: #7ba8d1;
   --link-hover: #0f4c81;
+  /* Filled primary action: white text needs a fill of at least 4.5:1 contrast. */
+  --button-primary-bg: #1565c0;
+  --button-primary-hover: #0f4c81;
   --badge-online: #10b981;
   --badge-error: #d32f2f;
   --badge-loading: #f59e0b;
@@ -293,6 +296,8 @@
   --header-text: #e6edf3;
   --link-color: #58a6ff;
   --link-hover: #79c0ff;
+  --button-primary-bg: #1f6feb;
+  --button-primary-hover: #388bfd;
   --badge-online: #3fb950;
   --badge-error: #f85149;
   --badge-loading: #d29922;

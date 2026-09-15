@@ -136,12 +136,12 @@
 }
 
 .btn-primary {
-  background: var(--link-color);
+  background: var(--button-primary-bg);
   color: #fff;
 }
 
 .btn-primary:hover {
-  background: var(--link-hover);
+  background: var(--button-primary-hover);
 }
 
 .btn-success {
