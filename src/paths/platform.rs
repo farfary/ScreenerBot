@@ -85,10 +85,14 @@ pub fn open_url_in_browser(url: &str) -> Result<()> {
         return Ok(());
     }
 
+    // Never route a URL through `cmd /C start`: cmd parses `&` as a command
+    // separator, so every query parameter after the first is dropped (the
+    // desktop sign-in URL arrived with only `client_id`). The URL protocol
+    // handler receives the argument verbatim, with no shell in between.
     #[cfg(target_os = "windows")]
     {
-        std::process::Command::new("cmd")
-            .args(["/C", "start", "", url])
+        std::process::Command::new("rundll32")
+            .args(["url.dll,FileProtocolHandler", url])
             .spawn()
             .map_err(|e| Error::Io(IoError::from(e)))?;
         return Ok(());
