@@ -229,6 +229,11 @@ impl Service for TokensServiceNew {
         let cleanup_handle = cleanup::start_cleanup_loop(db.clone(), shutdown.clone());
         handles.push(cleanup_handle);
 
+        // Keep on-chain logos and published banners current from the data service
+        let media_handle =
+            crate::tokens::media::start_media_sync_loop(db.clone(), shutdown.clone());
+        handles.push(media_handle);
+
         // Start authority reputation discovery loop (every 5 minutes)
         let auth_db = db.clone();
         let auth_shutdown = shutdown;

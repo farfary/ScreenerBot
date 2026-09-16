@@ -5,6 +5,7 @@ mod authority;
 mod blacklist;
 mod helpers;
 mod market;
+mod media;
 /// Unified database operations for tokens system
 ///
 /// Split into focused submodules:

@@ -262,6 +262,20 @@ pub const CREATE_TABLES: &[&str] = &[
         PRIMARY KEY (chain_id, address)
     )
     "#,
+    // Token logo/banner resolved by the ScreenerBot data service. Only values that
+    // outrank this app's own market providers are kept: an on-chain metadata logo
+    // or a published Token Profile's media (see `tokens::media`).
+    r#"
+    CREATE TABLE IF NOT EXISTS token_media (
+        chain_id TEXT NOT NULL DEFAULT 'solana',
+        mint TEXT NOT NULL,
+        logo_url TEXT,
+        banner_url TEXT,
+        media_last_fetched_at INTEGER NOT NULL,
+        media_next_fetch_at INTEGER NOT NULL,
+        PRIMARY KEY (chain_id, mint)
+    )
+    "#,
 ];
 
 /// All CREATE INDEX statements
@@ -344,6 +358,7 @@ pub const CREATE_INDEXES: &[&str] = &[
     // Authority reputation indexes (for auto-discovery queries)
     "CREATE INDEX IF NOT EXISTS idx_authority_rep_blocked ON authority_reputation(is_blocked) WHERE is_blocked = 1",
     "CREATE INDEX IF NOT EXISTS idx_authority_rep_confidence ON authority_reputation(confidence DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_token_media_next_fetch ON token_media(chain_id, media_next_fetch_at)",
 ];
 
 /// Initialize database schema.

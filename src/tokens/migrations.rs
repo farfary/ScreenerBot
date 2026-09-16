@@ -30,6 +30,7 @@ pub(super) const TOKEN_TABLES: &[&str] = &[
     "rejection_history",
     "rejection_stats",
     "authority_reputation",
+    "token_media",
 ];
 
 /// One additive column. Applied in array order when the table exists and the

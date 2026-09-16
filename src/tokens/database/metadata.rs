@@ -281,6 +281,13 @@ impl TokenDatabase {
             })?;
             result.insert(mint, image_url);
         }
+        // A token's own metadata logo or published profile icon outranks both
+        // providers, including for a mint neither provider has a picture for.
+        for mint in mints {
+            if let Some(logo) = crate::tokens::media::override_logo(mint) {
+                result.insert(mint.clone(), logo);
+            }
+        }
 
         Ok(result)
     }
@@ -395,6 +402,7 @@ impl TokenDatabase {
             let (mint, symbol, name, image_url) = row.map_err(|e| Error::RowDecode {
                 detail: e.to_string(),
             })?;
+            let image_url = crate::tokens::media::resolve_logo(&mint, image_url);
             result.insert(mint, (symbol, name, image_url));
         }
 

@@ -603,9 +603,15 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
         }
     }
 
-    let logo_url = published_profile
-        .as_ref()
-        .and_then(|profile| profile.icon_url.clone())
+    // Same order as every other surface (`tokens::media`): the metadata logo the
+    // data service reported, then the profile icon (read directly here so a
+    // signed-out install still shows it), then the provider's picture.
+    let logo_url = crate::tokens::media::override_logo(&mint)
+        .or_else(|| {
+            published_profile
+                .as_ref()
+                .and_then(|profile| profile.icon_url.clone())
+        })
         .or_else(|| token.image_url.clone());
     let primary_website = websites.first().map(|link| link.url.clone());
 

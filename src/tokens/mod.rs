@@ -25,6 +25,7 @@ pub mod events;
 pub mod favorites;
 pub mod filtered;
 pub mod market;
+pub mod media;
 mod migrations;
 pub mod pool_data;
 pub use pool_data as pools;

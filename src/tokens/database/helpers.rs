@@ -162,9 +162,16 @@ pub(super) fn assemble_token(
         .decimals
         .or_else(|| security_ref.and_then(|data| data.token_decimals));
 
-    // For now, only use primary source-provided images. Fallbacks can be added upstream where DB is available.
-    let resolved_image_url = primary_image_url.or(fallback_image_url);
-    let resolved_header_url = primary_header_url.or(fallback_header_url);
+    // Provider pictures rank below the token's own metadata logo and published
+    // profile media (`tokens::media`).
+    let resolved_image_url = crate::tokens::media::resolve_logo(
+        &metadata.mint,
+        primary_image_url.or(fallback_image_url),
+    );
+    let resolved_header_url = crate::tokens::media::resolve_banner(
+        &metadata.mint,
+        primary_header_url.or(fallback_header_url),
+    );
 
     // Security data timestamp (if available)
     let security_data_last_fetched_dt = security_ref.map(|sec| sec.security_data_last_fetched_at);
@@ -362,8 +369,8 @@ pub(super) fn assemble_token_without_market_data(
         name: metadata.name.unwrap_or_else(|| "Unknown Token".to_owned()),
         decimals: resolved_decimals,
         description: None,
-        image_url: None,
-        header_image_url: None,
+        image_url: crate::tokens::media::override_logo(&metadata.mint),
+        header_image_url: crate::tokens::media::override_banner(&metadata.mint),
         supply: None,
 
         // Data source

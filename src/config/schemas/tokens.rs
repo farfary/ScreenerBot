@@ -270,6 +270,28 @@ config_struct! {
             step: 1.0,
         })]
         timeout_seconds: u64 = 4,
+        /// How often known tokens are checked for their resolved logo and banner
+        #[metadata(field_metadata! {
+            label: "Media Sync Interval (seconds)",
+            hint: "How often to fetch on-chain logos and published banners for known tokens",
+            impact: "low",
+            category: "Sources",
+            min: 30.0,
+            max: 3600.0,
+            step: 30.0,
+        })]
+        media_sync_seconds: u64 = 120,
+        /// How long a token's fetched logo and banner stay current before re-checking
+        #[metadata(field_metadata! {
+            label: "Media Refresh (hours)",
+            hint: "Re-check a token's on-chain logo and published banner after this many hours",
+            impact: "low",
+            category: "Sources",
+            min: 1.0,
+            max: 168.0,
+            step: 1.0,
+        })]
+        media_refresh_hours: u64 = 24,
     }
 }
 
