@@ -1,36 +1,65 @@
 <p align="center">
-  <img src="https://screenerbot.io/banner.jpg" alt="ScreenerBot Banner" width="100%">
+  <img src="https://screenerbot.io/banner.jpg" alt="ScreenerBot, a self-hosted Solana trading bot" width="100%">
+</p>
+
+<h1 align="center">ScreenerBot</h1>
+
+<p align="center">
+  <strong>Self-hosted Solana trading bot: token screener, auto trader and wallet copy trading, built in Rust.</strong>
 </p>
 
 <p align="center">
-  <strong>Open Source Solana Trading Engine</strong>
+  <a href="https://github.com/farfary/ScreenerBot/releases/latest"><img src="https://img.shields.io/github/v/release/farfary/ScreenerBot?style=flat-square&label=release&color=9945FF" alt="Latest release"></a>
+  <a href="https://github.com/farfary/ScreenerBot/actions/workflows/build.yml"><img src="https://img.shields.io/github/actions/workflow/status/farfary/ScreenerBot/build.yml?style=flat-square&label=release%20build" alt="Release build status"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-BSL%201.1-blue?style=flat-square" alt="Business Source License 1.1"></a>
+  <a href="rust-toolchain.toml"><img src="https://img.shields.io/badge/rust-1.89-000000?style=flat-square" alt="Rust 1.89"></a>
+  <a href="https://screenerbot.io/download"><img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-555555?style=flat-square" alt="macOS, Windows and Linux"></a>
+  <a href="https://screenerbot.io/docs"><img src="https://img.shields.io/badge/docs-screenerbot.io-2F80ED?style=flat-square" alt="Documentation"></a>
+  <a href="https://t.me/screenerbotio_talk"><img src="https://img.shields.io/badge/chat-Telegram-26A5E4?style=flat-square" alt="Telegram community"></a>
 </p>
 
 <p align="center">
-  <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Built%20with-Rust-000000?style=flat-square&logo=rust&logoColor=white" alt="Built with Rust"></a>
-  <a href="https://solana.com/"><img src="https://img.shields.io/badge/Powered%20by-Solana-9945FF?style=flat-square&logo=solana&logoColor=white" alt="Powered by Solana"></a>
-  <a href="https://www.electronjs.org/"><img src="https://img.shields.io/badge/Desktop-Electron-47848F?style=flat-square&logo=electron&logoColor=white" alt="Electron Desktop"></a>
-  <a href="https://github.com/farfary/ScreenerBot/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-BSL--1.1-blue?style=flat-square" alt="BSL 1.1 License"></a>
-  <a href="https://screenerbot.io/docs"><img src="https://img.shields.io/badge/Docs-screenerbot.io-blue?style=flat-square" alt="Documentation"></a>
-  <a href="https://t.me/screenerbotio_talk"><img src="https://img.shields.io/badge/Community-Telegram-26A5E4?style=flat-square&logo=telegram&logoColor=white" alt="Telegram Community"></a>
-  <a href="https://github.com/farfary/ScreenerBot"><img src="https://img.shields.io/github/stars/farfary/ScreenerBot?style=flat-square" alt="GitHub Stars"></a>
-  <a href="https://screenerbot.io/download"><img src="https://img.shields.io/badge/Download-Latest-orange?style=flat-square" alt="Download"></a>
-  <a href="https://x.com/screenerbotio"><img src="https://img.shields.io/badge/X-Follow-000000?style=flat-square&logo=x&logoColor=white" alt="X Follow"></a>
+  <a href="https://screenerbot.io/download">Download</a> ·
+  <a href="https://screenerbot.io/docs">Documentation</a> ·
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#features">Features</a> ·
+  <a href="https://t.me/screenerbotio_talk">Community</a>
 </p>
 
-<p align="center">
-  A high-performance, local-first trading system for Solana DeFi.<br>
-  Automated strategies, manual execution, and paper or confirmation-gated live wallet copy.<br>
-  Built in Rust for native runtime performance and direct blockchain interaction.<br>
-  <strong>Runs entirely on your own machine — your keys never leave your computer.</strong>
-</p>
+ScreenerBot finds new Solana tokens, filters out risky ones with deterministic rules, prices them
+straight from on-chain pool reserves every 500 ms, and trades them with your own strategies. It can
+also copy the wallets you choose, starting in paper mode. Run it as a desktop app on macOS, Windows or
+Linux, or headless on a VPS. Your wallet key is encrypted on your machine and never leaves it. There
+is no subscription and no telemetry.
 
-<p align="center">
-  <a href="https://screenerbot.io">Website</a> •
-  <a href="https://screenerbot.io/docs">Documentation</a> •
-  <a href="https://screenerbot.io/download">Download</a> •
-  <a href="https://t.me/screenerbotio_talk">Join Community</a>
-</p>
+> [!WARNING]
+> Trading cryptocurrency carries a substantial risk of loss. This software can contain bugs that lose
+> money. You use it at your own risk, and the authors are not responsible for any losses. Start small,
+> use paper mode where it exists, and never trade more than you can afford to lose.
+
+---
+
+## Contents
+
+- [Screenshots](#screenshots)
+- [Features](#features)
+- [Quick start](#quick-start)
+- [How it works](#how-it-works)
+- [Discovery and filtering](#discovery-and-filtering)
+- [Pricing and supported DEXs](#pricing-and-supported-dexs)
+- [Strategies and the auto trader](#strategies-and-the-auto-trader)
+- [Wallet copy trading](#wallet-copy-trading)
+- [Swaps](#swaps)
+- [AI assistant and MCP agent connections](#ai-assistant-and-mcp-agent-connections)
+- [Dashboard and Telegram](#dashboard-and-telegram)
+- [Security and privacy](#security-and-privacy)
+- [Configuration](#configuration)
+- [Data sources and RPC](#data-sources-and-rpc)
+- [Building from source](#building-from-source)
+- [Project structure](#project-structure)
+- [Contributing](#contributing)
+- [Community](#community)
+- [License](#license)
 
 ---
 
@@ -38,14 +67,14 @@
 
 <table>
   <tr>
-    <td align="center" width="33%"><strong>Dashboard Overview</strong></td>
+    <td align="center" width="33%"><strong>Dashboard</strong></td>
     <td align="center" width="33%"><strong>Copy Trading</strong></td>
     <td align="center" width="33%"><strong>Token Details</strong></td>
   </tr>
   <tr>
-    <td><a href="https://screenerbot.io/api/screenshots/current/home?full=1"><img src="https://screenerbot.io/api/screenshots/current/home" alt="ScreenerBot Dashboard Overview" width="280"></a></td>
-    <td><a href="https://screenerbot.io/api/screenshots/current/auto-trader-copy-trading?full=1"><img src="https://screenerbot.io/api/screenshots/current/auto-trader-copy-trading" alt="ScreenerBot Copy Trading" width="280"></a></td>
-    <td><a href="https://screenerbot.io/api/screenshots/current/token-details?full=1"><img src="https://screenerbot.io/api/screenshots/current/token-details" alt="ScreenerBot Token Details" width="280"></a></td>
+    <td><a href="https://screenerbot.io/api/screenshots/current/home?full=1"><img src="https://screenerbot.io/api/screenshots/current/home" alt="ScreenerBot dashboard home" width="280"></a></td>
+    <td><a href="https://screenerbot.io/api/screenshots/current/auto-trader-copy-trading?full=1"><img src="https://screenerbot.io/api/screenshots/current/auto-trader-copy-trading" alt="Solana wallet copy trading in ScreenerBot" width="280"></a></td>
+    <td><a href="https://screenerbot.io/api/screenshots/current/token-details?full=1"><img src="https://screenerbot.io/api/screenshots/current/token-details" alt="ScreenerBot token details with chart and pools" width="280"></a></td>
   </tr>
   <tr>
     <td align="center" width="33%"><strong>Strategy Builder</strong></td>
@@ -53,9 +82,9 @@
     <td align="center" width="33%"><strong>Auto Trader</strong></td>
   </tr>
   <tr>
-    <td><a href="https://screenerbot.io/api/screenshots/current/strategies-manage?full=1"><img src="https://screenerbot.io/api/screenshots/current/strategies-manage" alt="ScreenerBot Strategy Builder" width="280"></a></td>
-    <td><a href="https://screenerbot.io/api/screenshots/current/strategies-conditions?full=1"><img src="https://screenerbot.io/api/screenshots/current/strategies-conditions" alt="ScreenerBot Strategy Conditions" width="280"></a></td>
-    <td><a href="https://screenerbot.io/api/screenshots/current/trader?full=1"><img src="https://screenerbot.io/api/screenshots/current/trader" alt="ScreenerBot Auto Trader" width="280"></a></td>
+    <td><a href="https://screenerbot.io/api/screenshots/current/strategies-manage?full=1"><img src="https://screenerbot.io/api/screenshots/current/strategies-manage" alt="ScreenerBot visual strategy builder" width="280"></a></td>
+    <td><a href="https://screenerbot.io/api/screenshots/current/strategies-conditions?full=1"><img src="https://screenerbot.io/api/screenshots/current/strategies-conditions" alt="ScreenerBot strategy conditions" width="280"></a></td>
+    <td><a href="https://screenerbot.io/api/screenshots/current/trader?full=1"><img src="https://screenerbot.io/api/screenshots/current/trader" alt="ScreenerBot auto trader controls" width="280"></a></td>
   </tr>
   <tr>
     <td align="center" width="33%"><strong>Open Positions</strong></td>
@@ -63,753 +92,502 @@
     <td align="center" width="33%"><strong>Filtering Analytics</strong></td>
   </tr>
   <tr>
-    <td><a href="https://screenerbot.io/api/screenshots/current/positions-open?full=1"><img src="https://screenerbot.io/api/screenshots/current/positions-open" alt="ScreenerBot Open Positions" width="280"></a></td>
-    <td><a href="https://screenerbot.io/api/screenshots/current/tokens-passed?full=1"><img src="https://screenerbot.io/api/screenshots/current/tokens-passed" alt="ScreenerBot Token Discovery" width="280"></a></td>
-    <td><a href="https://screenerbot.io/api/screenshots/current/filtering-analytics?full=1"><img src="https://screenerbot.io/api/screenshots/current/filtering-analytics" alt="ScreenerBot Filtering Analytics" width="280"></a></td>
+    <td><a href="https://screenerbot.io/api/screenshots/current/positions-open?full=1"><img src="https://screenerbot.io/api/screenshots/current/positions-open" alt="ScreenerBot open positions with P&L" width="280"></a></td>
+    <td><a href="https://screenerbot.io/api/screenshots/current/tokens-passed?full=1"><img src="https://screenerbot.io/api/screenshots/current/tokens-passed" alt="ScreenerBot Solana token discovery" width="280"></a></td>
+    <td><a href="https://screenerbot.io/api/screenshots/current/filtering-analytics?full=1"><img src="https://screenerbot.io/api/screenshots/current/filtering-analytics" alt="ScreenerBot token filtering analytics" width="280"></a></td>
   </tr>
 </table>
 
-<p align="center">
-  <a href="https://screenerbot.io/screenshots">View all screenshots</a>
-</p>
+<p align="center"><a href="https://screenerbot.io/screenshots">All screenshots</a></p>
 
 ---
 
-<p align="center">
-  <strong>⚠️ Risk Disclaimer</strong>
-</p>
+## Features
 
-<p align="center">
-  Cryptocurrency trading involves substantial risk of loss and is not suitable for every investor.<br>
-  This software may contain bugs or issues that could result in financial losses.<br>
-  The developers are not responsible for any financial losses incurred through use of this software.<br>
-  Trade at your own risk. Never invest more than you can afford to lose.
-</p>
-
----
-
-## Why Rust?
-
-ScreenerBot is written in **Rust** — the same language Solana itself is built with. This isn't a coincidence:
-
-- **Native Performance**: Compiled to machine code, not interpreted. Executes as fast as C/C++.
-- **Memory Safety**: No garbage collector pauses. Predictable, consistent execution times.
-- **Concurrency**: Fearless parallelism with async/await. Handle thousands of tokens simultaneously.
-- **Reliability**: If it compiles, it runs. Strong type system catches bugs at compile time.
-
-Trading bots written in Python or JavaScript can't match the speed and reliability of native code. When milliseconds matter in DeFi, Rust delivers.
-
----
-
-## Table of Contents
-
-- [Overview](#overview)
-- [Screenshots](#screenshots)
-- [Architecture](#architecture)
-- [Core Systems](#core-systems)
-- [Supported DEXs](#supported-dexs)
-- [Trading Features](#trading-features)
-- [LLM Analysis and Assistant](#llm-analysis-and-assistant)
-- [Agent Connections (MCP)](#agent-connections-mcp)
-- [Dashboard](#dashboard)
-- [Configuration](#configuration)
-- [Data Sources](#data-sources)
-- [Desktop Application](#desktop-application)
-- [Building from Source](#building-from-source)
-- [Project Structure](#project-structure)
-- [Contributing](#contributing)
-- [Community](#community)
+- **Token screener.** Discovers new, trending and boosted Solana tokens from DexScreener,
+  GeckoTerminal, Rugcheck, Jupiter, CoinGecko and DefiLlama. Explore Mode lets you browse it all
+  before you connect a wallet.
+- **Rug and risk filtering.** A staged pipeline checks metadata, on-chain authorities and supply,
+  market data, Rugcheck reports and, optionally, an LLM verdict. It records why each token was
+  rejected.
+- **Real-time on-chain prices.** 11 native pool decoders read reserves over your RPC every 500 ms.
+  Trading and P&L use these prices, not delayed API quotes.
+- **Strategy builder.** Build rule trees from price change, breakout, moving average, volume spike,
+  candle size, consecutive candles, liquidity and holding-time conditions.
+- **Auto trader.** Entry gates, DCA, partial exits, stop loss, trailing stop, take profit, a
+  time-based exit, a loss limit per period and a global force stop.
+- **Wallet copy trading.** Every copy task starts in paper mode with its own P&L. Live mode is
+  switched on per task, only after readiness checks, and has budgets and a latency kill switch.
+- **Manual trading.** Buy, add to, partially sell or close any position from the dashboard, using
+  the same swap and verification path as the auto trader.
+- **Swaps.** Jupiter by default. You can also turn on direct pool swaps for Raydium, Orca, Meteora,
+  Pump.fun, FluxBeam and Moonit, and Solana Tracker's Raptor router. A cost guard blocks routes that
+  would take SOL beyond the trade itself.
+- **AI assistant.** Nine LLM providers for chat, scheduled tasks and optional AI scoring in filtering
+  and exits. All model features are off by default.
+- **Built-in MCP server.** Connect Claude Code, Claude Desktop, Codex CLI or any stdio MCP client.
+  The agent can analyze, trade and configure the app, with permissions you set per connection.
+  Private keys are never exposed to it.
+- **Telegram bot.** Trade, copy-trading and wallet alerts, plus authenticated commands for status,
+  positions, pausing and force stop.
+- **Desktop or VPS.** An Electron app for macOS, Windows and Linux (x64 and arm64), or a headless
+  binary with a one-line installer. Updates are verified and installed from inside the app.
 
 ---
 
-## Overview
+## Quick start
 
-ScreenerBot is a professional-grade trading automation platform for Solana DeFi. Unlike cloud-based solutions, it runs entirely on your local machine:
+### Desktop app
 
-| Feature              | Benefit                                              |
-| -------------------- | ---------------------------------------------------- |
-| **Self-Custody**     | Private keys never leave your computer               |
-| **Native Speed**     | Rust performance with direct RPC connections         |
-| **Real-Time Prices** | Direct pool reserve calculations, not delayed APIs   |
-| **Trading Modes**    | Automated, manual, paper copy, and armed live copy   |
-| **Risk Controls**    | Shared admission, position, and emergency-stop gates |
-| **Full Control**     | Raw data access, custom strategies, no subscriptions |
+Download the latest build from **[screenerbot.io/download](https://screenerbot.io/download)** or
+[GitHub Releases](https://github.com/farfary/ScreenerBot/releases/latest). Each release publishes
+`SHA256SUMS`.
 
----
+| Platform | Architectures           | Packages        | Requirement                    |
+| -------- | ----------------------- | --------------- | ------------------------------ |
+| macOS    | Apple Silicon, Intel    | `.dmg`, `.zip`  | macOS 11 Big Sur or later      |
+| Windows  | x64, arm64              | `.msi`, `.zip`  | Windows 10 or later            |
+| Linux    | x64, arm64              | `.deb`, `.zip`  | glibc 2.29+ (Ubuntu 20.04+, Debian 11+) |
 
-## Architecture
+The first run opens a setup wizard for your wallet and RPC endpoints. You can also skip setup and
+browse in Explore Mode. Guide: [Getting started](https://screenerbot.io/docs/getting-started/setup).
 
-Independent services orchestrated by a central ServiceManager with dependency resolution,
-priority-based startup, readiness gates, health monitoring, and reverse-order shutdown:
+### Headless on a Linux VPS
 
-```
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                                  ServiceManager                                     │
-│         Dependency Resolution • Priority Startup • Health Monitoring • Metrics      │
-└─────────────────────────────────────────────────────────────────────────────────────┘
-        │                    │                    │                    │
-        ▼                    ▼                    ▼                    ▼
-┌──────────────────┐ ┌──────────────────┐ ┌───────────────────┐ ┌──────────────────┐
-│   Pool Service   │ │  Token Service   │ │Transaction Service│ │  Trader Service  │
-├──────────────────┤ ├──────────────────┤ ├───────────────────┤ ├──────────────────┤
-│ • Discovery      │ │ • Multi-source DB│ │ • Subject decode  │ │ • Entry eval     │
-│ • Fetcher (batch)│ │ • Market data    │ │ • Batch processor │ │ • Exit eval      │
-│ • Decoders (11)  │ │ • Security data  │ │ • DEX analyzer    │ │ • Executors      │
-│ • Calculator     │ │ • Priority update│ │ • P&L calculation │ │ • Safety gates   │
-│ • Analyzer       │ │ • Blacklist      │ │ • Subject SQLite  │ │ • DCA/Partial    │
-└──────────────────┘ └──────────────────┘ └───────────────────┘ └──────────────────┘
-        │                    │                    │                    │
-        ▼                    ▼                    ▼                    ▼
-┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐
-│ Filtering Engine │ │  OHLCV Service   │ │ Position Manager │ │ Strategy Engine  │
-├──────────────────┤ ├──────────────────┤ ├──────────────────┤ ├──────────────────┤
-│ • Multi-source   │ │ • 7 timeframes   │ │ • State tracking │ │ • Conditions     │
-│ • Configurable   │ │ • Gap detection  │ │ • DCA tracking   │ │ • Rule trees     │
-│ • Pass/reject    │ │ • Priority-based │ │ • Partial exits  │ │ • Evaluation     │
-│ • Blacklist aware│ │ • Bundle cache   │ │ • P&L calculation│ │ • Caching        │
-└──────────────────┘ └──────────────────┘ └──────────────────┘ └──────────────────┘
-        │                    │                    │                    │
-        ▼                    ▼                    ▼                    ▼
-┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐
-│   Connectivity   │ │  Events System   │ │   Swap Router    │ │ Wallet Services  │
-├──────────────────┤ ├──────────────────┤ ├──────────────────┤ ├──────────────────┤
-│ • Endpoint health│ │ • Non-blocking   │ │ • Jupiter V6     │ │ • Balances       │
-│ • Fallback logic │ │ • Categorized    │ │ • Direct pools   │ │ • Multi-wallet   │
-│ • Critical check │ │ • SQLite storage │ │ • Concurrent     │ │ • Shared watcher │
-└──────────────────┘ └──────────────────┘ └──────────────────┘ └──────────────────┘
-        │                    │                    │                    │
-        ▼                    ▼                    ▼                    ▼
-┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐
-│  LLM + Assistant │ │ Telegram Service │ │   SOL Price      │ │  Update Checker  │
-├──────────────────┤ ├──────────────────┤ ├──────────────────┤ ├──────────────────┤
-│ • 9 providers    │ │ • Notifications  │ │ • Jupiter feed   │ │ • Version check  │
-│ • Tool-calling   │ │ • Bot commands   │ │ • 30s refresh    │ │ • Auto-notify    │
-│ • Scheduled tasks│ │ • Inline actions │ │ • USD conversion │ │ • Release notes  │
-└──────────────────┘ └──────────────────┘ └──────────────────┘ └──────────────────┘
-                                        │││
-                                         ▼
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                                 Web Dashboard                                       │
-│         Axum REST API • Real-time Updates • Embedded Assets • Hot-reload Config     │
-└─────────────────────────────────────────────────────────────────────────────────────┘
+```bash
+curl -fsSL https://screenerbot.io/install.sh | sudo bash
 ```
 
-### Service Dependencies
+This opens an interactive manager. It detects x64 or arm64, installs the headless build as a systemd
+service, and handles updates, backups and removal. The dashboard listens on `localhost:8080` on the
+server. To reach it from your computer, use an SSH tunnel: `ssh -L 8080:localhost:8080 user@your-server`.
+See the [VPS installation guide](https://screenerbot.io/docs/getting-started/installation/vps).
 
-```
-Always available:
-  - Webserver (first-run setup, Explore Mode, and full mode)
+### From source
 
-Explore tier (Explore Mode and full mode):
-  - Connectivity, Events, Tokens, Filtering
-
-Full trading tier:
-  - Transactions initializes subject-scoped transaction storage
-  - Wallet Watch starts after Connectivity + Transactions
-  - Pools, Positions, Wallet, OHLCV, and Trader start in dependency order
-  - Copy Trading starts after Wallet Watch + Filtering + Positions + Wallet + Pools
-
-Control and automation tier:
-  - LLM Analysis, Assistant Scheduled Tasks, Telegram, Account, Updates, and supporting services
+```bash
+git clone https://github.com/farfary/ScreenerBot.git
+cd ScreenerBot
+cargo build --release
+./target/release/screenerbot          # headless, dashboard on http://127.0.0.1:8080
 ```
 
-ScreenerBot has three customer boot states: **initialization** (webserver-only setup), **Explore Mode**
-(market discovery and filtering without wallet-bound trading), and **full** (all enabled trading
-services). Moving from Explore Mode to full persists validated wallet/RPC settings and performs a graceful
-restart so the normal full boot path initializes every trading dependency cleanly.
-
-### Main Data Flows
-
-```text
-Market APIs -> Tokens -> Filtering -> Strategies -> Trader admission -> Swap -> Position
-Solana RPC -> Pool accounts -> Native decoders -> Live pool price -----^          |
-OHLCV sources -> Candles -> Indicators and strategy conditions --------^          v
-                                                                               Verification
-
-Shared wallet watch -> Subject decode -> Activity broadcast -> Alerts / Own wallet / Copy tasks
-Dashboard manual trade ------------------------------------------------> Shared swap + position path
-```
-
-Direct pool prices drive trading and P&L. OHLCV candles drive charts, indicators, and strategies;
-the two price systems are deliberately separate.
+For prerequisites, the desktop shell and packaging, see [Building from source](#building-from-source).
 
 ---
 
-## Core Systems
+## How it works
 
-### Pool Service
+```mermaid
+flowchart LR
+  subgraph Discover
+    D["DexScreener, GeckoTerminal,<br/>Rugcheck, Jupiter,<br/>CoinGecko, DefiLlama"] --> TK["Token database"] --> F["Filtering pipeline"]
+  end
+  subgraph Price
+    RPC["Solana RPC"] --> DEC["11 pool decoders"] --> LP["Live pool price<br/>every 500 ms"]
+    CS["Candle sources"] --> OH["OHLCV candles"]
+  end
+  subgraph Trade
+    ST["Strategies"] --> AD["Entry admission"] --> QR["Quote routers"]
+    QR --> SW["Swap"] --> VF["On-chain verification"] --> PO["Positions and P&L"]
+  end
+  F --> ST
+  OH --> ST
+  LP --> AD
+  LP --> PO
+  WW["Wallet watch<br/>WebSocket and polling"] --> CT["Copy tasks"] --> AD
+  MT["Manual trades<br/>dashboard and agents"] --> QR
+```
 
-Real-time price calculation directly from on-chain liquidity pool reserves.
-
-- **Discovery**: Finds pools from DexScreener, GeckoTerminal, and Raydium APIs
-- **Fetcher**: Batched RPC calls (50 accounts per request) with rate limiting
-- **Analyzer**: Classifies pools by DEX type and extracts metadata
-- **Decoders**: 11 native decoders for parsing pool state data
-- **Calculator**: Derives prices from reserves (SOL-based pricing)
-- **Cache**: In-memory price history with database persistence
-
-### Token Service
-
-Unified token database with multi-source data aggregation.
-
-- Core metadata (mint, symbol, decimals)
-- Market data from DexScreener and GeckoTerminal
-- Security analysis from Rugcheck
-- Priority-based background updates
-- Blacklist management
-
-### Transaction Service
-
-Subject-scoped transaction decoding, persistence, and DEX analysis for the bot's wallet and watched
-wallets.
-
-- Consumes activity from the shared wallet observation service
-- DEX classification (Jupiter, Raydium, Orca, Meteora, Pumpfun, GMGN, Fluxbeam, Moonshot)
-- Swap detection and P&L calculation
-- ATA operation tracking
-- Position entry/exit verification
-- Subject-keyed SQLite persistence with connection pooling
-
-### Wallet Observation Service
-
-One durable observation pipeline watches the bot wallet and user-selected external wallets.
-
-- A single multiplexed WebSocket transport for every watched address
-- HTTP cursor polling, reconnect gap-fill, and restart-safe recovery
-- Durable signature deduplication before activity is broadcast
-- Subject-relative swap and transfer classification
-- Independent consumers for transaction history, wallet refresh, Telegram alerts, and copy tasks
-
-### Position Manager
-
-Complete position lifecycle with DCA and partial exit support.
-
-- Multiple entries per position (DCA)
-- Partial exits with individual P&L tracking
-- Background price monitoring with peak tracking
-- Loss detection with configurable auto-blacklist
-- Typed provenance and management for automated, manual, and copy-originated positions
-
-### Filtering Engine
-
-Multi-criteria token evaluation from multiple data sources.
-
-- DexScreener: Liquidity, volume, price change, transactions, FDV, market cap
-- GeckoTerminal: Liquidity, volume, price change, market cap, reserve
-- Rugcheck: Security risks, authorities, holder distribution, insider detection
-- Meta: Token age, decimals validation, cooldown check
-
-### Strategy Engine
-
-Condition-based trading logic with configurable rules.
-
-- Price conditions (change percent, breakout, MA)
-- Volume conditions (spike, thresholds)
-- Candle patterns and time-based conditions
-- Rule tree evaluation with caching
-
-### Copy Trading Service
-
-Task-based wallet copy built on the same observation, admission, swap, position, and verification
-components used elsewhere in ScreenerBot.
-
-- Every task begins in Paper mode on a simulated book: buys, mirrored sells, and the task's own
-  exit rules run through the same evaluators Live uses, producing realized paper P&L
-- Live mode is armed per task behind readiness checks (paper history, paper P&L, detection latency,
-  pricing, runtime) and explicit acknowledgements
-- Fixed-SOL or ratio-of-target sizing
-- Per-trade, per-token, and total task limits
-- Guards that pause detached or late tasks and skip stale gap-fill replays before any sizing
-- Optional target-size filters, buy-once behavior, and filtering-pipeline requirement
-- Buy-only, mirror-sell, and hybrid exit ownership modes
-- Durable decisions, skip reasons, task spend, and activity history
+- **Two price systems, never mixed.** Live pool prices drive trading decisions and P&L. OHLCV candles
+  drive charts, indicators and strategy conditions.
+- **One trading path.** Automated, manual and copy trades share the same admission gates, quote
+  routers, swap execution, position lifecycle and on-chain verification.
+- **Services with explicit readiness.** A service manager starts each service in dependency order,
+  waits until it reports ready, monitors its health and stops services in reverse order.
+- **Three boot states.** *Setup* serves only the first-run wizard. *Explore Mode* runs discovery and
+  filtering without a wallet. *Full* starts every trading service. Moving from Explore Mode to full
+  saves the validated wallet and RPC settings, then restarts cleanly.
 
 ---
 
-## Supported DEXs
+## Discovery and filtering
 
-Native decoders for direct pool state interpretation:
+Discovery continuously collects candidates:
 
-| DEX          | Programs                    |
-| ------------ | --------------------------- |
-| **Raydium**  | CLMM, CPMM, Legacy AMM      |
-| **Orca**     | Whirlpool                   |
-| **Meteora**  | DAMM, DBC, DLMM             |
-| **Pumpfun**  | AMM, Legacy (Bonding Curve) |
-| **Fluxbeam** | AMM                         |
-| **Moonit**   | AMM                         |
+| Source        | What it provides                                         |
+| ------------- | -------------------------------------------------------- |
+| DexScreener   | Token profiles, latest and top boosts, market data       |
+| GeckoTerminal | New pools, trending pools, recent updates, market data   |
+| Rugcheck      | New, recent, trending and verified tokens; risk reports  |
+| Jupiter       | Recent, top organic, top traded and trending tokens      |
+| CoinGecko     | Solana tokens from market listings                       |
+| DefiLlama     | Solana protocol tokens                                   |
 
-### Swap Routers
+Every candidate goes through the filtering pipeline. Each stage can be switched on or off and tuned:
 
-- **Jupiter V6**: Aggregation with route optimization
-- **Direct pool swaps**: The bot builds the DEX instruction itself and swaps straight against the
-  pool, across every venue the direct engine supports (Raydium CPMM/AMM v4/CLMM, Orca Whirlpool,
-  Meteora DAMM v2/DLMM/DBC, Pump.fun AMM and legacy curves, FluxBeam, Moonit)
+1. **Meta.** Token age, decimals and cooldown checks.
+2. **On-chain.** Authority, supply and symbol checks that catch obvious scams with no API cost.
+3. **DexScreener.** Liquidity, volume, price change, transactions, FDV and market cap.
+4. **GeckoTerminal.** Liquidity, volume, price change, market cap and reserves.
+5. **Rugcheck.** Risk score, mint and freeze authorities, holder concentration and insiders.
+6. **LLM analysis** (optional). A model scores the token against your confidence threshold.
 
-Enabled quote routers are queried concurrently with automatic best-output selection and retryable
-fallback. Direct pool execution is enabled per `[swaps.direct]` and can pre-simulate every swap.
+Tokens that pass and tokens that fail each appear in the dashboard, with the exact rejection reason
+for each failure. The Filtering page also has analytics for the pipeline.
 
 ---
 
-## Trading Features
+## Pricing and supported DEXs
 
-### Entry Evaluation
+The pool service discovers pools and fetches their accounts in batches of at most 50 per RPC call. It
+decodes reserves natively and derives a SOL price for each token every 500 ms.
 
-Safety checks in order:
+| DEX          | Pool programs                          |
+| ------------ | -------------------------------------- |
+| **Raydium**  | CLMM, CPMM, Legacy AMM (v4)            |
+| **Orca**     | Whirlpool                              |
+| **Meteora**  | DAMM, DLMM, DBC                        |
+| **Pump.fun** | PumpSwap AMM, bonding curve            |
+| **FluxBeam** | AMM                                    |
+| **Moonit**   | AMM                                    |
 
-1. Global force stop and period loss limit
-2. Connectivity health
-3. Position limits
-4. Duplicate prevention
-5. Re-entry cooldown
-6. Blacklist check
+Wallet transactions are also classified by program for Jupiter, Raydium, Orca, Meteora, Pump.fun,
+FluxBeam, Moonit, GMGN and Raptor. More in [DEX reference](https://screenerbot.io/docs/reference/dexs).
+
+---
+
+## Strategies and the auto trader
+
+**Strategies** are rule trees built in the visual editor. Conditions: price change percent, price
+breakout, price versus moving average, volume spike, candle size, consecutive candles, liquidity level
+and position holding time. Candles cover seven timeframes: 1m, 5m, 15m, 1h, 4h, 12h and 1d.
+
+**Entry.** A token must clear every gate before anything is bought:
+
+1. Global force stop and the period loss limit
+2. Connectivity health of the endpoints the trade needs
+3. Position limits and duplicate-position checks
+4. Re-entry cooldown
+5. Blacklist
+6. LLM entry analysis, if enabled
 7. Strategy signals
 
-### Exit Evaluation
+**Exit.** Conditions are checked in priority order, and the first match wins:
 
-Priority-ordered conditions:
+| Priority | Condition                     | Applies to                     |
+| -------- | ----------------------------- | ------------------------------ |
+| 1        | Blacklisted token             | Every position (safety)        |
+| 2        | Loss beyond 90% (risk limit)  | Every position (safety)        |
+| 3        | LLM exit analysis, if enabled | Positions the auto trader owns |
+| 4        | Stop loss                     | Positions the auto trader owns |
+| 5        | Trailing stop                 | Positions the auto trader owns |
+| 6        | ROI target                    | Positions the auto trader owns |
+| 7        | Time override                 | Positions the auto trader owns |
+| 8        | Strategy exit signal          | Positions the auto trader owns |
 
-1. **Blacklist** (emergency): Immediate exit if token blacklisted
-2. **Risk Limits** (emergency): >90% loss protection
-3. **LLM Analysis** (high, optional): Provider-backed exit decision support
-4. **Stop Loss** (high): Fixed loss threshold from entry
-5. **Trailing Stop** (high): Dynamic stop-loss following price peaks
-6. **ROI Target** (normal): Fixed profit target exit
-7. **Time Override** (normal): Maximum hold duration
-8. **Strategy Exit** (normal): Strategy-defined exit signals
+A global force stop pauses all automated activity, exits included.
 
-### DCA (Dollar Cost Averaging)
-
-- Configurable DCA rounds with size multipliers
-- Price drop thresholds for additional entries
-- Per-round tracking with individual cost basis
-
-### Partial Exits
-
-- Multiple exit points per position
-- Individual P&L calculation per exit
-- Remaining position tracking
-
-### Manual Trading
-
-- Manual buys and sells from token, position, and trader surfaces
-- User-controlled DCA and percentage-based partial exits
-- Shared quote selection, force-stop gate, position transitions, and transaction verification
-- Explicit manual position provenance so automated DCA and policy exits do not take ownership
-
-### Wallet Copy Trading
-
-- Watch multiple target wallets through the shared, restart-safe observation pipeline
-- New tasks are Paper by default; Live execution is armed separately with readiness checks and confirmation
-- Fixed or proportional sizing with per-trade, per-token, and total task limits
-- Optional filtering, blacklist, target-size, self-copy, duplicate, cooldown, and position-capacity gates
-- Buy-only, mirror-sell, or hybrid exit management with per-task stop loss, trailing stop, take profit and time overrides
-- Latency kill switch pauses a task whose recent arrival delay exceeds the configured limit
-- Per-task insights: win rate, profit factor, P&L curve, exit and skip reasons, latency histogram, slippage
-- Recent activity shows paper fills, live submissions, copied sells, failures, and typed skip reasons
-- Copy fills, exits, failures and auto-pauses reach the dashboard header and Telegram
+**Positions** support several entries (DCA with configurable rounds and thresholds) and several partial
+exits, each with its own cost basis and P&L. Peak price is tracked for trailing stops. Every entry and
+exit is checked against the on-chain transaction. Each position records whether the auto trader, a
+manual trade or a copy task opened it, so automated exits never take over a position you manage
+yourself. Guides: [trading controls](https://screenerbot.io/docs/trading/trading-controls),
+[DCA](https://screenerbot.io/docs/trading/dca-guide),
+[trailing stop](https://screenerbot.io/docs/trading/trailing-stop).
 
 ---
 
-## LLM Analysis and Assistant
+## Wallet copy trading
 
-Nine provider clients power two separate consumers: model-scored token/trading analysis and the
-user-facing Assistant. Agent Control is the shared tool and authorization boundary used by the
-Assistant, scheduled automation, and paired MCP clients. Model-backed features are disabled by
-default; Agent Control is available by default and can be disabled independently.
+Copy trading uses the same wallet watch, admission, swap, position and verification components as the
+rest of the app.
 
-### Providers
+- **Paper first.** Every new task runs on a simulated book. Buys, mirrored sells and the task's own
+  exit rules run through the same evaluators as live trades and produce realized paper P&L.
+- **Switch to live per task, not globally.** A task can go live only after readiness checks (paper
+  history, paper P&L, detection latency, pricing, runtime) and your explicit confirmation.
+- **Sizing and budgets.** Fixed SOL or a ratio of the target's trade size, with per-trade, per-token
+  and total task limits.
+- **Exit modes.** Buy-only, mirror the target's sells, or hybrid. Each task has its own stop loss,
+  trailing stop, take profit and time override.
+- **Safety.** Optional filtering-pipeline requirement, blacklist, target-size, duplicate, cooldown and
+  capacity checks. A latency kill switch pauses a task that falls behind, and stale replays are skipped
+  before sizing.
+- **Insights.** Win rate, profit factor, P&L curve, exit and skip reasons, latency histogram, slippage,
+  and side-by-side wallet comparison.
+- **Wallet watch.** One multiplexed WebSocket covers every watched address. Cursor polling fills gaps
+  after a reconnect. Signatures are deduplicated durably, so a restart does not replay activity.
 
-Supports 9 providers: OpenAI, Anthropic, Groq, DeepSeek, Gemini, Ollama, Together AI, OpenRouter,
-and Mistral.
-
-### Features
-
-- **Token Filtering**: LLM analysis evaluates tokens during the filtering pipeline with configurable confidence thresholds
-- **Entry/Exit Analysis**: LLM-powered trade decision support with risk assessment
-- **Interactive Chat**: Tool-calling chat interface with portfolio, trading, and system tools
-- **Custom Instructions**: User-defined prompts for model-scored evaluations
-- **Assistant**: Dashboard chat with native provider tool calling and durable conversation history
-- **Automation**: Scheduled Assistant tasks with interval/daily/weekly schedules, headless tool execution, Telegram notifications, and run history tracking
-- **Agent Connections**: Pair an external MCP client (an AI coding agent) with the running app through the native `screenerbot mcp serve` bridge — full access by default, limitable per connection, in **Settings → Agent Connections**. Full guide: [AGENT_CONNECTIONS.md](AGENT_CONNECTIONS.md)
-
-### Automation
-
-Create scheduled tasks that run Assistant instructions automatically:
-
-- **Interval**: Run every N seconds (e.g., every 5 minutes)
-- **Daily**: Run at a specific time UTC (e.g., 14:00)
-- **Weekly**: Run on specific days at a time (e.g., mon,wed,fri:09:00)
-- Configurable tool permissions (read-only or full access)
-- Run history with tool call details and Assistant responses
-- Telegram notifications on completion or failure
-
-## Agent Connections (MCP)
-
-An external MCP client — an AI coding agent — can drive ScreenerBot's own tool registry
-over stdio. `screenerbot mcp serve` is a thin bridge built into the binary: it holds no
-trading logic, discovers the running app from `agent-runtime.json`, and calls an internal
-loopback bridge that resolves that connection's own permission policy and runs each tool
-in the live process. No separate package, extension, sidecar, or hosted endpoint.
-
-A new connection starts at **full access**: it can analyze tokens, read the portfolio,
-trade, change any setting the app has, and stop or resume the engine — everything the owner
-can do from the dashboard, with one permanent exception. **Wallet private-key material is
-never readable or writable by any agent at any permission level**: `wallet_encrypted` and
-`wallet_nonce` are redacted on read and refused on write before any lock is taken. The app
-signs locally; an agent is never asked to.
-
-- **Pair a client** in **Settings → Agent Connections**: name it, pick the client kind, set
-  its permissions (the form opens at full access), then create the connection. The panel
-  shows the one-time secret and the setup for that client:
-  - **Claude Code** — a copyable `claude mcp add --scope user screenerbot -e … -- <binary> mcp serve` command.
-  - **Claude Desktop** — a `claude_desktop_config.json` (`mcpServers.screenerbot`) block.
-  - **Codex CLI** — a copyable `codex mcp add screenerbot --env … -- <binary> mcp serve` command, with a `~/.codex/config.toml` fallback.
-  - **Hermes** — a YAML block under `mcp_servers`.
-  - **OpenClaw** — its native `openclaw mcp add` command.
-  - **Generic stdio** — a plain stdio JSON object to add by hand.
-  There is no universal MCP-client config format and no repo-wide installer script.
-- **Limit a connection at any time** with **Settings → Agent Connections → Permissions**.
-  Five capability categories — analysis, portfolio, trading, config, system — each set to
-  **Allow** (runs immediately), **Ask** (parks for an in-app decision) or **Off** (refused
-  and not even listed). Presets cover full access, ask-first and read-only; any per-category
-  mix is valid. The policy is resolved from the pairing store on every call, so an edit or a
-  revocation takes effect on that client's next request, with no restart on either side.
-- **Configuration is schema-driven, not an allowlist.** `update_config` addresses any
-  setting by dotted path (`rpc.urls`, `trader.max_open_positions`, `filtering.…`), type-
-  checked and validated exactly like a dashboard edit, applied atomically inside the config
-  write lock. `describe_config` returns the schema so an agent can discover what it may set.
-  RPC endpoint changes persist immediately and bind on the next app launch.
-- **`screenerbot mcp serve`** checks `agent-runtime.json` when no live origin is known and
-  after transport failure, so a long-lived client recovers when ScreenerBot starts later or
-  restarts on a different port. It only talks to a loopback origin and never starts the app.
-- **`screenerbot mcp doctor`** reports app reachability and pairing status without printing
-  the secret, and its **exit code** is the contract: `0` only when the live app answered a
-  pairing probe; `3` no runtime, `4` missing credentials, `5` bridge unreachable, `6`
-  pairing rejected (revoked/invalid, or agent control disabled).
-
-The one-time secret is shown once and stored by ScreenerBot only as a SHA-256 verifier; it
-is read only from `SCREENERBOT_CLIENT_ID` / `SCREENERBOT_PAIRING_SECRET` in the environment,
-never a CLI flag. Once you configure a client it keeps the plaintext under its own config
-(`claude mcp get` prints it back; Codex masks it). ScreenerBot must be running — the
-dashboard window can be closed while the process stays up, but a person needs it open to
-decide anything a connection has set to **Ask**; approved requests run at most once.
-
-Remove a connection with **Settings → Agent Connections → Revoke** (effective on the
-client's next request), then drop it from the client: `claude mcp remove --scope user
-screenerbot` or `codex mcp remove screenerbot`.
-
-**Full guide: [AGENT_CONNECTIONS.md](AGENT_CONNECTIONS.md)** — prerequisites,
-pairing flow, the permission model, per-client setup, approval behavior, troubleshooting,
-revocation, and the security model.
+Guide: [Copy trading](https://screenerbot.io/docs/copy-trading).
 
 ---
 
-## Dashboard
+## Swaps
 
-Embedded multi-page web interface (headless defaults to `http://localhost:8080`; Electron uses a
-dynamic authenticated localhost port):
+Enabled quote routers are queried at the same time. The best net output wins, and retryable failures
+fall back to the next router.
 
-- **Dashboard**: Overview with positions, system health, and real-time stats
-- **Positions**: Open/closed positions with P&L tracking and detailed analytics
-- **Tokens**: Database browser with market data, security analysis, and pool info
-- **Filtering**: Passed/rejected tokens with detailed rejection reasons
-- **Trader**: Automated trading controls, monitors, safety gates, and loss limits
-- **Copy Trading**: Copied wallets, per-task paper books, live readiness, insights, and wallet comparison
-- **Transactions**: Own-wallet and watched-wallet history with DEX classification and P&L
-- **Strategies**: Visual strategy builder with condition editor
-- **OHLCV**: Candlestick charts with multi-timeframe analysis
-- **Assistant**: Conversation, instructions, scheduled automation, and testing
-- **Wallets**: Multi-wallet management with balance monitoring
-- **Tools**: Multi-wallet trading, ATA cleanup, burn tokens
-- **Events**: System event log with filtering and search
-- **Services**: Service health, metrics, and dependency status
-- **Config**: Hot-reload configuration editor with metadata-driven UI
-- **Updates**: Version checking and release notes
-- **About**: System information and credits
-- **Lockscreen**: Security screen with password/TOTP protection
-- **Login**: Authentication flow
-- **Setup**: First-run initialization wizard
-- **Onboarding**: Guided setup for new users
+| Router                | Default | What it does                                                                 |
+| --------------------- | ------- | ---------------------------------------------------------------------------- |
+| **Jupiter**           | On      | Aggregated routing across Solana DEXs                                        |
+| **Direct pool swaps** | Off     | Builds the DEX instruction in-house and swaps against the pool, with optional pre-simulation: Raydium CPMM, AMM v4 and CLMM; Orca Whirlpool; Meteora DAMM v2, DLMM and DBC; Pump.fun AMM and bonding curve; FluxBeam; Moonit |
+| **Raptor**            | Off     | Solana Tracker's aggregator                                                  |
+
+**Swap cost guard.** Slippage protection covers only a swap's output. It misses SOL that a route
+leaves locked in another program's account. Before signing, the app simulates Jupiter and Raptor swaps
+and follows every lamport leaving the wallet. If a route would lock more unrecoverable SOL than
+`swaps.cost_guard` allows, it is refused and quoted again without that venue.
+
+---
+
+## AI assistant and MCP agent connections
+
+**LLM providers:** OpenAI, Anthropic, Groq, DeepSeek, Gemini, Ollama, Together AI, OpenRouter and
+Mistral. Everything that calls a model is off by default.
+
+- **Assistant.** A dashboard chat that calls tools to read your portfolio, tokens, trades and system
+  state, with saved conversation history.
+- **Scheduled automation.** Assistant tasks can run on an interval, daily or weekly (UTC). Each task
+  has its own tool permissions and run history, and can notify you on Telegram.
+- **LLM analysis.** Optional AI scoring during filtering and for entry and exit decisions, with
+  confidence thresholds and custom instructions.
+
+**Agent connections (MCP).** `screenerbot mcp serve` is a stdio MCP server built into the binary. It
+bridges an external agent to the running app's own tool registry. No extra package or hosted endpoint
+is involved.
+
+- Pair a client in **Settings → Agent Connections**. The app shows the setup for Claude Code, Claude
+  Desktop, Codex CLI, Hermes, OpenClaw or any generic stdio client.
+- Five permission categories: analysis, portfolio, trading, config and system. Set each one to
+  **Allow**, **Ask** (you approve each call in the app) or **Off**. Changes take effect on the
+  client's next call.
+- `update_config` can change any setting by its dotted path, with the same validation as the
+  dashboard. `describe_config` returns the schema.
+- **Private keys are never readable or writable by any agent, at any permission level.** The app signs
+  every transaction locally.
+- `screenerbot mcp doctor` reports whether the app is reachable and the pairing works, and its exit
+  code says what failed.
+
+Full guide: **[AGENT_CONNECTIONS.md](AGENT_CONNECTIONS.md)**.
+
+---
+
+## Dashboard and Telegram
+
+The dashboard is built into the binary. In the desktop app, it runs on a dynamic, authenticated
+localhost port. Headless, it runs on `127.0.0.1:8080`, which you can change with `--host` and `--port`.
+
+| Page             | What it is for                                                             |
+| ---------------- | -------------------------------------------------------------------------- |
+| **Home**         | Portfolio, open positions, system health and live stats                    |
+| **Assistant**    | Chat, instructions and scheduled automation                                |
+| **Positions**    | Open and closed positions, one detail view with chart, DCA and partial exits |
+| **Tokens**       | Token database with market data, security reports, pools and charts        |
+| **Filtering**    | Passed and rejected tokens with reasons, plus filtering analytics          |
+| **Auto Trader**  | Trader controls, strategies, monitors, safety gates and loss limits        |
+| **Copy Trading** | Copy tasks, paper books, live readiness, insights and wallet comparison    |
+| **Wallets**      | Multi-wallet management and balances                                       |
+| **Transactions** | Your wallet's and watched wallets' history, with DEX classification and P&L |
+| **Tools**        | Multi-wallet buy and sell, wallet cleanup and consolidation, burn tokens, wallet generator, token analyzer, trade watcher, airdrop checker |
+| **Services**     | Service health, metrics and dependencies                                   |
+| **Events**       | Searchable system event log                                                |
+| **Config**       | Schema-driven settings editor; most changes apply without a restart        |
+
+**Telegram** sends trade, copy-trading and wallet alerts. Its commands require login and include
+`/status`, `/positions`, `/balance`, `/stats`, `/tokens`, `/rejected`, `/pause_entries`,
+`/resume_entries` and `/force_stop`. Guide: [Telegram](https://screenerbot.io/docs/telegram).
+
+---
+
+## Security and privacy
+
+- **Self-custody.** The wallet key is encrypted with AES-256-GCM using a machine-derived key. It never
+  leaves your computer, and no dashboard, API or agent can read it.
+- **Local by default.** The headless dashboard binds to `127.0.0.1`. The desktop app uses an
+  authenticated random port. A lock screen with a password and optional TOTP protects the dashboard.
+- **No telemetry.** Nothing about you is reported. The one exception is referral attribution, which
+  stays off unless you enter a referral code.
+- **Verified updates.** Before an update is used, its size and SHA-256 must match what screenerbot.io
+  published and the digest GitHub reports for the release asset. Core updates download in the
+  background. They apply on their own only if you allow automatic installation and no open position
+  or running tool would be interrupted. Otherwise they wait for the next launch.
 
 ---
 
 ## Configuration
 
-Managed through `data/config.toml` in the platform app data directory with hot-reload support.
-Core configuration sections:
+Settings live in `data/config.toml` inside the platform app-data directory. Edit them in the dashboard
+**Config** page, through an MCP agent, or in the file.
 
-| Section          | Purpose                                                        |
-| ---------------- | -------------------------------------------------------------- |
-| `[trader]`       | Position limits, sizing, ROI targets, DCA, trailing stop       |
-| `[copy_trading]` | Global copy-task enablement, limits, slippage, filter policy   |
-| `[positions]`    | Position tracking, partial exits, cooldowns                    |
-| `[filtering]`    | Token filtering with nested DexScreener/GeckoTerminal/Rugcheck |
-| `[swaps]`        | Router configuration (Jupiter, direct pool swaps, slippage)    |
-| `[tokens]`       | Token database, update intervals                               |
-| `[pools]`        | Pool discovery, caching                                        |
-| `[rpc]`          | RPC endpoints and rate limiting                                |
-| `[ohlcv]`        | Candlestick data settings                                      |
-| `[strategies]`   | Strategy engine configuration                                  |
-| `[wallet]`       | Wallet monitoring                                              |
-| `[holder_watch]` | Holder-monitoring tool behavior                                |
-| `[events]`       | Event system settings                                          |
-| `[services]`     | Service manager settings                                       |
-| `[monitoring]`   | System metrics                                                 |
-| `[connectivity]` | Endpoint health monitoring                                     |
-| `[sol_price]`    | SOL/USD price service                                          |
-| `[gui]`          | Desktop application settings                                   |
-| `[webserver]`    | Headless host, port, sessions, and authentication              |
-| `[llm]`          | LLM provider credentials, models, rate limits, master switch   |
-| `[llm_analysis]` | Model-scored filtering and trading analysis                    |
-| `[assistant]`    | Dashboard chat and scheduled automation                        |
-| `[agent_control]` | Agent/MCP master switch, and the policy for the in-app assistant and scheduled tasks (paired connections carry their own) |
-| `[telegram]`     | Telegram bot, notifications, commands                          |
-| `[performance]`  | Cache and memory tuning                                        |
-| `[maintenance]`  | Retention, vacuum, and checkpoint schedules                    |
-| `[network]`      | Network proxy settings                                         |
-| `[account]`      | Optional ScreenerBot account settings                          |
+| Section           | Purpose                                                         |
+| ----------------- | --------------------------------------------------------------- |
+| `[rpc]`           | RPC endpoints and rate limiting                                 |
+| `[trader]`        | Position limits, sizing, ROI target, DCA, stop loss, trailing stop |
+| `[positions]`     | Position tracking, partial exits, cooldowns                     |
+| `[copy_trading]`  | Copy trading switch, global limits, slippage, filter policy     |
+| `[filtering]`     | Pipeline stages and thresholds                                  |
+| `[strategies]`    | Strategy engine                                                 |
+| `[swaps]`         | Jupiter, direct pool swaps, Raptor, slippage, cost guard        |
+| `[tokens]`        | Token database, discovery sources, update intervals             |
+| `[pools]`         | Pool discovery and caching                                      |
+| `[ohlcv]`         | Candle sources and cadence                                      |
+| `[sol_price]`     | SOL/USD reference price feed                                    |
+| `[wallet]`        | Wallet monitoring                                               |
+| `[holder_watch]`  | Holder monitoring tool                                          |
+| `[llm]`           | LLM provider credentials, models, rate limits and master switch |
+| `[llm_analysis]`  | AI scoring for filtering and trading                            |
+| `[assistant]`     | Dashboard chat and scheduled automation                         |
+| `[agent_control]` | Agent and MCP master switch, and the in-app assistant's policy  |
+| `[telegram]`      | Telegram bot, notifications and commands                        |
+| `[webserver]`     | Headless host, port, sessions and authentication                |
+| `[gui]`           | Desktop and dashboard settings                                  |
+| `[updates]`       | Automatic update behavior                                       |
+| `[account]`       | Optional ScreenerBot account                                    |
+| `[referral]`      | Opt-in referral attribution                                     |
+| `[network]`       | Network proxy                                                   |
+| `[connectivity]`  | Endpoint health monitoring                                      |
+| `[events]`        | Event log                                                       |
+| `[services]`      | Service manager                                                 |
+| `[monitoring]`    | System metrics                                                  |
+| `[performance]`   | Cache and memory tuning                                         |
+| `[maintenance]`   | Retention, vacuum and checkpoint schedules                      |
 
-Access via `with_config(|cfg| cfg.trader.max_open_positions)`. Hot-reload with `reload_config()`.
-Per-target copy task mode, sizing, budgets, and exit ownership live in `copy_trading.db`, not in
-global TOML.
-
----
-
-## Data Sources
-
-| Source            | Usage                                 |
-| ----------------- | ------------------------------------- |
-| **Solana RPC**    | Pool reserves, balances, transactions |
-| **DexScreener**   | Market data, pool discovery           |
-| **GeckoTerminal** | Alternative market metrics            |
-| **Rugcheck**      | Security analysis                     |
-| **Jupiter**       | Swap routing and quotes               |
-| **CoinGecko**     | Token metadata                        |
-| **DefiLlama**     | Token prices, DeFi protocols          |
-
-All data cached locally in SQLite databases.
-
-### RPC Provider
-
-A premium Solana RPC endpoint is **required** for reliable trading. ScreenerBot auto-detects your provider and applies optimal rate limits.
-
-| Provider                                              | Compatibility      | Notes                                                                                             |
-| ----------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------- |
-| **[Helius](https://www.helius.dev/solana-rpc-nodes)** | ⭐ **Recommended** | Most compatible and tested. Solana-native APIs, DAS, staked connections. Free tier: 100k req/day. |
-| [QuickNode](https://www.quicknode.com)                | ✅ Supported       | Fast global network. Good alternative.                                                            |
-| [Triton](https://triton.one)                          | ✅ Supported       | Ultra-low latency, gRPC support.                                                                  |
-| [Alchemy](https://www.alchemy.com)                    | ✅ Supported       | Developer-friendly, generous free tier.                                                           |
-
-> **Tip:** Configure 2-3 endpoints from different providers for automatic failover. See the [Best RPC Providers Guide](https://screenerbot.io/blog/best-rpc-providers) for detailed comparisons.
+Per-task copy trading settings (mode, sizing, budgets, exit ownership) are stored in
+`copy_trading.db`, not in the TOML file. Reference: [config file](https://screenerbot.io/docs/reference/config-file).
 
 ---
 
-## Desktop Application
+## Data sources and RPC
 
-Native desktop application built with **Electron** - the proven framework behind apps like VS Code, Slack, and Discord.
+| Source                       | Used for                                                                 |
+| ---------------------------- | ------------------------------------------------------------------------ |
+| **Solana RPC**               | Pool reserves, balances, transactions, wallet watch                      |
+| **ScreenerBot data service** | Optional, with a signed-in account: candles, pool registry, Rugcheck reports, decimals. Tried first; every caller falls back to the direct provider |
+| **DexScreener**              | Discovery, market data, SOL/USD price                                    |
+| **GeckoTerminal**            | Discovery, market data, candles, SOL/USD fallback                        |
+| **Rugcheck**                 | Discovery, security reports                                              |
+| **Jupiter**                  | Discovery lists, swap quotes, last-resort SOL/USD price                  |
+| **Solana Tracker**           | Optional candle fallback (API key), Raptor router                        |
+| **CoinGecko, DefiLlama**     | Solana token discovery                                                   |
 
-### Platform Support
+Data is cached locally in SQLite. Without an account, everything still works against public
+providers. It is slower and keeps less history.
 
-| Platform    | Min Version         | Package Format       |
-| ----------- | ------------------- | -------------------- |
-| **macOS**   | 10.13 (High Sierra) | `.app` / `.dmg`      |
-| **Windows** | Windows 10          | `.exe` / `.msi`      |
-| **Linux**   | Ubuntu 18.04+       | `.deb` / `.AppImage` |
-
-### Desktop Features
-
-- **Native Window**: 1400x900 default, 1200x700 minimum, fully resizable
-- **Embedded Dashboard**: Electron launches the Rust backend on a dynamic authenticated localhost port
-- **Keyboard Shortcuts**: Zoom (Cmd/Ctrl +/-/0), Reload (Cmd/Ctrl + R)
-- **System Integration**: Native title bar, notifications
+**RPC.** A dedicated Solana RPC endpoint is required for reliable trading. ScreenerBot detects
+[Helius](https://www.helius.dev), [QuickNode](https://www.quicknode.com), [Triton](https://triton.one)
+and [Alchemy](https://www.alchemy.com) endpoints and applies matching rate limits. Configure two or
+three endpoints from different providers for failover. Comparison:
+[Best Solana RPC providers](https://screenerbot.io/blog/best-rpc-providers).
 
 ---
 
-## Quick Install (VPS/Linux)
+## Building from source
 
-Run ScreenerBot 24/7 on a Linux VPS with a single command:
+**Prerequisites**
+
+- Rust. `rustup` installs the pinned toolchain from `rust-toolchain.toml` (currently 1.89.0).
+- A C compiler. SQLite is bundled, and OpenSSL is vendored on Windows and Linux.
+  - macOS: Xcode Command Line Tools
+  - Windows: Visual Studio Build Tools with the C++ workload
+  - Linux: `build-essential pkg-config libssl-dev`
+- Node.js 22 LTS, only for the Electron desktop shell
+
+**Build and run**
 
 ```bash
-curl -fsSL https://screenerbot.io/install.sh | bash
+cargo build --release                   # engine and dashboard: target/release/screenerbot
+./target/release/screenerbot --help     # all flags, including --debug-<module> logging
+
+cd electron && npm install && npm start # desktop shell, runs ../target/release/screenerbot
+npm run make                            # platform packages in electron/out/make/
 ```
 
-> See the [VPS Installation Guide](https://screenerbot.io/docs/getting-started/installation/vps) for detailed setup instructions including system requirements and management.
+**Test**
+
+```bash
+cargo install cargo-nextest --locked    # once
+cargo nextest run                       # offline suite; live RPC tests are #[ignore]d
+```
+
+[BUILD.md](BUILD.md) covers platform notes, cross-compilation and packaging in detail.
 
 ---
 
-## Building from Source
+## Project structure
 
-### Prerequisites
-
-- Rust 1.75+
-- Node.js 18+ (for frontend validation tools)
-- Platform-specific:
-  - **macOS**: Xcode Command Line Tools
-  - **Windows**: Visual Studio Build Tools, WebView2
-  - **Linux**: `libwebkit2gtk-4.0-dev`, `libssl-dev`, `libgtk-3-dev`
-
-### Build Options
-
-```bash
-git clone https://github.com/farfary/ScreenerBot.git
-cd ScreenerBot
-
-# Build the Rust engine
-cargo build --release
-
-# The headless binary is now at target/release/screenerbot
-```
-
-### Run
-
-```bash
-# Headless mode
-./target/release/screenerbot
-
-# Desktop application (requires the Rust build first)
-cd electron
-npm install
-npm start
-
-# With debug logging
-cargo run --bin screenerbot -- --debug-rpc
-```
-
-### Build Artifacts
-
-Electron packaging uses `npm run make` inside `electron/`. See [BUILD.md](BUILD.md) for the current
-platform dependencies, package outputs, and cross-compilation instructions.
-
-- **Rust debug binary**: `target/debug/screenerbot`
-- **Rust release binary**: `target/release/screenerbot`
-- **Desktop packages**: `electron/out/`
-
----
-
-## Project Structure
-
-```
+```text
 src/
-├── actions/        # Operation progress tracking with SSE broadcasting
-├── agent_control/  # Shared tool registry, authorization, pairings, approvals
-├── apis/           # External API clients, including nine LLM providers
-├── assistant/      # Dashboard chat and scheduled automation
-├── config/         # Macro-driven configuration system with hot-reload
-├── connectivity/   # Endpoint health monitoring with fallback strategies
-├── errors/         # Structured error types with blockchain-aware parsing
-├── events/         # Structured JSON event logging (SQLite)
-├── filtering/      # Multi-criteria token evaluation engine
-├── llm_analysis/   # Model-scored filtering and trading analysis
-├── mcp/            # Thin stdio adapter to the live app's agent bridge
-├── ohlcvs/         # OHLCV candlestick data (7 timeframes)
-├── pools/          # Pool service with 11 native DEX decoders
-├── positions/      # Position lifecycle (DCA, partial exits, P&L)
-├── rpc/            # Multi-provider RPC with rate limiting & circuit breaker
-├── run/            # Initialization, Explore Mode, and full-mode bootstrap
-├── services/       # ServiceManager lifecycle, readiness, health, and metrics
-├── strategies/     # Condition-based trading strategy engine
-├── swaps/          # Quote-router registry and swap execution
-├── telegram/       # Telegram bot (notifications, commands, inline actions)
-├── tokens/         # Token database with multi-source aggregation
-├── trader/         # Automated, manual, and wallet-copy trading logic
-├── transactions/   # Subject-scoped transaction decode and persistence
-├── wallets/        # Wallet management, balances, and shared observation
-└── webserver/      # Axum REST API + embedded dashboard assets
+├── chains/solana/   # Everything Solana-specific: RPC, pool decoders, swap routers, direct swap engine, transactions
+├── trader/          # Auto trader, entry/exit evaluators, safety gates, manual and copy trading
+├── positions/       # Position lifecycle: DCA, partial exits, verification, P&L
+├── pools/           # Pool service and the live pool price
+├── tokens/          # Token database and discovery
+├── filtering/       # Filtering pipeline and its sources
+├── strategies/      # Strategy conditions and rule-tree engine
+├── ohlcvs/          # Candles across seven timeframes
+├── swaps/           # Chain-neutral quote routing, comparison and fallback
+├── wallets/         # Wallets, balances and the shared wallet watch
+├── transactions/    # Transaction decoding and persistence
+├── agent_control/   # Tool registry, permissions, pairings, approvals
+├── mcp/             # stdio MCP bridge to the running app
+├── assistant/       # Dashboard chat and scheduled automation
+├── llm_analysis/    # AI scoring for filtering and trading
+├── apis/            # Market-data and LLM provider clients
+├── rpc/             # Chain-neutral RPC gateway, rate limiting, circuit breaker
+├── services/        # Service manager: dependencies, readiness, health
+├── config/          # Macro-driven configuration schema
+├── telegram/        # Telegram bot and notifications
+├── version/         # Verified two-part updates (core binary and desktop shell)
+└── webserver/       # Axum API and the embedded dashboard
 
-electron/           # Electron desktop shell
-docs/architecture/  # Living module architecture documentation
-tests/              # Domain-organized integration tests
+electron/            # Desktop shell
+tests/               # Integration tests, organized by domain
 ```
-
----
-
-## Links & Resources
-
-| Resource                  | Link                                                             |
-| ------------------------- | ---------------------------------------------------------------- |
-| 🌐 **Website**            | [screenerbot.io](https://screenerbot.io)                         |
-| 📚 **Documentation**      | [screenerbot.io/docs](https://screenerbot.io/docs)               |
-| ⬇️ **Download**           | [screenerbot.io/download](https://screenerbot.io/download)       |
-| 💬 **Telegram Community** | [t.me/screenerbotio_talk](https://t.me/screenerbotio_talk)       |
-| 📢 **Telegram Channel**   | [t.me/screenerbotio](https://t.me/screenerbotio)                 |
-| 🆘 **Telegram Support**   | [t.me/screenerbotio_support](https://t.me/screenerbotio_support) |
-| 𝕏 **X (Twitter)**         | [x.com/screenerbotio](https://x.com/screenerbotio)               |
 
 ---
 
 ## Contributing
 
-We welcome contributions from the community! Whether you're fixing a bug, adding a feature, or improving documentation — every contribution matters.
+Contributions are welcome. Good places to start:
 
-### Getting Started
+- **DEX support.** New pool decoders or direct swap venues.
+- **Strategy conditions.** New indicators and conditions.
+- **Dashboard.** UX improvements and new visualizations.
+- **Bug reports.** [Open an issue](https://github.com/farfary/ScreenerBot/issues) with steps to reproduce.
 
-1. **Join the community** — Start by joining our [Telegram Community](https://t.me/screenerbotio_talk) to discuss ideas, ask questions, and coordinate with other contributors
-2. **Read the docs** — Browse the [documentation](https://screenerbot.io/docs) for architecture details, coding patterns, and project structure
-3. **Fork & branch** — Fork the repository and create a feature branch from `main`
-4. **Follow patterns** — Match existing code style, naming conventions, and module structure
-5. **Validate** — Ensure `cargo check --lib` passes before submitting
-6. **Open a PR** — Submit a pull request with a clear description of your changes
-
-### Areas for Contribution
-
-- **DEX decoders** — Add support for new Solana DEX protocols
-- **Strategy conditions** — Implement new technical indicators and conditions
-- **Dashboard improvements** — UI/UX enhancements, new visualizations
-- **Documentation** — Improve guides, add tutorials, translate docs
-- **Bug reports** — Found an issue? [Open a GitHub issue](https://github.com/farfary/ScreenerBot/issues)
-
-> 💬 **Not sure where to start?** Ask in our [Telegram Community](https://t.me/screenerbotio_talk) — we'll help you find something that matches your skills!
+Before you open a pull request, match the existing module patterns and run `cargo fmt`,
+`cargo clippy` and `cargo nextest run`. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full
+workflow, and ask in the [Telegram community](https://t.me/screenerbotio_talk) if you are unsure
+where to start.
 
 ---
 
 ## Community
 
-<p align="center">
-  <strong>Join the ScreenerBot community — your gateway to Solana DeFi trading</strong>
-</p>
-
-<p align="center">
-  <a href="https://t.me/screenerbotio_talk"><img src="https://img.shields.io/badge/💬_Telegram_Community-Join_Discussion-26A5E4?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram Community"></a>
-</p>
-
-<p align="center">
-  Our <a href="https://t.me/screenerbotio_talk"><strong>Telegram Community</strong></a> is the main hub for everything ScreenerBot:<br>
-  🗣️ Discuss trading strategies and share insights<br>
-  🐛 Report bugs and request features<br>
-  🤝 Find contributors and collaborate on code<br>
-  📢 Get announcements and early access to new features<br>
-  🆘 Get help from the community and the development team
-</p>
-
-<p align="center">
-  <a href="https://t.me/screenerbotio"><img src="https://img.shields.io/badge/Telegram-Channel-26A5E4?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram Channel"></a>
-  <a href="https://t.me/screenerbotio_talk"><img src="https://img.shields.io/badge/Telegram-Community-26A5E4?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram Community"></a>
-  <a href="https://t.me/screenerbotio_support"><img src="https://img.shields.io/badge/Telegram-Support-26A5E4?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram Support"></a>
-  <a href="https://x.com/screenerbotio"><img src="https://img.shields.io/badge/X-Follow-000000?style=for-the-badge&logo=x&logoColor=white" alt="X (Twitter)"></a>
-  <a href="https://screenerbot.io"><img src="https://img.shields.io/badge/Website-screenerbot.io-9945FF?style=for-the-badge" alt="Website"></a>
-</p>
-
----
-
-<p align="center">
-  <img src="https://img.shields.io/badge/Built%20with-Rust-000000?style=flat-square&logo=rust&logoColor=white" alt="Rust">
-  <img src="https://img.shields.io/badge/Powered%20by-Solana-9945FF?style=flat-square&logo=solana&logoColor=white" alt="Solana">
-  <img src="https://img.shields.io/badge/Desktop-Electron-47848F?style=flat-square&logo=electron&logoColor=white" alt="Electron">
-</p>
+| Channel            | Link                                                             |
+| ------------------ | ---------------------------------------------------------------- |
+| Website            | [screenerbot.io](https://screenerbot.io)                         |
+| Documentation      | [screenerbot.io/docs](https://screenerbot.io/docs)               |
+| Telegram community | [t.me/screenerbotio_talk](https://t.me/screenerbotio_talk)       |
+| Telegram channel   | [t.me/screenerbotio](https://t.me/screenerbotio)                 |
+| Telegram support   | [t.me/screenerbotio_support](https://t.me/screenerbotio_support) |
+| X                  | [x.com/screenerbotio](https://x.com/screenerbotio)               |
 
 ---
 
 ## Author
 
-**Farhad Arghavan**
-
-Contact: [info@screenerbot.io](mailto:info@screenerbot.io)
+**Farhad Arghavan**. Contact: [info@screenerbot.io](mailto:info@screenerbot.io)
 
 ## License
 
-This project is licensed under the [Business Source License 1.1](LICENSE) (BSL 1.1).
+ScreenerBot is licensed under the [Business Source License 1.1](LICENSE).
 
-- **Non-commercial use** is permitted
-- **Commercial use** (competing products or paid services) requires a separate license
-- Contact [info@screenerbot.io](mailto:info@screenerbot.io) for alternative licensing
+- You may use, modify and run ScreenerBot.
+- You may not use it for a **Commercial Purpose** without a separate license. That means distributing,
+  selling or offering a product or service that competes with ScreenerBot, or that includes it as part
+  of a paid product or service.
+- For other licensing arrangements, contact [info@screenerbot.io](mailto:info@screenerbot.io).
+
+See [LICENSE](LICENSE) for the exact terms.
