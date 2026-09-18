@@ -24,6 +24,12 @@ module.exports = {
     appBundleId: 'io.screenerbot.app',
     appCategoryType: 'public.app-category.finance',
     icon: path.join(__dirname, 'assets', 'icon'),
+    // This file is the only source of macOS bundle metadata. Keys not expressed
+    // through a packager option go here; a hand-written Info.plist elsewhere in
+    // the tree is not read by the packager and cannot reach the bundle.
+    extendInfo: {
+      NSHumanReadableCopyright: '© 2024-2026 ScreenerBot',
+    },
     extraResource: [
       path.join(__dirname, '..', 'target', 'release', binaryName),
       ...(isWindows ? [
