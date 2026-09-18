@@ -30,10 +30,22 @@ module.exports = {
         path.join(__dirname, 'redist', isArm64 ? 'vc_redist.arm64.exe' : 'vc_redist.x64.exe')
       ] : [])
     ],
-    // A free ad-hoc signature keeps the bundle internally verifiable. When an
-    // Apple identity is available, the same config upgrades to trusted signing;
-    // notarization remains optional because it requires an Apple developer account.
-    osxSign: { identity: process.env.APPLE_SIGNING_IDENTITY || '-' },
+    // macOS bundles require a valid code signature. arm64 enforces signature
+    // validation at launch, so an unsigned bundle is refused; x86_64 executes
+    // unsigned code, so the same build runs on Intel.
+    //
+    // `-` is codesign's ad-hoc pseudo-identity, not a certificate name, so
+    // identity validation must be disabled for it: @electron/osx-sign otherwise
+    // resolves the identity against the keychain and throws "No identity found
+    // for signing". @electron/packager defaults `continueOnError` to true, which
+    // demotes that error to a warning and packages the bundle unsigned.
+    // `continueOnError: false` restores it as a build failure. An Apple identity
+    // supplied through APPLE_SIGNING_IDENTITY is keychain-validated as usual.
+    osxSign: {
+      identity: process.env.APPLE_SIGNING_IDENTITY || '-',
+      identityValidation: Boolean(process.env.APPLE_SIGNING_IDENTITY),
+      continueOnError: false,
+    },
     ...(process.env.APPLE_ID && process.env.APPLE_PASSWORD && process.env.APPLE_TEAM_ID
       ? {
           osxNotarize: {

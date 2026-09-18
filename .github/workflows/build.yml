@@ -352,6 +352,27 @@ jobs:
         working-directory: electron
         run: npx electron-forge make --arch=${{ matrix.electron-arch }}
 
+      # arm64 enforces code-signature validation at launch, so an unsigned or
+      # invalidly signed bundle is refused; x86_64 executes unsigned code, which
+      # makes a signing failure detectable only on arm64. Packaging tools demote
+      # signing errors to warnings, so the signature state is asserted here:
+      # the bundle and the Rust core must both verify, and the bundle must carry
+      # the application identifier rather than the upstream Electron one.
+      - name: Verify macOS code signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="electron/out/ScreenerBot-darwin-${{ matrix.electron-arch }}/ScreenerBot.app"
+          [ -d "$APP" ] || { echo "Packaged app not found at $APP" >&2; exit 1; }
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          codesign --verify --strict --verbose=2 "$APP/Contents/Resources/screenerbot"
+          IDENTIFIER="$(codesign -d --verbose=2 "$APP" 2>&1 | sed -n 's/^Identifier=//p')"
+          [ "$IDENTIFIER" = "io.screenerbot.app" ] || {
+            echo "Packaged app is signed as '$IDENTIFIER', expected io.screenerbot.app" >&2
+            exit 1
+          }
+          echo "Signed and sealed as $IDENTIFIER"
+
       - name: Collect artifacts
         shell: bash
         run: |
