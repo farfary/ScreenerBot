@@ -140,6 +140,10 @@ export function applyChartMixin(PositionDetailsDialog) {
 
     const isDark = document.documentElement.getAttribute("data-theme") !== "light";
     const pos = this._position() || {};
+    // A fresh chart reports only CHANGES to what is off-pane, so the previous position's note
+    // must not survive into this one.
+    this._pddClippedRefs = [];
+    this._pddDroppedEvents = 0;
 
     this._pddChart = window.createAdvancedChart(container, {
       theme: isDark ? "dark" : "light",
@@ -169,6 +173,13 @@ export function applyChartMixin(PositionDetailsDialog) {
     };
     // A click restores an activity-focused layout or finds a marked event (panes.js).
     this._pddChart.onClick = (param) => this._onPositionChartClick(param);
+    // The price scale refuses a level that would flatten the candles (advanced_chart). Say
+    // where that level went instead of leaving a legend entry for an invisible line.
+    this._pddChart.onReferenceClipped = (refs) => {
+      this._pddClippedRefs = refs;
+      this._renderChartNote();
+      this._renderChartLegend();
+    };
     this._syncPaneControls();
 
     // Record the frame before the first candles land so the initial paint is already on the
@@ -578,7 +589,9 @@ export function applyChartMixin(PositionDetailsDialog) {
               // Price lines do not extend the price scale on their own, so a deeply red or
               // green position drew its entry off-pane. Only while the view overlaps the
               // position's lifetime, though: a closed position's entry from weeks ago squashed
-              // today's candles into the bottom of the pane.
+              // today's candles into the bottom of the pane. How far the scale may stretch for
+              // it is the chart's own rule (ChartFraming.MIN_DATA_SHARE); a level it refuses
+              // comes back through onReferenceClipped and is named in the note.
               autoscale: { from: span.from, to: this._isSettled() ? span.to : Infinity },
             },
           ]
@@ -586,12 +599,39 @@ export function applyChartMixin(PositionDetailsDialog) {
     );
     this._renderChartLegend();
 
+    this._pddDroppedEvents = dropped;
+    this._renderChartNote();
+  };
+
+  /** Whether a reference level the chart was asked to keep in view is currently off-pane. */
+  proto._isReferenceClipped = function (label) {
+    return (this._pddClippedRefs || []).some((ref) => ref.label === label);
+  };
+
+  /**
+   * One line under the chart for everything the plot itself cannot show: events with no candle
+   * on this timeframe, and reference levels the price scale could not reach without flattening
+   * the candles.
+   */
+  proto._renderChartNote = function () {
     const note = this.dialogEl?.querySelector("#pddChartNote");
-    if (note) {
-      note.textContent = dropped
-        ? `${dropped} event${dropped > 1 ? "s" : ""} without a candle on this timeframe`
-        : "";
+    if (!note) return;
+
+    const parts = [];
+    const dropped = this._pddDroppedEvents || 0;
+    if (dropped) {
+      parts.push(`${dropped} event${dropped > 1 ? "s" : ""} without a candle on this timeframe`);
     }
+    (this._pddClippedRefs || []).forEach((ref) => {
+      parts.push(
+        `${ref.label || "Level"} ${this._formatPrice(ref.price)} is ${ref.above ? "above" : "below"} this view`
+      );
+    });
+
+    note.textContent = parts.join(" · ");
+    note.title = (this._pddClippedRefs || []).length
+      ? "Drag the price axis to scale out to it"
+      : "";
   };
 
   /**
@@ -609,7 +649,14 @@ export function applyChartMixin(PositionDetailsDialog) {
       ["Entry", colors.entry, "", entries.some((e) => !e.is_dca)],
       ["DCA", colors.dca, "", entries.some((e) => e.is_dca)],
       ["Exit", colors.exit, "", exits.length > 0],
-      ["Avg entry", colors.avgEntry, " is-line", Boolean(pos.average_entry_price || pos.entry_price)],
+      [
+        // Named as off-pane rather than dropped: the level is real, the price scale just
+        // refuses to stretch to it, and the note under the legend says which way it lies.
+        this._isReferenceClipped("Avg Entry") ? "Avg entry (off scale)" : "Avg entry",
+        colors.avgEntry,
+        " is-line",
+        Boolean(pos.average_entry_price || pos.entry_price),
+      ],
     ];
 
     items.innerHTML = legend

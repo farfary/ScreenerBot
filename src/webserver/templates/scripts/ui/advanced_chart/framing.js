@@ -27,6 +27,13 @@
   const MIN_FRAME_BARS = 40;
 
   /**
+   * Floor on the share of the price pane the candles keep when reference prices (an average
+   * entry, a stop) are folded into the automatic range. Below this the candles stop reading as
+   * a price series at all.
+   */
+  const MIN_DATA_SHARE = 0.4;
+
+  /**
    * The latest view for a plot `width` pixels wide. `rightOffset` is counted in bar SLOTS, so it
    * only means RIGHT_MARGIN alongside the `barSpacing` it came from, and must be re-derived when
    * the pane is resized.
@@ -114,7 +121,79 @@
     return window.from <= visible.to && window.to >= visible.from;
   }
 
-  const api = { RIGHT_MARGIN, MIN_FRAME_BARS, latestView, planRangeFrame, referenceInView };
+  /**
+   * Fold reference prices into the automatic price range without letting a distant one flatten
+   * the candles.
+   *
+   * A price line is paint-only in lightweight-charts, so a level outside the candle range has to
+   * be added to the range for it to be visible at all. Adding it unconditionally is what turned
+   * a position bought at 2.6x today's price into a pane of hairline candles: the range grew to
+   * the entry and the real price action kept ~1% of the height. The candles are the subject of
+   * the chart, so they keep at least MIN_DATA_SHARE of the pane; a reference is folded in only
+   * while it fits in the remaining budget, cheapest first so one unreachable level cannot starve
+   * a level that would have fitted. What does not fit is reported back as `clipped` rather than
+   * drawn at a price it does not have — the owning surface says where it went.
+   *
+   * @param {{minValue: number, maxValue: number} | null} priceRange - the data's own range
+   * @param {Array<{price: number, from: number, to: number}>} refs - registered reference prices
+   * @param {{from: number, to: number} | null} visible - the chart's visible time range
+   * @returns {{priceRange: object | null, clipped: Array}} the range to scale to, and the
+   *          references left outside it (each with `above` telling which edge it sits past)
+   */
+  function foldReferences(priceRange, refs, visible) {
+    const inView = (refs || []).filter(
+      (ref) => Number.isFinite(ref.price) && ref.price > 0 && referenceInView(ref, visible)
+    );
+    if (!inView.length) return { priceRange, clipped: [] };
+
+    // No data range to protect (an empty series): the references are all there is to scale to.
+    if (!priceRange) {
+      const prices = inView.map((ref) => ref.price);
+      const minValue = Math.min(...prices);
+      const maxValue = Math.max(...prices);
+      return { priceRange: minValue === maxValue ? null : { minValue, maxValue }, clipped: [] };
+    }
+
+    let { minValue, maxValue } = priceRange;
+    const dataSpan = maxValue - minValue;
+    // A flat window — one bar, or a dead price — has no shape left to protect, so every
+    // reference is allowed in; otherwise the candles keep MIN_DATA_SHARE of the pane.
+    let budget = dataSpan > 0 ? dataSpan * (1 / MIN_DATA_SHARE - 1) : Infinity;
+
+    const distance = (price) =>
+      price < minValue ? minValue - price : price > maxValue ? price - maxValue : 0;
+    const initialCost = new Map(inView.map((ref) => [ref, distance(ref.price)]));
+
+    const clipped = [];
+    inView
+      .slice()
+      .sort((a, b) => initialCost.get(a) - initialCost.get(b))
+      .forEach((ref) => {
+        const need = distance(ref.price);
+        if (need > budget) {
+          clipped.push({ ...ref, above: ref.price > maxValue });
+          return;
+        }
+        budget -= need;
+        if (ref.price < minValue) minValue = ref.price;
+        else if (ref.price > maxValue) maxValue = ref.price;
+      });
+
+    if (minValue === priceRange.minValue && maxValue === priceRange.maxValue) {
+      return { priceRange, clipped };
+    }
+    return { priceRange: { minValue, maxValue }, clipped };
+  }
+
+  const api = {
+    RIGHT_MARGIN,
+    MIN_FRAME_BARS,
+    MIN_DATA_SHARE,
+    latestView,
+    planRangeFrame,
+    referenceInView,
+    foldReferences,
+  };
   if (typeof module === "object" && module.exports) module.exports = api;
   if (root) root.ChartFraming = api;
 })(typeof window !== "undefined" ? window : null);

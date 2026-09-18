@@ -112,9 +112,13 @@
       this._barSeconds = null;
       // How the view is framed when data lands and the user has not taken over.
       this._frame = { mode: "latest" };
-      // Reference prices ({ price, from, to }) kept inside the price range while the
+      // Reference prices ({ price, label, from, to }) kept inside the price range while the
       // view overlaps their time window. Price lines do not extend the scale on their own.
       this._autoscaleRefs = [];
+      // Last reported set of references the price range could not afford, and the frame the
+      // report is deferred to.
+      this._clippedSignature = "";
+      this._clippedFrame = null;
 
       // UI elements
       this.tooltipEl = null;
@@ -347,30 +351,53 @@
      * range therefore drew its "Avg Entry" line off-pane and the chart looked
      * like it had no position on it at all. Prices registered through
      * setOverlayLines({ autoscale }) are folded into the range here — but only
-     * while the visible time range overlaps the line's window. A closed
-     * position's entry from weeks ago otherwise stretched the scale over empty
-     * price space and squashed today's candles into the bottom of the pane.
+     * while the visible time range overlaps the line's window, and only as far
+     * as ChartFraming.MIN_DATA_SHARE allows, so a far-away level can never
+     * flatten the candles it is drawn against. A reference that does not fit is
+     * handed to `onReferenceClipped` instead of being drawn somewhere it is not.
      * lightweight-charts re-runs this on every visible-range change.
      */
     _autoscaleInfo(baseImplementation) {
       const base = baseImplementation();
-      if (!this._autoscaleRefs.length || !this.chart) return base;
+      if (!this.chart) return base;
+      if (!this._autoscaleRefs.length) {
+        this._reportClippedRefs([]);
+        return base;
+      }
 
       const visible = this.chart.timeScale().getVisibleRange();
-      const values = this._autoscaleRefs
-        .filter((ref) => ref.price > 0 && Framing.referenceInView(ref, visible))
-        .map((ref) => ref.price);
-      if (!values.length) return base;
+      const folded = Framing.foldReferences(
+        base?.priceRange || null,
+        this._autoscaleRefs,
+        visible
+      );
+      this._reportClippedRefs(folded.clipped);
+      if (!folded.priceRange || folded.priceRange === base?.priceRange) return base;
 
-      let minValue = Math.min(...values);
-      let maxValue = Math.max(...values);
-      if (base?.priceRange) {
-        minValue = Math.min(minValue, base.priceRange.minValue);
-        maxValue = Math.max(maxValue, base.priceRange.maxValue);
-      }
-      if (minValue === maxValue) return base;
+      return { ...(base || {}), priceRange: folded.priceRange };
+    }
 
-      return { ...(base || {}), priceRange: { minValue, maxValue } };
+    /**
+     * Tell the owning surface which reference levels are off-pane, so it can say so in words
+     * rather than leaving a legend entry pointing at a line nobody can see.
+     *
+     * Autoscale runs inside the chart's own paint, so the callback is deferred one frame: a
+     * listener that writes DOM would otherwise re-enter the chart mid-render. Only changes are
+     * reported — this provider runs on every visible-range change.
+     */
+    _reportClippedRefs(clipped) {
+      const signature = clipped
+        .map((ref) => `${ref.label || ""}@${ref.price}${ref.above ? "^" : "v"}`)
+        .join("|");
+      if (signature === this._clippedSignature) return;
+      this._clippedSignature = signature;
+      if (!this.onReferenceClipped) return;
+
+      if (this._clippedFrame) cancelAnimationFrame(this._clippedFrame);
+      this._clippedFrame = requestAnimationFrame(() => {
+        this._clippedFrame = null;
+        this.onReferenceClipped?.(clipped);
+      });
     }
 
     /** Re-run autoscale after the registered reference prices changed. */
@@ -700,6 +727,7 @@
         .filter((o) => o.autoscale && Number.isFinite(o.price))
         .map((o) => ({
           price: o.price,
+          label: o.label || "",
           from: o.autoscale === true ? -Infinity : (o.autoscale.from ?? -Infinity),
           to: o.autoscale === true ? Infinity : (o.autoscale.to ?? Infinity),
         }));
@@ -1274,6 +1302,11 @@
       this._barSeconds = null;
       this._times = [];
       this._autoscaleRefs = [];
+      if (this._clippedFrame) {
+        cancelAnimationFrame(this._clippedFrame);
+        this._clippedFrame = null;
+      }
+      this._clippedSignature = "";
     }
   }
 
