@@ -281,6 +281,18 @@ async fn calculate_fee_breakdown(
             base_fee = (total - priority_fee).max(0.0);
         }
     }
+    // Version-1 transactionConfig states the paid priority fee in lamports.
+    // When present it is authoritative even if the message also has a
+    // ComputeBudget instruction.
+    if let Some(priority_lamports) =
+        transaction_config_priority_fee_lamports(&tx_data.transaction.message)
+    {
+        priority_fee = priority_lamports as f64 / 1_000_000_000.0;
+        if let Some(meta) = &tx_data.meta {
+            let total = meta.fee as f64 / 1_000_000_000.0;
+            base_fee = (total - priority_fee).max(0.0);
+        }
+    }
     // MEV tips detected from explicit system transfers to known tip accounts
     // Prefer balance analysis value; if zero, fall back to instruction scan
     let mut mev_tips = balance_analysis.total_tips;
@@ -307,6 +319,13 @@ async fn calculate_fee_breakdown(
         rent_costs,
         total_fees,
     })
+}
+
+fn transaction_config_priority_fee_lamports(message: &serde_json::Value) -> Option<u64> {
+    message
+        .get("transactionConfig")?
+        .get("priorityFee")?
+        .as_u64()
 }
 
 /// Detect total MEV/Jito tips by scanning parsed outer and inner instructions (dup from balance)
@@ -375,6 +394,74 @@ async fn estimate_swap_fees(
 
     // Estimate 0.1% fee for most DEXes
     Ok(total_sol_transfers * 0.001)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{calculate_fee_breakdown, AtaAnalysis, BalanceAnalysis};
+    use crate::chains::solana::rpc::TransactionDetails;
+    use crate::chains::solana::transactions::analyzer::ata::{AccountLifecycle, RentSummary};
+    use std::collections::HashMap;
+
+    #[tokio::test]
+    async fn v1_transaction_config_provides_priority_fee_in_lamports() {
+        let tx: TransactionDetails = serde_json::from_value(serde_json::json!({
+            "slot": 1,
+            "version": 1,
+            "transaction": {
+                "signatures": ["signature"],
+                "message": {
+                    "accountKeys": [],
+                    "instructions": [],
+                    "transactionConfig": {
+                        "computeUnitLimit": 30000,
+                        "heapSize": null,
+                        "loadedAccountsDataSizeLimit": 200000,
+                        "priorityFee": 6000
+                    }
+                }
+            },
+            "meta": {
+                "err": null,
+                "fee": 10000,
+                "preBalances": [],
+                "postBalances": []
+            },
+            "blockTime": null
+        }))
+        .expect("v1 jsonParsed transaction decodes");
+        let balance = BalanceAnalysis {
+            sol_changes: HashMap::new(),
+            token_changes: HashMap::new(),
+            clean_transfers: Vec::new(),
+            total_tips: 0.0,
+            total_rent: 0.0,
+            confidence: 1.0,
+        };
+        let ata = AtaAnalysis {
+            ata_operations: Vec::new(),
+            rent_summary: RentSummary {
+                total_rent_paid: 0.0,
+                total_rent_recovered: 0.0,
+                net_rent_cost: 0.0,
+                accounts_created: 0,
+                accounts_closed: 0,
+            },
+            account_lifecycle: AccountLifecycle {
+                created_accounts: Vec::new(),
+                closed_accounts: Vec::new(),
+                modified_accounts: Vec::new(),
+            },
+            confidence: 1.0,
+        };
+
+        let fees = calculate_fee_breakdown(&tx, &balance, &ata)
+            .await
+            .expect("fee breakdown");
+
+        assert!((fees.priority_fee - 0.000006).abs() < f64::EPSILON);
+        assert!((fees.base_fee - 0.000004).abs() < f64::EPSILON);
+    }
 }
 
 // =============================================================================

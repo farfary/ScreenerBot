@@ -356,11 +356,7 @@ impl RpcClientMethods for RpcClient {
     ) -> crate::Result<Option<EncodedConfirmedTransactionWithStatusMeta>> {
         let params = serde_json::json!([
             signature.to_string(),
-            {
-                "encoding": "jsonParsed",
-                "commitment": "confirmed",
-                "maxSupportedTransactionVersion": 0
-            }
+            get_transaction_config(Some(CommitmentLevel::Confirmed))
         ]);
 
         let result = self.manager.execute_raw("getTransaction", params).await;
@@ -1444,14 +1440,7 @@ impl RpcClientMethods for RpcClient {
         signature: &str,
         commitment: CommitmentLevel,
     ) -> crate::Result<TransactionDetails> {
-        let params = serde_json::json!([
-            signature,
-            {
-                "encoding": "jsonParsed",
-                "commitment": commitment_to_string(commitment),
-                "maxSupportedTransactionVersion": 0
-            }
-        ]);
+        let params = serde_json::json!([signature, get_transaction_config(Some(commitment))]);
 
         let result = self.manager.execute_raw("getTransaction", params).await?;
 
@@ -1472,13 +1461,7 @@ impl RpcClientMethods for RpcClient {
 
     async fn get_transaction_details(&self, signature: &str) -> crate::Result<TransactionDetails> {
         // Use jsonParsed encoding for proper decoding (required for v0 transactions with LUTs)
-        let params = serde_json::json!([
-            signature,
-            {
-                "encoding": "jsonParsed",
-                "maxSupportedTransactionVersion": 0
-            }
-        ]);
+        let params = serde_json::json!([signature, get_transaction_config(None)]);
 
         let result = self.manager.execute_raw("getTransaction", params).await?;
 
@@ -1533,6 +1516,73 @@ fn commitment_to_string(commitment: CommitmentLevel) -> &'static str {
         CommitmentLevel::Finalized => "finalized",
         CommitmentLevel::Confirmed => "confirmed",
         CommitmentLevel::Processed => "processed",
+    }
+}
+
+fn get_transaction_config(commitment: Option<CommitmentLevel>) -> serde_json::Value {
+    let mut config = serde_json::json!({
+        "encoding": "jsonParsed",
+        "maxSupportedTransactionVersion": 1
+    });
+    if let Some(commitment) = commitment {
+        config["commitment"] = serde_json::json!(commitment_to_string(commitment));
+    }
+    config
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        get_transaction_config, CommitmentLevel, EncodedConfirmedTransactionWithStatusMeta,
+    };
+
+    #[test]
+    fn transaction_requests_use_json_parsed_and_integer_version_one() {
+        let without_commitment = get_transaction_config(None);
+        assert_eq!(without_commitment["encoding"], "jsonParsed");
+        assert_eq!(without_commitment["maxSupportedTransactionVersion"], 1);
+        assert!(without_commitment["maxSupportedTransactionVersion"].is_number());
+        assert!(without_commitment.get("commitment").is_none());
+
+        let confirmed = get_transaction_config(Some(CommitmentLevel::Confirmed));
+        assert_eq!(confirmed["commitment"], "confirmed");
+        assert_eq!(confirmed["maxSupportedTransactionVersion"], 1);
+    }
+
+    #[test]
+    fn sdk_transaction_response_decodes_v1_parsed_message() {
+        let response: EncodedConfirmedTransactionWithStatusMeta =
+            serde_json::from_value(serde_json::json!({
+                "slot": 1,
+                "transaction": {
+                    "signatures": ["signature"],
+                    "message": {
+                        "accountKeys": [{
+                            "pubkey": "11111111111111111111111111111111",
+                            "signer": true,
+                            "writable": true,
+                            "source": "transaction"
+                        }],
+                        "recentBlockhash": "11111111111111111111111111111111",
+                        "instructions": [],
+                        "transactionConfig": {
+                            "computeUnitLimit": 30000,
+                            "heapSize": null,
+                            "loadedAccountsDataSizeLimit": 200000,
+                            "priorityFee": 6000
+                        }
+                    }
+                },
+                "meta": null,
+                "version": 1,
+                "blockTime": null
+            }))
+            .expect("SDK transaction response decodes v1 jsonParsed fields");
+
+        assert_eq!(
+            serde_json::to_value(response).expect("SDK response serializes")["version"],
+            1
+        );
     }
 }
 

@@ -290,6 +290,49 @@ mod tests {
     }
 
     #[test]
+    fn version_one_json_parsed_transaction_decodes_subject_balances() {
+        let raw = json!({
+            "slot": 100,
+            "version": 1,
+            "blockTime": 1000,
+            "transaction": {
+                "signatures": ["test-signature"],
+                "message": {
+                    "accountKeys": [
+                        { "pubkey": SUBJECT, "signer": true, "writable": true, "source": "transaction" },
+                        { "pubkey": POOL, "signer": false, "writable": true, "source": "transaction" }
+                    ],
+                    "instructions": [],
+                    "transactionConfig": {
+                        "computeUnitLimit": 30000,
+                        "heapSize": null,
+                        "loadedAccountsDataSizeLimit": 200000,
+                        "priorityFee": null
+                    }
+                }
+            },
+            "meta": {
+                "err": null,
+                "fee": 5000,
+                "preBalances": [1_000_000_000u64, 1_000_000_000u64],
+                "postBalances": [999_995_000u64, 1_000_000_000u64],
+                "preTokenBalances": [token_balance(0, SUBJECT, MINT_A, "0", 6)],
+                "postTokenBalances": [token_balance(0, SUBJECT, MINT_A, "1000000", 6)]
+            }
+        });
+
+        let tx = make_transaction(raw, true);
+        let deltas = extract_subject_deltas(SUBJECT, &tx);
+
+        let token_delta = deltas
+            .iter()
+            .find(|delta| delta.mint == MINT_A)
+            .expect("v1 parsed message preserves the subject token delta");
+        assert_eq!(token_delta.delta_raw, 1_000_000);
+        assert_eq!(token_delta.fee_native_raw, Some(5_000));
+    }
+
+    #[test]
     fn the_fee_payers_fee_is_added_back_to_the_native_delta() {
         let raw = json!({
             "slot": 100,

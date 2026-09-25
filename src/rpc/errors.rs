@@ -63,10 +63,28 @@ impl RpcError {
             Self::InvalidResponse { .. } => false,
             Self::Configuration { .. } => false,
             Self::ProviderError { code, .. } => {
-                // Server errors are retryable, client errors are not
-                *code >= -32099 && *code <= -32000
+                // The generic server-error range includes request-specific transaction failures.
+                (*code >= -32099 && *code <= -32000) && !matches!(*code, -32002 | -32015)
             }
             Self::Other(_) => false,
+        }
+    }
+
+    /// Whether this failure is evidence that the selected provider is unhealthy.
+    /// Deterministic JSON-RPC request errors (including unsupported transaction
+    /// versions) describe the request, not provider availability.
+    pub fn is_provider_health_failure(&self) -> bool {
+        match self {
+            Self::RateLimited { .. }
+            | Self::Network { .. }
+            | Self::Timeout { .. }
+            | Self::InvalidResponse { .. } => true,
+            Self::ProviderError { .. } => self.is_retryable(),
+            Self::CircuitOpen { .. }
+            | Self::NoProvidersAvailable { .. }
+            | Self::AccountNotFound { .. }
+            | Self::Configuration { .. }
+            | Self::Other(_) => false,
         }
     }
 
@@ -257,13 +275,14 @@ mod tests {
     use std::time::Duration;
 
     #[tokio::test]
-    async fn unsupported_transaction_version_retries_and_opens_the_provider_circuit() {
+    async fn unsupported_transaction_version_does_not_retry_or_open_provider_circuit() {
         let error = RpcError::ProviderError {
             code: -32015,
             message: "Transaction version (1) is not supported by the requesting client".to_owned(),
             data: None,
         };
-        assert!(error.is_retryable());
+        assert!(!error.is_retryable());
+        assert!(!error.is_provider_health_failure());
 
         let breaker = ProviderCircuitBreaker::new(
             "test-provider",
@@ -274,9 +293,62 @@ mod tests {
         );
         tokio::time::sleep(Duration::from_millis(2)).await;
         for _ in 0..5 {
+            if error.is_provider_health_failure() {
+                breaker.record_failure(&error.to_string(), false).await;
+            }
+        }
+        assert_eq!(breaker.current_state().await, CircuitState::Closed);
+        assert!(breaker.can_execute().await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn transport_and_retryable_server_errors_still_open_provider_circuit() {
+        let errors = [
+            RpcError::Network {
+                message: "connection reset".to_owned(),
+                is_timeout: false,
+            },
+            RpcError::ProviderError {
+                code: -32005,
+                message: "node is unhealthy".to_owned(),
+                data: None,
+            },
+        ];
+        let breaker = ProviderCircuitBreaker::new(
+            "test-provider",
+            CircuitBreakerConfig {
+                min_state_duration: Duration::from_millis(1),
+                ..Default::default()
+            },
+        );
+        tokio::time::sleep(Duration::from_millis(2)).await;
+        for error in errors.iter().cycle().take(5) {
+            assert!(error.is_retryable());
+            assert!(error.is_provider_health_failure());
             breaker.record_failure(&error.to_string(), false).await;
         }
         assert_eq!(breaker.current_state().await, CircuitState::Open);
         assert!(breaker.can_execute().await.is_err());
+    }
+
+    #[test]
+    fn json_rpc_request_errors_are_not_retryable_or_provider_health_failures() {
+        for code in [-32700, -32600, -32601, -32602] {
+            let error = RpcError::ProviderError {
+                code,
+                message: "request rejected".to_owned(),
+                data: None,
+            };
+            assert!(!error.is_retryable(), "code {code}");
+            assert!(!error.is_provider_health_failure(), "code {code}");
+        }
+
+        let simulation_failed = RpcError::ProviderError {
+            code: -32002,
+            message: "Transaction simulation failed".to_owned(),
+            data: None,
+        };
+        assert!(!simulation_failed.is_retryable());
+        assert!(!simulation_failed.is_provider_health_failure());
     }
 }

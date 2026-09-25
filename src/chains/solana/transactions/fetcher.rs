@@ -350,10 +350,7 @@ impl TransactionFetcher {
                     if e.is_retryable() {
                         attempts += 1;
                         if attempts >= self.config.max_retries {
-                            return Err(SolanaError::Rpc {
-                                operation: "fetch_transaction_details",
-                                detail: format!("failed after {attempts} attempts: {e}"),
-                            });
+                            return Err(e);
                         }
 
                         logger::info(
@@ -369,25 +366,8 @@ impl TransactionFetcher {
                         continue;
                     }
 
-                    // Default retry logic for other errors
-                    attempts += 1;
-                    if attempts >= self.config.max_retries {
-                        return Err(SolanaError::Rpc {
-                            operation: "fetch_transaction_details",
-                            detail: format!("failed after {attempts} attempts: {e}"),
-                        });
-                    }
-
-                    logger::info(
-                        LogTag::Transactions,
-                        &format!(
-                            "Transaction details fetch attempt {} failed, retrying in {}ms: {}",
-                            attempts, delay, e
-                        ),
-                    );
-
-                    sleep(Duration::from_millis(delay)).await;
-                    delay *= 2; // Exponential backoff
+                    // A deterministic request error cannot improve with another provider retry.
+                    return Err(e);
                 }
             }
         }
@@ -418,6 +398,10 @@ impl TransactionFetcher {
                         },
                     )
                 }
+                crate::Error::Rpc(source) => crate::chains::solana::Error::RpcFailure {
+                    operation: "get_transaction_details",
+                    source: source.clone(),
+                },
                 _ => crate::chains::solana::Error::Rpc {
                     operation: "get_transaction_details",
                     detail: e.to_string(),
@@ -508,6 +492,36 @@ impl TransactionFetcher {
         );
 
         results
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::chains::solana::error::Error as SolanaError;
+    use crate::errors::ErrorClass;
+    use crate::rpc::RpcError;
+
+    #[test]
+    fn transaction_fetcher_preserves_rpc_retry_classification() {
+        let unsupported_version = SolanaError::RpcFailure {
+            operation: "get_transaction_details",
+            source: RpcError::ProviderError {
+                code: -32015,
+                message: "Transaction version (1) is not supported".to_owned(),
+                data: None,
+            },
+        };
+        assert!(!unsupported_version.is_retryable());
+
+        let provider_fault = SolanaError::RpcFailure {
+            operation: "get_transaction_details",
+            source: RpcError::ProviderError {
+                code: -32005,
+                message: "node is unhealthy".to_owned(),
+                data: None,
+            },
+        };
+        assert!(provider_fault.is_retryable());
     }
 }
 

@@ -436,23 +436,26 @@ impl RpcManager {
                 Err(e) => {
                     let latency_ms = request_start.elapsed().as_millis() as u64;
                     let is_rate_limited = e.is_rate_limited();
+                    let is_provider_health_failure = e.is_provider_health_failure();
 
                     // Handle error
                     if is_rate_limited {
                         limiter.record_429(e.retry_after()).await;
-                    } else {
+                    } else if is_provider_health_failure {
                         breaker
                             .record_failure(&e.to_string(), is_rate_limited)
                             .await;
                     }
 
-                    self.update_provider_state(
-                        &provider_id,
-                        false,
-                        latency_ms,
-                        Some(&e.to_string()),
-                    )
-                    .await;
+                    if is_provider_health_failure {
+                        self.update_provider_state(
+                            &provider_id,
+                            false,
+                            latency_ms,
+                            Some(&e.to_string()),
+                        )
+                        .await;
+                    }
 
                     // Record stats
                     self.record_call_result(RpcCallResult {

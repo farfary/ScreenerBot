@@ -31,6 +31,13 @@ pub enum Error {
         operation: &'static str,
         detail: String,
     },
+    /// A typed RPC failure whose retry policy depends on the provider error code.
+    #[error("solana rpc {operation} failed: {source}")]
+    RpcFailure {
+        operation: &'static str,
+        #[source]
+        source: crate::rpc::RpcError,
+    },
     /// The requested account does not exist on chain.
     #[error("account {address} does not exist")]
     AccountNotFound { address: String },
@@ -97,6 +104,7 @@ impl ErrorClass for Error {
         match self {
             Error::Execution(e) => e.is_retryable(),
             Error::Rpc { .. } => true,
+            Error::RpcFailure { source, .. } => source.is_retryable(),
             Error::InvalidAddress { .. }
             | Error::InvalidKeypair { .. }
             | Error::KeypairUnavailable { .. }
@@ -118,6 +126,7 @@ impl ErrorClass for Error {
         match self {
             Error::Execution(e) => e.retry_after(),
             Error::Rpc { .. } => Some(Duration::from_millis(500)),
+            Error::RpcFailure { source, .. } => source.retry_after(),
             _ => None,
         }
     }
@@ -129,7 +138,7 @@ impl ErrorClass for Error {
             Error::InvalidKeypair { .. }
             | Error::KeypairUnavailable { .. }
             | Error::SecureStorage(_) => Severity::Critical,
-            Error::Rpc { .. } => Severity::Warning,
+            Error::Rpc { .. } | Error::RpcFailure { .. } => Severity::Warning,
             Error::Decode { .. }
             | Error::InstructionBuild { .. }
             | Error::SimulationRejected { .. }
@@ -148,7 +157,7 @@ impl ErrorClass for Error {
             | Error::KeypairUnavailable { .. }
             | Error::SecureStorage(_) => 500,
             Error::AccountNotFound { .. } => 404,
-            Error::Rpc { .. } => 503,
+            Error::Rpc { .. } | Error::RpcFailure { .. } => 503,
             Error::Decode { .. } | Error::InstructionBuild { .. } => 500,
             Error::SimulationRejected { .. } | Error::SwapCostRejected { .. } => 422,
             Error::DirectSwap(_) => 502,
