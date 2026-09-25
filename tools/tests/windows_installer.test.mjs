@@ -1,8 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
+import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
+const forgeConfigPath = fileURLToPath(new URL("../../electron/forge.config.js", import.meta.url));
 const {
   APP_ID,
   UPGRADE_CODES,
@@ -50,6 +53,28 @@ test("Windows installer identities remain stable and architecture-specific", () 
     beforeCreate: customizeWindowsInstaller,
   });
   assert.notEqual(UPGRADE_CODES.x64, UPGRADE_CODES.arm64);
+});
+
+test("Forge uses the requested Windows architecture for MSI and bundled runtime", () => {
+  for (const architecture of ["x64", "arm64"]) {
+    const inspectConfig = `
+      Object.defineProperty(process, 'platform', { value: 'win32' });
+      const config = require(process.argv[1]);
+      const wix = config.makers.find((maker) => maker.name === '@electron-forge/maker-wix');
+      process.stdout.write(JSON.stringify({
+        arch: wix.config.arch,
+        upgradeCode: wix.config.upgradeCode,
+        runtime: config.packagerConfig.extraResource.find((resource) => resource.includes('vc_redist.')),
+      }));
+    `;
+    const config = JSON.parse(execFileSync(process.execPath, ["-e", inspectConfig, forgeConfigPath], {
+      env: { ...process.env, ELECTRON_FORGE_ARCH: architecture },
+      encoding: "utf8",
+    }));
+    assert.equal(config.arch, architecture);
+    assert.equal(config.upgradeCode, UPGRADE_CODES[architecture]);
+    assert.ok(config.runtime.endsWith(`vc_redist.${architecture}.exe`));
+  }
 });
 
 test("the public Apps entry omits installer scope", () => {

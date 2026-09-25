@@ -7,7 +7,8 @@ const isMacOS = process.platform === 'darwin';
 const binaryName = isWindows ? 'screenerbot.exe' : 'screenerbot';
 
 // Detect target architecture for conditional makers
-// ELECTRON_FORGE_ARCH is set by electron-forge during make, fallback to process.arch
+// Cross-architecture packaging sets ELECTRON_FORGE_ARCH before loading this config.
+// Forge's --arch alone does not set it; local native builds use process.arch.
 const targetArch = process.env.ELECTRON_FORGE_ARCH || process.arch;
 const isArm64 = targetArch === 'arm64';
 

@@ -545,6 +545,11 @@ jobs:
 
       - name: Build Electron app
         working-directory: electron
+        env:
+          # Forge's --arch selects the package target but is not exposed to
+          # forge.config.js. Keep the bundled VC++ runtime and WiX identity on
+          # the same architecture as the package matrix leg.
+          ELECTRON_FORGE_ARCH: ${{ matrix.electron-arch }}
         run: npx electron-forge make --arch=${{ matrix.electron-arch }}
 
       - name: Verify Windows installer metadata
