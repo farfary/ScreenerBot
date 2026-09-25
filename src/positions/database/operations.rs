@@ -19,6 +19,15 @@ impl PositionsDatabase {
     /// Create new PositionsDatabase with connection pooling
     pub async fn new(chain: crate::chains::ChainId) -> Result<Self> {
         let database_path = crate::paths::get_positions_db_path();
+        Self::new_with_path(database_path, chain).await
+    }
+
+    /// Open a positions database at an explicit path and initialize its complete schema.
+    async fn new_with_path(
+        database_path: impl AsRef<std::path::Path>,
+        chain: crate::chains::ChainId,
+    ) -> Result<Self> {
+        let database_path = database_path.as_ref();
         let database_path_str = database_path.to_string_lossy().to_string();
 
         // Only log detailed initialization on first database creation
@@ -31,7 +40,7 @@ impl PositionsDatabase {
         }
 
         // Configure connection manager with centralized PRAGMAs
-        let manager = SqliteConnectionManager::file(&database_path)
+        let manager = SqliteConnectionManager::file(database_path)
             .with_init(|c| database::configure_connection(c, database::POSITIONS_DB));
 
         // Create connection pool
@@ -70,6 +79,14 @@ impl PositionsDatabase {
     async fn initialize_schema(&mut self, log_initialization: bool) -> Result<()> {
         let conn = self.get_connection()?;
 
+        // Establish the base table before additive migrations. This is a no-op for
+        // legacy schemas, whose provenance migration must still precede the chain
+        // identity migration.
+        conn.execute(SCHEMA_POSITIONS, [])
+            .map_err(|e| Error::SchemaMigration {
+                detail: format!("failed to create positions table: {e}"),
+            })?;
+
         // Provenance introduced `round_key`, which the chain migration needs when it
         // replaces the legacy uniqueness index. Historical databases can predate both
         // migrations, so add the provenance columns before rebuilding chain indexes.
@@ -77,11 +94,6 @@ impl PositionsDatabase {
         Self::migrate_chain_identity(&conn)?;
 
         // Create all tables
-        conn.execute(SCHEMA_POSITIONS, [])
-            .map_err(|e| Error::SchemaMigration {
-                detail: format!("failed to create positions table: {e}"),
-            })?;
-
         conn.execute(SCHEMA_POSITION_STATES, [])
             .map_err(|e| Error::SchemaMigration {
                 detail: format!("failed to create position_states table: {e}"),
@@ -977,6 +989,24 @@ mod tests {
     }
 
     fn assert_current_schema(connection: &Connection) {
+        for table in [
+            "positions",
+            "position_states",
+            "position_exits",
+            "position_entries",
+            "position_tracking",
+            "position_metadata",
+            "token_snapshots",
+        ] {
+            let exists = connection
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+                    [table],
+                    |row| row.get::<_, i64>(0),
+                )
+                .unwrap();
+            assert_eq!(exists, 1, "missing table {table}");
+        }
         for column in [
             "chain_id",
             "origin_kind",
@@ -1025,6 +1055,41 @@ mod tests {
                 .unwrap(),
             0
         );
+        assert_eq!(
+            connection
+                .query_row(
+                    "SELECT value FROM position_metadata WHERE key = 'schema_version'",
+                    [],
+                    |row| row.get::<_, String>(0),
+                )
+                .unwrap(),
+            POSITIONS_SCHEMA_VERSION.to_string()
+        );
+    }
+
+    #[tokio::test]
+    async fn full_schema_initialization_creates_and_reopens_fresh_database_files() {
+        let directory = tempfile::tempdir().unwrap();
+
+        for file_name in ["missing.db", "placeholder.db"] {
+            let path = directory.path().join(file_name);
+            if file_name == "placeholder.db" {
+                std::fs::File::create(&path).unwrap();
+            } else {
+                assert!(!path.exists());
+            }
+
+            let database = PositionsDatabase::new_with_path(&path, crate::chains::ChainId::Solana)
+                .await
+                .unwrap();
+            drop(database);
+            let database = PositionsDatabase::new_with_path(&path, crate::chains::ChainId::Solana)
+                .await
+                .unwrap();
+
+            let connection = database.get_connection().unwrap();
+            assert_current_schema(&connection);
+        }
     }
 
     #[tokio::test]
