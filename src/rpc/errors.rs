@@ -248,3 +248,35 @@ impl From<reqwest::Error> for RpcError {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::RpcError;
+    use crate::rpc::types::CircuitState;
+    use crate::rpc::{CircuitBreakerConfig, ProviderCircuitBreaker};
+    use std::time::Duration;
+
+    #[tokio::test]
+    async fn unsupported_transaction_version_retries_and_opens_the_provider_circuit() {
+        let error = RpcError::ProviderError {
+            code: -32015,
+            message: "Transaction version (1) is not supported by the requesting client".to_owned(),
+            data: None,
+        };
+        assert!(error.is_retryable());
+
+        let breaker = ProviderCircuitBreaker::new(
+            "test-provider",
+            CircuitBreakerConfig {
+                min_state_duration: Duration::from_millis(1),
+                ..Default::default()
+            },
+        );
+        tokio::time::sleep(Duration::from_millis(2)).await;
+        for _ in 0..5 {
+            breaker.record_failure(&error.to_string(), false).await;
+        }
+        assert_eq!(breaker.current_state().await, CircuitState::Open);
+        assert!(breaker.can_execute().await.is_err());
+    }
+}

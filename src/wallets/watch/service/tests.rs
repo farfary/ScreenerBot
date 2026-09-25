@@ -234,3 +234,68 @@ async fn an_overflowing_target_skips_to_the_head_then_is_disabled_when_it_repeat
     assert!(super::service_state::saturation_reason(address).is_some());
     super::service_state::clear_saturation(address);
 }
+
+#[tokio::test]
+async fn seven_targets_keep_independent_watch_budgets() {
+    let addresses = [
+        "TargetOne1111",
+        "TargetTwo1111",
+        "TargetThree1111",
+        "TargetFour1111",
+        "TargetFive1111",
+        "TargetSix1111",
+        "TargetSeven1111",
+    ];
+    let busy = [false, true, false, true, false, true, false];
+    let fake = FakeRuntime::new(
+        addresses
+            .iter()
+            .map(|address| (*address).to_owned())
+            .collect(),
+    );
+    let (watch_db, _dir) = temp_watch_db();
+    let own = Subject::from_account(
+        crate::chains::AccountId::new(crate::chains::ChainId::Solana, "OwnWallet1111").unwrap(),
+    );
+    let mut targets = Vec::new();
+
+    for (address, is_busy) in addresses.into_iter().zip(busy) {
+        let target = watch_db.insert_alert_target(address, None).await.unwrap();
+        watch_db.set_cursor(address, "old-head").await.unwrap();
+        for poll in 0..2 {
+            if is_busy {
+                for page in 0..poller::MAX_PAGES {
+                    fake.queue_page(
+                        address,
+                        (0..poller::PAGE_SIZE)
+                            .map(|item| format!("{address}-{poll}-{page}-{item}"))
+                            .collect(),
+                    );
+                }
+            } else {
+                fake.queue_page(address, Vec::new());
+            }
+        }
+        targets.push(idle_target_runtime(target));
+    }
+
+    let chain_runtime: Arc<dyn WalletWatchRuntime> = fake;
+    for _ in 0..2 {
+        for target in &mut targets {
+            poll_target(target, &chain_runtime, &watch_db, own.clone(), false).await;
+        }
+    }
+
+    for (target, is_busy) in targets.iter().zip(busy) {
+        let id = target.target.id.unwrap();
+        let persisted = watch_db.get_target(id).await.unwrap().unwrap();
+        assert_eq!(persisted.enabled, !is_busy, "{}", persisted.address);
+        assert_eq!(
+            super::service_state::saturation_reason(&persisted.address).is_some(),
+            is_busy,
+            "{}",
+            persisted.address
+        );
+        super::service_state::clear_saturation(&persisted.address);
+    }
+}
