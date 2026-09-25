@@ -2,17 +2,17 @@
 //!
 //! Split out of `service.rs` to keep that file under the module-size limit;
 //! `run()` owns the single event loop, this file owns what one watched
-//! address's WS forwarder looks like and how the whole set gets rebuilt from
-//! the database.
+//! address's WS forwarder looks like and how the runtime set follows database
+//! changes without interrupting unchanged subscriptions.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use chrono::Utc;
 use tokio::sync::mpsc;
 
-use crate::config::with_config;
 use crate::logger::{self, LogTag};
 use crate::transactions::types::Subject;
 
@@ -32,60 +32,40 @@ pub(super) struct TargetRuntime {
     /// First registration establishes a current head without replaying historical
     /// trades as new alerts.
     pub(super) baseline_only: bool,
-    /// Consecutive polls whose range did not fit in one tick's page budget.
-    pub(super) overflow_streak: u32,
     /// The open catch-up range was started by a gap-fill.
     pub(super) backfill: bool,
 }
 
-/// Consecutive over-budget polls after which a non-own target is disabled.
-const SATURATION_STREAK: u32 = 2;
-
-/// A non-own target produced more signatures than one tick can page
-/// (`MAX_PAGES` x `PAGE_SIZE`). Holding the range open would starve it forever and
-/// replaying it later only yields stale history, so the first overflow skips the
-/// gap to the current head, and a second one in a row means the wallet out-trades
-/// the poll budget: it is disabled with the reason surfaced in its status.
+/// A non-own target reached its per-wallet page budget before its cursor range
+/// completed. Preserve the cursor and pause until the user deliberately resumes.
 pub(super) async fn handle_overflow(target_runtime: &mut TargetRuntime, watch_db: &WatchDatabase) {
     let address = target_runtime.target.address.clone();
     let Some(state) = target_runtime.catch_up.take() else {
         return;
     };
-    target_runtime.overflow_streak += 1;
     let skipped = state.pending_len();
-
-    if target_runtime.overflow_streak >= SATURATION_STREAK {
-        let reason = format!(
-            "Disabled: more than {skipped} transactions per poll interval in {} consecutive polls exceeds the watch budget",
-            target_runtime.overflow_streak
-        );
-        logger::warning(LogTag::WalletWatch, &format!("{address}: {reason}"));
-        if let Some(id) = target_runtime.target.id {
-            match watch_db.set_enabled(id, false).await {
-                Ok(()) => {
-                    super::service_state::mark_saturated(&address, reason);
-                    super::service::request_reload();
-                }
-                Err(e) => logger::warning(
-                    LogTag::WalletWatch,
-                    &format!("Failed to disable saturated target {address}: {e}"),
-                ),
-            }
-        }
+    let pages = target_runtime.target.page_budget;
+    let Some(id) = target_runtime.target.id else {
         return;
-    }
-
-    if let Some(newest) = state.newest_signature() {
-        match watch_db.set_cursor(&address, newest).await {
-            Ok(()) => logger::warning(
-                LogTag::WalletWatch,
-                &format!("{address} exceeded the poll budget; skipped {skipped}+ older transactions to the current head"),
-            ),
-            Err(e) => logger::warning(
-                LogTag::WalletWatch,
-                &format!("Failed to re-baseline overflowing target {address}: {e}"),
-            ),
+    };
+    match watch_db.pause_for_budget(id, pages, skipped).await {
+        Ok(()) => {
+            target_runtime.target.enabled = false;
+            target_runtime.target.disable_reason =
+                Some(super::types::WatchDisableReason::SignatureBudget {
+                    page_budget: pages,
+                    signatures_checked: skipped,
+                });
+            logger::warning(LogTag::WalletWatch, &format!("Paused {address}: reached its {}-signature check limit before catching up; cursor preserved", skipped));
+            // Copy's consumer reacts immediately; its own reconciler also retries
+            // this state transition if its database is temporarily unavailable.
+            super::publish_target_change(address.clone());
+            super::service::request_reload();
         }
+        Err(e) => logger::warning(
+            LogTag::WalletWatch,
+            &format!("Failed to pause over-budget target {address}: {e}"),
+        ),
     }
 }
 
@@ -97,24 +77,44 @@ fn spawn_ws_forwarder(
     address: String,
     tx: mpsc::UnboundedSender<(String, WatchNotification)>,
     runtime: Arc<dyn WalletWatchRuntime>,
-) -> tokio::task::JoinHandle<()> {
-    tokio::spawn(async move {
-        let mut sub = match runtime.subscribe(&address).await {
-            Ok(sub) => sub,
-            Err(e) => {
-                logger::warning(
-                    LogTag::WalletWatch,
-                    &format!("Failed to subscribe to {address}: {e}"),
-                );
-                return;
-            }
-        };
-        while let Some(event) = sub.recv().await {
-            if tx.send((address.clone(), event)).is_err() {
+) -> (tokio::task::JoinHandle<()>, Arc<AtomicBool>) {
+    let active = Arc::new(AtomicBool::new(false));
+    let task_active = Arc::clone(&active);
+    let task = tokio::spawn(async move {
+        let mut retry = Duration::from_secs(1);
+        loop {
+            if tx.is_closed() {
                 break;
             }
+            let mut sub = match runtime.subscribe(&address).await {
+                Ok(sub) => {
+                    task_active.store(true, Ordering::Relaxed);
+                    retry = Duration::from_secs(1);
+                    sub
+                }
+                Err(error) => {
+                    task_active.store(false, Ordering::Relaxed);
+                    logger::warning(
+                        LogTag::WalletWatch,
+                        &format!("Failed to subscribe to {address}: {error}"),
+                    );
+                    tokio::time::sleep(retry).await;
+                    retry = (retry * 2).min(Duration::from_secs(30));
+                    continue;
+                }
+            };
+            while let Some(event) = sub.recv().await {
+                if tx.send((address.clone(), event)).is_err() {
+                    task_active.store(false, Ordering::Relaxed);
+                    return;
+                }
+            }
+            task_active.store(false, Ordering::Relaxed);
+            tokio::time::sleep(retry).await;
+            retry = (retry * 2).min(Duration::from_secs(30));
         }
-    })
+    });
+    (task, active)
 }
 
 fn register(
@@ -124,7 +124,9 @@ fn register(
     target: WatchTarget,
 ) {
     let address = target.address.clone();
-    let ws_task = spawn_ws_forwarder(address.clone(), ws_tx.clone(), Arc::clone(chain_runtime));
+    let (ws_task, ws_active) =
+        spawn_ws_forwarder(address.clone(), ws_tx.clone(), Arc::clone(chain_runtime));
+    super::service_state::set_subscription(address.clone(), Arc::clone(&ws_active));
     runtimes.insert(
         address,
         TargetRuntime {
@@ -133,72 +135,83 @@ fn register(
             last_poll: Instant::now(),
             catch_up: None,
             baseline_only: false,
-            overflow_streak: 0,
             backfill: false,
         },
     );
 }
 
-/// Rebuild the runtime target set from the database: the own wallet (always present,
-/// never persisted) plus every enabled row in `watch_targets`. Simple full-rebuild
-/// rather than a diff -- target management is a low-frequency, human-driven action
-/// (`watch_max_targets` caps the whole set to single digits/low tens by default), so
-/// a brief resubscribe-everything on change is not a real cost.
+/// Reconcile persisted targets without tearing down subscriptions for unchanged
+/// addresses. Each subscription holds a reference to the shared transport; aborting
+/// every forwarder during one wallet's pause can close that transport for all.
 pub(super) async fn reload_targets(
     runtimes: &mut HashMap<String, TargetRuntime>,
     ws_tx: &mpsc::UnboundedSender<(String, WatchNotification)>,
     chain_runtime: &Arc<dyn WalletWatchRuntime>,
     watch_db: &WatchDatabase,
     own_subject: Subject,
+    watch_enabled: bool,
 ) {
-    for runtime in runtimes.values() {
-        runtime.ws_task.abort();
-    }
-    runtimes.clear();
-
-    // Runs after any in-flight poll has finished, so a cursor such a poll wrote for
-    // a target that was just removed is swept here rather than left behind.
-    if let Err(e) = watch_db.purge_orphan_cursors(&own_subject.address()).await {
-        logger::warning(
-            LogTag::WalletWatch,
-            &format!("Failed to purge orphan watch cursors: {e}"),
-        );
-    }
-
-    // The own wallet is always watched, regardless of `wallet.watch_enabled` -- that
-    // switch is the master control for TARGET watching (pasted addresses), not for
-    // the own-wallet observation `TransactionsService` now structurally depends on.
-    register(
-        runtimes,
-        ws_tx,
-        chain_runtime,
+    let mut desired = HashMap::new();
+    desired.insert(
+        own_subject.address(),
         WatchTarget {
             id: None,
             address: own_subject.address(),
             label: Some("Own wallet".to_owned()),
             sources: vec![WatchSource::OwnWallet],
             enabled: true,
+            page_budget: super::poller::DEFAULT_PAGE_BUDGET,
+            disable_reason: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
         },
     );
 
-    if !with_config(|cfg| cfg.wallet.watch_enabled) {
-        return;
-    }
-
-    match watch_db.list_targets().await {
-        Ok(targets) => {
-            for target in targets.into_iter().filter(|t| t.enabled) {
-                // Enabled again (by the user or a re-added source): any earlier
-                // saturation verdict no longer describes it.
-                super::service_state::clear_saturation(&target.address);
-                register(runtimes, ws_tx, chain_runtime, target);
+    if watch_enabled {
+        match watch_db.list_targets().await {
+            Ok(targets) => {
+                for target in targets.into_iter().filter(|target| target.enabled) {
+                    desired.insert(target.address.clone(), target);
+                }
+            }
+            Err(error) => {
+                logger::warning(
+                    LogTag::WalletWatch,
+                    &format!(
+                        "Failed to load watch targets; retaining current subscriptions: {error}"
+                    ),
+                );
+                return;
             }
         }
-        Err(e) => logger::warning(
+    }
+
+    let desired_addresses = desired.keys().cloned().collect::<HashSet<_>>();
+    for (address, runtime) in runtimes.iter_mut() {
+        if let Some(target) = desired.remove(address) {
+            runtime.target = target;
+        }
+    }
+    let removed = runtimes
+        .keys()
+        .filter(|address| !desired_addresses.contains(*address))
+        .cloned()
+        .collect::<Vec<_>>();
+    for address in removed {
+        if let Some(runtime) = runtimes.remove(&address) {
+            runtime.ws_task.abort();
+            super::service_state::remove_subscription(&address);
+        }
+    }
+    // Re-read persisted target addresses so cursor cleanup follows completed target
+    // removals. Disabled rows retain their cursors for deliberate resume.
+    if let Err(error) = watch_db.purge_orphan_cursors(&own_subject.address()).await {
+        logger::warning(
             LogTag::WalletWatch,
-            &format!("Failed to load watch targets: {e}"),
-        ),
+            &format!("Failed to purge orphan watch cursors: {error}"),
+        );
+    }
+    for target in desired.into_values() {
+        register(runtimes, ws_tx, chain_runtime, target);
     }
 }

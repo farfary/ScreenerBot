@@ -93,6 +93,8 @@ export function pauseReasonText(reason) {
       return `Auto-paused: trades arrived ${seconds(reason.average_ms)} late on average (limit ${seconds(reason.threshold_ms)})`;
     case "watch_detached":
       return "Auto-paused: the wallet is no longer watched";
+    case "watch_budget_exceeded":
+      return `Paused: this wallet reached its ${(Number(reason.page_budget) || 5) * 100}-signature watch check limit before catching up`;
     default:
       return "Paused";
   }
@@ -104,6 +106,8 @@ export function pauseReasonShort(reason) {
       return "too slow";
     case "watch_detached":
       return "watch lost";
+    case "watch_budget_exceeded":
+      return "watch limit";
     case "user":
       return "by you";
     default:

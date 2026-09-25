@@ -182,6 +182,7 @@ function createLifecycle() {
         $,
         Utils,
         api: createApi(requestManager),
+        requestManager,
         state,
         on,
         toast,

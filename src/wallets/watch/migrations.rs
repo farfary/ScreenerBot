@@ -26,6 +26,25 @@ use super::database::WatchDatabase;
 use crate::wallets::Error;
 
 impl WatchDatabase {
+    pub(super) fn ensure_target_control_columns(tx: &rusqlite::Transaction) -> Result<(), Error> {
+        for (column, declaration) in [
+            ("page_budget", "INTEGER NOT NULL DEFAULT 5"),
+            ("disable_reason_json", "TEXT"),
+        ] {
+            if !Self::column_exists(tx, "watch_targets", column)? {
+                tx.execute(
+                    &format!("ALTER TABLE watch_targets ADD COLUMN {column} {declaration}"),
+                    [],
+                )
+                .map_err(|error| Error::Migration {
+                    step: format!("add watch_targets.{column}"),
+                    detail: error.to_string(),
+                })?;
+            }
+        }
+        Ok(())
+    }
+
     /// Whether `table` already carries a unique index over exactly
     /// `(chain_id, address)` — the structural gate that makes both rebuilds
     /// idempotent. A freshly created database satisfies it from
@@ -124,6 +143,8 @@ impl WatchDatabase {
                 label TEXT,
                 sources TEXT NOT NULL,
                 enabled INTEGER NOT NULL DEFAULT 1,
+                page_budget INTEGER NOT NULL DEFAULT 5,
+                disable_reason_json TEXT,
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 updated_at TEXT NOT NULL DEFAULT (datetime('now')),
                 UNIQUE (chain_id, address)
@@ -133,12 +154,22 @@ impl WatchDatabase {
         .map_err(|e| migration_step("create watch_targets__chain", e))?;
 
         let chain_expr = Self::chain_source_expr(tx, "watch_targets")?;
+        let budget_expr = if Self::column_exists(tx, "watch_targets", "page_budget")? {
+            "page_budget"
+        } else {
+            "5"
+        };
+        let reason_expr = if Self::column_exists(tx, "watch_targets", "disable_reason_json")? {
+            "disable_reason_json"
+        } else {
+            "NULL"
+        };
         tx.execute(
             &format!(
                 "INSERT INTO watch_targets__chain
-                    (id, chain_id, address, label, sources, enabled, created_at, updated_at)
+                    (id, chain_id, address, label, sources, enabled, page_budget, disable_reason_json, created_at, updated_at)
                  SELECT id, {chain_expr}, address, label, sources,
-                        enabled, created_at, updated_at
+                        enabled, {budget_expr}, {reason_expr}, created_at, updated_at
                  FROM watch_targets"
             ),
             [],

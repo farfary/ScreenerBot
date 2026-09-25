@@ -198,6 +198,8 @@ fn target(entry: &PromoTarget) -> WatchTarget {
         label: Some(label.to_owned()),
         sources,
         enabled,
+        page_budget: crate::wallets::watch::DEFAULT_PAGE_BUDGET,
+        disable_reason: None,
         created_at,
         updated_at: created_at + Duration::hours(1),
     }

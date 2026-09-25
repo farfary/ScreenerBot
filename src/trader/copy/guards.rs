@@ -24,17 +24,32 @@ const SOURCE_SETTLE_SECS: i64 = 120;
 pub(super) async fn pause_detached_tasks(database: &CopyDatabase) -> crate::trader::Result<()> {
     let settled_before = Utc::now() - chrono::Duration::seconds(SOURCE_SETTLE_SECS);
     for task in database.list_tasks().await? {
-        if !task.enabled || task.updated_at > settled_before {
+        if !task.enabled {
+            continue;
+        }
+        let budget_reason =
+            match crate::wallets::watch::copy_source_disable_reason(task.id, &task.target_address)
+                .await
+            {
+                Ok(Some(crate::wallets::watch::WatchDisableReason::SignatureBudget {
+                    page_budget,
+                    signatures_checked,
+                })) => Some(CopyPauseReason::WatchBudgetExceeded {
+                    page_budget,
+                    signatures_checked,
+                }),
+                Ok(_) => None,
+                Err(_) => return Ok(()),
+            };
+        if task.updated_at > settled_before && budget_reason.is_none() {
             continue;
         }
         match crate::wallets::watch::copy_source_active(task.id, &task.target_address).await {
             Ok(true) => {}
             Ok(false) => {
-                if database
-                    .pause_task(task.id, CopyPauseReason::WatchDetached)
-                    .await?
-                {
-                    notify::announce_pause(&task, &CopyPauseReason::WatchDetached).await;
+                let reason = budget_reason.unwrap_or(CopyPauseReason::WatchDetached);
+                if database.pause_task(task.id, reason.clone()).await? {
+                    notify::announce_pause(&task, &reason).await;
                     logger::warning(
                         LogTag::Trader,
                         &format!(
@@ -57,7 +72,12 @@ pub(super) async fn pause_detached_tasks(database: &CopyDatabase) -> crate::trad
 /// attaching it again would fight the watcher's own saturation guard.
 pub(super) async fn sync_paused_watches(database: &CopyDatabase) -> crate::trader::Result<()> {
     for task in database.list_tasks().await? {
-        if task.enabled || task.pause_reason == Some(CopyPauseReason::WatchDetached) {
+        if task.enabled
+            || matches!(
+                task.pause_reason,
+                Some(CopyPauseReason::WatchDetached | CopyPauseReason::WatchBudgetExceeded { .. })
+            )
+        {
             continue;
         }
         let attached =

@@ -244,3 +244,91 @@ async fn removing_one_source_preserves_the_shared_target_and_cursor() {
         .is_none());
     assert!(!db.has_cursor_row("Shared1111").await.unwrap());
 }
+
+#[tokio::test]
+async fn budget_pause_persists_across_reopen_and_blocks_implicit_reenable() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("wallets.db");
+    let db = WatchDatabase::new_with_path(&path, ChainId::Solana).unwrap();
+    let target = db.insert_alert_target("Budget1111", None).await.unwrap();
+    let id = target.id.unwrap();
+    db.set_page_budget(id, 8).await.unwrap();
+    db.set_cursor("Budget1111", "last-complete-check")
+        .await
+        .unwrap();
+    db.pause_for_budget(id, 8, 800).await.unwrap();
+    drop(db);
+
+    let reopened = WatchDatabase::new_with_path(&path, ChainId::Solana).unwrap();
+    let paused = reopened.get_target(id).await.unwrap().unwrap();
+    assert!(!paused.enabled);
+    assert_eq!(paused.page_budget, 8);
+    assert_eq!(
+        paused.disable_reason,
+        Some(WatchDisableReason::SignatureBudget {
+            page_budget: 8,
+            signatures_checked: 800,
+        })
+    );
+    assert_eq!(
+        reopened.get_cursor("Budget1111").await.unwrap().as_deref(),
+        Some("last-complete-check")
+    );
+
+    assert!(matches!(
+        reopened.set_enabled(id, true).await,
+        Err(Error::WatchBudgetAcknowledgementRequired { .. })
+    ));
+    reopened.set_enabled(id, false).await.unwrap();
+    assert!(
+        matches!(
+            reopened.set_enabled(id, true).await,
+            Err(Error::WatchBudgetAcknowledgementRequired { .. })
+        ),
+        "ordinary disable must not clear the budget safety pause"
+    );
+    reopened.set_page_budget(id, 12).await.unwrap();
+    let still_paused = reopened.get_target(id).await.unwrap().unwrap();
+    assert!(
+        !still_paused.enabled,
+        "editing a budget is not a resume action"
+    );
+    assert!(matches!(
+        still_paused.disable_reason,
+        Some(WatchDisableReason::SignatureBudget { .. })
+    ));
+    assert!(matches!(
+        reopened
+            .upsert_source("Budget1111", None, WatchSource::Copy { task_id: 7 })
+            .await,
+        Err(Error::WatchBudgetAcknowledgementRequired { .. })
+    ));
+}
+
+#[tokio::test]
+async fn explicit_resume_rebaselines_cursor_and_applies_only_this_wallets_budget() {
+    let (db, _dir) = temp_db();
+    let target = db.insert_alert_target("Resume1111", None).await.unwrap();
+    let id = target.id.unwrap();
+    assert!(matches!(
+        db.resume_target_from_head(id, 9, Some("must-not-skip".into()))
+            .await,
+        Err(Error::WatchResumeNotBudgetPaused { .. })
+    ));
+    db.set_cursor("Resume1111", "old-complete-check")
+        .await
+        .unwrap();
+    db.pause_for_budget(id, 5, 500).await.unwrap();
+    db.resume_target_from_head(id, 9, Some("current-head".to_owned()))
+        .await
+        .unwrap();
+
+    let resumed = db.get_target(id).await.unwrap().unwrap();
+    assert!(resumed.enabled);
+    assert_eq!(resumed.page_budget, 9);
+    assert_eq!(resumed.disable_reason, None);
+    assert_eq!(
+        db.get_cursor("Resume1111").await.unwrap().as_deref(),
+        Some("current-head")
+    );
+}

@@ -17,6 +17,14 @@ pub const PAGE_SIZE: usize = 100;
 /// Maximum RPC pages fetched for one target in one service tick.
 pub const MAX_PAGES: usize = 5;
 
+/// Safe default per target. Five hundred signatures bound each wallet's
+/// transaction detail work while still covering ordinary activity.
+pub const DEFAULT_PAGE_BUDGET: usize = MAX_PAGES;
+
+/// Upper bound for a user-selected per-wallet budget. Even at this limit one
+/// poll reads at most 5,000 signatures before yielding to other targets.
+pub const MAX_PAGE_BUDGET: usize = 50;
+
 /// Resolve baseline versus escalated polling without duplicating the state rule in
 /// service code or tests.
 pub fn cadence_secs(connected: bool, baseline_secs: u64, fallback_secs: u64) -> u64 {
@@ -137,12 +145,13 @@ pub(super) async fn advance_catch_up(
     runtime: &dyn WalletWatchRuntime,
     address: &str,
     state: &mut CatchUpState,
+    page_budget: usize,
 ) -> Result<Option<CompletedCatchUp>, Error> {
     if state.is_complete() {
         return Ok(state.completed());
     }
 
-    for _ in 0..MAX_PAGES {
+    for _ in 0..page_budget.clamp(1, MAX_PAGE_BUDGET) {
         let page = runtime
             .fetch_signatures_page(
                 address,
@@ -242,10 +251,15 @@ mod tests {
         runtime.queue_page("Addr1111", vec!["newest".to_owned(), "older".to_owned()]);
 
         let mut state = CatchUpState::new(Some("old-cursor".to_owned()));
-        let completed = advance_catch_up(runtime.as_ref(), "Addr1111", &mut state)
-            .await
-            .expect("fetch succeeds")
-            .expect("range completes in one short page");
+        let completed = advance_catch_up(
+            runtime.as_ref(),
+            "Addr1111",
+            &mut state,
+            DEFAULT_PAGE_BUDGET,
+        )
+        .await
+        .expect("fetch succeeds")
+        .expect("range completes in one short page");
 
         assert_eq!(names(&completed), ["older", "newest"]);
         assert_eq!(completed.newest_signature.as_deref(), Some("newest"));
@@ -261,9 +275,14 @@ mod tests {
         }
 
         let mut state = CatchUpState::new(Some("durable".to_owned()));
-        let completed = advance_catch_up(runtime.as_ref(), "Addr1111", &mut state)
-            .await
-            .expect("fetch succeeds");
+        let completed = advance_catch_up(
+            runtime.as_ref(),
+            "Addr1111",
+            &mut state,
+            DEFAULT_PAGE_BUDGET,
+        )
+        .await
+        .expect("fetch succeeds");
 
         assert!(completed.is_none(), "range must stay open past MAX_PAGES");
         assert!(!state.is_complete());

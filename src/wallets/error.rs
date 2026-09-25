@@ -54,6 +54,18 @@ pub enum Error {
     /// configured-capacity rejection, not a malformed request).
     #[error("the watch target limit of {max} is reached; remove one before adding another")]
     WatchTargetLimitReached { max: usize },
+    #[error("watch target {address} reached its signature page budget; raise the wallet limit and explicitly resume it")]
+    WatchBudgetAcknowledgementRequired { address: String },
+    #[error("watch page budget {requested} is outside the allowed range {min}–{max}")]
+    InvalidWatchBudget {
+        requested: usize,
+        min: usize,
+        max: usize,
+    },
+    #[error("resuming the watch requires acknowledging that activity since the last completed check will be skipped")]
+    WatchResumeAcknowledgementRequired,
+    #[error("watch target {id} is not paused by its signature limit")]
+    WatchResumeNotBudgetPaused { id: i64 },
     #[error("'{value}' is not a valid watch address")]
     InvalidWatchAddress { value: String },
     /// A batch wallet-creation request is malformed or produced nothing (no
@@ -136,6 +148,10 @@ impl ErrorClass for Error {
             Error::WatchTargetAlreadyWatched { .. } => false,
             Error::WatchTargetIsOwnWallet { .. } => false,
             Error::WatchTargetLimitReached { .. } => false,
+            Error::WatchBudgetAcknowledgementRequired { .. } => false,
+            Error::InvalidWatchBudget { .. } => false,
+            Error::WatchResumeAcknowledgementRequired => false,
+            Error::WatchResumeNotBudgetPaused { .. } => false,
             Error::InvalidWatchAddress { .. } => false,
             Error::InvalidBatchRequest { .. } => false,
             Error::InvalidWindow { .. } => false,
@@ -182,6 +198,11 @@ impl ErrorClass for Error {
             Error::WatchTargetAlreadyWatched { .. } => Severity::Warning,
             Error::WatchTargetIsOwnWallet { .. } => Severity::Warning,
             Error::WatchTargetLimitReached { .. } => Severity::Warning,
+            Error::WatchBudgetAcknowledgementRequired { .. } | Error::InvalidWatchBudget { .. } => {
+                Severity::Warning
+            }
+            Error::WatchResumeAcknowledgementRequired => Severity::Warning,
+            Error::WatchResumeNotBudgetPaused { .. } => Severity::Warning,
             Error::InvalidWatchAddress { .. } => Severity::Warning,
             Error::InvalidBatchRequest { .. } => Severity::Warning,
             Error::InvalidWindow { .. } => Severity::Warning,
@@ -211,6 +232,10 @@ impl ErrorClass for Error {
             Error::WatchDisabled => 400,
             Error::WatchTargetAlreadyWatched { .. } | Error::WatchTargetIsOwnWallet { .. } => 409,
             Error::WatchTargetLimitReached { .. } => 400,
+            Error::WatchBudgetAcknowledgementRequired { .. } => 409,
+            Error::InvalidWatchBudget { .. } => 400,
+            Error::WatchResumeAcknowledgementRequired => 400,
+            Error::WatchResumeNotBudgetPaused { .. } => 409,
             Error::InvalidWatchAddress { .. } => 400,
             Error::InvalidBatchRequest { .. } => 400,
             Error::InvalidWindow { .. } => 400,

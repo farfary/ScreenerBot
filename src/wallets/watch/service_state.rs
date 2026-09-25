@@ -1,12 +1,13 @@
-//! Observation-loop state other modules read: which targets the loop gave up on as
-//! saturated, and the short WS retry schedule for signatures the RPC has not
+//! Observation-loop state other modules read: per-target subscription liveness
+//! and the short WS retry schedule for signatures the RPC has not
 //! indexed yet.
 //!
 //! Kept out of `service.rs` (module-size limit) and behind plain accessors so the
 //! status API never reaches into the loop itself.
 
 use std::collections::HashMap;
-use std::sync::{LazyLock, RwLock};
+use std::sync::atomic::AtomicBool;
+use std::sync::{Arc, LazyLock, RwLock};
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
@@ -48,31 +49,31 @@ fn ws_retry_delay(attempt: u32) -> Option<Duration> {
     (attempt < WS_RETRY_ATTEMPTS).then(|| WS_RETRY_BASE * 2u32.pow(attempt))
 }
 
-/// Why the loop disabled a target, by address. In memory on purpose: a restart
-/// or re-enable is a fresh attempt, and the persisted `enabled = 0` is the state.
-static SATURATED: LazyLock<RwLock<HashMap<String, String>>> =
+/// Per-address forwarder liveness. Transport connectivity alone is not enough to
+/// claim a target streams: its subscription can fail or end independently.
+static SUBSCRIPTIONS: LazyLock<RwLock<HashMap<String, Arc<AtomicBool>>>> =
     LazyLock::new(|| RwLock::new(HashMap::new()));
 
-pub(super) fn mark_saturated(address: &str, reason: String) {
-    SATURATED
+pub(super) fn set_subscription(address: String, active: Arc<AtomicBool>) {
+    SUBSCRIPTIONS
         .write()
         .unwrap_or_else(|p| p.into_inner())
-        .insert(address.to_owned(), reason);
+        .insert(address, active);
 }
 
-pub(super) fn clear_saturation(address: &str) {
-    SATURATED
+pub(super) fn remove_subscription(address: &str) {
+    SUBSCRIPTIONS
         .write()
         .unwrap_or_else(|p| p.into_inner())
         .remove(address);
 }
 
-pub(super) fn saturation_reason(address: &str) -> Option<String> {
-    SATURATED
+pub(super) fn subscription_active(address: &str) -> bool {
+    SUBSCRIPTIONS
         .read()
         .unwrap_or_else(|p| p.into_inner())
         .get(address)
-        .cloned()
+        .is_some_and(|active| active.load(std::sync::atomic::Ordering::Relaxed))
 }
 
 #[cfg(test)]
@@ -91,10 +92,13 @@ mod tests {
     }
 
     #[test]
-    fn saturation_reason_round_trips_and_clears() {
-        mark_saturated("SatAddr", "too busy".to_owned());
-        assert_eq!(saturation_reason("SatAddr").as_deref(), Some("too busy"));
-        clear_saturation("SatAddr");
-        assert_eq!(saturation_reason("SatAddr"), None);
+    fn subscription_status_tracks_the_per_address_forwarder() {
+        let active = Arc::new(AtomicBool::new(false));
+        set_subscription("SatAddr".to_owned(), Arc::clone(&active));
+        assert!(!subscription_active("SatAddr"));
+        active.store(true, std::sync::atomic::Ordering::Relaxed);
+        assert!(subscription_active("SatAddr"));
+        remove_subscription("SatAddr");
+        assert!(!subscription_active("SatAddr"));
     }
 }

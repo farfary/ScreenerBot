@@ -37,8 +37,38 @@ pub struct WatchTarget {
     /// Every reason this address is being watched.
     pub sources: Vec<WatchSource>,
     pub enabled: bool,
+    /// Maximum signature pages this target may fetch during one poll. Its
+    /// independent default is `poller::DEFAULT_PAGE_BUDGET`.
+    pub page_budget: usize,
+    /// A safety pause that survives process restarts. User pauses have no
+    /// automatic cause; budget pauses retain the exact limit that stopped them.
+    pub disable_reason: Option<WatchDisableReason>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum WatchDisableReason {
+    User,
+    Unknown,
+    SignatureBudget {
+        page_budget: usize,
+        signatures_checked: usize,
+    },
+}
+
+impl WatchDisableReason {
+    pub fn summary(&self) -> String {
+        match self {
+            Self::User => "Paused by you".to_owned(),
+            Self::SignatureBudget { page_budget, .. } => format!(
+                "Paused: reached the {}-signature check limit before catching up",
+                page_budget * super::poller::PAGE_SIZE
+            ),
+            Self::Unknown => "Paused: the saved watch safety reason could not be read".to_owned(),
+        }
+    }
 }
 
 /// Side of a detected swap, subject-relative (did the subject's holding of `mint`

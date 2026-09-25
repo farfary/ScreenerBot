@@ -37,11 +37,11 @@ mod service_targets;
 mod source_registry;
 mod types;
 
-pub use poller::{cadence_secs, needs_gap_fill, CatchUpState, CompletedCatchUp};
+pub use poller::{cadence_secs, needs_gap_fill, CatchUpState, CompletedCatchUp, PAGE_SIZE};
 pub use service::subscribe_activity;
 pub use types::{
-    ActivityKind, SwapSide, TransferDirection, WalletActivity, WatchNotification, WatchSource,
-    WatchStatus, WatchTarget,
+    ActivityKind, SwapSide, TransferDirection, WalletActivity, WatchDisableReason,
+    WatchNotification, WatchSource, WatchStatus, WatchTarget,
 };
 
 use std::sync::{Arc, OnceLock};
@@ -57,6 +57,16 @@ use database::WatchDatabase;
 
 /// The global watch database instance, set once by `start()`.
 static GLOBAL_WATCH_DB: OnceLock<WatchDatabase> = OnceLock::new();
+static TARGET_CHANGE_CHANNEL: std::sync::LazyLock<tokio::sync::broadcast::Sender<String>> =
+    std::sync::LazyLock::new(|| tokio::sync::broadcast::channel(32).0);
+
+pub fn subscribe_target_changes() -> tokio::sync::broadcast::Receiver<String> {
+    TARGET_CHANGE_CHANNEL.subscribe()
+}
+
+pub(super) fn publish_target_change(address: String) {
+    let _ = TARGET_CHANGE_CHANNEL.send(address);
+}
 
 fn watch_db() -> Result<WatchDatabase, Error> {
     GLOBAL_WATCH_DB.get().cloned().ok_or_else(|| {
@@ -240,6 +250,72 @@ pub async fn set_target_enabled(id: i64, enabled: bool) -> Result<(), Error> {
     Ok(())
 }
 
+pub const MAX_PAGE_BUDGET: usize = poller::MAX_PAGE_BUDGET;
+pub const DEFAULT_PAGE_BUDGET: usize = poller::DEFAULT_PAGE_BUDGET;
+
+pub async fn resume_target(
+    id: i64,
+    page_budget: usize,
+    acknowledge_missed_activity: bool,
+) -> Result<(), Error> {
+    if !acknowledge_missed_activity {
+        return Err(Error::WatchResumeAcknowledgementRequired);
+    }
+    validate_page_budget(page_budget)?;
+    let target = get_target(id).await?.ok_or(Error::WatchTargetNotFound {
+        address: format!("id={id}"),
+    })?;
+    if target.enabled
+        || !matches!(
+            target.disable_reason,
+            Some(WatchDisableReason::SignatureBudget { .. })
+        )
+    {
+        return Err(Error::WatchResumeNotBudgetPaused { id });
+    }
+    let runtime = runtime::get_runtime().map_err(|e| Error::ChainRuntime {
+        operation: "get_runtime",
+        detail: e.to_string(),
+    })?;
+    let head = runtime
+        .fetch_signatures_page(&target.address, 1, None, None)
+        .await?;
+    watch_db()?
+        .resume_target_from_head(id, page_budget, head.first().cloned())
+        .await?;
+    service::request_reload();
+    Ok(())
+}
+
+pub async fn update_target_page_budget(id: i64, page_budget: usize) -> Result<(), Error> {
+    validate_page_budget(page_budget)?;
+    watch_db()?.set_page_budget(id, page_budget).await?;
+    service::request_reload();
+    Ok(())
+}
+
+fn validate_page_budget(page_budget: usize) -> Result<(), Error> {
+    if !(DEFAULT_PAGE_BUDGET..=MAX_PAGE_BUDGET).contains(&page_budget) {
+        return Err(Error::InvalidWatchBudget {
+            requested: page_budget,
+            min: DEFAULT_PAGE_BUDGET,
+            max: MAX_PAGE_BUDGET,
+        });
+    }
+    Ok(())
+}
+
+pub async fn copy_source_disable_reason(
+    task_id: i64,
+    address: &str,
+) -> Result<Option<WatchDisableReason>, Error> {
+    Ok(watch_db()?
+        .get_target_by_address(address)
+        .await?
+        .filter(|target| target.sources.contains(&WatchSource::Copy { task_id }))
+        .and_then(|target| target.disable_reason))
+}
+
 /// Per-target status: whether the shared transport is currently connected, when its
 /// cursor last advanced, and what it last advanced to.
 pub async fn get_status(id: i64) -> Result<WatchStatus, Error> {
@@ -250,8 +326,12 @@ pub async fn get_status(id: i64) -> Result<WatchStatus, Error> {
 
     let last_signature = db.get_cursor(&target.address).await?;
     let last_activity_at = db.get_cursor_updated_at(&target.address).await?;
-    let subscribed = runtime::try_get_runtime().is_some_and(|runtime| runtime.is_connected());
-    let last_error = service_state::saturation_reason(&target.address);
+    let subscribed = runtime::try_get_runtime().is_some_and(|runtime| runtime.is_connected())
+        && service_state::subscription_active(&target.address);
+    let last_error = target
+        .disable_reason
+        .as_ref()
+        .map(WatchDisableReason::summary);
 
     Ok(WatchStatus {
         target,
@@ -287,6 +367,8 @@ mod tests {
             label: None,
             sources: vec![WatchSource::Alert { rule_id: 1 }],
             enabled: true,
+            page_budget: DEFAULT_PAGE_BUDGET,
+            disable_reason: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
         }

@@ -20,6 +20,7 @@ export function createWatchedWallets({
   let hasLoadedOnce = false;
   let table = null;
   let copyClickHandler = null;
+  let budgetTarget = null;
 
   const COLUMNS = [
     {
@@ -41,7 +42,7 @@ export function createWatchedWallets({
       label: "Status",
       sortable: true,
       render: (value, row) =>
-        `<span class="watched-wallet-state ${row._stateClass}"><i class="icon-activity"></i><span>${value}</span></span>`,
+        `<span class="watched-wallet-state ${row._stateClass}"><i class="icon-activity"></i><span>${value}</span></span>${row._reason ? `<small class="watched-wallet-reason">${Utils.escapeHtml(row._reason)}</small>` : ""}`,
     },
     {
       id: "_lastActivity",
@@ -56,7 +57,8 @@ export function createWatchedWallets({
       render: (value, row) => `
         <div class="watched-wallet-actions">
           <button class="btn" type="button" data-watch-action="copy" data-watch-id="${row.id}" title="Open this wallet in Copy Trading">Copy trade</button>
-          <button class="btn" type="button" data-watch-action="toggle" data-watch-id="${row.id}">${row.enabled ? "Pause" : "Enable"}</button>
+          <button class="btn" type="button" data-watch-action="budget" data-watch-id="${row.id}">Watch limit</button>
+          ${row.disable_reason?.kind === "signature_budget" ? "" : `<button class="btn" type="button" data-watch-action="toggle" data-watch-id="${row.id}">${row.enabled ? "Pause" : "Enable"}</button>`}
           <button class="btn-icon danger" type="button" data-watch-action="delete" data-watch-id="${row.id}" title="Remove" aria-label="Remove ${Utils.escapeHtml(row.label || "wallet")}"><i class="icon-trash-2"></i></button>
         </div>`,
     },
@@ -77,6 +79,17 @@ export function createWatchedWallets({
     const cancelBtn = $("#watch-cancel-btn");
     if (cancelBtn) on(cancelBtn, "click", () => hideAddModal());
 
+    const budgetForm = $("#watch-budget-form");
+    if (budgetForm) on(budgetForm, "submit", saveBudget);
+    ["#watch-budget-close", "#watch-budget-cancel"].forEach((selector) => {
+      const button = $(selector);
+      if (button) on(button, "click", hideBudgetModal);
+    });
+    const budgetModal = $("#watch-budget-modal");
+    if (budgetModal) on(budgetModal, "click", (event) => {
+      if (event.target === budgetModal) hideBudgetModal();
+    });
+
     // The table is created lazily by load(), after the parent has made the
     // restored Watched panel visible. Constructing it here would measure a
     // display:none ancestor whenever another wallet subtab is active.
@@ -96,6 +109,75 @@ export function createWatchedWallets({
   function resetForm() {
     $("#watched-wallet-form")?.reset();
     setAddressError("");
+  }
+
+  function showBudgetModal(target) {
+    budgetTarget = target;
+    const modal = $("#watch-budget-modal");
+    const pausedForBudget = target.disable_reason?.kind === "signature_budget";
+    const input = $("#watch-page-budget");
+    if (input) input.value = String((target.page_budget || 5) * 100);
+    $("#watch-budget-resume-notice")?.classList.toggle("hidden", !pausedForBudget);
+    const ack = $("#watch-budget-ack");
+    if (ack) ack.checked = false;
+    const button = $("#watch-budget-save");
+    if (button) button.textContent = pausedForBudget ? "Resume from now" : "Save limit";
+    $("#watch-budget-error")?.classList.add("hidden");
+    showModal("watch-budget-modal");
+    modal?.querySelector("#watch-page-budget")?.focus();
+  }
+
+  function hideBudgetModal() {
+    hideModal("watch-budget-modal");
+    budgetTarget = null;
+  }
+
+  async function saveBudget(event) {
+    event.preventDefault();
+    const target = budgetTarget;
+    if (!target) return;
+    const signatureLimit = Number($("#watch-page-budget")?.value);
+    const pageBudget = signatureLimit / 100;
+    const pausedForBudget = target.disable_reason?.kind === "signature_budget";
+    const ack = $("#watch-budget-ack");
+    const error = $("#watch-budget-error");
+    if (!Number.isInteger(pageBudget) || pageBudget < 5 || pageBudget > 50) {
+      if (error) {
+        error.textContent = "Choose between 500 and 5,000 signatures per poll in 100-signature steps.";
+        error.classList.remove("hidden");
+      }
+      return;
+    }
+    if (pausedForBudget && !ack?.checked) {
+      if (error) {
+        error.textContent = "Acknowledge that signatures since the last completed check will be skipped.";
+        error.classList.remove("hidden");
+      }
+      return;
+    }
+    const submit = $("#watch-budget-save");
+    if (submit) submit.disabled = true;
+    try {
+      await requestManager.fetch(`/api/wallets/watch/${target.id}/${pausedForBudget ? "resume" : "budget"}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(pausedForBudget
+          ? { page_budget: pageBudget, acknowledge_missed_activity: true }
+          : { page_budget: pageBudget }),
+        priority: "high",
+        skipDedup: true,
+      });
+      hideBudgetModal();
+      Utils.showToast(pausedForBudget ? "Watch resumed from the current wallet head" : "Wallet watch limit updated", "success");
+      await load({ force: true });
+    } catch (requestError) {
+      if (error) {
+        error.textContent = requestError.detail || requestError.message || "Watch limit could not be saved.";
+        error.classList.remove("hidden");
+      }
+    } finally {
+      if (submit) submit.disabled = false;
+    }
   }
 
   function setAddressError(message) {
@@ -251,6 +333,10 @@ export function createWatchedWallets({
       openCopyForWallet(target.address, target.label || null);
       return;
     }
+    if (action === "budget" || (action === "toggle" && !target.enabled && target.disable_reason?.kind === "signature_budget")) {
+      showBudgetModal(target);
+      return;
+    }
     button.disabled = true;
     try {
       if (action === "toggle") {
@@ -294,6 +380,9 @@ export function createWatchedWallets({
         ...target,
         _state: state,
         _stateClass: stateClass,
+        _reason: target.disable_reason?.kind === "signature_budget"
+          ? `Reached the ${(Number(target.disable_reason.page_budget) || 5) * 100}-signature check limit before catching up.`
+          : target.disable_reason?.kind === "user" ? "Paused by you." : "",
         _lastActivity: status?.last_activity_at || null,
       };
     });

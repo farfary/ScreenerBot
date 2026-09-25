@@ -9,6 +9,8 @@ fn own_watch_target(address: &str) -> WatchTarget {
         label: None,
         sources: vec![WatchSource::OwnWallet],
         enabled: true,
+        page_budget: poller::DEFAULT_PAGE_BUDGET,
+        disable_reason: None,
         created_at: Utc::now(),
         updated_at: Utc::now(),
     }
@@ -21,6 +23,8 @@ fn alert_watch_target(address: &str, rule_id: i64) -> WatchTarget {
         label: None,
         sources: vec![WatchSource::Alert { rule_id }],
         enabled: true,
+        page_budget: poller::DEFAULT_PAGE_BUDGET,
+        disable_reason: None,
         created_at: Utc::now(),
         updated_at: Utc::now(),
     }
@@ -33,7 +37,6 @@ fn idle_target_runtime(target: WatchTarget) -> TargetRuntime {
         last_poll: Instant::now(),
         catch_up: None,
         baseline_only: false,
-        overflow_streak: 0,
         backfill: false,
     }
 }
@@ -185,7 +188,7 @@ async fn process_signature_rejects_a_wrong_chain_target_before_any_call() {
 }
 
 #[tokio::test]
-async fn an_overflowing_target_skips_to_the_head_then_is_disabled_when_it_repeats() {
+async fn the_first_incomplete_range_pauses_without_advancing_the_cursor() {
     let address = "BusyTarget1111";
     let fake = FakeRuntime::new(vec![address.to_owned()]);
     let full = |prefix: &str| -> Vec<String> {
@@ -217,22 +220,82 @@ async fn an_overflowing_target_skips_to_the_head_then_is_disabled_when_it_repeat
     .await;
     assert_eq!(
         watch_db.get_cursor(address).await.unwrap().as_deref(),
-        Some("first-0-000"),
-        "the first overflow re-baselines to the newest signature seen"
+        Some("old-head")
     );
     assert!(target_runtime.catch_up.is_none());
-    assert!(watch_db.get_target(id).await.unwrap().unwrap().enabled);
-
-    for page in 0..poller::MAX_PAGES {
-        fake.queue_page(address, full(&format!("second-{page}")));
-    }
-    poll_target(&mut target_runtime, &chain_runtime, &watch_db, own, false).await;
+    let paused = watch_db.get_target(id).await.unwrap().unwrap();
     assert!(
-        !watch_db.get_target(id).await.unwrap().unwrap().enabled,
-        "a second consecutive overflow disables the target"
+        !paused.enabled,
+        "the first incomplete range pauses the target"
     );
-    assert!(super::service_state::saturation_reason(address).is_some());
-    super::service_state::clear_saturation(address);
+    assert_eq!(
+        paused.disable_reason,
+        Some(crate::wallets::watch::WatchDisableReason::SignatureBudget {
+            page_budget: poller::DEFAULT_PAGE_BUDGET,
+            signatures_checked: poller::DEFAULT_PAGE_BUDGET * poller::PAGE_SIZE,
+        })
+    );
+}
+
+#[tokio::test]
+async fn changing_one_target_keeps_other_subscription_forwarders() {
+    let (watch_db, _dir) = temp_watch_db();
+    let own_address = "OwnReload1111";
+    let stable_address = "StableReload1111";
+    let changed_address = "ChangedReload1111";
+    watch_db
+        .insert_alert_target(stable_address, None)
+        .await
+        .unwrap();
+    let changed = watch_db
+        .insert_alert_target(changed_address, None)
+        .await
+        .unwrap();
+    let fake = FakeRuntime::new(vec![
+        own_address.to_owned(),
+        stable_address.to_owned(),
+        changed_address.to_owned(),
+    ]);
+    let chain_runtime: Arc<dyn WalletWatchRuntime> = fake;
+    let (ws_tx, _ws_rx) = mpsc::unbounded_channel();
+    let own = Subject::from_account(
+        crate::chains::AccountId::new(crate::chains::ChainId::Solana, own_address).unwrap(),
+    );
+    let mut runtimes = HashMap::new();
+
+    super::super::service_targets::reload_targets(
+        &mut runtimes,
+        &ws_tx,
+        &chain_runtime,
+        &watch_db,
+        own.clone(),
+        true,
+    )
+    .await;
+    let own_forwarder = runtimes[own_address].ws_task.id();
+    let stable_forwarder = runtimes[stable_address].ws_task.id();
+    assert!(runtimes.contains_key(changed_address));
+
+    watch_db
+        .set_enabled(changed.id.unwrap(), false)
+        .await
+        .unwrap();
+    super::super::service_targets::reload_targets(
+        &mut runtimes,
+        &ws_tx,
+        &chain_runtime,
+        &watch_db,
+        own,
+        true,
+    )
+    .await;
+
+    assert_eq!(runtimes[own_address].ws_task.id(), own_forwarder);
+    assert_eq!(runtimes[stable_address].ws_task.id(), stable_forwarder);
+    assert!(!runtimes.contains_key(changed_address));
+    for runtime in runtimes.values() {
+        runtime.ws_task.abort();
+    }
 }
 
 #[tokio::test]
@@ -247,6 +310,7 @@ async fn seven_targets_keep_independent_watch_budgets() {
         "TargetSeven1111",
     ];
     let busy = [false, true, false, true, false, true, false];
+    let raised_budget = [false, false, false, true, false, false, false];
     let fake = FakeRuntime::new(
         addresses
             .iter()
@@ -259,43 +323,66 @@ async fn seven_targets_keep_independent_watch_budgets() {
     );
     let mut targets = Vec::new();
 
-    for (address, is_busy) in addresses.into_iter().zip(busy) {
-        let target = watch_db.insert_alert_target(address, None).await.unwrap();
+    for ((address, is_busy), raised) in addresses.into_iter().zip(busy).zip(raised_budget) {
+        let inserted = watch_db.insert_alert_target(address, None).await.unwrap();
+        if raised {
+            watch_db
+                .set_page_budget(inserted.id.unwrap(), poller::DEFAULT_PAGE_BUDGET + 1)
+                .await
+                .unwrap();
+        }
+        let target = watch_db
+            .get_target(inserted.id.unwrap())
+            .await
+            .unwrap()
+            .unwrap();
         watch_db.set_cursor(address, "old-head").await.unwrap();
-        for poll in 0..2 {
-            if is_busy {
-                for page in 0..poller::MAX_PAGES {
-                    fake.queue_page(
-                        address,
-                        (0..poller::PAGE_SIZE)
-                            .map(|item| format!("{address}-{poll}-{page}-{item}"))
-                            .collect(),
-                    );
-                }
-            } else {
-                fake.queue_page(address, Vec::new());
+        if is_busy {
+            for page in 0..poller::DEFAULT_PAGE_BUDGET {
+                fake.queue_page(
+                    address,
+                    (0..poller::PAGE_SIZE)
+                        .map(|item| format!("{address}-{page}-{item}"))
+                        .collect(),
+                );
             }
+            if raised {
+                fake.queue_page(address, vec![format!("{address}-tail")]);
+            }
+        } else {
+            fake.queue_page(address, Vec::new());
         }
         targets.push(idle_target_runtime(target));
     }
 
     let chain_runtime: Arc<dyn WalletWatchRuntime> = fake;
-    for _ in 0..2 {
-        for target in &mut targets {
-            poll_target(target, &chain_runtime, &watch_db, own.clone(), false).await;
-        }
+    for target in &mut targets {
+        poll_target(target, &chain_runtime, &watch_db, own.clone(), false).await;
     }
 
-    for (target, is_busy) in targets.iter().zip(busy) {
+    for ((target, is_busy), raised) in targets.iter().zip(busy).zip(raised_budget) {
         let id = target.target.id.unwrap();
         let persisted = watch_db.get_target(id).await.unwrap().unwrap();
-        assert_eq!(persisted.enabled, !is_busy, "{}", persisted.address);
+        let expected_enabled = !is_busy || raised;
+        assert_eq!(persisted.enabled, expected_enabled, "{}", persisted.address);
         assert_eq!(
-            super::service_state::saturation_reason(&persisted.address).is_some(),
-            is_busy,
+            matches!(
+                persisted.disable_reason,
+                Some(crate::wallets::watch::WatchDisableReason::SignatureBudget { .. })
+            ),
+            is_busy && !raised,
             "{}",
             persisted.address
         );
-        super::service_state::clear_saturation(&persisted.address);
+        if !expected_enabled {
+            assert_eq!(
+                watch_db
+                    .get_cursor(&persisted.address)
+                    .await
+                    .unwrap()
+                    .as_deref(),
+                Some("old-head")
+            );
+        }
     }
 }

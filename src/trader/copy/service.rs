@@ -22,6 +22,7 @@ use super::{
 
 pub async fn run(shutdown: Arc<Notify>, database: CopyDatabase) {
     let mut receiver = subscribe_activity();
+    let mut watch_changes = crate::wallets::watch::subscribe_target_changes();
     if let Err(error) = reconcile_runtime_state(&database).await {
         logger::warning(
             LogTag::Trader,
@@ -43,6 +44,14 @@ pub async fn run(shutdown: Arc<Notify>, database: CopyDatabase) {
                     logger::warning(LogTag::Trader, &format!("Copy reconciliation failed: {error}"));
                 }
             }
+            changed = watch_changes.recv() => match changed {
+                Ok(_) | Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
+                    if let Err(error) = super::guards::pause_detached_tasks(&database).await {
+                        logger::warning(LogTag::Trader, &format!("Copy watch reconciliation failed: {error}"));
+                    }
+                }
+                Err(RecvError::Closed) => return,
+            },
             _ = paper_exits.tick() => {
                 if let Err(error) = super::paper_exits::sweep(&database, paper_costs()).await {
                     logger::warning(LogTag::Trader, &format!("Paper exit sweep failed: {error}"));

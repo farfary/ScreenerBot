@@ -188,6 +188,14 @@ pub(super) async fn announce_pause(task: &CopyTask, reason: &CopyPauseReason) {
             *threshold_ms as f64 / 1000.0
         ),
         CopyPauseReason::WatchDetached => "The target wallet is no longer watched".to_owned(),
+        CopyPauseReason::WatchBudgetExceeded {
+            page_budget,
+            ..
+        } => format!(
+            "The wallet reached its {}-signature watch check limit before catching up. {} pages are checked per poll.",
+            page_budget * crate::wallets::watch::PAGE_SIZE,
+            page_budget
+        ),
     };
     publish(
         task_name(task),

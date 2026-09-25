@@ -37,7 +37,7 @@ const RUNNING_DETAIL = {
 };
 
 export function createWorkspace(page) {
-  const { $, Utils, api, state, on, paint, toast, confirm } = page;
+  const { $, Utils, api, requestManager, state, on, paint, toast, confirm } = page;
   const esc = Utils.escapeHtml;
   const insights = new Map();
   const insightErrors = new Map();
@@ -154,7 +154,7 @@ export function createWorkspace(page) {
       <div class="copy-ws-identity">
         <div class="copy-ws-title"><h2 id="copy-ws-name"></h2><span id="copy-ws-mode"></span></div>
         <div class="copy-ws-address" id="copy-ws-address"></div>
-        <p class="copy-ws-state" id="copy-ws-state" aria-live="polite"></p>
+      <div class="copy-ws-state" id="copy-ws-state" aria-live="polite"></div>
       </div>
       <div class="copy-ws-actions" id="copy-ws-actions"></div>
     </header>
@@ -188,7 +188,10 @@ export function createWorkspace(page) {
           : "The wallet's sells and its exit rules";
     const holdings = open ? `${closer} still close its ${plural(open, "open holding")}.` : "";
     const hint = [resume, holdings].filter(Boolean).join(" ");
-    return `${esc(pauseReasonText(task.pause_reason) + since)}${hint ? `<small>${esc(hint)}</small>` : ""}`;
+    const budget = kind === "watch_budget_exceeded"
+      ? `<div class="copy-watch-resume"><small>A higher limit makes more signature-page and transaction-detail RPC calls. It may use more provider credits and can still fall behind. Resume starts from the current wallet head, so signatures since the last completed check will not be copied.</small><label class="copy-watch-budget-field">Signatures checked per poll<input data-watch-page-budget type="number" min="500" max="5000" step="100" value="${Math.min(5000, Math.max(500, (Number(task.pause_reason.page_budget) + 5) * 100))}" /></label><label class="checkbox-label copy-watch-ack"><input type="checkbox" data-watch-resume-ack /><span>I understand signatures since the last completed check will be skipped.</span></label></div>`
+      : "";
+    return `${esc(pauseReasonText(task.pause_reason) + since)}${hint ? `<small>${esc(hint)}</small>` : ""}${budget}`;
   }
 
   function actionsHtml(task) {
@@ -197,7 +200,9 @@ export function createWorkspace(page) {
     return [
       task.enabled
         ? button("pause", "btn-outline", "icon-pause", "Pause")
-        : button("resume", "btn-primary", "icon-play", "Resume"),
+        : task.pause_reason?.kind === "watch_budget_exceeded"
+          ? button("resume-budget", "btn-primary", "icon-play", "Resume from now")
+          : button("resume", "btn-primary", "icon-play", "Resume"),
       task.mode === "live"
         ? button("paper", "btn-outline", "icon-rotate-ccw", "Return to Paper")
         : "",
@@ -291,10 +296,60 @@ export function createWorkspace(page) {
     }
   }
 
+  async function resumeBudget(task, button) {
+    const signatureLimit = Number($("[data-watch-page-budget]")?.value);
+    const pageBudget = signatureLimit / 100;
+    if (!Number.isInteger(pageBudget) || pageBudget < 5 || pageBudget > 50) {
+      toast("error", "Choose between 500 and 5,000 signatures per poll in 100-signature steps");
+      return;
+    }
+    if (!$("[data-watch-resume-ack]")?.checked) {
+      toast("error", "Acknowledge that signatures since the last completed check will be skipped");
+      return;
+    }
+    if (task.mode === "live") {
+      const result = await confirm({
+        title: "Resume live copying",
+        message: `“${taskName(task)}” may submit real swaps after the watch resumes. Signatures since the last completed check will not be copied.`,
+        confirmLabel: "Resume live",
+        cancelLabel: "Keep paused",
+        variant: "danger",
+      });
+      if (!result.confirmed) return;
+    }
+    await run(button, async () => {
+      const { targets = [] } = await requestManager.fetch("/api/wallets/watch");
+      const target = targets.find((item) => item.address === task.target_address);
+      if (!target) throw new Error("The wallet watch target could not be found");
+      if (target.enabled) {
+        if (target.page_budget !== pageBudget) {
+          await requestManager.fetch(`/api/wallets/watch/${target.id}/budget`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ page_budget: pageBudget }),
+            priority: "high",
+            skipDedup: true,
+          });
+        }
+      } else {
+        await requestManager.fetch(`/api/wallets/watch/${target.id}/resume`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ page_budget: pageBudget, acknowledge_missed_activity: true }),
+          priority: "high",
+          skipDedup: true,
+        });
+      }
+      await api.update(task.id, { enabled: true });
+    }, "Wallet watch and copy task resumed from now", "Wallet watch or copy task could not be resumed");
+  }
+
   async function runAction(action, button) {
     const task = current() || selectedSummary();
     if (!task) return;
-    if (action === "pause" || action === "resume") {
+    if (action === "resume-budget") {
+      await resumeBudget(task, button);
+    } else if (action === "pause" || action === "resume") {
       const enabled = action === "resume";
       if (enabled && task.mode === "live") {
         const result = await confirm({

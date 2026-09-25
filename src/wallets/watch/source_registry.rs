@@ -22,16 +22,22 @@ impl WatchDatabase {
         tokio::task::spawn_blocking(move || {
             let mut conn = db.conn()?;
             let tx = conn.write_tx().map_err(DatabaseError::from)?;
-            let existing: Option<(i64, String)> = tx
+            let existing: Option<(i64, String, Option<String>)> = tx
                 .query_row(
-                    "SELECT id, sources FROM watch_targets WHERE chain_id = ?1 AND address = ?2",
+                    "SELECT id, sources, disable_reason_json FROM watch_targets WHERE chain_id = ?1 AND address = ?2",
                     params![db.chain.as_str(), address],
-                    |row| Ok((row.get(0)?, row.get(1)?)),
+                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
                 )
                 .optional()
                 .map_err(DatabaseError::from)?;
             let now = Utc::now().to_rfc3339();
-            let id = if let Some((id, json)) = existing {
+            let id = if let Some((id, json, disable_reason_json)) = existing {
+                let disable_reason = disable_reason_json
+                    .map(|json| serde_json::from_str::<super::WatchDisableReason>(&json)
+                        .unwrap_or(super::WatchDisableReason::Unknown));
+                if matches!(disable_reason, Some(super::WatchDisableReason::SignatureBudget { .. } | super::WatchDisableReason::Unknown)) {
+                    return Err(Error::WatchBudgetAcknowledgementRequired { address });
+                }
                 let mut sources: Vec<WatchSource> =
                     serde_json::from_str(&json).map_err(|e| Error::WatchSourcesDecode {
                         detail: e.to_string(),
@@ -43,7 +49,7 @@ impl WatchDatabase {
                     serde_json::to_string(&sources).map_err(|e| Error::Internal(InternalError::InvariantViolation {
                         message: format!("could not serialize watch sources: {e}"),
                     }))?;
-                tx.execute("UPDATE watch_targets SET sources=?1, label=COALESCE(?2,label), enabled=1, updated_at=?3 WHERE chain_id = ?4 AND id=?5", params![sources_json, label, now, db.chain.as_str(), id]).map_err(DatabaseError::from)?;
+                tx.execute("UPDATE watch_targets SET sources=?1, label=COALESCE(?2,label), enabled=1, disable_reason_json=NULL, updated_at=?3 WHERE chain_id = ?4 AND id=?5", params![sources_json, label, now, db.chain.as_str(), id]).map_err(DatabaseError::from)?;
                 id
             } else {
                 let sources_json =

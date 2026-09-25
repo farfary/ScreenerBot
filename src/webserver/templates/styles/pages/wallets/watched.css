@@ -22,8 +22,18 @@
   color: var(--text-muted);
 }
 
+.watched-wallet-reason {
+  display: block;
+  max-width: 42ch;
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs);
+  line-height: 1.4;
+}
+
 .watched-wallet-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: var(--spacing-xs);

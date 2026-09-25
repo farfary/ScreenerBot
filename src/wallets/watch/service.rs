@@ -17,6 +17,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant};
 
+use crate::errors::ErrorClass;
 use chrono::Utc;
 use tokio::sync::{broadcast, mpsc, Notify};
 use tokio::time::interval;
@@ -131,6 +132,7 @@ async fn poll_target(
             .catch_up
             .as_mut()
             .expect("catch-up initialized"),
+        target_runtime.target.page_budget,
     )
     .await
     {
@@ -181,10 +183,8 @@ async fn poll_target(
         }
         target_runtime.catch_up = None;
         target_runtime.baseline_only = false;
-        target_runtime.overflow_streak = 0;
         return;
     }
-    target_runtime.overflow_streak = 0;
 
     let mut replay_complete = true;
     for seen in &completed.signatures {
@@ -305,13 +305,14 @@ async fn process_signature(
     {
         Ok(tx) => tx,
         Err(e) => {
-            if matches!(
+            let retryable = matches!(
                 &e,
                 crate::wallets::Error::ChainExecution(
                     crate::chains::ExecutionFailure::IndexingDelay { .. }
                         | crate::chains::ExecutionFailure::NotFound { .. }
                 )
-            ) {
+            ) || e.is_retryable();
+            if retryable {
                 // Keep both pending records intact. A completed poll range stays in
                 // memory and is replayed next cadence; a WS-first notification is
                 // picked up by the baseline poll. The durable cursor remains behind
@@ -427,6 +428,7 @@ pub(super) async fn run(
         &chain_runtime,
         &watch_db,
         own_subject.clone(),
+        with_config(|cfg| cfg.wallet.watch_enabled),
     )
     .await;
 
@@ -519,7 +521,7 @@ pub(super) async fn run(
                 }
             }
             _ = RELOAD_NOTIFY.notified() => {
-                reload_targets(&mut runtimes, &ws_tx, &chain_runtime, &watch_db, own_subject.clone()).await;
+                reload_targets(&mut runtimes, &ws_tx, &chain_runtime, &watch_db, own_subject.clone(), with_config(|cfg| cfg.wallet.watch_enabled)).await;
             }
             _ = tick.tick() => {
                 let connected = connection_watch.is_connected();

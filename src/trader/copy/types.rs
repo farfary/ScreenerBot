@@ -52,8 +52,15 @@ pub enum ExitMode {
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum CopyPauseReason {
     User,
-    LatencyKillSwitch { average_ms: u64, threshold_ms: u64 },
+    LatencyKillSwitch {
+        average_ms: u64,
+        threshold_ms: u64,
+    },
     WatchDetached,
+    WatchBudgetExceeded {
+        page_budget: usize,
+        signatures_checked: usize,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -587,6 +594,22 @@ pub enum ClaimReconciliation {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn watch_budget_pause_exposes_a_distinct_dashboard_reason() {
+        let reason = CopyPauseReason::WatchBudgetExceeded {
+            page_budget: 8,
+            signatures_checked: 800,
+        };
+        assert_eq!(
+            serde_json::to_value(reason).unwrap(),
+            serde_json::json!({
+                "kind": "watch_budget_exceeded",
+                "page_budget": 8,
+                "signatures_checked": 800
+            })
+        );
+    }
 
     fn input() -> CopyTaskInput {
         CopyTaskInput {
