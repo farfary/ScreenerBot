@@ -112,6 +112,7 @@ pub fn init_from_args() {
                 "entry" => "entry",
                 "ohlcv" => "ohlcv",
                 "wallet" => "wallet",
+                "wallet-watch" => "wallet_watch",
                 "swaps" => "swap",
                 "decimals" => "decimals",
                 "transactions" => "transactions",
@@ -129,6 +130,9 @@ pub fn init_from_args() {
             };
 
             config.debug_modes.insert(tag_name.to_string(), true);
+            if module == "wallet" {
+                config.debug_modes.insert("wallet_watch".to_owned(), true);
+            }
         } else if let Some(module) = arg.strip_prefix("--verbose-") {
             // Map argument to tag name (same mapping as debug)
             let tag_name = match module {
@@ -153,6 +157,7 @@ pub fn init_from_args() {
                 "entry" => "entry",
                 "ohlcv" => "ohlcv",
                 "wallet" => "wallet",
+                "wallet-watch" => "wallet_watch",
                 "swaps" => "swap",
                 "decimals" => "decimals",
                 "transactions" => "transactions",
@@ -170,6 +175,9 @@ pub fn init_from_args() {
             };
 
             config.verbose_modes.insert(tag_name.to_string(), true);
+            if module == "wallet" {
+                config.verbose_modes.insert("wallet_watch".to_owned(), true);
+            }
         }
     }
 

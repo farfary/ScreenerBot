@@ -65,7 +65,7 @@ pub fn print_help() {
     println!("      api, blacklist, decimals, discovery, entry, filtering, monitor, ohlcv,");
     println!("      pool-calculator, pool-discovery, pool-analyzer, pool-cache, pool-fetcher,");
     println!("      pool-decoders, pool-prices, positions, profit, rpc, swaps, system,");
-    println!("      security, trader, transactions, webserver, websocket, wallet");
+    println!("      security, trader, transactions, webserver, websocket, wallet, wallet-watch");
     println!();
     println!("EXAMPLES:");
     println!("    screenerbot                                  # Start bot (headless, webserver on :8080)");
