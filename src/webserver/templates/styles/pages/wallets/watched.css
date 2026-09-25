@@ -5,6 +5,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  white-space: nowrap;
   color: var(--text-secondary);
   font-size: 0.75rem;
   font-weight: 600;
@@ -37,4 +38,22 @@
   align-items: center;
   justify-content: flex-end;
   gap: var(--spacing-xs);
+}
+
+#watch-budget-resume-notice {
+  border-top: 1px solid var(--border-color);
+  padding-top: var(--spacing-md);
+}
+
+#watch-budget-resume-notice p {
+  margin: 0 0 var(--spacing-sm);
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+
+@media (width <= 800px) {
+  #watched-wallets-root .data-table {
+    min-width: 770px;
+  }
 }

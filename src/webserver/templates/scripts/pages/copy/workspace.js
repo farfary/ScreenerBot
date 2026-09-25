@@ -63,6 +63,13 @@ export function createWorkspace(page) {
       const action = event.target.closest("[data-ws-action]");
       if (action) void runAction(action.dataset.wsAction, action);
     });
+    const updateRecovery = (event) => {
+      if (event.target.matches("[data-watch-page-budget], [data-watch-resume-ack]")) {
+        syncRecoveryAction();
+      }
+    };
+    on(root, "input", updateRecovery);
+    on(root, "change", updateRecovery);
     holdings.setup(root);
     activity.setup(root);
   }
@@ -154,8 +161,9 @@ export function createWorkspace(page) {
       <div class="copy-ws-identity">
         <div class="copy-ws-title"><h2 id="copy-ws-name"></h2><span id="copy-ws-mode"></span></div>
         <div class="copy-ws-address" id="copy-ws-address"></div>
-      <div class="copy-ws-state" id="copy-ws-state" aria-live="polite"></div>
+        <div class="copy-ws-state" id="copy-ws-state" aria-live="polite"></div>
       </div>
+      <div id="copy-ws-watch-recovery"></div>
       <div class="copy-ws-actions" id="copy-ws-actions"></div>
     </header>
     <div class="copy-tabs" role="tablist" aria-label="Task views" id="copy-ws-tabs"></div>
@@ -188,10 +196,21 @@ export function createWorkspace(page) {
           : "The wallet's sells and its exit rules";
     const holdings = open ? `${closer} still close its ${plural(open, "open holding")}.` : "";
     const hint = [resume, holdings].filter(Boolean).join(" ");
-    const budget = kind === "watch_budget_exceeded"
-      ? `<div class="copy-watch-resume"><small>A higher limit makes more signature-page and transaction-detail RPC calls. It may use more provider credits and can still fall behind. Resume starts from the current wallet head, so signatures since the last completed check will not be copied.</small><label class="copy-watch-budget-field">Signatures checked per poll<input data-watch-page-budget type="number" min="500" max="5000" step="100" value="${Math.min(5000, Math.max(500, (Number(task.pause_reason.page_budget) + 5) * 100))}" /></label><label class="checkbox-label copy-watch-ack"><input type="checkbox" data-watch-resume-ack /><span>I understand signatures since the last completed check will be skipped.</span></label></div>`
-      : "";
-    return `${esc(pauseReasonText(task.pause_reason) + since)}${hint ? `<small>${esc(hint)}</small>` : ""}${budget}`;
+    return `${esc(pauseReasonText(task.pause_reason) + since)}${hint ? `<small>${esc(hint)}</small>` : ""}`;
+  }
+
+  function recoveryHtml(task) {
+    if (task.enabled || task.pause_reason?.kind !== "watch_budget_exceeded") return "";
+    const currentLimit = (Number(task.pause_reason.page_budget) || 5) * 100;
+    const suggestedLimit = Math.min(5000, currentLimit + 500);
+    return `<div class="copy-watch-resume" role="group" aria-labelledby="copy-watch-resume-title">
+      <h3 id="copy-watch-resume-title">Restore wallet watch</h3>
+      <p>A higher limit uses more RPC credits and may still fall behind. Resuming starts at the current wallet head; activity since the last completed check will not be copied.</p>
+      <label class="copy-watch-budget-field" for="copy-watch-page-budget">Signatures checked per poll</label>
+      <input id="copy-watch-page-budget" data-watch-page-budget type="number" min="500" max="5000" step="100" value="${suggestedLimit}" aria-describedby="copy-watch-budget-hint" />
+      <small id="copy-watch-budget-hint">Current limit: ${currentLimit.toLocaleString()}. Choose 500–5,000 in steps of 100.</small>
+      <label class="checkbox-label copy-watch-ack"><input type="checkbox" data-watch-resume-ack /><span>I understand missed activity will not be copied.</span></label>
+    </div>`;
   }
 
   function actionsHtml(task) {
@@ -231,7 +250,28 @@ export function createWorkspace(page) {
           : "blocked";
       paint(stateNode, stateHtml(task));
     }
+    const recoveryNode = $("#copy-ws-watch-recovery");
+    if (recoveryNode) {
+      const recovery = recoveryHtml(task);
+      recoveryNode.hidden = !recovery;
+      paint(recoveryNode, recovery);
+      recoveryNode.closest(".copy-ws-head")?.classList.toggle("has-watch-recovery", !!recovery);
+    }
     paint($("#copy-ws-actions"), actionsHtml(task));
+    syncRecoveryAction();
+  }
+
+  function syncRecoveryAction() {
+    const button = $("[data-ws-action='resume-budget']");
+    if (!button) return;
+    const input = $("[data-watch-page-budget]");
+    const signatures = Number(input?.value);
+    button.disabled =
+      !input?.value ||
+      !Number.isInteger(signatures / 100) ||
+      signatures < 500 ||
+      signatures > 5000 ||
+      !$("[data-watch-resume-ack]")?.checked;
   }
 
   function renderTabs(task) {

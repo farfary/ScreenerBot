@@ -21,12 +21,14 @@ export function createWatchedWallets({
   let table = null;
   let copyClickHandler = null;
   let budgetTarget = null;
+  let savingBudget = false;
 
   const COLUMNS = [
     {
       id: "label",
       label: "Wallet",
       sortable: true,
+      minWidth: 160,
       render: (value, row) => {
         const label = Utils.escapeHtml(row.label || "Unlabelled wallet");
         const address = row.address || "";
@@ -41,6 +43,7 @@ export function createWatchedWallets({
       id: "_state",
       label: "Status",
       sortable: true,
+      minWidth: 230,
       render: (value, row) =>
         `<span class="watched-wallet-state ${row._stateClass}"><i class="icon-activity"></i><span>${value}</span></span>${row._reason ? `<small class="watched-wallet-reason">${Utils.escapeHtml(row._reason)}</small>` : ""}`,
     },
@@ -48,16 +51,18 @@ export function createWatchedWallets({
       id: "_lastActivity",
       label: "Last Sync",
       sortable: true,
+      minWidth: 140,
       render: (value) => (value ? formatTime(value) : "No activity yet"),
     },
     {
       id: "actions",
       label: "",
       sortable: false,
+      minWidth: 240,
       render: (value, row) => `
         <div class="watched-wallet-actions">
           <button class="btn" type="button" data-watch-action="copy" data-watch-id="${row.id}" title="Open this wallet in Copy Trading">Copy trade</button>
-          <button class="btn" type="button" data-watch-action="budget" data-watch-id="${row.id}">Watch limit</button>
+          <button class="btn" type="button" data-watch-action="budget" data-watch-id="${row.id}">${row.disable_reason?.kind === "signature_budget" ? "Resume watch" : "Watch limit"}</button>
           ${row.disable_reason?.kind === "signature_budget" ? "" : `<button class="btn" type="button" data-watch-action="toggle" data-watch-id="${row.id}">${row.enabled ? "Pause" : "Enable"}</button>`}
           <button class="btn-icon danger" type="button" data-watch-action="delete" data-watch-id="${row.id}" title="Remove" aria-label="Remove ${Utils.escapeHtml(row.label || "wallet")}"><i class="icon-trash-2"></i></button>
         </div>`,
@@ -81,6 +86,8 @@ export function createWatchedWallets({
 
     const budgetForm = $("#watch-budget-form");
     if (budgetForm) on(budgetForm, "submit", saveBudget);
+    on($("#watch-page-budget"), "input", syncBudgetSubmit);
+    on($("#watch-budget-ack"), "change", syncBudgetSubmit);
     ["#watch-budget-close", "#watch-budget-cancel"].forEach((selector) => {
       const button = $(selector);
       if (button) on(button, "click", hideBudgetModal);
@@ -115,14 +122,26 @@ export function createWatchedWallets({
     budgetTarget = target;
     const modal = $("#watch-budget-modal");
     const pausedForBudget = target.disable_reason?.kind === "signature_budget";
+    const currentLimit = (target.page_budget || 5) * 100;
     const input = $("#watch-page-budget");
-    if (input) input.value = String((target.page_budget || 5) * 100);
+    if (input)
+      input.value = String(pausedForBudget ? Math.min(5000, currentLimit + 500) : currentLimit);
+    const title = $("#watch-budget-title");
+    if (title) title.textContent = pausedForBudget ? "Resume wallet watch" : "Wallet watch limit";
+    const hint = $("#watch-budget-hint");
+    if (hint)
+      hint.textContent = `Current limit: ${currentLimit.toLocaleString()}. Choose 500–5,000 signatures per check in steps of 100. A higher limit uses more RPC credits and may still fall behind.`;
     $("#watch-budget-resume-notice")?.classList.toggle("hidden", !pausedForBudget);
     const ack = $("#watch-budget-ack");
     if (ack) ack.checked = false;
     const button = $("#watch-budget-save");
     if (button) button.textContent = pausedForBudget ? "Resume from now" : "Save limit";
-    $("#watch-budget-error")?.classList.add("hidden");
+    const error = $("#watch-budget-error");
+    if (error) {
+      error.textContent = "";
+      error.classList.add("hidden");
+    }
+    syncBudgetSubmit();
     showModal("watch-budget-modal");
     modal?.querySelector("#watch-page-budget")?.focus();
   }
@@ -130,6 +149,22 @@ export function createWatchedWallets({
   function hideBudgetModal() {
     hideModal("watch-budget-modal");
     budgetTarget = null;
+  }
+
+  function syncBudgetSubmit() {
+    const button = $("#watch-budget-save");
+    if (!button) return;
+    const input = $("#watch-page-budget");
+    const signatures = Number(input?.value);
+    const needsAck = budgetTarget?.disable_reason?.kind === "signature_budget";
+    button.disabled =
+      savingBudget ||
+      !budgetTarget ||
+      !input?.value ||
+      !Number.isInteger(signatures / 100) ||
+      signatures < 500 ||
+      signatures > 5000 ||
+      (needsAck && !$("#watch-budget-ack")?.checked);
   }
 
   async function saveBudget(event) {
@@ -143,40 +178,54 @@ export function createWatchedWallets({
     const error = $("#watch-budget-error");
     if (!Number.isInteger(pageBudget) || pageBudget < 5 || pageBudget > 50) {
       if (error) {
-        error.textContent = "Choose between 500 and 5,000 signatures per poll in 100-signature steps.";
+        error.textContent =
+          "Choose between 500 and 5,000 signatures per poll in 100-signature steps.";
         error.classList.remove("hidden");
       }
       return;
     }
     if (pausedForBudget && !ack?.checked) {
       if (error) {
-        error.textContent = "Acknowledge that signatures since the last completed check will be skipped.";
+        error.textContent =
+          "Acknowledge that signatures since the last completed check will be skipped.";
         error.classList.remove("hidden");
       }
       return;
     }
-    const submit = $("#watch-budget-save");
-    if (submit) submit.disabled = true;
+    savingBudget = true;
+    syncBudgetSubmit();
     try {
-      await requestManager.fetch(`/api/wallets/watch/${target.id}/${pausedForBudget ? "resume" : "budget"}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(pausedForBudget
-          ? { page_budget: pageBudget, acknowledge_missed_activity: true }
-          : { page_budget: pageBudget }),
-        priority: "high",
-        skipDedup: true,
-      });
+      await requestManager.fetch(
+        `/api/wallets/watch/${target.id}/${pausedForBudget ? "resume" : "budget"}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(
+            pausedForBudget
+              ? { page_budget: pageBudget, acknowledge_missed_activity: true }
+              : { page_budget: pageBudget }
+          ),
+          priority: "high",
+          skipDedup: true,
+        }
+      );
       hideBudgetModal();
-      Utils.showToast(pausedForBudget ? "Watch resumed from the current wallet head" : "Wallet watch limit updated", "success");
+      Utils.showToast(
+        pausedForBudget
+          ? "Watch resumed from the current wallet head"
+          : "Wallet watch limit updated",
+        "success"
+      );
       await load({ force: true });
     } catch (requestError) {
       if (error) {
-        error.textContent = requestError.detail || requestError.message || "Watch limit could not be saved.";
+        error.textContent =
+          requestError.detail || requestError.message || "Watch limit could not be saved.";
         error.classList.remove("hidden");
       }
     } finally {
-      if (submit) submit.disabled = false;
+      savingBudget = false;
+      syncBudgetSubmit();
     }
   }
 
