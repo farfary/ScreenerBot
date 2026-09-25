@@ -31,7 +31,7 @@ const REVISION_FILE = path.join(SHELL_ROOT, 'src', 'shell_revision.json');
 const REVISION_LENGTH = 12;
 
 const INPUT_DIRECTORIES = ['src', 'assets'];
-const INPUT_FILES = ['forge.config.js'];
+const INPUT_FILES = ['forge.config.js', 'tools/windows-installer.js'];
 /** Never part of the identity: generated, or noise that is not shipped. */
 const EXCLUDED = new Set(['shell_revision.json', '.DS_Store']);
 

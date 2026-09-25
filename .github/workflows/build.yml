@@ -547,6 +547,11 @@ jobs:
         working-directory: electron
         run: npx electron-forge make --arch=${{ matrix.electron-arch }}
 
+      - name: Verify Windows installer metadata
+        shell: bash
+        working-directory: electron
+        run: node tools/windows-installer.js --verify "out/make/wix/${{ matrix.electron-arch }}/ScreenerBot.wxs" "${{ matrix.electron-arch }}"
+
       - name: Collect artifacts
         shell: bash
         run: |

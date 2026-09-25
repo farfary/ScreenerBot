@@ -75,7 +75,7 @@ nvm use 22
 
 **Windows:**
 - Visual Studio Build Tools with C++ workload
-- [WiX Toolset v4+](https://wixtoolset.org/) (for MSI installer creation)
+- [WiX Toolset v3.14](https://github.com/wixtoolset/wix3/releases) (`candle.exe` and `light.exe`, required by the Electron Forge MSI maker)
 - [LLVM/LLD](https://llvm.org/) (recommended for ARM64 builds)
 
 **Linux:**
@@ -211,7 +211,7 @@ Output locations:
 The packaging is configured in `electron/forge.config.js`:
 
 - **macOS**: DMG with drag-to-Applications layout, dark mode support
-- **Windows**: WiX MSI installer with custom install directory, VC++ redistributable bundled
+- **Windows**: per-machine WiX MSI installer with a custom install directory and bundled VC++ redistributable; x64 and ARM64 packages carry distinct native architecture and stable upgrade identities
 - **Linux**: `.deb` package with proper desktop integration, categorized under Finance
 
 ## Platform-Specific Notes

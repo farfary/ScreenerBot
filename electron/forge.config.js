@@ -1,4 +1,5 @@
 const path = require('path');
+const { APP_ID, windowsInstallerIdentity } = require('./tools/windows-installer');
 
 // Platform-specific binary name
 const isWindows = process.platform === 'win32';
@@ -21,7 +22,7 @@ module.exports = {
     asar: true,
     name: 'ScreenerBot',
     executableName: 'ScreenerBot',
-    appBundleId: 'io.screenerbot.app',
+    appBundleId: APP_ID,
     appCategoryType: 'public.app-category.finance',
     icon: path.join(__dirname, 'assets', 'icon'),
     // This file is the only source of macOS bundle metadata. Keys not expressed
@@ -152,9 +153,9 @@ module.exports = {
         description: 'Automated Solana DeFi trading bot with wallet management',
         language: 1033, // English (United States)
         icon: path.join(__dirname, 'assets', 'icon.ico'),
-        // CRITICAL: Set arch to match build target - defaults to x86 if not specified!
-        // This determines whether the MSI installs to "Program Files" (x64) or "Program Files (x86)"
-        arch: targetArch === 'arm64' ? 'x64' : targetArch, // WIX doesn't support arm64 yet, use x64 for arm64 builds
+        // The upgrade code, native package architecture, install scope and
+        // user-facing product name are release invariants, not maker defaults.
+        ...windowsInstallerIdentity(targetArch),
         ui: {
           chooseDirectory: true, // Allow user to choose install directory
         },

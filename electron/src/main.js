@@ -6,6 +6,7 @@ const fs = require('fs');
 const os = require('os');
 const { pathToFileURL } = require('url');
 const appPaths = require('./paths');
+const { APP_ID } = require('./app_identity');
 const coreResolver = require('./core_resolver');
 const { createLineDecoder, shouldRollbackStagedCore } = require('./backend_launch');
 
@@ -14,6 +15,10 @@ const { createLineDecoder, shouldRollbackStagedCore } = require('./backend_launc
 // ============================================================================
 process.stdout?.on('error', (err) => { if (err.code === 'EPIPE') return; });
 process.stderr?.on('error', (err) => { if (err.code === 'EPIPE') return; });
+
+if (process.platform === 'win32') {
+  app.setAppUserModelId(APP_ID);
+}
 
 // ============================================================================
 // SINGLE INSTANCE LOCK - Must be checked FIRST before any other initialization
@@ -958,12 +963,14 @@ async function checkAndInstallVCRedist() {
     redistPath = path.join(__dirname, '..', 'redist', redistName);
   }
 
+  const downloadUrl = isArm64
+    ? 'https://aka.ms/vs/17/release/vc_redist.arm64.exe'
+    : 'https://aka.ms/vs/17/release/vc_redist.x64.exe';
+
   if (!fs.existsSync(redistPath)) {
     dialog.showErrorBox('Installer Not Found', `Could not locate ${redistName} correctly.`);
-    const downloadUrl = isArm64 
-      ? 'https://aka.ms/vs/17/release/vc_redist.arm64.exe'
-      : 'https://aka.ms/vs/17/release/vc_redist.x64.exe';
     shell.openExternal(downloadUrl);
+    app.quit();
     return false;
   }
 
@@ -1003,7 +1010,7 @@ async function checkAndInstallVCRedist() {
   } catch (err) {
     console.error('[Electron] Redist installation failed:', err);
     dialog.showErrorBox('Installation Failed', 'Please install Visual C++ Redistributable manually.');
-    shell.openExternal('https://aka.ms/vs/17/release/vc_redist.x64.exe');
+    shell.openExternal(downloadUrl);
     app.quit();
     return false;
   }
