@@ -124,6 +124,72 @@ impl TransactionDatabase {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::chains::{AccountId, ChainId};
+    use serde_json::json;
+
+    #[tokio::test]
+    async fn helius_watch_details_store_metadata_parent_before_analysis() {
+        let dir = tempfile::tempdir().unwrap();
+        let db =
+            TransactionDatabase::new_with_path(dir.path().join("transactions.db"), ChainId::Solana)
+                .await
+                .unwrap();
+        let subject = Subject::from_account(
+            AccountId::new(
+                ChainId::Solana,
+                "WatchedWallet1111111111111111111111111111111",
+            )
+            .unwrap(),
+        );
+        let mut transaction = Transaction::new("helius_successful_signature".to_owned());
+        transaction.status = TransactionStatus::Confirmed;
+        transaction.success = true;
+        transaction.raw_transaction_data =
+            Some(json!({"response": "needed for classification only"}));
+
+        assert!(db
+            .store_processed_transaction(subject.clone(), &transaction)
+            .await
+            .is_err());
+
+        db.store_watch_transaction(subject.clone(), &transaction)
+            .await
+            .unwrap();
+        db.store_watch_transaction(subject.clone(), &transaction)
+            .await
+            .unwrap();
+
+        let conn = db.get_connection().unwrap();
+        let (parent_count, raw_json): (i64, Option<String>) = conn
+            .query_row(
+                "SELECT COUNT(*), MAX(raw_transaction_data) FROM raw_transactions WHERE wallet_address = ?1",
+                params![subject.address()],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        let processed_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM processed_transactions WHERE wallet_address = ?1",
+                params![subject.address()],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let foreign_key_errors: i64 = conn
+            .query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(
+            (parent_count, processed_count, foreign_key_errors),
+            (1, 1, 0)
+        );
+        assert!(raw_json.is_none());
+    }
+}
+
 // =============================================================================
 // IMPLEMENTATION - TRANSACTION DATA MANAGEMENT
 // =============================================================================
@@ -225,6 +291,63 @@ impl TransactionDatabase {
         transaction: &Transaction,
     ) -> Result<(), Error> {
         let conn = self.get_connection()?;
+        self.store_processed_transaction_on_connection(&conn, subject, transaction)
+    }
+
+    /// Store an observed wallet's metadata parent and analysis together. Helius
+    /// supplies already fetched details, so this path does not pass through the
+    /// raw-response cache that normally creates the foreign-key parent row.
+    pub async fn store_watch_transaction(
+        &self,
+        subject: Subject,
+        transaction: &Transaction,
+    ) -> Result<(), Error> {
+        let mut conn = self.get_connection()?;
+        let chain_id = self.require_subject_chain(&subject)?;
+        let wallet_address = subject.address();
+        let status = match &transaction.status {
+            TransactionStatus::Pending => "Pending",
+            TransactionStatus::Confirmed => "Confirmed",
+            TransactionStatus::Finalized => "Finalized",
+            TransactionStatus::Failed(_) => "Failed",
+        };
+        let tx = conn
+            .transaction()
+            .map_err(crate::errors::DatabaseError::from)?;
+        tx.execute(
+            "INSERT INTO raw_transactions \
+             (chain_id, signature, wallet_address, slot, block_time, timestamp, status, success, error_message, \
+              fee_lamports, compute_units_consumed, instructions_count, accounts_count, raw_transaction_data) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, NULL) \
+             ON CONFLICT(chain_id, signature, wallet_address) DO NOTHING",
+            params![
+                chain_id,
+                transaction.signature,
+                wallet_address,
+                transaction.slot,
+                transaction.block_time,
+                transaction.timestamp.to_rfc3339(),
+                status,
+                transaction.success,
+                transaction.error_message,
+                transaction.fee_lamports,
+                transaction.compute_units_consumed,
+                transaction.instructions_count,
+                transaction.accounts_count,
+            ],
+        )
+        .map_err(crate::errors::DatabaseError::from)?;
+        self.store_processed_transaction_on_connection(&tx, subject, transaction)?;
+        tx.commit().map_err(crate::errors::DatabaseError::from)?;
+        Ok(())
+    }
+
+    fn store_processed_transaction_on_connection(
+        &self,
+        conn: &rusqlite::Connection,
+        subject: Subject,
+        transaction: &Transaction,
+    ) -> Result<(), Error> {
         let wallet_address = subject.address();
         let chain_id = self.require_subject_chain(&subject)?;
 

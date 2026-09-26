@@ -2,7 +2,7 @@
 //!
 //! | Field | Own wallet | Watched target |
 //! |---|---|---|
-//! | `raw_transactions.raw_transaction_data` | stored | not stored (the injected runtime's `decode_transaction(is_own=false)` skips it) |
+//! | `raw_transactions.raw_transaction_data` | stored | not stored (the watched target keeps only metadata for the processed-row foreign key) |
 //! | `processed_transactions` | stored | stored |
 //! | retention | unlimited | rolling window (`wallet.watch_retention_days`) |
 //! | `record_transaction_event` | yes | no -- the watch service emits its own `WalletActivity` |
@@ -41,10 +41,14 @@ pub(super) async fn record(
         }));
     };
 
-    if let Err(e) = db
-        .store_processed_transaction(subject.clone(), transaction)
-        .await
-    {
+    let stored = if is_own_wallet {
+        db.store_processed_transaction(subject.clone(), transaction)
+            .await
+    } else {
+        db.store_watch_transaction(subject.clone(), transaction)
+            .await
+    };
+    if let Err(e) = stored {
         logger::warning(
             LogTag::WalletWatch,
             &format!(

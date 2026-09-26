@@ -83,10 +83,9 @@ impl TransactionProcessor {
     }
 
     /// Create a processor for a watched (non-own) subject: the raw jsonParsed
-    /// response is fetched (needed to decode) but never persisted, only the decoded
-    /// analytics row is. A busy target's raw blobs would otherwise be far larger than
-    /// its decoded rows and dwarf `transactions.db` -- see the wallet-watch recording
-    /// policy (own wallet: full retention; watched target: decoded row only).
+    /// response is fetched (needed to decode) but its JSON blob is never persisted.
+    /// The watch recorder stores transaction metadata alongside the decoded row so
+    /// the processed row has its required parent without retaining the large blob.
     pub fn new_for_watch_target(wallet_pubkey: Pubkey) -> Self {
         Self {
             wallet_pubkey,
