@@ -19,6 +19,7 @@ import { createActivity } from "./activity.js";
 
 /** Analytics are heavier than the workspace read; a poll refreshes them at most this often. */
 const INSIGHTS_TTL_MS = 15_000;
+const WATCH_STATUS_TTL_MS = 15_000;
 
 const TABS = [
   { id: "overview", label: "Overview" },
@@ -45,6 +46,7 @@ export function createWorkspace(page) {
   let ws = null;
   let wsError = null;
   let shellFor = null;
+  const watchStatuses = new Map();
   const holdings = createHoldings(page, { rerender: renderPanel, showActivityFor });
   const activity = createActivity(page, { rerender: renderPanel });
 
@@ -84,6 +86,7 @@ export function createWorkspace(page) {
       changed = ws?.id === id && ws.stats?.decisions !== next.stats?.decisions;
       ws = next;
       wsError = null;
+      await refreshWatchStatus(id, next.target_address);
     } catch (error) {
       if (id !== state.selectedId) return;
       wsError = error.detail;
@@ -158,10 +161,11 @@ export function createWorkspace(page) {
     shellFor = id;
     forget(root);
     root.innerHTML = `<header class="copy-ws-head">
-      <div class="copy-ws-identity">
+    <div class="copy-ws-identity">
         <div class="copy-ws-title"><h2 id="copy-ws-name"></h2><span id="copy-ws-mode"></span></div>
         <div class="copy-ws-address" id="copy-ws-address"></div>
         <div class="copy-ws-state" id="copy-ws-state" aria-live="polite"></div>
+        <div class="copy-ws-watch-status" id="copy-ws-watch-status"></div>
       </div>
       <div id="copy-ws-watch-recovery"></div>
       <div class="copy-ws-actions" id="copy-ws-actions"></div>
@@ -199,16 +203,57 @@ export function createWorkspace(page) {
     return `${esc(pauseReasonText(task.pause_reason) + since)}${hint ? `<small>${esc(hint)}</small>` : ""}`;
   }
 
+  async function refreshWatchStatus(taskId, address) {
+    if (!address) return;
+    const cached = watchStatuses.get(address);
+    if (cached && Date.now() - cached.fetchedAt < WATCH_STATUS_TTL_MS) return;
+    try {
+      const { targets = [] } = await requestManager.fetch("/api/wallets/watch");
+      const target = targets.find((item) => item.address === address);
+      const status = target
+        ? await requestManager.fetch(`/api/wallets/watch/${target.id}/status`)
+        : null;
+      watchStatuses.set(address, { target, status, fetchedAt: Date.now() });
+      if (state.selectedId === taskId && current()?.target_address === address)
+        renderHeader(current());
+    } catch {
+      // Retain the last status while a transient watch-status request fails.
+    }
+  }
+
+  function watchStatusHtml(task) {
+    const watch = watchStatuses.get(task.target_address);
+    const status = watch?.status;
+    if (!status || status.mode !== "helius_high_activity") return "";
+    const catchingUp = status.catching_up ? " · catching up" : "";
+    const lastCheck = status.last_checked_at
+      ? ` Last check ${timeAgo(status.last_checked_at)}.`
+      : "";
+    return `<small>Helius high-activity checks${catchingUp}. This approved mode filters failed transactions and checks successful records in chronological order. Copying waits for these checks; stale trades still need to meet the arrival limit.${lastCheck}</small>`;
+  }
+
   function recoveryHtml(task) {
-    if (task.enabled || task.pause_reason?.kind !== "watch_budget_exceeded") return "";
+    if (task.enabled) return "";
+    if (task.pause_reason?.kind === "helius_unavailable") {
+      const approved = watchStatuses.get(task.target_address)?.status?.target
+        ?.high_activity_approved;
+      return `<div class="copy-watch-resume" role="group" aria-labelledby="copy-watch-resume-title">
+        <h3 id="copy-watch-resume-title">Restore wallet watch</h3>
+        <p>${approved ? "Restore Helius high-activity support, then retry the watch." : "Helius approval is off. Retrying will use standard wallet watch, which may reach the watch limit again."} Its saved cursor is preserved; stale trades still need to meet the copy arrival limit.</p>
+      </div>`;
+    }
+    if (task.pause_reason?.kind !== "watch_budget_exceeded") return "";
+    const watch = watchStatuses.get(task.target_address)?.status;
+    const highActivity = watch?.mode === "helius_high_activity";
     const currentLimit = (Number(task.pause_reason.page_budget) || 5) * 100;
     const suggestedLimit = Math.min(5000, currentLimit + 500);
     return `<div class="copy-watch-resume" role="group" aria-labelledby="copy-watch-resume-title">
       <h3 id="copy-watch-resume-title">Restore wallet watch</h3>
-      <p>A higher limit uses more RPC credits and may still fall behind. Resuming starts at the current wallet head; activity since the last completed check will not be copied.</p>
-      <label class="copy-watch-budget-field" for="copy-watch-page-budget">Signatures checked per poll</label>
+      <p>Resume from now starts at the current wallet head; activity since the last completed check will not be copied.</p>
+      <label class="copy-watch-budget-field" for="copy-watch-page-budget">${highActivity ? "Successful full transactions checked per check" : "Signatures checked per check"}</label>
       <input id="copy-watch-page-budget" data-watch-page-budget type="number" min="500" max="5000" step="100" value="${suggestedLimit}" aria-describedby="copy-watch-budget-hint" />
-      <small id="copy-watch-budget-hint">Current limit: ${currentLimit.toLocaleString()}. Choose 500–5,000 in steps of 100.</small>
+      <small id="copy-watch-budget-hint">${highActivity ? `Current limit: ${currentLimit.toLocaleString()}. Choose 500–5,000 successful full transactions per check in steps of 100. Helius charges 10 credits per 100 full transactions returned, rounded up, with a 10 credit minimum per request. A check can make multiple requests, and pricing can change.` : `Current limit: ${currentLimit.toLocaleString()}. Choose 500–5,000 signatures per check in steps of 100.`}</small>
+      <button class="btn" type="button" data-ws-action="approve-helius">Use Helius from saved cursor</button>
       <label class="checkbox-label copy-watch-ack"><input type="checkbox" data-watch-resume-ack /><span>I understand missed activity will not be copied.</span></label>
     </div>`;
   }
@@ -221,7 +266,9 @@ export function createWorkspace(page) {
         ? button("pause", "btn-outline", "icon-pause", "Pause")
         : task.pause_reason?.kind === "watch_budget_exceeded"
           ? button("resume-budget", "btn-primary", "icon-play", "Resume from now")
-          : button("resume", "btn-primary", "icon-play", "Resume"),
+          : task.pause_reason?.kind === "helius_unavailable"
+            ? button("resume-helius", "btn-primary", "icon-rotate-cw", "Retry watch and resume")
+            : button("resume", "btn-primary", "icon-play", "Resume"),
       task.mode === "live"
         ? button("paper", "btn-outline", "icon-rotate-ccw", "Return to Paper")
         : "",
@@ -250,6 +297,7 @@ export function createWorkspace(page) {
           : "blocked";
       paint(stateNode, stateHtml(task));
     }
+    paint($("#copy-ws-watch-status"), watchStatusHtml(task));
     const recoveryNode = $("#copy-ws-watch-recovery");
     if (recoveryNode) {
       const recovery = recoveryHtml(task);
@@ -357,31 +405,110 @@ export function createWorkspace(page) {
       });
       if (!result.confirmed) return;
     }
-    await run(button, async () => {
-      const { targets = [] } = await requestManager.fetch("/api/wallets/watch");
-      const target = targets.find((item) => item.address === task.target_address);
-      if (!target) throw new Error("The wallet watch target could not be found");
-      if (target.enabled) {
-        if (target.page_budget !== pageBudget) {
-          await requestManager.fetch(`/api/wallets/watch/${target.id}/budget`, {
+    await run(
+      button,
+      async () => {
+        const { targets = [] } = await requestManager.fetch("/api/wallets/watch");
+        const target = targets.find((item) => item.address === task.target_address);
+        if (!target) throw new Error("The wallet watch target could not be found");
+        if (target.enabled) {
+          if (target.page_budget !== pageBudget) {
+            await requestManager.fetch(`/api/wallets/watch/${target.id}/budget`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ page_budget: pageBudget }),
+              priority: "high",
+              skipDedup: true,
+            });
+          }
+        } else {
+          await requestManager.fetch(`/api/wallets/watch/${target.id}/resume`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ page_budget: pageBudget }),
+            body: JSON.stringify({ page_budget: pageBudget, acknowledge_missed_activity: true }),
             priority: "high",
             skipDedup: true,
           });
         }
-      } else {
-        await requestManager.fetch(`/api/wallets/watch/${target.id}/resume`, {
+        await api.update(task.id, { enabled: true });
+      },
+      "Wallet watch and copy task resumed from now",
+      "Wallet watch or copy task could not be resumed"
+    );
+  }
+
+  async function resumeHelius(task, button) {
+    if (task.mode === "live") {
+      const result = await confirm({
+        title: "Resume live copying",
+        message: `“${taskName(task)}” may submit real swaps after Helius wallet watching is restored.`,
+        confirmLabel: "Resume live",
+        cancelLabel: "Keep paused",
+        variant: "danger",
+      });
+      if (!result.confirmed) return;
+    }
+    await run(
+      button,
+      async () => {
+        const { targets = [] } = await requestManager.fetch("/api/wallets/watch");
+        const target = targets.find((item) => item.address === task.target_address);
+        if (!target) throw new Error("The wallet watch target could not be found");
+        await requestManager.fetch(`/api/wallets/watch/${target.id}/enabled`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ page_budget: pageBudget, acknowledge_missed_activity: true }),
+          body: JSON.stringify({ enabled: true }),
           priority: "high",
           skipDedup: true,
         });
-      }
-      await api.update(task.id, { enabled: true });
-    }, "Wallet watch and copy task resumed from now", "Wallet watch or copy task could not be resumed");
+        await api.update(task.id, { enabled: true });
+      },
+      "Wallet watch and copy task resumed with the saved cursor",
+      "Wallet watch or copy task could not be resumed"
+    );
+  }
+
+  async function approveHelius(task, button) {
+    const confirmation = await confirm({
+      title: "Enable Helius high-activity checks",
+      message:
+        "Helius currently charges 10 credits per 100 full transactions returned, rounded up, with a 10 credit minimum per request. A check can make multiple requests and return up to 1,000 records per request, so usage can vary as provider pricing changes. Active wallets are paced, with an idle safety check. The saved cursor is preserved.",
+      confirmLabel: "Enable Helius",
+      cancelLabel: "Keep paused",
+      variant: "warning",
+    });
+    if (!confirmation.confirmed) return;
+    if (task.mode === "live") {
+      const live = await confirm({
+        title: "Resume live copying",
+        message: `“${taskName(task)}” may submit real swaps after the wallet watch is restored.`,
+        confirmLabel: "Resume live",
+        cancelLabel: "Keep paused",
+        variant: "danger",
+      });
+      if (!live.confirmed) return;
+    }
+    await run(
+      button,
+      async () => {
+        const { targets = [] } = await requestManager.fetch("/api/wallets/watch");
+        const target = targets.find((item) => item.address === task.target_address);
+        if (!target) throw new Error("The wallet watch target could not be found");
+        await requestManager.fetch(`/api/wallets/watch/${target.id}/high-activity-approval`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ approved: true, acknowledge_provider_usage: true }),
+          priority: "high",
+          skipDedup: true,
+        });
+        const restored = await requestManager.fetch("/api/wallets/watch");
+        if (!restored.targets?.find((item) => item.id === target.id)?.enabled)
+          throw new Error("The wallet watch has not been restored");
+        await api.update(task.id, { enabled: true });
+      },
+      "Helius wallet watch and copy task resumed from the saved cursor",
+      "Helius wallet watch or copy task could not be resumed"
+    );
   }
 
   async function runAction(action, button) {
@@ -389,6 +516,10 @@ export function createWorkspace(page) {
     if (!task) return;
     if (action === "resume-budget") {
       await resumeBudget(task, button);
+    } else if (action === "resume-helius") {
+      await resumeHelius(task, button);
+    } else if (action === "approve-helius") {
+      await approveHelius(task, button);
     } else if (action === "pause" || action === "resume") {
       const enabled = action === "resume";
       if (enabled && task.mode === "live") {

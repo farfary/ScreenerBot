@@ -11,6 +11,10 @@
   font-weight: 600;
 }
 
+.watched-wallet-state.is-high-activity {
+  color: var(--success-color);
+}
+
 .watched-wallet-state.is-streaming {
   color: var(--success-color);
 }

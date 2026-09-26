@@ -199,6 +199,7 @@ fn target(entry: &PromoTarget) -> WatchTarget {
         sources,
         enabled,
         page_budget: crate::wallets::watch::DEFAULT_PAGE_BUDGET,
+        high_activity_approved: false,
         disable_reason: None,
         created_at,
         updated_at: created_at + Duration::hours(1),
@@ -225,5 +226,8 @@ pub fn get_promo_watch_status(id: i64) -> Option<WatchStatus> {
         last_activity_at: activity_minutes.map(|mins| Utc::now() - Duration::minutes(mins)),
         last_signature: signature.map(str::to_owned),
         last_error: None,
+        mode: crate::wallets::watch::WatchMode::Standard,
+        catching_up: false,
+        last_checked_at: None,
     })
 }

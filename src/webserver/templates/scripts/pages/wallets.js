@@ -14,6 +14,7 @@ import { enhanceAllSelects } from "../ui/custom_select.js";
 import { createBulkOperations } from "./wallets/bulk_operations.js";
 import { createWalletRenderers } from "./wallets/renderers.js";
 import { createWatchedWallets } from "./wallets/watched.js";
+import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 
 // =============================================================================
 // Constants
@@ -67,6 +68,7 @@ function createLifecycle() {
         on,
         showModal,
         hideModal,
+        confirm: (config) => ConfirmationDialog.show(config),
         enhanceAllSelects,
         loadAllData,
         walletsData: () => walletsData,

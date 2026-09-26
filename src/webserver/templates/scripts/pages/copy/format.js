@@ -56,6 +56,7 @@ const SKIP_LABELS = {
   latency_kill_switch: "Auto-paused: trades detected too late",
   claim_reconciled_abandoned: "Interrupted live submission closed without retry",
   stale_observation: "Replayed after downtime, too old to copy",
+  unknown_observation_time: "Replayed trade has no block time",
   entry_blocked: "Entry blocked",
 };
 
@@ -95,6 +96,8 @@ export function pauseReasonText(reason) {
       return "Auto-paused: the wallet is no longer watched";
     case "watch_budget_exceeded":
       return `Paused: this wallet reached its ${(Number(reason.page_budget) || 5) * 100}-signature watch check limit before catching up`;
+    case "helius_unavailable":
+      return "Paused: Helius high-activity checks are unavailable";
     default:
       return "Paused";
   }
@@ -108,6 +111,8 @@ export function pauseReasonShort(reason) {
       return "watch lost";
     case "watch_budget_exceeded":
       return "watch limit";
+    case "helius_unavailable":
+      return "Helius unavailable";
     case "user":
       return "by you";
     default:

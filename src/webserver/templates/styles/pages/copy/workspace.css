@@ -76,6 +76,13 @@
   color: var(--text-muted);
 }
 
+.copy-ws-watch-status {
+  max-width: 72ch;
+  font-size: var(--font-size-xs);
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
 .copy-watch-resume {
   display: grid;
   justify-items: start;
