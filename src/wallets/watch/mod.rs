@@ -40,8 +40,8 @@ mod types;
 pub use poller::{cadence_secs, needs_gap_fill, CatchUpState, CompletedCatchUp, PAGE_SIZE};
 pub use service::subscribe_activity;
 pub use types::{
-    ActivityKind, SwapSide, TransferDirection, WalletActivity, WatchDisableReason,
-    WatchNotification, WatchSource, WatchStatus, WatchTarget,
+    ActivityKind, SignaturePageItem, SwapSide, TransferDirection, WalletActivity,
+    WatchDisableReason, WatchNotification, WatchSource, WatchStatus, WatchTarget,
 };
 
 use std::sync::{Arc, OnceLock};
@@ -281,7 +281,11 @@ pub async fn resume_target(
         .fetch_signatures_page(&target.address, 1, None, None)
         .await?;
     watch_db()?
-        .resume_target_from_head(id, page_budget, head.first().cloned())
+        .resume_target_from_head(
+            id,
+            page_budget,
+            head.first().map(|item| item.signature.clone()),
+        )
         .await?;
     service::request_reload();
     Ok(())

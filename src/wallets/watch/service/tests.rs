@@ -140,6 +140,50 @@ async fn a_processing_failure_never_advances_the_durable_cursor() {
 }
 
 #[tokio::test]
+async fn failed_external_page_advances_raw_cursor_without_decoding() {
+    use crate::wallets::watch::SignaturePageItem;
+
+    let address = "FailedExternal1111";
+    let chain_runtime = FakeRuntime::new(vec![address.to_owned()]);
+    chain_runtime.queue_page_items(
+        address,
+        vec![SignaturePageItem {
+            signature: "failed-sig".to_owned(),
+            failed: true,
+        }],
+    );
+    let fake_runtime = chain_runtime.clone();
+    let chain_runtime: Arc<dyn WalletWatchRuntime> = chain_runtime;
+    let (watch_db, _dir) = temp_watch_db();
+    watch_db.mark_cursor_initialized(address).await.unwrap();
+    let own = Subject::from_account(
+        crate::chains::AccountId::new(crate::chains::ChainId::Solana, "OwnWallet1111").unwrap(),
+    );
+
+    let mut target_runtime = idle_target_runtime(alert_watch_target(address, 3));
+    poll_target(&mut target_runtime, &chain_runtime, &watch_db, own, false).await;
+
+    assert_eq!(
+        watch_db.get_cursor(address).await.unwrap().as_deref(),
+        Some("failed-sig")
+    );
+    assert!(fake_runtime.calls.lock().unwrap().decoded.is_empty());
+}
+
+#[test]
+fn own_wallet_failed_items_retain_the_decode_path() {
+    let target = own_watch_target("OwnFailed1111");
+    assert!(!skip_known_failed_external(&target, true));
+}
+
+#[test]
+fn failed_external_items_skip_but_successful_items_replay() {
+    let target = alert_watch_target("External1111", 4);
+    assert!(skip_known_failed_external(&target, true));
+    assert!(!skip_known_failed_external(&target, false));
+}
+
+#[tokio::test]
 async fn process_signature_resolves_the_exact_target_identity_before_dedupe() {
     let address = "IdentityTarget1111";
     let chain_runtime = FakeRuntime::new(vec![address.to_owned()]);

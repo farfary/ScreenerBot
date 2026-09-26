@@ -9,6 +9,7 @@
 use chrono::{DateTime, Utc};
 
 use super::runtime::WalletWatchRuntime;
+use super::types::SignaturePageItem;
 use crate::wallets::Error;
 
 /// Signatures per RPC page.
@@ -46,6 +47,7 @@ pub fn needs_gap_fill(startup: bool, was_connected: bool, is_connected: bool) ->
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SeenSignature {
     pub signature: String,
+    pub failed: bool,
     pub detected_at: DateTime<Utc>,
 }
 
@@ -84,7 +86,7 @@ impl CatchUpState {
 
     /// Absorb one newest-first RPC page. A short or empty page proves that the
     /// requested range is complete; a full page requires another request.
-    pub fn ingest_page(&mut self, page: Vec<String>, page_size: usize) {
+    pub fn ingest_page(&mut self, page: Vec<SignaturePageItem>, page_size: usize) {
         if self.complete {
             return;
         }
@@ -96,13 +98,14 @@ impl CatchUpState {
 
         let page_len = page.len();
         if self.newest_signature.is_none() {
-            self.newest_signature = page.first().cloned();
+            self.newest_signature = page.first().map(|item| item.signature.clone());
         }
-        self.before = page.last().cloned();
+        self.before = page.last().map(|item| item.signature.clone());
         let detected_at = Utc::now();
         self.newest_first
-            .extend(page.into_iter().map(|signature| SeenSignature {
-                signature,
+            .extend(page.into_iter().map(|item| SeenSignature {
+                signature: item.signature,
+                failed: item.failed,
                 detected_at,
             }));
         // With no durable cursor there is no previously observed boundary to fill.
@@ -181,14 +184,29 @@ mod tests {
             .collect()
     }
 
-    fn signatures(prefix: &str, count: usize) -> Vec<String> {
-        (0..count).map(|n| format!("{prefix}-{n:03}")).collect()
+    fn signatures(prefix: &str, count: usize) -> Vec<SignaturePageItem> {
+        (0..count)
+            .map(|n| SignaturePageItem {
+                signature: format!("{prefix}-{n:03}"),
+                failed: false,
+            })
+            .collect()
+    }
+
+    fn page(items: &[(&str, bool)]) -> Vec<SignaturePageItem> {
+        items
+            .iter()
+            .map(|(signature, failed)| SignaturePageItem {
+                signature: (*signature).to_owned(),
+                failed: *failed,
+            })
+            .collect()
     }
 
     #[test]
     fn complete_range_replays_oldest_first_and_advances_to_newest() {
         let mut state = CatchUpState::new(Some("old-cursor".to_owned()));
-        state.ingest_page(vec!["newest".to_owned(), "older".to_owned()], PAGE_SIZE);
+        state.ingest_page(page(&[("newest", false), ("older", false)]), PAGE_SIZE);
 
         let completed = state.completed().expect("complete range");
         assert_eq!(names(&completed), ["older", "newest"]);
@@ -199,7 +217,7 @@ mod tests {
     fn multiple_pages_preserve_global_oldest_first_order() {
         let mut state = CatchUpState::new(Some("old-cursor".to_owned()));
         state.ingest_page(signatures("new", PAGE_SIZE), PAGE_SIZE);
-        state.ingest_page(vec!["old-1".to_owned(), "old-2".to_owned()], PAGE_SIZE);
+        state.ingest_page(page(&[("old-1", false), ("old-2", false)]), PAGE_SIZE);
 
         let completed = state.completed().expect("complete range");
         assert_eq!(completed.signatures.first().unwrap().signature, "old-2");
@@ -217,7 +235,7 @@ mod tests {
         assert!(!state.is_complete());
         assert_eq!(state.completed(), None);
 
-        state.ingest_page(vec!["tail".to_owned()], PAGE_SIZE);
+        state.ingest_page(page(&[("tail", false)]), PAGE_SIZE);
         let completed = state.completed().expect("resumed range completes");
         assert_eq!(completed.signatures.first().unwrap().signature, "tail");
         assert_eq!(completed.newest_signature.as_deref(), Some("page-0-000"));
@@ -231,6 +249,34 @@ mod tests {
         let completed = state.completed().expect("initial window completes");
         assert_eq!(completed.signatures.len(), PAGE_SIZE);
         assert_eq!(completed.newest_signature.as_deref(), Some("recent-000"));
+    }
+
+    #[test]
+    fn completed_range_keeps_failure_metadata_in_oldest_first_order() {
+        let mut state = CatchUpState::new(Some("old-cursor".to_owned()));
+        state.ingest_page(
+            page(&[
+                ("new-success", false),
+                ("middle-failed", true),
+                ("old-success", false),
+            ]),
+            PAGE_SIZE,
+        );
+
+        let completed = state.completed().expect("complete range");
+        assert_eq!(
+            names(&completed),
+            ["old-success", "middle-failed", "new-success"]
+        );
+        assert_eq!(
+            completed
+                .signatures
+                .iter()
+                .map(|seen| seen.failed)
+                .collect::<Vec<_>>(),
+            [false, true, false]
+        );
+        assert_eq!(completed.newest_signature.as_deref(), Some("new-success"));
     }
 
     #[test]
@@ -271,7 +317,7 @@ mod tests {
 
         let runtime = FakeRuntime::new(vec!["Addr1111".to_owned()]);
         for page in 0..MAX_PAGES {
-            runtime.queue_page("Addr1111", signatures(&format!("page-{page}"), PAGE_SIZE));
+            runtime.queue_page_items("Addr1111", signatures(&format!("page-{page}"), PAGE_SIZE));
         }
 
         let mut state = CatchUpState::new(Some("durable".to_owned()));

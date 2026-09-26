@@ -17,7 +17,7 @@ use crate::chains::solana::transactions::processor::TransactionProcessor;
 use crate::chains::solana::transactions::subject;
 use crate::transactions::types::{Subject, Transaction};
 use crate::wallets::watch::runtime::{ConnectionWatch, NotificationStream, WalletWatchRuntime};
-use crate::wallets::watch::{ActivityKind, WatchNotification};
+use crate::wallets::watch::{ActivityKind, SignaturePageItem, WatchNotification};
 use crate::wallets::Error;
 
 use super::classify;
@@ -72,11 +72,19 @@ impl WalletWatchRuntime for SolanaWalletWatchRuntime {
         page_size: usize,
         before: Option<&str>,
         until: Option<&str>,
-    ) -> Result<Vec<String>, Error> {
+    ) -> Result<Vec<SignaturePageItem>, Error> {
         let pubkey = parse_pubkey(address)?;
         TransactionFetcher::new()
-            .fetch_signatures_page(pubkey, page_size, before, until)
+            .fetch_signature_info_page(pubkey, page_size, before, until)
             .await
+            .map(|page| {
+                page.into_iter()
+                    .map(|info| SignaturePageItem {
+                        signature: info.signature.to_string(),
+                        failed: info.err.is_some(),
+                    })
+                    .collect()
+            })
             .map_err(|e| Error::ChainRuntime {
                 operation: "fetch_signatures_page",
                 detail: e.to_string(),

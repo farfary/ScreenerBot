@@ -188,6 +188,9 @@ async fn poll_target(
 
     let mut replay_complete = true;
     for seen in &completed.signatures {
+        if skip_known_failed_external(&target_runtime.target, seen.failed) {
+            continue;
+        }
         if process_signature(
             chain_runtime,
             &target_runtime.target,
@@ -224,6 +227,13 @@ async fn poll_target(
     }
 
     target_runtime.catch_up = None;
+}
+
+/// External targets have no state change to record for a transaction the chain
+/// already reports as failed. Own-wallet failures still follow the established
+/// decode-and-history path.
+pub(super) fn skip_known_failed_external(target: &WatchTarget, failed: bool) -> bool {
+    failed && !target.sources.contains(&WatchSource::OwnWallet)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -467,11 +477,8 @@ pub(super) async fn run(
             }
             Some((address, event)) = ws_rx.recv() => {
                 if let Some(target_runtime) = runtimes.get(&address) {
-                    if event.failed {
-                        logger::debug(
-                            LogTag::WalletWatch,
-                            &format!("Notification for a failed transaction on {address}, decoding anyway to confirm"),
-                        );
+                    if skip_known_failed_external(&target_runtime.target, event.failed) {
+                        continue;
                     }
                     let detected_at = Utc::now();
                     let outcome = process_signature(&chain_runtime, &target_runtime.target, own_subject.clone(), &event.signature, detected_at, false).await;

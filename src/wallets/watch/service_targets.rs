@@ -75,6 +75,7 @@ pub(super) async fn handle_overflow(target_runtime: &mut TargetRuntime, watch_db
 /// subscription handle and unsubscribes, same as any other holder of one).
 fn spawn_ws_forwarder(
     address: String,
+    is_own: bool,
     tx: mpsc::UnboundedSender<(String, WatchNotification)>,
     runtime: Arc<dyn WalletWatchRuntime>,
 ) -> (tokio::task::JoinHandle<()>, Arc<AtomicBool>) {
@@ -104,6 +105,9 @@ fn spawn_ws_forwarder(
                 }
             };
             while let Some(event) = sub.recv().await {
+                if event.failed && !is_own {
+                    continue;
+                }
                 if tx.send((address.clone(), event)).is_err() {
                     task_active.store(false, Ordering::Relaxed);
                     return;
@@ -124,8 +128,13 @@ fn register(
     target: WatchTarget,
 ) {
     let address = target.address.clone();
-    let (ws_task, ws_active) =
-        spawn_ws_forwarder(address.clone(), ws_tx.clone(), Arc::clone(chain_runtime));
+    let is_own = target.sources.contains(&WatchSource::OwnWallet);
+    let (ws_task, ws_active) = spawn_ws_forwarder(
+        address.clone(),
+        is_own,
+        ws_tx.clone(),
+        Arc::clone(chain_runtime),
+    );
     super::service_state::set_subscription(address.clone(), Arc::clone(&ws_active));
     runtimes.insert(
         address,
@@ -213,5 +222,80 @@ pub(super) async fn reload_targets(
     }
     for target in desired.into_values() {
         register(runtimes, ws_tx, chain_runtime, target);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::wallets::watch::runtime::test_support::FakeRuntime;
+
+    #[tokio::test]
+    async fn failed_external_notification_never_enters_the_processing_channel() {
+        let address = "ExternalNotifications1111";
+        let runtime = FakeRuntime::new(vec![address.to_owned()]);
+        runtime.queue_notifications(
+            address,
+            vec![WatchNotification {
+                signature: "failed-external".to_owned(),
+                failed: true,
+            }],
+        );
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let (task, _) = spawn_ws_forwarder(address.to_owned(), false, tx, runtime);
+
+        assert!(
+            tokio::time::timeout(Duration::from_millis(25), rx.recv())
+                .await
+                .is_err(),
+            "known failed external notification must not enter processing"
+        );
+        task.abort();
+    }
+
+    #[tokio::test]
+    async fn successful_and_own_failed_notifications_enter_processing() {
+        let external = "SuccessNotifications1111";
+        let own = "OwnNotifications1111";
+        let runtime = FakeRuntime::new(vec![external.to_owned(), own.to_owned()]);
+        runtime.queue_notifications(
+            external,
+            vec![WatchNotification {
+                signature: "successful-external".to_owned(),
+                failed: false,
+            }],
+        );
+        runtime.queue_notifications(
+            own,
+            vec![WatchNotification {
+                signature: "failed-own".to_owned(),
+                failed: true,
+            }],
+        );
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let (external_task, _) =
+            spawn_ws_forwarder(external.to_owned(), false, tx.clone(), runtime.clone());
+        let (own_task, _) = spawn_ws_forwarder(own.to_owned(), true, tx, runtime);
+
+        let mut received = vec![
+            tokio::time::timeout(Duration::from_millis(100), rx.recv())
+                .await
+                .expect("successful external notification arrives")
+                .expect("channel remains open"),
+            tokio::time::timeout(Duration::from_millis(100), rx.recv())
+                .await
+                .expect("failed own notification arrives")
+                .expect("channel remains open"),
+        ];
+        received.sort_by(|left, right| left.1.signature.cmp(&right.1.signature));
+        assert_eq!(
+            received
+                .iter()
+                .map(|(_, event)| event.signature.as_str())
+                .collect::<Vec<_>>(),
+            ["failed-own", "successful-external"]
+        );
+        external_task.abort();
+        own_task.abort();
     }
 }

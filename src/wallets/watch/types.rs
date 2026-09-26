@@ -148,6 +148,15 @@ pub struct WatchNotification {
     pub failed: bool,
 }
 
+/// One signature returned by a cursor page. The chain adapter preserves the
+/// provider's failure metadata so the shared funnel can avoid decoding known
+/// failed activity for external watch targets without changing cursor progress.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SignaturePageItem {
+    pub signature: String,
+    pub failed: bool,
+}
+
 /// Per-target status, surfaced by `/api/wallets/watch/:id/status`.
 #[derive(Debug, Clone, Serialize)]
 pub struct WatchStatus {

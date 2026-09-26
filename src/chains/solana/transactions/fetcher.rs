@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
 
-use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
+use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods, SignatureInfo};
 use crate::logger::{self, LogTag};
 use crate::transactions::utils::*;
 
@@ -109,7 +109,10 @@ impl TransactionFetcher {
         // Use optimized signature fetching with rate limiting
         let signatures = self
             .fetch_signatures_with_retry(&rpc_client, wallet_pubkey, limit, None, None)
-            .await?;
+            .await?
+            .into_iter()
+            .map(|info| info.signature.to_string())
+            .collect::<Vec<_>>();
 
         let duration = start_time.elapsed();
 
@@ -134,7 +137,7 @@ impl TransactionFetcher {
         limit: usize,
         before: Option<&str>,
         until: Option<&str>,
-    ) -> crate::chains::solana::Result<Vec<String>> {
+    ) -> crate::chains::solana::Result<Vec<SignatureInfo>> {
         let mut attempts = 0;
         let mut delay = self.config.retry_base_delay_ms;
 
@@ -188,7 +191,7 @@ impl TransactionFetcher {
         limit: usize,
         before: Option<&str>,
         until: Option<&str>,
-    ) -> crate::chains::solana::Result<Vec<String>> {
+    ) -> crate::chains::solana::Result<Vec<SignatureInfo>> {
         // Use the existing RPC client method
         let sig_infos = rpc_client
             .get_wallet_signatures_main_rpc(&wallet_pubkey, limit, before, until)
@@ -198,12 +201,7 @@ impl TransactionFetcher {
                 detail: e.to_string(),
             })?;
 
-        let signatures: Vec<String> = sig_infos
-            .into_iter()
-            .map(|info| info.signature.to_string())
-            .collect();
-
-        Ok(signatures)
+        Ok(sig_infos)
     }
 
     /// Fetch a specific page of signatures with optional pagination cursor.
@@ -235,7 +233,10 @@ impl TransactionFetcher {
 
         let signatures = self
             .fetch_signatures_with_retry(&rpc_client, wallet_pubkey, limit, before, until)
-            .await?;
+            .await?
+            .into_iter()
+            .map(|info| info.signature.to_string())
+            .collect::<Vec<_>>();
 
         let duration = start_time.elapsed();
 
@@ -250,6 +251,19 @@ impl TransactionFetcher {
         );
 
         Ok(signatures)
+    }
+
+    /// Fetch a signature page while retaining RPC metadata for callers that can
+    /// reject known failed activity before fetching transaction details.
+    pub async fn fetch_signature_info_page(
+        &self,
+        wallet_pubkey: Pubkey,
+        limit: usize,
+        before: Option<&str>,
+        until: Option<&str>,
+    ) -> crate::chains::solana::Result<Vec<SignatureInfo>> {
+        self.fetch_signatures_with_retry(get_rpc_client(), wallet_pubkey, limit, before, until)
+            .await
     }
 }
 
@@ -672,9 +686,13 @@ impl BatchSignatureFetcher {
 
             // Set 'before' for next batch
             if let Some(last_sig) = batch_signatures.last() {
-                before = Some(last_sig.clone());
+                before = Some(last_sig.signature.to_string());
 
-                all_signatures.extend(batch_signatures);
+                all_signatures.extend(
+                    batch_signatures
+                        .into_iter()
+                        .map(|info| info.signature.to_string()),
+                );
 
                 // Add delay between batches
                 tokio::time::sleep(Duration::from_millis(self.fetcher.config.batch_delay_ms)).await;

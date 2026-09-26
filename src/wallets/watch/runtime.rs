@@ -13,7 +13,7 @@ use async_trait::async_trait;
 use crate::transactions::types::{Subject, Transaction};
 use crate::wallets::Error;
 
-use super::types::{ActivityKind, WatchNotification};
+use super::types::{ActivityKind, SignaturePageItem, WatchNotification};
 
 /// One address's realtime notification subscription. Dropping the runtime's
 /// `Box<dyn NotificationStream>` must end the underlying subscription, the same
@@ -67,7 +67,7 @@ pub trait WalletWatchRuntime: Send + Sync {
         page_size: usize,
         before: Option<&str>,
         until: Option<&str>,
-    ) -> Result<Vec<String>, Error>;
+    ) -> Result<Vec<SignaturePageItem>, Error>;
 
     /// Decode one signature into a chain-neutral transaction record.
     /// `is_own` selects the own-wallet persistence policy (raw JSON retained)
@@ -185,7 +185,10 @@ pub(crate) mod test_support {
         pub connected: tokio::sync::watch::Sender<bool>,
         connected_rx: tokio::sync::watch::Receiver<bool>,
         valid_addresses: Vec<String>,
-        pages: Mutex<std::collections::HashMap<String, VecDeque<Vec<String>>>>,
+        pages: Mutex<std::collections::HashMap<String, VecDeque<Vec<SignaturePageItem>>>>,
+        notifications: Mutex<
+            std::collections::HashMap<String, VecDeque<mpsc::UnboundedReceiver<WatchNotification>>>,
+        >,
         decode_results: Mutex<std::collections::HashMap<String, Result<Transaction, Error>>>,
         classify_results:
             Mutex<std::collections::HashMap<String, (ActivityKind, Option<&'static str>)>>,
@@ -200,6 +203,7 @@ pub(crate) mod test_support {
                 connected_rx: rx,
                 valid_addresses,
                 pages: Mutex::new(std::collections::HashMap::new()),
+                notifications: Mutex::new(std::collections::HashMap::new()),
                 decode_results: Mutex::new(std::collections::HashMap::new()),
                 classify_results: Mutex::new(std::collections::HashMap::new()),
                 calls: Mutex::new(FakeCalls::default()),
@@ -207,12 +211,38 @@ pub(crate) mod test_support {
         }
 
         pub fn queue_page(&self, address: &str, page: Vec<String>) {
+            self.queue_page_items(
+                address,
+                page.into_iter()
+                    .map(|signature| SignaturePageItem {
+                        signature,
+                        failed: false,
+                    })
+                    .collect(),
+            );
+        }
+
+        pub fn queue_page_items(&self, address: &str, page: Vec<SignaturePageItem>) {
             self.pages
                 .lock()
                 .unwrap()
                 .entry(address.to_owned())
                 .or_default()
                 .push_back(page);
+        }
+
+        pub fn queue_notifications(&self, address: &str, notifications: Vec<WatchNotification>) {
+            let (tx, rx) = mpsc::unbounded_channel();
+            for notification in notifications {
+                tx.send(notification).expect("test receiver remains open");
+            }
+            drop(tx);
+            self.notifications
+                .lock()
+                .unwrap()
+                .entry(address.to_owned())
+                .or_default()
+                .push_back(rx);
         }
 
         pub fn set_decode_result(&self, signature: &str, result: Result<Transaction, Error>) {
@@ -269,7 +299,16 @@ pub(crate) mod test_support {
                 .unwrap()
                 .subscribed
                 .push(address.to_owned());
-            let (_tx, rx) = mpsc::unbounded_channel();
+            let rx = self
+                .notifications
+                .lock()
+                .unwrap()
+                .get_mut(address)
+                .and_then(VecDeque::pop_front)
+                .unwrap_or_else(|| {
+                    let (_tx, rx) = mpsc::unbounded_channel();
+                    rx
+                });
             Ok(Box::new(FakeNotificationStream { rx }))
         }
 
@@ -279,7 +318,7 @@ pub(crate) mod test_support {
             _page_size: usize,
             _before: Option<&str>,
             _until: Option<&str>,
-        ) -> Result<Vec<String>, Error> {
+        ) -> Result<Vec<SignaturePageItem>, Error> {
             let mut pages = self.pages.lock().unwrap();
             Ok(pages
                 .get_mut(address)
