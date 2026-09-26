@@ -30,6 +30,8 @@ pub mod utils;
 // ============================================================================
 
 pub use client::{
+    // Transaction history types
+    HeliusTransactionsPage,
     ProviderHealthInfo,
     RpcClient,
     RpcClientMethods,
@@ -37,7 +39,6 @@ pub use client::{
     RpcFilterType,
     // Token supply types
     RpcTokenAccountBalance,
-    // Transaction history types
     SignatureInfo,
     TokenSupply,
 };

@@ -4,8 +4,8 @@
 //! Type definitions and trait signatures are in `methods.rs`.
 
 use super::methods::{
-    ProviderHealthInfo, RpcClientMethods, RpcFilterType, RpcTokenAccountBalance, SignatureInfo,
-    TokenSupply,
+    HeliusTransactionsPage, ProviderHealthInfo, RpcClientMethods, RpcFilterType,
+    RpcTokenAccountBalance, SignatureInfo, TokenSupply,
 };
 use super::RpcClient;
 use crate::chains::solana::constants::{SPL_TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID};
@@ -1099,6 +1099,25 @@ impl RpcClientMethods for RpcClient {
         Ok(all_transactions)
     }
 
+    async fn get_helius_successful_transactions_after(
+        &self,
+        address: &Pubkey,
+        limit: usize,
+        after: Option<&Signature>,
+    ) -> crate::Result<HeliusTransactionsPage> {
+        let params = helius_successful_transactions_params(address, limit, after)?;
+        let result = self
+            .manager
+            .execute_raw_for_provider_kind(
+                crate::rpc::types::ProviderKind::Helius,
+                "getTransactionsForAddress",
+                params,
+            )
+            .await?;
+
+        parse_helius_transactions_page(result)
+    }
+
     // =========================================================================
     // Program Account Methods Implementation
     // =========================================================================
@@ -1530,10 +1549,98 @@ fn get_transaction_config(commitment: Option<CommitmentLevel>) -> serde_json::Va
     config
 }
 
+fn helius_successful_transactions_params(
+    address: &Pubkey,
+    limit: usize,
+    after: Option<&Signature>,
+) -> crate::Result<serde_json::Value> {
+    if !(1..=1_000).contains(&limit) {
+        return Err(crate::Error::Data(
+            crate::errors::DataError::InvalidFormat {
+                expected: "transaction page limit in 1..=1000".to_owned(),
+                received: limit.to_string(),
+            },
+        ));
+    }
+
+    let mut filters = serde_json::json!({
+        "status": "succeeded",
+        // Keep both watch modes in the same address-reference cursor domain.
+        // ATA-only history can contain signatures absent from getSignaturesForAddress.
+        "tokenAccounts": "none",
+    });
+    if let Some(after) = after {
+        filters["signature"] = serde_json::json!({ "gt": after.to_string() });
+    }
+
+    Ok(serde_json::json!([
+        address.to_string(),
+        {
+            "transactionDetails": "full",
+            "sortOrder": "asc",
+            "limit": limit,
+            "commitment": "confirmed",
+            "encoding": "jsonParsed",
+            "maxSupportedTransactionVersion": 1,
+            "filters": filters,
+        }
+    ]))
+}
+
+fn parse_helius_transactions_page(
+    result: serde_json::Value,
+) -> crate::Result<HeliusTransactionsPage> {
+    let data = result
+        .get("data")
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| {
+            crate::Error::Data(crate::errors::DataError::ParseError {
+                data_type: "Helius transaction page".to_owned(),
+                error: "missing data array".to_owned(),
+            })
+        })?;
+
+    let mut transactions = Vec::with_capacity(data.len());
+    for item in data {
+        let transaction: TransactionDetails =
+            serde_json::from_value(item.clone()).map_err(|error| {
+                crate::Error::Data(crate::errors::DataError::ParseError {
+                    data_type: "Helius transaction".to_owned(),
+                    error: error.to_string(),
+                })
+            })?;
+
+        let signature = transaction.transaction.signatures.first().ok_or_else(|| {
+            crate::Error::Data(crate::errors::DataError::ParseError {
+                data_type: "Helius transaction signature".to_owned(),
+                error: "missing first signature".to_owned(),
+            })
+        })?;
+        Signature::from_str(signature).map_err(|error| {
+            crate::Error::Data(crate::errors::DataError::ParseError {
+                data_type: "Helius transaction signature".to_owned(),
+                error: error.to_string(),
+            })
+        })?;
+
+        transactions.push(transaction);
+    }
+
+    Ok(HeliusTransactionsPage {
+        transactions,
+        pagination_token: result
+            .get("paginationToken")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        get_transaction_config, CommitmentLevel, EncodedConfirmedTransactionWithStatusMeta,
+        get_transaction_config, helius_successful_transactions_params,
+        parse_helius_transactions_page, CommitmentLevel, EncodedConfirmedTransactionWithStatusMeta,
+        Pubkey, Signature,
     };
 
     #[test]
@@ -1583,6 +1690,82 @@ mod tests {
             serde_json::to_value(response).expect("SDK response serializes")["version"],
             1
         );
+    }
+
+    #[test]
+    fn helius_page_request_is_ascending_successful_and_exclusive() {
+        let address = Pubkey::new_unique();
+        let boundary = Signature::new_unique();
+        let params = helius_successful_transactions_params(&address, 500, Some(&boundary))
+            .expect("valid page request");
+        let config = &params[1];
+
+        assert_eq!(config["transactionDetails"], "full");
+        assert_eq!(config["sortOrder"], "asc");
+        assert_eq!(config["limit"], 500);
+        assert_eq!(config["commitment"], "confirmed");
+        assert_eq!(config["encoding"], "jsonParsed");
+        assert_eq!(config["maxSupportedTransactionVersion"], 1);
+        assert_eq!(config["filters"]["status"], "succeeded");
+        assert_eq!(config["filters"]["tokenAccounts"], "none");
+        assert_eq!(config["filters"]["signature"]["gt"], boundary.to_string());
+        assert!(config["filters"].get("tokenTransfer").is_none());
+        assert!(helius_successful_transactions_params(&address, 1_001, None).is_err());
+    }
+
+    #[test]
+    fn helius_page_parses_v1_transactions_and_pagination() {
+        let signature = Signature::new_unique();
+        let page = parse_helius_transactions_page(serde_json::json!({
+            "data": [{
+                "slot": 1,
+                "transactionIndex": 0,
+                "blockTime": 123,
+                "transaction": {
+                    "signatures": [signature.to_string()],
+                    "message": { "accountKeys": [], "instructions": [] }
+                },
+                "meta": {
+                    "err": null,
+                    "fee": 5000,
+                    "preBalances": [],
+                    "postBalances": [],
+                    "preTokenBalances": [],
+                    "postTokenBalances": [],
+                    "computeUnitsConsumed": 7,
+                    "logMessages": [],
+                    "innerInstructions": []
+                },
+                "version": 1
+            }],
+            "paginationToken": "1:1"
+        }))
+        .expect("valid Helius transaction page");
+
+        assert_eq!(page.transactions.len(), 1);
+        assert_eq!(
+            page.transactions[0].transaction.signatures[0],
+            signature.to_string()
+        );
+        assert_eq!(page.pagination_token.as_deref(), Some("1:1"));
+    }
+
+    #[test]
+    fn helius_page_rejects_an_invalid_first_signature() {
+        let error = parse_helius_transactions_page(serde_json::json!({
+            "data": [{
+                "slot": 1,
+                "transaction": {
+                    "signatures": ["not-a-signature"],
+                    "message": {}
+                },
+                "meta": null,
+                "blockTime": null
+            }]
+        }))
+        .expect_err("invalid first signature must be rejected");
+
+        assert!(error.to_string().contains("Helius transaction signature"));
     }
 }
 

@@ -195,6 +195,18 @@ config_struct! {
         watch_poll_fallback_secs: u64 = 3,
 
         #[metadata(field_metadata! {
+            label: "High Activity Watch Interval",
+            hint: "Minimum seconds between successful-transaction checks after a high-activity wallet signals new activity",
+            min: 1,
+            max: 60,
+            step: 1,
+            unit: "seconds",
+            impact: "medium",
+            category: "Watch",
+        })]
+        watch_high_activity_interval_secs: u64 = 5,
+
+        #[metadata(field_metadata! {
             label: "Watch Retention",
             hint: "Days to keep a watched (non-own) wallet's decoded transaction rows before they are purged",
             min: 1,

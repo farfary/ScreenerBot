@@ -19,7 +19,7 @@ use std::time::{Duration, Instant};
 
 use crate::errors::ErrorClass;
 use chrono::Utc;
-use tokio::sync::{broadcast, mpsc, Notify};
+use tokio::sync::{broadcast, Notify};
 use tokio::time::interval;
 
 use crate::config::with_config;
@@ -34,7 +34,7 @@ use super::dedupe;
 use super::poller;
 use super::recorder;
 use super::runtime::WalletWatchRuntime;
-use super::types::{WalletActivity, WatchNotification, WatchSource, WatchTarget};
+use super::types::{WalletActivity, WatchMode, WatchSource, WatchTarget};
 
 /// Bound generous enough that a burst across every watched target cannot fill the
 /// channel before the slowest consumer (a Telegram send) catches up. Bounded so a
@@ -85,23 +85,100 @@ pub(super) fn is_healthy() -> bool {
     }
 }
 
-use super::service_state::{self, WsRetry};
-use super::service_targets::{handle_overflow, reload_targets, TargetRuntime};
+use super::service_targets::{
+    handle_overflow, reload_targets, request_gap_fill, stop_all, TargetRuntime, TargetWorker,
+};
+
+pub(super) fn high_activity_poll_due(
+    elapsed: Duration,
+    dirty: bool,
+    high_secs: u64,
+    safety_secs: u64,
+) -> bool {
+    (dirty && elapsed >= Duration::from_secs(high_secs.max(1)))
+        || elapsed >= Duration::from_secs(safety_secs.max(1))
+}
 
 /// Poll one target's cursor forward. Used for the baseline poll, the escalated poll
 /// and gap-fill alike -- they differ only in WHEN this is called, never in what it
 /// does (§6.2: "every path converges on the same funnel").
-async fn poll_target(
+pub(super) async fn poll_target(
     target_runtime: &mut TargetRuntime,
     chain_runtime: &Arc<dyn WalletWatchRuntime>,
     watch_db: &WatchDatabase,
     own_subject: Subject,
     backfill: bool,
 ) {
+    if !target_runtime.target.enabled {
+        return;
+    }
     if chain_runtime
         .resolve_subject(&target_runtime.target.address)
         .is_err()
     {
+        return;
+    }
+
+    if target_runtime.high_activity && !target_runtime.target.high_activity_approved {
+        target_runtime.high_activity = false;
+        target_runtime.high_activity_catching_up = false;
+        target_runtime.catch_up = None;
+    }
+
+    if target_runtime.high_activity {
+        if !chain_runtime.supports_high_activity_mode().await {
+            if let Some(id) = target_runtime.target.id {
+                if watch_db
+                    .pause_for_reason(id, super::types::WatchDisableReason::HeliusUnavailable)
+                    .await
+                    .is_ok()
+                {
+                    target_runtime.target.enabled = false;
+                    target_runtime.target.disable_reason =
+                        Some(super::types::WatchDisableReason::HeliusUnavailable);
+                    super::publish_target_change(target_runtime.target.address.clone());
+                    request_reload();
+                }
+            }
+            super::service_state::set_runtime_error(
+                &target_runtime.target.address,
+                "High-activity provider is unavailable; watch paused",
+            );
+            return;
+        }
+        let completed =
+            poll_high_activity_target(target_runtime, chain_runtime, watch_db, own_subject.clone())
+                .await;
+        super::service_state::update_runtime_status(
+            &target_runtime.target.address,
+            WatchMode::HeliusHighActivity,
+            target_runtime.high_activity_catching_up,
+            completed,
+        );
+        if completed {
+            target_runtime.high_activity_failures = 0;
+        } else {
+            target_runtime.high_activity_failures += 1;
+            if target_runtime.high_activity_failures >= 3 {
+                if let Some(id) = target_runtime.target.id {
+                    if watch_db
+                        .pause_for_reason(id, super::types::WatchDisableReason::HeliusUnavailable)
+                        .await
+                        .is_ok()
+                    {
+                        target_runtime.target.enabled = false;
+                        target_runtime.target.disable_reason =
+                            Some(super::types::WatchDisableReason::HeliusUnavailable);
+                        super::publish_target_change(target_runtime.target.address.clone());
+                        request_reload();
+                    }
+                }
+                super::service_state::set_runtime_error(
+                    &target_runtime.target.address,
+                    "High-activity provider repeatedly failed; watch paused",
+                );
+            }
+        }
         return;
     }
 
@@ -145,7 +222,34 @@ async fn poll_target(
                 .sources
                 .contains(&WatchSource::OwnWallet)
             {
-                handle_overflow(target_runtime, watch_db).await;
+                if target_runtime.target.high_activity_approved
+                    && chain_runtime.supports_high_activity_mode().await
+                {
+                    target_runtime.catch_up = None;
+                    target_runtime.high_activity = true;
+                    target_runtime.high_activity_catching_up = true;
+                    super::service_state::update_runtime_status(
+                        &target_runtime.target.address,
+                        WatchMode::HeliusHighActivity,
+                        true,
+                        false,
+                    );
+                    let completed = poll_high_activity_target(
+                        target_runtime,
+                        chain_runtime,
+                        watch_db,
+                        own_subject.clone(),
+                    )
+                    .await;
+                    super::service_state::update_runtime_status(
+                        &target_runtime.target.address,
+                        WatchMode::HeliusHighActivity,
+                        target_runtime.high_activity_catching_up,
+                        completed,
+                    );
+                } else {
+                    handle_overflow(target_runtime, watch_db).await;
+                }
             }
             return;
         }
@@ -198,6 +302,7 @@ async fn poll_target(
             &seen.signature,
             seen.detected_at,
             target_runtime.backfill,
+            None,
         )
         .await
             == ProcessOutcome::Retryable
@@ -227,6 +332,12 @@ async fn poll_target(
     }
 
     target_runtime.catch_up = None;
+    super::service_state::update_runtime_status(
+        &target_runtime.target.address,
+        WatchMode::Standard,
+        false,
+        true,
+    );
 }
 
 /// External targets have no state change to record for a transaction the chain
@@ -237,7 +348,7 @@ pub(super) fn skip_known_failed_external(target: &WatchTarget, failed: bool) -> 
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ProcessOutcome {
+pub(super) enum ProcessOutcome {
     Terminal,
     Retryable,
 }
@@ -277,13 +388,14 @@ async fn clear_pending(subject: Subject, signature: &str) {
 
 /// The one funnel every trigger feeds: durable dedupe, pure decode, classify,
 /// record, dedupe-commit, broadcast.
-async fn process_signature(
+pub(super) async fn process_signature(
     chain_runtime: &Arc<dyn WalletWatchRuntime>,
     target: &WatchTarget,
     _own_subject: Subject,
     signature: &str,
     detected_at: chrono::DateTime<Utc>,
     backfill: bool,
+    predecoded: Option<crate::transactions::types::Transaction>,
 ) -> ProcessOutcome {
     let Ok(subject) = chain_runtime.resolve_subject(&target.address) else {
         return ProcessOutcome::Terminal;
@@ -309,10 +421,15 @@ async fn process_signature(
 
     let is_own = target.sources.contains(&WatchSource::OwnWallet);
 
-    let transaction = match chain_runtime
-        .decode_transaction(&target.address, signature, is_own)
-        .await
-    {
+    let transaction = match predecoded {
+        Some(transaction) => Ok(transaction),
+        None => {
+            chain_runtime
+                .decode_transaction(&target.address, signature, is_own)
+                .await
+        }
+    };
+    let transaction = match transaction {
         Ok(tx) => tx,
         Err(e) => {
             let retryable = matches!(
@@ -414,7 +531,146 @@ async fn process_signature(
     ProcessOutcome::Terminal
 }
 
-fn short(signature: &str) -> &str {
+/// Advance an already-selected high-activity target. Helius returns confirmed
+/// successful transactions oldest first. One cursor write per fetched page keeps
+/// SQLite work bounded; on failure it commits the last fully handled item first.
+async fn poll_high_activity_target(
+    target_runtime: &mut TargetRuntime,
+    chain_runtime: &Arc<dyn WalletWatchRuntime>,
+    watch_db: &WatchDatabase,
+    own_subject: Subject,
+) -> bool {
+    let cursor = match watch_db.get_cursor(&target_runtime.target.address).await {
+        Ok(cursor) => cursor,
+        Err(error) => {
+            logger::warning(
+                LogTag::WalletWatch,
+                &format!(
+                    "Failed to read Helius cursor for {}: {error}",
+                    target_runtime.target.address
+                ),
+            );
+            return false;
+        }
+    };
+    let cap = target_runtime
+        .target
+        .page_budget
+        .saturating_mul(poller::PAGE_SIZE);
+    let mut after = cursor;
+    let mut remaining = cap;
+    while remaining > 0 {
+        let page = match chain_runtime
+            .fetch_successful_transactions_after(
+                &target_runtime.target.address,
+                remaining.min(1000),
+                after.as_deref(),
+            )
+            .await
+        {
+            Ok(page) => page,
+            Err(error) => {
+                logger::warning(
+                    LogTag::WalletWatch,
+                    &format!(
+                        "Helius poll failed for {}: {error}",
+                        target_runtime.target.address
+                    ),
+                );
+                super::service_state::set_runtime_error(
+                    &target_runtime.target.address,
+                    "High-activity provider check failed; retrying",
+                );
+                return false;
+            }
+        };
+        let count = page.items.len();
+        let has_more = page.has_more;
+        let mut last_handled = None;
+        for item in page.items {
+            let outcome = match item.transaction {
+                Ok(Some(transaction)) => {
+                    process_signature(
+                        chain_runtime,
+                        &target_runtime.target,
+                        own_subject.clone(),
+                        &item.signature,
+                        Utc::now(),
+                        true,
+                        Some(transaction),
+                    )
+                    .await
+                }
+                Ok(None) => ProcessOutcome::Terminal,
+                Err(error)
+                    if error.is_retryable()
+                        || matches!(
+                            error,
+                            crate::wallets::Error::ChainExecution(
+                                crate::chains::ExecutionFailure::IndexingDelay { .. }
+                                    | crate::chains::ExecutionFailure::NotFound { .. }
+                            )
+                        ) =>
+                {
+                    ProcessOutcome::Retryable
+                }
+                Err(error) => {
+                    logger::warning(
+                        LogTag::WalletWatch,
+                        &format!(
+                            "Helius decode failed for {}: {error}",
+                            short(&item.signature)
+                        ),
+                    );
+                    super::service_state::set_runtime_error(
+                        &target_runtime.target.address,
+                        "High-activity transaction could not be decoded; cursor retained",
+                    );
+                    if let Some(signature) = last_handled.as_deref() {
+                        let _ = watch_db
+                            .set_cursor(&target_runtime.target.address, signature)
+                            .await;
+                    }
+                    return false;
+                }
+            };
+            if outcome == ProcessOutcome::Retryable {
+                if let Some(signature) = last_handled.as_deref() {
+                    let _ = watch_db
+                        .set_cursor(&target_runtime.target.address, signature)
+                        .await;
+                }
+                return false;
+            }
+            last_handled = Some(item.signature);
+        }
+        if let Some(signature) = last_handled {
+            if let Err(error) = watch_db
+                .set_cursor(&target_runtime.target.address, &signature)
+                .await
+            {
+                logger::warning(
+                    LogTag::WalletWatch,
+                    &format!(
+                        "Failed to advance Helius cursor for {}: {error}",
+                        target_runtime.target.address
+                    ),
+                );
+                return false;
+            }
+            after = Some(signature);
+        }
+        remaining = remaining.saturating_sub(count);
+        if !has_more || count == 0 {
+            target_runtime.high_activity_catching_up = false;
+            return true;
+        }
+    }
+    target_runtime.high_activity_catching_up = true;
+    true
+}
+
+pub(super) fn short(signature: &str) -> &str {
     &signature[..signature.len().min(8)]
 }
 
@@ -429,12 +685,10 @@ pub(super) async fn run(
         .write()
         .unwrap_or_else(|p| p.into_inner()) = Some(Instant::now());
 
-    let (ws_tx, mut ws_rx) = mpsc::unbounded_channel::<(String, WatchNotification)>();
-    let (retry_tx, mut retry_rx) = mpsc::unbounded_channel::<WsRetry>();
-    let mut runtimes: HashMap<String, TargetRuntime> = HashMap::new();
+    let mut workers: std::collections::HashMap<String, TargetWorker> =
+        std::collections::HashMap::new();
     reload_targets(
-        &mut runtimes,
-        &ws_tx,
+        &mut workers,
         &chain_runtime,
         &watch_db,
         own_subject.clone(),
@@ -442,24 +696,7 @@ pub(super) async fn run(
     )
     .await;
 
-    // Gap-fill at service start: catch up on anything that landed while the bot was
-    // down, for every registered target including the own wallet.
-    let startup_addresses: Vec<String> = runtimes.keys().cloned().collect();
-    for address in startup_addresses {
-        if let Some(target_runtime) = runtimes.get_mut(&address) {
-            poll_target(
-                target_runtime,
-                &chain_runtime,
-                &watch_db,
-                own_subject.clone(),
-                true,
-            )
-            .await;
-        }
-    }
-
     let mut connection_watch = chain_runtime.connection_watch();
-    let mut tick = interval(Duration::from_secs(1));
     let mut retention_tick = interval(Duration::from_secs(3600));
     retention_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     // The first tick fires immediately; the interval above already ran the real
@@ -475,38 +712,6 @@ pub(super) async fn run(
             _ = retention_tick.tick() => {
                 run_retention_cleanup(own_subject.clone()).await;
             }
-            Some((address, event)) = ws_rx.recv() => {
-                if let Some(target_runtime) = runtimes.get(&address) {
-                    if skip_known_failed_external(&target_runtime.target, event.failed) {
-                        continue;
-                    }
-                    let detected_at = Utc::now();
-                    let outcome = process_signature(&chain_runtime, &target_runtime.target, own_subject.clone(), &event.signature, detected_at, false).await;
-                    if outcome == ProcessOutcome::Retryable {
-                        // Usually the RPC has not indexed the transaction yet. Retry
-                        // on a short backoff instead of waiting a full poll interval.
-                        service_state::schedule_ws_retry(&retry_tx, WsRetry {
-                            address,
-                            signature: event.signature,
-                            detected_at,
-                            attempt: 0,
-                        });
-                    }
-                }
-            }
-            Some(retry) = retry_rx.recv() => {
-                if let Some(target_runtime) = runtimes.get(&retry.address) {
-                    let outcome = process_signature(&chain_runtime, &target_runtime.target, own_subject.clone(), &retry.signature, retry.detected_at, false).await;
-                    if outcome == ProcessOutcome::Retryable
-                        && !service_state::schedule_ws_retry(&retry_tx, retry.clone())
-                    {
-                        logger::debug(
-                            LogTag::WalletWatch,
-                            &format!("{} on {} still undecodable after WS retries; the poll will pick it up", short(&retry.signature), retry.address),
-                        );
-                    }
-                }
-            }
             result = connection_watch.changed() => {
                 if result.is_err() {
                     // Sender half of the transport's watch channel is gone (process
@@ -519,52 +724,16 @@ pub(super) async fn run(
                     connection_watch.is_connected(),
                 ) {
                     logger::debug(LogTag::WalletWatch, "Subscription transport reconnected - gap-filling every target");
-                    let addresses: Vec<String> = runtimes.keys().cloned().collect();
-                    for address in addresses {
-                        if let Some(target_runtime) = runtimes.get_mut(&address) {
-                            poll_target(target_runtime, &chain_runtime, &watch_db, own_subject.clone(), true).await;
-                        }
-                    }
+                    request_gap_fill(&workers);
                 }
             }
             _ = RELOAD_NOTIFY.notified() => {
-                reload_targets(&mut runtimes, &ws_tx, &chain_runtime, &watch_db, own_subject.clone(), with_config(|cfg| cfg.wallet.watch_enabled)).await;
-            }
-            _ = tick.tick() => {
-                let connected = connection_watch.is_connected();
-                let (baseline_secs, fallback_secs) = with_config(|cfg| {
-                    (cfg.wallet.watch_poll_interval_secs, cfg.wallet.watch_poll_fallback_secs)
-                });
-                let now = Instant::now();
-                let due: Vec<String> = runtimes
-                    .iter_mut()
-                    .filter_map(|runtime| {
-                        let (address, runtime) = runtime;
-                        let interval_secs = poller::cadence_secs(
-                            connected,
-                            baseline_secs,
-                            fallback_secs,
-                        );
-                        if now.duration_since(runtime.last_poll) >= Duration::from_secs(interval_secs) {
-                            runtime.last_poll = now;
-                            Some(address.clone())
-                        } else {
-                            None
-                        }
-                    })
-                    .collect();
-                for address in due {
-                    if let Some(target_runtime) = runtimes.get_mut(&address) {
-                        poll_target(target_runtime, &chain_runtime, &watch_db, own_subject.clone(), false).await;
-                    }
-                }
+                reload_targets(&mut workers, &chain_runtime, &watch_db, own_subject.clone(), with_config(|cfg| cfg.wallet.watch_enabled)).await;
             }
         }
     }
 
-    for runtime in runtimes.values() {
-        runtime.ws_task.abort();
-    }
+    stop_all(workers).await;
     *SERVICE_STARTED_AT
         .write()
         .unwrap_or_else(|p| p.into_inner()) = None;

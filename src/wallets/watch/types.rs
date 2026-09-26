@@ -40,6 +40,9 @@ pub struct WatchTarget {
     /// Maximum signature pages this target may fetch during one poll. Its
     /// independent default is `poller::DEFAULT_PAGE_BUDGET`.
     pub page_budget: usize,
+    /// Explicit consent for the higher-cost Helius fallback. The synthesized
+    /// own-wallet target always remains false.
+    pub high_activity_approved: bool,
     /// A safety pause that survives process restarts. User pauses have no
     /// automatic cause; budget pauses retain the exact limit that stopped them.
     pub disable_reason: Option<WatchDisableReason>,
@@ -56,6 +59,7 @@ pub enum WatchDisableReason {
         page_budget: usize,
         signatures_checked: usize,
     },
+    HeliusUnavailable,
 }
 
 impl WatchDisableReason {
@@ -67,6 +71,9 @@ impl WatchDisableReason {
                 page_budget * super::poller::PAGE_SIZE
             ),
             Self::Unknown => "Paused: the saved watch safety reason could not be read".to_owned(),
+            Self::HeliusUnavailable => {
+                "Paused: high-activity provider is unavailable; cursor preserved".to_owned()
+            }
         }
     }
 }
@@ -144,7 +151,7 @@ pub struct WalletActivity {
 pub struct WatchNotification {
     pub signature: String,
     /// Whether the runtime's notification metadata already indicates failure.
-    /// The funnel still decodes to confirm rather than trusting this alone.
+    /// External targets skip known failures; the own wallet retains its history path.
     pub failed: bool,
 }
 
@@ -157,6 +164,29 @@ pub struct SignaturePageItem {
     pub failed: bool,
 }
 
+/// One successful transaction returned by the high-activity provider path. A
+/// missing decoded transaction proves the provider payload had no meaningful
+/// effect for this subject, so it still advances the durable cursor.
+#[derive(Debug, Clone)]
+pub struct SuccessfulTransactionPageItem {
+    pub signature: String,
+    pub transaction: Result<Option<crate::transactions::types::Transaction>, crate::wallets::Error>,
+}
+
+/// An ascending page from the high-activity provider path.
+#[derive(Debug, Clone)]
+pub struct SuccessfulTransactionsPage {
+    pub items: Vec<SuccessfulTransactionPageItem>,
+    pub has_more: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WatchMode {
+    Standard,
+    HeliusHighActivity,
+}
+
 /// Per-target status, surfaced by `/api/wallets/watch/:id/status`.
 #[derive(Debug, Clone, Serialize)]
 pub struct WatchStatus {
@@ -167,4 +197,7 @@ pub struct WatchStatus {
     pub last_activity_at: Option<DateTime<Utc>>,
     pub last_signature: Option<String>,
     pub last_error: Option<String>,
+    pub mode: WatchMode,
+    pub catching_up: bool,
+    pub last_checked_at: Option<DateTime<Utc>>,
 }

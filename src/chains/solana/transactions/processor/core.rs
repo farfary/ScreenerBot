@@ -112,6 +112,35 @@ impl TransactionProcessor {
     /// response; `new_for_watch_target` retains it on the returned decoded value for
     /// classification but does not persist the JSON blob (see `extraction.rs`).
     pub async fn decode(&self, signature: &str) -> crate::chains::solana::Result<Transaction> {
+        let tx_data = self.fetch_transaction_data(signature).await?;
+        self.decode_details(signature, &tx_data).await
+    }
+
+    /// Analyze and project already fetched transaction details onto this processor's subject.
+    ///
+    /// This performs the same decode pipeline as [`Self::decode`] without reading
+    /// the RPC or raw-transaction cache. The caller supplies the signature from its
+    /// cursor page, so it must match a signature carried by the fetched transaction.
+    pub async fn decode_details(
+        &self,
+        signature: &str,
+        tx_data: &crate::chains::solana::rpc::TransactionDetails,
+    ) -> crate::chains::solana::Result<Transaction> {
+        if !tx_data
+            .transaction
+            .signatures
+            .iter()
+            .any(|transaction_signature| transaction_signature == signature)
+        {
+            return Err(crate::chains::solana::Error::Decode {
+                payload: "transaction signature",
+                detail: format!(
+                    "requested {signature}, transaction carries {}",
+                    tx_data.transaction.signatures.join(", ")
+                ),
+            });
+        }
+
         let start_time = Instant::now();
 
         if self.debug_enabled {
@@ -125,22 +154,19 @@ impl TransactionProcessor {
             );
         }
 
-        // Step 1: Fetch transaction details from blockchain
-        let tx_data = self.fetch_transaction_data(signature).await?;
-
-        // Step 2: Create Transaction structure from raw data snapshot
+        // Create Transaction structure from raw data snapshot.
         let mut transaction = self
-            .create_transaction_from_data(signature, &tx_data)
+            .create_transaction_from_data(signature, tx_data)
             .await?;
 
-        // Use new analyzer to get complete analysis
+        // Use the analyzer to get complete analysis.
         let analysis = self
             .analyzer
-            .analyze_transaction(&transaction, &tx_data)
+            .analyze_transaction(&transaction, tx_data)
             .await?;
 
-        // Map analyzer results to transaction fields
-        self.map_analysis_to_transaction(&mut transaction, &analysis, &tx_data)
+        // Map analyzer results to transaction fields.
+        self.map_analysis_to_transaction(&mut transaction, &analysis, tx_data)
             .await?;
 
         let processing_duration = start_time.elapsed();
@@ -236,5 +262,41 @@ impl TransactionProcessor {
         }
 
         results
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn preloaded_decode_rejects_a_mismatched_signature() {
+        let details: crate::chains::solana::rpc::TransactionDetails =
+            serde_json::from_value(json!({
+                "slot": 1,
+                "transaction": {
+                    "message": { "accountKeys": [] },
+                    "signatures": ["actual-signature"]
+                },
+                "meta": null,
+                "blockTime": null
+            }))
+            .expect("transaction fixture parses");
+        let processor = TransactionProcessor::new(Pubkey::default());
+
+        let error = processor
+            .decode_details("expected-signature", &details)
+            .await
+            .expect_err("mismatched signature must fail before analysis");
+
+        assert!(matches!(
+            error,
+            crate::chains::solana::Error::Decode {
+                payload: "transaction signature",
+                ..
+            }
+        ));
     }
 }

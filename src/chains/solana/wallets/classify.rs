@@ -25,6 +25,106 @@ const FEE_NOISE_LAMPORTS: i64 = 50_000;
 /// Floating-point tolerance for "no change" when comparing UI token/SOL amounts.
 const EPSILON: f64 = 1e-9;
 
+/// Returns whether the decoded transaction may have changed the subject's assets.
+///
+/// The predicate only rejects a transaction when complete balance metadata proves
+/// that the subject has no SOL change after excluding its network fee and no owned
+/// token-account change. Any missing or internally inconsistent metadata is kept
+/// for decoding so an incomplete RPC response cannot suppress real activity.
+pub fn subject_has_meaningful_effect(
+    subject_address: &str,
+    tx_data: &crate::chains::solana::rpc::TransactionDetails,
+) -> bool {
+    let Some(meta) = tx_data.meta.as_ref() else {
+        return true;
+    };
+
+    let account_keys = account_keys_from_message(&tx_data.transaction.message);
+    let subject_indices: Vec<usize> = account_keys
+        .iter()
+        .enumerate()
+        .filter_map(|(index, key)| (key == subject_address).then_some(index))
+        .collect();
+    let [subject_index] = subject_indices.as_slice() else {
+        return true;
+    };
+
+    let (Some(pre_sol), Some(post_sol)) = (
+        meta.pre_balances.get(*subject_index),
+        meta.post_balances.get(*subject_index),
+    ) else {
+        return true;
+    };
+    let mut sol_delta = i128::from(*post_sol) - i128::from(*pre_sol);
+    if *subject_index == 0 {
+        sol_delta += i128::from(meta.fee);
+    }
+    if sol_delta != 0 {
+        return true;
+    }
+
+    subject_token_balances_changed(meta, subject_address, account_keys.len()).unwrap_or(true)
+}
+
+/// `Ok(false)` proves every subject-owned token account kept its raw balance.
+/// `Err(())` means the RPC metadata cannot establish that conclusion.
+fn subject_token_balances_changed(
+    meta: &crate::chains::solana::rpc::TransactionMeta,
+    subject_address: &str,
+    account_count: usize,
+) -> Result<bool, ()> {
+    let (Some(pre), Some(post)) = (&meta.pre_token_balances, &meta.post_token_balances) else {
+        return Err(());
+    };
+
+    let mut balances = HashMap::<(u32, String), (Option<u128>, Option<u128>)>::new();
+    for balance in pre {
+        record_subject_token_balance(&mut balances, balance, subject_address, account_count, true)?;
+    }
+    for balance in post {
+        record_subject_token_balance(
+            &mut balances,
+            balance,
+            subject_address,
+            account_count,
+            false,
+        )?;
+    }
+
+    Ok(balances
+        .into_values()
+        .any(|(pre, post)| pre.unwrap_or(0) != post.unwrap_or(0)))
+}
+
+fn record_subject_token_balance(
+    balances: &mut HashMap<(u32, String), (Option<u128>, Option<u128>)>,
+    balance: &crate::chains::solana::rpc::TokenBalance,
+    subject_address: &str,
+    account_count: usize,
+    is_pre: bool,
+) -> Result<(), ()> {
+    if balance.account_index as usize >= account_count || balance.owner.is_none() {
+        return Err(());
+    }
+    if balance.owner.as_deref() != Some(subject_address) {
+        return Ok(());
+    }
+
+    let raw_amount = balance
+        .ui_token_amount
+        .amount
+        .parse::<u128>()
+        .map_err(|_| ())?;
+    let entry = balances
+        .entry((balance.account_index, balance.mint.clone()))
+        .or_insert((None, None));
+    let slot = if is_pre { &mut entry.0 } else { &mut entry.1 };
+    if slot.replace(raw_amount).is_some() {
+        return Err(());
+    }
+    Ok(())
+}
+
 /// Resolve one subject-relative `ActivityKind` from a decoded, successful
 /// transaction. Pure -- reads only `transaction.raw_transaction_data`, which
 /// `TransactionProcessor::decode()` always populates in memory on the object it
@@ -263,4 +363,114 @@ fn classify_transfer(
         ActivityKind::Other,
         Some("no DEX program and no single clear transfer leg"),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    const SUBJECT: &str = "Subject111111111111111111111111111111111";
+    const FEE_PAYER: &str = "FeePayer11111111111111111111111111111111";
+
+    fn details(meta: serde_json::Value) -> crate::chains::solana::rpc::TransactionDetails {
+        serde_json::from_value(json!({
+            "slot": 1,
+            "transaction": {
+                "message": { "accountKeys": [FEE_PAYER, SUBJECT] },
+                "signatures": ["signature"]
+            },
+            "meta": meta,
+            "blockTime": 1
+        }))
+        .expect("transaction fixture parses")
+    }
+
+    fn unchanged_meta() -> serde_json::Value {
+        json!({
+            "err": null,
+            "fee": 5_000,
+            "preBalances": [1_000_000, 2_000_000],
+            "postBalances": [995_000, 2_000_000],
+            "preTokenBalances": [],
+            "postTokenBalances": [],
+            "computeUnitsConsumed": null,
+            "logMessages": [],
+            "innerInstructions": []
+        })
+    }
+
+    #[test]
+    fn read_only_reference_has_no_subject_effect() {
+        assert!(!subject_has_meaningful_effect(
+            SUBJECT,
+            &details(unchanged_meta())
+        ));
+    }
+
+    #[test]
+    fn fee_only_subject_transaction_has_no_subject_effect() {
+        let mut transaction = details(unchanged_meta());
+        transaction.transaction.message = json!({ "accountKeys": [SUBJECT] });
+        transaction
+            .meta
+            .as_mut()
+            .expect("fixture has metadata")
+            .pre_balances = vec![1_000_000];
+        transaction
+            .meta
+            .as_mut()
+            .expect("fixture has metadata")
+            .post_balances = vec![995_000];
+
+        assert!(!subject_has_meaningful_effect(SUBJECT, &transaction));
+    }
+
+    #[test]
+    fn sol_balance_change_has_subject_effect() {
+        let mut transaction = details(unchanged_meta());
+        transaction
+            .meta
+            .as_mut()
+            .expect("fixture has metadata")
+            .post_balances[1] = 2_000_001;
+
+        assert!(subject_has_meaningful_effect(SUBJECT, &transaction));
+    }
+
+    #[test]
+    fn delegated_token_change_has_subject_effect_without_subject_signature() {
+        let mut meta = unchanged_meta();
+        meta["preTokenBalances"] = json!([{
+            "accountIndex": 1,
+            "mint": "Mint1111111111111111111111111111111111111",
+            "owner": SUBJECT,
+            "uiTokenAmount": { "amount": "10", "decimals": 0, "uiAmount": 10.0 }
+        }]);
+        meta["postTokenBalances"] = json!([{
+            "accountIndex": 1,
+            "mint": "Mint1111111111111111111111111111111111111",
+            "owner": SUBJECT,
+            "uiTokenAmount": { "amount": "9", "decimals": 0, "uiAmount": 9.0 }
+        }]);
+
+        assert!(subject_has_meaningful_effect(SUBJECT, &details(meta)));
+    }
+
+    #[test]
+    fn missing_or_ambiguous_metadata_fails_open() {
+        let missing_meta = details(serde_json::Value::Null);
+        assert!(subject_has_meaningful_effect(SUBJECT, &missing_meta));
+
+        let mut ambiguous = unchanged_meta();
+        ambiguous["preTokenBalances"] = json!([{
+            "accountIndex": 99,
+            "mint": "Mint1111111111111111111111111111111111111",
+            "owner": SUBJECT,
+            "uiTokenAmount": { "amount": "0", "decimals": 0, "uiAmount": 0.0 }
+        }]);
+        ambiguous["postTokenBalances"] = ambiguous["preTokenBalances"].clone();
+        assert!(subject_has_meaningful_effect(SUBJECT, &details(ambiguous)));
+    }
 }

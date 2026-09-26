@@ -561,6 +561,7 @@ mod tests {
             "watch_max_targets",
             "watch_poll_interval_secs",
             "watch_poll_fallback_secs",
+            "watch_high_activity_interval_secs",
             "watch_retention_days",
         ] {
             assert!(
@@ -585,6 +586,10 @@ mod tests {
         assert_eq!(
             round_tripped.watch_poll_fallback_secs,
             config.wallet.watch_poll_fallback_secs
+        );
+        assert_eq!(
+            round_tripped.watch_high_activity_interval_secs,
+            config.wallet.watch_high_activity_interval_secs
         );
         assert_eq!(
             round_tripped.watch_retention_days,

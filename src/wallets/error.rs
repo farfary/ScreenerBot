@@ -56,6 +56,10 @@ pub enum Error {
     WatchTargetLimitReached { max: usize },
     #[error("watch target {address} reached its signature page budget; raise the wallet limit and explicitly resume it")]
     WatchBudgetAcknowledgementRequired { address: String },
+    #[error("watch target {address} needs an explicit retry after Helius high-activity support is configured")]
+    WatchHeliusRetryRequired { address: String },
+    #[error("watch target {address} requires Helius high-activity support; configure Helius and retry the watch")]
+    WatchHeliusUnavailable { address: String },
     #[error("watch page budget {requested} is outside the allowed range {min}–{max}")]
     InvalidWatchBudget {
         requested: usize,
@@ -64,6 +68,10 @@ pub enum Error {
     },
     #[error("resuming the watch requires acknowledging that activity since the last completed check will be skipped")]
     WatchResumeAcknowledgementRequired,
+    #[error(
+        "enabling Helius high-activity checks requires explicit acknowledgement of provider usage"
+    )]
+    WatchHeliusApprovalAcknowledgementRequired,
     #[error("watch target {id} is not paused by its signature limit")]
     WatchResumeNotBudgetPaused { id: i64 },
     #[error("'{value}' is not a valid watch address")]
@@ -149,8 +157,10 @@ impl ErrorClass for Error {
             Error::WatchTargetIsOwnWallet { .. } => false,
             Error::WatchTargetLimitReached { .. } => false,
             Error::WatchBudgetAcknowledgementRequired { .. } => false,
+            Error::WatchHeliusRetryRequired { .. } | Error::WatchHeliusUnavailable { .. } => false,
             Error::InvalidWatchBudget { .. } => false,
             Error::WatchResumeAcknowledgementRequired => false,
+            Error::WatchHeliusApprovalAcknowledgementRequired => false,
             Error::WatchResumeNotBudgetPaused { .. } => false,
             Error::InvalidWatchAddress { .. } => false,
             Error::InvalidBatchRequest { .. } => false,
@@ -201,7 +211,11 @@ impl ErrorClass for Error {
             Error::WatchBudgetAcknowledgementRequired { .. } | Error::InvalidWatchBudget { .. } => {
                 Severity::Warning
             }
+            Error::WatchHeliusRetryRequired { .. } | Error::WatchHeliusUnavailable { .. } => {
+                Severity::Warning
+            }
             Error::WatchResumeAcknowledgementRequired => Severity::Warning,
+            Error::WatchHeliusApprovalAcknowledgementRequired => Severity::Warning,
             Error::WatchResumeNotBudgetPaused { .. } => Severity::Warning,
             Error::InvalidWatchAddress { .. } => Severity::Warning,
             Error::InvalidBatchRequest { .. } => Severity::Warning,
@@ -233,8 +247,10 @@ impl ErrorClass for Error {
             Error::WatchTargetAlreadyWatched { .. } | Error::WatchTargetIsOwnWallet { .. } => 409,
             Error::WatchTargetLimitReached { .. } => 400,
             Error::WatchBudgetAcknowledgementRequired { .. } => 409,
+            Error::WatchHeliusRetryRequired { .. } | Error::WatchHeliusUnavailable { .. } => 409,
             Error::InvalidWatchBudget { .. } => 400,
             Error::WatchResumeAcknowledgementRequired => 400,
+            Error::WatchHeliusApprovalAcknowledgementRequired => 400,
             Error::WatchResumeNotBudgetPaused { .. } => 409,
             Error::InvalidWatchAddress { .. } => 400,
             Error::InvalidBatchRequest { .. } => 400,

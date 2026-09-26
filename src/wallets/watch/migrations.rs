@@ -29,6 +29,7 @@ impl WatchDatabase {
     pub(super) fn ensure_target_control_columns(tx: &rusqlite::Transaction) -> Result<(), Error> {
         for (column, declaration) in [
             ("page_budget", "INTEGER NOT NULL DEFAULT 5"),
+            ("high_activity_approved", "INTEGER NOT NULL DEFAULT 0"),
             ("disable_reason_json", "TEXT"),
         ] {
             if !Self::column_exists(tx, "watch_targets", column)? {
@@ -144,6 +145,7 @@ impl WatchDatabase {
                 sources TEXT NOT NULL,
                 enabled INTEGER NOT NULL DEFAULT 1,
                 page_budget INTEGER NOT NULL DEFAULT 5,
+                high_activity_approved INTEGER NOT NULL DEFAULT 0,
                 disable_reason_json TEXT,
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 updated_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -164,12 +166,17 @@ impl WatchDatabase {
         } else {
             "NULL"
         };
+        let approval_expr = if Self::column_exists(tx, "watch_targets", "high_activity_approved")? {
+            "high_activity_approved"
+        } else {
+            "0"
+        };
         tx.execute(
             &format!(
                 "INSERT INTO watch_targets__chain
-                    (id, chain_id, address, label, sources, enabled, page_budget, disable_reason_json, created_at, updated_at)
+                    (id, chain_id, address, label, sources, enabled, page_budget, high_activity_approved, disable_reason_json, created_at, updated_at)
                  SELECT id, {chain_expr}, address, label, sources,
-                        enabled, {budget_expr}, {reason_expr}, created_at, updated_at
+                        enabled, {budget_expr}, {approval_expr}, {reason_expr}, created_at, updated_at
                  FROM watch_targets"
             ),
             [],

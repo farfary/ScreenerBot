@@ -40,8 +40,9 @@ mod types;
 pub use poller::{cadence_secs, needs_gap_fill, CatchUpState, CompletedCatchUp, PAGE_SIZE};
 pub use service::subscribe_activity;
 pub use types::{
-    ActivityKind, SignaturePageItem, SwapSide, TransferDirection, WalletActivity,
-    WatchDisableReason, WatchNotification, WatchSource, WatchStatus, WatchTarget,
+    ActivityKind, SignaturePageItem, SuccessfulTransactionPageItem, SuccessfulTransactionsPage,
+    SwapSide, TransferDirection, WalletActivity, WatchDisableReason, WatchMode, WatchNotification,
+    WatchSource, WatchStatus, WatchTarget,
 };
 
 use std::sync::{Arc, OnceLock};
@@ -245,8 +246,41 @@ pub async fn remove_copy_source(task_id: i64, address: &str) -> Result<(), Error
 }
 
 pub async fn set_target_enabled(id: i64, enabled: bool) -> Result<(), Error> {
-    watch_db()?.set_enabled(id, enabled).await?;
+    let db = watch_db()?;
+    if enabled {
+        let target = db.get_target(id).await?.ok_or(Error::WatchTargetNotFound {
+            address: format!("id={id}"),
+        })?;
+        if target.high_activity_approved
+            && matches!(
+                target.disable_reason,
+                Some(WatchDisableReason::HeliusUnavailable)
+            )
+        {
+            let runtime = runtime::get_runtime().map_err(|error| Error::ChainRuntime {
+                operation: "get_runtime",
+                detail: error.to_string(),
+            })?;
+            validate_helius_retry(&target, runtime.supports_high_activity_mode().await)?;
+        }
+    }
+    db.set_enabled(id, enabled).await?;
     service::request_reload();
+    Ok(())
+}
+
+fn validate_helius_retry(target: &WatchTarget, high_activity_supported: bool) -> Result<(), Error> {
+    if target.high_activity_approved
+        && matches!(
+            target.disable_reason,
+            Some(WatchDisableReason::HeliusUnavailable)
+        )
+        && !high_activity_supported
+    {
+        return Err(Error::WatchHeliusUnavailable {
+            address: target.address.clone(),
+        });
+    }
     Ok(())
 }
 
@@ -298,6 +332,36 @@ pub async fn update_target_page_budget(id: i64, page_budget: usize) -> Result<()
     Ok(())
 }
 
+/// Persist or revoke per-wallet approval for the Helius high-activity fallback.
+/// Approval validates provider capability and resumes a budget-paused watch from
+/// its saved cursor rather than rebasing at the current head.
+pub async fn set_target_high_activity_approved(
+    id: i64,
+    approved: bool,
+    acknowledge_provider_usage: bool,
+) -> Result<(), Error> {
+    let target = get_target(id).await?.ok_or(Error::WatchTargetNotFound {
+        address: format!("id={id}"),
+    })?;
+    if approved {
+        if !acknowledge_provider_usage {
+            return Err(Error::WatchHeliusApprovalAcknowledgementRequired);
+        }
+        let runtime = runtime::get_runtime().map_err(|error| Error::ChainRuntime {
+            operation: "get_runtime",
+            detail: error.to_string(),
+        })?;
+        if !runtime.supports_high_activity_mode().await {
+            return Err(Error::WatchHeliusUnavailable {
+                address: target.address,
+            });
+        }
+    }
+    watch_db()?.set_high_activity_approved(id, approved).await?;
+    service::request_reload();
+    Ok(())
+}
+
 fn validate_page_budget(page_budget: usize) -> Result<(), Error> {
     if !(DEFAULT_PAGE_BUDGET..=MAX_PAGE_BUDGET).contains(&page_budget) {
         return Err(Error::InvalidWatchBudget {
@@ -335,7 +399,11 @@ pub async fn get_status(id: i64) -> Result<WatchStatus, Error> {
     let last_error = target
         .disable_reason
         .as_ref()
-        .map(WatchDisableReason::summary);
+        .map(WatchDisableReason::summary)
+        .or_else(|| service_state::runtime_error(&target.address));
+    let mode = service_state::watch_mode(&target.address);
+    let catching_up = service_state::catching_up(&target.address);
+    let last_checked_at = service_state::last_checked_at(&target.address);
 
     Ok(WatchStatus {
         target,
@@ -343,6 +411,9 @@ pub async fn get_status(id: i64) -> Result<WatchStatus, Error> {
         last_activity_at,
         last_signature,
         last_error,
+        mode,
+        catching_up,
+        last_checked_at,
     })
 }
 
@@ -372,6 +443,7 @@ mod tests {
             sources: vec![WatchSource::Alert { rule_id: 1 }],
             enabled: true,
             page_budget: DEFAULT_PAGE_BUDGET,
+            high_activity_approved: false,
             disable_reason: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
@@ -388,5 +460,21 @@ mod tests {
     fn watch_target_limit_is_enforced_before_insert() {
         assert!(validate_target_constraints("next", &[], &[target("existing")], 1).is_err());
         assert!(validate_target_constraints("next", &[], &[target("existing")], 2).is_ok());
+    }
+
+    #[test]
+    fn helius_retry_requires_a_configured_high_activity_provider() {
+        let mut paused = target("helius");
+        paused.enabled = false;
+        paused.high_activity_approved = true;
+        paused.disable_reason = Some(WatchDisableReason::HeliusUnavailable);
+
+        assert!(matches!(
+            validate_helius_retry(&paused, false),
+            Err(Error::WatchHeliusUnavailable { .. })
+        ));
+        assert!(validate_helius_retry(&paused, true).is_ok());
+        paused.high_activity_approved = false;
+        assert!(validate_helius_retry(&paused, false).is_ok());
     }
 }

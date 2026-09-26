@@ -38,6 +38,9 @@ impl WatchDatabase {
                 if matches!(disable_reason, Some(super::WatchDisableReason::SignatureBudget { .. } | super::WatchDisableReason::Unknown)) {
                     return Err(Error::WatchBudgetAcknowledgementRequired { address });
                 }
+                if matches!(disable_reason, Some(super::WatchDisableReason::HeliusUnavailable)) {
+                    return Err(Error::WatchHeliusRetryRequired { address });
+                }
                 let mut sources: Vec<WatchSource> =
                     serde_json::from_str(&json).map_err(|e| Error::WatchSourcesDecode {
                         detail: e.to_string(),

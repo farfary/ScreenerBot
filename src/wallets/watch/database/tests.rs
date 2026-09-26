@@ -75,6 +75,7 @@ async fn a_pre_chain_identity_database_is_rebuilt_so_the_cursor_upsert_works() {
         let targets = db.list_targets().await.expect("list rebuilt targets");
         assert_eq!(targets.len(), 1, "the legacy row must survive the rebuild");
         assert_eq!(targets[0].address, "Addr1111");
+        assert!(!targets[0].high_activity_approved);
         assert_eq!(
             db.get_cursor("Addr1111").await.expect("read legacy cursor"),
             Some("Sig0000".to_owned()),
@@ -306,6 +307,39 @@ async fn budget_pause_persists_across_reopen_and_blocks_implicit_reenable() {
 }
 
 #[tokio::test]
+async fn helius_pause_requires_an_explicit_retry_and_preserves_its_cursor() {
+    let (db, _dir) = temp_db();
+    let target = db.insert_alert_target("Helius1111", None).await.unwrap();
+    let id = target.id.unwrap();
+    db.set_cursor("Helius1111", "last-complete-check")
+        .await
+        .unwrap();
+    db.pause_for_reason(id, WatchDisableReason::HeliusUnavailable)
+        .await
+        .unwrap();
+
+    assert!(matches!(
+        db.upsert_source("Helius1111", None, WatchSource::Copy { task_id: 7 })
+            .await,
+        Err(Error::WatchHeliusRetryRequired { .. })
+    ));
+    assert_eq!(
+        db.get_target(id).await.unwrap().unwrap().sources,
+        vec![WatchSource::Alert { rule_id: id }],
+        "a source update must not silently restore a provider-paused target"
+    );
+
+    db.set_enabled(id, true).await.unwrap();
+    let resumed = db.get_target(id).await.unwrap().unwrap();
+    assert!(resumed.enabled);
+    assert_eq!(resumed.disable_reason, None);
+    assert_eq!(
+        db.get_cursor("Helius1111").await.unwrap().as_deref(),
+        Some("last-complete-check")
+    );
+}
+
+#[tokio::test]
 async fn explicit_resume_rebaselines_cursor_and_applies_only_this_wallets_budget() {
     let (db, _dir) = temp_db();
     let target = db.insert_alert_target("Resume1111", None).await.unwrap();
@@ -330,5 +364,50 @@ async fn explicit_resume_rebaselines_cursor_and_applies_only_this_wallets_budget
     assert_eq!(
         db.get_cursor("Resume1111").await.unwrap().as_deref(),
         Some("current-head")
+    );
+}
+
+#[tokio::test]
+async fn helius_approval_is_persisted_and_restores_a_budget_pause_without_rebasing() {
+    let (db, dir) = temp_db();
+    let target = db.insert_alert_target("Approved1111", None).await.unwrap();
+    let id = target.id.unwrap();
+    assert!(!target.high_activity_approved);
+    db.set_cursor("Approved1111", "saved-cursor").await.unwrap();
+    db.pause_for_budget(id, 5, 500).await.unwrap();
+
+    db.set_high_activity_approved(id, true).await.unwrap();
+    let restored = db.get_target(id).await.unwrap().unwrap();
+    assert!(restored.high_activity_approved);
+    assert!(restored.enabled);
+    assert_eq!(restored.disable_reason, None);
+    assert_eq!(
+        db.get_cursor("Approved1111").await.unwrap().as_deref(),
+        Some("saved-cursor")
+    );
+
+    drop(db);
+    let reopened =
+        WatchDatabase::new_with_path(dir.path().join("wallets.db"), ChainId::Solana).unwrap();
+    assert!(
+        reopened
+            .get_target(id)
+            .await
+            .unwrap()
+            .unwrap()
+            .high_activity_approved
+    );
+
+    reopened
+        .set_high_activity_approved(id, false)
+        .await
+        .unwrap();
+    assert!(
+        !reopened
+            .get_target(id)
+            .await
+            .unwrap()
+            .unwrap()
+            .high_activity_approved
     );
 }

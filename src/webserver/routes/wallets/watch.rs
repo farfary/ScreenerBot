@@ -26,6 +26,10 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/:id", delete(remove_target))
         .route("/:id/enabled", post(set_target_enabled))
         .route("/:id/budget", post(set_target_budget))
+        .route(
+            "/:id/high-activity-approval",
+            post(set_high_activity_approval),
+        )
         .route("/:id/resume", post(resume_target))
         .route("/:id/status", get(get_status))
 }
@@ -67,6 +71,12 @@ struct SetBudgetRequest {
 struct ResumeRequest {
     page_budget: usize,
     acknowledge_missed_activity: bool,
+}
+
+#[derive(Deserialize)]
+struct HighActivityApprovalRequest {
+    approved: bool,
+    acknowledge_provider_usage: bool,
 }
 
 #[derive(Serialize)]
@@ -243,6 +253,33 @@ async fn resume_target(Path(id): Path<i64>, Json(request): Json<ResumeRequest>) 
     }
 }
 
+async fn set_high_activity_approval(
+    Path(id): Path<i64>,
+    Json(request): Json<HighActivityApprovalRequest>,
+) -> Response {
+    match watch::set_target_high_activity_approved(
+        id,
+        request.approved,
+        request.acknowledge_provider_usage,
+    )
+    .await
+    {
+        Ok(()) => success_response(MessageResponse {
+            message: if request.approved {
+                "Helius approval saved; watch restored from its saved cursor".to_owned()
+            } else {
+                "Helius approval removed".to_owned()
+            },
+        }),
+        Err(error) => error_response(
+            status_for(&error),
+            "HIGH_ACTIVITY_APPROVAL_ERROR",
+            "Helius approval could not be updated",
+            Some(&error.to_string()),
+        ),
+    }
+}
+
 /// Per-target status: whether the shared transport is connected, when its cursor
 /// last advanced, and to what.
 async fn get_status(Path(id): Path<i64>) -> Response {
@@ -314,6 +351,11 @@ mod tests {
                 WalletsError::WatchTargetLimitReached { max: 5 },
                 StatusCode::BAD_REQUEST,
                 "REJECTED",
+            ),
+            (
+                WalletsError::WatchHeliusApprovalAcknowledgementRequired,
+                StatusCode::BAD_REQUEST,
+                "ADD_ERROR",
             ),
         ];
 

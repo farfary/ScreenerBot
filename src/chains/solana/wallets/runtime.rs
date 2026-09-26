@@ -10,14 +10,17 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use crate::chains::solana::rpc::{self, ConnectionState};
+use crate::chains::solana::rpc::{self, ConnectionState, RpcClientMethods};
 use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 use crate::chains::solana::transactions::fetcher::TransactionFetcher;
 use crate::chains::solana::transactions::processor::TransactionProcessor;
 use crate::chains::solana::transactions::subject;
 use crate::transactions::types::{Subject, Transaction};
 use crate::wallets::watch::runtime::{ConnectionWatch, NotificationStream, WalletWatchRuntime};
-use crate::wallets::watch::{ActivityKind, SignaturePageItem, WatchNotification};
+use crate::wallets::watch::{
+    ActivityKind, SignaturePageItem, SuccessfulTransactionPageItem, SuccessfulTransactionsPage,
+    WatchNotification,
+};
 use crate::wallets::Error;
 
 use super::classify;
@@ -89,6 +92,77 @@ impl WalletWatchRuntime for SolanaWalletWatchRuntime {
                 operation: "fetch_signatures_page",
                 detail: e.to_string(),
             })
+    }
+
+    async fn supports_high_activity_mode(&self) -> bool {
+        rpc::get_rpc_client()
+            .manager()
+            .has_enabled_provider_kind(crate::rpc::ProviderKind::Helius)
+            .await
+    }
+
+    async fn fetch_successful_transactions_after(
+        &self,
+        address: &str,
+        limit: usize,
+        after: Option<&str>,
+    ) -> Result<SuccessfulTransactionsPage, Error> {
+        let pubkey = parse_pubkey(address)?;
+        let after = after
+            .map(|signature| {
+                signature.parse::<crate::chains::solana::solana_sdk::signature::Signature>()
+            })
+            .transpose()
+            .map_err(|error| Error::ChainRuntime {
+                operation: "parse_helius_cursor",
+                detail: error.to_string(),
+            })?;
+        let page = rpc::get_rpc_client()
+            .get_helius_successful_transactions_after(&pubkey, limit.min(1000), after.as_ref())
+            .await
+            .map_err(|error| Error::ChainRuntime {
+                operation: "fetch_successful_transactions_after",
+                detail: error.to_string(),
+            })?;
+        let processor = TransactionProcessor::new_for_watch_target(pubkey);
+        let mut items = Vec::with_capacity(page.transactions.len());
+        for details in page.transactions {
+            let signature = details
+                .transaction
+                .signatures
+                .first()
+                .cloned()
+                .ok_or_else(|| Error::ChainRuntime {
+                    operation: "fetch_successful_transactions_after",
+                    detail: "successful provider item had no signature".to_owned(),
+                })?;
+            let transaction = if classify::subject_has_meaningful_effect(address, &details) {
+                processor
+                    .decode_details(&signature, &details)
+                    .await
+                    .map(Some)
+                    .map_err(|error| match error.classify() {
+                        Some(
+                            failure @ (crate::chains::ExecutionFailure::IndexingDelay { .. }
+                            | crate::chains::ExecutionFailure::NotFound { .. }),
+                        ) => Error::ChainExecution(failure),
+                        _ => Error::ChainRuntime {
+                            operation: "decode_helius_transaction",
+                            detail: error.to_string(),
+                        },
+                    })
+            } else {
+                Ok(None)
+            };
+            items.push(SuccessfulTransactionPageItem {
+                signature,
+                transaction,
+            });
+        }
+        Ok(SuccessfulTransactionsPage {
+            items,
+            has_more: page.pagination_token.is_some(),
+        })
     }
 
     async fn decode_transaction(

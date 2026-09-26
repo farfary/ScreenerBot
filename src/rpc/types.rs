@@ -107,6 +107,7 @@ pub enum RpcMethod {
 
     // Provider-specific
     GetPriorityFeeEstimate,
+    GetTransactionsForAddress,
     GetAsset,
     GetAssetsByOwner,
     SearchAssets,
@@ -141,6 +142,7 @@ impl RpcMethod {
             "sendTransaction" => Self::SendTransaction,
             "simulateTransaction" => Self::SimulateTransaction,
             "getPriorityFeeEstimate" => Self::GetPriorityFeeEstimate,
+            "getTransactionsForAddress" => Self::GetTransactionsForAddress,
             "getAsset" => Self::GetAsset,
             "getAssetsByOwner" => Self::GetAssetsByOwner,
             "searchAssets" => Self::SearchAssets,
@@ -173,6 +175,7 @@ impl RpcMethod {
             Self::SendTransaction => "sendTransaction",
             Self::SimulateTransaction => "simulateTransaction",
             Self::GetPriorityFeeEstimate => "getPriorityFeeEstimate",
+            Self::GetTransactionsForAddress => "getTransactionsForAddress",
             Self::GetAsset => "getAsset",
             Self::GetAssetsByOwner => "getAssetsByOwner",
             Self::SearchAssets => "searchAssets",
@@ -197,6 +200,10 @@ impl RpcMethod {
             Self::GetSignatureStatuses => 2,
             Self::SendTransaction | Self::SimulateTransaction => 2,
             Self::GetPriorityFeeEstimate => 1,
+            // Full transaction pages are metered by Helius and may contain up to
+            // one thousand parsed transactions, so they consume the maximum
+            // local rate-limit weight.
+            Self::GetTransactionsForAddress => 5,
             Self::GetAsset => 1,
 
             // Heavy operations
@@ -216,6 +223,7 @@ impl RpcMethod {
         matches!(
             self,
             Self::GetPriorityFeeEstimate
+                | Self::GetTransactionsForAddress
                 | Self::GetAsset
                 | Self::GetAssetsByOwner
                 | Self::SearchAssets

@@ -7,13 +7,14 @@ pub mod methods;
 mod methods_impl;
 
 pub use methods::{
+    // Transaction history types
+    HeliusTransactionsPage,
     ProviderHealthInfo,
     RpcClientMethods,
     // Program account types
     RpcFilterType,
     // Token supply types
     RpcTokenAccountBalance,
-    // Transaction history types
     SignatureInfo,
     TokenSupply,
 };

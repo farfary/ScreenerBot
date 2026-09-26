@@ -10,6 +10,7 @@ fn own_watch_target(address: &str) -> WatchTarget {
         sources: vec![WatchSource::OwnWallet],
         enabled: true,
         page_budget: poller::DEFAULT_PAGE_BUDGET,
+        high_activity_approved: false,
         disable_reason: None,
         created_at: Utc::now(),
         updated_at: Utc::now(),
@@ -24,6 +25,7 @@ fn alert_watch_target(address: &str, rule_id: i64) -> WatchTarget {
         sources: vec![WatchSource::Alert { rule_id }],
         enabled: true,
         page_budget: poller::DEFAULT_PAGE_BUDGET,
+        high_activity_approved: false,
         disable_reason: None,
         created_at: Utc::now(),
         updated_at: Utc::now(),
@@ -33,12 +35,125 @@ fn alert_watch_target(address: &str, rule_id: i64) -> WatchTarget {
 fn idle_target_runtime(target: WatchTarget) -> TargetRuntime {
     TargetRuntime {
         target,
-        ws_task: tokio::spawn(async {}),
         last_poll: Instant::now(),
         catch_up: None,
         baseline_only: false,
         backfill: false,
+        high_activity: false,
+        high_activity_catching_up: false,
+        high_activity_dirty: false,
+        high_activity_failures: 0,
     }
+}
+
+#[test]
+fn high_activity_ws_burst_respects_minimum_interval_and_idle_safety_poll() {
+    assert!(!high_activity_poll_due(Duration::from_secs(4), true, 5, 30));
+    assert!(high_activity_poll_due(Duration::from_secs(5), true, 5, 30));
+    assert!(!high_activity_poll_due(
+        Duration::from_secs(29),
+        false,
+        5,
+        30
+    ));
+    assert!(high_activity_poll_due(
+        Duration::from_secs(30),
+        false,
+        5,
+        30
+    ));
+}
+
+#[tokio::test]
+async fn raw_overflow_switches_to_helius_and_preserves_the_prior_cursor() {
+    use crate::wallets::watch::{
+        SignaturePageItem, SuccessfulTransactionPageItem, SuccessfulTransactionsPage,
+    };
+    let address = "HighModeTarget1111";
+    let runtime = FakeRuntime::new(vec![address.to_owned()]);
+    runtime.set_high_activity_supported(true);
+    for page in 0..poller::DEFAULT_PAGE_BUDGET {
+        runtime.queue_page_items(
+            address,
+            (0..poller::PAGE_SIZE)
+                .map(|item| SignaturePageItem {
+                    signature: format!("raw-{page}-{item}"),
+                    failed: false,
+                })
+                .collect(),
+        );
+    }
+    runtime.queue_successful_page(
+        address,
+        SuccessfulTransactionsPage {
+            items: vec![SuccessfulTransactionPageItem {
+                signature: "helius-next".to_owned(),
+                transaction: Ok(None),
+            }],
+            has_more: false,
+        },
+    );
+    let chain_runtime: Arc<dyn WalletWatchRuntime> = runtime;
+    let (watch_db, _dir) = temp_watch_db();
+    watch_db
+        .set_cursor(address, "durable-before")
+        .await
+        .unwrap();
+    let own = Subject::from_account(
+        crate::chains::AccountId::new(crate::chains::ChainId::Solana, "OwnWallet1111").unwrap(),
+    );
+    let mut target = idle_target_runtime(alert_watch_target(address, 9));
+    target.target.high_activity_approved = true;
+    poll_target(&mut target, &chain_runtime, &watch_db, own, false).await;
+    assert!(target.high_activity);
+    assert_eq!(
+        watch_db.get_cursor(address).await.unwrap().as_deref(),
+        Some("helius-next")
+    );
+}
+
+#[tokio::test]
+async fn helius_bad_middle_item_commits_only_the_prior_item() {
+    use crate::wallets::watch::{SuccessfulTransactionPageItem, SuccessfulTransactionsPage};
+    let address = "HighMiddleTarget1111";
+    let runtime = FakeRuntime::new(vec![address.to_owned()]);
+    runtime.set_high_activity_supported(true);
+    runtime.queue_successful_page(
+        address,
+        SuccessfulTransactionsPage {
+            items: vec![
+                SuccessfulTransactionPageItem {
+                    signature: "first".to_owned(),
+                    transaction: Ok(None),
+                },
+                SuccessfulTransactionPageItem {
+                    signature: "bad".to_owned(),
+                    transaction: Err(crate::wallets::Error::ChainRuntime {
+                        operation: "test",
+                        detail: "bad".to_owned(),
+                    }),
+                },
+                SuccessfulTransactionPageItem {
+                    signature: "later".to_owned(),
+                    transaction: Ok(None),
+                },
+            ],
+            has_more: false,
+        },
+    );
+    let chain_runtime: Arc<dyn WalletWatchRuntime> = runtime;
+    let (watch_db, _dir) = temp_watch_db();
+    let own = Subject::from_account(
+        crate::chains::AccountId::new(crate::chains::ChainId::Solana, "OwnWallet1111").unwrap(),
+    );
+    let mut target = idle_target_runtime(alert_watch_target(address, 10));
+    target.target.high_activity_approved = true;
+    target.high_activity = true;
+    poll_target(&mut target, &chain_runtime, &watch_db, own, false).await;
+    assert_eq!(
+        watch_db.get_cursor(address).await.unwrap().as_deref(),
+        Some("first")
+    );
 }
 
 fn temp_watch_db() -> (WatchDatabase, tempfile::TempDir) {
@@ -197,6 +312,7 @@ async fn process_signature_resolves_the_exact_target_identity_before_dedupe() {
         "some-signature",
         Utc::now(),
         false,
+        None,
     )
     .await;
 
@@ -225,6 +341,7 @@ async fn process_signature_rejects_a_wrong_chain_target_before_any_call() {
         "some-signature",
         Utc::now(),
         false,
+        None,
     )
     .await;
 
@@ -301,7 +418,6 @@ async fn changing_one_target_keeps_other_subscription_forwarders() {
         changed_address.to_owned(),
     ]);
     let chain_runtime: Arc<dyn WalletWatchRuntime> = fake;
-    let (ws_tx, _ws_rx) = mpsc::unbounded_channel();
     let own = Subject::from_account(
         crate::chains::AccountId::new(crate::chains::ChainId::Solana, own_address).unwrap(),
     );
@@ -309,15 +425,14 @@ async fn changing_one_target_keeps_other_subscription_forwarders() {
 
     super::super::service_targets::reload_targets(
         &mut runtimes,
-        &ws_tx,
         &chain_runtime,
         &watch_db,
         own.clone(),
         true,
     )
     .await;
-    let own_forwarder = runtimes[own_address].ws_task.id();
-    let stable_forwarder = runtimes[stable_address].ws_task.id();
+    let own_forwarder = runtimes[own_address].forwarder_id();
+    let stable_forwarder = runtimes[stable_address].forwarder_id();
     assert!(runtimes.contains_key(changed_address));
 
     watch_db
@@ -326,7 +441,6 @@ async fn changing_one_target_keeps_other_subscription_forwarders() {
         .unwrap();
     super::super::service_targets::reload_targets(
         &mut runtimes,
-        &ws_tx,
         &chain_runtime,
         &watch_db,
         own,
@@ -334,12 +448,84 @@ async fn changing_one_target_keeps_other_subscription_forwarders() {
     )
     .await;
 
-    assert_eq!(runtimes[own_address].ws_task.id(), own_forwarder);
-    assert_eq!(runtimes[stable_address].ws_task.id(), stable_forwarder);
+    assert_eq!(runtimes[own_address].forwarder_id(), own_forwarder);
+    assert_eq!(runtimes[stable_address].forwarder_id(), stable_forwarder);
     assert!(!runtimes.contains_key(changed_address));
-    for runtime in runtimes.values() {
-        runtime.ws_task.abort();
+    super::super::service_targets::stop_all(runtimes).await;
+}
+
+#[tokio::test]
+async fn stalled_wallet_does_not_block_six_other_watchers_or_reload() {
+    let addresses = [
+        "BlockedTarget1111",
+        "ReadyTargetTwo1111",
+        "ReadyTargetThree1111",
+        "ReadyTargetFour1111",
+        "ReadyTargetFive1111",
+        "ReadyTargetSix1111",
+        "ReadyTargetSeven1111",
+    ];
+    let own_address = "OwnWorkerTest1111";
+    let (watch_db, _dir) = temp_watch_db();
+    let fake = FakeRuntime::new(
+        std::iter::once(own_address.to_owned())
+            .chain(addresses.iter().map(|address| (*address).to_owned()))
+            .collect(),
+    );
+    let blocked = fake.block_fetch(addresses[0]);
+    for (index, address) in addresses.iter().enumerate() {
+        watch_db.insert_alert_target(address, None).await.unwrap();
+        fake.queue_page(address, vec![format!("baseline-{index}")]);
     }
+    let chain_runtime: Arc<dyn WalletWatchRuntime> = fake;
+    let own = Subject::from_account(
+        crate::chains::AccountId::new(crate::chains::ChainId::Solana, own_address).unwrap(),
+    );
+    let mut workers = HashMap::new();
+    super::super::service_targets::reload_targets(
+        &mut workers,
+        &chain_runtime,
+        &watch_db,
+        own.clone(),
+        true,
+    )
+    .await;
+
+    tokio::time::timeout(Duration::from_secs(5), blocked.wait_started())
+        .await
+        .expect("busy wallet reaches the blocked RPC");
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let mut ready = true;
+            for (index, address) in addresses.iter().enumerate().skip(1) {
+                let expected = format!("baseline-{index}");
+                ready &= watch_db.get_cursor(address).await.unwrap().as_deref()
+                    == Some(expected.as_str());
+            }
+            if ready {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("six other wallets establish cursors while one RPC is blocked");
+    assert_eq!(watch_db.get_cursor(addresses[0]).await.unwrap(), None);
+
+    tokio::time::timeout(
+        Duration::from_secs(5),
+        super::super::service_targets::reload_targets(
+            &mut workers,
+            &chain_runtime,
+            &watch_db,
+            own,
+            true,
+        ),
+    )
+    .await
+    .expect("target reload does not wait for the blocked wallet");
+    blocked.release();
+    super::super::service_targets::stop_all(workers).await;
 }
 
 #[tokio::test]

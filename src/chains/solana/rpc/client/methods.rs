@@ -75,6 +75,15 @@ pub struct SignatureInfo {
     pub confirmation_status: Option<String>,
 }
 
+/// A chronological Helius page of successful, parsed transactions for a wallet.
+#[derive(Debug)]
+pub struct HeliusTransactionsPage {
+    /// Complete transaction data in ascending order.
+    pub transactions: Vec<TransactionDetails>,
+    /// Helius continuation token, when another page is available.
+    pub pagination_token: Option<String>,
+}
+
 /// Token account balance information from getTokenLargestAccounts
 #[derive(Debug, Clone)]
 pub struct RpcTokenAccountBalance {
@@ -364,6 +373,17 @@ pub trait RpcClientMethods {
     ) -> impl std::future::Future<
         Output = crate::Result<Vec<Option<EncodedConfirmedTransactionWithStatusMeta>>>,
     > + Send;
+
+    /// Fetch one ascending Helius-only page of successful wallet activity after a signature.
+    ///
+    /// The boundary is exclusive and the request includes changes to token accounts owned by the
+    /// wallet. A non-Helius provider is never used for this operation.
+    fn get_helius_successful_transactions_after(
+        &self,
+        address: &Pubkey,
+        limit: usize,
+        after: Option<&Signature>,
+    ) -> impl std::future::Future<Output = crate::Result<HeliusTransactionsPage>> + Send;
 
     // =========================================================================
     // Program Account Methods

@@ -1,9 +1,4 @@
-//! Per-address runtime state and target-set rebuilding for the observation loop.
-//!
-//! Split out of `service.rs` to keep that file under the module-size limit;
-//! `run()` owns the single event loop, this file owns what one watched
-//! address's WS forwarder looks like and how the runtime set follows database
-//! changes without interrupting unchanged subscriptions.
+//! Per-target workers and target-set reconciliation for wallet watch.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -11,173 +6,377 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use chrono::Utc;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, watch, Notify};
 
+use crate::config::with_config;
 use crate::logger::{self, LogTag};
 use crate::transactions::types::Subject;
 
 use super::database::WatchDatabase;
 use super::poller;
 use super::runtime::WalletWatchRuntime;
+use super::service::{self, ProcessOutcome};
+use super::service_state::{self, WsRetry};
 use super::types::{WatchNotification, WatchSource, WatchTarget};
 
-/// One watched address's runtime state: its WS forwarder (own-wallet and every
-/// target alike subscribe through the same shared transport) and when it was last
-/// polled.
+const TARGET_EVENT_CAPACITY: usize = 64;
+const TARGET_COMMAND_CAPACITY: usize = 8;
+
+/// Per-target state is only accessed by its worker, preserving its cursor and
+/// dedupe ordering while other targets process independently.
 pub(super) struct TargetRuntime {
     pub(super) target: WatchTarget,
-    pub(super) ws_task: tokio::task::JoinHandle<()>,
     pub(super) last_poll: Instant,
     pub(super) catch_up: Option<poller::CatchUpState>,
-    /// First registration establishes a current head without replaying historical
-    /// trades as new alerts.
     pub(super) baseline_only: bool,
-    /// The open catch-up range was started by a gap-fill.
     pub(super) backfill: bool,
+    pub(super) high_activity: bool,
+    pub(super) high_activity_catching_up: bool,
+    pub(super) high_activity_dirty: bool,
+    pub(super) high_activity_failures: u32,
 }
 
-/// A non-own target reached its per-wallet page budget before its cursor range
-/// completed. Preserve the cursor and pause until the user deliberately resumes.
-pub(super) async fn handle_overflow(target_runtime: &mut TargetRuntime, watch_db: &WatchDatabase) {
-    let address = target_runtime.target.address.clone();
-    let Some(state) = target_runtime.catch_up.take() else {
+enum WorkerCommand {
+    GapFill,
+}
+
+struct PendingRetry {
+    retry: WsRetry,
+    due: Instant,
+}
+
+/// The registry owns task handles; the worker owns its `TargetRuntime`.
+pub(super) struct TargetWorker {
+    command_tx: mpsc::Sender<WorkerCommand>,
+    target_tx: watch::Sender<WatchTarget>,
+    cancel: Arc<Notify>,
+    worker_task: tokio::task::JoinHandle<()>,
+    forwarder_task: tokio::task::JoinHandle<()>,
+}
+
+impl TargetWorker {
+    fn update(&self, target: WatchTarget) {
+        self.target_tx.send_replace(target);
+    }
+    fn approval_changed(&self, target: &WatchTarget) -> bool {
+        self.target_tx.borrow().high_activity_approved != target.high_activity_approved
+    }
+    fn gap_fill(&self) {
+        let _ = self.command_tx.try_send(WorkerCommand::GapFill);
+    }
+    pub(super) async fn stop(self) {
+        self.cancel.notify_waiters();
+        self.worker_task.abort();
+        self.forwarder_task.abort();
+        let _ = self.worker_task.await;
+        let _ = self.forwarder_task.await;
+    }
+    #[cfg(test)]
+    pub(super) fn forwarder_id(&self) -> tokio::task::Id {
+        self.forwarder_task.id()
+    }
+}
+
+/// A target exceeded its bounded raw cursor range. Its persisted cursor remains
+/// intact until the user resumes it with a higher budget or Helius support.
+pub(super) async fn handle_overflow(runtime: &mut TargetRuntime, db: &WatchDatabase) {
+    let address = runtime.target.address.clone();
+    let Some(state) = runtime.catch_up.take() else {
         return;
     };
-    let skipped = state.pending_len();
-    let pages = target_runtime.target.page_budget;
-    let Some(id) = target_runtime.target.id else {
+    let (pages, skipped) = (runtime.target.page_budget, state.pending_len());
+    let Some(id) = runtime.target.id else {
         return;
     };
-    match watch_db.pause_for_budget(id, pages, skipped).await {
+    match db.pause_for_budget(id, pages, skipped).await {
         Ok(()) => {
-            target_runtime.target.enabled = false;
-            target_runtime.target.disable_reason =
+            runtime.target.enabled = false;
+            runtime.target.disable_reason =
                 Some(super::types::WatchDisableReason::SignatureBudget {
                     page_budget: pages,
                     signatures_checked: skipped,
                 });
-            logger::warning(LogTag::WalletWatch, &format!("Paused {address}: reached its {}-signature check limit before catching up; cursor preserved", skipped));
-            // Copy's consumer reacts immediately; its own reconciler also retries
-            // this state transition if its database is temporarily unavailable.
-            super::publish_target_change(address.clone());
-            super::service::request_reload();
+            logger::warning(LogTag::WalletWatch, &format!("Paused {address}: reached its {skipped}-signature check limit before catching up; cursor preserved"));
+            super::publish_target_change(address);
+            service::request_reload();
         }
-        Err(e) => logger::warning(
+        Err(error) => logger::warning(
             LogTag::WalletWatch,
-            &format!("Failed to pause over-budget target {address}: {e}"),
+            &format!("Failed to pause over-budget target {address}: {error}"),
         ),
     }
 }
 
-/// Spawn the per-target WS forwarder: subscribes through the shared transport and
-/// funnels every notification into `tx`, tagged with the address, until the
-/// subscription ends or the task is aborted (which drops the runtime's
-/// subscription handle and unsubscribes, same as any other holder of one).
 fn spawn_ws_forwarder(
     address: String,
     is_own: bool,
-    tx: mpsc::UnboundedSender<(String, WatchNotification)>,
+    tx: mpsc::Sender<WatchNotification>,
     runtime: Arc<dyn WalletWatchRuntime>,
-) -> (tokio::task::JoinHandle<()>, Arc<AtomicBool>) {
-    let active = Arc::new(AtomicBool::new(false));
-    let task_active = Arc::clone(&active);
-    let task = tokio::spawn(async move {
+    cancel: Arc<Notify>,
+    active: Arc<AtomicBool>,
+    overflowed: Arc<AtomicBool>,
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
         let mut retry = Duration::from_secs(1);
         loop {
-            if tx.is_closed() {
-                break;
-            }
-            let mut sub = match runtime.subscribe(&address).await {
-                Ok(sub) => {
-                    task_active.store(true, Ordering::Relaxed);
+            let result = tokio::select! { _ = cancel.notified() => return, result = runtime.subscribe(&address) => result };
+            let mut subscription = match result {
+                Ok(subscription) => {
+                    active.store(true, Ordering::Relaxed);
                     retry = Duration::from_secs(1);
-                    sub
+                    subscription
                 }
                 Err(error) => {
-                    task_active.store(false, Ordering::Relaxed);
+                    active.store(false, Ordering::Relaxed);
                     logger::warning(
                         LogTag::WalletWatch,
                         &format!("Failed to subscribe to {address}: {error}"),
                     );
-                    tokio::time::sleep(retry).await;
+                    tokio::select! { _ = cancel.notified() => return, _ = tokio::time::sleep(retry) => {} }
                     retry = (retry * 2).min(Duration::from_secs(30));
                     continue;
                 }
             };
-            while let Some(event) = sub.recv().await {
+            loop {
+                let event = tokio::select! { _ = cancel.notified() => return, event = subscription.recv() => event };
+                let Some(event) = event else {
+                    break;
+                };
                 if event.failed && !is_own {
                     continue;
                 }
-                if tx.send((address.clone(), event)).is_err() {
-                    task_active.store(false, Ordering::Relaxed);
-                    return;
+                match tx.try_send(event) {
+                    Ok(()) => {}
+                    Err(mpsc::error::TrySendError::Full(_)) => {
+                        overflowed.store(true, Ordering::Relaxed)
+                    }
+                    Err(mpsc::error::TrySendError::Closed(_)) => return,
                 }
             }
-            task_active.store(false, Ordering::Relaxed);
-            tokio::time::sleep(retry).await;
+            active.store(false, Ordering::Relaxed);
+            tokio::select! { _ = cancel.notified() => return, _ = tokio::time::sleep(retry) => {} }
             retry = (retry * 2).min(Duration::from_secs(30));
         }
-    });
-    (task, active)
+    })
+}
+
+fn retry_due(retry: &WsRetry) -> Option<Instant> {
+    service_state::ws_retry_delay(retry.attempt).map(|delay| Instant::now() + delay)
+}
+
+async fn process_event(
+    runtime: &mut TargetRuntime,
+    event: WatchNotification,
+    chain: &Arc<dyn WalletWatchRuntime>,
+    own: &Subject,
+    retries: &mut Vec<PendingRetry>,
+) {
+    if !runtime.target.enabled {
+        return;
+    }
+    if service::skip_known_failed_external(&runtime.target, event.failed) {
+        return;
+    }
+    if runtime.high_activity {
+        runtime.high_activity_dirty = true;
+        return;
+    }
+    let detected_at = Utc::now();
+    if service::process_signature(
+        chain,
+        &runtime.target,
+        own.clone(),
+        &event.signature,
+        detected_at,
+        false,
+        None,
+    )
+    .await
+        == ProcessOutcome::Retryable
+    {
+        let retry = WsRetry {
+            address: runtime.target.address.clone(),
+            signature: event.signature,
+            detected_at,
+            attempt: 0,
+        };
+        if let Some(due) = retry_due(&retry) {
+            retries.push(PendingRetry { retry, due });
+        }
+    }
+}
+
+async fn process_retries(
+    runtime: &mut TargetRuntime,
+    chain: &Arc<dyn WalletWatchRuntime>,
+    own: &Subject,
+    retries: &mut Vec<PendingRetry>,
+) {
+    if !runtime.target.enabled {
+        retries.clear();
+        return;
+    }
+    let now = Instant::now();
+    let pending = std::mem::take(retries);
+    for retry in pending {
+        if retry.due > now {
+            retries.push(retry);
+            continue;
+        }
+        if service::process_signature(
+            chain,
+            &runtime.target,
+            own.clone(),
+            &retry.retry.signature,
+            retry.retry.detected_at,
+            false,
+            None,
+        )
+        .await
+            == ProcessOutcome::Retryable
+        {
+            let next = WsRetry {
+                attempt: retry.retry.attempt + 1,
+                ..retry.retry
+            };
+            if let Some(due) = retry_due(&next) {
+                retries.push(PendingRetry { retry: next, due });
+            }
+        }
+    }
+}
+
+async fn run_worker(
+    mut runtime: TargetRuntime,
+    mut target_updates: watch::Receiver<WatchTarget>,
+    mut commands: mpsc::Receiver<WorkerCommand>,
+    mut events: mpsc::Receiver<WatchNotification>,
+    overflowed: Arc<AtomicBool>,
+    cancel: Arc<Notify>,
+    chain: Arc<dyn WalletWatchRuntime>,
+    db: WatchDatabase,
+    own: Subject,
+) {
+    // The forwarder subscribes concurrently and buffers references, but this
+    // worker establishes its cursor before it processes any of them.
+    service::poll_target(&mut runtime, &chain, &db, own.clone(), true).await;
+    let mut tick = tokio::time::interval(Duration::from_millis(100));
+    tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let mut retries = Vec::new();
+    loop {
+        tokio::select! {
+            _ = cancel.notified() => break,
+            Ok(()) = target_updates.changed() => runtime.target = target_updates.borrow_and_update().clone(),
+            Some(command) = commands.recv() => match command {
+                WorkerCommand::GapFill => { service::poll_target(&mut runtime, &chain, &db, own.clone(), true).await; runtime.last_poll = Instant::now(); }
+            },
+            Some(event) = events.recv() => process_event(&mut runtime, event, &chain, &own, &mut retries).await,
+            _ = tick.tick() => {
+                process_retries(&mut runtime, &chain, &own, &mut retries).await;
+                let now = Instant::now();
+                let (baseline, fallback, high) = with_config(|cfg| (cfg.wallet.watch_poll_interval_secs, cfg.wallet.watch_poll_fallback_secs, cfg.wallet.watch_high_activity_interval_secs));
+                let dropped = overflowed.swap(false, Ordering::Relaxed);
+                let elapsed = now.duration_since(runtime.last_poll);
+                let due = if runtime.high_activity {
+                    service::high_activity_poll_due(elapsed, runtime.high_activity_dirty || runtime.high_activity_catching_up || dropped, high, baseline)
+                } else {
+                    dropped || elapsed >= Duration::from_secs(poller::cadence_secs(chain.is_connected(), baseline, fallback))
+                };
+                if due {
+                    runtime.last_poll = now;
+                    runtime.high_activity_dirty = false;
+                    service::poll_target(&mut runtime, &chain, &db, own.clone(), false).await;
+                }
+            }
+            else => break,
+        }
+    }
 }
 
 fn register(
-    runtimes: &mut HashMap<String, TargetRuntime>,
-    ws_tx: &mpsc::UnboundedSender<(String, WatchNotification)>,
-    chain_runtime: &Arc<dyn WalletWatchRuntime>,
+    workers: &mut HashMap<String, TargetWorker>,
+    chain: &Arc<dyn WalletWatchRuntime>,
+    db: &WatchDatabase,
+    own: &Subject,
     target: WatchTarget,
 ) {
     let address = target.address.clone();
-    let is_own = target.sources.contains(&WatchSource::OwnWallet);
-    let (ws_task, ws_active) = spawn_ws_forwarder(
-        address.clone(),
-        is_own,
-        ws_tx.clone(),
-        Arc::clone(chain_runtime),
-    );
-    super::service_state::set_subscription(address.clone(), Arc::clone(&ws_active));
-    runtimes.insert(
-        address,
+    let cancel = Arc::new(Notify::new());
+    let (command_tx, command_rx) = mpsc::channel(TARGET_COMMAND_CAPACITY);
+    let (target_tx, target_updates) = watch::channel(target.clone());
+    let (event_tx, event_rx) = mpsc::channel(TARGET_EVENT_CAPACITY);
+    let active = Arc::new(AtomicBool::new(false));
+    let overflowed = Arc::new(AtomicBool::new(false));
+    service_state::set_subscription(address.clone(), Arc::clone(&active));
+    let worker_task = tokio::spawn(run_worker(
         TargetRuntime {
-            target,
-            ws_task,
+            target: target.clone(),
             last_poll: Instant::now(),
             catch_up: None,
             baseline_only: false,
             backfill: false,
+            high_activity: false,
+            high_activity_catching_up: false,
+            high_activity_dirty: false,
+            high_activity_failures: 0,
+        },
+        target_updates,
+        command_rx,
+        event_rx,
+        Arc::clone(&overflowed),
+        Arc::clone(&cancel),
+        Arc::clone(chain),
+        db.clone(),
+        own.clone(),
+    ));
+    let forwarder_task = spawn_ws_forwarder(
+        address.clone(),
+        target.sources.contains(&WatchSource::OwnWallet),
+        event_tx,
+        Arc::clone(chain),
+        Arc::clone(&cancel),
+        active,
+        overflowed,
+    );
+    workers.insert(
+        address,
+        TargetWorker {
+            command_tx,
+            target_tx,
+            cancel,
+            worker_task,
+            forwarder_task,
         },
     );
 }
 
-/// Reconcile persisted targets without tearing down subscriptions for unchanged
-/// addresses. Each subscription holds a reference to the shared transport; aborting
-/// every forwarder during one wallet's pause can close that transport for all.
+/// Reconcile persisted targets without restarting unchanged workers. Target
+/// metadata and budgets are updated in the worker's sole runtime owner.
 pub(super) async fn reload_targets(
-    runtimes: &mut HashMap<String, TargetRuntime>,
-    ws_tx: &mpsc::UnboundedSender<(String, WatchNotification)>,
-    chain_runtime: &Arc<dyn WalletWatchRuntime>,
-    watch_db: &WatchDatabase,
-    own_subject: Subject,
+    workers: &mut HashMap<String, TargetWorker>,
+    chain: &Arc<dyn WalletWatchRuntime>,
+    db: &WatchDatabase,
+    own: Subject,
     watch_enabled: bool,
 ) {
     let mut desired = HashMap::new();
     desired.insert(
-        own_subject.address(),
+        own.address(),
         WatchTarget {
             id: None,
-            address: own_subject.address(),
+            address: own.address(),
             label: Some("Own wallet".to_owned()),
             sources: vec![WatchSource::OwnWallet],
             enabled: true,
-            page_budget: super::poller::DEFAULT_PAGE_BUDGET,
+            page_budget: poller::DEFAULT_PAGE_BUDGET,
+            high_activity_approved: false,
             disable_reason: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
         },
     );
-
     if watch_enabled {
-        match watch_db.list_targets().await {
+        match db.list_targets().await {
             Ok(targets) => {
                 for target in targets.into_iter().filter(|target| target.enabled) {
                     desired.insert(target.address.clone(), target);
@@ -194,108 +393,58 @@ pub(super) async fn reload_targets(
             }
         }
     }
-
     let desired_addresses = desired.keys().cloned().collect::<HashSet<_>>();
-    for (address, runtime) in runtimes.iter_mut() {
+    let mut restarts = Vec::new();
+    for (address, worker) in workers.iter() {
         if let Some(target) = desired.remove(address) {
-            runtime.target = target;
+            if worker.approval_changed(&target) {
+                restarts.push((address.clone(), target));
+            } else {
+                worker.update(target);
+            }
         }
     }
-    let removed = runtimes
+    for (address, target) in restarts {
+        if let Some(worker) = workers.remove(&address) {
+            worker.stop().await;
+            service_state::remove_subscription(&address);
+            service_state::remove_runtime_status(&address);
+        }
+        register(workers, chain, db, &own, target);
+    }
+    let removed = workers
         .keys()
         .filter(|address| !desired_addresses.contains(*address))
         .cloned()
         .collect::<Vec<_>>();
     for address in removed {
-        if let Some(runtime) = runtimes.remove(&address) {
-            runtime.ws_task.abort();
-            super::service_state::remove_subscription(&address);
+        if let Some(worker) = workers.remove(&address) {
+            worker.stop().await;
+            service_state::remove_subscription(&address);
+            service_state::remove_runtime_status(&address);
         }
     }
-    // Re-read persisted target addresses so cursor cleanup follows completed target
-    // removals. Disabled rows retain their cursors for deliberate resume.
-    if let Err(error) = watch_db.purge_orphan_cursors(&own_subject.address()).await {
+    if let Err(error) = db.purge_orphan_cursors(&own.address()).await {
         logger::warning(
             LogTag::WalletWatch,
             &format!("Failed to purge orphan watch cursors: {error}"),
         );
     }
     for target in desired.into_values() {
-        register(runtimes, ws_tx, chain_runtime, target);
+        register(workers, chain, db, &own, target);
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::wallets::watch::runtime::test_support::FakeRuntime;
-
-    #[tokio::test]
-    async fn failed_external_notification_never_enters_the_processing_channel() {
-        let address = "ExternalNotifications1111";
-        let runtime = FakeRuntime::new(vec![address.to_owned()]);
-        runtime.queue_notifications(
-            address,
-            vec![WatchNotification {
-                signature: "failed-external".to_owned(),
-                failed: true,
-            }],
-        );
-        let (tx, mut rx) = mpsc::unbounded_channel();
-        let (task, _) = spawn_ws_forwarder(address.to_owned(), false, tx, runtime);
-
-        assert!(
-            tokio::time::timeout(Duration::from_millis(25), rx.recv())
-                .await
-                .is_err(),
-            "known failed external notification must not enter processing"
-        );
-        task.abort();
+pub(super) fn request_gap_fill(workers: &HashMap<String, TargetWorker>) {
+    for worker in workers.values() {
+        worker.gap_fill();
     }
+}
 
-    #[tokio::test]
-    async fn successful_and_own_failed_notifications_enter_processing() {
-        let external = "SuccessNotifications1111";
-        let own = "OwnNotifications1111";
-        let runtime = FakeRuntime::new(vec![external.to_owned(), own.to_owned()]);
-        runtime.queue_notifications(
-            external,
-            vec![WatchNotification {
-                signature: "successful-external".to_owned(),
-                failed: false,
-            }],
-        );
-        runtime.queue_notifications(
-            own,
-            vec![WatchNotification {
-                signature: "failed-own".to_owned(),
-                failed: true,
-            }],
-        );
-        let (tx, mut rx) = mpsc::unbounded_channel();
-        let (external_task, _) =
-            spawn_ws_forwarder(external.to_owned(), false, tx.clone(), runtime.clone());
-        let (own_task, _) = spawn_ws_forwarder(own.to_owned(), true, tx, runtime);
-
-        let mut received = vec![
-            tokio::time::timeout(Duration::from_millis(100), rx.recv())
-                .await
-                .expect("successful external notification arrives")
-                .expect("channel remains open"),
-            tokio::time::timeout(Duration::from_millis(100), rx.recv())
-                .await
-                .expect("failed own notification arrives")
-                .expect("channel remains open"),
-        ];
-        received.sort_by(|left, right| left.1.signature.cmp(&right.1.signature));
-        assert_eq!(
-            received
-                .iter()
-                .map(|(_, event)| event.signature.as_str())
-                .collect::<Vec<_>>(),
-            ["failed-own", "successful-external"]
-        );
-        external_task.abort();
-        own_task.abort();
+pub(super) async fn stop_all(workers: HashMap<String, TargetWorker>) {
+    for (address, worker) in workers {
+        worker.stop().await;
+        service_state::remove_subscription(&address);
+        service_state::remove_runtime_status(&address);
     }
 }

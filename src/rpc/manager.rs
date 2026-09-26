@@ -227,7 +227,11 @@ impl RpcManager {
     }
 
     /// Select next provider based on strategy
-    async fn select_provider(&self, excluded: &[String]) -> Option<ProviderConfig> {
+    async fn select_provider(
+        &self,
+        excluded: &[String],
+        required_kind: Option<ProviderKind>,
+    ) -> Option<ProviderConfig> {
         let providers = self.providers.read().await;
         let states = self.provider_states.read().await;
         let strategy = *self.selection_strategy.read().await;
@@ -238,16 +242,18 @@ impl RpcManager {
             .filter(|p| {
                 p.enabled
                     && !excluded.contains(&p.id)
+                    && provider_matches_required_kind(p, required_kind)
                     && states.get(&p.id).is_none_or(|s| s.is_healthy())
             })
             .collect();
 
         if available.is_empty() {
             // Fallback: any enabled provider, healthy or not.
-            if let Some(provider) = providers
-                .iter()
-                .find(|p| p.enabled && !excluded.contains(&p.id))
-            {
+            if let Some(provider) = providers.iter().find(|p| {
+                p.enabled
+                    && !excluded.contains(&p.id)
+                    && provider_matches_required_kind(p, required_kind)
+            }) {
                 return Some(provider.clone());
             }
 
@@ -268,7 +274,10 @@ impl RpcManager {
             // its backoff before re-selecting, the per-provider rate limiter
             // gates acquisition, and the circuit breaker is still checked, so a
             // genuinely dead provider still fails fast through those.
-            return providers.iter().find(|p| p.enabled).cloned();
+            return providers
+                .iter()
+                .find(|p| p.enabled && provider_matches_required_kind(p, required_kind))
+                .cloned();
         }
 
         match strategy {
@@ -367,13 +376,45 @@ impl RpcManager {
             }
         }
 
+        self.execute_raw_restricted(method, params, None).await
+    }
+
+    /// Execute a provider-specific JSON-RPC request without routing to another provider kind.
+    ///
+    /// The normal limiter, circuit breaker, statistics and retry policy still apply. Retries may
+    /// use another configured provider of the requested kind, but never a different kind.
+    pub async fn execute_raw_for_provider_kind(
+        &self,
+        provider_kind: ProviderKind,
+        method: &str,
+        params: serde_json::Value,
+    ) -> Result<serde_json::Value, RpcError> {
+        self.execute_raw_restricted(method, params, Some(provider_kind))
+            .await
+    }
+
+    /// Whether an enabled provider of this kind is configured.
+    pub async fn has_enabled_provider_kind(&self, provider_kind: ProviderKind) -> bool {
+        self.providers
+            .read()
+            .await
+            .iter()
+            .any(|provider| provider.enabled && provider.kind == provider_kind)
+    }
+
+    async fn execute_raw_restricted(
+        &self,
+        method: &str,
+        params: serde_json::Value,
+        required_kind: Option<ProviderKind>,
+    ) -> Result<serde_json::Value, RpcError> {
         let rpc_method = RpcMethod::from_str(method);
         let mut last_error: Option<RpcError> = None;
         let mut tried_providers: Vec<String> = Vec::new();
 
         for retry in 0..=self.max_retries {
             // Select provider
-            let provider = match self.select_provider(&tried_providers).await {
+            let provider = match self.select_provider(&tried_providers, required_kind).await {
                 Some(p) => p,
                 None => {
                     return Err(RpcError::NoProvidersAvailable {
@@ -685,6 +726,38 @@ impl RpcManager {
         if let Some(state) = states.get_mut(provider_id) {
             state.enabled = enabled;
         }
+    }
+}
+
+fn provider_matches_required_kind(
+    provider: &ProviderConfig,
+    required_kind: Option<ProviderKind>,
+) -> bool {
+    required_kind.is_none_or(|kind| provider.kind == kind)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::provider_matches_required_kind;
+    use crate::rpc::{ProviderConfig, ProviderKind};
+
+    #[test]
+    fn helius_restricted_requests_exclude_non_helius_failover() {
+        let helius = ProviderConfig::from_url_with_priority(
+            "https://mainnet.helius-rpc.com/?api-key=test",
+            0,
+        );
+        let fallback =
+            ProviderConfig::from_url_with_priority("https://api.mainnet-beta.solana.com", 10);
+
+        assert!(provider_matches_required_kind(
+            &helius,
+            Some(ProviderKind::Helius)
+        ));
+        assert!(!provider_matches_required_kind(
+            &fallback,
+            Some(ProviderKind::Helius)
+        ));
     }
 }
 

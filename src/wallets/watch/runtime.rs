@@ -13,7 +13,9 @@ use async_trait::async_trait;
 use crate::transactions::types::{Subject, Transaction};
 use crate::wallets::Error;
 
-use super::types::{ActivityKind, SignaturePageItem, WatchNotification};
+use super::types::{
+    ActivityKind, SignaturePageItem, SuccessfulTransactionsPage, WatchNotification,
+};
 
 /// One address's realtime notification subscription. Dropping the runtime's
 /// `Box<dyn NotificationStream>` must end the underlying subscription, the same
@@ -68,6 +70,18 @@ pub trait WalletWatchRuntime: Send + Sync {
         before: Option<&str>,
         until: Option<&str>,
     ) -> Result<Vec<SignaturePageItem>, Error>;
+
+    /// Whether this runtime can use the provider's successful-transaction path.
+    async fn supports_high_activity_mode(&self) -> bool;
+
+    /// Fetch a chronological page after the exclusive durable signature cursor.
+    /// Each item is either predecoded or proven to have no meaningful subject effect.
+    async fn fetch_successful_transactions_after(
+        &self,
+        address: &str,
+        limit: usize,
+        after: Option<&str>,
+    ) -> Result<SuccessfulTransactionsPage, Error>;
 
     /// Decode one signature into a chain-neutral transaction record.
     /// `is_own` selects the own-wallet persistence policy (raw JSON retained)
@@ -136,7 +150,7 @@ pub(crate) mod test_support {
     use std::collections::VecDeque;
     use std::sync::Mutex;
 
-    use tokio::sync::mpsc;
+    use tokio::sync::{mpsc, Notify};
 
     use crate::chains::{AccountId, ChainId};
 
@@ -148,12 +162,42 @@ pub(crate) mod test_support {
     pub struct FakeCalls {
         pub resolved: Vec<String>,
         pub subscribed: Vec<String>,
+        pub fetched: Vec<String>,
         pub decoded: Vec<(String, String, bool)>,
         pub classified: Vec<String>,
     }
 
     pub struct FakeNotificationStream {
         pub rx: mpsc::UnboundedReceiver<WatchNotification>,
+    }
+
+    pub struct FetchBlock {
+        started: std::sync::atomic::AtomicBool,
+        released: std::sync::atomic::AtomicBool,
+        notify: Notify,
+    }
+
+    impl FetchBlock {
+        pub async fn wait_started(&self) {
+            while !self.started.load(std::sync::atomic::Ordering::Relaxed) {
+                self.notify.notified().await;
+            }
+        }
+
+        pub fn release(&self) {
+            self.released
+                .store(true, std::sync::atomic::Ordering::Relaxed);
+            self.notify.notify_one();
+        }
+
+        async fn wait(&self) {
+            self.started
+                .store(true, std::sync::atomic::Ordering::Relaxed);
+            self.notify.notify_one();
+            while !self.released.load(std::sync::atomic::Ordering::Relaxed) {
+                self.notify.notified().await;
+            }
+        }
     }
 
     #[async_trait]
@@ -186,12 +230,16 @@ pub(crate) mod test_support {
         connected_rx: tokio::sync::watch::Receiver<bool>,
         valid_addresses: Vec<String>,
         pages: Mutex<std::collections::HashMap<String, VecDeque<Vec<SignaturePageItem>>>>,
+        successful_pages:
+            Mutex<std::collections::HashMap<String, VecDeque<SuccessfulTransactionsPage>>>,
+        high_activity_supported: std::sync::atomic::AtomicBool,
         notifications: Mutex<
             std::collections::HashMap<String, VecDeque<mpsc::UnboundedReceiver<WatchNotification>>>,
         >,
         decode_results: Mutex<std::collections::HashMap<String, Result<Transaction, Error>>>,
         classify_results:
             Mutex<std::collections::HashMap<String, (ActivityKind, Option<&'static str>)>>,
+        fetch_blocks: Mutex<std::collections::HashMap<String, Arc<FetchBlock>>>,
         pub calls: Mutex<FakeCalls>,
     }
 
@@ -203,9 +251,12 @@ pub(crate) mod test_support {
                 connected_rx: rx,
                 valid_addresses,
                 pages: Mutex::new(std::collections::HashMap::new()),
+                successful_pages: Mutex::new(std::collections::HashMap::new()),
+                high_activity_supported: std::sync::atomic::AtomicBool::new(false),
                 notifications: Mutex::new(std::collections::HashMap::new()),
                 decode_results: Mutex::new(std::collections::HashMap::new()),
                 classify_results: Mutex::new(std::collections::HashMap::new()),
+                fetch_blocks: Mutex::new(std::collections::HashMap::new()),
                 calls: Mutex::new(FakeCalls::default()),
             })
         }
@@ -222,8 +273,35 @@ pub(crate) mod test_support {
             );
         }
 
+        pub fn block_fetch(&self, address: &str) -> Arc<FetchBlock> {
+            let block = Arc::new(FetchBlock {
+                started: std::sync::atomic::AtomicBool::new(false),
+                released: std::sync::atomic::AtomicBool::new(false),
+                notify: Notify::new(),
+            });
+            self.fetch_blocks
+                .lock()
+                .unwrap()
+                .insert(address.to_owned(), Arc::clone(&block));
+            block
+        }
+
         pub fn queue_page_items(&self, address: &str, page: Vec<SignaturePageItem>) {
             self.pages
+                .lock()
+                .unwrap()
+                .entry(address.to_owned())
+                .or_default()
+                .push_back(page);
+        }
+
+        pub fn set_high_activity_supported(&self, supported: bool) {
+            self.high_activity_supported
+                .store(supported, std::sync::atomic::Ordering::Relaxed);
+        }
+
+        pub fn queue_successful_page(&self, address: &str, page: SuccessfulTransactionsPage) {
+            self.successful_pages
                 .lock()
                 .unwrap()
                 .entry(address.to_owned())
@@ -319,11 +397,39 @@ pub(crate) mod test_support {
             _before: Option<&str>,
             _until: Option<&str>,
         ) -> Result<Vec<SignaturePageItem>, Error> {
+            self.calls.lock().unwrap().fetched.push(address.to_owned());
+            let block = self.fetch_blocks.lock().unwrap().get(address).cloned();
+            if let Some(block) = block {
+                block.wait().await;
+            }
             let mut pages = self.pages.lock().unwrap();
             Ok(pages
                 .get_mut(address)
                 .and_then(VecDeque::pop_front)
                 .unwrap_or_default())
+        }
+
+        async fn supports_high_activity_mode(&self) -> bool {
+            self.high_activity_supported
+                .load(std::sync::atomic::Ordering::Relaxed)
+        }
+
+        async fn fetch_successful_transactions_after(
+            &self,
+            address: &str,
+            _limit: usize,
+            _after: Option<&str>,
+        ) -> Result<SuccessfulTransactionsPage, Error> {
+            Ok(self
+                .successful_pages
+                .lock()
+                .unwrap()
+                .get_mut(address)
+                .and_then(VecDeque::pop_front)
+                .unwrap_or(SuccessfulTransactionsPage {
+                    items: Vec::new(),
+                    has_more: false,
+                }))
         }
 
         async fn decode_transaction(

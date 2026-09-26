@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS watch_targets (
     sources TEXT NOT NULL,
     enabled INTEGER NOT NULL DEFAULT 1,
     page_budget INTEGER NOT NULL DEFAULT 5,
+    high_activity_approved INTEGER NOT NULL DEFAULT 0,
     disable_reason_json TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -180,7 +181,7 @@ impl WatchDatabase {
         let conn = self.conn()?;
         let mut stmt = conn
             .prepare(
-                "SELECT id, address, label, sources, enabled, page_budget, disable_reason_json, created_at, updated_at \
+                "SELECT id, address, label, sources, enabled, page_budget, high_activity_approved, disable_reason_json, created_at, updated_at \
                  FROM watch_targets WHERE chain_id = ?1 ORDER BY created_at DESC",
             )
             .map_err(DatabaseError::from)?;
@@ -202,7 +203,7 @@ impl WatchDatabase {
     pub(super) fn get_target_sync(&self, id: i64) -> Result<Option<WatchTarget>, Error> {
         let conn = self.conn()?;
         conn.query_row(
-            "SELECT id, address, label, sources, enabled, page_budget, disable_reason_json, created_at, updated_at \
+            "SELECT id, address, label, sources, enabled, page_budget, high_activity_approved, disable_reason_json, created_at, updated_at \
              FROM watch_targets WHERE chain_id = ?1 AND id = ?2",
             params![self.chain.as_str(), id],
             Self::row_to_target,
@@ -223,7 +224,7 @@ impl WatchDatabase {
     fn get_target_by_address_sync(&self, address: &str) -> Result<Option<WatchTarget>, Error> {
         let conn = self.conn()?;
         conn.query_row(
-            "SELECT id, address, label, sources, enabled, page_budget, disable_reason_json, created_at, updated_at \
+            "SELECT id, address, label, sources, enabled, page_budget, high_activity_approved, disable_reason_json, created_at, updated_at \
              FROM watch_targets WHERE chain_id = ?1 AND address = ?2",
             params![self.chain.as_str(), address],
             Self::row_to_target,
@@ -327,7 +328,7 @@ impl WatchDatabase {
                  disable_reason_json = CASE WHEN ?1 = 0 THEN COALESCE(disable_reason_json, ?2) ELSE NULL END, \
                  updated_at = ?3 WHERE chain_id = ?4 AND id = ?5 \
                  AND (?1 = 0 OR disable_reason_json IS NULL OR \
-                   CASE WHEN json_valid(disable_reason_json) THEN json_extract(disable_reason_json, '$.kind') = 'user' ELSE 0 END)",
+                   CASE WHEN json_valid(disable_reason_json) THEN json_extract(disable_reason_json, '$.kind') IN ('user', 'helius_unavailable') ELSE 0 END)",
                 params![enabled, reason_json, now, self.chain.as_str(), id],
             )
             .map_err(DatabaseError::from)?;
@@ -396,8 +397,8 @@ impl WatchDatabase {
     fn row_to_target(row: &rusqlite::Row) -> rusqlite::Result<WatchTarget> {
         let sources_json: String = row.get(3)?;
         let sources: Vec<WatchSource> = serde_json::from_str(&sources_json).unwrap_or_default();
-        let created_str: String = row.get(7)?;
-        let updated_str: String = row.get(8)?;
+        let created_str: String = row.get(8)?;
+        let updated_str: String = row.get(9)?;
         let page_budget = row.get::<_, i64>(5)?.max(1) as usize;
         Ok(WatchTarget {
             id: Some(row.get(0)?),
@@ -406,8 +407,9 @@ impl WatchDatabase {
             sources,
             enabled: row.get::<_, i64>(4)? != 0,
             page_budget,
+            high_activity_approved: row.get::<_, i64>(6)? != 0,
             disable_reason: row
-                .get::<_, Option<String>>(6)?
+                .get::<_, Option<String>>(7)?
                 .map(|json| serde_json::from_str(&json).unwrap_or(WatchDisableReason::Unknown)),
             created_at: DateTime::parse_from_rfc3339(&created_str)
                 .map(|dt| dt.with_timezone(&Utc))
@@ -445,6 +447,17 @@ impl WatchDatabase {
         }).await.map_err(|error| Error::Internal(InternalError::from(error)))?
     }
 
+    pub async fn pause_for_reason(&self, id: i64, reason: WatchDisableReason) -> Result<(), Error> {
+        let db = self.clone();
+        tokio::task::spawn_blocking(move || {
+            let reason = serde_json::to_string(&reason).map_err(|error| Error::WatchSourcesDecode { detail: error.to_string() })?;
+            let conn = db.conn()?;
+            let affected = conn.execute("UPDATE watch_targets SET enabled=0, disable_reason_json=?1, updated_at=?2 WHERE chain_id=?3 AND id=?4", params![reason, Utc::now().to_rfc3339(), db.chain.as_str(), id]).map_err(DatabaseError::from)?;
+            if affected == 0 { return Err(Error::WatchTargetNotFound { address: format!("id={id}") }); }
+            Ok(())
+        }).await.map_err(|error| Error::Internal(InternalError::from(error)))?
+    }
+
     pub async fn set_page_budget(&self, id: i64, page_budget: usize) -> Result<(), Error> {
         let db = self.clone();
         tokio::task::spawn_blocking(move || {
@@ -456,6 +469,21 @@ impl WatchDatabase {
             if affected == 0 {
                 return Err(Error::WatchTargetNotFound { address: format!("id={id}") });
             }
+            Ok(())
+        }).await.map_err(|error| Error::Internal(InternalError::from(error)))?
+    }
+
+    /// Persist approval. A signature-budget pause resumes from the saved cursor,
+    /// so approval never discards unprocessed history.
+    pub async fn set_high_activity_approved(&self, id: i64, approved: bool) -> Result<(), Error> {
+        let db = self.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn = db.conn()?;
+            let affected = conn.execute(
+                "UPDATE watch_targets SET high_activity_approved=?1, enabled=CASE WHEN ?1=1 AND enabled=0 AND json_valid(disable_reason_json) AND json_extract(disable_reason_json, '$.kind')='signature_budget' THEN 1 ELSE enabled END, disable_reason_json=CASE WHEN ?1=1 AND enabled=0 AND json_valid(disable_reason_json) AND json_extract(disable_reason_json, '$.kind')='signature_budget' THEN NULL ELSE disable_reason_json END, updated_at=?2 WHERE chain_id=?3 AND id=?4",
+                params![approved, Utc::now().to_rfc3339(), db.chain.as_str(), id],
+            ).map_err(DatabaseError::from)?;
+            if affected == 0 { return Err(Error::WatchTargetNotFound { address: format!("id={id}") }); }
             Ok(())
         }).await.map_err(|error| Error::Internal(InternalError::from(error)))?
     }

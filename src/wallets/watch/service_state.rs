@@ -13,6 +13,8 @@ use std::time::Duration;
 use chrono::{DateTime, Utc};
 use tokio::sync::mpsc;
 
+use super::types::WatchMode;
+
 /// A WS notification whose transaction was not decodable yet.
 #[derive(Debug, Clone)]
 pub(super) struct WsRetry {
@@ -45,7 +47,7 @@ pub(super) fn schedule_ws_retry(tx: &mpsc::UnboundedSender<WsRetry>, retry: WsRe
     true
 }
 
-fn ws_retry_delay(attempt: u32) -> Option<Duration> {
+pub(super) fn ws_retry_delay(attempt: u32) -> Option<Duration> {
     (attempt < WS_RETRY_ATTEMPTS).then(|| WS_RETRY_BASE * 2u32.pow(attempt))
 }
 
@@ -53,6 +55,93 @@ fn ws_retry_delay(attempt: u32) -> Option<Duration> {
 /// claim a target streams: its subscription can fail or end independently.
 static SUBSCRIPTIONS: LazyLock<RwLock<HashMap<String, Arc<AtomicBool>>>> =
     LazyLock::new(|| RwLock::new(HashMap::new()));
+
+#[derive(Clone)]
+struct RuntimeStatus {
+    mode: WatchMode,
+    catching_up: bool,
+    last_checked_at: Option<DateTime<Utc>>,
+    last_error: Option<String>,
+}
+
+static RUNTIME_STATUS: LazyLock<RwLock<HashMap<String, RuntimeStatus>>> =
+    LazyLock::new(|| RwLock::new(HashMap::new()));
+
+pub(super) fn update_runtime_status(
+    address: &str,
+    mode: WatchMode,
+    catching_up: bool,
+    completed_successfully: bool,
+) {
+    let mut statuses = RUNTIME_STATUS.write().unwrap_or_else(|p| p.into_inner());
+    let last_error = if completed_successfully {
+        None
+    } else {
+        statuses
+            .get(address)
+            .and_then(|status| status.last_error.clone())
+    };
+    statuses.insert(
+        address.to_owned(),
+        RuntimeStatus {
+            mode,
+            catching_up,
+            last_checked_at: Some(Utc::now()),
+            last_error,
+        },
+    );
+}
+
+pub(super) fn remove_runtime_status(address: &str) {
+    RUNTIME_STATUS
+        .write()
+        .unwrap_or_else(|p| p.into_inner())
+        .remove(address);
+}
+
+pub(super) fn watch_mode(address: &str) -> WatchMode {
+    RUNTIME_STATUS
+        .read()
+        .unwrap_or_else(|p| p.into_inner())
+        .get(address)
+        .map(|status| status.mode)
+        .unwrap_or(WatchMode::Standard)
+}
+
+pub(super) fn catching_up(address: &str) -> bool {
+    RUNTIME_STATUS
+        .read()
+        .unwrap_or_else(|p| p.into_inner())
+        .get(address)
+        .is_some_and(|status| status.catching_up)
+}
+
+pub(super) fn last_checked_at(address: &str) -> Option<DateTime<Utc>> {
+    RUNTIME_STATUS
+        .read()
+        .unwrap_or_else(|p| p.into_inner())
+        .get(address)
+        .and_then(|status| status.last_checked_at)
+}
+
+pub(super) fn set_runtime_error(address: &str, summary: &'static str) {
+    let mut statuses = RUNTIME_STATUS.write().unwrap_or_else(|p| p.into_inner());
+    let status = statuses.entry(address.to_owned()).or_insert(RuntimeStatus {
+        mode: WatchMode::Standard,
+        catching_up: false,
+        last_checked_at: None,
+        last_error: None,
+    });
+    status.last_error = Some(summary.to_owned());
+}
+
+pub(super) fn runtime_error(address: &str) -> Option<String> {
+    RUNTIME_STATUS
+        .read()
+        .unwrap_or_else(|p| p.into_inner())
+        .get(address)
+        .and_then(|status| status.last_error.clone())
+}
 
 pub(super) fn set_subscription(address: String, active: Arc<AtomicBool>) {
     SUBSCRIPTIONS
@@ -100,5 +189,19 @@ mod tests {
         assert!(subscription_active("SatAddr"));
         remove_subscription("SatAddr");
         assert!(!subscription_active("SatAddr"));
+    }
+
+    #[test]
+    fn failed_status_update_keeps_safe_runtime_error_until_a_successful_check() {
+        let address = "status-preserve";
+        set_runtime_error(address, "High-activity provider check failed; retrying");
+        update_runtime_status(address, WatchMode::HeliusHighActivity, true, false);
+        assert_eq!(
+            runtime_error(address).as_deref(),
+            Some("High-activity provider check failed; retrying")
+        );
+        update_runtime_status(address, WatchMode::HeliusHighActivity, false, true);
+        assert!(runtime_error(address).is_none());
+        remove_runtime_status(address);
     }
 }
