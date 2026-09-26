@@ -27,27 +27,20 @@ pub(super) async fn pause_detached_tasks(database: &CopyDatabase) -> crate::trad
         if !task.enabled {
             continue;
         }
-        let budget_reason =
+        let pause_reason =
             match crate::wallets::watch::copy_source_disable_reason(task.id, &task.target_address)
                 .await
             {
-                Ok(Some(crate::wallets::watch::WatchDisableReason::SignatureBudget {
-                    page_budget,
-                    signatures_checked,
-                })) => Some(CopyPauseReason::WatchBudgetExceeded {
-                    page_budget,
-                    signatures_checked,
-                }),
-                Ok(_) => None,
+                Ok(reason) => watch_pause_reason(reason.as_ref()),
                 Err(_) => return Ok(()),
             };
-        if task.updated_at > settled_before && budget_reason.is_none() {
+        if task.updated_at > settled_before && pause_reason.is_none() {
             continue;
         }
         match crate::wallets::watch::copy_source_active(task.id, &task.target_address).await {
             Ok(true) => {}
             Ok(false) => {
-                let reason = budget_reason.unwrap_or(CopyPauseReason::WatchDetached);
+                let reason = pause_reason.unwrap_or(CopyPauseReason::WatchDetached);
                 if database.pause_task(task.id, reason.clone()).await? {
                     notify::announce_pause(&task, &reason).await;
                     logger::warning(
@@ -75,7 +68,11 @@ pub(super) async fn sync_paused_watches(database: &CopyDatabase) -> crate::trade
         if task.enabled
             || matches!(
                 task.pause_reason,
-                Some(CopyPauseReason::WatchDetached | CopyPauseReason::WatchBudgetExceeded { .. })
+                Some(
+                    CopyPauseReason::WatchDetached
+                        | CopyPauseReason::WatchBudgetExceeded { .. }
+                        | CopyPauseReason::HeliusUnavailable
+                )
             )
         {
             continue;
@@ -91,6 +88,24 @@ pub(super) async fn sync_paused_watches(database: &CopyDatabase) -> crate::trade
         }
     }
     Ok(())
+}
+
+fn watch_pause_reason(
+    reason: Option<&crate::wallets::watch::WatchDisableReason>,
+) -> Option<CopyPauseReason> {
+    match reason {
+        Some(crate::wallets::watch::WatchDisableReason::SignatureBudget {
+            page_budget,
+            signatures_checked,
+        }) => Some(CopyPauseReason::WatchBudgetExceeded {
+            page_budget: *page_budget,
+            signatures_checked: *signatures_checked,
+        }),
+        Some(crate::wallets::watch::WatchDisableReason::HeliusUnavailable) => {
+            Some(CopyPauseReason::HeliusUnavailable)
+        }
+        _ => None,
+    }
 }
 
 pub(super) async fn apply_latency_kill_switch(
@@ -190,30 +205,83 @@ pub(super) async fn reject_stale_backfill(
     tasks: &[CopyTask],
     mint: &str,
 ) -> crate::trader::Result<bool> {
-    if !activity.backfill {
-        return Ok(false);
-    }
     let threshold_ms = with_config(|config| config.copy_trading.max_arrival_distance_ms);
-    let Some(arrival_ms) = arrival_distance_ms(&observation_telemetry(activity)) else {
+    let Some(reason) = backfill_skip_reason(
+        activity.backfill,
+        arrival_distance_ms(&observation_telemetry(activity)),
+        threshold_ms,
+    ) else {
         return Ok(false);
     };
-    if arrival_ms <= threshold_ms {
-        return Ok(false);
-    }
     for task in tasks {
-        notify::record(
-            database,
-            skipped(
-                task.id,
-                activity,
-                mint,
-                CopySkip::StaleObservation {
-                    arrival_ms,
-                    threshold_ms,
-                },
-            ),
-        )
-        .await?;
+        notify::record(database, skipped(task.id, activity, mint, reason.clone())).await?;
     }
     Ok(true)
+}
+
+fn backfill_skip_reason(
+    backfill: bool,
+    arrival_ms: Option<u64>,
+    threshold_ms: u64,
+) -> Option<CopySkip> {
+    if !backfill {
+        return None;
+    }
+    match arrival_ms {
+        Some(arrival_ms) if arrival_ms > threshold_ms => Some(CopySkip::StaleObservation {
+            arrival_ms,
+            threshold_ms,
+        }),
+        Some(_) => None,
+        None => Some(CopySkip::UnknownObservationTime),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{backfill_skip_reason, watch_pause_reason};
+    use crate::trader::copy::{CopyPauseReason, CopySkip};
+    use crate::wallets::watch::WatchDisableReason;
+
+    const THRESHOLD_MS: u64 = 5_000;
+
+    #[test]
+    fn backfilled_observation_without_a_block_time_is_refused() {
+        assert_eq!(
+            backfill_skip_reason(true, None, THRESHOLD_MS),
+            Some(CopySkip::UnknownObservationTime)
+        );
+    }
+
+    #[test]
+    fn stale_backfilled_observation_is_refused() {
+        assert_eq!(
+            backfill_skip_reason(true, Some(THRESHOLD_MS + 1), THRESHOLD_MS),
+            Some(CopySkip::StaleObservation {
+                arrival_ms: THRESHOLD_MS + 1,
+                threshold_ms: THRESHOLD_MS,
+            })
+        );
+    }
+
+    #[test]
+    fn fresh_backfilled_observation_is_allowed() {
+        assert_eq!(
+            backfill_skip_reason(true, Some(THRESHOLD_MS), THRESHOLD_MS),
+            None
+        );
+    }
+
+    #[test]
+    fn non_backfill_without_a_block_time_is_unchanged() {
+        assert_eq!(backfill_skip_reason(false, None, THRESHOLD_MS), None);
+    }
+
+    #[test]
+    fn helius_capability_pause_keeps_its_reason() {
+        assert_eq!(
+            watch_pause_reason(Some(&WatchDisableReason::HeliusUnavailable)),
+            Some(CopyPauseReason::HeliusUnavailable)
+        );
+    }
 }

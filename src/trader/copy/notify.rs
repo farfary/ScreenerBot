@@ -196,6 +196,9 @@ pub(super) async fn announce_pause(task: &CopyTask, reason: &CopyPauseReason) {
             page_budget * crate::wallets::watch::PAGE_SIZE,
             page_budget
         ),
+        CopyPauseReason::HeliusUnavailable => {
+            "Helius high-activity checks are unavailable for this wallet".to_owned()
+        }
     };
     publish(
         task_name(task),

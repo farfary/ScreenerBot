@@ -61,6 +61,7 @@ pub enum CopyPauseReason {
         page_budget: usize,
         signatures_checked: usize,
     },
+    HeliusUnavailable,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -337,6 +338,8 @@ pub enum CopySkip {
         arrival_ms: u64,
         threshold_ms: u64,
     },
+    /// A replayed observation has no block time, so its age cannot be bounded.
+    UnknownObservationTime,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -608,6 +611,14 @@ mod tests {
                 "page_budget": 8,
                 "signatures_checked": 800
             })
+        );
+    }
+
+    #[test]
+    fn helius_pause_exposes_a_distinct_dashboard_reason() {
+        assert_eq!(
+            serde_json::to_value(CopyPauseReason::HeliusUnavailable).unwrap(),
+            serde_json::json!({"kind": "helius_unavailable"})
         );
     }
 
