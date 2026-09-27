@@ -133,9 +133,6 @@
   color: var(--semantic-success-text);
   background: var(--success-alpha-10);
   border-color: var(--success-alpha-30);
-}
-
-.setup-step.completed .setup-step-number {
   font-size: 0;
 }
 

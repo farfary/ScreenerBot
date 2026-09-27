@@ -533,7 +533,7 @@
 }
 
 /* High Contrast */
-@media (prefers-contrast: high) {
+@media (prefers-contrast: more) {
   .floating-panel {
     border-width: 2px;
   }

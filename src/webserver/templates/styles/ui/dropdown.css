@@ -27,6 +27,7 @@
 
 [data-theme="dark"] .dropdown-menu {
   background: var(--floating-bg-blur);
+  box-shadow: var(--shadow-floating-md);
 }
 
 [data-theme="light"] .dropdown-menu {
@@ -164,11 +165,6 @@
   display: flex;
   align-items: center;
   gap: 4px;
-}
-
-/* Dark theme badge adjustments */
-[data-theme="dark"] .dropdown-menu {
-  box-shadow: var(--shadow-floating-md);
 }
 
 [data-theme="dark"] .links-dropdown-menu,

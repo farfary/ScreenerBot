@@ -85,9 +85,4 @@ _backup/
 # Architecture docs — kept on disk, not part of the public repo
 /docs/
 
-# Lint/format configs (development only)
-.htmlvalidate.json
-.prettierrc.json
-.stylelintrc.json
-eslint.config.js
-
+# Frontend validation and formatting configs are versioned with package.json.

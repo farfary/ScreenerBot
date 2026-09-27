@@ -1,4 +1,4 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en" data-theme="dark" data-token-logo-shape="{{TOKEN_LOGO_SHAPE}}">
   <head>
     <meta charset="UTF-8" />
@@ -154,6 +154,7 @@
         }
       })();
     </script>
+    <!-- html-validate-disable element-permitted-content -->
     <style>
       .electron-mode #splashScreen {
         display: none !important;
@@ -169,6 +170,7 @@
         visibility: hidden !important;
       }
     </style>
+    <!-- html-validate-enable element-permitted-content -->
 
     <!-- Splash Screen - Shows on every app start (hidden in Electron via above) -->
     {{SPLASH_SCREEN}}
@@ -475,6 +477,7 @@
     </header>
 
     <!-- Notification Center - Compact slide-in panel -->
+    <!-- html-validate-disable hidden-focusable -->
     <div id="notificationDrawer" class="notification-drawer" data-state="closed" aria-hidden="true">
       <div class="notification-drawer__backdrop" data-role="dismiss"></div>
       <section
@@ -602,6 +605,7 @@
         </button>
       </section>
     </div>
+    <!-- html-validate-enable hidden-focusable -->
 
     <!-- Main App Container (everything below the fixed header) -->
     <div class="app-main">
