@@ -29,7 +29,51 @@ function replaceOnce(source, search, replacement, invariant) {
 
 /** Apply the product invariants that electron-wix-msi does not expose as options. */
 function customizeWindowsInstaller(creator) {
-  let template = creator.wixTemplate;
+  let template = creator.wixTemplate.replace(/[ \t]+(?=\r?$)/gm, '').replace(/\r\n/g, '\n');
+  template = replaceOnce(
+    template,
+    `    <!-- Lets cleanup any files that are were not part of the initial install
+    via this MSI. Such as newer versions installed by the auto-updater. -->
+    <DirectoryRef Id="APPLICATIONROOTDIRECTORY">
+      <Component Id="PurgeOnUninstall" Guid="{{RandomGuid}}" Win64="{{Win64YesNo}}">
+        <CreateFolder/>
+        <util:RemoveFolderEx On="uninstall" Property="INSTALLPATH" />
+      </Component>
+    </DirectoryRef>
+
+`,
+    '',
+    'recursive uninstall purge',
+  );
+  template = replaceOnce(
+    template,
+    '        <ComponentRef Id="PurgeOnUninstall" />\n',
+    '',
+    'recursive purge component reference',
+  );
+  template = replaceOnce(
+    template,
+    `    <!-- Necessary registry search to find the install path which is used by the
+    PurgeOnUninstall action. Since this package can be installed perUser or perMachine,
+    we have to look in both places. First successful search wins. -->
+    <Property Id="INSTALLPATH">
+      <RegistrySearch Key="SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{{{ProductCode}}}.msq"
+                      Root="HKCU"
+                      Type="raw"
+                      Id="INSTALLPATH_REGSEARCH_HKCU"
+                      Name="InstallPath"
+                      Win64="{{Win64YesNo}}"/>
+      <RegistrySearch Key="SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{{{ProductCode}}}.msq"
+                      Root="HKLM"
+                      Type="raw"
+                      Id="INSTALLPATH_REGSEARCH_HKLM"
+                      Name="InstallPath"
+                      Win64="{{Win64YesNo}}"/>
+    </Property>
+`,
+    '',
+    'recursive purge install path lookup',
+  );
   template = replaceOnce(
     template,
     'InstallerVersion="405"',
@@ -91,6 +135,12 @@ function verifyWindowsInstallerSource(source, architecture) {
   requireMatch(source, /InstallerVersion="500"/, 'Windows Installer schema must be version 500');
   requireMatch(source, /InstallScope="perMachine"/, 'installation scope changed');
   requireMatch(source, /<MajorUpgrade\b/, 'major-upgrade handling is missing');
+  if (/<(?:util:)?RemoveFolderEx\b|\bPurgeOnUninstall\b|<Property Id="INSTALLPATH"/.test(source)) {
+    throw new Error('Invalid Windows installer source: recursive uninstall purge is present');
+  }
+  if (/\bConfigurableDirectory=/.test(source)) {
+    throw new Error('Invalid Windows installer source: custom install directory is enabled');
+  }
   requireMatch(
     source,
     /<Property Id="VisibleProductName" Value="ScreenerBot" \/>/,

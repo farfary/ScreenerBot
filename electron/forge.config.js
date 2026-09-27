@@ -158,7 +158,7 @@ module.exports = {
         // user-facing product name are release invariants, not maker defaults.
         ...windowsInstallerIdentity(targetArch),
         ui: {
-          chooseDirectory: true, // Allow user to choose install directory
+          chooseDirectory: false,
         },
         // Authenticode is optional until a certificate is affordable. Release
         // integrity is still enforced independently with GitHub's asset digest.

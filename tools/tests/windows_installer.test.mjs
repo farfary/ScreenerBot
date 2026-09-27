@@ -2,10 +2,17 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 const forgeConfigPath = fileURLToPath(new URL("../../electron/forge.config.js", import.meta.url));
+const requireFromElectron = createRequire(forgeConfigPath);
+const MSI_TEMPLATE = readFileSync(
+  join(dirname(requireFromElectron.resolve("electron-wix-msi/lib/creator")), "../static/wix.xml"),
+  "utf8",
+);
 const {
   APP_ID,
   UPGRADE_CODES,
@@ -14,27 +21,16 @@ const {
   windowsInstallerIdentity,
 } = require("../../electron/tools/windows-installer.js");
 
-const BASE_TEMPLATE = `
-<Wix>
-  <Product UpgradeCode="{{UpgradeCode}}" Name = "{{ApplicationName}} (Machine - MSI)">
-    <Package InstallerVersion="405" Platform="{{Platform}}" InstallScope="{{PackageScope}}"/>
-    <MajorUpgrade AllowSameVersionUpgrades="yes" />
-    <Property Id="VisibleProductName" Value="{{ApplicationName}} (Machine)" />
-    <SetProperty Action="SetVisibleProductName" Id="VisibleProductName" Value="{{ApplicationName}} (User)">
-      MSIINSTALLPERUSER = "1"
-    </SetProperty>
-  </Product>
-</Wix>`;
-
 function renderedSource(architecture) {
   const identity = windowsInstallerIdentity(architecture);
-  const creator = { wixTemplate: BASE_TEMPLATE };
+  const creator = { wixTemplate: MSI_TEMPLATE };
   identity.beforeCreate(creator);
   return creator.wixTemplate
     .replaceAll("{{ApplicationName}}", "ScreenerBot")
     .replaceAll("{{UpgradeCode}}", identity.upgradeCode)
     .replaceAll("{{Platform}}", identity.arch)
-    .replaceAll("{{PackageScope}}", identity.defaultInstallMode);
+    .replaceAll("{{PackageScope}}", identity.defaultInstallMode)
+    .replaceAll("{{ConfigurableDirectory}}", "");
 }
 
 test("Windows installer identities remain stable and architecture-specific", () => {
@@ -64,6 +60,7 @@ test("Forge uses the requested Windows architecture for MSI and bundled runtime"
       process.stdout.write(JSON.stringify({
         arch: wix.config.arch,
         upgradeCode: wix.config.upgradeCode,
+        chooseDirectory: wix.config.ui.chooseDirectory,
         runtime: config.packagerConfig.extraResource.find((resource) => resource.includes('vc_redist.')),
       }));
     `;
@@ -74,6 +71,7 @@ test("Forge uses the requested Windows architecture for MSI and bundled runtime"
     assert.equal(config.arch, architecture);
     assert.equal(config.upgradeCode, UPGRADE_CODES[architecture]);
     assert.ok(config.runtime.endsWith(`vc_redist.${architecture}.exe`));
+    assert.equal(config.chooseDirectory, false);
   }
 });
 
@@ -86,6 +84,18 @@ test("the public Apps entry omits installer scope", () => {
   }
 });
 
+test("installer omits recursive uninstall cleanup", () => {
+  for (const architecture of ["x64", "arm64"]) {
+    const source = renderedSource(architecture);
+    assert.doesNotMatch(source, /RemoveFolderEx|PurgeOnUninstall|<Property Id="INSTALLPATH"/);
+    assert.doesNotMatch(source, /ConfigurableDirectory=/);
+    assert.throws(
+      () => verifyWindowsInstallerSource(`${source}<util:RemoveFolderEx On="uninstall" />`, architecture),
+      /recursive uninstall purge/,
+    );
+  }
+});
+
 test("ARM64 packages are authored as ARM64 with schema 500", () => {
   const source = renderedSource("arm64");
   assert.match(source, /Platform="arm64"/);
@@ -95,7 +105,11 @@ test("ARM64 packages are authored as ARM64 with schema 500", () => {
 
 test("template drift fails before an installer can silently regress", () => {
   assert.throws(
-    () => customizeWindowsInstaller({ wixTemplate: BASE_TEMPLATE.replace(" (Machine)", "") }),
+    () => customizeWindowsInstaller({ wixTemplate: MSI_TEMPLATE.replace('<util:RemoveFolderEx On="uninstall"', '<util:RemoveFolderEx On="both"') }),
+    /expected one recursive uninstall purge, found 0/,
+  );
+  assert.throws(
+    () => customizeWindowsInstaller({ wixTemplate: MSI_TEMPLATE.replace(" (Machine)", "") }),
     /expected one per-machine display name, found 0/,
   );
 });
