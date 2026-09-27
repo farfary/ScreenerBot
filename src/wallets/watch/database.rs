@@ -328,7 +328,7 @@ impl WatchDatabase {
                  disable_reason_json = CASE WHEN ?1 = 0 THEN COALESCE(disable_reason_json, ?2) ELSE NULL END, \
                  updated_at = ?3 WHERE chain_id = ?4 AND id = ?5 \
                  AND (?1 = 0 OR disable_reason_json IS NULL OR \
-                   CASE WHEN json_valid(disable_reason_json) THEN json_extract(disable_reason_json, '$.kind') IN ('user', 'helius_unavailable') ELSE 0 END)",
+                   CASE WHEN json_valid(disable_reason_json) THEN json_extract(disable_reason_json, '$.kind') IN ('user', 'helius_unavailable', 'processing_failed') ELSE 0 END)",
                 params![enabled, reason_json, now, self.chain.as_str(), id],
             )
             .map_err(DatabaseError::from)?;

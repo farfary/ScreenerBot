@@ -72,6 +72,7 @@ pub(super) async fn sync_paused_watches(database: &CopyDatabase) -> crate::trade
                     CopyPauseReason::WatchDetached
                         | CopyPauseReason::WatchBudgetExceeded { .. }
                         | CopyPauseReason::HeliusUnavailable
+                        | CopyPauseReason::WatchProcessingFailed
                 )
             )
         {
@@ -103,6 +104,9 @@ fn watch_pause_reason(
         }),
         Some(crate::wallets::watch::WatchDisableReason::HeliusUnavailable) => {
             Some(CopyPauseReason::HeliusUnavailable)
+        }
+        Some(crate::wallets::watch::WatchDisableReason::ProcessingFailed) => {
+            Some(CopyPauseReason::WatchProcessingFailed)
         }
         _ => None,
     }
@@ -282,6 +286,14 @@ mod tests {
         assert_eq!(
             watch_pause_reason(Some(&WatchDisableReason::HeliusUnavailable)),
             Some(CopyPauseReason::HeliusUnavailable)
+        );
+    }
+
+    #[test]
+    fn watch_processing_pause_keeps_its_reason() {
+        assert_eq!(
+            watch_pause_reason(Some(&WatchDisableReason::ProcessingFailed)),
+            Some(CopyPauseReason::WatchProcessingFailed)
         );
     }
 }

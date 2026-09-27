@@ -50,7 +50,7 @@ export function createWatchedWallets({
     },
     {
       id: "_lastActivity",
-      label: "Cursor updated",
+      label: "Progress saved",
       sortable: true,
       minWidth: 140,
       render: (value) => (value ? formatTime(value) : "Not synced yet"),
@@ -70,9 +70,8 @@ export function createWatchedWallets({
       render: (value, row) => `
         <div class="watched-wallet-actions">
           <button class="btn" type="button" data-watch-action="copy" data-watch-id="${row.id}" title="Open this wallet in Copy Trading">Copy trade</button>
-          <button class="btn" type="button" data-watch-action="budget" data-watch-id="${row.id}">${row.disable_reason?.kind === "signature_budget" ? "Resume watch" : "Watch limit"}</button>
-          <button class="btn" type="button" data-watch-action="high-activity" data-watch-id="${row.id}">${row.high_activity_approved ? "Disable Helius" : "Use Helius"}</button>
-          ${row.disable_reason?.kind === "signature_budget" ? "" : row.disable_reason?.kind === "helius_unavailable" ? `<button class="btn btn-primary" type="button" data-watch-action="retry" data-watch-id="${row.id}">Retry watch</button>` : `<button class="btn" type="button" data-watch-action="toggle" data-watch-id="${row.id}">${row.enabled ? "Pause" : "Enable"}</button>`}
+          <button class="btn" type="button" data-watch-action="budget" data-watch-id="${row.id}">${row.disable_reason?.kind === "signature_budget" ? "Restore watch" : "Watch options"}</button>
+          ${row.disable_reason?.kind === "signature_budget" ? "" : ["helius_unavailable", "processing_failed"].includes(row.disable_reason?.kind) ? `<button class="btn btn-primary" type="button" data-watch-action="retry" data-watch-id="${row.id}">Retry watch</button>` : `<button class="btn" type="button" data-watch-action="toggle" data-watch-id="${row.id}">${row.enabled ? "Pause" : "Enable"}</button>`}
           <button class="btn-icon danger" type="button" data-watch-action="delete" data-watch-id="${row.id}" title="Remove" aria-label="Remove ${Utils.escapeHtml(row.label || "wallet")}"><i class="icon-trash-2"></i></button>
         </div>`,
     },
@@ -95,6 +94,9 @@ export function createWatchedWallets({
 
     const budgetForm = $("#watch-budget-form");
     if (budgetForm) on(budgetForm, "submit", saveBudget);
+    on($("#watch-helius-action"), "click", () => {
+      if (budgetTarget) void setHeliusApproval(budgetTarget, $("#watch-helius-action"));
+    });
     on($("#watch-page-budget"), "input", syncBudgetSubmit);
     on($("#watch-budget-ack"), "change", syncBudgetSubmit);
     ["#watch-budget-close", "#watch-budget-cancel"].forEach((selector) => {
@@ -137,8 +139,11 @@ export function createWatchedWallets({
     if (input)
       input.value = String(pausedForBudget ? Math.min(5000, currentLimit + 500) : currentLimit);
     const title = $("#watch-budget-title");
-    if (title) title.textContent = pausedForBudget ? "Resume wallet watch" : "Wallet watch limit";
-    const highActivity = statuses.get(target.id)?.mode === "helius_high_activity";
+    if (title)
+      title.textContent = pausedForBudget ? "Restore wallet watch" : "Wallet watch options";
+    const status = statuses.get(target.id);
+    const helius = status?.catch_up_options?.find((option) => option.provider === "helius");
+    const highActivity = status?.mode === "helius_high_activity";
     const label = $("#watch-page-budget-label");
     if (label)
       label.textContent = highActivity
@@ -147,8 +152,25 @@ export function createWatchedWallets({
     const hint = $("#watch-budget-hint");
     if (hint)
       hint.textContent = highActivity
-        ? `Current limit: ${currentLimit.toLocaleString()}. Choose 500–5,000 successful full transactions per check in steps of 100. Helius charges 10 credits per 100 full transactions returned, rounded up, with a 10 credit minimum per request. A check can make multiple requests, and pricing can change.`
+        ? `Current limit: ${currentLimit.toLocaleString()}. Choose 500–5,000 successful transactions per check in steps of 100.`
         : `Current limit: ${currentLimit.toLocaleString()}. Choose 500–5,000 signatures per check in steps of 100.`;
+    const heliusDescription = $("#watch-helius-description");
+    const heliusAction = $("#watch-helius-action");
+    if (heliusDescription && heliusAction) {
+      heliusAction.classList.toggle("hidden", !target.high_activity_approved && !helius?.available);
+      heliusAction.textContent = target.high_activity_approved
+        ? "Stop Helius catch-up for this wallet"
+        : pausedForBudget
+          ? "Try to catch up using Helius"
+          : "Allow Helius catch-up if needed";
+      heliusDescription.textContent = target.high_activity_approved
+        ? "Helius catch-up is allowed for this wallet. Turning it off returns to standard checks, which may fall behind on a busy wallet."
+        : helius?.available
+          ? "Helius can check successful Solana transactions from the saved position without skipping the unchecked interval. It may use more provider credits and can still fall behind."
+          : helius
+            ? "Helius catch-up is unavailable. Configure an enabled Helius RPC endpoint to use it."
+            : "No catch-up provider is supported for this watch. Resume from now is available if the watch reaches its limit.";
+    }
     $("#watch-budget-resume-notice")?.classList.toggle("hidden", !pausedForBudget);
     const ack = $("#watch-budget-ack");
     if (ack) ack.checked = false;
@@ -388,6 +410,59 @@ export function createWatchedWallets({
     }
   }
 
+  async function setHeliusApproval(target, button) {
+    const approved = !target.high_activity_approved;
+    const status = statuses.get(target.id);
+    const helius = status?.catch_up_options?.find((option) => option.provider === "helius");
+    if (approved && !helius?.available) return;
+    const result = await confirm(
+      approved
+        ? {
+            title: "Allow Helius catch-up for this wallet",
+            message:
+              "Helius can check successful Solana transactions from the saved position without skipping the unchecked interval. It currently charges 10 credits per 100 full transactions returned, rounded up, with a 10 credit minimum per request. A check can make multiple requests; usage and provider pricing may vary. Copy tasks remain paused until resumed separately.",
+            confirmLabel: "Allow for this wallet",
+            cancelLabel: "Cancel",
+            variant: "warning",
+          }
+        : {
+            title: "Stop Helius catch-up for this wallet",
+            message:
+              "This wallet will return to standard checks. A busy wallet may reach its watch limit and pause again. Other wallets and your Helius RPC configuration are unchanged.",
+            confirmLabel: "Stop for this wallet",
+            cancelLabel: "Keep allowed",
+            variant: "warning",
+          }
+    );
+    if (!result.confirmed) return;
+    button.disabled = true;
+    try {
+      await requestManager.fetch(`/api/wallets/watch/${target.id}/high-activity-approval`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ approved, acknowledge_provider_usage: approved }),
+        priority: "high",
+        skipDedup: true,
+      });
+      hideBudgetModal();
+      Utils.showToast(
+        approved
+          ? target.disable_reason?.kind === "signature_budget"
+            ? "Watch restored from saved progress; copy tasks remain paused"
+            : "Helius catch-up allowed for this wallet when needed"
+          : "Helius catch-up stopped for this wallet",
+        "success"
+      );
+      await load({ force: true });
+    } catch (error) {
+      Utils.showToast(
+        error.detail || error.message || "Wallet catch-up setting could not be updated",
+        "error"
+      );
+      button.disabled = false;
+    }
+  }
+
   async function handleListAction(event) {
     const button = event.target.closest("button[data-watch-action]");
     if (!button) return;
@@ -397,44 +472,6 @@ export function createWatchedWallets({
     if (!target) return;
     if (action === "copy") {
       openCopyForWallet(target.address, target.label || null);
-      return;
-    }
-    if (action === "high-activity") {
-      const approved = !target.high_activity_approved;
-      if (approved) {
-        const result = await confirm({
-          title: "Enable Helius high-activity checks",
-          message:
-            "Helius currently charges 10 credits per 100 full transactions returned, rounded up, with a 10 credit minimum per request. A check can make multiple requests and return up to 1,000 records per request, so usage can vary as provider pricing changes. Active wallets are paced, with an idle safety check. This restores the saved cursor and does not skip history.",
-          confirmLabel: "Enable Helius",
-          cancelLabel: "Keep standard watch",
-          variant: "warning",
-        });
-        if (!result.confirmed) return;
-      }
-      button.disabled = true;
-      try {
-        await requestManager.fetch(`/api/wallets/watch/${id}/high-activity-approval`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ approved, acknowledge_provider_usage: approved }),
-          priority: "high",
-          skipDedup: true,
-        });
-        Utils.showToast(
-          approved
-            ? "Helius approval saved; watch resumed from its saved cursor"
-            : "Helius approval removed",
-          "success"
-        );
-        await load({ force: true });
-      } catch (error) {
-        Utils.showToast(
-          error.detail || error.message || "Helius approval could not be updated",
-          "error"
-        );
-        button.disabled = false;
-      }
       return;
     }
     if (
@@ -489,23 +526,19 @@ export function createWatchedWallets({
       const status = statuses.get(target.id);
       const highActivity = status?.mode === "helius_high_activity";
       const state = !target.enabled
-        ? highActivity
-          ? "Paused · Helius high-activity checks"
-          : "Paused"
-        : highActivity
-          ? status?.catching_up
-            ? "Helius high-activity checks · catching up"
-            : "Helius high-activity checks"
-          : status?.catching_up
-            ? "Polling · catching up"
+        ? "Paused"
+        : status?.catching_up
+          ? "Catching up"
+          : highActivity
+            ? "Watching"
             : status?.subscribed
               ? "Streaming"
               : "Polling";
       const stateClass = !target.enabled
         ? "is-paused"
-        : highActivity
-          ? "is-high-activity"
-          : status?.subscribed
+        : status?.catching_up
+          ? "is-polling"
+          : highActivity || status?.subscribed
             ? "is-streaming"
             : "is-polling";
       return {
@@ -514,17 +547,17 @@ export function createWatchedWallets({
         _stateClass: stateClass,
         _reason:
           target.disable_reason?.kind === "signature_budget"
-            ? `Reached the ${(Number(target.disable_reason.page_budget) || 5) * 100}-record check limit before catching up.`
+            ? "This wallet has more activity than its current watch can check."
             : target.disable_reason?.kind === "user"
               ? "Paused by you."
               : target.disable_reason?.kind === "helius_unavailable"
-                ? target.high_activity_approved
-                  ? "Restore Helius high-activity support before retrying. The saved cursor is preserved; stale trades still need to meet the copy arrival limit."
-                  : "Helius approval is off. Retry to use standard wallet watch from the saved cursor; the watch limit may be reached again."
-                : "",
-        _detail: highActivity
-          ? `Helius approval is active. Filters failed transactions and checks successful records in chronological order on the configured active cadence, with an idle safety check. Helius charges 10 credits per 100 full transactions returned, rounded up, with a 10 credit minimum per request.${status?.last_error ? ` Last error: ${status.last_error}` : ""}`
-          : status?.last_error || "",
+                ? "Helius checks failed. Saved progress is preserved."
+                : target.disable_reason?.kind === "processing_failed"
+                  ? "Wallet activity could not be processed. Saved progress is preserved."
+                  : "",
+        _detail: target.enabled
+          ? status?.last_error || (highActivity ? "Checking through Helius for this wallet." : "")
+          : "",
         _lastActivity: status?.last_activity_at || null,
         _lastCheck: status?.last_checked_at || null,
       };

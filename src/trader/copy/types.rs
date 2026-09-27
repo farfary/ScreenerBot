@@ -62,6 +62,7 @@ pub enum CopyPauseReason {
         signatures_checked: usize,
     },
     HeliusUnavailable,
+    WatchProcessingFailed,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -619,6 +620,14 @@ mod tests {
         assert_eq!(
             serde_json::to_value(CopyPauseReason::HeliusUnavailable).unwrap(),
             serde_json::json!({"kind": "helius_unavailable"})
+        );
+    }
+
+    #[test]
+    fn processing_pause_exposes_a_distinct_dashboard_reason() {
+        assert_eq!(
+            serde_json::to_value(CopyPauseReason::WatchProcessingFailed).unwrap(),
+            serde_json::json!({"kind": "watch_processing_failed"})
         );
     }
 

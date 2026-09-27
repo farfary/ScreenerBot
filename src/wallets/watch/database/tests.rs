@@ -321,7 +321,7 @@ async fn helius_pause_requires_an_explicit_retry_and_preserves_its_cursor() {
     assert!(matches!(
         db.upsert_source("Helius1111", None, WatchSource::Copy { task_id: 7 })
             .await,
-        Err(Error::WatchHeliusRetryRequired { .. })
+        Err(Error::WatchRetryRequired { .. })
     ));
     assert_eq!(
         db.get_target(id).await.unwrap().unwrap().sources,
@@ -335,6 +335,33 @@ async fn helius_pause_requires_an_explicit_retry_and_preserves_its_cursor() {
     assert_eq!(resumed.disable_reason, None);
     assert_eq!(
         db.get_cursor("Helius1111").await.unwrap().as_deref(),
+        Some("last-complete-check")
+    );
+}
+
+#[tokio::test]
+async fn processing_pause_requires_an_explicit_retry_and_preserves_its_cursor() {
+    let (db, _dir) = temp_db();
+    let target = db
+        .insert_alert_target("Processing1111", None)
+        .await
+        .unwrap();
+    let id = target.id.unwrap();
+    db.set_cursor("Processing1111", "last-complete-check")
+        .await
+        .unwrap();
+    db.pause_for_reason(id, WatchDisableReason::ProcessingFailed)
+        .await
+        .unwrap();
+
+    assert!(matches!(
+        db.upsert_source("Processing1111", None, WatchSource::Copy { task_id: 7 })
+            .await,
+        Err(Error::WatchRetryRequired { .. })
+    ));
+    db.set_enabled(id, true).await.unwrap();
+    assert_eq!(
+        db.get_cursor("Processing1111").await.unwrap().as_deref(),
         Some("last-complete-check")
     );
 }

@@ -17,7 +17,7 @@ use super::poller;
 use super::runtime::WalletWatchRuntime;
 use super::service::{self, ProcessOutcome};
 use super::service_state::{self, WsRetry};
-use super::types::{WatchNotification, WatchSource, WatchTarget};
+use super::types::{WatchDisableReason, WatchNotification, WatchSource, WatchTarget};
 
 const TARGET_EVENT_CAPACITY: usize = 64;
 const TARGET_COMMAND_CAPACITY: usize = 8;
@@ -34,6 +34,7 @@ pub(super) struct TargetRuntime {
     pub(super) high_activity_catching_up: bool,
     pub(super) high_activity_dirty: bool,
     pub(super) high_activity_failures: u32,
+    pub(super) high_activity_failure_reason: Option<WatchDisableReason>,
 }
 
 enum WorkerCommand {
@@ -319,6 +320,7 @@ fn register(
             high_activity_catching_up: false,
             high_activity_dirty: false,
             high_activity_failures: 0,
+            high_activity_failure_reason: None,
         },
         target_updates,
         command_rx,

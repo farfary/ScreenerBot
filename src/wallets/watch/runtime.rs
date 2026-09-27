@@ -74,6 +74,11 @@ pub trait WalletWatchRuntime: Send + Sync {
     /// Whether this runtime can use the provider's successful-transaction path.
     async fn supports_high_activity_mode(&self) -> bool;
 
+    /// Name a provider only when this chain adapter implements its catch-up path.
+    fn high_activity_provider(&self) -> Option<&'static str> {
+        None
+    }
+
     /// Fetch a chronological page after the exclusive durable signature cursor.
     /// Each item is either predecoded or proven to have no meaningful subject effect.
     async fn fetch_successful_transactions_after(

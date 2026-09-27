@@ -60,6 +60,7 @@ pub enum WatchDisableReason {
         signatures_checked: usize,
     },
     HeliusUnavailable,
+    ProcessingFailed,
 }
 
 impl WatchDisableReason {
@@ -73,6 +74,9 @@ impl WatchDisableReason {
             Self::Unknown => "Paused: the saved watch safety reason could not be read".to_owned(),
             Self::HeliusUnavailable => {
                 "Paused: high-activity provider is unavailable; cursor preserved".to_owned()
+            }
+            Self::ProcessingFailed => {
+                "Paused: wallet activity could not be processed; cursor preserved".to_owned()
             }
         }
     }
@@ -200,4 +204,12 @@ pub struct WatchStatus {
     pub mode: WatchMode,
     pub catching_up: bool,
     pub last_checked_at: Option<DateTime<Utc>>,
+    /// Recovery methods supported by this chain adapter and their current readiness.
+    pub catch_up_options: Vec<WatchCatchUpOption>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct WatchCatchUpOption {
+    pub provider: &'static str,
+    pub available: bool,
 }

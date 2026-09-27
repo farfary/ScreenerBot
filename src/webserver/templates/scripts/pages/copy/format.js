@@ -97,7 +97,9 @@ export function pauseReasonText(reason) {
     case "watch_budget_exceeded":
       return `Paused: this wallet reached its ${(Number(reason.page_budget) || 5) * 100}-signature watch check limit before catching up`;
     case "helius_unavailable":
-      return "Paused: Helius high-activity checks are unavailable";
+      return "Paused: Helius wallet checks failed";
+    case "watch_processing_failed":
+      return "Paused: wallet activity could not be processed";
     default:
       return "Paused";
   }
@@ -112,7 +114,9 @@ export function pauseReasonShort(reason) {
     case "watch_budget_exceeded":
       return "watch limit";
     case "helius_unavailable":
-      return "Helius unavailable";
+      return "watch provider";
+    case "watch_processing_failed":
+      return "watch processing";
     case "user":
       return "by you";
     default:

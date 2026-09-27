@@ -122,6 +122,8 @@ pub(super) async fn poll_target(
     if target_runtime.high_activity && !target_runtime.target.high_activity_approved {
         target_runtime.high_activity = false;
         target_runtime.high_activity_catching_up = false;
+        target_runtime.high_activity_failures = 0;
+        target_runtime.high_activity_failure_reason = None;
         target_runtime.catch_up = None;
     }
 
@@ -146,36 +148,46 @@ pub(super) async fn poll_target(
             );
             return;
         }
-        let completed =
+        let result =
             poll_high_activity_target(target_runtime, chain_runtime, watch_db, own_subject.clone())
                 .await;
         super::service_state::update_runtime_status(
             &target_runtime.target.address,
             WatchMode::HeliusHighActivity,
             target_runtime.high_activity_catching_up,
-            completed,
+            result == HighActivityPollResult::Checked,
         );
-        if completed {
+        if result == HighActivityPollResult::Checked {
             target_runtime.high_activity_failures = 0;
+            target_runtime.high_activity_failure_reason = None;
         } else {
-            target_runtime.high_activity_failures += 1;
+            let reason = result.pause_reason();
+            if target_runtime.high_activity_failure_reason.as_ref() == Some(&reason) {
+                target_runtime.high_activity_failures += 1;
+            } else {
+                target_runtime.high_activity_failures = 1;
+                target_runtime.high_activity_failure_reason = Some(reason.clone());
+            }
             if target_runtime.high_activity_failures >= 3 {
                 if let Some(id) = target_runtime.target.id {
-                    if watch_db
-                        .pause_for_reason(id, super::types::WatchDisableReason::HeliusUnavailable)
-                        .await
-                        .is_ok()
-                    {
+                    if watch_db.pause_for_reason(id, reason.clone()).await.is_ok() {
                         target_runtime.target.enabled = false;
-                        target_runtime.target.disable_reason =
-                            Some(super::types::WatchDisableReason::HeliusUnavailable);
+                        target_runtime.target.disable_reason = Some(reason.clone());
                         super::publish_target_change(target_runtime.target.address.clone());
                         request_reload();
                     }
                 }
                 super::service_state::set_runtime_error(
                     &target_runtime.target.address,
-                    "High-activity provider repeatedly failed; watch paused",
+                    match result {
+                        HighActivityPollResult::ProviderFailed => {
+                            "Helius checks repeatedly failed; watch paused"
+                        }
+                        HighActivityPollResult::ProcessingFailed => {
+                            "Wallet activity processing repeatedly failed; watch paused"
+                        }
+                        HighActivityPollResult::Checked => unreachable!(),
+                    },
                 );
             }
         }
@@ -234,7 +246,7 @@ pub(super) async fn poll_target(
                         true,
                         false,
                     );
-                    let completed = poll_high_activity_target(
+                    let result = poll_high_activity_target(
                         target_runtime,
                         chain_runtime,
                         watch_db,
@@ -245,8 +257,15 @@ pub(super) async fn poll_target(
                         &target_runtime.target.address,
                         WatchMode::HeliusHighActivity,
                         target_runtime.high_activity_catching_up,
-                        completed,
+                        result == HighActivityPollResult::Checked,
                     );
+                    if result == HighActivityPollResult::Checked {
+                        target_runtime.high_activity_failures = 0;
+                        target_runtime.high_activity_failure_reason = None;
+                    } else {
+                        target_runtime.high_activity_failures = 1;
+                        target_runtime.high_activity_failure_reason = Some(result.pause_reason());
+                    }
                 } else {
                     handle_overflow(target_runtime, watch_db).await;
                 }
@@ -534,12 +553,29 @@ pub(super) async fn process_signature(
 /// Advance an already-selected high-activity target. Helius returns confirmed
 /// successful transactions oldest first. One cursor write per fetched page keeps
 /// SQLite work bounded; on failure it commits the last fully handled item first.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum HighActivityPollResult {
+    Checked,
+    ProviderFailed,
+    ProcessingFailed,
+}
+
+impl HighActivityPollResult {
+    fn pause_reason(self) -> super::types::WatchDisableReason {
+        match self {
+            Self::ProviderFailed => super::types::WatchDisableReason::HeliusUnavailable,
+            Self::ProcessingFailed => super::types::WatchDisableReason::ProcessingFailed,
+            Self::Checked => unreachable!("a successful check cannot pause a watch"),
+        }
+    }
+}
+
 async fn poll_high_activity_target(
     target_runtime: &mut TargetRuntime,
     chain_runtime: &Arc<dyn WalletWatchRuntime>,
     watch_db: &WatchDatabase,
     own_subject: Subject,
-) -> bool {
+) -> HighActivityPollResult {
     let cursor = match watch_db.get_cursor(&target_runtime.target.address).await {
         Ok(cursor) => cursor,
         Err(error) => {
@@ -550,7 +586,11 @@ async fn poll_high_activity_target(
                     target_runtime.target.address
                 ),
             );
-            return false;
+            super::service_state::set_runtime_error(
+                &target_runtime.target.address,
+                "Wallet watch could not read its saved position; retrying",
+            );
+            return HighActivityPollResult::ProcessingFailed;
         }
     };
     let cap = target_runtime
@@ -581,7 +621,7 @@ async fn poll_high_activity_target(
                     &target_runtime.target.address,
                     "High-activity provider check failed; retrying",
                 );
-                return false;
+                return HighActivityPollResult::ProviderFailed;
             }
         };
         let count = page.items.len();
@@ -631,7 +671,7 @@ async fn poll_high_activity_target(
                             .set_cursor(&target_runtime.target.address, signature)
                             .await;
                     }
-                    return false;
+                    return HighActivityPollResult::ProcessingFailed;
                 }
             };
             if outcome == ProcessOutcome::Retryable {
@@ -640,7 +680,11 @@ async fn poll_high_activity_target(
                         .set_cursor(&target_runtime.target.address, signature)
                         .await;
                 }
-                return false;
+                super::service_state::set_runtime_error(
+                    &target_runtime.target.address,
+                    "Wallet activity could not be processed; retrying",
+                );
+                return HighActivityPollResult::ProcessingFailed;
             }
             last_handled = Some(item.signature);
         }
@@ -656,18 +700,22 @@ async fn poll_high_activity_target(
                         target_runtime.target.address
                     ),
                 );
-                return false;
+                super::service_state::set_runtime_error(
+                    &target_runtime.target.address,
+                    "Wallet watch could not save its position; retrying",
+                );
+                return HighActivityPollResult::ProcessingFailed;
             }
             after = Some(signature);
         }
         remaining = remaining.saturating_sub(count);
         if !has_more || count == 0 {
             target_runtime.high_activity_catching_up = false;
-            return true;
+            return HighActivityPollResult::Checked;
         }
     }
     target_runtime.high_activity_catching_up = true;
-    true
+    HighActivityPollResult::Checked
 }
 
 pub(super) fn short(signature: &str) -> &str {

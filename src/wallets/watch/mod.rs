@@ -404,6 +404,16 @@ pub async fn get_status(id: i64) -> Result<WatchStatus, Error> {
     let mode = service_state::watch_mode(&target.address);
     let catching_up = service_state::catching_up(&target.address);
     let last_checked_at = service_state::last_checked_at(&target.address);
+    let catch_up_options = match runtime::try_get_runtime() {
+        Some(runtime) => match runtime.high_activity_provider() {
+            Some(provider) => vec![types::WatchCatchUpOption {
+                provider,
+                available: runtime.supports_high_activity_mode().await,
+            }],
+            None => Vec::new(),
+        },
+        None => Vec::new(),
+    };
 
     Ok(WatchStatus {
         target,
@@ -414,6 +424,7 @@ pub async fn get_status(id: i64) -> Result<WatchStatus, Error> {
         mode,
         catching_up,
         last_checked_at,
+        catch_up_options,
     })
 }
 

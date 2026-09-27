@@ -101,6 +101,10 @@ impl WalletWatchRuntime for SolanaWalletWatchRuntime {
             .await
     }
 
+    fn high_activity_provider(&self) -> Option<&'static str> {
+        Some("helius")
+    }
+
     async fn fetch_successful_transactions_after(
         &self,
         address: &str,

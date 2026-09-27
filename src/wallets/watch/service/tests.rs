@@ -1,6 +1,19 @@
 use super::*;
 use crate::wallets::watch::runtime::test_support::FakeRuntime;
+use crate::wallets::watch::WatchDisableReason;
 use chrono::Utc;
+
+#[test]
+fn high_activity_failures_preserve_their_source() {
+    assert_eq!(
+        HighActivityPollResult::ProviderFailed.pause_reason(),
+        WatchDisableReason::HeliusUnavailable
+    );
+    assert_eq!(
+        HighActivityPollResult::ProcessingFailed.pause_reason(),
+        WatchDisableReason::ProcessingFailed
+    );
+}
 
 fn own_watch_target(address: &str) -> WatchTarget {
     WatchTarget {
@@ -43,6 +56,7 @@ fn idle_target_runtime(target: WatchTarget) -> TargetRuntime {
         high_activity_catching_up: false,
         high_activity_dirty: false,
         high_activity_failures: 0,
+        high_activity_failure_reason: None,
     }
 }
 

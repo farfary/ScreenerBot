@@ -11,10 +11,6 @@
   font-weight: 600;
 }
 
-.watched-wallet-state.is-high-activity {
-  color: var(--success-color);
-}
-
 .watched-wallet-state.is-streaming {
   color: var(--success-color);
 }
@@ -50,6 +46,18 @@
 }
 
 #watch-budget-resume-notice p {
+  margin: 0 0 var(--spacing-sm);
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+
+.watch-helius-option {
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: var(--spacing-md);
+}
+
+.watch-helius-option p {
   margin: 0 0 var(--spacing-sm);
   color: var(--text-secondary);
   font-size: var(--font-size-sm);

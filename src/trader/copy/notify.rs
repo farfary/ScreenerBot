@@ -199,6 +199,9 @@ pub(super) async fn announce_pause(task: &CopyTask, reason: &CopyPauseReason) {
         CopyPauseReason::HeliusUnavailable => {
             "Helius high-activity checks are unavailable for this wallet".to_owned()
         }
+        CopyPauseReason::WatchProcessingFailed => {
+            "Wallet activity could not be processed; the saved position is preserved".to_owned()
+        }
     };
     publish(
         task_name(task),

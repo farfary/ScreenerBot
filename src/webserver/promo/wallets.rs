@@ -229,5 +229,6 @@ pub fn get_promo_watch_status(id: i64) -> Option<WatchStatus> {
         mode: crate::wallets::watch::WatchMode::Standard,
         catching_up: false,
         last_checked_at: None,
+        catch_up_options: Vec::new(),
     })
 }
