@@ -262,9 +262,9 @@ async fn run_actor(mut commands: mpsc::UnboundedReceiver<Command>) {
             let id = next_request_id;
             next_request_id += 1;
             if ws_tx
-                .send(Message::Text(payloads::logs_subscribe_payload(
-                    &address, id,
-                )))
+                .send(Message::Text(
+                    payloads::logs_subscribe_payload(&address, id).into(),
+                ))
                 .await
                 .is_err()
             {
@@ -300,7 +300,7 @@ async fn run_actor(mut commands: mpsc::UnboundedReceiver<Command>) {
                                     let id = next_request_id;
                                     next_request_id += 1;
                                     if ws_tx
-                                        .send(Message::Text(payloads::logs_subscribe_payload(&address, id)))
+                                        .send(Message::Text(payloads::logs_subscribe_payload(&address, id).into()))
                                         .await
                                         .is_err()
                                     {
@@ -314,7 +314,7 @@ async fn run_actor(mut commands: mpsc::UnboundedReceiver<Command>) {
                                     let id = next_request_id;
                                     next_request_id += 1;
                                     if ws_tx
-                                        .send(Message::Text(payloads::logs_unsubscribe_payload(sub_id, id)))
+                                        .send(Message::Text(payloads::logs_unsubscribe_payload(sub_id, id).into()))
                                         .await
                                         .is_err()
                                     {
@@ -334,7 +334,7 @@ async fn run_actor(mut commands: mpsc::UnboundedReceiver<Command>) {
                         }
                     }
                     _ = heartbeat.tick() => {
-                        if ws_tx.send(Message::Ping(Vec::new())).await.is_err() {
+                        if ws_tx.send(Message::Ping(Vec::new().into())).await.is_err() {
                             break;
                         }
                     }

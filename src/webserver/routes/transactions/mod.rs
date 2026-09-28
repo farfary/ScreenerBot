@@ -20,5 +20,5 @@ pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/list", post(handlers::list_transactions))
         .route("/summary", post(handlers::get_summary))
-        .route("/:signature", get(handlers::get_transaction_detail))
+        .route("/{signature}", get(handlers::get_transaction_detail))
 }

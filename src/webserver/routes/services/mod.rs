@@ -18,6 +18,6 @@ pub use types::*;
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/services", get(handlers::list_services))
-        .route("/services/:name", get(handlers::get_service))
+        .route("/services/{name}", get(handlers::get_service))
         .route("/services/overview", get(handlers::services_overview))
 }

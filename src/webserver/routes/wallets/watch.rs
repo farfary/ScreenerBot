@@ -23,15 +23,15 @@ pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/", get(list_targets))
         .route("/", post(add_target))
-        .route("/:id", delete(remove_target))
-        .route("/:id/enabled", post(set_target_enabled))
-        .route("/:id/budget", post(set_target_budget))
+        .route("/{id}", delete(remove_target))
+        .route("/{id}/enabled", post(set_target_enabled))
+        .route("/{id}/budget", post(set_target_budget))
         .route(
-            "/:id/high-activity-approval",
+            "/{id}/high-activity-approval",
             post(set_high_activity_approval),
         )
-        .route("/:id/resume", post(resume_target))
-        .route("/:id/status", get(get_status))
+        .route("/{id}/resume", post(resume_target))
+        .route("/{id}/status", get(get_status))
 }
 
 // =============================================================================

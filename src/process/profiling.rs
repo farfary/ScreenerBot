@@ -15,6 +15,10 @@
 //! - `--profile-cpu`: Enable CPU profiling with pprof
 //! - `--profile-duration <seconds>`: Set profiling duration (default: 60)
 
+#[cfg(feature = "console")]
+use crate::arguments::is_profile_tokio_console_enabled;
+#[cfg(feature = "flamegraph")]
+use crate::arguments::{get_profile_duration, is_profile_cpu_enabled};
 use crate::{
     arguments::is_profile_tracing_enabled,
     logger::{self, LogTag},

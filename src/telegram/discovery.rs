@@ -216,7 +216,7 @@ async fn discovery_poll(bot: &Bot, offset: &Arc<AtomicI64>) {
                     let chat_type = match message.chat.kind {
                         teloxide::types::ChatKind::Private(_) => "private",
                         teloxide::types::ChatKind::Public(ref p) => match p.kind {
-                            teloxide::types::PublicChatKind::Group(_) => "group",
+                            teloxide::types::PublicChatKind::Group => "group",
                             teloxide::types::PublicChatKind::Supergroup(_) => "supergroup",
                             teloxide::types::PublicChatKind::Channel(_) => "channel",
                         },

@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use sysinfo::{Pid, System};
+use sysinfo::{Pid, ProcessesToUpdate, System};
 use tokio::sync::{Mutex, Notify};
 use tokio_metrics::TaskMonitor;
 
@@ -242,7 +242,7 @@ impl MetricsCollector {
             let sys_arc = self.system.clone();
             let _ = tokio::task::spawn_blocking(move || {
                 let mut sys = sys_arc.blocking_lock();
-                sys.refresh_process(pid);
+                sys.refresh_processes(ProcessesToUpdate::Some(&[pid]), false);
             })
             .await;
         }
@@ -343,7 +343,7 @@ impl MetricsCollector {
             let sys_arc = self.system.clone();
             let _ = tokio::task::spawn_blocking(move || {
                 let mut sys = sys_arc.blocking_lock();
-                sys.refresh_process(pid);
+                sys.refresh_processes(ProcessesToUpdate::Some(&[pid]), false);
             })
             .await;
         }

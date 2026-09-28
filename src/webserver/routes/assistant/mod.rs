@@ -37,15 +37,18 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/chat/stream", post(stream_chat_message))
         .route("/chat/sessions", get(list_chat_sessions))
         .route("/chat/sessions", post(create_chat_session))
-        .route("/chat/sessions/:id", get(get_chat_session))
-        .route("/chat/sessions/:id", delete(delete_chat_session))
-        .route("/chat/sessions/:id/summarize", post(summarize_chat_session))
+        .route("/chat/sessions/{id}", get(get_chat_session))
+        .route("/chat/sessions/{id}", delete(delete_chat_session))
         .route(
-            "/chat/sessions/:id/generate-title",
+            "/chat/sessions/{id}/summarize",
+            post(summarize_chat_session),
+        )
+        .route(
+            "/chat/sessions/{id}/generate-title",
             post(generate_session_title),
         )
         .route(
-            "/chat/confirm/:confirmation_id",
+            "/chat/confirm/{confirmation_id}",
             post(confirm_tool_execution),
         )
         // Scheduled automation
@@ -56,13 +59,13 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/automation/runs", get(get_automation_recent_runs))
         .route("/automation/stats", get(get_automation_stats_handler))
         .route(
-            "/automation/:id",
+            "/automation/{id}",
             get(get_automation_task)
                 .patch(update_automation_task)
                 .delete(delete_automation_task),
         )
-        .route("/automation/:id/toggle", post(toggle_automation_task))
-        .route("/automation/:id/run", post(run_automation_task))
-        .route("/automation/:id/runs", get(get_automation_task_runs))
-        .route("/automation/runs/:id", get(get_automation_run_detail))
+        .route("/automation/{id}/toggle", post(toggle_automation_task))
+        .route("/automation/{id}/run", post(run_automation_task))
+        .route("/automation/{id}/runs", get(get_automation_task_runs))
+        .route("/automation/runs/{id}", get(get_automation_run_detail))
 }

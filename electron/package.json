@@ -6,6 +6,13 @@
   "author": "ScreenerBot",
   "license": "BUSL-1.1",
   "private": true,
+  "engines": {
+    "node": ">=24.8.0"
+  },
+  "overrides": {
+    "tar": "^7.5.22",
+    "tmp": "^0.2.7"
+  },
   "scripts": {
     "sync-version": "node -e \"const fs=require('fs');const c=fs.readFileSync('../Cargo.toml','utf8');const m=c.match(/^version\\s*=\\s*\\\"([^\\\"]+)\\\"/m);if(m){const p=JSON.parse(fs.readFileSync('package.json','utf8'));if(p.version!==m[1]){p.version=m[1];fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\\n');console.log('Synced version to '+m[1])}}\"",
     "prestart": "npm run sync-version",
@@ -15,13 +22,13 @@
     "publish": "electron-forge publish"
   },
   "devDependencies": {
-    "@electron-forge/cli": "^7.6.0",
-    "@electron-forge/maker-deb": "^7.6.0",
-    "@electron-forge/maker-dmg": "^7.6.0",
-    "@electron-forge/maker-rpm": "^7.6.0",
-    "@electron-forge/maker-wix": "^7.6.0",
-    "@electron-forge/maker-zip": "^7.6.0",
-    "@electron-forge/plugin-auto-unpack-natives": "^7.6.0",
-    "electron": "^33.2.1"
+    "@electron-forge/cli": "^7.11.2",
+    "@electron-forge/maker-deb": "^7.11.2",
+    "@electron-forge/maker-dmg": "^7.11.2",
+    "@electron-forge/maker-rpm": "^7.11.2",
+    "@electron-forge/maker-wix": "^7.11.2",
+    "@electron-forge/maker-zip": "^7.11.2",
+    "@electron-forge/plugin-auto-unpack-natives": "^7.11.2",
+    "electron": "^44.4.5"
   }
 }

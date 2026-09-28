@@ -29,7 +29,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/settings", post(handlers::update_settings))
         // Sessions
         .route("/sessions", get(handlers::list_sessions))
-        .route("/sessions/:user_id/revoke", post(handlers::revoke_session))
+        .route("/sessions/{user_id}/revoke", post(handlers::revoke_session))
         // TOTP 2FA (status only - setup is in Security settings)
         .route("/totp/status", get(handlers::get_totp_status))
         // Chat Discovery
@@ -37,7 +37,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/discovery/stop", post(handlers::stop_discovery))
         .route("/discovery/chats", get(handlers::get_discovered_chats))
         .route(
-            "/discovery/select/:chat_id",
+            "/discovery/select/{chat_id}",
             post(handlers::select_discovered_chat),
         )
         .route("/discovery/clear", post(handlers::clear_discovered_chats))

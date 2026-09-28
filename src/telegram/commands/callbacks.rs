@@ -32,7 +32,7 @@ pub async fn handle_callback_query(
     query: teloxide::types::CallbackQuery,
 ) -> Result<()> {
     // Always answer callback query first to remove loading indicator
-    bot.answer_callback_query(&query.id)
+    bot.answer_callback_query(query.id.clone())
         .await
         .map_err(|e| Error::SendFailed {
             chat_id: chat_id.0.to_string(),

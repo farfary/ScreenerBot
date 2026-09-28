@@ -15,5 +15,5 @@ pub use types::*;
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/status", get(handlers::get_connectivity_status))
-        .route("/status/:endpoint", get(handlers::get_endpoint_status))
+        .route("/status/{endpoint}", get(handlers::get_endpoint_status))
 }

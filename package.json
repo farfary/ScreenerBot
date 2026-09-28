@@ -1,19 +1,18 @@
 {
   "type": "module",
-  "dependencies": {
-    "progress": "^2.0.3",
-    "sqlite3": "^5.1.7"
+  "engines": {
+    "node": ">=24.8.0"
   },
   "devDependencies": {
-    "@eslint/js": "^9.37.0",
-    "eslint": "^9.39.2",
-    "html-validate": "^10.7.0",
-    "playwright": "^1.58.0",
-    "prettier": "^3.6.2",
-    "prettier-plugin-sh": "^0.18.0",
-    "prettier-plugin-toml": "^2.0.6",
-    "stylelint": "^16.26.1",
-    "stylelint-config-standard": "^39.0.1"
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.11.0",
+    "html-validate": "^11.16.1",
+    "playwright": "^1.63.0",
+    "prettier": "^3.9.9",
+    "prettier-plugin-sh": "^0.20.2",
+    "prettier-plugin-toml": "^3.0.2",
+    "stylelint": "^17.15.0",
+    "stylelint-config-standard": "^40.0.0"
   },
   "scripts": {
     "lint:js": "eslint 'src/webserver/templates/**/*.js'",

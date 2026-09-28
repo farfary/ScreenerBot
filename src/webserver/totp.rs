@@ -5,7 +5,6 @@
 
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use qrcode::{render::svg, QrCode};
-use rand::Rng;
 use totp_rs::{Algorithm, Secret, TOTP};
 
 use super::{Error, Result};
@@ -15,28 +14,23 @@ const TOTP_ALGORITHM: Algorithm = Algorithm::SHA1;
 const TOTP_DIGITS: usize = 6;
 const TOTP_STEP: u64 = 30;
 const TOTP_SKEW: u8 = 1; // Allow ±1 step (±30 seconds) for clock drift
-const SECRET_LENGTH: usize = 20; // 160 bits for SHA1
 
 /// Generate a new random TOTP secret
 ///
 /// Returns a base32-encoded secret suitable for storage and use with authenticator apps.
 pub fn generate_secret() -> String {
-    let mut rng = rand::thread_rng();
-    let bytes: Vec<u8> = (0..SECRET_LENGTH).map(|_| rng.gen::<u8>()).collect();
-
-    // Use the Secret type to properly encode as base32
-    let secret = Secret::Raw(bytes);
-    secret.to_encoded().to_string()
+    Secret::generate().to_base32()
 }
 
 /// Create a TOTP instance from a base32-encoded secret
 fn create_totp(secret: &str, account: &str, issuer: &str) -> Result<TOTP> {
-    let secret = Secret::Encoded(secret.to_string())
-        .to_bytes()
+    let secret = Secret::try_from_base32(secret)
         .map_err(|e| Error::TotpSecret {
             operation: "decode",
             detail: e.to_string(),
-        })?;
+        })?
+        .as_bytes()
+        .to_vec();
 
     TOTP::new(
         TOTP_ALGORITHM,
@@ -82,7 +76,7 @@ pub fn verify_totp(secret: &str, code: &str) -> Result<bool> {
         })?
         .as_secs();
 
-    Ok(totp.check(code, time))
+    Ok(totp.check(code, time).is_some())
 }
 
 /// Generate an SVG QR code for an arbitrary public value.
@@ -132,6 +126,15 @@ mod tests {
         let uri = get_totp_uri(&secret, "test@example.com").unwrap();
         assert!(uri.starts_with("otpauth://totp/"));
         assert!(uri.contains("ScreenerBot"));
+    }
+
+    #[test]
+    fn generated_code_verifies_with_stored_secret() {
+        let secret = generate_secret();
+        let code = create_totp(&secret, "user", "ScreenerBot")
+            .unwrap()
+            .generate_current();
+        assert!(verify_totp(&secret, &code.to_string()).unwrap());
     }
 
     #[test]

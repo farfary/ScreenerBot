@@ -31,6 +31,7 @@ module.exports = {
     // the tree is not read by the packager and cannot reach the bundle.
     extendInfo: {
       NSHumanReadableCopyright: '© 2024-2026 ScreenerBot',
+      LSMinimumSystemVersion: '13.0',
     },
     extraResource: [
       path.join(__dirname, '..', 'target', 'release', binaryName),

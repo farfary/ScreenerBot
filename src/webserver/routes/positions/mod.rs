@@ -36,21 +36,21 @@ pub fn routes() -> Router<Arc<AppState>> {
         // Bulk delete of all archived positions — static segment, registered before
         // the `:position_id` param route so it is matched first.
         .route("/positions/archived", delete(delete_all_archived))
-        .route("/positions/:key/details", get(get_position_details))
+        .route("/positions/{key}/details", get(get_position_details))
         // The token's ALL-TIME activity (every position ever opened on the mint + every
         // wallet transaction that touched it). Separate from `/details` on purpose — that
         // route is on the manual-trade path and must stay cheap.
-        .route("/positions/:key/activity", get(get_token_activity))
-        .route("/positions/:mint/debug", get(get_position_debug_info))
+        .route("/positions/{key}/activity", get(get_token_activity))
+        .route("/positions/{mint}/debug", get(get_position_debug_info))
         .route(
-            "/positions/:position_id/force-close",
+            "/positions/{position_id}/force-close",
             post(force_close_position),
         )
-        .route("/positions/:position_id/archive", post(archive_position))
+        .route("/positions/{position_id}/archive", post(archive_position))
         .route(
-            "/positions/:position_id/unarchive",
+            "/positions/{position_id}/unarchive",
             post(unarchive_position),
         )
-        .route("/positions/:position_id/management", post(set_management))
-        .route("/positions/:position_id", delete(delete_position))
+        .route("/positions/{position_id}/management", post(set_management))
+        .route("/positions/{position_id}", delete(delete_position))
 }

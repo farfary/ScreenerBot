@@ -33,20 +33,20 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/status", get(status))
         .route("/tasks", get(list_tasks).post(create_task))
         .route(
-            "/tasks/:id",
+            "/tasks/{id}",
             get(get_task).patch(update_task).delete(delete_task),
         )
-        .route("/tasks/:id/mode", post(set_task_mode))
-        .route("/tasks/:id/stats", get(task_stats))
-        .route("/tasks/:id/workspace", get(task_workspace))
-        .route("/tasks/:id/activity", get(task_activity))
-        .route("/tasks/:id/insights", get(task_insights))
-        .route("/tasks/:id/clone", post(clone_task))
-        .route("/tasks/:id/reset", post(reset_paper_book))
-        .route("/tasks/:id/holdings/:mint/close", post(close_holding))
+        .route("/tasks/{id}/mode", post(set_task_mode))
+        .route("/tasks/{id}/stats", get(task_stats))
+        .route("/tasks/{id}/workspace", get(task_workspace))
+        .route("/tasks/{id}/activity", get(task_activity))
+        .route("/tasks/{id}/insights", get(task_insights))
+        .route("/tasks/{id}/clone", post(clone_task))
+        .route("/tasks/{id}/reset", post(reset_paper_book))
+        .route("/tasks/{id}/holdings/{mint}/close", post(close_holding))
         .route("/insights", get(compare_tasks))
         .route("/defaults", get(defaults))
-        .route("/wallets/:address", get(wallet_profile))
+        .route("/wallets/{address}", get(wallet_profile))
         .route("/activity", get(list_activity))
 }
 

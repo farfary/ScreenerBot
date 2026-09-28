@@ -22,6 +22,6 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/config", get(get_config))
         .route("/config", patch(update_config))
         .route("/providers", get(list_providers))
-        .route("/providers/:provider", patch(update_provider))
-        .route("/providers/:provider/test", post(test_provider))
+        .route("/providers/{provider}", patch(update_provider))
+        .route("/providers/{provider}/test", post(test_provider))
 }

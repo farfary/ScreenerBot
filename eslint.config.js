@@ -62,6 +62,8 @@ export default [
       "no-undef": "error",
       "no-redeclare": "error",
       "no-dupe-keys": "error",
+      "no-useless-assignment": "off",
+      "preserve-caught-error": "off",
       semi: ["error", "always"],
       quotes: ["warn", "double", { avoidEscape: true, allowTemplateLiterals: true }],
     },

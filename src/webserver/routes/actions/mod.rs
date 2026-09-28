@@ -22,11 +22,14 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/actions/history", get(handlers::get_action_history))
         .route("/actions/read-all", post(handlers::mark_all_actions_read))
         .route("/actions/dismiss-all", post(handlers::dismiss_all_actions))
-        .route("/actions/:action_id/read", post(handlers::mark_action_read))
         .route(
-            "/actions/:action_id/dismiss",
+            "/actions/{action_id}/read",
+            post(handlers::mark_action_read),
+        )
+        .route(
+            "/actions/{action_id}/dismiss",
             post(handlers::dismiss_action),
         )
-        .route("/actions/:action_id", get(handlers::get_action_by_id))
+        .route("/actions/{action_id}", get(handlers::get_action_by_id))
         .route("/actions/subscribers", get(handlers::get_subscriber_count))
 }

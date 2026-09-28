@@ -123,7 +123,6 @@
     gap: var(--spacing-xs);
     padding: var(--spacing-xs) var(--spacing-sm);
     margin: var(--spacing-sm);
-    margin-bottom: var(--spacing-sm);
     background: var(--bg-secondary);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);

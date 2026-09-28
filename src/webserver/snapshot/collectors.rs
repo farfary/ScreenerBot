@@ -78,7 +78,7 @@ pub(super) async fn collect_system_metrics_snapshot(
         let mut sys = System::new_all();
         sys.refresh_all();
 
-        let cpu_system_percent = sys.global_cpu_info().cpu_usage();
+        let cpu_system_percent = sys.global_cpu_usage();
         // sysinfo returns memory in bytes, convert to MB (bytes / 1024 / 1024)
         let system_memory_total_mb = (sys.total_memory() / 1024 / 1024) as u64;
         let system_memory_used_mb = (sys.used_memory() / 1024 / 1024) as u64;

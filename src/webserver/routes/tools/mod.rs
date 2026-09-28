@@ -45,13 +45,13 @@ fn multi_wallet_routes() -> Router<Arc<AppState>> {
         // Multi-Buy
         .route("/multi-buy/preview", post(preview_multi_buy))
         .route("/multi-buy/start", post(start_multi_buy))
-        .route("/multi-buy/:id", get(get_multi_buy_status))
-        .route("/multi-buy/:id/abort", post(abort_multi_buy))
+        .route("/multi-buy/{id}", get(get_multi_buy_status))
+        .route("/multi-buy/{id}/abort", post(abort_multi_buy))
         // Multi-Sell
         .route("/multi-sell/preview", post(preview_multi_sell))
         .route("/multi-sell/start", post(start_multi_sell))
-        .route("/multi-sell/:id", get(get_multi_sell_status))
-        .route("/multi-sell/:id/abort", post(abort_multi_sell))
+        .route("/multi-sell/{id}", get(get_multi_sell_status))
+        .route("/multi-sell/{id}/abort", post(abort_multi_sell))
         // Wallet Management
         .route("/wallets/summary", get(get_wallets_summary))
         .route("/wallets/consolidate", post(consolidate_wallets))
@@ -77,14 +77,14 @@ pub fn routes() -> Router<Arc<AppState>> {
         // Tool Favorites
         .route("/favorites", get(get_favorites_list))
         .route("/favorites", post(add_favorite))
-        .route("/favorites/:id", patch(update_favorite))
-        .route("/favorites/:id", delete(delete_favorite))
-        .route("/favorites/:id/use", post(mark_favorite_used))
+        .route("/favorites/{id}", patch(update_favorite))
+        .route("/favorites/{id}", delete(delete_favorite))
+        .route("/favorites/{id}/use", post(mark_favorite_used))
         // Trade Watcher
-        .route("/search-pools/:mint", get(search_pools_handler))
+        .route("/search-pools/{mint}", get(search_pools_handler))
         .route("/watched-tokens", get(get_watched_tokens_handler))
         .route("/watched-tokens", post(add_watched_token_handler))
-        .route("/watched-tokens/:id", delete(delete_watched_token_handler))
+        .route("/watched-tokens/{id}", delete(delete_watched_token_handler))
         .route("/trade-watcher/start", post(start_trade_watcher_handler))
         .route("/trade-watcher/stop", post(stop_trade_watcher_handler))
         .route(

@@ -26,13 +26,13 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/permissions", get(get_permissions))
         .route("/permissions", patch(update_permissions))
         .route("/pairings", get(pairings::list).post(pairings::create))
-        .route("/pairings/:client_id", delete(pairings::revoke))
+        .route("/pairings/{client_id}", delete(pairings::revoke))
         .route(
-            "/pairings/:client_id/permissions",
+            "/pairings/{client_id}/permissions",
             patch(pairings::update_permissions),
         )
         .route("/approvals", get(approvals::list_pending))
-        .route("/approvals/:id/decide", post(approvals::decide))
+        .route("/approvals/{id}/decide", post(approvals::decide))
         .route("/audit", get(approvals::list_audit))
 }
 

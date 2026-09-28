@@ -42,13 +42,13 @@ pub fn routes() -> Router<Arc<AppState>> {
         // Instructions
         .route("/instructions", get(list_instructions))
         .route("/instructions", post(create_instruction))
-        .route("/instructions/:id", get(get_instruction))
-        .route("/instructions/:id", patch(update_instruction))
-        .route("/instructions/:id", delete(delete_instruction))
+        .route("/instructions/{id}", get(get_instruction))
+        .route("/instructions/{id}", patch(update_instruction))
+        .route("/instructions/{id}", delete(delete_instruction))
         .route("/instructions/reorder", post(reorder_instructions))
         // Templates
         .route("/templates", get(list_templates))
         // History
         .route("/history", get(list_history))
-        .route("/history/:id", get(get_history_detail))
+        .route("/history/{id}", get(get_history_detail))
 }
