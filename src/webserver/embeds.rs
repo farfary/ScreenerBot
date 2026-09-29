@@ -285,6 +285,7 @@ pub const CORE_TOKEN_ACCENT: &str = include_str!("templates/scripts/core/token_a
 pub const CORE_BOOSTS: &str = include_str!("templates/scripts/core/boosts.js");
 pub const CORE_DOM: &str = include_str!("templates/scripts/core/dom.js");
 pub const CORE_UTILS: &str = include_str!("templates/scripts/core/utils.js");
+pub const CORE_FORMAT: &str = include_str!("templates/scripts/core/format.js");
 pub const CORE_BOOTSTRAP: &str = include_str!("templates/scripts/core/bootstrap.js");
 pub const CORE_ROUTER: &str = include_str!("templates/scripts/core/router.js");
 pub const CORE_CONNECTIVITY_WATCHER: &str =
