@@ -214,7 +214,10 @@ function beginPageTransition(mainContent, navigationId) {
   loadingEl.dataset.navigationId = String(navigationId);
   loadingEl.setAttribute("role", "status");
   loadingEl.setAttribute("aria-live", "polite");
-  loadingEl.innerHTML = '<div class="loading-spinner">Loading…</div>';
+  const spinner = document.createElement("div");
+  spinner.className = "loading-spinner";
+  spinner.textContent = I18n.t("common-loading");
+  loadingEl.replaceChildren(spinner);
 
   // Navigation chrome belongs to the displayed page. Release it before any
   // network/style/module wait so the outgoing page cannot remain half-visible.
