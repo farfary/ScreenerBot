@@ -19,9 +19,36 @@ import {
   getSourceMasterField,
   SETTINGS_TABS,
 } from "../../src/webserver/templates/scripts/pages/filtering/config_metadata.js";
+import { categoryId } from "../../src/webserver/templates/scripts/pages/config/field_text.js";
 
-const number = (label, extras = {}) => ({ type: "number", label, ...extras });
-const boolean = (label, extras = {}) => ({ type: "boolean", label, ...extras });
+/**
+ * Field metadata carries a catalog key; its text lives in the catalog. The
+ * fixtures register each field's label, hint and unit in a stand-in catalog.
+ */
+const catalog = new Map();
+let nextKey = 0;
+
+function field(type, label, { hint, unit, category, impact } = {}) {
+  const key = `config-fixture-${nextKey++}`;
+  catalog.set(key, { value: label, attributes: { hint, unit } });
+  catalog.set("config-category-general", { value: "General", attributes: {} });
+  const meta = { type, key };
+  if (category !== undefined) {
+    meta.category = category;
+    catalog.set(`config-category-${categoryId(category)}`, { value: category, attributes: {} });
+  }
+  if (impact !== undefined) meta.impact = impact;
+  return meta;
+}
+
+const number = (label, extras = {}) => field("number", label, extras);
+const boolean = (label, extras = {}) => field("boolean", label, extras);
+
+globalThis.I18n = {
+  ...globalThis.I18n,
+  t: (id) => catalog.get(id)?.value ?? id,
+  attr: (id, name) => catalog.get(id)?.attributes[name] ?? null,
+};
 
 /** A source object as `/api/config/metadata` delivers it: alphabetical children. */
 function source(children) {
@@ -131,10 +158,14 @@ test("the same category name under two sources stays two groups", () => {
   });
 
   const liquidity = groups.filter((group) => group.title === "Liquidity");
-  assert.equal(liquidity.length, 2, "keyed by source + category, so neither can overwrite the other");
+  assert.equal(
+    liquidity.length,
+    2,
+    "keyed by source + category, so neither can overwrite the other"
+  );
   assert.deepEqual(
     liquidity.map((group) => group.id),
-    ["dexscreener:Liquidity", "geckoterminal:Liquidity"]
+    ["dexscreener:liquidity", "geckoterminal:liquidity"]
   );
 });
 

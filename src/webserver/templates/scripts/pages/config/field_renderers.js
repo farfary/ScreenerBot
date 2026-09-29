@@ -12,6 +12,7 @@ import {
   deepEqual,
   normalizeFieldValue,
 } from "./utils.js";
+import { fieldHint, fieldLabel, fieldPlaceholder, fieldUnit, impactLabel } from "./field_text.js";
 
 /**
  * Open/closed state of one collapsible tree (categories or nested objects).
@@ -168,13 +169,13 @@ export function toggleCategory(path, defaultOpen = false) {
  *   one description line
  *   one reference strip: config key · unit · default
  *
- * `docs` is the field's Rust doc comment and near-duplicates `hint`, so it is
- * only the fallback description — never a second line of its own.
+ * The catalog's `hint` attribute already falls back to the field's doc comment,
+ * so the description is a single line.
  */
 export function buildFieldLabelHtml({ label, pathLabel, metadata = {}, defaultValue }) {
   const impact = metadata.impact
     ? `<span class="config-field-impact ${Utils.escapeHtml(metadata.impact.toLowerCase())}">` +
-      `${Utils.escapeHtml(metadata.impact)}</span>`
+      `${Utils.escapeHtml(impactLabel(metadata.impact))}</span>`
     : "";
   // A sub-config's own title IS its collapse control — a separate header bar
   // below it only repeated the name.
@@ -191,14 +192,15 @@ export function buildFieldLabelHtml({ label, pathLabel, metadata = {}, defaultVa
       `<span class="config-field-name">${Utils.escapeHtml(label)}</span>${impact}</${titleTag}>`,
   ];
 
-  const description = metadata.hint || metadata.docs;
+  const description = fieldHint(metadata.key);
   if (description) {
     parts.push(`<div class="config-field-hint">${Utils.escapeHtml(description)}</div>`);
   }
 
   const meta = [`<span class="config-field-key">${Utils.escapeHtml(pathLabel)}</span>`];
-  if (metadata.unit) {
-    meta.push(`<span>Unit: ${Utils.escapeHtml(metadata.unit)}</span>`);
+  const unit = fieldUnit(metadata.key);
+  if (unit) {
+    meta.push(`<span>Unit: ${Utils.escapeHtml(unit)}</span>`);
   }
   if (defaultValue !== null && defaultValue !== undefined) {
     const defaultText = Utils.escapeHtml(
@@ -322,9 +324,7 @@ export function renderObjectWithChildren({
   const hasSearch = normalizedSearch.length > 0;
 
   entries.sort(([keyA, metaA], [keyB, metaB]) => {
-    const labelA = metaA.label || keyA;
-    const labelB = metaB.label || keyB;
-    return labelA.localeCompare(labelB);
+    return fieldLabel(metaA.key).localeCompare(fieldLabel(metaB.key));
   });
 
   for (const [childKey, childMeta] of entries) {
@@ -347,7 +347,7 @@ export function renderObjectWithChildren({
 
     const labelEl = create("div", { className: "config-field-label" });
     labelEl.innerHTML = buildFieldLabelHtml({
-      label: childMeta.label || childKey,
+      label: fieldLabel(childMeta.key),
       pathLabel: childPathLabel,
       metadata: childMeta,
       defaultValue: childMeta.type === "object" ? undefined : childDefault,
@@ -419,10 +419,9 @@ function metadataMatchesSearchLocal(fieldKey, fieldMeta, term) {
     return true;
   }
   if (
-    matches(fieldMeta.label) ||
-    matches(fieldMeta.hint) ||
-    matches(fieldMeta.docs) ||
-    matches(fieldMeta.unit)
+    matches(fieldLabel(fieldMeta.key)) ||
+    matches(fieldHint(fieldMeta.key)) ||
+    matches(fieldUnit(fieldMeta.key))
   ) {
     return true;
   }
@@ -495,7 +494,7 @@ export const FIELD_RENDERERS = {
       const textarea = create("textarea", {
         id: fieldId,
         value: value ?? "",
-        placeholder: metadata.placeholder ?? "",
+        placeholder: fieldPlaceholder(metadata.key) ?? "",
         disabled,
         autocomplete: "off",
         spellcheck: false,
@@ -510,7 +509,7 @@ export const FIELD_RENDERERS = {
       type: "text",
       id: fieldId,
       value: value ?? "",
-      placeholder: metadata.placeholder ?? "",
+      placeholder: fieldPlaceholder(metadata.key) ?? "",
       disabled,
       autocomplete: "off",
       spellcheck: false,
@@ -524,7 +523,7 @@ export const FIELD_RENDERERS = {
     const textarea = create("textarea", {
       id: fieldId,
       value: Array.isArray(value) ? value.join("\n") : "",
-      placeholder: metadata.placeholder ?? "Enter one value per line",
+      placeholder: fieldPlaceholder(metadata.key) ?? "",
       disabled,
       autocomplete: "off",
       spellcheck: false,

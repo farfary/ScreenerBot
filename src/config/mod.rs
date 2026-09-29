@@ -73,6 +73,9 @@
 // Metadata helpers (must be declared before macros so macro expansions can use them)
 pub mod metadata;
 
+#[cfg(test)]
+mod metadata_catalog_tests;
+
 mod error;
 pub use error::{Error, Result};
 

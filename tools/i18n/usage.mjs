@@ -22,7 +22,7 @@ import { hasMarkup, lineIndex, scanMarkup, stripPlaceholders } from "./markup.mj
  * it is reachable. A call site may build ids dynamically only inside a
  * declared namespace, and ids in a namespace are exempt from the unused check.
  */
-export const DYNAMIC_NAMESPACES = {};
+export const DYNAMIC_NAMESPACES = { "config-": "config_catalog_covers_fields" };
 
 const CALLS = new Set(["t", "attr", "has"]);
 const DYNAMIC_MARK = /l10n-dynamic:\s*(\S+)/;

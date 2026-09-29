@@ -3,6 +3,8 @@
  * These functions have no state dependencies and can be imported/used independently.
  */
 
+import { categoryId, categoryLabel, fieldHint, fieldLabel, fieldUnit } from "./field_text.js";
+
 export const SECTION_DISPLAY_ORDER = [
   "rpc",
   "trader",
@@ -267,8 +269,7 @@ export function summarizeSectionFields(fields = {}) {
         summary.total += 1;
         const impact = (field.impact || "").toLowerCase();
         if (impact === "critical") summary.critical += 1;
-        const category = (field.category || "").toLowerCase();
-        if (category.includes("performance")) summary.performance += 1;
+        if (categoryId(field.category).includes("performance")) summary.performance += 1;
       }
     }
   }
@@ -321,10 +322,9 @@ export function metadataMatchesSearch(fieldKey, fieldMeta, term) {
     return true;
   }
   if (
-    matches(fieldMeta.label) ||
-    matches(fieldMeta.hint) ||
-    matches(fieldMeta.docs) ||
-    matches(fieldMeta.unit)
+    matches(fieldLabel(fieldMeta.key)) ||
+    matches(fieldHint(fieldMeta.key)) ||
+    matches(fieldUnit(fieldMeta.key))
   ) {
     return true;
   }
@@ -363,7 +363,7 @@ export function sectionHasMatchingFields(sectionId, term, metadata) {
 
   const fields = sectionMeta.fields ?? {};
   for (const [fieldKey, fieldMeta] of Object.entries(fields)) {
-    const category = fieldMeta.category ?? "General";
+    const category = categoryLabel(categoryId(fieldMeta.category ?? "General"));
     if (category.toLowerCase().includes(term)) {
       return true;
     }

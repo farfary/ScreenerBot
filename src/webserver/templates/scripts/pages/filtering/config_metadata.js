@@ -7,6 +7,13 @@
  */
 
 import { formatTimestamp } from "../../core/format.js";
+import {
+  categoryId,
+  categoryLabel,
+  fieldHint,
+  fieldLabel,
+  fieldUnit,
+} from "../config/field_text.js";
 
 export const FILTER_TABS = [
   { id: "status", label: '<i class="icon-chart-bar"></i> Status' },
@@ -144,6 +151,21 @@ function buildRows(fields) {
     .map((entry) => entry.row);
 }
 
+/**
+ * A field as the sub-tabs render it: `key` is the config key, `catalogKey` the
+ * localization key, and `label`, `hint` and `unit` are read from the catalog.
+ */
+function withCatalogText(key, metadata) {
+  return {
+    ...metadata,
+    key,
+    catalogKey: metadata.key,
+    label: fieldLabel(metadata.key),
+    hint: fieldHint(metadata.key),
+    unit: fieldUnit(metadata.key),
+  };
+}
+
 function groupFields(source, fields) {
   const categories = new Map();
 
@@ -151,9 +173,9 @@ function groupFields(source, fields) {
     // A source's own master switch is not one of its parameters — it is the
     // sub-tab's master control (see `getSourceMasterField`).
     if (source !== "meta" && key === "enabled") continue;
-    const category = metadata.category || "General";
+    const category = categoryId(metadata.category || "General");
     if (!categories.has(category)) categories.set(category, []);
-    categories.get(category).push({ key, ...metadata });
+    categories.get(category).push(withCatalogText(key, metadata));
   }
 
   return Array.from(categories, ([category, categoryFields]) => {
@@ -169,7 +191,7 @@ function groupFields(source, fields) {
       // the identity has to carry the source — a bare category name silently
       // collided and dropped groups when they were keyed by title.
       id: `${source}:${category}`,
-      title: category,
+      title: categoryLabel(category),
       source,
       enableKey: enableField?.key,
       enableHint: enableField?.hint,
@@ -206,7 +228,7 @@ export function buildConfigGroups(filteringMetadata = {}) {
 export function getSourceMasterField(filteringMetadata, source) {
   if (source === "meta") return null;
   const field = filteringMetadata?.[source]?.children?.enabled;
-  return field && field.type === "boolean" ? { key: "enabled", ...field } : null;
+  return field && field.type === "boolean" ? withCatalogText("enabled", field) : null;
 }
 
 export function formatTimestampForInput(timestamp) {

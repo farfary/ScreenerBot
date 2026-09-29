@@ -34,6 +34,7 @@ import {
   isCategoryOpen,
   toggleCategory,
 } from "./config/field_renderers.js";
+import { categoryId, categoryLabel, fieldLabel } from "./config/field_text.js";
 
 const CONFIG_STATE_KEY = "config.page";
 const DEFAULT_SECTION = "trader";
@@ -465,7 +466,7 @@ function sortCategoriesByVisibility(categories) {
     if (orderDiff !== 0) return orderDiff;
     const switchDiff = Number(holdsSwitch(fieldsB)) - Number(holdsSwitch(fieldsA));
     if (switchDiff !== 0) return switchDiff;
-    return catA.localeCompare(catB);
+    return categoryLabel(catA).localeCompare(categoryLabel(catB));
   });
 }
 
@@ -524,7 +525,7 @@ function renderCategories(sectionId) {
 
   const grouped = new Map();
   for (const [fieldKey, fieldMeta] of fields) {
-    const category = fieldMeta.category ?? "General";
+    const category = categoryId(fieldMeta.category ?? "General");
     if (!grouped.has(category)) {
       grouped.set(category, []);
     }
@@ -575,7 +576,7 @@ function renderCategories(sectionId) {
     header.innerHTML = `
       <div class="config-category-label">
         <i class="chevron icon-chevron-down"></i>
-        <span>${Utils.escapeHtml(category)}</span>
+        <span>${Utils.escapeHtml(categoryLabel(category))}</span>
       </div>
       <div class="config-category-meta">
         <span class="config-category-chip">${fieldCountLabel(fieldsList.length)}</span>
@@ -626,7 +627,7 @@ function renderCategories(sectionId) {
       const controlEl = create("div", { className: "config-field-control" });
 
       labelEl.innerHTML = buildFieldLabelHtml({
-        label: fieldMeta.label || fieldKey,
+        label: fieldLabel(fieldMeta.key),
         pathLabel: fieldPathLabel,
         metadata: fieldMeta,
         defaultValue: fieldMeta.type === "object" ? undefined : defaultValue,
@@ -733,7 +734,7 @@ function renderCategories(sectionId) {
 
     // Check if category matches search term directly
     const categoryMatchesSearch =
-      searchTerm.length > 0 && category.toLowerCase().includes(searchTerm);
+      searchTerm.length > 0 && categoryLabel(category).toLowerCase().includes(searchTerm);
 
     // Hide categories with no visible fields when searching
     const visibleFieldCount = body.querySelectorAll(".config-field").length;

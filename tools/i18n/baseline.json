@@ -36,7 +36,7 @@
     "src/webserver/templates/scripts/pages/assistant/instructions_tab.js": 88,
     "src/webserver/templates/scripts/pages/assistant/providers_tab.js": 47,
     "src/webserver/templates/scripts/pages/config.js": 55,
-    "src/webserver/templates/scripts/pages/config/field_renderers.js": 7,
+    "src/webserver/templates/scripts/pages/config/field_renderers.js": 6,
     "src/webserver/templates/scripts/pages/copy.js": 6,
     "src/webserver/templates/scripts/pages/copy/activity.js": 13,
     "src/webserver/templates/scripts/pages/copy/arm_gate.js": 6,

@@ -1,0 +1,56 @@
+/**
+ * Display text of configuration fields, read from the localization catalog.
+ *
+ * `/api/config/metadata` carries each field's catalog key (`config-<section>-
+ * <field>...`). The label is the message value; `hint`, `unit` and
+ * `placeholder` are message attributes. Category and impact names are
+ * `config-category-<id>` and `config-impact-<value>` messages.
+ *
+ * Every id built here lives in the `config-` namespace, which the Rust test
+ * `config_catalog_covers_fields` keeps complete.
+ */
+
+/**
+ * Stable id of a category name: lowercase, every run of non-alphanumerics
+ * collapsed to one `-`. Mirrors `category_key` in `src/config/metadata.rs`.
+ */
+export function categoryId(name) {
+  return String(name ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+/** Label of a field, by its catalog key. */
+export function fieldLabel(key) {
+  return I18n.t(key); // l10n-dynamic: config-
+}
+
+function fieldAttribute(key, name) {
+  return I18n.attr(key, name) ?? undefined; // l10n-dynamic: config-
+}
+
+/** Description of a field, or `undefined`. */
+export function fieldHint(key) {
+  return fieldAttribute(key, "hint");
+}
+
+/** Unit of a field's value, or `undefined`. */
+export function fieldUnit(key) {
+  return fieldAttribute(key, "unit");
+}
+
+/** Input placeholder of a field, or `undefined`. */
+export function fieldPlaceholder(key) {
+  return fieldAttribute(key, "placeholder");
+}
+
+/** Display name of a category, from its `categoryId`. */
+export function categoryLabel(id) {
+  return I18n.t("config-category-" + id); // l10n-dynamic: config-
+}
+
+/** Display name of an impact level (`critical`, `high`, `medium`, `low`). */
+export function impactLabel(impact) {
+  return I18n.t("config-impact-" + String(impact).toLowerCase()); // l10n-dynamic: config-
+}

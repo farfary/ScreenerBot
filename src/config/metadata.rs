@@ -26,6 +26,9 @@ pub enum FieldType {
 pub struct FieldMetadata {
     #[serde(rename = "type")]
     pub field_type: FieldType,
+    /// Localization catalog key (`config-<section>-<field>...`), assigned by
+    /// `collect_config_metadata` from the field path.
+    pub key: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub item_type: Option<FieldType>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -73,6 +76,7 @@ impl FieldMetadata {
 
         FieldMetadata {
             field_type: T::field_type(),
+            key: String::new(),
             item_type: T::item_type(),
             label: extras.label,
             hint: extras.hint,
@@ -318,6 +322,10 @@ pub fn collect_config_metadata() -> ConfigMetadata {
     map.insert("referral", super::ReferralConfig::field_metadata());
     map.insert("account", super::AccountConfig::field_metadata());
 
+    for (section_id, section) in map.iter_mut() {
+        assign_keys(&catalog_key(&["config", section_id]), section);
+    }
+
     for section in map.values_mut() {
         section.retain(|_, field| !field.hidden.unwrap_or_default());
 
@@ -334,6 +342,41 @@ pub fn collect_config_metadata() -> ConfigMetadata {
     }
 
     map
+}
+
+/// Catalog key for a path: each segment lowercased with `_` replaced by `-`,
+/// joined by `-`. The single place field keys are formed.
+pub(crate) fn catalog_key(segments: &[&str]) -> String {
+    segments
+        .iter()
+        .map(|segment| segment.to_ascii_lowercase().replace('_', "-"))
+        .collect::<Vec<_>>()
+        .join("-")
+}
+
+/// Category catalog key (`config-category-<kebab name>`).
+pub(crate) fn category_key(category: &str) -> String {
+    let kebab = category
+        .to_ascii_lowercase()
+        .split(|c: char| !c.is_ascii_alphanumeric())
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join("-");
+    format!("config-category-{kebab}")
+}
+
+/// Impact catalog key (`config-impact-<value>`).
+pub(crate) fn impact_key(impact: &str) -> String {
+    format!("config-impact-{}", impact.to_ascii_lowercase())
+}
+
+fn assign_keys(prefix: &str, fields: &mut SectionMetadata) {
+    for (name, field) in fields.iter_mut() {
+        field.key = format!("{prefix}-{}", catalog_key(&[name]));
+        if let Some(children) = field.children.as_mut() {
+            assign_keys(&field.key.clone(), children);
+        }
+    }
 }
 
 /// Determines visibility level for a category

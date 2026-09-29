@@ -112,7 +112,7 @@ test("usage rejects dynamic I18n calls unless a declared namespace annotates the
 test("usage collects literal and data-l10n-id references and flags unused ids", () => {
   const js = usageOf(`const a = "hello"; el.innerHTML = '<b data-l10n-id="tip"></b>';`);
   assert.deepEqual([...js.used].sort(), ["hello", "tip"]);
-  const unused = unusedErrors({ ids: IDS, used: js.used });
+  const unused = unusedErrors({ ids: IDS, used: js.used, namespaces: {} });
   assert.match(unused[0].message, /"config-x" is not used/);
   assert.deepEqual(unusedErrors({ ids: IDS, used: js.used, namespaces: NAMESPACES }), []);
 });

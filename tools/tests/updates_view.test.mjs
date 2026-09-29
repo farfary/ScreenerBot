@@ -6,6 +6,21 @@ import {
   parseReleaseNotes,
 } from "../../src/webserver/templates/scripts/ui/settings/updates_view.js";
 
+// Stand-in catalog for the field text that metadata references by key.
+const messages = {
+  "config-updates-auto-check": { value: "Check for Updates", hint: "Look for releases" },
+  "config-updates-check-interval-hours": {
+    value: "Check Interval",
+    hint: "How often to check",
+    unit: "hours",
+  },
+  "config-category-checking": { value: "Checking" },
+};
+globalThis.I18n = {
+  t: (id) => messages[id]?.value ?? id,
+  attr: (id, name) => messages[id]?.[name] ?? null,
+};
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -139,19 +154,16 @@ test("preferences use metadata and include the check interval", () => {
     {
       auto_check: {
         type: "boolean",
-        label: "Check for Updates",
-        hint: "Look for releases",
+        key: "config-updates-auto-check",
         category: "Checking",
       },
       check_interval_hours: {
         type: "integer",
-        label: "Check Interval",
-        hint: "How often to check",
+        key: "config-updates-check-interval-hours",
         category: "Checking",
         min: 1,
         max: 168,
         step: 1,
-        unit: "hours",
       },
     }
   );

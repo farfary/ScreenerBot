@@ -5,6 +5,14 @@
  * release-note text, and configuration metadata into stable dashboard markup.
  */
 
+import {
+  categoryId,
+  categoryLabel,
+  fieldHint,
+  fieldLabel,
+  fieldUnit,
+} from "../../pages/config/field_text.js";
+
 const PREFERENCE_ORDER = [
   "auto_check",
   "check_interval_hours",
@@ -14,7 +22,7 @@ const PREFERENCE_ORDER = [
   "notify_telegram",
 ];
 
-const CATEGORY_ORDER = ["Checking", "Installing", "Notifications"];
+const CATEGORY_ORDER = ["checking", "installing", "notifications"];
 
 function orderBy(items, preferredOrder, valueFor) {
   const ranks = new Map(preferredOrder.map((value, index) => [value, index]));
@@ -434,12 +442,13 @@ export function createUpdatesView(Utils) {
     const min = Number.isFinite(metadata.min) ? ` min="${metadata.min}"` : "";
     const max = Number.isFinite(metadata.max) ? ` max="${metadata.max}"` : "";
     const step = Number.isFinite(metadata.step) ? ` step="${metadata.step}"` : "";
+    const unit = fieldUnit(metadata.key);
     return `
       <div class="updates-number-control">
         <input class="updates-number-input" type="number" id="updatePref_${escape(key)}"
           data-pref="${escape(key)}" data-saved-value="${escape(value)}" value="${escape(value)}"
           ${min}${max}${step}>
-        ${metadata.unit ? `<span class="input-unit">${escape(metadata.unit)}</span>` : ""}
+        ${unit ? `<span class="input-unit">${escape(unit)}</span>` : ""}
       </div>
     `;
   }
@@ -465,11 +474,12 @@ export function createUpdatesView(Utils) {
       `;
     }
 
-    const categoryNames = [...new Set(fields.map((field) => field.metadata.category || "Other"))];
-    const categories = orderBy(categoryNames, CATEGORY_ORDER, (category) => category).map(
+    const categoryOf = (field) => categoryId(field.metadata.category || "General");
+    const categoryIds = [...new Set(fields.map(categoryOf))];
+    const categories = orderBy(categoryIds, CATEGORY_ORDER, (category) => category).map(
       (category) => ({
         category,
-        fields: fields.filter((field) => (field.metadata.category || "Other") === category),
+        fields: fields.filter((field) => categoryOf(field) === category),
       })
     );
 
@@ -477,15 +487,15 @@ export function createUpdatesView(Utils) {
       .map(
         ({ category, fields: categoryFields }) => `
           <section class="updates-preference-section">
-            <h3 class="updates-subhead">${escape(category)}</h3>
+            <h3 class="updates-subhead">${escape(categoryLabel(category))}</h3>
             <div class="settings-group">
               ${categoryFields
                 .map(
                   ({ key, value, metadata: field }) => `
                     <div class="settings-field" data-update-field="${escape(key)}">
                       <div class="settings-field-info">
-                        <label for="updatePref_${escape(key)}">${escape(field.label || key)}</label>
-                        ${field.hint ? `<span class="settings-field-hint">${escape(field.hint)}</span>` : ""}
+                        <label for="updatePref_${escape(key)}">${escape(fieldLabel(field.key))}</label>
+                        ${fieldHint(field.key) ? `<span class="settings-field-hint">${escape(fieldHint(field.key))}</span>` : ""}
                       </div>
                       <div class="settings-field-control">
                         ${renderPreferenceControl(key, value, field)}

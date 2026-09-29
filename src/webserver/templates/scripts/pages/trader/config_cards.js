@@ -7,6 +7,8 @@
 //! /api/config (applied + hot-reloaded by core via the caller's saveConfig).
 //! Reset discards the unsaved edits, restoring the last-saved values.
 
+import { fieldHint, fieldLabel, fieldUnit } from "../config/field_text.js";
+
 // Declarative spec: which DOM fields belong to which card, their config section
 // and key, and how to coerce the input value into the saved payload. Keys/types
 // mirror the backend config schema (trader / positions sections).
@@ -270,9 +272,13 @@ export function createTraderConfigCards({ saveConfig }) {
         const hint = group?.querySelector(".config-hint");
         const unit = group?.querySelector(".input-unit");
 
-        if (label && metadata.label) label.textContent = metadata.label;
-        if (hint && metadata.hint) hint.textContent = metadata.hint;
-        if (unit && metadata.unit) unit.textContent = metadata.unit;
+        const labelText = fieldLabel(metadata.key);
+        const hintText = fieldHint(metadata.key);
+        const unitText = fieldUnit(metadata.key);
+
+        if (label) label.textContent = labelText;
+        if (hint && hintText) hint.textContent = hintText;
+        if (unit && unitText) unit.textContent = unitText;
 
         if (input.type === "number" && field.type !== "minutes-to-seconds") {
           if (metadata.min != null) input.min = String(metadata.min);
@@ -280,9 +286,8 @@ export function createTraderConfigCards({ saveConfig }) {
           if (metadata.step != null) input.step = String(metadata.step);
         }
 
-        const accessibleName = metadata.label || field.key;
-        input.setAttribute("aria-label", accessibleName);
-        if (metadata.hint) input.setAttribute("title", metadata.hint);
+        input.setAttribute("aria-label", labelText);
+        if (hintText) input.setAttribute("title", hintText);
       });
     });
   }

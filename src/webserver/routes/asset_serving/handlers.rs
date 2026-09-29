@@ -142,6 +142,7 @@ pub async fn get_page_script(Path(file): Path<String>) -> Response {
         "config.js" => Some(embeds::CONFIG_PAGE_SCRIPT),
         "config/utils.js" => Some(embeds::CONFIG_UTILS_JS),
         "config/field_renderers.js" => Some(embeds::CONFIG_FIELD_RENDERERS_JS),
+        "config/field_text.js" => Some(embeds::CONFIG_FIELD_TEXT_JS),
         "strategies.js" => Some(embeds::STRATEGIES_PAGE_SCRIPT),
         "strategies/condition_editor.js" => Some(embeds::STRATEGIES_CONDITION_EDITOR_JS),
         "strategies/condition_catalog.js" => Some(embeds::STRATEGIES_CONDITION_CATALOG_JS),

@@ -73,4 +73,10 @@ impl Serialize for MessageId {
     }
 }
 
+/// Every message id in the source-locale catalogs, sorted.
+#[cfg(test)]
+pub(crate) fn source_message_ids() -> &'static [&'static str] {
+    SOURCE_IDS
+}
+
 include!(concat!(env!("OUT_DIR"), "/i18n_catalog.rs"));

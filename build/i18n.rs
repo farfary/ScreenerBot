@@ -3,7 +3,7 @@
 //! Every registered locale directory under `locales/` is parsed with the Fluent
 //! syntax parser; any parse error or duplicate message id fails the build. The
 //! generated `i18n_catalog.rs` embeds the catalogs and one `MessageId` constant
-//! per source-locale message.
+//! per source-locale message, plus the sorted list of those ids.
 
 use fluent_syntax::ast::Entry;
 use serde::Deserialize;
@@ -144,6 +144,11 @@ pub fn generate(manifest_dir: &Path, out_dir: &Path) {
         "pub(crate) const REGISTRY_TOML: &str = include_str!({:?});\n",
         registry_path.display().to_string()
     );
+    out.push_str("pub(crate) static SOURCE_IDS: &[&str] = &[\n");
+    for id in &source_ids {
+        let _ = writeln!(out, "    {id:?},");
+    }
+    out.push_str("];\n\n");
     out.push_str("pub mod ids {\n    use super::MessageId;\n\n");
     for (name, id) in &consts {
         let _ = writeln!(
