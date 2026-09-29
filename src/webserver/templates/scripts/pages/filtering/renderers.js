@@ -149,7 +149,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
         <div class="metric-card">
           <span class="metric-label">Last Refresh</span>
           <span class="metric-value">${Utils.escapeHtml(refreshedLabel(updated_at))}</span>
-          <span class="metric-detail">${updated_at ? Utils.escapeHtml(new Date(updated_at).toLocaleString()) : building ? "First snapshot in progress" : "No refresh yet"}</span>
+          <span class="metric-detail">${updated_at ? Utils.escapeHtml(Utils.formatTimestamp(updated_at)) : building ? "First snapshot in progress" : "No refresh yet"}</span>
         </div>
       </div>
     `;
@@ -497,7 +497,9 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
     const data = state.analytics;
 
     const totalRejected = data.total_rejected || 0;
-    const rejectionRate = data.rejection_rate ? `${data.rejection_rate.toFixed(1)}%` : "";
+    const rejectionRate = data.rejection_rate
+      ? Utils.formatPercentValue(data.rejection_rate, { decimals: 1, includeSign: false })
+      : "";
 
     // Compact Tree View
     const treeHtml = `

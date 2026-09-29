@@ -1,3 +1,5 @@
+import { formatPercentValue, formatSol, formatTimeSpan } from "../../core/format.js";
+
 /**
  * Trader Example Updaters Module
  *
@@ -92,8 +94,7 @@ export function createExampleUpdaters({ $, Utils: _Utils }) {
       exampleProfit.textContent = `+${value}% profit`;
     }
     if (exampleTarget) {
-      const targetValue = (0.01 * (1 + value / 100)).toFixed(4);
-      exampleTarget.textContent = `${targetValue} SOL`;
+      exampleTarget.textContent = formatSol(0.01 * (1 + value / 100), { decimals: 4 });
     }
     if (exampleSummary) {
       exampleSummary.textContent = `+${value}%`;
@@ -154,9 +155,9 @@ export function createExampleUpdaters({ $, Utils: _Utils }) {
     const entryPrice = 0.01;
     const exitPrice = entryPrice * (1 - threshold / 100);
 
-    if (exampleEntry) exampleEntry.textContent = `${entryPrice.toFixed(6)} SOL`;
+    if (exampleEntry) exampleEntry.textContent = formatSol(entryPrice, { decimals: 6 });
     if (exampleTrigger) exampleTrigger.textContent = `-${threshold}%`;
-    if (exampleExit) exampleExit.textContent = `${exitPrice.toFixed(6)} SOL`;
+    if (exampleExit) exampleExit.textContent = formatSol(exitPrice, { decimals: 6 });
     if (exampleLoss) exampleLoss.textContent = `-${threshold}%`;
 
     // Update hold time display
@@ -165,11 +166,11 @@ export function createExampleUpdaters({ $, Utils: _Utils }) {
       if (minHold === 0) {
         holdTimeDisplay.textContent = "Immediate";
       } else if (minHold < 60) {
-        holdTimeDisplay.textContent = `${minHold}s delay`;
+        holdTimeDisplay.textContent = `${formatTimeSpan(minHold)} delay`;
       } else if (minHold < 3600) {
-        holdTimeDisplay.textContent = `${Math.round(minHold / 60)}m delay`;
+        holdTimeDisplay.textContent = `${formatTimeSpan(Math.round(minHold / 60), { unit: "minute" })} delay`;
       } else {
-        holdTimeDisplay.textContent = `${(minHold / 3600).toFixed(1)}h delay`;
+        holdTimeDisplay.textContent = `${formatTimeSpan(minHold / 3600, { unit: "hour", decimals: 1 })} delay`;
       }
     }
 
@@ -205,35 +206,36 @@ export function createExampleUpdaters({ $, Utils: _Utils }) {
     const stepPeak = $("#example-peak");
     const stepExit = $("#example-exit");
 
-    if (stepEntry) stepEntry.textContent = `${entryPrice.toFixed(4)} SOL`;
+    if (stepEntry) stepEntry.textContent = formatSol(entryPrice, { decimals: 4 });
     if (stepActivation) {
-      stepActivation.textContent = `${activationPrice.toFixed(4)} SOL`;
+      stepActivation.textContent = formatSol(activationPrice, { decimals: 4 });
       const activationDetail = $("#example-activation-pct");
       if (activationDetail) activationDetail.textContent = `+${activation}% profit`;
     }
     if (stepPeak) {
-      stepPeak.textContent = `${peakPrice.toFixed(4)} SOL`;
+      stepPeak.textContent = formatSol(peakPrice, { decimals: 4 });
       const peakDetail = $("#example-peak-pct");
       if (peakDetail) {
         const gainFromEntry = ((peakPrice - entryPrice) / entryPrice) * 100;
-        peakDetail.textContent = `+${gainFromEntry.toFixed(1)}% profit`;
+        peakDetail.textContent = `+${formatPercentValue(gainFromEntry, { decimals: 1, plus: "" })} profit`;
       }
     }
     if (stepExit) {
-      stepExit.textContent = `${exitPrice.toFixed(4)} SOL`;
+      stepExit.textContent = formatSol(exitPrice, { decimals: 4 });
       const exitDetail = $("#example-exit-pct");
-      if (exitDetail) exitDetail.textContent = `+${protectedProfit.toFixed(1)}% final`;
+      if (exitDetail)
+        exitDetail.textContent = `+${formatPercentValue(protectedProfit, { decimals: 1, plus: "" })} final`;
     }
 
     // Update summary
     const summaryProtected = $("#example-protected");
     const summaryAvoided = $("#example-avoided");
     if (summaryProtected) {
-      summaryProtected.textContent = `${protectedProfit.toFixed(1)}%`;
+      summaryProtected.textContent = formatPercentValue(protectedProfit, { decimals: 1, plus: "" });
     }
     if (summaryAvoided) {
       const avoidedLoss = ((peakPrice - exitPrice) / peakPrice) * 100;
-      summaryAvoided.textContent = `${avoidedLoss.toFixed(1)}%`;
+      summaryAvoided.textContent = formatPercentValue(avoidedLoss, { decimals: 1, plus: "" });
     }
 
     // Update impact indicators

@@ -1,6 +1,7 @@
 /* global */
 import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
+import { formatTimeSpan } from "../core/format.js";
 import * as Utils from "../core/utils.js";
 import { requestManager, createScopedFetcher } from "../core/request_manager.js";
 import { showFeaturedRow, hideFeaturedRow } from "../ui/featured_row.js";
@@ -403,9 +404,13 @@ function createLifecycle() {
       if (mins >= 60) {
         const hours = Math.floor(mins / 60);
         const remainingMins = mins % 60;
-        avgHoldEl.textContent = remainingMins > 0 ? `${hours}h ${remainingMins}m` : `${hours}h`;
+        const hoursText = formatTimeSpan(hours, { unit: "hour" });
+        avgHoldEl.textContent =
+          remainingMins > 0
+            ? `${hoursText} ${formatTimeSpan(remainingMins, { unit: "minute" })}`
+            : hoursText;
       } else {
-        avgHoldEl.textContent = `${mins}m`;
+        avgHoldEl.textContent = formatTimeSpan(mins, { unit: "minute" });
       }
     }
     if (bestEl) {

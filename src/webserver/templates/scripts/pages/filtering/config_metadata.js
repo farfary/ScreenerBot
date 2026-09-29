@@ -6,6 +6,8 @@
  * amount of grouping logic unique to the filtering workspace.
  */
 
+import { formatTimestamp } from "../../core/format.js";
+
 export const FILTER_TABS = [
   { id: "status", label: '<i class="icon-chart-bar"></i> Status' },
   { id: "analytics", label: '<i class="icon-chart-pie"></i> Analytics' },
@@ -218,8 +220,8 @@ export function getTimeRangeLabel(timeRange) {
   const { preset, startTime, endTime } = timeRange;
   if (preset === "all" || (!startTime && !endTime)) return "All Time";
   if (preset === "custom") {
-    const start = startTime ? new Date(startTime * 1000).toLocaleString() : "∞";
-    const end = endTime ? new Date(endTime * 1000).toLocaleString() : "Now";
+    const start = startTime ? formatTimestamp(startTime) : "∞";
+    const end = endTime ? formatTimestamp(endTime) : "Now";
     return `${start} → ${end}`;
   }
   return TIME_RANGE_PRESETS[preset]?.label || "Custom";

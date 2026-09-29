@@ -4,6 +4,7 @@
  */
 
 import { $, $$, on } from "../../core/dom.js";
+import { formatFixed, formatPercentValue } from "../../core/format.js";
 import * as Utils from "../../core/utils.js";
 import { ConfirmationDialog } from "../../ui/confirmation_dialog.js";
 
@@ -878,7 +879,7 @@ function renderTaSecurityTab() {
           <div class="ta-holder-bar">
             <div class="ta-holder-fill" style="width: ${Math.min(security.top_holders_pct, 100)}%"></div>
           </div>
-          <span class="ta-holder-pct">${security.top_holders_pct.toFixed(2)}%</span>
+          <span class="ta-holder-pct">${formatPercentValue(security.top_holders_pct, { plus: "" })}</span>
           <span class="ta-holder-label">held by top 10 holders</span>
         </div>
       </div>
@@ -1136,7 +1137,7 @@ function copyAnalysisReport() {
 
   if (overview.price_sol) {
     report += `Price: ${overview.price_sol} SOL`;
-    if (overview.price_usd) report += ` ($${overview.price_usd.toFixed(6)})`;
+    if (overview.price_usd) report += ` ($${formatFixed(overview.price_usd, { decimals: 6 })})`;
     report += "\n";
   }
 
@@ -1152,18 +1153,19 @@ function copyAnalysisReport() {
 
   if (market) {
     report += "\nMarket:\n";
-    if (market.volume_h24) report += `- 24h Volume: $${market.volume_h24.toFixed(2)}\n`;
-    if (market.price_change_h24) report += `- 24h Change: ${market.price_change_h24.toFixed(2)}%\n`;
-    if (market.market_cap) report += `- Market Cap: $${market.market_cap.toFixed(2)}\n`;
+    if (market.volume_h24) report += `- 24h Volume: $${formatFixed(market.volume_h24)}\n`;
+    if (market.price_change_h24)
+      report += `- 24h Change: ${formatPercentValue(market.price_change_h24, { plus: "" })}\n`;
+    if (market.market_cap) report += `- Market Cap: $${formatFixed(market.market_cap)}\n`;
   }
 
   if (liquidity) {
     report += "\nLiquidity:\n";
-    report += `- Total: ${liquidity.total_liquidity_sol.toFixed(4)} SOL\n`;
+    report += `- Total: ${Utils.formatSol(liquidity.total_liquidity_sol)}\n`;
     report += `- Pools: ${liquidity.pool_count}\n`;
   }
 
-  report += `\nGenerated: ${new Date(taAnalysisData.fetched_at).toLocaleString()}\n`;
+  report += `\nGenerated: ${Utils.formatTimestamp(taAnalysisData.fetched_at)}\n`;
 
   Utils.copyToClipboard(report);
   Utils.notifyCopied("Analysis report");

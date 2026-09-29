@@ -1,6 +1,7 @@
 import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
 import { $, $$ } from "../core/dom.js";
+import { formatFixed, formatPercentValue } from "../core/format.js";
 import * as Utils from "../core/utils.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
@@ -463,7 +464,7 @@ function createLifecycle() {
 
       setValue(
         "profit-factor",
-        Number.isFinite(data.profit_factor) ? data.profit_factor.toFixed(2) : "—",
+        formatFixed(data.profit_factor),
         Number.isFinite(data.profit_factor)
           ? data.profit_factor >= 1
             ? "positive"
@@ -1078,7 +1079,7 @@ function createLifecycle() {
                 <div class="time-rule-metric">
                   <span class="time-rule-label">ROI:</span>
                   <span class="time-rule-value ${roi >= 0 ? "value-positive" : "value-negative"}">
-                    ${roi >= 0 ? "+" : ""}${roi.toFixed(2)}%
+                    ${roi >= 0 ? "+" : ""}${formatPercentValue(roi, { plus: "" })}
                   </span>
                 </div>
               </div>

@@ -59,7 +59,7 @@
     "src/webserver/templates/scripts/pages/filtering.js": 41,
     "src/webserver/templates/scripts/pages/filtering/config_metadata.js": 9,
     "src/webserver/templates/scripts/pages/filtering/renderers.js": 65,
-    "src/webserver/templates/scripts/pages/home.js": 8,
+    "src/webserver/templates/scripts/pages/home.js": 5,
     "src/webserver/templates/scripts/pages/login.js": 6,
     "src/webserver/templates/scripts/pages/positions.js": 71,
     "src/webserver/templates/scripts/pages/services.js": 45,

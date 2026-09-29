@@ -1,3 +1,5 @@
+import { formatTimeSpan } from "../../core/format.js";
+
 /**
  * Trader Controls Module
  *
@@ -313,7 +315,7 @@ export function createTraderControls({
       const remainingSecs = data.period_remaining_secs ?? 0;
       const hours = Math.floor(remainingSecs / 3600);
       const mins = Math.floor((remainingSecs % 3600) / 60);
-      period.textContent = `Resets in ${hours}h ${mins}m`;
+      period.textContent = `Resets in ${formatTimeSpan(hours, { unit: "hour" })} ${formatTimeSpan(mins, { unit: "minute" })}`;
     }
 
     if (status) {

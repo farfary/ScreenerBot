@@ -125,6 +125,18 @@ export function formatNumber(value, decimalsOrOptions = 2, maybeOptions = {}) {
   }).format(num);
 }
 
+/**
+ * A number at a fixed count of decimals, without grouping. Rounds the exact
+ * binary value like `toFixed`, so it matches the money formatters digit for digit.
+ */
+export function formatFixed(value, { decimals = 2, fallback = DASH } = {}) {
+  const num = coerceNumber(value);
+  if (!Number.isFinite(num)) {
+    return fallback;
+  }
+  return localizeDecimal(num.toFixed(decimals));
+}
+
 export function formatCompactNumber(value, digitsOrOptions = 2, maybeFallback = DASH) {
   // Support both (value, digits, fallback) and (value, { digits, fallback, prefix })
   let digits = digitsOrOptions;
@@ -262,7 +274,7 @@ export function formatPriceSol(price, { fallback, decimals = 12 } = {}) {
 
 export function formatPercentValue(
   value,
-  { fallback = DASH, decimals = 2, includeSign = true } = {}
+  { fallback = DASH, decimals = 2, includeSign = true, plus = "+" } = {}
 ) {
   const num = coerceNumber(value);
   if (!Number.isFinite(num)) {
@@ -274,7 +286,7 @@ export function formatPercentValue(
     return `${magnitude}%`;
   }
 
-  if (num > 0) return `+${magnitude}%`;
+  if (num > 0) return `${plus}${magnitude}%`;
   if (num < 0) return `-${magnitude}%`;
   return `${magnitude}%`;
 }
@@ -395,18 +407,24 @@ function toDate(value) {
   return null;
 }
 
-export function formatTimestamp(value, { fallback, includeSeconds = true } = {}) {
+export function formatTimestamp(
+  value,
+  { fallback, includeSeconds = true, includeYear = true, includeDate = true } = {}
+) {
   const date = toDate(value);
   if (!date) {
     return orElse(fallback, notAvailable);
   }
-  const options = {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  };
+  const options = {};
+  if (includeDate) {
+    if (includeYear) {
+      options.year = "numeric";
+    }
+    options.month = "short";
+    options.day = "numeric";
+  }
+  options.hour = "2-digit";
+  options.minute = "2-digit";
   if (includeSeconds) {
     options.second = "2-digit";
   }
@@ -417,24 +435,46 @@ export function formatTimestamp(value, { fallback, includeSeconds = true } = {})
  * Calendar day only. A release date, a report day or an expiry is about the
  * day itself, and formatTimestamp's time-of-day is noise there.
  */
-export function formatDate(value, { fallback } = {}) {
+export function formatDate(
+  value,
+  { fallback, includeYear = true, weekday = false, utc = false } = {}
+) {
   const date = toDate(value);
   if (!date) {
     return orElse(fallback, notAvailable);
   }
-  return intl(Intl.DateTimeFormat, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  }).format(date);
+  const options = {};
+  if (weekday) {
+    options.weekday = "short";
+  }
+  if (includeYear) {
+    options.year = "numeric";
+  }
+  options.month = "short";
+  options.day = "numeric";
+  if (utc) {
+    options.timeZone = "UTC";
+  }
+  return intl(Intl.DateTimeFormat, options).format(date);
 }
 
-export function formatTimeAgo(value, { fallback = HYPHEN } = {}) {
+/**
+ * Elapsed time since a moment. The default style shows the largest whole unit
+ * ("3h ago"); `detailed` shows the trimmed two-unit span ("3h 5m ago") and
+ * "just now" below five seconds.
+ */
+export function formatTimeAgo(value, { fallback = HYPHEN, style = "compact" } = {}) {
   const date = toDate(value);
   if (!date) {
     return fallback;
   }
   const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (style === "detailed") {
+    const elapsed = (Date.now() - date.getTime()) / 1000;
+    if (elapsed < 5) return plain(I18n.t("format-just-now"));
+    const span = formatUptime(Math.round(elapsed), { style: "trimmed" });
+    return plain(I18n.t("format-ago-span", counted(Math.round(elapsed), span)));
+  }
   if (seconds < 0) {
     return ago.second(0);
   }
@@ -481,12 +521,16 @@ export function formatUptime(seconds, { fallback, style = "detailed" } = {}) {
   const minutes = Math.floor((total % 3600) / 60);
   const remainingSeconds = total % 60;
 
-  if (style === "compact") {
+  // `trimmed` is `compact` without a trailing zero part ("3h", not "3h 0m").
+  if (style === "compact" || style === "trimmed") {
+    const trim = style === "trimmed";
     if (total < 60) return unit.second(total);
     if (total < 3600) return unit.minute(Math.floor(total / 60));
     if (total < 86400) {
-      return `${unit.hour(Math.floor(total / 3600))} ${unit.minute(Math.floor((total % 3600) / 60))}`;
+      if (trim && minutes === 0) return unit.hour(hours);
+      return `${unit.hour(Math.floor(total / 3600))} ${unit.minute(minutes)}`;
     }
+    if (trim && hours === 0) return unit.day(days);
     return `${unit.day(days)} ${unit.hour(hours)}`;
   }
 
@@ -495,6 +539,22 @@ export function formatUptime(seconds, { fallback, style = "detailed" } = {}) {
     return `${unit.hour(hours)} ${unit.minute(minutes)} ${unit.second(remainingSeconds)}`;
   if (minutes > 0) return `${unit.minute(minutes)} ${unit.second(remainingSeconds)}`;
   return unit.second(remainingSeconds);
+}
+
+/**
+ * A quantity of one time unit ("1.5s", "2.0h") at a fixed number of decimals.
+ * `unit` is one of `second`, `minute`, `hour`, `day`.
+ */
+export function formatTimeSpan(
+  value,
+  { unit: unitName = "second", decimals = 0, fallback = DASH } = {}
+) {
+  const num = coerceNumber(value);
+  const words = unit[unitName];
+  if (!Number.isFinite(num) || !words) {
+    return fallback;
+  }
+  return words(num, localizeDecimal(num.toFixed(decimals)));
 }
 
 export function formatBytes(bytes, fallback) {

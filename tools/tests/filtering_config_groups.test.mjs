@@ -10,6 +10,7 @@
  * Run with `npm run test:js`.
  */
 
+import "./fixtures/i18n_global.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 

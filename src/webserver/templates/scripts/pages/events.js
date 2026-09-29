@@ -300,11 +300,7 @@ function createLifecycle() {
           floating: true,
           wrap: false,
           render: (value) => {
-            if (!value) {
-              return "—";
-            }
-            const date = new Date(value);
-            return `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
+            return Utils.formatTimestamp(value, { fallback: "—" });
           },
         },
         {

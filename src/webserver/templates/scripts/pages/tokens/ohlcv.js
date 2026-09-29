@@ -4,6 +4,7 @@
  * Factory function pattern for shared state access
  */
 
+import { formatTimeSpan } from "../../core/format.js";
 import { timeAgoCell } from "./formatters.js";
 
 /**
@@ -120,9 +121,8 @@ export function createOhlcvModule(deps) {
         align: "right",
         render: (value) => {
           if (!value || value <= 0) return "—";
-          if (value < 24) return `${value.toFixed(1)}h`;
-          const days = value / 24;
-          return `${days.toFixed(1)}d`;
+          if (value < 24) return formatTimeSpan(value, { unit: "hour", decimals: 1 });
+          return formatTimeSpan(value / 24, { unit: "day", decimals: 1 });
         },
       },
       {
@@ -227,7 +227,7 @@ export function createOhlcvModule(deps) {
       {
         id: "ohlcv-size",
         label: "DB Size",
-        value: `${(stats.database_size_mb ?? 0).toFixed(1)} MB`,
+        value: Utils.formatBytes((stats.database_size_mb ?? 0) * 1_048_576),
         variant: "secondary",
       },
     ]);

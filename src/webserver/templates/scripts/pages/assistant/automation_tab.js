@@ -1,5 +1,6 @@
 import { $ } from "../../core/dom.js";
 import { closeMenu, openMenu, trackAnchoredMenu } from "../../core/menu_manager.js";
+import { formatTimeSpan } from "../../core/format.js";
 import * as Utils from "../../core/utils.js";
 import { ConfirmationDialog } from "../../ui/confirmation_dialog.js";
 
@@ -161,7 +162,9 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
         const taskName =
           state.automationTasks.find((t) => t.id === run.task_id)?.name || `Task #${run.task_id}`;
         const time = run.started_at ? Utils.formatTimeAgo(new Date(run.started_at)) : "";
-        const duration = run.duration_ms ? (run.duration_ms / 1000).toFixed(1) + "s" : "";
+        const duration = run.duration_ms
+          ? formatTimeSpan(run.duration_ms / 1000, { decimals: 1 })
+          : "";
 
         return `
       <div class="automation-run-item ${statusClass}" onclick="window.assistantPage.viewAutomationRun(${run.id})">
@@ -180,9 +183,9 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
   function formatSchedule(type, value) {
     if (type === "interval") {
       const secs = parseInt(value);
-      if (secs >= 3600) return `Every ${Math.round(secs / 3600)}h`;
-      if (secs >= 60) return `Every ${Math.round(secs / 60)}m`;
-      return `Every ${secs}s`;
+      if (secs >= 3600) return `Every ${formatTimeSpan(Math.round(secs / 3600), { unit: "hour" })}`;
+      if (secs >= 60) return `Every ${formatTimeSpan(Math.round(secs / 60), { unit: "minute" })}`;
+      return `Every ${formatTimeSpan(secs)}`;
     }
     if (type === "daily") return `Daily at ${value} UTC`;
     if (type === "weekly") {
@@ -591,8 +594,8 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
           <div class="run-detail-grid">
             <div class="run-detail-item"><span class="run-detail-label">Task</span><span class="run-detail-value">${Utils.escapeHtml(taskName)}</span></div>
             <div class="run-detail-item"><span class="run-detail-label">Status</span><span class="run-detail-value status-${run.status}">${Utils.escapeHtml(run.status)}</span></div>
-            <div class="run-detail-item"><span class="run-detail-label">Started</span><span class="run-detail-value">${run.started_at ? new Date(run.started_at).toLocaleString() : "—"}</span></div>
-            <div class="run-detail-item"><span class="run-detail-label">Duration</span><span class="run-detail-value">${run.duration_ms ? (run.duration_ms / 1000).toFixed(1) + "s" : "—"}</span></div>
+            <div class="run-detail-item"><span class="run-detail-label">Started</span><span class="run-detail-value">${run.started_at ? Utils.formatTimestamp(run.started_at) : "—"}</span></div>
+            <div class="run-detail-item"><span class="run-detail-label">Duration</span><span class="run-detail-value">${run.duration_ms ? formatTimeSpan(run.duration_ms / 1000, { decimals: 1 }) : "—"}</span></div>
             ${run.provider ? `<div class="run-detail-item"><span class="run-detail-label">Provider</span><span class="run-detail-value">${Utils.escapeHtml(String(run.provider))}</span></div>` : ""}
             ${run.tokens_used ? `<div class="run-detail-item"><span class="run-detail-label">Tokens</span><span class="run-detail-value">${Utils.escapeHtml(String(run.tokens_used))}</span></div>` : ""}
           </div>
@@ -783,8 +786,10 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
                   const statusIcon =
                     run.status === "success" ? "icon-circle-check" : "icon-circle-x";
                   const statusClass = run.status === "success" ? "success" : "failed";
-                  const time = run.started_at ? new Date(run.started_at).toLocaleString() : "";
-                  const duration = run.duration_ms ? (run.duration_ms / 1000).toFixed(1) + "s" : "";
+                  const time = run.started_at ? Utils.formatTimestamp(run.started_at) : "";
+                  const duration = run.duration_ms
+                    ? formatTimeSpan(run.duration_ms / 1000, { decimals: 1 })
+                    : "";
                   return `
                   <div class="automation-run-item ${statusClass}" onclick="window.assistantPage.viewAutomationRun(${run.id}); this.closest('.modal-overlay').remove();">
                     <i class="${statusIcon} run-status-icon"></i>

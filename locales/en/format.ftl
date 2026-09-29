@@ -34,6 +34,15 @@ format-ago-day =
        *[other] { $amount }d ago
     }
 
+# Elapsed time as a span, for example "3h 5m ago". $amount is the formatted span.
+format-ago-span =
+    { $count ->
+        [one] { $amount } ago
+       *[other] { $amount } ago
+    }
+# Elapsed time below the resolution of a span.
+format-just-now = just now
+
 # Time remaining until a moment.
 format-in-second =
     { $count ->

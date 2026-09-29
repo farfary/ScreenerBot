@@ -1,5 +1,6 @@
 import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
+import { formatFixed } from "../core/format.js";
 import * as Utils from "../core/utils.js";
 import { DataTable } from "../ui/data_table.js";
 import { requestManager } from "../core/request_manager.js";
@@ -39,14 +40,14 @@ function getActivityBar(metrics) {
             : "#9ca3af";
 
   return `
-    <div class="activity-cell" title="${activity.toFixed(1)}% busy">
+    <div class="activity-cell" title="${Utils.formatPercentValue(activity, { decimals: 1, includeSign: false })} busy">
       <div class="activity-track">
         <div class="activity-fill" style="width:${activity.toFixed(
           1
         )}%; background:${color};"></div>
       </div>
       <div class="activity-meta">
-        <span>${activity.toFixed(1)}%</span>
+        <span>${Utils.formatPercentValue(activity, { decimals: 1, includeSign: false })}</span>
         <span>${metrics.total_polls || 0} polls</span>
       </div>
     </div>
@@ -100,7 +101,6 @@ function createLifecycle() {
         tooltip: `${Utils.formatNumber(degraded, 0)} degraded / ${Utils.formatNumber(unhealthy, 0)} unhealthy`,
       },
     ]);
-
   };
 
   const loadServicesPage = async ({ reason, signal }) => {
@@ -147,6 +147,7 @@ function createLifecycle() {
           description: "Waiting for the backend to respond. We will retry automatically.",
         });
       } else if (reason !== "poll") {
+
         Utils.showToast({ key: "services-load", type: "warning", title: "Could not refresh services" });
       }
       throw error;
@@ -263,7 +264,7 @@ function createLifecycle() {
           minWidth: 90,
           render: (v, row) => {
             const rate = row.metrics?.cycles_per_second;
-            return Number.isFinite(rate) ? rate.toFixed(2) : "0.00";
+            return formatFixed(Number.isFinite(rate) ? rate : 0);
           },
           sortFn: (a, b) =>
             (a.metrics?.cycles_per_second || 0) - (b.metrics?.cycles_per_second || 0),
@@ -296,7 +297,7 @@ function createLifecycle() {
           label: "Ops/sec",
           sortable: true,
           minWidth: 90,
-          render: (v, row) => (row.metrics?.operations_per_second || 0).toFixed(2),
+          render: (v, row) => formatFixed(row.metrics?.operations_per_second || 0),
           sortFn: (a, b) =>
             (a.metrics?.operations_per_second || 0) - (b.metrics?.operations_per_second || 0),
         },

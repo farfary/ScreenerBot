@@ -152,8 +152,8 @@ export function createWatchedWallets({
     const hint = $("#watch-budget-hint");
     if (hint)
       hint.textContent = highActivity
-        ? `Current limit: ${currentLimit.toLocaleString()}. Choose 500–5,000 successful transactions per check in steps of 100.`
-        : `Current limit: ${currentLimit.toLocaleString()}. Choose 500–5,000 signatures per check in steps of 100.`;
+        ? `Current limit: ${Utils.formatNumber(currentLimit, 0)}. Choose 500–5,000 successful transactions per check in steps of 100.`
+        : `Current limit: ${Utils.formatNumber(currentLimit, 0)}. Choose 500–5,000 signatures per check in steps of 100.`;
     const heliusDescription = $("#watch-helius-description");
     const heliusAction = $("#watch-helius-action");
     if (heliusDescription && heliusAction) {
@@ -567,8 +567,7 @@ export function createWatchedWallets({
   }
 
   function formatTime(value) {
-    const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? "Unknown" : date.toLocaleString();
+    return Utils.formatTimestamp(value, { fallback: "Unknown" });
   }
 
   function reset() {

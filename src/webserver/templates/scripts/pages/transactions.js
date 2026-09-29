@@ -13,13 +13,6 @@ const DEFAULT_FILTERS = {
   status: "all",
 };
 
-function formatTimestamp(value) {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-  return `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
-}
-
 function formatSignatureLink(signature) {
   if (!signature) return "—";
   const safe = Utils.escapeHtml(signature);
@@ -418,7 +411,7 @@ function createLifecycle() {
           label: "Time",
           minWidth: 160,
           floating: true,
-          render: (value) => formatTimestamp(value),
+          render: (value) => Utils.formatTimestamp(value, { fallback: "—" }),
         },
         {
           id: "signature",

@@ -2,6 +2,8 @@
 // histogram and a multi-series comparison. Colours come from CSS classes so the
 // theme owns them; nothing here draws a glow or background.
 
+import { formatDate, formatFixed, formatTimestamp } from "../../core/format.js";
+
 const SERIES_CLASSES = [
   "copy-series-0",
   "copy-series-1",
@@ -34,7 +36,8 @@ export function sparkline(values, { width = 88, height = 22 } = {}) {
 const VIEW = 100;
 const INSET = 4;
 
-const signed = (value) => `${value >= 0 ? "+" : "−"}${Math.abs(value).toFixed(3)}`;
+const signed = (value) =>
+  `${value >= 0 ? "+" : "−"}${formatFixed(Math.abs(value), { decimals: 3 })}`;
 
 const path = (points, x, y) =>
   points.map((point) => `${x(point.at).toFixed(2)},${y(point.value).toFixed(2)}`).join(" ");
@@ -43,8 +46,8 @@ const path = (points, x, y) =>
 function timeLabel(ms, spanMs) {
   const date = new Date(ms);
   return spanMs < 36 * 3_600_000
-    ? date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-    : date.toLocaleDateString([], { month: "short", day: "numeric" });
+    ? formatTimestamp(date, { includeDate: false, includeSeconds: false })
+    : formatDate(date, { includeYear: false });
 }
 
 /**

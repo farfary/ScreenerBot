@@ -101,24 +101,6 @@ function createLifecycle() {
     eventCleanups.push(() => element.removeEventListener(event, handler));
   }
 
-  /**
-   * Format number with commas
-   */
-  function formatNumber(num) {
-    return num.toLocaleString();
-  }
-
-  /**
-   * Format bytes to human-readable size
-   */
-  function formatBytes(bytes) {
-    if (bytes === 0) return "0 B";
-    const k = 1024;
-    const sizes = ["B", "KB", "MB", "GB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
-  }
-
   // ============================================================================
   // Tab Management
   // ============================================================================
@@ -243,7 +225,7 @@ function createLifecycle() {
     // Total Evaluations
     const totalEval = $("#metric-total-evaluations");
     if (totalEval) {
-      totalEval.textContent = formatNumber(metrics.total_evaluations || 0);
+      totalEval.textContent = Utils.formatNumber(metrics.total_evaluations || 0, 0);
     }
 
     // Cache Hit Rate
@@ -452,8 +434,8 @@ function createLifecycle() {
     const cacheSize = $("#cache-size");
     const cacheMemory = $("#cache-memory");
 
-    if (cacheSize) cacheSize.textContent = formatNumber(stats.total_entries || 0);
-    if (cacheMemory) cacheMemory.textContent = formatBytes(stats.total_size_bytes || 0);
+    if (cacheSize) cacheSize.textContent = Utils.formatNumber(stats.total_entries || 0, 0);
+    if (cacheMemory) cacheMemory.textContent = Utils.formatBytes(stats.total_size_bytes || 0);
   }
 
   /**

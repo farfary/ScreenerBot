@@ -1,4 +1,17 @@
-// Copy Trading labels and formatters shared by every panel.
+// Copy Trading labels and formatters shared by every panel. The formatters
+// compose the functions of core/format.js with this feature's precision.
+
+import {
+  formatAddressCompact,
+  formatFixed,
+  formatPercentValue,
+  formatPriceSol,
+  formatSol,
+  formatTimeAgo,
+  formatTimeSpan,
+  formatTimestamp,
+  formatUptime,
+} from "../../core/format.js";
 
 export const SOLANA_ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
@@ -137,30 +150,30 @@ export function finite(value) {
 }
 
 export function fixed(value, decimals = 4) {
-  const number = finite(value);
-  return number === null ? "—" : number.toFixed(decimals);
+  return formatFixed(value, { decimals, fallback: "—" });
 }
 
 export function sol(value, decimals = 4) {
-  const number = finite(value);
-  return number === null ? "—" : `${number.toFixed(decimals)} SOL`;
+  return formatSol(value, { decimals, fallback: "—" });
 }
+
+/** Sign glyph of a change: a typographic minus so it aligns with the plus. */
+const changeSign = (number) => (number > 0 ? "+" : number < 0 ? "−" : "");
 
 export function signedSol(value, decimals = 4) {
   const number = finite(value);
   if (number === null) return "—";
-  return `${number > 0 ? "+" : number < 0 ? "−" : ""}${Math.abs(number).toFixed(decimals)} SOL`;
+  return `${changeSign(number)}${formatSol(Math.abs(number), { decimals })}`;
 }
 
 export function signedPct(value, decimals = 1) {
   const number = finite(value);
   if (number === null) return "—";
-  return `${number > 0 ? "+" : number < 0 ? "−" : ""}${Math.abs(number).toFixed(decimals)}%`;
+  return `${changeSign(number)}${formatPercentValue(Math.abs(number), { decimals, includeSign: false })}`;
 }
 
 export function pct(value, decimals = 1) {
-  const number = finite(value);
-  return number === null ? "—" : `${number.toFixed(decimals)}%`;
+  return formatPercentValue(value, { decimals, plus: "", fallback: "—" });
 }
 
 /**
@@ -192,55 +205,37 @@ export function price(value) {
   const number = finite(value);
   if (number === null) return "—";
   if (number === 0) return "0";
-  if (number >= 1) return number.toFixed(4);
-  const digits = Math.min(12, Math.max(4, Math.ceil(-Math.log10(number)) + 3));
-  return number.toFixed(digits);
+  const decimals = number >= 1 ? 4 : Math.min(12, Math.max(4, Math.ceil(-Math.log10(number)) + 3));
+  return formatPriceSol(number, { decimals });
 }
 
 export function seconds(ms) {
   const number = finite(ms);
   if (number === null) return "—";
-  return number < 10_000 ? `${(number / 1000).toFixed(1)}s` : `${Math.round(number / 1000)}s`;
+  return number < 10_000
+    ? formatTimeSpan(number / 1000, { decimals: 1 })
+    : formatTimeSpan(Math.round(number / 1000));
 }
 
 /** Humanized duration from seconds: 45s, 12m, 3h 5m, 2d 4h. */
 export function duration(totalSeconds) {
   const value = finite(totalSeconds);
   if (value === null) return "—";
-  const secs = Math.max(0, Math.round(value));
-  if (secs < 60) return `${secs}s`;
-  const minutes = Math.floor(secs / 60);
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return minutes % 60 ? `${hours}h ${minutes % 60}m` : `${hours}h`;
-  const days = Math.floor(hours / 24);
-  return hours % 24 ? `${days}d ${hours % 24}h` : `${days}d`;
+  return formatUptime(Math.max(0, Math.round(value)), { style: "trimmed" });
 }
 
 export function timeAgo(value) {
   if (!value) return "—";
-  const at = new Date(value).getTime();
-  if (!Number.isFinite(at)) return "—";
-  const delta = (Date.now() - at) / 1000;
-  return delta < 5 ? "just now" : `${duration(delta)} ago`;
+  return formatTimeAgo(value, { style: "detailed", fallback: "—" });
 }
 
 export function dateTime(value) {
   if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value);
-  return date.toLocaleString([], {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
+  return formatTimestamp(value, { includeYear: false, fallback: String(value) });
 }
 
 export function shortAddress(address) {
-  if (!address) return "—";
-  return address.length > 12 ? `${address.slice(0, 5)}…${address.slice(-4)}` : address;
+  return formatAddressCompact(address, { start: 5, end: 4 });
 }
 
 export function taskName(task) {

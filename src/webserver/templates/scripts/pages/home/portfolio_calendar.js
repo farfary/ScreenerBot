@@ -222,7 +222,7 @@ export function createCalendar(fetcher) {
   }
 
   function fmtSol(v, decimals = 3) {
-    return Utils.formatSol(v, { decimals, suffix: " SOL" });
+    return Utils.formatSol(v, { decimals });
   }
 
   function popoverRow(label, value, cls = "") {
@@ -236,12 +236,7 @@ export function createCalendar(fetcher) {
     const pnl = d.net_pnl_sol || 0;
     const pnlCls = pnl > 0 ? "profit" : pnl < 0 ? "loss" : "";
     const dt = new Date(`${d.date}T00:00:00Z`);
-    const dateStr = dt.toLocaleDateString(undefined, {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-      timeZone: "UTC",
-    });
+    const dateStr = Utils.formatDate(dt, { includeYear: false, weekday: true, utc: true });
     const trades = d.trades || 0;
     const wins = d.wins || 0;
     const losses = Math.max(0, trades - wins);

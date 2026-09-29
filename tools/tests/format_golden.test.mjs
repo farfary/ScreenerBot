@@ -212,3 +212,29 @@ test("UiText arguments use the formatters", () => {
   assert.equal(render("time", FIXTURE.now), "Jun 15, 2025, 03:06:40 PM SOL");
   assert.equal(render("duration", 90061000), "1d 1h 1m SOL");
 });
+
+test("page-level formatter options: date parts, trimmed spans and detailed elapsed time", () => {
+  const { context, fmt } = load("en-u-nu-latn");
+  const now = FIXTURE.now;
+  assert.equal(fmt.formatTimestamp(now, { includeYear: false }), "Jun 15, 03:06:40 PM");
+  assert.equal(fmt.formatTimestamp(now, { includeDate: false, includeSeconds: false }), "03:06 PM");
+  assert.equal(fmt.formatDate(now, { includeYear: false }), "Jun 15");
+  assert.equal(
+    fmt.formatDate(now, { includeYear: false, weekday: true, utc: true }),
+    "Sun, Jun 15"
+  );
+  assert.equal(fmt.formatUptime(10800, { style: "trimmed" }), "3h");
+  assert.equal(fmt.formatUptime(11100, { style: "trimmed" }), "3h 5m");
+  assert.equal(fmt.formatUptime(90000, { style: "trimmed" }), "1d 1h");
+  assert.equal(fmt.formatUptime(86400, { style: "trimmed" }), "1d");
+  assert.equal(fmt.formatUptime(45, { style: "trimmed" }), "45s");
+  assert.equal(fmt.formatTimeAgo(now - 2000, { style: "detailed" }), "just now");
+  assert.equal(fmt.formatTimeAgo(now - 45000, { style: "detailed" }), "45s ago");
+  assert.equal(fmt.formatTimeAgo(now - 11100000, { style: "detailed" }), "3h 5m ago");
+  assert.equal(fmt.formatTimeAgo(now - 11100000), "3h ago");
+  assert.equal(fmt.formatTimeAgo(null, { style: "detailed", fallback: "—" }), "—");
+  assert.equal(fmt.formatPercentValue(1.5, { plus: "" }), "1.50%");
+  assert.equal(fmt.formatPercentValue(-1.5, { plus: "" }), "-1.50%");
+  assert.equal(fmt.formatPercentValue(1.5), "+1.50%");
+  assert.ok(context.I18n);
+});
