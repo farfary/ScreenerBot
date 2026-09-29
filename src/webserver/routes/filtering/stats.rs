@@ -5,7 +5,7 @@ use chrono::Utc;
 use std::collections::HashMap;
 
 use crate::{
-    filtering::{self, SnapshotState},
+    filtering::{self, sources::rejection_text, SnapshotState},
     i18n::ids,
     logger::{self, LogTag},
     tokens::get_rejection_stats_async,
@@ -15,7 +15,7 @@ use crate::{
     },
 };
 
-use super::helpers::{get_rejection_category, get_rejection_display_label};
+use super::helpers::RejectionCategory;
 use super::types::{
     FilteringStatsResponse, RefreshResponse, RejectionStatEntry, RejectionStatsResponse,
 };
@@ -89,9 +89,11 @@ pub async fn get_rejection_stats() -> Response {
                 .map(|(reason, source, count)| {
                     total_rejected += count;
                     *by_source.entry(source.clone()).or_default() += count;
+                    let category = RejectionCategory::of_code(&reason);
                     RejectionStatEntry {
-                        display_label: get_rejection_display_label(&reason).to_string(),
-                        category: get_rejection_category(&reason).to_string(),
+                        reason_text: rejection_text(&reason),
+                        category: category.id().to_string(),
+                        category_text: category.text(),
                         reason,
                         source,
                         count,

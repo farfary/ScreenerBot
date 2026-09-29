@@ -8,6 +8,7 @@ use crate::{
         BlacklistReasonInfo, FilteringQuery, FilteringQueryResult, FilteringView, SnapshotState,
         SortDirection, TokenSortKey,
     },
+    i18n::UiText,
     logger::{self, LogTag},
     tokens::SecurityRisk,
 };
@@ -38,6 +39,10 @@ pub struct TokenListResponse {
     pub rejection_reasons: HashMap<String, String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub available_rejection_reasons: Vec<String>,
+    /// Catalog text per rejection code present in `rejection_reasons` or
+    /// `available_rejection_reasons`.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub rejection_texts: HashMap<String, UiText>,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub blacklist_reasons: HashMap<String, Vec<BlacklistReasonInfo>>,
 }
@@ -651,10 +656,29 @@ pub(super) fn build_token_list_response(
         priced_total: result.priced_total,
         positions_total: result.positions_total,
         blacklisted_total: result.blacklisted_total,
+        rejection_texts: rejection_texts(
+            result
+                .rejection_reasons
+                .values()
+                .chain(&result.available_rejection_reasons),
+        ),
         rejection_reasons: result.rejection_reasons,
         available_rejection_reasons: result.available_rejection_reasons,
         blacklist_reasons: result.blacklist_reasons,
     }
+}
+
+/// Catalog text for each distinct stored rejection code.
+pub fn rejection_texts<'a>(codes: impl IntoIterator<Item = &'a String>) -> HashMap<String, UiText> {
+    codes
+        .into_iter()
+        .map(|code| {
+            (
+                code.clone(),
+                crate::filtering::sources::rejection_text(code),
+            )
+        })
+        .collect()
 }
 
 impl TokenListQuery {

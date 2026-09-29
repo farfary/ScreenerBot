@@ -8,7 +8,7 @@ use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 
 use crate::{
-    filtering::{self, SnapshotState},
+    filtering::{self, sources::rejection_text, SnapshotState},
     i18n::ids,
     logger::{self, LogTag},
     tokens::{
@@ -21,9 +21,7 @@ use crate::{
     },
 };
 
-use super::helpers::{
-    get_category_icon, get_category_label, get_rejection_category, get_rejection_display_label,
-};
+use super::helpers::RejectionCategory;
 use super::types::{
     AnalyticsQuery, AnalyticsResponse, CategoryBreakdown, CategoryReasonEntry, DataQualityMetric,
     RecentRejectionEntry, RejectionStatEntry, SourceBreakdown, TimeRangeInfo,
@@ -59,8 +57,11 @@ pub async fn get_analytics(Query(query): Query<AnalyticsQuery>) -> Response {
             let total_passed = stats.as_ref().map(|s| s.passed_filtering);
 
             // Calculate totals and build category/source maps
-            let mut by_category_map: HashMap<String, Vec<(String, String, i64)>> = HashMap::new();
-            let mut by_source_map: HashMap<String, Vec<(String, String, i64)>> = HashMap::new();
+            let mut by_category_map: HashMap<
+                &'static str,
+                (RejectionCategory, Vec<(String, i64)>),
+            > = HashMap::new();
+            let mut by_source_map: HashMap<String, Vec<(String, i64)>> = HashMap::new();
             let mut total_rejected: i64 = 0;
 
             // Data quality specific counts
@@ -69,18 +70,17 @@ pub async fn get_analytics(Query(query): Query<AnalyticsQuery>) -> Response {
             for (reason, source, count) in &raw_stats {
                 total_rejected += count;
 
-                let category = get_rejection_category(reason).to_string();
-                by_category_map.entry(category.clone()).or_default().push((
-                    reason.clone(),
-                    get_rejection_display_label(reason),
-                    *count,
-                ));
+                let category = RejectionCategory::of_code(reason);
+                by_category_map
+                    .entry(category.id())
+                    .or_insert_with(|| (category, Vec::new()))
+                    .1
+                    .push((reason.clone(), *count));
 
-                by_source_map.entry(source.clone()).or_default().push((
-                    reason.clone(),
-                    get_rejection_display_label(reason),
-                    *count,
-                ));
+                by_source_map
+                    .entry(source.clone())
+                    .or_default()
+                    .push((reason.clone(), *count));
 
                 // Track data quality issues specifically
                 if reason.contains("missing")
@@ -96,8 +96,8 @@ pub async fn get_analytics(Query(query): Query<AnalyticsQuery>) -> Response {
             // Build category breakdown
             let mut by_category: Vec<CategoryBreakdown> = by_category_map
                 .into_iter()
-                .map(|(category, reasons)| {
-                    let cat_count: i64 = reasons.iter().map(|(_, _, c)| c).sum();
+                .map(|(_, (category, reasons))| {
+                    let cat_count: i64 = reasons.iter().map(|(_, c)| c).sum();
                     let cat_pct = if total_rejected > 0 {
                         (cat_count as f64 / total_rejected as f64) * 100.0
                     } else {
@@ -106,15 +106,15 @@ pub async fn get_analytics(Query(query): Query<AnalyticsQuery>) -> Response {
 
                     let mut reason_entries: Vec<CategoryReasonEntry> = reasons
                         .into_iter()
-                        .map(|(reason, display_label, count)| {
+                        .map(|(reason, count)| {
                             let pct = if cat_count > 0 {
                                 (count as f64 / cat_count as f64) * 100.0
                             } else {
                                 0.0
                             };
                             CategoryReasonEntry {
+                                reason_text: rejection_text(&reason),
                                 reason,
-                                display_label,
                                 count,
                                 percentage: (pct * 10.0).round() / 10.0,
                             }
@@ -124,9 +124,9 @@ pub async fn get_analytics(Query(query): Query<AnalyticsQuery>) -> Response {
                     reason_entries.sort_by(|a, b| b.count.cmp(&a.count));
 
                     CategoryBreakdown {
-                        label: get_category_label(&category).to_string(),
-                        icon: get_category_icon(&category).to_string(),
-                        category,
+                        category_text: category.text(),
+                        icon: category.icon().to_string(),
+                        category: category.id().to_string(),
                         count: cat_count,
                         percentage: (cat_pct * 10.0).round() / 10.0,
                         reasons: reason_entries,
@@ -140,7 +140,7 @@ pub async fn get_analytics(Query(query): Query<AnalyticsQuery>) -> Response {
             let mut by_source: Vec<SourceBreakdown> = by_source_map
                 .into_iter()
                 .map(|(source, reasons)| {
-                    let src_count: i64 = reasons.iter().map(|(_, _, c)| c).sum();
+                    let src_count: i64 = reasons.iter().map(|(_, c)| c).sum();
                     let src_pct = if total_rejected > 0 {
                         (src_count as f64 / total_rejected as f64) * 100.0
                     } else {
@@ -149,16 +149,18 @@ pub async fn get_analytics(Query(query): Query<AnalyticsQuery>) -> Response {
 
                     let mut top_reasons: Vec<RejectionStatEntry> = reasons
                         .into_iter()
-                        .map(|(reason, display_label, count)| {
+                        .map(|(reason, count)| {
                             let pct = if src_count > 0 {
                                 (count as f64 / src_count as f64) * 100.0
                             } else {
                                 0.0
                             };
+                            let category = RejectionCategory::of_code(&reason);
                             RejectionStatEntry {
-                                category: get_rejection_category(&reason).to_string(),
+                                category: category.id().to_string(),
+                                category_text: category.text(),
+                                reason_text: rejection_text(&reason),
                                 reason,
-                                display_label,
                                 source: source.clone(),
                                 count,
                                 percentage: (pct * 10.0).round() / 10.0,
@@ -197,7 +199,7 @@ pub async fn get_analytics(Query(query): Query<AnalyticsQuery>) -> Response {
                         "info"
                     };
                     DataQualityMetric {
-                        label: get_rejection_display_label(&metric),
+                        reason_text: rejection_text(&metric),
                         metric,
                         count,
                         percentage: (pct * 10.0).round() / 10.0,
@@ -215,9 +217,11 @@ pub async fn get_analytics(Query(query): Query<AnalyticsQuery>) -> Response {
                     } else {
                         0.0
                     };
+                    let category = RejectionCategory::of_code(&reason);
                     RejectionStatEntry {
-                        display_label: get_rejection_display_label(&reason),
-                        category: get_rejection_category(&reason).to_string(),
+                        reason_text: rejection_text(&reason),
+                        category: category.id().to_string(),
+                        category_text: category.text(),
                         reason,
                         source,
                         count,
@@ -237,7 +241,7 @@ pub async fn get_analytics(Query(query): Query<AnalyticsQuery>) -> Response {
                         symbol,
                         name,
                         image_url,
-                        display_label: get_rejection_display_label(&reason),
+                        reason_text: rejection_text(&reason),
                         reason,
                         source,
                         rejected_at: DateTime::from_timestamp(ts, 0)

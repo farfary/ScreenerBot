@@ -12,7 +12,6 @@ import { formatFixed, formatPercentValue } from "../../core/format.js";
  * @param {Function} options.renderHintTrigger - Function to render hint triggers
  * @param {Function} options.escapeHtml - HTML escape function
  * @param {Function} options.formatShortAddress - Address formatting function
- * @param {Function} options.getRejectionDisplayLabel - Rejection label function
  * @returns {string} HTML string for overview tab
  */
 export function renderOverviewTab(token, options = {}) {
@@ -79,7 +78,7 @@ export function renderOverviewTab(token, options = {}) {
  * @returns {string} HTML string for the overview left column
  */
 export function renderOverviewLeft(token, options = {}) {
-  const { renderHintTrigger, escapeHtml, formatShortAddress, getRejectionDisplayLabel } = options;
+  const { renderHintTrigger, escapeHtml, formatShortAddress } = options;
   return `
     <div class="overview-sheet">
       ${buildHeadlineMetrics(token)}
@@ -87,7 +86,6 @@ export function renderOverviewLeft(token, options = {}) {
         renderHintTrigger,
         escapeHtml,
         formatShortAddress,
-        getRejectionDisplayLabel,
       })}
     </div>
   `;
@@ -159,11 +157,11 @@ function buildHeadlineMetrics(token) {
 }
 
 function buildOverviewContent(token, options) {
-  const { renderHintTrigger, escapeHtml, formatShortAddress, getRejectionDisplayLabel } = options;
+  const { renderHintTrigger, escapeHtml, formatShortAddress } = options;
 
   return `
     <div class="overview-sections">
-      ${buildTokenInfoSection(token, { renderHintTrigger, escapeHtml, formatShortAddress, getRejectionDisplayLabel })}
+      ${buildTokenInfoSection(token, { renderHintTrigger, escapeHtml, formatShortAddress })}
       ${buildLiquiditySection(token, { renderHintTrigger, formatShortAddress })}
       ${buildMarketPulseSection(token, { renderHintTrigger })}
       ${buildActivitySection(token, { renderHintTrigger })}
@@ -172,7 +170,7 @@ function buildOverviewContent(token, options) {
 }
 
 function buildTokenInfoSection(token, options) {
-  const { renderHintTrigger, escapeHtml, formatShortAddress, getRejectionDisplayLabel } = options;
+  const { renderHintTrigger, escapeHtml, formatShortAddress } = options;
 
   const age = token.pair_created_at
     ? Utils.formatTimeAgo(new Date(token.pair_created_at * 1000))
@@ -184,22 +182,6 @@ function buildTokenInfoSection(token, options) {
     token.tags && token.tags.length > 0
       ? `<div class="overview-tags">${token.tags.map((tag) => `<span class="overview-tag">${escapeHtml(tag)}</span>`).join("")}</div>`
       : '<span class="overview-tags-empty">No tags</span>';
-
-  let filteringStatusHtml = "";
-  if (token.last_rejection_reason) {
-    const displayLabel = getRejectionDisplayLabel(token.last_rejection_reason);
-    filteringStatusHtml = `
-      <div class="overview-fact overview-fact-wide">
-        <span class="overview-fact-label">Filter Status</span>
-        <span
-          class="overview-fact-value overview-filter-status"
-          title="${escapeHtml(token.last_rejection_reason)}"
-        >
-          Rejected · ${escapeHtml(displayLabel)}
-        </span>
-      </div>
-    `;
-  }
 
   return `
     <section class="overview-section">
@@ -254,7 +236,6 @@ function buildTokenInfoSection(token, options) {
           `
               : ""
           }
-          ${filteringStatusHtml}
       </div>
       <div class="overview-tags-row">
         <span class="overview-inline-label">Tags</span>

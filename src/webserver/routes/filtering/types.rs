@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::filtering::SnapshotState;
+use crate::i18n::UiText;
 
 // ============================================================================
 // RESPONSE TYPES
@@ -34,11 +35,12 @@ pub struct FilteringStatsResponse {
 #[derive(Debug, Serialize)]
 pub struct RejectionStatEntry {
     pub reason: String,
-    pub display_label: String,
+    pub reason_text: UiText,
     pub source: String,
     pub count: i64,
     #[serde(default)]
     pub category: String,
+    pub category_text: UiText,
     #[serde(default)]
     pub percentage: f64,
 }
@@ -54,7 +56,7 @@ pub struct RejectionStatsResponse {
 #[derive(Debug, Serialize)]
 pub struct CategoryBreakdown {
     pub category: String,
-    pub label: String,
+    pub category_text: UiText,
     pub icon: String,
     pub count: i64,
     pub percentage: f64,
@@ -64,7 +66,7 @@ pub struct CategoryBreakdown {
 #[derive(Debug, Serialize)]
 pub struct CategoryReasonEntry {
     pub reason: String,
-    pub display_label: String,
+    pub reason_text: UiText,
     pub count: i64,
     pub percentage: f64,
 }
@@ -80,7 +82,7 @@ pub struct SourceBreakdown {
 #[derive(Debug, Serialize)]
 pub struct DataQualityMetric {
     pub metric: String,
-    pub label: String,
+    pub reason_text: UiText,
     pub count: i64,
     pub percentage: f64,
     pub severity: String,
@@ -135,7 +137,7 @@ pub struct RecentRejectionEntry {
     pub name: Option<String>,
     pub image_url: Option<String>,
     pub reason: String,
-    pub display_label: String,
+    pub reason_text: UiText,
     pub source: String,
     pub rejected_at: String,
 }
@@ -147,7 +149,7 @@ pub struct RejectedTokenEntry {
     pub name: Option<String>,
     pub image_url: Option<String>,
     pub reason: String,
-    pub display_label: String,
+    pub reason_text: UiText,
     pub source: String,
     pub rejected_at: String,
 }

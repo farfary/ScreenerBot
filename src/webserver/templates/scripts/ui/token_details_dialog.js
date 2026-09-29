@@ -684,7 +684,6 @@ export class TokenDetailsDialog {
       renderHintTrigger: this._renderHintTrigger.bind(this),
       escapeHtml: this._escapeHtml.bind(this),
       formatShortAddress: this._formatShortAddress.bind(this),
-      getRejectionDisplayLabel: this._getRejectionDisplayLabel.bind(this),
     });
     this._renderHtmlIfChanged(liveRegion, html, "__ovHtml");
   }
@@ -1482,7 +1481,6 @@ export class TokenDetailsDialog {
       renderHintTrigger: this._renderHintTrigger.bind(this),
       escapeHtml: this._escapeHtml.bind(this),
       formatShortAddress: this._formatShortAddress.bind(this),
-      getRejectionDisplayLabel: this._getRejectionDisplayLabel.bind(this),
     });
 
     setTimeout(() => {

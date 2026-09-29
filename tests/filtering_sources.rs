@@ -1691,6 +1691,10 @@ fn rejection_reasons_are_attributed_to_the_right_source() {
     }
 }
 
+fn english() -> screenerbot::i18n::LanguageIdentifier {
+    "en".parse().expect("valid language tag")
+}
+
 #[test]
 fn rejection_labels_are_machine_readable_and_displayable() {
     for (reason, _) in reason_source_pairs() {
@@ -1706,12 +1710,14 @@ fn rejection_labels_are_machine_readable_and_displayable() {
             "{label} must not contain spaces (it is persisted as a code)"
         );
         assert_eq!(reason.to_string(), label, "Display must mirror label()");
-        assert!(!reason.display_label().is_empty(), "empty display label");
+        let text = reason.ui_text().render_plain(&english());
+        assert!(!text.is_empty(), "empty display text");
+        assert_ne!(text, reason.ui_text().id, "{label} has no catalog message");
     }
 }
 
 #[test]
-fn llm_analysis_rejection_carries_its_reasoning_into_the_display_label() {
+fn llm_analysis_rejection_carries_its_reasoning_into_the_display_text() {
     let reason = FilterRejectionReason::LlmAnalysisRejected {
         reason: "unverifiable team".to_owned(),
         confidence: 72,
@@ -1723,7 +1729,7 @@ fn llm_analysis_rejection_carries_its_reasoning_into_the_display_label() {
         "llm_analysis_rejected",
         "the code stays constant"
     );
-    let display = reason.display_label();
+    let display = reason.ui_text().render_plain(&english());
     assert!(display.contains("unverifiable team"));
     assert!(display.contains("72"));
     assert!(display.contains("anthropic"));

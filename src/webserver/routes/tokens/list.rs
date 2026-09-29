@@ -68,6 +68,7 @@ pub(crate) async fn get_tokens_list(
                 positions_total: 0,
                 blacklisted_total: 0,
                 rejection_reasons: HashMap::new(),
+                rejection_texts: HashMap::new(),
                 available_rejection_reasons: Vec::new(),
                 blacklist_reasons: HashMap::new(),
             })

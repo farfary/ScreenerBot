@@ -19,10 +19,27 @@ import {
   SOURCE_LABELS,
 } from "./config_metadata.js";
 
+let reasonClickBound = false;
+
 /**
  * Create filtering renderers with access to state and dependencies
  */
 export function createFilteringRenderers({ state, $: _$, Utils, requestManager: _requestManager }) {
+  // Catalog text of a rejection entry; a payload without it shows the stored code.
+  function reasonLabel(entry) {
+    return entry.reason_text ? I18n.text(entry.reason_text) : entry.reason;
+  }
+
+  // Reason rows carry the stored code in `data-reason`; one delegated listener selects it.
+  // The factory runs on every page init, so the listener is bound once per document.
+  if (!reasonClickBound) {
+    reasonClickBound = true;
+    document.addEventListener("click", (event) => {
+      const row = event.target instanceof Element ? event.target.closest("[data-reason]") : null;
+      if (row?.dataset.reason) window.filteringPage.selectReason(row.dataset.reason);
+    });
+  }
+
   // A share of a snapshot-derived count, or `null` when the snapshot has not produced one
   // yet. Every count on this page is absent until the first snapshot exists (the API sends
   // null with `snapshot_state: "building"`), and `0 / null` would quietly become a
@@ -173,12 +190,12 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
         .join("");
 
       const rejItems = topReasons
-        .map(({ reason, display_label, source, count }) => {
+        .map(({ reason, reason_text, source, count }) => {
           const barWidth = Math.min((count / maxCount) * 100, 100).toFixed(1);
           return `
           <div class="rejection-item">
             <div class="rej-bar" style="width: ${barWidth}%"></div>
-            <span class="rej-label">${Utils.escapeHtml(display_label || reason)}</span>
+            <span class="rej-label">${Utils.escapeHtml(reasonLabel({ reason, reason_text }))}</span>
             <span class="rej-source-tag ${Utils.escapeHtml(source)}">${Utils.escapeHtml(source)}</span>
             <span class="rej-count">${Utils.formatNumber(count, 0)}</span>
           </div>`;
@@ -300,7 +317,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
             <div class="bar-chart-row">
               <div class="bar-label-col">
                 <div class="bar-icon"><i class="icon-${Utils.escapeHtml(cat.icon)}"></i></div>
-                <div class="bar-label" title="${Utils.escapeHtml(cat.label)}">${Utils.escapeHtml(cat.label)}</div>
+                <div class="bar-label" title="${Utils.escapeHtml(I18n.text(cat.category_text))}">${Utils.escapeHtml(I18n.text(cat.category_text))}</div>
               </div>
               <div class="bar-track-col">
                 <div class="bar-track">
@@ -385,10 +402,10 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
                         return `
                   <tr>
                     <td>
-                      <span class="font-medium">${Utils.escapeHtml(r.display_label)}</span>
+                      <span class="font-medium">${Utils.escapeHtml(reasonLabel(r))}</span>
                     </td>
                     <td>
-                      <span class="reason-badge">${Utils.escapeHtml(r.category)}</span>
+                      <span class="reason-badge">${Utils.escapeHtml(I18n.text(r.category_text))}</span>
                     </td>
                     <td class="text-end font-data">
                       ${Utils.formatNumber(r.count, 0)}
@@ -446,8 +463,8 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
             .slice(0, 30)
             .map(
               (r) => `
-            <div class="overview-list-item" onclick="window.filteringPage.selectReason('${r.reason}', '${Utils.escapeHtml(r.display_label.replace(/'/g, "\\'"))}')">
-              <span class="overview-item-label">${Utils.escapeHtml(r.display_label)}</span>
+            <div class="overview-list-item" data-reason="${Utils.escapeHtml(r.reason)}">
+              <span class="overview-item-label">${Utils.escapeHtml(reasonLabel(r))}</span>
               <span class="overview-item-count">${Utils.formatNumber(r.count, 0)}</span>
             </div>
           `
@@ -471,11 +488,11 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
                 ? `<img src="${Utils.escapeHtml(t.image_url)}" alt="${Utils.escapeHtml(sym)}" class="overview-token-logo token-logo-artwork" onerror="this.parentElement.innerHTML='<span class=\\'overview-token-initial\\'>${initial}</span>'">`
                 : `<span class="overview-token-initial">${initial}</span>`;
               return `
-              <div class="overview-list-item overview-list-item--token" onclick="window.filteringPage.selectReason('${t.reason}', '${Utils.escapeHtml(t.display_label.replace(/'/g, "\\'"))}')">
+              <div class="overview-list-item overview-list-item--token" data-reason="${Utils.escapeHtml(t.reason)}">
                 <div class="overview-token-avatar token-logo-frame">${logoHtml}</div>
                 <div class="overview-item-info">
                   <span class="overview-item-symbol">${Utils.escapeHtml(sym)}${t.name ? ` <span class="overview-item-name">${Utils.escapeHtml(t.name)}</span>` : ""}</span>
-                  <span class="overview-item-reason">${Utils.escapeHtml(t.display_label)}</span>
+                  <span class="overview-item-reason">${Utils.escapeHtml(reasonLabel(t))}</span>
                 </div>
                 <span class="overview-item-time">${Utils.formatTimeAgo(new Date(t.rejected_at))}</span>
               </div>
@@ -526,7 +543,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
             <div class="tree-category" data-category="${cat.category}">
               <div class="tree-category-header" onclick="window.filteringPage.toggleCategory('${cat.category}')">
                 <i class="icon-${Utils.escapeHtml(cat.icon)} tree-icon"></i>
-                <span class="tree-label">${Utils.escapeHtml(cat.label)}</span>
+                <span class="tree-label">${Utils.escapeHtml(I18n.text(cat.category_text))}</span>
                 <span class="tree-count">${Utils.formatCompactNumber(cat.count)}</span>
                 <i class="icon-chevron-down tree-toggle" id="toggle-${cat.category}"></i>
               </div>
@@ -535,10 +552,10 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
                   .map(
                     (r) => `
                   <div class="tree-reason ${window.filteringPage.currentReason === r.reason ? "active" : ""}"
-                       onclick="window.filteringPage.selectReason('${r.reason}', '${Utils.escapeHtml(r.display_label.replace(/'/g, "\\'"))}')"
+                       data-reason="${Utils.escapeHtml(r.reason)}"
                        id="reason-${r.reason}"
-                       data-label="${Utils.escapeHtml(r.display_label.toLowerCase())}">
-                    <span class="tree-reason-label">${Utils.escapeHtml(r.display_label)}</span>
+                       data-label="${Utils.escapeHtml(reasonLabel(r).toLowerCase())}">
+                    <span class="tree-reason-label">${Utils.escapeHtml(reasonLabel(r))}</span>
                     <span class="tree-reason-count">${Utils.formatCompactNumber(r.count)}</span>
                   </div>
                 `

@@ -33,6 +33,7 @@ import {
   percentCell,
   timeAgoCell,
   getRejectionDisplayLabel,
+  setRejectionTexts,
   tokenCell,
   normalizeBlacklistReasons,
   summarizeBlacklistReasons,
@@ -554,6 +555,7 @@ function createLifecycle() {
         skipQueue: reason !== "poll",
       });
       const items = Array.isArray(data?.items) ? data.items : [];
+      setRejectionTexts(data?.rejection_texts);
 
       const rejectionReasons =
         data &&
@@ -702,6 +704,7 @@ function createLifecycle() {
         signal,
       });
       const items = Array.isArray(data?.items) ? data.items : [];
+      setRejectionTexts(data?.rejection_texts);
 
       const rejectionReasons =
         data &&

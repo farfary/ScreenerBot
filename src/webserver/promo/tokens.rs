@@ -58,23 +58,23 @@ const PROMO_FAVORITE_SYMBOLS: &[&str] = &["TRUMP", "Fartcoin", "GOAT", "MOODENG"
 /// columns render. The same constant the rest of the promo prices against.
 const PROMO_SOL_USD: f64 = super::PROMO_SOL_PRICE_FALLBACK;
 
-/// Rejection reasons, as the filtering pipeline codes them: (code, label).
+/// Rejection reasons, as the filtering pipeline codes them.
 ///
 /// These are the real codes — a promo screenshot of the Rejected view is showing
 /// the product's own vocabulary, and inventing reason strings for it would teach a
 /// reader something untrue about how filtering explains itself.
-const PROMO_REJECTIONS: &[(&str, &str)] = &[
-    ("dex_liquidity_low", "Liquidity below minimum"),
-    ("dex_mcap_low", "Market cap below minimum"),
-    ("dex_volume_low", "24h volume below minimum"),
-    ("dex_age_low", "Pair younger than minimum age"),
-    ("rugcheck_score_high", "Risk score above maximum"),
-    ("rugcheck_holders_low", "Too few unique holders"),
-    ("rugcheck_top_holder_high", "Top holder concentration"),
-    ("rugcheck_lp_unlocked", "Liquidity not locked or burned"),
-    ("rugcheck_mint_authority", "Mint authority not revoked"),
-    ("rugcheck_transfer_fee", "Token-2022 transfer fee set"),
-    ("no_market_data", "No market data from any source"),
+const PROMO_REJECTIONS: &[&str] = &[
+    "dex_liq_low",
+    "dex_mcap_low",
+    "dex_vol_low",
+    "token_too_new",
+    "rug_score",
+    "rug_min_holders",
+    "rug_top_holder",
+    "rug_lp_lock_low",
+    "rug_mint_authority",
+    "rug_transfer_fee_present",
+    "dex_data_missing",
 ];
 
 /// Blacklist categories, as the blacklist records them: (category, reason).
@@ -353,9 +353,9 @@ fn with_security(token: &mut Token, seed: usize, passed: bool) {
 /// Record why a token was rejected, and when.
 fn with_rejection(token: &mut Token, seed: usize, discovered: DateTime<Utc>) {
     let mut rng = Lcg::seeded(seed ^ 0xDEAD);
-    let (code, _) = PROMO_REJECTIONS[rng.below(PROMO_REJECTIONS.len())];
+    let code = PROMO_REJECTIONS[rng.below(PROMO_REJECTIONS.len())];
     token.last_rejection_reason = Some(code.to_owned());
-    token.last_rejection_source = Some(if code.starts_with("rugcheck") {
+    token.last_rejection_source = Some(if code.starts_with("rug_") {
         "rugcheck".to_owned()
     } else {
         "dexscreener".to_owned()
@@ -506,7 +506,7 @@ fn build_universe() -> Vec<PromoToken> {
         if unpriced {
             // An unpriced token is rejected for exactly that, whatever else is true
             // of it — the pipeline never reaches a market rule it has no data for.
-            token.last_rejection_reason = Some("no_market_data".to_owned());
+            token.last_rejection_reason = Some("dex_data_missing".to_owned());
             token.last_rejection_source = Some("dexscreener".to_owned());
         }
         // Blacklisting starts past the unpriced block. A token nobody has priced yet
@@ -677,6 +677,27 @@ pub fn get_promo_tokens_list(query: &FilteringQuery) -> TokenListResponse {
         })
         .collect();
 
+    // Same shape as the production list: mint -> code for the rejected view only.
+    let (rejection_reasons, available_rejection_reasons) = if view == FilteringView::Rejected {
+        (
+            items
+                .iter()
+                .filter_map(|token| {
+                    token
+                        .last_rejection_reason
+                        .as_ref()
+                        .map(|code| (token.mint.clone(), code.clone()))
+                })
+                .collect::<HashMap<String, String>>(),
+            PROMO_REJECTIONS
+                .iter()
+                .map(|code| (*code).to_owned())
+                .collect(),
+        )
+    } else {
+        (HashMap::new(), Vec::new())
+    };
+
     let next_cursor = if start + items.len() < total {
         Some(start + items.len())
     } else {
@@ -700,14 +721,13 @@ pub fn get_promo_tokens_list(query: &FilteringQuery) -> TokenListResponse {
         priced_total,
         positions_total,
         blacklisted_total,
-        rejection_reasons: PROMO_REJECTIONS
-            .iter()
-            .map(|(code, label)| ((*code).to_owned(), (*label).to_owned()))
-            .collect(),
-        available_rejection_reasons: PROMO_REJECTIONS
-            .iter()
-            .map(|(code, _)| (*code).to_owned())
-            .collect(),
+        rejection_texts: crate::webserver::routes::tokens::types::rejection_texts(
+            rejection_reasons
+                .values()
+                .chain(&available_rejection_reasons),
+        ),
+        rejection_reasons,
+        available_rejection_reasons,
         blacklist_reasons,
     }
 }
@@ -761,4 +781,38 @@ pub fn get_promo_favorites() -> Vec<serde_json::Value> {
             row
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::filtering::sources::rejection_text;
+    use crate::i18n::ids;
+
+    #[test]
+    fn promo_rejection_codes_are_production_codes() {
+        for code in PROMO_REJECTIONS {
+            let text = rejection_text(code);
+            assert_ne!(text.id, ids::FILTERING_REJECT_UNKNOWN.as_str(), "{code}");
+        }
+    }
+
+    #[test]
+    fn rejected_list_maps_promo_mints_to_promo_codes() {
+        let query = FilteringQuery {
+            view: FilteringView::Rejected,
+            page_size: 100,
+            ..FilteringQuery::default()
+        };
+        let response = get_promo_tokens_list(&query);
+        assert!(!response.rejection_reasons.is_empty());
+        for (mint, code) in &response.rejection_reasons {
+            assert!(
+                UNIVERSE.iter().any(|entry| &entry.token.mint == mint),
+                "{mint}"
+            );
+            assert!(PROMO_REJECTIONS.contains(&code.as_str()), "{code}");
+            assert!(response.rejection_texts.contains_key(code), "{code}");
+        }
+    }
 }

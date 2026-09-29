@@ -8,7 +8,8 @@ use axum::{
 use chrono::{DateTime, Utc};
 
 use crate::{
-    i18n::ids,
+    filtering::sources::rejection_text,
+    i18n::{ids, source_locale, LanguageIdentifier},
     logger::{self, LogTag},
     tokens::{get_rejected_tokens_async, get_token_info_batch_async},
     webserver::{
@@ -17,7 +18,6 @@ use crate::{
     },
 };
 
-use super::helpers::get_rejection_display_label;
 use super::types::{RejectedTokenEntry, RejectedTokensQuery};
 
 /// GET /api/filtering/rejected-tokens
@@ -47,7 +47,7 @@ pub async fn get_rejected_tokens_handler(Query(params): Query<RejectedTokensQuer
                         symbol,
                         name,
                         image_url,
-                        display_label: get_rejection_display_label(&reason),
+                        reason_text: rejection_text(&reason),
                         reason,
                         source,
                         rejected_at: DateTime::from_timestamp(ts, 0)
@@ -99,13 +99,14 @@ pub async fn export_rejected_tokens(Query(params): Query<RejectedTokensQuery>) -
             }
 
             // Write records
+            let locale: LanguageIdentifier = source_locale().parse().unwrap_or_default();
             for (mint, reason, source, ts) in tokens {
                 let dt = DateTime::from_timestamp(ts, 0)
                     .unwrap_or_else(|| Utc::now())
                     .to_rfc3339();
-                let display_label = get_rejection_display_label(&reason);
+                let reason_label = rejection_text(&reason).render_plain(&locale);
 
-                if let Err(e) = wtr.write_record(&[mint, reason, display_label, source, dt]) {
+                if let Err(e) = wtr.write_record(&[mint, reason, reason_label, source, dt]) {
                     return ApiError::new(
                         ApiErrorCode::Internal,
                         ids::ERRORS_FILTERING_CSV_RECORD_FAILED,

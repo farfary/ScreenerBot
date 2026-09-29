@@ -832,7 +832,6 @@ window.filteringPage = {
   explorerPage: 0,
   explorerLimit: 50,
   currentReason: null,
-  currentReasonLabel: null,
   tokenSearchQuery: "",
 
   debouncedFilterTokens: null,
@@ -984,7 +983,6 @@ window.filteringPage = {
 
   selectSummary: () => {
     window.filteringPage.currentReason = null;
-    window.filteringPage.currentReasonLabel = null;
 
     document.querySelectorAll(".tree-reason").forEach((el) => el.classList.remove("active"));
     const navOverview = document.querySelector(".explorer-nav-overview");
@@ -1008,7 +1006,7 @@ window.filteringPage = {
     }
   },
 
-  selectReason: (reason, label) => {
+  selectReason: (reason) => {
     // Toggle deselect: clicking the active reason returns to overview
     if (window.filteringPage.currentReason === reason) {
       window.filteringPage.selectSummary();
@@ -1033,7 +1031,6 @@ window.filteringPage = {
     }
 
     window.filteringPage.currentReason = reason;
-    window.filteringPage.currentReasonLabel = label;
     window.filteringPage.tokenSearchQuery = "";
     window.filteringPage.loadExplorer(0);
   },

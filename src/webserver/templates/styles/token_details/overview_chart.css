@@ -267,10 +267,6 @@
   text-decoration: underline;
 }
 
-.overview-filter-status {
-  color: var(--danger);
-}
-
 .overview-tags-row,
 .overview-pool-row {
   display: flex;

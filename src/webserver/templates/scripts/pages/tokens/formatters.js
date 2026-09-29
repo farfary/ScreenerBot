@@ -8,7 +8,7 @@ import { boostTierForMint, boostCountForMint, formatBoostCount } from "../../cor
 import * as AppState from "../../core/app_state.js";
 import * as Hints from "../../core/hints.js";
 import { HintTrigger } from "../../ui/hint_popover.js";
-import { REJECTION_LABELS, SORT_KEY_TO_COLUMN, TOKEN_VIEWS } from "./constants.js";
+import { SORT_KEY_TO_COLUMN, TOKEN_VIEWS } from "./constants.js";
 
 export function findFirstDifferenceIndex(a, b) {
   if (typeof a !== "string" || typeof b !== "string") {
@@ -76,9 +76,19 @@ export function timeAgoCell(seconds) {
   return Utils.formatTimeAgo(seconds, { fallback: "—" });
 }
 
+// Catalog text per rejection code, as sent by the tokens API (`rejection_texts`).
+// Merged across responses so rows from earlier pages keep their label.
+const rejectionTexts = new Map();
+
+export function setRejectionTexts(texts) {
+  if (!texts || typeof texts !== "object") return;
+  for (const [code, uiText] of Object.entries(texts)) rejectionTexts.set(code, uiText);
+}
+
 export function getRejectionDisplayLabel(reasonCode) {
   if (!reasonCode) return null;
-  return REJECTION_LABELS[reasonCode] || reasonCode;
+  const uiText = rejectionTexts.get(reasonCode);
+  return uiText ? I18n.text(uiText) : reasonCode;
 }
 
 export function tokenCell(row) {
