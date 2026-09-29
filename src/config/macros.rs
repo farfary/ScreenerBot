@@ -86,17 +86,10 @@ macro_rules! config_struct {
                     let mut extras = $crate::config::metadata::FieldMetadataExtras::default();
                     $(extras = $metadata;)?
 
-                    let docs: Option<&'static str> = {
-                        let doc = concat!($($doc, "\n",)* "");
-                        let doc = doc.trim();
-                        (!doc.is_empty()).then_some(doc)
-                    };
-
                     let default_value: $field_type = $default_value;
                     let mut metadata = $crate::config::metadata::FieldMetadata::from_parts::<$field_type>(
                         &default_value,
                         extras,
-                        docs,
                     );
                     metadata.children = <$field_type as $crate::config::metadata::NestedMetadata>::nested_metadata();
                     fields.insert(stringify!($field_name), metadata);

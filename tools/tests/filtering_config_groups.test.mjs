@@ -19,7 +19,6 @@ import {
   getSourceMasterField,
   SETTINGS_TABS,
 } from "../../src/webserver/templates/scripts/pages/filtering/config_metadata.js";
-import { categoryId } from "../../src/webserver/templates/scripts/pages/config/field_text.js";
 
 /**
  * Field metadata carries a catalog key; its text lives in the catalog. The
@@ -28,14 +27,17 @@ import { categoryId } from "../../src/webserver/templates/scripts/pages/config/f
 const catalog = new Map();
 let nextKey = 0;
 
+/** Category id the API sends for a display name. */
+const categoryIdOf = (name) => name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+
 function field(type, label, { hint, unit, category, impact } = {}) {
   const key = `config-fixture-${nextKey++}`;
   catalog.set(key, { value: label, attributes: { hint, unit } });
   catalog.set("config-category-general", { value: "General", attributes: {} });
   const meta = { type, key };
   if (category !== undefined) {
-    meta.category = category;
-    catalog.set(`config-category-${categoryId(category)}`, { value: category, attributes: {} });
+    meta.category = categoryIdOf(category);
+    catalog.set(`config-category-${meta.category}`, { value: category, attributes: {} });
   }
   if (impact !== undefined) meta.impact = impact;
   return meta;

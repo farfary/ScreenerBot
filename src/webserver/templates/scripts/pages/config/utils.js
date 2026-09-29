@@ -3,7 +3,7 @@
  * These functions have no state dependencies and can be imported/used independently.
  */
 
-import { categoryId, categoryLabel, fieldHint, fieldLabel, fieldUnit } from "./field_text.js";
+import { categoryLabel, fieldHint, fieldLabel, fieldUnit } from "./field_text.js";
 
 export const SECTION_DISPLAY_ORDER = [
   "rpc",
@@ -269,7 +269,7 @@ export function summarizeSectionFields(fields = {}) {
         summary.total += 1;
         const impact = (field.impact || "").toLowerCase();
         if (impact === "critical") summary.critical += 1;
-        if (categoryId(field.category).includes("performance")) summary.performance += 1;
+        if ((field.category ?? "").includes("performance")) summary.performance += 1;
       }
     }
   }
@@ -363,7 +363,7 @@ export function sectionHasMatchingFields(sectionId, term, metadata) {
 
   const fields = sectionMeta.fields ?? {};
   for (const [fieldKey, fieldMeta] of Object.entries(fields)) {
-    const category = categoryLabel(categoryId(fieldMeta.category ?? "General"));
+    const category = categoryLabel(fieldMeta.category ?? "general");
     if (category.toLowerCase().includes(term)) {
       return true;
     }

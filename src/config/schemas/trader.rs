@@ -1,5 +1,6 @@
 //! Trading system configuration
 
+use crate::config::metadata::{ConfigCategory, ConfigImpact};
 use crate::config_struct;
 use crate::field_metadata;
 use serde::{Deserialize, Serialize};
@@ -57,227 +58,170 @@ config_struct! {
     pub struct TraderConfig {
         // Trader control
         #[metadata(field_metadata! {
-            label: "Enabled",
-            hint: "Master switch for the trading system",
-            impact: "critical",
-            category: "Core Trading",
+            impact: ConfigImpact::Critical,
+            category: ConfigCategory::CoreTrading,
         })]
         enabled: bool = false,
 
         // Core trading parameters
         #[metadata(field_metadata! {
-            label: "Max Open Positions",
-            hint: "Max simultaneous positions (2-5 conservative)",
             min: 1,
             max: 100,
-            unit: "positions",
-            impact: "critical",
-            category: "Core Trading",
+            impact: ConfigImpact::Critical,
+            category: ConfigCategory::CoreTrading,
         })]
         max_open_positions: usize = 2,
         #[metadata(field_metadata! {
-            label: "Trade Size",
-            hint: "SOL per position (0.005-0.01 for testing)",
             min: 0.001,
             max: 10,
             step: 0.001,
-            unit: "SOL",
-            impact: "critical",
-            category: "Core Trading",
+            impact: ConfigImpact::Critical,
+            category: ConfigCategory::CoreTrading,
         })]
         trade_size_sol: f64 = 0.005,
         #[metadata(field_metadata! {
-            label: "Entry Sizes",
-            hint: "Preset SOL amounts for manual trades [0.005, 0.01, 0.02, 0.05]",
-            impact: "medium",
-            category: "Core Trading",
+            impact: ConfigImpact::Medium,
+            category: ConfigCategory::CoreTrading,
         })]
         entry_sizes: Vec<f64> = vec![0.005, 0.01, 0.02, 0.05],
 
         // ==================== ROI EXIT CONFIGURATION ====================
         #[metadata(field_metadata! {
-            label: "Enable ROI Exit",
-            hint: "Enable automatic exit when profit target is reached",
-            impact: "high",
-            category: "ROI Exit",
+            impact: ConfigImpact::High,
+            category: ConfigCategory::RoiExit,
         })]
         roi_exit_enabled: bool = true,
         #[metadata(field_metadata! {
-            label: "ROI Target %",
-            hint: "Exit when profit reaches this % (20 = exit at +20%)",
             min: 1,
             max: 1000,
             step: 1,
-            unit: "%",
-            impact: "high",
-            category: "ROI Exit",
+            impact: ConfigImpact::High,
+            category: ConfigCategory::RoiExit,
         })]
         roi_target_percent: f64 = 20.0,
 
         // ==================== TIME OVERRIDE CONFIGURATION ====================
         #[metadata(field_metadata! {
-            label: "Enable Time Override",
-            hint: "Enable automatic exit for positions held too long at a loss",
-            impact: "high",
-            category: "Time Override",
+            impact: ConfigImpact::High,
+            category: ConfigCategory::TimeOverride,
         })]
         time_override_enabled: bool = true,
         #[metadata(field_metadata! {
-            label: "Time Override Duration",
-            hint: "Duration before forced exit (168 hours = 7 days, 30 minutes, etc)",
             min: 1,
             max: 43200,
             step: 1,
-            impact: "critical",
-            category: "Time Override",
+            impact: ConfigImpact::Critical,
+            category: ConfigCategory::TimeOverride,
         })]
         time_override_duration: f64 = 168.0,
         #[metadata(field_metadata! {
-            label: "Time Override Unit",
-            hint: "Time unit: seconds, minutes, hours, days",
-            impact: "critical",
-            category: "Time Override",
+            impact: ConfigImpact::Critical,
+            category: ConfigCategory::TimeOverride,
         })]
         time_override_unit: String = "hours".to_owned(),
         #[metadata(field_metadata! {
-            label: "Time Override Loss %",
-            hint: "Loss % to trigger time override (-40 = exit if down 40%)",
             min: -100,
             max: 0,
             step: 1,
-            unit: "%",
-            impact: "medium",
-            category: "Time Override",
+            impact: ConfigImpact::Medium,
+            category: ConfigCategory::TimeOverride,
         })]
         time_override_loss_threshold_percent: f64 = -40.0,
 
         // ==================== STOP LOSS CONFIGURATION ====================
         #[metadata(field_metadata! {
-            label: "Enable Stop Loss",
-            hint: "Enable automatic exit when loss exceeds threshold (exits immediately, unlike time override)",
-            impact: "high",
-            category: "Stop Loss",
+            impact: ConfigImpact::High,
+            category: ConfigCategory::StopLoss,
         })]
         stop_loss_enabled: bool = false,
         #[metadata(field_metadata! {
-            label: "Stop Loss Threshold %",
-            hint: "Exit when loss exceeds this % (50 = exit at -50%)",
             min: 1,
             max: 100,
             step: 1,
-            unit: "%",
-            impact: "critical",
-            category: "Stop Loss",
+            impact: ConfigImpact::Critical,
+            category: ConfigCategory::StopLoss,
         })]
         stop_loss_threshold_pct: f64 = 50.0,
         #[metadata(field_metadata! {
-            label: "Allow Partial Exit",
-            hint: "Allow partial exits for stop loss instead of full position close",
-            impact: "medium",
-            category: "Stop Loss",
+            impact: ConfigImpact::Medium,
+            category: ConfigCategory::StopLoss,
         })]
         stop_loss_allow_partial: bool = false,
         #[metadata(field_metadata! {
-            label: "Min Hold Time",
-            hint: "Minimum seconds to hold before stop loss can trigger (0 = immediate)",
             min: 0,
             max: 86400,
             step: 1,
-            unit: "seconds",
-            impact: "medium",
-            category: "Stop Loss",
+            impact: ConfigImpact::Medium,
+            category: ConfigCategory::StopLoss,
         })]
         stop_loss_min_hold_seconds: u64 = 0,
 
         // Position timing
         #[metadata(field_metadata! {
-            label: "Close Cooldown",
-            hint: "Minutes before reopening same token",
             min: 0,
             max: 1440,
             step: 5,
-            unit: "minutes",
-            impact: "critical",
-            category: "Timing",
+            impact: ConfigImpact::Critical,
+            category: ConfigCategory::Timing,
         })]
         position_close_cooldown_minutes: i64 = 15,
 
         // Performance settings
         #[metadata(field_metadata! {
-            label: "Entry Check Concurrency",
-            hint: "Tokens to check concurrently (higher = faster but more CPU)",
             min: 1,
             max: 50,
             step: 1,
-            unit: "concurrent",
-            impact: "medium",
-            category: "Performance",
+            impact: ConfigImpact::Medium,
+            category: ConfigCategory::Performance,
         })]
         entry_check_concurrency: usize = 10,
 
         // Sell concurrency
         #[metadata(field_metadata! {
-            label: "Sell Concurrency",
-            hint: "Number of sell operations to execute concurrently (higher = faster exits)",
             min: 1,
             max: 20,
             step: 1,
-            unit: "concurrent",
-            impact: "medium",
-            category: "Performance",
+            impact: ConfigImpact::Medium,
+            category: ConfigCategory::Performance,
         })]
         sell_concurrency: usize = 5,
 
         // ==================== DCA CONFIGURATION ====================
         #[metadata(field_metadata! {
-            label: "Enable DCA",
-            hint: "Enable Dollar Cost Averaging for positions",
-            impact: "high",
-            category: "DCA",
+            impact: ConfigImpact::High,
+            category: ConfigCategory::Dca,
         })]
         dca_enabled: bool = false,
         #[metadata(field_metadata! {
-            label: "DCA Threshold %",
-            hint: "Enter DCA when position down by this % (-10 = DCA at -10%)",
             min: -100,
             max: 0,
             step: 1,
-            unit: "%",
-            impact: "high",
-            category: "DCA",
+            impact: ConfigImpact::High,
+            category: ConfigCategory::Dca,
         })]
         dca_threshold_pct: f64 = -10.0,
         #[metadata(field_metadata! {
-            label: "Max DCA Count",
-            hint: "Maximum number of additional DCA entries per position",
             min: 1,
             max: 5,
             step: 1,
-            unit: "entries",
-            impact: "critical",
-            category: "DCA",
+            impact: ConfigImpact::Critical,
+            category: ConfigCategory::Dca,
         })]
         dca_max_count: usize = 2,
         #[metadata(field_metadata! {
-            label: "DCA Size %",
-            hint: "Size of each DCA entry as % of initial position size",
             min: 10,
             max: 200,
             step: 10,
-            unit: "%",
-            impact: "high",
-            category: "DCA",
+            impact: ConfigImpact::High,
+            category: ConfigCategory::Dca,
         })]
         dca_size_percentage: f64 = 50.0,
         #[metadata(field_metadata! {
-            label: "DCA Cooldown",
-            hint: "Minimum minutes between DCA entries",
             min: 1,
             max: 1440,
             step: 5,
-            unit: "minutes",
-            impact: "medium",
-            category: "DCA",
+            impact: ConfigImpact::Medium,
+            category: ConfigCategory::Dca,
         })]
         dca_cooldown_minutes: i64 = 30,
 
@@ -286,10 +230,8 @@ config_struct! {
         /// When false, entry monitor pauses but exit monitor continues
         /// Default: true
         #[metadata(field_metadata! {
-            label: "Entry Monitor Enabled",
-            hint: "Enable scanning for new entry opportunities",
-            impact: "critical",
-            category: "Monitor Control",
+            impact: ConfigImpact::Critical,
+            category: ConfigCategory::MonitorControl,
         })]
         entry_monitor_enabled: bool = true,
 
@@ -297,10 +239,8 @@ config_struct! {
         /// When false, exit monitor pauses - USE WITH CAUTION
         /// Default: true
         #[metadata(field_metadata! {
-            label: "Exit Monitor Enabled",
-            hint: "Enable exit monitoring for open positions (disable with caution)",
-            impact: "critical",
-            category: "Monitor Control",
+            impact: ConfigImpact::Critical,
+            category: ConfigCategory::MonitorControl,
         })]
         exit_monitor_enabled: bool = true,
 
@@ -309,10 +249,8 @@ config_struct! {
         /// When cumulative realized losses exceed the limit, entry monitor pauses
         /// Default: false
         #[metadata(field_metadata! {
-            label: "Loss Limit Enabled",
-            hint: "Enable period-based loss limit protection",
-            impact: "high",
-            category: "Loss Limit",
+            impact: ConfigImpact::High,
+            category: ConfigCategory::LossLimit,
         })]
         loss_limit_enabled: bool = false,
 
@@ -320,14 +258,11 @@ config_struct! {
         /// When cumulative losses reach this amount, new entries are blocked
         /// Default: 0.1 SOL
         #[metadata(field_metadata! {
-            label: "Loss Limit (SOL)",
-            hint: "Maximum realized loss allowed in the period",
             min: 0.001,
             max: 100.0,
             step: 0.01,
-            unit: "SOL",
-            impact: "critical",
-            category: "Loss Limit",
+            impact: ConfigImpact::Critical,
+            category: ConfigCategory::LossLimit,
         })]
         loss_limit_sol: f64 = 0.1,
 
@@ -335,14 +270,11 @@ config_struct! {
         /// After this period, cumulative loss tracking resets
         /// Default: 24 (daily limit)
         #[metadata(field_metadata! {
-            label: "Loss Limit Period",
-            hint: "Loss limit period in hours (24 = daily)",
             min: 1,
             max: 168,
             step: 1,
-            unit: "hours",
-            impact: "high",
-            category: "Loss Limit",
+            impact: ConfigImpact::High,
+            category: ConfigCategory::LossLimit,
         })]
         loss_limit_period_hours: u64 = 24,
 
@@ -351,10 +283,8 @@ config_struct! {
         /// If false, manual resume required via dashboard
         /// Default: true
         #[metadata(field_metadata! {
-            label: "Auto Resume",
-            hint: "Auto-resume entry monitor when loss limit period resets",
-            impact: "medium",
-            category: "Loss Limit",
+            impact: ConfigImpact::Medium,
+            category: ConfigCategory::LossLimit,
         })]
         loss_limit_auto_resume: bool = true,
     }

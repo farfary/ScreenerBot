@@ -1,5 +1,6 @@
 //! Wallet monitoring and caching configuration
 
+use crate::config::metadata::{ConfigCategory, ConfigImpact};
 use crate::config_struct;
 use crate::field_metadata;
 
@@ -7,214 +8,161 @@ config_struct! {
     /// Wallet monitoring and caching configuration
     pub struct WalletConfig {
         #[metadata(field_metadata! {
-            label: "Snapshot Interval",
-            hint: "Seconds between periodic wallet balance snapshots. This is only the backstop — any on-chain activity refreshes the balance within seconds",
             min: 10,
             max: 600,
             step: 5,
-            unit: "seconds",
-            impact: "medium",
-            category: "Wallet",
+            impact: ConfigImpact::Medium,
+            category: ConfigCategory::Wallet,
         })]
         snapshot_interval_secs: u64 = 15,
 
         #[metadata(field_metadata! {
-            label: "Flow Cache Update",
-            hint: "Seconds between SOL flow cache syncs from transactions DB",
             min: 1,
             max: 60,
             step: 1,
-            unit: "seconds",
-            impact: "high",
-            category: "Wallet",
+            impact: ConfigImpact::High,
+            category: ConfigCategory::Wallet,
         })]
         flow_cache_update_secs: u64 = 5,
 
         #[metadata(field_metadata! {
-            label: "Flow Cache Batch Size",
-            hint: "Max new transactions to process per sync",
             min: 100,
             max: 20000,
             step: 100,
-            unit: "rows",
-            impact: "medium",
-            category: "Wallet",
+            impact: ConfigImpact::Medium,
+            category: ConfigCategory::Wallet,
         })]
         flow_cache_backfill_batch: usize = 2000,
 
         #[metadata(field_metadata! {
-            label: "Flow Cache Lookback",
-            hint: "Safety lookback when resuming sync (seconds)",
             min: 0,
             max: 86400,
             step: 60,
-            unit: "seconds",
-            impact: "medium",
-            category: "Wallet",
+            impact: ConfigImpact::Medium,
+            category: ConfigCategory::Wallet,
         })]
         flow_cache_lookback_secs: u64 = 3600,
 
         #[metadata(field_metadata! {
-            label: "Max Daily Flow Days",
-            hint: "Maximum days of daily flow data to return (hard cap)",
             min: 30,
             max: 1825,
             step: 30,
-            unit: "days",
-            impact: "medium",
-            category: "Wallet",
+            impact: ConfigImpact::Medium,
+            category: ConfigCategory::Wallet,
         })]
         max_daily_flow_days: usize = 730,
 
         #[metadata(field_metadata! {
-            label: "Daily Flow Decimation Threshold",
-            hint: "Days threshold beyond which older data is decimated",
             min: 30,
             max: 730,
             step: 30,
-            unit: "days",
-            impact: "low",
-            category: "Wallet",
+            impact: ConfigImpact::Low,
+            category: ConfigCategory::Wallet,
         })]
         daily_flow_decimate_threshold_days: usize = 365,
 
         #[metadata(field_metadata! {
-            label: "Dashboard Metrics Update (24h)",
-            hint: "Seconds between pre-computing 24h dashboard metrics",
             min: 30,
             max: 300,
             step: 10,
-            unit: "seconds",
-            impact: "high",
-            category: "Wallet",
+            impact: ConfigImpact::High,
+            category: ConfigCategory::Wallet,
         })]
         dashboard_metrics_24h_interval_secs: u64 = 60,
 
         #[metadata(field_metadata! {
-            label: "Dashboard Metrics Update (7d)",
-            hint: "Seconds between pre-computing 7d dashboard metrics",
             min: 60,
             max: 600,
             step: 30,
-            unit: "seconds",
-            impact: "medium",
-            category: "Wallet",
+            impact: ConfigImpact::Medium,
+            category: ConfigCategory::Wallet,
         })]
         dashboard_metrics_7d_interval_secs: u64 = 300,
 
         #[metadata(field_metadata! {
-            label: "Dashboard Metrics Update (30d)",
-            hint: "Seconds between pre-computing 30d dashboard metrics",
             min: 300,
             max: 1800,
             step: 60,
-            unit: "seconds",
-            impact: "medium",
-            category: "Wallet",
+            impact: ConfigImpact::Medium,
+            category: ConfigCategory::Wallet,
         })]
         dashboard_metrics_30d_interval_secs: u64 = 900,
 
         #[metadata(field_metadata! {
-            label: "Dashboard Metrics Update (All Time)",
-            hint: "Seconds between pre-computing all-time dashboard metrics",
             min: 600,
             max: 3600,
             step: 60,
-            unit: "seconds",
-            impact: "low",
-            category: "Wallet",
+            impact: ConfigImpact::Low,
+            category: ConfigCategory::Wallet,
         })]
         dashboard_metrics_alltime_interval_secs: u64 = 1800,
 
         #[metadata(field_metadata! {
-            label: "API Response Cache TTL",
-            hint: "Seconds to cache wallet dashboard responses in memory",
             min: 10,
             max: 300,
             step: 10,
-            unit: "seconds",
-            impact: "low",
-            category: "Wallet",
+            impact: ConfigImpact::Low,
+            category: ConfigCategory::Wallet,
         })]
         api_response_cache_ttl_secs: u64 = 30,
 
         #[metadata(field_metadata! {
-            label: "Minimum SOL Balance",
-            hint: "Minimum SOL balance required for swaps (safety threshold)",
             min: 0.001,
             max: 1.0,
             step: 0.001,
-            unit: "SOL",
-            impact: "high",
-            category: "Safety",
+            impact: ConfigImpact::High,
+            category: ConfigCategory::Safety,
         })]
         min_balance_sol: f64 = 0.01,
 
         #[metadata(field_metadata! {
-            label: "Watch Enabled",
-            hint: "Master switch for the wallet observation service. The own wallet is always watched regardless of this setting",
-            impact: "high",
-            category: "Watch",
+            impact: ConfigImpact::High,
+            category: ConfigCategory::Watch,
         })]
         watch_enabled: bool = true,
 
         #[metadata(field_metadata! {
-            label: "Max Watch Targets",
-            hint: "Maximum number of pasted addresses that can be watched at once (subscription + RPC budget guard)",
             min: 1,
             max: 50,
             step: 1,
-            unit: "targets",
-            impact: "medium",
-            category: "Watch",
+            impact: ConfigImpact::Medium,
+            category: ConfigCategory::Watch,
         })]
         watch_max_targets: usize = 10,
 
         #[metadata(field_metadata! {
-            label: "Watch Poll Interval",
-            hint: "Seconds between baseline signature polls per target, as a safety net for a silent WebSocket drop",
             min: 5,
             max: 300,
             step: 5,
-            unit: "seconds",
-            impact: "medium",
-            category: "Watch",
+            impact: ConfigImpact::Medium,
+            category: ConfigCategory::Watch,
         })]
         watch_poll_interval_secs: u64 = 30,
 
         #[metadata(field_metadata! {
-            label: "Watch Poll Fallback Interval",
-            hint: "Seconds between escalated signature polls while the shared subscription is not connected",
             min: 1,
             max: 60,
             step: 1,
-            unit: "seconds",
-            impact: "medium",
-            category: "Watch",
+            impact: ConfigImpact::Medium,
+            category: ConfigCategory::Watch,
         })]
         watch_poll_fallback_secs: u64 = 3,
 
         #[metadata(field_metadata! {
-            label: "High Activity Watch Interval",
-            hint: "Minimum seconds between successful-transaction checks after a high-activity wallet signals new activity",
             min: 1,
             max: 60,
             step: 1,
-            unit: "seconds",
-            impact: "medium",
-            category: "Watch",
+            impact: ConfigImpact::Medium,
+            category: ConfigCategory::Watch,
         })]
         watch_high_activity_interval_secs: u64 = 5,
 
         #[metadata(field_metadata! {
-            label: "Watch Retention",
-            hint: "Days to keep a watched (non-own) wallet's decoded transaction rows before they are purged",
             min: 1,
             max: 365,
             step: 1,
-            unit: "days",
-            impact: "low",
-            category: "Watch",
+            impact: ConfigImpact::Low,
+            category: ConfigCategory::Watch,
         })]
         watch_retention_days: u32 = 30,
     }

@@ -14,6 +14,7 @@ use serde_json::{Map, Value};
 
 use crate::agent_control::error::{Error, Result};
 use crate::config::{self, metadata::collect_config_metadata, schemas::Config};
+use crate::i18n::{format_message, source_locale, LanguageIdentifier};
 
 /// Substituted for wallet key material in every agent-visible read.
 pub const REDACTED: &str = "[redacted]";
@@ -173,13 +174,72 @@ pub fn read(path: Option<&str>) -> Result<Value> {
     }
 }
 
+/// Message text of a catalog id in the source locale.
+fn english_text(locale: &LanguageIdentifier, id: &str) -> Option<crate::i18n::LocalizedMessage> {
+    format_message(locale, id, None)
+}
+
+/// Render the display text of one section's fields (label, hint, unit,
+/// placeholder, category and impact names) from the source-locale catalog.
+/// Metadata carries ids; an agent is given the English text.
+fn render_english(locale: &LanguageIdentifier, fields: &mut Value) {
+    let Some(fields) = fields.as_object_mut() else {
+        return;
+    };
+    for meta in fields.values_mut() {
+        let Some(meta) = meta.as_object_mut() else {
+            continue;
+        };
+        if let Some(message) = meta
+            .get("key")
+            .and_then(Value::as_str)
+            .and_then(|key| english_text(locale, key))
+        {
+            if let Some(label) = message.value {
+                meta.insert("label".to_owned(), Value::String(label));
+            }
+            for (name, text) in message.attributes {
+                if matches!(name.as_str(), "hint" | "unit" | "placeholder") {
+                    meta.insert(name, Value::String(text));
+                }
+            }
+        }
+        for (field, prefix) in [
+            ("category", "config-category-"),
+            ("impact", "config-impact-"),
+        ] {
+            let id = meta.get(field).and_then(Value::as_str).map(str::to_owned);
+            if let Some(text) = id
+                .and_then(|id| english_text(locale, &format!("{prefix}{id}")))
+                .and_then(|message| message.value)
+            {
+                meta.insert(field.to_owned(), Value::String(text));
+            }
+        }
+        if let Some(children) = meta.get_mut("children") {
+            render_english(locale, children);
+        }
+    }
+}
+
 /// Field metadata for every config section the app renders: type, label, unit,
 /// bounds and default. This is how an agent discovers what it may set.
 pub fn schema(section: Option<&str>) -> Result<Value> {
-    let metadata =
+    let mut metadata =
         serde_json::to_value(collect_config_metadata()).map_err(|e| Error::InvalidParameters {
             detail: format!("config metadata could not be serialized: {e}"),
         })?;
+    let locale: LanguageIdentifier =
+        source_locale()
+            .parse()
+            .map_err(|e| Error::InvalidParameters {
+                detail: format!("source locale is not a valid language tag: {e}"),
+            })?;
+    if let Some(sections) = metadata.as_object_mut() {
+        for section in sections.values_mut() {
+            render_english(&locale, section);
+        }
+    }
     match section.map(str::trim).filter(|s| !s.is_empty()) {
         Some(section) => resolve(&metadata, section).cloned(),
         None => Ok(metadata),
@@ -276,4 +336,23 @@ pub fn updates_from_object(object: &Map<String, Value>) -> Vec<(String, Value)> 
         .iter()
         .map(|(path, value)| (path.clone(), value.clone()))
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn schema_renders_english_text_from_the_catalog() {
+        let schema = schema(Some("trader.max_open_positions")).expect("field schema");
+        assert_eq!(schema["label"], "Max Open Positions");
+        assert_eq!(
+            schema["hint"],
+            "Max simultaneous positions (2-5 conservative)"
+        );
+        assert_eq!(schema["unit"], "positions");
+        assert_eq!(schema["category"], "Core Trading");
+        assert_eq!(schema["impact"], "critical");
+        assert!(schema["key"].is_string());
+    }
 }

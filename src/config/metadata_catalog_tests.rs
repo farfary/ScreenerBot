@@ -1,8 +1,8 @@
 //! Guards tying config field metadata to the `config-` localization messages.
 
 use super::metadata::{
-    category_key, collect_config_metadata, impact_key, ConfigMetadata, FieldMetadata, FieldType,
-    SectionMetadata,
+    category_key, collect_config_metadata, impact_key, ConfigCategory, ConfigImpact,
+    ConfigMetadata, FieldMetadata, SectionMetadata,
 };
 use crate::i18n::{format_message, source_message_ids, LanguageIdentifier};
 use std::collections::BTreeSet;
@@ -38,52 +38,16 @@ fn all_fields(metadata: &ConfigMetadata) -> Vec<FieldEntry<'_>> {
     out
 }
 
-/// Category of a field as the dashboard groups it.
-fn category_of(meta: &FieldMetadata) -> &str {
-    meta.category.unwrap_or("General")
-}
-
-/// Collapse Fluent's indentation handling: trim every line and the whole text.
-fn normalize(text: &str) -> String {
-    text.lines()
-        .map(str::trim)
-        .collect::<Vec<_>>()
-        .join("\n")
-        .trim()
-        .to_string()
-}
-
-/// Text an attribute carries, `None` when the schema leaves it empty.
-fn non_empty(text: Option<&str>) -> Option<&str> {
-    text.filter(|value| !value.trim().is_empty())
-}
-
-/// Placeholder shown for a field: its own, or a one-per-line prompt for an
-/// array that declares none.
-fn placeholder_of(meta: &FieldMetadata) -> Option<&str> {
-    match meta.placeholder {
-        Some(text) => non_empty(Some(text)),
-        None => (meta.field_type == FieldType::Array).then_some("Enter one value per line"),
-    }
-}
-
 fn english() -> LanguageIdentifier {
     "en".parse().expect("valid language tag")
 }
 
-fn used_category_keys(fields: &[FieldEntry<'_>]) -> BTreeSet<String> {
-    fields
-        .iter()
-        .map(|field| category_key(category_of(field.meta)))
-        .chain(std::iter::once(category_key("General")))
-        .collect()
+fn category_keys() -> BTreeSet<String> {
+    ConfigCategory::ALL.into_iter().map(category_key).collect()
 }
 
-fn used_impact_keys(fields: &[FieldEntry<'_>]) -> BTreeSet<String> {
-    fields
-        .iter()
-        .filter_map(|field| field.meta.impact.map(impact_key))
-        .collect()
+fn impact_keys() -> BTreeSet<String> {
+    ConfigImpact::ALL.into_iter().map(impact_key).collect()
 }
 
 /// Guarantee behind the dashboard's dynamic `config-` lookups: every key it can
@@ -108,8 +72,8 @@ fn config_catalog_covers_fields() {
         );
     }
     let field_keys = expected.clone();
-    let categories = used_category_keys(&fields);
-    let impacts = used_impact_keys(&fields);
+    let categories = category_keys();
+    let impacts = impact_keys();
     for key in categories.iter().chain(impacts.iter()) {
         assert!(
             expected.insert(key.clone()),
@@ -150,69 +114,22 @@ fn config_catalog_covers_fields() {
     }
 }
 
-/// The catalog reproduces the text the schema declares: the label (or the
-/// field name for a field without one), the hint (or the doc comment), the
-/// unit, and the placeholder (arrays default to a one-per-line prompt).
+/// Every category and impact variant has a catalog message, whether or not a
+/// field currently uses it.
 #[test]
-fn config_catalog_matches_schema_text() {
-    let metadata = collect_config_metadata();
-    for field in all_fields(&metadata) {
-        let message = format_message(&english(), &field.meta.key, None)
-            .unwrap_or_else(|| panic!("`{}` is missing", field.meta.key));
-        let attribute = |name: &str| {
-            message
-                .attributes
-                .iter()
-                .find(|(attr, _)| attr == name)
-                .map(|(_, text)| text.as_str())
-        };
-
-        let label = non_empty(field.meta.label).unwrap_or(field.name);
-        assert_eq!(
-            normalize(message.value.as_deref().unwrap_or_default()),
-            normalize(label),
-            "label of `{}`",
-            field.meta.key
-        );
-
-        let hint = non_empty(field.meta.hint).or(non_empty(field.meta.docs));
-        assert_eq!(
-            attribute("hint").map(normalize),
-            hint.map(normalize),
-            "hint of `{}`",
-            field.meta.key
-        );
-        assert_eq!(
-            attribute("unit").map(normalize),
-            non_empty(field.meta.unit).map(normalize),
-            "unit of `{}`",
-            field.meta.key
-        );
-
-        assert_eq!(
-            attribute("placeholder").map(normalize),
-            placeholder_of(field.meta).map(normalize),
-            "placeholder of `{}`",
-            field.meta.key
+fn every_category_and_impact_variant_has_a_message() {
+    for category in ConfigCategory::ALL {
+        let key = category_key(category);
+        assert!(
+            format_message(&english(), &key, None).is_some(),
+            "`{key}` is missing from locales/en/config.ftl"
         );
     }
-}
-
-/// Category and impact messages carry the English the dashboard showed before
-/// the names moved into the catalog.
-#[test]
-fn config_category_and_impact_messages_read_as_their_names() {
-    let metadata = collect_config_metadata();
-    let fields = all_fields(&metadata);
-    for field in &fields {
-        let name = category_of(field.meta);
-        let text = crate::i18n::format(&english(), &category_key(name), None);
-        assert_eq!(text, name);
-        if let Some(impact) = field.meta.impact {
-            assert_eq!(
-                crate::i18n::format(&english(), &impact_key(impact), None),
-                impact
-            );
-        }
+    for impact in ConfigImpact::ALL {
+        let key = impact_key(impact);
+        assert!(
+            format_message(&english(), &key, None).is_some(),
+            "`{key}` is missing from locales/en/config.ftl"
+        );
     }
 }

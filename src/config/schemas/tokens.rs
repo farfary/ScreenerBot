@@ -1,5 +1,6 @@
 //! Token discovery, sources, and data provider configuration.
 
+use crate::config::metadata::{ConfigCategory, ConfigImpact};
 use crate::config_struct;
 use crate::field_metadata;
 
@@ -12,35 +13,27 @@ config_struct! {
     pub struct TokensConfig {
         // Market data source selection
         #[metadata(field_metadata! {
-            label: "Preferred Market Data Source",
-            hint: "Choose DexScreener or GeckoTerminal for price/volume/market data. Rugcheck always fetched for security.",
-            impact: "high",
-            category: "Data Sources",
+            impact: ConfigImpact::High,
+            category: ConfigCategory::DataSources,
         })]
         preferred_market_data_source: String = "dexscreener".to_owned(), // "dexscreener" or "geckoterminal"
 
         // Multi-source validation configuration
         #[metadata(field_metadata! {
-            label: "Token Sources",
-            hint: "Multi-source validation and per-source toggles",
-            impact: "high",
-            category: "Sources",
+            impact: ConfigImpact::High,
+            category: ConfigCategory::Sources,
         })]
         sources: TokenSourcesConfig = TokenSourcesConfig::default(),
 
         #[metadata(field_metadata! {
-            label: "Token Discovery",
-            hint: "Configure discovery endpoints per provider",
-            impact: "high",
-            category: "Discovery",
+            impact: ConfigImpact::High,
+            category: ConfigCategory::Discovery,
         })]
         discovery: TokenDiscoveryConfig = TokenDiscoveryConfig::default(),
 
         #[metadata(field_metadata! {
-            label: "Update Intervals",
-            hint: "Configure background update loop intervals for tokens module",
-            impact: "medium",
-            category: "Updates",
+            impact: ConfigImpact::Medium,
+            category: ConfigCategory::Updates,
         })]
         update_intervals: UpdateIntervalsConfig = UpdateIntervalsConfig::default(),
     }
@@ -54,50 +47,40 @@ config_struct! {
     /// Background update loop intervals (in seconds)
     pub struct UpdateIntervalsConfig {
         #[metadata(field_metadata! {
-            label: "Open Position Interval (s)",
-            hint: "How often to update tokens with active trading positions",
-            impact: "high",
-            category: "Updates",
+            impact: ConfigImpact::High,
+            category: ConfigCategory::Updates,
             min: 1.0,
             step: 1.0,
         })]
         open_position_seconds: u64 = 5,
 
         #[metadata(field_metadata! {
-            label: "Pool Tracked Interval (s)",
-            hint: "How often to update tokens tracked by Pool Service",
-            impact: "high",
-            category: "Updates",
+            impact: ConfigImpact::High,
+            category: ConfigCategory::Updates,
             min: 1.0,
             step: 1.0,
         })]
         pool_tracked_seconds: u64 = 7,
 
         #[metadata(field_metadata! {
-            label: "Filter Passed Interval (s)",
-            hint: "How often to update tokens that passed filtering criteria",
-            impact: "high",
-            category: "Updates",
+            impact: ConfigImpact::High,
+            category: ConfigCategory::Updates,
             min: 1.0,
             step: 1.0,
         })]
         filter_passed_seconds: u64 = 8,
 
         #[metadata(field_metadata! {
-            label: "Background Interval (s)",
-            hint: "How often to update oldest tokens in background refresh",
-            impact: "low",
-            category: "Updates",
+            impact: ConfigImpact::Low,
+            category: ConfigCategory::Updates,
             min: 5.0,
             step: 5.0,
         })]
         background_seconds: u64 = 30,
 
         #[metadata(field_metadata! {
-            label: "Security Interval (s)",
-            hint: "How often to attempt fetching Rugcheck data for tokens without security info",
-            impact: "low",
-            category: "Updates",
+            impact: ConfigImpact::Low,
+            category: ConfigCategory::Updates,
             min: 0.0,
             step: 1.0,
         })]
@@ -109,27 +92,21 @@ config_struct! {
     /// Full API configuration for a data source
     pub struct SourceApiConfig {
         #[metadata(field_metadata! {
-            label: "Enabled",
-            hint: "Enable or disable this data source",
-            impact: "high",
-            category: "Sources",
+            impact: ConfigImpact::High,
+            category: ConfigCategory::Sources,
         })]
         enabled: bool = true,
 
         /// API base URL (override the hardcoded default)
         #[metadata(field_metadata! {
-            label: "Endpoint",
-            hint: "API base URL (leave default for the standard endpoint)",
-            impact: "critical",
-            category: "Sources",
+            impact: ConfigImpact::Critical,
+            category: ConfigCategory::Sources,
         })]
         endpoint: String = String::new(),
 
         #[metadata(field_metadata! {
-            label: "Rate Limit (req/min)",
-            hint: "Maximum API requests per minute to this source",
-            impact: "medium",
-            category: "Sources",
+            impact: ConfigImpact::Medium,
+            category: ConfigCategory::Sources,
             min: 1.0,
             max: 300.0,
             step: 1.0,
@@ -137,10 +114,8 @@ config_struct! {
         rate_limit_per_minute: u32 = 60,
 
         #[metadata(field_metadata! {
-            label: "Timeout (seconds)",
-            hint: "HTTP request timeout in seconds",
-            impact: "low",
-            category: "Sources",
+            impact: ConfigImpact::Low,
+            category: ConfigCategory::Sources,
             min: 1.0,
             max: 60.0,
             step: 1.0,
@@ -153,18 +128,14 @@ config_struct! {
     /// DexScreener source configuration (rate limit fixed in code)
     pub struct DexscreenerSourceConfig {
         #[metadata(field_metadata! {
-            label: "Enabled",
-            hint: "Enable or disable DexScreener as a data source",
-            impact: "high",
-            category: "Sources",
+            impact: ConfigImpact::High,
+            category: ConfigCategory::Sources,
         })]
         enabled: bool = true,
 
         #[metadata(field_metadata! {
-            label: "Timeout (seconds)",
-            hint: "HTTP request timeout for DexScreener API calls",
-            impact: "low",
-            category: "Sources",
+            impact: ConfigImpact::Low,
+            category: ConfigCategory::Sources,
             min: 1.0,
             max: 60.0,
             step: 1.0,
@@ -177,10 +148,8 @@ config_struct! {
     /// Enable/disable toggle for a specific source
     pub struct SourceToggleConfig {
         #[metadata(field_metadata! {
-            label: "Enabled",
-            hint: "Enable or disable this source",
-            impact: "high",
-            category: "Sources",
+            impact: ConfigImpact::High,
+            category: ConfigCategory::Sources,
         })]
         enabled: bool = true,
     }
@@ -190,10 +159,8 @@ config_struct! {
     /// Multi-source validation settings
     pub struct TokenSourcesConfig {
         #[metadata(field_metadata! {
-            label: "DexScreener Source",
-            hint: "DexScreener API configuration",
-            impact: "high",
-            category: "Sources",
+            impact: ConfigImpact::High,
+            category: ConfigCategory::Sources,
         })]
         dexscreener: DexscreenerSourceConfig = DexscreenerSourceConfig {
             enabled: true,
@@ -201,10 +168,8 @@ config_struct! {
         },
 
         #[metadata(field_metadata! {
-            label: "GeckoTerminal Source",
-            hint: "GeckoTerminal API configuration",
-            impact: "medium",
-            category: "Sources",
+            impact: ConfigImpact::Medium,
+            category: ConfigCategory::Sources,
         })]
         geckoterminal: SourceApiConfig = SourceApiConfig {
             enabled: true,
@@ -214,10 +179,8 @@ config_struct! {
         },
 
         #[metadata(field_metadata! {
-            label: "Rugcheck Source",
-            hint: "Rugcheck API configuration",
-            impact: "medium",
-            category: "Sources",
+            impact: ConfigImpact::Medium,
+            category: ConfigCategory::Sources,
         })]
         rugcheck: SourceApiConfig = SourceApiConfig {
             enabled: true,
@@ -227,10 +190,8 @@ config_struct! {
         },
 
         #[metadata(field_metadata! {
-            label: "ScreenerBot Server Source",
-            hint: "Self-hosted ScreenerBot data server — shared first-hop cache for Rugcheck reports and boosted-token identity",
-            impact: "high",
-            category: "Sources",
+            impact: ConfigImpact::High,
+            category: ConfigCategory::Sources,
         })]
         screenerbot_server: ScreenerbotServerSourceConfig =
             ScreenerbotServerSourceConfig::default(),
@@ -245,26 +206,20 @@ config_struct! {
     pub struct ScreenerbotServerSourceConfig {
         /// Whether to try the ScreenerBot server as the shared first-hop cache
         #[metadata(field_metadata! {
-            label: "Enabled",
-            hint: "Try the self-hosted ScreenerBot server before direct data providers",
-            impact: "high",
-            category: "Sources",
+            impact: ConfigImpact::High,
+            category: ConfigCategory::Sources,
         })]
         enabled: bool = true,
         /// ScreenerBot data server base URL (no trailing slash)
         #[metadata(field_metadata! {
-            label: "Endpoint",
-            hint: "Base URL of the self-hosted ScreenerBot data server",
-            impact: "critical",
-            category: "Sources",
+            impact: ConfigImpact::Critical,
+            category: ConfigCategory::Sources,
         })]
         endpoint: String = "https://screenerbot.io/data".to_owned(),
         /// HTTP request timeout in seconds (keep short so a miss falls back fast)
         #[metadata(field_metadata! {
-            label: "Timeout (seconds)",
-            hint: "HTTP request timeout for the ScreenerBot server (short so misses fall back quickly)",
-            impact: "low",
-            category: "Sources",
+            impact: ConfigImpact::Low,
+            category: ConfigCategory::Sources,
             min: 1.0,
             max: 30.0,
             step: 1.0,
@@ -272,10 +227,8 @@ config_struct! {
         timeout_seconds: u64 = 4,
         /// How often known tokens are checked for their resolved logo and banner
         #[metadata(field_metadata! {
-            label: "Media Sync Interval (seconds)",
-            hint: "How often to fetch on-chain logos and published banners for known tokens",
-            impact: "low",
-            category: "Sources",
+            impact: ConfigImpact::Low,
+            category: ConfigCategory::Sources,
             min: 30.0,
             max: 3600.0,
             step: 30.0,
@@ -283,10 +236,8 @@ config_struct! {
         media_sync_seconds: u64 = 120,
         /// How long a token's fetched logo and banner stay current before re-checking
         #[metadata(field_metadata! {
-            label: "Media Refresh (hours)",
-            hint: "Re-check a token's on-chain logo and published banner after this many hours",
-            impact: "low",
-            category: "Sources",
+            impact: ConfigImpact::Low,
+            category: ConfigCategory::Sources,
             min: 1.0,
             max: 168.0,
             step: 1.0,
@@ -302,58 +253,44 @@ config_struct! {
 config_struct! {
     pub struct TokenDiscoveryConfig {
         #[metadata(field_metadata! {
-            label: "Discovery Enabled",
-            hint: "Master toggle for token discovery endpoints",
-            impact: "critical",
-            category: "Discovery",
+            impact: ConfigImpact::Critical,
+            category: ConfigCategory::Discovery,
         })]
         enabled: bool = true,
 
         #[metadata(field_metadata! {
-            label: "DexScreener Discovery",
-            hint: "Per-endpoint toggles for DexScreener discovery",
-            impact: "high",
-            category: "Discovery",
+            impact: ConfigImpact::High,
+            category: ConfigCategory::Discovery,
         })]
         dexscreener: DexscreenerDiscoveryConfig = DexscreenerDiscoveryConfig::default(),
 
         #[metadata(field_metadata! {
-            label: "GeckoTerminal Discovery",
-            hint: "Per-endpoint toggles for GeckoTerminal discovery",
-            impact: "high",
-            category: "Discovery",
+            impact: ConfigImpact::High,
+            category: ConfigCategory::Discovery,
         })]
         geckoterminal: GeckoDiscoveryConfig = GeckoDiscoveryConfig::default(),
 
         #[metadata(field_metadata! {
-            label: "Rugcheck Discovery",
-            hint: "Per-endpoint toggles for Rugcheck discovery",
-            impact: "high",
-            category: "Discovery",
+            impact: ConfigImpact::High,
+            category: ConfigCategory::Discovery,
         })]
         rugcheck: RugcheckDiscoveryConfig = RugcheckDiscoveryConfig::default(),
 
         #[metadata(field_metadata! {
-            label: "Jupiter Discovery",
-            hint: "Per-endpoint toggles for Jupiter discovery",
-            impact: "medium",
-            category: "Discovery",
+            impact: ConfigImpact::Medium,
+            category: ConfigCategory::Discovery,
         })]
         jupiter: JupiterDiscoveryConfig = JupiterDiscoveryConfig::default(),
 
         #[metadata(field_metadata! {
-            label: "CoinGecko Discovery",
-            hint: "Toggle CoinGecko Solana markets discovery",
-            impact: "low",
-            category: "Discovery",
+            impact: ConfigImpact::Low,
+            category: ConfigCategory::Discovery,
         })]
         coingecko: CoingeckoDiscoveryConfig = CoingeckoDiscoveryConfig::default(),
 
         #[metadata(field_metadata! {
-            label: "DeFiLlama Discovery",
-            hint: "Toggle DeFiLlama protocol discovery",
-            impact: "low",
-            category: "Discovery",
+            impact: ConfigImpact::Low,
+            category: ConfigCategory::Discovery,
         })]
         defillama: DefillamaDiscoveryConfig = DefillamaDiscoveryConfig::default(),
     }
@@ -362,34 +299,26 @@ config_struct! {
 config_struct! {
     pub struct DexscreenerDiscoveryConfig {
         #[metadata(field_metadata! {
-            label: "Enabled",
-            hint: "Master toggle for DexScreener discovery endpoints",
-            impact: "high",
-            category: "Discovery",
+            impact: ConfigImpact::High,
+            category: ConfigCategory::Discovery,
         })]
         enabled: bool = true,
 
         #[metadata(field_metadata! {
-            label: "Latest Profiles",
-            hint: "Discover tokens with recently created DexScreener profiles",
-            impact: "medium",
-            category: "Discovery",
+            impact: ConfigImpact::Medium,
+            category: ConfigCategory::Discovery,
         })]
         latest_profiles_enabled: bool = true,
 
         #[metadata(field_metadata! {
-            label: "Latest Boosts",
-            hint: "Discover tokens with recent boost purchases on DexScreener",
-            impact: "medium",
-            category: "Discovery",
+            impact: ConfigImpact::Medium,
+            category: ConfigCategory::Discovery,
         })]
         latest_boosts_enabled: bool = true,
 
         #[metadata(field_metadata! {
-            label: "Top Boosts",
-            hint: "Discover tokens with the most active boosts on DexScreener",
-            impact: "medium",
-            category: "Discovery",
+            impact: ConfigImpact::Medium,
+            category: ConfigCategory::Discovery,
         })]
         top_boosts_enabled: bool = true,
     }
@@ -398,34 +327,26 @@ config_struct! {
 config_struct! {
     pub struct GeckoDiscoveryConfig {
         #[metadata(field_metadata! {
-            label: "Enabled",
-            hint: "Master toggle for GeckoTerminal discovery endpoints",
-            impact: "high",
-            category: "Discovery",
+            impact: ConfigImpact::High,
+            category: ConfigCategory::Discovery,
         })]
         enabled: bool = true,
 
         #[metadata(field_metadata! {
-            label: "New Pools",
-            hint: "Discover tokens from newly created liquidity pools",
-            impact: "medium",
-            category: "Discovery",
+            impact: ConfigImpact::Medium,
+            category: ConfigCategory::Discovery,
         })]
         new_pools_enabled: bool = true,
 
         #[metadata(field_metadata! {
-            label: "Recently Updated",
-            hint: "Discover tokens with recent price/volume activity",
-            impact: "medium",
-            category: "Discovery",
+            impact: ConfigImpact::Medium,
+            category: ConfigCategory::Discovery,
         })]
         recently_updated_enabled: bool = true,
 
         #[metadata(field_metadata! {
-            label: "Trending",
-            hint: "Discover trending tokens on GeckoTerminal",
-            impact: "medium",
-            category: "Discovery",
+            impact: ConfigImpact::Medium,
+            category: ConfigCategory::Discovery,
         })]
         trending_enabled: bool = true,
     }
@@ -434,42 +355,32 @@ config_struct! {
 config_struct! {
     pub struct RugcheckDiscoveryConfig {
         #[metadata(field_metadata! {
-            label: "Enabled",
-            hint: "Master toggle for Rugcheck discovery endpoints",
-            impact: "high",
-            category: "Discovery",
+            impact: ConfigImpact::High,
+            category: ConfigCategory::Discovery,
         })]
         enabled: bool = true,
 
         #[metadata(field_metadata! {
-            label: "New Tokens",
-            hint: "Discover newly listed tokens from Rugcheck",
-            impact: "medium",
-            category: "Discovery",
+            impact: ConfigImpact::Medium,
+            category: ConfigCategory::Discovery,
         })]
         new_tokens_enabled: bool = true,
 
         #[metadata(field_metadata! {
-            label: "Recent",
-            hint: "Discover recently analyzed tokens on Rugcheck",
-            impact: "medium",
-            category: "Discovery",
+            impact: ConfigImpact::Medium,
+            category: ConfigCategory::Discovery,
         })]
         recent_enabled: bool = true,
 
         #[metadata(field_metadata! {
-            label: "Trending",
-            hint: "Discover trending tokens on Rugcheck",
-            impact: "medium",
-            category: "Discovery",
+            impact: ConfigImpact::Medium,
+            category: ConfigCategory::Discovery,
         })]
         trending_enabled: bool = true,
 
         #[metadata(field_metadata! {
-            label: "Verified",
-            hint: "Discover verified/audited tokens from Rugcheck",
-            impact: "medium",
-            category: "Discovery",
+            impact: ConfigImpact::Medium,
+            category: ConfigCategory::Discovery,
         })]
         verified_enabled: bool = true,
     }
@@ -478,42 +389,32 @@ config_struct! {
 config_struct! {
     pub struct JupiterDiscoveryConfig {
         #[metadata(field_metadata! {
-            label: "Enabled",
-            hint: "Master toggle for Jupiter discovery endpoints",
-            impact: "high",
-            category: "Discovery",
+            impact: ConfigImpact::High,
+            category: ConfigCategory::Discovery,
         })]
         enabled: bool = true,
 
         #[metadata(field_metadata! {
-            label: "Recent",
-            hint: "Discover recently listed tokens on Jupiter",
-            impact: "medium",
-            category: "Discovery",
+            impact: ConfigImpact::Medium,
+            category: ConfigCategory::Discovery,
         })]
         recent_enabled: bool = true,
 
         #[metadata(field_metadata! {
-            label: "Top Organic",
-            hint: "Discover tokens with highest organic trading activity",
-            impact: "medium",
-            category: "Discovery",
+            impact: ConfigImpact::Medium,
+            category: ConfigCategory::Discovery,
         })]
         top_organic_enabled: bool = true,
 
         #[metadata(field_metadata! {
-            label: "Top Traded",
-            hint: "Discover most traded tokens by volume on Jupiter",
-            impact: "medium",
-            category: "Discovery",
+            impact: ConfigImpact::Medium,
+            category: ConfigCategory::Discovery,
         })]
         top_traded_enabled: bool = true,
 
         #[metadata(field_metadata! {
-            label: "Top Trending",
-            hint: "Discover trending tokens on Jupiter aggregator",
-            impact: "medium",
-            category: "Discovery",
+            impact: ConfigImpact::Medium,
+            category: ConfigCategory::Discovery,
         })]
         top_trending_enabled: bool = true,
     }
@@ -522,26 +423,20 @@ config_struct! {
 config_struct! {
     pub struct CoingeckoDiscoveryConfig {
         #[metadata(field_metadata! {
-            label: "Enabled",
-            hint: "Enable CoinGecko as a discovery source (requires API key for higher rate limits)",
-            impact: "medium",
-            category: "Discovery",
+            impact: ConfigImpact::Medium,
+            category: ConfigCategory::Discovery,
         })]
         enabled: bool = false,
 
         #[metadata(field_metadata! {
-            label: "Markets",
-            hint: "Discover tokens from CoinGecko Solana markets listing",
-            impact: "medium",
-            category: "Discovery",
+            impact: ConfigImpact::Medium,
+            category: ConfigCategory::Discovery,
         })]
         markets_enabled: bool = false,
 
         #[metadata(field_metadata! {
-            label: "API Key",
-            hint: "CoinGecko API key for higher rate limits (optional, free tier works without key)",
-            impact: "low",
-            category: "Discovery",
+            impact: ConfigImpact::Low,
+            category: ConfigCategory::Discovery,
         })]
         api_key: Option<String> = None,
     }
@@ -550,18 +445,14 @@ config_struct! {
 config_struct! {
     pub struct DefillamaDiscoveryConfig {
         #[metadata(field_metadata! {
-            label: "Enabled",
-            hint: "Enable DeFiLlama as a discovery source for established protocols",
-            impact: "low",
-            category: "Discovery",
+            impact: ConfigImpact::Low,
+            category: ConfigCategory::Discovery,
         })]
         enabled: bool = false,
 
         #[metadata(field_metadata! {
-            label: "Protocols",
-            hint: "Discover tokens from DeFiLlama protocol listings",
-            impact: "low",
-            category: "Discovery",
+            impact: ConfigImpact::Low,
+            category: ConfigCategory::Discovery,
         })]
         protocols_enabled: bool = false,
     }

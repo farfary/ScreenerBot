@@ -10,6 +10,7 @@
 //!
 //! Leave empty to use automatic detection (env vars → macOS system proxy).
 
+use crate::config::metadata::ConfigCategory;
 use crate::config_struct;
 use crate::field_metadata;
 
@@ -24,10 +25,7 @@ config_struct! {
         /// Set to e.g. "socks5://127.0.0.1:1080" or "http://127.0.0.1:8080".
         /// Leave empty for automatic detection (env vars / system proxy).
         #[metadata(field_metadata! {
-            label: "Proxy URL",
-            hint: "e.g. socks5://127.0.0.1:1080 or http://127.0.0.1:8080 — leave empty for auto-detection",
-            placeholder: "socks5://127.0.0.1:1080",
-            category: "General"
+            category: ConfigCategory::General
         })]
         proxy: String = String::new(),
     }

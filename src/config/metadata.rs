@@ -3,6 +3,16 @@
 use serde::Serialize;
 use std::collections::BTreeMap;
 
+mod category;
+#[cfg(test)]
+mod category_tests;
+mod impact;
+
+pub(crate) use category::category_key;
+pub use category::ConfigCategory;
+pub(crate) use impact::impact_key;
+pub use impact::ConfigImpact;
+
 /// Convenience alias for the metadata map of a config section.
 pub type SectionMetadata = BTreeMap<&'static str, FieldMetadata>;
 
@@ -32,15 +42,9 @@ pub struct FieldMetadata {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub item_type: Option<FieldType>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub label: Option<&'static str>,
+    pub impact: Option<ConfigImpact>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub hint: Option<&'static str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub unit: Option<&'static str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub impact: Option<&'static str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub category: Option<&'static str>,
+    pub category: Option<ConfigCategory>,
     /// Visibility level for UI rendering: "primary", "secondary", or "technical"
     #[serde(skip_serializing_if = "Option::is_none")]
     pub visibility: Option<&'static str>,
@@ -51,10 +55,6 @@ pub struct FieldMetadata {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub step: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub placeholder: Option<&'static str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub docs: Option<&'static str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub default: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub children: Option<SectionMetadata>,
@@ -63,12 +63,8 @@ pub struct FieldMetadata {
 }
 
 impl FieldMetadata {
-    /// Build metadata for a given field type using optional extras and docs.
-    pub fn from_parts<T>(
-        default_value: &T,
-        extras: FieldMetadataExtras,
-        docs: Option<&'static str>,
-    ) -> Self
+    /// Build metadata for a given field type using optional extras.
+    pub fn from_parts<T>(default_value: &T, extras: FieldMetadataExtras) -> Self
     where
         T: FieldTypeInfo + Serialize,
     {
@@ -78,17 +74,12 @@ impl FieldMetadata {
             field_type: T::field_type(),
             key: String::new(),
             item_type: T::item_type(),
-            label: extras.label,
-            hint: extras.hint,
-            unit: extras.unit,
             impact: extras.impact,
             category: extras.category,
             visibility: None, // Set by collect_config_metadata based on category
             min: extras.min,
             max: extras.max,
             step: extras.step,
-            placeholder: extras.placeholder,
-            docs,
             default,
             children: None,
             hidden: extras.hidden.then_some(true),
@@ -99,15 +90,11 @@ impl FieldMetadata {
 /// Optional metadata overrides supplied via the `#[metadata(...)]` attribute.
 #[derive(Debug, Clone, Default)]
 pub struct FieldMetadataExtras {
-    pub label: Option<&'static str>,
-    pub hint: Option<&'static str>,
-    pub unit: Option<&'static str>,
-    pub impact: Option<&'static str>,
-    pub category: Option<&'static str>,
+    pub impact: Option<ConfigImpact>,
+    pub category: Option<ConfigCategory>,
     pub min: Option<f64>,
     pub max: Option<f64>,
     pub step: Option<f64>,
-    pub placeholder: Option<&'static str>,
     pub hidden: bool,
 }
 
@@ -335,9 +322,9 @@ pub fn collect_config_metadata() -> ConfigMetadata {
             }
 
             // Keep original category, derive visibility from it
-            let category = field.category.unwrap_or("General");
+            let category = field.category.unwrap_or(ConfigCategory::General);
             field.category = Some(category);
-            field.visibility = Some(derive_visibility(category));
+            field.visibility = Some(category.visibility_str());
         }
     }
 
@@ -354,54 +341,12 @@ pub(crate) fn catalog_key(segments: &[&str]) -> String {
         .join("-")
 }
 
-/// Category catalog key (`config-category-<kebab name>`).
-pub(crate) fn category_key(category: &str) -> String {
-    let kebab = category
-        .to_ascii_lowercase()
-        .split(|c: char| !c.is_ascii_alphanumeric())
-        .filter(|part| !part.is_empty())
-        .collect::<Vec<_>>()
-        .join("-");
-    format!("config-category-{kebab}")
-}
-
-/// Impact catalog key (`config-impact-<value>`).
-pub(crate) fn impact_key(impact: &str) -> String {
-    format!("config-impact-{}", impact.to_ascii_lowercase())
-}
-
 fn assign_keys(prefix: &str, fields: &mut SectionMetadata) {
     for (name, field) in fields.iter_mut() {
         field.key = format!("{prefix}-{}", catalog_key(&[name]));
         if let Some(children) = field.children.as_mut() {
             assign_keys(&field.key.clone(), children);
         }
-    }
-}
-
-/// Determines visibility level for a category
-/// - "primary": Essential settings, expanded by default
-/// - "secondary": Important but less frequently changed, collapsed
-/// - "technical": Power-user settings (timeouts, retries, etc.), collapsed and grouped at bottom
-fn derive_visibility(category: &str) -> &'static str {
-    match category {
-        // Primary - Essential user settings (expand by default)
-        "Core Trading" | "ROI Exit" | "DCA" | "Trailing Stop" | "Liquidity" | "Market Cap"
-        | "Security" | "Age" | "Source Control" | "Global Control" | "Connection"
-        | "Notifications" | "Endpoints" | "Router" | "Slippage" | "Profit" | "Loss Detection"
-        | "Partial Exit" | "General" | "Commands" | "Features" => "primary",
-
-        // Secondary - Authentication, thresholds, etc.
-        "Authentication" | "Thresholds" => "secondary",
-
-        // Technical - Power-user settings (collapsed, grouped at bottom)
-        "Timeouts" | "Retries" | "Rate Limiting" | "Circuit Breaker" | "Connection Pooling"
-        | "Statistics" | "Cache" | "Retention" | "Debug" | "Validation" | "Provider Selection" => {
-            "technical"
-        }
-
-        // Secondary - Everything else (collapsed)
-        _ => "secondary",
     }
 }
 
@@ -416,18 +361,6 @@ macro_rules! field_metadata {
     }};
     (@assign $meta:ident,) => {};
     (@assign $meta:ident) => {};
-    (@assign $meta:ident, label: $value:expr $(, $($rest:tt)*)?) => {{
-        $meta.label = Some($value);
-        $crate::field_metadata!(@assign $meta $(, $($rest)*)?);
-    }};
-    (@assign $meta:ident, hint: $value:expr $(, $($rest:tt)*)?) => {{
-        $meta.hint = Some($value);
-        $crate::field_metadata!(@assign $meta $(, $($rest)*)?);
-    }};
-    (@assign $meta:ident, unit: $value:expr $(, $($rest:tt)*)?) => {{
-        $meta.unit = Some($value);
-        $crate::field_metadata!(@assign $meta $(, $($rest)*)?);
-    }};
     (@assign $meta:ident, impact: $value:expr $(, $($rest:tt)*)?) => {{
         $meta.impact = Some($value);
         $crate::field_metadata!(@assign $meta $(, $($rest)*)?);
@@ -446,10 +379,6 @@ macro_rules! field_metadata {
     }};
     (@assign $meta:ident, step: $value:expr $(, $($rest:tt)*)?) => {{
         $meta.step = Some($value as f64);
-        $crate::field_metadata!(@assign $meta $(, $($rest)*)?);
-    }};
-    (@assign $meta:ident, placeholder: $value:expr $(, $($rest:tt)*)?) => {{
-        $meta.placeholder = Some($value);
         $crate::field_metadata!(@assign $meta $(, $($rest)*)?);
     }};
     (@assign $meta:ident, hidden: $value:expr $(, $($rest:tt)*)?) => {{

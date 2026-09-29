@@ -1,30 +1,31 @@
 //! Global copy-trading policy. Per-target limits and mode live in copy_trading.db.
 
+use crate::config::metadata::{ConfigCategory, ConfigImpact};
 use crate::config::{Error, Result};
 use crate::errors::ConfigurationError;
 use crate::{config_struct, field_metadata};
 
 config_struct! {
     pub struct CopyTradingConfig {
-        #[metadata(field_metadata! { label: "Wallet Copy", hint: "Enable copy task processing", impact: "high", category: "Copy Trading", })]
+        #[metadata(field_metadata! { impact: ConfigImpact::High, category: ConfigCategory::CopyTrading, })]
         enabled: bool = false,
-        #[metadata(field_metadata! { label: "Maximum Active Tasks", hint: "Maximum simultaneously enabled copy tasks; paper and live tasks both count, as each watches its wallet", min: 1, max: 50, step: 1, impact: "high", category: "Copy Trading", })]
+        #[metadata(field_metadata! { min: 1, max: 50, step: 1, impact: ConfigImpact::High, category: ConfigCategory::CopyTrading, })]
         max_active_tasks: usize = 10,
-        #[metadata(field_metadata! { label: "Default Slippage", hint: "Default paper and future live copy slippage", min: 0.1, max: 50.0, step: 0.1, unit: "%", impact: "high", category: "Copy Trading", })]
+        #[metadata(field_metadata! { min: 0.1, max: 50.0, step: 0.1, impact: ConfigImpact::High, category: ConfigCategory::CopyTrading, })]
         default_slippage_pct: f64 = 2.0,
-        #[metadata(field_metadata! { label: "Default Mode", hint: "New copy tasks always begin in paper mode", impact: "low", category: "Copy Trading", hidden: true, })]
+        #[metadata(field_metadata! { impact: ConfigImpact::Low, category: ConfigCategory::CopyTrading, hidden: true, })]
         default_mode: String = "paper".to_owned(),
-        #[metadata(field_metadata! { label: "Require Filter Pass", hint: "Only copy tokens accepted by the filtering pipeline", impact: "high", category: "Copy Trading", })]
+        #[metadata(field_metadata! { impact: ConfigImpact::High, category: ConfigCategory::CopyTrading, })]
         require_filter_pass: bool = true,
-        #[metadata(field_metadata! { label: "Block On Force Stop", hint: "Copy entries always obey the global force stop", impact: "high", category: "Copy Trading", hidden: true, })]
+        #[metadata(field_metadata! { impact: ConfigImpact::High, category: ConfigCategory::CopyTrading, hidden: true, })]
         block_on_force_stop: bool = true,
-        #[metadata(field_metadata! { label: "Latency Kill Switch", hint: "Pause a copy task when its recent target-to-detection delay stays above the configured limit", impact: "high", category: "Copy Trading", })]
+        #[metadata(field_metadata! { impact: ConfigImpact::High, category: ConfigCategory::CopyTrading, })]
         latency_kill_switch_enabled: bool = true,
-        #[metadata(field_metadata! { label: "Maximum Arrival Delay", hint: "Pause after the trailing sample window exceeds this average target-to-detection delay", min: 250, max: 30000, step: 250, unit: "ms", impact: "high", category: "Copy Trading", })]
+        #[metadata(field_metadata! { min: 250, max: 30000, step: 250, impact: ConfigImpact::High, category: ConfigCategory::CopyTrading, })]
         max_arrival_distance_ms: u64 = 4000,
-        #[metadata(field_metadata! { label: "Latency Sample Window", hint: "Number of recent observations used by the latency kill switch", min: 3, max: 100, step: 1, impact: "medium", category: "Copy Trading", })]
+        #[metadata(field_metadata! { min: 3, max: 100, step: 1, impact: ConfigImpact::Medium, category: ConfigCategory::CopyTrading, })]
         latency_window_size: usize = 10,
-        #[metadata(field_metadata! { label: "Live Readiness Rounds", hint: "Closed paper rounds a task needs before its live-readiness checklist passes", min: 1, max: 500, step: 1, impact: "low", category: "Copy Trading", })]
+        #[metadata(field_metadata! { min: 1, max: 500, step: 1, impact: ConfigImpact::Low, category: ConfigCategory::CopyTrading, })]
         readiness_min_closed_rounds: usize = 10,
     }
 }

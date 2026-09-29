@@ -155,12 +155,12 @@ test("preferences use metadata and include the check interval", () => {
       auto_check: {
         type: "boolean",
         key: "config-updates-auto-check",
-        category: "Checking",
+        category: "checking",
       },
       check_interval_hours: {
         type: "integer",
         key: "config-updates-check-interval-hours",
-        category: "Checking",
+        category: "checking",
         min: 1,
         max: 168,
         step: 1,

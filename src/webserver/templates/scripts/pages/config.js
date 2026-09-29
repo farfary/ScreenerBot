@@ -34,7 +34,7 @@ import {
   isCategoryOpen,
   toggleCategory,
 } from "./config/field_renderers.js";
-import { categoryId, categoryLabel, fieldLabel } from "./config/field_text.js";
+import { categoryLabel, fieldLabel } from "./config/field_text.js";
 
 const CONFIG_STATE_KEY = "config.page";
 const DEFAULT_SECTION = "trader";
@@ -525,7 +525,7 @@ function renderCategories(sectionId) {
 
   const grouped = new Map();
   for (const [fieldKey, fieldMeta] of fields) {
-    const category = categoryId(fieldMeta.category ?? "General");
+    const category = fieldMeta.category ?? "general";
     if (!grouped.has(category)) {
       grouped.set(category, []);
     }

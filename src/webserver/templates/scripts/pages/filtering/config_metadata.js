@@ -8,7 +8,6 @@
 
 import { formatTimestamp } from "../../core/format.js";
 import {
-  categoryId,
   categoryLabel,
   fieldHint,
   fieldLabel,
@@ -173,7 +172,7 @@ function groupFields(source, fields) {
     // A source's own master switch is not one of its parameters — it is the
     // sub-tab's master control (see `getSourceMasterField`).
     if (source !== "meta" && key === "enabled") continue;
-    const category = categoryId(metadata.category || "General");
+    const category = metadata.category || "general";
     if (!categories.has(category)) categories.set(category, []);
     categories.get(category).push(withCatalogText(key, metadata));
   }

@@ -487,9 +487,7 @@ export const FIELD_RENDERERS = {
     return component;
   },
   string({ fieldId, value, metadata = {}, disabled, onChange }) {
-    // Only genuinely long or multi-line values earn a textarea. `docs` is the
-    // field's Rust doc comment, which nearly every field carries, so treating
-    // it as a "long text" marker turned every string into a 100px box.
+    // Only genuinely long or multi-line values earn a textarea.
     if (typeof value === "string" && (value.length > 120 || value.includes("\n"))) {
       const textarea = create("textarea", {
         id: fieldId,

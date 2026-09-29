@@ -6,7 +6,6 @@
  */
 
 import {
-  categoryId,
   categoryLabel,
   fieldHint,
   fieldLabel,
@@ -474,7 +473,7 @@ export function createUpdatesView(Utils) {
       `;
     }
 
-    const categoryOf = (field) => categoryId(field.metadata.category || "General");
+    const categoryOf = (field) => field.metadata.category || "general";
     const categoryIds = [...new Set(fields.map(categoryOf))];
     const categories = orderBy(categoryIds, CATEGORY_ORDER, (category) => category).map(
       (category) => ({

@@ -23,6 +23,7 @@
 //! `src/services/implementations/referral_service.rs`, which is the only code
 //! that sends anything, and it is why the guarantee is worth stating.
 
+use crate::config::metadata::ConfigCategory;
 use crate::config_struct;
 use crate::field_metadata;
 
@@ -35,19 +36,14 @@ config_struct! {
         /// Stored uppercase; the server normalizes the same way, so case never
         /// matters to a user typing it off a video.
         #[metadata(field_metadata! {
-            label: "Referral code",
-            hint: "Optional. If someone introduced you to ScreenerBot, their code credits them with a share of the fees you pay us — at no extra cost to you. Leave empty and nothing is ever sent from this machine.",
-            placeholder: "e.g. FARHAD",
-            category: "General"
+            category: ConfigCategory::General
         })]
         code: String = String::new(),
 
         /// Where the activation is sent. Configurable so the devnet/staging
         /// harness can point elsewhere; never a value a user needs to change.
         #[metadata(field_metadata! {
-            label: "Activation endpoint",
-            hint: "Where the referral code is registered. Only change this if you are testing against a staging server.",
-            category: "Debug"
+            category: ConfigCategory::Debug
         })]
         endpoint: String = "https://screenerbot.io/api/referral/activate".to_string(),
 
@@ -57,9 +53,7 @@ config_struct! {
         /// Daily rather than per-launch: the server upserts by wallet, so a
         /// faster cadence would add load and change nothing.
         #[metadata(field_metadata! {
-            label: "Re-announce every (hours)",
-            hint: "How often to re-send, so a wallet you add later is still attributed. 0 sends only once per launch.",
-            category: "Debug"
+            category: ConfigCategory::Debug
         })]
         reannounce_hours: u64 = 24,
     }

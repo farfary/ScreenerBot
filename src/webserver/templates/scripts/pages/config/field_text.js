@@ -3,23 +3,13 @@
  *
  * `/api/config/metadata` carries each field's catalog key (`config-<section>-
  * <field>...`). The label is the message value; `hint`, `unit` and
- * `placeholder` are message attributes. Category and impact names are
- * `config-category-<id>` and `config-impact-<value>` messages.
+ * `placeholder` are message attributes. The metadata carries category and
+ * impact as ids; their names are `config-category-<id>` and
+ * `config-impact-<id>` messages.
  *
  * Every id built here lives in the `config-` namespace, which the Rust test
  * `config_catalog_covers_fields` keeps complete.
  */
-
-/**
- * Stable id of a category name: lowercase, every run of non-alphanumerics
- * collapsed to one `-`. Mirrors `category_key` in `src/config/metadata.rs`.
- */
-export function categoryId(name) {
-  return String(name ?? "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
 
 /** Label of a field, by its catalog key. */
 export function fieldLabel(key) {
@@ -45,7 +35,7 @@ export function fieldPlaceholder(key) {
   return fieldAttribute(key, "placeholder");
 }
 
-/** Display name of a category, from its `categoryId`. */
+/** Display name of a category, from its id. */
 export function categoryLabel(id) {
   return I18n.t("config-category-" + id); // l10n-dynamic: config-
 }
