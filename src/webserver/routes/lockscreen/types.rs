@@ -70,6 +70,5 @@ pub struct UpdateSettingsRequest {
 #[derive(Debug, Serialize)]
 pub struct SuccessResponse {
     pub success: bool,
-    pub message: String,
     pub timestamp: String,
 }

@@ -200,9 +200,7 @@ pub async fn delete_instruction(
     match db::with_analysis_db(|conn| db::delete_instruction(conn, id)) {
         Ok(()) => {
             logger::info(LogTag::Api, &format!("Deleted analysis instruction: {id}"));
-            success_response(serde_json::json!({
-                "message": "Instruction deleted successfully"
-            }))
+            success_response(serde_json::json!({}))
         }
         Err(e) => ApiError::new(
             ApiErrorCode::DatabaseError,
@@ -224,9 +222,7 @@ pub async fn reorder_instructions(
                 LogTag::Api,
                 &format!("Reordered {} analysis instructions", req.ids.len()),
             );
-            success_response(serde_json::json!({
-                "message": "Instructions reordered successfully"
-            }))
+            success_response(serde_json::json!({}))
         }
         Err(e) => ApiError::new(
             ApiErrorCode::DatabaseError,

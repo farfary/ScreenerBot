@@ -852,14 +852,15 @@ export class ConfigImportDialog {
       });
 
       if (!response.success) {
-        throw new Error(response.message || "Import failed");
+        throw new Error("Import failed");
       }
 
       playSuccess();
       Utils.showToast({
         type: "success",
         title: "Configuration Imported",
-        message: response.message || `Imported ${response.imported_sections.length} section(s)`,
+        message:
+          I18n.text(response.text) || `Imported ${response.imported_sections.length} section(s)`,
       });
 
       this.destroy();

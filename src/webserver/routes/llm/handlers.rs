@@ -93,9 +93,7 @@ pub async fn update_config(
     match update_config_section(|cfg| apply_llm_config_update(cfg, &req), true) {
         Ok(()) => {
             logger::info(LogTag::Api, "Master LLM configuration updated via API");
-            success_response(serde_json::json!({
-                "message": "LLM configuration updated successfully"
-            }))
+            success_response(serde_json::json!({}))
         }
         Err(e) => ApiError::new(
             ApiErrorCode::ConfigError,

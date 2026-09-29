@@ -161,8 +161,7 @@ pub async fn start_trade_watcher_handler() -> Response {
     start_trade_monitor().await;
 
     success_response(serde_json::json!({
-        "success": true,
-        "message": "Trade watcher started"
+        "success": true
     }))
 }
 
@@ -177,8 +176,7 @@ pub async fn stop_trade_watcher_handler() -> Response {
     stop_trade_monitor().await;
 
     success_response(serde_json::json!({
-        "success": true,
-        "message": "Trade watcher stopped"
+        "success": true
     }))
 }
 

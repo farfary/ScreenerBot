@@ -847,7 +847,7 @@ async function renderTelegramActions(container) {
       });
       const data = await response.json();
 
-      if (response.ok && data.success) {
+      if (response.ok) {
         statusEl.className = "config-action-status success";
         statusEl.innerHTML =
           '<i class="icon-circle-check"></i> Test message sent successfully! Check your Telegram.';
@@ -1077,7 +1077,7 @@ async function handleDiff() {
     const payload = await requestManager.fetch("/api/config/diff", {
       priority: "normal",
     });
-    const message = payload?.message ?? apiErrorMessage(payload);
+    const message = I18n.text(payload?.text) || apiErrorMessage(payload);
     Utils.showToast({
       type: "info",
       title: "Configuration diff",

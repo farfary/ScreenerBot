@@ -817,7 +817,6 @@ where
     match merge_result {
         Ok(()) => {
             let response = UpdateResponse {
-                message: format!("{section_name} updated successfully"),
                 saved_to_disk: true,
                 timestamp: chrono::Utc::now().to_rfc3339(),
             };

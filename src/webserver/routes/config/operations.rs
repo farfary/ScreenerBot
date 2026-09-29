@@ -6,7 +6,7 @@ use axum::response::{IntoResponse as _, Response};
 use serde::Serialize;
 
 use crate::config;
-use crate::i18n::ids;
+use crate::i18n::{ids, UiText};
 use crate::webserver::api_error::{ApiError, ApiErrorCode};
 use crate::webserver::utils::success_response;
 
@@ -20,7 +20,6 @@ use super::types::UpdateResponse;
 pub async fn reload_config_from_disk() -> Response {
     match config::reload_config() {
         Ok(_) => success_response(UpdateResponse {
-            message: "Configuration reloaded from disk successfully".to_owned(),
             saved_to_disk: false,
             timestamp: chrono::Utc::now().to_rfc3339(),
         }),
@@ -56,7 +55,6 @@ pub async fn reset_config_to_defaults() -> Response {
 
     match result {
         Ok(_) => success_response(UpdateResponse {
-            message: "Configuration reset to defaults successfully".to_owned(),
             saved_to_disk: true,
             timestamp: chrono::Utc::now().to_rfc3339(),
         }),
@@ -105,7 +103,7 @@ pub async fn get_config_diff() -> Response {
                         disk: serde_json::Value,
                         memory_timestamp: String,
                         disk_file: String,
-                        message: String,
+                        text: UiText,
                     }
 
                     success_response(DiffResponse {
@@ -114,11 +112,11 @@ pub async fn get_config_diff() -> Response {
                         disk: disk_json,
                         memory_timestamp: chrono::Utc::now().to_rfc3339(),
                         disk_file: config_path.to_string_lossy().to_string(),
-                        message: if has_changes {
-                            "In-memory configuration differs from disk version".to_owned()
+                        text: UiText::new(if has_changes {
+                            ids::SYSTEM_RESULT_CONFIG_DIFFERS
                         } else {
-                            "In-memory configuration matches disk version".to_owned()
-                        },
+                            ids::SYSTEM_RESULT_CONFIG_MATCHES
+                        }),
                     })
                 }
                 Err(e) => ApiError::new(

@@ -26,7 +26,6 @@ pub struct ForceCloseResponse {
     pub position_id: i64,
     pub symbol: String,
     pub reason: String,
-    pub message: String,
 }
 
 pub(super) async fn force_close_position(
@@ -163,6 +162,5 @@ pub(super) async fn force_close_position(
         position_id,
         symbol,
         reason: closed_reason,
-        message: "Position force-closed successfully".to_owned(),
     })
 }

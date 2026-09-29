@@ -117,10 +117,6 @@ pub async fn consolidate_wallets(Json(request): Json<ConsolidateRequest>) -> Res
                 successful_ops: result.successful_ops,
                 failed_ops: result.failed_ops,
                 sol_recovered: result.total_sol_recovered,
-                message: format!(
-                    "Consolidated {} wallets, recovered {:.6} SOL",
-                    result.successful_ops, result.total_sol_recovered
-                ),
             })
         }
         Err(e) => ApiError::new(ApiErrorCode::Internal, ids::ERRORS_TOOLS_CONSOLIDATE_FAILED)
@@ -165,10 +161,6 @@ pub async fn cleanup_subwallet_atas(Json(request): Json<SubWalletAtaCleanupReque
                 successful_ops: result.successful_ops,
                 failed_ops: result.failed_ops,
                 sol_recovered: result.total_sol_recovered,
-                message: format!(
-                    "Cleaned up ATAs on {} wallets, reclaimed {:.6} SOL",
-                    result.successful_ops, result.total_sol_recovered
-                ),
             })
         }
         Err(e) => ApiError::new(ApiErrorCode::Internal, ids::ERRORS_TOOLS_ATA_CLEANUP_FAILED)

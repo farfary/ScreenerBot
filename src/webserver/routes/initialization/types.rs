@@ -67,7 +67,6 @@ pub struct InitializationCompleteResponse {
 pub struct InitializationProgressResponse {
     pub step: String,
     pub status: String,
-    pub message: String,
     pub services_started: usize,
     pub services_total: usize,
 }

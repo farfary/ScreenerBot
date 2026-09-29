@@ -246,7 +246,6 @@ pub async fn refresh_token_ohlcv(
             Ok(Json(serde_json::json!({
               "success": true,
               "mint": mint,
-              "message": "OHLCV refresh triggered",
             })))
         }
         Err(e) => {
@@ -259,7 +258,6 @@ pub async fn refresh_token_ohlcv(
             Ok(Json(serde_json::json!({
               "success": true,
               "mint": mint,
-              "message": "OHLCV monitoring active, data pending pool availability",
             })))
         }
     }
@@ -282,7 +280,6 @@ pub async fn deprioritize_token_ohlcv(
         return Ok(Json(serde_json::json!({
           "success": true,
           "mint": mint,
-          "message": "Token is open position, priority unchanged",
         })));
     }
 
@@ -296,7 +293,6 @@ pub async fn deprioritize_token_ohlcv(
             Ok(Json(serde_json::json!({
               "success": true,
               "mint": mint,
-              "message": "OHLCV priority reduced",
             })))
         }
         Err(e) => {
@@ -308,7 +304,6 @@ pub async fn deprioritize_token_ohlcv(
             Ok(Json(serde_json::json!({
               "success": true,
               "mint": mint,
-              "message": "Token not in OHLCV monitoring",
             })))
         }
     }
@@ -366,7 +361,6 @@ pub async fn focus_token(
         mint,
         focused: true,
         ohlcv_priority_updated: ohlcv_updated,
-        message: Some("Token focused for priority data fetching".to_owned()),
     }))
 }
 
@@ -425,7 +419,6 @@ pub async fn unfocus_token(
         mint,
         focused: false,
         ohlcv_priority_updated: ohlcv_updated,
-        message: Some("Token unfocused".to_owned()),
     }))
 }
 

@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::config;
 use crate::config::schemas::TabConfig;
+use crate::i18n::UiText;
 
 // ============================================================================
 // RESPONSE TYPES
@@ -72,7 +73,6 @@ pub struct GuiDefaultsResponse {
 
 #[derive(Debug, Serialize)]
 pub struct UpdateResponse {
-    pub message: String,
     pub saved_to_disk: bool,
     pub timestamp: String,
 }
@@ -215,7 +215,7 @@ pub struct ImportConfigRequest {
 #[derive(Debug, Serialize)]
 pub struct ImportConfigResponse {
     pub success: bool,
-    pub message: String,
+    pub text: UiText,
     pub imported_sections: Vec<String>,
     pub saved_to_disk: bool,
     pub timestamp: String,

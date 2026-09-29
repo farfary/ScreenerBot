@@ -141,7 +141,6 @@ pub(super) async fn set_password(Json(req): Json<SetPasswordRequest>) -> Respons
 
     success_response(SuccessResponse {
         success: true,
-        message: "Password set successfully".to_owned(),
         timestamp: chrono::Utc::now().to_rfc3339(),
     })
 }
@@ -191,7 +190,6 @@ pub(super) async fn clear_password(Json(req): Json<ClearPasswordRequest>) -> Res
 
     success_response(SuccessResponse {
         success: true,
-        message: "Password cleared and lockscreen disabled".to_owned(),
         timestamp: chrono::Utc::now().to_rfc3339(),
     })
 }
@@ -234,7 +232,6 @@ pub(super) async fn update_settings(Json(req): Json<UpdateSettingsRequest>) -> R
 
     success_response(SuccessResponse {
         success: true,
-        message: "Settings updated successfully".to_owned(),
         timestamp: chrono::Utc::now().to_rfc3339(),
     })
 }

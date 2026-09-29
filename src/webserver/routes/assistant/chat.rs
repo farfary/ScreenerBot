@@ -343,9 +343,7 @@ pub async fn delete_chat_session(
     match chat_db::delete_session(&pool, id) {
         Ok(()) => {
             logger::info(LogTag::Api, &format!("Deleted chat session: {id}"));
-            success_response(serde_json::json!({
-                "message": "Chat session deleted successfully"
-            }))
+            success_response(serde_json::json!({}))
         }
         Err(e) => ApiError::new(
             ApiErrorCode::DatabaseError,

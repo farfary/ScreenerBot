@@ -111,7 +111,6 @@ pub async fn add_favorite(
             Ok(Json(FavoriteResponse {
                 success: true,
                 favorite: Some(favorite),
-                message: None,
             }))
         }
         Err(e) => {
@@ -148,7 +147,6 @@ pub async fn remove_favorite(
                 Ok(Json(FavoriteResponse {
                     success: true,
                     favorite: None,
-                    message: Some("Favorite removed".to_owned()),
                 }))
             } else {
                 logger::debug(
@@ -198,7 +196,6 @@ pub async fn update_favorite(
             Ok(Json(FavoriteResponse {
                 success: true,
                 favorite: Some(favorite),
-                message: None,
             }))
         }
         Ok(None) => {

@@ -297,10 +297,7 @@ pub async fn start_multi_buy(Json(request): Json<MultiBuyStartRequest>) -> Respo
         }
     });
 
-    success_response(SessionStartResponse {
-        session_id,
-        message: "Multi-buy session started".to_owned(),
-    })
+    success_response(SessionStartResponse { session_id })
 }
 
 /// Get multi-buy session status

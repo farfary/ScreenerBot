@@ -496,9 +496,9 @@ window.addEventListener("screenerbot:toggle-position-management", async (event) 
       priority: "high",
     });
     if (data && data.success === false) {
-      throw new Error(data.message || "Request failed");
+      throw new Error("Request failed");
     }
-    Utils.showToast(data?.message || `Position management set to ${management}`, "success");
+    Utils.showToast(I18n.text(data.text), "success");
     window.dispatchEvent(
       new CustomEvent("screenerbot:position-management-changed", {
         detail: { id, management },

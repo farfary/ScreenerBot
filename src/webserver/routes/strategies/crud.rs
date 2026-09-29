@@ -282,7 +282,6 @@ pub async fn create_strategy(Json(request): Json<StrategyRequest>) -> Response {
 
     success_response(serde_json::json!({
         "id": strategy.id,
-        "message": "Strategy created successfully"
     }))
 }
 
@@ -383,7 +382,6 @@ pub async fn update_strategy_handler(
     success_response(serde_json::json!({
         "id": strategy.id,
         "version": strategy.version,
-        "message": "Strategy updated successfully"
     }))
 }
 
@@ -444,7 +442,6 @@ pub async fn set_strategy_enabled_handler(
         "enabled": strategy.enabled,
         "version": strategy.version,
         "updated_at": strategy.updated_at.to_rfc3339(),
-        "message": "Strategy enabled state updated successfully"
     }))
 }
 
@@ -486,6 +483,5 @@ pub async fn delete_strategy_handler(Path(id): Path<String>) -> Response {
 
     success_response(serde_json::json!({
         "id": id,
-        "message": "Strategy deleted successfully"
     }))
 }

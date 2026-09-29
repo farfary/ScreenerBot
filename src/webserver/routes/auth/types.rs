@@ -62,7 +62,6 @@ pub struct LoginResponse {
 pub struct LogoutResponse {
     /// Whether logout was successful
     pub success: bool,
-    pub message: String,
     pub timestamp: String,
 }
 
@@ -79,7 +78,6 @@ pub struct SetPasswordRequest {
 #[derive(Debug, Serialize)]
 pub struct SetPasswordResponse {
     pub success: bool,
-    pub message: String,
     pub timestamp: String,
 }
 

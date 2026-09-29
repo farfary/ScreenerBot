@@ -10,7 +10,6 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Serialize)]
 pub struct TraderControlResponse {
     pub success: bool,
-    pub message: String,
     pub status: crate::trader::TraderStatus,
 }
 
@@ -73,7 +72,6 @@ pub struct ManualTradeSuccess {
     pub effective_price_sol: Option<f64>,
     pub size_sol: Option<f64>,
     pub position_id: Option<String>,
-    pub message: String,
     pub timestamp: String,
 }
 

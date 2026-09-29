@@ -466,39 +466,19 @@ pub(super) async fn initialization_progress() -> Response {
             (0, 0)
         };
 
-    let (step, status, message) = if !initialization_complete {
-        (
-            "pre-initialization".to_owned(),
-            "waiting".to_owned(),
-            "Awaiting user credentials".to_owned(),
-        )
+    let (step, status) = if !initialization_complete {
+        ("pre-initialization", "waiting")
     } else if services_total == 0 {
-        (
-            "services-startup".to_owned(),
-            "idle".to_owned(),
-            "No enabled services registered".to_owned(),
-        )
+        ("services-startup", "idle")
     } else if services_started < services_total {
-        (
-            "services-startup".to_owned(),
-            "starting".to_owned(),
-            format!(
-                "Starting services ({} / {})...",
-                services_started, services_total
-            ),
-        )
+        ("services-startup", "starting")
     } else {
-        (
-            "services-startup".to_owned(),
-            "complete".to_owned(),
-            "All services initialized".to_owned(),
-        )
+        ("services-startup", "complete")
     };
 
     let response = InitializationProgressResponse {
-        step,
-        status,
-        message,
+        step: step.to_owned(),
+        status: status.to_owned(),
         services_started,
         services_total,
     };

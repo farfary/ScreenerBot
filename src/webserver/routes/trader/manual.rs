@@ -25,7 +25,6 @@ use super::types::*;
 fn trade_response(
     result: Result<crate::trader::TradeResult, crate::trader::Error>,
     mint: String,
-    message: String,
 ) -> Response {
     match result {
         Ok(tr) if !tr.success => match tr.error {
@@ -43,7 +42,6 @@ fn trade_response(
             effective_price_sol: tr.executed_price_sol,
             size_sol: tr.executed_size_sol,
             position_id: tr.position_id,
-            message,
             timestamp: chrono::Utc::now().to_rfc3339(),
         }),
         Err(error) => trader_failure(&error),
@@ -80,7 +78,7 @@ pub async fn manual_buy_handler(Json(req): Json<ManualBuyRequest>) -> Response {
         .management
         .unwrap_or(crate::positions::PositionManagement::UserOnly);
     let result = crate::trader::manual::manual_buy(&req.mint, size, management, slippage_pct).await;
-    trade_response(result, req.mint, "Manual buy executed".to_owned())
+    trade_response(result, req.mint)
 }
 
 pub async fn manual_add_handler(Json(req): Json<ManualAddRequest>) -> Response {
@@ -106,7 +104,7 @@ pub async fn manual_add_handler(Json(req): Json<ManualAddRequest>) -> Response {
         &format!("mint={} size_sol={}", req.mint, size),
     );
     let result = crate::trader::manual::manual_add(&req.mint, size, slippage_pct).await;
-    trade_response(result, req.mint, "Added to position".to_owned())
+    trade_response(result, req.mint)
 }
 
 pub async fn manual_sell_handler(Json(req): Json<ManualSellRequest>) -> Response {
@@ -144,11 +142,7 @@ pub async fn manual_sell_handler(Json(req): Json<ManualSellRequest>) -> Response
     } else {
         crate::trader::manual::manual_sell(&req.mint, pct, slippage_pct).await
     };
-    let message = match pct {
-        Some(pct) if pct < 100.0 => format!("Partial position closed ({pct}%)"),
-        _ => "Full position closed".to_owned(),
-    };
-    trade_response(result, req.mint, message)
+    trade_response(result, req.mint)
 }
 
 // =============================================================================

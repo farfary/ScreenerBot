@@ -51,5 +51,5 @@ pub async fn deploy_strategy_handler(Path(id): Path<String>) -> Response {
         );
     }
 
-    success_response(serde_json::json!({"id": strategy.id, "message": "Strategy deployed"}))
+    success_response(serde_json::json!({"id": strategy.id}))
 }

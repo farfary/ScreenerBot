@@ -397,7 +397,7 @@ export class TokenDetailsDialog {
    *   unused alternative, not a real gap).
    * - The chart is only flagged once its poll has actually settled on "empty"
    *   (backed off), not while candles may still be loading.
-   * @param {Array<{source:string,label:string,state:string,message:string}>} sourceStatus
+   * @param {Array<{source:string,label:string,state:string,text:object}>} sourceStatus
    */
   _renderSourceIssues(sourceStatus) {
     const row = this.dialogEl?.querySelector("#sourceIssuesRow");
@@ -442,7 +442,7 @@ export class TokenDetailsDialog {
         (s) =>
           `<span class="source-issue source-issue--${this._escapeHtml(s.state)}">
              <i class="${icon(s.state)}" aria-hidden="true"></i>
-             <span class="source-issue-text">${this._escapeHtml(s.message)}</span>
+             <span class="source-issue-text">${this._escapeHtml(I18n.text(s.text))}</span>
            </span>`
       )
       .join("");

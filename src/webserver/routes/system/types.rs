@@ -6,7 +6,6 @@ use serde::Serialize;
 #[derive(Debug, Serialize)]
 pub struct RebootResponse {
     pub success: bool,
-    pub message: String,
     /// Identity of the process accepting the restart request. Clients wait for
     /// `/api/health` to report a different value before reloading.
     pub instance_id: String,
@@ -35,7 +34,6 @@ pub struct BootStatusResponse {
     pub wallet_last_updated: Option<String>,
     pub uptime_seconds: u64,
     pub phase: String,
-    pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub retry_after_ms: Option<u64>,
 }
@@ -53,7 +51,6 @@ pub struct PathsResponse {
 #[derive(Debug, Serialize)]
 pub struct OpenPathResponse {
     pub opened: bool,
-    pub message: String,
     pub path: String,
 }
 
@@ -84,7 +81,6 @@ pub struct OpenUrlRequest {
 #[derive(Debug, Serialize)]
 pub struct OpenUrlResponse {
     pub opened: bool,
-    pub message: String,
     pub url: String,
 }
 

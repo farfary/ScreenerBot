@@ -52,19 +52,12 @@ pub struct WalletListResponse {
 
 #[derive(Serialize)]
 pub struct WalletCreatedResponse {
-    pub message: String,
     pub wallet: Wallet,
 }
 
 #[derive(Serialize)]
 pub struct SetMainResponse {
-    pub message: String,
     pub wallet: Wallet,
-}
-
-#[derive(Serialize)]
-pub struct DeleteResponse {
-    pub message: String,
 }
 
 /// Response for import preview

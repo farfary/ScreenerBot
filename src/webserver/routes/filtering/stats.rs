@@ -59,7 +59,6 @@ pub async fn trigger_refresh() -> Response {
             );
 
             success_response(RefreshResponse {
-                message: "Filtering snapshot rebuilt".to_owned(),
                 timestamp: Utc::now().to_rfc3339(),
             })
         }

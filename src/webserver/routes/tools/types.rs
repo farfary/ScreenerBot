@@ -212,8 +212,6 @@ pub fn default_close_atas() -> bool {
 pub struct SessionStartResponse {
     /// Unique session ID
     pub session_id: String,
-    /// Status message
-    pub message: String,
 }
 
 /// Response for session status
@@ -316,8 +314,6 @@ pub struct ConsolidateResponse {
     pub failed_ops: usize,
     /// SOL recovered
     pub sol_recovered: f64,
-    /// Status message
-    pub message: String,
 }
 
 /// Request for ATA cleanup on sub-wallets

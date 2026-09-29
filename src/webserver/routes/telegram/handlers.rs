@@ -186,9 +186,7 @@ pub(super) async fn update_settings(
     ) {
         Ok(()) => {
             logger::info(LogTag::Telegram, "Telegram settings updated via API");
-            success_response(serde_json::json!({
-                "message": "Settings updated successfully"
-            }))
+            success_response(serde_json::json!({}))
         }
         Err(e) => ApiError::new(
             ApiErrorCode::ConfigError,
@@ -240,7 +238,6 @@ pub(super) async fn revoke_session(
     );
 
     success_response(serde_json::json!({
-        "message": "Session revoked",
         "user_id": user_id
     }))
 }
@@ -284,9 +281,7 @@ pub(super) async fn send_test_message(
             match notifier.send_message(&message).await {
                 Ok(()) => {
                     logger::info(LogTag::Telegram, "Sent Telegram test message");
-                    success_response(serde_json::json!({
-                        "message": "Test message sent successfully"
-                    }))
+                    success_response(serde_json::json!({}))
                 }
                 Err(e) => ApiError::new(ApiErrorCode::Internal, ids::ERRORS_TELEGRAM_SEND_FAILED)
                     .details(e.to_string())
@@ -337,7 +332,6 @@ pub(super) async fn start_discovery(State(_state): State<Arc<AppState>>) -> Resp
     logger::info(LogTag::Telegram, "Telegram chat discovery mode started");
 
     success_response(serde_json::json!({
-        "message": "Discovery mode started. Send a message to your bot in Telegram.",
         "active": true
     }))
 }
@@ -350,7 +344,6 @@ pub(super) async fn stop_discovery(State(_state): State<Arc<AppState>>) -> Respo
     logger::info(LogTag::Telegram, "Telegram chat discovery mode stopped");
 
     success_response(serde_json::json!({
-        "message": "Discovery mode stopped",
         "active": false
     }))
 }
@@ -396,7 +389,6 @@ pub(super) async fn select_discovered_chat(
             );
 
             success_response(serde_json::json!({
-                "message": "Chat selected successfully",
                 "chat_id": chat_id
             }))
         }
@@ -413,7 +405,5 @@ pub(super) async fn select_discovered_chat(
 pub(super) async fn clear_discovered_chats(State(_state): State<Arc<AppState>>) -> Response {
     crate::telegram::discovery::clear_discovered_chats().await;
 
-    success_response(serde_json::json!({
-        "message": "Discovered chats cleared"
-    }))
+    success_response(serde_json::json!({}))
 }

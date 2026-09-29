@@ -12,7 +12,6 @@ use crate::i18n::UiText;
 
 #[derive(Debug, Serialize)]
 pub struct RefreshResponse {
-    pub message: String,
     pub timestamp: String,
 }
 

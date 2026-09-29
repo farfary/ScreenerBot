@@ -17,9 +17,7 @@ use crate::webserver::api_error::{ApiError, ApiErrorCode};
 use crate::webserver::utils::{status_for, success_response};
 use axum::response::IntoResponse as _;
 
-use super::types::{
-    DeleteResponse, ListWalletsQuery, SetMainResponse, WalletCreatedResponse, WalletListResponse,
-};
+use super::types::{ListWalletsQuery, SetMainResponse, WalletCreatedResponse, WalletListResponse};
 
 /// The category for a failed wallet operation, carrying the status the typed
 /// error already has.
@@ -64,10 +62,7 @@ pub async fn create_wallet(Json(request): Json<CreateWalletRequest>) -> Response
     }
 
     match wallets::create_wallet(request).await {
-        Ok(wallet) => success_response(WalletCreatedResponse {
-            message: format!("Wallet '{}' created successfully", wallet.name),
-            wallet,
-        }),
+        Ok(wallet) => success_response(WalletCreatedResponse { wallet }),
         Err(e) => {
             logger::error(LogTag::Wallet, &format!("Failed to create wallet: {e}"));
             ApiError::new(ApiErrorCode::Internal, ids::ERRORS_WALLETS_CREATE_FAILED)
@@ -92,10 +87,7 @@ pub async fn import_wallet(Json(request): Json<ImportWalletRequest>) -> Response
     }
 
     match wallets::import_wallet(request).await {
-        Ok(wallet) => success_response(WalletCreatedResponse {
-            message: format!("Wallet '{}' imported successfully", wallet.name),
-            wallet,
-        }),
+        Ok(wallet) => success_response(WalletCreatedResponse { wallet }),
         Err(e) => {
             logger::error(LogTag::Wallet, &format!("Failed to import wallet: {e}"));
 
@@ -178,9 +170,7 @@ pub async fn update_wallet(
 /// Delete a wallet permanently
 pub async fn delete_wallet(Path(id): Path<i64>) -> Response {
     match wallets::delete_wallet(id).await {
-        Ok(()) => success_response(DeleteResponse {
-            message: "Wallet deleted successfully".to_owned(),
-        }),
+        Ok(()) => success_response(serde_json::json!({})),
         Err(e) => {
             logger::error(
                 LogTag::Wallet,
@@ -213,10 +203,7 @@ pub async fn export_wallet(Path(id): Path<i64>) -> Response {
 /// Set a wallet as the main wallet
 pub async fn set_main_wallet(Path(id): Path<i64>) -> Response {
     match wallets::set_main_wallet(id).await {
-        Ok(wallet) => success_response(SetMainResponse {
-            message: format!("'{}' is now the main wallet", wallet.name),
-            wallet,
-        }),
+        Ok(wallet) => success_response(SetMainResponse { wallet }),
         Err(e) => {
             logger::error(
                 LogTag::Wallet,
@@ -232,9 +219,7 @@ pub async fn set_main_wallet(Path(id): Path<i64>) -> Response {
 /// Archive a wallet (soft delete)
 pub async fn archive_wallet(Path(id): Path<i64>) -> Response {
     match wallets::archive_wallet(id).await {
-        Ok(()) => success_response(DeleteResponse {
-            message: "Wallet archived successfully".to_owned(),
-        }),
+        Ok(()) => success_response(serde_json::json!({})),
         Err(e) => {
             logger::error(
                 LogTag::Wallet,
@@ -251,9 +236,7 @@ pub async fn archive_wallet(Path(id): Path<i64>) -> Response {
 /// Restore an archived wallet
 pub async fn restore_wallet(Path(id): Path<i64>) -> Response {
     match wallets::restore_wallet(id).await {
-        Ok(()) => success_response(DeleteResponse {
-            message: "Wallet restored successfully".to_owned(),
-        }),
+        Ok(()) => success_response(serde_json::json!({})),
         Err(e) => {
             logger::error(
                 LogTag::Wallet,

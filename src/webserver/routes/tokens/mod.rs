@@ -15,6 +15,7 @@ mod favorites;
 mod identity;
 mod list;
 mod ohlcv;
+mod source_status;
 pub mod types;
 
 // Re-export handler functions for use by the router

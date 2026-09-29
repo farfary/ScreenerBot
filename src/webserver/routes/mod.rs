@@ -44,6 +44,9 @@ pub mod updates;
 pub mod wallet;
 pub mod wallets;
 
+#[cfg(test)]
+mod result_text_tests;
+
 use asset_serving::*;
 
 pub fn create_router(state: Arc<AppState>) -> Router {

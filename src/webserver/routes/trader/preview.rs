@@ -199,7 +199,6 @@ pub async fn get_templates() -> Response {
 pub async fn apply_template(Json(request): Json<ApplyTemplateRequest>) -> Response {
     match crate::trader::templates::apply_template(&request.template_id) {
         Ok(template) => success_response(serde_json::json!({
-            "message": format!("Template '{}' applied successfully", template.name),
             "template": template,
         })),
         Err(error @ crate::trader::Error::TemplateNotFound { .. }) => trader_failure(&error),

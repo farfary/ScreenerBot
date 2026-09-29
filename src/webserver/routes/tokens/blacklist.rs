@@ -54,7 +54,6 @@ pub async fn add_to_blacklist(
                 success: true,
                 mint,
                 is_blacklisted: true,
-                message: Some(format!("Token blacklisted: {reason}")),
             }))
         }
         Ok(Err(e)) => {
@@ -122,7 +121,6 @@ pub async fn remove_from_blacklist(
                 success: true,
                 mint,
                 is_blacklisted: false,
-                message: Some("Token removed from blacklist".to_owned()),
             }))
         }
         Ok(Err(e)) => {
@@ -196,7 +194,6 @@ pub async fn get_blacklist_status(
                 success: true,
                 mint,
                 is_blacklisted,
-                message: None,
             }))
         }
         Ok(Err(e)) => {

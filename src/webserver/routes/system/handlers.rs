@@ -40,8 +40,6 @@ pub(super) async fn reboot_system() -> Response {
 
     let response = RebootResponse {
         success: true,
-        message: "Graceful restart scheduled. The dashboard will reconnect automatically."
-            .to_owned(),
         instance_id: global::instance_id().to_owned(),
     };
 
@@ -130,26 +128,6 @@ pub(super) async fn boot_status(State(state): State<Arc<AppState>>) -> Response 
         "ready"
     };
 
-    let message = match phase {
-        "initialization" => "Waiting for initial wallet/RPC setup",
-        "ui_startup" => {
-            if pending_services.is_empty() {
-                "Frontend prerequisites warming up"
-            } else {
-                "Frontend prerequisites still starting"
-            }
-        }
-        "service_startup" => {
-            if pending_services.is_empty() {
-                "Core services warming up"
-            } else {
-                "Core services still starting"
-            }
-        }
-        _ => "All systems ready",
-    }
-    .to_string();
-
     let retry_after_ms = (!ui_ready).then_some(750);
 
     // Get onboarding status from config
@@ -191,7 +169,6 @@ pub(super) async fn boot_status(State(state): State<Arc<AppState>>) -> Response 
         wallet_last_updated,
         uptime_seconds: state.uptime_seconds(),
         phase: phase.to_string(),
-        message,
         retry_after_ms,
     };
 
@@ -233,7 +210,6 @@ pub(super) async fn open_data_directory() -> Response {
     match paths::open_directory_in_file_manager(&data_dir) {
         Ok(_) => success_response(OpenPathResponse {
             opened: true,
-            message: "Data folder opened in your file manager".to_owned(),
             path: data_dir.display().to_string(),
         }),
         Err(err) => ApiError::new(ApiErrorCode::Internal, ids::ERRORS_SYSTEM_OPEN_DATA_FAILED)
@@ -254,7 +230,6 @@ pub(super) async fn open_url(Json(request): Json<OpenUrlRequest>) -> Response {
     match paths::open_url_in_browser(url) {
         Ok(_) => success_response(OpenUrlResponse {
             opened: true,
-            message: "URL opened in your default browser".to_owned(),
             url: url.to_string(),
         }),
         Err(err) => ApiError::new(

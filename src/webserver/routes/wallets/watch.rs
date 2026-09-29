@@ -54,7 +54,6 @@ struct AddTargetRequest {
 
 #[derive(Serialize)]
 struct TargetResponse {
-    message: String,
     target: WatchTarget,
 }
 
@@ -78,11 +77,6 @@ struct ResumeRequest {
 struct HighActivityApprovalRequest {
     approved: bool,
     acknowledge_provider_usage: bool,
-}
-
-#[derive(Serialize)]
-struct MessageResponse {
-    message: String,
 }
 
 // =============================================================================
@@ -138,10 +132,7 @@ async fn add_target(Json(request): Json<AddTargetRequest>) -> Response {
         .filter(|s| !s.is_empty());
 
     match watch::add_target(address, label).await {
-        Ok(target) => success_response(TargetResponse {
-            message: format!("Now watching {address}"),
-            target,
-        }),
+        Ok(target) => success_response(TargetResponse { target }),
         Err(e) => {
             logger::warning(
                 LogTag::WalletWatch,
@@ -163,9 +154,7 @@ fn failure_code(error: &WalletsError) -> ApiErrorCode {
 /// Remove a watch target permanently (also drops its cursor).
 async fn remove_target(Path(id): Path<i64>) -> Response {
     match watch::remove_target(id).await {
-        Ok(()) => success_response(MessageResponse {
-            message: "Watch target removed".to_owned(),
-        }),
+        Ok(()) => success_response(serde_json::json!({})),
         Err(e) => {
             logger::warning(
                 LogTag::WalletWatch,
@@ -185,13 +174,7 @@ async fn set_target_enabled(
     Json(request): Json<SetEnabledRequest>,
 ) -> Response {
     match watch::set_target_enabled(id, request.enabled).await {
-        Ok(()) => success_response(MessageResponse {
-            message: if request.enabled {
-                "Watch target enabled".to_owned()
-            } else {
-                "Watch target disabled".to_owned()
-            },
-        }),
+        Ok(()) => success_response(serde_json::json!({})),
         Err(e) => {
             logger::warning(
                 LogTag::WalletWatch,
@@ -206,9 +189,7 @@ async fn set_target_enabled(
 
 async fn set_target_budget(Path(id): Path<i64>, Json(request): Json<SetBudgetRequest>) -> Response {
     match watch::update_target_page_budget(id, request.page_budget).await {
-        Ok(()) => success_response(MessageResponse {
-            message: "Watch budget updated".to_owned(),
-        }),
+        Ok(()) => success_response(serde_json::json!({})),
         Err(error) => ApiError::new(failure_code(&error), ids::ERRORS_WALLET_WATCH_BUDGET_FAILED)
             .details(error.to_string())
             .into_response(),
@@ -217,9 +198,7 @@ async fn set_target_budget(Path(id): Path<i64>, Json(request): Json<SetBudgetReq
 
 async fn resume_target(Path(id): Path<i64>, Json(request): Json<ResumeRequest>) -> Response {
     match watch::resume_target(id, request.page_budget, request.acknowledge_missed_activity).await {
-        Ok(()) => success_response(MessageResponse {
-            message: "Watch resumed from the current head".to_owned(),
-        }),
+        Ok(()) => success_response(serde_json::json!({})),
         Err(error) => ApiError::new(failure_code(&error), ids::ERRORS_WALLET_WATCH_RESUME_FAILED)
             .details(error.to_string())
             .into_response(),
@@ -237,13 +216,7 @@ async fn set_high_activity_approval(
     )
     .await
     {
-        Ok(()) => success_response(MessageResponse {
-            message: if request.approved {
-                "Helius approval saved; watch restored from its saved cursor".to_owned()
-            } else {
-                "Helius approval removed".to_owned()
-            },
-        }),
+        Ok(()) => success_response(serde_json::json!({})),
         Err(error) => ApiError::new(
             failure_code(&error),
             ids::ERRORS_WALLET_WATCH_APPROVAL_FAILED,

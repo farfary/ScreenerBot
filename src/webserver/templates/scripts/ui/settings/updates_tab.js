@@ -499,8 +499,8 @@ function attachActions(root, state, refresh, session) {
     Utils.showToast({
       key: "updates:installer-opened",
       type: "success",
-      title: "Installer opened",
-      message: "ScreenerBot will quit cleanly now.",
+      title: I18n.t("updates-installer-toast-title"),
+      message: I18n.t("updates-installer-toast-message"),
     });
     setTimeout(() => window.electronAPI?.quitForUpdate?.(), 1000);
   });

@@ -146,9 +146,7 @@ pub async fn update_analysis_config(
     match update_config_section(|cfg| apply_analysis_config_update(cfg, &req), true) {
         Ok(()) => {
             logger::info(LogTag::Api, "LLM analysis configuration updated via API");
-            success_response(serde_json::json!({
-                "message": "Analysis configuration updated successfully"
-            }))
+            success_response(serde_json::json!({}))
         }
         Err(e) => ApiError::new(
             ApiErrorCode::ConfigError,
@@ -241,9 +239,7 @@ pub async fn clear_cache(State(state): State<Arc<AppState>>) -> Response {
     if let Some(engine) = &state.analysis_engine {
         engine.clear_cache();
         logger::info(LogTag::Api, "Analysis cache cleared via API");
-        success_response(serde_json::json!({
-            "message": "Cache cleared successfully"
-        }))
+        success_response(serde_json::json!({}))
     } else {
         ApiError::new(
             ApiErrorCode::ServiceUnavailable,

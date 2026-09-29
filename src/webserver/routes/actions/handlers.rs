@@ -47,7 +47,6 @@ pub(super) async fn stream_actions(
                     let lag_msg = serde_json::json!({
                         "type": "lag",
                         "skipped": skipped,
-                        "message": format!("Client lagged behind, {skipped} updates skipped")
                     });
                     if let Ok(json) = serde_json::to_string(&lag_msg) {
                         yield Ok(Event::default().event("lag").data(json));

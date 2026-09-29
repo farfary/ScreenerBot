@@ -64,9 +64,7 @@ pub async fn update_permissions(
     ) {
         Ok(()) => {
             logger::info(LogTag::Api, "Updated agent-control tool permissions");
-            success_response(serde_json::json!({
-                "message": "Tool permissions updated successfully"
-            }))
+            success_response(serde_json::json!({}))
         }
         Err(e) => ApiError::new(
             ApiErrorCode::ConfigError,

@@ -16,7 +16,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::i18n::ids;
+use crate::i18n::{ids, UiArg, UiText};
 use crate::logger::{self, LogTag};
 use crate::positions;
 use crate::webserver::api_error::{ApiError, ApiErrorCode};
@@ -28,7 +28,6 @@ pub struct ArchiveResponse {
     pub position_id: i64,
     pub archived: bool,
     pub freed_slot: bool,
-    pub message: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -36,7 +35,6 @@ pub struct DeleteResponse {
     pub success: bool,
     pub position_id: i64,
     pub freed_slot: bool,
-    pub message: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -49,7 +47,7 @@ pub struct ManagementResponse {
     pub success: bool,
     pub position_id: i64,
     pub management: positions::PositionManagement,
-    pub message: String,
+    pub text: UiText,
 }
 
 #[derive(Debug, Serialize)]
@@ -57,7 +55,6 @@ pub struct BulkDeleteResponse {
     pub success: bool,
     pub deleted: usize,
     pub freed_slots: usize,
-    pub message: String,
 }
 
 /// A position counts toward the open-slot semaphore while it is a buy that has not
@@ -114,7 +111,6 @@ pub(super) async fn archive_position(Path(position_id): Path<i64>) -> Response {
         position_id,
         archived: true,
         freed_slot: was_open,
-        message: "Position archived".to_owned(),
     })
 }
 
@@ -180,7 +176,6 @@ pub(super) async fn unarchive_position(Path(position_id): Path<i64>) -> Response
         position_id,
         archived: false,
         freed_slot: false,
-        message: "Position restored".to_owned(),
     })
 }
 
@@ -230,7 +225,10 @@ pub(super) async fn set_management(
         success: true,
         position_id,
         management: req.management,
-        message: format!("Position management set to {}", req.management.as_str()),
+        text: UiText::new(ids::POSITIONS_RESULT_MANAGEMENT_SET).arg(
+            "management",
+            UiArg::Text(req.management.as_str().to_owned()),
+        ),
     })
 }
 
@@ -286,7 +284,6 @@ pub(super) async fn delete_position(Path(position_id): Path<i64>) -> Response {
         success: true,
         position_id,
         freed_slot: was_open,
-        message: "Position permanently deleted".to_owned(),
     })
 }
 
@@ -298,7 +295,6 @@ pub(super) async fn delete_all_archived() -> Response {
             success: true,
             deleted: 0,
             freed_slots: 0,
-            message: "No archived positions to delete".to_owned(),
         });
     }
 
@@ -330,6 +326,5 @@ pub(super) async fn delete_all_archived() -> Response {
         success: true,
         deleted,
         freed_slots: 0,
-        message: format!("Deleted {deleted} archived position(s)"),
     })
 }

@@ -64,7 +64,6 @@ pub async fn set_password(Json(req): Json<SetPasswordRequest>) -> Response {
 
         return success_response(SetPasswordResponse {
             success: true,
-            message: "Password cleared and authentication disabled".to_owned(),
             timestamp: chrono::Utc::now().to_rfc3339(),
         });
     }
@@ -118,11 +117,6 @@ pub async fn set_password(Json(req): Json<SetPasswordRequest>) -> Response {
 
     success_response(SetPasswordResponse {
         success: true,
-        message: if has_existing {
-            "Password changed successfully".to_owned()
-        } else {
-            "Password set and authentication enabled".to_owned()
-        },
         timestamp: chrono::Utc::now().to_rfc3339(),
     })
 }

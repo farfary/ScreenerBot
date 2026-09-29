@@ -17,3 +17,8 @@ positions-close-reason-closed-externally = Closed externally
 positions-close-reason-wallet-history = Wallet history
 positions-close-reason-exit-retry-pending = Exit retry pending
 positions-close-reason-synthetic-exit-permanent-failure = Synthetic exit permanent failure
+
+# Result of changing who manages a position. Id comes from set_management in
+# src/webserver/routes/positions/manage.rs. $management is the PositionManagement
+# id (auto_trader, user_only, copy_task, hybrid).
+positions-result-management-set = Position management set to { $management }

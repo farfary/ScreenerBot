@@ -293,10 +293,7 @@ pub async fn start_multi_sell(Json(request): Json<MultiSellStartRequest>) -> Res
         }
     });
 
-    success_response(SessionStartResponse {
-        session_id,
-        message: "Multi-sell session started".to_owned(),
-    })
+    success_response(SessionStartResponse { session_id })
 }
 
 /// Get multi-sell session status

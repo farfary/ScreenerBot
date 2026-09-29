@@ -138,9 +138,7 @@ pub async fn clear_ata_cache() -> Response {
     match clear_failed_ata_cache().await {
         Ok(()) => {
             logger::info(LogTag::Wallet, "Failed ATA cache cleared via API");
-            success_response(serde_json::json!({
-                "message": "Failed ATA cache cleared - previously failed ATAs will be retried"
-            }))
+            success_response(serde_json::json!({}))
         }
         Err(e) => {
             logger::error(LogTag::Wallet, &format!("Failed to clear ATA cache: {e}"));

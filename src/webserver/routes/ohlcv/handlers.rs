@@ -170,7 +170,6 @@ pub(super) async fn get_status_handler(Path(mint): Path<String>) -> Result<Respo
 pub(super) async fn refresh_handler(Path(mint): Path<String>) -> Result<Response, Response> {
     match request_refresh(&mint).await {
         Ok(_) => Ok(success_response(serde_json::json!({
-            "message": "Refresh requested",
             "mint": mint
         }))),
         Err(e) => Err(
@@ -211,7 +210,6 @@ pub(super) async fn add_monitoring_handler(
 
     match add_token_monitoring(&mint, priority).await {
         Ok(_) => Ok(success_response(serde_json::json!({
-            "message": "Monitoring started",
             "mint": mint,
             "priority": priority.as_str()
         }))),
@@ -229,7 +227,6 @@ pub(super) async fn remove_monitoring_handler(
 ) -> Result<Response, Response> {
     match remove_token_monitoring(&mint).await {
         Ok(_) => Ok(success_response(serde_json::json!({
-            "message": "Monitoring stopped",
             "mint": mint
         }))),
         Err(e) => Err(ApiError::new(
@@ -244,7 +241,6 @@ pub(super) async fn remove_monitoring_handler(
 pub(super) async fn record_view_handler(Path(mint): Path<String>) -> Result<Response, Response> {
     match record_activity(&mint, ActivityType::ChartViewed).await {
         Ok(_) => Ok(success_response(serde_json::json!({
-            "message": "Activity recorded",
             "mint": mint
         }))),
         Err(e) => Err(

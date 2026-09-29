@@ -264,8 +264,7 @@ pub async fn abort_session(id: &str) -> Response {
             );
 
             success_response(serde_json::json!({
-                "success": true,
-                "message": "Session aborted"
+                "success": true
             }))
         }
         None => ApiError::new(ApiErrorCode::NotFound, ids::ERRORS_TOOLS_SESSION_NOT_FOUND)

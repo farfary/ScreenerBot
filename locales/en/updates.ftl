@@ -17,3 +17,7 @@ updates-check-failed-legacy = { $cause }
 updates-download-started = Downloading update v{ $version }...
 updates-apply-started = Installing the update. ScreenerBot restarts and reconnects automatically.
 updates-install-opened = Verified update installer opened. Complete the operating-system installer.
+
+# Toast shown by ui/settings/updates_tab.js after the installer is launched.
+updates-installer-toast-title = Installer opened
+updates-installer-toast-message = ScreenerBot will quit cleanly now.

@@ -8,7 +8,7 @@ use axum::{
 };
 
 use crate::config;
-use crate::i18n::ids;
+use crate::i18n::{ids, UiArg, UiText};
 use crate::webserver::{
     api_error::{ApiError, ApiErrorCode},
     utils::success_response,
@@ -713,23 +713,19 @@ pub async fn import_config(Json(request): Json<ImportConfigRequest>) -> Response
             .into_response();
     }
 
-    let message = if errors.is_empty() {
-        format!(
-            "Successfully imported {} section(s)",
-            imported_sections.len()
-        )
+    let count = UiArg::Count(imported_sections.len() as i64);
+    let text = if errors.is_empty() {
+        UiText::new(ids::SYSTEM_RESULT_CONFIG_IMPORTED).arg("count", count)
     } else {
-        format!(
-            "Imported {} section(s) with {} warning(s): {}",
-            imported_sections.len(),
-            errors.len(),
-            errors.join(", ")
-        )
+        UiText::new(ids::SYSTEM_RESULT_CONFIG_IMPORTED_WITH_WARNINGS)
+            .arg("count", count)
+            .arg("warnings", UiArg::Count(errors.len() as i64))
+            .arg("details", UiArg::Text(errors.join(", ")))
     };
 
     success_response(ImportConfigResponse {
         success: true,
-        message,
+        text,
         imported_sections,
         saved_to_disk,
         timestamp: chrono::Utc::now().to_rfc3339(),

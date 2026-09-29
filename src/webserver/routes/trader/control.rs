@@ -114,7 +114,6 @@ pub async fn start_trader_handler() -> Response {
     match trader::start_trader_checked().await {
         Ok(status) => success_response(TraderControlResponse {
             success: true,
-            message: "Trader started successfully".to_owned(),
             status,
         }),
         Err(error) => trader_failure(&error),
@@ -126,7 +125,6 @@ pub async fn stop_trader_handler() -> Response {
     match trader::stop_trader_checked().await {
         Ok(status) => success_response(TraderControlResponse {
             success: true,
-            message: "Trader stopped successfully".to_owned(),
             status,
         }),
         Err(error) => trader_failure(&error),
@@ -154,8 +152,7 @@ pub async fn force_stop_handler(
 pub async fn resume_handler(State(_state): State<Arc<AppState>>) -> Response {
     trader::clear_force_stop(None).await;
     success_response(serde_json::json!({
-        "resumed": true,
-        "message": "Force stop cleared. Use Start Trading to resume."
+        "resumed": true
     }))
 }
 
