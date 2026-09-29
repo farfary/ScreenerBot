@@ -22,6 +22,26 @@ const facts = (rows) => {
 const section = (title, body) =>
   body ? `<section class="pdd-section"><h3 class="pdd-section-title">${title}</h3>${body}</section>` : "";
 
+// closed_reason ids: the `Debug` names of the exit `TradeReason` variants
+// (src/trader/types.rs) and the reasons written by src/positions.
+const CLOSE_REASON_LABELS = Object.freeze({
+  TakeProfit: "positions-close-reason-take-profit",
+  StopLoss: "positions-close-reason-stop-loss",
+  TrailingStop: "positions-close-reason-trailing-stop",
+  TimeOverride: "positions-close-reason-time-override",
+  StrategyExit: "positions-close-reason-strategy-exit",
+  LlmAnalysisExit: "positions-close-reason-llm-analysis-exit",
+  ManualExit: "positions-close-reason-manual-exit",
+  RiskManagement: "positions-close-reason-risk-management",
+  Blacklisted: "positions-close-reason-blacklisted",
+  ForceSell: "positions-close-reason-force-sell",
+  CopySell: "positions-close-reason-copy-sell",
+  closed_externally: "positions-close-reason-closed-externally",
+  wallet_history: "positions-close-reason-wallet-history",
+  exit_retry_pending: "positions-close-reason-exit-retry-pending",
+  synthetic_exit_permanent_failure: "positions-close-reason-synthetic-exit-permanent-failure",
+});
+
 const humanize = (value) => {
   const text = String(value)
     .replace(/([a-z])([A-Z])/g, "$1 $2")
@@ -29,6 +49,12 @@ const humanize = (value) => {
     .toLowerCase();
   return Utils.escapeHtml(text.charAt(0).toUpperCase() + text.slice(1));
 };
+
+const closeReasonLabel = (reason) =>
+  Object.hasOwn(CLOSE_REASON_LABELS, reason)
+    ? Utils.escapeHtml(I18n.label(CLOSE_REASON_LABELS, reason))
+    : // l10n-ignore: closed_reason also carries "force_closed: <operator text>" and "_pending_verification" suffixed ids, which are not enumerable
+      humanize(reason);
 
 const isWebUrl = (url) => typeof url === "string" && /^https?:\/\//i.test(url);
 
@@ -111,7 +137,7 @@ export function applySummaryMixin(PositionDetailsDialog) {
     if (settled && pos.exit_time) {
       rows.push(fact("Closed", when(pos.exit_time), { sub: `held ${age(pos.exit_time - pos.entry_time)}` }));
     }
-    if (settled && pos.closed_reason) rows.push(fact("Reason", humanize(pos.closed_reason)));
+    if (settled && pos.closed_reason) rows.push(fact("Reason", closeReasonLabel(pos.closed_reason)));
     if (pos.status === "archived" && pos.archived_at) rows.push(fact("Archived", when(pos.archived_at)));
 
     const verified = settled ? pos.transaction_exit_verified : pos.transaction_entry_verified;

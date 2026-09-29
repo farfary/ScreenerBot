@@ -54,7 +54,7 @@ pub async fn check_open_cooldown() -> Result<(), EntryBlock> {
 mod tests {
     use chrono::{Duration, TimeZone, Utc};
 
-    use super::open_cooldown_wait_secs;
+    use super::{open_cooldown_wait_secs, EntryBlock};
 
     #[test]
     fn open_cooldown_reports_the_boundary_without_rounding_it_away() {
@@ -69,6 +69,51 @@ mod tests {
             open_cooldown_wait_secs(Some(now - Duration::seconds(5)), now, 5),
             None
         );
+    }
+
+    /// Catalog key of the label for each entry block. The match is exhaustive, so
+    /// a new variant fails to compile until it is mapped here and in
+    /// `ENTRY_BLOCK_LABELS` (pages/copy/format.js).
+    fn block_label_key(block: &EntryBlock) -> &'static str {
+        match block {
+            EntryBlock::ForceStopped => "copy-entry-block-force-stopped",
+            EntryBlock::LossLimit => "copy-entry-block-loss-limit",
+            EntryBlock::Connectivity(_) => "copy-entry-block-connectivity",
+            EntryBlock::PositionLimit => "copy-entry-block-position-limit",
+            EntryBlock::AlreadyOpen => "copy-entry-block-already-open",
+            EntryBlock::ReentryCooldown => "copy-entry-block-reentry-cooldown",
+            EntryBlock::OpenCooldown { .. } => "copy-entry-block-open-cooldown",
+            EntryBlock::EntryReserved => "copy-entry-block-entry-reserved",
+            EntryBlock::Blacklisted => "copy-entry-block-blacklisted",
+            EntryBlock::CheckFailed(_) => "copy-entry-block-check-failed",
+        }
+    }
+
+    #[test]
+    fn entry_block_labels_exist_in_the_catalog() {
+        let blocks = [
+            EntryBlock::ForceStopped,
+            EntryBlock::LossLimit,
+            EntryBlock::Connectivity(String::new()),
+            EntryBlock::PositionLimit,
+            EntryBlock::AlreadyOpen,
+            EntryBlock::ReentryCooldown,
+            EntryBlock::OpenCooldown { wait_secs: 0 },
+            EntryBlock::EntryReserved,
+            EntryBlock::Blacklisted,
+            EntryBlock::CheckFailed(String::new()),
+        ];
+        for block in &blocks {
+            let value = serde_json::to_value(block).unwrap();
+            let id = value["kind"].as_str().expect("block kind");
+            let key = block_label_key(block);
+            assert_eq!(
+                key,
+                format!("copy-entry-block-{}", id.replace('_', "-")),
+                "key does not follow the serialized id {id}"
+            );
+            assert_ne!(crate::i18n::format_en(key, None), key, "missing {key}");
+        }
     }
 }
 

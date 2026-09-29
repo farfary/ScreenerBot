@@ -711,4 +711,95 @@ mod tests {
         };
         assert_eq!(telemetry, None);
     }
+
+    /// Catalog key of the label for each skip kind. The match is exhaustive, so a
+    /// new variant fails to compile until it is mapped here and in `SKIP_LABELS`
+    /// (pages/copy/format.js).
+    fn skip_label_key(skip: &CopySkip) -> &'static str {
+        match skip {
+            CopySkip::NotBuySwap => "copy-skip-not-buy-swap",
+            CopySkip::NotSellSwap => "copy-skip-not-sell-swap",
+            CopySkip::ExitModeDisabled => "copy-skip-exit-mode-disabled",
+            CopySkip::ForceStopped => "copy-skip-force-stopped",
+            CopySkip::LatencyKillSwitch { .. } => "copy-skip-latency-kill-switch",
+            CopySkip::ClaimReconciledAbandoned => "copy-skip-claim-reconciled-abandoned",
+            CopySkip::CopyPositionNotFound => "copy-skip-copy-position-not-found",
+            CopySkip::PositionUserOnly => "copy-skip-position-user-only",
+            CopySkip::PositionManagementMismatch => "copy-skip-position-management-mismatch",
+            CopySkip::TaskDisabled => "copy-skip-task-disabled",
+            CopySkip::ModeTransitionRequired => "copy-skip-mode-transition-required",
+            CopySkip::LiveConfirmationRequired => "copy-skip-live-confirmation-required",
+            CopySkip::UnsupportedSizingMode => "copy-skip-unsupported-sizing-mode",
+            CopySkip::SelfCopy => "copy-skip-self-copy",
+            CopySkip::TargetBelowMinimum { .. } => "copy-skip-target-below-minimum",
+            CopySkip::TargetAboveMaximum { .. } => "copy-skip-target-above-maximum",
+            CopySkip::AlreadyBought => "copy-skip-already-bought",
+            CopySkip::Blacklisted => "copy-skip-blacklisted",
+            CopySkip::FilterRequired => "copy-skip-filter-required",
+            CopySkip::EntryBlocked { .. } => "copy-skip-entry-blocked",
+            CopySkip::BudgetExhausted => "copy-skip-budget-exhausted",
+            CopySkip::TokenCapReached => "copy-skip-token-cap-reached",
+            CopySkip::BelowMinimumSize { .. } => "copy-skip-below-minimum-size",
+            CopySkip::InvalidSizing => "copy-skip-invalid-sizing",
+            CopySkip::InvalidSlippage { .. } => "copy-skip-invalid-slippage",
+            CopySkip::InvalidExitPolicy => "copy-skip-invalid-exit-policy",
+            CopySkip::InvalidPrice => "copy-skip-invalid-price",
+            CopySkip::StaleObservation { .. } => "copy-skip-stale-observation",
+            CopySkip::UnknownObservationTime => "copy-skip-unknown-observation-time",
+        }
+    }
+
+    #[test]
+    fn copy_skip_labels_exist_in_the_catalog() {
+        let skips = [
+            CopySkip::NotBuySwap,
+            CopySkip::NotSellSwap,
+            CopySkip::ExitModeDisabled,
+            CopySkip::ForceStopped,
+            CopySkip::LatencyKillSwitch {
+                average_ms: 0,
+                threshold_ms: 0,
+            },
+            CopySkip::ClaimReconciledAbandoned,
+            CopySkip::CopyPositionNotFound,
+            CopySkip::PositionUserOnly,
+            CopySkip::PositionManagementMismatch,
+            CopySkip::TaskDisabled,
+            CopySkip::ModeTransitionRequired,
+            CopySkip::LiveConfirmationRequired,
+            CopySkip::UnsupportedSizingMode,
+            CopySkip::SelfCopy,
+            CopySkip::TargetBelowMinimum { minimum_sol: 0.0 },
+            CopySkip::TargetAboveMaximum { maximum_sol: 0.0 },
+            CopySkip::AlreadyBought,
+            CopySkip::Blacklisted,
+            CopySkip::FilterRequired,
+            CopySkip::EntryBlocked {
+                block: crate::trader::admission::EntryBlock::ForceStopped,
+            },
+            CopySkip::BudgetExhausted,
+            CopySkip::TokenCapReached,
+            CopySkip::BelowMinimumSize { minimum_sol: 0.0 },
+            CopySkip::InvalidSizing,
+            CopySkip::InvalidSlippage { maximum_pct: 0.0 },
+            CopySkip::InvalidExitPolicy,
+            CopySkip::InvalidPrice,
+            CopySkip::StaleObservation {
+                arrival_ms: 0,
+                threshold_ms: 0,
+            },
+            CopySkip::UnknownObservationTime,
+        ];
+        for skip in &skips {
+            let value = serde_json::to_value(skip).unwrap();
+            let id = value["kind"].as_str().expect("skip kind");
+            let key = skip_label_key(skip);
+            assert_eq!(
+                key,
+                format!("copy-skip-{}", id.replace('_', "-")),
+                "key does not follow the serialized id {id}"
+            );
+            assert_ne!(crate::i18n::format_en(key, None), key, "missing {key}");
+        }
+    }
 }

@@ -1,4 +1,5 @@
 // Client-Side Router - SPA Navigation
+import { isNetworkError } from "./request_manager.js";
 import { PageLifecycleRegistry } from "./lifecycle.js";
 import * as AppState from "./app_state.js";
 import { waitForReady } from "./bootstrap.js";
@@ -257,7 +258,9 @@ async function fetchPageContent(pageName, timeoutMs, controller) {
   } catch (error) {
     clearTimeout(timeoutId);
     if (error.name === "AbortError" && controller.signal.reason === "timeout") {
-      throw new Error("Request timeout");
+      const timeoutError = new Error("Request timeout");
+      timeoutError.name = "TimeoutError";
+      throw timeoutError;
     }
     throw error;
   }
@@ -388,23 +391,16 @@ export async function loadPage(pageName, { historyMode = "push" } = {}) {
   }
 }
 
-// Heuristic: did the page fetch fail because the backend was unreachable
-// (vs. a real 4xx/5xx from a live server)? `fetch` rejects with a TypeError
-// (commonly "Failed to fetch") on connection refused / network down, and our
-// fetchPageContent maps an aborted request to "Request timeout".
+// Did the page fetch fail because the backend was unreachable (vs. a real
+// 4xx/5xx from a live server)? A rejected `fetch` is a transport failure
+// (`isNetworkError`), and fetchPageContent maps an aborted request to a
+// `TimeoutError`.
 function isConnectionError(error) {
   if (window.__SB_CONNECTIVITY__ && window.__SB_CONNECTIVITY__.isBackendOnline() === false) {
     return true;
   }
   if (!navigator.onLine) return true;
-  const msg = (error && error.message) || "";
-  return (
-    error instanceof TypeError ||
-    msg.includes("Failed to fetch") ||
-    msg.includes("NetworkError") ||
-    msg.includes("Load failed") ||
-    msg === "Request timeout"
-  );
+  return isNetworkError(error) || error?.name === "TimeoutError";
 }
 
 function renderOfflinePlaceholder(loadingEl, pageName) {

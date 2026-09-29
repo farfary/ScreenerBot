@@ -14,6 +14,19 @@ const MAX_CONCURRENT_REQUESTS = 4;
 const MAX_CONNECTION_RETRIES = 5;
 const CONNECTION_RETRY_DELAY_MS = 1000;
 
+/**
+ * True when a fetch rejected for a transport reason (connection refused, reset,
+ * network down, DNS). The platform reports these as a TypeError; the message
+ * wording differs per browser and is never inspected. Aborts are not transport
+ * failures.
+ * @param {unknown} error
+ * @returns {boolean}
+ */
+export function isNetworkError(error) {
+  if (error?.name === "AbortError") return false;
+  return error instanceof TypeError || error?.name === "TypeError";
+}
+
 class RequestManager {
   constructor() {
     // Track in-flight requests by key (method:url)
@@ -33,15 +46,7 @@ class RequestManager {
    * Check if error is a connection failure (server not ready)
    */
   _isConnectionError(error) {
-    // Network errors when server is down
-    if (error instanceof TypeError && error.message.includes("Failed to fetch")) {
-      return true;
-    }
-    // ERR_CONNECTION_REFUSED, ERR_CONNECTION_RESET, etc.
-    if (error.name === "TypeError" || error.message?.includes("NetworkError")) {
-      return true;
-    }
-    return false;
+    return isNetworkError(error);
   }
 
   /**

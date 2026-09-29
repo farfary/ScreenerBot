@@ -41,56 +41,60 @@ export const EXIT_LABELS = {
   manual: "Closed by hand",
 };
 
-const SKIP_LABELS = {
-  not_buy_swap: "Wallet activity was not a buy",
-  task_disabled: "Task is paused",
-  mode_transition_required: "Execution mode must be changed separately",
-  live_confirmation_required: "Live execution needs confirmation",
-  unsupported_sizing_mode: "Sizing mode is not supported yet",
-  self_copy: "The wallet is one of your own",
-  target_below_minimum: "Wallet trade below the minimum",
-  target_above_maximum: "Wallet trade above the maximum",
-  already_bought: "Already bought this token (buy once)",
-  blacklisted: "Token is blocked by risk controls",
-  filter_required: "Token did not pass Filtering",
-  budget_exhausted: "Task budget is spent",
-  token_cap_reached: "Per-token limit reached",
-  below_minimum_size: "Copy size too small",
-  invalid_sizing: "Task sizing is invalid",
-  invalid_slippage: "Task slippage is invalid",
-  invalid_exit_policy: "Task exit rules are invalid",
-  invalid_price: "No usable market price",
-  not_sell_swap: "Wallet activity was not a sell",
-  exit_mode_disabled: "Wallet sell ignored: the task sells by its own rules",
-  force_stopped: "Trading is force-stopped",
-  copy_position_not_found: "No position owned by this task",
-  position_user_only: "Position is managed by you",
-  position_management_mismatch: "Position no longer follows copy sells",
-  latency_kill_switch: "Auto-paused: trades detected too late",
-  claim_reconciled_abandoned: "Interrupted live submission closed without retry",
-  stale_observation: "Replayed after downtime, too old to copy",
-  unknown_observation_time: "Replayed trade has no block time",
-  entry_blocked: "Entry blocked",
-};
+// Skip ids serialized by `CopySkip` (src/trader/copy/types.rs).
+const SKIP_LABELS = Object.freeze({
+  not_buy_swap: "copy-skip-not-buy-swap",
+  task_disabled: "copy-skip-task-disabled",
+  mode_transition_required: "copy-skip-mode-transition-required",
+  live_confirmation_required: "copy-skip-live-confirmation-required",
+  unsupported_sizing_mode: "copy-skip-unsupported-sizing-mode",
+  self_copy: "copy-skip-self-copy",
+  target_below_minimum: "copy-skip-target-below-minimum",
+  target_above_maximum: "copy-skip-target-above-maximum",
+  already_bought: "copy-skip-already-bought",
+  blacklisted: "copy-skip-blacklisted",
+  filter_required: "copy-skip-filter-required",
+  budget_exhausted: "copy-skip-budget-exhausted",
+  token_cap_reached: "copy-skip-token-cap-reached",
+  below_minimum_size: "copy-skip-below-minimum-size",
+  invalid_sizing: "copy-skip-invalid-sizing",
+  invalid_slippage: "copy-skip-invalid-slippage",
+  invalid_exit_policy: "copy-skip-invalid-exit-policy",
+  invalid_price: "copy-skip-invalid-price",
+  not_sell_swap: "copy-skip-not-sell-swap",
+  exit_mode_disabled: "copy-skip-exit-mode-disabled",
+  force_stopped: "copy-skip-force-stopped",
+  copy_position_not_found: "copy-skip-copy-position-not-found",
+  position_user_only: "copy-skip-position-user-only",
+  position_management_mismatch: "copy-skip-position-management-mismatch",
+  latency_kill_switch: "copy-skip-latency-kill-switch",
+  claim_reconciled_abandoned: "copy-skip-claim-reconciled-abandoned",
+  stale_observation: "copy-skip-stale-observation",
+  unknown_observation_time: "copy-skip-unknown-observation-time",
+  entry_blocked: "copy-skip-entry-blocked",
+});
 
-const ENTRY_BLOCK_LABELS = {
-  force_stopped: "Trading is force-stopped",
-  loss_limit: "Loss limit blocks new entries",
-  connectivity: "Required services are unavailable",
-  position_limit: "Open-position limit reached",
-  already_open: "A position is already open",
-  reentry_cooldown: "Token re-entry cooldown",
-  open_cooldown: "Global entry cooldown",
-  entry_reserved: "Another entry is processing",
-  blacklisted: "Token is blocked by risk controls",
-  check_failed: "A safety check could not complete",
-};
+// Block ids serialized by `EntryBlock` (src/trader/admission.rs).
+const ENTRY_BLOCK_LABELS = Object.freeze({
+  force_stopped: "copy-entry-block-force-stopped",
+  loss_limit: "copy-entry-block-loss-limit",
+  connectivity: "copy-entry-block-connectivity",
+  position_limit: "copy-entry-block-position-limit",
+  already_open: "copy-entry-block-already-open",
+  reentry_cooldown: "copy-entry-block-reentry-cooldown",
+  open_cooldown: "copy-entry-block-open-cooldown",
+  entry_reserved: "copy-entry-block-entry-reserved",
+  blacklisted: "copy-entry-block-blacklisted",
+  check_failed: "copy-entry-block-check-failed",
+});
 
 /** Label for a skip key as the backend groups them (`kind` or `kind.block`). */
 export function skipLabel(key) {
   const [kind, block] = String(key || "").split(".");
-  if (kind === "entry_blocked" && block) return ENTRY_BLOCK_LABELS[block] || "Entry blocked";
-  return SKIP_LABELS[kind] || kind.replace(/_/g, " ");
+  if (kind === "entry_blocked" && block && Object.hasOwn(ENTRY_BLOCK_LABELS, block)) {
+    return I18n.label(ENTRY_BLOCK_LABELS, block);
+  }
+  return I18n.label(SKIP_LABELS, kind);
 }
 
 /** Group key of a skipped outcome, matching the backend's breakdown keys. */

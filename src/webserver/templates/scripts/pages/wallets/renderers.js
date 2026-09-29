@@ -5,13 +5,19 @@
 
 import { DataTable } from "../../ui/data_table.js";
 
+// wallet_type ids serialized by `WalletType` (src/wallets/types.rs).
+const WALLET_TYPE_LABELS = Object.freeze({
+  generated: "wallets-type-generated",
+  imported: "wallets-type-imported",
+  migrated: "wallets-type-migrated",
+});
+
 export function createWalletRenderers({
   walletsData,
   tokenHoldings,
   currentTab,
   $,
   Utils,
-  capitalizeFirst,
   handleWalletAction,
   onRefresh,
   onAddWallet,
@@ -144,7 +150,7 @@ export function createWalletRenderers({
       label: "Type",
       sortable: true,
       render: (value, row) =>
-        `<span class="wallet-badge ${row.wallet_type}">${capitalizeFirst(row.wallet_type)}</span>`,
+        `<span class="wallet-badge ${row.wallet_type}">${Utils.escapeHtml(I18n.label(WALLET_TYPE_LABELS, row.wallet_type))}</span>`,
     },
     {
       id: "created_at",

@@ -1,4 +1,5 @@
 import * as Utils from "../../core/utils.js";
+import { isNetworkError } from "../../core/request_manager.js";
 import {
   formatCompactFixed,
   formatFixed,
@@ -210,9 +211,9 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
    */
   proto._renderQuoteError = function (err) {
     const title =
-      err?.message && err.message !== "Failed to fetch"
+      err?.message && !isNetworkError(err)
         ? err.message
-        : "Couldn't fetch a quote — check your connection and try again";
+        : I18n.t("trade-quote-error-network");
     if (this.quoteErrorTextEl) this.quoteErrorTextEl.textContent = title;
     if (this.quoteErrorDetailEl) {
       const detail = err?.detail || "";

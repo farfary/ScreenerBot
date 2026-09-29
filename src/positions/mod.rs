@@ -91,3 +91,30 @@ pub use types::{
     Position, PositionManagement, PositionOrigin, PriceSource, TradeOrigin, VerificationKind,
     VerificationOutcome,
 };
+
+#[cfg(test)]
+mod close_reason_label_tests {
+    use super::ledger::CLOSED_EXTERNALLY;
+
+    /// closed_reason values written outside the trade-reason path. They have no
+    /// enum, so this list mirrors `CLOSE_REASON_LABELS` (ui/position_details/summary.js)
+    /// and `EXIT_TYPE_LABELS` (pages/trader.js); the literals are the ones in
+    /// `positions/apply.rs` and `positions/ledger/sync.rs`.
+    const WRITTEN_REASONS: [&str; 4] = [
+        CLOSED_EXTERNALLY,
+        "wallet_history",
+        "exit_retry_pending",
+        "synthetic_exit_permanent_failure",
+    ];
+
+    #[test]
+    fn written_close_reasons_have_catalog_labels() {
+        for id in WRITTEN_REASONS {
+            let suffix = id.replace('_', "-");
+            for prefix in ["positions-close-reason-", "trader-exit-type-"] {
+                let key = format!("{prefix}{suffix}");
+                assert_ne!(crate::i18n::format_en(&key, None), key, "missing {key}");
+            }
+        }
+    }
+}

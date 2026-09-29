@@ -18,6 +18,39 @@ import {
 } from "./trader/features.js";
 import { createLifecycle as createStrategiesLifecycle } from "./strategies.js";
 
+// exit_type ids: the stored closed_reason. Snake-case ids are the exit-rule ids;
+// CamelCase ids are the `Debug` names of the exit `TradeReason` variants
+// (src/trader/types.rs); the rest are written by src/positions and
+// src/trader/stats.rs.
+const EXIT_TYPE_LABELS = Object.freeze({
+  stop_loss: "trader-exit-type-stop-loss",
+  take_profit: "trader-exit-type-take-profit",
+  roi: "trader-exit-type-roi",
+  roi_exit: "trader-exit-type-roi-exit",
+  trailing_stop: "trader-exit-type-trailing-stop",
+  time_override: "trader-exit-type-time-override",
+  time_rule: "trader-exit-type-time-rule",
+  manual: "trader-exit-type-manual",
+  manual_close: "trader-exit-type-manual-close",
+  dca: "trader-exit-type-dca",
+  unknown: "trader-exit-type-unknown",
+  TakeProfit: "trader-exit-type-take-profit-reason",
+  StopLoss: "trader-exit-type-stop-loss-reason",
+  TrailingStop: "trader-exit-type-trailing-stop-reason",
+  TimeOverride: "trader-exit-type-time-override-reason",
+  StrategyExit: "trader-exit-type-strategy-exit-reason",
+  LlmAnalysisExit: "trader-exit-type-llm-analysis-exit-reason",
+  ManualExit: "trader-exit-type-manual-exit-reason",
+  RiskManagement: "trader-exit-type-risk-management-reason",
+  Blacklisted: "trader-exit-type-blacklisted-reason",
+  ForceSell: "trader-exit-type-force-sell-reason",
+  CopySell: "trader-exit-type-copy-sell-reason",
+  closed_externally: "trader-exit-type-closed-externally",
+  wallet_history: "trader-exit-type-wallet-history",
+  exit_retry_pending: "trader-exit-type-exit-retry-pending",
+  synthetic_exit_permanent_failure: "trader-exit-type-synthetic-exit-permanent-failure",
+});
+
 // Sub-tabs configuration. Strategy Control is second and the embedded Strategies
 // editor is third (Strategies was formerly its own top-level tab).
 const SUB_TABS = [
@@ -670,26 +703,11 @@ function createLifecycle() {
     paint("worst-trade", "worst-trade-token", data.worst_trade_pct, data.worst_trade_token);
   }
 
-  // Humanize a closed_reason / exit_type into a readable label.
-  const EXIT_TYPE_LABELS = {
-    stop_loss: "Stop Loss",
-    take_profit: "Take Profit",
-    roi: "ROI Target",
-    roi_exit: "ROI Target",
-    trailing_stop: "Trailing Stop",
-    time_override: "Time Override",
-    time_rule: "Time Rule",
-    manual: "Manual",
-    manual_close: "Manual",
-    dca: "DCA",
-    unknown: "Unknown",
-  };
-
   function formatExitType(type) {
-    if (!type) return "Unknown";
-    return (
-      EXIT_TYPE_LABELS[type] || type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
-    );
+    const text = String(type || "unknown");
+    if (Object.hasOwn(EXIT_TYPE_LABELS, text)) return I18n.label(EXIT_TYPE_LABELS, text);
+    // l10n-ignore: closed_reason also carries "force_closed: <operator text>" and "_pending_verification" suffixed ids, which are not enumerable
+    return text.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
   }
 
   /**

@@ -113,6 +113,20 @@ test("plural selection follows $count", () => {
   assert.match(I18n.t("items", { count: 3 }), /3.* items$/);
 });
 
+test("label resolves mapped values and returns unmapped values unchanged", () => {
+  const { I18n, logs } = load(payload);
+  const map = Object.freeze({ a: "hello", b: "greeting", c: "absent-key" });
+  assert.equal(I18n.label(map, "a"), "Salam");
+  assert.equal(I18n.label(map, "zzz"), "zzz");
+  assert.equal(I18n.label(map, "zzz"), "zzz");
+  assert.equal(I18n.label(map, "c"), "c");
+  assert.equal(I18n.label(map, "constructor"), "constructor");
+  assert.equal(I18n.label(map, null), "");
+  assert.equal(I18n.label(map, undefined), "");
+  assert.equal(logs.warn.filter((line) => line.includes("zzz")).length, 1);
+  assert.ok(logs.warn.some((line) => line.includes("constructor")));
+});
+
 test("attr returns the formatted attribute or null", () => {
   const { I18n } = load(payload);
   assert.equal(I18n.attr("tip", "title"), "Hover");

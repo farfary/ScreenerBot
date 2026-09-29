@@ -434,3 +434,45 @@ pub enum UpdateType {
     /// Action was cancelled
     ActionCancelled,
 }
+
+#[cfg(test)]
+mod label_tests {
+    use super::ActionType;
+
+    /// Catalog key of the notification label for each action type. The match is
+    /// exhaustive, so a new variant fails to compile until it is mapped here and
+    /// in `ACTION_TYPE_LABELS` (ui/notification_panel.js).
+    fn label_key(action: ActionType) -> &'static str {
+        match action {
+            ActionType::SwapBuy => "notifications-action-swap-buy",
+            ActionType::SwapSell => "notifications-action-swap-sell",
+            ActionType::PositionOpen => "notifications-action-position-open",
+            ActionType::PositionClose => "notifications-action-position-close",
+            ActionType::PositionDca => "notifications-action-position-dca",
+            ActionType::PositionPartialExit => "notifications-action-position-partial-exit",
+            ActionType::ManualOrder => "notifications-action-manual-order",
+        }
+    }
+
+    #[test]
+    fn action_type_labels_exist_in_the_catalog() {
+        for action in [
+            ActionType::SwapBuy,
+            ActionType::SwapSell,
+            ActionType::PositionOpen,
+            ActionType::PositionClose,
+            ActionType::PositionDca,
+            ActionType::PositionPartialExit,
+            ActionType::ManualOrder,
+        ] {
+            let id = serde_json::to_value(action).unwrap();
+            let key = label_key(action);
+            assert_eq!(
+                key.strip_prefix("notifications-action-"),
+                id.as_str().map(|s| s.replace('_', "-")).as_deref(),
+                "key does not follow the serialized id {id}"
+            );
+            assert_ne!(crate::i18n::format_en(key, None), key, "missing {key}");
+        }
+    }
+}

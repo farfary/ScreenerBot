@@ -13,6 +13,38 @@ import { ConfirmationDialog } from "./confirmation_dialog.js";
 import { enhanceAllSelects } from "./custom_select.js";
 import { playTabSwitch } from "../core/sounds.js";
 
+// Action type ids serialized by `ActionType` (src/actions/types.rs).
+const ACTION_TYPE_LABELS = Object.freeze({
+  swap_buy: "notifications-action-swap-buy",
+  swap_sell: "notifications-action-swap-sell",
+  position_open: "notifications-action-position-open",
+  position_close: "notifications-action-position-close",
+  position_dca: "notifications-action-position-dca",
+  position_partial_exit: "notifications-action-position-partial-exit",
+  manual_order: "notifications-action-manual-order",
+  unknown: "notifications-action-unknown",
+});
+
+// Trade reason ids: the `Debug` names of `TradeReason` (src/trader/types.rs).
+const TRADE_REASON_LABELS = Object.freeze({
+  StrategySignal: "notifications-reason-strategy-signal",
+  ManualEntry: "notifications-reason-manual-entry",
+  ForceBuy: "notifications-reason-force-buy",
+  CopyBuy: "notifications-reason-copy-buy",
+  DCAScheduled: "notifications-reason-dca-scheduled",
+  TakeProfit: "notifications-reason-take-profit",
+  StopLoss: "notifications-reason-stop-loss",
+  TrailingStop: "notifications-reason-trailing-stop",
+  TimeOverride: "notifications-reason-time-override",
+  StrategyExit: "notifications-reason-strategy-exit",
+  LlmAnalysisExit: "notifications-reason-llm-analysis-exit",
+  ManualExit: "notifications-reason-manual-exit",
+  RiskManagement: "notifications-reason-risk-management",
+  Blacklisted: "notifications-reason-blacklisted",
+  ForceSell: "notifications-reason-force-sell",
+  CopySell: "notifications-reason-copy-sell",
+});
+
 let currentTab = "all";
 let isInitialized = false;
 let isOpen = false;
@@ -697,7 +729,7 @@ function renderNotification(notification) {
           ? '<i class="icon-ban"></i>'
           : "";
 
-  const actionTypeLabel = escapeText(formatActionType(action_type));
+  const actionTypeLabel = escapeText(I18n.label(ACTION_TYPE_LABELS, action_type || "unknown"));
   const rawSymbol =
     metadata && typeof metadata === "object" && metadata !== null ? metadata.symbol : "";
   const symbol = rawSymbol ? escapeText(rawSymbol) : "";
@@ -721,7 +753,7 @@ function renderNotification(notification) {
     details.push(formatPercentValue(pct, { decimals: pct % 1 === 0 ? 0 : 1, plus: "" }));
   }
 
-  if (md.reason) details.push(humanizeToken(md.reason));
+  if (md.reason) details.push(I18n.label(TRADE_REASON_LABELS, md.reason));
   if (md.strategy_id) details.push(escapeText(md.strategy_id));
 
   const source = sourceFromOperation(md.operation);
@@ -808,15 +840,6 @@ function formatSol(value) {
   return formatFixed(value, { decimals: 4, trim: true, fallback: "0" });
 }
 
-/** Humanize a CamelCase / snake_case token, e.g. "TakeProfit" -> "Take Profit". */
-function humanizeToken(value) {
-  return String(value)
-    .replace(/_/g, " ")
-    .replace(/([a-z])([A-Z])/g, "$1 $2")
-    .replace(/\b\w/g, (c) => c.toUpperCase())
-    .trim();
-}
-
 /** Derive an "auto" | "manual" source tag from the operation field. */
 function sourceFromOperation(operation) {
   if (!operation) return "";
@@ -869,25 +892,6 @@ function setupNotificationListDelegation() {
   };
 
   list.addEventListener("click", handlers.notificationList);
-}
-
-/**
- * Format action type for display
- */
-function formatActionType(actionType) {
-  if (!actionType) return "Action";
-
-  const typeMap = {
-    swap_buy: "Buy",
-    swap_sell: "Sell",
-    position_open: "Open",
-    position_close: "Close",
-    position_dca: "DCA",
-    position_partial_exit: "Partial Exit",
-    manual_order: "Manual",
-  };
-
-  return typeMap[actionType] || actionType;
 }
 
 /**

@@ -80,7 +80,6 @@ function createLifecycle() {
         currentTab: () => currentTab,
         $,
         Utils,
-        capitalizeFirst,
         handleWalletAction,
         onRefresh: handleRefresh,
         onAddWallet: () => showModal("add-wallet-modal"),
@@ -773,11 +772,6 @@ function hideAllModals() {
 // =============================================================================
 // Utility Functions
 // =============================================================================
-
-function capitalizeFirst(str) {
-  if (!str) return "";
-  return str.charAt(0).toUpperCase() + str.slice(1);
-}
 
 function cleanup() {
   if (renderers) {

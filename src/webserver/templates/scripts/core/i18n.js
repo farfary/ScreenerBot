@@ -201,6 +201,18 @@
       return Boolean(message(id));
     },
 
+    /**
+     * Label for an enum-like value. `map` is a frozen `{ <id>: <message key> }`
+     * table owned by the calling module. A value the map does not list, or whose
+     * key the bundle lacks, renders as the raw value so it is never presented
+     * as a wording the catalog did not provide.
+     */
+    label(map, value) {
+      if (map && Object.hasOwn(map, value) && I18n.has(map[value])) return I18n.t(map[value]);
+      warnOnce("label:" + String(value), "No label for value " + String(value));
+      return String(value ?? "");
+    },
+
     /** Render a backend UiText: `{ id, args: { name: { type, value } } }`. */
     text(uiText) {
       if (!uiText || typeof uiText.id !== "string") return "";

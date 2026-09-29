@@ -262,3 +262,37 @@ pub struct WalletBalanceSummary {
     /// Reclaimable SOL from closing empty ATAs (~0.00089088 per ATA)
     pub reclaimable_sol: f64,
 }
+
+#[cfg(test)]
+mod label_tests {
+    use super::WalletType;
+
+    /// Catalog key of the label for each wallet type. The match is exhaustive, so
+    /// a new variant fails to compile until it is mapped here and in
+    /// `WALLET_TYPE_LABELS` (pages/wallets/renderers.js).
+    fn label_key(wallet_type: &WalletType) -> &'static str {
+        match wallet_type {
+            WalletType::Generated => "wallets-type-generated",
+            WalletType::Imported => "wallets-type-imported",
+            WalletType::Migrated => "wallets-type-migrated",
+        }
+    }
+
+    #[test]
+    fn wallet_type_labels_exist_in_the_catalog() {
+        for wallet_type in [
+            WalletType::Generated,
+            WalletType::Imported,
+            WalletType::Migrated,
+        ] {
+            let id = serde_json::to_value(&wallet_type).unwrap();
+            let key = label_key(&wallet_type);
+            assert_eq!(
+                key.strip_prefix("wallets-type-"),
+                id.as_str(),
+                "key does not follow the serialized id {id}"
+            );
+            assert_ne!(crate::i18n::format_en(key, None), key, "missing {key}");
+        }
+    }
+}
