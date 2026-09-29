@@ -1,13 +1,17 @@
 //! Model-scored analysis status, stats, configuration, cache and testing handlers (`/api/llm-analysis`).
 
-use axum::{extract::State, http::StatusCode, response::Response, Json};
+use axum::{extract::State, response::Response, Json};
 use std::sync::Arc;
 
 use crate::config::{update_config_section, with_config};
+use crate::i18n::ids;
 use crate::llm_analysis::types::{EvaluationContext, Priority};
 use crate::logger::{self, LogTag};
+use crate::webserver::api_error::{ApiError, ApiErrorCode};
+use crate::webserver::routes::llm::analysis_failure;
 use crate::webserver::state::AppState;
-use crate::webserver::utils::{error_response, success_response};
+use crate::webserver::utils::success_response;
+use axum::response::IntoResponse as _;
 
 use super::types::*;
 
@@ -146,12 +150,12 @@ pub async fn update_analysis_config(
                 "message": "Analysis configuration updated successfully"
             }))
         }
-        Err(e) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "CONFIG_ERROR",
-            &format!("Failed to update analysis config: {e}"),
-            None,
-        ),
+        Err(e) => ApiError::new(
+            ApiErrorCode::ConfigError,
+            ids::ERRORS_LLM_ANALYSIS_CONFIG_UPDATE_FAILED,
+        )
+        .details(e.to_string())
+        .into_response(),
     }
 }
 
@@ -241,12 +245,11 @@ pub async fn clear_cache(State(state): State<Arc<AppState>>) -> Response {
             "message": "Cache cleared successfully"
         }))
     } else {
-        error_response(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "ANALYSIS_NOT_INITIALIZED",
-            "Analysis engine not initialized",
-            None,
+        ApiError::new(
+            ApiErrorCode::ServiceUnavailable,
+            ids::ERRORS_LLM_ANALYSIS_UNAVAILABLE,
         )
+        .into_response()
     }
 }
 
@@ -267,12 +270,11 @@ pub async fn get_cache_stats(State(state): State<Arc<AppState>>) -> Response {
             ttl_seconds,
         })
     } else {
-        error_response(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "ANALYSIS_NOT_INITIALIZED",
-            "Analysis engine not initialized",
-            None,
+        ApiError::new(
+            ApiErrorCode::ServiceUnavailable,
+            ids::ERRORS_LLM_ANALYSIS_UNAVAILABLE,
         )
+        .into_response()
     }
 }
 
@@ -284,24 +286,22 @@ pub async fn test_evaluate(
     // Check whether model-backed features are enabled.
     let llm_enabled = with_config(|cfg| cfg.llm.enabled);
     if !llm_enabled {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "ANALYSIS_DISABLED",
-            "LLM features are disabled. Enable [llm] first.",
-            None,
-        );
+        return ApiError::new(
+            ApiErrorCode::InvalidInput,
+            ids::ERRORS_LLM_ANALYSIS_DISABLED,
+        )
+        .into_response();
     }
 
     // Get the model-analysis engine.
     let engine = match &state.analysis_engine {
         Some(e) => e,
         None => {
-            return error_response(
-                StatusCode::SERVICE_UNAVAILABLE,
-                "ANALYSIS_NOT_INITIALIZED",
-                "Analysis engine not initialized",
-                None,
-            );
+            return ApiError::new(
+                ApiErrorCode::ServiceUnavailable,
+                ids::ERRORS_LLM_ANALYSIS_UNAVAILABLE,
+            )
+            .into_response();
         }
     };
 
@@ -311,12 +311,12 @@ pub async fn test_evaluate(
         Some("medium") => Priority::Medium,
         Some("low") | None => Priority::Low,
         Some(p) => {
-            return error_response(
-                StatusCode::BAD_REQUEST,
-                "INVALID_PRIORITY",
-                &format!("Invalid priority: '{p}'. Use 'high', 'medium', or 'low'."),
-                None,
-            );
+            return ApiError::new(
+                ApiErrorCode::InvalidInput,
+                ids::ERRORS_LLM_ANALYSIS_PRIORITY_INVALID,
+            )
+            .text_arg("priority", p.to_string())
+            .into_response();
         }
     };
 
@@ -373,12 +373,7 @@ pub async fn test_evaluate(
                 &format!("LLM test evaluation failed for {}: {}", req.mint, e),
             );
 
-            error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "EVALUATION_FAILED",
-                &format!("Model analysis failed: {e}"),
-                None,
-            )
+            analysis_failure(ids::ERRORS_LLM_ANALYSIS_EVALUATION_FAILED, &e).into_response()
         }
     }
 }

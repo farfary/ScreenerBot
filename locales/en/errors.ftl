@@ -144,3 +144,81 @@ errors-telegram-notifier-failed = Failed to create notifier
 errors-telegram-token-required = Bot token must be configured first
 errors-telegram-discovery-failed = Failed to start discovery
 errors-telegram-chat-select-failed = Failed to select chat
+
+# Assistant chat
+errors-chat-message-empty = Message cannot be empty
+errors-chat-message-too-long = Message exceeds maximum length of 10,000 characters
+errors-chat-database-unavailable = Chat database not initialized
+errors-chat-session-not-found = Chat session { $id } not found
+errors-chat-session-validate-failed = Failed to validate session
+errors-chat-engine-unavailable = Chat engine not initialized
+errors-chat-process-failed = Failed to process chat message
+errors-chat-sessions-list-failed = Failed to list chat sessions
+errors-chat-session-create-failed = Failed to create chat session
+errors-chat-session-get-failed = Failed to get chat session
+errors-chat-messages-get-failed = Failed to get chat messages
+errors-chat-session-delete-failed = Failed to delete chat session
+errors-chat-messages-load-failed = Failed to get messages
+errors-chat-summarize-empty = Cannot summarize empty chat session
+errors-chat-provider-invalid = Invalid provider: { $provider }
+errors-chat-summary-save-failed = Failed to save summary
+errors-chat-title-empty-session = Cannot generate title for empty chat session
+errors-chat-no-user-message = No user messages found in session
+errors-chat-title-save-failed = Failed to update session title
+errors-chat-confirmation-save-failed = Failed to save confirmation response
+errors-chat-confirmation-failed = Failed to process confirmation
+errors-chat-summary-failed = Failed to generate summary
+
+# Assistant automation
+errors-automation-database-unavailable = Database not initialized
+errors-automation-tasks-list-failed = Failed to list tasks
+errors-automation-name-empty = Task name cannot be empty
+errors-automation-instruction-empty = Task instruction cannot be empty
+errors-automation-schedule-type-invalid = Invalid schedule_type. Must be: interval, daily, or weekly
+errors-automation-schedule-value-invalid = Invalid schedule_value
+errors-automation-task-create-failed = Failed to create task
+errors-automation-task-not-found = Task not found
+errors-automation-task-get-failed = Failed to get task
+errors-automation-schedule-invalid = Invalid schedule
+errors-automation-tool-permissions-invalid = tool_permissions must be 'full' or 'readonly'
+errors-automation-priority-invalid = priority must be 'low', 'medium', or 'high'
+errors-automation-task-update-failed = Failed to update task
+errors-automation-task-running-delete = Cannot delete task while it is running
+errors-automation-task-delete-failed = Failed to delete task
+errors-automation-task-toggle-failed = Failed to toggle task
+errors-automation-task-disabled = Cannot run a disabled task
+errors-automation-task-already-running = Task is already running
+errors-automation-runs-list-failed = Failed to list runs
+errors-automation-recent-runs-failed = Failed to list recent runs
+errors-automation-run-not-found = Run not found
+errors-automation-run-get-failed = Failed to get run
+errors-automation-stats-failed = Failed to get stats
+
+# LLM providers
+errors-llm-config-update-failed = Failed to update LLM config
+errors-llm-provider-unknown = Unknown provider: { $provider }
+errors-llm-manager-unavailable = LLM manager not initialized
+errors-llm-provider-disabled = Provider '{ $provider }' is not configured or disabled
+errors-llm-provider-config-update-failed = Failed to update provider config
+errors-llm-provider-test-failed = Provider test failed
+# The reason is the provider's own wording, shown exactly as sent.
+errors-llm-provider-refused = { $reason }
+
+# LLM analysis
+errors-llm-analysis-config-update-failed = Failed to update analysis config
+errors-llm-analysis-unavailable = Analysis engine not initialized
+errors-llm-analysis-disabled = LLM features are disabled. Enable [llm] first.
+errors-llm-analysis-priority-invalid = Invalid priority: '{ $priority }'. Use 'high', 'medium', or 'low'.
+errors-llm-analysis-evaluation-failed = Model analysis failed
+errors-llm-analysis-instructions-list-failed = Failed to list instructions
+errors-llm-analysis-instruction-not-found = Instruction { $id } not found
+errors-llm-analysis-instruction-get-failed = Failed to get instruction
+errors-llm-analysis-instruction-created-retrieve-failed = Failed to retrieve created instruction
+errors-llm-analysis-instruction-create-failed = Failed to create instruction
+errors-llm-analysis-instruction-updated-retrieve-failed = Failed to retrieve updated instruction
+errors-llm-analysis-instruction-update-failed = Failed to update instruction
+errors-llm-analysis-instruction-delete-failed = Failed to delete instruction
+errors-llm-analysis-instructions-reorder-failed = Failed to reorder instructions
+errors-llm-analysis-decisions-list-failed = Failed to list decision history
+errors-llm-analysis-decision-not-found = Decision { $id } not found
+errors-llm-analysis-decision-get-failed = Failed to get decision

@@ -2,7 +2,6 @@
 
 use axum::{
     extract::{Path, State},
-    http::StatusCode,
     response::{sse::Event, Response, Sse},
     Json,
 };
@@ -16,9 +15,14 @@ use crate::assistant::chat::database as chat_db;
 use crate::assistant::chat::ChatProgressEvent;
 use crate::assistant::{try_get_chat_engine, ChatRequest as ChatEngineRequest};
 use crate::config::with_config;
+use crate::i18n::ids;
 use crate::logger::{self, LogTag};
+use crate::webserver::api_error::{ApiError, ApiErrorCode};
 use crate::webserver::state::AppState;
-use crate::webserver::utils::{error_response, success_response};
+use crate::webserver::utils::success_response;
+use axum::response::IntoResponse as _;
+
+use crate::webserver::routes::llm::{assistant_failure, provider_failure};
 
 use super::types::*;
 
@@ -33,33 +37,27 @@ pub async fn send_chat_message(
 ) -> Response {
     // Validate message
     if req.message.trim().is_empty() {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "INVALID_MESSAGE",
-            "Message cannot be empty",
-            None,
-        );
+        return ApiError::new(ApiErrorCode::InvalidInput, ids::ERRORS_CHAT_MESSAGE_EMPTY)
+            .into_response();
     }
 
     if req.message.len() > 10000 {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "MESSAGE_TOO_LONG",
-            "Message exceeds maximum length of 10,000 characters",
-            None,
-        );
+        return ApiError::new(
+            ApiErrorCode::InvalidInput,
+            ids::ERRORS_CHAT_MESSAGE_TOO_LONG,
+        )
+        .into_response();
     }
 
     // Validate session exists
     let pool = match chat_db::get_chat_pool() {
         Some(p) => p,
         None => {
-            return error_response(
-                StatusCode::SERVICE_UNAVAILABLE,
-                "CHAT_DB_NOT_INITIALIZED",
-                "Chat database not initialized",
-                None,
+            return ApiError::new(
+                ApiErrorCode::ServiceUnavailable,
+                ids::ERRORS_CHAT_DATABASE_UNAVAILABLE,
             )
+            .into_response()
         }
     };
 
@@ -68,20 +66,17 @@ pub async fn send_chat_message(
             // Session exists, continue
         }
         Ok(None) => {
-            return error_response(
-                StatusCode::NOT_FOUND,
-                "SESSION_NOT_FOUND",
-                &format!("Chat session {} not found", req.session_id),
-                None,
-            )
+            return ApiError::new(ApiErrorCode::NotFound, ids::ERRORS_CHAT_SESSION_NOT_FOUND)
+                .text_arg("id", req.session_id.to_string())
+                .into_response()
         }
         Err(e) => {
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "DB_ERROR",
-                &format!("Failed to validate session: {e}"),
-                None,
+            return ApiError::new(
+                ApiErrorCode::DatabaseError,
+                ids::ERRORS_CHAT_SESSION_VALIDATE_FAILED,
             )
+            .details(e.to_string())
+            .into_response()
         }
     }
 
@@ -89,12 +84,11 @@ pub async fn send_chat_message(
     let engine = match try_get_chat_engine() {
         Some(e) => e,
         None => {
-            return error_response(
-                StatusCode::SERVICE_UNAVAILABLE,
-                "CHAT_NOT_INITIALIZED",
-                "Chat engine not initialized",
-                None,
+            return ApiError::new(
+                ApiErrorCode::ServiceUnavailable,
+                ids::ERRORS_CHAT_ENGINE_UNAVAILABLE,
             )
+            .into_response()
         }
     };
 
@@ -120,12 +114,7 @@ pub async fn send_chat_message(
             );
             success_response(response)
         }
-        Err(e) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "CHAT_ERROR",
-            &format!("Failed to process chat message: {e}"),
-            None,
-        ),
+        Err(e) => assistant_failure(ids::ERRORS_CHAT_PROCESS_FAILED, &e).into_response(),
     }
 }
 
@@ -135,55 +124,49 @@ pub async fn stream_chat_message(
     Json(req): Json<SendChatMessageRequest>,
 ) -> Result<Sse<impl futures::Stream<Item = Result<Event, Infallible>>>, Response> {
     if req.message.trim().is_empty() {
-        return Err(error_response(
-            StatusCode::BAD_REQUEST,
-            "INVALID_MESSAGE",
-            "Message cannot be empty",
-            None,
-        ));
+        return Err(
+            ApiError::new(ApiErrorCode::InvalidInput, ids::ERRORS_CHAT_MESSAGE_EMPTY)
+                .into_response(),
+        );
     }
     if req.message.len() > 10000 {
-        return Err(error_response(
-            StatusCode::BAD_REQUEST,
-            "MESSAGE_TOO_LONG",
-            "Message exceeds maximum length of 10,000 characters",
-            None,
-        ));
+        return Err(ApiError::new(
+            ApiErrorCode::InvalidInput,
+            ids::ERRORS_CHAT_MESSAGE_TOO_LONG,
+        )
+        .into_response());
     }
     let pool = chat_db::get_chat_pool().ok_or_else(|| {
-        error_response(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "CHAT_DB_NOT_INITIALIZED",
-            "Chat database not initialized",
-            None,
+        ApiError::new(
+            ApiErrorCode::ServiceUnavailable,
+            ids::ERRORS_CHAT_DATABASE_UNAVAILABLE,
         )
+        .into_response()
     })?;
     match chat_db::get_session(&pool, req.session_id) {
         Ok(Some(_)) => {}
         Ok(None) => {
-            return Err(error_response(
-                StatusCode::NOT_FOUND,
-                "SESSION_NOT_FOUND",
-                &format!("Chat session {} not found", req.session_id),
-                None,
-            ));
+            return Err(
+                ApiError::new(ApiErrorCode::NotFound, ids::ERRORS_CHAT_SESSION_NOT_FOUND)
+                    .text_arg("id", req.session_id.to_string())
+                    .into_response(),
+            );
         }
         Err(error) => {
-            return Err(error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "DB_ERROR",
-                &format!("Failed to validate session: {error}"),
-                None,
-            ));
+            return Err(ApiError::new(
+                ApiErrorCode::DatabaseError,
+                ids::ERRORS_CHAT_SESSION_VALIDATE_FAILED,
+            )
+            .details(error.to_string())
+            .into_response());
         }
     }
     let engine = try_get_chat_engine().ok_or_else(|| {
-        error_response(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "CHAT_NOT_INITIALIZED",
-            "Chat engine not initialized",
-            None,
+        ApiError::new(
+            ApiErrorCode::ServiceUnavailable,
+            ids::ERRORS_CHAT_ENGINE_UNAVAILABLE,
         )
+        .into_response()
     })?;
     let chat_request = ChatEngineRequest {
         session_id: req.session_id,
@@ -224,23 +207,22 @@ pub async fn list_chat_sessions(State(_state): State<Arc<AppState>>) -> Response
     let pool = match chat_db::get_chat_pool() {
         Some(p) => p,
         None => {
-            return error_response(
-                StatusCode::SERVICE_UNAVAILABLE,
-                "CHAT_DB_NOT_INITIALIZED",
-                "Chat database not initialized",
-                None,
+            return ApiError::new(
+                ApiErrorCode::ServiceUnavailable,
+                ids::ERRORS_CHAT_DATABASE_UNAVAILABLE,
             )
+            .into_response()
         }
     };
 
     match chat_db::get_sessions(&pool) {
         Ok(sessions) => success_response(sessions),
-        Err(e) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "DB_ERROR",
-            &format!("Failed to list chat sessions: {e}"),
-            None,
-        ),
+        Err(e) => ApiError::new(
+            ApiErrorCode::DatabaseError,
+            ids::ERRORS_CHAT_SESSIONS_LIST_FAILED,
+        )
+        .details(e.to_string())
+        .into_response(),
     }
 }
 
@@ -252,12 +234,11 @@ pub async fn create_chat_session(
     let pool = match chat_db::get_chat_pool() {
         Some(p) => p,
         None => {
-            return error_response(
-                StatusCode::SERVICE_UNAVAILABLE,
-                "CHAT_DB_NOT_INITIALIZED",
-                "Chat database not initialized",
-                None,
+            return ApiError::new(
+                ApiErrorCode::ServiceUnavailable,
+                ids::ERRORS_CHAT_DATABASE_UNAVAILABLE,
             )
+            .into_response()
         }
     };
 
@@ -271,12 +252,12 @@ pub async fn create_chat_session(
             logger::info(LogTag::Api, &format!("Created chat session: {session_id}"));
             success_response(CreateChatSessionResponse { session_id })
         }
-        Err(e) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "DB_ERROR",
-            &format!("Failed to create chat session: {e}"),
-            None,
-        ),
+        Err(e) => ApiError::new(
+            ApiErrorCode::DatabaseError,
+            ids::ERRORS_CHAT_SESSION_CREATE_FAILED,
+        )
+        .details(e.to_string())
+        .into_response(),
     }
 }
 
@@ -289,24 +270,20 @@ pub async fn get_chat_session(
     if crate::webserver::promo::are_promo_fixtures_enabled() {
         return match crate::webserver::promo::get_promo_chat_session(id) {
             Some(response) => success_response(response),
-            None => error_response(
-                StatusCode::NOT_FOUND,
-                "NOT_FOUND",
-                &format!("Chat session {id} not found"),
-                None,
-            ),
+            None => ApiError::new(ApiErrorCode::NotFound, ids::ERRORS_CHAT_SESSION_NOT_FOUND)
+                .text_arg("id", id.to_string())
+                .into_response(),
         };
     }
 
     let pool = match chat_db::get_chat_pool() {
         Some(p) => p,
         None => {
-            return error_response(
-                StatusCode::SERVICE_UNAVAILABLE,
-                "CHAT_DB_NOT_INITIALIZED",
-                "Chat database not initialized",
-                None,
+            return ApiError::new(
+                ApiErrorCode::ServiceUnavailable,
+                ids::ERRORS_CHAT_DATABASE_UNAVAILABLE,
             )
+            .into_response()
         }
     };
 
@@ -314,32 +291,29 @@ pub async fn get_chat_session(
     let session = match chat_db::get_session(&pool, id) {
         Ok(Some(s)) => s,
         Ok(None) => {
-            return error_response(
-                StatusCode::NOT_FOUND,
-                "NOT_FOUND",
-                &format!("Chat session {id} not found"),
-                None,
-            )
+            return ApiError::new(ApiErrorCode::NotFound, ids::ERRORS_CHAT_SESSION_NOT_FOUND)
+                .text_arg("id", id.to_string())
+                .into_response()
         }
         Err(e) => {
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "DB_ERROR",
-                &format!("Failed to get chat session: {e}"),
-                None,
+            return ApiError::new(
+                ApiErrorCode::DatabaseError,
+                ids::ERRORS_CHAT_SESSION_GET_FAILED,
             )
+            .details(e.to_string())
+            .into_response()
         }
     };
 
     // Get messages
     match chat_db::get_messages(&pool, id) {
         Ok(messages) => success_response(GetChatSessionResponse { session, messages }),
-        Err(e) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "DB_ERROR",
-            &format!("Failed to get chat messages: {e}"),
-            None,
-        ),
+        Err(e) => ApiError::new(
+            ApiErrorCode::DatabaseError,
+            ids::ERRORS_CHAT_MESSAGES_GET_FAILED,
+        )
+        .details(e.to_string())
+        .into_response(),
     }
 }
 
@@ -351,12 +325,11 @@ pub async fn delete_chat_session(
     let pool = match chat_db::get_chat_pool() {
         Some(p) => p,
         None => {
-            return error_response(
-                StatusCode::SERVICE_UNAVAILABLE,
-                "CHAT_DB_NOT_INITIALIZED",
-                "Chat database not initialized",
-                None,
+            return ApiError::new(
+                ApiErrorCode::ServiceUnavailable,
+                ids::ERRORS_CHAT_DATABASE_UNAVAILABLE,
             )
+            .into_response()
         }
     };
 
@@ -367,12 +340,12 @@ pub async fn delete_chat_session(
                 "message": "Chat session deleted successfully"
             }))
         }
-        Err(e) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "DB_ERROR",
-            &format!("Failed to delete chat session: {e}"),
-            None,
-        ),
+        Err(e) => ApiError::new(
+            ApiErrorCode::DatabaseError,
+            ids::ERRORS_CHAT_SESSION_DELETE_FAILED,
+        )
+        .details(e.to_string())
+        .into_response(),
     }
 }
 
@@ -384,12 +357,11 @@ pub async fn summarize_chat_session(
     let pool = match chat_db::get_chat_pool() {
         Some(p) => p,
         None => {
-            return error_response(
-                StatusCode::SERVICE_UNAVAILABLE,
-                "CHAT_DB_NOT_INITIALIZED",
-                "Chat database not initialized",
-                None,
+            return ApiError::new(
+                ApiErrorCode::ServiceUnavailable,
+                ids::ERRORS_CHAT_DATABASE_UNAVAILABLE,
             )
+            .into_response()
         }
     };
 
@@ -397,22 +369,18 @@ pub async fn summarize_chat_session(
     let messages = match chat_db::get_messages(&pool, id) {
         Ok(m) => m,
         Err(e) => {
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "DB_ERROR",
-                &format!("Failed to get messages: {e}"),
-                None,
+            return ApiError::new(
+                ApiErrorCode::DatabaseError,
+                ids::ERRORS_CHAT_MESSAGES_LOAD_FAILED,
             )
+            .details(e.to_string())
+            .into_response()
         }
     };
 
     if messages.is_empty() {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "EMPTY_SESSION",
-            "Cannot summarize empty chat session",
-            None,
-        );
+        return ApiError::new(ApiErrorCode::InvalidInput, ids::ERRORS_CHAT_SUMMARIZE_EMPTY)
+            .into_response();
     }
 
     // Build conversation text
@@ -426,12 +394,11 @@ pub async fn summarize_chat_session(
     let llm_manager = match try_get_llm_manager() {
         Some(m) => m,
         None => {
-            return error_response(
-                StatusCode::SERVICE_UNAVAILABLE,
-                "LLM_NOT_CONFIGURED",
-                "LLM manager not initialized",
-                None,
+            return ApiError::new(
+                ApiErrorCode::ServiceUnavailable,
+                ids::ERRORS_LLM_MANAGER_UNAVAILABLE,
             )
+            .into_response()
         }
     };
 
@@ -439,12 +406,12 @@ pub async fn summarize_chat_session(
     let provider = match Provider::from_str(&provider_name) {
         Some(p) => p,
         None => {
-            return error_response(
-                StatusCode::BAD_REQUEST,
-                "INVALID_PROVIDER",
-                &format!("Invalid provider: {provider_name}"),
-                None,
+            return ApiError::new(
+                ApiErrorCode::InvalidInput,
+                ids::ERRORS_CHAT_PROVIDER_INVALID,
             )
+            .text_arg("provider", provider_name.clone())
+            .into_response()
         }
     };
 
@@ -473,12 +440,12 @@ pub async fn summarize_chat_session(
 
             // Save summary to session
             if let Err(e) = chat_db::update_session_summary(&pool, id, &summary) {
-                return error_response(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "DB_ERROR",
-                    &format!("Failed to save summary: {e}"),
-                    None,
-                );
+                return ApiError::new(
+                    ApiErrorCode::DatabaseError,
+                    ids::ERRORS_CHAT_SUMMARY_SAVE_FAILED,
+                )
+                .details(e.to_string())
+                .into_response();
             }
 
             logger::info(LogTag::Api, &format!("Summarized chat session: {id}"));
@@ -486,12 +453,7 @@ pub async fn summarize_chat_session(
                 "summary": summary
             }))
         }
-        Err(e) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "LLM_ERROR",
-            &format!("Failed to generate summary: {e}"),
-            None,
-        ),
+        Err(e) => provider_failure(ids::ERRORS_CHAT_SUMMARY_FAILED, &e).into_response(),
     }
 }
 
@@ -503,12 +465,11 @@ pub async fn generate_session_title(
     let pool = match chat_db::get_chat_pool() {
         Some(p) => p,
         None => {
-            return error_response(
-                StatusCode::SERVICE_UNAVAILABLE,
-                "CHAT_DB_NOT_INITIALIZED",
-                "Chat database not initialized",
-                None,
+            return ApiError::new(
+                ApiErrorCode::ServiceUnavailable,
+                ids::ERRORS_CHAT_DATABASE_UNAVAILABLE,
             )
+            .into_response()
         }
     };
 
@@ -516,22 +477,21 @@ pub async fn generate_session_title(
     let messages = match chat_db::get_messages(&pool, id) {
         Ok(m) => m,
         Err(e) => {
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "DB_ERROR",
-                &format!("Failed to get messages: {e}"),
-                None,
+            return ApiError::new(
+                ApiErrorCode::DatabaseError,
+                ids::ERRORS_CHAT_MESSAGES_LOAD_FAILED,
             )
+            .details(e.to_string())
+            .into_response()
         }
     };
 
     if messages.is_empty() {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "EMPTY_SESSION",
-            "Cannot generate title for empty chat session",
-            None,
-        );
+        return ApiError::new(
+            ApiErrorCode::InvalidInput,
+            ids::ERRORS_CHAT_TITLE_EMPTY_SESSION,
+        )
+        .into_response();
     }
 
     // Get the first 2-3 messages (user + assistant exchanges)
@@ -551,12 +511,8 @@ pub async fn generate_session_title(
     }
 
     if first_user_msg.is_empty() {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "NO_USER_MESSAGE",
-            "No user messages found in session",
-            None,
-        );
+        return ApiError::new(ApiErrorCode::InvalidInput, ids::ERRORS_CHAT_NO_USER_MESSAGE)
+            .into_response();
     }
 
     // Build the title generation prompt
@@ -581,12 +537,11 @@ Rules:
     let llm_manager = match try_get_llm_manager() {
         Some(m) => m,
         None => {
-            return error_response(
-                StatusCode::SERVICE_UNAVAILABLE,
-                "LLM_NOT_CONFIGURED",
-                "LLM manager not initialized",
-                None,
+            return ApiError::new(
+                ApiErrorCode::ServiceUnavailable,
+                ids::ERRORS_LLM_MANAGER_UNAVAILABLE,
             )
+            .into_response()
         }
     };
 
@@ -594,12 +549,12 @@ Rules:
     let provider = match Provider::from_str(&provider_name) {
         Some(p) => p,
         None => {
-            return error_response(
-                StatusCode::BAD_REQUEST,
-                "INVALID_PROVIDER",
-                &format!("Invalid provider: {provider_name}"),
-                None,
+            return ApiError::new(
+                ApiErrorCode::InvalidInput,
+                ids::ERRORS_CHAT_PROVIDER_INVALID,
             )
+            .text_arg("provider", provider_name.clone())
+            .into_response()
         }
     };
 
@@ -642,12 +597,12 @@ Rules:
 
     // Update session title in database
     if let Err(e) = chat_db::update_session_title(&pool, id, &title) {
-        return error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "DB_ERROR",
-            &format!("Failed to update session title: {e}"),
-            None,
-        );
+        return ApiError::new(
+            ApiErrorCode::DatabaseError,
+            ids::ERRORS_CHAT_TITLE_SAVE_FAILED,
+        )
+        .details(e.to_string())
+        .into_response();
     }
 
     logger::info(
@@ -673,12 +628,11 @@ pub async fn confirm_tool_execution(
     let engine = match try_get_chat_engine() {
         Some(e) => e,
         None => {
-            return error_response(
-                StatusCode::SERVICE_UNAVAILABLE,
-                "CHAT_NOT_INITIALIZED",
-                "Chat engine not initialized",
-                None,
+            return ApiError::new(
+                ApiErrorCode::ServiceUnavailable,
+                ids::ERRORS_CHAT_ENGINE_UNAVAILABLE,
             )
+            .into_response()
         }
     };
 
@@ -691,12 +645,11 @@ pub async fn confirm_tool_execution(
             let pool = match chat_db::get_chat_pool() {
                 Some(pool) => pool,
                 None => {
-                    return error_response(
-                        StatusCode::SERVICE_UNAVAILABLE,
-                        "CHAT_DB_NOT_INITIALIZED",
-                        "Chat database not initialized",
-                        None,
+                    return ApiError::new(
+                        ApiErrorCode::ServiceUnavailable,
+                        ids::ERRORS_CHAT_DATABASE_UNAVAILABLE,
                     )
+                    .into_response()
                 }
             };
             let tool_calls = serde_json::to_string(&response.tool_calls).ok();
@@ -707,12 +660,12 @@ pub async fn confirm_tool_execution(
                 &response.content,
                 tool_calls.as_deref(),
             ) {
-                return error_response(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "DB_ERROR",
-                    &format!("Failed to save confirmation response: {e}"),
-                    None,
-                );
+                return ApiError::new(
+                    ApiErrorCode::DatabaseError,
+                    ids::ERRORS_CHAT_CONFIRMATION_SAVE_FAILED,
+                )
+                .details(e.to_string())
+                .into_response();
             }
             logger::info(
                 LogTag::Api,
@@ -723,12 +676,7 @@ pub async fn confirm_tool_execution(
             );
             success_response(response)
         }
-        Err(e) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "CHAT_ERROR",
-            &format!("Failed to process confirmation: {e}"),
-            None,
-        ),
+        Err(e) => assistant_failure(ids::ERRORS_CHAT_CONFIRMATION_FAILED, &e).into_response(),
     }
 }
 

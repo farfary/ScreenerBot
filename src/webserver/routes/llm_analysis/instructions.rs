@@ -2,16 +2,18 @@
 
 use axum::{
     extract::{Path, Query, State},
-    http::StatusCode,
     response::Response,
     Json,
 };
 use std::sync::Arc;
 
+use crate::i18n::ids;
 use crate::llm_analysis::db;
 use crate::logger::{self, LogTag};
+use crate::webserver::api_error::{ApiError, ApiErrorCode};
 use crate::webserver::state::AppState;
-use crate::webserver::utils::{error_response, success_response};
+use crate::webserver::utils::success_response;
+use axum::response::IntoResponse as _;
 
 use super::types::*;
 
@@ -48,12 +50,12 @@ pub async fn list_instructions(State(_state): State<Arc<AppState>>) -> Response 
                 total,
             })
         }
-        Err(e) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "DB_ERROR",
-            &format!("Failed to list instructions: {e}"),
-            None,
-        ),
+        Err(e) => ApiError::new(
+            ApiErrorCode::DatabaseError,
+            ids::ERRORS_LLM_ANALYSIS_INSTRUCTIONS_LIST_FAILED,
+        )
+        .details(e.to_string())
+        .into_response(),
     }
 }
 
@@ -70,18 +72,18 @@ pub async fn get_instruction(State(_state): State<Arc<AppState>>, Path(id): Path
             created_at: i.created_at,
             updated_at: i.updated_at,
         }),
-        Ok(None) => error_response(
-            StatusCode::NOT_FOUND,
-            "NOT_FOUND",
-            &format!("Instruction {id} not found"),
-            None,
-        ),
-        Err(e) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "DB_ERROR",
-            &format!("Failed to get instruction: {e}"),
-            None,
-        ),
+        Ok(None) => ApiError::new(
+            ApiErrorCode::NotFound,
+            ids::ERRORS_LLM_ANALYSIS_INSTRUCTION_NOT_FOUND,
+        )
+        .text_arg("id", id.to_string())
+        .into_response(),
+        Err(e) => ApiError::new(
+            ApiErrorCode::DatabaseError,
+            ids::ERRORS_LLM_ANALYSIS_INSTRUCTION_GET_FAILED,
+        )
+        .details(e.to_string())
+        .into_response(),
     }
 }
 
@@ -113,26 +115,25 @@ pub async fn create_instruction(
                     created_at: instruction.created_at,
                     updated_at: instruction.updated_at,
                 }),
-                Ok(None) => error_response(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "DB_ERROR",
-                    "Failed to retrieve created instruction",
-                    None,
-                ),
-                Err(e) => error_response(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "DB_ERROR",
-                    &format!("Failed to retrieve created instruction: {e}"),
-                    None,
-                ),
+                Ok(None) => ApiError::new(
+                    ApiErrorCode::DatabaseError,
+                    ids::ERRORS_LLM_ANALYSIS_INSTRUCTION_CREATED_RETRIEVE_FAILED,
+                )
+                .into_response(),
+                Err(e) => ApiError::new(
+                    ApiErrorCode::DatabaseError,
+                    ids::ERRORS_LLM_ANALYSIS_INSTRUCTION_CREATED_RETRIEVE_FAILED,
+                )
+                .details(e.to_string())
+                .into_response(),
             }
         }
-        Err(e) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "DB_ERROR",
-            &format!("Failed to create instruction: {e}"),
-            None,
-        ),
+        Err(e) => ApiError::new(
+            ApiErrorCode::DatabaseError,
+            ids::ERRORS_LLM_ANALYSIS_INSTRUCTION_CREATE_FAILED,
+        )
+        .details(e.to_string())
+        .into_response(),
     }
 }
 
@@ -168,26 +169,26 @@ pub async fn update_instruction(
                     created_at: instruction.created_at,
                     updated_at: instruction.updated_at,
                 }),
-                Ok(None) => error_response(
-                    StatusCode::NOT_FOUND,
-                    "NOT_FOUND",
-                    &format!("Instruction {id} not found"),
-                    None,
-                ),
-                Err(e) => error_response(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "DB_ERROR",
-                    &format!("Failed to retrieve updated instruction: {e}"),
-                    None,
-                ),
+                Ok(None) => ApiError::new(
+                    ApiErrorCode::NotFound,
+                    ids::ERRORS_LLM_ANALYSIS_INSTRUCTION_NOT_FOUND,
+                )
+                .text_arg("id", id.to_string())
+                .into_response(),
+                Err(e) => ApiError::new(
+                    ApiErrorCode::DatabaseError,
+                    ids::ERRORS_LLM_ANALYSIS_INSTRUCTION_UPDATED_RETRIEVE_FAILED,
+                )
+                .details(e.to_string())
+                .into_response(),
             }
         }
-        Err(e) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "DB_ERROR",
-            &format!("Failed to update instruction: {e}"),
-            None,
-        ),
+        Err(e) => ApiError::new(
+            ApiErrorCode::DatabaseError,
+            ids::ERRORS_LLM_ANALYSIS_INSTRUCTION_UPDATE_FAILED,
+        )
+        .details(e.to_string())
+        .into_response(),
     }
 }
 
@@ -203,12 +204,12 @@ pub async fn delete_instruction(
                 "message": "Instruction deleted successfully"
             }))
         }
-        Err(e) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "DB_ERROR",
-            &format!("Failed to delete instruction: {e}"),
-            None,
-        ),
+        Err(e) => ApiError::new(
+            ApiErrorCode::DatabaseError,
+            ids::ERRORS_LLM_ANALYSIS_INSTRUCTION_DELETE_FAILED,
+        )
+        .details(e.to_string())
+        .into_response(),
     }
 }
 
@@ -227,12 +228,12 @@ pub async fn reorder_instructions(
                 "message": "Instructions reordered successfully"
             }))
         }
-        Err(e) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "DB_ERROR",
-            &format!("Failed to reorder instructions: {e}"),
-            None,
-        ),
+        Err(e) => ApiError::new(
+            ApiErrorCode::DatabaseError,
+            ids::ERRORS_LLM_ANALYSIS_INSTRUCTIONS_REORDER_FAILED,
+        )
+        .details(e.to_string())
+        .into_response(),
     }
 }
 
@@ -327,12 +328,12 @@ pub async fn list_history(
                 per_page,
             })
         }
-        Err(e) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "DB_ERROR",
-            &format!("Failed to list decision history: {e}"),
-            None,
-        ),
+        Err(e) => ApiError::new(
+            ApiErrorCode::DatabaseError,
+            ids::ERRORS_LLM_ANALYSIS_DECISIONS_LIST_FAILED,
+        )
+        .details(e.to_string())
+        .into_response(),
     }
 }
 
@@ -357,17 +358,17 @@ pub async fn get_history_detail(
             cached: d.cached,
             created_at: d.created_at,
         }),
-        Ok(None) => error_response(
-            StatusCode::NOT_FOUND,
-            "NOT_FOUND",
-            &format!("Decision {id} not found"),
-            None,
-        ),
-        Err(e) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "DB_ERROR",
-            &format!("Failed to get decision: {e}"),
-            None,
-        ),
+        Ok(None) => ApiError::new(
+            ApiErrorCode::NotFound,
+            ids::ERRORS_LLM_ANALYSIS_DECISION_NOT_FOUND,
+        )
+        .text_arg("id", id.to_string())
+        .into_response(),
+        Err(e) => ApiError::new(
+            ApiErrorCode::DatabaseError,
+            ids::ERRORS_LLM_ANALYSIS_DECISION_GET_FAILED,
+        )
+        .details(e.to_string())
+        .into_response(),
     }
 }

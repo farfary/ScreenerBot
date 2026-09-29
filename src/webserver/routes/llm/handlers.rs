@@ -2,7 +2,6 @@
 
 use axum::{
     extract::{Path, State},
-    http::StatusCode,
     response::Response,
     Json,
 };
@@ -10,10 +9,14 @@ use std::sync::Arc;
 
 use crate::apis::llm::{try_get_llm_manager, ChatMessage, ChatRequest, Provider};
 use crate::config::{update_config_section, with_config, Config};
+use crate::i18n::ids;
 use crate::logger::{self, LogTag};
+use crate::webserver::api_error::{ApiError, ApiErrorCode};
 use crate::webserver::state::AppState;
-use crate::webserver::utils::{error_response, success_response};
+use crate::webserver::utils::success_response;
+use axum::response::IntoResponse as _;
 
+use super::provider_error::provider_failure;
 use super::types::*;
 
 /// GET /api/llm/providers - List all providers with status
@@ -94,12 +97,12 @@ pub async fn update_config(
                 "message": "LLM configuration updated successfully"
             }))
         }
-        Err(e) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "CONFIG_UPDATE_FAILED",
-            &format!("Failed to update LLM config: {e}"),
-            None,
-        ),
+        Err(e) => ApiError::new(
+            ApiErrorCode::ConfigError,
+            ids::ERRORS_LLM_CONFIG_UPDATE_FAILED,
+        )
+        .details(e.to_string())
+        .into_response(),
     }
 }
 
@@ -127,12 +130,9 @@ pub async fn test_provider(
     let provider = match Provider::from_str(&provider_name) {
         Some(p) => p,
         None => {
-            return error_response(
-                StatusCode::BAD_REQUEST,
-                "INVALID_PROVIDER",
-                &format!("Unknown provider: {provider_name}"),
-                None,
-            );
+            return ApiError::new(ApiErrorCode::InvalidInput, ids::ERRORS_LLM_PROVIDER_UNKNOWN)
+                .text_arg("provider", provider_name.clone())
+                .into_response();
         }
     };
 
@@ -140,12 +140,8 @@ pub async fn test_provider(
     let llm_manager = match try_get_llm_manager() {
         Some(m) => m,
         None => {
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "LLM_NOT_INITIALIZED",
-                "LLM manager not initialized",
-                None,
-            );
+            return ApiError::new(ApiErrorCode::Internal, ids::ERRORS_LLM_MANAGER_UNAVAILABLE)
+                .into_response();
         }
     };
 
@@ -153,12 +149,12 @@ pub async fn test_provider(
     let client = match llm_manager.get_client(provider) {
         Some(c) => c,
         None => {
-            return error_response(
-                StatusCode::BAD_REQUEST,
-                "PROVIDER_DISABLED",
-                &format!("Provider '{provider_name}' is not configured or disabled"),
-                None,
-            );
+            return ApiError::new(
+                ApiErrorCode::InvalidInput,
+                ids::ERRORS_LLM_PROVIDER_DISABLED,
+            )
+            .text_arg("provider", provider_name.clone())
+            .into_response();
         }
     };
 
@@ -244,12 +240,7 @@ pub async fn test_provider(
                 &format!("LLM provider '{provider_name}' test failed: {e}"),
             );
 
-            error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "PROVIDER_TEST_FAILED",
-                &format!("Provider test failed: {e}"),
-                None,
-            )
+            provider_failure(ids::ERRORS_LLM_PROVIDER_TEST_FAILED, &e).into_response()
         }
     }
 }
@@ -264,12 +255,9 @@ pub async fn update_provider(
     let provider = match Provider::from_str(&provider_name) {
         Some(p) => p,
         None => {
-            return error_response(
-                StatusCode::BAD_REQUEST,
-                "INVALID_PROVIDER",
-                &format!("Unknown provider: {provider_name}"),
-                None,
-            );
+            return ApiError::new(ApiErrorCode::InvalidInput, ids::ERRORS_LLM_PROVIDER_UNKNOWN)
+                .text_arg("provider", provider_name.clone())
+                .into_response();
         }
     };
 
@@ -431,12 +419,12 @@ pub async fn update_provider(
                 "updated": true
             }))
         }
-        Err(e) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "CONFIG_UPDATE_FAILED",
-            &format!("Failed to update provider config: {e}"),
-            None,
-        ),
+        Err(e) => ApiError::new(
+            ApiErrorCode::ConfigError,
+            ids::ERRORS_LLM_PROVIDER_CONFIG_UPDATE_FAILED,
+        )
+        .details(e.to_string())
+        .into_response(),
     }
 }
 

@@ -13,7 +13,10 @@ use std::sync::Arc;
 use crate::webserver::state::AppState;
 
 mod handlers;
+mod provider_error;
 pub mod types;
+
+pub(crate) use provider_error::{analysis_failure, assistant_failure, provider_failure};
 
 use handlers::{get_config, list_providers, test_provider, update_config, update_provider};
 

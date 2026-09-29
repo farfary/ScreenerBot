@@ -1,9 +1,12 @@
 //! Assistant scheduled-automation handlers (`/api/assistant/automation`).
 
-use axum::{extract::Path, http::StatusCode, response::Response, Json};
+use axum::{extract::Path, response::Response, Json};
 
+use crate::i18n::ids;
 use crate::logger::{self, LogTag};
-use crate::webserver::utils::{error_response, success_response};
+use crate::webserver::api_error::{ApiError, ApiErrorCode};
+use crate::webserver::utils::success_response;
+use axum::response::IntoResponse as _;
 
 use super::types::*;
 
@@ -19,23 +22,22 @@ pub async fn list_automation_tasks() -> Response {
     let pool = match crate::assistant::chat::database::get_chat_pool() {
         Some(p) => p,
         None => {
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "DB_ERROR",
-                "Database not initialized",
-                None,
+            return ApiError::new(
+                ApiErrorCode::DatabaseError,
+                ids::ERRORS_AUTOMATION_DATABASE_UNAVAILABLE,
             )
+            .into_response()
         }
     };
 
     match crate::assistant::scheduled::database::list_tasks(&pool) {
         Ok(tasks) => success_response(serde_json::json!({ "tasks": tasks })),
-        Err(e) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "DB_ERROR",
-            &format!("Failed to list tasks: {e}"),
-            None,
-        ),
+        Err(e) => ApiError::new(
+            ApiErrorCode::DatabaseError,
+            ids::ERRORS_AUTOMATION_TASKS_LIST_FAILED,
+        )
+        .details(e.to_string())
+        .into_response(),
     }
 }
 
@@ -44,43 +46,39 @@ pub async fn create_automation_task(Json(req): Json<CreateAutomationTaskRequest>
     let pool = match crate::assistant::chat::database::get_chat_pool() {
         Some(p) => p,
         None => {
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "DB_ERROR",
-                "Database not initialized",
-                None,
+            return ApiError::new(
+                ApiErrorCode::DatabaseError,
+                ids::ERRORS_AUTOMATION_DATABASE_UNAVAILABLE,
             )
+            .into_response()
         }
     };
 
     // Validate name is not empty
     if req.name.trim().is_empty() {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "INVALID_NAME",
-            "Task name cannot be empty",
-            None,
-        );
+        return ApiError::new(
+            ApiErrorCode::InvalidInput,
+            ids::ERRORS_AUTOMATION_NAME_EMPTY,
+        )
+        .into_response();
     }
 
     // Validate instruction is not empty
     if req.instruction.trim().is_empty() {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "INVALID_INSTRUCTION",
-            "Task instruction cannot be empty",
-            None,
-        );
+        return ApiError::new(
+            ApiErrorCode::InvalidInput,
+            ids::ERRORS_AUTOMATION_INSTRUCTION_EMPTY,
+        )
+        .into_response();
     }
 
     // Validate schedule type
     if !["interval", "daily", "weekly"].contains(&req.schedule_type.as_str()) {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "INVALID_SCHEDULE_TYPE",
-            "Invalid schedule_type. Must be: interval, daily, or weekly",
-            None,
-        );
+        return ApiError::new(
+            ApiErrorCode::InvalidInput,
+            ids::ERRORS_AUTOMATION_SCHEDULE_TYPE_INVALID,
+        )
+        .into_response();
     }
 
     // Validate schedule value
@@ -89,12 +87,12 @@ pub async fn create_automation_task(Json(req): Json<CreateAutomationTaskRequest>
         &req.schedule_value,
         None,
     ) {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "INVALID_SCHEDULE",
-            &format!("Invalid schedule_value: {e}"),
-            None,
-        );
+        return ApiError::new(
+            ApiErrorCode::InvalidInput,
+            ids::ERRORS_AUTOMATION_SCHEDULE_VALUE_INVALID,
+        )
+        .details(e.to_string())
+        .into_response();
     }
 
     match crate::assistant::scheduled::database::create_task(
@@ -135,12 +133,12 @@ pub async fn create_automation_task(Json(req): Json<CreateAutomationTaskRequest>
                 _ => success_response(serde_json::json!({ "id": id })),
             }
         }
-        Err(e) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "DB_ERROR",
-            &format!("Failed to create task: {e}"),
-            None,
-        ),
+        Err(e) => ApiError::new(
+            ApiErrorCode::DatabaseError,
+            ids::ERRORS_AUTOMATION_TASK_CREATE_FAILED,
+        )
+        .details(e.to_string())
+        .into_response(),
     }
 }
 
@@ -149,24 +147,27 @@ pub async fn get_automation_task(Path(id): Path<i64>) -> Response {
     let pool = match crate::assistant::chat::database::get_chat_pool() {
         Some(p) => p,
         None => {
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "DB_ERROR",
-                "Database not initialized",
-                None,
+            return ApiError::new(
+                ApiErrorCode::DatabaseError,
+                ids::ERRORS_AUTOMATION_DATABASE_UNAVAILABLE,
             )
+            .into_response()
         }
     };
 
     match crate::assistant::scheduled::database::get_task(&pool, id) {
         Ok(Some(task)) => success_response(serde_json::json!({ "task": task })),
-        Ok(None) => error_response(StatusCode::NOT_FOUND, "NOT_FOUND", "Task not found", None),
-        Err(e) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "DB_ERROR",
-            &format!("Failed to get task: {e}"),
-            None,
-        ),
+        Ok(None) => ApiError::new(
+            ApiErrorCode::NotFound,
+            ids::ERRORS_AUTOMATION_TASK_NOT_FOUND,
+        )
+        .into_response(),
+        Err(e) => ApiError::new(
+            ApiErrorCode::DatabaseError,
+            ids::ERRORS_AUTOMATION_TASK_GET_FAILED,
+        )
+        .details(e.to_string())
+        .into_response(),
     }
 }
 
@@ -178,48 +179,45 @@ pub async fn update_automation_task(
     let pool = match crate::assistant::chat::database::get_chat_pool() {
         Some(p) => p,
         None => {
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "DB_ERROR",
-                "Database not initialized",
-                None,
+            return ApiError::new(
+                ApiErrorCode::DatabaseError,
+                ids::ERRORS_AUTOMATION_DATABASE_UNAVAILABLE,
             )
+            .into_response()
         }
     };
 
     // Validate schedule if provided
     if let (Some(st), Some(sv)) = (&req.schedule_type, &req.schedule_value) {
         if let Err(e) = crate::assistant::scheduled::database::calculate_next_run(st, sv, None) {
-            return error_response(
-                StatusCode::BAD_REQUEST,
-                "INVALID_SCHEDULE",
-                &format!("Invalid schedule: {e}"),
-                None,
-            );
+            return ApiError::new(
+                ApiErrorCode::InvalidInput,
+                ids::ERRORS_AUTOMATION_SCHEDULE_INVALID,
+            )
+            .details(e.to_string())
+            .into_response();
         }
     }
 
     // Validate tool_permissions if provided
     if let Some(tp) = &req.tool_permissions {
         if !["full", "readonly"].contains(&tp.as_str()) {
-            return error_response(
-                StatusCode::BAD_REQUEST,
-                "INVALID_TOOL_PERMISSIONS",
-                "tool_permissions must be 'full' or 'readonly'",
-                None,
-            );
+            return ApiError::new(
+                ApiErrorCode::InvalidInput,
+                ids::ERRORS_AUTOMATION_TOOL_PERMISSIONS_INVALID,
+            )
+            .into_response();
         }
     }
 
     // Validate priority if provided
     if let Some(p) = &req.priority {
         if !["low", "medium", "high"].contains(&p.as_str()) {
-            return error_response(
-                StatusCode::BAD_REQUEST,
-                "INVALID_PRIORITY",
-                "priority must be 'low', 'medium', or 'high'",
-                None,
-            );
+            return ApiError::new(
+                ApiErrorCode::InvalidInput,
+                ids::ERRORS_AUTOMATION_PRIORITY_INVALID,
+            )
+            .into_response();
         }
     }
 
@@ -243,12 +241,12 @@ pub async fn update_automation_task(
             Ok(Some(task)) => success_response(serde_json::json!({ "task": task })),
             _ => success_response(serde_json::json!({ "updated": true })),
         },
-        Err(e) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "DB_ERROR",
-            &format!("Failed to update task: {e}"),
-            None,
-        ),
+        Err(e) => ApiError::new(
+            ApiErrorCode::DatabaseError,
+            ids::ERRORS_AUTOMATION_TASK_UPDATE_FAILED,
+        )
+        .details(e.to_string())
+        .into_response(),
     }
 }
 
@@ -257,36 +255,34 @@ pub async fn delete_automation_task(Path(id): Path<i64>) -> Response {
     let pool = match crate::assistant::chat::database::get_chat_pool() {
         Some(p) => p,
         None => {
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "DB_ERROR",
-                "Database not initialized",
-                None,
+            return ApiError::new(
+                ApiErrorCode::DatabaseError,
+                ids::ERRORS_AUTOMATION_DATABASE_UNAVAILABLE,
             )
+            .into_response()
         }
     };
 
     // Check if task has a running execution
     match crate::assistant::scheduled::database::list_runs_for_task(&pool, id, 1) {
         Ok(runs) if !runs.is_empty() && runs[0].status == "running" => {
-            return error_response(
-                StatusCode::CONFLICT,
-                "TASK_RUNNING",
-                "Cannot delete task while it is running",
-                None,
-            );
+            return ApiError::new(
+                ApiErrorCode::Conflict,
+                ids::ERRORS_AUTOMATION_TASK_RUNNING_DELETE,
+            )
+            .into_response();
         }
         _ => {}
     }
 
     match crate::assistant::scheduled::database::delete_task(&pool, id) {
         Ok(_) => success_response(serde_json::json!({ "deleted": true })),
-        Err(e) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "DB_ERROR",
-            &format!("Failed to delete task: {e}"),
-            None,
-        ),
+        Err(e) => ApiError::new(
+            ApiErrorCode::DatabaseError,
+            ids::ERRORS_AUTOMATION_TASK_DELETE_FAILED,
+        )
+        .details(e.to_string())
+        .into_response(),
     }
 }
 
@@ -298,12 +294,11 @@ pub async fn toggle_automation_task(
     let pool = match crate::assistant::chat::database::get_chat_pool() {
         Some(p) => p,
         None => {
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "DB_ERROR",
-                "Database not initialized",
-                None,
+            return ApiError::new(
+                ApiErrorCode::DatabaseError,
+                ids::ERRORS_AUTOMATION_DATABASE_UNAVAILABLE,
             )
+            .into_response()
         }
     };
 
@@ -312,12 +307,12 @@ pub async fn toggle_automation_task(
             Ok(Some(task)) => success_response(serde_json::json!({ "task": task })),
             _ => success_response(serde_json::json!({ "toggled": true })),
         },
-        Err(e) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "DB_ERROR",
-            &format!("Failed to toggle task: {e}"),
-            None,
-        ),
+        Err(e) => ApiError::new(
+            ApiErrorCode::DatabaseError,
+            ids::ERRORS_AUTOMATION_TASK_TOGGLE_FAILED,
+        )
+        .details(e.to_string())
+        .into_response(),
     }
 }
 
@@ -326,49 +321,50 @@ pub async fn run_automation_task(Path(id): Path<i64>) -> Response {
     let pool = match crate::assistant::chat::database::get_chat_pool() {
         Some(p) => p,
         None => {
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "DB_ERROR",
-                "Database not initialized",
-                None,
+            return ApiError::new(
+                ApiErrorCode::DatabaseError,
+                ids::ERRORS_AUTOMATION_DATABASE_UNAVAILABLE,
             )
+            .into_response()
         }
     };
 
     let task = match crate::assistant::scheduled::database::get_task(&pool, id) {
         Ok(Some(t)) => t,
         Ok(None) => {
-            return error_response(StatusCode::NOT_FOUND, "NOT_FOUND", "Task not found", None)
+            return ApiError::new(
+                ApiErrorCode::NotFound,
+                ids::ERRORS_AUTOMATION_TASK_NOT_FOUND,
+            )
+            .into_response()
         }
         Err(e) => {
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "DB_ERROR",
-                &format!("Failed to get task: {e}"),
-                None,
+            return ApiError::new(
+                ApiErrorCode::DatabaseError,
+                ids::ERRORS_AUTOMATION_TASK_GET_FAILED,
             )
+            .details(e.to_string())
+            .into_response()
         }
     };
 
     // Don't allow running disabled tasks
     if !task.enabled {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "TASK_DISABLED",
-            "Cannot run a disabled task",
-            None,
-        );
+        return ApiError::new(
+            ApiErrorCode::InvalidInput,
+            ids::ERRORS_AUTOMATION_TASK_DISABLED,
+        )
+        .into_response();
     }
 
     // Check if task is already running
     match crate::assistant::scheduled::database::list_runs_for_task(&pool, id, 1) {
         Ok(runs) if !runs.is_empty() && runs[0].status == "running" => {
-            return error_response(
-                StatusCode::CONFLICT,
-                "TASK_RUNNING",
-                "Task is already running",
-                None,
-            );
+            return ApiError::new(
+                ApiErrorCode::Conflict,
+                ids::ERRORS_AUTOMATION_TASK_ALREADY_RUNNING,
+            )
+            .into_response();
         }
         _ => {}
     }
@@ -417,23 +413,22 @@ pub async fn get_automation_task_runs(Path(id): Path<i64>) -> Response {
     let pool = match crate::assistant::chat::database::get_chat_pool() {
         Some(p) => p,
         None => {
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "DB_ERROR",
-                "Database not initialized",
-                None,
+            return ApiError::new(
+                ApiErrorCode::DatabaseError,
+                ids::ERRORS_AUTOMATION_DATABASE_UNAVAILABLE,
             )
+            .into_response()
         }
     };
 
     match crate::assistant::scheduled::database::list_runs_for_task(&pool, id, 50) {
         Ok(runs) => success_response(serde_json::json!({ "runs": runs })),
-        Err(e) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "DB_ERROR",
-            &format!("Failed to list runs: {e}"),
-            None,
-        ),
+        Err(e) => ApiError::new(
+            ApiErrorCode::DatabaseError,
+            ids::ERRORS_AUTOMATION_RUNS_LIST_FAILED,
+        )
+        .details(e.to_string())
+        .into_response(),
     }
 }
 
@@ -449,23 +444,22 @@ pub async fn get_automation_recent_runs() -> Response {
     let pool = match crate::assistant::chat::database::get_chat_pool() {
         Some(p) => p,
         None => {
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "DB_ERROR",
-                "Database not initialized",
-                None,
+            return ApiError::new(
+                ApiErrorCode::DatabaseError,
+                ids::ERRORS_AUTOMATION_DATABASE_UNAVAILABLE,
             )
+            .into_response()
         }
     };
 
     match crate::assistant::scheduled::database::list_recent_runs(&pool, 100) {
         Ok(runs) => success_response(serde_json::json!({ "runs": runs })),
-        Err(e) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "DB_ERROR",
-            &format!("Failed to list recent runs: {e}"),
-            None,
-        ),
+        Err(e) => ApiError::new(
+            ApiErrorCode::DatabaseError,
+            ids::ERRORS_AUTOMATION_RECENT_RUNS_FAILED,
+        )
+        .details(e.to_string())
+        .into_response(),
     }
 }
 
@@ -474,24 +468,24 @@ pub async fn get_automation_run_detail(Path(run_id): Path<i64>) -> Response {
     let pool = match crate::assistant::chat::database::get_chat_pool() {
         Some(p) => p,
         None => {
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "DB_ERROR",
-                "Database not initialized",
-                None,
+            return ApiError::new(
+                ApiErrorCode::DatabaseError,
+                ids::ERRORS_AUTOMATION_DATABASE_UNAVAILABLE,
             )
+            .into_response()
         }
     };
 
     match crate::assistant::scheduled::database::get_run(&pool, run_id) {
         Ok(Some(run)) => success_response(serde_json::json!({ "run": run })),
-        Ok(None) => error_response(StatusCode::NOT_FOUND, "NOT_FOUND", "Run not found", None),
-        Err(e) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "DB_ERROR",
-            &format!("Failed to get run: {e}"),
-            None,
-        ),
+        Ok(None) => ApiError::new(ApiErrorCode::NotFound, ids::ERRORS_AUTOMATION_RUN_NOT_FOUND)
+            .into_response(),
+        Err(e) => ApiError::new(
+            ApiErrorCode::DatabaseError,
+            ids::ERRORS_AUTOMATION_RUN_GET_FAILED,
+        )
+        .details(e.to_string())
+        .into_response(),
     }
 }
 
@@ -507,22 +501,21 @@ pub async fn get_automation_stats_handler() -> Response {
     let pool = match crate::assistant::chat::database::get_chat_pool() {
         Some(p) => p,
         None => {
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "DB_ERROR",
-                "Database not initialized",
-                None,
+            return ApiError::new(
+                ApiErrorCode::DatabaseError,
+                ids::ERRORS_AUTOMATION_DATABASE_UNAVAILABLE,
             )
+            .into_response()
         }
     };
 
     match crate::assistant::scheduled::database::get_automation_stats(&pool) {
         Ok(stats) => success_response(serde_json::json!({ "stats": stats })),
-        Err(e) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "DB_ERROR",
-            &format!("Failed to get stats: {e}"),
-            None,
-        ),
+        Err(e) => ApiError::new(
+            ApiErrorCode::DatabaseError,
+            ids::ERRORS_AUTOMATION_STATS_FAILED,
+        )
+        .details(e.to_string())
+        .into_response(),
     }
 }
