@@ -20,6 +20,9 @@ pub struct CatalogPayload<'a> {
     /// BCP 47 tag for `Intl` APIs, forcing Latin digits.
     pub intl_locale: String,
     pub dir: TextDirection,
+    /// `"accented"` or `"bidi"` for a pseudo-locale; omitted otherwise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pseudo: Option<&'static str>,
     pub source: &'static str,
     /// Least specific first; later catalogs override earlier ones per key.
     pub catalogs: Vec<CatalogEntry>,

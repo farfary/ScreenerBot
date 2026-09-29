@@ -184,3 +184,47 @@ test("runtime survives a missing catalog", () => {
   assert.equal(I18n.text({ id: "hello" }), "hello");
   assert.equal(logs.error.length, 1);
 });
+
+const PSEUDO_FIXTURE = JSON.parse(
+  fs.readFileSync(new URL("./fixtures/i18n_pseudo.json", import.meta.url), "utf8")
+);
+
+function pseudoPayload(kind, ftl) {
+  return {
+    locale: kind === "bidi" ? "ar-XB" : "en-XA",
+    intlLocale: kind === "bidi" ? "ar-XB-u-nu-latn" : "en-XA-u-nu-latn",
+    dir: kind === "bidi" ? "rtl" : "ltr",
+    source: "en",
+    pseudo: kind,
+    catalogs: [{ locale: "en", ftl }],
+  };
+}
+
+// The empty input cannot be written as a Fluent message value; it is covered by
+// the Rust tests, and every other fixture input is valid inline text.
+const FIXTURE_CASES = PSEUDO_FIXTURE.map((c, i) => ({ ...c, id: `case-${i}` })).filter(
+  (c) => c.input !== ""
+);
+const FIXTURE_FTL = FIXTURE_CASES.map((c) => `${c.id} = ${c.input}`).join("\n") + "\n";
+
+for (const kind of ["accented", "bidi"]) {
+  test(`pseudo ${kind} runtime matches the shared fixture`, () => {
+    const { I18n, logs } = load(pseudoPayload(kind, FIXTURE_FTL));
+    assert.equal(I18n.pseudo, kind);
+    for (const c of FIXTURE_CASES) {
+      assert.equal(I18n.t(c.id), c[kind], c.input);
+    }
+    assert.deepEqual(logs.error, []);
+  });
+
+  test(`pseudo ${kind} leaves placeables untransformed`, () => {
+    const { I18n } = load(pseudoPayload(kind, "who = Hi { $name }!\n"));
+    // "Hi " and "!" are text elements; the variable value is passed through as is.
+    const prefix = kind === "bidi" ? "\u202EHı\u202C " : "Ħīī ";
+    assert.equal(I18n.t("who", { name: "Word" }), `${prefix}\u2068Word\u2069!`);
+  });
+}
+
+test("pseudo is null for a real locale", () => {
+  assert.equal(load(payload).I18n.pseudo, null);
+});

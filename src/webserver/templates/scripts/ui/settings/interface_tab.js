@@ -215,6 +215,11 @@ async function populateLanguageOptions(select, current) {
     if (!response.ok) throw new Error(response.statusText);
     const { locales } = await response.json();
     const options = [{ code: "system", name: I18n.t("common-language-system") }, ...locales];
+    // A configured value that is not offered (a developer pseudo-locale) stays
+    // visible, labelled by its code, instead of displaying as "System".
+    if (current && !options.some((o) => o.code === current)) {
+      options.push({ code: current, name: current });
+    }
     select.replaceChildren(
       ...options.map(({ code, name }) => {
         const option = document.createElement("option");

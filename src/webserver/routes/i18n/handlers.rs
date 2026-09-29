@@ -28,8 +28,8 @@ pub async fn get_locales(headers: HeaderMap) -> Response {
 /// Classic script that installs the dashboard catalogs for one locale as
 /// `window.__SCREENERBOT_L10N__`, in fallback order from least to most specific.
 pub async fn get_catalog_script(Path(locale): Path<String>) -> Response {
-    let langid =
-        i18n::locale_info(&locale).and_then(|_| locale.parse::<i18n::LanguageIdentifier>().ok());
+    let langid = i18n::display_locale_info(&locale)
+        .and_then(|_| locale.parse::<i18n::LanguageIdentifier>().ok());
     let Some(langid) = langid else {
         return error_response(
             axum::http::StatusCode::NOT_FOUND,
@@ -42,6 +42,7 @@ pub async fn get_catalog_script(Path(locale): Path<String>) -> Response {
         locale: &locale,
         intl_locale: format!("{locale}-u-nu-latn"),
         dir: i18n::text_direction(&langid),
+        pseudo: i18n::PseudoLocale::from_code(&locale).map(|p| p.kind()),
         source: i18n::source_locale(),
         catalogs: i18n::dashboard_catalog_chain(&langid)
             .into_iter()
@@ -112,5 +113,40 @@ mod tests {
     async fn unregistered_locale_is_not_found() {
         let (status, _, _) = body_of(get_catalog_script(Path("xx".to_string())).await).await;
         assert_eq!(status, StatusCode::NOT_FOUND);
+    }
+
+    async fn catalog_json(locale: &str) -> serde_json::Value {
+        let (status, _, body) = body_of(get_catalog_script(Path(locale.to_string())).await).await;
+        assert_eq!(status, StatusCode::OK);
+        let json = body
+            .strip_prefix("window.__SCREENERBOT_L10N__ = ")
+            .and_then(|rest| rest.strip_suffix(';'))
+            .expect("assignment wrapper");
+        serde_json::from_str(json).expect("json")
+    }
+
+    #[tokio::test]
+    async fn pseudo_bidi_catalog_is_source_only_and_rtl() {
+        let value = catalog_json("ar-XB").await;
+        assert_eq!(value["locale"], "ar-XB");
+        assert_eq!(value["intlLocale"], "ar-XB-u-nu-latn");
+        assert_eq!(value["dir"], "rtl");
+        assert_eq!(value["pseudo"], "bidi");
+        assert_eq!(value["source"], "en");
+        assert_eq!(value["catalogs"].as_array().expect("catalogs").len(), 1);
+        assert_eq!(value["catalogs"][0]["locale"], "en");
+    }
+
+    #[tokio::test]
+    async fn pseudo_accented_catalog_is_ltr() {
+        let value = catalog_json("en-XA").await;
+        assert_eq!(value["dir"], "ltr");
+        assert_eq!(value["pseudo"], "accented");
+    }
+
+    #[tokio::test]
+    async fn real_locale_catalog_has_no_pseudo_field() {
+        let value = catalog_json("en").await;
+        assert!(value.get("pseudo").is_none());
     }
 }

@@ -8,6 +8,7 @@
 mod html;
 mod localizer;
 mod negotiate;
+mod pseudo;
 mod registry;
 mod text;
 
@@ -15,6 +16,8 @@ mod text;
 mod tests;
 #[cfg(test)]
 mod tests_html;
+#[cfg(test)]
+mod tests_pseudo;
 
 use serde::{Serialize, Serializer};
 use std::fmt;
@@ -24,8 +27,10 @@ pub use localizer::{
     dashboard_catalog, dashboard_catalog_chain, format, format_en, format_message, LocalizedMessage,
 };
 pub use negotiate::{resolve_locale, resolve_request_locale, SYSTEM_SETTING};
+pub use pseudo::{transform_accented, transform_bidi, PseudoLocale, PSEUDO_LOCALES};
 pub use registry::{
-    available_locales, locale_info, source_locale, text_direction, LocaleInfo, TextDirection,
+    available_locales, display_locale_info, locale_info, source_locale, text_direction, LocaleInfo,
+    TextDirection,
 };
 pub use text::{UiArg, UiText};
 pub use unic_langid::LanguageIdentifier;

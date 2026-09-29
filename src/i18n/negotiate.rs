@@ -1,5 +1,6 @@
 //! Locale resolution from the stored setting, the request and the operating system.
 
+use super::pseudo::PseudoLocale;
 use super::registry::{available_langids, source_locale};
 use crate::logger::{self, LogTag};
 use axum::http::{header::ACCEPT_LANGUAGE, HeaderMap};
@@ -31,10 +32,17 @@ fn source_langid() -> LanguageIdentifier {
 
 /// Resolve the display locale.
 ///
-/// Order: an explicit `setting` that matches a registered locale, then the
+/// Order: an explicit `setting` equal to a pseudo-locale code, an explicit
+/// `setting` that matches a registered locale, then the
 /// `Accept-Language` header, then the operating-system locales, then the source
 /// locale. An unrecognized setting is reported and treated as `"system"`.
 pub fn resolve_locale(setting: &str, accept_language: Option<&str>) -> LanguageIdentifier {
+    if let Some(pseudo) = PseudoLocale::from_code(setting) {
+        if let Ok(id) = pseudo.code().parse() {
+            return id;
+        }
+    }
+
     if setting != SYSTEM_SETTING {
         let explicit = setting
             .parse::<LanguageIdentifier>()

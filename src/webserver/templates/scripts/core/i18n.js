@@ -22,11 +22,60 @@
     "label",
   ];
 
+  // Pseudo-locale transforms. Mirror of src/i18n/pseudo.rs; both are pinned by
+  // tools/tests/fixtures/i18n_pseudo.json. Each table holds 26 scalars (A-Z, a-z).
+  const ACCENT_UPPER = "ȦƁƇḒḖƑƓĦĪĴĶĿḾȠǾƤɊŘŞŦŬṼẆẊẎẐ";
+  const ACCENT_LOWER = "ȧƀƈḓḗƒɠħīĵķŀḿƞǿƥɋřşŧŭṽẇẋẏẑ";
+  const BIDI_UPPER = "∀ԐↃᗡƎℲ⅁HIſӼ⅂WNOԀÒᴚS⊥∩ɅMX⅄Z";
+  const BIDI_LOWER = "ɐqɔpǝɟƃɥıɾʞʅɯuodbɹsʇnʌʍxʎz";
+  const RLO = "\u202E";
+  const PDF = "\u202C";
+  const ACCENT_TABLES = [Array.from(ACCENT_UPPER), Array.from(ACCENT_LOWER)];
+  const BIDI_TABLES = [Array.from(BIDI_UPPER), Array.from(BIDI_LOWER)];
+
+  function mapLetter(ch, tables) {
+    const code = ch.charCodeAt(0);
+    return code < 97 ? tables[0][code - 65] : tables[1][code - 97];
+  }
+
+  function isAsciiLetter(ch) {
+    return (ch >= "A" && ch <= "Z") || (ch >= "a" && ch <= "z");
+  }
+
+  function transformAccented(text) {
+    let out = "";
+    for (const ch of text) {
+      if (!isAsciiLetter(ch)) {
+        out += ch;
+        continue;
+      }
+      const mapped = mapLetter(ch, ACCENT_TABLES);
+      out += "aeiouAEIOU".includes(ch) ? mapped + mapped : mapped;
+    }
+    return out;
+  }
+
+  function transformBidi(text) {
+    let out = "";
+    let inWord = false;
+    for (const ch of text) {
+      const letter = isAsciiLetter(ch);
+      if (letter && !inWord) out += RLO;
+      else if (!letter && inWord) out += PDF;
+      inWord = letter;
+      out += letter ? mapLetter(ch, BIDI_TABLES) : ch;
+    }
+    return inWord ? out + PDF : out;
+  }
+
+  const PSEUDO_TRANSFORMS = { accented: transformAccented, bidi: transformBidi };
+
   const data = window.__SCREENERBOT_L10N__ || null;
   const locale = (data && data.locale) || "en";
   const intlLocale = (data && data.intlLocale) || "en-u-nu-latn";
   const source = (data && data.source) || "en";
   const dir = (data && data.dir) || "ltr";
+  const pseudo = (data && data.pseudo) || null;
 
   const warned = new Set();
   function warnOnce(key, message) {
@@ -40,7 +89,9 @@
       console.error("[I18n] Catalog runtime is unavailable; messages resolve to their ids");
       return null;
     }
-    const bundle = new FluentBundle.FluentBundle([intlLocale], { useIsolating: true });
+    const options = { useIsolating: true };
+    if (pseudo && PSEUDO_TRANSFORMS[pseudo]) options.transform = PSEUDO_TRANSFORMS[pseudo];
+    const bundle = new FluentBundle.FluentBundle([intlLocale], options);
     for (const catalog of data.catalogs) {
       const errors = bundle.addResource(new FluentBundle.FluentResource(catalog.ftl), {
         allowOverrides: true,
@@ -127,6 +178,7 @@
     intlLocale,
     dir,
     source,
+    pseudo,
 
     /** Formatted message value, or the id when the catalog has no value for it. */
     t(id, args) {

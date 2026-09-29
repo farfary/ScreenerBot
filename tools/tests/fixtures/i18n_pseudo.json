@@ -1,0 +1,42 @@
+[
+  {
+    "input": "Save changes",
+    "accented": "Şȧȧṽḗḗ ƈħȧȧƞɠḗḗş",
+    "bidi": "\u202eSɐʌǝ\u202c \u202eɔɥɐuƃǝs\u202c"
+  },
+  {
+    "input": "Hello, World",
+    "accented": "Ħḗḗŀŀǿǿ, Ẇǿǿřŀḓ",
+    "bidi": "\u202eHǝʅʅo\u202c, \u202eMoɹʅp\u202c"
+  },
+  {
+    "input": "SOL",
+    "accented": "ŞǾǾĿ",
+    "bidi": "\u202eSO⅂\u202c"
+  },
+  {
+    "input": "3 tokens",
+    "accented": "3 ŧǿǿķḗḗƞş",
+    "bidi": "3 \u202eʇoʞǝus\u202c"
+  },
+  {
+    "input": "",
+    "accented": "",
+    "bidi": ""
+  },
+  {
+    "input": "42 / 7%",
+    "accented": "42 / 7%",
+    "bidi": "42 / 7%"
+  },
+  {
+    "input": "Ünïcode stays",
+    "accented": "Üƞïƈǿǿḓḗḗ şŧȧȧẏş",
+    "bidi": "Ü\u202eu\u202cï\u202eɔopǝ\u202c \u202esʇɐʎs\u202c"
+  },
+  {
+    "input": "a-b c_d",
+    "accented": "ȧȧ-ƀ ƈ_ḓ",
+    "bidi": "\u202eɐ\u202c-\u202eq\u202c \u202eɔ\u202c_\u202ep\u202c"
+  }
+]

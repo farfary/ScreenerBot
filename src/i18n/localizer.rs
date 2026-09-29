@@ -1,5 +1,6 @@
 //! Fluent bundles built from the embedded catalogs, with per-key fallback.
 
+use super::pseudo::PseudoLocale;
 use super::{registry, CatalogFile, CATALOGS, SERVER_ONLY_DOMAINS};
 use crate::logger::{self, LogTag};
 use fluent_bundle::concurrent::FluentBundle;
@@ -16,10 +17,21 @@ fn locale_files(locale: &str) -> impl Iterator<Item = &'static CatalogFile> + '_
     CATALOGS.iter().filter(move |file| file.locale == locale)
 }
 
+/// Build a bundle for `code`. A pseudo-locale uses the source catalogs with its
+/// text transform, which Fluent applies to text elements only.
 fn build_bundle(code: &str) -> Option<Bundle> {
     let langid: LanguageIdentifier = code.parse().ok()?;
+    let pseudo = PseudoLocale::from_code(code);
+    let catalog_locale = if pseudo.is_some() {
+        registry::source_locale()
+    } else {
+        code
+    };
     let mut bundle = FluentBundle::new_concurrent(vec![langid]);
-    for file in locale_files(code) {
+    if let Some(pseudo) = pseudo {
+        bundle.set_transform(Some(pseudo.transform()));
+    }
+    for file in locale_files(catalog_locale) {
         let resource = match FluentResource::try_new(file.source.to_string()) {
             Ok(resource) => resource,
             Err((resource, errors)) => {
@@ -46,8 +58,22 @@ fn build_bundle(code: &str) -> Option<Bundle> {
     Some(bundle)
 }
 
-/// Bundle for a registered locale, built on first use.
+/// Bundle for a registered or pseudo locale, built on first use.
 fn bundle_for(code: &str) -> Option<&'static Bundle> {
+    static PSEUDO_BUNDLES: OnceLock<HashMap<&'static str, OnceLock<Option<Bundle>>>> =
+        OnceLock::new();
+    if let Some(pseudo) = PseudoLocale::from_code(code) {
+        return PSEUDO_BUNDLES
+            .get_or_init(|| {
+                super::PSEUDO_LOCALES
+                    .iter()
+                    .map(|p| (p.code(), OnceLock::new()))
+                    .collect()
+            })
+            .get(pseudo.code())?
+            .get_or_init(|| build_bundle(code))
+            .as_ref();
+    }
     static BUNDLES: OnceLock<HashMap<&'static str, OnceLock<Option<Bundle>>>> = OnceLock::new();
     let bundles = BUNDLES.get_or_init(|| {
         registry::available_locales()
@@ -63,6 +89,11 @@ fn bundle_for(code: &str) -> Option<&'static Bundle> {
 
 /// Lookup order for one key: the locale, its language-only form, then the source locale.
 fn fallback_chain(locale: &LanguageIdentifier) -> Vec<String> {
+    // A pseudo bundle already holds every source message, transformed; the
+    // language-only form must not resolve to the untransformed source.
+    if PseudoLocale::from_code(&locale.to_string()).is_some() {
+        return vec![locale.to_string(), registry::source_locale().to_string()];
+    }
     let mut chain = vec![locale.to_string()];
     let language_only =
         LanguageIdentifier::from_parts(locale.language, None, None, &[]).to_string();
@@ -132,8 +163,9 @@ pub fn format(locale: &LanguageIdentifier, id: &str, args: Option<&FluentArgs>) 
         .unwrap_or_else(|| id.to_string())
 }
 
-/// Registered locales in the fallback chain of `locale`, least specific first
-/// (source locale, language-only form, then the locale itself).
+/// Locales with dashboard catalogs in the fallback chain of `locale`, least
+/// specific first (source locale, language-only form, then the locale itself).
+/// A pseudo-locale contributes no catalog of its own, so it resolves to the source only.
 fn catalog_order(locale: &LanguageIdentifier) -> Vec<String> {
     let mut chain = fallback_chain(locale);
     chain.retain(|code| registry::locale_info(code).is_some());

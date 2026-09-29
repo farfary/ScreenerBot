@@ -1,5 +1,6 @@
 //! Locale registry parsed from the embedded `locales/registry.toml`.
 
+use super::pseudo::PseudoLocale;
 use crate::logger::{self, LogTag};
 use serde::{Deserialize, Serialize};
 use std::sync::OnceLock;
@@ -95,9 +96,17 @@ pub fn locale_info(code: &str) -> Option<&'static LocaleInfo> {
     registry().locales.iter().find(|l| l.code == code)
 }
 
-/// Text direction of a resolved locale; left-to-right when the locale is not registered.
+/// Locale metadata for rendering: registered locales and the pseudo-locales.
+/// Use `locale_info` to offer locales; this is for locales already in effect.
+pub fn display_locale_info(code: &str) -> Option<LocaleInfo> {
+    locale_info(code)
+        .cloned()
+        .or_else(|| PseudoLocale::from_code(code).map(|p| p.info()))
+}
+
+/// Text direction of a resolved locale; left-to-right when the locale is unknown.
 pub fn text_direction(locale: &LanguageIdentifier) -> TextDirection {
-    locale_info(&locale.to_string()).map_or(TextDirection::Ltr, |info| info.dir)
+    display_locale_info(&locale.to_string()).map_or(TextDirection::Ltr, |info| info.dir)
 }
 
 /// Code of the locale that catalogs are authored in.
