@@ -26,6 +26,7 @@ pub mod events;
 pub mod features;
 pub mod filtering;
 pub mod global;
+pub mod i18n;
 pub mod llm_analysis;
 pub mod logger;
 pub mod mcp;

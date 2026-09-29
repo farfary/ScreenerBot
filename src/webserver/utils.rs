@@ -3,7 +3,7 @@
 //! Helper functions for common webserver operations
 
 use axum::{
-    http::StatusCode,
+    http::{header, StatusCode},
     response::{IntoResponse, Response},
     Json,
 };
@@ -61,4 +61,18 @@ pub fn format_duration(seconds: u64) -> String {
     } else {
         format!("{secs}s")
     }
+}
+
+/// Build a 200 response that browsers must not cache. Embedded assets change
+/// with every binary, so a stale cached copy is never valid.
+pub fn no_store_response(content_type: &'static str, body: String) -> Response {
+    (
+        StatusCode::OK,
+        [
+            (header::CONTENT_TYPE, content_type),
+            (header::CACHE_CONTROL, "no-store, no-cache, must-revalidate"),
+        ],
+        body,
+    )
+        .into_response()
 }

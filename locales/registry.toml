@@ -1,0 +1,6 @@
+source = "en"
+
+[[locale]]
+code = "en"
+name = "English"
+dir = "ltr"

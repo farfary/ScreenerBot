@@ -13,9 +13,14 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use screenerbot::filtering;
+use screenerbot::i18n::{self, LanguageIdentifier};
 use screenerbot::webserver::routes;
 use screenerbot::webserver::state::AppState;
 use screenerbot::webserver::templates;
+
+fn locale() -> LanguageIdentifier {
+    i18n::resolve_locale("en", None)
+}
 
 /// A first-paint fetch may not wait for work measured in seconds. The frontend's own
 /// request timeout is 10s and the dashboard's poll is 5s, so anything approaching a second
@@ -81,13 +86,14 @@ async fn filtering_counts_never_block_the_first_paint() {
 async fn the_dashboard_shell_stays_cheap_to_render_and_send() {
     // Warm any lazily-initialised template state so the measurement is of the steady-state
     // render rather than one-time setup.
-    let _ = templates::base_template("ScreenerBot", "home", &templates::home_content());
+    let _ = templates::base_template("ScreenerBot", "home", &templates::home_content(), &locale());
 
     const RENDERS: u32 = 20;
     let started = Instant::now();
     let mut bytes = 0usize;
     for _ in 0..RENDERS {
-        let html = templates::base_template("ScreenerBot", "home", &templates::home_content());
+        let html =
+            templates::base_template("ScreenerBot", "home", &templates::home_content(), &locale());
         bytes = html.len();
     }
     let per_render = started.elapsed() / RENDERS;
@@ -125,7 +131,8 @@ async fn the_dashboard_shell_stays_cheap_to_render_and_send() {
 /// empty for a frame.
 #[tokio::test]
 async fn the_first_paint_html_carries_its_own_skeleton_and_styles() {
-    let html = templates::base_template("ScreenerBot", "home", &templates::home_content());
+    let html =
+        templates::base_template("ScreenerBot", "home", &templates::home_content(), &locale());
 
     // Assert on the shell's ROOT container and its skeleton flag, not on an inner card
     // class: the home page has been redesigned before, and a card name that no longer

@@ -37,6 +37,14 @@ config_struct! {
         })]
         chat_id: String = String::new(),
 
+        /// Message language: "app" follows the dashboard language, otherwise a registered locale code
+        #[metadata(field_metadata! {
+            label: "Language",
+            hint: "Language of Telegram messages. \"app\" follows the dashboard language; otherwise use a registered locale code.",
+            category: "Connection",
+        })]
+        language: String = "app".to_owned(),
+
         // === Authentication Section ===
         /// Session timeout in minutes (auto-logout after inactivity)
         #[metadata(field_metadata! {

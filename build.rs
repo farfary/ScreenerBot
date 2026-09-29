@@ -2,7 +2,11 @@
 //!
 //! Generates build-time environment variables for cache busting.
 //! Watches all template files so the asset version timestamp changes
-//! whenever any HTML/CSS/JS template is modified.
+//! whenever any HTML/CSS/JS template is modified. Validates the localization
+//! catalogs and generates their embedded form (see `build/i18n.rs`).
+
+#[path = "build/i18n.rs"]
+mod i18n;
 
 fn main() {
     // Per-build asset version for cache busting of embedded HTML/CSS/JS
@@ -16,6 +20,15 @@ fn main() {
     // cargo:rerun-if-changed on a directory only watches the listing (add/remove),
     // not content changes inside files. We must list each file individually.
     watch_dir_recursive("src/webserver/templates");
+
+    // A broken locale catalog must fail the build.
+    watch_dir_recursive("locales");
+    let manifest_dir = std::path::PathBuf::from(
+        std::env::var_os("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR is set by cargo"),
+    );
+    let out_dir =
+        std::path::PathBuf::from(std::env::var_os("OUT_DIR").expect("OUT_DIR is set by cargo"));
+    i18n::generate(&manifest_dir, &out_dir);
 }
 
 fn watch_dir_recursive(dir: &str) {

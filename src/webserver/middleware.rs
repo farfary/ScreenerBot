@@ -31,7 +31,7 @@ pub const SECURITY_TOKEN_HEADER: &str = "X-ScreenerBot-Token";
 ///
 /// Allowed without token (required for initial page load):
 /// - Root path (/) - returns HTML with embedded token
-/// - Static assets (/assets/*, /scripts/*, /styles/*)
+/// - Static assets (/assets/*, /scripts/*, /styles/*, /i18n/*)
 /// - Page HTML (/api/pages/*)
 /// - SSE streams (/api/*/stream) - EventSource API doesn't support custom headers
 /// - /oauth/callback - the system browser returns here after a ScreenerBot
@@ -172,6 +172,7 @@ fn is_security_token_exempt_path(path: &str) -> bool {
         || path.starts_with("/assets/")
         || path.starts_with("/scripts/")
         || path.starts_with("/styles/")
+        || path.starts_with("/i18n/")
         || path.starts_with("/api/pages/")
         || path == "/oauth/callback"
         || (path.starts_with("/api/") && path.ends_with("/stream"))
@@ -287,6 +288,7 @@ pub async fn cache_control(request: Request, next: Next) -> Response {
         && (path.starts_with("/scripts/")
             || path.starts_with("/styles/")
             || path.starts_with("/assets/")
+            || path.starts_with("/i18n/")
             || path.starts_with("/fonts/"))
     {
         headers.insert(
@@ -298,6 +300,7 @@ pub async fn cache_control(request: Request, next: Next) -> Response {
     else if path.starts_with("/scripts/")
         || path.starts_with("/styles/")
         || path.starts_with("/assets/")
+        || path.starts_with("/i18n/")
         || path.starts_with("/fonts/")
     {
         headers.insert(
@@ -358,6 +361,7 @@ pub async fn auth_gate(request: Request, next: Next) -> Response {
         || path.starts_with("/api/auth/")
         || path.starts_with("/scripts/")
         || path.starts_with("/styles/")
+        || path.starts_with("/i18n/")
         || path.starts_with("/assets/")
         // The external-agent bridge does not carry a dashboard session; every
         // handler authenticates a mandatory pairing bearer credential instead,
@@ -447,6 +451,7 @@ mod tests {
             "/assets/logo.png",
             "/scripts/app.js",
             "/styles/app.css",
+            "/i18n/en/dashboard.ftl",
             "/api/pages/dashboard",
             "/api/tokens/stream",
             "/oauth/callback",

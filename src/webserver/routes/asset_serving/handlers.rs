@@ -1,4 +1,4 @@
-use crate::webserver::{embeds, templates};
+use crate::webserver::{embeds, templates, utils::no_store_response};
 use axum::{
     extract::Path,
     http::{header as http_header, StatusCode},
@@ -32,37 +32,14 @@ fn version_js_imports(js: &str) -> String {
 /// it is always fresh — this is why CSS changes appeared but JS changes did not). Send
 /// `no-store` so every load fetches the current embedded script.
 fn serve_js(content: &str) -> Response {
-    let versioned = version_js_imports(content);
-    (
-        StatusCode::OK,
-        [
-            (
-                http_header::CONTENT_TYPE,
-                "application/javascript; charset=utf-8",
-            ),
-            (
-                http_header::CACHE_CONTROL,
-                "no-store, no-cache, must-revalidate",
-            ),
-        ],
-        versioned,
+    no_store_response(
+        "application/javascript; charset=utf-8",
+        version_js_imports(content),
     )
-        .into_response()
 }
 
 fn serve_css(content: String) -> Response {
-    (
-        StatusCode::OK,
-        [
-            (http_header::CONTENT_TYPE, "text/css; charset=utf-8"),
-            (
-                http_header::CACHE_CONTROL,
-                "no-store, no-cache, must-revalidate",
-            ),
-        ],
-        content,
-    )
-        .into_response()
+    no_store_response("text/css; charset=utf-8", content)
 }
 
 /// Serve the isolated stylesheet bundle for one routable dashboard page.

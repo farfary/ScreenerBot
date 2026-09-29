@@ -98,6 +98,12 @@ rusqlite = { version = "0.37", features = ["bundled", "unlock_notify"] }
 r2d2 = "0.8"
 r2d2_sqlite = "0.31"
 
+# Localization
+fluent-bundle = "0.16"
+fluent-langneg = "0.13"
+sys-locale = "0.3"
+unic-langid = "0.9"
+
 # Crypto / encoding
 bs58 = "0.5"
 base64 = "0.23"
@@ -214,7 +220,10 @@ openssl = { version = "0.10", features = ["vendored"] }
 tikv-jemallocator = { version = "0.7", optional = true }
 
 [build-dependencies]
-# No build dependencies needed
+# Locale catalog validation and id generation (build/i18n.rs)
+fluent-syntax = "0.12"
+serde = { version = "1.0", features = ["derive"] }
+toml = "1.1"
 
 # Features — keep placeholders but no dependencies by default
 [features]

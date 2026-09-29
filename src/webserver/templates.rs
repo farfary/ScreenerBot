@@ -3,6 +3,7 @@
 //! This module provides functions to render HTML pages by combining templates with dynamic data.
 //! All embedded assets (HTML, CSS, JS) are imported from the `embeds` module.
 
+use crate::i18n::{text_direction, LanguageIdentifier};
 use crate::version;
 
 // Import all embedded assets from the embeds module
@@ -88,7 +89,12 @@ pub fn page_styles(page: &str) -> Option<String> {
 }
 
 /// Render the base layout with shared chrome and inject the requested content.
-pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
+pub fn base_template(
+    title: &str,
+    active_tab: &str,
+    content: &str,
+    locale: &LanguageIdentifier,
+) -> String {
     use crate::global;
 
     let asset_version = option_env!("ASSET_VERSION_TS")
@@ -96,6 +102,8 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         .unwrap_or_else(|| version::get_version().to_string());
 
     let mut html = BASE_TEMPLATE.replace("{{TITLE}}", title);
+    html = html.replace("{{LANG}}", &locale.to_string());
+    html = html.replace("{{DIR}}", text_direction(locale).as_str());
     html = html.replace("{{NAV_TABS}}", &nav_tabs(active_tab));
     html = html.replace("{{CONTENT}}", content);
 
@@ -384,7 +392,7 @@ pub fn login_content() -> String {
 }
 
 /// Render the login page template (minimal template without navigation)
-pub fn login_template(title: &str, content: &str) -> String {
+pub fn login_template(title: &str, content: &str, locale: &LanguageIdentifier) -> String {
     use crate::version;
 
     let asset_version = option_env!("ASSET_VERSION_TS")
@@ -404,7 +412,7 @@ pub fn login_template(title: &str, content: &str) -> String {
 
     format!(
         r#"<!DOCTYPE html>
-<html lang="en">
+<html lang="{}" dir="{}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -417,7 +425,13 @@ pub fn login_template(title: &str, content: &str) -> String {
     <script type="module" src="/scripts/pages/login.js?v={}"></script>
 </body>
 </html>"#,
-        title, combined_styles, content, asset_version, asset_version
+        locale,
+        text_direction(locale).as_str(),
+        title,
+        combined_styles,
+        content,
+        asset_version,
+        asset_version
     )
 }
 

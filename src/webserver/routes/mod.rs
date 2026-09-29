@@ -1,6 +1,6 @@
 //! Web API route registration, static asset serving, and top-level request handlers.
 use crate::webserver::{state::AppState, templates};
-use axum::{extract::Path as AxumPath, response::Html, routing::get, Router};
+use axum::{extract::Path as AxumPath, http::HeaderMap, response::Html, routing::get, Router};
 use std::sync::Arc;
 
 pub mod account;
@@ -21,6 +21,7 @@ pub mod featured;
 pub mod features;
 pub mod filtering;
 pub mod header;
+pub mod i18n;
 pub mod initialization;
 pub mod llm;
 pub mod llm_analysis;
@@ -68,6 +69,10 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/scripts/promo/{file}", get(get_promo_script))
         .route("/scripts/pages/{*file}", get(get_page_script))
         .route("/scripts/ui/{*file}", get(get_ui_script))
+        .route(
+            "/i18n/{locale}/dashboard.ftl",
+            get(i18n::handlers::get_dashboard_catalog),
+        )
         .route("/styles/pages/{page}", get(get_page_styles))
         .route("/assets/{file}", get(get_asset))
         .route("/assets/fonts/{file}", get(get_font))
@@ -78,101 +83,155 @@ pub fn create_router(state: Arc<AppState>) -> Router {
 }
 
 /// Home page handler
-async fn home_page() -> Html<String> {
+async fn home_page(headers: HeaderMap) -> Html<String> {
     let content = templates::home_content();
-    Html(templates::base_template("Home", "home", &content))
+    let locale = crate::i18n::resolve_request_locale(&headers);
+    Html(templates::base_template("Home", "home", &content, &locale))
 }
 
 /// Tokens page handler
-async fn tokens_page() -> Html<String> {
+async fn tokens_page(headers: HeaderMap) -> Html<String> {
     let content = templates::tokens_content();
-    Html(templates::base_template("Tokens", "tokens", &content))
+    let locale = crate::i18n::resolve_request_locale(&headers);
+    Html(templates::base_template(
+        "Tokens", "tokens", &content, &locale,
+    ))
 }
 
 /// Positions page handler
-async fn positions_page() -> Html<String> {
+async fn positions_page(headers: HeaderMap) -> Html<String> {
     let content = templates::positions_content();
-    Html(templates::base_template("Positions", "positions", &content))
+    let locale = crate::i18n::resolve_request_locale(&headers);
+    Html(templates::base_template(
+        "Positions",
+        "positions",
+        &content,
+        &locale,
+    ))
 }
 
 /// Events page handler
-async fn events_page() -> Html<String> {
+async fn events_page(headers: HeaderMap) -> Html<String> {
     let content = templates::events_content();
-    Html(templates::base_template("Events", "events", &content))
+    let locale = crate::i18n::resolve_request_locale(&headers);
+    Html(templates::base_template(
+        "Events", "events", &content, &locale,
+    ))
 }
 
 /// Copy Trading page handler
-async fn copy_page() -> Html<String> {
+async fn copy_page(headers: HeaderMap) -> Html<String> {
     let content = templates::copy_content();
-    Html(templates::base_template("Copy Trading", "copy", &content))
+    let locale = crate::i18n::resolve_request_locale(&headers);
+    Html(templates::base_template(
+        "Copy Trading",
+        "copy",
+        &content,
+        &locale,
+    ))
 }
 
 /// Services page handler
-async fn services_page() -> Html<String> {
+async fn services_page(headers: HeaderMap) -> Html<String> {
     let content = templates::services_content();
-    Html(templates::base_template("Services", "services", &content))
+    let locale = crate::i18n::resolve_request_locale(&headers);
+    Html(templates::base_template(
+        "Services", "services", &content, &locale,
+    ))
 }
 
 /// Transactions page handler
-async fn transactions_page() -> Html<String> {
+async fn transactions_page(headers: HeaderMap) -> Html<String> {
     let content = templates::transactions_content();
+    let locale = crate::i18n::resolve_request_locale(&headers);
     Html(templates::base_template(
         "Transactions",
         "transactions",
         &content,
+        &locale,
     ))
 }
 
 /// Filtering page handler
-async fn filtering_page() -> Html<String> {
+async fn filtering_page(headers: HeaderMap) -> Html<String> {
     let content = templates::filtering_content();
-    Html(templates::base_template("Filtering", "filtering", &content))
+    let locale = crate::i18n::resolve_request_locale(&headers);
+    Html(templates::base_template(
+        "Filtering",
+        "filtering",
+        &content,
+        &locale,
+    ))
 }
 
 /// Config page handler
-async fn config_page() -> Html<String> {
+async fn config_page(headers: HeaderMap) -> Html<String> {
     let content = templates::config_content();
-    Html(templates::base_template("Config", "config", &content))
+    let locale = crate::i18n::resolve_request_locale(&headers);
+    Html(templates::base_template(
+        "Config", "config", &content, &locale,
+    ))
 }
 
 /// Auto Trader page handler
-async fn trader_page() -> Html<String> {
+async fn trader_page(headers: HeaderMap) -> Html<String> {
     let content = templates::trader_content();
-    Html(templates::base_template("Auto Trader", "trader", &content))
+    let locale = crate::i18n::resolve_request_locale(&headers);
+    Html(templates::base_template(
+        "Auto Trader",
+        "trader",
+        &content,
+        &locale,
+    ))
 }
 
 /// Wallets page handler
-async fn wallets_page() -> Html<String> {
+async fn wallets_page(headers: HeaderMap) -> Html<String> {
     let content = templates::wallets_content();
-    Html(templates::base_template("Wallets", "wallets", &content))
+    let locale = crate::i18n::resolve_request_locale(&headers);
+    Html(templates::base_template(
+        "Wallets", "wallets", &content, &locale,
+    ))
 }
 
 /// Tools page handler
-async fn tools_page() -> Html<String> {
+async fn tools_page(headers: HeaderMap) -> Html<String> {
     let content = templates::tools_content();
-    Html(templates::base_template("Tools", "tools", &content))
+    let locale = crate::i18n::resolve_request_locale(&headers);
+    Html(templates::base_template(
+        "Tools", "tools", &content, &locale,
+    ))
 }
 
 /// Assistant page handler
-async fn assistant_page() -> Html<String> {
+async fn assistant_page(headers: HeaderMap) -> Html<String> {
     let content = templates::assistant_content();
-    Html(templates::base_template("Assistant", "assistant", &content))
+    let locale = crate::i18n::resolve_request_locale(&headers);
+    Html(templates::base_template(
+        "Assistant",
+        "assistant",
+        &content,
+        &locale,
+    ))
 }
 
 /// Initialization page handler
-async fn initialization_page() -> Html<String> {
+async fn initialization_page(headers: HeaderMap) -> Html<String> {
     let content = templates::initialization_content();
+    let locale = crate::i18n::resolve_request_locale(&headers);
     Html(templates::base_template(
         "Initialization",
         "initialization",
         &content,
+        &locale,
     ))
 }
 
 /// Login page handler
-async fn login_page() -> Html<String> {
+async fn login_page(headers: HeaderMap) -> Html<String> {
     let content = templates::login_content();
-    Html(templates::login_template("Login", &content))
+    let locale = crate::i18n::resolve_request_locale(&headers);
+    Html(templates::login_template("Login", &content, &locale))
 }
 
 /// Register all API route groups under `/api`.
@@ -192,6 +251,7 @@ fn api_routes() -> Router<Arc<AppState>> {
         .merge(actions::routes())
         .merge(header::routes())
         .merge(ui_state::routes())
+        .merge(i18n::routes())
         .merge(boosts::routes())
         .merge(token_profiles::routes())
         .merge(featured::routes())

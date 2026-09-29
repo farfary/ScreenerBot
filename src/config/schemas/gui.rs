@@ -62,6 +62,9 @@ config_struct! {
         /// Theme preference (dark, light, system)
         theme: String = "dark".to_owned(),
 
+        /// Display language: "system" or a registered locale code (see locales/registry.toml)
+        language: String = "system".to_owned(),
+
         /// Token logo shape ("circle" or "rounded-square")
         token_logo_shape: String = "circle".to_owned(),
 
