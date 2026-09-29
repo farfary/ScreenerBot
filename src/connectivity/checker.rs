@@ -176,13 +176,15 @@ impl ConnectivityChecker {
                         LogTag::Connectivity,
                         &format!(
                             "{} endpoint degraded (latency={}ms): {}",
-                            name, latency_ms, reason
+                            name,
+                            latency_ms,
+                            reason.render_source_plain()
                         ),
                     );
 
                     tokio::spawn({
                         let name = name.to_string();
-                        let reason = reason.clone();
+                        let reason = reason.render_source_plain();
                         let latency = *latency_ms;
                         let from_state = previous_kind.to_string();
                         async move {
@@ -220,7 +222,10 @@ impl ConnectivityChecker {
                         LogTag::Connectivity,
                         &format!(
                             "{} endpoint unhealthy (failures={}, criticality={:?}): {}",
-                            name, consecutive_failures, criticality, reason
+                            name,
+                            consecutive_failures,
+                            criticality,
+                            reason.render_source_plain()
                         ),
                     );
 
@@ -236,7 +241,7 @@ impl ConnectivityChecker {
 
                     tokio::spawn({
                         let name = name.to_string();
-                        let reason = reason.clone();
+                        let reason = reason.render_source_plain();
                         let failures = *consecutive_failures;
                         let from_state = previous_kind.to_string();
                         let crit = criticality;

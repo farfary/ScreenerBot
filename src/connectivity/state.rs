@@ -1,6 +1,6 @@
 //! Connectivity state management — tracks and aggregates endpoint health across services.
 
-use super::types::{EndpointCriticality, EndpointHealth, FallbackStrategy};
+use super::types::{EndpointCriticality, EndpointHealth, FallbackStrategy, ProbeFailure};
 use chrono::Utc;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -105,7 +105,7 @@ impl ConnectivityState {
         name: &'static str,
         healthy: bool,
         latency_ms: u64,
-        error: Option<String>,
+        error: Option<ProbeFailure>,
         failure_threshold: u32,
         recovery_threshold: u32,
     ) {
@@ -167,7 +167,7 @@ impl ConnectivityState {
                 self.health.insert(
                     name,
                     EndpointHealth::Unhealthy {
-                        reason: error.unwrap_or_else(|| "Unknown error".to_owned()),
+                        reason: error.unwrap_or(ProbeFailure::Unknown),
                         last_check: now,
                         last_success,
                         consecutive_failures: *failures,
@@ -313,7 +313,7 @@ pub async fn update_health(
     name: &'static str,
     healthy: bool,
     latency_ms: u64,
-    error: Option<String>,
+    error: Option<ProbeFailure>,
     failure_threshold: u32,
     recovery_threshold: u32,
 ) {

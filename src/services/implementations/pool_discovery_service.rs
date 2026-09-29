@@ -1,6 +1,7 @@
 //! Pool discovery service — discovers new liquidity pools from on-chain transactions.
 
 use crate::errors::ServiceError;
+use crate::i18n::{ids, UiArg, UiText};
 use crate::logger::{self, LogTag};
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use async_trait::async_trait;
@@ -77,7 +78,10 @@ impl Service for PoolDiscoveryService {
         if crate::chains::solana::pools::service::get_pool_discovery().is_some() {
             ServiceHealth::Healthy
         } else {
-            ServiceHealth::Unhealthy("PoolDiscovery component not available".to_owned())
+            ServiceHealth::Unhealthy(
+                UiText::new(ids::SERVICES_HEALTH_COMPONENT_UNAVAILABLE)
+                    .arg("component", UiArg::Text("PoolDiscovery".to_owned())),
+            )
         }
     }
 

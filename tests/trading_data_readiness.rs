@@ -854,7 +854,7 @@ async fn a_strategy_reads_the_timeframe_it_was_saved_with_not_whatever_is_popula
 // initialise config (the loss-limit check reads it) and to serialise with each other.
 
 use screenerbot::connectivity::state as connectivity_state;
-use screenerbot::connectivity::types::EndpointCriticality;
+use screenerbot::connectivity::types::{EndpointCriticality, ProbeFailure};
 use screenerbot::trader::admission::{check_entry_admission, EntryBlock};
 
 const ENTRY_ENDPOINTS: [&str; 3] = ["rpc", "dexscreener", "rugcheck"];
@@ -870,7 +870,7 @@ async fn mark_unhealthy(name: &'static str) {
     connectivity_state::ensure_endpoint_registered(name, EndpointCriticality::Important, None)
         .await;
     // failure_threshold = 1: one bad check is enough to report unhealthy.
-    connectivity_state::update_health(name, false, 1, Some("test".to_owned()), 1, 1).await;
+    connectivity_state::update_health(name, false, 1, Some(ProbeFailure::Unknown), 1, 1).await;
 }
 
 #[tokio::test]

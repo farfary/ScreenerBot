@@ -4,6 +4,7 @@
 //! automation. Business logic lives in `crate::assistant::scheduled::worker`.
 
 use crate::config::with_config;
+use crate::i18n::{ids, UiText};
 use crate::logger::{self, LogTag};
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use async_trait::async_trait;
@@ -78,7 +79,9 @@ impl Service for AssistantScheduledTasksService {
         if !crate::global::is_initialization_complete()
             || !with_config(|cfg| cfg.llm.enabled && cfg.assistant.scheduled_tasks_enabled)
         {
-            return ServiceHealth::Degraded("Disabled in config".to_owned());
+            return ServiceHealth::Degraded(UiText::new(
+                ids::SERVICES_HEALTH_ASSISTANT_TASKS_DISABLED,
+            ));
         }
         ServiceHealth::Healthy
     }

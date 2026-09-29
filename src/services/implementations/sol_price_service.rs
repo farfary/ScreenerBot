@@ -1,5 +1,6 @@
 //! SOL price service — tracks real-time SOL/USD price for portfolio valuation.
 
+use crate::i18n::{ids, UiArg, UiText};
 use crate::services::{Service, ServiceHealth};
 use async_trait::async_trait;
 use std::sync::Arc;
@@ -56,7 +57,9 @@ impl Service for SolPriceService {
     async fn health(&self) -> ServiceHealth {
         // Check if service is running
         if !crate::sol_price::is_sol_price_service_running() {
-            return ServiceHealth::Unhealthy("SOL price service is not running".to_owned());
+            return ServiceHealth::Unhealthy(UiText::new(
+                ids::SERVICES_HEALTH_SOL_PRICE_NOT_RUNNING,
+            ));
         }
 
         // Check if we have valid cached price data
@@ -65,13 +68,13 @@ impl Service for SolPriceService {
                 if info.is_fresh() {
                     ServiceHealth::Healthy
                 } else {
-                    ServiceHealth::Degraded(format!(
-                        "SOL price data is stale ({}s old)",
-                        info.age_seconds()
-                    ))
+                    ServiceHealth::Degraded(
+                        UiText::new(ids::SERVICES_HEALTH_SOL_PRICE_STALE)
+                            .arg("seconds", UiArg::Text(info.age_seconds().to_string())),
+                    )
                 }
             }
-            None => ServiceHealth::Degraded("No SOL price data available yet".to_owned()),
+            None => ServiceHealth::Degraded(UiText::new(ids::SERVICES_HEALTH_SOL_PRICE_NO_DATA)),
         }
     }
 }

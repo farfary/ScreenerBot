@@ -4,6 +4,7 @@ use crate::config::get_config_clone;
 use crate::connectivity::checker::ConnectivityChecker;
 use crate::connectivity::state;
 use crate::events::{record_connectivity_event, Severity};
+use crate::i18n::{ids, UiArg, UiText};
 use crate::logger::{self, LogTag};
 use crate::services::{Service, ServiceHealth};
 use async_trait::async_trait;
@@ -172,7 +173,10 @@ impl Service for ConnectivityService {
             ServiceHealth::Healthy
         } else {
             let unhealthy = state::get_unhealthy_critical_endpoints().await;
-            ServiceHealth::Unhealthy(format!("Critical endpoints unhealthy: {:?}", unhealthy))
+            ServiceHealth::Unhealthy(
+                UiText::new(ids::SERVICES_HEALTH_CONNECTIVITY_CRITICAL_UNHEALTHY)
+                    .arg("endpoints", UiArg::Text(format!("{:?}", unhealthy))),
+            )
         }
     }
 }

@@ -1,5 +1,6 @@
 //! Assistant chat data types — request/response structs and tool-call types.
 
+use crate::i18n::UiText;
 use serde::{Deserialize, Serialize};
 
 /// Chat request from user
@@ -39,11 +40,23 @@ pub struct ChatResponse {
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ChatProgressEvent {
-    Thinking { iteration: usize },
-    ToolStarted { tool_name: String },
-    ToolFinished { tool_call: ToolCallInfo },
-    Complete { response: ChatResponse },
-    Error { message: String },
+    Thinking {
+        iteration: usize,
+    },
+    ToolStarted {
+        tool_name: String,
+    },
+    ToolFinished {
+        tool_call: ToolCallInfo,
+    },
+    Complete {
+        response: ChatResponse,
+    },
+    /// A failed turn: catalog text for the viewer plus the technical detail.
+    Error {
+        text: UiText,
+        details: String,
+    },
 }
 
 /// Information about a tool call

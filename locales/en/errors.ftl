@@ -159,6 +159,7 @@ errors-chat-session-not-found = Chat session { $id } not found
 errors-chat-session-validate-failed = Failed to validate session
 errors-chat-engine-unavailable = Chat engine not initialized
 errors-chat-process-failed = Failed to process chat message
+errors-chat-stream-serialize-failed = Failed to serialize chat event
 errors-chat-sessions-list-failed = Failed to list chat sessions
 errors-chat-session-create-failed = Failed to create chat session
 errors-chat-session-get-failed = Failed to get chat session

@@ -1,6 +1,7 @@
 //! Pool fetcher service — fetches and updates pool account data via RPC.
 
 use crate::errors::ServiceError;
+use crate::i18n::{ids, UiArg, UiText};
 use crate::logger::{self, LogTag};
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use async_trait::async_trait;
@@ -80,7 +81,10 @@ impl Service for PoolFetcherService {
         if crate::chains::solana::pools::service::get_account_fetcher().is_some() {
             ServiceHealth::Healthy
         } else {
-            ServiceHealth::Unhealthy("AccountFetcher component not available".to_owned())
+            ServiceHealth::Unhealthy(
+                UiText::new(ids::SERVICES_HEALTH_COMPONENT_UNAVAILABLE)
+                    .arg("component", UiArg::Text("AccountFetcher".to_owned())),
+            )
         }
     }
 

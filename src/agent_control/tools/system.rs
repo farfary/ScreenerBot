@@ -7,7 +7,17 @@ use serde_json::json;
 use super::{Tool, ToolCategory, ToolDefinition, ToolResult};
 use crate::events::{self};
 use crate::global;
-use crate::services;
+use crate::services::{self, ServiceHealth};
+
+/// Health as shown to the agent: the variant name, with the message rendered in the
+/// source locale for the states that carry one.
+fn describe_health(health: &ServiceHealth) -> String {
+    match health {
+        ServiceHealth::Degraded(text) => format!("Degraded({:?})", text.render_source_plain()),
+        ServiceHealth::Unhealthy(text) => format!("Unhealthy({:?})", text.render_source_plain()),
+        other => format!("{other:?}"),
+    }
+}
 
 // ============================================================================
 // GetStatusTool - System status
@@ -87,7 +97,7 @@ impl Tool for GetStatusTool {
                     service_statuses.push(ServiceStatus {
                         name: name.to_string(),
                         status: "Running".to_owned(),
-                        health: format!("{:?}", health),
+                        health: describe_health(&health),
                     });
                 }
             }

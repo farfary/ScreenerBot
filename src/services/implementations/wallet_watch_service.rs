@@ -8,6 +8,7 @@ use std::sync::Arc;
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
 
+use crate::i18n::{ids, UiText};
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
 
 pub struct WalletWatchService;
@@ -57,7 +58,7 @@ impl Service for WalletWatchService {
         if crate::wallets::watch::is_healthy() {
             ServiceHealth::Healthy
         } else {
-            ServiceHealth::Degraded("Detection running on polling alone".to_owned())
+            ServiceHealth::Degraded(UiText::new(ids::SERVICES_HEALTH_WALLET_WATCH_POLLING_ONLY))
         }
     }
 

@@ -1,6 +1,7 @@
 //! Pool calculator service — computes token prices from pool reserves.
 
 use crate::errors::ServiceError;
+use crate::i18n::{ids, UiArg, UiText};
 use crate::logger::{self, LogTag};
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use async_trait::async_trait;
@@ -80,7 +81,10 @@ impl Service for PoolCalculatorService {
         if crate::chains::solana::pools::service::get_price_calculator().is_some() {
             ServiceHealth::Healthy
         } else {
-            ServiceHealth::Unhealthy("PriceCalculator component not available".to_owned())
+            ServiceHealth::Unhealthy(
+                UiText::new(ids::SERVICES_HEALTH_COMPONENT_UNAVAILABLE)
+                    .arg("component", UiArg::Text("PriceCalculator".to_owned())),
+            )
         }
     }
 

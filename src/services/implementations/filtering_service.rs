@@ -12,6 +12,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 
 use crate::filtering;
+use crate::i18n::{ids, UiArg, UiText};
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
 
 pub struct FilteringService {
@@ -97,7 +98,10 @@ impl Service for FilteringService {
 
         match store.snapshot_age().await {
             Some(age) if age <= max_age => ServiceHealth::Healthy,
-            Some(age) => ServiceHealth::Degraded(format!("snapshot_age_secs={}", age.as_secs())),
+            Some(age) => ServiceHealth::Degraded(
+                UiText::new(ids::SERVICES_HEALTH_FILTERING_SNAPSHOT_STALE)
+                    .arg("seconds", UiArg::Text(age.as_secs().to_string())),
+            ),
             None => ServiceHealth::Starting,
         }
     }

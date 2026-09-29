@@ -3,6 +3,7 @@
 //! Periodically checks for application updates from the screenerbot.io API.
 //! Runs in the background and notifies users when updates are available.
 
+use crate::i18n::{ids, UiText};
 use crate::services::{Service, ServiceHealth};
 use async_trait::async_trait;
 use std::sync::Arc;
@@ -50,9 +51,7 @@ impl Service for UpdateCheckService {
     async fn health(&self) -> ServiceHealth {
         let state = crate::version::get_update_state().await;
         if let Some(error) = state.check_error {
-            ServiceHealth::Degraded(
-                error.render_plain(&crate::i18n::source_locale().parse().unwrap_or_default()),
-            )
+            ServiceHealth::Degraded(error)
         } else if state.last_check.is_some() {
             ServiceHealth::Healthy
         } else {

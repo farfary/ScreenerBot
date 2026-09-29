@@ -2,7 +2,9 @@
 
 use crate::config::get_config_clone;
 use crate::connectivity::monitor::EndpointMonitor;
-use crate::connectivity::types::{EndpointCriticality, FallbackStrategy, HealthCheckResult};
+use crate::connectivity::types::{
+    EndpointCriticality, FallbackStrategy, HealthCheckResult, ProbeFailure,
+};
 use async_trait::async_trait;
 use std::time::Instant;
 use tokio::time::Duration;
@@ -49,7 +51,11 @@ impl EndpointMonitor for GeckoTerminalMonitor {
             .build()
         {
             Ok(c) => c,
-            Err(e) => return HealthCheckResult::failure(format!("Failed to create client: {e}")),
+            Err(e) => {
+                return HealthCheckResult::failure(ProbeFailure::ClientSetupFailed {
+                    detail: e.to_string(),
+                })
+            }
         };
 
         // Use networks endpoint as health check (lightweight)
@@ -63,14 +69,20 @@ impl EndpointMonitor for GeckoTerminalMonitor {
                 if response.status().is_success() {
                     HealthCheckResult::success(latency)
                 } else {
-                    HealthCheckResult::failure(format!("HTTP {}", response.status()))
+                    HealthCheckResult::failure(ProbeFailure::HttpStatus {
+                        status: response.status().to_string(),
+                    })
                 }
             }
             Err(e) => {
                 if e.is_timeout() {
-                    HealthCheckResult::failure(format!("Timeout after {timeout_secs}s"))
+                    HealthCheckResult::failure(ProbeFailure::Timeout {
+                        seconds: timeout_secs,
+                    })
                 } else {
-                    HealthCheckResult::failure(format!("Request failed: {e}"))
+                    HealthCheckResult::failure(ProbeFailure::RequestFailed {
+                        detail: e.to_string(),
+                    })
                 }
             }
         }

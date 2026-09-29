@@ -1,5 +1,6 @@
 //! Pools parent service — initializes pool components and runs helper background tasks.
 
+use crate::i18n::{ids, UiText};
 use crate::logger::{self, LogTag};
 use crate::services::{Service, ServiceHealth};
 use async_trait::async_trait;
@@ -94,7 +95,7 @@ impl Service for PoolsService {
         if crate::pools::is_pool_service_running() {
             ServiceHealth::Healthy
         } else {
-            ServiceHealth::Unhealthy("Pool service not running".to_owned())
+            ServiceHealth::Unhealthy(UiText::new(ids::SERVICES_HEALTH_POOLS_NOT_RUNNING))
         }
     }
 }

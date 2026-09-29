@@ -2,7 +2,9 @@
 
 use crate::config::get_config_clone;
 use crate::connectivity::monitor::EndpointMonitor;
-use crate::connectivity::types::{EndpointCriticality, FallbackStrategy, HealthCheckResult};
+use crate::connectivity::types::{
+    EndpointCriticality, FallbackStrategy, HealthCheckResult, ProbeFailure,
+};
 use crate::errors::NetworkError;
 use async_trait::async_trait;
 use futures::future::select_ok;
@@ -160,12 +162,16 @@ impl EndpointMonitor for InternetMonitor {
                 match self.check_http(timeout_secs).await {
                     Ok(latency) => HealthCheckResult::degraded(
                         latency,
-                        format!("DNS check failed but HTTP works: {dns_error}"),
+                        ProbeFailure::InternetDnsFailed {
+                            detail: dns_error.to_string(),
+                        },
                     ),
-                    Err(http_error) => HealthCheckResult::failure(format!(
-                        "DNS and HTTP checks failed. DNS: {}. HTTP: {}",
-                        dns_error, http_error
-                    )),
+                    Err(http_error) => {
+                        HealthCheckResult::failure(ProbeFailure::InternetChecksFailed {
+                            dns: dns_error.to_string(),
+                            http: http_error.to_string(),
+                        })
+                    }
                 }
             }
         }

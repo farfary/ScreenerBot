@@ -205,6 +205,12 @@ impl ApiError {
         }
     }
 
+    /// The message and technical details, for a transport that carries them
+    /// outside the HTTP error envelope.
+    pub fn into_text_and_details(self) -> (UiText, Option<String>) {
+        (self.text, self.details)
+    }
+
     pub fn arg(mut self, name: impl Into<Cow<'static, str>>, value: UiArg) -> Self {
         self.text = self.text.arg(name, value);
         self
@@ -225,13 +231,10 @@ impl ApiError {
 
     /// The JSON envelope sent as the response body.
     pub fn body(&self) -> Value {
-        let source: i18n::LanguageIdentifier = i18n::source_locale()
-            .parse()
-            .unwrap_or_else(|_| i18n::LanguageIdentifier::default());
         json!({
             "error": {
                 "code": self.code.as_str(),
-                "message": self.text.render_plain(&source),
+                "message": self.text.render_source_plain(),
                 "text": self.text,
                 "details": self.details,
                 "timestamp": chrono::Utc::now().to_rfc3339(),

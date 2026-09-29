@@ -1,6 +1,7 @@
 //! Telegram service — manages Telegram bot lifecycle, notifications, and command polling.
 
 use crate::config::with_config;
+use crate::i18n::{ids, UiText};
 use crate::logger::{self, LogTag};
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use crate::telegram::notifier::{self, send_notification};
@@ -213,8 +214,12 @@ impl Service for TelegramService {
         let state = self.state.read().await.clone();
         match state {
             BotState::Connected => ServiceHealth::Healthy,
-            BotState::Discovery => ServiceHealth::Degraded("Discovery mode".to_owned()),
-            BotState::Disconnected => ServiceHealth::Unhealthy("Disconnected".to_owned()),
+            BotState::Discovery => {
+                ServiceHealth::Degraded(UiText::new(ids::SERVICES_HEALTH_TELEGRAM_DISCOVERY))
+            }
+            BotState::Disconnected => {
+                ServiceHealth::Unhealthy(UiText::new(ids::SERVICES_HEALTH_TELEGRAM_DISCONNECTED))
+            }
         }
     }
 

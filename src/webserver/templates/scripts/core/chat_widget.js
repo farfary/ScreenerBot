@@ -1075,7 +1075,14 @@ export class ChatWidget {
           .join("\n");
         if (!data) continue;
         const event = JSON.parse(data);
-        if (event.type === "error") throw new Error(event.message || "Assistant request failed");
+        if (event.type === "error") {
+          throw new Error(
+            apiErrorMessage(
+              { error: { text: event.text, details: event.details } },
+              "Assistant request failed",
+            ),
+          );
+        }
         onEvent?.(event);
         if (event.type === "complete") finalResponse = event.response;
       }

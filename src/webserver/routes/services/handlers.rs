@@ -6,6 +6,7 @@ use axum::{
 use std::sync::Arc;
 
 use crate::{
+    i18n::{ids, UiText},
     logger::{self, LogTag},
     services::ServiceHealth,
     webserver::{state::AppState, utils::success_response},
@@ -77,9 +78,9 @@ pub async fn gather_services_overview_snapshot() -> ServicesOverviewResponse {
                                 health_map
                                     .get(name)
                                     .cloned()
-                                    .unwrap_or(ServiceHealth::Unhealthy(
-                                        "Health status unavailable".to_owned(),
-                                    ));
+                                    .unwrap_or(ServiceHealth::Unhealthy(UiText::new(
+                                        ids::SERVICES_HEALTH_UNAVAILABLE,
+                                    )));
                             let metrics = metrics_map
                                 .get(name)
                                 .cloned()

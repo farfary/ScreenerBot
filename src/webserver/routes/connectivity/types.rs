@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::connectivity::EndpointHealth;
+use crate::i18n::{ids, UiText};
 
 /// Response for connectivity status overview
 #[derive(Debug, Serialize, Deserialize)]
@@ -17,7 +18,7 @@ pub struct ConnectivityStatusResponse {
 pub struct EndpointHealthResponse {
     pub status: String,
     pub latency_ms: Option<u64>,
-    pub message: Option<String>,
+    pub message: Option<UiText>,
     pub last_check: Option<String>,
     pub last_success: Option<String>,
     pub consecutive_failures: Option<u32>,
@@ -44,7 +45,7 @@ impl From<EndpointHealth> for EndpointHealthResponse {
             } => Self {
                 status: "degraded".to_owned(),
                 latency_ms: Some(latency_ms),
-                message: Some(reason),
+                message: Some(reason.ui_text()),
                 last_check: Some(last_check.to_rfc3339()),
                 last_success: Some(last_check.to_rfc3339()),
                 consecutive_failures: None,
@@ -57,7 +58,7 @@ impl From<EndpointHealth> for EndpointHealthResponse {
             } => Self {
                 status: "unhealthy".to_owned(),
                 latency_ms: None,
-                message: Some(reason),
+                message: Some(reason.ui_text()),
                 last_check: Some(last_check.to_rfc3339()),
                 last_success: last_success.map(|t| t.to_rfc3339()),
                 consecutive_failures: Some(consecutive_failures),
@@ -65,7 +66,7 @@ impl From<EndpointHealth> for EndpointHealthResponse {
             EndpointHealth::Unknown => Self {
                 status: "unknown".to_owned(),
                 latency_ms: None,
-                message: Some("Not checked yet".to_owned()),
+                message: Some(UiText::new(ids::CONNECTIVITY_ENDPOINT_NOT_CHECKED)),
                 last_check: None,
                 last_success: None,
                 consecutive_failures: None,

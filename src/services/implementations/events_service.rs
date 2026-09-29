@@ -1,6 +1,7 @@
 //! Events service — manages event ingestion and database lifecycle.
 
 use crate::config;
+use crate::i18n::{ids, UiText};
 use crate::services::{Service, ServiceHealth};
 use async_trait::async_trait;
 use std::sync::Arc;
@@ -93,7 +94,7 @@ impl Service for EventsService {
         if crate::events::EVENTS_DB.get().is_some() {
             ServiceHealth::Healthy
         } else {
-            ServiceHealth::Unhealthy("Events database not initialized".to_owned())
+            ServiceHealth::Unhealthy(UiText::new(ids::SERVICES_HEALTH_EVENTS_DB_UNINITIALIZED))
         }
     }
 }

@@ -3,7 +3,9 @@
 use crate::chains::solana::rpc::get_rpc_client;
 use crate::config::get_config_clone;
 use crate::connectivity::monitor::EndpointMonitor;
-use crate::connectivity::types::{EndpointCriticality, FallbackStrategy, HealthCheckResult};
+use crate::connectivity::types::{
+    EndpointCriticality, FallbackStrategy, HealthCheckResult, ProbeFailure,
+};
 use async_trait::async_trait;
 
 /// RPC endpoint monitor - checks health of all configured RPC providers
@@ -49,7 +51,7 @@ impl EndpointMonitor for RpcMonitor {
         let provider_health = rpc_client.get_provider_health().await;
 
         if provider_health.is_empty() {
-            return HealthCheckResult::failure("No RPC providers configured".to_owned());
+            return HealthCheckResult::failure(ProbeFailure::NoRpcProviders);
         }
 
         let total_providers = provider_health.len();
@@ -77,12 +79,11 @@ impl EndpointMonitor for RpcMonitor {
                 // Some providers failed
                 HealthCheckResult::degraded(
                     avg_latency,
-                    format!(
-                        "{}/{} RPC providers healthy. Unhealthy: {}",
-                        healthy_count,
-                        total_providers,
-                        errors.join("; ")
-                    ),
+                    ProbeFailure::RpcPartiallyHealthy {
+                        healthy: healthy_count,
+                        total: total_providers,
+                        unhealthy: errors.join("; "),
+                    },
                 )
             } else {
                 // All providers healthy
@@ -90,11 +91,10 @@ impl EndpointMonitor for RpcMonitor {
             }
         } else {
             // All providers failed
-            HealthCheckResult::failure(format!(
-                "All {} RPC providers unreachable: {}",
-                total_providers,
-                errors.join("; ")
-            ))
+            HealthCheckResult::failure(ProbeFailure::RpcAllUnreachable {
+                total: total_providers,
+                unhealthy: errors.join("; "),
+            })
         }
     }
 

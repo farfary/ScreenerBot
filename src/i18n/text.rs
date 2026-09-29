@@ -78,6 +78,15 @@ impl UiText {
             .filter(|c| !matches!(*c, FSI | PDI))
             .collect()
     }
+
+    /// Plain text in the source locale, for logs, agent output and API `message`
+    /// fields that must not depend on the viewer's locale.
+    pub fn render_source_plain(&self) -> String {
+        let source: LanguageIdentifier = super::source_locale()
+            .parse()
+            .unwrap_or_else(|_| LanguageIdentifier::default());
+        self.render_plain(&source)
+    }
 }
 
 /// First strong isolate and pop directional isolate, inserted around placeables.

@@ -11,7 +11,9 @@ pub use state::{
     are_critical_endpoints_healthy, get_all_health, get_endpoint_health, get_fallback_strategy,
     get_unhealthy_critical_endpoints, is_endpoint_healthy, is_endpoint_offline, is_network_offline,
 };
-pub use types::{EndpointCriticality, EndpointHealth, FallbackStrategy, HealthCheckResult};
+pub use types::{
+    EndpointCriticality, EndpointHealth, FallbackStrategy, HealthCheckResult, ProbeFailure,
+};
 
 /// Check that none of the named endpoints is CONFIRMED down.
 ///

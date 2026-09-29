@@ -15,14 +15,14 @@ use crate::assistant::chat::database as chat_db;
 use crate::assistant::chat::ChatProgressEvent;
 use crate::assistant::{try_get_chat_engine, ChatRequest as ChatEngineRequest};
 use crate::config::with_config;
-use crate::i18n::ids;
+use crate::i18n::{ids, UiText};
 use crate::logger::{self, LogTag};
 use crate::webserver::api_error::{ApiError, ApiErrorCode};
 use crate::webserver::state::AppState;
 use crate::webserver::utils::success_response;
 use axum::response::IntoResponse as _;
 
-use crate::webserver::routes::llm::{assistant_failure, provider_failure};
+use crate::webserver::routes::llm::{assistant_failure, assistant_failure_text, provider_failure};
 
 use super::types::*;
 
@@ -180,20 +180,27 @@ pub async fn stream_chat_message(
     let error_sender = sender.clone();
     tokio::spawn(async move {
         if let Err(error) = engine.process_message_streaming(chat_request, sender).await {
-            let _ = error_sender.send(ChatProgressEvent::Error {
-                message: format!("{error}"),
-            });
+            let (text, details) = assistant_failure_text(ids::ERRORS_CHAT_PROCESS_FAILED, &error);
+            let _ = error_sender.send(ChatProgressEvent::Error { text, details });
             logger::error(LogTag::Api, &format!("Streaming chat failed: {error}"));
         }
     });
 
     let stream = UnboundedReceiverStream::new(receiver).map(|event| {
-        let data = serde_json::to_string(&event).unwrap_or_else(|_| {
-            r#"{"type":"error","message":"Failed to serialize chat event"}"#.to_owned()
-        });
+        let data = serde_json::to_string(&event).unwrap_or_else(|_| serialize_failure_frame());
         Ok(Event::default().data(data))
     });
     Ok(Sse::new(stream))
+}
+
+/// Stream frame sent when an event cannot be serialized.
+fn serialize_failure_frame() -> String {
+    serde_json::json!({
+        "type": "error",
+        "text": UiText::new(ids::ERRORS_CHAT_STREAM_SERIALIZE_FAILED),
+        "details": "",
+    })
+    .to_string()
 }
 
 /// GET /api/assistant/chat/sessions - List all chat sessions

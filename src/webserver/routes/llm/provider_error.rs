@@ -3,7 +3,7 @@
 use crate::apis::llm::LlmError;
 use crate::apis::Error as ApisError;
 use crate::assistant::error::Error as AssistantError;
-use crate::i18n::{ids, MessageId};
+use crate::i18n::{ids, MessageId, UiText};
 use crate::llm_analysis::error::Error as AnalysisError;
 use crate::webserver::api_error::{ApiError, ApiErrorCode};
 
@@ -68,6 +68,16 @@ pub(crate) fn assistant_failure(failed: MessageId, error: &AssistantError) -> Ap
             ApiError::new(ApiErrorCode::Internal, failed).details(error.to_string())
         }
     }
+}
+
+/// Catalog text and technical detail of a failed assistant turn, for the
+/// streaming transport. Same wording selection as [`assistant_failure`].
+pub(crate) fn assistant_failure_text(
+    failed: MessageId,
+    error: &AssistantError,
+) -> (UiText, String) {
+    let (text, details) = assistant_failure(failed, error).into_text_and_details();
+    (text, details.unwrap_or_default())
 }
 
 /// Failure of a model analysis; a wrapped provider rejection shows the
