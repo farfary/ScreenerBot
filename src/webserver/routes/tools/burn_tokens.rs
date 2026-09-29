@@ -1,17 +1,20 @@
 //! Burn tokens handlers
 
-use axum::{http::StatusCode, response::Response, Json};
+use axum::{response::Response, Json};
 use std::collections::HashMap;
 use std::time::Duration;
 
 use crate::chains::solana::assets::ata::get_all_token_accounts;
 use crate::chains::solana::assets::burn_configured_wallet_token;
 use crate::chains::solana::constants::ATA_RENT_COST_SOL;
+use crate::i18n::ids;
 use crate::logger::{self, LogTag};
 use crate::pools;
 use crate::positions;
 use crate::utils::get_wallet_address;
-use crate::webserver::utils::{error_response, success_response};
+use crate::webserver::api_error::{ApiError, ApiErrorCode};
+use crate::webserver::utils::success_response;
+use axum::response::IntoResponse as _;
 
 use super::types::*;
 
@@ -26,12 +29,12 @@ pub async fn scan_burnable_tokens() -> Response {
         Ok(addr) => addr,
         Err(e) => {
             logger::error(LogTag::Tools, &format!("Failed to get wallet address: {e}"));
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "WALLET_ERROR",
-                "Failed to get wallet address",
-                Some(&e.to_string()),
-            );
+            return ApiError::new(
+                ApiErrorCode::Internal,
+                ids::ERRORS_TOOLS_WALLET_ADDRESS_FAILED,
+            )
+            .details(e.to_string())
+            .into_response();
         }
     };
 
@@ -40,12 +43,12 @@ pub async fn scan_burnable_tokens() -> Response {
         Ok(accounts) => accounts,
         Err(e) => {
             logger::error(LogTag::Tools, &format!("Failed to get token accounts: {e}"));
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "SCAN_ERROR",
-                "Failed to scan token accounts",
-                Some(&e.to_string()),
-            );
+            return ApiError::new(
+                ApiErrorCode::Internal,
+                ids::ERRORS_TOOLS_TOKEN_ACCOUNTS_SCAN_FAILED,
+            )
+            .details(e.to_string())
+            .into_response();
         }
     };
 
@@ -214,24 +217,20 @@ pub async fn scan_burnable_tokens() -> Response {
 /// Burn selected tokens
 pub async fn burn_selected_tokens(Json(request): Json<BurnTokensRequest>) -> Response {
     if request.mints.is_empty() {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "NO_TOKENS",
-            "No tokens selected for burning",
-            None,
-        );
+        return ApiError::new(ApiErrorCode::InvalidInput, ids::ERRORS_TOOLS_NO_TOKENS)
+            .into_response();
     }
 
     // Get wallet address
     let wallet_address = match get_wallet_address() {
         Ok(addr) => addr,
         Err(e) => {
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "WALLET_ERROR",
-                "Failed to get wallet address",
-                Some(&e.to_string()),
-            );
+            return ApiError::new(
+                ApiErrorCode::Internal,
+                ids::ERRORS_TOOLS_WALLET_ADDRESS_FAILED,
+            )
+            .details(e.to_string())
+            .into_response();
         }
     };
 
@@ -244,12 +243,12 @@ pub async fn burn_selected_tokens(Json(request): Json<BurnTokensRequest>) -> Res
     let all_accounts = match get_all_token_accounts(&wallet_address).await {
         Ok(accounts) => accounts,
         Err(e) => {
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "SCAN_ERROR",
-                "Failed to get token accounts",
-                Some(&e.to_string()),
-            );
+            return ApiError::new(
+                ApiErrorCode::Internal,
+                ids::ERRORS_TOOLS_TOKEN_ACCOUNTS_GET_FAILED,
+            )
+            .details(e.to_string())
+            .into_response();
         }
     };
 

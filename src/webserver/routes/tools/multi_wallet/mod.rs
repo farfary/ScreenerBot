@@ -7,6 +7,7 @@
 //! - Session management: Tracking and controlling multi-wallet operations
 
 // Module declarations
+mod config_error;
 mod multi_buy;
 mod multi_sell;
 mod session;

@@ -1,17 +1,20 @@
 //! ATA cleanup and wallet generator handlers
 
-use axum::{http::StatusCode, response::Response, Json};
+use axum::{response::Response, Json};
 
 use crate::chains::adapter;
 use crate::chains::solana::assets::ata::get_all_token_accounts;
 use crate::chains::solana::constants::ATA_RENT_LAMPORTS;
+use crate::i18n::ids;
 use crate::logger::{self, LogTag};
 use crate::tools::ata_cleanup::{
     clear_failed_ata_cache, get_ata_cleanup_statistics, get_failed_ata_count,
     trigger_immediate_ata_cleanup,
 };
 use crate::utils::get_wallet_address;
-use crate::webserver::utils::{error_response, success_response};
+use crate::webserver::api_error::{ApiError, ApiErrorCode};
+use crate::webserver::utils::success_response;
+use axum::response::IntoResponse as _;
 
 use super::types::*;
 
@@ -29,12 +32,9 @@ pub async fn scan_atas() -> Response {
                 LogTag::Wallet,
                 &format!("Failed to get wallet address: {e}"),
             );
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "WALLET_ERROR",
-                "Failed to get wallet",
-                Some(&e.to_string()),
-            );
+            return ApiError::new(ApiErrorCode::Internal, ids::ERRORS_TOOLS_WALLET_FAILED)
+                .details(e.to_string())
+                .into_response();
         }
     };
 
@@ -46,12 +46,12 @@ pub async fn scan_atas() -> Response {
                 LogTag::Wallet,
                 &format!("Failed to get token accounts: {e}"),
             );
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "SCAN_ERROR",
-                "Failed to scan accounts",
-                Some(&e.to_string()),
-            );
+            return ApiError::new(
+                ApiErrorCode::Internal,
+                ids::ERRORS_TOOLS_ACCOUNTS_SCAN_FAILED,
+            )
+            .details(e.to_string())
+            .into_response();
         }
     };
 
@@ -126,12 +126,9 @@ pub async fn cleanup_atas() -> Response {
         }
         Err(e) => {
             logger::error(LogTag::Wallet, &format!("ATA cleanup failed: {e}"));
-            error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "CLEANUP_ERROR",
-                "Cleanup failed",
-                Some(&e.to_string()),
-            )
+            ApiError::new(ApiErrorCode::Internal, ids::ERRORS_TOOLS_CLEANUP_FAILED)
+                .details(e.to_string())
+                .into_response()
         }
     }
 }
@@ -147,12 +144,9 @@ pub async fn clear_ata_cache() -> Response {
         }
         Err(e) => {
             logger::error(LogTag::Wallet, &format!("Failed to clear ATA cache: {e}"));
-            error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "CACHE_ERROR",
-                "Failed to clear cache",
-                Some(&e.to_string()),
-            )
+            ApiError::new(ApiErrorCode::Internal, ids::ERRORS_TOOLS_CACHE_CLEAR_FAILED)
+                .details(e.to_string())
+                .into_response()
         }
     }
 }

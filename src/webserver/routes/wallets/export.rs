@@ -10,9 +10,10 @@ use axum::{
 };
 use std::collections::HashMap;
 
+use crate::i18n::ids;
 use crate::logger::{self, LogTag};
 use crate::wallets::{self, bulk::WalletExportRow};
-use crate::webserver::utils::error_response;
+use crate::webserver::api_error::{ApiError, ApiErrorCode};
 
 use super::types::{ExportQuery, FullExportRequest};
 use super::utils::escape_csv_field;
@@ -26,11 +27,9 @@ use super::utils::escape_csv_field;
 /// GET /api/wallets/export?format=csv&include_inactive=false
 pub async fn export_wallets_csv(Query(query): Query<ExportQuery>) -> impl IntoResponse {
     if query.format != "csv" {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "INVALID_FORMAT",
-            "Only CSV format is currently supported",
-            None,
+        return ApiError::new(
+            ApiErrorCode::InvalidInput,
+            ids::ERRORS_WALLETS_EXPORT_FORMAT_UNSUPPORTED,
         )
         .into_response();
     }
@@ -39,13 +38,9 @@ pub async fn export_wallets_csv(Query(query): Query<ExportQuery>) -> impl IntoRe
     let wallets = match wallets::list_wallets(query.include_inactive).await {
         Ok(w) => w,
         Err(e) => {
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "LIST_ERROR",
-                "Failed to list wallets",
-                Some(&e.to_string()),
-            )
-            .into_response();
+            return ApiError::new(ApiErrorCode::Internal, ids::ERRORS_WALLETS_LIST_FAILED)
+                .details(e.to_string())
+                .into_response();
         }
     };
 
@@ -106,24 +101,18 @@ pub async fn export_wallets_full(Json(request): Json<FullExportRequest>) -> impl
     const REQUIRED_CONFIRMATION: &str = "I understand the risks";
 
     if request.confirmation != REQUIRED_CONFIRMATION {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "CONFIRMATION_REQUIRED",
-            &format!(
-                "You must confirm by providing: \"{}\"",
-                REQUIRED_CONFIRMATION
-            ),
-            None,
+        return ApiError::new(
+            ApiErrorCode::InvalidInput,
+            ids::ERRORS_WALLETS_EXPORT_CONFIRMATION_REQUIRED,
         )
+        .text_arg("confirmation", REQUIRED_CONFIRMATION)
         .into_response();
     }
 
     if request.wallet_ids.is_empty() {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "NO_WALLETS",
-            "No wallet IDs provided",
-            None,
+        return ApiError::new(
+            ApiErrorCode::InvalidInput,
+            ids::ERRORS_WALLETS_EXPORT_NO_IDS,
         )
         .into_response();
     }
@@ -142,12 +131,11 @@ pub async fn export_wallets_full(Json(request): Json<FullExportRequest>) -> impl
         Ok(exports) => exports,
         Err(e) => {
             logger::error(LogTag::Wallet, &format!("Failed to export wallets: {e}"));
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "EXPORT_ERROR",
-                "Failed to export wallets",
-                Some(&e.to_string()),
+            return ApiError::new(
+                ApiErrorCode::Internal,
+                ids::ERRORS_WALLETS_EXPORT_BULK_FAILED,
             )
+            .details(e.to_string())
             .into_response();
         }
     };
@@ -156,13 +144,9 @@ pub async fn export_wallets_full(Json(request): Json<FullExportRequest>) -> impl
     let wallets_list = match wallets::list_wallets(true).await {
         Ok(w) => w,
         Err(e) => {
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "LIST_ERROR",
-                "Failed to list wallets",
-                Some(&e.to_string()),
-            )
-            .into_response();
+            return ApiError::new(ApiErrorCode::Internal, ids::ERRORS_WALLETS_LIST_FAILED)
+                .details(e.to_string())
+                .into_response();
         }
     };
 
@@ -187,13 +171,8 @@ pub async fn export_wallets_full(Json(request): Json<FullExportRequest>) -> impl
         .collect();
 
     if filtered_exports.is_empty() {
-        return error_response(
-            StatusCode::NOT_FOUND,
-            "NO_MATCHING_WALLETS",
-            "No wallets found matching the provided IDs",
-            None,
-        )
-        .into_response();
+        return ApiError::new(ApiErrorCode::NotFound, ids::ERRORS_WALLETS_EXPORT_NO_MATCH)
+            .into_response();
     }
 
     // Build CSV with private keys

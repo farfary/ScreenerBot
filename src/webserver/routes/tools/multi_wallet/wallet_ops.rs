@@ -2,15 +2,19 @@
 //!
 //! Handles wallet summary, consolidation, and ATA cleanup operations.
 
-use axum::{http::StatusCode, response::Response, Json};
+use axum::{response::Response, Json};
 
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
+use crate::i18n::ids;
 use crate::logger::{self, LogTag};
 use crate::tools::multi_wallet::{execute_consolidation, ConsolidateConfig};
 use crate::wallets;
-use crate::webserver::utils::{error_response, success_response};
+use crate::webserver::api_error::{ApiError, ApiErrorCode};
+use crate::webserver::utils::success_response;
+use axum::response::IntoResponse as _;
 
 use super::super::types::*;
+use super::config_error::invalid_config;
 
 // =============================================================================
 // Wallet Management Handlers
@@ -22,12 +26,9 @@ pub async fn get_wallets_summary() -> Response {
     let all_wallets = match wallets::list_active_wallets().await {
         Ok(w) => w,
         Err(e) => {
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "WALLET_ERROR",
-                "Failed to get wallets",
-                Some(&e.to_string()),
-            );
+            return ApiError::new(ApiErrorCode::Internal, ids::ERRORS_TOOLS_WALLETS_GET_FAILED)
+                .details(e.to_string())
+                .into_response();
         }
     };
 
@@ -96,12 +97,7 @@ pub async fn consolidate_wallets(Json(request): Json<ConsolidateRequest>) -> Res
 
     // Validate config
     if let Err(e) = config.validate() {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "INVALID_CONFIG",
-            &e.to_string(),
-            None,
-        );
+        return invalid_config(&e).into_response();
     }
 
     // Execute consolidation
@@ -127,12 +123,9 @@ pub async fn consolidate_wallets(Json(request): Json<ConsolidateRequest>) -> Res
                 ),
             })
         }
-        Err(e) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "CONSOLIDATION_FAILED",
-            "Failed to consolidate wallets",
-            Some(&e.to_string()),
-        ),
+        Err(e) => ApiError::new(ApiErrorCode::Internal, ids::ERRORS_TOOLS_CONSOLIDATE_FAILED)
+            .details(e.to_string())
+            .into_response(),
     }
 }
 
@@ -178,11 +171,8 @@ pub async fn cleanup_subwallet_atas(Json(request): Json<SubWalletAtaCleanupReque
                 ),
             })
         }
-        Err(e) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "CLEANUP_FAILED",
-            "Failed to cleanup ATAs",
-            Some(&e.to_string()),
-        ),
+        Err(e) => ApiError::new(ApiErrorCode::Internal, ids::ERRORS_TOOLS_ATA_CLEANUP_FAILED)
+            .details(e.to_string())
+            .into_response(),
     }
 }

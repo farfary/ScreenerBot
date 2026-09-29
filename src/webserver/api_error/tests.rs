@@ -45,10 +45,11 @@ fn ordinal(code: ApiErrorCode) -> usize {
         ApiErrorCode::CopyError => 36,
         ApiErrorCode::RateLimited => 37,
         ApiErrorCode::UpstreamTimeout => 38,
+        ApiErrorCode::PayloadTooLarge => 39,
     }
 }
 
-const ALL: [ApiErrorCode; 39] = [
+const ALL: [ApiErrorCode; 40] = [
     ApiErrorCode::InvalidInput,
     ApiErrorCode::InvalidPassword,
     ApiErrorCode::InvalidTotp,
@@ -88,6 +89,7 @@ const ALL: [ApiErrorCode; 39] = [
     ApiErrorCode::CopyError,
     ApiErrorCode::RateLimited,
     ApiErrorCode::UpstreamTimeout,
+    ApiErrorCode::PayloadTooLarge,
 ];
 
 #[test]

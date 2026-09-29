@@ -2,7 +2,7 @@
 //!
 //! Provides global session state tracking and management utilities for multi-wallet operations.
 
-use axum::{http::StatusCode, response::Response};
+use axum::response::Response;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, LazyLock};
@@ -10,10 +10,13 @@ use tokio::sync::mpsc::UnboundedReceiver;
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 
+use crate::i18n::ids;
 use crate::logger::{self, LogTag};
 use crate::swaps::RouterChoice;
 use crate::tools::multi_wallet::{SessionResult, SessionStatus, WalletOpResult};
-use crate::webserver::utils::{error_response, success_response};
+use crate::webserver::api_error::{ApiError, ApiErrorCode};
+use crate::webserver::utils::success_response;
+use axum::response::IntoResponse as _;
 
 use super::super::types::*;
 
@@ -144,27 +147,25 @@ pub fn validate_router_choice(router: Option<&str>) -> Result<(), Response> {
         return Ok(());
     };
     let Some(registry) = crate::swaps::try_get_registry() else {
-        return Err(error_response(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "ROUTERS_UNAVAILABLE",
-            "Swap routers are not ready yet",
-            None,
-        ));
+        return Err(ApiError::new(
+            ApiErrorCode::ServiceUnavailable,
+            ids::ERRORS_TOOLS_ROUTERS_UNAVAILABLE,
+        )
+        .into_response());
     };
     match registry.get_router(&id) {
         Some(router) if router.is_enabled() => Ok(()),
-        Some(router) => Err(error_response(
-            StatusCode::BAD_REQUEST,
-            "ROUTER_DISABLED",
-            &format!("{} is disabled in Settings > Swaps", router.name()),
-            None,
-        )),
-        None => Err(error_response(
-            StatusCode::BAD_REQUEST,
-            "UNKNOWN_ROUTER",
-            &format!("Unknown swap router '{id}'"),
-            None,
-        )),
+        Some(router) => Err(ApiError::new(
+            ApiErrorCode::InvalidInput,
+            ids::ERRORS_TOOLS_ROUTER_DISABLED,
+        )
+        .text_arg("router", router.name())
+        .into_response()),
+        None => Err(
+            ApiError::new(ApiErrorCode::InvalidInput, ids::ERRORS_TOOLS_ROUTER_UNKNOWN)
+                .text_arg("router", id.to_string())
+                .into_response(),
+        ),
     }
 }
 
@@ -200,15 +201,13 @@ pub async fn get_session_status(id: &str, expected_type: &str) -> Response {
     match sessions.get(id) {
         Some(session) => {
             if session.operation_type != expected_type {
-                return error_response(
-                    StatusCode::BAD_REQUEST,
-                    "TYPE_MISMATCH",
-                    &format!(
-                        "Session is {} not {}",
-                        session.operation_type, expected_type
-                    ),
-                    None,
-                );
+                return ApiError::new(
+                    ApiErrorCode::InvalidInput,
+                    ids::ERRORS_TOOLS_SESSION_TYPE_MISMATCH,
+                )
+                .text_arg("actual", session.operation_type.as_str())
+                .text_arg("expected", expected_type)
+                .into_response();
             }
 
             let is_complete = matches!(
@@ -232,12 +231,9 @@ pub async fn get_session_status(id: &str, expected_type: &str) -> Response {
                 operations: session.result.operations.clone(),
             })
         }
-        None => error_response(
-            StatusCode::NOT_FOUND,
-            "SESSION_NOT_FOUND",
-            "Session not found",
-            Some(id),
-        ),
+        None => ApiError::new(ApiErrorCode::NotFound, ids::ERRORS_TOOLS_SESSION_NOT_FOUND)
+            .details(id)
+            .into_response(),
     }
 }
 
@@ -251,12 +247,11 @@ pub async fn abort_session(id: &str) -> Response {
                 session.status,
                 SessionStatus::Completed | SessionStatus::Failed | SessionStatus::Aborted
             ) {
-                return error_response(
-                    StatusCode::BAD_REQUEST,
-                    "SESSION_COMPLETE",
-                    "Session is already complete",
-                    None,
-                );
+                return ApiError::new(
+                    ApiErrorCode::InvalidInput,
+                    ids::ERRORS_TOOLS_SESSION_COMPLETE,
+                )
+                .into_response();
             }
 
             // Set abort flag
@@ -273,11 +268,8 @@ pub async fn abort_session(id: &str) -> Response {
                 "message": "Session aborted"
             }))
         }
-        None => error_response(
-            StatusCode::NOT_FOUND,
-            "SESSION_NOT_FOUND",
-            "Session not found",
-            Some(id),
-        ),
+        None => ApiError::new(ApiErrorCode::NotFound, ids::ERRORS_TOOLS_SESSION_NOT_FOUND)
+            .details(id)
+            .into_response(),
     }
 }

@@ -5,19 +5,20 @@
 
 use axum::{
     extract::Path,
-    http::StatusCode,
-    response::Response,
+    response::{IntoResponse as _, Response},
     routing::{delete, get, post},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+use crate::i18n::ids;
 use crate::logger::{self, LogTag};
 use crate::wallets::watch::{self, WatchTarget};
 use crate::wallets::Error as WalletsError;
+use crate::webserver::api_error::{ApiError, ApiErrorCode};
 use crate::webserver::state::AppState;
-use crate::webserver::utils::{error_response, status_for, success_response};
+use crate::webserver::utils::{status_for, success_response};
 
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
@@ -110,12 +111,9 @@ async fn list_targets() -> Response {
                 LogTag::WalletWatch,
                 &format!("Failed to list watch targets: {e}"),
             );
-            error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "LIST_ERROR",
-                "Failed to list watch targets",
-                Some(&e.to_string()),
-            )
+            ApiError::new(ApiErrorCode::Internal, ids::ERRORS_WALLET_WATCH_LIST_FAILED)
+                .details(e.to_string())
+                .into_response()
         }
     }
 }
@@ -126,12 +124,11 @@ async fn list_targets() -> Response {
 async fn add_target(Json(request): Json<AddTargetRequest>) -> Response {
     let address = request.address.trim();
     if address.is_empty() {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "INVALID_ADDRESS",
-            "Address cannot be empty",
-            None,
-        );
+        return ApiError::new(
+            ApiErrorCode::InvalidInput,
+            ids::ERRORS_WALLET_WATCH_ADDRESS_EMPTY,
+        )
+        .into_response();
     }
 
     let label = request
@@ -150,27 +147,17 @@ async fn add_target(Json(request): Json<AddTargetRequest>) -> Response {
                 LogTag::WalletWatch,
                 &format!("Failed to add watch target {address}: {e}"),
             );
-            let msg = e.to_string();
-            error_response(
-                status_for(&e),
-                add_target_error_code(&e),
-                "Failed to add watch target",
-                Some(&msg),
-            )
+            ApiError::new(failure_code(&e), ids::ERRORS_WALLET_WATCH_ADD_FAILED)
+                .details(e.to_string())
+                .into_response()
         }
     }
 }
 
-/// The dashboard's error code for a failed add. The status comes from the
-/// error itself; only the code — which the UI reads — is chosen here.
-fn add_target_error_code(error: &WalletsError) -> &'static str {
-    match error {
-        WalletsError::WatchTargetAlreadyWatched { .. }
-        | WalletsError::WatchTargetIsOwnWallet { .. } => "DUPLICATE",
-        WalletsError::InvalidWatchAddress { .. } => "INVALID_ADDRESS",
-        WalletsError::WatchDisabled | WalletsError::WatchTargetLimitReached { .. } => "REJECTED",
-        _ => "ADD_ERROR",
-    }
+/// The category for a failed watch operation, carrying the status the typed
+/// error already has.
+fn failure_code(error: &WalletsError) -> ApiErrorCode {
+    ApiErrorCode::for_status(status_for(error).as_u16())
 }
 
 /// Remove a watch target permanently (also drops its cursor).
@@ -184,13 +171,9 @@ async fn remove_target(Path(id): Path<i64>) -> Response {
                 LogTag::WalletWatch,
                 &format!("Failed to remove watch target {id}: {e}"),
             );
-            let msg = e.to_string();
-            error_response(
-                status_for(&e),
-                "REMOVE_ERROR",
-                "Failed to remove watch target",
-                Some(&msg),
-            )
+            ApiError::new(failure_code(&e), ids::ERRORS_WALLET_WATCH_REMOVE_FAILED)
+                .details(e.to_string())
+                .into_response()
         }
     }
 }
@@ -214,13 +197,9 @@ async fn set_target_enabled(
                 LogTag::WalletWatch,
                 &format!("Failed to update watch target {id}: {e}"),
             );
-            let msg = e.to_string();
-            error_response(
-                status_for(&e),
-                "UPDATE_ERROR",
-                "Failed to update watch target",
-                Some(&msg),
-            )
+            ApiError::new(failure_code(&e), ids::ERRORS_WALLET_WATCH_UPDATE_FAILED)
+                .details(e.to_string())
+                .into_response()
         }
     }
 }
@@ -230,12 +209,9 @@ async fn set_target_budget(Path(id): Path<i64>, Json(request): Json<SetBudgetReq
         Ok(()) => success_response(MessageResponse {
             message: "Watch budget updated".to_owned(),
         }),
-        Err(error) => error_response(
-            status_for(&error),
-            "BUDGET_ERROR",
-            "Watch budget could not be updated",
-            Some(&error.to_string()),
-        ),
+        Err(error) => ApiError::new(failure_code(&error), ids::ERRORS_WALLET_WATCH_BUDGET_FAILED)
+            .details(error.to_string())
+            .into_response(),
     }
 }
 
@@ -244,12 +220,9 @@ async fn resume_target(Path(id): Path<i64>, Json(request): Json<ResumeRequest>) 
         Ok(()) => success_response(MessageResponse {
             message: "Watch resumed from the current head".to_owned(),
         }),
-        Err(error) => error_response(
-            status_for(&error),
-            "RESUME_ERROR",
-            "Watch could not be resumed",
-            Some(&error.to_string()),
-        ),
+        Err(error) => ApiError::new(failure_code(&error), ids::ERRORS_WALLET_WATCH_RESUME_FAILED)
+            .details(error.to_string())
+            .into_response(),
     }
 }
 
@@ -271,12 +244,12 @@ async fn set_high_activity_approval(
                 "Helius approval removed".to_owned()
             },
         }),
-        Err(error) => error_response(
-            status_for(&error),
-            "HIGH_ACTIVITY_APPROVAL_ERROR",
-            "Helius approval could not be updated",
-            Some(&error.to_string()),
-        ),
+        Err(error) => ApiError::new(
+            failure_code(&error),
+            ids::ERRORS_WALLET_WATCH_APPROVAL_FAILED,
+        )
+        .details(error.to_string())
+        .into_response(),
     }
 }
 
@@ -287,32 +260,27 @@ async fn get_status(Path(id): Path<i64>) -> Response {
     if crate::webserver::promo::are_promo_fixtures_enabled() {
         return match crate::webserver::promo::get_promo_watch_status(id) {
             Some(status) => success_response(status),
-            None => error_response(
-                StatusCode::NOT_FOUND,
-                "STATUS_ERROR",
-                "Failed to get watch status",
-                Some("Watch target not found"),
-            ),
+            None => ApiError::new(
+                ApiErrorCode::NotFound,
+                ids::ERRORS_WALLET_WATCH_STATUS_FAILED,
+            )
+            .details("Watch target not found")
+            .into_response(),
         };
     }
 
     match watch::get_status(id).await {
         Ok(status) => success_response(status),
-        Err(e) => {
-            let msg = e.to_string();
-            error_response(
-                status_for(&e),
-                "STATUS_ERROR",
-                "Failed to get watch status",
-                Some(&msg),
-            )
-        }
+        Err(e) => ApiError::new(failure_code(&e), ids::ERRORS_WALLET_WATCH_STATUS_FAILED)
+            .details(e.to_string())
+            .into_response(),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::http::StatusCode;
 
     /// The statuses the dashboard depends on, asserted against the typed value
     /// rather than the sentence it renders to: `watched.js` reads 409 to say
@@ -326,42 +294,43 @@ mod tests {
                     address: "addr".to_owned(),
                 },
                 StatusCode::CONFLICT,
-                "DUPLICATE",
+                ApiErrorCode::Conflict,
             ),
             (
                 WalletsError::WatchTargetIsOwnWallet {
                     address: "addr".to_owned(),
                 },
                 StatusCode::CONFLICT,
-                "DUPLICATE",
+                ApiErrorCode::Conflict,
             ),
             (
                 WalletsError::InvalidWatchAddress {
                     value: "nope".to_owned(),
                 },
                 StatusCode::BAD_REQUEST,
-                "INVALID_ADDRESS",
+                ApiErrorCode::InvalidInput,
             ),
             (
                 WalletsError::WatchDisabled,
                 StatusCode::BAD_REQUEST,
-                "REJECTED",
+                ApiErrorCode::InvalidInput,
             ),
             (
                 WalletsError::WatchTargetLimitReached { max: 5 },
                 StatusCode::BAD_REQUEST,
-                "REJECTED",
+                ApiErrorCode::InvalidInput,
             ),
             (
                 WalletsError::WatchHeliusApprovalAcknowledgementRequired,
                 StatusCode::BAD_REQUEST,
-                "ADD_ERROR",
+                ApiErrorCode::InvalidInput,
             ),
         ];
 
         for (error, status, code) in cases {
             assert_eq!(status_for(&error), status, "status for {error}");
-            assert_eq!(add_target_error_code(&error), code, "code for {error}");
+            assert_eq!(failure_code(&error), code, "code for {error}");
+            assert_eq!(code.status(), status, "status of {code:?}");
         }
     }
 

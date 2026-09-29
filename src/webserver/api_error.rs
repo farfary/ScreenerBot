@@ -62,6 +62,8 @@ pub enum ApiErrorCode {
     TaskLive,
     OpenPositions,
     CopyError,
+    /// An uploaded body exceeds the size the endpoint accepts.
+    PayloadTooLarge,
 }
 
 impl ApiErrorCode {
@@ -107,6 +109,7 @@ impl ApiErrorCode {
             Self::TaskLive => "TASK_LIVE",
             Self::OpenPositions => "OPEN_POSITIONS",
             Self::CopyError => "COPY_ERROR",
+            Self::PayloadTooLarge => "PAYLOAD_TOO_LARGE",
         }
     }
 
@@ -154,6 +157,7 @@ impl ApiErrorCode {
             | Self::MissingToken
             | Self::AgentControlDisabled => StatusCode::FORBIDDEN,
             Self::NotFound => StatusCode::NOT_FOUND,
+            Self::PayloadTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
             Self::Conflict | Self::LiveUnavailable | Self::TaskLive | Self::OpenPositions => {
                 StatusCode::CONFLICT
             }

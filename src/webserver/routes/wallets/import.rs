@@ -2,15 +2,18 @@
 //!
 //! Handles file parsing, preview generation, and batch wallet imports.
 
-use axum::{extract::Multipart, http::StatusCode, response::Response, Json};
+use axum::{extract::Multipart, response::Response, Json};
 use uuid::Uuid;
 
+use crate::i18n::ids;
 use crate::logger::{self, LogTag};
 use crate::wallets::{
     self,
     bulk::{build_preview, detect_columns, parse_csv, parse_excel, ColumnMapping},
 };
-use crate::webserver::utils::{error_response, success_response};
+use crate::webserver::api_error::{ApiError, ApiErrorCode};
+use crate::webserver::utils::success_response;
+use axum::response::IntoResponse as _;
 
 use super::types::{
     ImportExecuteRequest, ImportPreviewResponse, ImportSession, IMPORT_SESSIONS, MAX_FILE_SIZE,
@@ -41,25 +44,22 @@ pub async fn import_preview(mut multipart: Multipart) -> Response {
             match field.bytes().await {
                 Ok(bytes) => {
                     if bytes.len() > MAX_FILE_SIZE {
-                        return error_response(
-                            StatusCode::PAYLOAD_TOO_LARGE,
-                            "FILE_TOO_LARGE",
-                            &format!(
-                                "File exceeds maximum size of {}MB",
-                                MAX_FILE_SIZE / 1024 / 1024
-                            ),
-                            None,
-                        );
+                        return ApiError::new(
+                            ApiErrorCode::PayloadTooLarge,
+                            ids::ERRORS_WALLETS_IMPORT_FILE_TOO_LARGE,
+                        )
+                        .count_arg("megabytes", (MAX_FILE_SIZE / 1024 / 1024) as i64)
+                        .into_response();
                     }
                     file_data = Some((filename, bytes.to_vec()));
                 }
                 Err(e) => {
-                    return error_response(
-                        StatusCode::BAD_REQUEST,
-                        "READ_ERROR",
-                        "Failed to read uploaded file",
-                        Some(&e.to_string()),
-                    );
+                    return ApiError::new(
+                        ApiErrorCode::InvalidInput,
+                        ids::ERRORS_WALLETS_IMPORT_READ_FAILED,
+                    )
+                    .details(e.to_string())
+                    .into_response();
                 }
             }
             break;
@@ -69,12 +69,11 @@ pub async fn import_preview(mut multipart: Multipart) -> Response {
     let (filename, bytes) = match file_data {
         Some(data) => data,
         None => {
-            return error_response(
-                StatusCode::BAD_REQUEST,
-                "NO_FILE",
-                "No file uploaded. Use 'file' field in multipart form",
-                None,
-            );
+            return ApiError::new(
+                ApiErrorCode::InvalidInput,
+                ids::ERRORS_WALLETS_IMPORT_NO_FILE,
+            )
+            .into_response();
         }
     };
 
@@ -91,55 +90,53 @@ pub async fn import_preview(mut multipart: Multipart) -> Response {
             let content = match String::from_utf8(bytes) {
                 Ok(s) => s,
                 Err(e) => {
-                    return error_response(
-                        StatusCode::BAD_REQUEST,
-                        "INVALID_ENCODING",
-                        "CSV file must be UTF-8 encoded",
-                        Some(&e.to_string()),
-                    );
+                    return ApiError::new(
+                        ApiErrorCode::InvalidInput,
+                        ids::ERRORS_WALLETS_IMPORT_ENCODING_INVALID,
+                    )
+                    .details(e.to_string())
+                    .into_response();
                 }
             };
 
             match parse_csv(&content) {
                 Ok(data) => data,
                 Err(e) => {
-                    return error_response(
-                        StatusCode::BAD_REQUEST,
-                        "PARSE_ERROR",
-                        "Failed to parse CSV file",
-                        Some(&e),
-                    );
+                    return ApiError::new(
+                        ApiErrorCode::InvalidInput,
+                        ids::ERRORS_WALLETS_IMPORT_CSV_PARSE_FAILED,
+                    )
+                    .details(e)
+                    .into_response();
                 }
             }
         }
         "xlsx" | "xls" | "xlsm" => match parse_excel(&bytes, None) {
             Ok(data) => data,
             Err(e) => {
-                return error_response(
-                    StatusCode::BAD_REQUEST,
-                    "PARSE_ERROR",
-                    "Failed to parse Excel file",
-                    Some(&e),
-                );
+                return ApiError::new(
+                    ApiErrorCode::InvalidInput,
+                    ids::ERRORS_WALLETS_IMPORT_EXCEL_PARSE_FAILED,
+                )
+                .details(e)
+                .into_response();
             }
         },
         _ => {
-            return error_response(
-                StatusCode::BAD_REQUEST,
-                "INVALID_FORMAT",
-                "Unsupported file format. Use .csv, .xlsx, or .xls",
-                None,
-            );
+            return ApiError::new(
+                ApiErrorCode::InvalidInput,
+                ids::ERRORS_WALLETS_IMPORT_FORMAT_UNSUPPORTED,
+            )
+            .into_response();
         }
     };
 
     if rows.is_empty() {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "EMPTY_FILE",
-            "File contains no data rows",
-            None,
-        );
+        return ApiError::new(
+            ApiErrorCode::InvalidInput,
+            ids::ERRORS_WALLETS_IMPORT_FILE_EMPTY,
+        )
+        .into_response();
     }
 
     // Auto-detect column mapping
@@ -149,12 +146,12 @@ pub async fn import_preview(mut multipart: Multipart) -> Response {
     let existing_addresses = match wallets::get_existing_wallet_addresses().await {
         Ok(addrs) => addrs,
         Err(e) => {
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "DATABASE_ERROR",
-                "Failed to check existing wallets",
-                Some(&e.to_string()),
-            );
+            return ApiError::new(
+                ApiErrorCode::DatabaseError,
+                ids::ERRORS_WALLETS_IMPORT_EXISTING_CHECK_FAILED,
+            )
+            .details(e.to_string())
+            .into_response();
         }
     };
 
@@ -202,12 +199,12 @@ pub async fn import_execute(Json(request): Json<ImportExecuteRequest>) -> Respon
     let mapping: ColumnMapping = (&request.mapping).into();
     if !mapping.is_valid() {
         let missing = mapping.missing_columns();
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "INVALID_MAPPING",
-            &format!("Missing required columns: {}", missing.join(", ")),
-            None,
-        );
+        return ApiError::new(
+            ApiErrorCode::InvalidInput,
+            ids::ERRORS_WALLETS_IMPORT_MAPPING_INVALID,
+        )
+        .text_arg("columns", missing.join(", "))
+        .into_response();
     }
 
     // Get session data
@@ -219,12 +216,11 @@ pub async fn import_execute(Json(request): Json<ImportExecuteRequest>) -> Respon
     let rows = match session_data {
         Some(data) => data,
         None => {
-            return error_response(
-                StatusCode::NOT_FOUND,
-                "SESSION_NOT_FOUND",
-                "Import session not found or expired. Please upload the file again",
-                None,
-            );
+            return ApiError::new(
+                ApiErrorCode::NotFound,
+                ids::ERRORS_WALLETS_IMPORT_SESSION_NOT_FOUND,
+            )
+            .into_response();
         }
     };
 
@@ -232,12 +228,12 @@ pub async fn import_execute(Json(request): Json<ImportExecuteRequest>) -> Respon
     let existing_addresses = match wallets::get_existing_wallet_addresses().await {
         Ok(addrs) => addrs,
         Err(e) => {
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "DATABASE_ERROR",
-                "Failed to check existing wallets",
-                Some(&e.to_string()),
-            );
+            return ApiError::new(
+                ApiErrorCode::DatabaseError,
+                ids::ERRORS_WALLETS_IMPORT_EXISTING_CHECK_FAILED,
+            )
+            .details(e.to_string())
+            .into_response();
         }
     };
 
@@ -252,12 +248,11 @@ pub async fn import_execute(Json(request): Json<ImportExecuteRequest>) -> Respon
             sessions.remove(&request.session_id);
         }
 
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "NO_VALID_ROWS",
-            "No valid rows to import",
-            None,
-        );
+        return ApiError::new(
+            ApiErrorCode::InvalidInput,
+            ids::ERRORS_WALLETS_IMPORT_NO_VALID_ROWS,
+        )
+        .into_response();
     }
 
     // Execute bulk import

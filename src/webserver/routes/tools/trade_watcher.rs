@@ -1,12 +1,15 @@
 //! Trade watcher handlers
 
-use axum::{extract::Path, http::StatusCode, response::Response, Json};
+use axum::{extract::Path, response::Response, Json};
 
+use crate::i18n::ids;
 use crate::logger::{self, LogTag};
 use crate::tools::database::{
     add_watched_token, delete_watched_token, get_watched_tokens, WatchedTokenConfig,
 };
-use crate::webserver::utils::{error_response, success_response};
+use crate::webserver::api_error::{ApiError, ApiErrorCode};
+use crate::webserver::utils::success_response;
+use axum::response::IntoResponse as _;
 
 use super::types::*;
 
@@ -43,12 +46,10 @@ pub async fn search_pools_handler(Path(mint): Path<String>) -> Response {
                     mint, e
                 ),
             );
-            error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "POOL_SEARCH_ERROR",
-                &e.to_string(),
-                Some(&mint),
-            )
+            ApiError::new(ApiErrorCode::Internal, ids::ERRORS_TOOLS_POOL_SEARCH_FAILED)
+                .text_arg("mint", mint.as_str())
+                .details(e.to_string())
+                .into_response()
         }
     }
 }
@@ -57,12 +58,12 @@ pub async fn search_pools_handler(Path(mint): Path<String>) -> Response {
 pub async fn get_watched_tokens_handler() -> Response {
     match get_watched_tokens() {
         Ok(tokens) => success_response(serde_json::json!({ "tokens": tokens })),
-        Err(e) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "DATABASE_ERROR",
-            &e.to_string(),
-            None,
-        ),
+        Err(e) => ApiError::new(
+            ApiErrorCode::DatabaseError,
+            ids::ERRORS_TOOLS_WATCHED_LIST_FAILED,
+        )
+        .details(e.to_string())
+        .into_response(),
     }
 }
 
@@ -106,12 +107,12 @@ pub async fn add_watched_token_handler(Json(req): Json<AddWatchedTokenRequest>) 
                 LogTag::Tools,
                 &format!("[TRADE_WATCHER] Failed to add watched token: {e}"),
             );
-            error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "DATABASE_ERROR",
-                &e.to_string(),
-                None,
+            ApiError::new(
+                ApiErrorCode::DatabaseError,
+                ids::ERRORS_TOOLS_WATCHED_ADD_FAILED,
             )
+            .details(e.to_string())
+            .into_response()
         }
     }
 }
@@ -139,12 +140,12 @@ pub async fn delete_watched_token_handler(Path(id): Path<i64>) -> Response {
                     id, e
                 ),
             );
-            error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "DATABASE_ERROR",
-                &e.to_string(),
-                None,
+            ApiError::new(
+                ApiErrorCode::DatabaseError,
+                ids::ERRORS_TOOLS_WATCHED_DELETE_FAILED,
             )
+            .details(e.to_string())
+            .into_response()
         }
     }
 }

@@ -2,11 +2,12 @@
 //!
 //! Handles preview, start, status, and abort for multi-sell operations.
 
-use axum::{extract::Path, http::StatusCode, response::Response, Json};
+use axum::{extract::Path, response::Response, Json};
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
+use crate::i18n::ids;
 use crate::logger::{self, LogTag};
 use crate::tokens::decimals;
 use crate::tools::multi_wallet::{
@@ -14,9 +15,12 @@ use crate::tools::multi_wallet::{
 };
 use crate::tools::DelayConfig;
 use crate::wallets;
-use crate::webserver::utils::{error_response, success_response};
+use crate::webserver::api_error::{ApiError, ApiErrorCode};
+use crate::webserver::utils::success_response;
+use axum::response::IntoResponse as _;
 
 use super::super::types::*;
+use super::config_error::invalid_config;
 use super::session::{
     cleanup_old_sessions, get_session_status, has_active_multi_wallet_session,
     spawn_progress_drain, validate_router_choice, MultiWalletSession, MULTI_WALLET_SESSIONS,
@@ -41,24 +45,17 @@ pub async fn preview_multi_sell(Json(request): Json<MultiSellPreviewRequest>) ->
         .validate_address(&request.token_mint)
         .is_err()
     {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "INVALID_MINT",
-            "Invalid token mint address",
-            None,
-        );
+        return ApiError::new(ApiErrorCode::InvalidInput, ids::ERRORS_TOOLS_MINT_INVALID)
+            .into_response();
     }
 
     // Get wallets with their balances
     let all_wallets = match wallets::list_active_wallets().await {
         Ok(w) => w,
         Err(e) => {
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "WALLET_ERROR",
-                "Failed to get wallets",
-                Some(&e.to_string()),
-            );
+            return ApiError::new(ApiErrorCode::Internal, ids::ERRORS_TOOLS_WALLETS_GET_FAILED)
+                .details(e.to_string())
+                .into_response();
         }
     };
 
@@ -166,12 +163,8 @@ pub async fn start_multi_sell(Json(request): Json<MultiSellStartRequest>) -> Res
 
     // Check for concurrent sessions
     if has_active_multi_wallet_session().await {
-        return error_response(
-            StatusCode::CONFLICT,
-            "SESSION_ACTIVE",
-            "Another multi-wallet operation is already in progress",
-            None,
-        );
+        return ApiError::new(ApiErrorCode::Conflict, ids::ERRORS_TOOLS_SESSION_ACTIVE)
+            .into_response();
     }
 
     // Cleanup old sessions
@@ -182,12 +175,8 @@ pub async fn start_multi_sell(Json(request): Json<MultiSellStartRequest>) -> Res
         .validate_address(&request.token_mint)
         .is_err()
     {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "INVALID_MINT",
-            "Invalid token mint address",
-            None,
-        );
+        return ApiError::new(ApiErrorCode::InvalidInput, ids::ERRORS_TOOLS_MINT_INVALID)
+            .into_response();
     }
 
     if let Err(response) = validate_router_choice(request.router.as_deref()) {
@@ -234,12 +223,7 @@ pub async fn start_multi_sell(Json(request): Json<MultiSellStartRequest>) -> Res
 
     // Validate config
     if let Err(e) = config.validate() {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "INVALID_CONFIG",
-            &e.to_string(),
-            None,
-        );
+        return invalid_config(&e).into_response();
     }
 
     // Create session entry. When the caller named the wallets, progress has a
