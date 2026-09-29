@@ -37,6 +37,18 @@ export function buildInterfaceTab(settings) {
           </div>
         </div>
 
+        <div class="settings-field">
+          <div class="settings-field-info">
+            <label>Language</label>
+            <span class="settings-field-hint">Display language of the dashboard</span>
+          </div>
+          <div class="settings-field-control">
+            <select id="settingLanguage" class="settings-select" data-custom-select>
+              <option value="system" selected>${I18n.t("common-language-system")}</option>
+            </select>
+          </div>
+        </div>
+
         <div class="settings-field settings-field--logo-shape">
           <div class="settings-field-info">
             <label id="tokenLogoShapeLabel">Token Logo Shape</label>
@@ -194,11 +206,36 @@ export function buildInterfaceTab(settings) {
 }
 
 /**
+ * Fill the language select with "System" plus every registered locale, each
+ * shown by its native name, and select the configured value.
+ */
+async function populateLanguageOptions(select, current) {
+  try {
+    const response = await fetch("/api/i18n/locales");
+    if (!response.ok) throw new Error(response.statusText);
+    const { locales } = await response.json();
+    const options = [{ code: "system", name: I18n.t("common-language-system") }, ...locales];
+    select.replaceChildren(
+      ...options.map(({ code, name }) => {
+        const option = document.createElement("option");
+        option.value = code;
+        option.textContent = name;
+        return option;
+      })
+    );
+    select.value = options.some((o) => o.code === current) ? current : "system";
+  } catch (error) {
+    console.error("Failed to load display languages:", error);
+  }
+}
+
+/**
  * Attach handlers for Interface tab
  */
 export function attachInterfaceHandlers(dialog, content) {
   const fields = {
     theme: content.querySelector("#settingTheme"),
+    language: content.querySelector("#settingLanguage"),
     logoShapes: content.querySelectorAll('input[name="tokenLogoShape"]'),
     animations: content.querySelector("#settingAnimations"),
     compact: content.querySelector("#settingCompact"),
@@ -218,6 +255,10 @@ export function attachInterfaceHandlers(dialog, content) {
     dialog._checkForChanges();
   };
 
+  if (fields.language) {
+    populateLanguageOptions(fields.language, dialog.settings?.dashboard?.interface?.language);
+    fields.language.addEventListener("change", (e) => updateSetting("language", e.target.value));
+  }
   if (fields.theme) {
     fields.theme.addEventListener("change", (e) => updateSetting("theme", e.target.value));
   }

@@ -451,7 +451,7 @@ mod tests {
             "/assets/logo.png",
             "/scripts/app.js",
             "/styles/app.css",
-            "/i18n/en/dashboard.ftl",
+            "/i18n/en/catalog.js",
             "/api/pages/dashboard",
             "/api/tokens/stream",
             "/oauth/callback",

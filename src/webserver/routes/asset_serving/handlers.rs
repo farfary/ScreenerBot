@@ -77,6 +77,7 @@ pub async fn get_core_script(Path(file): Path<String>) -> Response {
         "request_manager.js" => Some(embeds::CORE_REQUEST_MANAGER),
         "client_ready.js" => Some(embeds::CORE_CLIENT_READY),
         "brand_text.js" => Some(embeds::CORE_BRAND_TEXT),
+        "i18n.js" => Some(embeds::CORE_I18N),
         "splash.js" => Some(embeds::CORE_SPLASH),
         "onboarding.js" => Some(embeds::CORE_ONBOARDING),
         "setup_runtime.js" => Some(embeds::CORE_SETUP_RUNTIME),
@@ -308,6 +309,12 @@ pub async fn get_asset(Path(file): Path<String>) -> Response {
             StatusCode::OK,
             [(http_header::CONTENT_TYPE, "application/javascript")],
             embeds::LIGHTWEIGHT_CHARTS_JS,
+        )
+            .into_response(),
+        "fluent-bundle.js" => (
+            StatusCode::OK,
+            [(http_header::CONTENT_TYPE, "application/javascript")],
+            embeds::FLUENT_BUNDLE_JS,
         )
             .into_response(),
         _ => (StatusCode::NOT_FOUND, "Asset not found").into_response(),

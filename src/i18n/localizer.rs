@@ -79,27 +79,66 @@ fn fallback_chain(locale: &LanguageIdentifier) -> Vec<String> {
     chain
 }
 
-/// Format a message for `locale`. Falls back per key to the language-only
-/// locale and then the source locale; returns the id when no catalog has it.
-pub fn format(locale: &LanguageIdentifier, id: &str, args: Option<&FluentArgs>) -> String {
+/// A formatted message: its value plus its attributes in declaration order.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LocalizedMessage {
+    pub value: Option<String>,
+    pub attributes: Vec<(String, String)>,
+}
+
+/// Format a message and its attributes for `locale`. Falls back per key to the
+/// language-only locale and then the source locale; `None` when no catalog has it.
+pub fn format_message(
+    locale: &LanguageIdentifier,
+    id: &str,
+    args: Option<&FluentArgs>,
+) -> Option<LocalizedMessage> {
     for code in fallback_chain(locale) {
         let Some(bundle) = bundle_for(&code) else {
             continue;
         };
-        let Some(pattern) = bundle.get_message(id).and_then(|m| m.value()) else {
+        let Some(message) = bundle.get_message(id) else {
             continue;
         };
         let mut errors = Vec::new();
-        let text = bundle.format_pattern(pattern, args, &mut errors);
+        let value = message.value().map(|pattern| {
+            bundle
+                .format_pattern(pattern, args, &mut errors)
+                .into_owned()
+        });
+        let attributes = message
+            .attributes()
+            .map(|attribute| {
+                let text = bundle.format_pattern(attribute.value(), args, &mut errors);
+                (attribute.id().to_string(), text.into_owned())
+            })
+            .collect();
         if !errors.is_empty() {
             logger::debug(
                 LogTag::System,
                 &format!("Formatting {id:?} for {code}: {errors:?}"),
             );
         }
-        return text.into_owned();
+        return Some(LocalizedMessage { value, attributes });
     }
-    id.to_string()
+    None
+}
+
+/// Format a message value for `locale`; returns the id when no catalog has a
+/// value for it.
+pub fn format(locale: &LanguageIdentifier, id: &str, args: Option<&FluentArgs>) -> String {
+    format_message(locale, id, args)
+        .and_then(|message| message.value)
+        .unwrap_or_else(|| id.to_string())
+}
+
+/// Registered locales in the fallback chain of `locale`, least specific first
+/// (source locale, language-only form, then the locale itself).
+fn catalog_order(locale: &LanguageIdentifier) -> Vec<String> {
+    let mut chain = fallback_chain(locale);
+    chain.retain(|code| registry::locale_info(code).is_some());
+    chain.reverse();
+    chain
 }
 
 /// Format a message in the source locale.
@@ -123,4 +162,13 @@ pub fn dashboard_catalog(code: &str) -> Option<String> {
         out.push('\n');
     }
     Some(out)
+}
+
+/// Dashboard catalogs for `locale` in fallback order, least specific first, as
+/// `(locale code, Fluent source)` pairs. Later entries override earlier ones.
+pub fn dashboard_catalog_chain(locale: &LanguageIdentifier) -> Vec<(String, String)> {
+    catalog_order(locale)
+        .into_iter()
+        .filter_map(|code| dashboard_catalog(&code).map(|ftl| (code, ftl)))
+        .collect()
 }

@@ -54,6 +54,8 @@ export default [
         MutationObserver: "readonly",
         // App-specific globals that some legacy files reference
         Router: "readonly",
+        I18n: "readonly",
+        FluentBundle: "readonly",
       },
     },
     rules: {

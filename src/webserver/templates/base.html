@@ -58,6 +58,11 @@
       })();
     </script>
 
+    <!-- Localization runtime: synchronous classic scripts so every later script can call I18n.t() -->
+    <script src="/assets/fluent-bundle.js?v={{ASSET_VERSION}}"></script>
+    <script src="/i18n/{{LANG}}/catalog.js?v={{ASSET_VERSION}}"></script>
+    <script src="/scripts/core/i18n.js?v={{ASSET_VERSION}}"></script>
+
     <!-- Theme initialization - MUST run before any rendering to prevent flash -->
     <script>
       (function () {

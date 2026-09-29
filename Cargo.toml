@@ -103,6 +103,7 @@ fluent-bundle = "0.16"
 fluent-langneg = "0.13"
 sys-locale = "0.3"
 unic-langid = "0.9"
+lol_html = "3"
 
 # Crypto / encoding
 bs58 = "0.5"

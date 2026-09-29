@@ -1,4 +1,4 @@
-use crate::i18n::LocaleInfo;
+use crate::i18n::{LocaleInfo, TextDirection};
 use serde::Serialize;
 
 #[derive(Debug, Serialize)]
@@ -10,4 +10,23 @@ pub struct LocalesResponse {
     /// Locale the catalogs are authored in.
     pub source: &'static str,
     pub locales: Vec<LocaleInfo>,
+}
+
+/// Body of `/i18n/{locale}/catalog.js`.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogPayload<'a> {
+    pub locale: &'a str,
+    /// BCP 47 tag for `Intl` APIs, forcing Latin digits.
+    pub intl_locale: String,
+    pub dir: TextDirection,
+    pub source: &'static str,
+    /// Least specific first; later catalogs override earlier ones per key.
+    pub catalogs: Vec<CatalogEntry>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CatalogEntry {
+    pub locale: String,
+    pub ftl: String,
 }

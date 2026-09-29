@@ -5,6 +5,7 @@
 //! The generated `ids` module exposes one `MessageId` constant per source-locale
 //! message, so call sites reference catalog keys by symbol.
 
+mod html;
 mod localizer;
 mod negotiate;
 mod registry;
@@ -12,11 +13,16 @@ mod text;
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_html;
 
 use serde::{Serialize, Serializer};
 use std::fmt;
 
-pub use localizer::{dashboard_catalog, format, format_en};
+pub use html::{localize_html, L10N_ATTRIBUTES};
+pub use localizer::{
+    dashboard_catalog, dashboard_catalog_chain, format, format_en, format_message, LocalizedMessage,
+};
 pub use negotiate::{resolve_locale, resolve_request_locale, SYSTEM_SETTING};
 pub use registry::{
     available_locales, locale_info, source_locale, text_direction, LocaleInfo, TextDirection,

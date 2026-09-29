@@ -272,7 +272,7 @@ pub fn base_template(
             String::new()
         },
     );
-    html
+    crate::i18n::localize_html(&html, locale)
 }
 
 fn nav_tabs(active: &str) -> String {
@@ -410,7 +410,7 @@ pub fn login_template(title: &str, content: &str, locale: &LanguageIdentifier) -
     // Minimal styles for login page
     let combined_styles = [FOUNDATION_STYLES, &lucide_css, LOGIN_PAGE_STYLES].join("\n");
 
-    format!(
+    let html = format!(
         r#"<!DOCTYPE html>
 <html lang="{}" dir="{}">
 <head>
@@ -421,6 +421,9 @@ pub fn login_template(title: &str, content: &str, locale: &LanguageIdentifier) -
 </head>
 <body>
     {}
+    <script src="/assets/fluent-bundle.js?v={}"></script>
+    <script src="/i18n/{}/catalog.js?v={}"></script>
+    <script src="/scripts/core/i18n.js?v={}"></script>
     <script src="/scripts/core/brand_text.js?v={}"></script>
     <script type="module" src="/scripts/pages/login.js?v={}"></script>
 </body>
@@ -431,8 +434,13 @@ pub fn login_template(title: &str, content: &str, locale: &LanguageIdentifier) -
         combined_styles,
         content,
         asset_version,
+        locale,
+        asset_version,
+        asset_version,
+        asset_version,
         asset_version
-    )
+    );
+    crate::i18n::localize_html(&html, locale)
 }
 
 #[cfg(test)]

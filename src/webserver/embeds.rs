@@ -229,6 +229,7 @@ pub const LOGO_SVG: &str = include_str!("assets/logo.svg");
 pub const LOGO_PNG: &[u8] = include_bytes!("assets/logo.png");
 pub const GOOGLE_G_PNG: &[u8] = include_bytes!("assets/google-g.png");
 pub const LIGHTWEIGHT_CHARTS_JS: &[u8] = include_bytes!("assets/lightweight-charts.js");
+pub const FLUENT_BUNDLE_JS: &[u8] = include_bytes!("assets/fluent-bundle.js");
 
 // Solana brand assets (solana.com/branding) - Public for asset_serving.rs.
 // The logomark is the gradient SOL glyph used wherever the dashboard renders SOL as
@@ -299,6 +300,7 @@ pub const CORE_AGENT_APPROVALS: &str = include_str!("templates/scripts/core/agen
 pub const CORE_REQUEST_MANAGER: &str = include_str!("templates/scripts/core/request_manager.js");
 pub const CORE_CLIENT_READY: &str = include_str!("templates/scripts/core/client_ready.js");
 pub const CORE_BRAND_TEXT: &str = include_str!("templates/scripts/core/brand_text.js");
+pub const CORE_I18N: &str = include_str!("templates/scripts/core/i18n.js");
 pub const CORE_SPLASH: &str = include_str!("templates/scripts/core/splash.js");
 pub const CORE_ONBOARDING: &str = include_str!("templates/scripts/core/onboarding.js");
 pub const CORE_SETUP_RUNTIME: &str = include_str!("templates/scripts/core/setup_runtime.js");

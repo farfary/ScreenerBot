@@ -338,9 +338,20 @@ export class SettingsDialog {
         throw new Error(`Failed to save settings: ${response.statusText}`);
       }
 
+      // The server renders localized HTML, so a new display language only
+      // takes effect on a fresh page load.
+      const languageChanged =
+        this.settings?.dashboard?.interface?.language !==
+        this.originalSettings?.dashboard?.interface?.language;
+
       this.originalSettings = JSON.parse(JSON.stringify(this.settings));
       this.hasChanges = false;
       this._updateSaveButton();
+
+      if (languageChanged) {
+        window.location.reload();
+        return;
+      }
 
       Utils.showToast({
         type: "success",

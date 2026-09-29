@@ -70,8 +70,8 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/scripts/pages/{*file}", get(get_page_script))
         .route("/scripts/ui/{*file}", get(get_ui_script))
         .route(
-            "/i18n/{locale}/dashboard.ftl",
-            get(i18n::handlers::get_dashboard_catalog),
+            "/i18n/{locale}/catalog.js",
+            get(i18n::handlers::get_catalog_script),
         )
         .route("/styles/pages/{page}", get(get_page_styles))
         .route("/assets/{file}", get(get_asset))
@@ -280,7 +280,7 @@ fn api_routes() -> Router<Arc<AppState>> {
 }
 
 /// SPA page content handler - returns just the content HTML (not full template)
-async fn get_page_content(AxumPath(page): AxumPath<String>) -> Html<String> {
+async fn get_page_content(AxumPath(page): AxumPath<String>, headers: HeaderMap) -> Html<String> {
     let content = match page.as_str() {
         "home" => templates::home_content(),
         "tokens" => templates::tokens_content(),
@@ -313,5 +313,6 @@ async fn get_page_content(AxumPath(page): AxumPath<String>) -> Html<String> {
         }
     };
 
-    Html(content)
+    let locale = crate::i18n::resolve_request_locale(&headers);
+    Html(crate::i18n::localize_html(&content, &locale))
 }
