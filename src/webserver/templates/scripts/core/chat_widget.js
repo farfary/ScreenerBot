@@ -7,6 +7,7 @@
  * coexist.
  */
 import * as Utils from "./utils.js";
+import { formatNumber, formatTimestamp } from "./format.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 import { playSuccess, playError } from "./sounds.js";
 
@@ -884,7 +885,7 @@ export class ChatWidget {
     const isUser = msg.role === "user";
     const messageTime = msg.timestamp || msg.created_at;
     const timestamp = messageTime
-      ? new Date(messageTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+      ? formatTimestamp(new Date(messageTime), { includeDate: false, includeSeconds: false })
       : "";
 
     let parsedToolCalls = msg.tool_calls;
@@ -1166,13 +1167,13 @@ export class ChatWidget {
       counter.textContent = "";
       counter.className = "char-count cw-char-count";
     } else if (len > 4000) {
-      counter.textContent = `${len.toLocaleString()} / 4,000`;
+      counter.textContent = `${formatNumber(len, 0)} / ${formatNumber(4000, 0)}`;
       counter.className = "char-count cw-char-count danger";
     } else if (len > 3500) {
-      counter.textContent = `${len.toLocaleString()} / 4,000`;
+      counter.textContent = `${formatNumber(len, 0)} / ${formatNumber(4000, 0)}`;
       counter.className = "char-count cw-char-count warning";
     } else if (len > 100) {
-      counter.textContent = len.toLocaleString();
+      counter.textContent = formatNumber(len, 0);
       counter.className = "char-count cw-char-count";
     } else {
       counter.textContent = "";

@@ -8,6 +8,7 @@
  * position chart.
  */
 import { requestManager } from "../core/request_manager.js";
+import { formatNumber } from "../core/format.js";
 
 /**
  * Candle count requested for a chart. 0 = the FULL stored history for the
@@ -235,7 +236,7 @@ export function renderOhlcvStatus(refs, status, formatTimeAgo) {
     .map((tf) => {
       const has = tf.candles > 0;
       const dot = has ? (tf.backfill_complete ? "ready" : "partial") : "none";
-      const count = has ? Number(tf.candles).toLocaleString() : "—";
+      const count = has ? formatNumber(tf.candles, 0) : "—";
       const fresh = has ? ago(tf.last_new_data_at) : "—";
       return `
         <div class="chart-data-tip-row">
@@ -268,7 +269,7 @@ export function renderOhlcvStatus(refs, status, formatTimeAgo) {
     </div>
     <div class="chart-data-tip-list">${rows}</div>
     <div class="chart-data-tip-foot">
-      <span>${Number(status.total_candles || 0).toLocaleString()} candles · ${
+      <span>${formatNumber(status.total_candles || 0, 0)} candles · ${
         status.monitored ? "monitoring" : "idle"
       }</span>
       <span class="chart-data-tip-foot-time">${updated}</span>

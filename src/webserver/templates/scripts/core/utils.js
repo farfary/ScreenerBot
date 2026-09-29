@@ -12,6 +12,9 @@ import {
   formatTimeFromSeconds,
   formatTimestamp,
   formatDate,
+  formatDatePart,
+  formatCompactFixed,
+  formatTimeSpan,
   formatTimeAgo,
   formatTimeUntil,
   formatUptime,
@@ -384,6 +387,9 @@ import {
     }
   }
 
+  // Debug dumps show whole counts with up to three decimals, as a person reads a market figure.
+  const DEBUG_COUNT = { decimals: 0, maxDecimals: 3 };
+
   function generateDebugText(data, type) {
     const lines = [];
     const tokenInfo = data.token_info || {};
@@ -432,18 +438,18 @@ import {
     );
     lines.push(
       `Market Cap: ${
-        market.market_cap != null ? "$" + Number(market.market_cap).toLocaleString() : "N/A"
+        market.market_cap != null ? "$" + formatNumber(market.market_cap, DEBUG_COUNT) : "N/A"
       }`
     );
-    lines.push(`FDV: ${market.fdv != null ? "$" + Number(market.fdv).toLocaleString() : "N/A"}`);
+    lines.push(`FDV: ${market.fdv != null ? "$" + formatNumber(market.fdv, DEBUG_COUNT) : "N/A"}`);
     lines.push(
       `Liquidity: ${
-        market.liquidity_usd != null ? "$" + Number(market.liquidity_usd).toLocaleString() : "N/A"
+        market.liquidity_usd != null ? "$" + formatNumber(market.liquidity_usd, DEBUG_COUNT) : "N/A"
       }`
     );
     lines.push(
       `24h Volume: ${
-        market.volume_24h != null ? "$" + Number(market.volume_24h).toLocaleString() : "N/A"
+        market.volume_24h != null ? "$" + formatNumber(market.volume_24h, DEBUG_COUNT) : "N/A"
       }`
     );
     lines.push("");
@@ -972,6 +978,9 @@ import {
     formatTimeFromSeconds,
     formatTimestamp,
     formatDate,
+    formatDatePart,
+    formatCompactFixed,
+    formatTimeSpan,
     formatTimeAgo,
     formatTimeUntil,
     formatUptime,
@@ -1038,6 +1047,9 @@ export {
   formatTimeFromSeconds,
   formatTimestamp,
   formatDate,
+  formatDatePart,
+  formatCompactFixed,
+  formatTimeSpan,
   formatTimeAgo,
   formatTimeUntil,
   formatUptime,

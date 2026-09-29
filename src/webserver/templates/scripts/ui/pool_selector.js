@@ -5,16 +5,11 @@
 
 import { create, on, off } from "../core/dom.js";
 import { escapeHtml } from "../core/utils.js";
+import { formatAddressCompact, formatCompactFixed } from "../core/format.js";
 
-/**
- * Format number in compact notation (1.2K, 3.4M, etc.)
- */
-function formatCompact(num) {
-  if (num === null || num === undefined || !Number.isFinite(num)) return "—";
-  if (num >= 1_000_000) return (num / 1_000_000).toFixed(1) + "M";
-  if (num >= 1_000) return (num / 1_000).toFixed(1) + "K";
-  return num.toFixed(0);
-}
+/** Pool liquidity and volume: one decimal in K and M, whole numbers below. */
+const formatCompact = (value) =>
+  formatCompactFixed(value, { decimals: 1, belowDecimals: 0, billions: false });
 
 export class PoolSelector {
   constructor(options = {}) {
@@ -119,7 +114,7 @@ export class PoolSelector {
     content.innerHTML = `
       <div class="pool-selector-info">
         <span class="pool-count">${pools.length} pool${pools.length !== 1 ? "s" : ""} found</span>
-        <span class="pool-mint">${tokenMint.slice(0, 8)}...${tokenMint.slice(-6)}</span>
+        <span class="pool-mint">${formatAddressCompact(tokenMint, { start: 8, end: 6, ellipsis: "..." })}</span>
       </div>
       <div class="pool-list">
         ${pools
@@ -135,7 +130,7 @@ export class PoolSelector {
               <span class="pool-liquidity" title="Liquidity">$${formatCompact(pool.liquidity_usd)} liq</span>
               <span class="pool-volume" title="24h Volume">$${formatCompact(pool.volume_24h)} 24h</span>
             </div>
-            <div class="pool-address">${pool.address.slice(0, 8)}...${pool.address.slice(-6)}</div>
+            <div class="pool-address">${formatAddressCompact(pool.address, { start: 8, end: 6, ellipsis: "..." })}</div>
           </div>
         `
           )

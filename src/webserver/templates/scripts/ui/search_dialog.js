@@ -13,6 +13,7 @@
 
 import { $, create, show, hide, on, off } from "../core/dom.js";
 import { showToast, notifyCopied } from "../core/utils.js";
+import { formatCompactFixed, formatNumber } from "../core/format.js";
 import { ConfirmationDialog } from "./confirmation_dialog.js";
 
 const SEARCH_DEBOUNCE_MS = 300;
@@ -62,30 +63,14 @@ let searchDebounceTimer = null;
 // UTILITIES
 // =============================================================================
 
-/**
- * Format number in compact notation (1.2K, 3.4M, etc.)
- */
-function formatCompactNumber(n) {
-  if (n === null || n === undefined || !Number.isFinite(n)) return "—";
-  if (n >= 1e9) return (n / 1e9).toFixed(2) + "B";
-  if (n >= 1e6) return (n / 1e6).toFixed(2) + "M";
-  if (n >= 1e3) return (n / 1e3).toFixed(2) + "K";
-  return n.toFixed(2);
-}
+/** Market cap: K, M and B at two decimals. */
+const formatMarketCap = (value) => formatCompactFixed(value);
 
-/**
- * Format currency in USD
- */
-function formatCurrencyUSD(value) {
-  if (value === null || value === undefined || !Number.isFinite(value)) return "—";
-  return (
-    "$" +
-    value.toLocaleString("en-US", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 6,
-    })
-  );
-}
+/** Price in USD with two to six decimals. */
+const formatPriceUSD = (value) => {
+  const text = formatNumber(value, { decimals: 2, maxDecimals: 6, fallback: "" });
+  return text === "" ? "—" : `$${text}`;
+};
 
 /**
  * Escape HTML to prevent XSS
@@ -247,8 +232,8 @@ function renderResults() {
         </div>
       </div>
       <div class="search-result-data">
-        <div class="search-result-price">${formatCurrencyUSD(token.price_usd)}</div>
-        <div class="search-result-mcap">${formatCompactNumber(token.market_cap)}</div>
+        <div class="search-result-price">${formatPriceUSD(token.price_usd)}</div>
+        <div class="search-result-mcap">${formatMarketCap(token.market_cap)}</div>
       </div>
       <div class="search-result-actions">
         <button class="btn-icon btn-icon-sm search-action-btn action-favorite" data-action="favorite" title="Add to Favorites" aria-label="Add to Favorites">

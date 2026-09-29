@@ -3,6 +3,7 @@
  * Extracted from token_details_dialog.js to reduce file size
  */
 import * as Utils from "../../core/utils.js";
+import { formatFixed, formatPercentValue } from "../../core/format.js";
 
 /**
  * Render the overview tab content
@@ -248,7 +249,7 @@ function buildTokenInfoSection(token, options) {
               ? `
           <div class="overview-fact">
             <span class="overview-fact-label">Top 10 Hold</span>
-            <span class="overview-fact-value">${token.top_10_concentration.toFixed(1)}%</span>
+            <span class="overview-fact-value">${formatPercentValue(token.top_10_concentration, { decimals: 1, plus: "" })}</span>
           </div>
           `
               : ""
@@ -391,10 +392,10 @@ function buildActivitySection(token, options) {
         <div class="overview-section-actions">
           ${
             typeof buyPct24 === "number"
-              ? `<span class="overview-ratio ${buyPct24 >= 50 ? "bullish" : "bearish"}">${buyPct24.toFixed(0)}% Buy</span>`
+              ? `<span class="overview-ratio ${buyPct24 >= 50 ? "bullish" : "bearish"}">${formatPercentValue(buyPct24, { decimals: 0, plus: "" })} Buy</span>`
               : ""
           }
-          ${buySellRatio ? `<span class="overview-ratio ${ratioClass}">${buySellRatio.toFixed(2)} B/S</span>` : ""}
+          ${buySellRatio ? `<span class="overview-ratio ${ratioClass}">${formatFixed(buySellRatio, { decimals: 2 })} B/S</span>` : ""}
           ${renderHintTrigger("tokenDetails.activity")}
         </div>
       </div>
@@ -456,7 +457,7 @@ function buildFlowRow(label, data, { minutes }) {
   const sellPct = 100 - buyPct;
 
   const countsTitle = hasAny
-    ? `Buys: ${typeof buys === "number" ? buys : "—"} (${total > 0 ? buyPct.toFixed(0) : "—"}%), Sells: ${typeof sells === "number" ? sells : "—"} (${total > 0 ? sellPct.toFixed(0) : "—"}%), Total: ${total}`
+    ? `Buys: ${typeof buys === "number" ? buys : "—"} (${total > 0 ? formatFixed(buyPct, { decimals: 0 }) : "—"}%), Sells: ${typeof sells === "number" ? sells : "—"} (${total > 0 ? formatFixed(sellPct, { decimals: 0 }) : "—"}%), Total: ${total}`
     : "No transaction data";
 
   const buyText = typeof buys === "number" ? Utils.formatNumber(buys, { decimals: 0 }) : "—";
@@ -464,7 +465,9 @@ function buildFlowRow(label, data, { minutes }) {
   const ratePerMin = minutes && total >= 0 ? total / minutes : null;
   const rateText = hasAny ? `${Utils.formatNumber(ratePerMin ?? 0, { decimals: 1 })}/m` : "—";
   const pctText =
-    total > 0 ? `${buyPct.toFixed(0)}% / ${sellPct.toFixed(0)}%` : hasAny ? "0% / 0%" : "—";
+    total > 0
+      ? `${formatPercentValue(buyPct, { decimals: 0, plus: "" })} / ${formatPercentValue(sellPct, { decimals: 0, plus: "" })}`
+      : hasAny ? "0% / 0%" : "—";
 
   return `
     <div class="overview-flow-row" title="${countsTitle}">
@@ -492,8 +495,7 @@ function buildFlowRow(label, data, { minutes }) {
 
 function formatChange(change) {
   if (change === undefined || change === null) return "—";
-  const formatted = Math.abs(change).toFixed(2);
-  return change >= 0 ? `+${formatted}%` : `${formatted}%`;
+  return formatPercentValue(change, { decimals: 2, signZero: true });
 }
 
 function getChangeClass(change) {

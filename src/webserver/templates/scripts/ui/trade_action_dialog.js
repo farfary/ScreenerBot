@@ -1,6 +1,7 @@
 import { on, off } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
 import { createFocusTrap } from "../core/utils.js";
+import { formatFixed, formatPercentValue, formatSol, withSolUnit } from "../core/format.js";
 import { pushEscapeHandler } from "../core/escape_stack.js";
 import * as Hints from "../core/hints.js";
 import { HintTrigger } from "./hint_popover.js";
@@ -974,7 +975,8 @@ export class TradeActionDialog {
     }
 
     if (action === "buy" || action === "add") {
-      const balance = context.balance != null ? context.balance.toFixed(4) : "—";
+      const balance =
+        context.balance != null ? formatFixed(context.balance, { decimals: 4 }) : "—";
       const balanceClass = context.balance != null && context.balance < 0.01 ? "low-balance" : "";
       rows.push(`
         <div class="trade-action-context-item">
@@ -996,7 +998,7 @@ export class TradeActionDialog {
         <div class="trade-action-context-item">
           <span class="trade-action-context-label">Position Size</span>
           <span class="trade-action-context-value">
-            <span class="trade-action-balance-amount">${context.currentSize.toFixed(4)}</span>
+            <span class="trade-action-balance-amount">${formatFixed(context.currentSize, { decimals: 4 })}</span>
             <span class="trade-action-balance-unit">SOL</span>
           </span>
         </div>
@@ -1227,21 +1229,21 @@ export class TradeActionDialog {
         presets.push(
           {
             label: "1.0×",
-            sublabel: `${context.entrySize.toFixed(3)} SOL`,
+            sublabel: formatSol(context.entrySize, { decimals: 3 }),
             value: context.entrySize,
             type: "amount",
             group: "multiplier",
           },
           {
             label: "1.5×",
-            sublabel: `${(context.entrySize * 1.5).toFixed(3)} SOL`,
+            sublabel: formatSol(context.entrySize * 1.5, { decimals: 3 }),
             value: context.entrySize * 1.5,
             type: "amount",
             group: "multiplier",
           },
           {
             label: "2.0×",
-            sublabel: `${(context.entrySize * 2.0).toFixed(3)} SOL`,
+            sublabel: formatSol(context.entrySize * 2.0, { decimals: 3 }),
             value: context.entrySize * 2.0,
             type: "amount",
             group: "multiplier",
@@ -1592,7 +1594,9 @@ export class TradeActionDialog {
     if (this._sliderUnit === "%") {
       this.sliderReadoutEl.textContent = `${Math.round(value)}%`;
     } else {
-      this.sliderReadoutEl.textContent = `${this._trimNumber(value)} SOL`;
+      this.sliderReadoutEl.textContent = withSolUnit(
+        formatFixed(value, { decimals: 6, trim: true, fallback: "0" })
+      );
     }
   }
 
@@ -1675,7 +1679,7 @@ export class TradeActionDialog {
       // on chain. Same ceiling the slider and MAX use.
       const spendable = this._maxSpendableSol(context);
       if (spendable != null && value > spendable) {
-        return `Insufficient balance (need ${value.toFixed(4)} SOL plus ${SOL_FEE_RESERVE} for fees, have ${context.balance.toFixed(4)})`;
+        return `Insufficient balance (need ${formatSol(value, { decimals: 4 })} plus ${SOL_FEE_RESERVE} for fees, have ${formatFixed(context.balance, { decimals: 4 })})`;
       }
     }
 
@@ -1816,7 +1820,7 @@ export class TradeActionDialog {
           <div class="slippage-warning-icon"><i class="icon-triangle-alert"></i></div>
           <div class="slippage-warning-title">High Price Impact Warning</div>
           <div class="slippage-warning-text">
-            This trade has a price impact of <strong>${impactPct.toFixed(2)}%</strong>,
+            This trade has a price impact of <strong>${formatPercentValue(impactPct, { decimals: 2, plus: "" })}</strong>,
             which exceeds your slippage tolerance of <strong>${tolerance}%</strong>. You may
             receive significantly less than expected.
           </div>

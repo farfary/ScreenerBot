@@ -16,6 +16,7 @@
 
 import { $ } from "../core/dom.js";
 import { resolveTokenLogoUrl } from "../core/utils.js";
+import { formatFixed, formatPercentValue } from "../core/format.js";
 import { openFeaturedDialog } from "./featured_dialog.js";
 import { boostTier, formatBoostCount } from "../core/boosts.js";
 import * as Hints from "../core/hints.js";
@@ -423,10 +424,10 @@ class FeaturedRow {
       const change = token.price_change_24h;
       if (change != null) {
         const cls = change >= 0 ? "pos" : "neg";
-        metric = `<span class="row-metric ${cls}">${change > 0 ? "+" : ""}${change.toFixed(0)}%</span>`;
+        metric = `<span class="row-metric ${cls}">${formatPercentValue(change, { decimals: 0 })}</span>`;
       } else if (token.price_usd != null) {
         const price = token.price_usd;
-        const shown = price < 0.01 ? price.toFixed(4) : price.toFixed(2);
+        const shown = formatFixed(price, { decimals: price < 0.01 ? 4 : 2 });
         metric = `<span class="row-metric">$${shown}</span>`;
       }
     }

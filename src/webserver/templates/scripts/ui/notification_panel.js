@@ -1,6 +1,14 @@
 // Notification drawer UI manager
 import { notificationManager } from "../core/notifications.js";
 import * as Utils from "../core/utils.js";
+import {
+  formatDate,
+  formatFixed,
+  formatPercentValue,
+  formatTimeSpan,
+  formatTimestamp,
+  withSolUnit,
+} from "../core/format.js";
 import { ConfirmationDialog } from "./confirmation_dialog.js";
 import { enhanceAllSelects } from "./custom_select.js";
 import { playTabSwitch } from "../core/sounds.js";
@@ -703,14 +711,14 @@ function renderNotification(notification) {
   const sizeSol = Number(md.size_sol);
   const inputLamports = Number(md.input_amount);
   if (Number.isFinite(sizeSol) && sizeSol > 0) {
-    details.push(`${formatSol(sizeSol)} SOL`);
+    details.push(withSolUnit(formatSol(sizeSol)));
   } else if (Number.isFinite(inputLamports) && inputLamports > 0) {
-    details.push(`${formatSol(inputLamports / 1_000_000_000)} SOL`);
+    details.push(withSolUnit(formatSol(inputLamports / 1_000_000_000)));
   }
 
   const pct = Number(md.percentage);
   if (Number.isFinite(pct) && pct > 0) {
-    details.push(`${pct % 1 === 0 ? pct : pct.toFixed(1)}%`);
+    details.push(formatPercentValue(pct, { decimals: pct % 1 === 0 ? 0 : 1, plus: "" }));
   }
 
   if (md.reason) details.push(humanizeToken(md.reason));
@@ -797,9 +805,7 @@ function renderNotification(notification) {
 
 /** Format a SOL amount compactly (trim trailing zeros, max 4 dp). */
 function formatSol(value) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return "0";
-  return parseFloat(n.toFixed(4)).toString();
+  return formatFixed(value, { decimals: 4, trim: true, fallback: "0" });
 }
 
 /** Humanize a CamelCase / snake_case token, e.g. "TakeProfit" -> "Take Profit". */
@@ -822,12 +828,12 @@ function sourceFromOperation(operation) {
 
 /** Compact duration: "820ms", "3.4s", "1m 12s". */
 function formatDuration(ms) {
-  if (ms < 1000) return `${Math.round(ms)}ms`;
+  if (ms < 1000) return formatTimeSpan(Math.round(ms), { unit: "millisecond" });
   const sec = ms / 1000;
-  if (sec < 60) return `${parseFloat(sec.toFixed(1))}s`;
+  if (sec < 60) return formatTimeSpan(sec, { decimals: 1, trim: true });
   const m = Math.floor(sec / 60);
   const s = Math.round(sec % 60);
-  return `${m}m ${s}s`;
+  return `${formatTimeSpan(m, { unit: "minute" })} ${formatTimeSpan(s)}`;
 }
 
 /**
@@ -908,11 +914,7 @@ function formatTime(timestamp) {
   if (diffDay < 7) return `${diffDay} ${diffDay === 1 ? "day" : "days"} ago`;
 
   const sameYear = date.getFullYear() === now.getFullYear();
-  return date.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    ...(sameYear ? {} : { year: "numeric" }),
-  });
+  return formatDate(date, { includeYear: !sameYear });
 }
 
 /**
@@ -922,13 +924,7 @@ function formatAbsoluteTime(timestamp) {
   if (!timestamp) return "";
   const date = new Date(timestamp);
   if (isNaN(date.getTime())) return "";
-  return date.toLocaleString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatTimestamp(date, { includeSeconds: false });
 }
 
 function resolveTimestamp(notification) {

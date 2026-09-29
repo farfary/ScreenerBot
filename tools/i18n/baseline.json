@@ -20,7 +20,7 @@
     "src/webserver/templates/scripts/core/connectivity_watcher.js": 4,
     "src/webserver/templates/scripts/core/global_chat.js": 3,
     "src/webserver/templates/scripts/core/header.js": 10,
-    "src/webserver/templates/scripts/core/header_metrics.js": 10,
+    "src/webserver/templates/scripts/core/header_metrics.js": 9,
     "src/webserver/templates/scripts/core/hints.js": 46,
     "src/webserver/templates/scripts/core/lockscreen.js": 1,
     "src/webserver/templates/scripts/core/onboarding.js": 3,
@@ -144,7 +144,7 @@
     "src/webserver/templates/scripts/ui/token_identity.js": 3,
     "src/webserver/templates/scripts/ui/tool_favorites.js": 18,
     "src/webserver/templates/scripts/ui/trade_action/quick_trade.js": 6,
-    "src/webserver/templates/scripts/ui/trade_action/quote_manager.js": 7,
+    "src/webserver/templates/scripts/ui/trade_action/quote_manager.js": 2,
     "src/webserver/templates/scripts/ui/trade_action_dialog.js": 59,
     "src/webserver/templates/scripts/ui/transaction_details_dialog.js": 80,
     "src/webserver/templates/scripts/ui/transaction_type.js": 29

@@ -6,6 +6,7 @@
  * metadata from the token detail response.
  */
 import * as Utils from "../../core/utils.js";
+import { formatAddressCompact } from "../../core/format.js";
 import { renderTabState } from "./state_handling.js";
 
 export function renderPoolsTab(token, options = {}) {
@@ -44,8 +45,8 @@ export function renderPoolsTab(token, options = {}) {
         </div>
         <div class="pools-summary-rows">
           ${renderPoolFact("DEX", escapeHtml(canonicalPool.program || "Unknown"))}
-          ${renderPoolFact("Liquidity", formatCurrency(canonicalPool.liquidity_usd))}
-          ${renderPoolFact("24h Volume", formatCurrency(canonicalPool.volume_h24_usd))}
+          ${renderPoolFact("Liquidity", Utils.formatCurrencyUSD(canonicalPool.liquidity_usd))}
+          ${renderPoolFact("24h Volume", Utils.formatCurrencyUSD(canonicalPool.volume_h24_usd))}
         </div>
       </section>
     `
@@ -120,8 +121,8 @@ function buildPoolDetail(pool, options = {}) {
       </header>
 
       <div class="pool-detail-metrics">
-        ${renderPoolMetric("Liquidity", formatCurrency(pool.liquidity_usd))}
-        ${renderPoolMetric("24h Volume", formatCurrency(pool.volume_h24_usd))}
+        ${renderPoolMetric("Liquidity", Utils.formatCurrencyUSD(pool.liquidity_usd))}
+        ${renderPoolMetric("24h Volume", Utils.formatCurrencyUSD(pool.volume_h24_usd))}
         ${renderPoolMetric("Updated", lastUpdated)}
       </div>
 
@@ -179,10 +180,6 @@ function renderAddressRow(label, address, options = {}) {
       </div>
     </div>
   `;
-}
-
-function formatCurrency(value) {
-  return value === null || value === undefined ? "—" : Utils.formatCurrencyUSD(value);
 }
 
 export function renderLinksTab(token, options = {}) {
@@ -404,8 +401,7 @@ function renderLinkFact(label, value, modifier = "") {
 }
 
 function formatShortAddress(address) {
-  if (!address || address.length < 12) return address;
-  return `${address.slice(0, 6)}...${address.slice(-4)}`;
+  return formatAddressCompact(address, { start: 6, end: 4, ellipsis: "..." });
 }
 
 function extractDomainName(url) {

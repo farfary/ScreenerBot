@@ -4,6 +4,11 @@
  * Helper functions for formatting and display
  */
 import * as Hints from "../../core/hints.js";
+import {
+  formatAddressCompact,
+  formatPercentValue,
+  formatSol,
+} from "../../core/format.js";
 import { HintTrigger } from "../hint_popover.js";
 
 /**
@@ -21,7 +26,7 @@ export function applyUtilitiesMixin(DialogClass) {
    */
   proto._formatShortAddress = function (address) {
     if (!address || address.length < 16) return address || "—";
-    return `${address.substring(0, 6)}...${address.substring(address.length - 6)}`;
+    return formatAddressCompact(address, { start: 6, end: 6, ellipsis: "..." });
   };
 
   /**
@@ -38,11 +43,10 @@ export function applyUtilitiesMixin(DialogClass) {
     if (!Number.isFinite(solNum)) return "—";
 
     const sign = solNum >= 0 ? "+" : "-";
-    const absVal = Math.abs(solNum).toFixed(4);
-    let result = `${sign}${absVal} SOL`;
+    let result = `${sign}${formatSol(Math.abs(solNum), { decimals: 4 })}`;
 
     if (Number.isFinite(percentNum)) {
-      result += ` (${percentNum >= 0 ? "+" : ""}${percentNum.toFixed(2)}%)`;
+      result += ` (${formatPercentValue(percentNum, { decimals: 2, signZero: true })})`;
     }
 
     return result;
@@ -56,8 +60,7 @@ export function applyUtilitiesMixin(DialogClass) {
    */
   proto._formatChange = function (value) {
     if (value === null || value === undefined) return "—";
-    const sign = value >= 0 ? "+" : "";
-    return `${sign}${value.toFixed(2)}%`;
+    return formatPercentValue(value, { decimals: 2, signZero: true });
   };
 
   /**

@@ -1,6 +1,7 @@
 // Live metrics and effective Auto Trader state for the global dashboard header.
 import { Poller } from "./poller.js";
 import { requestManager } from "./request_manager.js";
+import { formatFixed, formatPercentValue, formatSol } from "./format.js";
 import { formatNumber, showToast } from "./utils.js";
 
 const METRICS_POLL_INTERVAL = 5000;
@@ -81,7 +82,7 @@ function updateBotCard(trader, state) {
   }
 
   const sign = value > 0 ? "+" : value < 0 ? "−" : "";
-  pnl.innerHTML = `<span class="pnl-num">${sign}${Math.abs(value).toFixed(3)}</span><span class="pnl-unit"> SOL</span>`;
+  pnl.innerHTML = `<span class="pnl-num">${sign}${formatFixed(Math.abs(value), { decimals: 3 })}</span><span class="pnl-unit"> SOL</span>`;
   setValueClass(pnl, value);
 }
 
@@ -118,7 +119,10 @@ function updateWalletCard(wallet, state) {
   if (change) {
     if (Number.isFinite(changePercent)) {
       const direction = changePercent > 0 ? "↑" : changePercent < 0 ? "↓" : "";
-      change.textContent = `${direction}${Math.abs(changePercent).toFixed(1)}%`;
+      change.textContent = `${direction}${formatPercentValue(Math.abs(changePercent), {
+        decimals: 1,
+        includeSign: false,
+      })}`;
       setValueClass(change, changePercent);
     } else {
       change.textContent = "—";
@@ -141,15 +145,12 @@ function updateSolPriceCard(sol) {
   const price = finiteNumber(sol?.price_usd);
   value.textContent =
     Number.isFinite(price) && price > 0
-      ? `$${price.toLocaleString(undefined, {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        })}`
+      ? `$${formatNumber(price, 2)}`
       : "—";
 
   const percent = finiteNumber(sol?.change_24h_percent);
   if (Number.isFinite(percent)) {
-    change.textContent = `${percent > 0 ? "+" : ""}${percent.toFixed(2)}%`;
+    change.textContent = formatPercentValue(percent, { decimals: 2 });
     setValueClass(change, percent);
   } else {
     change.textContent = "—";
@@ -226,7 +227,7 @@ function updateTicker(metrics) {
     const percent = finiteNumber(metrics.trader?.today_pnl_percent);
     if (Number.isFinite(pnl) && Number.isFinite(percent)) {
       const sign = pnl > 0 ? "+" : pnl < 0 ? "−" : "";
-      todayPnl.textContent = `${sign}${Math.abs(pnl).toFixed(3)} SOL (${percent > 0 ? "+" : ""}${percent.toFixed(1)}%)`;
+      todayPnl.textContent = `${sign}${formatSol(Math.abs(pnl), { decimals: 3 })} (${formatPercentValue(percent, { decimals: 1 })})`;
       setValueClass(todayPnl, pnl);
     } else {
       todayPnl.textContent = "—";

@@ -1,4 +1,5 @@
 import * as Utils from "../../core/utils.js";
+import { formatAddressCompact, formatFixed, withSolUnit } from "../../core/format.js";
 
 /**
  * Quick Trade Mode Mixin for TradeActionDialog
@@ -178,7 +179,7 @@ export function applyQuickTradeMixin(TradeActionDialog) {
 
     this._searchDropdownEl.innerHTML = this._searchResults
       .map((token, index) => {
-        const mintShort = token.mint ? `${token.mint.slice(0, 4)}...${token.mint.slice(-4)}` : "";
+        const mintShort = token.mint ? formatAddressCompact(token.mint, { ellipsis: "..." }) : "";
         return `
           <div class="search-result-item" data-index="${index}" data-mint="${Utils.escapeHtml(token.mint)}">
             <span class="search-result-symbol token-symbol-type">${Utils.escapeHtml(token.symbol || "???")} </span>
@@ -313,8 +314,8 @@ export function applyQuickTradeMixin(TradeActionDialog) {
         const priceFormatted =
           token.price_sol < 0.000001
             ? token.price_sol.toExponential(4)
-            : token.price_sol.toFixed(9).replace(/\.?0+$/, "");
-        this._quickTokenPriceEl.textContent = `${priceFormatted} SOL`;
+            : formatFixed(token.price_sol, { decimals: 9, trim: true });
+        this._quickTokenPriceEl.textContent = withSolUnit(priceFormatted);
         this._quickTokenPriceEl.style.display = "block";
       } else {
         this._quickTokenPriceEl.style.display = "none";

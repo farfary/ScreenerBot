@@ -692,7 +692,7 @@ export function applyChartMixin(PositionDetailsDialog) {
         { label: "Avg Entry", value: this._formatPrice(avgEntry) },
         {
           label: "P&L @ Bar",
-          value: `${pnlPct >= 0 ? "+" : "-"}${Math.abs(pnlPct).toFixed(2)}%`,
+          value: Utils.formatPercentValue(pnlPct, { decimals: 2, signZero: true }),
           cls: pnlPct >= 0 ? "positive" : "negative",
         }
       );
@@ -723,7 +723,7 @@ export function applyChartMixin(PositionDetailsDialog) {
       return;
     }
     const pct = ((last.close - last.open) / last.open) * 100;
-    chg.textContent = `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%`;
+    chg.textContent = Utils.formatPercentValue(pct, { decimals: 2, signZero: true });
     chg.className = `ohlcv-change ${pct >= 0 ? "positive" : "negative"}`;
   };
 

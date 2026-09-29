@@ -3,6 +3,7 @@
  * Extracted from token_details_dialog.js to reduce file size
  */
 import * as Utils from "../../core/utils.js";
+import { formatPercentValue } from "../../core/format.js";
 import { renderTabState } from "./state_handling.js";
 
 /**
@@ -319,7 +320,7 @@ function buildHolderGauge(percent, stateClass) {
         <circle class="security-holder-gauge-ring" cx="41" cy="41" r="34"
           style="stroke-dasharray:${circumference};stroke-dashoffset:${offset}"></circle>
       </svg>
-      <span class="security-holder-gauge-value">${normalizedPercent.toFixed(0)}%</span>
+      <span class="security-holder-gauge-value">${formatPercentValue(normalizedPercent, { decimals: 0, plus: "" })}</span>
       <span class="security-holder-gauge-label">Top 10</span>
     </div>
   `;

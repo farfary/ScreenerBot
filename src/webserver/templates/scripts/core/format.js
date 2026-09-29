@@ -111,7 +111,7 @@ export function formatNumber(value, decimalsOrOptions = 2, maybeOptions = {}) {
     decimals = options.decimals ?? 2;
   }
 
-  const { fallback = DASH, useGrouping = true } = options || {};
+  const { fallback = DASH, useGrouping = true, maxDecimals = decimals } = options || {};
 
   const num = coerceNumber(value);
   if (!Number.isFinite(num)) {
@@ -120,21 +120,51 @@ export function formatNumber(value, decimalsOrOptions = 2, maybeOptions = {}) {
 
   return intl(Intl.NumberFormat, {
     minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
+    maximumFractionDigits: Math.max(decimals, maxDecimals),
     useGrouping,
   }).format(num);
+}
+
+/** Drop trailing fraction zeros of a `toFixed` digit string ("0.500" -> "0.5", "-0.00" -> "0"). */
+function trimZeros(text) {
+  if (!text.includes(".")) return text;
+  const trimmed = text.replace(/\.?0+$/, "");
+  return trimmed === "-0" ? "0" : trimmed;
 }
 
 /**
  * A number at a fixed count of decimals, without grouping. Rounds the exact
  * binary value like `toFixed`, so it matches the money formatters digit for digit.
+ * `trim` drops trailing fraction zeros.
  */
-export function formatFixed(value, { decimals = 2, fallback = DASH } = {}) {
+export function formatFixed(value, { decimals = 2, fallback = DASH, trim = false } = {}) {
   const num = coerceNumber(value);
   if (!Number.isFinite(num)) {
     return fallback;
   }
-  return localizeDecimal(num.toFixed(decimals));
+  const text = num.toFixed(decimals);
+  return localizeDecimal(trim ? trimZeros(text) : text);
+}
+
+/**
+ * A magnitude scaled to `K`, `M` or `B` at fixed decimals ("1.50K"); values
+ * below one thousand use `belowDecimals` (optionally trimmed). `billions: false`
+ * keeps the scale at `M` for surfaces that never show `B`.
+ */
+export function formatCompactFixed(
+  value,
+  { decimals = 2, belowDecimals = decimals, trimBelow = false, billions = true, fallback = DASH } = {}
+) {
+  const num = coerceNumber(value);
+  if (!Number.isFinite(num)) {
+    return fallback;
+  }
+  const abs = Math.abs(num);
+  const scaled = (divisor, suffix) => `${localizeDecimal((num / divisor).toFixed(decimals))}${suffix}`;
+  if (billions && abs >= 1e9) return scaled(1e9, "B");
+  if (abs >= 1e6) return scaled(1e6, "M");
+  if (abs >= 1e3) return scaled(1e3, "K");
+  return formatFixed(num, { decimals: belowDecimals, trim: trimBelow });
 }
 
 export function formatCompactNumber(value, digitsOrOptions = 2, maybeFallback = DASH) {
@@ -274,7 +304,7 @@ export function formatPriceSol(price, { fallback, decimals = 12 } = {}) {
 
 export function formatPercentValue(
   value,
-  { fallback = DASH, decimals = 2, includeSign = true, plus = "+" } = {}
+  { fallback = DASH, decimals = 2, includeSign = true, plus = "+", signZero = false } = {}
 ) {
   const num = coerceNumber(value);
   if (!Number.isFinite(num)) {
@@ -286,7 +316,7 @@ export function formatPercentValue(
     return `${magnitude}%`;
   }
 
-  if (num > 0) return `${plus}${magnitude}%`;
+  if (num > 0 || (signZero && num === 0)) return `${plus}${magnitude}%`;
   if (num < 0) return `-${magnitude}%`;
   return `${magnitude}%`;
 }
@@ -331,6 +361,16 @@ export function formatSol(amount, { decimals = 4, fallback = HYPHEN, suffix } = 
     return plain(I18n.t("format-sol-amount", { amount: formatted }));
   }
   return `${formatted}${suffix}`;
+}
+
+/** An already formatted elapsed span with the "ago" wording ("3h 5m" -> "3h 5m ago"); `count` selects the plural form. */
+export function withAgo(span, count = 0) {
+  return plain(I18n.t("format-ago-span", counted(count, span)));
+}
+
+/** An already formatted SOL amount with the SOL term ("0.1500" -> "0.1500 SOL"). */
+export function withSolUnit(amount) {
+  return plain(I18n.t("format-sol-amount", { amount }));
 }
 
 export function formatPnL(value, { decimals = 4, fallback = HYPHEN } = {}) {
@@ -458,6 +498,16 @@ export function formatDate(
   return intl(Intl.DateTimeFormat, options).format(date);
 }
 
+/** One calendar component of a moment (`year` or `month`), for chart axis ticks. */
+export function formatDatePart(value, { part = "year", fallback } = {}) {
+  const date = toDate(value);
+  if (!date) {
+    return orElse(fallback, notAvailable);
+  }
+  const options = part === "month" ? { month: "short" } : { year: "numeric" };
+  return intl(Intl.DateTimeFormat, options).format(date);
+}
+
 /**
  * Elapsed time since a moment. The default style shows the largest whole unit
  * ("3h ago"); `detailed` shows the trimmed two-unit span ("3h 5m ago") and
@@ -521,6 +571,14 @@ export function formatUptime(seconds, { fallback, style = "detailed" } = {}) {
   const minutes = Math.floor((total % 3600) / 60);
   const remainingSeconds = total % 60;
 
+  // `hm` counts hours without rolling over to days and shows "<1m" below a minute.
+  if (style === "hm") {
+    const wholeHours = Math.floor(total / 3600);
+    if (wholeHours > 0) return `${unit.hour(wholeHours)} ${unit.minute(minutes)}`;
+    if (minutes > 0) return unit.minute(minutes);
+    return plain(I18n.t("format-under-minute"));
+  }
+
   // `trimmed` is `compact` without a trailing zero part ("3h", not "3h 0m").
   if (style === "compact" || style === "trimmed") {
     const trim = style === "trimmed";
@@ -543,18 +601,20 @@ export function formatUptime(seconds, { fallback, style = "detailed" } = {}) {
 
 /**
  * A quantity of one time unit ("1.5s", "2.0h") at a fixed number of decimals.
- * `unit` is one of `second`, `minute`, `hour`, `day`.
+ * `unit` is one of `millisecond`, `second`, `minute`, `hour`, `day`. `trim` drops
+ * trailing fraction zeros.
  */
 export function formatTimeSpan(
   value,
-  { unit: unitName = "second", decimals = 0, fallback = DASH } = {}
+  { unit: unitName = "second", decimals = 0, fallback = DASH, trim = false } = {}
 ) {
   const num = coerceNumber(value);
   const words = unit[unitName];
   if (!Number.isFinite(num) || !words) {
     return fallback;
   }
-  return words(num, localizeDecimal(num.toFixed(decimals)));
+  const text = num.toFixed(decimals);
+  return words(num, localizeDecimal(trim ? trimZeros(text) : text));
 }
 
 export function formatBytes(bytes, fallback) {
@@ -568,6 +628,47 @@ export function formatBytes(bytes, fallback) {
     return size.mb(num / 1_048_576, localizeDecimal((num / 1_048_576).toFixed(1)));
   }
   return size.gb(num / 1_073_741_824, localizeDecimal((num / 1_073_741_824).toFixed(2)));
+}
+
+/**
+ * Process memory in megabytes, one decimal in gigabytes from 1024 MB, with the
+ * unit attached to the number ("512MB", "1.5GB").
+ */
+export function formatMemoryMb(megabytes, { fallback = DASH } = {}) {
+  const num = coerceNumber(megabytes);
+  if (!Number.isFinite(num) || num < 0) {
+    return fallback;
+  }
+  if (num >= 1024) {
+    const gigabytes = num / 1024;
+    return plain(I18n.t("format-memory-gb", counted(gigabytes, localizeDecimal(gigabytes.toFixed(1)))));
+  }
+  return plain(I18n.t("format-memory-mb", counted(Math.round(num))));
+}
+
+/** Round-trip latency in milliseconds; two decimals in seconds from 1000 ms. */
+export function formatLatencyMs(milliseconds, { fallback = DASH } = {}) {
+  const num = coerceNumber(milliseconds);
+  if (!Number.isFinite(num) || num < 0) {
+    return fallback;
+  }
+  if (num >= 1000) {
+    return unit.second(num / 1000, localizeDecimal((num / 1000).toFixed(2)));
+  }
+  return unit.millisecond(Math.round(num));
+}
+
+/**
+ * A data size in one unit (`b`, `kb`, `mb`, `gb`) at a fixed number of decimals
+ * ("1.5 MB"), for sources that already report the size in that unit.
+ */
+export function formatSizeAt(value, { unit: unitName = "mb", decimals = 1, fallback = DASH } = {}) {
+  const num = coerceNumber(value);
+  const words = size[unitName];
+  if (!Number.isFinite(num) || !words) {
+    return fallback;
+  }
+  return words(num, localizeDecimal(num.toFixed(decimals)));
 }
 
 export function formatDuration(nanos, fallback) {
@@ -599,10 +700,11 @@ export function formatAddressCompact(address, options = {}) {
   if (!address) return DASH;
   const start = options.start ?? 4;
   const end = options.end ?? 4;
+  const ellipsis = options.ellipsis ?? "…";
   if (address.length <= start + end + 1) {
     return address;
   }
-  return `${address.slice(0, start)}…${address.slice(-end)}`;
+  return `${address.slice(0, start)}${ellipsis}${address.slice(-end)}`;
 }
 
 export function formatSecondsToTime(seconds, fallback = HYPHEN) {

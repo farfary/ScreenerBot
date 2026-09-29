@@ -12,6 +12,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
+import "./fixtures/i18n_global.mjs";
+
 const MODULE = "../../src/webserver/templates/scripts/ui/chart_data.js";
 
 async function mod() {

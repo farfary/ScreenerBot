@@ -15,12 +15,7 @@ const ACTIVITY_REFRESH_MS = 30000;
 // After a failed read, wait this long before the next details tick may try again.
 const ACTIVITY_RETRY_MS = 10000;
 
-const dateOnly = (ts) =>
-  new Date(ts * 1000).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+const dateOnly = (ts) => Utils.formatDate(new Date(ts * 1000));
 
 export function applyActivityMixin(PositionDetailsDialog) {
   const proto = PositionDetailsDialog.prototype;

@@ -15,6 +15,8 @@
  * normal row - never a change to a number, a score, or a sort the user chose.
  */
 
+import { formatNumber } from "./format.js";
+
 const FEED_URL = "/api/boosts";
 /** Matches the backend cache window; a paid boost appears within a minute. */
 const TTL_MS = 60 * 1000;
@@ -69,7 +71,7 @@ export function boostRowClass(mint) {
  */
 export function formatBoostCount(boosts) {
   const count = Number(boosts) || 0;
-  return count > 0 ? `${count}x` : "";
+  return count > 0 ? `${formatNumber(count, { decimals: 0, useGrouping: false })}x` : "";
 }
 
 /** True when the two maps disagree on any mint or any standing. */

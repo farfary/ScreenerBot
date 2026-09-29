@@ -1109,9 +1109,9 @@ export class TokenDetailsDialog {
         if (diff < 60000) {
           timeStr = "Just now";
         } else if (diff < 3600000) {
-          timeStr = Math.floor(diff / 60000) + "m ago";
+          timeStr = Utils.formatTimeAgo(tsMs);
         } else {
-          timeStr = new Date(tsMs).toLocaleTimeString();
+          timeStr = Utils.formatTimestamp(tsMs, { includeDate: false });
         }
 
         lastUpdatedValue.textContent = timeStr;
@@ -1329,9 +1329,9 @@ export class TokenDetailsDialog {
       changeEl.classList.toggle("positive", change24h !== null && change24h >= 0);
       changeEl.classList.toggle("negative", change24h !== null && change24h < 0);
       if (change24h !== null) {
-        const sign = change24h >= 0 ? "+" : "";
-        update("change-24h", `${sign}${change24h.toFixed(2)}%`, change24h);
-        changeEl.setAttribute("aria-label", `24 hour change ${sign}${change24h.toFixed(2)}%`);
+        const changeText = Utils.formatPercentValue(change24h, { decimals: 2, signZero: true });
+        update("change-24h", changeText, change24h);
+        changeEl.setAttribute("aria-label", `24 hour change ${changeText}`);
       }
     }
   }

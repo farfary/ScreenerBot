@@ -238,3 +238,43 @@ test("page-level formatter options: date parts, trimmed spans and detailed elaps
   assert.equal(fmt.formatPercentValue(1.5), "+1.50%");
   assert.ok(context.I18n);
 });
+
+test("surface formatter options: trimmed fixed text, extra decimals, zero sign and address marks", () => {
+  const { fmt } = load("en-u-nu-latn");
+  assert.equal(fmt.formatNumber(1234.56789, { decimals: 0, maxDecimals: 3 }), "1,234.568");
+  assert.equal(fmt.formatNumber(5, { decimals: 0, maxDecimals: 3 }), "5");
+  assert.equal(fmt.formatNumber(1234.5, 2), "1,234.50");
+  assert.equal(fmt.formatFixed(0.5, { decimals: 4, trim: true }), "0.5");
+  assert.equal(fmt.formatFixed(10, { decimals: 2, trim: true }), "10");
+  assert.equal(fmt.formatFixed(-0.00001, { decimals: 4, trim: true }), "0");
+  assert.equal(fmt.formatFixed(0.0000005, { decimals: 9, trim: true }), "0.0000005");
+  assert.equal(fmt.formatFixed(0.5, { decimals: 4 }), "0.5000");
+  assert.equal(fmt.formatTimeSpan(3, { decimals: 1, trim: true }), "3s");
+  assert.equal(fmt.formatTimeSpan(3.4, { decimals: 1, trim: true }), "3.4s");
+  assert.equal(fmt.formatTimeSpan(820, { unit: "millisecond" }), "820ms");
+  assert.equal(fmt.formatPercentValue(0, { signZero: true }), "+0.00%");
+  assert.equal(fmt.formatPercentValue(0), "0.00%");
+  assert.equal(fmt.formatPercentValue(-1.5, { signZero: true }), "-1.50%");
+  assert.equal(fmt.formatPercentValue(-1.5, { includeSign: false }), "1.50%");
+  assert.equal(fmt.formatPercentValue(2, { decimals: 0, signZero: true, includeSign: true }), "+2%");
+  assert.equal(
+    fmt.formatAddressCompact("abcdefghijklmnop", { start: 4, end: 4, ellipsis: "..." }),
+    "abcd...mnop"
+  );
+  assert.equal(fmt.formatAddressCompact("abcdefghijklmnop", { start: 4, end: 4 }), "abcd…mnop");
+  assert.equal(fmt.formatUptime(30, { style: "hm" }), "<1m");
+  assert.equal(fmt.formatUptime(300, { style: "hm" }), "5m");
+  assert.equal(fmt.formatUptime(3660, { style: "hm" }), "1h 1m");
+  assert.equal(fmt.formatUptime(108300, { style: "hm" }), "30h 5m");
+  assert.equal(fmt.formatUptime(7200, { style: "hm" }), "2h 0m");
+});
+
+test("de keeps digits for the surface formatters; only separators change", () => {
+  const { fmt } = load("de-u-nu-latn");
+  assert.equal(fmt.formatCompactFixed(1234567), "1,23M");
+  assert.equal(fmt.formatFixed(0.5, { decimals: 4, trim: true }), "0,5");
+  assert.equal(fmt.formatLatencyMs(1500), "1,50s");
+  assert.equal(fmt.formatMemoryMb(1536), "1,5GB");
+  assert.equal(fmt.formatSizeAt(1.5, { unit: "mb", decimals: 1 }), "1,5 MB");
+  assert.equal(fmt.formatNumber(1234.56789, { decimals: 0, maxDecimals: 3 }), "1.234,568");
+});

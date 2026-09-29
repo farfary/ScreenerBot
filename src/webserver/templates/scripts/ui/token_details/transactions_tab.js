@@ -220,7 +220,7 @@ export function applyTransactionsTabMixin(DialogClass) {
       .map((tx) => {
         const label = typeLabel(tx.transaction_type || tx.type);
         const kind = transactionKind(tx);
-        const timeDisplay = new Date(tx.timestamp).toLocaleTimeString();
+        const timeDisplay = Utils.formatTimestamp(new Date(tx.timestamp), { includeDate: false });
         const price = tx.price_sol
           ? Utils.formatPriceSubscript(tx.price_sol, { precision: 5 })
           : "—";

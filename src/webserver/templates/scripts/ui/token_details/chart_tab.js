@@ -380,8 +380,10 @@ export function applyChartTabMixin(DialogClass) {
 
     if (ohlcvChange && latest.open && latest.close) {
       const changePercent = ((latest.close - latest.open) / latest.open) * 100;
-      const sign = changePercent >= 0 ? "+" : "";
-      ohlcvChange.textContent = `${sign}${changePercent.toFixed(2)}%`;
+      ohlcvChange.textContent = Utils.formatPercentValue(changePercent, {
+        decimals: 2,
+        signZero: true,
+      });
       ohlcvChange.className = `ohlcv-change ${changePercent >= 0 ? "positive" : "negative"}`;
     }
   };

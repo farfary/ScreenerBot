@@ -9,6 +9,7 @@
  * empty state), and feeds entry/exit markers to the chart.
  */
 import * as Utils from "../../core/utils.js";
+import { formatPercentValue, withSolUnit } from "../../core/format.js";
 import { requestManager } from "../../core/request_manager.js";
 import { renderTabState } from "./state_handling.js";
 
@@ -255,17 +256,17 @@ function pickPrice(...candidates) {
 
 function fmtPrice(value) {
   if (value === null || value === undefined || !Number.isFinite(Number(value))) return "—";
-  return Utils.formatPriceSubscript(Number(value), { precision: 5 }) + " SOL";
+  return withSolUnit(Utils.formatPriceSubscript(Number(value), { precision: 5 }));
 }
 
 function fmtSol(value) {
   if (value === null || value === undefined || !Number.isFinite(Number(value))) return "—";
-  return Utils.formatNumber(Number(value), { decimals: 4 }) + " SOL";
+  return withSolUnit(Utils.formatNumber(Number(value), { decimals: 4 }));
 }
 
 function fmtPct(value) {
   if (value === null || value === undefined || !Number.isFinite(Number(value))) return "—";
-  return `${Number(value) >= 0 ? "+" : ""}${Number(value).toFixed(1)}%`;
+  return formatPercentValue(value, { decimals: 1, signZero: true });
 }
 
 function fmtPnl(sol, pct) {
@@ -273,9 +274,9 @@ function fmtPnl(sol, pct) {
   const hasPct = pct !== null && pct !== undefined && Number.isFinite(Number(pct));
   if (!hasSol && !hasPct) return "—";
   const solStr = hasSol
-    ? `${Number(sol) >= 0 ? "+" : ""}${Utils.formatNumber(Number(sol), { decimals: 4 })} SOL`
+    ? `${Number(sol) >= 0 ? "+" : ""}${withSolUnit(Utils.formatNumber(Number(sol), { decimals: 4 }))}`
     : "";
-  const pctStr = hasPct ? `${Number(pct) >= 0 ? "+" : ""}${Number(pct).toFixed(2)}%` : "";
+  const pctStr = hasPct ? formatPercentValue(pct, { decimals: 2, signZero: true }) : "";
   return [solStr, pctStr].filter(Boolean).join("  ");
 }
 

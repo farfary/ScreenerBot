@@ -3,6 +3,7 @@
  * Extracted from settings_dialog.js
  */
 import * as Utils from "../../core/utils.js";
+import { formatSizeAt } from "../../core/format.js";
 import { ConfirmationDialog } from "../confirmation_dialog.js";
 
 /**
@@ -381,8 +382,8 @@ async function loadDataOverview(content) {
         const percentage = (db.size_bytes / maxSize) * 100;
         const sizeDisplay =
           db.size_mb >= 1
-            ? `${db.size_mb.toFixed(1)} MB`
-            : `${(db.size_bytes / 1024).toFixed(0)} KB`;
+            ? formatSizeAt(db.size_mb, { unit: "mb", decimals: 1 })
+            : formatSizeAt(db.size_bytes / 1024, { unit: "kb", decimals: 0 });
         return `
             <div class="data-db-item">
               <span class="data-db-name">${db.name}</span>
@@ -398,7 +399,7 @@ async function loadDataOverview(content) {
     card.innerHTML = `
         <div class="data-total-bar">
           <span class="data-total-label">Total Database Storage</span>
-          <span class="data-total-value">${data.total_size_mb.toFixed(1)} MB</span>
+          <span class="data-total-value">${formatSizeAt(data.total_size_mb, { unit: "mb", decimals: 1 })}</span>
         </div>
         <div class="data-db-list">
           ${dbItemsHtml}

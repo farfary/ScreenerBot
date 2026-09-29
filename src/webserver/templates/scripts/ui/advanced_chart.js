@@ -52,7 +52,6 @@
     barSpacing: 12,
     minBarSpacing: 4,
     indicators: [], // ['ema9', 'ema21']
-    locale: "en-US",
     // Significant digits for every price this chart prints (axis, tooltip).
     // Not decimal places — see Utils.formatPriceSubscript.
     pricePrecision: 5,
@@ -233,35 +232,27 @@
           // crosshair tooltip formats in local time — that mismatch made the
           // axis label and the popup show different times for the same candle.
           // Format ticks in local time so both agree.
-          tickMarkFormatter: (time, tickMarkType, locale) => {
+          tickMarkFormatter: (time, tickMarkType) => {
             const d = new Date(time * 1000);
+            const utils = window.Utils;
             switch (tickMarkType) {
               case 0: // Year
-                return d.toLocaleDateString(locale, { year: "numeric" });
+                return utils.formatDatePart(d, { part: "year" });
               case 1: // Month
-                return d.toLocaleDateString(locale, { month: "short" });
+                return utils.formatDatePart(d, { part: "month" });
               case 2: // DayOfMonth
-                return d.toLocaleDateString(locale, {
-                  day: "numeric",
-                  month: "short",
-                });
+                return utils.formatDate(d, { includeYear: false });
               case 3: // Time
-                return d.toLocaleTimeString(locale, {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                });
+                return utils.formatTimestamp(d, { includeDate: false, includeSeconds: false });
               default: // TimeWithSeconds
-                return d.toLocaleTimeString(locale, {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                  second: "2-digit",
-                });
+                return utils.formatTimestamp(d, { includeDate: false });
             }
           },
         },
         localization: {
           priceFormatter: (price) => this._formatPrice(price),
-          locale: this.options.locale,
+          timeFormatter: (time) => this._formatBarTime(time),
+          locale: I18n.intlLocale,
         },
         handleScroll: {
           mouseWheel: true,
@@ -801,7 +792,7 @@
       refs.low.textContent = this._formatPrice(bar.low);
       refs.delta.textContent = `${delta >= 0 ? "+" : "-"}${this._formatPrice(Math.abs(delta))}`;
       refs.delta.className = `tooltip-value ${changeClass}`;
-      refs.range.textContent = rangePercent === null ? "—" : `${rangePercent.toFixed(2)}%`;
+      refs.range.textContent = rangePercent === null ? "—" : window.Utils.formatPercentValue(rangePercent, { decimals: 2, plus: "" });
       // Always rendered, including 0: a row that appears and disappears between
       // candles made the card change height under the cursor.
       refs.volume.textContent = this._formatVolume(bar.volume || 0);
@@ -1053,33 +1044,32 @@
       const daily = (this._barSeconds || 0) >= 86400;
       const now = new Date();
 
-      return date.toLocaleString(this.options.locale, {
-        month: "short",
-        day: "numeric",
-        ...(date.getFullYear() === now.getFullYear() ? {} : { year: "numeric" }),
-        ...(daily ? {} : { hour: "2-digit", minute: "2-digit" }),
-      });
+      const includeYear = date.getFullYear() !== now.getFullYear();
+      return daily
+        ? window.Utils.formatDate(date, { includeYear })
+        : window.Utils.formatTimestamp(date, { includeYear, includeSeconds: false });
     }
 
     /** Detected bar interval as a compact label (5m, 4h, 1d). */
     _formatBarInterval() {
       const seconds = this._barSeconds;
       if (!seconds) return "";
-      if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
-      if (seconds < 86400) return `${Math.round(seconds / 3600)}h`;
-      return `${Math.round(seconds / 86400)}d`;
+      const span = (value, unit) => window.Utils.formatTimeSpan(Math.round(value), { unit });
+      if (seconds < 3600) return span(seconds / 60, "minute");
+      if (seconds < 86400) return span(seconds / 3600, "hour");
+      return span(seconds / 86400, "day");
     }
 
     _formatSignedPercent(percent) {
       if (percent === null || !Number.isFinite(percent)) return "—";
-      return `${percent >= 0 ? "+" : "-"}${Math.abs(percent).toFixed(2)}%`;
+      return window.Utils.formatPercentValue(percent, { decimals: 2, signZero: true });
     }
 
     _formatVolume(volume) {
-      if (volume >= 1e9) return (volume / 1e9).toFixed(2) + "B";
-      if (volume >= 1e6) return (volume / 1e6).toFixed(2) + "M";
-      if (volume >= 1e3) return (volume / 1e3).toFixed(2) + "K";
-      return volume.toFixed(this.options.volumePrecision);
+      return window.Utils.formatCompactFixed(volume, {
+        decimals: 2,
+        belowDecimals: this.options.volumePrecision,
+      });
     }
 
     // ========================================================================

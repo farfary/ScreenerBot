@@ -356,7 +356,7 @@ class FeaturedDialog {
     const change = token.price_change_24h;
     const changeHtml =
       change != null
-        ? `<span class="feat-card-change ${change >= 0 ? "pos" : "neg"}">${change > 0 ? "+" : ""}${change.toFixed(1)}%</span>`
+        ? `<span class="feat-card-change ${change >= 0 ? "pos" : "neg"}">${Utils.formatPercentValue(change, { decimals: 1 })}</span>`
         : "";
 
     const priceHtml =

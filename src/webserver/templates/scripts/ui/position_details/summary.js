@@ -6,6 +6,7 @@
  * token's risk and the market it trades in. Flat sections separated by rules, never cards.
  */
 import * as Utils from "../../core/utils.js";
+import { formatPercentValue, withAgo } from "../../core/format.js";
 
 const fact = (label, value, { sub = "", tone = "", title = "" } = {}) => `
   <div class="pdd-fact"${title ? ` title="${title}"` : ""}>
@@ -101,9 +102,10 @@ export function applySummaryMixin(PositionDetailsDialog) {
       }
     }
 
+    const heldSeconds = Date.now() / 1000 - pos.entry_time;
     rows.push(
       fact("Opened", when(pos.entry_time), {
-        sub: settled ? "" : `${age(Date.now() / 1000 - pos.entry_time)} ago`,
+        sub: settled ? "" : withAgo(age(heldSeconds), heldSeconds),
       })
     );
     if (settled && pos.exit_time) {
@@ -161,7 +163,8 @@ export function applySummaryMixin(PositionDetailsDialog) {
     const hi = Math.max(peak, entry, mark || entry);
     if (!(hi > lo)) return "";
 
-    const at = (price) => `${(((price - lo) / (hi - lo)) * 100).toFixed(2)}%`;
+    const at = (price) =>
+      formatPercentValue(((price - lo) / (hi - lo)) * 100, { decimals: 2, plus: "" });
     const tone = mark && mark < entry ? "is-down" : "is-up";
     const span = mark
       ? `<span class="pdd-range-span ${tone}" style="--from: ${at(Math.min(entry, mark))}; --to: ${at(Math.max(entry, mark))}"></span>`

@@ -127,3 +127,18 @@ format-bytes-gb =
         [one] { $amount } GB
        *[other] { $amount } GB
     }
+
+# Process memory with the unit attached to the number.
+format-memory-mb =
+    { $count ->
+        [one] { $amount }MB
+       *[other] { $amount }MB
+    }
+format-memory-gb =
+    { $count ->
+        [one] { $amount }GB
+       *[other] { $amount }GB
+    }
+
+# Uptime below one minute.
+format-under-minute = <1m

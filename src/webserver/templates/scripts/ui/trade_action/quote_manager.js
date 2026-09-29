@@ -1,4 +1,11 @@
 import * as Utils from "../../core/utils.js";
+import {
+  formatCompactFixed,
+  formatFixed,
+  formatPercentValue,
+  formatTimeSpan,
+  withSolUnit,
+} from "../../core/format.js";
 
 /**
  * Quote Manager Mixin for TradeActionDialog
@@ -242,14 +249,14 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
     if (this.quoteUnitPriceEl) {
       const pp = quote.price_per_token_sol;
       this.quoteUnitPriceEl.textContent =
-        typeof pp === "number" && pp > 0 ? `1 ${tokenUnit} ≈ ${trimSol(pp)} SOL` : "";
+        typeof pp === "number" && pp > 0 ? `1 ${tokenUnit} ≈ ${withSolUnit(trimSol(pp))}` : "";
     }
 
     // Price impact with color
     const impactPct = quote.price_impact_pct ?? 0;
     // A real but sub-basis-point impact must not read as a flat 0.00%.
     this.quoteImpactEl.textContent =
-      impactPct > 0 && impactPct < 0.01 ? "<0.01%" : `${impactPct.toFixed(2)}%`;
+      impactPct > 0 && impactPct < 0.01 ? "<0.01%" : formatPercentValue(impactPct, { decimals: 2, plus: "" });
     this.quoteImpactEl.className = "quote-value quote-impact";
     if (impactPct > 5) {
       this.quoteImpactEl.classList.add("impact-high");
@@ -271,11 +278,11 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
     this.quotePlatformFeeEl.textContent =
       quote.platform_fee_sol == null
         ? `${quote.platform_fee_pct}%`
-        : `${quote.platform_fee_pct}% · ${trimSol(quote.platform_fee_sol)} SOL`;
+        : `${quote.platform_fee_pct}% · ${withSolUnit(trimSol(quote.platform_fee_sol))}`;
     this.quoteNetworkFeeEl.textContent =
-      quote.network_fee_sol == null ? "—" : `≈ ${trimSol(quote.network_fee_sol)} SOL`;
+      quote.network_fee_sol == null ? "—" : `≈ ${withSolUnit(trimSol(quote.network_fee_sol))}`;
 
-    this.quoteSlippageEl.textContent = `${(quote.slippage_bps / 100).toFixed(1)}%`;
+    this.quoteSlippageEl.textContent = formatPercentValue(quote.slippage_bps / 100, { decimals: 1, plus: "" });
 
     // One route row: the aggregator that priced it, with the venue path beneath it
     // when the path says something the aggregator name does not.
@@ -294,7 +301,7 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
       this.quoteWarningEl.dataset.visible = exceeds ? "true" : "false";
       if (exceeds) {
         this.quoteWarningTextEl.textContent =
-          `Price impact ${impactPct.toFixed(2)}% is above your ${trimPct(tolerance)}% max slippage — ` +
+          `Price impact ${formatPercentValue(impactPct, { decimals: 2, plus: "" })} is above your ${trimPct(tolerance)}% max slippage — ` +
           "this size moves the pool. A smaller amount fills closer to the market price.";
       }
     }
@@ -302,32 +309,25 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
     // The header badge counts the same 15s the refresh timer does; seed it here so it
     // does not show the previous quote's remainder for the first second.
     if (this.quoteAgeEl) {
-      this.quoteAgeEl.textContent = `${QUOTE_REFRESH_SECS}s`;
+      this.quoteAgeEl.textContent = formatTimeSpan(QUOTE_REFRESH_SECS);
     }
   };
 
   /** Compact SOL string without trailing zeros, never scientific notation. */
   function trimSol(n) {
-    if (typeof n !== "number" || !isFinite(n)) return "0";
-    if (n === 0) return "0";
-    if (n < 0.000001) return n.toFixed(9).replace(/0+$/, "").replace(/\.$/, "");
-    return parseFloat(n.toFixed(6)).toString();
+    return formatFixed(n, { decimals: n < 0.000001 ? 9 : 6, trim: true, fallback: "0" });
   }
 
   /** Percent without trailing zeros — "1%", "1.5%", never "1.00%". */
   function trimPct(n) {
-    if (typeof n !== "number" || !isFinite(n)) return "0";
-    return parseFloat(n.toFixed(2)).toString();
+    return formatFixed(n, { decimals: 2, trim: true, fallback: "0" });
   }
 
   /** Compact amount with a unit label, using K/M/B for large token counts. */
   function formatAmount(n, unit) {
     if (typeof n !== "number" || !isFinite(n)) return `0 ${unit}`;
     if (unit === "SOL") return `${trimSol(n)} ${unit}`;
-    if (n >= 1e9) return `${(n / 1e9).toFixed(2)}B ${unit}`;
-    if (n >= 1e6) return `${(n / 1e6).toFixed(2)}M ${unit}`;
-    if (n >= 1e3) return `${(n / 1e3).toFixed(2)}K ${unit}`;
-    return `${parseFloat(n.toFixed(4))} ${unit}`;
+    return `${formatCompactFixed(n, { decimals: 2, belowDecimals: 4, trimBelow: true })} ${unit}`;
   }
 
   /**
@@ -410,7 +410,7 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
         // The badge and the draining top edge count to the same moment the quote
         // actually refreshes — reduced motion drops the bar, never the number.
         if (this.quoteAgeEl) {
-          this.quoteAgeEl.textContent = `${remaining}s`;
+          this.quoteAgeEl.textContent = formatTimeSpan(remaining);
         }
         if (age >= QUOTE_REFRESH_SECS) {
           this._fetchQuote();

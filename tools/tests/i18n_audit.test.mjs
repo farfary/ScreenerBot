@@ -13,6 +13,7 @@ import assert from "node:assert/strict";
 import { compareBaseline, initialBaseline, lowerBaseline } from "../i18n/audit.mjs";
 import { checkCatalogs } from "../i18n/catalogs.mjs";
 import { scanCss } from "../i18n/css_direction.mjs";
+import { scanFormatting } from "../i18n/formatting.mjs";
 import { scanHtmlHardcoded, scanJsHardcoded } from "../i18n/hardcoded.mjs";
 import { scanHtmlUsage, scanJsUsage, unusedErrors } from "../i18n/usage.mjs";
 
@@ -230,4 +231,50 @@ test("baseline update lowers or drops entries and refuses to raise", () => {
 test("initial baseline sorts keys", () => {
   const baseline = initialBaseline({ hardcoded: { "b.js": 1, "a.js": 2 }, cssDirection: {} });
   assert.deepEqual(Object.keys(baseline.hardcoded), ["a.js", "b.js"]);
+});
+
+const SCRIPTS = "src/webserver/templates/scripts";
+const formattingOf = (source, path) => scanFormatting({ source, path: `${SCRIPTS}/${path}` });
+
+test("formatting flags toLocale*String calls in a page", () => {
+  const result = formattingOf("const a = x.toLocaleString();\nconst b = d.toLocaleDateString('de');", "pages/home.js");
+  assert.equal(result.errors.length, 2);
+  assert.match(result.errors[0].message, /toLocaleString\(\) formats a value outside core\/format\.js/);
+  assert.equal(result.errors[1].line, 2);
+  assert.equal(formattingOf("t.toLocaleTimeString();", "pages/home.js").errors.length, 1);
+  assert.equal(formattingOf("x?.['toLocaleString']();", "pages/home.js").errors.length, 1);
+});
+
+test("formatting flags Intl members and the en-US literal in ui scripts", () => {
+  assert.equal(formattingOf("const f = new Intl.NumberFormat('de');", "ui/panel.js").errors.length, 1);
+  assert.equal(formattingOf("const f = window.Intl.DateTimeFormat();", "ui/panel.js").errors.length, 1);
+  assert.equal(formattingOf("const l = 'en-US';", "ui/panel.js").errors.length, 1);
+  assert.equal(formattingOf("const l = `en-US`;", "ui/panel.js").errors.length, 1);
+  assert.equal(formattingOf("const label = 'International';", "ui/panel.js").errors.length, 0);
+});
+
+test("formatting allows core/format.js and core/i18n.js only", () => {
+  const source = "const f = new Intl.NumberFormat('en-US'); x.toLocaleString();";
+  assert.equal(formattingOf(source, "core/format.js").errors.length, 0);
+  assert.equal(formattingOf(source, "core/i18n.js").errors.length, 0);
+  assert.ok(formattingOf(source, "core/utils.js").errors.length > 0);
+  assert.ok(formattingOf(source, "pages/format.js").errors.length > 0);
+});
+
+test("formatting honours l10n-format-ok with a reason and rejects it without one", () => {
+  const same = formattingOf("input.value = d.toLocaleDateString('en-CA'); // l10n-format-ok: machine input value", "pages/a.js");
+  assert.equal(same.errors.length, 0);
+  assert.equal(same.escapes, 1);
+  const above = formattingOf("// l10n-format-ok: machine input value\ninput.value = d.toLocaleDateString('en-CA');", "pages/a.js");
+  assert.equal(above.errors.length, 0);
+  const empty = formattingOf("input.value = d.toLocaleDateString('en-CA'); // l10n-format-ok:", "pages/a.js");
+  assert.equal(empty.errors.length, 2);
+  assert.ok(empty.errors.some((error) => /requires a reason/.test(error.message)));
+  const far = formattingOf("// l10n-format-ok: machine input value\n\ninput.value = d.toLocaleDateString('en-CA');", "pages/a.js");
+  assert.equal(far.errors.length, 1);
+});
+
+test("formatting reports a script that cannot be parsed", () => {
+  const result = formattingOf("const = ;", "pages/a.js");
+  assert.match(result.errors[0].message, /cannot parse/);
 });

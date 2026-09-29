@@ -1,6 +1,7 @@
 import { on, off } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
 import { createFocusTrap } from "../core/utils.js";
+import { formatAddressCompact } from "../core/format.js";
 
 // EventDetailsDialog renders a modal overlay for inspecting full event data.
 const SEVERITY_BADGES = {
@@ -31,7 +32,7 @@ function formatMintDisplay(mint) {
   if (!trimmed) {
     return "—";
   }
-  const short = `${trimmed.slice(0, 4)}...${trimmed.slice(-4)}`;
+  const short = formatAddressCompact(trimmed, { ellipsis: "..." });
   const safeFull = Utils.escapeHtml(trimmed);
   const safeShort = Utils.escapeHtml(short);
   return `<code class="mono-text" title="${safeFull}">${safeShort}</code>`;

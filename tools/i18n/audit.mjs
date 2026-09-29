@@ -7,7 +7,8 @@
  *   node tools/i18n/audit.mjs --update-baseline lower or drop baseline entries
  *   node tools/i18n/audit.mjs --init-baseline   write the baseline from current counts
  *
- * Catalog parity and key usage errors always fail. Hardcoded strings and
+ * Catalog parity, key usage and value-formatting errors (toLocale*String, Intl and the
+ * "en-US" literal outside `core/format.js`) always fail. Hardcoded strings and
  * physical-direction CSS are gated by `baseline.json`: a count may fall, never rise.
  */
 
@@ -18,6 +19,7 @@ import { pathToFileURL } from "node:url";
 import { REPO_ROOT, TEMPLATES_ROOT, repoPath, walk } from "../lib/dashboard_ui.mjs";
 import { checkCatalogs, loadCatalogs } from "./catalogs.mjs";
 import { scanCss } from "./css_direction.mjs";
+import { scanFormatting } from "./formatting.mjs";
 import { scanHtmlHardcoded, scanJsHardcoded } from "./hardcoded.mjs";
 import { scanUsage } from "./usage.mjs";
 
@@ -129,6 +131,7 @@ export function analyze({ sources, catalogInput }) {
   const css = {};
   let ignores = 0;
   let rtlOk = 0;
+  let formatOk = 0;
   const scan = (files, scanner, into, tally) => {
     for (const file of files) {
       const result = scanner({ ...file, ids: catalog.sourceIds });
@@ -140,6 +143,11 @@ export function analyze({ sources, catalogInput }) {
   scan(sources.js, scanJsHardcoded, hardcoded, (n) => (ignores += n));
   scan(sources.html, scanHtmlHardcoded, hardcoded, (n) => (ignores += n));
   scan(sources.css, scanCss, css, (n) => (rtlOk += n));
+  for (const file of sources.js) {
+    const result = scanFormatting(file);
+    errors.push(...result.errors);
+    formatOk += result.escapes;
+  }
 
   return {
     errors,
@@ -147,6 +155,7 @@ export function analyze({ sources, catalogInput }) {
     completeness: catalog.completeness,
     ignores,
     rtlOk,
+    formatOk,
     details: { hardcoded, cssDirection: css },
     current: { hardcoded: countsOf(hardcoded), cssDirection: countsOf(css) },
   };
@@ -160,7 +169,7 @@ export function formatSummary(result) {
     lines.push(`${titles[category]}: ${sum(counts)} in ${Object.keys(counts).length} files`);
     for (const [path, count] of topFiles(counts)) lines.push(`  ${String(count).padStart(5)}  ${path}`);
   }
-  lines.push("", `l10n-ignore comments: ${result.ignores}`, `rtl-ok comments: ${result.rtlOk}`);
+  lines.push("", `l10n-ignore comments: ${result.ignores}`, `rtl-ok comments: ${result.rtlOk}`, `l10n-format-ok comments: ${result.formatOk}`);
   lines.push("Locale completeness:");
   for (const [code, percent] of result.completeness) lines.push(`  ${code}: ${percent}%`);
   for (const line of result.info) lines.push(`info: ${line}`);

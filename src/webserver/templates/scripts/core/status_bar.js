@@ -1,5 +1,6 @@
 // Status Bar - Fetches and displays system metrics
-// Non-module script for immediate execution
+
+import { formatLatencyMs, formatMemoryMb, formatPercentValue, formatUptime } from "./format.js";
 
 (function () {
   "use strict";
@@ -35,27 +36,6 @@
     elements.tokens = document.getElementById("statusBarTokens");
   }
 
-  function formatUptime(seconds) {
-    if (!seconds || seconds < 0) return "—";
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    if (h > 0) return `${h}h ${m}m`;
-    if (m > 0) return `${m}m`;
-    return "<1m";
-  }
-
-  function formatMemory(mb) {
-    if (!mb || mb < 0) return "—";
-    if (mb >= 1024) return `${(mb / 1024).toFixed(1)}GB`;
-    return `${Math.round(mb)}MB`;
-  }
-
-  function formatLatency(ms) {
-    if (!ms || ms < 0) return "—";
-    if (ms >= 1000) return `${(ms / 1000).toFixed(2)}s`;
-    return `${Math.round(ms)}ms`;
-  }
-
   function updateDisplay(data) {
     // Version
     if (elements.version && data.version) {
@@ -64,13 +44,14 @@
 
     // Uptime
     if (elements.uptime && typeof data.uptime_seconds === "number") {
-      elements.uptime.textContent = formatUptime(data.uptime_seconds);
+      elements.uptime.textContent =
+        data.uptime_seconds > 0 ? formatUptime(data.uptime_seconds, { style: "hm" }) : "—";
     }
 
     // Memory
     if (elements.memory && data.metrics) {
       const memMB = data.metrics.process_memory_mb || data.metrics.memory_usage_mb;
-      elements.memory.textContent = formatMemory(memMB);
+      elements.memory.textContent = memMB > 0 ? formatMemoryMb(memMB) : "—";
     }
 
     // RPC Stats
@@ -91,7 +72,7 @@
         const displayRate = Number.isFinite(successRate)
           ? Math.min(Math.max(successRate, 0), 100)
           : 0;
-        elements.rpcSuccess.textContent = `${displayRate.toFixed(1)}%`;
+        elements.rpcSuccess.textContent = formatPercentValue(displayRate, { decimals: 1, plus: "" });
 
         // Set health indicator
         let health = "unknown";
@@ -104,7 +85,7 @@
       // RPC Latency
       if (elements.rpcLatency) {
         const latency = rpc.average_response_time_ms || 0;
-        elements.rpcLatency.textContent = formatLatency(latency);
+        elements.rpcLatency.textContent = latency > 0 ? formatLatencyMs(latency) : "—";
       }
     }
 
