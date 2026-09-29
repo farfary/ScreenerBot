@@ -20,6 +20,10 @@ pub async fn handle_update_command() -> String {
                 "⚠️ <b>Update check failed</b>\n\n{}",
                 state
                     .check_error
+                    .map(|error| {
+                        error
+                            .render_plain(&crate::i18n::source_locale().parse().unwrap_or_default())
+                    })
                     .unwrap_or_else(|| "screenerbot.io could not be reached.".to_owned())
             ),
             _ => format!("✅ <b>Up to date</b>\n\nRunning v{current}."),

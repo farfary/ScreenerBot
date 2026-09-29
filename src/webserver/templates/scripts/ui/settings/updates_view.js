@@ -238,7 +238,7 @@ export function createUpdatesView(Utils) {
       case "ready_to_apply":
         headline = `Version ${update?.version || ""} is ready`;
         detail =
-          state.blocked_reason ||
+          I18n.text(state.blocked_reason) ||
           "The update can be installed now with a short restart, or automatically on the next start.";
         icon = "icon-circle-check";
         tone = "success";
@@ -246,7 +246,9 @@ export function createUpdatesView(Utils) {
         break;
       case "ready_to_install":
         headline = `Version ${update?.version || ""} is ready`;
-        detail = state.blocked_reason || "The desktop installer is ready to finish this update.";
+        detail =
+          I18n.text(state.blocked_reason) ||
+          "The desktop installer is ready to finish this update.";
         icon = "icon-package";
         tone = "primary";
         actions = [button("updatesInstall", "Open installer", "icon-package")];
@@ -275,7 +277,7 @@ export function createUpdatesView(Utils) {
         break;
       case "check_failed":
         headline = "Could not check for updates";
-        detail = state.check_error || "The release service could not be reached.";
+        detail = I18n.text(state.check_error) || "The release service could not be reached.";
         icon = "icon-circle-alert";
         tone = "error";
         actions = [button("updatesCheck", "Try again", "icon-refresh-cw")];

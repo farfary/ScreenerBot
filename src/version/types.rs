@@ -11,7 +11,9 @@
 //!   shell actually changed, identified by `shell_revision`.
 
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
+
+use crate::i18n::{ids, UiArg, UiText};
 
 /// Current version information
 #[derive(Debug, Clone, Serialize)]
@@ -252,19 +254,42 @@ pub enum DeferReason {
 }
 
 impl DeferReason {
-    pub fn message(self) -> &'static str {
-        match self {
-            DeferReason::AutomaticInstallDisabled => {
-                "Automatic installation is disabled. The update is ready and will be applied when you choose."
-            }
-            DeferReason::TradingActive => {
-                "A position, trade, or tool operation is active, so the restart is deferred. The update applies automatically when the app is idle."
-            }
-            DeferReason::NeedsInstaller => {
-                "This release also updates the desktop shell, so the installer has to run once."
-            }
-        }
+    pub fn ui_text(self) -> UiText {
+        UiText::new(match self {
+            DeferReason::AutomaticInstallDisabled => ids::UPDATES_DEFER_AUTOMATIC_INSTALL_DISABLED,
+            DeferReason::TradingActive => ids::UPDATES_DEFER_TRADING_ACTIVE,
+            DeferReason::NeedsInstaller => ids::UPDATES_DEFER_NEEDS_INSTALLER,
+        })
     }
+}
+
+/// Text for a failed update check; `cause` is the technical error.
+pub fn check_failed_text(cause: String) -> UiText {
+    UiText::new(ids::UPDATES_CHECK_FAILED).arg("cause", UiArg::Text(cause))
+}
+
+/// Reads `check_error` from either shape. Builds before this field carried
+/// catalog text persisted the error as a plain string; that string becomes the
+/// `cause` of the legacy message so stored state still loads.
+fn deserialize_check_error<'de, D>(deserializer: D) -> Result<Option<UiText>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Stored {
+        Text(UiText),
+        Legacy(String),
+    }
+
+    Ok(
+        Option::<Stored>::deserialize(deserializer)?.map(|stored| match stored {
+            Stored::Text(text) => text,
+            Stored::Legacy(cause) => {
+                UiText::new(ids::UPDATES_CHECK_FAILED_LEGACY).arg("cause", UiArg::Text(cause))
+            }
+        }),
+    )
 }
 
 /// Update state
@@ -275,7 +300,8 @@ pub struct UpdateState {
     pub available_update: Option<UpdateInfo>,
     pub last_check: Option<DateTime<Utc>>,
     pub last_check_attempt: Option<DateTime<Utc>>,
-    pub check_error: Option<String>,
+    #[serde(deserialize_with = "deserialize_check_error")]
+    pub check_error: Option<UiText>,
     pub download_progress: DownloadProgress,
     /// Set when an update is staged but its activation was postponed.
     pub deferred: Option<DeferReason>,
@@ -299,4 +325,83 @@ pub struct StagedCore {
     pub sha256: String,
     pub size: u64,
     pub staged_at: DateTime<Utc>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::i18n::{format_en, format_message, source_locale, LanguageIdentifier};
+
+    fn source() -> LanguageIdentifier {
+        source_locale().parse().unwrap()
+    }
+
+    /// Exhaustive on purpose: a new variant fails to compile until its catalog
+    /// key is named here.
+    fn catalog_key(reason: DeferReason) -> &'static str {
+        match reason {
+            DeferReason::AutomaticInstallDisabled => "updates-defer-automatic-install-disabled",
+            DeferReason::TradingActive => "updates-defer-trading-active",
+            DeferReason::NeedsInstaller => "updates-defer-needs-installer",
+        }
+    }
+
+    #[test]
+    fn every_defer_reason_has_a_catalog_message() {
+        for reason in [
+            DeferReason::AutomaticInstallDisabled,
+            DeferReason::TradingActive,
+            DeferReason::NeedsInstaller,
+        ] {
+            let key = catalog_key(reason);
+            assert_eq!(reason.ui_text().id, key);
+            assert_ne!(format_en(key, None), key, "missing {key}");
+            let code = serde_json::to_value(reason).unwrap();
+            assert_eq!(
+                key.strip_prefix("updates-defer-")
+                    .map(|c| c.replace('-', "_")),
+                code.as_str().map(str::to_owned),
+                "key does not follow the serialized code {code}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_check_error_round_trips_as_catalog_text() {
+        let state = UpdateState {
+            check_error: Some(check_failed_text("HTTP 503".to_owned())),
+            ..UpdateState::default()
+        };
+        let json = serde_json::to_string(&state).unwrap();
+        let loaded: UpdateState = serde_json::from_str(&json).unwrap();
+        let text = loaded.check_error.expect("check error persists");
+        assert_eq!(text.id, "updates-check-failed");
+        assert_eq!(
+            text.args.get("cause"),
+            Some(&UiArg::Text("HTTP 503".into()))
+        );
+    }
+
+    #[test]
+    fn a_plain_string_check_error_from_an_older_build_still_loads() {
+        let loaded: UpdateState =
+            serde_json::from_str(r#"{"phase":"check_failed","check_error":"connection refused"}"#)
+                .unwrap();
+        let text = loaded.check_error.expect("legacy error is kept");
+        assert_eq!(text.id, "updates-check-failed-legacy");
+        assert_eq!(
+            text.args.get("cause"),
+            Some(&UiArg::Text("connection refused".into()))
+        );
+        assert_eq!(text.render_plain(&source()), "connection refused");
+        assert!(format_message(&source(), &text.id, None).is_some());
+    }
+
+    #[test]
+    fn a_missing_or_null_check_error_loads_as_none() {
+        let missing: UpdateState = serde_json::from_str("{}").unwrap();
+        assert!(missing.check_error.is_none());
+        let null: UpdateState = serde_json::from_str(r#"{"check_error":null}"#).unwrap();
+        assert!(null.check_error.is_none());
+    }
 }

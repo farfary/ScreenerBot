@@ -167,7 +167,9 @@ async fn record_deferred(
             &format!(
                 "Update v{} is staged but held back: {}",
                 update.version,
-                reason.message()
+                reason
+                    .ui_text()
+                    .render_plain(&crate::i18n::source_locale().parse().unwrap_or_default())
             ),
         );
         mutate_state(|state| state.deferred = Some(reason)).await;

@@ -1,7 +1,7 @@
 use crate::{
     config,
     errors::ErrorClass,
-    i18n::{ids, MessageId},
+    i18n::{ids, MessageId, UiArg, UiText},
     logger::{self, LogTag},
     version,
     webserver::{
@@ -100,7 +100,8 @@ pub(super) async fn download_update(Json(body): Json<DownloadRequest>) -> Respon
 
     success_response(DownloadResponse {
         started: true,
-        message: format!("Downloading update v{version_str}..."),
+        text: UiText::new(ids::UPDATES_DOWNLOAD_STARTED)
+            .arg("version", UiArg::Text(version_str.to_string())),
     })
 }
 
@@ -133,9 +134,7 @@ pub(super) async fn get_status() -> Response {
         None
     };
 
-    let blocked_reason = readiness
-        .or(state.deferred)
-        .map(|reason| reason.message().to_owned());
+    let blocked_reason = readiness.or(state.deferred).map(|reason| reason.ui_text());
     let auto_download = config::with_config(|cfg| cfg.updates.auto_download);
     let requires_user_action = needs_user_action(&state, blocked_reason.is_some(), auto_download);
 
@@ -169,8 +168,7 @@ pub(super) async fn apply_update() -> Response {
     match version::apply_now().await {
         Ok(()) => success_response(ApplyResponse {
             applying: true,
-            message: "Installing the update. ScreenerBot restarts and reconnects automatically."
-                .to_owned(),
+            text: UiText::new(ids::UPDATES_APPLY_STARTED),
         }),
         Err(e) => update_error_response(ids::ERRORS_UPDATES_APPLY_FAILED, &e),
     }
@@ -184,8 +182,7 @@ pub(super) async fn install_update() -> Response {
     match version::prepare_install().await {
         Ok(_) => success_response(InstallResponse {
             opened: true,
-            message: "Verified update installer opened. Complete the operating-system installer."
-                .to_owned(),
+            text: UiText::new(ids::UPDATES_INSTALL_OPENED),
         }),
         Err(e) => update_error_response(ids::ERRORS_UPDATES_INSTALL_FAILED, &e),
     }

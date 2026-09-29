@@ -50,7 +50,9 @@ impl Service for UpdateCheckService {
     async fn health(&self) -> ServiceHealth {
         let state = crate::version::get_update_state().await;
         if let Some(error) = state.check_error {
-            ServiceHealth::Degraded(error)
+            ServiceHealth::Degraded(
+                error.render_plain(&crate::i18n::source_locale().parse().unwrap_or_default()),
+            )
         } else if state.last_check.is_some() {
             ServiceHealth::Healthy
         } else {

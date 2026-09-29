@@ -1,3 +1,4 @@
+use crate::i18n::UiText;
 use crate::version::{ReleaseSummary, StagedCore, UpdateInfo, UpdateState};
 use serde::{Deserialize, Serialize};
 
@@ -34,7 +35,7 @@ pub struct UpdateStatusResponse {
     pub staged_core: Option<StagedCore>,
     /// Why a ready update is not installing itself right now.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub blocked_reason: Option<String>,
+    pub blocked_reason: Option<UiText>,
     /// Whether the current phase needs an explicit choice from the operator.
     pub requires_user_action: bool,
 }
@@ -56,17 +57,17 @@ pub struct DownloadRequest {
 #[derive(Debug, Serialize)]
 pub struct DownloadResponse {
     pub started: bool,
-    pub message: String,
+    pub text: UiText,
 }
 
 #[derive(Debug, Serialize)]
 pub struct ApplyResponse {
     pub applying: bool,
-    pub message: String,
+    pub text: UiText,
 }
 
 #[derive(Debug, Serialize)]
 pub struct InstallResponse {
     pub opened: bool,
-    pub message: String,
+    pub text: UiText,
 }

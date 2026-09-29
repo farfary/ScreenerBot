@@ -146,9 +146,9 @@ function renderDataAccess(access) {
     <div class="account-data" data-state="${escape(access.state)}">
       <p class="account-data-headline">
         <i class="${access.available ? "icon-circle-check" : "icon-info"}" aria-hidden="true"></i>
-        <span>${escape(access.headline)}</span>
+        <span>${escape(I18n.text(access.text))}</span>
       </p>
-      <p class="account-data-detail">${escape(access.detail)}</p>
+      <p class="account-data-detail">${escape(I18n.textAttr(access.text, "detail"))}</p>
     </div>`;
 }
 

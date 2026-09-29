@@ -15,10 +15,18 @@ const messages = {
     unit: "hours",
   },
   "config-category-checking": { value: "Checking" },
+  "updates-defer-trading-active": { value: "A trade is active, so the restart is deferred." },
+  "updates-check-failed": { value: "unused" },
 };
 globalThis.I18n = {
   t: (id) => messages[id]?.value ?? id,
   attr: (id, name) => messages[id]?.[name] ?? null,
+  text: (uiText) =>
+    uiText
+      ? uiText.id === "updates-check-failed"
+        ? String(uiText.args.cause.value)
+        : (messages[uiText.id]?.value ?? uiText.id)
+      : "",
 };
 
 function escapeHtml(value) {
@@ -200,4 +208,28 @@ test("status exposes one phase-appropriate primary action", () => {
   });
   assert.match(verifying.html, /is-indeterminate/);
   assert.doesNotMatch(verifying.html, /aria-valuenow/);
+});
+
+test("blocked reason and check error render from backend text", () => {
+  const ready = view.renderStatus({
+    phase: "ready_to_apply",
+    currentVersion: "0.2.3",
+    platform: "macOS arm64",
+    available_update: { version: "0.2.4", kind: "core", core: { size: 24 } },
+    download_progress: {},
+    blocked_reason: { id: "updates-defer-trading-active" },
+  });
+  assert.match(ready.html, /A trade is active, so the restart is deferred\./);
+
+  const failed = view.renderStatus({
+    phase: "check_failed",
+    currentVersion: "0.2.3",
+    platform: "macOS arm64",
+    download_progress: {},
+    check_error: {
+      id: "updates-check-failed",
+      args: { cause: { type: "text", value: "HTTP 503" } },
+    },
+  });
+  assert.match(failed.html, /HTTP 503/);
 });

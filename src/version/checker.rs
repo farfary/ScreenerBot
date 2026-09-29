@@ -435,7 +435,7 @@ fn apply_check_failure(state: &mut UpdateState, error: &Error, previous_phase: U
             UpdatePhase::CheckFailed
         };
     }
-    state.check_error = Some(error.to_string());
+    state.check_error = Some(check_failed_text(error.to_string()));
 }
 
 #[cfg(test)]

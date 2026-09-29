@@ -373,15 +373,16 @@
       if (!access) return "";
 
       const state = escapeHtml(access.state || "unknown");
-      const detail = access.detail
-        ? `<p class="account-data-detail">${escapeHtml(access.detail)}</p>`
+      const detailText = I18n.textAttr(access.text, "detail");
+      const detail = detailText
+        ? `<p class="account-data-detail">${escapeHtml(detailText)}</p>`
         : "";
 
       return `
         <div class="account-data" data-state="${state}">
           <p class="account-data-headline">
             <i class="${access.available ? "icon-circle-check" : "icon-info"}" aria-hidden="true"></i>
-            <span>${escapeHtml(access.headline || "")}</span>
+            <span>${escapeHtml(I18n.text(access.text))}</span>
           </p>
           ${detail}
         </div>`;

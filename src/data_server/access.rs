@@ -1,13 +1,14 @@
 //! Whether ScreenerBot data is available to this install, and what to say if not.
 //!
 //! ============================================================================
-//! WHY THE SENTENCE LIVES IN RUST
+//! WHY THE SENTENCE IS OWNED BY THE BACKEND
 //! ============================================================================
 //! Three surfaces explain this to the same person: the first-run introduction,
 //! the setup screen's account panel, and Settings. If each composed its own
 //! wording they would drift, and the one that drifted would be the one the user
-//! read first. So the state carries its own headline and detail, every surface
-//! renders what it is given, and improving the sentence is a one-line change.
+//! read first. So the state carries its own catalog text (headline and
+//! `.detail`), every surface renders what it is given, and improving the
+//! sentence is a one-line catalog change.
 //!
 //! ============================================================================
 //! WHY THIS IS NEVER AN ERROR
@@ -22,6 +23,8 @@ use std::time::{Duration, Instant};
 
 use arc_swap::ArcSwap;
 use serde::Serialize;
+
+use crate::i18n::{ids, source_locale, LanguageIdentifier, UiArg, UiText};
 
 /// Where this install stands with the ScreenerBot data service.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -62,52 +65,24 @@ impl DataAccess {
         matches!(self, DataAccess::Ready)
     }
 
-    /// The short line, written as a statement of fact.
-    pub fn headline(&self) -> &'static str {
+    /// Catalog text for this state: the message value is the headline, written
+    /// as a statement of fact, and its `.detail` attribute is the explanation,
+    /// which must always answer "so what happens instead?".
+    pub fn ui_text(&self) -> UiText {
         match self {
-            DataAccess::Ready => "ScreenerBot data is active",
-            DataAccess::Disabled => "ScreenerBot data is switched off",
-            DataAccess::Offline => "ScreenerBot data is offline",
-            DataAccess::SignedOut => "ScreenerBot data needs an account",
-            DataAccess::ReauthorizationRequired => "ScreenerBot data needs you to sign in again",
-            DataAccess::VersionUnsupported { .. } => "ScreenerBot data needs a newer version",
-            DataAccess::Unreachable => "ScreenerBot data is not responding",
-            DataAccess::Unknown => "ScreenerBot data has not been checked yet",
-        }
-    }
-
-    /// The explanation, which must always answer "so what happens instead?".
-    pub fn detail(&self) -> String {
-        match self {
-            DataAccess::Ready => "Shared candles, pool registry, security reports and token \
-                                  identity are being served from screenerbot.io."
-                .to_string(),
-            DataAccess::Disabled => "The ScreenerBot source is turned off in your settings, so \
-                                     data comes from the public providers only."
-                .to_string(),
-            DataAccess::Offline => "There is no network connection. Data will resume on its own \
-                                    once the connection returns."
-                .to_string(),
-            DataAccess::SignedOut => "Charts, pools, security reports and token identity come \
-                                      from the public providers instead. They are slower, rate \
-                                      limited, and thinner on history. Signing in is free and \
-                                      changes nothing else about how ScreenerBot runs."
-                .to_string(),
+            DataAccess::Ready => UiText::new(ids::ACCOUNT_DATA_ACCESS_READY),
+            DataAccess::Disabled => UiText::new(ids::ACCOUNT_DATA_ACCESS_DISABLED),
+            DataAccess::Offline => UiText::new(ids::ACCOUNT_DATA_ACCESS_OFFLINE),
+            DataAccess::SignedOut => UiText::new(ids::ACCOUNT_DATA_ACCESS_SIGNED_OUT),
             DataAccess::ReauthorizationRequired => {
-                "This device was authorised before ScreenerBot data existed. Sign in again to \
-                 restore it — the public providers are being used until then."
-                    .to_string()
+                UiText::new(ids::ACCOUNT_DATA_ACCESS_REAUTHORIZATION_REQUIRED)
             }
-            DataAccess::VersionUnsupported { minimum } => format!(
-                "This version is no longer served. Update to {minimum} or newer to use \
-                 ScreenerBot data again; the public providers are being used until then."
-            ),
-            DataAccess::Unreachable => "The service did not answer. The public providers are \
-                                        being used, and ScreenerBot will keep retrying."
-                .to_string(),
-            DataAccess::Unknown => {
-                "ScreenerBot has not yet needed shared data this session.".to_string()
+            DataAccess::VersionUnsupported { minimum } => {
+                UiText::new(ids::ACCOUNT_DATA_ACCESS_VERSION_UNSUPPORTED)
+                    .arg("minimum", UiArg::Text(minimum.clone()))
             }
+            DataAccess::Unreachable => UiText::new(ids::ACCOUNT_DATA_ACCESS_UNREACHABLE),
+            DataAccess::Unknown => UiText::new(ids::ACCOUNT_DATA_ACCESS_UNKNOWN),
         }
     }
 
@@ -129,8 +104,8 @@ pub struct DataAccessStatus {
     pub state: &'static str,
     pub available: bool,
     pub actionable: bool,
-    pub headline: &'static str,
-    pub detail: String,
+    /// Headline and `.detail` attribute, formatted by the presentation layer.
+    pub text: UiText,
     /// Present only for `version_unsupported`, so the UI can name the release.
     pub minimum_version: Option<String>,
     /// When the state was last established, or null if never.
@@ -225,7 +200,8 @@ pub fn record(access: DataAccess) {
 
     // A transition is worth one line, at a level that matches what it means: a
     // missing account is a choice the user made, not a fault.
-    let message = format!("Data Server: {}", access.headline());
+    let source: LanguageIdentifier = source_locale().parse().unwrap_or_default();
+    let message = format!("Data Server: {}", access.ui_text().render_plain(&source));
     match access {
         DataAccess::Ready => crate::logger::info(crate::logger::LogTag::System, &message),
         DataAccess::Unreachable => crate::logger::warning(crate::logger::LogTag::System, &message),
@@ -288,8 +264,7 @@ pub fn describe(access: DataAccess, checked_at: Option<i64>) -> DataAccessStatus
         state: access.key(),
         available: access.available(),
         actionable: access.actionable(),
-        headline: access.headline(),
-        detail: access.detail(),
+        text: access.ui_text(),
         minimum_version: match &access {
             DataAccess::VersionUnsupported { minimum } => Some(minimum.clone()),
             _ => None,
@@ -324,19 +299,84 @@ mod tests {
         ];
 
         for state in states {
-            assert!(!state.headline().is_empty(), "{:?}", state.key());
-            assert!(state.detail().len() > 40, "{:?}", state.key());
+            let text = state.ui_text();
+            let key = state.key().replace('_', "-");
+            assert_eq!(text.id, format!("account-data-access-{key}"));
+            let headline = text.render_plain(&source());
+            assert!(
+                !headline.is_empty() && headline != text.id,
+                "{:?}",
+                state.key()
+            );
+            assert!(
+                detail_attribute_exists(&text.id),
+                "{:?} has no .detail",
+                state.key()
+            );
             // Only the working state may claim to be working.
             assert_eq!(state.available(), state == DataAccess::Ready);
         }
     }
 
+    fn source() -> LanguageIdentifier {
+        source_locale().parse().unwrap()
+    }
+
+    fn detail_attribute_exists(id: &str) -> bool {
+        crate::i18n::format_message(&source(), id, None).is_some_and(|message| {
+            message
+                .attributes
+                .iter()
+                .any(|(name, value)| name == "detail" && !value.is_empty())
+        })
+    }
+
+    /// Exhaustive on purpose: a new variant fails to compile until its catalog
+    /// key is named here.
+    fn catalog_key(state: &DataAccess) -> &'static str {
+        match state {
+            DataAccess::Ready => "account-data-access-ready",
+            DataAccess::Disabled => "account-data-access-disabled",
+            DataAccess::Offline => "account-data-access-offline",
+            DataAccess::SignedOut => "account-data-access-signed-out",
+            DataAccess::ReauthorizationRequired => "account-data-access-reauthorization-required",
+            DataAccess::VersionUnsupported { .. } => "account-data-access-version-unsupported",
+            DataAccess::Unreachable => "account-data-access-unreachable",
+            DataAccess::Unknown => "account-data-access-unknown",
+        }
+    }
+
+    #[test]
+    fn every_state_has_a_catalog_headline_and_detail() {
+        for state in [
+            DataAccess::Ready,
+            DataAccess::Disabled,
+            DataAccess::Offline,
+            DataAccess::SignedOut,
+            DataAccess::ReauthorizationRequired,
+            DataAccess::VersionUnsupported {
+                minimum: "0.2.0".to_string(),
+            },
+            DataAccess::Unreachable,
+            DataAccess::Unknown,
+        ] {
+            let key = catalog_key(&state);
+            assert_eq!(state.ui_text().id, key);
+            assert_ne!(crate::i18n::format_en(key, None), key, "missing {key}");
+            assert!(detail_attribute_exists(key), "{key} has no .detail");
+        }
+    }
+
     #[test]
     fn the_version_refusal_names_the_release_to_update_to() {
-        let state = DataAccess::VersionUnsupported {
+        let text = DataAccess::VersionUnsupported {
             minimum: "1.4.2".to_string(),
-        };
-        assert!(state.detail().contains("1.4.2"));
+        }
+        .ui_text();
+        assert_eq!(
+            text.args.get("minimum"),
+            Some(&UiArg::Text("1.4.2".to_string()))
+        );
     }
 
     #[test]
