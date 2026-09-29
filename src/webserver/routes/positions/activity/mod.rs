@@ -16,7 +16,10 @@ mod merge;
 
 use std::collections::HashMap;
 
-use axum::{extract::Path, http::StatusCode, response::Response};
+use axum::{
+    extract::Path,
+    response::{IntoResponse as _, Response},
+};
 use chrono::Utc;
 use futures::future::join_all;
 
@@ -26,12 +29,14 @@ use super::types::{
     EntryRecordResponse, ExitRecordResponse, TokenActivityResponse,
 };
 use crate::chains::adapter;
+use crate::i18n::ids;
 use crate::logger::{self, LogTag};
 use crate::positions::{self, Position};
 use crate::sol_price;
 use crate::tokens;
 use crate::transactions::get_transaction;
-use crate::webserver::utils::{error_response, success_response};
+use crate::webserver::api_error::{ApiError, ApiErrorCode};
+use crate::webserver::utils::success_response;
 
 use drafts::Draft;
 
@@ -43,30 +48,23 @@ pub async fn get_token_activity(Path(key): Path<String>) -> Response {
     let position = match resolve_position_by_key(&key).await {
         Ok(Some(position)) => position,
         Ok(None) => {
-            return error_response(
-                StatusCode::NOT_FOUND,
-                "POSITION_NOT_FOUND",
-                "Position not found",
-                Some(&format!("No position found for key {key}")),
-            )
+            return ApiError::new(ApiErrorCode::NotFound, ids::ERRORS_POSITIONS_NOT_FOUND)
+                .details(key.clone())
+                .into_response()
         }
         Err(err) => {
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "POSITION_ACTIVITY_ERROR",
-                "Failed to resolve position",
-                Some(&err.to_string()),
-            )
+            return ApiError::new(ApiErrorCode::Internal, ids::ERRORS_POSITIONS_RESOLVE_FAILED)
+                .details(err.to_string())
+                .into_response()
         }
     };
 
     if !drafts::is_tradeable_mint(&position.mint) {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "INVALID_MINT",
-            "Wrapped SOL has no token activity",
-            None,
-        );
+        return ApiError::new(
+            ApiErrorCode::InvalidInput,
+            ids::ERRORS_POSITIONS_WRAPPED_SOL_ACTIVITY,
+        )
+        .into_response();
     }
 
     success_response(build_token_activity(&position).await)

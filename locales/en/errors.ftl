@@ -1,6 +1,9 @@
 # API error messages. Each key names the failed operation; technical causes are
 # carried separately in the response `details` and are never part of a message.
 
+# Framing for an operation message followed by its technical cause.
+errors-with-details = { $message }: { $details }
+
 # Configuration
 errors-config-save-failed = Failed to save configuration
 
@@ -79,6 +82,9 @@ errors-agent-disabled = Agent control is disabled
 errors-agent-approval-not-pending = Approval is no longer pending
 errors-agent-approval-not-found = Approval not found
 errors-agent-bridge-task-failed = Agent-control bridge task failed
+errors-agent-task-failed = agent-control task failed
+errors-agent-pairing-not-found = No active pairing with that id
+errors-agent-permissions-update-failed = Failed to update permissions
 
 # Connectivity
 errors-connectivity-endpoint-not-found = Endpoint '{ $endpoint }' not found or not monitored
@@ -307,3 +313,103 @@ errors-tools-router-unknown = Unknown swap router '{ $router }'
 errors-tools-session-type-mismatch = Session is { $actual } not { $expected }
 errors-tools-session-not-found = Session not found
 errors-tools-session-complete = Session is already complete
+
+# Configuration import and reload
+errors-config-reload-failed = Failed to reload config
+errors-config-reset-failed = Failed to reset config
+errors-config-disk-parse-failed = Failed to parse disk config
+errors-config-disk-read-failed = Failed to read disk config
+errors-config-update-failed = Failed to update config
+errors-config-import-not-object = Config must be a JSON object
+errors-config-import-no-sections = No valid sections found to import
+errors-config-import-validation-failed = Config validation failed. No changes were applied.
+errors-config-import-commit-failed = Failed to commit config changes
+errors-config-import-failed = Failed to import config
+
+# Filtering
+errors-filtering-analytics-failed = Failed to fetch analytics
+errors-filtering-refresh-failed = Failed to rebuild filtering snapshot
+errors-filtering-rejection-stats-failed = Failed to fetch rejection statistics
+errors-filtering-rejected-tokens-failed = Failed to fetch rejected tokens
+errors-filtering-csv-header-failed = Failed to write CSV header
+errors-filtering-csv-record-failed = Failed to write CSV record
+errors-filtering-csv-finalize-failed = Failed to finalize CSV
+errors-filtering-export-response-failed = Failed to build response
+
+# OHLCV
+errors-ohlcv-fetch-failed = Failed to fetch OHLCV data
+errors-ohlcv-pools-failed = Failed to fetch pools
+errors-ohlcv-gaps-failed = Failed to fetch gaps
+errors-ohlcv-refresh-failed = Failed to refresh
+errors-ohlcv-monitor-start-failed = Failed to start monitoring
+errors-ohlcv-monitor-stop-failed = Failed to stop monitoring
+errors-ohlcv-activity-failed = Failed to record activity
+errors-ohlcv-list-failed = Failed to list OHLCV tokens
+errors-ohlcv-delete-failed = Failed to delete token data
+errors-ohlcv-clear-failed = Failed to clear OHLCV cache
+errors-ohlcv-cleanup-failed = Failed to cleanup inactive tokens
+
+# Trader and manual trading
+errors-trade-already-running = trader is already running
+errors-trade-already-stopped = trader is already stopped
+errors-trade-config-update-failed = trader config update failed
+errors-trade-trader-unavailable = complete wallet and RPC setup before using the auto trader
+errors-trade-force-stop-active = the emergency stop is active; clear it first
+errors-trade-template-not-found = no trader template named { $template }
+errors-trade-manual-force-stopped = manual trading is disabled while the emergency stop is active
+errors-trade-core-services-not-ready = core services are not ready for trading: { $pending }
+errors-trade-mint-invalid = invalid token mint address { $mint }
+errors-trade-blacklisted = token { $mint } is blacklisted
+errors-trade-slippage-invalid = slippage { $slippage }% must be in (0, { $maximum }]
+errors-trade-percentage-invalid = sell percentage { $percentage } must be in (0, 100]
+errors-trade-record-failed = could not record manual trade
+errors-trade-no-open-position = no open position for token { $mint }
+errors-trade-size-invalid = invalid trade size { $amount } SOL
+errors-trade-management-invalid = invalid position management { $management }
+errors-trade-strategy-evaluation-failed = strategy evaluation for token { $mint } failed
+errors-trade-token-data-missing = token data unavailable for { $mint }
+errors-trade-endpoints-unhealthy = no healthy endpoints available
+errors-trade-dependency-failed = { $dependency } dependency failed
+errors-trade-storage-failed = The trade request could not be completed
+errors-trade-manual-failed = Manual trade failed
+# The reason is the trader's own wording for a refused trade, shown exactly as produced.
+errors-trade-manual-refused = { $reason }
+errors-trade-wallet-not-configured = Wallet not configured
+errors-trade-amount-sol-invalid = amount_sol is required for buy and must be positive
+errors-trade-no-tokens-in-wallet = No tokens found in wallet for this position. Token balance is 0; the position cannot be closed via swap.
+errors-trade-percentage-range = percentage must be in (0, 100]
+errors-trade-amount-tokens-invalid = amount_tokens must be positive
+errors-trade-sell-amount-zero = Computed sell amount is zero
+
+# Swap quotes. The message is the dialog headline; `.hint` is what the user can do.
+errors-trade-quote-registry-unavailable = Swap routing is not ready yet
+    .hint = The swap service is still starting. Wait for services to become ready, then retry.
+errors-trade-quote-no-routers-enabled = No swap providers are enabled
+    .hint = Enable at least one swap router in Trader settings, then try again.
+errors-trade-quote-not-tradable = This token isn't tradable right now
+    .hint = No liquidity or swap route is available. The token may be unlaunched, abandoned, or have no pool. Try again later or choose another token.
+errors-trade-quote-no-route = No swap route available
+    .hint = No provider could route this trade at the requested amount. Try a smaller amount, or try again in a moment.
+errors-trade-quote-rate-limited = Swap providers are rate limiting us
+    .hint = The swap providers are throttling requests. Wait a few seconds and retry.
+errors-trade-quote-timeout = Quote request timed out
+    .hint = The swap providers didn't respond in time. Check your connection and retry.
+errors-trade-quote-router-rejected = The quote was refused
+    .hint = A provider returned a quote that failed our safety checks and was discarded. Retry to fetch a fresh one.
+errors-trade-quote-unavailable = Couldn't fetch a quote
+    .hint = The swap providers couldn't quote this trade. Try again in a moment.
+
+# Positions
+errors-positions-not-found = Position not found
+errors-positions-already-closed = Position is already closed
+errors-positions-already-archived = Position is already archived
+errors-positions-not-archived = Position is not archived
+errors-positions-archive-failed = Failed to archive position
+errors-positions-unarchive-failed = Failed to unarchive position
+errors-positions-management-invalid = Copy-owned management requires a copy-origin position
+errors-positions-management-failed = Failed to update position management
+errors-positions-delete-failed = Failed to delete position
+errors-positions-bulk-delete-failed = Failed to delete archived positions
+errors-positions-detail-failed = Failed to load position details
+errors-positions-resolve-failed = Failed to resolve position
+errors-positions-wrapped-sol-activity = Wrapped SOL has no token activity

@@ -2,11 +2,16 @@
 //!
 //! Endpoints for importing and exporting configuration files.
 
-use axum::{http::StatusCode, response::Response, Json};
+use axum::{
+    response::{IntoResponse as _, Response},
+    Json,
+};
 
 use crate::config;
+use crate::i18n::ids;
 use crate::webserver::{
-    utils::{error_response, success_response},
+    api_error::{ApiError, ApiErrorCode},
+    utils::success_response,
     Error, Result,
 };
 
@@ -347,12 +352,11 @@ pub async fn import_config_preview(Json(request): Json<ImportConfigPreviewReques
     let imported_obj = match imported.as_object() {
         Some(obj) => obj,
         None => {
-            return error_response(
-                StatusCode::BAD_REQUEST,
-                "INVALID_FORMAT",
-                "Config must be a JSON object",
-                None,
-            );
+            return ApiError::new(
+                ApiErrorCode::InvalidInput,
+                ids::ERRORS_CONFIG_IMPORT_NOT_OBJECT,
+            )
+            .into_response();
         }
     };
 
@@ -538,12 +542,11 @@ pub async fn import_config(Json(request): Json<ImportConfigRequest>) -> Response
     let imported_obj = match imported.as_object() {
         Some(obj) => obj,
         None => {
-            return error_response(
-                StatusCode::BAD_REQUEST,
-                "INVALID_FORMAT",
-                "Config must be a JSON object",
-                None,
-            );
+            return ApiError::new(
+                ApiErrorCode::InvalidInput,
+                ids::ERRORS_CONFIG_IMPORT_NOT_OBJECT,
+            )
+            .into_response();
         }
     };
 
@@ -564,12 +567,11 @@ pub async fn import_config(Json(request): Json<ImportConfigRequest>) -> Response
     };
 
     if sections_to_import.is_empty() {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "NO_SECTIONS",
-            "No valid sections found to import",
-            None,
-        );
+        return ApiError::new(
+            ApiErrorCode::InvalidInput,
+            ids::ERRORS_CONFIG_IMPORT_NO_SECTIONS,
+        )
+        .into_response();
     }
 
     // PHASE 1: Build a candidate config by cloning current and applying all changes
@@ -645,15 +647,12 @@ pub async fn import_config(Json(request): Json<ImportConfigRequest>) -> Response
     if !imported_sections.is_empty() {
         if let Err(validation_error) = config::validate_config(&candidate_config) {
             // Validation failed - don't commit anything
-            return error_response(
-                StatusCode::BAD_REQUEST,
-                "VALIDATION_FAILED",
-                &format!(
-                    "Config validation failed: {}. No changes were applied.",
-                    validation_error
-                ),
-                None,
-            );
+            return ApiError::new(
+                ApiErrorCode::InvalidInput,
+                ids::ERRORS_CONFIG_IMPORT_VALIDATION_FAILED,
+            )
+            .details(validation_error.to_string())
+            .into_response();
         }
     }
 
@@ -685,12 +684,12 @@ pub async fn import_config(Json(request): Json<ImportConfigRequest>) -> Response
             },
             false, // Don't save to disk yet
         ) {
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "COMMIT_FAILED",
-                &format!("Failed to commit config changes: {e}"),
-                None,
-            );
+            return ApiError::new(
+                ApiErrorCode::ConfigError,
+                ids::ERRORS_CONFIG_IMPORT_COMMIT_FAILED,
+            )
+            .details(e.to_string())
+            .into_response();
         }
     }
 
@@ -709,12 +708,9 @@ pub async fn import_config(Json(request): Json<ImportConfigRequest>) -> Response
         };
 
     if imported_sections.is_empty() {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "IMPORT_FAILED",
-            &format!("Failed to import config: {}", errors.join(", ")),
-            None,
-        );
+        return ApiError::new(ApiErrorCode::InvalidInput, ids::ERRORS_CONFIG_IMPORT_FAILED)
+            .details(errors.join(", "))
+            .into_response();
     }
 
     let message = if errors.is_empty() {

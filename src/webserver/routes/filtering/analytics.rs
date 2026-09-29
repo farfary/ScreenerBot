@@ -1,17 +1,24 @@
 //! Filtering analytics route — serves filter rejection statistics and charts.
 
-use axum::{extract::Query, http::StatusCode, response::Response};
+use axum::{
+    extract::Query,
+    response::{IntoResponse as _, Response},
+};
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 
 use crate::{
     filtering::{self, SnapshotState},
+    i18n::ids,
     logger::{self, LogTag},
     tokens::{
         get_recent_rejections_async, get_rejection_stats_aggregated_async,
         get_rejection_stats_with_time_filter_async,
     },
-    webserver::utils::{error_response, success_response},
+    webserver::{
+        api_error::{ApiError, ApiErrorCode},
+        utils::success_response,
+    },
 };
 
 use super::helpers::{
@@ -285,24 +292,24 @@ pub async fn get_analytics(Query(query): Query<AnalyticsQuery>) -> Response {
                 LogTag::Filtering,
                 &format!("Failed to fetch rejection stats for analytics: {:?}", err),
             );
-            error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "ANALYTICS_FAILED",
-                &format!("Failed to fetch analytics: {:?}", err),
-                None,
+            ApiError::new(
+                ApiErrorCode::Internal,
+                ids::ERRORS_FILTERING_ANALYTICS_FAILED,
             )
+            .details(format!("{err:?}"))
+            .into_response()
         }
         (_, _, Err(err)) => {
             logger::warning(
                 LogTag::Filtering,
                 &format!("Failed to fetch recent rejections for analytics: {:?}", err),
             );
-            error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "ANALYTICS_FAILED",
-                &format!("Failed to fetch analytics: {:?}", err),
-                None,
+            ApiError::new(
+                ApiErrorCode::Internal,
+                ids::ERRORS_FILTERING_ANALYTICS_FAILED,
             )
+            .details(format!("{err:?}"))
+            .into_response()
         }
     }
 }

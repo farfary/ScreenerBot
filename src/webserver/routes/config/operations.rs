@@ -2,12 +2,13 @@
 //!
 //! Config reload, reset, and diff endpoints.
 
-use axum::http::StatusCode;
-use axum::response::Response;
+use axum::response::{IntoResponse as _, Response};
 use serde::Serialize;
 
 use crate::config;
-use crate::webserver::utils::{error_response, success_response};
+use crate::i18n::ids;
+use crate::webserver::api_error::{ApiError, ApiErrorCode};
+use crate::webserver::utils::success_response;
 
 use super::types::UpdateResponse;
 
@@ -23,12 +24,9 @@ pub async fn reload_config_from_disk() -> Response {
             saved_to_disk: false,
             timestamp: chrono::Utc::now().to_rfc3339(),
         }),
-        Err(e) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "RELOAD_FAILED",
-            &format!("Failed to reload config: {e}"),
-            None,
-        ),
+        Err(e) => ApiError::new(ApiErrorCode::ConfigError, ids::ERRORS_CONFIG_RELOAD_FAILED)
+            .details(e.to_string())
+            .into_response(),
     }
 }
 
@@ -62,12 +60,9 @@ pub async fn reset_config_to_defaults() -> Response {
             saved_to_disk: true,
             timestamp: chrono::Utc::now().to_rfc3339(),
         }),
-        Err(e) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "RESET_FAILED",
-            &format!("Failed to reset config: {e}"),
-            None,
-        ),
+        Err(e) => ApiError::new(ApiErrorCode::ConfigError, ids::ERRORS_CONFIG_RESET_FAILED)
+            .details(e.to_string())
+            .into_response(),
     }
 }
 
@@ -126,19 +121,19 @@ pub async fn get_config_diff() -> Response {
                         },
                     })
                 }
-                Err(e) => error_response(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "PARSE_ERROR",
-                    &format!("Failed to parse disk config: {e}"),
-                    None,
-                ),
+                Err(e) => ApiError::new(
+                    ApiErrorCode::ConfigError,
+                    ids::ERRORS_CONFIG_DISK_PARSE_FAILED,
+                )
+                .details(e.to_string())
+                .into_response(),
             }
         }
-        Err(e) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "READ_ERROR",
-            &format!("Failed to read disk config: {e}"),
-            None,
-        ),
+        Err(e) => ApiError::new(
+            ApiErrorCode::ConfigError,
+            ids::ERRORS_CONFIG_DISK_READ_FAILED,
+        )
+        .details(e.to_string())
+        .into_response(),
     }
 }

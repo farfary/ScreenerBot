@@ -1,14 +1,18 @@
 //! Filtering stats route — computes and returns token filtering pass/fail rates.
 
-use axum::{http::StatusCode, response::Response};
+use axum::response::{IntoResponse as _, Response};
 use chrono::Utc;
 use std::collections::HashMap;
 
 use crate::{
     filtering::{self, SnapshotState},
+    i18n::ids,
     logger::{self, LogTag},
     tokens::get_rejection_stats_async,
-    webserver::utils::{error_response, success_response},
+    webserver::{
+        api_error::{ApiError, ApiErrorCode},
+        utils::success_response,
+    },
 };
 
 use super::helpers::{get_rejection_category, get_rejection_display_label};
@@ -65,12 +69,9 @@ pub async fn trigger_refresh() -> Response {
                 &format!("Filtering refresh failed: {err}"),
             );
 
-            error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "FILTERING_REFRESH_FAILED",
-                &format!("Failed to rebuild filtering snapshot: {err}"),
-                None,
-            )
+            ApiError::new(ApiErrorCode::Internal, ids::ERRORS_FILTERING_REFRESH_FAILED)
+                .details(err.to_string())
+                .into_response()
         }
     }
 }
@@ -112,12 +113,12 @@ pub async fn get_rejection_stats() -> Response {
                 &format!("Failed to fetch rejection stats: {:?}", err),
             );
 
-            error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "REJECTION_STATS_FAILED",
-                &format!("Failed to fetch rejection statistics: {:?}", err),
-                None,
+            ApiError::new(
+                ApiErrorCode::Internal,
+                ids::ERRORS_FILTERING_REJECTION_STATS_FAILED,
             )
+            .details(format!("{err:?}"))
+            .into_response()
         }
     }
 }

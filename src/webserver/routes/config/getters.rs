@@ -2,13 +2,18 @@
 //!
 //! GET endpoints for viewing config sections, plus generic PATCH handler.
 
-use axum::{http::StatusCode, response::Response, Json};
+use axum::{
+    response::{IntoResponse as _, Response},
+    Json,
+};
 
 use crate::config;
 use crate::config::metadata::collect_config_metadata;
 use crate::config::schemas::default_tabs;
+use crate::i18n::ids;
 use crate::webserver::{
-    utils::{error_response, success_response},
+    api_error::{ApiError, ApiErrorCode},
+    utils::success_response,
     Error, Result,
 };
 
@@ -818,11 +823,8 @@ where
             };
             success_response(response)
         }
-        Err(e) => error_response(
-            StatusCode::BAD_REQUEST,
-            "CONFIG_UPDATE_FAILED",
-            &format!("Failed to update config: {e}"),
-            None,
-        ),
+        Err(e) => ApiError::new(ApiErrorCode::InvalidInput, ids::ERRORS_CONFIG_UPDATE_FAILED)
+            .details(e.to_string())
+            .into_response(),
     }
 }

@@ -1,12 +1,20 @@
 //! Filtering tokens route — lists tokens with their current filter evaluation results.
 
-use axum::{body::Body, extract::Query, http::StatusCode, response::Response};
+use axum::{
+    body::Body,
+    extract::Query,
+    response::{IntoResponse as _, Response},
+};
 use chrono::{DateTime, Utc};
 
 use crate::{
+    i18n::ids,
     logger::{self, LogTag},
     tokens::{get_rejected_tokens_async, get_token_info_batch_async},
-    webserver::utils::{error_response, success_response},
+    webserver::{
+        api_error::{ApiError, ApiErrorCode},
+        utils::success_response,
+    },
 };
 
 use super::helpers::get_rejection_display_label;
@@ -56,12 +64,12 @@ pub async fn get_rejected_tokens_handler(Query(params): Query<RejectedTokensQuer
                 LogTag::Filtering,
                 &format!("Failed to fetch rejected tokens: {:?}", err),
             );
-            error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "FETCH_FAILED",
-                &format!("Failed to fetch rejected tokens: {:?}", err),
-                None,
+            ApiError::new(
+                ApiErrorCode::Internal,
+                ids::ERRORS_FILTERING_REJECTED_TOKENS_FAILED,
             )
+            .details(format!("{err:?}"))
+            .into_response()
         }
     }
 }
@@ -82,12 +90,12 @@ pub async fn export_rejected_tokens(Query(params): Query<RejectedTokensQuery>) -
             if let Err(e) =
                 wtr.write_record(&["Mint", "Reason", "Display Label", "Source", "Rejected At"])
             {
-                return error_response(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "CSV_ERROR",
-                    &format!("Failed to write CSV header: {e}"),
-                    None,
-                );
+                return ApiError::new(
+                    ApiErrorCode::Internal,
+                    ids::ERRORS_FILTERING_CSV_HEADER_FAILED,
+                )
+                .details(e.to_string())
+                .into_response();
             }
 
             // Write records
@@ -98,12 +106,12 @@ pub async fn export_rejected_tokens(Query(params): Query<RejectedTokensQuery>) -
                 let display_label = get_rejection_display_label(&reason);
 
                 if let Err(e) = wtr.write_record(&[mint, reason, display_label, source, dt]) {
-                    return error_response(
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        "CSV_ERROR",
-                        &format!("Failed to write CSV record: {e}"),
-                        None,
-                    );
+                    return ApiError::new(
+                        ApiErrorCode::Internal,
+                        ids::ERRORS_FILTERING_CSV_RECORD_FAILED,
+                    )
+                    .details(e.to_string())
+                    .into_response();
                 }
             }
 
@@ -120,20 +128,19 @@ pub async fn export_rejected_tokens(Query(params): Query<RejectedTokensQuery>) -
                         )
                         .body(Body::from(data))
                         .unwrap_or_else(|_| {
-                            error_response(
-                                StatusCode::INTERNAL_SERVER_ERROR,
-                                "RESPONSE_ERROR",
-                                "Failed to build response",
-                                None,
+                            ApiError::new(
+                                ApiErrorCode::Internal,
+                                ids::ERRORS_FILTERING_EXPORT_RESPONSE_FAILED,
                             )
+                            .into_response()
                         })
                 }
-                Err(e) => error_response(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "CSV_ERROR",
-                    &format!("Failed to finalize CSV: {e}"),
-                    None,
-                ),
+                Err(e) => ApiError::new(
+                    ApiErrorCode::Internal,
+                    ids::ERRORS_FILTERING_CSV_FINALIZE_FAILED,
+                )
+                .details(e.to_string())
+                .into_response(),
             }
         }
         Err(err) => {
@@ -141,12 +148,12 @@ pub async fn export_rejected_tokens(Query(params): Query<RejectedTokensQuery>) -
                 LogTag::Filtering,
                 &format!("Failed to fetch rejected tokens for export: {:?}", err),
             );
-            error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "FETCH_FAILED",
-                &format!("Failed to fetch rejected tokens: {:?}", err),
-                None,
+            ApiError::new(
+                ApiErrorCode::Internal,
+                ids::ERRORS_FILTERING_REJECTED_TOKENS_FAILED,
             )
+            .details(format!("{err:?}"))
+            .into_response()
         }
     }
 }

@@ -32,6 +32,8 @@ tip = Tip
     .aria-label = Label
 attrs-only =
     .placeholder = Type here
+hinted = Headline
+    .hint = Try { $name }
 `;
 
 const FA = `
@@ -132,6 +134,16 @@ test("attr returns the formatted attribute or null", () => {
   assert.equal(I18n.attr("tip", "title"), "Hover");
   assert.equal(I18n.attr("tip", "missing"), null);
   assert.equal(I18n.attr("nope", "title"), null);
+});
+
+test("textAttr renders an attribute of a backend text with its arguments", () => {
+  const { I18n } = load(payload);
+  const text = { id: "hinted", args: { name: { type: "text", value: "again" } } };
+  assert.match(I18n.textAttr(text, "hint"), /Try .*again/);
+  assert.equal(I18n.textAttr(text, "missing"), null);
+  assert.equal(I18n.textAttr({ id: "hello" }, "hint"), null);
+  assert.equal(I18n.textAttr({ id: "nope" }, "hint"), null);
+  assert.equal(I18n.textAttr(null, "hint"), null);
 });
 
 test("text renders count, nested and time arguments", () => {

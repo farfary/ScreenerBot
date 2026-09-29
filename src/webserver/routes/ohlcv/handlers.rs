@@ -1,18 +1,18 @@
 //! OHLCV route handlers — endpoint implementations for candlestick data.
 
 use super::types::*;
+use crate::i18n::ids;
 use crate::ohlcvs::{
     add_token_monitoring, clear_all_ohlcv_data, delete_inactive_tokens, delete_token_data,
     get_all_tokens_with_status, get_available_pools, get_data_gaps, get_database_stats,
     get_metrics, get_ohlcv_data, record_activity, remove_token_monitoring, request_refresh,
     ActivityType, DatabaseStats, Priority, Timeframe,
 };
-use crate::webserver::utils::{error_response, success_response};
+use crate::webserver::api_error::{ApiError, ApiErrorCode};
+use crate::webserver::utils::success_response;
 use axum::{
     extract::{Path, Query},
-    http::StatusCode,
-    response::Json,
-    response::Response,
+    response::{IntoResponse as _, Json, Response},
 };
 
 pub(super) async fn get_ohlcv_data_handler(
@@ -50,12 +50,11 @@ pub(super) async fn get_ohlcv_data_handler(
 
             Ok(success_response(response))
         }
-        Err(e) => Err(error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "ohlcv_fetch_failed",
-            &format!("Failed to fetch OHLCV data: {e}"),
-            None,
-        )),
+        Err(e) => Err(
+            ApiError::new(ApiErrorCode::Internal, ids::ERRORS_OHLCV_FETCH_FAILED)
+                .details(e.to_string())
+                .into_response(),
+        ),
     }
 }
 
@@ -75,12 +74,11 @@ pub(super) async fn get_pools_handler(Path(mint): Path<String>) -> Result<Respon
 
             Ok(success_response(response))
         }
-        Err(e) => Err(error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "ohlcv_pools_failed",
-            &format!("Failed to fetch pools: {e}"),
-            None,
-        )),
+        Err(e) => Err(
+            ApiError::new(ApiErrorCode::Internal, ids::ERRORS_OHLCV_POOLS_FAILED)
+                .details(e.to_string())
+                .into_response(),
+        ),
     }
 }
 
@@ -114,12 +112,11 @@ pub(super) async fn get_gaps_handler(
 
             Ok(success_response(response))
         }
-        Err(e) => Err(error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "ohlcv_gaps_failed",
-            &format!("Failed to fetch gaps: {e}"),
-            None,
-        )),
+        Err(e) => Err(
+            ApiError::new(ApiErrorCode::Internal, ids::ERRORS_OHLCV_GAPS_FAILED)
+                .details(e.to_string())
+                .into_response(),
+        ),
     }
 }
 
@@ -176,12 +173,11 @@ pub(super) async fn refresh_handler(Path(mint): Path<String>) -> Result<Response
             "message": "Refresh requested",
             "mint": mint
         }))),
-        Err(e) => Err(error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "ohlcv_refresh_failed",
-            &format!("Failed to refresh: {e}"),
-            None,
-        )),
+        Err(e) => Err(
+            ApiError::new(ApiErrorCode::Internal, ids::ERRORS_OHLCV_REFRESH_FAILED)
+                .details(e.to_string())
+                .into_response(),
+        ),
     }
 }
 
@@ -219,12 +215,12 @@ pub(super) async fn add_monitoring_handler(
             "mint": mint,
             "priority": priority.as_str()
         }))),
-        Err(e) => Err(error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "ohlcv_monitor_start_failed",
-            &format!("Failed to start monitoring: {e}"),
-            None,
-        )),
+        Err(e) => Err(ApiError::new(
+            ApiErrorCode::Internal,
+            ids::ERRORS_OHLCV_MONITOR_START_FAILED,
+        )
+        .details(e.to_string())
+        .into_response()),
     }
 }
 
@@ -236,12 +232,12 @@ pub(super) async fn remove_monitoring_handler(
             "message": "Monitoring stopped",
             "mint": mint
         }))),
-        Err(e) => Err(error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "ohlcv_monitor_stop_failed",
-            &format!("Failed to stop monitoring: {e}"),
-            None,
-        )),
+        Err(e) => Err(ApiError::new(
+            ApiErrorCode::Internal,
+            ids::ERRORS_OHLCV_MONITOR_STOP_FAILED,
+        )
+        .details(e.to_string())
+        .into_response()),
     }
 }
 
@@ -251,12 +247,11 @@ pub(super) async fn record_view_handler(Path(mint): Path<String>) -> Result<Resp
             "message": "Activity recorded",
             "mint": mint
         }))),
-        Err(e) => Err(error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "ohlcv_activity_failed",
-            &format!("Failed to record activity: {e}"),
-            None,
-        )),
+        Err(e) => Err(
+            ApiError::new(ApiErrorCode::Internal, ids::ERRORS_OHLCV_ACTIVITY_FAILED)
+                .details(e.to_string())
+                .into_response(),
+        ),
     }
 }
 
@@ -360,12 +355,11 @@ pub(super) async fn get_all_tokens_handler() -> Result<Response, Response> {
 
             Ok(success_response(response))
         }
-        Err(e) => Err(error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "ohlcv_list_failed",
-            &format!("Failed to list OHLCV tokens: {e}"),
-            None,
-        )),
+        Err(e) => Err(
+            ApiError::new(ApiErrorCode::Internal, ids::ERRORS_OHLCV_LIST_FAILED)
+                .details(e.to_string())
+                .into_response(),
+        ),
     }
 }
 
@@ -411,12 +405,11 @@ pub(super) async fn delete_token_handler(Path(mint): Path<String>) -> Result<Res
 
             Ok(success_response(response))
         }
-        Err(e) => Err(error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "ohlcv_delete_failed",
-            &format!("Failed to delete token data: {e}"),
-            None,
-        )),
+        Err(e) => Err(
+            ApiError::new(ApiErrorCode::Internal, ids::ERRORS_OHLCV_DELETE_FAILED)
+                .details(e.to_string())
+                .into_response(),
+        ),
     }
 }
 
@@ -430,12 +423,11 @@ pub(super) async fn clear_all_handler() -> Result<Response, Response> {
             gaps_deleted: result.gaps_deleted,
             tokens_reset: result.tokens_reset,
         })),
-        Err(e) => Err(error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "ohlcv_clear_failed",
-            &format!("Failed to clear OHLCV cache: {e}"),
-            None,
-        )),
+        Err(e) => Err(
+            ApiError::new(ApiErrorCode::Internal, ids::ERRORS_OHLCV_CLEAR_FAILED)
+                .details(e.to_string())
+                .into_response(),
+        ),
     }
 }
 
@@ -454,11 +446,10 @@ pub(super) async fn cleanup_inactive_handler(
 
             Ok(success_response(response))
         }
-        Err(e) => Err(error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "ohlcv_cleanup_failed",
-            &format!("Failed to cleanup inactive tokens: {e}"),
-            None,
-        )),
+        Err(e) => Err(
+            ApiError::new(ApiErrorCode::Internal, ids::ERRORS_OHLCV_CLEANUP_FAILED)
+                .details(e.to_string())
+                .into_response(),
+        ),
     }
 }

@@ -1,17 +1,22 @@
 //! Position detail route — serves detailed data for a single position view.
 
-use axum::{extract::Path, http::StatusCode, response::Response};
+use axum::{
+    extract::Path,
+    response::{IntoResponse as _, Response},
+};
 use chrono::Utc;
 
 use super::list::map_position_to_response_async;
 use super::types::*;
 use crate::chains::adapter;
+use crate::i18n::ids;
 use crate::logger::{self, LogTag};
 use crate::pools;
 use crate::positions;
 use crate::sol_price;
 use crate::tokens;
-use crate::webserver::utils::{error_response, success_response};
+use crate::webserver::api_error::{ApiError, ApiErrorCode};
+use crate::webserver::utils::success_response;
 
 pub async fn get_position_details(Path(key): Path<String>) -> Response {
     match resolve_position_by_key(&key).await {
@@ -134,24 +139,18 @@ pub async fn get_position_details(Path(key): Path<String>) -> Response {
                 fetched_at: Utc::now().to_rfc3339(),
             })
         }
-        Ok(None) => error_response(
-            StatusCode::NOT_FOUND,
-            "POSITION_NOT_FOUND",
-            "Position not found",
-            Some(&format!("No position found for key {key}")),
-        ),
+        Ok(None) => ApiError::new(ApiErrorCode::NotFound, ids::ERRORS_POSITIONS_NOT_FOUND)
+            .details(key.clone())
+            .into_response(),
         Err(err) => {
             logger::info(
                 LogTag::Webserver,
                 &format!("Failed to resolve position for key {key}: {err}"),
             );
 
-            error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "POSITION_DETAIL_ERROR",
-                "Failed to load position details",
-                Some(&err.to_string()),
-            )
+            ApiError::new(ApiErrorCode::Internal, ids::ERRORS_POSITIONS_DETAIL_FAILED)
+                .details(err.to_string())
+                .into_response()
         }
     }
 }

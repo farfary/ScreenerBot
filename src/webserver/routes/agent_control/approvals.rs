@@ -9,7 +9,6 @@
 
 use axum::{
     extract::{Path, Query, State},
-    http::StatusCode,
     response::Response,
     Json,
 };
@@ -19,9 +18,9 @@ use std::sync::Arc;
 use crate::agent_control::{approvals, audit, bridge};
 use crate::logger::{self, LogTag};
 use crate::webserver::state::AppState;
-use crate::webserver::utils::{error_response, status_for, success_response};
+use crate::webserver::utils::success_response;
 
-use super::error_code;
+use super::{failure, task_failed};
 
 #[derive(Debug, Deserialize)]
 pub struct DecideBody {
@@ -46,8 +45,8 @@ fn fifty() -> u32 {
 pub async fn list_pending(State(_state): State<Arc<AppState>>) -> Response {
     match tokio::task::spawn_blocking(approvals::list_pending).await {
         Ok(Ok(rows)) => success_response(rows),
-        Ok(Err(e)) => error_response(status_for(&e), error_code(&e), &e.to_string(), None),
-        Err(_) => internal(),
+        Ok(Err(e)) => failure(&e),
+        Err(_) => task_failed(),
     }
 }
 
@@ -66,7 +65,7 @@ pub async fn decide(
                 );
                 success_response(serde_json::json!({ "resolved": "approved" }))
             }
-            Err(e) => error_response(status_for(&e), error_code(&e), &e.to_string(), None),
+            Err(e) => failure(&e),
         }
     } else {
         let id_for_log = id.clone();
@@ -78,8 +77,8 @@ pub async fn decide(
                 );
                 success_response(serde_json::json!({ "resolved": "denied" }))
             }
-            Ok(Err(e)) => error_response(status_for(&e), error_code(&e), &e.to_string(), None),
-            Err(_) => internal(),
+            Ok(Err(e)) => failure(&e),
+            Err(_) => task_failed(),
         }
     }
 }
@@ -97,16 +96,7 @@ pub async fn list_audit(
             "page": page.max(1),
             "per_page": per_page.clamp(1, 200),
         })),
-        Ok(Err(e)) => error_response(status_for(&e), error_code(&e), &e.to_string(), None),
-        Err(_) => internal(),
+        Ok(Err(e)) => failure(&e),
+        Err(_) => task_failed(),
     }
-}
-
-fn internal() -> Response {
-    error_response(
-        StatusCode::INTERNAL_SERVER_ERROR,
-        "INTERNAL",
-        "agent-control task failed",
-        None,
-    )
 }

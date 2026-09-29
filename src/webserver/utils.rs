@@ -7,26 +7,6 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
-use serde_json::json;
-
-/// Legacy untyped error response; routes migrate to ApiError.
-pub fn error_response(
-    status: StatusCode,
-    code: &str,
-    message: &str,
-    details: Option<&str>,
-) -> Response {
-    let error = json!({
-        "error": {
-            "code": code,
-            "message": message,
-            "details": details,
-            "timestamp": chrono::Utc::now().to_rfc3339(),
-        }
-    });
-
-    (status, Json(error)).into_response()
-}
 
 /// The HTTP status a typed domain error already carries.
 ///

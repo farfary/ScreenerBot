@@ -7,19 +7,20 @@
 
 use axum::{
     extract::{Path, State},
-    http::StatusCode,
-    response::Response,
+    response::{IntoResponse as _, Response},
     Json,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use crate::agent_control::{pairing, ToolPermissions};
+use crate::i18n::ids;
 use crate::logger::{self, LogTag};
+use crate::webserver::api_error::{ApiError, ApiErrorCode};
 use crate::webserver::state::AppState;
-use crate::webserver::utils::{error_response, status_for, success_response};
+use crate::webserver::utils::success_response;
 
-use super::error_code;
+use super::{failure, task_failed};
 
 #[derive(Debug, Deserialize)]
 pub struct CreatePairingBody {
@@ -59,8 +60,8 @@ fn current_binary_path() -> Option<String> {
 pub async fn list(State(_state): State<Arc<AppState>>) -> Response {
     match tokio::task::spawn_blocking(pairing::list).await {
         Ok(Ok(rows)) => success_response(rows),
-        Ok(Err(e)) => error_response(status_for(&e), error_code(&e), &e.to_string(), None),
-        Err(_) => internal(),
+        Ok(Err(e)) => failure(&e),
+        Err(_) => task_failed(),
     }
 }
 
@@ -93,8 +94,8 @@ pub async fn create(
                 binary_path: current_binary_path(),
             })
         }
-        Ok(Err(e)) => error_response(status_for(&e), error_code(&e), &e.to_string(), None),
-        Err(_) => internal(),
+        Ok(Err(e)) => failure(&e),
+        Err(_) => task_failed(),
     }
 }
 
@@ -125,14 +126,10 @@ pub async fn revoke(
             );
             success_response(serde_json::json!({ "revoked": true }))
         }
-        Ok(Ok(false)) => error_response(
-            StatusCode::NOT_FOUND,
-            "PAIRING_NOT_FOUND",
-            "No active pairing with that id",
-            None,
-        ),
-        Ok(Err(e)) => error_response(status_for(&e), error_code(&e), &e.to_string(), None),
-        Err(_) => internal(),
+        Ok(Ok(false)) => ApiError::new(ApiErrorCode::NotFound, ids::ERRORS_AGENT_PAIRING_NOT_FOUND)
+            .into_response(),
+        Ok(Err(e)) => failure(&e),
+        Err(_) => task_failed(),
     }
 }
 
@@ -155,22 +152,9 @@ pub async fn update_permissions(
             );
             success_response(serde_json::json!({ "permissions": permissions }))
         }
-        Ok(Ok(false)) => error_response(
-            StatusCode::NOT_FOUND,
-            "PAIRING_NOT_FOUND",
-            "No active pairing with that id",
-            None,
-        ),
-        Ok(Err(e)) => error_response(status_for(&e), error_code(&e), &e.to_string(), None),
-        Err(_) => internal(),
+        Ok(Ok(false)) => ApiError::new(ApiErrorCode::NotFound, ids::ERRORS_AGENT_PAIRING_NOT_FOUND)
+            .into_response(),
+        Ok(Err(e)) => failure(&e),
+        Err(_) => task_failed(),
     }
-}
-
-fn internal() -> Response {
-    error_response(
-        StatusCode::INTERNAL_SERVER_ERROR,
-        "INTERNAL",
-        "agent-control task failed",
-        None,
-    )
 }

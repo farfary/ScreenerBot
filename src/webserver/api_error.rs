@@ -195,6 +195,16 @@ impl ApiError {
         }
     }
 
+    /// Error whose message is an already-built [`UiText`], for a typed domain
+    /// error that owns its own catalog mapping.
+    pub fn with_text(code: ApiErrorCode, text: UiText) -> Self {
+        Self {
+            code,
+            text,
+            details: None,
+        }
+    }
+
     pub fn arg(mut self, name: impl Into<Cow<'static, str>>, value: UiArg) -> Self {
         self.text = self.text.arg(name, value);
         self

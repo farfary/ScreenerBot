@@ -1,11 +1,18 @@
 //! Trailing stop preview, templates, and trader statistics
 
-use axum::{extract::Query, http::StatusCode, response::Response, Json};
+use axum::{
+    extract::Query,
+    response::{IntoResponse as _, Response},
+    Json,
+};
 
 use crate::config::with_config;
+use crate::i18n::ids;
 use crate::positions;
-use crate::webserver::utils::{error_response, success_response};
+use crate::webserver::api_error::{ApiError, ApiErrorCode};
+use crate::webserver::utils::success_response;
 
+use super::control::trader_failure;
 use super::types::*;
 
 // =============================================================================
@@ -195,17 +202,12 @@ pub async fn apply_template(Json(request): Json<ApplyTemplateRequest>) -> Respon
             "message": format!("Template '{}' applied successfully", template.name),
             "template": template,
         })),
-        Err(error @ crate::trader::Error::TemplateNotFound { .. }) => error_response(
-            StatusCode::BAD_REQUEST,
-            "TemplateNotFound",
-            &error.to_string(),
-            None,
-        ),
-        Err(error) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "ConfigUpdateFailed",
-            &error.to_string(),
-            None,
-        ),
+        Err(error @ crate::trader::Error::TemplateNotFound { .. }) => trader_failure(&error),
+        Err(error) => ApiError::new(
+            ApiErrorCode::ConfigError,
+            ids::ERRORS_TRADE_CONFIG_UPDATE_FAILED,
+        )
+        .details(error.to_string())
+        .into_response(),
     }
 }

@@ -1,5 +1,9 @@
 import * as Utils from "../../core/utils.js";
-import { apiErrorMessage, isNetworkError } from "../../core/request_manager.js";
+import {
+  apiErrorDetails,
+  apiErrorTitle,
+  isNetworkError,
+} from "../../core/request_manager.js";
 import {
   formatCompactFixed,
   formatFixed,
@@ -180,10 +184,12 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
         this._pulseQuote();
         this._startQuoteRefreshTimer();
       } else {
-        // Carry the backend's friendly title (message) + actionable hint
-        // (details) so the error panel can explain WHY the quote failed.
-        const e = new Error(apiErrorMessage(data, "Couldn't fetch a quote"));
-        e.detail = data.error?.details || "";
+        // Carry the localized title, the message's `hint` attribute and the
+        // technical detail so the error panel can explain WHY the quote failed.
+        const e = new Error(apiErrorTitle(data, "Couldn't fetch a quote"));
+        e.detail = [I18n.textAttr(data.error?.text, "hint"), apiErrorDetails(data)]
+          .filter(Boolean)
+          .join(" ");
         e.code = data.error?.code || "";
         throw e;
       }

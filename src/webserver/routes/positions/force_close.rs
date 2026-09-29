@@ -1,13 +1,19 @@
 //! Force-close route — allows manual closure of ghost positions stuck in open state.
 
-use axum::{extract::Path, http::StatusCode, response::Response, Json};
+use axum::{
+    extract::Path,
+    response::{IntoResponse as _, Response},
+    Json,
+};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
+use crate::i18n::ids;
 use crate::logger::{self, LogTag};
 use crate::pools;
 use crate::positions;
-use crate::webserver::utils::{error_response, success_response};
+use crate::webserver::api_error::{ApiError, ApiErrorCode};
+use crate::webserver::utils::success_response;
 
 #[derive(Debug, Deserialize)]
 pub struct ForceCloseRequest {
@@ -41,12 +47,9 @@ pub(super) async fn force_close_position(
             match positions::get_db_position_by_id(position_id).await {
                 Ok(Some(p)) => p,
                 _ => {
-                    return error_response(
-                        StatusCode::NOT_FOUND,
-                        "POSITION_NOT_FOUND",
-                        "Position not found",
-                        Some(&format!("No position found with ID {position_id}")),
-                    );
+                    return ApiError::new(ApiErrorCode::NotFound, ids::ERRORS_POSITIONS_NOT_FOUND)
+                        .details(position_id.to_string())
+                        .into_response();
                 }
             }
         }
@@ -54,15 +57,12 @@ pub(super) async fn force_close_position(
 
     // 2. Validate it's actually open
     if position.exit_time.is_some() && position.transaction_exit_verified {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "POSITION_ALREADY_CLOSED",
-            "Position is already closed",
-            Some(&format!(
-                "Position {position_id} ({}) is already closed",
-                position.symbol
-            )),
-        );
+        return ApiError::new(
+            ApiErrorCode::InvalidInput,
+            ids::ERRORS_POSITIONS_ALREADY_CLOSED,
+        )
+        .details(format!("{position_id} {}", position.symbol))
+        .into_response();
     }
 
     let symbol = position.symbol.clone();

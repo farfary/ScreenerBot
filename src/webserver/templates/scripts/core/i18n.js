@@ -173,6 +173,16 @@
     }
   }
 
+  function uiTextArgs(uiText) {
+    const args = {};
+    for (const [name, arg] of Object.entries(uiText.args || {})) {
+      const convert = ARG_FORMATTERS[arg.type];
+      if (!convert) warnOnce("arg:" + arg.type, "Unknown argument type " + arg.type);
+      args[name] = convert ? convert(arg.value) : arg.value;
+    }
+    return args;
+  }
+
   const I18n = {
     locale,
     intlLocale,
@@ -216,13 +226,13 @@
     /** Render a backend UiText: `{ id, args: { name: { type, value } } }`. */
     text(uiText) {
       if (!uiText || typeof uiText.id !== "string") return "";
-      const args = {};
-      for (const [name, arg] of Object.entries(uiText.args || {})) {
-        const convert = ARG_FORMATTERS[arg.type];
-        if (!convert) warnOnce("arg:" + arg.type, "Unknown argument type " + arg.type);
-        args[name] = convert ? convert(arg.value) : arg.value;
-      }
-      return I18n.t(uiText.id, args);
+      return I18n.t(uiText.id, uiTextArgs(uiText));
+    },
+
+    /** Formatted attribute of a backend UiText's message, with its args, or null. */
+    textAttr(uiText, name) {
+      if (!uiText || typeof uiText.id !== "string") return null;
+      return I18n.attr(uiText.id, name, uiTextArgs(uiText));
     },
 
     registerArgFormatter(type, fn) {

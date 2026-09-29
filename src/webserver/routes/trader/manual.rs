@@ -1,53 +1,41 @@
 //! Manual trading operations
 
-use axum::{extract::Query, http::StatusCode, response::Response, Json};
+use axum::{
+    extract::Query,
+    response::{IntoResponse as _, Response},
+    Json,
+};
 
 use crate::config::with_config;
 use crate::errors::ErrorClass;
+use crate::i18n::ids;
 use crate::logger::{self, LogTag};
 use crate::swaps::{try_get_best_quote, QuoteError};
 use crate::trader::manual::guard::{self, BlacklistPolicy, ManualTradeKind};
-use crate::webserver::utils::{error_response, success_response};
+use crate::webserver::api_error::{ApiError, ApiErrorCode};
+use crate::webserver::utils::success_response;
 
+use super::control::trader_failure;
 use super::types::*;
 
 // =============================================================================
 // MANUAL TRADING HANDLERS
 // =============================================================================
 
-/// Map a refused or failed manual trade to its response; the codes are the ones
-/// the dashboard trade dialog has always received.
-fn manual_error(fallback_code: &str, error: &crate::trader::Error) -> Response {
-    use crate::trader::Error;
-    let code = match error {
-        Error::ForceStopped => "ForceStopped",
-        Error::CoreServicesNotReady { .. } => "CoreServicesNotReady",
-        Error::InvalidMint { .. } => "InvalidMint",
-        Error::Blacklisted { .. } => "Blacklisted",
-        Error::NoOpenPosition { .. } => "NoOpenPosition",
-        Error::InvalidSlippage { .. } => "InvalidSlippage",
-        Error::InvalidPercentage { .. } => "InvalidPercentage",
-        _ => fallback_code,
-    };
-    let status =
-        StatusCode::from_u16(error.http_status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
-    error_response(status, code, &error.to_string(), None)
-}
-
 fn trade_response(
     result: Result<crate::trader::TradeResult, crate::trader::Error>,
     mint: String,
-    failed_code: &str,
-    error_code: &str,
     message: String,
 ) -> Response {
     match result {
-        Ok(tr) if !tr.success => error_response(
-            StatusCode::BAD_REQUEST,
-            failed_code,
-            tr.error.as_deref().unwrap_or("Manual trade failed"),
-            None,
-        ),
+        Ok(tr) if !tr.success => match tr.error {
+            Some(reason) => {
+                ApiError::new(ApiErrorCode::InvalidInput, ids::ERRORS_TRADE_MANUAL_REFUSED)
+                    .text_arg("reason", reason)
+            }
+            None => ApiError::new(ApiErrorCode::InvalidInput, ids::ERRORS_TRADE_MANUAL_FAILED),
+        }
+        .into_response(),
         Ok(tr) => success_response(ManualTradeSuccess {
             success: true,
             mint,
@@ -58,7 +46,7 @@ fn trade_response(
             message,
             timestamp: chrono::Utc::now().to_rfc3339(),
         }),
-        Err(error) => manual_error(error_code, &error),
+        Err(error) => trader_failure(&error),
     }
 }
 
@@ -69,11 +57,11 @@ pub async fn manual_buy_handler(Json(req): Json<ManualBuyRequest>) -> Response {
         BlacklistPolicy::Enforce
     };
     if let Err(error) = guard::preflight(ManualTradeKind::Buy, &req.mint, blacklist).await {
-        return manual_error("ManualBuyError", &error);
+        return trader_failure(&error);
     }
     let slippage_pct = match guard::validate_slippage(req.slippage_pct) {
         Ok(v) => v,
-        Err(error) => return manual_error("ManualBuyError", &error),
+        Err(error) => return trader_failure(&error),
     };
     let size = match req.size_sol {
         Some(v) if v.is_finite() && v > 0.0 => v,
@@ -92,24 +80,18 @@ pub async fn manual_buy_handler(Json(req): Json<ManualBuyRequest>) -> Response {
         .management
         .unwrap_or(crate::positions::PositionManagement::UserOnly);
     let result = crate::trader::manual::manual_buy(&req.mint, size, management, slippage_pct).await;
-    trade_response(
-        result,
-        req.mint,
-        "ManualBuyFailed",
-        "ManualBuyError",
-        "Manual buy executed".to_owned(),
-    )
+    trade_response(result, req.mint, "Manual buy executed".to_owned())
 }
 
 pub async fn manual_add_handler(Json(req): Json<ManualAddRequest>) -> Response {
     if let Err(error) =
         guard::preflight(ManualTradeKind::Add, &req.mint, BlacklistPolicy::Enforce).await
     {
-        return manual_error("ManualAddError", &error);
+        return trader_failure(&error);
     }
     let slippage_pct = match guard::validate_slippage(req.slippage_pct) {
         Ok(v) => v,
-        Err(error) => return manual_error("ManualAddError", &error),
+        Err(error) => return trader_failure(&error),
     };
     // Default add size = the configured DCA size (a fraction of the trade size). The
     // fraction must come from `trader.dca_size_percentage`, never a hardcoded 0.5.
@@ -124,20 +106,14 @@ pub async fn manual_add_handler(Json(req): Json<ManualAddRequest>) -> Response {
         &format!("mint={} size_sol={}", req.mint, size),
     );
     let result = crate::trader::manual::manual_add(&req.mint, size, slippage_pct).await;
-    trade_response(
-        result,
-        req.mint,
-        "ManualAddFailed",
-        "ManualAddError",
-        "Added to position".to_owned(),
-    )
+    trade_response(result, req.mint, "Added to position".to_owned())
 }
 
 pub async fn manual_sell_handler(Json(req): Json<ManualSellRequest>) -> Response {
     if let Err(error) =
         guard::preflight(ManualTradeKind::Sell, &req.mint, BlacklistPolicy::Ignore).await
     {
-        return manual_error("ManualSellError", &error);
+        return trader_failure(&error);
     }
     let pct = if req.close_all.unwrap_or_default() {
         None // Full exit (100%)
@@ -147,12 +123,12 @@ pub async fn manual_sell_handler(Json(req): Json<ManualSellRequest>) -> Response
             .unwrap_or_else(|| with_config(|cfg| cfg.positions.partial_exit_default_pct));
         match guard::validate_percentage(requested) {
             Ok(pct) => Some(pct),
-            Err(error) => return manual_error("ManualSellError", &error),
+            Err(error) => return trader_failure(&error),
         }
     };
     let slippage_pct = match guard::validate_slippage(req.slippage_pct) {
         Ok(v) => v,
-        Err(error) => return manual_error("ManualSellError", &error),
+        Err(error) => return trader_failure(&error),
     };
     logger::info(
         LogTag::Webserver,
@@ -172,13 +148,7 @@ pub async fn manual_sell_handler(Json(req): Json<ManualSellRequest>) -> Response
         Some(pct) if pct < 100.0 => format!("Partial position closed ({pct}%)"),
         _ => "Full position closed".to_owned(),
     };
-    trade_response(
-        result,
-        req.mint,
-        "ManualSellFailed",
-        "ManualSellError",
-        message,
-    )
+    trade_response(result, req.mint, message)
 }
 
 // =============================================================================
@@ -198,12 +168,8 @@ pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Re
         .validate_address(&req.mint)
         .is_err()
     {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "InvalidMint",
-            "Invalid token mint address",
-            None,
-        );
+        return ApiError::new(ApiErrorCode::InvalidInput, ids::ERRORS_TOOLS_MINT_INVALID)
+            .into_response();
     }
 
     let direction = if req.direction.eq_ignore_ascii_case("sell") {
@@ -215,12 +181,11 @@ pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Re
     let wallet_address = match get_wallet_address() {
         Ok(addr) => addr,
         Err(_) => {
-            return error_response(
-                StatusCode::SERVICE_UNAVAILABLE,
-                "WalletNotAvailable",
-                "Wallet not configured",
-                None,
-            );
+            return ApiError::new(
+                ApiErrorCode::ServiceUnavailable,
+                ids::ERRORS_TRADE_WALLET_NOT_CONFIGURED,
+            )
+            .into_response();
         }
     };
 
@@ -237,12 +202,11 @@ pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Re
         let amount_sol = match req.amount_sol {
             Some(amt) if amt > 0.0 && amt.is_finite() => amt,
             _ => {
-                return error_response(
-                    StatusCode::BAD_REQUEST,
-                    "InvalidAmount",
-                    "amount_sol is required for buy and must be positive",
-                    None,
-                );
+                return ApiError::new(
+                    ApiErrorCode::InvalidInput,
+                    ids::ERRORS_TRADE_AMOUNT_SOL_INVALID,
+                )
+                .into_response();
             }
         };
         let amount_lamports = crate::chains::adapter().native_to_raw(amount_sol);
@@ -263,34 +227,31 @@ pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Re
                 .await
                 .unwrap_or(0);
         if actual_balance == 0 {
-            return error_response(
-                StatusCode::UNPROCESSABLE_ENTITY,
-                "NoTokensInWallet",
-                "No tokens found in wallet for this position",
-                Some("Token balance is 0; the position cannot be closed via swap"),
-            );
+            return ApiError::new(
+                ApiErrorCode::IntegrityFailed,
+                ids::ERRORS_TRADE_NO_TOKENS_IN_WALLET,
+            )
+            .into_response();
         }
 
         // Percentage of the real balance (default = full close). Legacy callers may
         // still send amount_tokens (whole tokens); honour it only as a fallback.
         let amount_raw = if let Some(pct) = req.percentage {
             if !pct.is_finite() || pct <= 0.0 || pct > 100.0 {
-                return error_response(
-                    StatusCode::BAD_REQUEST,
-                    "InvalidAmount",
-                    "percentage must be in (0, 100]",
-                    None,
-                );
+                return ApiError::new(
+                    ApiErrorCode::InvalidInput,
+                    ids::ERRORS_TRADE_PERCENTAGE_RANGE,
+                )
+                .into_response();
             }
             ((actual_balance as f64) * pct / 100.0).floor() as u64
         } else if let Some(tokens) = req.amount_tokens {
             if !tokens.is_finite() || tokens <= 0.0 {
-                return error_response(
-                    StatusCode::BAD_REQUEST,
-                    "InvalidAmount",
-                    "amount_tokens must be positive",
-                    None,
-                );
+                return ApiError::new(
+                    ApiErrorCode::InvalidInput,
+                    ids::ERRORS_TRADE_AMOUNT_TOKENS_INVALID,
+                )
+                .into_response();
             }
             // Clamp to the real balance so we never quote more than exists.
             ((tokens * 10f64.powi(token_decimals as i32)) as u64).min(actual_balance)
@@ -299,12 +260,11 @@ pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Re
         };
 
         if amount_raw == 0 {
-            return error_response(
-                StatusCode::BAD_REQUEST,
-                "InvalidAmount",
-                "Computed sell amount is zero",
-                None,
-            );
+            return ApiError::new(
+                ApiErrorCode::InvalidInput,
+                ids::ERRORS_TRADE_SELL_AMOUNT_ZERO,
+            )
+            .into_response();
         }
 
         let amount_tokens_display = amount_raw as f64 / 10f64.powi(token_decimals as i32);
@@ -327,7 +287,7 @@ pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Re
         slippage_pct: match guard::validate_slippage(req.slippage_pct) {
             Ok(Some(pct)) => pct,
             Ok(None) => with_config(|cfg| cfg.swaps.slippage.quote_default_pct),
-            Err(error) => return manual_error("InvalidSlippage", &error),
+            Err(error) => return trader_failure(&error),
         },
         swap_mode: SwapMode::ExactIn,
         exclude_dexes: None,
@@ -421,22 +381,27 @@ pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Re
             success_response(response)
         }
         Err(e) => {
-            // The trade dialog explains WHY a quote couldn't be fetched. Every
-            // part of that answer — status, code, headline, hint — comes from
-            // the QuoteError variant the router produced, so a provider
-            // rewording its response cannot change what the user is told.
-            // `Unavailable` shows the raw detail as supporting text; a refused
-            // quote adds which router was refused and why after the hint.
-            let status =
-                StatusCode::from_u16(e.http_status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+            // The trade dialog explains WHY a quote couldn't be fetched. Status
+            // and message come from the QuoteError variant the router produced,
+            // so a provider rewording its response cannot change what the user
+            // is told; the message's `hint` attribute is rendered by the
+            // dashboard. `details` carries only the technical values: the raw
+            // failure for `Unavailable`, and which router was refused and why
+            // for a refused quote.
+            let text = e.ui_text();
             let details = match &e {
-                QuoteError::Unavailable { .. } => e.to_string(),
+                QuoteError::Unavailable { .. } => Some(e.to_string()),
                 QuoteError::RouterRejected { router, detail } => {
-                    format!("{} {router}: {detail}", e.hint())
+                    Some(format!("{router}: {detail}"))
                 }
-                _ => e.hint().to_owned(),
+                _ => None,
             };
-            error_response(status, e.code(), e.title(), Some(&details))
+            let error = ApiError::with_text(ApiErrorCode::for_status(e.http_status()), text);
+            match details {
+                Some(details) => error.details(details),
+                None => error,
+            }
+            .into_response()
         }
     }
 }

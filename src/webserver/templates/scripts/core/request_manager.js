@@ -28,14 +28,15 @@ export function isNetworkError(error) {
 }
 
 /**
- * User-facing message of an API error envelope. Renders the catalog `text` in
- * the viewer's language when the response carries one; otherwise the
- * English `message`, then `fallback`.
+ * Operation message of an API error envelope without its technical cause.
+ * Renders the catalog `text` in the viewer's language when the response carries
+ * one; otherwise the English `message`, then `fallback`. For callers that
+ * render `details` themselves.
  * @param {any} body Parsed response body.
  * @param {string|null} [fallback]
  * @returns {string|null|undefined}
  */
-export function apiErrorMessage(body, fallback) {
+export function apiErrorTitle(body, fallback) {
   const text = body?.error?.text;
   const i18n = globalThis.window?.I18n;
   if (text?.id && i18n) {
@@ -43,6 +44,26 @@ export function apiErrorMessage(body, fallback) {
     if (rendered) return rendered;
   }
   return body?.error?.message || body?.message || fallback;
+}
+
+/**
+ * User-facing message of an API error envelope: the localized operation message,
+ * followed by the technical cause when the response carries one.
+ * @param {any} body Parsed response body.
+ * @param {string|null} [fallback]
+ * @returns {string|null|undefined}
+ */
+export function apiErrorMessage(body, fallback) {
+  const text = body?.error?.text;
+  const details = body?.error?.details;
+  const i18n = globalThis.window?.I18n;
+  if (text?.id && i18n && typeof details === "string" && details !== "") {
+    const rendered = i18n.text(text);
+    if (rendered) {
+      return i18n.t("errors-with-details", { message: rendered, details });
+    }
+  }
+  return apiErrorTitle(body, fallback);
 }
 
 /**
@@ -56,7 +77,7 @@ export function apiErrorDetails(body) {
 
 // Classic (non-module) scripts read these through the window.
 if (typeof window !== "undefined") {
-  window.RequestManagerErrors = { apiErrorMessage, apiErrorDetails };
+  window.RequestManagerErrors = { apiErrorMessage, apiErrorTitle, apiErrorDetails };
 }
 
 class RequestManager {

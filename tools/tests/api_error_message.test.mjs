@@ -16,8 +16,12 @@ import vm from "node:vm";
 const read = (rel) =>
   fs.readFileSync(new URL(`../../src/webserver/${rel}`, import.meta.url), "utf8");
 
-const EN = "errors-strategies-already-exists = Strategy with ID '{ $id }' already exists\n";
-const FA = "errors-strategies-already-exists = Strategy { $id } exists (fa)\n";
+const EN =
+  "errors-strategies-already-exists = Strategy with ID '{ $id }' already exists\n" +
+  "errors-with-details = { $message }: { $details }\n";
+const FA =
+  "errors-strategies-already-exists = Strategy { $id } exists (fa)\n" +
+  "errors-with-details = { $message } | { $details } (fa)\n";
 
 function loadI18n() {
   const context = { console, Intl, Date, JSON, fetch: async () => ({ ok: true }) };
@@ -40,7 +44,7 @@ function loadI18n() {
 
 const I18n = loadI18n();
 globalThis.window = { I18n, location: { origin: "http://localhost" } };
-const { apiErrorMessage, apiErrorDetails } = await import(
+const { apiErrorMessage, apiErrorTitle, apiErrorDetails } = await import(
   new URL("../../src/webserver/templates/scripts/core/request_manager.js", import.meta.url)
 );
 
@@ -53,10 +57,38 @@ const envelope = {
   },
 };
 
+const withoutDetails = { error: { ...envelope.error, details: null } };
+
 test("renders the catalog text in the active locale", () => {
-  const message = apiErrorMessage(envelope, "fallback");
+  const message = apiErrorMessage(withoutDetails, "fallback");
   assert.match(message, /Strategy .*a.* exists \(fa\)/);
   assert.notEqual(message, envelope.error.message);
+});
+
+test("frames the message with its technical cause when details are present", () => {
+  const message = apiErrorMessage(envelope, "fallback");
+  assert.match(message, /Strategy .*a.* exists \(fa\).* \| .*raw cause.* \(fa\)$/);
+});
+
+test("empty or non-string details leave the message unframed", () => {
+  for (const details of ["", null, undefined, 5]) {
+    const body = { error: { ...envelope.error, details } };
+    assert.match(apiErrorMessage(body, "fallback"), /^Strategy .*a.* exists \(fa\)$/);
+  }
+});
+
+test("a legacy envelope with details keeps its English message", () => {
+  const legacy = { error: { message: "Legacy message", details: "cause" } };
+  assert.equal(apiErrorMessage(legacy, "fallback"), "Legacy message");
+});
+
+test("the title omits details", () => {
+  assert.match(apiErrorTitle(envelope, "fallback"), /^Strategy .*a.* exists \(fa\)$/);
+  const legacy = { error: { message: "Legacy message", details: "cause" } };
+  assert.equal(apiErrorTitle(legacy, "fallback"), "Legacy message");
+  assert.equal(apiErrorTitle({ message: "Top level" }, "fallback"), "Top level");
+  assert.equal(apiErrorTitle(null, "fallback"), "fallback");
+  assert.equal(apiErrorTitle({}, "fallback"), "fallback");
 });
 
 test("uses the English message when the envelope has no text", () => {
@@ -77,4 +109,5 @@ test("exposes technical details or null", () => {
   assert.equal(apiErrorDetails({ error: { details: null } }), null);
   assert.equal(apiErrorDetails(null), null);
   assert.equal(globalThis.window.RequestManagerErrors.apiErrorMessage, apiErrorMessage);
+  assert.equal(globalThis.window.RequestManagerErrors.apiErrorTitle, apiErrorTitle);
 });

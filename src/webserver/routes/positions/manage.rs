@@ -9,12 +9,18 @@
 //! permit) so the bot can open a new position; it does NOT sell — tokens stay in
 //! the wallet.
 
-use axum::{extract::Path, http::StatusCode, response::Response, Json};
+use axum::{
+    extract::Path,
+    response::{IntoResponse as _, Response},
+    Json,
+};
 use serde::{Deserialize, Serialize};
 
+use crate::i18n::ids;
 use crate::logger::{self, LogTag};
 use crate::positions;
-use crate::webserver::utils::{error_response, success_response};
+use crate::webserver::api_error::{ApiError, ApiErrorCode};
+use crate::webserver::utils::success_response;
 
 #[derive(Debug, Serialize)]
 pub struct ArchiveResponse {
@@ -66,34 +72,27 @@ pub(super) async fn archive_position(Path(position_id): Path<i64>) -> Response {
     let position = match positions::get_position_by_id(position_id).await {
         Some(p) => p,
         None => {
-            return error_response(
-                StatusCode::NOT_FOUND,
-                "POSITION_NOT_FOUND",
-                "Position not found",
-                Some(&format!("No position found with ID {position_id}")),
-            );
+            return ApiError::new(ApiErrorCode::NotFound, ids::ERRORS_POSITIONS_NOT_FOUND)
+                .details(position_id.to_string())
+                .into_response();
         }
     };
 
     if position.archived {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "ALREADY_ARCHIVED",
-            "Position is already archived",
-            None,
-        );
+        return ApiError::new(
+            ApiErrorCode::InvalidInput,
+            ids::ERRORS_POSITIONS_ALREADY_ARCHIVED,
+        )
+        .into_response();
     }
 
     let was_open = holds_open_slot(&position);
 
     // Persist first, then mirror into memory so a failed write doesn't desync state.
     if let Err(e) = positions::set_position_archived_db(position_id, true).await {
-        return error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "ARCHIVE_FAILED",
-            "Failed to archive position",
-            Some(&e.to_string()),
-        );
+        return ApiError::new(ApiErrorCode::Internal, ids::ERRORS_POSITIONS_ARCHIVE_FAILED)
+            .details(e.to_string())
+            .into_response();
     }
     positions::set_position_archived_in_memory(position_id, true).await;
 
@@ -124,31 +123,27 @@ pub(super) async fn unarchive_position(Path(position_id): Path<i64>) -> Response
     let position = match positions::get_position_by_id(position_id).await {
         Some(p) => p,
         None => {
-            return error_response(
-                StatusCode::NOT_FOUND,
-                "POSITION_NOT_FOUND",
-                "Position not found",
-                Some(&format!("No position found with ID {position_id}")),
-            );
+            return ApiError::new(ApiErrorCode::NotFound, ids::ERRORS_POSITIONS_NOT_FOUND)
+                .details(position_id.to_string())
+                .into_response();
         }
     };
 
     if !position.archived {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "NOT_ARCHIVED",
-            "Position is not archived",
-            None,
-        );
+        return ApiError::new(
+            ApiErrorCode::InvalidInput,
+            ids::ERRORS_POSITIONS_NOT_ARCHIVED,
+        )
+        .into_response();
     }
 
     if let Err(e) = positions::set_position_archived_db(position_id, false).await {
-        return error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "UNARCHIVE_FAILED",
-            "Failed to unarchive position",
-            Some(&e.to_string()),
-        );
+        return ApiError::new(
+            ApiErrorCode::Internal,
+            ids::ERRORS_POSITIONS_UNARCHIVE_FAILED,
+        )
+        .details(e.to_string())
+        .into_response();
     }
     positions::set_position_archived_in_memory(position_id, false).await;
 
@@ -197,32 +192,28 @@ pub(super) async fn set_management(
     let position = match positions::get_position_by_id(position_id).await {
         Some(p) => p,
         None => {
-            return error_response(
-                StatusCode::NOT_FOUND,
-                "POSITION_NOT_FOUND",
-                "Position not found",
-                Some(&format!("No position found with ID {position_id}")),
-            );
+            return ApiError::new(ApiErrorCode::NotFound, ids::ERRORS_POSITIONS_NOT_FOUND)
+                .details(position_id.to_string())
+                .into_response();
         }
     };
 
     if !req.management.is_valid_for_origin(&position.origin) {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "INVALID_POSITION_MANAGEMENT",
-            "Copy-owned management requires a copy-origin position",
-            None,
-        );
+        return ApiError::new(
+            ApiErrorCode::InvalidInput,
+            ids::ERRORS_POSITIONS_MANAGEMENT_INVALID,
+        )
+        .into_response();
     }
 
     // Persist first, then mirror into memory so a failed write doesn't desync state.
     if let Err(e) = positions::set_position_management_db(position_id, req.management).await {
-        return error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "MANAGEMENT_FAILED",
-            "Failed to update position management",
-            Some(&e.to_string()),
-        );
+        return ApiError::new(
+            ApiErrorCode::Internal,
+            ids::ERRORS_POSITIONS_MANAGEMENT_FAILED,
+        )
+        .details(e.to_string())
+        .into_response();
     }
     positions::set_position_management_in_memory(position_id, req.management).await;
 
@@ -252,12 +243,9 @@ pub(super) async fn delete_position(Path(position_id): Path<i64>) -> Response {
             match positions::get_db_position_by_id(position_id).await {
                 Ok(Some(p)) => p,
                 _ => {
-                    return error_response(
-                        StatusCode::NOT_FOUND,
-                        "POSITION_NOT_FOUND",
-                        "Position not found",
-                        Some(&format!("No position found with ID {position_id}")),
-                    );
+                    return ApiError::new(ApiErrorCode::NotFound, ids::ERRORS_POSITIONS_NOT_FOUND)
+                        .details(position_id.to_string())
+                        .into_response();
                 }
             }
         }
@@ -270,20 +258,13 @@ pub(super) async fn delete_position(Path(position_id): Path<i64>) -> Response {
     match positions::delete_position_by_id(position_id).await {
         Ok(true) => {}
         Ok(false) => {
-            return error_response(
-                StatusCode::NOT_FOUND,
-                "POSITION_NOT_FOUND",
-                "Position not found",
-                None,
-            );
+            return ApiError::new(ApiErrorCode::NotFound, ids::ERRORS_POSITIONS_NOT_FOUND)
+                .into_response();
         }
         Err(e) => {
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "DELETE_FAILED",
-                "Failed to delete position",
-                Some(&e.to_string()),
-            );
+            return ApiError::new(ApiErrorCode::Internal, ids::ERRORS_POSITIONS_DELETE_FAILED)
+                .details(e.to_string())
+                .into_response();
         }
     }
 
@@ -327,12 +308,12 @@ pub(super) async fn delete_all_archived() -> Response {
     let deleted = match positions::delete_archived_positions().await {
         Ok(n) => n,
         Err(e) => {
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "BULK_DELETE_FAILED",
-                "Failed to delete archived positions",
-                Some(&e.to_string()),
-            );
+            return ApiError::new(
+                ApiErrorCode::Internal,
+                ids::ERRORS_POSITIONS_BULK_DELETE_FAILED,
+            )
+            .details(e.to_string())
+            .into_response();
         }
     };
 

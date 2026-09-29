@@ -16,6 +16,7 @@ use std::time::Duration;
 
 use crate::chains::ChainId;
 use crate::errors::{ErrorClass, NetworkError, ServiceError, Severity};
+use crate::i18n::{ids, UiText};
 use crate::Error;
 
 /// A quote could not be produced. Constructed by the router that failed, or by
@@ -72,66 +73,21 @@ pub enum QuoteError {
 }
 
 impl QuoteError {
-    /// Stable machine code for the dashboard's error envelope. The trade
-    /// dialog switches on this; it must not change casually.
-    pub fn code(&self) -> &'static str {
-        match self {
-            QuoteError::RegistryUnavailable(_) => "SwapsUnavailable",
-            QuoteError::NoRoutersEnabled { .. } => "NoRouters",
-            QuoteError::NotTradable { .. } => "TokenNotTradable",
-            QuoteError::NoRoute { .. } => "NoRoute",
-            QuoteError::RateLimited { .. } => "QuoteRateLimited",
-            QuoteError::Timeout { .. } => "QuoteTimeout",
-            QuoteError::RouterRejected { .. } => "QuoteRejected",
-            QuoteError::Unavailable { .. } => "QuoteFailed",
-        }
-    }
-
-    /// Short headline for the trade dialog.
-    pub fn title(&self) -> &'static str {
-        match self {
-            QuoteError::RegistryUnavailable(_) => "Swap routing is not ready yet",
-            QuoteError::NoRoutersEnabled { .. } => "No swap providers are enabled",
-            QuoteError::NotTradable { .. } => "This token isn't tradable right now",
-            QuoteError::NoRoute { .. } => "No swap route available",
-            QuoteError::RateLimited { .. } => "Swap providers are rate limiting us",
-            QuoteError::Timeout { .. } => "Quote request timed out",
-            QuoteError::RouterRejected { .. } => "The quote was refused",
-            QuoteError::Unavailable { .. } => "Couldn't fetch a quote",
-        }
-    }
-
-    /// What the user can actually do about it.
-    pub fn hint(&self) -> &'static str {
-        match self {
-            QuoteError::RegistryUnavailable(_) => {
-                "The swap service is still starting. Wait for services to become ready, then retry."
-            }
-            QuoteError::NoRoutersEnabled { .. } => {
-                "Enable at least one swap router in Trader settings, then try again."
-            }
-            QuoteError::NotTradable { .. } => {
-                "No liquidity or swap route is available. The token may be unlaunched, \
-                 abandoned, or have no pool. Try again later or choose another token."
-            }
-            QuoteError::NoRoute { .. } => {
-                "No provider could route this trade at the requested amount. Try a smaller \
-                 amount, or try again in a moment."
-            }
-            QuoteError::RateLimited { .. } => {
-                "The swap providers are throttling requests. Wait a few seconds and retry."
-            }
-            QuoteError::Timeout { .. } => {
-                "The swap providers didn't respond in time. Check your connection and retry."
-            }
-            QuoteError::RouterRejected { .. } => {
-                "A provider returned a quote that failed our safety checks and was discarded. \
-                 Retry to fetch a fresh one."
-            }
-            QuoteError::Unavailable { .. } => {
-                "The swap providers couldn't quote this trade. Try again in a moment."
-            }
-        }
+    /// Catalog message for the trade dialog: the headline is the message value
+    /// and what the user can do about it is its `hint` attribute
+    /// (`errors-trade-quote-*` in `locales/en/errors.ftl`). The HTTP status comes
+    /// from [`ErrorClass::http_status`], never from this text.
+    pub fn ui_text(&self) -> UiText {
+        UiText::new(match self {
+            QuoteError::RegistryUnavailable(_) => ids::ERRORS_TRADE_QUOTE_REGISTRY_UNAVAILABLE,
+            QuoteError::NoRoutersEnabled { .. } => ids::ERRORS_TRADE_QUOTE_NO_ROUTERS_ENABLED,
+            QuoteError::NotTradable { .. } => ids::ERRORS_TRADE_QUOTE_NOT_TRADABLE,
+            QuoteError::NoRoute { .. } => ids::ERRORS_TRADE_QUOTE_NO_ROUTE,
+            QuoteError::RateLimited { .. } => ids::ERRORS_TRADE_QUOTE_RATE_LIMITED,
+            QuoteError::Timeout { .. } => ids::ERRORS_TRADE_QUOTE_TIMEOUT,
+            QuoteError::RouterRejected { .. } => ids::ERRORS_TRADE_QUOTE_ROUTER_REJECTED,
+            QuoteError::Unavailable { .. } => ids::ERRORS_TRADE_QUOTE_UNAVAILABLE,
+        })
     }
 
     /// The blacklist reason to record when this failure is a durable verdict on

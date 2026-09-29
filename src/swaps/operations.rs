@@ -1064,35 +1064,50 @@ mod tests {
         assert!(!not_tradable("Jupiter").is_rate_limited());
     }
 
-    /// Statuses and codes are read by the trade dialog; they come from the
+    /// Statuses and catalog messages are read by the trade dialog; they come from the
     /// variant, never from prose.
     #[test]
-    fn every_variant_answers_with_its_own_status_and_code() {
+    fn every_variant_answers_with_its_own_status_and_message() {
         let cases = [
             (
                 QuoteError::NoRoutersEnabled {
                     chain: ChainId::Solana,
                 },
                 503,
-                "NoRouters",
+                "errors-trade-quote-no-routers-enabled",
             ),
-            (not_tradable("Jupiter"), 422, "TokenNotTradable"),
-            (no_route("Jupiter"), 422, "NoRoute"),
-            (timeout("Jupiter"), 504, "QuoteTimeout"),
+            (
+                not_tradable("Jupiter"),
+                422,
+                "errors-trade-quote-not-tradable",
+            ),
+            (no_route("Jupiter"), 422, "errors-trade-quote-no-route"),
+            (timeout("Jupiter"), 504, "errors-trade-quote-timeout"),
             (
                 QuoteError::RouterRejected {
                     router: "Jupiter".to_owned(),
                     detail: "zero output".to_owned(),
                 },
                 502,
-                "QuoteRejected",
+                "errors-trade-quote-router-rejected",
             ),
         ];
-        for (err, status, code) in cases {
+        let source: crate::i18n::LanguageIdentifier = crate::i18n::source_locale().parse().unwrap();
+        for (err, status, id) in cases {
             assert_eq!(err.http_status(), status, "{err}");
-            assert_eq!(err.code(), code, "{err}");
-            assert!(!err.hint().is_empty(), "{err}");
-            assert!(!err.title().is_empty(), "{err}");
+            assert_eq!(err.ui_text().id, id, "{err}");
+            let message = crate::i18n::format_message(&source, id, None).expect("catalog message");
+            assert!(
+                message.value.is_some_and(|title| !title.is_empty()),
+                "{err}"
+            );
+            assert!(
+                message
+                    .attributes
+                    .iter()
+                    .any(|(name, hint)| name == "hint" && !hint.is_empty()),
+                "{err}"
+            );
         }
     }
 
