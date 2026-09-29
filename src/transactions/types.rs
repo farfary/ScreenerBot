@@ -381,30 +381,6 @@ impl TransactionType {
         }
     }
 
-    /// Human label for the dashboard badge and the details dialog.
-    pub fn label(&self) -> &'static str {
-        match self.kind() {
-            "buy" => "Buy",
-            "sell" => "Sell",
-            "swap" => "Swap",
-            "sol_transfer" => "SOL transfer",
-            "token_transfer" => "Token transfer",
-            "transfer" => "Transfer",
-            "dust" => "Dust",
-            "spam" => "Spam airdrop",
-            "ata_create" => "Account opened",
-            "ata_close" => "Rent reclaimed",
-            "ata" => "Token account",
-            "liquidity_add" => "Add liquidity",
-            "liquidity_remove" => "Remove liquidity",
-            "nft" => "NFT",
-            "program" => "Program call",
-            "compute" => "Compute",
-            "failed" => "Failed",
-            _ => "Unclassified",
-        }
-    }
-
     /// Reads a persisted discriminant back into a coarse variant.
     ///
     /// Rows written before the JSON encoding landed hold a `Debug` rendering

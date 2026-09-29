@@ -47,7 +47,7 @@ export function createProfile(page) {
         plural(watch.sources, "source"),
       ],
       ["Last activity", watch.last_activity_at ? timeAgo(watch.last_activity_at) : "—"],
-      watch.last_error ? ["Last error", watch.last_error] : null,
+      watch.last_error ? ["Last error", I18n.text(watch.last_error)] : null,
     ];
   }
 

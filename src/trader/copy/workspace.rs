@@ -21,11 +21,13 @@ use crate::trader::{Error, Result};
 
 mod book;
 mod profile;
+mod readiness;
 
 pub use book::{
     clone_task, close_paper_holding, reset_paper_book, CloneRequest, ClosedHolding, ResetResult,
 };
 pub use profile::{wallet_profile, WalletProfile, WalletWatch};
+pub use readiness::{Readiness, ReadinessCheck};
 
 /// Newest decisions shipped with the workspace; the Activity tab pages the rest.
 const WORKSPACE_ACTIVITY: usize = 20;
@@ -191,131 +193,6 @@ fn paper_holding(
     }
 }
 
-#[derive(Debug, Serialize)]
-pub struct ReadinessCheck {
-    pub id: &'static str,
-    pub label: &'static str,
-    pub passed: bool,
-    pub detail: String,
-}
-
-/// Advisory evidence from the paper book before arming live. Arming still
-/// needs the explicit confirmation; this is what the confirmation is about.
-#[derive(Debug, Serialize)]
-pub struct Readiness {
-    pub ready: bool,
-    pub checks: Vec<ReadinessCheck>,
-}
-
-/// "1 round", "3 rounds": a count with its noun in agreement.
-fn plural(count: usize, noun: &str) -> String {
-    format!("{count} {noun}{}", if count == 1 { "" } else { "s" })
-}
-
-/// A signed SOL figure as the dashboard writes one, with a true minus sign.
-fn signed_sol(value: f64) -> String {
-    let sign = if value > 0.0 {
-        "+"
-    } else if value < 0.0 {
-        "\u{2212}"
-    } else {
-        ""
-    };
-    format!("{sign}{:.4}", value.abs())
-}
-
-fn live_block_text(reason: &str) -> &'static str {
-    match reason {
-        "setup_incomplete" => "Finish wallet and RPC setup first",
-        "force_stop" => "The emergency stop is engaged",
-        "copy_trading_disabled" => "Copy processing is paused globally",
-        _ => "Live execution is unavailable",
-    }
-}
-
-/// `block` is why live execution is unavailable right now, if it is.
-fn readiness(
-    summary: &CopyTaskSummary,
-    rounds: &[CopyRound],
-    holdings: &[PaperHolding],
-    block: Option<&'static str>,
-) -> Readiness {
-    let (min_rounds, max_arrival_ms) = with_config(|config| {
-        (
-            config.copy_trading.readiness_min_closed_rounds,
-            config.copy_trading.max_arrival_distance_ms,
-        )
-    });
-    let realized: f64 = rounds.iter().map(|round| round.pnl_sol).sum();
-    let wins = rounds.iter().filter(|round| round.pnl_sol > 0.0).count();
-    let p95 = summary.stats.arrival_distance.p95_ms;
-    let unpriced = holdings
-        .iter()
-        .filter(|holding| holding.open && holding.mark_price_sol.is_none())
-        .count();
-    let checks = vec![
-        ReadinessCheck {
-            id: "history",
-            label: "Paper history",
-            passed: rounds.len() >= min_rounds,
-            detail: if rounds.len() >= min_rounds {
-                format!(
-                    "{}, {min_rounds} needed",
-                    plural(rounds.len(), "closed paper round")
-                )
-            } else {
-                format!("{} of {min_rounds} closed paper rounds", rounds.len())
-            },
-        },
-        ReadinessCheck {
-            id: "profit",
-            label: "Profitable in paper",
-            passed: realized > 0.0,
-            detail: format!(
-                "{} SOL realized over {}, {wins} won",
-                signed_sol(realized),
-                plural(rounds.len(), "round")
-            ),
-        },
-        ReadinessCheck {
-            id: "latency",
-            label: "Trades detected in time",
-            passed: p95.is_some_and(|p95| p95 <= max_arrival_ms),
-            detail: match p95 {
-                Some(p95) => format!(
-                    "p95 arrival {:.1}s, limit {:.1}s",
-                    p95 as f64 / 1000.0,
-                    max_arrival_ms as f64 / 1000.0
-                ),
-                None => "No arrival samples yet".to_owned(),
-            },
-        },
-        ReadinessCheck {
-            id: "priced",
-            label: "Every holding priced",
-            passed: unpriced == 0,
-            detail: if unpriced == 0 {
-                "Every open paper holding has a pool price".to_owned()
-            } else {
-                format!("{} without a pool price", plural(unpriced, "open holding"))
-            },
-        },
-        ReadinessCheck {
-            id: "runtime",
-            label: "Live execution available",
-            passed: block.is_none(),
-            detail: block
-                .map(live_block_text)
-                .unwrap_or("Setup and safety gates allow live copies")
-                .to_owned(),
-        },
-    ];
-    Readiness {
-        ready: checks.iter().all(|check| check.passed),
-        checks,
-    }
-}
-
 /// Everything the task workspace shows, in one read.
 #[derive(Serialize)]
 pub struct CopyTaskWorkspace {
@@ -391,7 +268,7 @@ pub fn build_workspace(
         .map(|position| paper_holding(position, manages.then_some(&policy), mark(position), now))
         .collect::<Vec<_>>();
     let paper_rounds = closed_rounds(summary.task.id, CopyBook::Paper, activity, positions);
-    let readiness = readiness(&summary, &paper_rounds, &paper_holdings, block);
+    let readiness = readiness::readiness(&summary, &paper_rounds, &paper_holdings, block);
     CopyTaskWorkspace {
         live_remaining_budget_sol: (summary.task.total_budget_sol - live_spent_sol).max(0.0),
         summary,

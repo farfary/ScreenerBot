@@ -4,7 +4,6 @@ import { renderAddress } from "../../ui/token_identity.js";
 import {
   MODE_LABELS,
   STATE_LABELS,
-  pauseReasonText,
   plural,
   rangeQuery,
   taskName,
@@ -200,7 +199,7 @@ export function createWorkspace(page) {
           : "The wallet's sells and its exit rules";
     const holdings = open ? `${closer} still close its ${plural(open, "open holding")}.` : "";
     const hint = [resume, holdings].filter(Boolean).join(" ");
-    return `${esc(pauseReasonText(task.pause_reason) + since)}${hint ? `<small>${esc(hint)}</small>` : ""}`;
+    return `${esc(I18n.text(task.pause_text) + since)}${hint ? `<small>${esc(hint)}</small>` : ""}`;
   }
 
   async function refreshWatchStatus(taskId, address) {

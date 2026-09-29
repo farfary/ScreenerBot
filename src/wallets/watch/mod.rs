@@ -42,7 +42,7 @@ pub use service::subscribe_activity;
 pub use types::{
     ActivityKind, SignaturePageItem, SuccessfulTransactionPageItem, SuccessfulTransactionsPage,
     SwapSide, TransferDirection, WalletActivity, WatchDisableReason, WatchMode, WatchNotification,
-    WatchSource, WatchStatus, WatchTarget,
+    WatchRuntimeError, WatchSource, WatchStatus, WatchTarget,
 };
 
 use std::sync::{Arc, OnceLock};
@@ -399,8 +399,8 @@ pub async fn get_status(id: i64) -> Result<WatchStatus, Error> {
     let last_error = target
         .disable_reason
         .as_ref()
-        .map(WatchDisableReason::summary)
-        .or_else(|| service_state::runtime_error(&target.address));
+        .map(WatchDisableReason::ui_text)
+        .or_else(|| service_state::runtime_error(&target.address).map(WatchRuntimeError::ui_text));
     let mode = service_state::watch_mode(&target.address);
     let catching_up = service_state::catching_up(&target.address);
     let last_checked_at = service_state::last_checked_at(&target.address);

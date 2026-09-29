@@ -146,8 +146,7 @@
     "src/webserver/templates/scripts/ui/trade_action/quick_trade.js": 6,
     "src/webserver/templates/scripts/ui/trade_action/quote_manager.js": 2,
     "src/webserver/templates/scripts/ui/trade_action_dialog.js": 59,
-    "src/webserver/templates/scripts/ui/transaction_details_dialog.js": 80,
-    "src/webserver/templates/scripts/ui/transaction_type.js": 29
+    "src/webserver/templates/scripts/ui/transaction_details_dialog.js": 80
   },
   "cssDirection": {
     "src/webserver/templates/styles/base/floating.css": 6,

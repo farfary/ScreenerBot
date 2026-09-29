@@ -16,7 +16,7 @@ pub struct WalletWatch {
     pub sources: usize,
     pub subscribed: bool,
     pub last_activity_at: Option<DateTime<Utc>>,
-    pub last_error: Option<String>,
+    pub last_error: Option<crate::i18n::UiText>,
 }
 
 /// What this bot knows about a wallet before (or while) copying it.

@@ -103,42 +103,21 @@ export function skipKey(reason) {
   return reason.block?.kind ? `${reason.kind}.${reason.block.kind}` : reason.kind;
 }
 
-export function pauseReasonText(reason) {
-  switch (reason?.kind) {
-    case "user":
-      return "Paused by you";
-    case "latency_kill_switch":
-      return `Auto-paused: trades arrived ${seconds(reason.average_ms)} late on average (limit ${seconds(reason.threshold_ms)})`;
-    case "watch_detached":
-      return "Auto-paused: the wallet is no longer watched";
-    case "watch_budget_exceeded":
-      return `Paused: this wallet reached its ${(Number(reason.page_budget) || 5) * 100}-signature watch check limit before catching up`;
-    case "helius_unavailable":
-      return "Paused: Helius wallet checks failed";
-    case "watch_processing_failed":
-      return "Paused: wallet activity could not be processed";
-    default:
-      return "Paused";
-  }
-}
+// Pause kinds serialized by `CopyPauseReason` (src/trader/copy/types.rs).
+const PAUSE_SHORT_LABELS = Object.freeze({
+  user: "copy-pause-short-user",
+  latency_kill_switch: "copy-pause-short-latency-kill-switch",
+  watch_detached: "copy-pause-short-watch-detached",
+  watch_budget_exceeded: "copy-pause-short-watch-budget-exceeded",
+  helius_unavailable: "copy-pause-short-helius-unavailable",
+  watch_processing_failed: "copy-pause-short-watch-processing-failed",
+});
 
+/** Short cause of a pause for the task list; empty when the kind has none. */
 export function pauseReasonShort(reason) {
-  switch (reason?.kind) {
-    case "latency_kill_switch":
-      return "too slow";
-    case "watch_detached":
-      return "watch lost";
-    case "watch_budget_exceeded":
-      return "watch limit";
-    case "helius_unavailable":
-      return "watch provider";
-    case "watch_processing_failed":
-      return "watch processing";
-    case "user":
-      return "by you";
-    default:
-      return "";
-  }
+  return Object.hasOwn(PAUSE_SHORT_LABELS, reason?.kind)
+    ? I18n.label(PAUSE_SHORT_LABELS, reason.kind)
+    : "";
 }
 
 /** "1 task", "3 tasks": a count with its noun in agreement. */

@@ -353,7 +353,8 @@ pub struct ActivityEvent {
     pub block_time: Option<i64>,
     pub fee_sol: Option<f64>,
     pub direction: Option<String>,
-    pub transaction_type: Option<String>,
+    /// Type label; the position path adds the identifying payload.
+    pub transaction_type: Option<crate::i18n::UiText>,
     pub router: Option<String>,
     pub sol_change: Option<f64>,
     pub instructions_count: Option<usize>,

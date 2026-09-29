@@ -34,7 +34,7 @@ use super::dedupe;
 use super::poller;
 use super::recorder;
 use super::runtime::WalletWatchRuntime;
-use super::types::{WalletActivity, WatchMode, WatchSource, WatchTarget};
+use super::types::{WalletActivity, WatchMode, WatchRuntimeError, WatchSource, WatchTarget};
 
 /// Bound generous enough that a burst across every watched target cannot fill the
 /// channel before the slowest consumer (a Telegram send) catches up. Bounded so a
@@ -144,7 +144,7 @@ pub(super) async fn poll_target(
             }
             super::service_state::set_runtime_error(
                 &target_runtime.target.address,
-                "High-activity provider is unavailable; watch paused",
+                WatchRuntimeError::ProviderUnavailable,
             );
             return;
         }
@@ -181,10 +181,10 @@ pub(super) async fn poll_target(
                     &target_runtime.target.address,
                     match result {
                         HighActivityPollResult::ProviderFailed => {
-                            "Helius checks repeatedly failed; watch paused"
+                            WatchRuntimeError::ProviderRepeatedFailure
                         }
                         HighActivityPollResult::ProcessingFailed => {
-                            "Wallet activity processing repeatedly failed; watch paused"
+                            WatchRuntimeError::ProcessingRepeatedFailure
                         }
                         HighActivityPollResult::Checked => unreachable!(),
                     },
@@ -588,7 +588,7 @@ async fn poll_high_activity_target(
             );
             super::service_state::set_runtime_error(
                 &target_runtime.target.address,
-                "Wallet watch could not read its saved position; retrying",
+                WatchRuntimeError::PositionUnreadable,
             );
             return HighActivityPollResult::ProcessingFailed;
         }
@@ -619,7 +619,7 @@ async fn poll_high_activity_target(
                 );
                 super::service_state::set_runtime_error(
                     &target_runtime.target.address,
-                    "High-activity provider check failed; retrying",
+                    WatchRuntimeError::ProviderCheckFailed,
                 );
                 return HighActivityPollResult::ProviderFailed;
             }
@@ -664,7 +664,7 @@ async fn poll_high_activity_target(
                     );
                     super::service_state::set_runtime_error(
                         &target_runtime.target.address,
-                        "High-activity transaction could not be decoded; cursor retained",
+                        WatchRuntimeError::DecodeFailed,
                     );
                     if let Some(signature) = last_handled.as_deref() {
                         let _ = watch_db
@@ -682,7 +682,7 @@ async fn poll_high_activity_target(
                 }
                 super::service_state::set_runtime_error(
                     &target_runtime.target.address,
-                    "Wallet activity could not be processed; retrying",
+                    WatchRuntimeError::ProcessingFailed,
                 );
                 return HighActivityPollResult::ProcessingFailed;
             }
@@ -702,7 +702,7 @@ async fn poll_high_activity_target(
                 );
                 super::service_state::set_runtime_error(
                     &target_runtime.target.address,
-                    "Wallet watch could not save its position; retrying",
+                    WatchRuntimeError::PositionSaveFailed,
                 );
                 return HighActivityPollResult::ProcessingFailed;
             }

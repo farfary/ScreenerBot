@@ -176,7 +176,7 @@ function renderDetails(event, ctx) {
     metric("Chain status", event.status ? Utils.escapeHtml(event.status) : null),
     metric(
       "Transaction type",
-      event.transaction_type ? Utils.escapeHtml(event.transaction_type) : null
+      event.transaction_type ? Utils.escapeHtml(I18n.text(event.transaction_type)) : null
     ),
     metric("Direction", event.direction ? Utils.escapeHtml(event.direction) : null),
     metric(

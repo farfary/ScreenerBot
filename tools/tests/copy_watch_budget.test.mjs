@@ -1,12 +1,21 @@
-import "./fixtures/i18n_global.mjs";
+import { englishI18n } from "./fixtures/i18n_en.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 
-import {
-  pauseReasonShort,
-  pauseReasonText,
-} from "../../src/webserver/templates/scripts/pages/copy/format.js";
+import { pauseReasonShort } from "../../src/webserver/templates/scripts/pages/copy/format.js";
+
+// A pause reason as `CopyPauseReason::ui_text` sends it.
+// Rendered without the isolation marks Fluent wraps around interpolated values.
+const renderPause = (id, args = {}) =>
+  englishI18n
+    .text({
+      id,
+      args: Object.fromEntries(
+        Object.entries(args).map(([name, value]) => [name, { type: "text", value }])
+      ),
+    })
+    .replace(/[\u2068\u2069]/g, "");
 
 test("a watch-budget pause names the limit rather than latency or lost watch", () => {
   const reason = {
@@ -15,9 +24,11 @@ test("a watch-budget pause names the limit rather than latency or lost watch", (
     signatures_checked: 800,
   };
 
+  const text = renderPause("copy-pause-watch-budget-exceeded", { limit: "800" });
+
   assert.equal(pauseReasonShort(reason), "watch limit");
-  assert.match(pauseReasonText(reason), /800-signature watch check limit/);
-  assert.doesNotMatch(pauseReasonText(reason), /late|no longer watched/);
+  assert.match(text, /800-signature watch check limit/);
+  assert.doesNotMatch(text, /late|no longer watched/);
 });
 
 test("watch recovery keeps the copy task paused until a separate resume", async () => {
@@ -62,6 +73,6 @@ test("Helius catch-up is offered only for a capable watch and requires per-walle
 
 test("processing failures are distinct from provider failures in copy status", () => {
   assert.equal(pauseReasonShort({ kind: "watch_processing_failed" }), "watch processing");
-  assert.match(pauseReasonText({ kind: "watch_processing_failed" }), /could not be processed/);
+  assert.match(renderPause("copy-pause-watch-processing-failed"), /could not be processed/);
   assert.equal(pauseReasonShort({ kind: "helius_unavailable" }), "watch provider");
 });

@@ -3,6 +3,8 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+use crate::i18n::{ids, UiArg, UiText};
+
 /// Why a wallet is under observation. One address can serve more than one source at
 /// once (`sources` on `WatchTarget` is a `Vec`).
 ///
@@ -64,21 +66,48 @@ pub enum WatchDisableReason {
 }
 
 impl WatchDisableReason {
-    pub fn summary(&self) -> String {
+    /// Catalog text named `wallets-watch-disabled-<kind>` after the serialized `kind`.
+    pub fn ui_text(&self) -> UiText {
         match self {
-            Self::User => "Paused by you".to_owned(),
-            Self::SignatureBudget { page_budget, .. } => format!(
-                "Paused: reached the {}-signature check limit before catching up",
-                page_budget * super::poller::PAGE_SIZE
-            ),
-            Self::Unknown => "Paused: the saved watch safety reason could not be read".to_owned(),
-            Self::HeliusUnavailable => {
-                "Paused: high-activity provider is unavailable; cursor preserved".to_owned()
+            Self::User => UiText::new(ids::WALLETS_WATCH_DISABLED_USER),
+            Self::SignatureBudget { page_budget, .. } => {
+                UiText::new(ids::WALLETS_WATCH_DISABLED_SIGNATURE_BUDGET).arg(
+                    "limit",
+                    UiArg::Text((page_budget * super::poller::PAGE_SIZE).to_string()),
+                )
             }
-            Self::ProcessingFailed => {
-                "Paused: wallet activity could not be processed; cursor preserved".to_owned()
-            }
+            Self::Unknown => UiText::new(ids::WALLETS_WATCH_DISABLED_UNKNOWN),
+            Self::HeliusUnavailable => UiText::new(ids::WALLETS_WATCH_DISABLED_HELIUS_UNAVAILABLE),
+            Self::ProcessingFailed => UiText::new(ids::WALLETS_WATCH_DISABLED_PROCESSING_FAILED),
         }
+    }
+}
+
+/// The last problem the observation loop hit for a target, shown in its status.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WatchRuntimeError {
+    ProviderUnavailable,
+    ProviderRepeatedFailure,
+    ProcessingRepeatedFailure,
+    PositionUnreadable,
+    ProviderCheckFailed,
+    DecodeFailed,
+    ProcessingFailed,
+    PositionSaveFailed,
+}
+
+impl WatchRuntimeError {
+    pub fn ui_text(self) -> UiText {
+        UiText::new(match self {
+            Self::ProviderUnavailable => ids::WALLETS_WATCH_ERROR_PROVIDER_UNAVAILABLE,
+            Self::ProviderRepeatedFailure => ids::WALLETS_WATCH_ERROR_PROVIDER_REPEATED_FAILURE,
+            Self::ProcessingRepeatedFailure => ids::WALLETS_WATCH_ERROR_PROCESSING_REPEATED_FAILURE,
+            Self::PositionUnreadable => ids::WALLETS_WATCH_ERROR_POSITION_UNREADABLE,
+            Self::ProviderCheckFailed => ids::WALLETS_WATCH_ERROR_PROVIDER_CHECK_FAILED,
+            Self::DecodeFailed => ids::WALLETS_WATCH_ERROR_DECODE_FAILED,
+            Self::ProcessingFailed => ids::WALLETS_WATCH_ERROR_PROCESSING_FAILED,
+            Self::PositionSaveFailed => ids::WALLETS_WATCH_ERROR_POSITION_SAVE_FAILED,
+        })
     }
 }
 
@@ -200,7 +229,7 @@ pub struct WatchStatus {
     pub subscribed: bool,
     pub last_activity_at: Option<DateTime<Utc>>,
     pub last_signature: Option<String>,
-    pub last_error: Option<String>,
+    pub last_error: Option<UiText>,
     pub mode: WatchMode,
     pub catching_up: bool,
     pub last_checked_at: Option<DateTime<Utc>>,
@@ -212,4 +241,92 @@ pub struct WatchStatus {
 pub struct WatchCatchUpOption {
     pub provider: &'static str,
     pub available: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::i18n::{format_en, LanguageIdentifier};
+
+    /// Every variant, listed through an exhaustive match so a new one fails to
+    /// compile until it is added here and to the catalog.
+    fn disable_reasons() -> Vec<WatchDisableReason> {
+        let listed = |reason: WatchDisableReason| match reason {
+            WatchDisableReason::User
+            | WatchDisableReason::Unknown
+            | WatchDisableReason::SignatureBudget { .. }
+            | WatchDisableReason::HeliusUnavailable
+            | WatchDisableReason::ProcessingFailed => reason,
+        };
+        vec![
+            listed(WatchDisableReason::User),
+            listed(WatchDisableReason::Unknown),
+            listed(WatchDisableReason::SignatureBudget {
+                page_budget: 8,
+                signatures_checked: 800,
+            }),
+            listed(WatchDisableReason::HeliusUnavailable),
+            listed(WatchDisableReason::ProcessingFailed),
+        ]
+    }
+
+    fn runtime_errors() -> Vec<WatchRuntimeError> {
+        let listed = |error: WatchRuntimeError| match error {
+            WatchRuntimeError::ProviderUnavailable
+            | WatchRuntimeError::ProviderRepeatedFailure
+            | WatchRuntimeError::ProcessingRepeatedFailure
+            | WatchRuntimeError::PositionUnreadable
+            | WatchRuntimeError::ProviderCheckFailed
+            | WatchRuntimeError::DecodeFailed
+            | WatchRuntimeError::ProcessingFailed
+            | WatchRuntimeError::PositionSaveFailed => error,
+        };
+        [
+            WatchRuntimeError::ProviderUnavailable,
+            WatchRuntimeError::ProviderRepeatedFailure,
+            WatchRuntimeError::ProcessingRepeatedFailure,
+            WatchRuntimeError::PositionUnreadable,
+            WatchRuntimeError::ProviderCheckFailed,
+            WatchRuntimeError::DecodeFailed,
+            WatchRuntimeError::ProcessingFailed,
+            WatchRuntimeError::PositionSaveFailed,
+        ]
+        .into_iter()
+        .map(listed)
+        .collect()
+    }
+
+    #[test]
+    fn every_disable_reason_has_catalog_text_named_after_its_kind() {
+        for reason in disable_reasons() {
+            let kind = serde_json::to_value(&reason).unwrap()["kind"]
+                .as_str()
+                .unwrap()
+                .replace('_', "-");
+            let text = reason.ui_text();
+            assert_eq!(text.id, format!("wallets-watch-disabled-{kind}"));
+            assert_ne!(format_en(&text.id, None), text.id, "missing {}", text.id);
+        }
+    }
+
+    #[test]
+    fn every_runtime_error_has_catalog_text() {
+        for error in runtime_errors() {
+            let text = error.ui_text();
+            assert_ne!(format_en(&text.id, None), text.id, "missing {}", text.id);
+        }
+    }
+
+    #[test]
+    fn budget_pause_names_the_signature_limit() {
+        let en: LanguageIdentifier = "en".parse().unwrap();
+        let reason = WatchDisableReason::SignatureBudget {
+            page_budget: 50,
+            signatures_checked: 5000,
+        };
+        assert_eq!(
+            reason.ui_text().render_plain(&en),
+            "Paused: reached the 5000-signature check limit before catching up"
+        );
+    }
 }

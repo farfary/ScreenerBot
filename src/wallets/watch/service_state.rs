@@ -13,7 +13,7 @@ use std::time::Duration;
 use chrono::{DateTime, Utc};
 use tokio::sync::mpsc;
 
-use super::types::WatchMode;
+use super::types::{WatchMode, WatchRuntimeError};
 
 /// A WS notification whose transaction was not decodable yet.
 #[derive(Debug, Clone)]
@@ -61,7 +61,7 @@ struct RuntimeStatus {
     mode: WatchMode,
     catching_up: bool,
     last_checked_at: Option<DateTime<Utc>>,
-    last_error: Option<String>,
+    last_error: Option<WatchRuntimeError>,
 }
 
 static RUNTIME_STATUS: LazyLock<RwLock<HashMap<String, RuntimeStatus>>> =
@@ -77,9 +77,7 @@ pub(super) fn update_runtime_status(
     let last_error = if completed_successfully {
         None
     } else {
-        statuses
-            .get(address)
-            .and_then(|status| status.last_error.clone())
+        statuses.get(address).and_then(|status| status.last_error)
     };
     statuses.insert(
         address.to_owned(),
@@ -124,7 +122,7 @@ pub(super) fn last_checked_at(address: &str) -> Option<DateTime<Utc>> {
         .and_then(|status| status.last_checked_at)
 }
 
-pub(super) fn set_runtime_error(address: &str, summary: &'static str) {
+pub(super) fn set_runtime_error(address: &str, error: WatchRuntimeError) {
     let mut statuses = RUNTIME_STATUS.write().unwrap_or_else(|p| p.into_inner());
     let status = statuses.entry(address.to_owned()).or_insert(RuntimeStatus {
         mode: WatchMode::Standard,
@@ -132,15 +130,15 @@ pub(super) fn set_runtime_error(address: &str, summary: &'static str) {
         last_checked_at: None,
         last_error: None,
     });
-    status.last_error = Some(summary.to_owned());
+    status.last_error = Some(error);
 }
 
-pub(super) fn runtime_error(address: &str) -> Option<String> {
+pub(super) fn runtime_error(address: &str) -> Option<WatchRuntimeError> {
     RUNTIME_STATUS
         .read()
         .unwrap_or_else(|p| p.into_inner())
         .get(address)
-        .and_then(|status| status.last_error.clone())
+        .and_then(|status| status.last_error)
 }
 
 pub(super) fn set_subscription(address: String, active: Arc<AtomicBool>) {
@@ -194,11 +192,11 @@ mod tests {
     #[test]
     fn failed_status_update_keeps_safe_runtime_error_until_a_successful_check() {
         let address = "status-preserve";
-        set_runtime_error(address, "High-activity provider check failed; retrying");
+        set_runtime_error(address, WatchRuntimeError::ProviderCheckFailed);
         update_runtime_status(address, WatchMode::HeliusHighActivity, true, false);
         assert_eq!(
-            runtime_error(address).as_deref(),
-            Some("High-activity provider check failed; retrying")
+            runtime_error(address),
+            Some(WatchRuntimeError::ProviderCheckFailed)
         );
         update_runtime_status(address, WatchMode::HeliusHighActivity, false, true);
         assert!(runtime_error(address).is_none());

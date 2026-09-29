@@ -1,9 +1,7 @@
 //! Joining an event's record half to its on-chain half.
 
 use crate::chains::adapter;
-use crate::transactions::{
-    TokenTransfer, Transaction, TransactionDirection, TransactionStatus, TransactionType,
-};
+use crate::transactions::{TokenTransfer, Transaction, TransactionDirection, TransactionStatus};
 
 use super::super::types::{ActivityEvent, TransactionTokenTransferSummary};
 use super::drafts::Draft;
@@ -72,7 +70,7 @@ pub(super) fn merge_position_event(
         block_time: tx.and_then(|tx| tx.block_time),
         fee_sol: tx.and_then(transaction_fee_sol),
         direction: tx.map(|tx| describe_direction(&tx.direction)),
-        transaction_type: tx.map(|tx| describe_type(&tx.transaction_type)),
+        transaction_type: tx.map(|tx| tx.transaction_type.ui_text()),
         router: tx.and_then(|tx| tx.token_swap_info.as_ref().map(|info| info.router.clone())),
         sol_change: tx.map(|tx| tx.sol_balance_change),
         instructions_count: tx.map(|tx| tx.instructions_count),
@@ -138,7 +136,10 @@ pub(super) fn wallet_event(draft: Draft) -> ActivityEvent {
             row.fee_lamports.map(|l| adapter().raw_to_native(l))
         },
         direction: row.direction.clone(),
-        transaction_type: row.transaction_type.clone(),
+        transaction_type: row
+            .transaction_type
+            .as_deref()
+            .map(crate::transactions::kind_text),
         router: row.router.clone(),
         sol_change: Some(row.sol_delta),
         instructions_count: Some(row.instructions_count),
@@ -206,43 +207,5 @@ fn describe_direction(direction: &TransactionDirection) -> String {
         TransactionDirection::Outgoing => "Outgoing".to_owned(),
         TransactionDirection::Internal => "Internal".to_owned(),
         TransactionDirection::Unknown => "Unknown".to_owned(),
-    }
-}
-
-/// Names a transaction for the position activity feed.
-///
-/// The label itself comes from `TransactionType::label()` so the feed, the list
-/// badge and the details dialog cannot drift apart; only the payload detail that
-/// makes an entry identifiable is added here.
-fn describe_type(transaction_type: &TransactionType) -> String {
-    let label = transaction_type.label();
-    match transaction_type {
-        TransactionType::SwapSolToToken { router, .. }
-        | TransactionType::SwapTokenToSol { router, .. }
-        | TransactionType::SwapTokenToToken { router, .. }
-        | TransactionType::LiquidityAdd { router, .. }
-        | TransactionType::LiquidityRemove { router, .. }
-            if !router.is_empty() =>
-        {
-            format!("{label} ({router})")
-        }
-        TransactionType::TokenTransfer { mint, amount, .. } => {
-            format!("{label} {mint} ({amount:.4})")
-        }
-        TransactionType::SpamAirdrop { mint, .. } => format!("{label} ({mint})"),
-        TransactionType::AtaClose { token_mint, .. }
-        | TransactionType::AtaCreate { token_mint, .. }
-            if !token_mint.is_empty() =>
-        {
-            format!("{label} ({token_mint})")
-        }
-        TransactionType::NftOperation { detail, .. }
-        | TransactionType::ProgramInteraction { detail, .. }
-            if !detail.is_empty() =>
-        {
-            format!("{label} ({detail})")
-        }
-        TransactionType::Other { description, .. } => description.clone(),
-        _ => label.to_owned(),
     }
 }

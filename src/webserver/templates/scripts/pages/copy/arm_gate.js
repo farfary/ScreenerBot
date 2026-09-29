@@ -42,7 +42,7 @@ export function createArmGate(page) {
     const checks = (ws.readiness?.checks || [])
       .map(
         (check) =>
-          `<li class="copy-check ${check.passed ? "is-passed" : "is-failed"}"><i class="${check.passed ? "icon-circle-check" : "icon-circle-x"}" aria-hidden="true"></i><span><strong>${esc(check.label)}</strong><small>${esc(check.detail)}</small></span><span class="sr-only">${check.passed ? "passed" : "not passed"}</span></li>`
+          `<li class="copy-check ${check.passed ? "is-passed" : "is-failed"}"><i class="${check.passed ? "icon-circle-check" : "icon-circle-x"}" aria-hidden="true"></i><span><strong>${esc(I18n.text(check.text))}</strong><small>${esc(I18n.text(check.detail))}</small></span><span class="sr-only">${check.passed ? "passed" : "not passed"}</span></li>`
       )
       .join("");
     const size =

@@ -6,12 +6,14 @@
 use chrono::Utc;
 use serde::Serialize;
 
+use super::pause_text;
 use super::{
     apply_paper_book, arrival_distance_ms, build_task_stats, closed_rounds,
     confirm_mode_transition, summarize_arrival_distances, sync_open_position_management,
     ArrivalDistanceStats, CopyActivityRow, CopyDatabase, CopyMode, CopyPauseReason, CopyRound,
     CopyTask, CopyTaskInput, CopyTaskStats, ExitMode, PaperPosition,
 };
+use crate::i18n::UiText;
 use crate::positions::{Position, PositionOrigin};
 use crate::trader::{Error, Result};
 use crate::wallets::watch;
@@ -49,6 +51,8 @@ pub struct CopyTaskSummary {
     pub effective_require_filter_pass: bool,
     /// Cumulative realized P&L after each of the latest closed rounds.
     pub pnl_trend: Vec<f64>,
+    /// Why the task is paused; absent while it is enabled.
+    pub pause_text: Option<UiText>,
 }
 
 /// Figures across every task. P&L and holdings count paused tasks too (they
@@ -295,6 +299,7 @@ pub fn summarize(
             effective_state: effective_state(status, &task),
             effective_require_filter_pass: task.requires_filter_pass(global_filter),
             pnl_trend,
+            pause_text: (!task.enabled).then(|| pause_text(task.pause_reason.as_ref())),
             task,
         },
         samples,

@@ -556,7 +556,8 @@ export function createWatchedWallets({
                   ? "Wallet activity could not be processed. Saved progress is preserved."
                   : "",
         _detail: target.enabled
-          ? status?.last_error || (highActivity ? "Checking through Helius for this wallet." : "")
+          ? (status?.last_error ? I18n.text(status.last_error) : "") ||
+            (highActivity ? "Checking through Helius for this wallet." : "")
           : "",
         _lastActivity: status?.last_activity_at || null,
         _lastCheck: status?.last_checked_at || null,

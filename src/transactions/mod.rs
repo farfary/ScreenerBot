@@ -39,6 +39,7 @@ mod error;
 pub mod manager;
 pub mod service;
 pub mod subject;
+mod type_text;
 pub mod types;
 pub mod utils;
 pub mod verifier;
@@ -57,6 +58,7 @@ pub use deltas::{DeltaKind, SubjectAssetDelta, NATIVE_SOL_SENTINEL};
 
 // Public API exports - Types
 pub use subject::Subject;
+pub use type_text::kind_text;
 pub use types::{
     AtaAnalysis, AtaOperation, AtaOperationType, CachedAnalysis, DeferredRetry, InstructionInfo,
     SolBalanceChange, SwapPnLInfo, TokenBalanceChange, TokenSwapInfo, TokenTransfer, Transaction,

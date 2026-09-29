@@ -38,7 +38,9 @@ function sorted(tasks, sort) {
 export function stateText(task) {
   if (!task.enabled) {
     const short = pauseReasonShort(task.pause_reason);
-    return short ? `Paused · ${short}` : "Paused";
+    return short
+      ? I18n.t("copy-state-paused-reason", { reason: short })
+      : I18n.t("copy-state-paused");
   }
   return STATE_LABELS[task.effective_state] || "Unknown";
 }
