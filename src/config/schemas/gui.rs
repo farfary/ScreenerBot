@@ -132,8 +132,6 @@ config_struct! {
     pub struct TabConfig {
         /// Tab identifier (e.g., "home", "positions")
         id: String = "".to_owned(),
-        /// Display label
-        label: String = "".to_owned(),
         /// Icon class name (e.g., "icon-home")
         icon: String = "".to_owned(),
         /// Sort order (lower = first)
@@ -148,91 +146,78 @@ pub fn default_tabs() -> Vec<TabConfig> {
     vec![
         TabConfig {
             id: "home".into(),
-            label: "Home".into(),
             icon: "icon-house".into(),
             order: 0,
             enabled: true,
         },
         TabConfig {
             id: "assistant".into(),
-            label: "Assistant".into(),
             icon: "icon-bot-message-square".into(),
             order: 1,
             enabled: true,
         },
         TabConfig {
             id: "positions".into(),
-            label: "Positions".into(),
             icon: "icon-chart-candlestick".into(),
             order: 2,
             enabled: true,
         },
         TabConfig {
             id: "tokens".into(),
-            label: "Tokens".into(),
             icon: "icon-coins".into(),
             order: 3,
             enabled: true,
         },
         TabConfig {
             id: "filtering".into(),
-            label: "Filtering".into(),
             icon: "icon-list-filter".into(),
             order: 4,
             enabled: true,
         },
         TabConfig {
             id: "trader".into(),
-            label: "Auto Trader".into(),
             icon: "icon-bot".into(),
             order: 5,
             enabled: true,
         },
         TabConfig {
             id: "copy".into(),
-            label: "Copy Trading".into(),
             icon: "icon-copy".into(),
             order: 6,
             enabled: true,
         },
         TabConfig {
             id: "wallets".into(),
-            label: "Wallets".into(),
             icon: "icon-wallet".into(),
             order: 7,
             enabled: true,
         },
         TabConfig {
             id: "transactions".into(),
-            label: "Transactions".into(),
             icon: "icon-activity".into(),
             order: 8,
             enabled: true,
         },
         TabConfig {
             id: "tools".into(),
-            label: "Tools".into(),
             icon: "icon-wrench".into(),
             order: 9,
             enabled: true,
         },
         TabConfig {
             id: "services".into(),
-            label: "Services".into(),
             icon: "icon-server".into(),
             order: 10,
             enabled: true,
         },
         TabConfig {
             id: "events".into(),
-            label: "Events".into(),
             icon: "icon-radio-tower".into(),
             order: 11,
             enabled: true,
         },
         TabConfig {
             id: "config".into(),
-            label: "Config".into(),
             icon: "icon-settings".into(),
             order: 12,
             enabled: true,
@@ -242,7 +227,7 @@ pub fn default_tabs() -> Vec<TabConfig> {
 
 /// Ensures all default tabs exist in the provided tabs list.
 /// Also handles migration from old tab IDs (e.g., "wallet" -> "wallets").
-/// Forces icons and labels from defaults - only order and enabled are user-configurable.
+/// Forces icons from defaults - only order and enabled are user-configurable.
 /// Returns the merged list with missing tabs added and old IDs migrated.
 pub fn ensure_all_tabs_present(mut tabs: Vec<TabConfig>) -> Vec<TabConfig> {
     let defaults = default_tabs();
@@ -274,11 +259,10 @@ pub fn ensure_all_tabs_present(mut tabs: Vec<TabConfig>) -> Vec<TabConfig> {
     // there are no user-defined tabs — so pruning unknowns is safe.
     tabs.retain(|t| default_map.contains_key(&t.id));
 
-    // Force icons and labels from defaults for existing tabs
+    // Force icons from defaults for existing tabs
     for tab in &mut tabs {
         if let Some(default_tab) = default_map.get(&tab.id) {
             tab.icon = default_tab.icon.clone();
-            tab.label = default_tab.label.clone();
         }
     }
 
@@ -307,12 +291,11 @@ pub fn ensure_all_tabs_present(mut tabs: Vec<TabConfig>) -> Vec<TabConfig> {
 
 #[cfg(test)]
 mod tests {
-    use super::{ensure_all_tabs_present, StartupConfig, TabConfig};
+    use super::{ensure_all_tabs_present, NavigationConfig, StartupConfig, TabConfig};
 
     fn tab(id: &str, order: u32, enabled: bool) -> TabConfig {
         TabConfig {
             id: id.into(),
-            label: String::new(),
             icon: String::new(),
             order,
             enabled,
@@ -410,5 +393,19 @@ mod tests {
         let serialized = toml::to_string(&config).expect("startup config should serialize");
         assert!(serialized.contains("explore_mode_enabled = true"));
         assert!(!serialized.contains("setup_skipped"));
+    }
+
+    #[test]
+    fn navigation_reads_a_tab_with_the_former_label_key() {
+        let navigation: NavigationConfig = toml::from_str(
+            "[[tabs]]\nid = \"home\"\nlabel = \"Home\"\nicon = \"icon-house\"\norder = 0\nenabled = true\n",
+        )
+        .expect("a tab carrying `label` should deserialize");
+
+        assert_eq!(navigation.tabs.len(), 1);
+        assert_eq!(navigation.tabs[0].id, "home");
+
+        let serialized = toml::to_string(&navigation).expect("navigation should serialize");
+        assert!(!serialized.contains("label"));
     }
 }

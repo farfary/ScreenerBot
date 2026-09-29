@@ -86,14 +86,13 @@ async fn filtering_counts_never_block_the_first_paint() {
 async fn the_dashboard_shell_stays_cheap_to_render_and_send() {
     // Warm any lazily-initialised template state so the measurement is of the steady-state
     // render rather than one-time setup.
-    let _ = templates::base_template("ScreenerBot", "home", &templates::home_content(), &locale());
+    let _ = templates::base_template("home", &templates::home_content(), &locale());
 
     const RENDERS: u32 = 20;
     let started = Instant::now();
     let mut bytes = 0usize;
     for _ in 0..RENDERS {
-        let html =
-            templates::base_template("ScreenerBot", "home", &templates::home_content(), &locale());
+        let html = templates::base_template("home", &templates::home_content(), &locale());
         bytes = html.len();
     }
     let per_render = started.elapsed() / RENDERS;
@@ -131,8 +130,7 @@ async fn the_dashboard_shell_stays_cheap_to_render_and_send() {
 /// empty for a frame.
 #[tokio::test]
 async fn the_first_paint_html_carries_its_own_skeleton_and_styles() {
-    let html =
-        templates::base_template("ScreenerBot", "home", &templates::home_content(), &locale());
+    let html = templates::base_template("home", &templates::home_content(), &locale());
 
     // Assert on the shell's ROOT container and its skeleton flag, not on an inner card
     // class: the home page has been redesigned before, and a card name that no longer

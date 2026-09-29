@@ -5,40 +5,8 @@
 import * as Utils from "../../core/utils.js";
 
 /**
- * Get default tab configuration
- */
-function getDefaultTabs() {
-  return [
-    { id: "home", label: "Home", icon: "icon-house", order: 0, enabled: true },
-    {
-      id: "assistant",
-      label: "Assistant",
-      icon: "icon-bot-message-square",
-      order: 1,
-      enabled: true,
-    },
-    {
-      id: "positions",
-      label: "Positions",
-      icon: "icon-chart-candlestick",
-      order: 2,
-      enabled: true,
-    },
-    { id: "tokens", label: "Tokens", icon: "icon-coins", order: 3, enabled: true },
-    { id: "filtering", label: "Filtering", icon: "icon-list-filter", order: 4, enabled: true },
-    { id: "trader", label: "Auto Trader", icon: "icon-bot", order: 5, enabled: true },
-    { id: "wallets", label: "Wallets", icon: "icon-wallet", order: 7, enabled: true },
-    { id: "transactions", label: "Transactions", icon: "icon-activity", order: 8, enabled: true },
-    { id: "tools", label: "Tools", icon: "icon-wrench", order: 9, enabled: true },
-    { id: "services", label: "Services", icon: "icon-server", order: 10, enabled: true },
-    { id: "events", label: "Events", icon: "icon-radio-tower", order: 11, enabled: true },
-    { id: "config", label: "Config", icon: "icon-settings", order: 12, enabled: true },
-  ];
-}
-
-/**
- * Fetch default tab configuration from backend (single source of truth)
- * Falls back to local defaults on failure
+ * Fetch default tab configuration from the backend (single source of truth).
+ * Returns null when the defaults cannot be loaded.
  */
 async function fetchDefaultTabs() {
   try {
@@ -50,9 +18,14 @@ async function fetchDefaultTabs() {
       }
     }
   } catch (e) {
-    console.warn("Failed to fetch default tabs from API, using local fallback", e);
+    console.warn("Failed to fetch default tabs from API", e);
   }
-  return getDefaultTabs();
+  return null;
+}
+
+/** Display name of a navigation tab, from its id. */
+function tabLabel(id) {
+  return I18n.t("nav-" + id); // l10n-dynamic: nav-
 }
 
 /**
@@ -60,7 +33,7 @@ async function fetchDefaultTabs() {
  */
 export function buildNavigationTab(settings) {
   const navigation = settings?.dashboard?.navigation || {};
-  const tabs = navigation.tabs || getDefaultTabs();
+  const tabs = navigation.tabs || [];
 
   // Sort tabs by order for display
   const sortedTabs = [...tabs].sort((a, b) => a.order - b.order);
@@ -80,7 +53,7 @@ export function buildNavigationTab(settings) {
           <i class="${tab.icon}"></i>
         </div>
         <div class="settings-nav-tab-info">
-          <span class="settings-nav-tab-label">${tab.label}</span>
+          <span class="settings-nav-tab-label">${tabLabel(tab.id)}</span>
         </div>
         <div class="settings-nav-tab-status ${tab.enabled ? "enabled" : "disabled"}">
           ${tab.enabled ? '<i class="icon-eye"></i>' : '<i class="icon-eye-off"></i>'}
@@ -129,7 +102,7 @@ function refreshNavigationList(content, settings) {
   const listContainer = content.querySelector("#navTabsList");
   if (!listContainer) return;
 
-  const tabs = settings?.dashboard?.navigation?.tabs || getDefaultTabs();
+  const tabs = settings?.dashboard?.navigation?.tabs || [];
   const sortedTabs = [...tabs].sort((a, b) => a.order - b.order);
 
   const tabItems = sortedTabs
@@ -147,7 +120,7 @@ function refreshNavigationList(content, settings) {
           <i class="${tab.icon}"></i>
         </div>
         <div class="settings-nav-tab-info">
-          <span class="settings-nav-tab-label">${tab.label}</span>
+          <span class="settings-nav-tab-label">${tabLabel(tab.id)}</span>
         </div>
         <div class="settings-nav-tab-status ${tab.enabled ? "enabled" : "disabled"}">
           ${tab.enabled ? '<i class="icon-eye"></i>' : '<i class="icon-eye-off"></i>'}
@@ -176,7 +149,7 @@ export function attachNavigationHandlers(dialog, content) {
   // Ensure navigation config exists
   if (!dialog.settings.dashboard) dialog.settings.dashboard = {};
   if (!dialog.settings.dashboard.navigation) {
-    dialog.settings.dashboard.navigation = { tabs: getDefaultTabs() };
+    dialog.settings.dashboard.navigation = { tabs: [] };
   }
 
   const getTabs = () => dialog.settings.dashboard.navigation.tabs;
@@ -364,6 +337,13 @@ export function attachNavigationHandlers(dialog, content) {
     resetBtn.addEventListener("click", async () => {
       // Fetch defaults from backend (single source of truth)
       const defaultTabs = await fetchDefaultTabs();
+      if (!defaultTabs) {
+        Utils.showToast({
+          type: "error",
+          title: "Could not load the default navigation",
+        });
+        return;
+      }
       dialog.settings.dashboard.navigation.tabs = defaultTabs;
       dialog._checkForChanges();
       refreshNavigationList(content, dialog.settings);

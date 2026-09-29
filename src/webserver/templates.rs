@@ -88,20 +88,22 @@ pub fn page_styles(page: &str) -> Option<String> {
     Some(styles)
 }
 
+/// Document title of a page: its `nav-page-title-<id>` catalog message in `locale`.
+fn page_title(page_id: &str, locale: &LanguageIdentifier) -> String {
+    crate::i18n::format(locale, &format!("nav-page-title-{page_id}"), None)
+}
+
 /// Render the base layout with shared chrome and inject the requested content.
-pub fn base_template(
-    title: &str,
-    active_tab: &str,
-    content: &str,
-    locale: &LanguageIdentifier,
-) -> String {
+/// `active_tab` is the page id; it selects the tab highlight, the page styles and
+/// the localized document title.
+pub fn base_template(active_tab: &str, content: &str, locale: &LanguageIdentifier) -> String {
     use crate::global;
 
     let asset_version = option_env!("ASSET_VERSION_TS")
         .map(|ts| format!("{}-{}", version::get_version(), ts))
         .unwrap_or_else(|| version::get_version().to_string());
 
-    let mut html = BASE_TEMPLATE.replace("{{TITLE}}", title);
+    let mut html = BASE_TEMPLATE.replace("{{TITLE}}", &page_title(active_tab, locale));
     html = html.replace("{{LANG}}", &locale.to_string());
     html = html.replace("{{DIR}}", text_direction(locale).as_str());
     html = html.replace("{{NAV_TABS}}", &nav_tabs(active_tab));
@@ -295,7 +297,7 @@ fn nav_tabs(active: &str) -> String {
             ""
         };
         return format!(
-            "<a href=\"/initialization\" data-page=\"initialization\" class=\"tab{}\"{}><i class=\"icon-settings\"></i> Setup</a>",
+            "<a href=\"/initialization\" data-page=\"initialization\" class=\"tab{}\"{}><i class=\"icon-settings\"></i> <span data-l10n-id=\"nav-setup\"></span></a>",
             active_class, aria_current
         );
     }
@@ -315,8 +317,8 @@ fn nav_tabs(active: &str) -> String {
             };
             // Real hrefs preserve expected link behavior; data-page keeps SPA routing fast.
             format!(
-                "<a href=\"/{}\" data-page=\"{}\" class=\"tab{}\"{}><i class=\"{}\"></i> {}</a>",
-                tab.id, tab.id, active_class, aria_current, tab.icon, tab.label
+                "<a href=\"/{}\" data-page=\"{}\" class=\"tab{}\"{}><i class=\"{}\"></i> <span data-l10n-id=\"nav-{}\"></span></a>",
+                tab.id, tab.id, active_class, aria_current, tab.icon, tab.id
             )
         })
         .collect::<Vec<_>>()
@@ -392,7 +394,7 @@ pub fn login_content() -> String {
 }
 
 /// Render the login page template (minimal template without navigation)
-pub fn login_template(title: &str, content: &str, locale: &LanguageIdentifier) -> String {
+pub fn login_template(content: &str, locale: &LanguageIdentifier) -> String {
     use crate::version;
 
     let asset_version = option_env!("ASSET_VERSION_TS")
@@ -430,7 +432,7 @@ pub fn login_template(title: &str, content: &str, locale: &LanguageIdentifier) -
 </html>"#,
         locale,
         text_direction(locale).as_str(),
-        title,
+        page_title("login", locale),
         combined_styles,
         content,
         asset_version,
@@ -446,6 +448,8 @@ pub fn login_template(title: &str, content: &str, locale: &LanguageIdentifier) -
 #[cfg(test)]
 mod tests {
     use super::page_styles;
+    use crate::config::schemas::default_tabs;
+    use crate::i18n::format_message;
 
     #[test]
     fn every_spa_page_has_an_explicit_style_bundle() {
@@ -473,5 +477,84 @@ mod tests {
             );
         }
         assert!(page_styles("unknown-page").is_none());
+    }
+
+    fn english() -> crate::i18n::LanguageIdentifier {
+        "en".parse().expect("valid language tag")
+    }
+
+    fn has_message(id: &str) -> bool {
+        format_message(&english(), id, None)
+            .and_then(|message| message.value)
+            .is_some_and(|value| !value.is_empty())
+    }
+
+    /// Ids the router accepts, read from `PAGE_IDS` in `router.js`.
+    fn router_page_ids() -> Vec<String> {
+        let source = include_str!("templates/scripts/core/router.js");
+        let start = source.find("const PAGE_IDS = ").expect("PAGE_IDS declared");
+        let list = &source[start..];
+        let list = &list[list.find('[').unwrap() + 1..];
+        let list = &list[..list.find(']').unwrap()];
+        list.split(',')
+            .map(|id| id.trim().trim_matches('"').to_string())
+            .filter(|id| !id.is_empty())
+            .collect()
+    }
+
+    /// Guarantee behind the dashboard's dynamic `nav-` lookups: every tab, and
+    /// every page the router or a handler can title, has its message.
+    #[test]
+    fn nav_catalog_covers_tabs_and_pages() {
+        let tab_ids: Vec<String> = default_tabs().into_iter().map(|tab| tab.id).collect();
+        for id in tab_ids.iter().map(String::as_str).chain(["setup"]) {
+            assert!(has_message(&format!("nav-{id}")), "missing nav-{id}");
+        }
+
+        let mut routable = router_page_ids();
+        routable.sort();
+        let mut tabs_sorted = tab_ids.clone();
+        tabs_sorted.sort();
+        assert_eq!(
+            routable, tabs_sorted,
+            "router page ids differ from the default tabs"
+        );
+
+        let titled = routable
+            .iter()
+            .map(String::as_str)
+            .chain(["initialization", "login"]);
+        for id in titled {
+            assert!(
+                has_message(&format!("nav-page-title-{id}")),
+                "missing nav-page-title-{id}"
+            );
+        }
+    }
+
+    /// Every `nav-` message is a tab label or a page title of a known page.
+    #[test]
+    fn nav_catalog_has_no_orphans() {
+        let mut expected: Vec<String> = Vec::new();
+        for tab in default_tabs() {
+            expected.push(format!("nav-{}", tab.id));
+            expected.push(format!("nav-page-title-{}", tab.id));
+        }
+        for id in [
+            "nav-setup",
+            "nav-page-title-initialization",
+            "nav-page-title-login",
+        ] {
+            expected.push(id.to_string());
+        }
+        let orphans: Vec<&str> = crate::i18n::source_message_ids()
+            .iter()
+            .copied()
+            .filter(|id| id.starts_with("nav-") && !expected.iter().any(|known| known == id))
+            .collect();
+        assert!(
+            orphans.is_empty(),
+            "nav messages without a tab or page: {orphans:?}"
+        );
     }
 }

@@ -261,61 +261,10 @@ export class SettingsDialog {
           show_background_notifications: true,
         },
         navigation: {
-          tabs: this._getDefaultTabs(),
+          tabs: [],
         },
       },
     };
-  }
-
-  /**
-   * Get default tab configuration
-   */
-  _getDefaultTabs() {
-    return [
-      { id: "home", label: "Home", icon: "icon-house", order: 0, enabled: true },
-      {
-        id: "assistant",
-        label: "Assistant",
-        icon: "icon-bot-message-square",
-        order: 1,
-        enabled: true,
-      },
-      {
-        id: "positions",
-        label: "Positions",
-        icon: "icon-chart-candlestick",
-        order: 2,
-        enabled: true,
-      },
-      { id: "tokens", label: "Tokens", icon: "icon-coins", order: 3, enabled: true },
-      { id: "filtering", label: "Filtering", icon: "icon-list-filter", order: 4, enabled: true },
-      { id: "trader", label: "Auto Trader", icon: "icon-bot", order: 5, enabled: true },
-      { id: "wallets", label: "Wallets", icon: "icon-wallet", order: 7, enabled: true },
-      { id: "transactions", label: "Transactions", icon: "icon-activity", order: 8, enabled: true },
-      { id: "tools", label: "Tools", icon: "icon-wrench", order: 9, enabled: true },
-      { id: "services", label: "Services", icon: "icon-server", order: 10, enabled: true },
-      { id: "events", label: "Events", icon: "icon-radio-tower", order: 11, enabled: true },
-      { id: "config", label: "Config", icon: "icon-settings", order: 12, enabled: true },
-    ];
-  }
-
-  /**
-   * Fetch default tab configuration from backend (single source of truth)
-   * Falls back to local defaults on failure
-   */
-  async _fetchDefaultTabs() {
-    try {
-      const response = await fetch("/api/config/gui/defaults");
-      if (response.ok) {
-        const result = await response.json();
-        if (result.success && result.data?.tabs) {
-          return result.data.tabs;
-        }
-      }
-    } catch (e) {
-      console.warn("Failed to fetch default tabs from API, using local fallback", e);
-    }
-    return this._getDefaultTabs();
   }
 
   /**
@@ -449,7 +398,7 @@ export class SettingsDialog {
     const tabsHTML = enabledTabs
       .map((tab) => {
         const activeClass = tab.id === currentPage ? " active" : "";
-        return `<a href="#" data-page="${tab.id}" class="tab${activeClass}"><i class="${tab.icon}"></i> ${tab.label}</a>`;
+        return `<a href="#" data-page="${tab.id}" class="tab${activeClass}"><i class="${tab.icon}"></i> <span>${I18n.t("nav-" + tab.id)}</span></a>`; // l10n-dynamic: nav-
       })
       .join("\n        ");
 

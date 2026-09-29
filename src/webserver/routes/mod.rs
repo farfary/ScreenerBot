@@ -86,133 +86,91 @@ pub fn create_router(state: Arc<AppState>) -> Router {
 async fn home_page(headers: HeaderMap) -> Html<String> {
     let content = templates::home_content();
     let locale = crate::i18n::resolve_request_locale(&headers);
-    Html(templates::base_template("Home", "home", &content, &locale))
+    Html(templates::base_template("home", &content, &locale))
 }
 
 /// Tokens page handler
 async fn tokens_page(headers: HeaderMap) -> Html<String> {
     let content = templates::tokens_content();
     let locale = crate::i18n::resolve_request_locale(&headers);
-    Html(templates::base_template(
-        "Tokens", "tokens", &content, &locale,
-    ))
+    Html(templates::base_template("tokens", &content, &locale))
 }
 
 /// Positions page handler
 async fn positions_page(headers: HeaderMap) -> Html<String> {
     let content = templates::positions_content();
     let locale = crate::i18n::resolve_request_locale(&headers);
-    Html(templates::base_template(
-        "Positions",
-        "positions",
-        &content,
-        &locale,
-    ))
+    Html(templates::base_template("positions", &content, &locale))
 }
 
 /// Events page handler
 async fn events_page(headers: HeaderMap) -> Html<String> {
     let content = templates::events_content();
     let locale = crate::i18n::resolve_request_locale(&headers);
-    Html(templates::base_template(
-        "Events", "events", &content, &locale,
-    ))
+    Html(templates::base_template("events", &content, &locale))
 }
 
 /// Copy Trading page handler
 async fn copy_page(headers: HeaderMap) -> Html<String> {
     let content = templates::copy_content();
     let locale = crate::i18n::resolve_request_locale(&headers);
-    Html(templates::base_template(
-        "Copy Trading",
-        "copy",
-        &content,
-        &locale,
-    ))
+    Html(templates::base_template("copy", &content, &locale))
 }
 
 /// Services page handler
 async fn services_page(headers: HeaderMap) -> Html<String> {
     let content = templates::services_content();
     let locale = crate::i18n::resolve_request_locale(&headers);
-    Html(templates::base_template(
-        "Services", "services", &content, &locale,
-    ))
+    Html(templates::base_template("services", &content, &locale))
 }
 
 /// Transactions page handler
 async fn transactions_page(headers: HeaderMap) -> Html<String> {
     let content = templates::transactions_content();
     let locale = crate::i18n::resolve_request_locale(&headers);
-    Html(templates::base_template(
-        "Transactions",
-        "transactions",
-        &content,
-        &locale,
-    ))
+    Html(templates::base_template("transactions", &content, &locale))
 }
 
 /// Filtering page handler
 async fn filtering_page(headers: HeaderMap) -> Html<String> {
     let content = templates::filtering_content();
     let locale = crate::i18n::resolve_request_locale(&headers);
-    Html(templates::base_template(
-        "Filtering",
-        "filtering",
-        &content,
-        &locale,
-    ))
+    Html(templates::base_template("filtering", &content, &locale))
 }
 
 /// Config page handler
 async fn config_page(headers: HeaderMap) -> Html<String> {
     let content = templates::config_content();
     let locale = crate::i18n::resolve_request_locale(&headers);
-    Html(templates::base_template(
-        "Config", "config", &content, &locale,
-    ))
+    Html(templates::base_template("config", &content, &locale))
 }
 
 /// Auto Trader page handler
 async fn trader_page(headers: HeaderMap) -> Html<String> {
     let content = templates::trader_content();
     let locale = crate::i18n::resolve_request_locale(&headers);
-    Html(templates::base_template(
-        "Auto Trader",
-        "trader",
-        &content,
-        &locale,
-    ))
+    Html(templates::base_template("trader", &content, &locale))
 }
 
 /// Wallets page handler
 async fn wallets_page(headers: HeaderMap) -> Html<String> {
     let content = templates::wallets_content();
     let locale = crate::i18n::resolve_request_locale(&headers);
-    Html(templates::base_template(
-        "Wallets", "wallets", &content, &locale,
-    ))
+    Html(templates::base_template("wallets", &content, &locale))
 }
 
 /// Tools page handler
 async fn tools_page(headers: HeaderMap) -> Html<String> {
     let content = templates::tools_content();
     let locale = crate::i18n::resolve_request_locale(&headers);
-    Html(templates::base_template(
-        "Tools", "tools", &content, &locale,
-    ))
+    Html(templates::base_template("tools", &content, &locale))
 }
 
 /// Assistant page handler
 async fn assistant_page(headers: HeaderMap) -> Html<String> {
     let content = templates::assistant_content();
     let locale = crate::i18n::resolve_request_locale(&headers);
-    Html(templates::base_template(
-        "Assistant",
-        "assistant",
-        &content,
-        &locale,
-    ))
+    Html(templates::base_template("assistant", &content, &locale))
 }
 
 /// Initialization page handler
@@ -220,7 +178,6 @@ async fn initialization_page(headers: HeaderMap) -> Html<String> {
     let content = templates::initialization_content();
     let locale = crate::i18n::resolve_request_locale(&headers);
     Html(templates::base_template(
-        "Initialization",
         "initialization",
         &content,
         &locale,
@@ -231,7 +188,7 @@ async fn initialization_page(headers: HeaderMap) -> Html<String> {
 async fn login_page(headers: HeaderMap) -> Html<String> {
     let content = templates::login_content();
     let locale = crate::i18n::resolve_request_locale(&headers);
-    Html(templates::login_template("Login", &content, &locale))
+    Html(templates::login_template(&content, &locale))
 }
 
 /// Register all API route groups under `/api`.

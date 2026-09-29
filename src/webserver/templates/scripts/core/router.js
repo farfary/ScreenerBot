@@ -9,21 +9,22 @@ import { closeStackedOverlays } from "./escape_stack.js";
 const assetVersion = window.__ASSET_VERSION__ || "";
 const assetQuery = assetVersion ? `?v=${encodeURIComponent(assetVersion)}` : "";
 
-const PAGE_TITLES = Object.freeze({
-  home: "Home",
-  tokens: "Tokens",
-  positions: "Positions",
-  events: "Events",
-  services: "Services",
-  transactions: "Transactions",
-  filtering: "Filtering",
-  wallets: "Wallets",
-  tools: "Tools",
-  assistant: "Assistant",
-  config: "Configuration",
-  trader: "Auto Trader",
-  copy: "Copy Trading",
-});
+// Routable page ids. Each has a `nav-page-title-<id>` catalog message.
+const PAGE_IDS = Object.freeze([
+  "home",
+  "tokens",
+  "positions",
+  "events",
+  "services",
+  "transactions",
+  "filtering",
+  "wallets",
+  "tools",
+  "assistant",
+  "config",
+  "trader",
+  "copy",
+]);
 
 // Import TabBarManager for coordinated tab bar management
 let TabBarManager = null;
@@ -69,7 +70,10 @@ function activatePageStyles(pageName) {
 }
 
 function updateDocumentTitle(pageName) {
-  document.title = `${PAGE_TITLES[pageName] || "Dashboard"} - ScreenerBot`;
+  const title = PAGE_IDS.includes(pageName)
+    ? I18n.t("nav-page-title-" + pageName) // l10n-dynamic: nav-
+    : "Dashboard";
+  document.title = `${title} - ScreenerBot`;
 }
 
 function waitForPageStylesheet(pageName, link) {
@@ -267,7 +271,7 @@ async function fetchPageContent(pageName, timeoutMs, controller) {
 }
 
 export async function loadPage(pageName, { historyMode = "push" } = {}) {
-  if (!pageName || !PAGE_TITLES[pageName]) return;
+  if (!pageName || !PAGE_IDS.includes(pageName)) return;
 
   const navigationId = ++_state.navigationId;
   _state.navigationController?.abort("superseded");

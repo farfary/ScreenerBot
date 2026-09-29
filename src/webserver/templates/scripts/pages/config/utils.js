@@ -3,7 +3,7 @@
  * These functions have no state dependencies and can be imported/used independently.
  */
 
-import { categoryLabel, fieldHint, fieldLabel, fieldUnit } from "./field_text.js";
+import { categoryLabel, fieldHint, fieldLabel, fieldUnit, sectionLabel } from "./field_text.js";
 
 export const SECTION_DISPLAY_ORDER = [
   "rpc",
@@ -35,62 +35,6 @@ export const SECTION_DISPLAY_ORDER = [
   "ohlcv",
   "summary",
 ];
-
-export const SECTION_LABEL_OVERRIDES = {
-  rpc: "RPC",
-  account: "ScreenerBot Account",
-  trader: "Auto Trader",
-  positions: "Positions",
-  filtering: "Filtering",
-  swaps: "Swaps",
-  tokens: "Tokens",
-  pools: "Pools",
-  wallet: "Wallet",
-  sol_price: "SOL Price",
-  events: "Events",
-  webserver: "Webserver",
-  services: "Services",
-  monitoring: "Monitoring",
-  maintenance: "Maintenance",
-  updates: "Updates",
-  ohlcv: "OHLCV",
-  summary: "Summary",
-  telegram: "Telegram",
-  llm: "LLM Providers",
-  llm_analysis: "LLM Analysis",
-  assistant: "Assistant",
-  agent_control: "Agent Control",
-  strategies: "Strategies",
-  holder_watch: "Holder Watch",
-  performance: "Performance",
-  network: "Network",
-};
-
-/**
- * Convert snake_case or space-separated string to Title Case.
- * @param {string} id - The identifier to convert
- * @returns {string} Title-cased string
- */
-export function toTitleCase(id) {
-  return id
-    .split(/[_\s]+/)
-    .filter(Boolean)
-    .map((chunk) => chunk.charAt(0).toUpperCase() + chunk.slice(1))
-    .join(" ");
-}
-
-/**
- * Format a section ID into a display label.
- * Uses SECTION_LABEL_OVERRIDES if available, otherwise converts to title case.
- * @param {string} sectionId - The section identifier
- * @returns {string} Formatted label
- */
-export function formatSectionLabel(sectionId) {
-  if (SECTION_LABEL_OVERRIDES[sectionId]) {
-    return SECTION_LABEL_OVERRIDES[sectionId];
-  }
-  return toTitleCase(sectionId);
-}
 
 /**
  * Parse array input from textarea (one value per line).
@@ -356,7 +300,7 @@ export function sectionHasMatchingFields(sectionId, term, metadata) {
     return false;
   }
 
-  const label = sectionMeta.label ?? formatSectionLabel(sectionId);
+  const label = sectionMeta.label ?? sectionLabel(sectionId);
   if (sectionId.toLowerCase().includes(term) || label.toLowerCase().includes(term)) {
     return true;
   }
@@ -389,7 +333,7 @@ export function transformMetadata(raw) {
 
     sections[sectionId] = {
       id: sectionId,
-      label: formatSectionLabel(sectionId),
+      label: sectionLabel(sectionId),
       fields: normalizedFields,
       summary: summarizeSectionFields(normalizedFields),
     };

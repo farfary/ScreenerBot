@@ -15,7 +15,6 @@ import {
   transformMetadata,
   sortSectionsForDisplay,
   sectionHasMatchingFields,
-  formatSectionLabel,
   metadataMatchesSearch,
 } from "./config/utils.js";
 import {
@@ -34,7 +33,7 @@ import {
   isCategoryOpen,
   toggleCategory,
 } from "./config/field_renderers.js";
-import { categoryLabel, fieldLabel } from "./config/field_text.js";
+import { categoryLabel, fieldLabel, sectionLabel } from "./config/field_text.js";
 
 const CONFIG_STATE_KEY = "config.page";
 const DEFAULT_SECTION = "trader";
@@ -209,7 +208,7 @@ function renderSidebar() {
 
   for (const [sectionId, metadata] of sections) {
     const summary = metadata.summary ?? {};
-    const label = metadata.label ?? formatSectionLabel(sectionId);
+    const label = metadata.label ?? sectionLabel(sectionId);
     const sectionPending = countPendingChanges(sectionId);
     const icon = SECTION_ICONS[sectionId] || "icon-settings";
 

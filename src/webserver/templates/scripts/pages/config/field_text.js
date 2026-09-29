@@ -35,6 +35,11 @@ export function fieldPlaceholder(key) {
   return fieldAttribute(key, "placeholder");
 }
 
+/** Display name of a top-level config section, from its id (`sol_price`). */
+export function sectionLabel(sectionId) {
+  return I18n.t("config-section-" + sectionId.toLowerCase().replaceAll("_", "-")); // l10n-dynamic: config-
+}
+
 /** Display name of a category, from its id. */
 export function categoryLabel(id) {
   return I18n.t("config-category-" + id); // l10n-dynamic: config-

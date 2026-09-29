@@ -1221,6 +1221,37 @@ config-webserver-host = Host
 config-webserver-port = Port
     .hint = Port for dashboard access (headless mode only). Requires restart to take effect.
 
+## Sections
+
+config-section-account = ScreenerBot Account
+config-section-agent-control = Agent Control
+config-section-assistant = Assistant
+config-section-copy-trading = Copy Trading
+config-section-events = Events
+config-section-filtering = Filtering
+config-section-holder-watch = Holder Watch
+config-section-llm = LLM Providers
+config-section-llm-analysis = LLM Analysis
+config-section-maintenance = Maintenance
+config-section-monitoring = Monitoring
+config-section-network = Network
+config-section-ohlcv = OHLCV
+config-section-performance = Performance
+config-section-pools = Pools
+config-section-positions = Positions
+config-section-referral = Referral
+config-section-rpc = RPC
+config-section-services = Services
+config-section-sol-price = SOL Price
+config-section-strategies = Strategies
+config-section-swaps = Swaps
+config-section-telegram = Telegram
+config-section-tokens = Tokens
+config-section-trader = Auto Trader
+config-section-updates = Updates
+config-section-wallet = Wallet
+config-section-webserver = Webserver
+
 ## Categories
 
 config-category-activity = Activity

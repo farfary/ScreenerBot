@@ -113,16 +113,11 @@ fn catalog_chain_runs_source_first() {
 fn dashboard_and_login_templates_survive_the_rewrite() {
     use crate::webserver::templates::{base_template, login_template};
     let locale = langid("en");
-    let page = base_template(
-        "Home",
-        "home",
-        "<p data-l10n-id=\"common-loading\">x</p>",
-        &locale,
-    );
+    let page = base_template("home", "<p data-l10n-id=\"common-loading\">x</p>", &locale);
     assert!(page.contains(">Loading…</p>"));
     assert!(page.contains("/i18n/en/catalog.js?v="));
     assert!(page.contains("/scripts/core/i18n.js?v="));
-    let login = login_template("Login", "<b data-l10n-id=\"common-loading\">x</b>", &locale);
+    let login = login_template("<b data-l10n-id=\"common-loading\">x</b>", &locale);
     assert!(login.contains(">Loading…</b>"));
     assert!(login.contains("/i18n/en/catalog.js?v="));
 }

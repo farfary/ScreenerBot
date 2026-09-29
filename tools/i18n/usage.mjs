@@ -18,11 +18,14 @@ import {
 import { hasMarkup, lineIndex, scanMarkup, stripPlaceholders } from "./markup.mjs";
 
 /**
- * Namespace prefix (`config-`) to the Rust test that guarantees every id in
+ * Namespace prefix (`config-`, `nav-`) to the Rust test that guarantees every id in
  * it is reachable. A call site may build ids dynamically only inside a
  * declared namespace, and ids in a namespace are exempt from the unused check.
  */
-export const DYNAMIC_NAMESPACES = { "config-": "config_catalog_covers_fields" };
+export const DYNAMIC_NAMESPACES = {
+  "config-": "config_catalog_covers_fields",
+  "nav-": "nav_catalog_covers_tabs_and_pages",
+};
 
 const CALLS = new Set(["t", "attr", "has"]);
 const DYNAMIC_MARK = /l10n-dynamic:\s*(\S+)/;

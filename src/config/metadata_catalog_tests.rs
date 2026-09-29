@@ -1,7 +1,7 @@
 //! Guards tying config field metadata to the `config-` localization messages.
 
 use super::metadata::{
-    category_key, collect_config_metadata, impact_key, ConfigCategory, ConfigImpact,
+    catalog_key, category_key, collect_config_metadata, impact_key, ConfigCategory, ConfigImpact,
     ConfigMetadata, FieldMetadata, SectionMetadata,
 };
 use crate::i18n::{format_message, source_message_ids, LanguageIdentifier};
@@ -42,6 +42,14 @@ fn english() -> LanguageIdentifier {
     "en".parse().expect("valid language tag")
 }
 
+/// The `config-section-<id>` message of every top-level section.
+fn section_keys(metadata: &ConfigMetadata) -> BTreeSet<String> {
+    metadata
+        .keys()
+        .map(|section| format!("config-section-{}", catalog_key(&[section])))
+        .collect()
+}
+
 fn category_keys() -> BTreeSet<String> {
     ConfigCategory::ALL.into_iter().map(category_key).collect()
 }
@@ -50,8 +58,8 @@ fn impact_keys() -> BTreeSet<String> {
     ConfigImpact::ALL.into_iter().map(impact_key).collect()
 }
 
-/// Guarantee behind the dashboard's dynamic `config-` lookups: every key it can
-/// build exists, and the catalog holds nothing else in that namespace.
+/// Guarantee behind the dashboard's dynamic `config-` lookups (fields, sections,
+/// categories, impacts): every key it can build exists, and the catalog holds nothing else in that namespace.
 #[test]
 fn config_catalog_covers_fields() {
     let metadata = collect_config_metadata();
@@ -74,10 +82,20 @@ fn config_catalog_covers_fields() {
     let field_keys = expected.clone();
     let categories = category_keys();
     let impacts = impact_keys();
-    for key in categories.iter().chain(impacts.iter()) {
+    let sections = section_keys(&metadata);
+    assert_eq!(
+        sections.len(),
+        metadata.len(),
+        "two sections share a `config-section-` key"
+    );
+    for key in categories
+        .iter()
+        .chain(impacts.iter())
+        .chain(sections.iter())
+    {
         assert!(
             expected.insert(key.clone()),
-            "category or impact key `{key}` collides with a field key"
+            "category, impact or section key `{key}` collides with a field key"
         );
     }
 
@@ -100,7 +118,7 @@ fn config_catalog_covers_fields() {
         .collect();
     assert!(
         orphans.is_empty(),
-        "config messages that no field, category or impact uses: {orphans:?}"
+        "config messages that no field, section, category or impact uses: {orphans:?}"
     );
 
     for key in &field_keys {
