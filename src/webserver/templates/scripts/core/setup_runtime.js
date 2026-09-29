@@ -186,7 +186,7 @@
 
     if (!response.ok) {
       throw new Error(
-        body?.error?.message || body?.message || `Request failed (${response.status})`
+        window.RequestManagerErrors.apiErrorMessage(body, `Request failed (${response.status})`)
       );
     }
     return body?.data ?? body;

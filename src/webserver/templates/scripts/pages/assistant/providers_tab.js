@@ -1,6 +1,7 @@
 import { $ } from "../../core/dom.js";
 import * as Utils from "../../core/utils.js";
 import { playSuccess, playError } from "../../core/sounds.js";
+import { apiErrorMessage } from "../../core/request_manager.js";
 
 // Provider names mapping
 const PROVIDER_NAMES = {
@@ -353,7 +354,7 @@ export function createProvidersTab({ state, _eventCleanups, loadConfig }) {
           `;
           playSuccess();
         } else {
-          throw new Error(data.error?.message || "Test failed");
+          throw new Error(apiErrorMessage(data, "Test failed"));
         }
       } catch (error) {
         testResult.className = "test-connection-result visible error";

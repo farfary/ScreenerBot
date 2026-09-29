@@ -1,6 +1,6 @@
 //! Strategies testing route — runs strategy backtests and simulations.
 
-use axum::{extract::Path, http::StatusCode, response::Response, Json};
+use axum::{extract::Path, response::Response, Json};
 use chrono::{DateTime, Utc};
 
 use crate::{
@@ -14,7 +14,9 @@ use crate::{
 };
 
 use super::types::{StrategyTestRequest, StrategyTestResponse};
-use super::utils::err;
+use super::utils::{err, err_cause};
+use crate::i18n::ids;
+use crate::webserver::api_error::ApiErrorCode;
 
 /// POST /api/strategies/:id/test - Test strategy evaluation
 pub async fn test_strategy(
@@ -32,11 +34,12 @@ pub async fn test_strategy(
     // Get strategy
     let strategy = match get_strategy(&id) {
         Ok(Some(s)) => s,
-        Ok(None) => return err(StatusCode::NOT_FOUND, "Strategy not found"),
+        Ok(None) => return err(ApiErrorCode::NotFound, ids::ERRORS_STRATEGIES_NOT_FOUND),
         Err(e) => {
-            return err(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                &format!("Failed to get strategy: {e}"),
+            return err_cause(
+                ApiErrorCode::Internal,
+                ids::ERRORS_STRATEGIES_GET_FAILED,
+                &e,
             );
         }
     };
@@ -81,9 +84,10 @@ pub async fn test_strategy(
     let eval_result = match engine.evaluate_strategy(&strategy, &context).await {
         Ok(result) => result,
         Err(e) => {
-            return err(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                &format!("Strategy evaluation failed: {e}"),
+            return err_cause(
+                ApiErrorCode::Internal,
+                ids::ERRORS_STRATEGIES_EVALUATION_FAILED,
+                &e,
             );
         }
     };

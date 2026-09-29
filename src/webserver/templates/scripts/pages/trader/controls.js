@@ -1,4 +1,5 @@
 import { formatTimeSpan } from "../../core/format.js";
+import { apiErrorMessage } from "../../core/request_manager.js";
 
 /**
  * Trader Controls Module
@@ -363,7 +364,7 @@ export function createTraderControls({
             Utils.showToast({
               type: "error",
               title: "Could not activate force stop",
-              message: data?.error?.message || null,
+              message: apiErrorMessage(data, null),
             });
             playError();
           }
@@ -393,7 +394,7 @@ export function createTraderControls({
             Utils.showToast({
               type: "error",
               title: "Could not resume trading",
-              message: data?.error?.message || null,
+              message: apiErrorMessage(data, null),
             });
             playError();
           }
@@ -417,7 +418,7 @@ export function createTraderControls({
             key: "loss-limit-action",
             type: "error",
             title: failureTitle,
-            message: data?.error?.message || null,
+            message: apiErrorMessage(data, null),
           });
           playError();
         }
@@ -474,7 +475,7 @@ export function createTraderControls({
               key: "monitor-toggle",
               type: "error",
               title: "Could not toggle the entry monitor",
-              message: data?.error?.message || null,
+              message: apiErrorMessage(data, null),
             });
             playError();
           } else {
@@ -509,7 +510,7 @@ export function createTraderControls({
               key: "monitor-toggle",
               type: "error",
               title: "Could not toggle the exit monitor",
-              message: data?.error?.message || null,
+              message: apiErrorMessage(data, null),
             });
             playError();
           } else {

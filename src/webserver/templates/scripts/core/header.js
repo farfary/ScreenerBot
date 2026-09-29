@@ -25,6 +25,7 @@ import "./action_toasts.js";
 // shortcuts. Same relative-specifier rule as above — it shares the trade dialog
 // and the manual-trade submitter with the rest of the dashboard.
 import "../ui/quick_trade_shortcuts.js";
+import { apiErrorMessage } from "./request_manager.js";
 
 const state = {
   traderEnabled: false,
@@ -158,7 +159,7 @@ async function controlTrader(action) {
 
     if (!res.ok) {
       const message =
-        payload?.error?.message || payload?.message || `Trader request failed (${res.status})`;
+        apiErrorMessage(payload, `Trader request failed (${res.status})`);
       throw new Error(message);
     }
 

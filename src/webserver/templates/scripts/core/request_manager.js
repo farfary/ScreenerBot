@@ -27,6 +27,38 @@ export function isNetworkError(error) {
   return error instanceof TypeError || error?.name === "TypeError";
 }
 
+/**
+ * User-facing message of an API error envelope. Renders the catalog `text` in
+ * the viewer's language when the response carries one; otherwise the
+ * English `message`, then `fallback`.
+ * @param {any} body Parsed response body.
+ * @param {string|null} [fallback]
+ * @returns {string|null|undefined}
+ */
+export function apiErrorMessage(body, fallback) {
+  const text = body?.error?.text;
+  const i18n = globalThis.window?.I18n;
+  if (text?.id && i18n) {
+    const rendered = i18n.text(text);
+    if (rendered) return rendered;
+  }
+  return body?.error?.message || body?.message || fallback;
+}
+
+/**
+ * Untranslated technical context of an API error envelope.
+ * @param {any} body Parsed response body.
+ * @returns {string|null}
+ */
+export function apiErrorDetails(body) {
+  return body?.error?.details ?? null;
+}
+
+// Classic (non-module) scripts read these through the window.
+if (typeof window !== "undefined") {
+  window.RequestManagerErrors = { apiErrorMessage, apiErrorDetails };
+}
+
 class RequestManager {
   constructor() {
     // Track in-flight requests by key (method:url)

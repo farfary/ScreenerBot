@@ -1,6 +1,8 @@
+use crate::i18n::ids;
+use crate::webserver::api_error::{ApiError, ApiErrorCode};
+use axum::response::IntoResponse as _;
 use axum::{
     extract::Path,
-    http::StatusCode,
     response::{Json, Response},
     Json as AxumJson,
 };
@@ -13,7 +15,7 @@ use crate::wallet::{
     get_flow_cache_stats, get_snapshot_token_balances, get_wallet_dashboard_data,
     refresh_dashboard_cache,
 };
-use crate::webserver::utils::{error_response, success_response};
+use crate::webserver::utils::success_response;
 
 /// Generate a QR code for the current main wallet address.
 pub(super) async fn get_wallet_qr(Path(address): Path<String>) -> Response {
@@ -23,23 +25,16 @@ pub(super) async fn get_wallet_qr(Path(address): Path<String>) -> Response {
         match crate::wallets::get_main_address().await {
             Ok(address) => address,
             Err(err) => {
-                return error_response(
-                    StatusCode::NOT_FOUND,
-                    "WALLET_NOT_FOUND",
-                    "Main wallet is not available",
-                    Some(&err.to_string()),
-                );
+                return ApiError::new(ApiErrorCode::NotFound, ids::ERRORS_WALLET_UNAVAILABLE)
+                    .details(err.to_string())
+                    .into_response();
             }
         }
     };
 
     if address != current_address {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "WALLET_CHANGED",
-            "The main wallet changed; refresh and try again",
-            None,
-        );
+        return ApiError::new(ApiErrorCode::StaleRequest, ids::ERRORS_WALLET_CHANGED)
+            .into_response();
     }
 
     match crate::webserver::totp::generate_qr_data_url_for_value(&address) {
@@ -47,12 +42,9 @@ pub(super) async fn get_wallet_qr(Path(address): Path<String>) -> Response {
             address,
             qr_data_url,
         }),
-        Err(err) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "QR_ERROR",
-            "Could not generate the wallet QR code",
-            Some(&err.to_string()),
-        ),
+        Err(err) => ApiError::new(ApiErrorCode::Internal, ids::ERRORS_WALLET_QR_FAILED)
+            .details(err.to_string())
+            .into_response(),
     }
 }
 

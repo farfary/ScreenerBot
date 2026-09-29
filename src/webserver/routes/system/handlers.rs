@@ -1,10 +1,12 @@
 //! System route handlers — endpoint implementations for system info and control.
 
 use super::types::*;
+use crate::i18n::ids;
 use crate::logger::{self, LogTag};
 use crate::paths;
+use crate::webserver::api_error::{ApiError, ApiErrorCode};
 use crate::webserver::state::AppState;
-use crate::webserver::utils::{error_response, success_response};
+use crate::webserver::utils::success_response;
 use crate::{
     global::{
         self, are_core_services_ready, get_pending_services, CONNECTIVITY_SYSTEM_READY,
@@ -13,7 +15,8 @@ use crate::{
     services::{get_service_manager, startup},
     wallet,
 };
-use axum::{extract::State, http::StatusCode, response::Response, Json};
+use axum::response::IntoResponse as _;
+use axum::{extract::State, response::Response, Json};
 use chrono::Utc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -198,12 +201,9 @@ pub(super) async fn boot_status(State(state): State<Arc<AppState>>) -> Response 
 /// GET /api/system/paths — Return key filesystem locations
 pub(super) async fn get_paths() -> Response {
     if let Err(err) = paths::ensure_all_directories() {
-        return error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "PATHS_INIT_FAILED",
-            &err.to_string(),
-            None,
-        );
+        return ApiError::new(ApiErrorCode::Internal, ids::ERRORS_SYSTEM_PATHS_INIT_FAILED)
+            .details(err.to_string())
+            .into_response();
     }
 
     let response = PathsResponse {
@@ -223,12 +223,9 @@ pub(super) async fn get_paths() -> Response {
 /// POST /api/system/paths/open-data — Open the data directory in the OS file manager
 pub(super) async fn open_data_directory() -> Response {
     if let Err(err) = paths::ensure_all_directories() {
-        return error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "PATHS_INIT_FAILED",
-            &err.to_string(),
-            None,
-        );
+        return ApiError::new(ApiErrorCode::Internal, ids::ERRORS_SYSTEM_PATHS_INIT_FAILED)
+            .details(err.to_string())
+            .into_response();
     }
 
     let data_dir = paths::get_data_directory();
@@ -239,12 +236,9 @@ pub(super) async fn open_data_directory() -> Response {
             message: "Data folder opened in your file manager".to_owned(),
             path: data_dir.display().to_string(),
         }),
-        Err(err) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "OPEN_DATA_FAILED",
-            &err.to_string(),
-            None,
-        ),
+        Err(err) => ApiError::new(ApiErrorCode::Internal, ids::ERRORS_SYSTEM_OPEN_DATA_FAILED)
+            .details(err.to_string())
+            .into_response(),
     }
 }
 
@@ -253,12 +247,8 @@ pub(super) async fn open_url(Json(request): Json<OpenUrlRequest>) -> Response {
     let url = request.url.trim();
 
     if url.is_empty() {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "INVALID_URL",
-            "URL cannot be empty",
-            None,
-        );
+        return ApiError::new(ApiErrorCode::InvalidInput, ids::ERRORS_SYSTEM_URL_EMPTY)
+            .into_response();
     }
 
     match paths::open_url_in_browser(url) {
@@ -267,12 +257,12 @@ pub(super) async fn open_url(Json(request): Json<OpenUrlRequest>) -> Response {
             message: "URL opened in your default browser".to_owned(),
             url: url.to_string(),
         }),
-        Err(err) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "OPEN_URL_FAILED",
-            &err.to_string(),
-            None,
-        ),
+        Err(err) => ApiError::new(
+            ApiErrorCode::BrowserOpenFailed,
+            ids::ERRORS_SYSTEM_OPEN_URL_FAILED,
+        )
+        .details(err.to_string())
+        .into_response(),
     }
 }
 

@@ -1,9 +1,11 @@
 //! Handlers for the ScreenerBot account panel.
 
-use axum::{extract::Query, http::StatusCode, response::Response, Json};
+use crate::i18n::ids;
+use crate::webserver::api_error::{ApiError, ApiErrorCode};
+use axum::{extract::Query, response::Response, Json};
 use serde::{Deserialize, Serialize};
 
-use crate::webserver::utils::{error_response, success_response};
+use crate::webserver::utils::success_response;
 use crate::{account, paths};
 
 #[derive(Serialize)]
@@ -24,12 +26,20 @@ fn ok<T: Serialize>(data: T) -> Response {
 /// The server's own wording is passed through unchanged wherever it exists, so
 /// the app and the website never explain the same failure two different ways.
 fn refused(error: crate::Error) -> Response {
-    error_response(
-        StatusCode::UNAUTHORIZED,
-        "ACCOUNT_SIGNIN_FAILED",
-        &error.to_string(),
-        None,
-    )
+    match error {
+        crate::Error::Account(crate::errors::AccountError::Refused { message }) => ApiError::new(
+            ApiErrorCode::Unauthorized,
+            ids::ERRORS_ACCOUNT_SIGNIN_REFUSED,
+        )
+        .text_arg("reason", message)
+        .into_response(),
+        other => ApiError::new(
+            ApiErrorCode::Unauthorized,
+            ids::ERRORS_ACCOUNT_SIGNIN_FAILED,
+        )
+        .details(other.to_string())
+        .into_response(),
+    }
 }
 
 /// GET /api/account/status
@@ -54,20 +64,20 @@ pub async fn start_browser_signin() -> Response {
             Ok(()) => ok(BrowserSignInStarted { opened: true }),
             Err(error) => {
                 account::cancel_browser_signin();
-                error_response(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "ACCOUNT_BROWSER_OPEN_FAILED",
-                    &error.to_string(),
-                    Some("Open your default browser and try again"),
+                ApiError::new(
+                    ApiErrorCode::BrowserOpenFailed,
+                    ids::ERRORS_ACCOUNT_BROWSER_OPEN_FAILED,
                 )
+                .details(error.to_string())
+                .into_response()
             }
         },
-        Err(error) => error_response(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "ACCOUNT_SIGNIN_UNAVAILABLE",
-            &error.to_string(),
-            None,
-        ),
+        Err(error) => ApiError::new(
+            ApiErrorCode::ServiceUnavailable,
+            ids::ERRORS_ACCOUNT_SIGNIN_UNAVAILABLE,
+        )
+        .details(error.to_string())
+        .into_response(),
     }
 }
 
@@ -81,12 +91,12 @@ pub async fn open_signup() -> Response {
 
     match paths::open_url_in_browser(SIGN_UP_URL) {
         Ok(()) => ok(BrowserSignInStarted { opened: true }),
-        Err(error) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "ACCOUNT_BROWSER_OPEN_FAILED",
-            &error.to_string(),
-            Some("Open screenerbot.io/signup in your browser"),
-        ),
+        Err(error) => ApiError::new(
+            ApiErrorCode::BrowserOpenFailed,
+            ids::ERRORS_ACCOUNT_SIGNUP_OPEN_FAILED,
+        )
+        .details(error.to_string())
+        .into_response(),
     }
 }
 
@@ -102,12 +112,11 @@ pub struct PasswordSignIn {
 pub async fn signin_with_password(Json(body): Json<PasswordSignIn>) -> Response {
     let email = body.email.trim();
     if email.is_empty() || body.password.is_empty() {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "INVALID_REQUEST",
-            "Enter your email address and password.",
-            None,
-        );
+        return ApiError::new(
+            ApiErrorCode::InvalidInput,
+            ids::ERRORS_ACCOUNT_CREDENTIALS_REQUIRED,
+        )
+        .into_response();
     }
 
     match account::sign_in_with_password(email, &body.password).await {
@@ -193,12 +202,9 @@ pub async fn poll_device_signin(Json(body): Json<DevicePoll>) -> Response {
 pub async fn signout() -> Response {
     match account::sign_out() {
         Ok(()) => ok(account::status()),
-        Err(error) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "ACCOUNT_SIGNOUT_FAILED",
-            &error.to_string(),
-            None,
-        ),
+        Err(error) => ApiError::new(ApiErrorCode::Internal, ids::ERRORS_ACCOUNT_SIGNOUT_FAILED)
+            .details(error.to_string())
+            .into_response(),
     }
 }
 
@@ -226,12 +232,12 @@ pub async fn set_gateway_enabled(Json(body): Json<GatewayToggle>) -> Response {
 
     match result {
         Ok(()) => ok(account::status()),
-        Err(error) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "CONFIG_WRITE_FAILED",
-            &error.to_string(),
-            None,
-        ),
+        Err(error) => ApiError::new(
+            ApiErrorCode::ConfigError,
+            ids::ERRORS_ACCOUNT_GATEWAY_UPDATE_FAILED,
+        )
+        .details(error.to_string())
+        .into_response(),
     }
 }
 

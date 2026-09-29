@@ -4,6 +4,8 @@ use super::types::*;
 use super::validation::{
     clear_setup_validation, consume_setup_validation, store_setup_validation, validate_rpc_url_list,
 };
+use crate::i18n::ids;
+use crate::webserver::api_error::{ApiError, ApiErrorCode};
 use crate::{
     arguments,
     chains::solana::{
@@ -14,12 +16,10 @@ use crate::{
     global,
     logger::{self, LogTag},
     services,
-    webserver::{
-        utils::{error_response, success_response},
-        Error, Result,
-    },
+    webserver::{utils::success_response, Error, Result},
 };
-use axum::{extract::Json, http::StatusCode, response::Response};
+use axum::response::IntoResponse as _;
+use axum::{extract::Json, response::Response};
 
 /// GET /api/initialization/status
 /// Check if initialization is required
@@ -100,12 +100,12 @@ pub(super) async fn complete_onboarding() -> Response {
             LogTag::Webserver,
             &format!("Failed to update onboarding state: {e}"),
         );
-        return error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "CONFIG_ERROR",
-            "Failed to update onboarding state",
-            Some(&e.to_string()),
-        );
+        return ApiError::new(
+            ApiErrorCode::ConfigError,
+            ids::ERRORS_INITIALIZATION_ONBOARDING_UPDATE_FAILED,
+        )
+        .details(e.to_string())
+        .into_response();
     }
 
     success_response(serde_json::json!({ "success": true }))
@@ -146,13 +146,9 @@ pub(super) async fn enter_explore_mode() -> Response {
     if let Err(e) =
         config::utils::save_config_to_file(&config, &config_path.to_string_lossy(), true)
     {
-        errors.push(format!("Failed to save configuration: {e}"));
-        return error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "CONFIG_SAVE_FAILED",
-            &errors.join("; "),
-            None,
-        );
+        return ApiError::new(ApiErrorCode::ConfigError, ids::ERRORS_CONFIG_SAVE_FAILED)
+            .details(e.to_string())
+            .into_response();
     }
 
     logger::info(LogTag::Webserver, "Explore Mode configuration saved");
@@ -342,19 +338,19 @@ pub(super) async fn complete_initialization(
         "Starting initialization completion process",
     );
 
-    let mut errors = Vec::new();
+    let errors: Vec<String> = Vec::new();
 
     // Validation already performed the expensive network checks. Consume the
     // one-time receipt only when it belongs to this exact immutable snapshot.
     let validated = match consume_setup_validation(&request) {
         Ok(validated) => validated,
         Err(message) => {
-            return error_response(
-                StatusCode::BAD_REQUEST,
-                "SETUP_VALIDATION_REQUIRED",
-                &message.to_string(),
-                None,
-            );
+            return ApiError::new(
+                ApiErrorCode::SetupValidationRequired,
+                ids::ERRORS_INITIALIZATION_VALIDATION_REQUIRED,
+            )
+            .details(message.to_string())
+            .into_response();
         }
     };
 
@@ -380,13 +376,12 @@ pub(super) async fn complete_initialization(
     let encrypted = match crate::secure_storage::encrypt_private_key(&request.wallet_private_key) {
         Ok(enc) => enc,
         Err(e) => {
-            errors.push(format!("Failed to encrypt private key: {e}"));
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "ENCRYPTION_FAILED",
-                &errors.join("; "),
-                None,
-            );
+            return ApiError::new(
+                ApiErrorCode::Internal,
+                ids::ERRORS_INITIALIZATION_ENCRYPT_FAILED,
+            )
+            .details(e.to_string())
+            .into_response();
         }
     };
 
@@ -416,13 +411,9 @@ pub(super) async fn complete_initialization(
     if let Err(e) =
         config::utils::save_config_to_file(&config, &config_path.to_string_lossy(), true)
     {
-        errors.push(format!("Failed to save configuration: {e}"));
-        return error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "CONFIG_SAVE_FAILED",
-            &errors.join("; "),
-            None,
-        );
+        return ApiError::new(ApiErrorCode::ConfigError, ids::ERRORS_CONFIG_SAVE_FAILED)
+            .details(e.to_string())
+            .into_response();
     }
 
     logger::info(LogTag::Webserver, "Configuration saved successfully");

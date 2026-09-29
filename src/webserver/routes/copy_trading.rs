@@ -3,7 +3,6 @@
 
 use axum::{
     extract::{Path, Query},
-    http::StatusCode,
     response::Response,
     routing::{get, post},
     Json, Router,
@@ -12,11 +11,14 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use crate::errors::ErrorClass;
+use crate::i18n::ids;
 use crate::trader::copy::workspace::{self, ActivityFilter, CloneRequest, RangeQuery};
 use crate::trader::copy::{control, CopyMode, CopySkip, CopyTask, CopyTaskInput};
+use crate::webserver::api_error::{ApiError, ApiErrorCode};
 use crate::webserver::promo;
 use crate::webserver::state::AppState;
-use crate::webserver::utils::{error_response, success_response};
+use crate::webserver::utils::success_response;
+use axum::response::IntoResponse as _;
 
 /// Decisions the overview carries.
 const OVERVIEW_ACTIVITY: usize = 50;
@@ -223,29 +225,46 @@ fn respond<T: Serialize>(result: crate::trader::Result<T>) -> Response {
 
 fn copy_error(error: &crate::trader::Error) -> Response {
     use crate::trader::Error;
-    let (code, message) = match error {
-        Error::CopyTaskNotFound { .. } => ("NOT_FOUND", "Copy task not found"),
-        Error::CopyHoldingNotFound { .. } => ("NOT_FOUND", "No open paper holding in this token"),
+    let (code, id) = match error {
+        Error::CopyTaskNotFound { .. } => (ApiErrorCode::NotFound, ids::ERRORS_COPY_TASK_NOT_FOUND),
+        Error::CopyHoldingNotFound { .. } => {
+            (ApiErrorCode::NotFound, ids::ERRORS_COPY_HOLDING_NOT_FOUND)
+        }
         Error::CopyTaskRejected {
             reason: CopySkip::LiveConfirmationRequired,
         } => (
-            "LIVE_CONFIRMATION_REQUIRED",
-            "Arming live copy trading requires explicit confirmation",
+            ApiErrorCode::LiveConfirmationRequired,
+            ids::ERRORS_COPY_LIVE_CONFIRMATION_REQUIRED,
         ),
-        Error::CopyTaskRejected { .. } => ("INVALID_TASK", "Invalid copy task"),
-        Error::CopyValidation { .. } => ("INVALID_REQUEST", "Copy trading request rejected"),
-        Error::CopyTaskLimit { .. } => ("TASK_LIMIT", "Maximum active copy tasks reached"),
-        Error::CopyWatchRejected { .. } => ("WATCH_REJECTED", "Copy target could not be watched"),
-        Error::CopyLiveUnavailable { .. } => {
-            ("LIVE_UNAVAILABLE", "Live copy trading is unavailable")
+        Error::CopyTaskRejected { .. } => {
+            (ApiErrorCode::InvalidTask, ids::ERRORS_COPY_TASK_INVALID)
         }
-        Error::CopyTaskLive { .. } => ("TASK_LIVE", "Pause the live task before deleting it"),
-        Error::CopyTaskOwnsPositions { .. } => {
-            ("OPEN_POSITIONS", "Copy task still owns open positions")
+        Error::CopyValidation { .. } => (
+            ApiErrorCode::InvalidInput,
+            ids::ERRORS_COPY_REQUEST_REJECTED,
+        ),
+        Error::CopyTaskLimit { .. } => (ApiErrorCode::TaskLimit, ids::ERRORS_COPY_TASK_LIMIT),
+        Error::CopyWatchRejected { .. } => {
+            (ApiErrorCode::WatchRejected, ids::ERRORS_COPY_WATCH_REJECTED)
         }
-        _ => ("COPY_ERROR", "Copy trading request failed"),
+        Error::CopyLiveUnavailable { .. } => (
+            ApiErrorCode::LiveUnavailable,
+            ids::ERRORS_COPY_LIVE_UNAVAILABLE,
+        ),
+        Error::CopyTaskLive { .. } => (ApiErrorCode::TaskLive, ids::ERRORS_COPY_TASK_LIVE),
+        Error::CopyTaskOwnsPositions { .. } => (
+            ApiErrorCode::OpenPositions,
+            ids::ERRORS_COPY_TASK_OWNS_POSITIONS,
+        ),
+        _ => (
+            match error.http_status() {
+                500 => ApiErrorCode::CopyError,
+                status => ApiErrorCode::for_status(status),
+            },
+            ids::ERRORS_COPY_REQUEST_FAILED,
+        ),
     };
-    let status =
-        StatusCode::from_u16(error.http_status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
-    error_response(status, code, message, Some(&error.to_string()))
+    ApiError::new(code, id)
+        .details(error.to_string())
+        .into_response()
 }

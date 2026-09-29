@@ -69,7 +69,20 @@ impl UiText {
         }
         format(locale, &self.id, Some(&args))
     }
+
+    /// Like [`UiText::render`] without the Unicode isolation marks Fluent wraps
+    /// around interpolated values, for plain-text consumers such as API messages.
+    pub fn render_plain(&self, locale: &LanguageIdentifier) -> String {
+        self.render(locale)
+            .chars()
+            .filter(|c| !matches!(*c, FSI | PDI))
+            .collect()
+    }
 }
+
+/// First strong isolate and pop directional isolate, inserted around placeables.
+const FSI: char = '\u{2068}';
+const PDI: char = '\u{2069}';
 
 fn fluent_value(arg: &UiArg, locale: &LanguageIdentifier) -> FluentValue<'static> {
     match arg {

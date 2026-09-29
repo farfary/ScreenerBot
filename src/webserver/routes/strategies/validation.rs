@@ -1,6 +1,6 @@
 //! Strategies validation route — validates strategy configurations before saving.
 
-use axum::{extract::Path, http::StatusCode, response::Response, Json};
+use axum::{extract::Path, response::Response, Json};
 use chrono::Utc;
 
 use crate::{
@@ -10,17 +10,20 @@ use crate::{
 };
 
 use super::types::StrategyRequest;
-use super::utils::err;
+use super::utils::{err, err_cause};
+use crate::i18n::ids;
+use crate::webserver::api_error::ApiErrorCode;
 
 /// POST /api/strategies/:id/validate - Validate a strategy by id
 pub async fn validate_strategy_handler(Path(id): Path<String>) -> Response {
     let strategy = match get_strategy(&id) {
         Ok(Some(s)) => s,
-        Ok(None) => return err(StatusCode::NOT_FOUND, "Strategy not found"),
+        Ok(None) => return err(ApiErrorCode::NotFound, ids::ERRORS_STRATEGIES_NOT_FOUND),
         Err(e) => {
-            return err(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                &format!("Failed to get strategy: {e}"),
+            return err_cause(
+                ApiErrorCode::Internal,
+                ids::ERRORS_STRATEGIES_GET_FAILED,
+                &e,
             )
         }
     };

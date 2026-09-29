@@ -1,10 +1,15 @@
 use crate::{
     config,
+    errors::ErrorClass,
+    i18n::{ids, MessageId},
     logger::{self, LogTag},
     version,
-    webserver::utils::{error_response, status_for, success_response},
+    webserver::{
+        api_error::{ApiError, ApiErrorCode},
+        utils::success_response,
+    },
 };
-use axum::{http::StatusCode, response::Response, Json};
+use axum::{response::IntoResponse, response::Response, Json};
 
 use super::types::*;
 
@@ -54,7 +59,7 @@ pub(super) async fn check_updates() -> Response {
         }
         Err(e) => {
             logger::warning(LogTag::Webserver, &format!("Update check failed: {e}"));
-            update_error_response("UPDATE_CHECK_FAILED", &e)
+            update_error_response(ids::ERRORS_UPDATES_CHECK_FAILED, &e)
         }
     }
 }
@@ -70,29 +75,27 @@ pub(super) async fn download_update(Json(body): Json<DownloadRequest>) -> Respon
     let update = match state.available_update {
         Some(u) => u,
         None => {
-            return error_response(
-                StatusCode::BAD_REQUEST,
-                "NO_UPDATE_AVAILABLE",
-                "No update available to download",
-                None,
-            );
+            return ApiError::new(
+                ApiErrorCode::NoUpdateAvailable,
+                ids::ERRORS_UPDATES_NONE_AVAILABLE,
+            )
+            .into_response();
         }
     };
 
     if update.version != body.version {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "UPDATE_VERSION_CHANGED",
-            "The available update changed; check for updates again",
-            None,
-        );
+        return ApiError::new(
+            ApiErrorCode::StaleRequest,
+            ids::ERRORS_UPDATES_VERSION_CHANGED,
+        )
+        .into_response();
     }
 
     // Clone version for response before moving into spawn
     let version_str = update.version.clone();
 
     if let Err(e) = version::start_download(update).await {
-        return update_error_response("DOWNLOAD_NOT_STARTED", &e);
+        return update_error_response(ids::ERRORS_UPDATES_DOWNLOAD_FAILED, &e);
     }
 
     success_response(DownloadResponse {
@@ -109,7 +112,7 @@ pub(super) async fn get_history() -> Response {
             releases,
             current_version: version::VERSION.to_owned(),
         }),
-        Err(e) => update_error_response("HISTORY_UNAVAILABLE", &e),
+        Err(e) => update_error_response(ids::ERRORS_UPDATES_HISTORY_UNAVAILABLE, &e),
     }
 }
 
@@ -169,7 +172,7 @@ pub(super) async fn apply_update() -> Response {
             message: "Installing the update. ScreenerBot restarts and reconnects automatically."
                 .to_owned(),
         }),
-        Err(e) => update_error_response("APPLY_FAILED", &e),
+        Err(e) => update_error_response(ids::ERRORS_UPDATES_APPLY_FAILED, &e),
     }
 }
 
@@ -184,12 +187,34 @@ pub(super) async fn install_update() -> Response {
             message: "Verified update installer opened. Complete the operating-system installer."
                 .to_owned(),
         }),
-        Err(e) => update_error_response("INSTALL_FAILED", &e),
+        Err(e) => update_error_response(ids::ERRORS_UPDATES_INSTALL_FAILED, &e),
     }
 }
 
-fn update_error_response(code: &str, error: &version::Error) -> Response {
-    error_response(status_for(error), code, &error.to_string(), None)
+/// Category of an update failure. The operation message names what failed; the
+/// error's own text travels in `details`.
+fn update_error_response(id: MessageId, error: &version::Error) -> Response {
+    use version::Error;
+    let code = match error {
+        Error::Network(inner) => ApiErrorCode::for_status(inner.http_status()),
+        Error::Io(inner) => ApiErrorCode::for_status(inner.http_status()),
+        Error::Data(inner) => ApiErrorCode::for_status(inner.http_status()),
+        Error::Internal(inner) => ApiErrorCode::for_status(inner.http_status()),
+        Error::UpdateCheckFailed { status } => ApiErrorCode::for_status(*status),
+        Error::InvalidUpdateUrl { .. } => ApiErrorCode::InvalidInput,
+        Error::DigestMismatch { .. } | Error::DownloadSizeMismatch { .. } => {
+            ApiErrorCode::IntegrityFailed
+        }
+        Error::NoUpdateAvailable => ApiErrorCode::NotFound,
+        Error::UpdateChanged
+        | Error::DownloadInProgress
+        | Error::CheckInProgress
+        | Error::RestartInProgress => ApiErrorCode::Conflict,
+        Error::UnsupportedInstall { .. } => ApiErrorCode::NotImplemented,
+    };
+    ApiError::new(code, id)
+        .details(error.to_string())
+        .into_response()
 }
 
 #[cfg(test)]

@@ -18,7 +18,7 @@
 
 import * as Utils from "../core/utils.js";
 import { tradeToastKey } from "../core/action_toasts.js";
-import { requestManager } from "../core/request_manager.js";
+import { requestManager, apiErrorMessage } from "../core/request_manager.js";
 import { TradeActionDialog } from "./trade_action_dialog.js";
 
 // One dialog instance shared by every caller — it is modal, so there is never a
@@ -393,7 +393,7 @@ export async function submitTrade({ action, mint, result, btn = null }) {
 async function describeError(error, action) {
   try {
     const body = await error?.response?.json();
-    const message = body?.error?.message || body?.message;
+    const message = apiErrorMessage(body);
     if (message) return message;
   } catch {
     // no JSON body — fall back below

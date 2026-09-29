@@ -10,6 +10,7 @@ import * as Utils from "./utils.js";
 import { formatNumber, formatTimestamp } from "./format.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 import { playSuccess, playError } from "./sounds.js";
+import { apiErrorMessage } from "./request_manager.js";
 
 export class ChatWidget {
   /**
@@ -449,7 +450,7 @@ export class ChatWidget {
       this._hideTypingIndicator();
       this._updateInputStatus("");
 
-      if (data.error) throw new Error(data.error.message || "Unknown error");
+      if (data.error) throw new Error(apiErrorMessage(data, "Unknown error"));
 
       if (data.content !== undefined) {
         this.state.messages.push({
@@ -546,7 +547,7 @@ export class ChatWidget {
       this._hideTypingIndicator();
       this._updateInputStatus("");
 
-      if (data.error) throw new Error(data.error.message || "Unknown error");
+      if (data.error) throw new Error(apiErrorMessage(data, "Unknown error"));
 
       if (data.content !== undefined) {
         this.state.messages.push({
@@ -1053,7 +1054,7 @@ export class ChatWidget {
     });
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error?.message || `API error: ${response.status}`);
+      throw new Error(apiErrorMessage(errorData, `API error: ${response.status}`));
     }
     if (!response.body) throw new Error("Assistant progress stream is unavailable");
 

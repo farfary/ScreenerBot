@@ -2,20 +2,18 @@
 //! does anything else; the path exemption only removes the GUI token / session
 //! cookie, never the pairing check.
 
-use axum::{
-    extract::State,
-    http::{HeaderMap, StatusCode},
-    response::Response,
-    Json,
-};
+use axum::{extract::State, http::HeaderMap, response::Response, Json};
 use serde::Deserialize;
 use serde_json::Value;
 use std::sync::Arc;
 
 use crate::agent_control::{bridge, Error};
-use crate::webserver::routes::agent_control::error_code;
+use crate::errors::ErrorClass;
+use crate::i18n::ids;
+use crate::webserver::api_error::{ApiError, ApiErrorCode};
 use crate::webserver::state::AppState;
-use crate::webserver::utils::{error_response, status_for, success_response};
+use crate::webserver::utils::success_response;
+use axum::response::IntoResponse as _;
 
 const CLIENT_HEADER: &str = "x-screenerbot-client";
 const SECRET_HEADER: &str = "x-screenerbot-pairing-secret";
@@ -38,12 +36,41 @@ fn credential(headers: &HeaderMap) -> Result<(String, String), Response> {
 }
 
 fn reject(error: &Error) -> Response {
-    error_response(
-        status_for(error),
-        error_code(error),
-        &error.to_string(),
-        None,
-    )
+    let (code, id) = match error {
+        Error::Config(inner) => (
+            ApiErrorCode::for_status(inner.http_status()),
+            ids::ERRORS_AGENT_CONFIG_FAILED,
+        ),
+        Error::InvalidParameters { .. } => (
+            ApiErrorCode::InvalidInput,
+            ids::ERRORS_AGENT_INVALID_PARAMETERS,
+        ),
+        Error::SecretPath { .. } => (
+            ApiErrorCode::Forbidden,
+            ids::ERRORS_AGENT_WALLET_KEY_MATERIAL,
+        ),
+        Error::Database(_) => (ApiErrorCode::DatabaseError, ids::ERRORS_AGENT_STORE_FAILED),
+        Error::InvalidPairingRequest { .. } => (
+            ApiErrorCode::InvalidInput,
+            ids::ERRORS_AGENT_INVALID_PAIRING_REQUEST,
+        ),
+        Error::PairingRejected => (
+            ApiErrorCode::Unauthorized,
+            ids::ERRORS_AGENT_PAIRING_REJECTED,
+        ),
+        Error::Disabled => (
+            ApiErrorCode::AgentControlDisabled,
+            ids::ERRORS_AGENT_DISABLED,
+        ),
+        Error::ApprovalNotPending => (
+            ApiErrorCode::Conflict,
+            ids::ERRORS_AGENT_APPROVAL_NOT_PENDING,
+        ),
+        Error::ApprovalNotFound => (ApiErrorCode::NotFound, ids::ERRORS_AGENT_APPROVAL_NOT_FOUND),
+    };
+    ApiError::new(code, id)
+        .details(error.to_string())
+        .into_response()
 }
 
 #[derive(Debug, Deserialize)]
@@ -132,10 +159,5 @@ pub async fn approval_status(
 }
 
 fn task_failed() -> Response {
-    error_response(
-        StatusCode::INTERNAL_SERVER_ERROR,
-        "INTERNAL",
-        "agent-control bridge task failed",
-        None,
-    )
+    ApiError::new(ApiErrorCode::Internal, ids::ERRORS_AGENT_BRIDGE_TASK_FAILED).into_response()
 }

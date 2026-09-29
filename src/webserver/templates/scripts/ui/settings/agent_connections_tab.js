@@ -36,6 +36,7 @@
  * dynamically imported inside the browser-only loader, so the pure config
  * generators below import cleanly under node for unit testing.
  */
+import { apiErrorMessage } from "../../core/request_manager.js";
 
 const LIST_URL = "/api/agent-control/pairings";
 const pairingUrl = (clientId) => `${LIST_URL}/${encodeURIComponent(clientId)}`;
@@ -830,7 +831,7 @@ export async function loadAgentConnectionsTab(_dialog, content) {
       const body = await res.json().catch(() => null);
       if (controller.signal.aborted) return;
       if (!res.ok) {
-        showError((body && body.error && body.error.message) || "Could not create the connection.");
+        showError(apiErrorMessage(body, "Could not create the connection."));
         return;
       }
       // Success: hold the secret in memory only, render the one-time panel.

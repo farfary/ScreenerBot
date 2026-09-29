@@ -125,3 +125,14 @@ fn dashboard_catalog_excludes_server_only_domains() {
     assert!(catalog.contains("common-loading"));
     assert!(dashboard_catalog("xx").is_none());
 }
+
+#[test]
+fn render_plain_strips_isolation_marks() {
+    let text =
+        UiText::new(ids::ERRORS_STRATEGIES_ALREADY_EXISTS).arg("id", UiArg::Text("a".into()));
+    let rendered = text.render(&langid("en"));
+    assert!(rendered.contains('\u{2068}'));
+    let plain = text.render_plain(&langid("en"));
+    assert_eq!(plain, "Strategy with ID 'a' already exists");
+    assert!(!plain.contains('\u{2068}') && !plain.contains('\u{2069}'));
+}

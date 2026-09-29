@@ -1,8 +1,10 @@
 //! Route handlers for transactions API.
 
+use crate::i18n::ids;
+use crate::webserver::api_error::{ApiError, ApiErrorCode};
+use axum::response::IntoResponse as _;
 use axum::{
     extract::{Path, Query, State},
-    http::StatusCode,
     response::Response,
     Json,
 };
@@ -10,7 +12,7 @@ use std::sync::Arc;
 
 use crate::transactions::{get_transaction_database, Subject};
 use crate::webserver::state::AppState;
-use crate::webserver::utils::{error_response, success_response};
+use crate::webserver::utils::success_response;
 
 use super::types::*;
 
@@ -218,12 +220,12 @@ pub(super) async fn get_summary(
 
 async fn resolve_subject(requested: Option<&str>) -> Result<Subject, Response> {
     let own = Subject::own().map_err(|e| {
-        error_response(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "OWN_WALLET_UNAVAILABLE",
-            "The main wallet is not configured",
-            Some(&e.to_string()),
+        ApiError::new(
+            ApiErrorCode::ServiceUnavailable,
+            ids::ERRORS_TRANSACTIONS_OWN_WALLET_UNAVAILABLE,
         )
+        .details(e.to_string())
+        .into_response()
     })?;
     let Some(address) = requested.map(str::trim).filter(|value| !value.is_empty()) else {
         return Ok(own);
@@ -234,26 +236,24 @@ async fn resolve_subject(requested: Option<&str>) -> Result<Subject, Response> {
 
     let subject =
         crate::chains::solana::transactions::subject::try_from_address(address).map_err(|_| {
-            error_response(
-                StatusCode::BAD_REQUEST,
-                "INVALID_SUBJECT",
-                "Transaction subject is not a valid Solana address",
-                None,
+            ApiError::new(
+                ApiErrorCode::InvalidInput,
+                ids::ERRORS_TRANSACTIONS_INVALID_SUBJECT,
             )
+            .into_response()
         })?;
     match crate::wallets::watch::get_target_by_address(address).await {
         Ok(Some(_)) => Ok(subject),
-        Ok(None) => Err(error_response(
-            StatusCode::FORBIDDEN,
-            "SUBJECT_NOT_WATCHED",
-            "Transaction subject is not a watched wallet",
-            None,
-        )),
-        Err(e) => Err(error_response(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "WATCH_STORE_UNAVAILABLE",
-            "Watched wallets are not available",
-            Some(&e.to_string()),
-        )),
+        Ok(None) => Err(ApiError::new(
+            ApiErrorCode::Forbidden,
+            ids::ERRORS_TRANSACTIONS_SUBJECT_NOT_WATCHED,
+        )
+        .into_response()),
+        Err(e) => Err(ApiError::new(
+            ApiErrorCode::ServiceUnavailable,
+            ids::ERRORS_TRANSACTIONS_WATCH_STORE_UNAVAILABLE,
+        )
+        .details(e.to_string())
+        .into_response()),
     }
 }

@@ -1,5 +1,5 @@
 import * as Utils from "../../core/utils.js";
-import { isNetworkError } from "../../core/request_manager.js";
+import { apiErrorMessage, isNetworkError } from "../../core/request_manager.js";
 import {
   formatCompactFixed,
   formatFixed,
@@ -182,7 +182,7 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
       } else {
         // Carry the backend's friendly title (message) + actionable hint
         // (details) so the error panel can explain WHY the quote failed.
-        const e = new Error(data.error?.message || "Couldn't fetch a quote");
+        const e = new Error(apiErrorMessage(data, "Couldn't fetch a quote"));
         e.detail = data.error?.details || "";
         e.code = data.error?.code || "";
         throw e;

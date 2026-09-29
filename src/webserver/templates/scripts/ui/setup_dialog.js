@@ -7,6 +7,7 @@
  *
  * Usage: SetupDialog.show() -> Promise<boolean> (true if setup completed).
  */
+import { apiErrorMessage } from "../core/request_manager.js";
 
 class SetupDialog {
   static activeDialog = null;
@@ -184,7 +185,7 @@ class SetupDialog {
       const validation = await validateRes.json();
       if (!validateRes.ok || !validation.valid || !validation.validation_id) {
         const msg =
-          validation?.error?.message ||
+          apiErrorMessage(validation) ||
           (validation?.errors?.length ? validation.errors.join(" ") : "Validation failed.");
         this.setStatus("error", msg);
         this.setBusy(false);
@@ -208,7 +209,7 @@ class SetupDialog {
       const result = await completeRes.json();
       if (!completeRes.ok || !result.success) {
         const msg =
-          result?.error?.message ||
+          apiErrorMessage(result) ||
           (result?.errors?.length ? result.errors.join(" ") : "Setup could not be completed.");
         this.setStatus("error", msg);
         this.setBusy(false);

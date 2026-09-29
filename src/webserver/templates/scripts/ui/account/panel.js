@@ -30,7 +30,7 @@
 
     if (!response.ok) {
       throw new Error(
-        body?.error?.message || body?.message || "That did not work. Please try again."
+        window.RequestManagerErrors.apiErrorMessage(body, "That did not work. Please try again.")
       );
     }
 

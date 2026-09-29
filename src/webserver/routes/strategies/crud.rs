@@ -2,7 +2,6 @@
 
 use axum::{
     extract::{Path, Query},
-    http::StatusCode,
     response::Response,
     Json,
 };
@@ -22,7 +21,10 @@ use crate::{
 };
 
 use super::types::*;
-use super::utils::err;
+use super::utils::{err, err_cause};
+use crate::i18n::ids;
+use crate::webserver::api_error::{ApiError, ApiErrorCode};
+use axum::response::IntoResponse as _;
 
 /// GET /api/strategies - List all strategies
 pub async fn list_strategies(Query(query): Query<StrategyListQuery>) -> Response {
@@ -41,8 +43,8 @@ pub async fn list_strategies(Query(query): Query<StrategyListQuery>) -> Response
             "EXIT" => StrategyType::Exit,
             _ => {
                 return err(
-                    StatusCode::BAD_REQUEST,
-                    "Invalid strategy type. Must be ENTRY or EXIT",
+                    ApiErrorCode::InvalidInput,
+                    ids::ERRORS_STRATEGIES_INVALID_TYPE,
                 );
             }
         };
@@ -52,9 +54,10 @@ pub async fn list_strategies(Query(query): Query<StrategyListQuery>) -> Response
                 match get_enabled_strategies(strategy_type) {
                     Ok(list) => list,
                     Err(e) => {
-                        return err(
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            &format!("Failed to get strategies: {e}"),
+                        return err_cause(
+                            ApiErrorCode::Internal,
+                            ids::ERRORS_STRATEGIES_LIST_FAILED,
+                            &e,
                         );
                     }
                 }
@@ -65,9 +68,10 @@ pub async fn list_strategies(Query(query): Query<StrategyListQuery>) -> Response
                         .filter(|s| s.strategy_type == strategy_type && !s.enabled)
                         .collect(),
                     Err(e) => {
-                        return err(
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            &format!("Failed to get strategies: {e}"),
+                        return err_cause(
+                            ApiErrorCode::Internal,
+                            ids::ERRORS_STRATEGIES_LIST_FAILED,
+                            &e,
                         );
                     }
                 }
@@ -79,9 +83,10 @@ pub async fn list_strategies(Query(query): Query<StrategyListQuery>) -> Response
                     .filter(|s| s.strategy_type == strategy_type)
                     .collect(),
                 Err(e) => {
-                    return err(
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        &format!("Failed to get strategies: {e}"),
+                    return err_cause(
+                        ApiErrorCode::Internal,
+                        ids::ERRORS_STRATEGIES_LIST_FAILED,
+                        &e,
                     );
                 }
             }
@@ -90,9 +95,10 @@ pub async fn list_strategies(Query(query): Query<StrategyListQuery>) -> Response
         match get_all_strategies() {
             Ok(list) => list.into_iter().filter(|s| s.enabled == enabled).collect(),
             Err(e) => {
-                return err(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    &format!("Failed to get strategies: {e}"),
+                return err_cause(
+                    ApiErrorCode::Internal,
+                    ids::ERRORS_STRATEGIES_LIST_FAILED,
+                    &e,
                 );
             }
         }
@@ -100,9 +106,10 @@ pub async fn list_strategies(Query(query): Query<StrategyListQuery>) -> Response
         match get_all_strategies() {
             Ok(list) => list,
             Err(e) => {
-                return err(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    &format!("Failed to get strategies: {e}"),
+                return err_cause(
+                    ApiErrorCode::Internal,
+                    ids::ERRORS_STRATEGIES_LIST_FAILED,
+                    &e,
                 );
             }
         }
@@ -141,11 +148,12 @@ pub async fn get_strategy_detail(Path(id): Path<String>) -> Response {
 
     let strategy = match get_strategy(&id) {
         Ok(Some(s)) => s,
-        Ok(None) => return err(StatusCode::NOT_FOUND, "Strategy not found"),
+        Ok(None) => return err(ApiErrorCode::NotFound, ids::ERRORS_STRATEGIES_NOT_FOUND),
         Err(e) => {
-            return err(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                &format!("Failed to get strategy: {e}"),
+            return err_cause(
+                ApiErrorCode::Internal,
+                ids::ERRORS_STRATEGIES_GET_FAILED,
+                &e,
             );
         }
     };
@@ -153,9 +161,10 @@ pub async fn get_strategy_detail(Path(id): Path<String>) -> Response {
     let rules_json = match serde_json::to_value(&strategy.rules) {
         Ok(json) => json,
         Err(e) => {
-            return err(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                &format!("Failed to serialize rules: {e}"),
+            return err_cause(
+                ApiErrorCode::Internal,
+                ids::ERRORS_STRATEGIES_SERIALIZE_RULES_FAILED,
+                &e,
             );
         }
     };
@@ -191,8 +200,8 @@ pub async fn create_strategy(Json(request): Json<StrategyRequest>) -> Response {
         "EXIT" => StrategyType::Exit,
         _ => {
             return err(
-                StatusCode::BAD_REQUEST,
-                "Invalid strategy type. Must be ENTRY or EXIT",
+                ApiErrorCode::InvalidInput,
+                ids::ERRORS_STRATEGIES_INVALID_TYPE,
             );
         }
     };
@@ -201,7 +210,11 @@ pub async fn create_strategy(Json(request): Json<StrategyRequest>) -> Response {
     let rules: RuleTree = match serde_json::from_value(request.rules) {
         Ok(rules) => rules,
         Err(e) => {
-            return err(StatusCode::BAD_REQUEST, &format!("Invalid rules JSON: {e}"));
+            return err_cause(
+                ApiErrorCode::InvalidInput,
+                ids::ERRORS_STRATEGIES_INVALID_RULES_JSON,
+                &e,
+            );
         }
     };
 
@@ -216,10 +229,12 @@ pub async fn create_strategy(Json(request): Json<StrategyRequest>) -> Response {
 
     // Check if strategy with this ID already exists
     if let Ok(Some(_)) = get_strategy(&id) {
-        return err(
-            StatusCode::CONFLICT,
-            &format!("Strategy with ID '{id}' already exists"),
-        );
+        return ApiError::new(
+            ApiErrorCode::Conflict,
+            ids::ERRORS_STRATEGIES_ALREADY_EXISTS,
+        )
+        .text_arg("id", id.to_string())
+        .into_response();
     }
 
     let now = Utc::now();
@@ -241,17 +256,19 @@ pub async fn create_strategy(Json(request): Json<StrategyRequest>) -> Response {
 
     // Validate strategy before saving
     if let Err(e) = strategies::validate_strategy(&strategy).await {
-        return err(
-            StatusCode::BAD_REQUEST,
-            &format!("Strategy validation failed: {e}"),
+        return err_cause(
+            ApiErrorCode::InvalidInput,
+            ids::ERRORS_STRATEGIES_VALIDATION_FAILED,
+            &e,
         );
     }
 
     // Insert into database
     if let Err(e) = insert_strategy(&strategy) {
-        return err(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            &format!("Failed to create strategy: {e}"),
+        return err_cause(
+            ApiErrorCode::Internal,
+            ids::ERRORS_STRATEGIES_CREATE_FAILED,
+            &e,
         );
     }
 
@@ -279,11 +296,12 @@ pub async fn update_strategy_handler(
     // Check if strategy exists
     let existing = match get_strategy(&id) {
         Ok(Some(s)) => s,
-        Ok(None) => return err(StatusCode::NOT_FOUND, "Strategy not found"),
+        Ok(None) => return err(ApiErrorCode::NotFound, ids::ERRORS_STRATEGIES_NOT_FOUND),
         Err(e) => {
-            return err(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                &format!("Failed to get strategy: {e}"),
+            return err_cause(
+                ApiErrorCode::Internal,
+                ids::ERRORS_STRATEGIES_GET_FAILED,
+                &e,
             );
         }
     };
@@ -294,8 +312,8 @@ pub async fn update_strategy_handler(
         "EXIT" => StrategyType::Exit,
         _ => {
             return err(
-                StatusCode::BAD_REQUEST,
-                "Invalid strategy type. Must be ENTRY or EXIT",
+                ApiErrorCode::InvalidInput,
+                ids::ERRORS_STRATEGIES_INVALID_TYPE,
             );
         }
     };
@@ -304,7 +322,11 @@ pub async fn update_strategy_handler(
     let rules: RuleTree = match serde_json::from_value(request.rules) {
         Ok(rules) => rules,
         Err(e) => {
-            return err(StatusCode::BAD_REQUEST, &format!("Invalid rules JSON: {e}"));
+            return err_cause(
+                ApiErrorCode::InvalidInput,
+                ids::ERRORS_STRATEGIES_INVALID_RULES_JSON,
+                &e,
+            );
         }
     };
 
@@ -326,17 +348,19 @@ pub async fn update_strategy_handler(
 
     // Validate strategy before saving
     if let Err(e) = strategies::validate_strategy(&strategy).await {
-        return err(
-            StatusCode::BAD_REQUEST,
-            &format!("Strategy validation failed: {e}"),
+        return err_cause(
+            ApiErrorCode::InvalidInput,
+            ids::ERRORS_STRATEGIES_VALIDATION_FAILED,
+            &e,
         );
     }
 
     // Update in database
     if let Err(e) = update_strategy(&strategy) {
-        return err(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            &format!("Failed to update strategy: {e}"),
+        return err_cause(
+            ApiErrorCode::Internal,
+            ids::ERRORS_STRATEGIES_UPDATE_FAILED,
+            &e,
         );
     }
 
@@ -378,11 +402,12 @@ pub async fn set_strategy_enabled_handler(
 
     let mut strategy = match get_strategy(&id) {
         Ok(Some(s)) => s,
-        Ok(None) => return err(StatusCode::NOT_FOUND, "Strategy not found"),
+        Ok(None) => return err(ApiErrorCode::NotFound, ids::ERRORS_STRATEGIES_NOT_FOUND),
         Err(e) => {
-            return err(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                &format!("Failed to get strategy: {e}"),
+            return err_cause(
+                ApiErrorCode::Internal,
+                ids::ERRORS_STRATEGIES_GET_FAILED,
+                &e,
             );
         }
     };
@@ -392,9 +417,10 @@ pub async fn set_strategy_enabled_handler(
     strategy.version += 1;
 
     if let Err(e) = update_strategy(&strategy) {
-        return err(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            &format!("Failed to update strategy enabled state: {e}"),
+        return err_cause(
+            ApiErrorCode::Internal,
+            ids::ERRORS_STRATEGIES_UPDATE_ENABLED_FAILED,
+            &e,
         );
     }
 
@@ -429,20 +455,22 @@ pub async fn delete_strategy_handler(Path(id): Path<String>) -> Response {
     // Check if strategy exists
     match get_strategy(&id) {
         Ok(Some(_)) => {}
-        Ok(None) => return err(StatusCode::NOT_FOUND, "Strategy not found"),
+        Ok(None) => return err(ApiErrorCode::NotFound, ids::ERRORS_STRATEGIES_NOT_FOUND),
         Err(e) => {
-            return err(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                &format!("Failed to get strategy: {e}"),
+            return err_cause(
+                ApiErrorCode::Internal,
+                ids::ERRORS_STRATEGIES_GET_FAILED,
+                &e,
             );
         }
     }
 
     // Delete from database
     if let Err(e) = delete_strategy(&id) {
-        return err(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            &format!("Failed to delete strategy: {e}"),
+        return err_cause(
+            ApiErrorCode::Internal,
+            ids::ERRORS_STRATEGIES_DELETE_FAILED,
+            &e,
         );
     }
 

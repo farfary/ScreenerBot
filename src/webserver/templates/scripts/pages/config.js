@@ -3,7 +3,7 @@ import { $, on, off, create, show, hide } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
 import * as AppState from "../core/app_state.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
-import { requestManager } from "../core/request_manager.js";
+import { requestManager, apiErrorMessage } from "../core/request_manager.js";
 import * as Hints from "../core/hints.js";
 import { HintTrigger } from "../ui/hint_popover.js";
 import { ConfigExportDialog, ConfigImportDialog } from "../ui/config_import_export_dialog.js";
@@ -1077,7 +1077,7 @@ async function handleDiff() {
     const payload = await requestManager.fetch("/api/config/diff", {
       priority: "normal",
     });
-    const message = payload?.message ?? payload?.error?.message;
+    const message = payload?.message ?? apiErrorMessage(payload);
     Utils.showToast({
       type: "info",
       title: "Configuration diff",

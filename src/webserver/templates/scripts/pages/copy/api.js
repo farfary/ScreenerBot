@@ -1,6 +1,7 @@
 // Copy Trading API client. Every failure carries the server's own explanation
 // (`error.detail`) so the page can say why a request was refused instead of a
 // generic "could not be saved".
+import { apiErrorMessage, apiErrorDetails } from "../../core/request_manager.js";
 
 const BASE = "/api/copy-trading";
 
@@ -10,7 +11,7 @@ export async function withDetail(error) {
   let detail = null;
   try {
     const body = await error?.response?.json();
-    detail = body?.error?.details || body?.error?.message || null;
+    detail = apiErrorDetails(body) || apiErrorMessage(body, null);
   } catch {
     // The body was not JSON or is already read; the status line is all there is.
   }

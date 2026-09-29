@@ -1,8 +1,11 @@
-use axum::{extract::Path, http::StatusCode, response::Response};
+use crate::i18n::ids;
+use crate::webserver::api_error::{ApiError, ApiErrorCode};
+use axum::response::IntoResponse as _;
+use axum::{extract::Path, response::Response};
 use std::collections::HashMap;
 
 use crate::connectivity::{get_all_health, get_endpoint_health, get_unhealthy_critical_endpoints};
-use crate::webserver::utils::{error_response, success_response};
+use crate::webserver::utils::success_response;
 
 use super::types::*;
 
@@ -43,11 +46,11 @@ pub(super) async fn get_endpoint_status(Path(endpoint): Path<String>) -> Respons
             let response = EndpointHealthResponse::from(health);
             success_response(response)
         }
-        None => error_response(
-            StatusCode::NOT_FOUND,
-            "NOT_FOUND",
-            &format!("Endpoint '{endpoint}' not found or not monitored"),
-            None,
-        ),
+        None => ApiError::new(
+            ApiErrorCode::NotFound,
+            ids::ERRORS_CONNECTIVITY_ENDPOINT_NOT_FOUND,
+        )
+        .text_arg("endpoint", endpoint.clone())
+        .into_response(),
     }
 }

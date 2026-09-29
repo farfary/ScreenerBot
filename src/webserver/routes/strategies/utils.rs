@@ -1,22 +1,19 @@
 //! Strategies route utilities — helper functions for strategy response formatting.
 
-use axum::http::StatusCode;
-use axum::response::Response;
+use axum::response::{IntoResponse, Response};
+use std::fmt::Display;
 
-use crate::webserver::utils::error_response;
+use crate::i18n::MessageId;
+use crate::webserver::api_error::{ApiError, ApiErrorCode};
 
-/// Helper to create error response with standard format
-pub fn err(status: StatusCode, message: &str) -> Response {
-    error_response(
-        status,
-        match status {
-            StatusCode::BAD_REQUEST => "BAD_REQUEST",
-            StatusCode::NOT_FOUND => "NOT_FOUND",
-            StatusCode::CONFLICT => "CONFLICT",
-            StatusCode::INTERNAL_SERVER_ERROR => "INTERNAL_SERVER_ERROR",
-            _ => "ERROR",
-        },
-        message,
-        None,
-    )
+/// Error response for a failed strategy operation.
+pub fn err(code: ApiErrorCode, id: MessageId) -> Response {
+    ApiError::new(code, id).into_response()
+}
+
+/// Error response whose technical cause travels in `details`.
+pub fn err_cause(code: ApiErrorCode, id: MessageId, cause: &impl Display) -> Response {
+    ApiError::new(code, id)
+        .details(cause.to_string())
+        .into_response()
 }

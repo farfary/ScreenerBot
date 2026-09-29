@@ -1,12 +1,12 @@
-use axum::{extract::Json, http::StatusCode, response::Response};
+use crate::i18n::ids;
+use crate::webserver::api_error::{ApiError, ApiErrorCode};
+use axum::response::IntoResponse as _;
+use axum::{extract::Json, response::Response};
 use std::collections::HashMap;
 
 use super::types::*;
 use crate::paths;
-use crate::webserver::{
-    utils::{error_response, success_response},
-    Error, Result,
-};
+use crate::webserver::{utils::success_response, Error, Result};
 
 /// Load the UI state store from disk.
 ///
@@ -72,12 +72,9 @@ pub(super) async fn save_state(Json(req): Json<SaveStateRequest>) -> Response {
     store.insert(req.key.clone(), req.value);
 
     if let Err(e) = save_store(&store) {
-        return error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "save_failed",
-            &format!("Failed to save state: {e}"),
-            None,
-        );
+        return ApiError::new(ApiErrorCode::Internal, ids::ERRORS_UI_STATE_SAVE_FAILED)
+            .details(e.to_string())
+            .into_response();
     }
 
     success_response(SaveStateResponse {
@@ -96,12 +93,9 @@ pub(super) async fn batch_save_state(Json(req): Json<BatchSaveRequest>) -> Respo
     }
 
     if let Err(e) = save_store(&store) {
-        return error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "save_failed",
-            &format!("Failed to save state: {e}"),
-            None,
-        );
+        return ApiError::new(ApiErrorCode::Internal, ids::ERRORS_UI_STATE_SAVE_FAILED)
+            .details(e.to_string())
+            .into_response();
     }
 
     success_response(BatchSaveResponse { saved: count })
@@ -125,12 +119,9 @@ pub(super) async fn remove_state(Json(req): Json<RemoveStateRequest>) -> Respons
 
     if existed {
         if let Err(e) = save_store(&store) {
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "save_failed",
-                &format!("Failed to save state: {e}"),
-                None,
-            );
+            return ApiError::new(ApiErrorCode::Internal, ids::ERRORS_UI_STATE_SAVE_FAILED)
+                .details(e.to_string())
+                .into_response();
         }
     }
 
@@ -145,12 +136,9 @@ pub(super) async fn clear_state() -> Response {
     let store = HashMap::new();
 
     if let Err(e) = save_store(&store) {
-        return error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "clear_failed",
-            &format!("Failed to clear state: {e}"),
-            None,
-        );
+        return ApiError::new(ApiErrorCode::Internal, ids::ERRORS_UI_STATE_CLEAR_FAILED)
+            .details(e.to_string())
+            .into_response();
     }
 
     success_response(serde_json::json!({ "cleared": true }))

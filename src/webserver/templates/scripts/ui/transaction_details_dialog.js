@@ -4,7 +4,7 @@
  */
 import * as Utils from "../core/utils.js";
 import { createFocusTrap } from "../core/utils.js";
-import { requestManager } from "../core/request_manager.js";
+import { requestManager, apiErrorMessage } from "../core/request_manager.js";
 import { DialogTabBar, renderDialogTabRow } from "./dialog_tab_bar.js";
 import { typeIcon, typeLabel } from "./transaction_type.js";
 import {
@@ -113,7 +113,7 @@ export class TransactionDetailsDialog {
     }
     try {
       const body = await error.response.json();
-      const message = body?.error?.message || body?.message;
+      const message = apiErrorMessage(body);
       return message ? `${fallback}: ${message}` : fallback;
     } catch {
       return fallback;

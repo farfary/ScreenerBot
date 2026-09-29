@@ -4,6 +4,7 @@ mod server;
 mod error;
 pub use error::{Error, Result};
 
+pub mod api_error;
 mod embeds;
 pub mod middleware;
 pub mod promo;

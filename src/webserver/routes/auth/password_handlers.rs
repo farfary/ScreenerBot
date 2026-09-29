@@ -1,11 +1,14 @@
 //! Password management handlers
 
-use axum::{http::StatusCode, response::Response, Json};
+use crate::i18n::ids;
+use crate::webserver::api_error::{ApiError, ApiErrorCode};
+use axum::response::IntoResponse as _;
+use axum::{response::Response, Json};
 
 use crate::config;
 use crate::secure_storage::{generate_password_salt, hash_password, verify_password};
 use crate::webserver::session;
-use crate::webserver::utils::{error_response, success_response};
+use crate::webserver::utils::success_response;
 
 use super::types::{SetPasswordRequest, SetPasswordResponse};
 
@@ -26,21 +29,19 @@ pub async fn set_password(Json(req): Json<SetPasswordRequest>) -> Response {
         match &req.current_password {
             Some(current) => {
                 if !verify_password(current, &existing_salt, &existing_hash) {
-                    return error_response(
-                        StatusCode::UNAUTHORIZED,
-                        "INVALID_PASSWORD",
-                        "Current password is incorrect",
-                        None,
-                    );
+                    return ApiError::new(
+                        ApiErrorCode::InvalidPassword,
+                        ids::ERRORS_AUTH_CURRENT_PASSWORD_INCORRECT,
+                    )
+                    .into_response();
                 }
             }
             None => {
-                return error_response(
-                    StatusCode::BAD_REQUEST,
-                    "CURRENT_REQUIRED",
-                    "Current password is required to change password",
-                    None,
-                );
+                return ApiError::new(
+                    ApiErrorCode::CurrentPasswordRequired,
+                    ids::ERRORS_AUTH_CURRENT_PASSWORD_REQUIRED,
+                )
+                .into_response();
             }
         }
     }
@@ -56,12 +57,9 @@ pub async fn set_password(Json(req): Json<SetPasswordRequest>) -> Response {
             },
             true,
         ) {
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "CONFIG_ERROR",
-                "Failed to save configuration",
-                Some(&e.to_string()),
-            );
+            return ApiError::new(ApiErrorCode::ConfigError, ids::ERRORS_CONFIG_SAVE_FAILED)
+                .details(e.to_string())
+                .into_response();
         }
 
         return success_response(SetPasswordResponse {
@@ -73,21 +71,19 @@ pub async fn set_password(Json(req): Json<SetPasswordRequest>) -> Response {
 
     // Validate new password
     if req.new_password.len() < 4 {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "PASSWORD_TOO_SHORT",
-            "Password must be at least 4 characters",
-            None,
-        );
+        return ApiError::new(
+            ApiErrorCode::InvalidInput,
+            ids::ERRORS_AUTH_PASSWORD_TOO_SHORT,
+        )
+        .into_response();
     }
 
     if req.new_password.len() > 128 {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "PASSWORD_TOO_LONG",
-            "Password must be at most 128 characters",
-            None,
-        );
+        return ApiError::new(
+            ApiErrorCode::InvalidInput,
+            ids::ERRORS_AUTH_PASSWORD_TOO_LONG,
+        )
+        .into_response();
     }
 
     // Generate new salt and hash
@@ -95,12 +91,9 @@ pub async fn set_password(Json(req): Json<SetPasswordRequest>) -> Response {
     let new_hash = match hash_password(&req.new_password, &new_salt) {
         Ok(h) => h,
         Err(e) => {
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "HASH_ERROR",
-                "Failed to hash password",
-                Some(&e.to_string()),
-            );
+            return ApiError::new(ApiErrorCode::Internal, ids::ERRORS_AUTH_HASH_FAILED)
+                .details(e.to_string())
+                .into_response();
         }
     };
 
@@ -114,12 +107,9 @@ pub async fn set_password(Json(req): Json<SetPasswordRequest>) -> Response {
         },
         true,
     ) {
-        return error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "CONFIG_ERROR",
-            "Failed to save configuration",
-            Some(&e.to_string()),
-        );
+        return ApiError::new(ApiErrorCode::ConfigError, ids::ERRORS_CONFIG_SAVE_FAILED)
+            .details(e.to_string())
+            .into_response();
     }
 
     // Security: Invalidate all existing sessions when password is changed

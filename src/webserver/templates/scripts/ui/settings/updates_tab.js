@@ -9,6 +9,7 @@ import { Poller } from "../../core/poller.js";
 import { DialogTabBar, renderDialogTabRow } from "../dialog_tab_bar.js";
 import { ConfirmationDialog } from "../confirmation_dialog.js";
 import { createUpdatesView } from "./updates_view.js";
+import { apiErrorMessage } from "../../core/request_manager.js";
 
 const BUSY_PHASES = new Set(["checking", "downloading", "verifying", "applying"]);
 const UPDATE_TABS = [
@@ -169,7 +170,7 @@ async function request(url, options = {}, errorTitle, key) {
     const response = await fetch(url, options);
     const body = await response.json().catch(() => ({}));
     if (!response.ok || body.success === false) {
-      throw new Error(body.error?.message || body.error || "Request failed");
+      throw new Error(apiErrorMessage(body, body.error || "Request failed"));
     }
     return body;
   } catch (err) {

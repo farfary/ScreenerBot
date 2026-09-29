@@ -1,6 +1,6 @@
 //! Strategies deployment route — activates and deactivates trading strategies.
 
-use axum::{extract::Path, http::StatusCode, response::Response};
+use axum::{extract::Path, response::Response};
 use chrono::Utc;
 
 use crate::{
@@ -12,17 +12,20 @@ use crate::{
     webserver::utils::success_response,
 };
 
-use super::utils::err;
+use super::utils::{err, err_cause};
+use crate::i18n::ids;
+use crate::webserver::api_error::ApiErrorCode;
 
 /// POST /api/strategies/:id/deploy - Enable a strategy
 pub async fn deploy_strategy_handler(Path(id): Path<String>) -> Response {
     let mut strategy = match get_strategy(&id) {
         Ok(Some(s)) => s,
-        Ok(None) => return err(StatusCode::NOT_FOUND, "Strategy not found"),
+        Ok(None) => return err(ApiErrorCode::NotFound, ids::ERRORS_STRATEGIES_NOT_FOUND),
         Err(e) => {
-            return err(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                &format!("Failed to get strategy: {e}"),
+            return err_cause(
+                ApiErrorCode::Internal,
+                ids::ERRORS_STRATEGIES_GET_FAILED,
+                &e,
             )
         }
     };
@@ -33,9 +36,10 @@ pub async fn deploy_strategy_handler(Path(id): Path<String>) -> Response {
     strategy.updated_at = Utc::now();
 
     if let Err(e) = update_strategy(&strategy) {
-        return err(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            &format!("Failed to deploy strategy: {e}"),
+        return err_cause(
+            ApiErrorCode::Internal,
+            ids::ERRORS_STRATEGIES_DEPLOY_FAILED,
+            &e,
         );
     }
 

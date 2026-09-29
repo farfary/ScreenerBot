@@ -1,3 +1,5 @@
+use crate::i18n::ids;
+use crate::webserver::api_error::{ApiError, ApiErrorCode};
 use axum::{
     extract::Path,
     http::HeaderMap,
@@ -7,7 +9,7 @@ use axum::{
 
 use super::types::{CatalogEntry, CatalogPayload, LocalesResponse};
 use crate::i18n;
-use crate::webserver::utils::{error_response, no_store_response};
+use crate::webserver::utils::no_store_response;
 
 /// Registered locales plus the locale and setting in effect for this request.
 pub async fn get_locales(headers: HeaderMap) -> Response {
@@ -31,12 +33,12 @@ pub async fn get_catalog_script(Path(locale): Path<String>) -> Response {
     let langid = i18n::display_locale_info(&locale)
         .and_then(|_| locale.parse::<i18n::LanguageIdentifier>().ok());
     let Some(langid) = langid else {
-        return error_response(
-            axum::http::StatusCode::NOT_FOUND,
-            "LOCALE_NOT_FOUND",
-            "Locale is not registered",
-            Some(&locale),
-        );
+        return ApiError::new(
+            ApiErrorCode::NotFound,
+            ids::ERRORS_I18N_LOCALE_NOT_REGISTERED,
+        )
+        .details(locale.clone())
+        .into_response();
     };
     let payload = CatalogPayload {
         locale: &locale,
@@ -54,12 +56,12 @@ pub async fn get_catalog_script(Path(locale): Path<String>) -> Response {
             "application/javascript; charset=utf-8",
             format!("window.__SCREENERBOT_L10N__ = {json};"),
         ),
-        Err(err) => error_response(
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            "CATALOG_ENCODE_FAILED",
-            "Catalog could not be encoded",
-            Some(&err.to_string()),
-        ),
+        Err(err) => ApiError::new(
+            ApiErrorCode::Internal,
+            ids::ERRORS_I18N_CATALOG_ENCODE_FAILED,
+        )
+        .details(err.to_string())
+        .into_response(),
     }
 }
 

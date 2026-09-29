@@ -1,10 +1,13 @@
 //! TOTP two-factor authentication handlers
 
-use axum::{http::StatusCode, response::Response, Json};
+use crate::i18n::ids;
+use crate::webserver::api_error::{ApiError, ApiErrorCode};
+use axum::response::IntoResponse as _;
+use axum::{response::Response, Json};
 
 use crate::config;
 use crate::secure_storage::verify_password;
-use crate::webserver::utils::{error_response, success_response};
+use crate::webserver::utils::success_response;
 use crate::webserver::{totp, Error};
 
 use super::types::{
@@ -38,21 +41,19 @@ pub async fn totp_setup(Json(req): Json<TotpSetupRequest>) -> Response {
     });
 
     if hash.is_empty() || salt.is_empty() {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "NO_PASSWORD",
-            "Password must be set before enabling 2FA",
-            None,
-        );
+        return ApiError::new(
+            ApiErrorCode::PasswordNotSet,
+            ids::ERRORS_AUTH_TOTP_PASSWORD_REQUIRED,
+        )
+        .into_response();
     }
 
     if !verify_password(&req.password, &salt, &hash) {
-        return error_response(
-            StatusCode::UNAUTHORIZED,
-            "INVALID_PASSWORD",
-            "Incorrect password",
-            None,
-        );
+        return ApiError::new(
+            ApiErrorCode::InvalidPassword,
+            ids::ERRORS_AUTH_PASSWORD_INCORRECT,
+        )
+        .into_response();
     }
 
     // Generate new TOTP secret
@@ -63,24 +64,18 @@ pub async fn totp_setup(Json(req): Json<TotpSetupRequest>) -> Response {
     let uri = match totp::get_totp_uri(&secret, account) {
         Ok(u) => u,
         Err(e) => {
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "TOTP_ERROR",
-                "Failed to generate TOTP URI",
-                Some(&e.to_string()),
-            );
+            return ApiError::new(ApiErrorCode::Internal, ids::ERRORS_AUTH_TOTP_URI_FAILED)
+                .details(e.to_string())
+                .into_response();
         }
     };
 
     let qr_code = match totp::generate_qr_data_url(&secret, account) {
         Ok(q) => q,
         Err(e) => {
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "QR_ERROR",
-                "Failed to generate QR code",
-                Some(&e.to_string()),
-            );
+            return ApiError::new(ApiErrorCode::Internal, ids::ERRORS_AUTH_TOTP_QR_FAILED)
+                .details(e.to_string())
+                .into_response();
         }
     };
 
@@ -98,12 +93,11 @@ pub async fn totp_setup(Json(req): Json<TotpSetupRequest>) -> Response {
 pub async fn totp_verify_setup(Json(req): Json<TotpVerifySetupRequest>) -> Response {
     // Validate secret format (should be base32)
     if req.secret.is_empty() {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "INVALID_SECRET",
-            "Secret is required",
-            None,
-        );
+        return ApiError::new(
+            ApiErrorCode::InvalidInput,
+            ids::ERRORS_AUTH_TOTP_SECRET_REQUIRED,
+        )
+        .into_response();
     }
 
     // Verify the TOTP code
@@ -123,12 +117,9 @@ pub async fn totp_verify_setup(Json(req): Json<TotpVerifySetupRequest>) -> Respo
                 },
                 true,
             ) {
-                return error_response(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "CONFIG_ERROR",
-                    "Failed to save TOTP configuration",
-                    Some(&e.to_string()),
-                );
+                return ApiError::new(ApiErrorCode::ConfigError, ids::ERRORS_AUTH_TOTP_SAVE_FAILED)
+                    .details(e.to_string())
+                    .into_response();
             }
 
             success_response(SetPasswordResponse {
@@ -137,18 +128,17 @@ pub async fn totp_verify_setup(Json(req): Json<TotpVerifySetupRequest>) -> Respo
                 timestamp: chrono::Utc::now().to_rfc3339(),
             })
         }
-        Err(Error::InvalidTotpCode) => error_response(
-            StatusCode::BAD_REQUEST,
-            "INVALID_CODE",
-            "Invalid verification code. Please check the code and try again.",
-            None,
-        ),
-        Err(e) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "TOTP_ERROR",
-            "Failed to verify code",
-            Some(&e.to_string()),
-        ),
+        Err(Error::InvalidTotpCode) => ApiError::new(
+            ApiErrorCode::InvalidInput,
+            ids::ERRORS_AUTH_TOTP_CODE_INVALID,
+        )
+        .into_response(),
+        Err(e) => ApiError::new(
+            ApiErrorCode::Internal,
+            ids::ERRORS_AUTH_TOTP_CODE_VERIFY_FAILED,
+        )
+        .details(e.to_string())
+        .into_response(),
     }
 }
 
@@ -165,12 +155,11 @@ pub async fn totp_disable(Json(req): Json<TotpDisableRequest>) -> Response {
     });
 
     if !verify_password(&req.password, &salt, &hash) {
-        return error_response(
-            StatusCode::UNAUTHORIZED,
-            "INVALID_PASSWORD",
-            "Incorrect password",
-            None,
-        );
+        return ApiError::new(
+            ApiErrorCode::InvalidPassword,
+            ids::ERRORS_AUTH_PASSWORD_INCORRECT,
+        )
+        .into_response();
     }
 
     // Disable TOTP and clear secret
@@ -181,12 +170,9 @@ pub async fn totp_disable(Json(req): Json<TotpDisableRequest>) -> Response {
         },
         true,
     ) {
-        return error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "CONFIG_ERROR",
-            "Failed to save configuration",
-            Some(&e.to_string()),
-        );
+        return ApiError::new(ApiErrorCode::ConfigError, ids::ERRORS_CONFIG_SAVE_FAILED)
+            .details(e.to_string())
+            .into_response();
     }
 
     success_response(SetPasswordResponse {

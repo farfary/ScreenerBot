@@ -2,13 +2,15 @@
 
 use super::types::*;
 use crate::config::{update_config_section, with_config};
+use crate::i18n::ids;
 use crate::logger::{self, LogTag};
 use crate::telegram::session::get_session_manager;
+use crate::webserver::api_error::{ApiError, ApiErrorCode};
 use crate::webserver::state::AppState;
-use crate::webserver::utils::{error_response, success_response};
+use crate::webserver::utils::success_response;
+use axum::response::IntoResponse as _;
 use axum::{
     extract::{Path, State},
-    http::StatusCode,
     response::Response,
     Json,
 };
@@ -188,12 +190,12 @@ pub(super) async fn update_settings(
                 "message": "Settings updated successfully"
             }))
         }
-        Err(e) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "CONFIG_ERROR",
-            &format!("Failed to update settings: {e}"),
-            None,
-        ),
+        Err(e) => ApiError::new(
+            ApiErrorCode::ConfigError,
+            ids::ERRORS_TELEGRAM_SETTINGS_UPDATE_FAILED,
+        )
+        .details(e.to_string())
+        .into_response(),
     }
 }
 
@@ -257,21 +259,19 @@ pub(super) async fn send_test_message(
     });
 
     if !enabled {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "TELEGRAM_DISABLED",
-            "Telegram is not enabled",
-            None,
-        );
+        return ApiError::new(
+            ApiErrorCode::TelegramDisabled,
+            ids::ERRORS_TELEGRAM_DISABLED,
+        )
+        .into_response();
     }
 
     if bot_token.is_empty() || chat_id.is_empty() {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "NOT_CONFIGURED",
-            "Bot token or chat ID not configured",
-            None,
-        );
+        return ApiError::new(
+            ApiErrorCode::NotConfigured,
+            ids::ERRORS_TELEGRAM_NOT_CONFIGURED,
+        )
+        .into_response();
     }
 
     // Create notifier and send
@@ -288,20 +288,14 @@ pub(super) async fn send_test_message(
                         "message": "Test message sent successfully"
                     }))
                 }
-                Err(e) => error_response(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "SEND_FAILED",
-                    &format!("Failed to send message: {e}"),
-                    None,
-                ),
+                Err(e) => ApiError::new(ApiErrorCode::Internal, ids::ERRORS_TELEGRAM_SEND_FAILED)
+                    .details(e.to_string())
+                    .into_response(),
             }
         }
-        Err(e) => error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "NOTIFIER_ERROR",
-            &format!("Failed to create notifier: {e}"),
-            None,
-        ),
+        Err(e) => ApiError::new(ApiErrorCode::Internal, ids::ERRORS_TELEGRAM_NOTIFIER_FAILED)
+            .details(e.to_string())
+            .into_response(),
     }
 }
 
@@ -323,22 +317,21 @@ pub(super) async fn start_discovery(State(_state): State<Arc<AppState>>) -> Resp
     let bot_token = with_config(|c| c.telegram.bot_token.clone());
 
     if bot_token.is_empty() {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "NO_TOKEN",
-            "Bot token must be configured first",
-            None,
-        );
+        return ApiError::new(
+            ApiErrorCode::NotConfigured,
+            ids::ERRORS_TELEGRAM_TOKEN_REQUIRED,
+        )
+        .into_response();
     }
 
     // Start the discovery polling service
     if let Err(e) = crate::telegram::discovery::start_discovery().await {
-        return error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "DISCOVERY_FAILED",
-            &format!("Failed to start discovery: {e}"),
-            None,
-        );
+        return ApiError::new(
+            ApiErrorCode::Internal,
+            ids::ERRORS_TELEGRAM_DISCOVERY_FAILED,
+        )
+        .details(e.to_string())
+        .into_response();
     }
 
     logger::info(LogTag::Telegram, "Telegram chat discovery mode started");
@@ -407,12 +400,12 @@ pub(super) async fn select_discovered_chat(
                 "chat_id": chat_id
             }))
         }
-        Err(e) => error_response(
-            StatusCode::NOT_FOUND,
-            "SELECTION_FAILED",
-            &format!("Failed to select chat: {e}"),
-            None,
-        ),
+        Err(e) => ApiError::new(
+            ApiErrorCode::NotFound,
+            ids::ERRORS_TELEGRAM_CHAT_SELECT_FAILED,
+        )
+        .details(e.to_string())
+        .into_response(),
     }
 }
 

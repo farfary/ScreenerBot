@@ -9,7 +9,7 @@ use axum::{
 };
 use serde_json::json;
 
-/// Format error response with consistent structure
+/// Legacy untyped error response; routes migrate to ApiError.
 pub fn error_response(
     status: StatusCode,
     code: &str,

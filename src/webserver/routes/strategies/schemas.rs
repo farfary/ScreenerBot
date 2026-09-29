@@ -1,6 +1,5 @@
 //! Strategies schemas route — serves condition and action schema definitions for the UI.
 
-use axum::http::StatusCode;
 use axum::response::Response;
 use chrono::Utc;
 
@@ -11,7 +10,9 @@ use crate::{
 };
 
 use super::types::ConditionSchemasResponse;
-use super::utils::err;
+use super::utils::err_cause;
+use crate::i18n::ids;
+use crate::webserver::api_error::ApiErrorCode;
 
 /// GET /api/strategies/conditions/schemas - Get all condition schemas
 pub async fn get_condition_schemas() -> Response {
@@ -20,9 +21,10 @@ pub async fn get_condition_schemas() -> Response {
     let schemas = match strategies::get_condition_schemas().await {
         Ok(s) => s,
         Err(e) => {
-            return err(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                &format!("Failed to get condition schemas: {e}"),
+            return err_cause(
+                ApiErrorCode::Internal,
+                ids::ERRORS_STRATEGIES_SCHEMAS_FAILED,
+                &e,
             );
         }
     };

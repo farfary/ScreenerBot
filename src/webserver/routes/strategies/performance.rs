@@ -1,6 +1,6 @@
 //! Strategies performance route — serves strategy PnL and win/loss statistics.
 
-use axum::{extract::Path, http::StatusCode, response::Response};
+use axum::{extract::Path, response::Response};
 
 use crate::{
     logger::{self, LogTag},
@@ -9,7 +9,9 @@ use crate::{
 };
 
 use super::types::StrategyPerformanceResponse;
-use super::utils::err;
+use super::utils::{err, err_cause};
+use crate::i18n::ids;
+use crate::webserver::api_error::ApiErrorCode;
 
 /// GET /api/strategies/:id/performance - Get strategy performance stats
 pub async fn get_strategy_performance_stats(Path(id): Path<String>) -> Response {
@@ -21,11 +23,12 @@ pub async fn get_strategy_performance_stats(Path(id): Path<String>) -> Response 
     // Check if strategy exists
     match get_strategy(&id) {
         Ok(Some(_)) => {}
-        Ok(None) => return err(StatusCode::NOT_FOUND, "Strategy not found"),
+        Ok(None) => return err(ApiErrorCode::NotFound, ids::ERRORS_STRATEGIES_NOT_FOUND),
         Err(e) => {
-            return err(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                &format!("Failed to get strategy: {e}"),
+            return err_cause(
+                ApiErrorCode::Internal,
+                ids::ERRORS_STRATEGIES_GET_FAILED,
+                &e,
             );
         }
     }
@@ -35,14 +38,15 @@ pub async fn get_strategy_performance_stats(Path(id): Path<String>) -> Response 
         Ok(Some(p)) => p,
         Ok(None) => {
             return err(
-                StatusCode::NOT_FOUND,
-                "No performance data available for this strategy",
+                ApiErrorCode::NotFound,
+                ids::ERRORS_STRATEGIES_NO_PERFORMANCE,
             );
         }
         Err(e) => {
-            return err(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                &format!("Failed to get performance stats: {e}"),
+            return err_cause(
+                ApiErrorCode::Internal,
+                ids::ERRORS_STRATEGIES_PERFORMANCE_FAILED,
+                &e,
             );
         }
     };

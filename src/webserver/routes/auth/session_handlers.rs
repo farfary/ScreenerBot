@@ -1,14 +1,14 @@
 //! Session management handlers (login, logout, status)
 
-use axum::{
-    http::header, http::header::HeaderValue, http::HeaderMap, http::StatusCode, response::Response,
-    Json,
-};
+use crate::i18n::ids;
+use crate::webserver::api_error::{ApiError, ApiErrorCode};
+use axum::response::IntoResponse as _;
+use axum::{http::header, http::header::HeaderValue, http::HeaderMap, response::Response, Json};
 
 use crate::config;
 use crate::secure_storage::verify_password;
 use crate::webserver::session;
-use crate::webserver::utils::{error_response, success_response};
+use crate::webserver::utils::success_response;
 use crate::webserver::{totp, Error};
 
 use super::helpers::{build_session_cookie, get_cookie_value};
@@ -66,32 +66,23 @@ pub async fn login(Json(req): Json<LoginRequest>) -> Response {
 
     // Check if auth is enabled
     if !auth_enabled {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "AUTH_DISABLED",
-            "Authentication is not enabled",
-            None,
-        );
+        return ApiError::new(ApiErrorCode::AuthDisabled, ids::ERRORS_AUTH_NOT_ENABLED)
+            .into_response();
     }
 
     // Check if password is set
     if hash.is_empty() || salt.is_empty() {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "NO_PASSWORD",
-            "No password has been configured",
-            None,
-        );
+        return ApiError::new(ApiErrorCode::PasswordNotSet, ids::ERRORS_AUTH_NO_PASSWORD)
+            .into_response();
     }
 
     // Verify password
     if !verify_password(&req.password, &salt, &hash) {
-        return error_response(
-            StatusCode::UNAUTHORIZED,
-            "INVALID_PASSWORD",
-            "Incorrect password",
-            None,
-        );
+        return ApiError::new(
+            ApiErrorCode::InvalidPassword,
+            ids::ERRORS_AUTH_PASSWORD_INCORRECT,
+        )
+        .into_response();
     }
 
     // If TOTP is enabled, verify the code
@@ -110,20 +101,19 @@ pub async fn login(Json(req): Json<LoginRequest>) -> Response {
                         // TOTP verified, continue to create session
                     }
                     Err(Error::InvalidTotpCode) => {
-                        return error_response(
-                            StatusCode::UNAUTHORIZED,
-                            "INVALID_TOTP",
-                            "Invalid or expired 2FA code",
-                            None,
-                        );
+                        return ApiError::new(
+                            ApiErrorCode::InvalidTotp,
+                            ids::ERRORS_AUTH_TOTP_INVALID,
+                        )
+                        .into_response();
                     }
                     Err(e) => {
-                        return error_response(
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            "TOTP_ERROR",
-                            "Failed to verify 2FA code",
-                            Some(&e.to_string()),
-                        );
+                        return ApiError::new(
+                            ApiErrorCode::Internal,
+                            ids::ERRORS_AUTH_TOTP_VERIFY_FAILED,
+                        )
+                        .details(e.to_string())
+                        .into_response();
                     }
                 }
             }

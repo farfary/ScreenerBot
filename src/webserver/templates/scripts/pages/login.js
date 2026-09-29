@@ -2,8 +2,10 @@
  * Login Page Module
  *
  * Handles password authentication with optional TOTP 2FA for headless mode dashboard access.
- * Self-contained module without dependencies on core modules.
+ * Its only core dependency is the request manager's error-envelope helper.
  */
+
+import { apiErrorMessage } from "../core/request_manager.js";
 
 // Simple DOM helper
 const $ = (selector) => document.querySelector(selector);
@@ -181,7 +183,7 @@ async function handleLogin(passwordInput, errorContainer) {
       hideError();
     } else {
       // Show error
-      const errorMessage = response.error?.message || "Login failed";
+      const errorMessage = apiErrorMessage(response, "Login failed");
       showError(errorContainer, errorMessage);
       shakeForm();
       passwordInput.focus();
@@ -239,7 +241,7 @@ async function handleTotpSubmit(totpInput, errorContainer) {
       window.location.href = "/";
     } else {
       // Show error
-      const errorMessage = response.error?.message || "Invalid code";
+      const errorMessage = apiErrorMessage(response, "Invalid code");
       showError(errorContainer, errorMessage);
       shakeForm();
       totpInput.value = "";

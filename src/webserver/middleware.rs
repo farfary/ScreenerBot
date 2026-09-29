@@ -2,6 +2,8 @@
 //!
 //! Request interceptors for authentication, validation, gating, and cache control
 
+use crate::i18n::ids;
+use crate::webserver::api_error::{ApiError, ApiErrorCode};
 use axum::{
     body::Body,
     extract::Request,
@@ -13,7 +15,6 @@ use axum::{
 use crate::{
     global,
     logger::{self, LogTag},
-    webserver::utils,
 };
 
 /// Security header name for token validation
@@ -57,12 +58,11 @@ pub async fn security_gate(request: Request, next: Next) -> Response {
                 request.uri().path()
             ),
         );
-        return utils::error_response(
-            StatusCode::FORBIDDEN,
-            "INVALID_LOCAL_REQUEST",
-            "Request must originate from the local dashboard",
-            None,
-        );
+        return ApiError::new(
+            ApiErrorCode::InvalidLocalRequest,
+            ids::ERRORS_SECURITY_INVALID_LOCAL_REQUEST,
+        )
+        .into_response();
     }
 
     let path = request.uri().path();
@@ -95,12 +95,11 @@ pub async fn security_gate(request: Request, next: Next) -> Response {
                     request.uri().path()
                 ),
             );
-            utils::error_response(
-                StatusCode::FORBIDDEN,
-                "INVALID_TOKEN",
-                "Invalid security token",
-                None,
+            ApiError::new(
+                ApiErrorCode::InvalidToken,
+                ids::ERRORS_SECURITY_INVALID_TOKEN,
             )
+            .into_response()
         }
         None => {
             // Missing token - log for debugging
@@ -112,12 +111,12 @@ pub async fn security_gate(request: Request, next: Next) -> Response {
                     global::is_gui_mode()
                 ),
             );
-            utils::error_response(
-                StatusCode::FORBIDDEN,
-                "MISSING_TOKEN",
-                "Security token required",
-                Some("This endpoint is only accessible from within ScreenerBot"),
+            ApiError::new(
+                ApiErrorCode::MissingToken,
+                ids::ERRORS_SECURITY_TOKEN_REQUIRED,
             )
+            .details("This endpoint is only accessible from within ScreenerBot")
+            .into_response()
         }
     }
 }
@@ -252,12 +251,12 @@ pub async fn initialization_gate(request: Request, next: Next) -> Response {
         ),
     );
 
-    utils::error_response(
-        StatusCode::SERVICE_UNAVAILABLE,
-        "INITIALIZATION_REQUIRED",
-        "Bot initialization is required before accessing this endpoint",
-        Some("Please complete the initialization process through the web interface"),
+    ApiError::new(
+        ApiErrorCode::InitializationRequired,
+        ids::ERRORS_INITIALIZATION_REQUIRED,
     )
+    .details("Please complete the initialization process through the web interface")
+    .into_response()
 }
 
 /// Cache control middleware
@@ -384,12 +383,12 @@ pub async fn auth_gate(request: Request, next: Next) -> Response {
 
     // Not authenticated - redirect to login for page requests, return 401 for API
     if path.starts_with("/api/") {
-        return utils::error_response(
-            StatusCode::UNAUTHORIZED,
-            "AUTHENTICATION_REQUIRED",
-            "Authentication required",
-            Some("Please log in to access this endpoint"),
-        );
+        return ApiError::new(
+            ApiErrorCode::AuthenticationRequired,
+            ids::ERRORS_AUTH_REQUIRED,
+        )
+        .details("Please log in to access this endpoint")
+        .into_response();
     }
 
     // Redirect to login page for HTML page requests

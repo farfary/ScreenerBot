@@ -1,13 +1,12 @@
-use axum::http::StatusCode;
+use crate::i18n::ids;
+use crate::webserver::api_error::{ApiError, ApiErrorCode};
+use axum::response::IntoResponse as _;
 use axum::response::Response;
 use axum::Json;
 
 use crate::config;
 use crate::secure_storage::{generate_password_salt, hash_password, verify_password};
-use crate::webserver::{
-    utils::{error_response, success_response},
-    Error, Result,
-};
+use crate::webserver::{utils::success_response, Error, Result};
 
 use super::types::*;
 
@@ -44,12 +43,11 @@ pub(super) async fn verify_password_handler(Json(req): Json<VerifyPasswordReques
 
     // Check if password is set
     if hash.is_empty() || salt.is_empty() {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "NO_PASSWORD",
-            "No password has been set",
-            None,
-        );
+        return ApiError::new(
+            ApiErrorCode::PasswordNotSet,
+            ids::ERRORS_LOCKSCREEN_NO_PASSWORD_SET,
+        )
+        .into_response();
     }
 
     let valid = verify_password(&req.password, &salt, &hash);
@@ -64,22 +62,21 @@ pub(super) async fn verify_password_handler(Json(req): Json<VerifyPasswordReques
 pub(super) async fn set_password(Json(req): Json<SetPasswordRequest>) -> Response {
     // Validate password type
     if !["pin4", "pin6", "text"].contains(&req.password_type.as_str()) {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "INVALID_TYPE",
-            "Invalid password type. Must be 'pin4', 'pin6', or 'text'",
-            None,
-        );
+        return ApiError::new(
+            ApiErrorCode::InvalidInput,
+            ids::ERRORS_LOCKSCREEN_INVALID_TYPE,
+        )
+        .into_response();
     }
 
     // Validate password format based on type
     if let Err(e) = validate_password_format(&req.new_password, &req.password_type) {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "INVALID_FORMAT",
-            &e.to_string(),
-            None,
-        );
+        return ApiError::new(
+            ApiErrorCode::InvalidInput,
+            ids::ERRORS_LOCKSCREEN_INVALID_FORMAT,
+        )
+        .details(e.to_string())
+        .into_response();
     }
 
     // Check if password already exists
@@ -98,21 +95,19 @@ pub(super) async fn set_password(Json(req): Json<SetPasswordRequest>) -> Respons
         match &req.current_password {
             Some(current) => {
                 if !verify_password(current, &existing_salt, &existing_hash) {
-                    return error_response(
-                        StatusCode::UNAUTHORIZED,
-                        "INVALID_PASSWORD",
-                        "Current password is incorrect",
-                        None,
-                    );
+                    return ApiError::new(
+                        ApiErrorCode::InvalidPassword,
+                        ids::ERRORS_AUTH_CURRENT_PASSWORD_INCORRECT,
+                    )
+                    .into_response();
                 }
             }
             None => {
-                return error_response(
-                    StatusCode::BAD_REQUEST,
-                    "CURRENT_REQUIRED",
-                    "Current password is required to change password",
-                    None,
-                );
+                return ApiError::new(
+                    ApiErrorCode::CurrentPasswordRequired,
+                    ids::ERRORS_AUTH_CURRENT_PASSWORD_REQUIRED,
+                )
+                .into_response();
             }
         }
     }
@@ -122,12 +117,9 @@ pub(super) async fn set_password(Json(req): Json<SetPasswordRequest>) -> Respons
     let new_hash = match hash_password(&req.new_password, &new_salt) {
         Ok(h) => h,
         Err(e) => {
-            return error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "HASH_ERROR",
-                "Failed to hash password",
-                Some(&e.to_string()),
-            );
+            return ApiError::new(ApiErrorCode::Internal, ids::ERRORS_AUTH_HASH_FAILED)
+                .details(e.to_string())
+                .into_response();
         }
     };
 
@@ -142,12 +134,9 @@ pub(super) async fn set_password(Json(req): Json<SetPasswordRequest>) -> Respons
         },
         true,
     ) {
-        return error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "CONFIG_ERROR",
-            "Failed to save configuration",
-            Some(&e.to_string()),
-        );
+        return ApiError::new(ApiErrorCode::ConfigError, ids::ERRORS_CONFIG_SAVE_FAILED)
+            .details(e.to_string())
+            .into_response();
     }
 
     success_response(SuccessResponse {
@@ -170,22 +159,20 @@ pub(super) async fn clear_password(Json(req): Json<ClearPasswordRequest>) -> Res
 
     // Check if password exists
     if hash.is_empty() || salt.is_empty() {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "NO_PASSWORD",
-            "No password is currently set",
-            None,
-        );
+        return ApiError::new(
+            ApiErrorCode::PasswordNotSet,
+            ids::ERRORS_LOCKSCREEN_NO_CURRENT_PASSWORD,
+        )
+        .into_response();
     }
 
     // Verify current password
     if !verify_password(&req.current_password, &salt, &hash) {
-        return error_response(
-            StatusCode::UNAUTHORIZED,
-            "INVALID_PASSWORD",
-            "Password is incorrect",
-            None,
-        );
+        return ApiError::new(
+            ApiErrorCode::InvalidPassword,
+            ids::ERRORS_LOCKSCREEN_PASSWORD_INCORRECT,
+        )
+        .into_response();
     }
 
     // Clear password and disable lockscreen
@@ -197,12 +184,9 @@ pub(super) async fn clear_password(Json(req): Json<ClearPasswordRequest>) -> Res
         },
         true,
     ) {
-        return error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "CONFIG_ERROR",
-            "Failed to save configuration",
-            Some(&e.to_string()),
-        );
+        return ApiError::new(ApiErrorCode::ConfigError, ids::ERRORS_CONFIG_SAVE_FAILED)
+            .details(e.to_string())
+            .into_response();
     }
 
     success_response(SuccessResponse {
@@ -220,12 +204,11 @@ pub(super) async fn update_settings(Json(req): Json<UpdateSettingsRequest>) -> R
             config::with_config(|cfg| !cfg.gui.dashboard.lockscreen.password_hash.is_empty());
 
         if !has_password {
-            return error_response(
-                StatusCode::BAD_REQUEST,
-                "NO_PASSWORD",
-                "Cannot enable lockscreen without setting a password first",
-                None,
-            );
+            return ApiError::new(
+                ApiErrorCode::PasswordNotSet,
+                ids::ERRORS_LOCKSCREEN_ENABLE_NEEDS_PASSWORD,
+            )
+            .into_response();
         }
     }
 
@@ -244,12 +227,9 @@ pub(super) async fn update_settings(Json(req): Json<UpdateSettingsRequest>) -> R
         },
         true,
     ) {
-        return error_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "CONFIG_ERROR",
-            "Failed to save configuration",
-            Some(&e.to_string()),
-        );
+        return ApiError::new(ApiErrorCode::ConfigError, ids::ERRORS_CONFIG_SAVE_FAILED)
+            .details(e.to_string())
+            .into_response();
     }
 
     success_response(SuccessResponse {
