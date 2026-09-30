@@ -17,13 +17,26 @@
 //! macOS system-proxy probe is the path that actually fires in practice.
 
 use crate::logger::{self, LogTag};
-use std::sync::LazyLock;
+use std::sync::{LazyLock, Once};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio_tungstenite::{
     client_async_tls_with_config, connect_async, tungstenite::protocol::WebSocketConfig,
     MaybeTlsStream, WebSocketStream,
 };
+
+#[cfg(test)]
+mod tests;
+
+/// Installs aws-lc-rs as the process-default rustls `CryptoProvider`, once.
+/// Required because both rustls backends are compiled in, so rustls cannot select a default itself.
+pub fn install_tls_crypto_provider() {
+    static INSTALL: Once = Once::new();
+    INSTALL.call_once(|| {
+        // Err means a provider is already installed; that provider stays in effect.
+        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+    });
+}
 
 /// Cached detected proxy URL (e.g. "http://127.0.0.1:1081" or "socks5://127.0.0.1:1080").
 /// `None` means no proxy was detected (direct connections).
@@ -106,6 +119,7 @@ pub fn log_detected_proxy() {
 pub async fn connect_ws(
     ws_url: &str,
 ) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>, crate::errors::NetworkError> {
+    install_tls_crypto_provider();
     if let Some(proxy) = proxy_url() {
         if let Some((proxy_host, proxy_port)) = parse_http_proxy(proxy) {
             return connect_ws_via_http_proxy(ws_url, &proxy_host, proxy_port).await;

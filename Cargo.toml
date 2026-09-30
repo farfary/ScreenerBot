@@ -89,6 +89,7 @@ reqwest = { version = "0.13", default-features = false, features = [
   "socks",
 ] }
 tokio-tungstenite = { version = "0.30", features = ["connect", "rustls-tls-native-roots"] }
+rustls = { version = "0.23", default-features = false, features = ["aws_lc_rs", "std", "tls12"] }
 
 # OpenSSL - vendored build for Android cross-compilation
 openssl = { version = "0.10", features = ["vendored"], optional = true }

@@ -11,6 +11,8 @@ use crate::{
 /// hook, ctrl-c shutdown signal, one-shot wallet reset, run the bot, and
 /// restart-after-graceful-shutdown handling. Called once from `main()`.
 pub async fn boot() {
+    crate::net::install_tls_crypto_provider();
+
     // Store command line arguments
     set_cmd_args(std::env::args().collect());
 
