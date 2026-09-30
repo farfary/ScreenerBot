@@ -71,31 +71,7 @@ pub(super) async fn get_events_head(
 
     let event_responses: Vec<EventResponse> = events_vec
         .into_iter()
-        .map(|e| {
-            // Extract message from payload
-            let message = e
-                .payload
-                .get("message")
-                .and_then(|v| v.as_str())
-                .unwrap_or("No message")
-                .to_string();
-
-            EventResponse {
-                id: e.id.unwrap_or_default(),
-                event_time: e.event_time.to_rfc3339(),
-                category: e.category.to_string(),
-                subtype: e.subtype,
-                severity: e.severity.to_string(),
-                mint: e.mint,
-                reference_id: e.reference_id,
-                message,
-                payload: e.payload.clone(),
-                created_at: e
-                    .created_at
-                    .map(|dt| dt.to_rfc3339())
-                    .unwrap_or_else(|| chrono::Utc::now().to_rfc3339()),
-            }
-        })
+        .map(EventResponse::from_event)
         .collect();
 
     let count = event_responses.len();
@@ -152,27 +128,7 @@ pub(super) async fn get_events_since(
                     max_id = id;
                 }
             }
-            let message = e
-                .payload
-                .get("message")
-                .and_then(|v| v.as_str())
-                .unwrap_or("No message")
-                .to_string();
-            EventResponse {
-                id: e.id.unwrap_or_default(),
-                event_time: e.event_time.to_rfc3339(),
-                category: e.category.to_string(),
-                subtype: e.subtype,
-                severity: e.severity.to_string(),
-                mint: e.mint,
-                reference_id: e.reference_id,
-                message,
-                payload: e.payload.clone(),
-                created_at: e
-                    .created_at
-                    .map(|dt| dt.to_rfc3339())
-                    .unwrap_or_else(|| chrono::Utc::now().to_rfc3339()),
-            }
+            EventResponse::from_event(e)
         })
         .collect();
 
@@ -232,27 +188,7 @@ pub(super) async fn get_events_before(
                     max_id = id;
                 }
             }
-            let message = e
-                .payload
-                .get("message")
-                .and_then(|v| v.as_str())
-                .unwrap_or("No message")
-                .to_string();
-            EventResponse {
-                id: e.id.unwrap_or_default(),
-                event_time: e.event_time.to_rfc3339(),
-                category: e.category.to_string(),
-                subtype: e.subtype,
-                severity: e.severity.to_string(),
-                mint: e.mint,
-                reference_id: e.reference_id,
-                message,
-                payload: e.payload.clone(),
-                created_at: e
-                    .created_at
-                    .map(|dt| dt.to_rfc3339())
-                    .unwrap_or_else(|| chrono::Utc::now().to_rfc3339()),
-            }
+            EventResponse::from_event(e)
         })
         .collect();
 

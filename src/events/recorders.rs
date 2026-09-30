@@ -4,8 +4,10 @@
 //! submit them through `crate::events::record_safe`. Each function checks its
 //! category via `is_category_enabled` before doing any work.
 
+use super::display_text::{write_default_text, write_text, ScheduledTaskOutcome};
 use super::maintenance::is_category_enabled;
 use crate::events::{Event, EventCategory, Severity};
+use crate::i18n::{ids, UiArg, UiText};
 use chrono::Utc;
 use serde_json::{json, Map, Value};
 
@@ -433,9 +435,9 @@ pub async fn record_ohlcv_event(
     payload_obj
         .entry("event_time".to_owned())
         .or_insert_with(|| Value::String(Utc::now().to_rfc3339()));
-    payload_obj
-        .entry("message".to_owned())
-        .or_insert_with(|| Value::String(format!("OHLCV event: {subtype}")));
+    write_default_text(&mut payload_obj, || {
+        UiText::new(ids::EVENTS_OHLCV_DEFAULT).arg("subtype", UiArg::Text(subtype.to_string()))
+    });
 
     let event = Event::new(
         EventCategory::Ohlcv,
@@ -481,9 +483,9 @@ pub async fn record_filtering_event(
     payload_obj
         .entry("event_time".to_owned())
         .or_insert_with(|| Value::String(Utc::now().to_rfc3339()));
-    payload_obj
-        .entry("message".to_owned())
-        .or_insert_with(|| Value::String(format!("Filtering event: {subtype}")));
+    write_default_text(&mut payload_obj, || {
+        UiText::new(ids::EVENTS_FILTERING_DEFAULT).arg("subtype", UiArg::Text(subtype.to_string()))
+    });
 
     let event = Event::new(
         EventCategory::Filtering,
@@ -529,9 +531,9 @@ pub async fn record_trader_event(
     payload_obj
         .entry("event_time".to_owned())
         .or_insert_with(|| Value::String(Utc::now().to_rfc3339()));
-    payload_obj
-        .entry("message".to_owned())
-        .or_insert_with(|| Value::String(format!("Trader event: {subtype}")));
+    write_default_text(&mut payload_obj, || {
+        UiText::new(ids::EVENTS_TRADER_DEFAULT).arg("subtype", UiArg::Text(subtype.to_string()))
+    });
 
     let event = Event::new(
         EventCategory::Trader,
@@ -574,9 +576,11 @@ pub async fn record_rpc_event(method: &str, action: &str, severity: Severity, pa
     payload_obj
         .entry("event_time".to_owned())
         .or_insert_with(|| Value::String(Utc::now().to_rfc3339()));
-    payload_obj
-        .entry("message".to_owned())
-        .or_insert_with(|| Value::String(format!("RPC {method} - {action}")));
+    write_default_text(&mut payload_obj, || {
+        UiText::new(ids::EVENTS_RPC_DEFAULT)
+            .arg("method", UiArg::Text(method.to_string()))
+            .arg("action", UiArg::Text(action.to_string()))
+    });
 
     let event = Event::new(
         EventCategory::Rpc,
@@ -619,9 +623,11 @@ pub async fn record_api_event(api_name: &str, action: &str, severity: Severity, 
     payload_obj
         .entry("event_time".to_owned())
         .or_insert_with(|| Value::String(Utc::now().to_rfc3339()));
-    payload_obj
-        .entry("message".to_owned())
-        .or_insert_with(|| Value::String(format!("{api_name} - {action}")));
+    write_default_text(&mut payload_obj, || {
+        UiText::new(ids::EVENTS_API_DEFAULT)
+            .arg("api", UiArg::Text(api_name.to_string()))
+            .arg("action", UiArg::Text(action.to_string()))
+    });
 
     let event = Event::new(
         EventCategory::Api,
@@ -639,29 +645,42 @@ pub async fn record_api_event(api_name: &str, action: &str, severity: Severity, 
 // SCHEDULED TASK EVENTS
 // =============================================================================
 
-/// Record a scheduled task event (execution, completion, failure)
-pub fn record_event(category: EventCategory, title: &str, description: &str, severity: Severity) {
-    let title = title.to_string();
+/// Record a scheduled task event. The subtype is the stable outcome code; the
+/// title is catalog text and `description` (model output or error) stays data.
+pub fn record_scheduled_task_event(
+    outcome: ScheduledTaskOutcome,
+    task_name: &str,
+    description: &str,
+) {
+    let title = outcome.title(task_name);
     let description = description.to_string();
 
     tokio::spawn(async move {
-        if !is_category_enabled(&category) {
+        if !is_category_enabled(&EventCategory::ScheduledTask) {
             return;
         }
 
-        let payload = json!({
-            "title": title,
-            "description": description,
-            "event_time": Utc::now().to_rfc3339()
-        });
+        let mut payload = Map::new();
+        payload.insert(
+            "title".to_owned(),
+            Value::String(title.render_source_plain()),
+        );
+        payload.insert("description".to_owned(), Value::String(description));
+        payload.insert(
+            "event_time".to_owned(),
+            Value::String(Utc::now().to_rfc3339()),
+        );
+        write_text(&mut payload, &title);
 
-        let event = Event::new(category, Some(title), severity, None, None, payload);
+        let event = Event::new(
+            EventCategory::ScheduledTask,
+            Some(outcome.code().to_owned()),
+            outcome.severity(),
+            None,
+            None,
+            Value::Object(payload),
+        );
 
         crate::events::record_safe(event).await;
     });
-}
-
-/// Record a scheduled task event
-pub fn record_scheduled_task_event(title: &str, description: &str, severity: Severity) {
-    record_event(EventCategory::ScheduledTask, title, description, severity);
 }

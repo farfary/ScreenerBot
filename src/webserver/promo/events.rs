@@ -230,7 +230,8 @@ pub fn get_promo_events(
             severity: (*event_severity).to_owned(),
             mint: event_mint,
             reference_id: None,
-            message: (*message).to_owned(),
+            text: None,
+            message: Some((*message).to_owned()),
             payload: json!({ "message": message, "symbol": symbol }),
             created_at: event_time.to_rfc3339(),
         });

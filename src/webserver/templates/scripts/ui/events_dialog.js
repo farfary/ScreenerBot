@@ -3,6 +3,11 @@ import * as Utils from "../core/utils.js";
 import { createFocusTrap } from "../core/utils.js";
 import { formatAddressCompact } from "../core/format.js";
 
+/** Display text of an event: catalog text when the row carries it, else the stored message. */
+export function eventMessageText(event) {
+  return event.text ? I18n.text(event.text) : event.message;
+}
+
 // EventDetailsDialog renders a modal overlay for inspecting full event data.
 const SEVERITY_BADGES = {
   info: '<span class="badge"><i class="icon-info"></i> Info</span>',
@@ -255,7 +260,7 @@ export class EventDetailsDialog {
       return;
     }
 
-    const message = coerceText(event.message).trim();
+    const message = coerceText(eventMessageText(event)).trim();
     const fallback = event.category ? `${event.category} event` : "Event details";
     const heading = message
       ? message.length > 140
@@ -302,7 +307,7 @@ export class EventDetailsDialog {
       return;
     }
 
-    const message = coerceText(event.message).trim();
+    const message = coerceText(eventMessageText(event)).trim();
     if (message) {
       this.messageEl.textContent = message;
       this.messageEl.setAttribute("data-visible", "true");

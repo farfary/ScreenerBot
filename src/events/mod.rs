@@ -43,8 +43,10 @@
 //! monitoring and debugging; events are for persistent analysis and metrics.
 
 pub mod database;
+mod display_text;
 mod error;
 pub use database as db;
+pub use display_text::{with_text, ScheduledTaskOutcome};
 pub mod maintenance;
 pub mod recorders;
 pub mod types;

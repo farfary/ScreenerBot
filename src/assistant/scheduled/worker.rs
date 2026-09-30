@@ -10,7 +10,7 @@ use crate::assistant::chat::{self, ChatRequest, ChatResponse, ToolMode};
 use crate::assistant::error as assistant_error;
 use crate::config::with_config;
 use crate::errors::InternalError;
-use crate::events::{record_scheduled_task_event, Severity};
+use crate::events::{record_scheduled_task_event, ScheduledTaskOutcome};
 use crate::logger::{self, LogTag};
 use chrono;
 use futures::FutureExt;
@@ -219,11 +219,7 @@ async fn execute_scheduled_task(
 
             // Record successful task completion event
             let preview = safe_truncate(&response.content, 200);
-            record_scheduled_task_event(
-                &format!("Task '{}' completed", task.name),
-                preview,
-                Severity::Info,
-            );
+            record_scheduled_task_event(ScheduledTaskOutcome::Completed, &task.name, preview);
 
             Ok(())
         }
@@ -263,11 +259,7 @@ async fn execute_scheduled_task(
             }
 
             // Record failed task event
-            record_scheduled_task_event(
-                &format!("Task '{}' failed", task.name),
-                &error_msg,
-                Severity::Warn,
-            );
+            record_scheduled_task_event(ScheduledTaskOutcome::Failed, &task.name, &error_msg);
 
             Err(err.into())
         }
@@ -305,11 +297,7 @@ async fn execute_scheduled_task(
             }
 
             // Record timeout event
-            record_scheduled_task_event(
-                &format!("Task '{}' timed out", task.name),
-                &error_msg,
-                Severity::Warn,
-            );
+            record_scheduled_task_event(ScheduledTaskOutcome::TimedOut, &task.name, &error_msg);
 
             Err(assistant_error::Error::Timeout {
                 waited_ms: timeout_secs * 1000,

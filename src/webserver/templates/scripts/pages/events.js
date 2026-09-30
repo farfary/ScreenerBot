@@ -2,7 +2,7 @@ import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
 import * as Utils from "../core/utils.js";
 import { DataTable } from "../ui/data_table.js";
-import { EventDetailsDialog } from "../ui/events_dialog.js";
+import { EventDetailsDialog, eventMessageText } from "../ui/events_dialog.js";
 import { requestManager } from "../core/request_manager.js";
 
 const DEFAULT_FILTERS = {
@@ -43,11 +43,26 @@ function formatMint(mint) {
   )}</span>`;
 }
 
-function formatMessagePreview(value) {
+/** Message key of each stable scheduled-task subtype code; older rows keep their stored subtype. */
+const EVENT_SUBTYPE_LABELS = Object.freeze({
+  task_completed: "events-subtype-task-completed",
+  task_failed: "events-subtype-task-failed",
+  task_timed_out: "events-subtype-task-timed-out",
+});
+
+function formatSubtype(value) {
   if (!value) {
     return "—";
   }
-  const text = String(value);
+  return Object.hasOwn(EVENT_SUBTYPE_LABELS, value) ? I18n.label(EVENT_SUBTYPE_LABELS, value) : value;
+}
+
+function formatMessagePreview(row) {
+  const message = eventMessageText(row);
+  if (!message) {
+    return I18n.t("events-message-none");
+  }
+  const text = String(message);
   const preview = text.length > 160 ? `${text.slice(0, 160)}...` : text;
   return `<span title="${Utils.escapeHtml(text)}">${Utils.escapeHtml(preview)}</span>`;
 }
@@ -317,7 +332,7 @@ function createLifecycle() {
           minWidth: 120,
           sortable: true,
           wrap: false,
-          render: (value) => value || "—",
+          render: (value) => Utils.escapeHtml(formatSubtype(value)),
         },
         {
           id: "severity",
@@ -331,7 +346,7 @@ function createLifecycle() {
           label: "Message",
           minWidth: 320,
           wrap: false,
-          render: (value) => formatMessagePreview(value),
+          render: (_value, row) => formatMessagePreview(row),
         },
         {
           id: "mint",
