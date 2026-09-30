@@ -210,7 +210,7 @@
 
     validateWallet(required) {
       const result = validateWalletValue(this.walletInput.value, required);
-      this.setInlineValidation("wallet-validation", this.walletInput, result.state, result.message);
+      this.setInlineValidation("wallet-validation", this.walletInput, result.state, result.message); // api-body-ok: local validator result, not a server body
       if (!result.valid) this.hideWalletPreview();
       return result.valid;
     }
@@ -221,7 +221,7 @@
 
     validateRpc(required) {
       const result = validateRpcValue(this.rpcInput.value, required);
-      this.setInlineValidation("rpc-validation", this.rpcInput, result.state, result.message);
+      this.setInlineValidation("rpc-validation", this.rpcInput, result.state, result.message); // api-body-ok: local validator result, not a server body
       return result.valid;
     }
 

@@ -165,7 +165,7 @@ export function createProvidersTab({ state, _eventCleanups, loadConfig }) {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || errorData.message || `HTTP ${response.status}`);
+        throw new Error(apiErrorMessage(errorData, `HTTP ${response.status}`));
       }
 
       const result = await response.json();
@@ -177,7 +177,7 @@ export function createProvidersTab({ state, _eventCleanups, loadConfig }) {
           message: `${PROVIDER_NAMES[providerId]} is working correctly`,
         });
       } else {
-        throw new Error(result.error || "Test failed");
+        throw new Error(apiErrorMessage(result, "Test failed"));
       }
     } catch (error) {
       console.error(`[Assistant] Provider test failed for ${providerId}:`, error);

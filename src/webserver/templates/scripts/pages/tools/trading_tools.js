@@ -9,6 +9,7 @@ import * as Hints from "../../core/hints.js";
 import { HintTrigger } from "../../ui/hint_popover.js";
 import { enhanceAllSelects } from "../../ui/custom_select.js";
 import { PoolSelector } from "../../ui/pool_selector.js";
+import { apiErrorMessage } from "../../core/request_manager.js";
 
 // =============================================================================
 // Trade Watcher Tool
@@ -317,7 +318,7 @@ async function handleTwStartWatch() {
     const data = await response.json();
 
     if (!response.ok || !data.success) {
-      throw new Error(data.error || "Failed to start watch");
+      throw new Error(apiErrorMessage(data, "Failed to start watch"));
     }
 
     Utils.showToast(`Watch started for ${data.symbol || mint.slice(0, 8)}...`, "success");
@@ -356,7 +357,7 @@ async function handleTwStopAllWatches() {
     const data = await response.json();
 
     if (!response.ok || !data.success) {
-      throw new Error(data.error || "Failed to stop watches");
+      throw new Error(apiErrorMessage(data, "Failed to stop watches"));
     }
 
     Utils.showToast("All watches stopped", "success");
@@ -384,7 +385,7 @@ async function loadTwActiveWatches() {
     const data = await response.json();
 
     if (!response.ok || !data.success) {
-      throw new Error(data.error || "Failed to load watches");
+      throw new Error(apiErrorMessage(data, "Failed to load watches"));
     }
 
     const watches = data.watches || [];
@@ -478,7 +479,7 @@ async function stopTwWatch(watchId) {
     const data = await response.json();
 
     if (!response.ok || !data.success) {
-      throw new Error(data.error || "Failed to stop watch");
+      throw new Error(apiErrorMessage(data, "Failed to stop watch"));
     }
 
     Utils.showToast("Watch stopped", "success");

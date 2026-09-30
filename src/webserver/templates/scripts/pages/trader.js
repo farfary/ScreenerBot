@@ -5,7 +5,7 @@ import { formatFixed, formatPercentValue } from "../core/format.js";
 import * as Utils from "../core/utils.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
-import { requestManager } from "../core/request_manager.js";
+import { requestManager, apiErrorMessage } from "../core/request_manager.js";
 import { createTraderConfigCards } from "./trader/config_cards.js";
 import { playToggleOn, playToggleOff, playError } from "../core/sounds.js";
 import { createExampleUpdaters } from "./trader/examples.js";
@@ -780,7 +780,7 @@ function createLifecycle() {
       if (data.success) {
         updatePreviewPanel(data.data);
       } else {
-        console.error("[Trader] Preview failed:", data.error);
+        console.error("[Trader] Preview failed:", apiErrorMessage(data, "Unknown error"));
       }
     } catch (error) {
       console.error("[Trader] Failed to load preview:", error);

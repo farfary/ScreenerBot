@@ -4,6 +4,7 @@
  */
 import * as Utils from "../../core/utils.js";
 import { enhanceAllSelects } from "../custom_select.js";
+import { apiErrorMessage } from "../../core/request_manager.js";
 
 /**
  * Load and build Security tab content (async because we need to fetch status)
@@ -326,7 +327,7 @@ async function updateSecuritySetting(key, value) {
     }
 
     const data = await response.json().catch(() => null);
-    reportFailure(data?.message);
+    reportFailure(apiErrorMessage(data, null));
   } catch (error) {
     reportFailure(error.message);
   }
@@ -491,7 +492,7 @@ function showPasswordModal(dialog, mode, content) {
         }
       } else {
         const data = await response.json();
-        Utils.showToast(data.message || "Failed to save password", "error");
+        Utils.showToast(apiErrorMessage(data, "Failed to save password"), "error");
       }
     } catch (error) {
       Utils.showToast("Failed to save password: " + error.message, "error");
@@ -594,7 +595,7 @@ function removePassword(dialog, content) {
         }
       } else {
         const data = await response.json();
-        Utils.showToast(data.message || "Failed to remove password", "error");
+        Utils.showToast(apiErrorMessage(data, "Failed to remove password"), "error");
       }
     } catch (error) {
       Utils.showToast("Failed to remove password: " + error.message, "error");
@@ -676,7 +677,7 @@ async function showTotpSetupModal(dialog, content) {
 
       const data = await response.json();
       if (!response.ok) {
-        Utils.showToast(data.error || data.message || "Failed to setup 2FA", "error");
+        Utils.showToast(apiErrorMessage(data, "Failed to setup 2FA"), "error");
         return;
       }
 
@@ -721,7 +722,7 @@ async function showTotpSetupModal(dialog, content) {
 
       const data = await response.json();
       if (!response.ok) {
-        Utils.showToast(data.error || data.message || "Invalid code", "error");
+        Utils.showToast(apiErrorMessage(data, "Invalid code"), "error");
         return;
       }
 
@@ -790,7 +791,7 @@ async function disableTotp(dialog, content) {
 
       const data = await response.json();
       if (!response.ok) {
-        Utils.showToast(data.error || data.message || "Failed to disable 2FA", "error");
+        Utils.showToast(apiErrorMessage(data, "Failed to disable 2FA"), "error");
         return;
       }
 

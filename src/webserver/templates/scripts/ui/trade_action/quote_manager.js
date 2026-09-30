@@ -187,10 +187,10 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
         // Carry the localized title, the message's `hint` attribute and the
         // technical detail so the error panel can explain WHY the quote failed.
         const e = new Error(apiErrorTitle(data, "Couldn't fetch a quote"));
-        e.detail = [I18n.textAttr(data.error?.text, "hint"), apiErrorDetails(data)]
+        e.detail = [I18n.textAttr(data.error?.text, "hint"), apiErrorDetails(data)] // api-body-ok: envelope hint attribute; no helper exposes it
           .filter(Boolean)
           .join(" ");
-        e.code = data.error?.code || "";
+        e.code = data.error?.code || ""; // api-body-ok: envelope error code; no helper exposes it
         throw e;
       }
     } catch (err) {

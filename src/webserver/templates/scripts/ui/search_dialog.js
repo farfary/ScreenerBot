@@ -15,6 +15,7 @@ import { $, create, show, hide, on, off } from "../core/dom.js";
 import { showToast, notifyCopied } from "../core/utils.js";
 import { formatCompactFixed, formatNumber } from "../core/format.js";
 import { ConfirmationDialog } from "./confirmation_dialog.js";
+import { apiErrorMessage } from "../core/request_manager.js";
 
 const SEARCH_DEBOUNCE_MS = 300;
 const MIN_QUERY_LENGTH = 2;
@@ -177,7 +178,7 @@ async function handleSearch(e) {
     const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(data.error || "Search failed");
+      throw new Error(apiErrorMessage(data, "Search failed"));
     }
 
     currentResults = data.results || [];
@@ -408,7 +409,7 @@ async function addToFavorites(token, btn) {
         btn.title = "Already in Favorites";
       }
     } else {
-      throw new Error(data.error || "Failed to add to favorites");
+      throw new Error(apiErrorMessage(data, "Failed to add to favorites"));
     }
   } catch (error) {
     showToast(`Error: ${error.message}`, "error");
@@ -459,7 +460,7 @@ async function addToBlacklist(token, btn) {
         btn.title = "Blacklisted";
       }
     } else {
-      throw new Error(data.error || "Failed to blacklist token");
+      throw new Error(apiErrorMessage(data, "Failed to blacklist token"));
     }
   } catch (error) {
     showToast(`Error: ${error.message}`, "error");

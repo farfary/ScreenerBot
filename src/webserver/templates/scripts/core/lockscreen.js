@@ -377,7 +377,7 @@ class LockscreenController {
       if (response.ok && data.valid) {
         this.unlock();
       } else {
-        this._showError(data.message || "Incorrect password");
+        this._showError(window.RequestManagerErrors.apiErrorMessage(data, "Incorrect password"));
         this._showInputError();
         this._resetInputs();
       }

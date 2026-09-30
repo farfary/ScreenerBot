@@ -7,6 +7,7 @@ import { $, $$, on } from "../../core/dom.js";
 import { formatFixed, formatPercentValue } from "../../core/format.js";
 import * as Utils from "../../core/utils.js";
 import { ConfirmationDialog } from "../../ui/confirmation_dialog.js";
+import { apiErrorMessage } from "../../core/request_manager.js";
 
 function renderCreateTokenTool(container, actionsContainer) {
   container.innerHTML = `
@@ -468,7 +469,7 @@ async function analyzeToken(mint) {
     const data = await response.json();
 
     if (!response.ok || !data.success) {
-      throw new Error(data.error || "Failed to analyze token");
+      throw new Error(apiErrorMessage(data, "Failed to analyze token"));
     }
 
     // Store data
@@ -606,7 +607,7 @@ async function handleTaFavoriteClick(e) {
       btn.classList.add("active");
       btn.title = "Already in Favorites";
     } else {
-      throw new Error(data.error || "Failed to add to favorites");
+      throw new Error(apiErrorMessage(data, "Failed to add to favorites"));
     }
   } catch (error) {
     Utils.showToast(`Error: ${error.message}`, "error");
@@ -654,7 +655,7 @@ async function handleTaBlacklistClick(e) {
       btn.classList.add("active");
       btn.title = "Blacklisted";
     } else {
-      throw new Error(data.error || "Failed to blacklist token");
+      throw new Error(apiErrorMessage(data, "Failed to blacklist token"));
     }
   } catch (error) {
     Utils.showToast(`Error: ${error.message}`, "error");

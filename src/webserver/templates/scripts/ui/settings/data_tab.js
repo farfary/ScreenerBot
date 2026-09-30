@@ -5,6 +5,7 @@
 import * as Utils from "../../core/utils.js";
 import { formatSizeAt } from "../../core/format.js";
 import { ConfirmationDialog } from "../confirmation_dialog.js";
+import { apiErrorMessage } from "../../core/request_manager.js";
 
 /**
  * Build Data tab HTML
@@ -534,7 +535,7 @@ async function resetConfig() {
       Utils.showToast("Configuration reset to defaults", "success");
     } else {
       const data = await response.json();
-      Utils.showToast("Failed to reset config: " + (data.error || "Unknown error"), "error");
+      Utils.showToast("Failed to reset config: " + apiErrorMessage(data, "Unknown error"), "error");
     }
   } catch (err) {
     Utils.showToast("Failed to reset config: " + err.message, "error");

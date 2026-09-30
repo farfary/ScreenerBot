@@ -853,7 +853,7 @@ async function renderTelegramActions(container) {
           '<i class="icon-circle-check"></i> Test message sent successfully! Check your Telegram.';
         Utils.showToast("Telegram test message sent", "success");
       } else {
-        throw new Error(data.message || data.error || "Failed to send test message");
+        throw new Error(apiErrorMessage(data, "Failed to send test message"));
       }
     } catch (error) {
       statusEl.className = "config-action-status error";

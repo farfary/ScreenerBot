@@ -3,6 +3,8 @@
  * Handles bulk import/export functionality with multi-step wizards
  */
 
+import { apiErrorMessage } from "../../core/request_manager.js";
+
 export function createBulkOperations({
   $,
   Utils,
@@ -228,7 +230,7 @@ export function createBulkOperations({
 
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data.error || data.message || "Failed to process file");
+        throw new Error(apiErrorMessage(data, "Failed to process file"));
       }
 
       importPreviewData = data;
@@ -430,7 +432,7 @@ export function createBulkOperations({
 
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data.error || data.message || "Import failed");
+        throw new Error(apiErrorMessage(data, "Import failed"));
       }
 
       renderImportResults(data);
@@ -495,7 +497,7 @@ export function createBulkOperations({
         const rowClass = result.success ? "success-row" : "error-row";
         const statusIcon = result.success
           ? '<span class="result-status success"><i class="icon-check"></i> Imported</span>'
-          : `<span class="result-status error"><i class="icon-x"></i> ${Utils.escapeHtml(result.error || "Failed")}</span>`;
+          : `<span class="result-status error"><i class="icon-x"></i> ${Utils.escapeHtml(result.error || "Failed")}</span>`; // api-body-ok: per-row import outcome field (wallets/bulk/types.rs)
 
         return `
           <tr class="${rowClass}">
@@ -645,7 +647,7 @@ export function createBulkOperations({
 
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.error || data.message || "Export failed");
+        throw new Error(apiErrorMessage(data, "Export failed"));
       }
 
       // Get filename from header or generate one

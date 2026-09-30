@@ -6,7 +6,7 @@
 import { registerPage } from "../core/lifecycle.js";
 import { $, on } from "../core/dom.js";
 import { Poller } from "../core/poller.js";
-import { requestManager } from "../core/request_manager.js";
+import { requestManager, apiErrorMessage } from "../core/request_manager.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
 import * as Utils from "../core/utils.js";
 import * as Hints from "../core/hints.js";
@@ -498,7 +498,7 @@ async function handleCreateWallet(e) {
 
     const data = await response.json();
     if (!response.ok) {
-      throw new Error(data.error || data.message || "Creation failed");
+      throw new Error(apiErrorMessage(data, "Creation failed"));
     }
 
     Utils.showToast(`Wallet "${data.wallet.name}" created!`, "success");
@@ -536,7 +536,7 @@ async function handleImportWallet(e) {
 
     const data = await response.json();
     if (!response.ok) {
-      throw new Error(data.error || data.message || "Import failed");
+      throw new Error(apiErrorMessage(data, "Import failed"));
     }
 
     Utils.showToast(`Wallet "${data.wallet.name}" imported!`, "success");
@@ -593,7 +593,7 @@ async function handleArchiveWallet() {
       method: "POST",
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "Failed");
+    if (!response.ok) throw new Error(apiErrorMessage(data, "Failed"));
 
     Utils.showToast("Wallet archived", "success");
     closeArchiveModal();
@@ -622,7 +622,7 @@ async function restoreWallet(id) {
   try {
     const response = await fetch(`/api/wallets/${id}/restore`, { method: "POST" });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "Failed");
+    if (!response.ok) throw new Error(apiErrorMessage(data, "Failed"));
 
     Utils.showToast("Wallet restored", "success");
     await loadAllData();
@@ -662,7 +662,7 @@ async function handleExportKey() {
       method: "POST",
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "Failed");
+    if (!response.ok) throw new Error(apiErrorMessage(data, "Failed"));
 
     const keyDisplay = $("#export-key-display");
     const keyEl = $("#exported-key");
@@ -710,7 +710,7 @@ async function handleDeleteWallet() {
       method: "DELETE",
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "Failed");
+    if (!response.ok) throw new Error(apiErrorMessage(data, "Failed"));
 
     Utils.showToast("Wallet deleted permanently", "success");
     closeDeleteModal();

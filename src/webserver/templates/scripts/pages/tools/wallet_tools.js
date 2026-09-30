@@ -7,6 +7,7 @@ import { $, $$, on } from "../../core/dom.js";
 import * as Utils from "../../core/utils.js";
 import * as Hints from "../../core/hints.js";
 import { HintTrigger } from "../../ui/hint_popover.js";
+import { apiErrorMessage } from "../../core/request_manager.js";
 
 // =============================================================================
 // Wallet Cleanup Tool
@@ -147,14 +148,9 @@ async function handleCleanupATAs() {
 
   try {
     const response = await fetch("/api/tools/ata-cleanup", { method: "POST" });
+    const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-    const data = await response.json();
-
-    // Check for error response
-    if (data.error) {
-      throw new Error(data.error);
+      throw new Error(apiErrorMessage(data, `HTTP ${response.status}`));
     }
 
     Utils.showToast(`Cleaned ${data.closed_count || 0} ATAs`, "success");
@@ -273,13 +269,9 @@ async function handleScanBurnTokens() {
 
   try {
     const response = await fetch("/api/tools/burn-tokens/scan");
+    const result = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-    const result = await response.json();
-
-    if (result.error) {
-      throw new Error(result.error);
+      throw new Error(apiErrorMessage(result, `HTTP ${response.status}`));
     }
 
     const data = result.data || result;
@@ -843,15 +835,9 @@ async function handleGenerateWallets() {
       body: JSON.stringify({ count }),
     });
 
+    const result = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-
-    const result = await response.json();
-
-    // Check for error response
-    if (result.error) {
-      throw new Error(result.error);
+      throw new Error(apiErrorMessage(result, `HTTP ${response.status}`));
     }
 
     // The API returns { success: true, data: [...] }

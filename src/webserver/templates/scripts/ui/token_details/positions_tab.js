@@ -65,7 +65,7 @@ export function applyPositionsTabMixin(DialogClass) {
       this._positionsFetching = false;
     }
 
-    const position = data && !data.error ? data.position : null;
+    const position = data?.position ?? null;
 
     if (!position) {
       this._renderHtmlIfChanged(

@@ -450,7 +450,7 @@ export class ChatWidget {
       this._hideTypingIndicator();
       this._updateInputStatus("");
 
-      if (data.error) throw new Error(apiErrorMessage(data, "Unknown error"));
+      if (data.error) throw new Error(apiErrorMessage(data, "Unknown error")); // api-body-ok: presence check of the streamed envelope, rendered by apiErrorMessage
 
       if (data.content !== undefined) {
         this.state.messages.push({
@@ -547,7 +547,7 @@ export class ChatWidget {
       this._hideTypingIndicator();
       this._updateInputStatus("");
 
-      if (data.error) throw new Error(apiErrorMessage(data, "Unknown error"));
+      if (data.error) throw new Error(apiErrorMessage(data, "Unknown error")); // api-body-ok: presence check of the streamed envelope, rendered by apiErrorMessage
 
       if (data.content !== undefined) {
         this.state.messages.push({

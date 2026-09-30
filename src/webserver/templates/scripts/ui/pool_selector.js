@@ -6,6 +6,7 @@
 import { create, on, off } from "../core/dom.js";
 import { escapeHtml } from "../core/utils.js";
 import { formatAddressCompact, formatCompactFixed } from "../core/format.js";
+import { apiErrorMessage } from "../core/request_manager.js";
 
 /** Pool liquidity and volume: one decimal in K and M, whole numbers below. */
 const formatCompact = (value) =>
@@ -34,7 +35,7 @@ export class PoolSelector {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || `HTTP ${response.status}`);
+        throw new Error(apiErrorMessage(data, `HTTP ${response.status}`));
       }
 
       if (!data.success || !data.pools || data.pools.length === 0) {

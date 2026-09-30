@@ -30,7 +30,7 @@ async function fetchApi(url, options = {}) {
     const data = await response.json();
 
     if (!response.ok) {
-      return { success: false, error: data.error || { message: "Request failed" } };
+      return { ...data, success: false };
     }
 
     return data;

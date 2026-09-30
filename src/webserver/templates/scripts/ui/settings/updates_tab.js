@@ -170,7 +170,7 @@ async function request(url, options = {}, errorTitle, key) {
     const response = await fetch(url, options);
     const body = await response.json().catch(() => ({}));
     if (!response.ok || body.success === false) {
-      throw new Error(apiErrorMessage(body, body.error || "Request failed"));
+      throw new Error(apiErrorMessage(body, "Request failed"));
     }
     return body;
   } catch (err) {

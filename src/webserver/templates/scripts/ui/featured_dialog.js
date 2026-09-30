@@ -28,6 +28,7 @@ import { getTokenAccent, fallbackAccent } from "../core/token_accent.js";
 // window listener so cards open the token details dialog even when the featured
 // dialog is opened from a page (e.g. Home) that doesn't otherwise load it.
 import "./token_details_dialog.js";
+import { apiErrorMessage } from "../core/request_manager.js";
 
 const DIALOG_ID = "featured-dialog";
 
@@ -87,7 +88,7 @@ class FeaturedDialog {
         this.data = data;
         this._renderCategories();
       } else {
-        this._showError(data.error || "Failed to load featured");
+        this._showError(apiErrorMessage(data, "Failed to load featured"));
       }
     } catch (e) {
       this._showError("Network error: " + e.message);

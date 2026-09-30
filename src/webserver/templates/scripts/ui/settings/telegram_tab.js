@@ -4,6 +4,7 @@
  */
 import * as Utils from "../../core/utils.js";
 import { enhanceAllSelects } from "../custom_select.js";
+import { apiErrorMessage } from "../../core/request_manager.js";
 
 /**
  * Load Telegram tab (async because we need to fetch settings and auth state)
@@ -470,7 +471,7 @@ function attachTelegramHandlers(dialog, content, settings) {
           key: "telegram-setting",
           type: "error",
           title: "Could not save Telegram setting",
-          message: data?.message || null,
+          message: apiErrorMessage(data, null),
         });
       }
     } catch (error) {
@@ -519,7 +520,7 @@ function attachTelegramHandlers(dialog, content, settings) {
         Utils.showToast({
           type: "error",
           title: "Could not start discovery",
-          message: data.message || null,
+          message: apiErrorMessage(data, null),
         });
         return;
       }
@@ -609,7 +610,7 @@ function attachTelegramHandlers(dialog, content, settings) {
         Utils.showToast({
           type: "error",
           title: "Could not select chat",
-          message: data.message || null,
+          message: apiErrorMessage(data, null),
         });
       }
     } catch {
@@ -655,7 +656,7 @@ function attachTelegramHandlers(dialog, content, settings) {
           Utils.showToast({
             type: "error",
             title: "Test message failed",
-            message: data.message || null,
+            message: apiErrorMessage(data, null),
           });
         }
       } catch {
