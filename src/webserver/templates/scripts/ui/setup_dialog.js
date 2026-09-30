@@ -50,26 +50,30 @@ class SetupDialog {
       <div class="setup-dialog-header">
         <div class="setup-dialog-icon"><i class="icon-key-round"></i></div>
         <div>
-          <h2 class="setup-dialog-title" id="setup-dialog-title">Set up wallet &amp; RPC</h2>
-          <p class="setup-dialog-subtitle">
-            Connect your Solana wallet and a premium RPC endpoint to enable trading and live
-            on-chain data. Your private key is encrypted on this device and never leaves it.
-          </p>
+          <h2
+            class="setup-dialog-title"
+            id="setup-dialog-title"
+            data-l10n-id="setup-dialog-title"
+          ></h2>
+          <p class="setup-dialog-subtitle" data-l10n-id="setup-dialog-subtitle"></p>
         </div>
-        <button type="button" class="setup-dialog-close" data-action="cancel" title="Close" aria-label="Close">
+        <button type="button" class="setup-dialog-close" data-action="cancel"
+          data-l10n-id="setup-dialog-close">
           <i class="icon-x"></i>
         </button>
       </div>
 
       <div class="setup-dialog-body">
         <label class="setup-dialog-field">
-          <span class="setup-dialog-label">Wallet private key <span class="req">*</span></span>
+          <span class="setup-dialog-label">
+            <span data-l10n-id="setup-dialog-wallet-label"></span> <span class="req">*</span>
+          </span>
           <div class="setup-dialog-input-wrap">
             <textarea id="setup-dialog-wallet" class="setup-dialog-input" rows="2"
-              placeholder="Base58 string or JSON array [1,2,3,...]" spellcheck="false"
+              data-l10n-id="setup-dialog-wallet-input" spellcheck="false"
               autocomplete="off"></textarea>
             <button type="button" class="setup-dialog-reveal" data-action="reveal"
-              title="Show private key" aria-label="Show private key" aria-pressed="false">
+              aria-pressed="false">
               <i class="icon-eye" aria-hidden="true"></i>
             </button>
           </div>
@@ -77,27 +81,27 @@ class SetupDialog {
         </label>
 
         <label class="setup-dialog-field">
-          <span class="setup-dialog-label">RPC endpoint(s) <span class="req">*</span></span>
-          <textarea id="setup-dialog-rpc" class="setup-dialog-input" rows="2"
-            placeholder="https://your-endpoint... (one per line)" spellcheck="false"></textarea>
-          <span class="setup-dialog-hint">
-            A premium provider (Helius, QuickNode, Alchemy) is strongly recommended — the public
-            Solana RPC is rate-limited and may not work.
+          <span class="setup-dialog-label">
+            <span data-l10n-id="setup-dialog-rpc-label"></span> <span class="req">*</span>
           </span>
+          <textarea id="setup-dialog-rpc" class="setup-dialog-input" rows="2"
+            data-l10n-id="setup-dialog-rpc-input" spellcheck="false"></textarea>
+          <span class="setup-dialog-hint" data-l10n-id="setup-dialog-rpc-hint"></span>
         </label>
 
         <div class="setup-dialog-status" id="setup-dialog-status" hidden></div>
       </div>
 
       <div class="setup-dialog-footer">
-        <button type="button" class="setup-dialog-btn secondary" data-action="cancel">Cancel</button>
-        <button type="button" class="setup-dialog-btn primary" data-action="submit">
-          Validate &amp; connect
-        </button>
+        <button type="button" class="setup-dialog-btn secondary" data-action="cancel"
+          data-l10n-id="common-action-cancel"></button>
+        <button type="button" class="setup-dialog-btn primary" data-action="submit"
+          data-l10n-id="setup-dialog-submit"></button>
       </div>
     `;
 
     this.backdrop.appendChild(this.element);
+    I18n.localizeTree(this.element);
     document.body.appendChild(this.backdrop);
 
     this.walletInput = this.element.querySelector("#setup-dialog-wallet");
@@ -113,18 +117,25 @@ class SetupDialog {
     this.element
       .querySelector('[data-action="submit"]')
       .addEventListener("click", () => this.submit());
-    this.element.querySelector('[data-action="reveal"]').addEventListener("click", (e) => {
+    const revealBtn = this.element.querySelector('[data-action="reveal"]');
+    this.setRevealed(revealBtn, false);
+    revealBtn.addEventListener("click", (e) => {
       const masked = this.walletInput.style.webkitTextSecurity !== "none";
       this.walletInput.style.webkitTextSecurity = masked ? "none" : "disc";
-      e.currentTarget.querySelector("i").className = masked ? "icon-eye-off" : "icon-eye";
-      e.currentTarget.setAttribute("aria-pressed", String(masked));
-      e.currentTarget.setAttribute("aria-label", masked ? "Hide private key" : "Show private key");
-      e.currentTarget.title = masked ? "Hide private key" : "Show private key";
+      this.setRevealed(e.currentTarget, masked);
     });
     this.walletInput.style.webkitTextSecurity = "disc";
 
     document.addEventListener("keydown", this.onKeyDown);
     setTimeout(() => this.walletInput.focus(), 50);
+  }
+
+  setRevealed(button, revealed) {
+    const label = revealed ? I18n.t("setup-wallet-hide-key") : I18n.t("setup-wallet-show-key");
+    button.querySelector("i").className = revealed ? "icon-eye-off" : "icon-eye";
+    button.setAttribute("aria-pressed", String(revealed));
+    button.setAttribute("aria-label", label);
+    button.title = label;
   }
 
   onKeyDown(e) {
@@ -151,7 +162,9 @@ class SetupDialog {
     this.busy = busy;
     if (this.submitBtn) {
       this.submitBtn.disabled = busy;
-      this.submitBtn.textContent = busy ? label || "Working…" : "Validate & connect";
+      this.submitBtn.textContent = busy
+        ? label || I18n.t("setup-dialog-working")
+        : I18n.t("setup-dialog-submit");
     }
   }
 
@@ -160,7 +173,7 @@ class SetupDialog {
     const rpcUrls = this.parseRpcUrls();
 
     if (!walletPrivateKey || rpcUrls.length === 0) {
-      this.setStatus("error", "Enter both a wallet private key and at least one RPC URL.");
+      this.setStatus("error", I18n.t("setup-dialog-error-missing-fields"));
       return;
     }
 
@@ -172,7 +185,7 @@ class SetupDialog {
     this.requestAbort = new AbortController();
 
     try {
-      this.setBusy(true, "Validating…");
+      this.setBusy(true, I18n.t("setup-dialog-validating"));
       const validateRes = await fetch("/api/initialization/validate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -186,7 +199,7 @@ class SetupDialog {
       if (!validateRes.ok || !validation.valid || !validation.validation_id) {
         const msg =
           apiErrorMessage(validation) ||
-          (validation?.errors?.length ? validation.errors.join(" ") : "Validation failed.");
+          (validation?.errors?.length ? validation.errors.join(" ") : I18n.t("setup-dialog-error-validation"));
         this.setStatus("error", msg);
         this.setBusy(false);
         return;
@@ -195,7 +208,7 @@ class SetupDialog {
         this.setStatus("warning", validation.warnings.join(" "));
       }
 
-      this.setBusy(true, "Saving…");
+      this.setBusy(true, I18n.t("setup-dialog-saving"));
       const completeRes = await fetch("/api/initialization/complete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -210,25 +223,25 @@ class SetupDialog {
       if (!completeRes.ok || !result.success) {
         const msg =
           apiErrorMessage(result) ||
-          (result?.errors?.length ? result.errors.join(" ") : "Setup could not be completed.");
+          (result?.errors?.length ? result.errors.join(" ") : I18n.t("setup-dialog-error-incomplete"));
         this.setStatus("error", msg);
         this.setBusy(false);
         return;
       }
 
       this.walletInput.value = "";
-      this.setStatus("success", "Setup saved — restarting ScreenerBot in full mode…");
-      this.submitBtn.textContent = "Restarting…";
+      this.setStatus("success", I18n.t("setup-dialog-saved"));
+      this.submitBtn.textContent = I18n.t("setup-dialog-restarting");
 
       const waitForRestart = window.waitForScreenerBotRestart;
       if (typeof waitForRestart !== "function") {
-        throw new Error("Automatic restart helper is unavailable. Reload the dashboard shortly.");
+        throw new Error(I18n.t("setup-dialog-error-restart-helper"));
       }
 
       await waitForRestart(result.instance_id, { target: window.location.pathname || "/home" });
     } catch (err) {
       if (err?.name === "AbortError") return;
-      this.setStatus("error", err?.message || "Unexpected error.");
+      this.setStatus("error", err?.message || I18n.t("setup-dialog-error-unexpected"));
       this.setBusy(false);
     }
   }

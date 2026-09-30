@@ -4,10 +4,14 @@
     <!-- Logo and branding -->
     <div class="login-header" id="loginHeader">
       <div class="login-logo" id="loginLogo">
-        <img src="/assets/logo.svg" alt="ScreenerBot" class="login-logo-img" />
+        <img
+          src="/assets/logo.svg"
+          data-l10n-id="shell-brand-logo"
+          class="login-logo-img"
+        />
       </div>
-      <div class="login-brand" id="loginBrand">ScreenerBot</div>
-      <div class="login-subtitle" id="loginSubtitle">Dashboard Login</div>
+      <div class="login-brand" id="loginBrand" data-l10n-id="shell-brand-name"></div>
+      <div class="login-subtitle" id="loginSubtitle" data-l10n-id="auth-login-subtitle"></div>
     </div>
 
     <!-- Login form -->
@@ -15,14 +19,14 @@
       <!-- Password step -->
       <div class="login-step" id="loginPasswordStep">
         <div class="login-input-group">
-          <label for="loginPassword" class="login-label">Password</label>
+          <label for="loginPassword" class="login-label" data-l10n-id="auth-password-label"></label>
           <div class="login-password-field">
             <input
               type="password"
               id="loginPassword"
               name="password"
               class="login-password-input"
-              placeholder="Enter password"
+              data-l10n-id="auth-password-input"
               autocomplete="current-password"
               spellcheck="false"
               required
@@ -31,7 +35,7 @@
               type="button"
               id="loginPasswordToggle"
               class="login-password-toggle"
-              aria-label="Toggle password visibility"
+              data-l10n-id="auth-password-toggle"
             >
               <i class="icon-eye" id="loginPasswordIcon"></i>
             </button>
@@ -40,15 +44,15 @@
 
         <button type="submit" id="loginSubmit" class="login-submit">
           <i class="icon-log-in"></i>
-          <span>Sign In</span>
+          <span data-l10n-id="auth-login-submit"></span>
         </button>
       </div>
 
       <!-- TOTP step (hidden by default) -->
       <div class="login-step" id="loginTotpStep" style="display: none">
         <div class="login-input-group">
-          <label for="loginTotpCode" class="login-label">Two-Factor Authentication</label>
-          <p class="login-totp-hint">Enter the 6-digit code from your authenticator app</p>
+          <label for="loginTotpCode" class="login-label" data-l10n-id="auth-totp-title"></label>
+          <p class="login-totp-hint" data-l10n-id="auth-totp-hint"></p>
           <div class="login-totp-field">
             <input
               type="text"
@@ -67,25 +71,25 @@
 
         <button type="submit" id="loginTotpSubmit" class="login-submit">
           <i class="icon-shield-check"></i>
-          <span>Verify</span>
+          <span data-l10n-id="auth-totp-verify"></span>
         </button>
 
         <button type="button" id="loginTotpBack" class="login-back-btn">
           <i class="icon-arrow-left"></i>
-          <span>Back</span>
+          <span data-l10n-id="common-action-back"></span>
         </button>
       </div>
 
       <!-- Error message -->
       <div id="loginError" class="login-error" aria-live="polite" style="display: none">
         <i class="icon-circle-alert"></i>
-        <span id="loginErrorText">Incorrect password</span>
+        <span id="loginErrorText" data-l10n-id="auth-error-incorrect-password"></span>
       </div>
     </form>
   </div>
 
   <!-- Version footer -->
   <div class="login-footer">
-    <span class="login-version">ScreenerBot</span>
+    <span class="login-version" data-l10n-id="shell-brand-name"></span>
   </div>
 </div>

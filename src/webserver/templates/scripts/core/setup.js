@@ -96,7 +96,7 @@
       try {
         const result = await requestJson("/api/version");
         const versionEl = document.getElementById("setup-version");
-        if (versionEl && result?.version) versionEl.textContent = `v${result.version}`;
+        if (versionEl && result?.version) versionEl.textContent = I18n.t("shell-version", { version: result.version });
       } catch {
         // Version decoration is optional and must never block setup.
       }
@@ -261,18 +261,18 @@
       this.setVerificationState(
         "wallet",
         "running",
-        "Parsing private key",
-        "Checking the key and deriving its public address."
+        I18n.t("setup-verify-wallet-parsing"),
+        I18n.t("setup-verify-wallet-parsing-detail")
       );
       this.setVerificationState(
         "rpc",
         "running",
-        "Testing Solana mainnet",
-        `Checking ${snapshot.rpcUrls.length} endpoint${snapshot.rpcUrls.length === 1 ? "" : "s"}.`
+        I18n.t("setup-verify-rpc-testing"),
+        I18n.t("setup-verify-rpc-testing-detail", { count: snapshot.rpcUrls.length })
       );
-      this.setVerificationState("save", "pending", "Waiting to save", "");
+      this.setVerificationState("save", "pending", I18n.t("setup-verify-save-waiting"), "");
       if (this.verificationSummary) {
-        this.verificationSummary.textContent = "Verifying the exact credentials you entered.";
+        this.verificationSummary.textContent = I18n.t("setup-verify-summary-running");
       }
 
       try {
@@ -289,17 +289,17 @@
 
         this.renderValidationResult(validation);
         if (!validation?.valid || !validation?.validation_id) {
-          throw new Error(validation?.errors?.join(" ") || "Credential verification failed.");
+          throw new Error(validation?.errors?.join(" ") || I18n.t("setup-error-credentials-failed"));
         }
 
         this.setVerificationState(
           "save",
           "running",
-          "Encrypting and saving",
-          "Writing the verified configuration on this device."
+          I18n.t("setup-verify-save-running"),
+          I18n.t("setup-verify-save-running-detail")
         );
         if (this.verificationSummary) {
-          this.verificationSummary.textContent = "Credentials verified. Saving securely.";
+          this.verificationSummary.textContent = I18n.t("setup-verify-summary-saving");
         }
 
         const completed = await requestJson("/api/initialization/complete", {
@@ -314,14 +314,14 @@
         });
         if (!this.isCurrentRun(run, signal)) return;
         if (!completed?.success) {
-          throw new Error(completed?.errors?.join(" ") || "Setup could not be saved.");
+          throw new Error(completed?.errors?.join(" ") || I18n.t("setup-error-save-failed"));
         }
 
         this.setVerificationState(
           "save",
           "success",
-          "Configuration saved",
-          "Private key encrypted; working RPC endpoints stored."
+          I18n.t("setup-verify-save-done"),
+          I18n.t("setup-verify-save-done-detail")
         );
         this.walletInput.value = "";
         this.hideWalletPreview();
@@ -334,17 +334,23 @@
         if (error?.name === "AbortError" || !this.isCurrentRun(run, signal)) return;
 
         if (document.getElementById("save-verification-card")?.dataset.state === "running") {
-          this.setVerificationState("save", "error", "Could not save setup", error.message);
+          this.setVerificationState(
+            "save",
+            "error",
+            I18n.t("setup-verify-save-failed"),
+            error.message
+          );
         } else if (!document.querySelector('.setup-verification-item[data-state="error"]')) {
-          this.setVerificationState("wallet", "error", "Verification request failed", "");
-          this.setVerificationState("rpc", "error", "Verification request failed", "");
-          this.setVerificationState("save", "pending", "Not saved", "");
+          const requestFailed = I18n.t("setup-verify-request-failed");
+          this.setVerificationState("wallet", "error", requestFailed, "");
+          this.setVerificationState("rpc", "error", requestFailed, "");
+          this.setVerificationState("save", "pending", I18n.t("setup-verify-save-skipped"), "");
         }
 
         if (this.verificationSummary) {
-          this.verificationSummary.textContent = "Review the issue, then verify again.";
+          this.verificationSummary.textContent = I18n.t("setup-verify-summary-failed");
         }
-        this.showError(error.message || "Verification failed.", true);
+        this.showError(error.message || I18n.t("setup-error-verify-failed"), true);
         this.verificationBusy = false;
         this.updateButtons();
       }
@@ -376,12 +382,11 @@
     }
 
     resetVerificationStates() {
-      this.setVerificationState("wallet", "pending", "Waiting to validate", "");
-      this.setVerificationState("rpc", "pending", "Waiting to test endpoints", "");
-      this.setVerificationState("save", "pending", "Waiting to save", "");
+      this.setVerificationState("wallet", "pending", I18n.t("setup-verify-wallet-waiting"), "");
+      this.setVerificationState("rpc", "pending", I18n.t("setup-verify-rpc-waiting"), "");
+      this.setVerificationState("save", "pending", I18n.t("setup-verify-save-waiting"), "");
       if (this.verificationSummary) {
-        this.verificationSummary.textContent =
-          "Checking your wallet and Solana mainnet connections.";
+        this.verificationSummary.textContent = I18n.t("setup-verify-summary-checking");
       }
     }
 
@@ -390,7 +395,7 @@
       this.hideError();
       this.exploreBtn.disabled = true;
       const originalLabel = this.exploreBtn.textContent;
-      this.exploreBtn.textContent = "Opening Explore Mode…";
+      this.exploreBtn.textContent = I18n.t("setup-explore-opening");
 
       try {
         const result = await requestJson("/api/initialization/explore", {
@@ -399,13 +404,13 @@
           body: "{}",
         });
         if (!result?.success) {
-          throw new Error(result?.errors?.join(" ") || "Explore Mode could not be started.");
+          throw new Error(result?.errors?.join(" ") || I18n.t("setup-error-explore-failed"));
         }
         window.location.assign("/tokens");
       } catch (error) {
         this.exploreBtn.disabled = false;
         this.exploreBtn.textContent = originalLabel;
-        this.showError(error.message || "Explore Mode could not be started.", true);
+        this.showError(error.message || I18n.t("setup-error-explore-failed"), true);
       }
     }
 
@@ -418,9 +423,9 @@
         this.completeIcon.className = "setup-complete-icon icon-circle-check";
       }
       if (this.completeText) {
-        this.completeText.textContent = "Restarting ScreenerBot with your verified configuration.";
+        this.completeText.textContent = I18n.t("setup-complete-restarting");
       }
-      if (this.servicesStatus) this.servicesStatus.textContent = "Finishing restart…";
+      if (this.servicesStatus) this.servicesStatus.textContent = I18n.t("setup-complete-finishing");
       if (this.restartIndicator) this.restartIndicator.hidden = false;
       if (this.completeActions) this.completeActions.hidden = true;
 
@@ -429,7 +434,7 @@
         signal: this.restartAbort.signal,
         onReady: () => {
           if (this.servicesStatus) {
-            this.servicesStatus.textContent = "ScreenerBot is ready. Opening dashboard…";
+            this.servicesStatus.textContent = I18n.t("setup-complete-ready");
           }
         },
       }).catch((error) => {
@@ -439,8 +444,7 @@
           this.completeIcon.className = "setup-complete-icon icon-triangle-alert";
         }
         if (this.completeText) {
-          this.completeText.textContent =
-            "Your verified configuration is safely stored on this device.";
+          this.completeText.textContent = I18n.t("setup-complete-stored");
         }
         if (this.servicesStatus) this.servicesStatus.textContent = error.message;
         if (this.restartIndicator) this.restartIndicator.hidden = true;
@@ -481,7 +485,7 @@
           this.onAccountChanged(status);
         } catch (error) {
           this.gatewayCheckboxEl.checked = !requested;
-          this.showError(error.message || "Gateway preference could not be saved.", false);
+          this.showError(error.message || I18n.t("setup-error-gateway-failed"), false);
         } finally {
           this.gatewayBusy = false;
           this.gatewayCheckboxEl.disabled = false;
@@ -495,7 +499,7 @@
       if (!this.toggleBtn) return;
 
       this.toggleBtn.setAttribute("aria-pressed", String(!masked));
-      const action = masked ? "Show private key" : "Hide private key";
+      const action = masked ? I18n.t("setup-wallet-show-key") : I18n.t("setup-wallet-hide-key");
       this.toggleBtn.setAttribute("aria-label", action);
       this.toggleBtn.title = action;
       const icon = this.toggleBtn.querySelector(".toggle-icon");
@@ -528,15 +532,18 @@
 
       try {
         await navigator.clipboard.writeText(address);
-        this.copyBtn.setAttribute("aria-label", "Wallet address copied");
-        this.copyBtn.title = "Copied";
+        this.copyBtn.setAttribute("aria-label", I18n.attr("setup-wallet-copy-done", "aria-label"));
+        this.copyBtn.title = I18n.attr("setup-wallet-copy-done", "title");
         window.setTimeout(() => {
-          this.copyBtn?.setAttribute("aria-label", "Copy wallet address");
-          if (this.copyBtn) this.copyBtn.title = "Copy wallet address";
+          this.copyBtn?.setAttribute("aria-label", I18n.attr("setup-wallet-copy", "aria-label"));
+          if (this.copyBtn) this.copyBtn.title = I18n.attr("setup-wallet-copy", "title");
         }, 1500);
       } catch {
-        this.copyBtn.setAttribute("aria-label", "Could not copy wallet address");
-        this.copyBtn.title = "Copy failed";
+        this.copyBtn.setAttribute(
+          "aria-label",
+          I18n.attr("setup-wallet-copy-failed", "aria-label")
+        );
+        this.copyBtn.title = I18n.attr("setup-wallet-copy-failed", "title");
       }
     }
 
@@ -544,7 +551,10 @@
       if (!this.errorEl || !this.errorMessages) return;
       this.errorMessages.textContent = message;
       if (this.retryBtn) {
-        this.retryBtn.textContent = this.currentStep === 2 ? "Review credentials" : "Dismiss";
+        this.retryBtn.textContent =
+          this.currentStep === 2
+            ? I18n.t("setup-action-review-credentials")
+            : I18n.t("common-action-dismiss");
       }
       this.errorEl.hidden = false;
       if (focus) window.requestAnimationFrame(() => this.errorEl.focus({ preventScroll: true }));

@@ -42,7 +42,7 @@
       return {
         valid: false,
         state: required ? "error" : "",
-        message: required ? "Enter a wallet private key." : "",
+        message: required ? I18n.t("setup-wallet-required") : "",
       };
     }
 
@@ -57,13 +57,13 @@
         return {
           valid: true,
           state: "success",
-          message: "64-byte JSON key format recognized.",
+          message: I18n.t("setup-wallet-json-recognized"),
         };
       } catch {
         return {
           valid: false,
           state: "error",
-          message: "Use a JSON array containing exactly 64 byte values (0–255).",
+          message: I18n.t("setup-wallet-json-invalid"),
         };
       }
     }
@@ -72,14 +72,14 @@
       return {
         valid: false,
         state: "error",
-        message: "Use a base58 private key or a 64-byte JSON array.",
+        message: I18n.t("setup-wallet-format-invalid"),
       };
     }
 
     return {
       valid: true,
       state: "success",
-      message: "Base58 key format recognized.",
+      message: I18n.t("setup-wallet-base58-recognized"),
     };
   }
 
@@ -91,11 +91,11 @@
       return {
         valid: false,
         state: required ? "error" : "",
-        message: required ? "Enter at least one RPC endpoint." : "",
+        message: required ? I18n.t("setup-rpc-required") : "",
         urls,
       };
     }
-    if (urls.length > 10) return fail("Use no more than 10 RPC endpoints.");
+    if (urls.length > 10) return fail(I18n.t("setup-rpc-too-many"));
 
     const normalized = new Set();
     for (const value of urls) {
@@ -103,32 +103,32 @@
       try {
         parsed = new URL(value);
       } catch {
-        return fail("Every endpoint must be a valid HTTPS URL.");
+        return fail(I18n.t("setup-rpc-url-invalid"));
       }
 
       if (parsed.protocol !== "https:" || !parsed.hostname) {
-        return fail("Every endpoint must be a valid HTTPS URL.");
+        return fail(I18n.t("setup-rpc-url-invalid"));
       }
       if (parsed.username || parsed.password) {
-        return fail("RPC URLs cannot include usernames or passwords.");
+        return fail(I18n.t("setup-rpc-url-credentials"));
       }
-      if (parsed.hash) return fail("RPC URLs cannot include fragments.");
+      if (parsed.hash) return fail(I18n.t("setup-rpc-url-fragment"));
       if (parsed.hostname.toLowerCase() === PUBLIC_SOLANA_RPC) {
-        return fail("The public Solana RPC cannot support continuous polling.");
+        return fail(I18n.t("setup-rpc-public-endpoint"));
       }
       if (isPrivateHostname(parsed.hostname)) {
-        return fail("RPC endpoints cannot use local or private network hosts.");
+        return fail(I18n.t("setup-rpc-private-host"));
       }
 
       const key = parsed.href.replace(/\/$/, "").toLowerCase();
-      if (normalized.has(key)) return fail("Remove duplicate RPC endpoints.");
+      if (normalized.has(key)) return fail(I18n.t("setup-rpc-duplicate"));
       normalized.add(key);
     }
 
     return {
       valid: true,
       state: "success",
-      message: `${urls.length} HTTPS endpoint${urls.length === 1 ? "" : "s"} ready to test.`,
+      message: I18n.t("setup-rpc-ready", { count: urls.length }),
       urls,
     };
   }
@@ -137,10 +137,10 @@
     const walletValid = Boolean(validation?.wallet_address);
     const wallet = {
       state: walletValid ? "success" : "error",
-      label: walletValid ? "Wallet verified" : "Wallet could not be verified",
+      label: walletValid ? I18n.t("setup-wallet-verified") : I18n.t("setup-wallet-unverified"),
       details: walletValid
-        ? `Address ${validation.wallet_address}`
-        : "Check the private key format.",
+        ? I18n.t("setup-wallet-address-detail", { address: validation.wallet_address })
+        : I18n.t("setup-wallet-format-hint"),
       address: walletValid ? validation.wallet_address : null,
     };
 
@@ -152,11 +152,11 @@
     if (!working.length) {
       rpc = {
         state: "error",
-        label: "No working mainnet RPC",
+        label: I18n.t("setup-rpc-none-working"),
         details:
           failed[0]?.error ||
           validation?.errors?.find((message) => /rpc|endpoint|https|mainnet/i.test(message)) ||
-          "No endpoint passed the mainnet health checks.",
+          I18n.t("setup-rpc-health-failed"),
       };
     } else {
       const fastest = working.reduce((best, current) =>
@@ -166,9 +166,12 @@
       rpc = {
         state: warning ? "warning" : "success",
         label: warning
-          ? `${working.length} working; ${failed.length} unavailable`
-          : `${working.length} mainnet endpoint${working.length === 1 ? "" : "s"} verified`,
-        details: `Fastest: ${fastest.display_url} (${fastest.latency_ms} ms).`,
+          ? I18n.t("setup-rpc-partial", { working: working.length, failed: failed.length })
+          : I18n.t("setup-rpc-verified", { count: working.length }),
+        details: I18n.t("setup-rpc-fastest", {
+          url: fastest.display_url,
+          latency: fastest.latency_ms,
+        }),
       };
     }
 
@@ -186,7 +189,10 @@
 
     if (!response.ok) {
       throw new Error(
-        window.RequestManagerErrors.apiErrorMessage(body, `Request failed (${response.status})`)
+        window.RequestManagerErrors.apiErrorMessage(
+          body,
+          I18n.t("setup-error-request-failed", { status: response.status })
+        )
       );
     }
     return body?.data ?? body;
@@ -240,7 +246,7 @@
       await delay(500, options.signal);
     }
 
-    throw new Error("Setup is saved, but ScreenerBot has not reconnected yet.");
+    throw new Error(I18n.t("setup-error-restart-timeout"));
   }
 
   window.SetupRuntime = {

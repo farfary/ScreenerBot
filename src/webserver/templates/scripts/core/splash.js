@@ -43,10 +43,7 @@ class SplashController {
         this.retryTimeout = null;
       }
       this.splashEl?.classList.add("settled");
-      this.setState(
-        "ScreenerBot could not start",
-        "Check the log file, then restart the app."
-      );
+      this.setState(I18n.t("shell-splash-failed"), I18n.t("shell-splash-failed-detail"));
     });
   }
 
@@ -94,7 +91,7 @@ class SplashController {
         const data = await response.json();
         const versionEl = document.getElementById("splashVersion");
         if (versionEl && data.version) {
-          versionEl.textContent = `v${data.version}`;
+          versionEl.textContent = I18n.t("shell-version", { version: data.version });
         }
       }
     } catch (err) {
@@ -140,7 +137,7 @@ class SplashController {
       // Initialization state is authoritative. Never guess "dashboard" on a
       // transient failure because that can bypass first-run onboarding.
       if (Date.now() - this.startTime >= SPLASH_SLOW_AFTER_MS) {
-        this.setState("Starting ScreenerBot", "Waiting for the local core to answer.");
+        this.setState(I18n.t("shell-splash-starting"), I18n.t("shell-splash-waiting"));
       }
       this.retryTimeout = setTimeout(() => this.checkInitialization(), 1500);
     }

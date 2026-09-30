@@ -144,7 +144,7 @@ class LockscreenController {
       if (response.ok) {
         const data = await response.json();
         if (this.versionEl && data.version) {
-          this.versionEl.textContent = `v${data.version}`;
+          this.versionEl.textContent = I18n.t("shell-version", { version: data.version });
         }
       }
     } catch (err) {
@@ -377,13 +377,13 @@ class LockscreenController {
       if (response.ok && data.valid) {
         this.unlock();
       } else {
-        this._showError(window.RequestManagerErrors.apiErrorMessage(data, "Incorrect password"));
+        this._showError(window.RequestManagerErrors.apiErrorMessage(data, I18n.t("auth-error-incorrect-password")));
         this._showInputError();
         this._resetInputs();
       }
     } catch (error) {
       console.error("[Lockscreen] Verification failed:", error);
-      this._showError("Verification failed");
+      this._showError(I18n.t("auth-error-verification-failed"));
       this._showInputError();
       this._resetInputs();
     } finally {

@@ -37,7 +37,7 @@ class OnboardingControllerClass {
         const data = await response.json();
         const versionEl = document.getElementById("onboarding-version");
         if (versionEl && data.version) {
-          versionEl.textContent = `v${data.version}`;
+          versionEl.textContent = I18n.t("shell-version", { version: data.version });
         }
       }
     } catch {
@@ -142,11 +142,13 @@ class OnboardingControllerClass {
       this.prevBtn.disabled = this.currentSlide === 0;
     }
     if (this.nextBtn) {
-      if (this.currentSlide === this.totalSlides - 1) {
-        this.nextBtn.innerHTML = 'Continue to setup <i class="icon-arrow-right"></i>';
-      } else {
-        this.nextBtn.innerHTML = 'Next <i class="icon-chevron-right"></i>';
-      }
+      const isLast = this.currentSlide === this.totalSlides - 1;
+      const icon = document.createElement("i");
+      icon.className = isLast ? "icon-arrow-right" : "icon-chevron-right";
+      const label = isLast
+        ? I18n.t("onboarding-action-continue-to-setup")
+        : I18n.t("common-action-next");
+      this.nextBtn.replaceChildren(`${label} `, icon);
     }
     if (this.setupShortcutBtn) {
       this.setupShortcutBtn.hidden = this.currentSlide === this.totalSlides - 1;

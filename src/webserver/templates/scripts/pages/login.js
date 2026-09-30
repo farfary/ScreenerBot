@@ -10,6 +10,15 @@ import { apiErrorMessage } from "../core/request_manager.js";
 // Simple DOM helper
 const $ = (selector) => document.querySelector(selector);
 
+// Replace a submit button's content with an icon and a text label.
+function setButtonContent(button, iconClass, label) {
+  const icon = document.createElement("i");
+  icon.className = iconClass;
+  const text = document.createElement("span");
+  text.textContent = label;
+  button.replaceChildren(icon, " ", text);
+}
+
 // State to track verified password for TOTP step
 let verifiedPassword = "";
 
@@ -35,7 +44,7 @@ async function fetchApi(url, options = {}) {
 
     return data;
   } catch (err) {
-    return { success: false, error: { message: err.message || "Network error" } };
+    return { success: false, error: { message: err.message || I18n.t("auth-error-network") } };
   }
 }
 
@@ -156,7 +165,7 @@ async function handleLogin(passwordInput, errorContainer) {
   const password = passwordInput.value.trim();
 
   if (!password) {
-    showError(errorContainer, "Please enter a password");
+    showError(errorContainer, I18n.t("auth-error-password-required"));
     shakeForm();
     return;
   }
@@ -164,7 +173,7 @@ async function handleLogin(passwordInput, errorContainer) {
   const submitBtn = $("#loginSubmit");
   if (submitBtn) {
     submitBtn.disabled = true;
-    submitBtn.innerHTML = '<i class="icon-loader spin"></i> <span>Signing in...</span>';
+    setButtonContent(submitBtn, "icon-loader spin", I18n.t("auth-login-signing-in"));
   }
 
   try {
@@ -183,7 +192,7 @@ async function handleLogin(passwordInput, errorContainer) {
       hideError();
     } else {
       // Show error
-      const errorMessage = apiErrorMessage(response, "Login failed");
+      const errorMessage = apiErrorMessage(response, I18n.t("auth-error-login-failed"));
       showError(errorContainer, errorMessage);
       shakeForm();
       passwordInput.focus();
@@ -191,12 +200,12 @@ async function handleLogin(passwordInput, errorContainer) {
     }
   } catch (err) {
     console.error("[Login] Error:", err);
-    showError(errorContainer, "Connection error. Please try again.");
+    showError(errorContainer, I18n.t("auth-error-connection"));
     shakeForm();
   } finally {
     if (submitBtn) {
       submitBtn.disabled = false;
-      submitBtn.innerHTML = '<i class="icon-log-in"></i> <span>Sign In</span>';
+      setButtonContent(submitBtn, "icon-log-in", I18n.t("auth-login-submit"));
     }
   }
 }
@@ -208,14 +217,14 @@ async function handleTotpSubmit(totpInput, errorContainer) {
   const code = totpInput.value.trim();
 
   if (!code || code.length !== 6) {
-    showError(errorContainer, "Please enter the 6-digit code");
+    showError(errorContainer, I18n.t("auth-error-totp-required"));
     shakeForm();
     return;
   }
 
   if (!verifiedPassword) {
     // Session expired or state lost - go back to password step
-    showError(errorContainer, "Session expired. Please enter your password again.");
+    showError(errorContainer, I18n.t("auth-error-session-expired"));
     showPasswordStep();
     return;
   }
@@ -223,7 +232,7 @@ async function handleTotpSubmit(totpInput, errorContainer) {
   const submitBtn = $("#loginTotpSubmit");
   if (submitBtn) {
     submitBtn.disabled = true;
-    submitBtn.innerHTML = '<i class="icon-loader spin"></i> <span>Verifying...</span>';
+    setButtonContent(submitBtn, "icon-loader spin", I18n.t("auth-totp-verifying"));
   }
 
   try {
@@ -241,7 +250,7 @@ async function handleTotpSubmit(totpInput, errorContainer) {
       window.location.href = "/";
     } else {
       // Show error
-      const errorMessage = apiErrorMessage(response, "Invalid code");
+      const errorMessage = apiErrorMessage(response, I18n.t("auth-error-totp-invalid"));
       showError(errorContainer, errorMessage);
       shakeForm();
       totpInput.value = "";
@@ -249,12 +258,12 @@ async function handleTotpSubmit(totpInput, errorContainer) {
     }
   } catch (err) {
     console.error("[Login] TOTP Error:", err);
-    showError(errorContainer, "Connection error. Please try again.");
+    showError(errorContainer, I18n.t("auth-error-connection"));
     shakeForm();
   } finally {
     if (submitBtn) {
       submitBtn.disabled = false;
-      submitBtn.innerHTML = '<i class="icon-shield-check"></i> <span>Verify</span>';
+      setButtonContent(submitBtn, "icon-shield-check", I18n.t("auth-totp-verify"));
     }
   }
 }

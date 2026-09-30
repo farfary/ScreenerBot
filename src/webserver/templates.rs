@@ -3,7 +3,7 @@
 //! This module provides functions to render HTML pages by combining templates with dynamic data.
 //! All embedded assets (HTML, CSS, JS) are imported from the `embeds` module.
 
-use crate::i18n::{text_direction, LanguageIdentifier};
+use crate::i18n::{ids, text_direction, LanguageIdentifier, UiArg, UiText};
 use crate::version;
 
 // Import all embedded assets from the embeds module
@@ -93,6 +93,14 @@ fn page_title(page_id: &str, locale: &LanguageIdentifier) -> String {
     crate::i18n::format(locale, &format!("nav-page-title-{page_id}"), None)
 }
 
+/// Full document title: the page title followed by the product name, composed by
+/// the `shell-document-title` catalog message so word order stays localizable.
+fn document_title(page_id: &str, locale: &LanguageIdentifier) -> String {
+    UiText::new(ids::SHELL_DOCUMENT_TITLE)
+        .arg("page", UiArg::Text(page_title(page_id, locale)))
+        .render_plain(locale)
+}
+
 /// Render the base layout with shared chrome and inject the requested content.
 /// `active_tab` is the page id; it selects the tab highlight, the page styles and
 /// the localized document title.
@@ -103,7 +111,7 @@ pub fn base_template(active_tab: &str, content: &str, locale: &LanguageIdentifie
         .map(|ts| format!("{}-{}", version::get_version(), ts))
         .unwrap_or_else(|| version::get_version().to_string());
 
-    let mut html = BASE_TEMPLATE.replace("{{TITLE}}", &page_title(active_tab, locale));
+    let mut html = BASE_TEMPLATE.replace("{{TITLE}}", &document_title(active_tab, locale));
     html = html.replace("{{LANG}}", &locale.to_string());
     html = html.replace("{{DIR}}", text_direction(locale).as_str());
     html = html.replace("{{NAV_TABS}}", &nav_tabs(active_tab));
@@ -418,7 +426,7 @@ pub fn login_template(content: &str, locale: &LanguageIdentifier) -> String {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{} - ScreenerBot</title>
+    <title>{}</title>
     <style>{}</style>
 </head>
 <body>
@@ -432,7 +440,7 @@ pub fn login_template(content: &str, locale: &LanguageIdentifier) -> String {
 </html>"#,
         locale,
         text_direction(locale).as_str(),
-        page_title("login", locale),
+        document_title("login", locale),
         combined_styles,
         content,
         asset_version,
