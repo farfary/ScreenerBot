@@ -84,7 +84,7 @@ function buildTelegramTab(settings) {
             (s) => `
       <div class="session-item" data-session-id="${s.user_id}">
         <div class="session-info">
-          <span class="session-user">${s.username || Utils.escapeHtml(I18n.t("settings-telegram-unknown"))}</span>
+          <span class="session-user">${Utils.escapeHtml(s.username || I18n.t("settings-telegram-unknown"))}</span>
           <span class="session-time">${Utils.escapeHtml(I18n.t("settings-telegram-session-active", { duration: Utils.formatDuration(s.created_at_secs * 1000) }))}</span>
         </div>
         <button class="btn btn-danger btn-sm session-revoke-btn" data-session-id="${s.user_id}">
@@ -136,7 +136,7 @@ function buildTelegramTab(settings) {
           <div class="settings-field-info">
             <label data-l10n-id="settings-telegram-chat-label"></label>
             <span class="settings-field-hint" id="tgChatIdHint">
-              ${settings.chat_id ? `<span data-l10n-id="settings-telegram-chat-connected"></span> <bdi dir="ltr">${settings.chat_id}</bdi>` : '<span data-l10n-id="settings-telegram-chat-discover-hint"></span>'}
+              ${settings.chat_id ? `<span data-l10n-id="settings-telegram-chat-connected"></span> <bdi dir="ltr">${Utils.escapeHtml(String(settings.chat_id))}</bdi>` : '<span data-l10n-id="settings-telegram-chat-discover-hint"></span>'}
             </span>
           </div>
           <div class="settings-field-control" id="tgChatIdControl">
@@ -144,7 +144,7 @@ function buildTelegramTab(settings) {
               settings.chat_id
                 ? `
               <span class="chat-id-display">
-                <code dir="ltr">${settings.chat_id}</code>
+                <code dir="ltr">${Utils.escapeHtml(String(settings.chat_id))}</code>
                 <button class="btn btn-secondary btn-sm" id="tgChangeChatBtn" data-l10n-id="settings-telegram-chat-change">
                   <i class="icon-pencil"></i>
                 </button>
@@ -579,11 +579,11 @@ function attachTelegramHandlers(dialog, content, settings) {
     discoveredChatsEl.innerHTML = chats
       .map(
         (chat) => `
-      <div class="discovered-chat-item" data-chat-id="${chat.chat_id}">
+      <div class="discovered-chat-item" data-chat-id="${Utils.escapeHtml(String(chat.chat_id))}">
         <div class="chat-info">
-          <span class="chat-name">${chat.first_name || chat.username || Utils.escapeHtml(I18n.t("settings-telegram-unknown"))}</span>
-          <span class="chat-meta">${Utils.escapeHtml(Object.hasOwn(CHAT_TYPE_LABELS, chat.chat_type) ? I18n.label(CHAT_TYPE_LABELS, chat.chat_type) : chat.chat_type)} • <span data-l10n-id="settings-telegram-chat-id-label"></span> <bdi dir="ltr">${chat.chat_id}</bdi></span>
-          ${chat.message_preview ? `<span class="chat-preview">"${chat.message_preview}"</span>` : ""}
+          <span class="chat-name">${Utils.escapeHtml(chat.first_name || chat.username || I18n.t("settings-telegram-unknown"))}</span>
+          <span class="chat-meta">${Utils.escapeHtml(Object.hasOwn(CHAT_TYPE_LABELS, chat.chat_type) ? I18n.label(CHAT_TYPE_LABELS, chat.chat_type) : chat.chat_type)} • <span data-l10n-id="settings-telegram-chat-id-label"></span> <bdi dir="ltr">${Utils.escapeHtml(String(chat.chat_id))}</bdi></span>
+          ${chat.message_preview ? `<span class="chat-preview">"${Utils.escapeHtml(chat.message_preview)}"</span>` : ""}
         </div>
         <button class="btn btn-success btn-sm select-chat-btn">
           <i class="icon-check"></i> <span data-l10n-id="settings-telegram-discovery-select"></span>
