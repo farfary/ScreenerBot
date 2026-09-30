@@ -100,7 +100,7 @@ r2d2_sqlite = "0.31"
 
 # Localization
 fluent-bundle = "0.16"
-fluent-langneg = "0.13"
+fluent-langneg = { version = "0.13", features = ["cldr"] }
 sys-locale = "0.3"
 unic-langid = "0.9"
 lol_html = "3"

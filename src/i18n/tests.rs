@@ -46,8 +46,23 @@ fn system_setting_negotiates_request_language() {
     let unregistered = resolve_locale("system", Some("sw-KE,sw;q=0.9,en;q=0.8"));
     assert_eq!(unregistered, langid("en"));
     let regional = resolve_locale("system", Some("fr-CA,fr;q=0.9,en;q=0.8"));
-    let expected = if locale_info("fr").is_some() { "fr" } else { "en" };
+    let expected = if locale_info("fr").is_some() {
+        "fr"
+    } else {
+        "en"
+    };
     assert_eq!(regional, langid(expected));
+}
+
+#[test]
+fn script_locales_negotiate_through_likely_subtags() {
+    if locale_info("zh-Hans").is_none() {
+        return;
+    }
+    for request in ["zh", "zh-CN", "zh-Hans-CN", "zh-SG"] {
+        assert_eq!(resolve_locale("system", Some(request)), langid("zh-Hans"));
+    }
+    assert_eq!(resolve_locale("system", Some("zh-TW")), langid("en"));
 }
 
 #[test]
