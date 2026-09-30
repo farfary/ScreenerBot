@@ -4,8 +4,10 @@
 //! Database is the source of truth, in-memory HashMap is a hot cache for performance.
 
 use super::db::ActionsDatabase;
+use super::failure::ActionFailure;
 use super::types::{Action, ActionId, ActionState, ActionUpdate, StepStatus};
 use super::{Error, Result};
+use crate::i18n::ids;
 use crate::logger::{self, LogTag};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -58,7 +60,7 @@ pub async fn sync_from_db() -> Result<()> {
     // (uncancellable, reappearing after every client-side clear). Finalize them
     // as failed instead; the active set then starts empty, as it should.
     let finalized = db
-        .finalize_orphaned_in_progress("Interrupted by application restart")
+        .finalize_orphaned_in_progress(&ActionFailure::new(ids::ACTIONS_FAILURE_INTERRUPTED))
         .await?;
 
     if finalized > 0 {
@@ -145,7 +147,7 @@ pub async fn update_step(
     action_id: &str,
     step_index: usize,
     status: StepStatus,
-    error: Option<String>,
+    error: Option<ActionFailure>,
     metadata: Option<Value>,
 ) -> bool {
     // 1. Persist first — but a persistence failure must NOT suppress steps 2 and 3.
@@ -164,7 +166,7 @@ pub async fn update_step(
                     action_id,
                     step_index,
                     status,
-                    error.clone(),
+                    error.as_ref(),
                     metadata.clone(),
                 )
                 .await
@@ -208,7 +210,8 @@ pub async fn update_step(
         }
         StepStatus::Failed => {
             let step_name = action_clone.steps[step_index].name;
-            let error_msg = error.unwrap_or_else(|| "Unknown error".to_owned());
+            let error_msg =
+                error.unwrap_or_else(|| ActionFailure::new(ids::ACTIONS_FAILURE_UNKNOWN));
             ActionUpdate::step_failed(&action_clone, step_index, step_name, error_msg)
         }
         _ => return true, // No broadcast for Pending/Skipped
@@ -295,7 +298,7 @@ pub async fn complete_action_success(action_id: &str) -> bool {
 }
 
 /// Mark action as failed (dual-write: DB → HashMap → Broadcast)
-pub async fn complete_action_failed(action_id: &str, error: String) -> bool {
+pub async fn complete_action_failed(action_id: &str, error: ActionFailure) -> bool {
     // 1. Get current action state for DB update
     let (started_at, completed_at) = {
         let mut actions = ACTIVE_ACTIONS.write().await;

@@ -1,6 +1,6 @@
 import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
-import { requestManager } from "../core/request_manager.js";
+import { apiErrorMessage, requestManager } from "../core/request_manager.js";
 import * as Utils from "../core/utils.js";
 import * as AppState from "../core/app_state.js";
 import { DataTable } from "../ui/data_table.js";
@@ -543,7 +543,10 @@ function createLifecycle() {
         step: shortStep(n.state?.current_step),
         kind,
         _rank: rank,
-        error: kind === "failed" ? n.state?.error || failedStep?.error || null : null,
+        error:
+          kind === "failed"
+            ? apiErrorMessage({ error: n.state?.error || failedStep?.error }, null)
+            : null,
       });
     };
 

@@ -24,3 +24,20 @@ actions-step-swap-short = Swapping
 actions-step-verify-short = Confirming
 actions-step-unknown-short = Working
 
+# Action failures. Ids come from src/actions/failure.rs and its producers. The
+# technical cause travels separately as `details` and is not part of the text.
+actions-failure-recorded = { $message }
+actions-failure-unknown = Unknown error
+actions-failure-interrupted = Interrupted by application restart
+actions-failure-validation = Validation failed
+actions-failure-quote = Quote failed
+actions-failure-swap = Swap failed
+actions-failure-trade = Trade failed
+actions-failure-entry = Entry failed
+actions-failure-exit = Exit failed
+actions-failure-dca = DCA failed
+actions-failure-verification-expired = Verification expired: the transaction never landed
+actions-failure-verification-gave-up = Verification gave up
+actions-failure-transaction-failed = The transaction failed on chain
+actions-failure-sell-transaction-failed = The sell transaction failed on chain
+actions-failure-dca-verification-failed = DCA verification failed

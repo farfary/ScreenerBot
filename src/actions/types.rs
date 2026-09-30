@@ -7,6 +7,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use super::failure::ActionFailure;
 use super::step_code::ActionStepCode;
 
 /// Unique identifier for an action (UUID format)
@@ -118,7 +119,7 @@ impl Action {
         &mut self,
         step_index: usize,
         status: StepStatus,
-        error: Option<String>,
+        error: Option<ActionFailure>,
         metadata: Option<Value>,
     ) -> bool {
         if step_index >= self.steps.len() {
@@ -171,7 +172,7 @@ impl Action {
     }
 
     /// Mark action as failed
-    pub fn complete_failed(&mut self, error: String) {
+    pub fn complete_failed(&mut self, error: ActionFailure) {
         self.state = ActionState::Failed { error };
         self.completed_at = Some(Utc::now());
     }
@@ -225,7 +226,7 @@ pub enum ActionState {
     Completed,
 
     /// Action failed with error
-    Failed { error: String },
+    Failed { error: ActionFailure },
 
     /// Action was cancelled by user or system
     Cancelled,
@@ -250,7 +251,7 @@ pub struct ActionStep {
     pub completed_at: Option<DateTime<Utc>>,
 
     /// Error message if step failed
-    pub error: Option<String>,
+    pub error: Option<ActionFailure>,
 
     /// Additional step metadata
     pub metadata: Value,
@@ -357,7 +358,7 @@ impl ActionUpdate {
         action: &Action,
         step_index: usize,
         step_name: ActionStepCode,
-        error: String,
+        error: ActionFailure,
     ) -> Self {
         Self {
             action_id: action.id.clone(),
@@ -387,7 +388,7 @@ impl ActionUpdate {
     }
 
     /// Create action failed update
-    pub fn failed(action: &Action, error: String) -> Self {
+    pub fn failed(action: &Action, error: ActionFailure) -> Self {
         Self {
             action_id: action.id.clone(),
             update_type: UpdateType::ActionFailed,

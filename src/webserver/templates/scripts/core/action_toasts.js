@@ -21,6 +21,7 @@
 
 import { notificationManager } from "./notifications.js";
 import { toastManager } from "./toast.js";
+import { apiErrorMessage } from "./request_manager.js";
 // The wording lives in its own module so it can be tested without a DOM.
 import { outcomeMessage, stepMessage, symbolOf } from "./action_message.js";
 
@@ -112,7 +113,7 @@ function showResolved(action, status) {
       key: keyFor(action),
       type: "error",
       title: titleFor(action, "failed"),
-      message: action?.state?.error || null,
+      message: apiErrorMessage({ error: action?.state?.error }, null) || null,
     });
     return;
   }

@@ -8,6 +8,7 @@
 //! - Event recording
 //! - Action tracking for dashboard visibility
 
+use crate::actions::ActionFailure;
 use crate::errors::ErrorClass;
 use crate::i18n::{ids, UiText};
 use crate::logger::{self, LogTag};
@@ -277,7 +278,11 @@ pub async fn monitor_positions(
                             // Fail action
                             let error_msg = result.error.clone().unwrap_or_default();
                             if let Some(ref a) = action {
-                                a.fail(&error_msg).await;
+                                a.fail(ActionFailure::with_details(
+                                    ids::ACTIONS_FAILURE_EXIT,
+                                    error_msg.as_str(),
+                                ))
+                                .await;
                             }
 
                             logger::error(
@@ -295,7 +300,11 @@ pub async fn monitor_positions(
                         let e = e.to_string();
                         // Fail action
                         if let Some(ref a) = action {
-                            a.fail(&e).await;
+                            a.fail(ActionFailure::with_details(
+                                ids::ACTIONS_FAILURE_EXIT,
+                                e.as_str(),
+                            ))
+                            .await;
                         }
 
                         if throttled {
@@ -373,7 +382,11 @@ pub async fn monitor_positions(
                                 // Fail action
                                 let error_msg = result.error.clone().unwrap_or_default();
                                 if let Some(ref a) = action {
-                                    a.fail(&error_msg).await;
+                                    a.fail(ActionFailure::with_details(
+                                        ids::ACTIONS_FAILURE_DCA,
+                                        error_msg.as_str(),
+                                    ))
+                                    .await;
                                 }
 
                                 logger::error(
@@ -385,7 +398,11 @@ pub async fn monitor_positions(
                         Err(e) => {
                             // Fail action
                             if let Some(ref a) = action {
-                                a.fail(&e.to_string()).await;
+                                a.fail(ActionFailure::with_details(
+                                    ids::ACTIONS_FAILURE_DCA,
+                                    e.to_string(),
+                                ))
+                                .await;
                             }
 
                             logger::error(LogTag::Trader, &format!("Failed to execute DCA: {e}"));

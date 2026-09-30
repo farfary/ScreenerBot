@@ -8,6 +8,7 @@
 
 mod queries;
 
+use super::failure::ActionFailure;
 use super::types::{Action, ActionState, ActionStep, ActionType, StepStatus};
 use crate::actions::{Error, Result};
 use crate::database;
@@ -461,7 +462,7 @@ impl ActionsDatabase {
                 step.completed_at.and_then(|end| step
                     .started_at
                     .map(|start| (end - start).num_milliseconds())),
-                step.error,
+                step.error.as_ref().map(ActionFailure::to_stored),
                 metadata,
             ],
         )
@@ -509,7 +510,7 @@ impl ActionsDatabase {
                 step.completed_at.and_then(|end| step
                     .started_at
                     .map(|start| (end - start).num_milliseconds())),
-                step.error,
+                step.error.as_ref().map(ActionFailure::to_stored),
                 metadata,
             ],
         )
@@ -579,7 +580,7 @@ impl ActionsDatabase {
         action_id: &str,
         step_index: usize,
         status: StepStatus,
-        error: Option<String>,
+        error: Option<&ActionFailure>,
         metadata: Option<serde_json::Value>,
     ) -> Result<()> {
         let conn = self.get_write_connection()?;
@@ -618,7 +619,7 @@ impl ActionsDatabase {
                 status_str,
                 status_str,
                 now,
-                error,
+                error.map(ActionFailure::to_stored),
                 metadata_str,
                 action_id,
                 step_index as i64,

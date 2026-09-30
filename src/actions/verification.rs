@@ -10,6 +10,7 @@
 //! registration. Both maps live under one lock, which is what makes that
 //! handover race-free.
 
+use super::failure::ActionFailure;
 use super::state::{complete_action_failed, complete_action_success, update_step};
 use super::types::StepStatus;
 use serde_json::json;
@@ -24,8 +25,8 @@ const UNCLAIMED_VERDICT_TTL: Duration = Duration::from_secs(15 * 60);
 /// the same path and never register, so this must stay bounded.
 const MAX_UNCLAIMED_VERDICTS: usize = 512;
 
-/// The result of verifying one signature: `Err` carries the user-facing reason.
-pub type VerificationVerdict = Result<(), String>;
+/// The result of verifying one signature: `Err` carries the failure shown to the user.
+pub type VerificationVerdict = Result<(), ActionFailure>;
 
 #[derive(Default)]
 struct Registry {
@@ -128,5 +129,78 @@ async fn finish(action_id: &str, step_index: usize, signature: &str, verdict: Ve
             .await;
             complete_action_failed(action_id, reason).await;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::actions::state::{get_action, register_action};
+    use crate::actions::{Action, ActionState, ActionStepCode, ActionType};
+    use crate::i18n::ids;
+
+    async fn registered(id: &str) -> Action {
+        let action = Action::new(
+            id.to_owned(),
+            ActionType::ManualOrder,
+            "mint".to_owned(),
+            vec![ActionStepCode::Swap, ActionStepCode::Verify],
+            json!({}),
+        );
+        register_action(action.clone()).await.unwrap();
+        action
+    }
+
+    async fn state_of(id: &str) -> ActionState {
+        get_action(id).await.unwrap().state
+    }
+
+    #[tokio::test]
+    async fn failed_verdict_fails_the_action_and_step_with_its_failure() {
+        registered("verdict-fail-waiting").await;
+        await_verification("verdict-fail-waiting", 1, "sig-fail-waiting").await;
+        assert!(matches!(
+            state_of("verdict-fail-waiting").await,
+            ActionState::InProgress { .. }
+        ));
+
+        let failure = ActionFailure::with_details(ids::ACTIONS_FAILURE_VERIFICATION_GAVE_UP, "x");
+        settle_verification("sig-fail-waiting", Err(failure.clone())).await;
+
+        let action = get_action("verdict-fail-waiting").await.unwrap();
+        assert_eq!(
+            action.state,
+            ActionState::Failed {
+                error: failure.clone()
+            }
+        );
+        assert_eq!(action.steps[1].status, StepStatus::Failed);
+        assert_eq!(action.steps[1].error, Some(failure));
+    }
+
+    #[tokio::test]
+    async fn verdict_settled_before_registration_is_handed_over() {
+        registered("verdict-early-ok").await;
+        registered("verdict-early-fail").await;
+        settle_verification("sig-early-ok", Ok(())).await;
+        let failure = ActionFailure::new(ids::ACTIONS_FAILURE_TRANSACTION_FAILED);
+        settle_verification("sig-early-fail", Err(failure.clone())).await;
+
+        await_verification("verdict-early-ok", 1, "sig-early-ok").await;
+        await_verification("verdict-early-fail", 1, "sig-early-fail").await;
+
+        assert_eq!(state_of("verdict-early-ok").await, ActionState::Completed);
+        assert_eq!(
+            state_of("verdict-early-fail").await,
+            ActionState::Failed { error: failure }
+        );
+    }
+
+    #[tokio::test]
+    async fn ok_verdict_completes_a_waiting_action() {
+        registered("verdict-ok-waiting").await;
+        await_verification("verdict-ok-waiting", 1, "sig-ok-waiting").await;
+        settle_verification("sig-ok-waiting", Ok(())).await;
+        assert_eq!(state_of("verdict-ok-waiting").await, ActionState::Completed);
     }
 }

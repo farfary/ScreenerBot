@@ -2,7 +2,7 @@
 
 use crate::actions::{
     complete_action_failed, complete_action_success, register_action, update_step, Action,
-    ActionStepCode, ActionType, StepStatus,
+    ActionFailure, ActionStepCode, ActionType, StepStatus,
 };
 use crate::trader::error::Error;
 use serde_json::json;
@@ -110,8 +110,8 @@ impl AutoOpenAction {
     }
 
     /// Fail the action with error
-    pub async fn fail(&self, error: &str) {
-        complete_action_failed(&self.action_id, error.to_string()).await;
+    pub async fn fail(&self, failure: ActionFailure) {
+        complete_action_failed(&self.action_id, failure).await;
     }
 }
 
@@ -193,8 +193,8 @@ impl AutoCloseAction {
     }
 
     /// Fail the action with error
-    pub async fn fail(&self, error: &str) {
-        complete_action_failed(&self.action_id, error.to_string()).await;
+    pub async fn fail(&self, failure: ActionFailure) {
+        complete_action_failed(&self.action_id, failure).await;
     }
 }
 
@@ -287,7 +287,7 @@ impl AutoDcaAction {
     }
 
     /// Fail the action with error
-    pub async fn fail(&self, error: &str) {
-        complete_action_failed(&self.action_id, error.to_string()).await;
+    pub async fn fail(&self, failure: ActionFailure) {
+        complete_action_failed(&self.action_id, failure).await;
     }
 }

@@ -4,6 +4,7 @@
 //! paginated history, startup sync, and cleanup of old entries.
 
 use super::ActionFilters;
+use crate::actions::failure::ActionFailure;
 use crate::actions::step_code::ActionStepCode;
 use crate::actions::types::{Action, ActionState, ActionStep, ActionType, StepStatus};
 use crate::actions::{Error, Result};
@@ -166,7 +167,9 @@ impl ActionsDatabase {
                     status,
                     started_at,
                     completed_at,
-                    error: row.get(6)?,
+                    error: row
+                        .get::<_, Option<String>>(6)?
+                        .map(|raw| ActionFailure::from_stored(&raw)),
                     metadata,
                 })
             })
@@ -377,7 +380,9 @@ impl ActionsDatabase {
                         status,
                         started_at,
                         completed_at,
-                        error: row.get(7)?,
+                        error: row
+                            .get::<_, Option<String>>(7)?
+                            .map(|raw| ActionFailure::from_stored(&raw)),
                         metadata,
                     },
                 ))
@@ -782,7 +787,7 @@ impl ActionsDatabase {
     /// stuck in the actions center forever (uncancellable, reappearing after any
     /// client-side clear). Instead we mark them failed with a clear reason and
     /// fail their non-terminal steps. Returns the number of actions finalized.
-    pub async fn finalize_orphaned_in_progress(&self, reason: &str) -> Result<usize> {
+    pub async fn finalize_orphaned_in_progress(&self, reason: &ActionFailure) -> Result<usize> {
         let mut conn = self.get_write_connection()?;
 
         // Collect orphan ids first so we can also fail their non-terminal steps.
@@ -812,8 +817,9 @@ impl ActionsDatabase {
 
         let now = Utc::now().to_rfc3339();
         let failed_state = ActionState::Failed {
-            error: reason.to_owned(),
+            error: reason.clone(),
         };
+        let reason_stored = reason.to_stored();
         let state_data = serde_json::to_string(&failed_state).map_err(|e| {
             Error::Data(DataError::ParseError {
                 data_type: "failed action state".to_owned(),
@@ -854,7 +860,7 @@ impl ActionsDatabase {
                     completed_at = COALESCE(completed_at, ?2)
                 WHERE action_id = ?3 AND status IN ('pending', 'inprogress')
                 "#,
-                params![reason, now, id],
+                params![reason_stored, now, id],
             )
             .map_err(|e| {
                 Error::Database(DatabaseError::Query {

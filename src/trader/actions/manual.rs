@@ -2,8 +2,9 @@
 
 use crate::actions::{
     complete_action_failed, complete_action_success, register_action, update_step, Action,
-    ActionStepCode, ActionType, StepStatus,
+    ActionFailure, ActionStepCode, ActionType, StepStatus,
 };
+use crate::i18n::ids;
 use crate::trader::error::Error;
 use serde_json::{json, Value};
 use uuid::Uuid;
@@ -173,15 +174,16 @@ impl ManualBuyAction {
 
     /// Fail validation step
     pub async fn fail_validation(&self, error: &str) {
+        let failure = ActionFailure::with_details(ids::ACTIONS_FAILURE_VALIDATION, error);
         update_step(
             &self.action_id,
             STEP_VALIDATE,
             StepStatus::Failed,
-            Some(error.to_string()),
+            Some(failure.clone()),
             None,
         )
         .await;
-        complete_action_failed(&self.action_id, error.to_string()).await;
+        complete_action_failed(&self.action_id, failure).await;
     }
 
     /// Start quote step
@@ -214,15 +216,16 @@ impl ManualBuyAction {
 
     /// Fail quote step
     pub async fn fail_quote(&self, error: &str) {
+        let failure = ActionFailure::with_details(ids::ACTIONS_FAILURE_QUOTE, error);
         update_step(
             &self.action_id,
             STEP_QUOTE,
             StepStatus::Failed,
-            Some(error.to_string()),
+            Some(failure.clone()),
             None,
         )
         .await;
-        complete_action_failed(&self.action_id, error.to_string()).await;
+        complete_action_failed(&self.action_id, failure).await;
     }
 
     /// Start swap step
@@ -252,15 +255,16 @@ impl ManualBuyAction {
 
     /// Fail swap step
     pub async fn fail_swap(&self, error: &str) {
+        let failure = ActionFailure::with_details(ids::ACTIONS_FAILURE_SWAP, error);
         update_step(
             &self.action_id,
             STEP_SWAP,
             StepStatus::Failed,
-            Some(error.to_string()),
+            Some(failure.clone()),
             None,
         )
         .await;
-        complete_action_failed(&self.action_id, error.to_string()).await;
+        complete_action_failed(&self.action_id, failure).await;
     }
 
     /// Start verification step
@@ -307,8 +311,8 @@ impl ManualBuyAction {
     }
 
     /// Fail the action with error
-    pub async fn fail(&self, error: &str) {
-        complete_action_failed(&self.action_id, error.to_string()).await;
+    pub async fn fail(&self, failure: ActionFailure) {
+        complete_action_failed(&self.action_id, failure).await;
     }
 }
 
@@ -379,15 +383,16 @@ impl ManualSellAction {
 
     /// Fail validation step
     pub async fn fail_validation(&self, error: &str) {
+        let failure = ActionFailure::with_details(ids::ACTIONS_FAILURE_VALIDATION, error);
         update_step(
             &self.action_id,
             STEP_VALIDATE,
             StepStatus::Failed,
-            Some(error.to_string()),
+            Some(failure.clone()),
             None,
         )
         .await;
-        complete_action_failed(&self.action_id, error.to_string()).await;
+        complete_action_failed(&self.action_id, failure).await;
     }
 
     /// Start quote step
@@ -420,15 +425,16 @@ impl ManualSellAction {
 
     /// Fail quote step
     pub async fn fail_quote(&self, error: &str) {
+        let failure = ActionFailure::with_details(ids::ACTIONS_FAILURE_QUOTE, error);
         update_step(
             &self.action_id,
             STEP_QUOTE,
             StepStatus::Failed,
-            Some(error.to_string()),
+            Some(failure.clone()),
             None,
         )
         .await;
-        complete_action_failed(&self.action_id, error.to_string()).await;
+        complete_action_failed(&self.action_id, failure).await;
     }
 
     /// Start swap step
@@ -461,15 +467,16 @@ impl ManualSellAction {
 
     /// Fail swap step
     pub async fn fail_swap(&self, error: &str) {
+        let failure = ActionFailure::with_details(ids::ACTIONS_FAILURE_SWAP, error);
         update_step(
             &self.action_id,
             STEP_SWAP,
             StepStatus::Failed,
-            Some(error.to_string()),
+            Some(failure.clone()),
             None,
         )
         .await;
-        complete_action_failed(&self.action_id, error.to_string()).await;
+        complete_action_failed(&self.action_id, failure).await;
     }
 
     /// Start verification step
@@ -515,8 +522,8 @@ impl ManualSellAction {
     }
 
     /// Fail the action with error
-    pub async fn fail(&self, error: &str) {
-        complete_action_failed(&self.action_id, error.to_string()).await;
+    pub async fn fail(&self, failure: ActionFailure) {
+        complete_action_failed(&self.action_id, failure).await;
     }
 }
 
@@ -587,15 +594,16 @@ impl ManualAddAction {
 
     /// Fail validation step
     pub async fn fail_validation(&self, error: &str) {
+        let failure = ActionFailure::with_details(ids::ACTIONS_FAILURE_VALIDATION, error);
         update_step(
             &self.action_id,
             STEP_VALIDATE,
             StepStatus::Failed,
-            Some(error.to_string()),
+            Some(failure.clone()),
             None,
         )
         .await;
-        complete_action_failed(&self.action_id, error.to_string()).await;
+        complete_action_failed(&self.action_id, failure).await;
     }
 
     /// Start quote step
@@ -628,15 +636,16 @@ impl ManualAddAction {
 
     /// Fail quote step
     pub async fn fail_quote(&self, error: &str) {
+        let failure = ActionFailure::with_details(ids::ACTIONS_FAILURE_QUOTE, error);
         update_step(
             &self.action_id,
             STEP_QUOTE,
             StepStatus::Failed,
-            Some(error.to_string()),
+            Some(failure.clone()),
             None,
         )
         .await;
-        complete_action_failed(&self.action_id, error.to_string()).await;
+        complete_action_failed(&self.action_id, failure).await;
     }
 
     /// Start swap step
@@ -666,15 +675,16 @@ impl ManualAddAction {
 
     /// Fail swap step
     pub async fn fail_swap(&self, error: &str) {
+        let failure = ActionFailure::with_details(ids::ACTIONS_FAILURE_SWAP, error);
         update_step(
             &self.action_id,
             STEP_SWAP,
             StepStatus::Failed,
-            Some(error.to_string()),
+            Some(failure.clone()),
             None,
         )
         .await;
-        complete_action_failed(&self.action_id, error.to_string()).await;
+        complete_action_failed(&self.action_id, failure).await;
     }
 
     /// Start verification step
@@ -721,8 +731,8 @@ impl ManualAddAction {
     }
 
     /// Fail the action with error
-    pub async fn fail(&self, error: &str) {
-        complete_action_failed(&self.action_id, error.to_string()).await;
+    pub async fn fail(&self, failure: ActionFailure) {
+        complete_action_failed(&self.action_id, failure).await;
     }
 }
 
@@ -787,7 +797,7 @@ pub async fn create_failed_add_action(mint: &str, error: &str) {
 /// user a transaction had been attempted when nothing had been submitted.
 #[async_trait::async_trait]
 pub trait ManualActionFailure {
-    async fn fail(&self, error: &str);
+    async fn fail(&self, failure: ActionFailure);
     async fn fail_validation(&self, error: &str);
     async fn fail_quote(&self, error: &str);
     async fn fail_swap(&self, error: &str);
@@ -798,8 +808,8 @@ macro_rules! impl_manual_action_failure {
         $(
             #[async_trait::async_trait]
             impl ManualActionFailure for $ty {
-                async fn fail(&self, error: &str) {
-                    <$ty>::fail(self, error).await
+                async fn fail(&self, failure: ActionFailure) {
+                    <$ty>::fail(self, failure).await
                 }
                 async fn fail_validation(&self, error: &str) {
                     <$ty>::fail_validation(self, error).await
@@ -831,7 +841,14 @@ pub async fn fail_at_step<A: ManualActionFailure + Sync>(
         Some(TradeStep::Swap) => action.fail_swap(error).await,
         // Never claim a step we do not know: an unattributed failure must not
         // be drawn as a failed swap.
-        None => action.fail(error).await,
+        None => {
+            action
+                .fail(ActionFailure::with_details(
+                    ids::ACTIONS_FAILURE_TRADE,
+                    error,
+                ))
+                .await
+        }
     }
 }
 

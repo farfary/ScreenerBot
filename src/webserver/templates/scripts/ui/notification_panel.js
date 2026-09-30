@@ -1,6 +1,7 @@
 // Notification drawer UI manager
 import { notificationManager } from "../core/notifications.js";
 import * as Utils from "../core/utils.js";
+import { apiErrorMessage } from "../core/request_manager.js";
 import {
   formatDate,
   formatFixed,
@@ -782,7 +783,10 @@ function renderNotification(notification) {
   let errorHtml = "";
   if (isFailed) {
     const failedStep = steps?.find((step) => step.status === "failed");
-    const errorMsg = state?.error || failedStep?.error || notification.error || "Unknown error";
+    const errorMsg = apiErrorMessage(
+      { error: state?.error || failedStep?.error },
+      notification.error || "Unknown error"
+    );
     errorHtml = `<div class="notification-error">${escapeText(errorMsg)}</div>`;
   } else if (isCancelled) {
     errorHtml = '<div class="notification-error">Cancelled</div>';

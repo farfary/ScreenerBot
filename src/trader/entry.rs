@@ -4,6 +4,8 @@
 //! Moved out of `monitors::entry` so a second entry source can reserve a mint and submit
 //! a decision through the identical pipeline instead of a copy of it.
 
+use crate::actions::ActionFailure;
+use crate::i18n::ids;
 use crate::logger::{self, LogTag};
 use crate::positions::{PositionManagement, PositionOrigin};
 use crate::trader::types::{TradeDecision, TradeResult};
@@ -157,7 +159,11 @@ pub async fn submit_entry_with_context(
 
                 // Fail action
                 if let Some(ref a) = action {
-                    a.fail(&error_msg).await;
+                    a.fail(ActionFailure::with_details(
+                        ids::ACTIONS_FAILURE_ENTRY,
+                        error_msg.as_str(),
+                    ))
+                    .await;
                 }
 
                 if let Some(remaining) = result.capacity_guard_remaining {
@@ -210,7 +216,11 @@ pub async fn submit_entry_with_context(
 
             // Fail action
             if let Some(ref a) = action {
-                a.fail(&e.to_string()).await;
+                a.fail(ActionFailure::with_details(
+                    ids::ACTIONS_FAILURE_ENTRY,
+                    e.to_string(),
+                ))
+                .await;
             }
 
             logger::error(

@@ -434,7 +434,9 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                    if item.kind == VerificationKind::Entry {
                      crate::actions::settle_verification(
                        &item.signature,
-                       Err("Verification expired: the transaction never landed".to_owned()),
+                       Err(crate::actions::ActionFailure::new(
+                         crate::i18n::ids::ACTIONS_FAILURE_VERIFICATION_EXPIRED,
+                       )),
                      )
                      .await;
                      if item.is_dca {
@@ -735,7 +737,10 @@ async fn verification_worker(shutdown: Arc<Notify>) {
 
                          crate::actions::settle_verification(
                            &item.signature,
-                           Err(format!("Verification gave up: {give_up_reason:?}")),
+                           Err(crate::actions::ActionFailure::with_details(
+                             crate::i18n::ids::ACTIONS_FAILURE_VERIFICATION_GAVE_UP,
+                             format!("{give_up_reason:?}"),
+                           )),
                          )
                          .await;
 
@@ -795,7 +800,9 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                        remove_verification(&item.signature).await;
                        crate::actions::settle_verification(
                          &item.signature,
-                         Err("The transaction failed on chain".to_owned()),
+                         Err(crate::actions::ActionFailure::new(
+                           crate::i18n::ids::ACTIONS_FAILURE_TRANSACTION_FAILED,
+                         )),
                        )
                        .await;
 
@@ -838,10 +845,57 @@ fn verification_verdict(
         | T::DcaVerified { .. }
         // The sell landed and was verified; only a residual is left to retry.
         | T::ExitResidualClearForRetry { .. } => Some(Ok(())),
-        T::DcaFailed { reason, .. } => Some(Err(reason.clone())),
+        T::DcaFailed { reason, .. } => Some(Err(crate::actions::ActionFailure::with_details(
+            crate::i18n::ids::ACTIONS_FAILURE_DCA_VERIFICATION_FAILED,
+            reason.as_str(),
+        ))),
         T::ExitFailedClearForRetry { .. } => {
-            Some(Err("The sell transaction failed on chain".to_owned()))
+            Some(Err(crate::actions::ActionFailure::new(
+                crate::i18n::ids::ACTIONS_FAILURE_SELL_TRANSACTION_FAILED,
+            )))
         }
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod verdict_tests {
+    use super::*;
+    use crate::positions::transitions::PositionTransition as T;
+
+    fn text(verdict: Option<crate::actions::VerificationVerdict>) -> String {
+        verdict
+            .expect("a verdict")
+            .expect_err("a failure")
+            .log_text()
+    }
+
+    #[test]
+    fn verified_transitions_settle_ok_and_failed_ones_settle_err() {
+        assert!(matches!(
+            verification_verdict(&T::ExitVerified {
+                position_id: 1,
+                effective_exit_price: 0.0,
+                sol_received: 0.0,
+                fee_lamports: 0,
+                exit_time: chrono::Utc::now(),
+            }),
+            Some(Ok(()))
+        ));
+        assert_eq!(
+            text(verification_verdict(&T::ExitFailedClearForRetry {
+                position_id: 1
+            })),
+            "The sell transaction failed on chain"
+        );
+        assert_eq!(
+            text(verification_verdict(&T::DcaFailed {
+                position_id: 1,
+                dca_signature: "s".to_owned(),
+                reason: "Verification expired".to_owned(),
+            })),
+            "DCA verification failed: Verification expired"
+        );
+        assert!(verification_verdict(&T::RemoveOrphanEntry { position_id: 1 }).is_none());
     }
 }
