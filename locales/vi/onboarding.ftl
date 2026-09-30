@@ -1,0 +1,72 @@
+onboarding-welcome-title = Chào mừng đến với { -brand }
+onboarding-welcome-description = Trợ thủ giao dịch Solana ưu tiên chạy cục bộ - viết bằng Rust cho tốc độ gốc. Khám phá token, phân tích thị trường và điều khiển giao dịch ngay trên máy của bạn.
+onboarding-welcome-free-title = Miễn phí & mã nguồn mở
+onboarding-welcome-free-description = Không đăng ký trả phí hay tường phí. Xem mã nguồn được công bố trên GitHub.
+onboarding-welcome-custody-title = Tự lưu ký
+onboarding-welcome-custody-description = Khóa riêng tư được mã hóa khi lưu trữ và không bao giờ được gửi đi đâu.
+onboarding-welcome-engine-title = Bộ máy luôn hoạt động
+onboarding-welcome-engine-description = Các dịch vụ được điều phối với kiểm tra tình trạng và kiểm soát vòng đời an toàn.
+onboarding-welcome-realtime-title = Dữ liệu on-chain thời gian thực
+onboarding-welcome-realtime-description = Tính trực tiếp từ dự trữ của pool - không phải ảnh chụp API bị trễ.
+
+onboarding-discover-title = Khám phá & lọc
+onboarding-discover-description = Quét ba nguồn dữ liệu để tìm cặp Solana mới, giải mã hơn 12 loại pool DEX trên chuỗi, rồi đưa mọi token qua các quy tắc chất lượng và bảo mật có thể cấu hình.
+onboarding-discover-dex-title = Khám phá đa DEX
+onboarding-discover-dex-description = Nguồn dữ liệu từ { -dexscreener }, { -geckoterminal } và Raydium cho các cặp { -sol } mới.
+onboarding-discover-scanner-title = Trình quét token thông minh
+onboarding-discover-scanner-description = Thanh khoản, khối lượng, tuổi token, phân bổ holder và các quy tắc { -rugcheck }.
+onboarding-discover-intelligence-title = Thông tin token
+onboarding-discover-intelligence-description = Dữ liệu thị trường, bảo mật và danh sách đen gộp trong một chế độ xem.
+onboarding-discover-price-action-title = Theo dõi biến động giá
+onboarding-discover-price-action-description = Dữ liệu nến bảy khung thời gian kèm phát hiện khoảng trống và tín hiệu động lượng.
+
+onboarding-trade-title = Giao dịch thông minh
+onboarding-trade-description = Giao dịch tự động với hệ thống ưu tiên thoát lệnh sáu tầng. DCA vào vị thế, đặt trailing stop, xây cây chiến lược - hoặc giao dịch thủ công chỉ với một cú nhấp.
+onboarding-trade-auto-title = Giao dịch tự động
+onboarding-trade-auto-description = Bộ đánh giá vào/thoát lệnh, các vòng DCA, thoát một phần và trailing stop loss.
+onboarding-trade-strategy-title = Bộ máy chiến lược
+onboarding-trade-strategy-description = Cây điều kiện kết hợp tín hiệu về giá, khối lượng và thời gian.
+onboarding-trade-routing-title = Định tuyến giá tốt nhất
+onboarding-trade-routing-description = Lấy báo giá đồng thời từ mọi router đã bật - tuyến tốt nhất sẽ thắng.
+onboarding-trade-safety-title = Kiểm soát an toàn
+onboarding-trade-safety-description = Dừng khẩn cấp, giới hạn lỗ theo kỳ và công tắc giám sát độc lập.
+
+onboarding-connect-title = Luôn kết nối
+onboarding-connect-description = Theo dõi danh mục của bạn từ mọi nơi. Trợ lý dựa trên chín nhà cung cấp LLM, cảnh báo { -telegram } kèm giao dịch trực tiếp và nhật ký sự kiện có thể tìm kiếm.
+onboarding-connect-assistant-title = Trợ lý
+onboarding-connect-assistant-description = Phân tích qua trò chuyện với khả năng gọi công cụ cho giao dịch, cấu hình và danh mục.
+onboarding-connect-telegram-title = Tích hợp { -telegram }
+onboarding-connect-telegram-description = Thông báo, lệnh nội tuyến và phiên bảo vệ bằng 2FA ngay từ điện thoại.
+onboarding-connect-wallets-title = Theo dõi nhiều ví
+onboarding-connect-wallets-description = Toàn bộ ví Solana và token bạn nắm giữ trong một bảng điều khiển.
+onboarding-connect-events-title = Luồng sự kiện trực tiếp
+onboarding-connect-events-description = Mọi giao dịch, swap và sự kiện hệ thống đều được ghi lại kèm danh mục và mức độ nghiêm trọng.
+
+onboarding-data-title = Dữ liệu { -brand }
+onboarding-data-description = Chúng tôi vận hành dịch vụ dữ liệu thị trường dùng chung để mỗi bản cài đặt không bị các nhà cung cấp công khai giới hạn tốc độ riêng lẻ. Dịch vụ miễn phí với tài khoản { -brand }, và { -brand } vẫn hoạt động khi không có tài khoản.
+onboarding-data-candles-title = Lịch sử nến dùng chung
+onboarding-data-candles-description = Lịch sử dùng chung ở bảy khung thời gian, sâu nhiều năm, phục vụ từ một cache.
+onboarding-data-pools-title = Pool đã xác định & bảo mật
+onboarding-data-pools-description = Sổ đăng ký pool trung tâm và các báo cáo { -rugcheck } trong cache, đã được lấy sẵn.
+onboarding-data-signin-title = Đăng nhập để sử dụng
+onboarding-data-signin-description = Khi không có tài khoản, dữ liệu này không khả dụng và sẽ dùng các nhà cung cấp công khai.
+onboarding-data-reading-title = Chỉ đọc
+onboarding-data-reading-description = Chúng tôi chỉ biết bạn tra cứu token nào. Không bao giờ có khóa, số dư, vị thế hay giao dịch.
+
+onboarding-privacy-title = Khóa của bạn, dữ liệu của bạn
+onboarding-privacy-description = Cấu hình, khóa và lịch sử giao dịch của bạn được giữ trên máy này. Tiếp theo, hãy chọn Chế độ khám phá để khám phá mà không cần thông tin đăng nhập, hoặc liên kết ví và RPC để bật đầy đủ bot - và đăng nhập tại đó nếu bạn muốn dùng dữ liệu { -brand }.
+onboarding-privacy-local-title = Kiến trúc ưu tiên cục bộ
+onboarding-privacy-local-description = Cấu hình, phân tích và cơ sở dữ liệu được lưu trên máy tính của bạn.
+onboarding-privacy-wallet-title = Ví được mã hóa
+onboarding-privacy-wallet-description = Khóa riêng tư của bạn được mã hóa khi lưu trữ và không bao giờ được gửi đi.
+onboarding-privacy-security-title = Bảo mật bảng điều khiển
+onboarding-privacy-security-description = Khóa bằng mật khẩu, xác thực hai yếu tố TOTP và bảo vệ hết phiên.
+onboarding-privacy-config-title = Cấu hình linh hoạt
+onboarding-privacy-config-description = Hầu hết cài đặt có thể chỉnh từ bảng điều khiển sau khi thiết lập.
+
+onboarding-setup-shortcut =
+    .aria-label = Chuyển thẳng đến thiết lập ví và RPC hoặc chọn Chế độ khám phá
+onboarding-setup-shortcut-label = Đến phần thiết lập
+onboarding-progress-dot =
+    .aria-label = Đến slide { $number }
+onboarding-action-continue-to-setup = Tiếp tục thiết lập

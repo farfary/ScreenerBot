@@ -1,0 +1,305 @@
+wallets-type-generated = Đã tạo
+wallets-type-imported = Đã nhập
+wallets-type-migrated = Đã chuyển đổi
+
+wallets-watch-disabled-user = Bạn đã tạm dừng
+wallets-watch-disabled-signature-budget = Đã tạm dừng: đạt giới hạn kiểm tra { $limit } chữ ký trước khi bắt kịp
+wallets-watch-disabled-unknown = Đã tạm dừng: không đọc được lý do an toàn đã lưu của việc theo dõi
+wallets-watch-disabled-helius-unavailable = Đã tạm dừng: nhà cung cấp cho ví hoạt động mạnh không khả dụng; đã giữ nguyên con trỏ
+wallets-watch-disabled-processing-failed = Đã tạm dừng: không thể xử lý hoạt động của ví; đã giữ nguyên con trỏ
+
+wallets-watch-error-provider-unavailable = Nhà cung cấp cho ví hoạt động mạnh không khả dụng; đã tạm dừng theo dõi
+wallets-watch-error-provider-repeated-failure = Các lần kiểm tra qua { -helius } liên tục thất bại; đã tạm dừng theo dõi
+wallets-watch-error-processing-repeated-failure = Xử lý hoạt động của ví liên tục thất bại; đã tạm dừng theo dõi
+wallets-watch-error-position-unreadable = Theo dõi ví không đọc được vị trí đã lưu; đang thử lại
+wallets-watch-error-provider-check-failed = Kiểm tra nhà cung cấp cho ví hoạt động mạnh thất bại; đang thử lại
+wallets-watch-error-decode-failed = Không thể giải mã giao dịch của ví hoạt động mạnh; đã giữ nguyên con trỏ
+wallets-watch-error-processing-failed = Không thể xử lý hoạt động của ví; đang thử lại
+wallets-watch-error-position-save-failed = Theo dõi ví không lưu được vị trí; đang thử lại
+
+wallets-watch-reason-user = Bạn đã tạm dừng.
+wallets-watch-reason-signature-budget = Ví này có nhiều hoạt động hơn mức mà cấu hình theo dõi hiện tại có thể kiểm tra.
+wallets-watch-reason-helius-unavailable = Kiểm tra qua { -helius } thất bại. Tiến độ đã lưu được giữ nguyên.
+wallets-watch-reason-processing-failed = Không thể xử lý hoạt động của ví. Tiến độ đã lưu được giữ nguyên.
+
+wallets-field-address = Địa chỉ
+wallets-field-name = Tên ví
+wallets-field-notes = Ghi chú
+wallets-field-private-key = Khóa riêng tư
+wallets-address-copy = Sao chép địa chỉ
+wallets-modal-close =
+    .aria-label = Đóng hộp thoại
+wallets-this-wallet = ví này
+wallets-summary-sol = { -sol }
+wallets-copied-address = Địa chỉ
+wallets-copied-mint = Địa chỉ mint
+wallets-copied-private-key = Khóa riêng tư
+
+wallets-tab-main = Ví chính
+wallets-tab-secondaries = Ví thứ cấp
+wallets-tab-archive = Lưu trữ
+wallets-tab-watched = Đang theo dõi
+wallets-refresh-failed = Không thể làm mới danh sách ví
+wallets-action-failed = Thất bại
+wallets-toast-failed = Thất bại: { $reason }
+wallets-create-busy = Đang tạo...
+wallets-create-fallback = Tạo thất bại
+wallets-create-done = Đã tạo ví “{ $name }”!
+wallets-import-busy = Đang nhập...
+wallets-import-failed = Nhập thất bại
+wallets-import-done = Đã nhập ví “{ $name }”!
+wallets-archive-busy = Đang lưu trữ...
+wallets-archive-confirm-text = Bạn có chắc muốn lưu trữ <strong>{ $name }</strong>?
+wallets-archive-done = Đã lưu trữ ví
+wallets-restore-done = Đã khôi phục ví
+wallets-export-busy = Đang giải mã...
+wallets-export-revealed = Đã hiện khóa - hãy bảo quản cẩn thận
+wallets-delete-busy = Đang xóa...
+wallets-delete-confirm-text = Bạn có chắc muốn xóa <strong>{ $name }</strong>?
+wallets-delete-done = Đã xóa vĩnh viễn ví
+
+wallets-add-title = Thêm ví
+wallets-add-tab-create = Tạo mới
+wallets-add-tab-import = Nhập ví có sẵn
+wallets-create-name-input =
+    .placeholder = ví dụ: Ví giao dịch
+wallets-create-name-hint = Tên gợi nhớ để nhận biết ví này
+wallets-create-notes-input =
+    .placeholder = Mô tả hoặc mục đích (không bắt buộc)...
+wallets-create-submit = Tạo ví
+wallets-import-warning-title = Cảnh báo bảo mật
+wallets-import-warning-body = Chỉ nhập khóa riêng tư từ nguồn đáng tin cậy. Khóa của bạn sẽ được mã hóa và lưu an toàn trên thiết bị này.
+wallets-import-name-input =
+    .placeholder = ví dụ: Ví của tôi
+wallets-import-key-input =
+    .placeholder = Chuỗi base58 hoặc mảng JSON [1,2,3,...]
+wallets-import-key-toggle =
+    .aria-label = Bật/tắt hiển thị khóa riêng tư
+wallets-import-key-hint = Hỗ trợ khóa mã hóa base58 hoặc định dạng mảng byte
+wallets-import-notes-input =
+    .placeholder = Mô tả (không bắt buộc)...
+wallets-import-submit = Nhập ví
+
+wallets-watch-add-title = Theo dõi ví
+wallets-watch-add-address = Địa chỉ ví
+wallets-watch-add-address-input =
+    .placeholder = Địa chỉ Solana
+wallets-watch-add-address-hint = Ghi lại hoạt động trên chuỗi của ví và gửi cảnh báo giao dịch qua cài đặt { -telegram } của bạn.
+wallets-watch-add-label = Nhãn
+wallets-watch-add-label-input =
+    .placeholder = Tên (không bắt buộc)
+wallets-watch-add-submit = Thêm theo dõi
+
+wallets-watch-budget-title-options = Tùy chọn theo dõi ví
+wallets-watch-budget-title-restore = Khôi phục theo dõi ví
+wallets-watch-budget-close =
+    .aria-label = Đóng
+wallets-watch-budget-label-signatures = Số chữ ký kiểm tra mỗi lần
+wallets-watch-budget-label-transactions = Số giao dịch đầy đủ thành công kiểm tra mỗi lần
+wallets-watch-budget-hint-signatures = Giới hạn hiện tại: { $limit }. Chọn từ 500–5,000 chữ ký mỗi lần kiểm tra, bước 100.
+wallets-watch-budget-hint-transactions = Giới hạn hiện tại: { $limit }. Chọn từ 500–5,000 giao dịch thành công mỗi lần kiểm tra, bước 100.
+wallets-watch-budget-error-range = Chọn từ 500 đến 5,000 bản ghi mỗi lần kiểm tra, bước 100 bản ghi.
+wallets-watch-budget-error-ack = Hãy xác nhận rằng các chữ ký kể từ lần kiểm tra hoàn tất gần nhất sẽ bị bỏ qua.
+wallets-watch-budget-save-failed = Không thể lưu giới hạn theo dõi.
+wallets-watch-budget-save = Lưu giới hạn
+wallets-watch-budget-resume = Tiếp tục từ bây giờ
+wallets-watch-budget-resume-notice = Ví này đã đạt giới hạn kiểm tra trước khi bắt kịp. Tiếp tục từ bây giờ sẽ bắt đầu từ hoạt động mới nhất của ví; hoạt động kể từ lần kiểm tra hoàn tất gần nhất sẽ không được copy.
+wallets-watch-budget-resume-tasks = Các tác vụ copy vẫn tạm dừng cho đến khi bạn tiếp tục từng tác vụ trong Copy trading.
+wallets-watch-budget-resume-ack = Tôi hiểu rằng hoạt động bị bỏ lỡ sẽ không được copy.
+wallets-watch-budget-resumed = Đã tiếp tục theo dõi từ điểm mới nhất của ví
+wallets-watch-budget-updated = Đã cập nhật giới hạn theo dõi ví
+wallets-watch-helius-allow = Cho phép bắt kịp qua { -helius } khi cần
+wallets-watch-helius-try = Thử bắt kịp bằng { -helius }
+wallets-watch-helius-stop = Dừng bắt kịp qua { -helius } cho ví này
+wallets-watch-helius-description-approved = Đã cho phép bắt kịp qua { -helius } cho ví này. Nếu tắt, hệ thống quay lại kiểm tra tiêu chuẩn và có thể bị chậm trễ với ví hoạt động mạnh.
+wallets-watch-helius-description-available = { -helius } có thể kiểm tra các giao dịch Solana thành công từ vị trí đã lưu mà không bỏ qua khoảng chưa kiểm tra. Cách này có thể tốn thêm credit của nhà cung cấp và vẫn có thể bị chậm trễ.
+wallets-watch-helius-description-unavailable = Bắt kịp qua { -helius } không khả dụng. Hãy cấu hình một endpoint RPC { -helius } đã bật để sử dụng.
+wallets-watch-helius-description-unsupported = Không có nhà cung cấp bắt kịp nào được hỗ trợ cho lượt theo dõi này. Bạn có thể dùng Tiếp tục từ bây giờ nếu lượt theo dõi đạt giới hạn.
+wallets-watch-helius-allow-title = Cho phép bắt kịp qua { -helius } cho ví này
+wallets-watch-helius-allow-message = { -helius } có thể kiểm tra các giao dịch Solana thành công từ vị trí đã lưu mà không bỏ qua khoảng chưa kiểm tra. Hiện tại nhà cung cấp tính 10 credit cho mỗi 100 giao dịch đầy đủ được trả về, làm tròn lên, tối thiểu 10 credit mỗi yêu cầu. Một lần kiểm tra có thể gửi nhiều yêu cầu; mức sử dụng và giá của nhà cung cấp có thể thay đổi. Các tác vụ copy vẫn tạm dừng cho đến khi được tiếp tục riêng.
+wallets-watch-helius-allow-confirm = Cho phép cho ví này
+wallets-watch-helius-stop-message = Ví này sẽ quay lại kiểm tra tiêu chuẩn. Ví hoạt động mạnh có thể đạt giới hạn theo dõi và tạm dừng lần nữa. Các ví khác và cấu hình RPC { -helius } của bạn không thay đổi.
+wallets-watch-helius-stop-confirm = Dừng cho ví này
+wallets-watch-helius-stop-keep = Giữ nguyên cho phép
+wallets-watch-helius-restored = Đã khôi phục theo dõi từ tiến độ đã lưu; các tác vụ copy vẫn tạm dừng
+wallets-watch-helius-allowed = Đã cho phép bắt kịp qua { -helius } cho ví này khi cần
+wallets-watch-helius-stopped = Đã dừng bắt kịp qua { -helius } cho ví này
+wallets-watch-helius-update-failed = Không thể cập nhật cài đặt bắt kịp của ví
+
+wallets-export-title = Xuất khóa riêng tư
+wallets-export-warning-title = Cảnh báo bảo mật nghiêm trọng
+wallets-export-warning-body = Tuyệt đối không chia sẻ khóa riêng tư với bất kỳ ai. Ai có khóa này đều có thể lấy toàn bộ tiền trong ví.
+wallets-export-key-label = Khóa riêng tư (Base58)
+wallets-export-copy =
+    .title = Sao chép vào bộ nhớ tạm
+    .aria-label = Sao chép vào bộ nhớ tạm
+wallets-export-reveal = Hiện khóa
+
+wallets-archive-title = Lưu trữ ví
+wallets-archive-note = Ví đã lưu trữ không được dùng trong bất kỳ thao tác nào nhưng có thể khôi phục bất cứ lúc nào.
+wallets-archive-confirm = Có, lưu trữ
+wallets-delete-title = Xóa ví
+wallets-delete-warning-title = Không thể hoàn tác thao tác này!
+wallets-delete-warning-body = Xóa ví này sẽ xóa vĩnh viễn ví và khóa riêng tư đã mã hóa của nó khỏi thiết bị này.
+wallets-delete-confirm = Có, xóa
+
+wallets-bulk-import-title = Nhập ví
+wallets-bulk-import-submit = Nhập ví
+wallets-bulk-step-upload = Tải tệp lên
+wallets-bulk-step-map = Ghép cột
+wallets-bulk-step-results = Kết quả
+wallets-bulk-import-file-warning-body = Chỉ nhập tệp từ nguồn đáng tin cậy. Khóa riêng tư sẽ được mã hóa và lưu an toàn trên thiết bị này.
+wallets-bulk-drop-title = Thả tệp của bạn vào đây
+wallets-bulk-drop-subtitle = hoặc nhấp để chọn
+wallets-bulk-drop-formats = Hỗ trợ CSV và Excel (.xlsx, .xls)
+wallets-bulk-file-remove =
+    .aria-label = Xóa tệp
+wallets-bulk-map-subtitle = Ghép các cột trong tệp với các trường của ví
+wallets-bulk-preview-title = Xem trước (5 dòng đầu)
+wallets-bulk-summary-valid = <strong>{ $count }</strong> hợp lệ
+wallets-bulk-summary-invalid = <strong>{ $count }</strong> không hợp lệ
+wallets-bulk-summary-duplicate =
+    { $count ->
+       *[other] <strong>{ $count }</strong> trùng lặp
+    }
+wallets-bulk-done = Xong
+wallets-bulk-file-invalid = Loại tệp không hợp lệ. Vui lòng dùng tệp CSV hoặc Excel.
+wallets-bulk-preview-busy = Đang xử lý...
+wallets-bulk-preview-fallback = Không thể xử lý tệp
+wallets-bulk-preview-failed = Không thể xử lý tệp: { $reason }
+wallets-bulk-column-select = -- Chọn cột --
+wallets-bulk-preview-empty = Không tìm thấy dòng dữ liệu nào trong tệp
+wallets-bulk-preview-status = Trạng thái
+wallets-bulk-status-valid = Hợp lệ
+wallets-bulk-status-duplicate = Trùng lặp
+wallets-bulk-status-invalid = Không hợp lệ
+wallets-bulk-import-busy = Đang nhập...
+wallets-bulk-import-toast =
+    { $count ->
+       *[other] Đã nhập { $count } ví
+    }
+wallets-bulk-import-error = Nhập thất bại: { $reason }
+wallets-bulk-result-success-title = Nhập thành công
+wallets-bulk-result-success-detail =
+    { $count ->
+       *[other] Đã nhập thành công cả { $count } ví
+    }
+wallets-bulk-result-partial-title = Thành công một phần
+wallets-bulk-result-partial-detail = Đã nhập { $imported }, thất bại { $failed }
+wallets-bulk-result-failed-title = Nhập thất bại
+wallets-bulk-result-failed-detail =
+    { $count ->
+       *[other] Cả { $count } ví đều nhập thất bại
+    }
+wallets-bulk-result-imported = Đã nhập
+wallets-bulk-result-failed = Thất bại
+
+wallets-bulk-export-title = Xuất ví
+wallets-bulk-export-format = Định dạng
+wallets-bulk-export-format-csv = CSV (.csv)
+wallets-bulk-export-format-xlsx = Excel (.xlsx)
+wallets-bulk-export-include-archived = Bao gồm ví đã lưu trữ
+wallets-bulk-export-safe-title = Xuất an toàn
+wallets-bulk-export-safe-body = Chỉ xuất địa chỉ ví và siêu dữ liệu. Không bao gồm khóa riêng tư.
+wallets-bulk-export-safe-submit = Xuất địa chỉ
+wallets-bulk-export-or = hoặc
+wallets-bulk-export-danger-title = Xuất nguy hiểm
+wallets-bulk-export-danger-body = Bao gồm khóa riêng tư trong tệp xuất. Ai có tệp này đều có thể lấy tiền của bạn.
+wallets-bulk-export-danger-submit = Xuất kèm khóa riêng tư
+wallets-bulk-export-busy = Đang xuất...
+wallets-bulk-export-done = Đã xuất ví ra { $filename }
+wallets-bulk-export-fallback = Xuất thất bại
+wallets-bulk-export-error = Xuất thất bại: { $reason }
+wallets-bulk-confirm-title = Xác nhận xuất nguy hiểm
+wallets-bulk-confirm-warning =
+    { $count ->
+       *[other] Bạn sắp xuất <strong>{ $count }</strong> khóa riêng tư. Việc này cực kỳ nguy hiểm!
+    }
+wallets-bulk-confirm-risk-steal = Ai có tệp này đều có thể lấy toàn bộ tiền
+wallets-bulk-confirm-risk-share = Tuyệt đối không chia sẻ tệp này với bất kỳ ai
+wallets-bulk-confirm-risk-delete = Xóa tệp ngay sau khi dùng
+wallets-bulk-confirm-prompt = Nhập cụm từ bên dưới để xác nhận
+wallets-bulk-confirm-submit = Xuất khóa
+
+wallets-holdings-col-token = Token
+wallets-holdings-col-balance = Số dư
+wallets-holdings-col-value = Giá trị ({ -sol })
+wallets-holdings-col-type = Loại
+wallets-holdings-col-decimals = Số thập phân
+wallets-holdings-col-mint = Mint
+wallets-holdings-empty-title = Không có token nào
+wallets-holdings-empty-message = Các token ví này đang nắm giữ sẽ hiện ở đây.
+wallets-holdings-no-main = Chưa có ví chính
+wallets-holdings-main-tag = Chính
+wallets-holdings-main-title = Ví chính
+wallets-holdings-tokens = Token
+wallets-holdings-last-used = Dùng lần cuối
+wallets-holdings-never = Chưa bao giờ
+wallets-holdings-search =
+    .placeholder = Tìm theo ký hiệu hoặc mint...
+wallets-holdings-export = Xuất khóa
+wallets-holdings-export-tooltip = Xuất khóa riêng tư của ví này
+wallets-list-col-name = Tên
+wallets-list-col-balance = Số dư ({ -sol })
+wallets-list-col-type = Loại
+wallets-list-col-created = Ngày tạo
+wallets-list-col-actions = Thao tác
+wallets-list-action-export = Xuất khóa riêng tư
+wallets-list-action-archive = Lưu trữ ví
+wallets-list-action-restore = Khôi phục ví
+wallets-list-action-delete = Xóa vĩnh viễn
+wallets-list-count = Ví
+wallets-list-search =
+    .placeholder = Tìm theo tên hoặc địa chỉ...
+wallets-list-loading-title = Đang tải danh sách ví…
+wallets-list-loading-description = Đang chuẩn bị chế độ xem ví đã chọn.
+wallets-secondaries-empty-title = Chưa có ví thứ cấp
+wallets-secondaries-empty-message = Tạo thêm ví để sắp xếp hoạt động giao dịch trên nhiều tài khoản.
+wallets-secondaries-add = Thêm ví
+wallets-archive-empty-title = Chưa có ví lưu trữ
+wallets-archive-empty-message = Các ví bạn lưu trữ sẽ được cất giữ an toàn ở đây để tham khảo sau.
+
+wallets-watched-col-wallet = Ví
+wallets-watched-col-status = Trạng thái
+wallets-watched-col-progress = Tiến độ đã lưu
+wallets-watched-col-last-check = Lần kiểm tra cuối
+wallets-watched-unlabelled = Ví chưa đặt nhãn
+wallets-watched-generic-name = ví
+wallets-watched-not-synced = Chưa đồng bộ
+wallets-watched-not-checked = Chưa kiểm tra
+wallets-watched-action-copy = Copy giao dịch
+    .title = Mở ví này trong Copy trading
+wallets-watched-action-restore = Khôi phục theo dõi
+wallets-watched-action-options = Tùy chọn theo dõi
+wallets-watched-action-retry = Thử lại theo dõi
+wallets-watched-action-pause = Tạm dừng
+wallets-watched-action-enable = Bật
+wallets-watched-action-remove =
+    .title = Xóa
+    .aria-label = Xóa { $name }
+wallets-watch-state-paused = Đã tạm dừng
+wallets-watch-state-catching-up = Đang bắt kịp
+wallets-watch-state-watching = Đang theo dõi
+wallets-watch-state-streaming = Đang stream
+wallets-watch-state-polling = Đang polling
+wallets-watched-detail-helius = Đang kiểm tra qua { -helius } cho ví này.
+wallets-watched-empty-title = Chưa có địa chỉ nào được theo dõi
+wallets-watched-empty-message = Dùng Theo dõi ví để ghi lại hoạt động trên chuỗi của một ví công khai.
+wallets-watched-count = Đang theo dõi
+wallets-watched-search =
+    .placeholder = Tìm ví đang theo dõi...
+wallets-watched-add = Theo dõi ví
+wallets-watched-refresh = Làm mới ví đang theo dõi
+wallets-watched-loading-title = Đang tải ví đang theo dõi...
+wallets-watched-loading-description = Đang lấy các đối tượng theo dõi.
+wallets-watched-load-error-title = Không thể tải các địa chỉ đang theo dõi
+wallets-watched-load-error-description = Hãy làm mới để thử lại.
+wallets-watched-address-invalid = Nhập địa chỉ ví Solana hợp lệ.
+wallets-watched-added = Đã thêm theo dõi ví
+wallets-watched-duplicate = Ví đó đã được theo dõi.
+wallets-watched-add-failed = Không thể thêm theo dõi ví.
+wallets-watched-retried = Đã khôi phục theo dõi ví với con trỏ đã lưu
+wallets-watched-paused = Đã tạm dừng theo dõi ví
+wallets-watched-enabled = Đã bật theo dõi ví
+wallets-watched-removed = Đã xóa theo dõi ví
+wallets-watched-update-failed = Không thể cập nhật theo dõi ví

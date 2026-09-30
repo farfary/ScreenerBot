@@ -44,3 +44,8 @@ dir = "ltr"
 code = "id"
 name = "Bahasa Indonesia"
 dir = "ltr"
+
+[[locale]]
+code = "vi"
+name = "Tiếng Việt"
+dir = "ltr"
