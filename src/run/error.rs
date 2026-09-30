@@ -3,6 +3,7 @@
 use std::time::Duration;
 
 use crate::errors::{ErrorClass, ServiceError, Severity, StartupError, StartupErrorCode};
+use crate::i18n::{ids, UiArg, UiText};
 
 /// Everything that can go wrong while starting or stopping the process lifecycle.
 #[derive(Debug, Clone, thiserror::Error)]
@@ -120,30 +121,26 @@ impl From<Error> for StartupError {
                 crate::Error::Webserver(crate::webserver::Error::PortInUse { address }) => {
                     StartupError::new(
                         StartupErrorCode::PortInUse,
-                        "Network port is busy",
-                        format!("the dashboard port {address} is already in use"),
-                        "Another program is using the port ScreenerBot needs. Close that program, or \
-                         change the webserver port in Settings, then start ScreenerBot again.",
+                        UiText::new(ids::STARTUP_PORT_IN_USE_TITLE),
+                        UiText::new(ids::STARTUP_PORT_IN_USE_DETAIL)
+                            .arg("address", UiArg::Text(address)),
+                        UiText::new(ids::STARTUP_PORT_IN_USE_REMEDY),
                     )
                 }
                 crate::Error::Config(crate::config::Error::ParseFailed { detail }) => {
                     StartupError::new(
                         StartupErrorCode::ConfigInvalid,
-                        "Configuration could not be read",
-                        format!("config.toml could not be parsed: {detail}"),
-                        "Your configuration file could not be read. Restore a backup from the data \
-                         folder, or reset configuration to defaults and set up your wallet and RPC \
-                         again.",
+                        UiText::new(ids::STARTUP_CONFIG_INVALID_TITLE),
+                        UiText::new(ids::STARTUP_CONFIG_PARSE_DETAIL)
+                            .arg("detail", UiArg::Text(detail)),
+                        UiText::new(ids::STARTUP_CONFIG_PARSE_REMEDY),
                     )
                 }
-                source => StartupError::generic(
-                    Error::Core {
-                        source: Box::new(source),
-                    }
-                    .to_string(),
-                ),
+                source => StartupError::generic_error(Error::Core {
+                    source: Box::new(source),
+                }),
             },
-            error => StartupError::generic(error.to_string()),
+            error => StartupError::generic_error(error),
         }
     }
 }

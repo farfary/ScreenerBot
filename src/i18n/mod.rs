@@ -31,7 +31,10 @@ pub use localizer::{
 };
 pub(crate) use markup::escape_text;
 pub use markup::ALLOWED_TAGS;
-pub use negotiate::{resolve_locale, resolve_request_locale, SYSTEM_SETTING};
+pub use negotiate::{
+    app_locale_nonblocking, resolve_known_setting, resolve_locale, resolve_request_locale,
+    SYSTEM_SETTING,
+};
 pub use pseudo::{transform_accented, transform_bidi, PseudoLocale, PSEUDO_LOCALES};
 pub use registry::{
     available_locales, display_locale_info, locale_info, source_locale, text_direction, LocaleInfo,
@@ -42,7 +45,7 @@ pub use unic_langid::LanguageIdentifier;
 
 /// Catalog domains that are rendered by the backend only and never sent to the
 /// dashboard.
-pub const SERVER_ONLY_DOMAINS: &[&str] = &["telegram"];
+pub const SERVER_ONLY_DOMAINS: &[&str] = &["telegram", "startup"];
 
 /// One embedded Fluent file: `locales/<locale>/<domain>.ftl`.
 pub(crate) struct CatalogFile {

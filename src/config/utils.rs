@@ -699,6 +699,15 @@ where
     f(&config)
 }
 
+/// Read the configuration without waiting: `None` when it is not loaded, the
+/// lock is held for writing, or the lock is poisoned. For contexts that must
+/// never block, such as the panic hook and fatal startup reporting.
+pub fn try_with_config<T>(read: impl FnOnce(&Config) -> T) -> Option<T> {
+    let lock = CONFIG.get()?;
+    let cfg = lock.try_read().ok()?;
+    Some(read(&cfg))
+}
+
 /// Get a clone of the entire configuration
 ///
 /// This is useful when you need to hold onto config values across await points.

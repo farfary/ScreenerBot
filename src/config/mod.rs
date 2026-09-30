@@ -115,7 +115,7 @@ pub use schemas::{
 
 pub use utils::{
     get_config_clone, is_config_initialized, load_config, load_config_from_path, reload_config,
-    reload_config_from_path, save_config, validate_config, with_config, CONFIG,
+    reload_config_from_path, save_config, try_with_config, validate_config, with_config, CONFIG,
 };
 
 pub use wallet::get_wallet_pubkey_string;

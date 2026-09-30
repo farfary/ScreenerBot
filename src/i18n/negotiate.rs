@@ -10,6 +10,22 @@ use unic_langid::LanguageIdentifier;
 /// Setting value that defers to the request and operating-system languages.
 pub const SYSTEM_SETTING: &str = "system";
 
+/// Resolves a language setting, or `None` when it is neither `system`, a
+/// registered locale nor a pseudo-locale (which would make `resolve_locale` log).
+pub fn resolve_known_setting(setting: &str) -> Option<LanguageIdentifier> {
+    let resolvable = setting == SYSTEM_SETTING
+        || super::registry::locale_info(setting).is_some()
+        || PseudoLocale::from_code(setting).is_some();
+    resolvable.then(|| resolve_locale(setting, None))
+}
+
+/// Dashboard language from the configuration, read without waiting.
+pub fn app_locale_nonblocking() -> Option<LanguageIdentifier> {
+    let setting =
+        crate::config::try_with_config(|cfg| cfg.gui.dashboard.interface.language.clone())?;
+    resolve_known_setting(&setting)
+}
+
 fn negotiate(requested: &[LanguageIdentifier]) -> Option<LanguageIdentifier> {
     if requested.is_empty() {
         return None;

@@ -2,6 +2,7 @@
 
 use crate::{
     errors::StartupError,
+    i18n::ids,
     logger::{self, LogTag},
 };
 
@@ -12,14 +13,14 @@ use crate::{
 /// tier prevents globally available dashboard surfaces from depending on the
 /// wallet setup branch that happened to start the process.
 pub(super) async fn initialize_dashboard_persistence() -> Result<(), StartupError> {
-    crate::actions::init_database().await.map_err(|e| {
-        StartupError::generic(format!("Failed to initialize actions database: {e}"))
-    })?;
+    crate::actions::init_database()
+        .await
+        .map_err(|e| StartupError::failed(ids::STARTUP_FAILURE_ACTIONS_INIT, e))?;
     logger::info(LogTag::System, "Actions database initialized successfully");
 
     crate::actions::sync_from_db()
         .await
-        .map_err(|e| StartupError::generic(format!("Failed to sync actions from database: {e}")))?;
+        .map_err(|e| StartupError::failed(ids::STARTUP_FAILURE_ACTIONS_SYNC, e))?;
     crate::actions::spawn_cleanup_task();
 
     // Maintenance covers every database that currently exists and is safe in
@@ -65,7 +66,7 @@ pub(super) async fn initialize_dashboard_persistence() -> Result<(), StartupErro
     // configuration APIs must remain usable in Explore Mode.
     crate::strategies::init_strategy_system(crate::strategies::engine::EngineConfig::default())
         .await
-        .map_err(|e| StartupError::generic(format!("Failed to initialize strategy system: {e}")))?;
+        .map_err(|e| StartupError::failed(ids::STARTUP_FAILURE_STRATEGY_INIT, e))?;
     logger::info(LogTag::System, "Strategy system initialized successfully");
 
     Ok(())
@@ -86,16 +87,14 @@ pub(crate) async fn initialize_model_features_if_enabled() -> Result<(), Startup
         logger::info(LogTag::System, "Initializing analysis engine...");
         crate::llm_analysis::init_analysis_engine()
             .await
-            .map_err(|e| {
-                StartupError::generic(format!("Failed to initialize analysis engine: {e}"))
-            })?;
+            .map_err(|e| StartupError::failed(ids::STARTUP_FAILURE_ANALYSIS_INIT, e))?;
         logger::info(LogTag::System, "Analysis engine initialized successfully");
     }
 
     if crate::assistant::try_get_chat_engine().is_none() {
-        crate::assistant::init_chat_engine().await.map_err(|e| {
-            StartupError::generic(format!("Failed to initialize Assistant chat engine: {e}"))
-        })?;
+        crate::assistant::init_chat_engine()
+            .await
+            .map_err(|e| StartupError::failed(ids::STARTUP_FAILURE_ASSISTANT_INIT, e))?;
         logger::info(
             LogTag::System,
             "Assistant chat engine initialized successfully",
@@ -105,7 +104,7 @@ pub(crate) async fn initialize_model_features_if_enabled() -> Result<(), Startup
     if crate::apis::llm::try_get_llm_manager().is_none() {
         crate::apis::llm::init::init_providers_from_config()
             .await
-            .map_err(|e| StartupError::generic(e.to_string()))?;
+            .map_err(|e| StartupError::generic_error(e))?;
     }
 
     Ok(())
@@ -118,13 +117,13 @@ pub(crate) async fn initialize_model_features_if_enabled() -> Result<(), Startup
 pub(crate) async fn initialize_full_runtime() -> Result<(), StartupError> {
     crate::wallets::initialize()
         .await
-        .map_err(|e| StartupError::generic(format!("Failed to initialize wallets: {e}")))?;
+        .map_err(|e| StartupError::failed(ids::STARTUP_FAILURE_WALLETS_INIT, e))?;
     logger::info(LogTag::System, "Wallets module initialized");
 
     logger::info(LogTag::System, "Validating wallet consistency...");
     match crate::wallet_validation::WalletValidator::validate_wallet_consistency()
         .await
-        .map_err(|e| StartupError::generic(format!("Failed to validate wallet consistency: {e}")))?
+        .map_err(|e| StartupError::failed(ids::STARTUP_FAILURE_WALLET_VALIDATION, e))?
     {
         crate::wallet_validation::WalletValidationResult::Valid => {
             logger::info(LogTag::System, "Wallet validation passed");

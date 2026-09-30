@@ -17,6 +17,7 @@ use bootstrap::{initialize_full_runtime, initialize_model_features_if_enabled};
 use crate::{
     errors::StartupError,
     global,
+    i18n::{ids, UiArg, UiText},
     logger::{self, LogTag},
     process::lock::ProcessLock,
     process::profiling,
@@ -29,24 +30,21 @@ pub async fn run_bot() -> Result<()> {
 
     // 1. Ensure all required directories exist (safety backup, already done in main.rs)
     crate::paths::ensure_all_directories().map_err(|error| {
-        Error::Startup(StartupError::generic(format!(
-            "Failed to create required directories: {error}"
-        )))
+        Error::Startup(StartupError::failed(
+            ids::STARTUP_FAILURE_DIRECTORIES,
+            error,
+        ))
     })?;
 
     // 2. Acquire process lock to prevent multiple instances
     let process_lock = ProcessLock::acquire().map_err(|error| match error {
         crate::process::Error::LockHeld { .. } => StartupError::new(
             crate::errors::StartupErrorCode::LockHeld,
-            "ScreenerBot is already running",
-            "Another copy of ScreenerBot is already running on this computer, so a second \
-             one cannot start.",
-            "Switch to the window that's already open. If you don't see one, quit any \
-             background ScreenerBot process and try again. If the problem persists after a \
-             reboot, the lock file may be stale and can be removed from the data folder \
-             (.screenerbot.lock).",
+            UiText::new(ids::STARTUP_LOCK_HELD_TITLE),
+            UiText::new(ids::STARTUP_LOCK_HELD_DETAIL),
+            UiText::new(ids::STARTUP_LOCK_HELD_REMEDY),
         ),
-        error => StartupError::generic(error.to_string()),
+        error => StartupError::generic_error(error),
     })?;
 
     // Run bot with the acquired lock
@@ -65,23 +63,11 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<()> {
 
     // 2. Validate CLI arguments early (before any processing)
     if let Err(e) = crate::arguments::validate_port_argument() {
-        return Err(Error::Startup(StartupError::new(
-            crate::errors::StartupErrorCode::ConfigInvalid,
-            "Invalid startup option",
-            e.to_string(),
-            "A command-line option is invalid. Start ScreenerBot without that option, or \
-             correct it and try again.",
-        )));
+        return Err(Error::Startup(StartupError::invalid_option(e)));
     }
 
     if let Err(e) = crate::arguments::validate_host_argument() {
-        return Err(Error::Startup(StartupError::new(
-            crate::errors::StartupErrorCode::ConfigInvalid,
-            "Invalid startup option",
-            e.to_string(),
-            "A command-line option is invalid. Start ScreenerBot without that option, or \
-             correct it and try again.",
-        )));
+        return Err(Error::Startup(StartupError::invalid_option(e)));
     }
 
     // 3. Log CLI overrides (if provided)
@@ -171,11 +157,12 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<()> {
             crate::config::load_config().map_err(|error| match error {
                 crate::config::Error::ParseFailed { detail } => StartupError::new(
                     crate::errors::StartupErrorCode::ConfigInvalid,
-                    "Configuration could not be read",
-                    format!("Failed to load config: config.toml could not be parsed: {detail}"),
-                    "Restore a valid configuration or complete setup again.",
+                    UiText::new(ids::STARTUP_CONFIG_INVALID_TITLE),
+                    UiText::new(ids::STARTUP_CONFIG_LOAD_PARSE_DETAIL)
+                        .arg("detail", UiArg::Text(detail)),
+                    UiText::new(ids::STARTUP_CONFIG_LOAD_PARSE_REMEDY),
                 ),
-                error => StartupError::generic(format!("Failed to load config: {error}")),
+                error => StartupError::failed(ids::STARTUP_FAILURE_CONFIG_LOAD, error),
             })?;
             logger::info(LogTag::System, "Configuration loaded successfully");
         }
