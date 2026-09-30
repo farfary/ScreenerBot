@@ -845,6 +845,9 @@ function createLifecycle() {
 
   // Automation Tab API
   api.createAutomationTask = automationTab.createAutomationTask;
+  api.saveNewAutomationTask = automationTab.saveNewAutomationTask;
+  api.saveEditedAutomationTask = automationTab.saveEditedAutomationTask;
+  api.updateScheduleHint = automationTab.updateScheduleHint;
   api.toggleAutomationTask = automationTab.toggleAutomationTask;
   api.runAutomationTask = automationTab.runAutomationTask;
   api.deleteAutomationTask = automationTab.deleteAutomationTask;
