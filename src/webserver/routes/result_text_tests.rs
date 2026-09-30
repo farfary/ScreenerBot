@@ -56,7 +56,7 @@ fn token_source_results_render_english() {
     );
     assert_eq!(
         render(UiText::new(ids::TOKENS_RESULT_SECURITY_MISSING)),
-        "No Rugcheck report"
+        "No RugCheck report"
     );
     assert_eq!(
         render(UiText::new(ids::TOKENS_RESULT_CHART_AVAILABLE)),

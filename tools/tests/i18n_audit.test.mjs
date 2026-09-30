@@ -45,6 +45,13 @@ test("catalog parity flags a missing attribute", () => {
   assert.match(messagesOf(result), /message "tip" is missing attributes \[title\]/);
 });
 
+test("a message that spells the product name instead of { -brand } is an error", () => {
+  const literal = catalogErrors("de", { "common.ftl": "hello = Willkommen bei ScreenerBot\n", "terms.ftl": "-brand = ScreenerBot\n" });
+  assert.match(messagesOf(literal), /de: message "hello" spells "ScreenerBot"/);
+  const term = catalogErrors("de", { "common.ftl": "hello = Willkommen bei { -brand }\n", "terms.ftl": "-brand = ScreenerBot\n" });
+  assert.doesNotMatch(messagesOf(term), /spells/);
+});
+
 test("markup outside the allowlist is an error in every locale", () => {
   const bad = ["<script>x</script>", '<strong class="x">x</strong>', "<a href>x</a>", "a < b", "<strong >x</strong>"];
   for (const text of bad) {

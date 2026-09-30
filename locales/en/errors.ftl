@@ -30,7 +30,7 @@ errors-auth-totp-code-verify-failed = Failed to verify code
 # Request security
 errors-security-invalid-local-request = Request must originate from the local dashboard
 errors-security-invalid-token = Invalid security token
-errors-security-token-required = Security token required. This endpoint is only accessible from within ScreenerBot.
+errors-security-token-required = Security token required. This endpoint is only accessible from within { -brand }.
 
 # Lockscreen
 errors-lockscreen-no-password-set = No password has been set

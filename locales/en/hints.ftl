@@ -263,7 +263,7 @@ hints-trader-exit-content =
 
 hints-services-overview-title = System Services
 hints-services-overview-content =
-    Background services powering ScreenerBot.
+    Background services powering { -brand }.
 
     Service states:
     • **Running** (green) — operating normally
@@ -508,7 +508,7 @@ hints-tools-wallet-consolidation-content =
 
 hints-config-overview-title = Configuration
 hints-config-overview-content =
-    System-wide settings for ScreenerBot.
+    System-wide settings for { -brand }.
 
     Categories:
     • **Trader** — entry/exit rules, position sizing
@@ -535,7 +535,7 @@ hints-config-telegram-content =
        • Message @userinfobot or @getidsbot
        • Copy the numeric ID it returns
 
-    3. **Configure in ScreenerBot:**
+    3. **Configure in { -brand }:**
        • Enable notifications toggle
        • Paste bot token and chat ID
        • Click "Test Connection" to verify
@@ -547,12 +547,12 @@ hints-config-telegram-content =
     • Error notifications
 
     { "*" }*Privacy:**
-    Messages are sent directly from ScreenerBot to your Telegram bot — no third-party servers involved.
+    Messages are sent directly from { -brand } to your Telegram bot — no third-party servers involved.
 hints-config-telegram-password-title = Bot Authentication Password
 hints-config-telegram-password-content =
     { "*" }*Secure your Telegram bot with password authentication**
 
-    When you interact with your ScreenerBot Telegram bot, you'll need to authenticate with this password before executing sensitive commands.
+    When you interact with your { -brand } Telegram bot, you'll need to authenticate with this password before executing sensitive commands.
 
     { "*" }*Why set a password?**
     • Prevents unauthorized users from controlling your bot

@@ -275,7 +275,7 @@ shell-action-trade-failed = Trade failed
 
 ## Exit dialog (ui/exit_dialog.js)
 
-shell-exit-title = Close ScreenerBot?
+shell-exit-title = Close { -brand }?
 shell-exit-description = Choose how you'd like to close the application
 shell-exit-minimize = Minimize to Tray
 shell-exit-minimize-detail = Keep running in background

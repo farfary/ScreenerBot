@@ -21,7 +21,7 @@ home-holdings-token-count =
 home-holdings-with-unpriced = { $tokens } · { $count } unpriced
 home-holdings-unpriced-note =
     { $count ->
-        [one] { $count } held token has no price available and count as 0 in the total
+        [one] { $count } held token has no price available and counts as 0 in the total
        *[other] { $count } held tokens have no price available and count as 0 in the total
     }
 

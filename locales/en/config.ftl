@@ -4,10 +4,10 @@
 ## account
 
 config-account-auto-wallet-signin = Sign in automatically with my wallet
-    .hint = When this wallet already has a ScreenerBot account, sign in without asking at startup. Off by default: signing a message with your trading key is something you should choose, not something the bot decides.
+    .hint = When this wallet already has a { -brand } account, sign in without asking at startup. Off by default: signing a message with your trading key is something you should choose, not something the bot decides.
 config-account-refresh-margin-secs = Token refresh margin (seconds)
     .hint = How early to renew the sign-in token before it expires. Only change this if you are debugging authentication.
-config-account-use-gateway-rpc = Use ScreenerBot RPC for sending transactions
+config-account-use-gateway-rpc = Use { -brand } RPC for sending transactions
     .hint = Broadcast signed swap transactions through screenerbot.io instead of your own RPC. Signing always happens on this machine; the server cannot alter a signed transaction. Your own RPC is still required for price data.
 
 ## agent_control
@@ -626,14 +626,14 @@ config-ohlcv-sources-geckoterminal-rate-limit-per-minute = Rate Limit (req/min)
     .hint = Maximum API requests per minute (GeckoTerminal enforces strict limits)
 config-ohlcv-sources-geckoterminal-timeout-seconds = Timeout (seconds)
     .hint = HTTP request timeout for GeckoTerminal calls
-config-ohlcv-sources-screenerbot-server = ScreenerBot Server Source
-    .hint = Self-hosted ScreenerBot OHLCV cache — tried FIRST (fast, shared cache); falls back to the providers below on a miss
+config-ohlcv-sources-screenerbot-server = { -brand } Server Source
+    .hint = Self-hosted { -brand } OHLCV cache — tried FIRST (fast, shared cache); falls back to the providers below on a miss
 config-ohlcv-sources-screenerbot-server-enabled = Enabled
-    .hint = Try the self-hosted ScreenerBot OHLCV server before external providers
+    .hint = Try the self-hosted { -brand } OHLCV server before external providers
 config-ohlcv-sources-screenerbot-server-endpoint = Endpoint
     .hint = Base URL of the self-hosted OHLCV server
 config-ohlcv-sources-screenerbot-server-timeout-seconds = Timeout (seconds)
-    .hint = HTTP request timeout for the ScreenerBot server (short so misses fall back quickly)
+    .hint = HTTP request timeout for the { -brand } server (short so misses fall back quickly)
 config-ohlcv-sources-solana-tracker = SolanaTracker Source
     .hint = SolanaTracker fallback endpoint used exclusively by the OHLCV fetcher (when enabled + API key set)
 config-ohlcv-sources-solana-tracker-api-key = API Key
@@ -730,7 +730,7 @@ config-positions-trailing-stop-enabled = Enable Trailing Stop
 ## referral
 
 config-referral-code = Referral code
-    .hint = Optional. If someone introduced you to ScreenerBot, their code credits them with a share of the fees you pay us — at no extra cost to you. Leave empty and nothing is ever sent from this machine.
+    .hint = Optional. If someone introduced you to { -brand }, their code credits them with a share of the fees you pay us — at no extra cost to you. Leave empty and nothing is ever sent from this machine.
     .placeholder = e.g. FARHAD
 config-referral-endpoint = Activation endpoint
     .hint = Where the referral code is registered. Only change this if you are testing against a staging server.
@@ -926,9 +926,9 @@ config-telegram-notify-dca-executed = DCA Executed
 config-telegram-notify-filtering-alerts = Filtering Alerts
     .hint = Notify when new tokens pass your filtering criteria
 config-telegram-notify-on-shutdown = Bot Shutdown
-    .hint = Send notification when ScreenerBot stops
+    .hint = Send notification when { -brand } stops
 config-telegram-notify-on-startup = Bot Startup
-    .hint = Send notification when ScreenerBot starts
+    .hint = Send notification when { -brand } starts
 config-telegram-notify-partial-exit = Partial Exits
     .hint = Notify when a partial exit (sell percentage) is executed
 config-telegram-notify-position-closed = Position Closed
@@ -1043,18 +1043,18 @@ config-tokens-sources-rugcheck-rate-limit-per-minute = Rate Limit (req/min)
     .hint = Maximum API requests per minute to this source
 config-tokens-sources-rugcheck-timeout-seconds = Timeout (seconds)
     .hint = HTTP request timeout in seconds
-config-tokens-sources-screenerbot-server = ScreenerBot Server Source
-    .hint = Self-hosted ScreenerBot data server — shared first-hop cache for Rugcheck reports and boosted-token identity
+config-tokens-sources-screenerbot-server = { -brand } Server Source
+    .hint = Self-hosted { -brand } data server — shared first-hop cache for Rugcheck reports and boosted-token identity
 config-tokens-sources-screenerbot-server-enabled = Enabled
-    .hint = Try the self-hosted ScreenerBot server before direct data providers
+    .hint = Try the self-hosted { -brand } server before direct data providers
 config-tokens-sources-screenerbot-server-endpoint = Endpoint
-    .hint = Base URL of the self-hosted ScreenerBot data server
+    .hint = Base URL of the self-hosted { -brand } data server
 config-tokens-sources-screenerbot-server-media-refresh-hours = Media Refresh (hours)
     .hint = Re-check a token's on-chain logo and published banner after this many hours
 config-tokens-sources-screenerbot-server-media-sync-seconds = Media Sync Interval (seconds)
     .hint = How often to fetch on-chain logos and published banners for known tokens
 config-tokens-sources-screenerbot-server-timeout-seconds = Timeout (seconds)
-    .hint = HTTP request timeout for the ScreenerBot server (short so misses fall back quickly)
+    .hint = HTTP request timeout for the { -brand } server (short so misses fall back quickly)
 config-tokens-update-intervals = Update Intervals
     .hint = Configure background update loop intervals for tokens module
 config-tokens-update-intervals-background-seconds = Background Interval (s)
@@ -1155,7 +1155,7 @@ config-updates-check-interval-hours = Check Interval
     .hint = How often to check for a newer release
     .unit = hours
 config-updates-defer-while-trading = Wait While Trading
-    .hint = Postpone the restart while positions are open. The update still applies the next time ScreenerBot starts.
+    .hint = Postpone the restart while positions are open. The update still applies the next time { -brand } starts.
 config-updates-notify-telegram = Announce on Telegram
     .hint = Send a Telegram message when an update is found, staged, or applied
 
@@ -1224,9 +1224,9 @@ config-webserver-auth-enabled = Enable Authentication
 config-webserver-auth-session-timeout-secs = Session Timeout
     .hint = How long before a session expires and requires re-login. 0 = never expires.
 config-webserver-auth-show-logo = Show Logo
-    .hint = Display the ScreenerBot logo on the login page.
+    .hint = Display the { -brand } logo on the login page.
 config-webserver-auth-show-name = Show App Name
-    .hint = Display 'ScreenerBot' on the login page.
+    .hint = Display '{ -brand }' on the login page.
 config-webserver-auth-totp-enabled = Enable 2FA (TOTP)
     .hint = Require TOTP code in addition to password. Set up via dashboard settings.
 config-webserver-host = Host
@@ -1237,7 +1237,7 @@ config-webserver-port = Port
 
 ## Sections
 
-config-section-account = ScreenerBot Account
+config-section-account = { -brand } Account
 config-section-agent-control = Agent Control
 config-section-assistant = Assistant
 config-section-copy-trading = Copy Trading

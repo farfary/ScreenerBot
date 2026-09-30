@@ -32,13 +32,13 @@ startup-recovery-reset-wallet = Reset wallet data & restart
 
 startup-port-in-use-title = Network port is busy
 startup-port-in-use-detail = The dashboard port { $address } is already in use.
-startup-port-in-use-remedy = Another program is using the port ScreenerBot needs. Close that program, or change the webserver port in Settings, then start ScreenerBot again.
+startup-port-in-use-remedy = Another program is using the port { -brand } needs. Close that program, or change the webserver port in Settings, then start { -brand } again.
 
 ## Another instance is running.
 
-startup-lock-held-title = ScreenerBot is already running
-startup-lock-held-detail = Another copy of ScreenerBot is already running on this computer, so a second one cannot start.
-startup-lock-held-remedy = Switch to the window that's already open. If you don't see one, quit any background ScreenerBot process and try again. If the problem persists after a reboot, the lock file may be stale and can be removed from the data folder (.screenerbot.lock).
+startup-lock-held-title = { -brand } is already running
+startup-lock-held-detail = Another copy of { -brand } is already running on this computer, so a second one cannot start.
+startup-lock-held-remedy = Switch to the window that's already open. If you don't see one, quit any background { -brand } process and try again. If the problem persists after a reboot, the lock file may be stale and can be removed from the data folder (.screenerbot.lock).
 
 ## Configuration.
 
@@ -48,11 +48,11 @@ startup-config-load-parse-detail = Failed to load config: config.toml could not 
 startup-config-parse-remedy = Your configuration file could not be read. Restore a backup from the data folder, or reset configuration to defaults and set up your wallet and RPC again.
 startup-config-load-parse-remedy = Restore a valid configuration or complete setup again.
 startup-option-invalid-title = Invalid startup option
-startup-option-invalid-remedy = A command-line option is invalid. Start ScreenerBot without that option, or correct it and try again.
+startup-option-invalid-remedy = A command-line option is invalid. Start { -brand } without that option, or correct it and try again.
 
 ## Generic failures.
 
-startup-generic-title = ScreenerBot could not start
+startup-generic-title = { -brand } could not start
 startup-generic-remedy = Check the log file for details, then restart the app. If the problem persists, contact support at t.me/screenerbotio_support.
 startup-generic-detail = { $error }
 startup-failure-directories = Failed to create required directories: { $error }

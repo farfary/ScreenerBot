@@ -28,6 +28,17 @@ function* descendants(node) {
   }
 }
 
+/** Text of a message that spells the product name instead of referencing `-brand`. */
+function literalBrandErrors(id, node, code, file, brand) {
+  if (!brand) return [];
+  const literal = [...descendants(node)].some(
+    (child) => child.type === "TextElement" && child.value.includes(brand)
+  );
+  return literal
+    ? [{ file, message: `${code}: message "${id}" spells "${brand}"; reference the term { -brand } instead` }]
+    : [];
+}
+
 /** `{ messages, terms, junk }` for one locale: Maps of id to `{ node, file }`. */
 export function parseLocale(files) {
   const messages = new Map();
@@ -238,6 +249,15 @@ export function checkCatalogs({ catalogs, registered, source = SOURCE_LOCALE }) 
     errors.push(...markupAllowlistErrors(id, entry.node, source, `locales/${source}/${entry.file}`));
   }
   const sourceTerms = [...en.terms].filter(([, entry]) => entry.file === TERMS_FILE);
+  const brandTerm = en.terms.get("brand");
+  const brand = brandTerm
+    ? brandTerm.node.value.elements.map((element) => element.value ?? "").join("").trim() || null
+    : null;
+  for (const [code, locale] of parsed) {
+    for (const [id, entry] of locale.messages) {
+      errors.push(...literalBrandErrors(id, entry.node, code, `locales/${code}/${entry.file}`, brand));
+    }
+  }
 
   for (const [code, locale] of parsed) {
     if (code === source) continue;

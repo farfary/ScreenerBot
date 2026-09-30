@@ -4,3 +4,8 @@ source = "en"
 code = "en"
 name = "English"
 dir = "ltr"
+
+[[locale]]
+code = "de"
+name = "Deutsch"
+dir = "ltr"
