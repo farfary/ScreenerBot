@@ -435,7 +435,7 @@
   .transaction-details-dialog .tx-flow-arrow {
     width: 30px;
     height: 30px;
-    transform: rotate(90deg);
+    transform: rotate(calc(var(--dir-sign) * 90deg));
   }
 
   .transaction-details-dialog .tx-execution-strip {

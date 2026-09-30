@@ -155,11 +155,11 @@
 
 @keyframes updates-slide {
   from {
-    transform: translateX(-100%);
+    transform: translateX(calc(var(--dir-sign) * -100%));
   }
 
   to {
-    transform: translateX(286%);
+    transform: translateX(calc(var(--dir-sign) * 286%));
   }
 }
 

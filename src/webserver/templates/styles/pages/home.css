@@ -507,11 +507,11 @@
 /* Loading state */
 @keyframes home-shimmer {
   from {
-    transform: translateX(-100%);
+    transform: translateX(calc(var(--dir-sign) * -100%));
   }
 
   to {
-    transform: translateX(100%);
+    transform: translateX(calc(var(--dir-sign) * 100%));
   }
 }
 

@@ -1,7 +1,9 @@
 /**
  * Physical-direction CSS: declarations that mirror incorrectly in a
  * right-to-left layout. Logical properties (`margin-inline-start`, `inset-inline-end`,
- * `text-align: start`) are the replacement. `translateX` is out of scope.
+ * `text-align: start`) are the replacement. A horizontal `translate` offset is physical
+ * unless it is scaled by `--dir-sign` (foundation.css: 1 in LTR, -1 in RTL), or is `-50%`
+ * (centering against `left: 50%`) or zero. `@keyframes` bodies are scanned like any rule.
  *
  * `/* rtl-ok: <reason> *\/` on the same line or the line above skips a declaration.
  */
@@ -50,10 +52,63 @@ function asymmetricShorthand(property, value) {
   });
 }
 
+const ZERO_LENGTH = /^[+-]?0*\.?0+(px|%|rem|em|vw)?$/;
+
+/** Top-level comma-separated arguments of a CSS function body. */
+function splitArguments(body) {
+  const parts = [];
+  let depth = 0;
+  let current = "";
+  for (const char of body) {
+    if (char === "(") depth += 1;
+    else if (char === ")") depth = Math.max(0, depth - 1);
+    if (depth === 0 && char === ",") {
+      parts.push(current.trim());
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+  parts.push(current.trim());
+  return parts;
+}
+
+/** True when a translation X component moves along the physical horizontal axis. */
+function physicalOffset(x) {
+  if (x === undefined || x === "") return false;
+  if (x.includes("--dir-sign")) return false;
+  const text = x.replace(/\s+/g, "");
+  return text !== "-50%" && !ZERO_LENGTH.test(text);
+}
+
+/** X components of every translation in a `transform` or `translate` value. */
+function translationOffsets(name, value) {
+  if (name === "translate") return [splitValues(value)[0]];
+  const offsets = [];
+  const pattern = /translate(X|3d)?\(/gi;
+  let match;
+  while ((match = pattern.exec(value))) {
+    let depth = 1;
+    let end = pattern.lastIndex;
+    while (end < value.length && depth > 0) {
+      if (value[end] === "(") depth += 1;
+      else if (value[end] === ")") depth -= 1;
+      end += 1;
+    }
+    const args = splitArguments(value.slice(pattern.lastIndex, end - 1));
+    offsets.push(args[0]);
+    pattern.lastIndex = end;
+  }
+  return offsets;
+}
+
 /** Why a declaration is physical, or null. */
 export function physicalReason(property, value) {
   const name = property.toLowerCase();
   const text = value.trim().toLowerCase();
+  if ((name === "transform" || name === "translate") && translationOffsets(name, text).some(physicalOffset)) {
+    return "translateX without --dir-sign";
+  }
   if (PHYSICAL_PROPERTIES.has(name) || /^border-(left|right)(-|$)/.test(name)) return name;
   if (SIDE_KEYWORD_PROPERTIES.has(name) && (text === "left" || text === "right")) return `${name}: ${text}`;
   if (FOUR_VALUE_SHORTHANDS.has(name) && asymmetricShorthand(name, value)) return `${name} with different left and right`;

@@ -1,6 +1,7 @@
 // Header controls for global dashboard interactions (trader toggle + metrics)
 import { loadPage } from "./router.js";
 import * as Utils from "./utils.js";
+import { dirSign, scrollStart } from "./dom.js";
 import { notificationManager } from "./notifications.js";
 import * as NotificationPanel from "../ui/notification_panel.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
@@ -405,12 +406,11 @@ function initHeaderTabsScroll() {
   // Update scroll indicators based on scroll position
   // Classes applied to WRAPPER (not scrollable element) so indicators stay fixed
   const updateScrollIndicators = () => {
-    const { scrollLeft, scrollWidth, clientWidth } = headerRow;
-    const canScrollLeft = scrollLeft > 1;
-    const canScrollRight = scrollLeft < scrollWidth - clientWidth - 1;
+    const { scrollWidth, clientWidth } = headerRow;
+    const fromStart = scrollStart(headerRow);
 
-    wrapper.classList.toggle("can-scroll-left", canScrollLeft);
-    wrapper.classList.toggle("can-scroll-right", canScrollRight);
+    wrapper.classList.toggle("can-scroll-start", fromStart > 1);
+    wrapper.classList.toggle("can-scroll-end", fromStart < scrollWidth - clientWidth - 1);
   };
 
   // Mouse wheel horizontal scroll support
@@ -421,12 +421,12 @@ function initHeaderTabsScroll() {
     // Convert vertical scroll only while the row can move in that direction; at
     // either boundary, let the page receive the wheel event normally.
     if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
-      const maxScrollLeft = headerRow.scrollWidth - headerRow.clientWidth;
+      const maxScrollStart = headerRow.scrollWidth - headerRow.clientWidth;
       const canMove =
-        event.deltaY < 0 ? headerRow.scrollLeft > 0 : headerRow.scrollLeft < maxScrollLeft;
+        event.deltaY < 0 ? scrollStart(headerRow) > 0 : scrollStart(headerRow) < maxScrollStart;
       if (!canMove) return;
       event.preventDefault();
-      headerRow.scrollLeft += event.deltaY;
+      headerRow.scrollLeft += dirSign() * event.deltaY;
       updateScrollIndicators();
     }
   };

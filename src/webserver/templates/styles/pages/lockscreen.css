@@ -428,14 +428,14 @@
   50%,
   70%,
   90% {
-    transform: translateX(-8px);
+    transform: translateX(calc(var(--dir-sign) * -8px));
   }
 
   20%,
   40%,
   60%,
   80% {
-    transform: translateX(8px);
+    transform: translateX(calc(var(--dir-sign) * 8px));
   }
 }
 

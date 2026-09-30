@@ -443,13 +443,12 @@ select.select-lg {
   content: "";
   position: absolute;
   top: var(--toggle-knob-offset);
-  /* rtl-ok: knob travel is a physical translateX */
-  left: var(--toggle-knob-offset);
+  inset-inline-start: var(--toggle-knob-offset);
   width: var(--toggle-knob-size);
   height: var(--toggle-knob-size);
   background: var(--control-knob);
   border-radius: var(--toggle-knob-radius);
-  transform: translateX(var(--toggle-knob-travel, 0)) scale(var(--toggle-knob-squash, 1));
+  transform: translateX(calc(var(--dir-sign) * var(--toggle-knob-travel, 0))) scale(var(--toggle-knob-squash, 1));
   transition:
     transform var(--control-motion),
     background-color var(--control-motion);

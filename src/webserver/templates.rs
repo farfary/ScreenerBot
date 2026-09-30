@@ -174,6 +174,7 @@ pub fn base_template(active_tab: &str, content: &str, locale: &LanguageIdentifie
         FOUNDATION_STYLES,
         SCROLLBAR_STYLES, // Global scrollbar system - must be early to set defaults
         FLOATING_STYLES,  // Global floating UI system (dropdowns, popovers, dialogs)
+        DIRECTION_STYLES, // Mirrors inline-axis icon glyphs under RTL
         &lucide_css,
         LAYOUT_STYLES,
         HEADER_STYLES,

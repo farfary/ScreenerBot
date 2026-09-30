@@ -471,7 +471,7 @@
 }
 
 .agent-connections .agent-pair-revoked-group[open] summary i {
-  transform: rotate(90deg);
+  transform: rotate(calc(var(--dir-sign) * 90deg));
 }
 
 .agent-connections .agent-pair-revoked-group summary span {

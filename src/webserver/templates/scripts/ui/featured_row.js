@@ -14,7 +14,7 @@
  * Visibility: Home and Tokens pages, when enabled in settings.
  */
 
-import { $ } from "../core/dom.js";
+import { $, dirSign, scrollStart } from "../core/dom.js";
 import { escapeHtml, resolveTokenLogoUrl } from "../core/utils.js";
 import { formatFixed, formatPercentValue } from "../core/format.js";
 import { openFeaturedDialog } from "./featured_dialog.js";
@@ -174,11 +174,11 @@ class FeaturedRow {
           </button>
         </div>
         <div class="featured-row-scroll">
-          <button class="featured-row-arrow featured-row-arrow-left" aria-label="${escapeHtml(I18n.attr("tokens-featured-row-scroll-left", "aria-label"))}">
+          <button class="featured-row-arrow featured-row-arrow-start" aria-label="${escapeHtml(I18n.attr("tokens-featured-row-scroll-start", "aria-label"))}">
             <i class="icon-chevron-left"></i>
           </button>
           <div class="featured-row-tokens" id="featured-row-tokens"></div>
-          <button class="featured-row-arrow featured-row-arrow-right" aria-label="${escapeHtml(I18n.attr("tokens-featured-row-scroll-right", "aria-label"))}">
+          <button class="featured-row-arrow featured-row-arrow-end" aria-label="${escapeHtml(I18n.attr("tokens-featured-row-scroll-end", "aria-label"))}">
             <i class="icon-chevron-right"></i>
           </button>
         </div>
@@ -235,25 +235,26 @@ class FeaturedRow {
 
     // Scroll arrows
     const scrollContainer = this.containerEl.querySelector(".featured-row-tokens");
-    const leftArrow = this.containerEl.querySelector(".featured-row-arrow-left");
-    const rightArrow = this.containerEl.querySelector(".featured-row-arrow-right");
+    const startArrow = this.containerEl.querySelector(".featured-row-arrow-start");
+    const endArrow = this.containerEl.querySelector(".featured-row-arrow-end");
 
-    if (scrollContainer && leftArrow && rightArrow) {
+    if (scrollContainer && startArrow && endArrow) {
       const scrollAmount = 200;
 
-      leftArrow.addEventListener("click", () => {
-        scrollContainer.scrollBy({ left: -scrollAmount, behavior: "smooth" });
+      startArrow.addEventListener("click", () => {
+        scrollContainer.scrollBy({ left: -dirSign() * scrollAmount, behavior: "smooth" });
       });
 
-      rightArrow.addEventListener("click", () => {
-        scrollContainer.scrollBy({ left: scrollAmount, behavior: "smooth" });
+      endArrow.addEventListener("click", () => {
+        scrollContainer.scrollBy({ left: dirSign() * scrollAmount, behavior: "smooth" });
       });
 
       // Update arrow visibility on scroll
       const updateArrows = () => {
-        const { scrollLeft, scrollWidth, clientWidth } = scrollContainer;
-        leftArrow.classList.toggle("hidden", scrollLeft <= 0);
-        rightArrow.classList.toggle("hidden", scrollLeft >= scrollWidth - clientWidth - 1);
+        const { scrollWidth, clientWidth } = scrollContainer;
+        const fromStart = scrollStart(scrollContainer);
+        startArrow.classList.toggle("hidden", fromStart <= 0);
+        endArrow.classList.toggle("hidden", fromStart >= scrollWidth - clientWidth - 1);
       };
 
       scrollContainer.addEventListener("scroll", updateArrows);
@@ -389,12 +390,12 @@ class FeaturedRow {
 
     // Update arrow visibility after render
     requestAnimationFrame(() => {
-      const leftArrow = this.containerEl?.querySelector(".featured-row-arrow-left");
-      const rightArrow = this.containerEl?.querySelector(".featured-row-arrow-right");
-      if (leftArrow && rightArrow) {
-        const { scrollLeft, scrollWidth, clientWidth } = container;
-        leftArrow.classList.toggle("hidden", scrollLeft <= 0);
-        rightArrow.classList.toggle("hidden", scrollWidth <= clientWidth);
+      const startArrow = this.containerEl?.querySelector(".featured-row-arrow-start");
+      const endArrow = this.containerEl?.querySelector(".featured-row-arrow-end");
+      if (startArrow && endArrow) {
+        const { scrollWidth, clientWidth } = container;
+        startArrow.classList.toggle("hidden", scrollStart(container) <= 0);
+        endArrow.classList.toggle("hidden", scrollWidth <= clientWidth);
       }
     });
   }

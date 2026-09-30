@@ -3,6 +3,7 @@
  * Handles all event listener attachments for the DataTable component
  */
 
+import { scrollStart } from "../../core/dom.js";
 import { openMenu, closeMenu, trackAnchoredMenu } from "../../core/menu_manager.js";
 import { copyToClipboard, notifyCopied, notifyCopyFailed } from "../../core/utils.js";
 
@@ -553,7 +554,7 @@ export function applyEventHandlersMixin(DataTable) {
             this._stopActionDropdownTracking = trackAnchoredMenu({
               trigger,
               menu,
-              align: menu.classList.contains("menu-left") ? "start" : "end",
+              align: menu.classList.contains("menu-start") ? "start" : "end",
               onDetach: () => closeAllActionDropdowns(),
             });
             requestAnimationFrame(() => {
@@ -767,7 +768,10 @@ export function applyEventHandlersMixin(DataTable) {
         // Toggle a wrapper class so CSS can add an elevation/shadow to pinned
         // (floating-left) columns once the body has scrolled horizontally.
         if (this.elements.wrapper) {
-          this.elements.wrapper.classList.toggle("is-pinned-scrolled", scrollLeft > 0);
+          this.elements.wrapper.classList.toggle(
+            "is-pinned-scrolled",
+            scrollStart(this.elements.scrollContainer) > 0,
+          );
         }
       };
       this._addEventListener(this.elements.scrollContainer, "scroll", hScrollSync);

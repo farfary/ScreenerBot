@@ -211,7 +211,7 @@
 @keyframes settings-tab-slide-in {
   0% {
     opacity: 0;
-    transform: translateX(8px);
+    transform: translateX(calc(var(--dir-sign) * 8px));
   }
 
   100% {

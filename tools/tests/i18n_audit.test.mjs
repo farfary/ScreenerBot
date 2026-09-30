@@ -240,7 +240,25 @@ test("css counts physical properties and asymmetric shorthands only", () => {
   assert.equal(count(".a { border-radius: 4px 4px 2px; }"), 1);
   assert.equal(count(".a { border-radius: 4px; }"), 0);
   assert.equal(count(".a { margin: 0 4px 2px; }"), 0);
-  assert.equal(count(".a { transform: translateX(4px); }"), 0);
+});
+
+test("css flags a horizontal translation unless it uses --dir-sign, is -50% or is zero", () => {
+  const count = (css) => scanCss({ source: css, path: "a.css" }).items.length;
+  assert.equal(count(".a { transform: translateX(4px); }"), 1);
+  assert.equal(count(".a { transform: translate(3px, -50%); }"), 1);
+  assert.equal(count(".a { transform: translate3d(8px, 0, 0); }"), 1);
+  assert.equal(count(".a { translate: 3px 0; }"), 1);
+  assert.equal(count(".a { transform: translateX(var(--x, 0)) scale(1); }"), 1);
+  assert.equal(count("@keyframes k { from { transform: translateX(-100%); } }"), 1);
+  assert.equal(count(".a { transform: translateX(calc(var(--dir-sign) * 4px)); }"), 0);
+  assert.equal(count(".a { transform: translate(calc(var(--dir-sign) * 3px), -50%); }"), 0);
+  assert.equal(count(".a { transform: translateX(-50%); }"), 0);
+  assert.equal(count(".a { transform: translate(-50%, 8px); }"), 0);
+  assert.equal(count(".a { transform: translateX(0) translateY(4px); }"), 0);
+  assert.equal(count(".a { transform: translate(0, -50%); }"), 0);
+  assert.equal(count(".a { transform: translateY(4px) rotate(90deg); }"), 0);
+  assert.equal(count(".a { /* rtl-ok: JS writes physical offset */ transform: translateX(4px); }"), 0);
+  assert.equal(count(".a {\n  /* rtl-ok: JS writes physical offset */\n  transform: translateX(4px);\n}"), 0);
 });
 
 test("css honours rtl-ok and rejects an empty reason", () => {

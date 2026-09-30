@@ -300,7 +300,7 @@
 
   to {
     opacity: 0;
-    transform: translateX(-20px);
+    transform: translateX(calc(var(--dir-sign) * -20px));
   }
 }
 
@@ -311,7 +311,7 @@
 @keyframes quick-trade-slide-in {
   from {
     opacity: 0;
-    transform: translateX(20px);
+    transform: translateX(calc(var(--dir-sign) * 20px));
   }
 
   to {

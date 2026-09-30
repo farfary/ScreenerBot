@@ -382,7 +382,7 @@
 }
 
 .config-category.collapsed .config-category-label .chevron {
-  transform: rotate(-90deg);
+  transform: rotate(calc(var(--dir-sign) * -90deg));
 }
 
 .config-category-meta {

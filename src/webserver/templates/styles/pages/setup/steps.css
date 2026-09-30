@@ -415,11 +415,11 @@ html[data-input="keyboard"] .setup-screen [tabindex="-1"]:focus-visible {
 
 @keyframes setup-restart-progress {
   0% {
-    transform: translateX(-110%);
+    transform: translateX(calc(var(--dir-sign) * -110%));
   }
 
   100% {
-    transform: translateX(370%);
+    transform: translateX(calc(var(--dir-sign) * 370%));
   }
 }
 

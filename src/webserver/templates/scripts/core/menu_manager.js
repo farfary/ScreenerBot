@@ -27,6 +27,8 @@
  * menu itself don't dismiss it.
  */
 
+import { dirSign } from "./dom.js";
+
 const openMenus = new Set();
 let listenersAttached = false;
 
@@ -155,7 +157,10 @@ export function trackAnchoredMenu({
     const availableBelow = window.innerHeight - triggerRect.bottom - viewportMargin;
     const availableAbove = triggerRect.top - viewportMargin;
     const openAbove = availableBelow < menuRect.height && availableAbove > availableBelow;
-    const preferredLeft = align === "end" ? triggerRect.right - menuRect.width : triggerRect.left;
+    // `align` is an inline edge: "start" is the trigger's left edge in LTR and its right edge
+    // in RTL. The clamp below flips the menu inward when that side has no room.
+    const alignRight = (align === "end") === (dirSign() === 1);
+    const preferredLeft = alignRight ? triggerRect.right - menuRect.width : triggerRect.left;
     const left = Math.max(
       viewportMargin,
       Math.min(preferredLeft, window.innerWidth - menuRect.width - viewportMargin)

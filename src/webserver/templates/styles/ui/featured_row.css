@@ -130,11 +130,11 @@
   border-color: var(--link-color);
 }
 
-.featured-row-arrow-left {
+.featured-row-arrow-start {
   inset-inline-start: 0;
 }
 
-.featured-row-arrow-right {
+.featured-row-arrow-end {
   inset-inline-end: 0;
 }
 

@@ -15,6 +15,7 @@ pub(super) const BASE_TEMPLATE: &str = include_str!("templates/base.html");
 pub(super) const FOUNDATION_STYLES: &str = include_str!("templates/styles/foundation.css");
 pub(super) const SCROLLBAR_STYLES: &str = include_str!("templates/styles/base/scrollbar.css");
 pub(super) const FLOATING_STYLES: &str = include_str!("templates/styles/base/floating.css");
+pub(super) const DIRECTION_STYLES: &str = include_str!("templates/styles/base/direction.css");
 pub(super) const LAYOUT_STYLES: &str = include_str!("templates/styles/layout.css");
 pub(super) const COMPONENT_STYLES: &str = include_str!("templates/styles/components.css");
 pub(super) const HEADER_STYLES: &str = include_str!("templates/styles/header.css");

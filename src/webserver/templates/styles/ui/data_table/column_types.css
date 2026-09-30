@@ -406,7 +406,7 @@
   transform: translateY(0) scaleY(1);
 }
 
-.dt-actions-dropdown-menu.menu-left {
+.dt-actions-dropdown-menu.menu-start {
   inset-inline: 0 auto;
 }
 
@@ -419,30 +419,40 @@
   left: auto;
   z-index: var(--z-dropdown);
   border-top-width: 0;
-  /* rtl-ok: portaled menu positioned by JS in viewport coordinates */
-  border-radius: var(--radius-md) 0 var(--radius-md) var(--radius-md);
-  transform-origin: top right;
+  border-start-start-radius: var(--radius-md);
+  border-start-end-radius: 0;
+  border-end-end-radius: var(--radius-md);
+  border-end-start-radius: var(--radius-md);
+
+  /* Anchored to the trigger's inline-end edge: right in LTR, left in RTL. */
+  transform-origin: calc(50% + var(--dir-sign) * 50%) top;
 }
 
-.dt-actions-dropdown-menu.is-portaled.menu-left {
-  /* rtl-ok: portaled menu positioned by JS in viewport coordinates */
-  border-radius: 0 var(--radius-md) var(--radius-md) var(--radius-md);
-  transform-origin: top left;
+.dt-actions-dropdown-menu.is-portaled.menu-start {
+  border-start-start-radius: 0;
+  border-start-end-radius: var(--radius-md);
+  border-end-end-radius: var(--radius-md);
+  border-end-start-radius: var(--radius-md);
+  transform-origin: calc(50% - var(--dir-sign) * 50%) top;
 }
 
 .dt-actions-dropdown-menu.is-portaled.menu-above {
   border-top-width: 1px;
   border-bottom-width: 0;
-  /* rtl-ok: portaled menu positioned by JS in viewport coordinates */
-  border-radius: var(--radius-md) var(--radius-md) 0 var(--radius-md);
+  border-start-start-radius: var(--radius-md);
+  border-start-end-radius: var(--radius-md);
+  border-end-end-radius: 0;
+  border-end-start-radius: var(--radius-md);
   transform: translateY(4px) scaleY(0.985);
-  transform-origin: bottom right;
+  transform-origin: calc(50% + var(--dir-sign) * 50%) bottom;
 }
 
-.dt-actions-dropdown-menu.is-portaled.menu-left.menu-above {
-  /* rtl-ok: portaled menu positioned by JS in viewport coordinates */
-  border-radius: var(--radius-md) var(--radius-md) var(--radius-md) 0;
-  transform-origin: bottom left;
+.dt-actions-dropdown-menu.is-portaled.menu-start.menu-above {
+  border-start-start-radius: var(--radius-md);
+  border-start-end-radius: var(--radius-md);
+  border-end-end-radius: var(--radius-md);
+  border-end-start-radius: 0;
+  transform-origin: calc(50% - var(--dir-sign) * 50%) bottom;
 }
 
 .dt-actions-dropdown-menu.is-portaled.menu-above.open {

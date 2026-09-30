@@ -12,6 +12,7 @@
  * - Automatic positioning to stay within viewport
  */
 
+import { dirSign } from "../core/dom.js";
 import { showToast, notifyCopied, notifyCopyFailed } from "../core/utils.js";
 import { POSITION_MANAGEMENT_LABELS } from "./position_management.js";
 
@@ -744,7 +745,7 @@ class ContextMenuManager {
 
   _positionSubmenu(parentEl, submenuEl) {
     // Clear prior adjustments so measurements reflect the default open position.
-    submenuEl.classList.remove("left");
+    submenuEl.classList.remove("flipped");
     submenuEl.style.top = "";
 
     // The submenu's CSS top within its parent item (e.g. -5px). We adjust RELATIVE to
@@ -757,9 +758,14 @@ class ContextMenuManager {
     const viewportHeight = window.innerHeight;
     const padding = 8;
 
-    // Horizontal: open to the left when the submenu would overflow the right edge.
-    if (parentRect.right + submenuRect.width > viewportWidth - padding) {
-      submenuEl.classList.add("left");
+    // Horizontal: the submenu opens toward the inline end (right in LTR, left in RTL)
+    // and flips to the inline start when that side has no room.
+    const overflowsEnd =
+      dirSign() === 1
+        ? parentRect.right + submenuRect.width > viewportWidth - padding
+        : parentRect.left - submenuRect.width < padding;
+    if (overflowsEnd) {
+      submenuEl.classList.add("flipped");
     }
 
     // Vertical: clamp the submenu's viewport top so its bottom stays inside the frame,
@@ -816,9 +822,14 @@ class ContextMenuManager {
     // Set transform origin for animation
     this.menuEl.style.transformOrigin = `${originY} ${originX}`;
 
-    // Mark submenus that should open left
-    if (originX === "right" || finalX + rect.width > viewportWidth - 200) {
-      this.menuEl.classList.add("submenus-left");
+    // Mark submenus that must open toward the inline start: near the right edge in
+    // LTR (submenus default to the right), near the left edge in RTL (default left).
+    const submenuRoomEnd =
+      dirSign() === 1
+        ? originX !== "right" && finalX + rect.width <= viewportWidth - 200
+        : finalX >= 200;
+    if (!submenuRoomEnd) {
+      this.menuEl.classList.add("submenus-flipped");
     }
   }
 
@@ -846,13 +857,14 @@ class ContextMenuManager {
         break;
 
       case "ArrowRight":
-        e.preventDefault();
-        this._openCurrentSubmenu();
-        break;
-
       case "ArrowLeft":
         e.preventDefault();
-        this._closeCurrentSubmenu();
+        // Submenus open toward the inline end: ArrowRight in LTR, ArrowLeft in RTL.
+        if ((e.key === "ArrowRight") === (dirSign() === 1)) {
+          this._openCurrentSubmenu();
+        } else {
+          this._closeCurrentSubmenu();
+        }
         break;
 
       case "Escape":

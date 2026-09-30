@@ -1,0 +1,34 @@
+/* ==================== Directional Icons ====================
+ * Lucide glyphs that point along the inline axis are mirrored under RTL. The
+ * glyph pseudo-element is flipped, not the element, so element-level rotation
+ * and animation on the same icon still compose. Icons that are not mirrored by
+ * design (trend and diagonal arrows, exchange arrows, vertical arrows, media
+ * play) are classified in tools/tests/rtl_icons.test.mjs.
+ */
+[dir="rtl"]
+  :is(
+    .icon-chevron-left,
+    .icon-chevron-right,
+    .icon-chevrons-left,
+    .icon-chevrons-right,
+    .icon-arrow-left,
+    .icon-arrow-right,
+    .icon-log-in,
+    .icon-log-out,
+    .icon-panel-left,
+    .icon-panel-right,
+    .icon-undo,
+    .icon-redo,
+    .icon-undo-2,
+    .icon-redo-2,
+    .icon-reply,
+    .icon-forward,
+    .icon-corner-down-left,
+    .icon-corner-down-right,
+    .icon-list-indent,
+    .icon-indent,
+    .icon-outdent
+  )::before {
+  display: inline-block;
+  transform: scaleX(-1);
+}

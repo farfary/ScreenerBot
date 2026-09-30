@@ -1072,12 +1072,12 @@ body.trade-action-dialog-open {
 
   20%,
   60% {
-    transform: translateX(-4px);
+    transform: translateX(calc(var(--dir-sign) * -4px));
   }
 
   40%,
   80% {
-    transform: translateX(4px);
+    transform: translateX(calc(var(--dir-sign) * 4px));
   }
 }
 

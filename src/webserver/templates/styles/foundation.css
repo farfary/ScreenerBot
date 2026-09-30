@@ -269,6 +269,13 @@
   --color-danger: var(--error-color);
   --color-error: var(--error-color);
   --color-info: var(--link-color);
+
+  /* Sign of the inline direction: scales horizontal offsets that must mirror in RTL. */
+  --dir-sign: 1;
+}
+
+[dir="rtl"] {
+  --dir-sign: -1;
 }
 
 [data-theme="dark"] {

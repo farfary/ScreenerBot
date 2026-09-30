@@ -9,6 +9,16 @@ export function $(selector) {
   return document.querySelector(selector);
 }
 
+// Sign of the inline direction: 1 in LTR, -1 in RTL
+export function dirSign() {
+  return document.documentElement.dir === "rtl" ? -1 : 1;
+}
+
+// Distance scrolled from the inline start edge (Chromium reports negative scrollLeft in RTL)
+export function scrollStart(el) {
+  return Math.abs(el.scrollLeft);
+}
+
 // Select all elements by selector
 export function $$(selector) {
   if (!selector) return [];

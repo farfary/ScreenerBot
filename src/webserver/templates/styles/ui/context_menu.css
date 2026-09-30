@@ -222,7 +222,7 @@
   backdrop-filter: var(--floating-blur-lg);
   opacity: 0;
   visibility: hidden;
-  transform: translateX(-4px);
+  transform: translateX(calc(var(--dir-sign) * -4px));
   transition:
     opacity var(--floating-duration-fast) ease,
     transform var(--floating-duration-fast) ease,
@@ -236,19 +236,19 @@
   transform: translateX(0);
 }
 
-/* Submenu opens to left if near right edge */
-.context-menu-submenu.left,
-.context-menu.submenus-left .context-menu-submenu {
+/* Submenu opens toward the inline start when the inline-end side has no room */
+.context-menu-submenu.flipped,
+.context-menu.submenus-flipped .context-menu-submenu {
   inset-inline: auto 100%;
   margin-inline: 0 2px;
-  transform: translateX(4px);
+  transform: translateX(calc(var(--dir-sign) * 4px));
 }
 
-.context-menu-item:hover > .context-menu-submenu.left,
-.context-menu-item.active > .context-menu-submenu.left,
-.context-menu-item.submenu-open > .context-menu-submenu.left,
-.context-menu.submenus-left .context-menu-item:hover > .context-menu-submenu,
-.context-menu.submenus-left .context-menu-item.submenu-open > .context-menu-submenu {
+.context-menu-item:hover > .context-menu-submenu.flipped,
+.context-menu-item.active > .context-menu-submenu.flipped,
+.context-menu-item.submenu-open > .context-menu-submenu.flipped,
+.context-menu.submenus-flipped .context-menu-item:hover > .context-menu-submenu,
+.context-menu.submenus-flipped .context-menu-item.submenu-open > .context-menu-submenu {
   transform: translateX(0);
 }
 

@@ -38,6 +38,7 @@
 /* global sessionStorage, history, queueMicrotask */
 
 import * as AppState from "../core/app_state.js";
+import { dirSign, scrollStart } from "../core/dom.js";
 import { playTabSwitch } from "../core/sounds.js";
 
 // ============================================================================
@@ -184,7 +185,7 @@ export class TabBar {
       // Convert vertical scroll to horizontal
       if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
         event.preventDefault();
-        this.container.scrollLeft += event.deltaY;
+        this.container.scrollLeft += dirSign() * event.deltaY;
         this._updateScrollIndicators();
       }
     };
@@ -205,7 +206,8 @@ export class TabBar {
   }
 
   _updateScrollIndicators() {
-    const { scrollLeft, scrollWidth, clientWidth } = this.container;
+    const { scrollWidth, clientWidth } = this.container;
+    const fromStart = scrollStart(this.container);
     const wrapper = this.container.parentElement;
 
     // Check if wrapper has the scroll wrapper class
@@ -214,19 +216,19 @@ export class TabBar {
       // or use container itself for indicator tracking
       const target = wrapper || this.container;
 
-      const canScrollLeft = scrollLeft > 1;
-      const canScrollRight = scrollLeft < scrollWidth - clientWidth - 1;
+      const canScrollStart = fromStart > 1;
+      const canScrollEnd = fromStart < scrollWidth - clientWidth - 1;
 
-      target.classList.toggle("can-scroll-left", canScrollLeft);
-      target.classList.toggle("can-scroll-right", canScrollRight);
+      target.classList.toggle("can-scroll-start", canScrollStart);
+      target.classList.toggle("can-scroll-end", canScrollEnd);
       return;
     }
 
-    const canScrollLeft = scrollLeft > 1;
-    const canScrollRight = scrollLeft < scrollWidth - clientWidth - 1;
+    const canScrollStart = fromStart > 1;
+    const canScrollEnd = fromStart < scrollWidth - clientWidth - 1;
 
-    wrapper.classList.toggle("can-scroll-left", canScrollLeft);
-    wrapper.classList.toggle("can-scroll-right", canScrollRight);
+    wrapper.classList.toggle("can-scroll-start", canScrollStart);
+    wrapper.classList.toggle("can-scroll-end", canScrollEnd);
   }
 
   _cleanupScrollNavigation() {

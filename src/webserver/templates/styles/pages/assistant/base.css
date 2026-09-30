@@ -260,7 +260,7 @@
 
 .decision-card:hover {
   border-color: var(--primary-alpha-40);
-  transform: translateX(2px);
+  transform: translateX(calc(var(--dir-sign) * 2px));
 }
 
 .decision-icon {

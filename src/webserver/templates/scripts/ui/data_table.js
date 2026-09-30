@@ -1493,7 +1493,7 @@ export class DataTable {
    *   actions: {
    *     dropdown: true,
    *     icon: '⋮', // or '•••' or '⚙️'
-   *     menuPosition: 'left', // 'left' or 'right' (default)
+   *     menuPosition: 'start', // 'start' or 'end' (default), the trigger edge the menu aligns to
    *     items: [
    *       {
    *         id: 'view',
@@ -1529,8 +1529,8 @@ export class DataTable {
     // Dropdown menu style
     if (config.dropdown && config.items) {
       const icon = config.icon || '<i class="icon-ellipsis-vertical"></i>';
-      const menuPosition = config.menuPosition || "right";
-      const menuClass = menuPosition === "left" ? "menu-left" : "";
+      const menuPosition = config.menuPosition || "end";
+      const menuClass = menuPosition === "start" ? "menu-start" : "";
 
       return `
         <div class="dt-actions-container">

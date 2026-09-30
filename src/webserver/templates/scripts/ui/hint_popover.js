@@ -8,6 +8,7 @@
  */
 
 import * as Hints from "../core/hints.js";
+import { dirSign } from "../core/dom.js";
 
 // Currently open popover instance
 let activePopover = null;
@@ -289,8 +290,15 @@ export class HintPopover {
       this.el.style.maxHeight = `${maxHeight}px`;
     }
 
-    // Preferred position from data attribute
-    const preferred = this.triggerEl.dataset.hintPosition || "right";
+    // Preferred position from data attribute. "right" and "left" name the inline end
+    // and inline start, so they swap sides under RTL.
+    const requested = this.triggerEl.dataset.hintPosition || "right";
+    const preferred =
+      dirSign() === -1 && (requested === "right" || requested === "left")
+        ? requested === "right"
+          ? "left"
+          : "right"
+        : requested;
 
     // Calculate available space in each direction
     const spaceRight = viewport.right - triggerRect.right;

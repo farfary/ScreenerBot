@@ -560,10 +560,10 @@ tokens-featured-social-twitter = { -twitter }
 
 tokens-featured-row-view-all = All
     .title = Open the full Featured view
-tokens-featured-row-scroll-left =
-    .aria-label = Scroll left
-tokens-featured-row-scroll-right =
-    .aria-label = Scroll right
+tokens-featured-row-scroll-start =
+    .aria-label = Show previous tokens
+tokens-featured-row-scroll-end =
+    .aria-label = Show more tokens
 tokens-featured-row-empty = No featured tokens
 # $name and $symbol identify the token; $boosts is the formatted active boost count.
 tokens-featured-row-title = { $name } ({ $symbol })

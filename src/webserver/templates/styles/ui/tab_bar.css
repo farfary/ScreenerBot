@@ -323,21 +323,21 @@
   color: var(--text-primary);
 }
 
-.tab-scroll-btn--left {
+.tab-scroll-btn--start {
   inset-inline-start: 0;
   background: linear-gradient(to right, var(--tab-bar-bg-secondary) 50%, transparent);
   padding-inline-start: 4px;
 }
 
-.tab-scroll-btn--right {
+.tab-scroll-btn--end {
   inset-inline-end: 0;
   background: linear-gradient(to left, var(--tab-bar-bg-secondary) 50%, transparent);
   padding-inline-end: 4px;
 }
 
 /* Show buttons when there's overflow */
-.tab-scroll-wrapper.can-scroll-left .tab-scroll-btn--left,
-.tab-scroll-wrapper.can-scroll-right .tab-scroll-btn--right {
+.tab-scroll-wrapper.can-scroll-start .tab-scroll-btn--start,
+.tab-scroll-wrapper.can-scroll-end .tab-scroll-btn--end {
   opacity: 1;
   pointer-events: auto;
 }
@@ -366,11 +366,11 @@
   background: linear-gradient(to left, var(--tab-bar-bg-secondary), transparent);
 }
 
-.tab-scroll-wrapper.can-scroll-left::before {
+.tab-scroll-wrapper.can-scroll-start::before {
   opacity: 1;
 }
 
-.tab-scroll-wrapper.can-scroll-right::after {
+.tab-scroll-wrapper.can-scroll-end::after {
   opacity: 1;
 }
 

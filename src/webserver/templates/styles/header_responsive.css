@@ -46,8 +46,8 @@
   background: linear-gradient(to left, var(--bg-secondary), transparent);
 }
 
-.header-row-2-wrapper.can-scroll-left::before,
-.header-row-2-wrapper.can-scroll-right::after {
+.header-row-2-wrapper.can-scroll-start::before,
+.header-row-2-wrapper.can-scroll-end::after {
   opacity: 1;
 }
 
@@ -97,6 +97,7 @@
   background: linear-gradient(to top, var(--primary-alpha-20), transparent);
   mask: linear-gradient(90deg, transparent, #000 20%, #000 80%, transparent);
   opacity: 0;
+  /* rtl-ok: indicator offset is measured from the physical left edge by JS */
   transform: translateX(var(--nav-indicator-x, 0));
   filter: blur(1px);
   pointer-events: none;

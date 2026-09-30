@@ -3,6 +3,8 @@
  * Handles column width calculations, resizing, and auto-sizing
  */
 
+import { dirSign } from "../../core/dom.js";
+
 export function applyColumnManagementMixin(DataTable) {
   const proto = DataTable.prototype;
 
@@ -460,7 +462,7 @@ export function applyColumnManagementMixin(DataTable) {
       const { columnId, startX, startWidth, minWidth } = this.resizing;
 
       const effectiveMin = typeof minWidth === "number" ? minWidth : 50;
-      let diff = e.pageX - startX;
+      let diff = dirSign() * (e.pageX - startX);
 
       // Prevent shrinking beyond min width
       const maxDecrease = startWidth - effectiveMin;

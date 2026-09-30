@@ -206,7 +206,7 @@
 .exit-dialog__option:hover {
   background: rgb(255, 255, 255, 0.07);
   border-color: rgb(255, 255, 255, 0.12);
-  transform: translateX(4px);
+  transform: translateX(calc(var(--dir-sign) * 4px));
 }
 
 .exit-dialog__option:focus {
@@ -217,7 +217,7 @@
 }
 
 .exit-dialog__option:active {
-  transform: translateX(2px);
+  transform: translateX(calc(var(--dir-sign) * 2px));
 }
 
 /* Light theme */
@@ -292,7 +292,7 @@
   font-size: 16px;
   color: var(--text-muted, #6e7681);
   opacity: 0;
-  transform: translateX(-8px);
+  transform: translateX(calc(var(--dir-sign) * -8px));
   transition: all var(--transition-base);
 }
 

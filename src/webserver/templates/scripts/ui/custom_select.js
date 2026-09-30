@@ -11,6 +11,7 @@
  */
 
 import { openMenu, closeMenu } from "../core/menu_manager.js";
+import { dirSign } from "../core/dom.js";
 
 const MAX_DROPDOWN_HEIGHT = 280;
 const VIEWPORT_MARGIN = 8;
@@ -850,10 +851,19 @@ export class CustomSelect {
     );
 
     // --- HORIZONTAL: align to the trigger, then clamp fully into the viewport. ---
-    let left = triggerRect.left;
-    if (left + resolvedDropdownWidth > viewportWidth - VIEWPORT_MARGIN) {
-      // Prefer right-aligning to the trigger when it would overflow the right edge.
+    // The dropdown aligns to the trigger's inline-start edge (left in LTR, right in RTL)
+    // and falls back to the opposite edge when it would overflow the viewport.
+    let left;
+    if (dirSign() === 1) {
+      left = triggerRect.left;
+      if (left + resolvedDropdownWidth > viewportWidth - VIEWPORT_MARGIN) {
+        left = triggerRect.right - resolvedDropdownWidth;
+      }
+    } else {
       left = triggerRect.right - resolvedDropdownWidth;
+      if (left < VIEWPORT_MARGIN) {
+        left = triggerRect.left;
+      }
     }
     left = Math.max(
       VIEWPORT_MARGIN,

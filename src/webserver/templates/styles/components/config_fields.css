@@ -418,7 +418,7 @@
 
 .config-field.collapsed .config-object-chevron,
 .config-object-field.collapsed .config-object-chevron {
-  transform: rotate(-90deg);
+  transform: rotate(calc(var(--dir-sign) * -90deg));
 }
 
 .config-field--stacked.collapsed {
