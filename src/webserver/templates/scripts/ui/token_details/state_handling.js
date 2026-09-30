@@ -13,12 +13,6 @@
  * genuine data change still repaints exactly once.
  */
 
-const CONNECTION_TEXT = {
-  online: "",
-  reconnecting: "Waiting for core…",
-  offline: "Waiting for core…",
-};
-
 function backendLooksOffline() {
   if (navigator.onLine === false) return true;
   if (document.documentElement.hasAttribute("data-backend-offline")) return true;
@@ -54,7 +48,7 @@ export function renderTabState({
   if (safeKind === "loading") {
     return `
       <div class="tdd-state tdd-state-loading" ${role}>
-        <div class="loading-spinner">${escapeStateText(message || "Loading…")}</div>
+        <div class="loading-spinner">${escapeStateText(message || I18n.t("common-loading"))}</div>
       </div>
     `;
   }
@@ -67,7 +61,7 @@ export function renderTabState({
       ${
         retry
           ? `<button type="button" class="tdd-state-retry" data-action="tdd-retry">
-              <i class="icon-refresh-cw" aria-hidden="true"></i> Retry
+              <i class="icon-refresh-cw" aria-hidden="true"></i> ${escapeStateText(I18n.t("common-action-retry"))}
             </button>`
           : ""
       }
@@ -144,7 +138,7 @@ export function applyStateHandlingMixin(DialogClass) {
     }
     const text = chip.querySelector(".tdd-connection-text");
     if (text) {
-      text.textContent = CONNECTION_TEXT[state] || CONNECTION_TEXT.reconnecting;
+      text.textContent = I18n.t("shell-connection-waiting");
     }
   };
 
@@ -157,12 +151,12 @@ export function applyStateHandlingMixin(DialogClass) {
    */
   proto._renderTabError = function (content, opts = {}) {
     if (!content) return;
-    const title = opts.title || "Couldn't load data";
+    const title = opts.title || I18n.t("tokens-state-error-title");
     const message =
       opts.message ||
       (navigator.onLine === false
-        ? "You appear to be offline."
-        : "The request failed after several attempts.");
+        ? I18n.t("tokens-state-offline")
+        : I18n.t("tokens-state-request-failed"));
     const html = renderTabState({
       kind: "error",
       icon: "icon-triangle-alert",
@@ -180,7 +174,7 @@ export function applyStateHandlingMixin(DialogClass) {
    * @param {HTMLElement} content - the tab content element
    * @param {string} [label]
    */
-  proto._renderTabWaiting = function (content, label = "Waiting for data…") {
+  proto._renderTabWaiting = function (content, label = I18n.t("tokens-state-waiting")) {
     if (!content) return;
     const html = renderTabState({ kind: "loading", message: label });
     this._renderHtmlIfChanged(content, html, "__stateHtml");
@@ -195,7 +189,7 @@ export function applyStateHandlingMixin(DialogClass) {
     this._retryCount = 0;
     this._setConnectionState("reconnecting");
     const content = this.dialogEl?.querySelector(`[data-tab-content="${this.currentTab}"]`);
-    this._renderTabWaiting(content, "Loading…");
+    this._renderTabWaiting(content, I18n.t("common-loading"));
     this.isRefreshing = false;
     this._fetchTokenData();
   };

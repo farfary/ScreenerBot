@@ -4,6 +4,7 @@
  * Handles transaction history display and chart
  */
 import * as Utils from "../../core/utils.js";
+import { withSolUnit } from "../../core/format.js";
 import { requestManager } from "../../core/request_manager.js";
 import { renderTabState } from "./state_handling.js";
 import { typeKind, typeLabel } from "../transaction_type.js";
@@ -25,7 +26,7 @@ export function applyTransactionsTabMixin(DialogClass) {
 
     content.innerHTML = renderTabState({
       kind: "loading",
-      message: "Loading transactions…",
+      message: I18n.t("tokens-transactions-loading"),
     });
 
     try {
@@ -40,8 +41,8 @@ export function applyTransactionsTabMixin(DialogClass) {
         if (transactions.length === 0) {
           content.innerHTML = renderTabState({
             icon: "icon-activity",
-            title: "No transactions",
-            message: "No wallet transaction history is available for this token.",
+            title: I18n.t("tokens-transactions-empty-title"),
+            message: I18n.t("tokens-transactions-empty-history"),
           });
           content.dataset.loaded = "true";
           return;
@@ -59,16 +60,16 @@ export function applyTransactionsTabMixin(DialogClass) {
       } else {
         content.innerHTML = renderTabState({
           icon: "icon-activity",
-          title: "No transactions",
-          message: "No transaction data is available for this token.",
+          title: I18n.t("tokens-transactions-empty-title"),
+          message: I18n.t("tokens-transactions-empty-data"),
         });
         content.dataset.loaded = "true";
       }
     } catch (err) {
       console.error("Failed to load transactions:", err);
       this._renderTabError(content, {
-        title: "Couldn't load transactions",
-        message: "Transaction history is temporarily unavailable.",
+        title: I18n.t("tokens-transactions-error-title"),
+        message: I18n.t("tokens-transactions-error-message"),
       });
     }
   };
@@ -80,19 +81,20 @@ export function applyTransactionsTabMixin(DialogClass) {
    */
   proto._buildTransactionsHTML = function (transactions) {
     const stats = summarizeTransactions(transactions);
+    const esc = (text) => this._escapeHtml(text);
     return `
       <div class="transactions-container">
         <section class="transactions-overview">
           <div class="transactions-section-heading">
             <div>
-              <strong>24h activity</strong>
-              <span>Hourly wallet transactions</span>
+              <strong>${esc(I18n.t("tokens-transactions-activity-title"))}</strong>
+              <span>${esc(I18n.t("tokens-transactions-activity-subtitle"))}</span>
             </div>
           </div>
           <div class="transactions-metrics">
-            <div><span>Total</span><strong>${stats.total}</strong></div>
-            <div><span>Buys</span><strong class="positive">${stats.buys}</strong></div>
-            <div><span>Sells</span><strong class="negative">${stats.sells}</strong></div>
+            <div><span>${esc(I18n.t("tokens-transactions-metric-total"))}</span><strong>${Utils.formatNumber(stats.total, { decimals: 0 })}</strong></div>
+            <div><span>${esc(I18n.t("tokens-transactions-metric-buys"))}</span><strong class="positive">${Utils.formatNumber(stats.buys, { decimals: 0 })}</strong></div>
+            <div><span>${esc(I18n.t("tokens-transactions-metric-sells"))}</span><strong class="negative">${Utils.formatNumber(stats.sells, { decimals: 0 })}</strong></div>
           </div>
           <div id="txns-chart" class="transactions-chart"></div>
         </section>
@@ -100,16 +102,16 @@ export function applyTransactionsTabMixin(DialogClass) {
         <section class="transactions-list-section">
           <div class="transactions-section-heading">
             <div>
-              <strong>Recent transactions</strong>
-              <span>${Math.min(transactions.length, 100)} shown</span>
+              <strong>${esc(I18n.t("tokens-transactions-recent-title"))}</strong>
+              <span>${esc(I18n.t("tokens-transactions-shown", { count: Math.min(transactions.length, 100) }))}</span>
             </div>
           </div>
           <div class="transactions-table-shell">
             <div class="transactions-table-header" aria-hidden="true">
-              <span>Time</span>
-              <span>Type</span>
-              <span class="transaction-price-cell">Price</span>
-              <span>Total</span>
+              <span>${esc(I18n.t("tokens-transactions-column-time"))}</span>
+              <span>${esc(I18n.t("tokens-transactions-column-type"))}</span>
+              <span class="transaction-price-cell">${esc(I18n.t("tokens-transactions-column-price"))}</span>
+              <span>${esc(I18n.t("tokens-transactions-column-total"))}</span>
               <span></span>
             </div>
             <div id="txns-list" class="transactions-list"></div>
@@ -157,7 +159,7 @@ export function applyTransactionsTabMixin(DialogClass) {
     // Create Chart
     // Ensure LightweightCharts is available
     if (!window.LightweightCharts) {
-      chartContainer.innerHTML = "Chart library missing";
+      chartContainer.textContent = I18n.t("tokens-transactions-chart-missing");
       return;
     }
 
@@ -225,19 +227,19 @@ export function applyTransactionsTabMixin(DialogClass) {
           ? Utils.formatPriceSubscript(tx.price_sol, { precision: 5 })
           : "—";
         const amount = tx.amount_sol !== undefined ? tx.amount_sol : Math.abs(tx.sol_delta || 0);
-        const total = Utils.formatNumber(amount, { decimals: 2 });
+        const total = withSolUnit(Utils.formatNumber(amount, { decimals: 2 }));
 
         const rowInner = `
           <span class="transaction-time">${this._escapeHtml(timeDisplay)}</span>
           <strong class="transaction-kind ${kind}">${this._escapeHtml(label)}</strong>
           <span class="transaction-price-cell">${price}</span>
-          <span class="transaction-total">${total} SOL</span>
+          <span class="transaction-total">${this._escapeHtml(total)}</span>
           <i class="icon-external-link transaction-external" aria-hidden="true"></i>
         `;
 
         return tx.signature
           ? `
-            <a class="token-transaction-row" href="${Utils.solscanTxUrl(tx.signature)}" target="_blank" rel="noopener noreferrer" title="View transaction on Solscan">
+            <a class="token-transaction-row" href="${Utils.solscanTxUrl(tx.signature)}" target="_blank" rel="noopener noreferrer" title="${this._escapeHtml(I18n.t("tokens-transactions-view-solscan"))}">
               ${rowInner}
             </a>
           `

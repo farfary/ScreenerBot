@@ -12,6 +12,9 @@ import * as Utils from "../../core/utils.js";
 import { formatPercentValue, withSolUnit } from "../../core/format.js";
 import { requestManager } from "../../core/request_manager.js";
 import { renderTabState } from "./state_handling.js";
+import { POSITION_MANAGEMENT_LABELS } from "../position_management.js";
+import { POSITION_STATUS_LABELS } from "../position_status.js";
+import { closeReasonText } from "../trade_reason.js";
 
 export function applyPositionsTabMixin(DialogClass) {
   const proto = DialogClass.prototype;
@@ -29,8 +32,8 @@ export function applyPositionsTabMixin(DialogClass) {
         content,
         renderTabState({
           icon: "icon-chart-bar",
-          title: "No position",
-          message: "No token selected.",
+          title: I18n.t("tokens-positions-empty-title"),
+          message: I18n.t("tokens-positions-no-token"),
         }),
         "__posHtml"
       );
@@ -48,7 +51,7 @@ export function applyPositionsTabMixin(DialogClass) {
     if (!content.__posHtml) {
       this._renderHtmlIfChanged(
         content,
-        renderTabState({ kind: "loading", message: "Loading position…" }),
+        renderTabState({ kind: "loading", message: I18n.t("tokens-positions-loading") }),
         "__posHtml"
       );
     }
@@ -72,8 +75,8 @@ export function applyPositionsTabMixin(DialogClass) {
         content,
         renderTabState({
           icon: "icon-chart-bar",
-          title: "No position",
-          message: "No position for this token yet. Use Buy to open one.",
+          title: I18n.t("tokens-positions-empty-title"),
+          message: I18n.t("tokens-positions-empty-message"),
         }),
         "__posHtml"
       );
@@ -104,7 +107,8 @@ export function applyPositionsTabMixin(DialogClass) {
 
 function renderPositionSummary(position) {
   const isClosed = !!position.exit_time;
-  const stateLabel = position.archived ? "Archived" : isClosed ? "Closed" : "Open";
+  const stateKey = position.archived ? "archived" : isClosed ? "closed" : "open";
+  const stateLabel = I18n.label(POSITION_STATUS_LABELS, stateKey);
   const stateClass = position.archived ? "muted" : isClosed ? "warning" : "good";
 
   // A wallet-derived round whose cost basis could not be established, or whose history
@@ -130,48 +134,57 @@ function renderPositionSummary(position) {
     : "—";
 
   const metadata = [];
-  const ownershipLabels = {
-    auto_trader: "Auto Trader",
-    user_only: "User Only",
-    copy_task: "Copy Task",
-    hybrid: "Hybrid",
-  };
+  const metaItem = (text) => `<span class="position-meta-item">${escapeText(text)}</span>`;
   metadata.push(
-    `<span class="position-meta-item">${ownershipLabels[position.management] || "Auto Trader"}</span>`
+    metaItem(I18n.label(POSITION_MANAGEMENT_LABELS, position.management || "auto_trader"))
   );
   if (position.origin?.kind === "external") {
-    metadata.push('<span class="position-meta-item">From wallet history</span>');
+    metadata.push(metaItem(I18n.t("tokens-positions-from-wallet-history")));
   }
   if (position.holding_state === "frozen") {
-    metadata.push('<span class="position-meta-item">Frozen — cannot be sold</span>');
+    metadata.push(metaItem(I18n.t("tokens-positions-frozen")));
   }
   if (pnlUnknown) {
     metadata.push(
-      `<span class="position-meta-item">${
-        basisUnknown ? "No cost basis" : "History incomplete"
-      }</span>`
+      metaItem(
+        basisUnknown
+          ? I18n.t("tokens-positions-no-cost-basis")
+          : I18n.t("tokens-positions-history-incomplete")
+      )
     );
   }
   if (position.dca_count > 0) {
-    metadata.push(`<span class="position-meta-item">DCA ${position.dca_count}</span>`);
+    metadata.push(metaItem(I18n.t("tokens-positions-dca-count", { count: position.dca_count })));
   }
   if (position.partial_exit_count > 0) {
-    metadata.push(`<span class="position-meta-item">Exits ${position.partial_exit_count}</span>`);
+    metadata.push(
+      metaItem(I18n.t("tokens-positions-exit-count", { count: position.partial_exit_count }))
+    );
   }
 
   const marketFacts = [
-    ["Avg Entry", basisUnknown ? "—" : fmtPrice(entry)],
-    ["Current", fmtPrice(current)],
-    ["Tokens", tokensHeld != null ? Utils.formatCompactNumber(tokensHeld) : "—"],
-    ["Opened", ageStr],
+    [I18n.t("tokens-positions-fact-avg-entry"), basisUnknown ? "—" : fmtPrice(entry)],
+    [I18n.t("tokens-positions-fact-current"), fmtPrice(current)],
+    [
+      I18n.t("tokens-positions-fact-tokens"),
+      tokensHeld != null ? Utils.formatCompactNumber(tokensHeld) : "—",
+    ],
+    [I18n.t("tokens-positions-fact-opened"), ageStr],
   ];
   if (isClosed) {
     marketFacts.push(
-      ["Exit Price", fmtPrice(position.effective_exit_price ?? position.exit_price)],
-      ["SOL Received", fmtSol(position.sol_received)]
+      [
+        I18n.t("tokens-positions-fact-exit-price"),
+        fmtPrice(position.effective_exit_price ?? position.exit_price),
+      ],
+      [I18n.t("tokens-positions-fact-sol-received"), fmtSol(position.sol_received)]
     );
     if (position.closed_reason) {
-      marketFacts.push(["Closed Reason", escapeText(position.closed_reason), "wide"]);
+      marketFacts.push([
+        I18n.t("tokens-positions-fact-closed-reason"),
+        escapeText(closeReasonText(position.closed_reason)),
+        "wide",
+      ]);
     }
   }
 
@@ -181,12 +194,12 @@ function renderPositionSummary(position) {
     hasTargets || hasExtremes
       ? `
       <section class="position-section">
-        <div class="position-section-heading">Targets &amp; range</div>
+        <div class="position-section-heading">${escapeText(I18n.t("tokens-positions-section-range"))}</div>
         <div class="position-facts">
-          ${renderPositionFact("Profit Target Min", fmtPct(position.profit_target_min))}
-          ${renderPositionFact("Profit Target Max", fmtPct(position.profit_target_max))}
-          ${renderPositionFact("Highest Price", fmtPrice(position.price_highest))}
-          ${renderPositionFact("Lowest Price", fmtPrice(position.price_lowest))}
+          ${renderPositionFact(I18n.t("tokens-positions-fact-target-min"), fmtPct(position.profit_target_min))}
+          ${renderPositionFact(I18n.t("tokens-positions-fact-target-max"), fmtPct(position.profit_target_max))}
+          ${renderPositionFact(I18n.t("tokens-positions-fact-highest"), fmtPrice(position.price_highest))}
+          ${renderPositionFact(I18n.t("tokens-positions-fact-lowest"), fmtPrice(position.price_lowest))}
         </div>
       </section>`
       : "";
@@ -196,8 +209,8 @@ function renderPositionSummary(position) {
       <div class="position-sheet">
         <header class="position-sheet-header">
           <div class="position-heading">
-            <span class="position-kicker">Position</span>
-            <strong>${escapeText(position.symbol || "Token")}</strong>
+            <span class="position-kicker">${escapeText(I18n.t("tokens-positions-kicker"))}</span>
+            <strong>${escapeText(position.symbol || I18n.t("tokens-positions-fallback-symbol"))}</strong>
           </div>
           <div class="position-meta">
             ${metadata.join("")}
@@ -207,17 +220,17 @@ function renderPositionSummary(position) {
 
         <div class="position-headline">
           <div class="position-headline-item">
-            <span>${isClosed ? "Realized PnL" : "Unrealized PnL"}</span>
+            <span>${escapeText(isClosed ? I18n.t("tokens-positions-realized-pnl") : I18n.t("tokens-positions-unrealized-pnl"))}</span>
             <strong class="${toneClass(pnlPct ?? pnlSol)}">${fmtPnl(pnlSol, pnlPct)}</strong>
           </div>
           <div class="position-headline-item">
-            <span>Size</span>
+            <span>${escapeText(I18n.t("tokens-positions-size"))}</span>
             <strong>${fmtSol(sizeSol)}</strong>
           </div>
         </div>
 
         <section class="position-section">
-          <div class="position-section-heading">Market &amp; holdings</div>
+          <div class="position-section-heading">${escapeText(I18n.t("tokens-positions-section-market"))}</div>
           <div class="position-facts">
             ${marketFacts
               .map(([label, value, modifier]) => renderPositionFact(label, value, modifier))
@@ -236,7 +249,7 @@ function renderPositionSummary(position) {
 function renderPositionFact(label, value, modifier = "") {
   return `
     <div class="position-fact ${modifier}">
-      <span>${label}</span>
+      <span>${escapeText(label)}</span>
       <strong>${value}</strong>
     </div>
   `;

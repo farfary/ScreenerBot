@@ -181,7 +181,10 @@ export function applyChartTabMixin(DialogClass) {
         type: idx === 0 ? "entry" : "dca",
         price: entry.price_sol,
         timestamp: Math.floor(new Date(entry.timestamp).getTime() / 1000),
-        label: idx === 0 ? "Entry" : `DCA ${idx}`,
+        label:
+          idx === 0
+            ? I18n.t("tokens-chart-marker-entry")
+            : I18n.t("positions-chart-marker-dca", { index: idx }),
       });
     });
 
@@ -192,7 +195,7 @@ export function applyChartTabMixin(DialogClass) {
         type: "exit",
         price: exit.price_sol,
         timestamp: Math.floor(new Date(exit.timestamp).getTime() / 1000),
-        label: `Exit ${idx + 1}`,
+        label: I18n.t("positions-chart-marker-exit-numbered", { index: idx + 1 }),
       });
     });
 
@@ -204,7 +207,7 @@ export function applyChartTabMixin(DialogClass) {
       lines.push({
         price: this.positionsData.stop_loss_price,
         color: "#ef4444",
-        label: "Stop Loss",
+        label: I18n.t("tokens-chart-level-stop-loss"),
         style: 2,
       });
     }
@@ -212,7 +215,7 @@ export function applyChartTabMixin(DialogClass) {
       lines.push({
         price: this.positionsData.take_profit_price,
         color: "#10b981",
-        label: "Take Profit",
+        label: I18n.t("tokens-chart-level-take-profit"),
         style: 2,
       });
     }
@@ -266,7 +269,7 @@ export function applyChartTabMixin(DialogClass) {
         }
         // No data yet - show waiting message
         if (loadingText) {
-          loadingText.textContent = "Waiting for chart data...";
+          loadingText.textContent = I18n.t("positions-chart-waiting");
         }
         if (loadingOverlay) {
           loadingOverlay.classList.remove("hidden");
@@ -311,7 +314,7 @@ export function applyChartTabMixin(DialogClass) {
     } catch {
       // On error, show waiting message
       if (loadingText) {
-        loadingText.textContent = "Waiting for chart data...";
+        loadingText.textContent = I18n.t("positions-chart-waiting");
       }
       if (loadingOverlay) {
         loadingOverlay.classList.remove("hidden");

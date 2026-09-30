@@ -3,7 +3,14 @@
  * Extracted from token_details_dialog.js to reduce file size
  */
 import * as Utils from "../../core/utils.js";
-import { formatFixed, formatPercentValue } from "../../core/format.js";
+import { formatFixed, formatPercentValue, withSolUnit } from "../../core/format.js";
+
+const esc = (text) => Utils.escapeHtml(text);
+
+/** Buy share as a whole-number percentage without a sign. */
+function wholePercent(value) {
+  return formatPercentValue(value, { decimals: 0, plus: "" });
+}
 
 /**
  * Render the overview tab content
@@ -29,18 +36,18 @@ export function renderOverviewTab(token, options = {}) {
             <div class="chart-header-left">
               <div class="chart-data-indicator" id="chartDataIndicator" tabindex="0" role="status">
                 <span class="chart-data-dot"></span>
-                <span class="chart-data-label">Data</span>
+                <span class="chart-data-label">${esc(I18n.t("positions-chart-data"))}</span>
                 <div class="chart-data-tip" id="chartDataTip" role="tooltip">
-                  <div class="chart-data-tip-empty">Checking data…</div>
+                  <div class="chart-data-tip-empty">${esc(I18n.t("tokens-overview-chart-checking"))}</div>
                 </div>
               </div>
               ${renderHintTrigger("tokenDetails.chart")}
             </div>
             <div class="chart-ohlcv-display" id="chartOhlcvDisplay">
-              <span class="ohlcv-item"><span class="ohlcv-label">O</span> <span class="ohlcv-value" id="ohlcvOpen">—</span></span>
-              <span class="ohlcv-item"><span class="ohlcv-label">H</span> <span class="ohlcv-value" id="ohlcvHigh">—</span></span>
-              <span class="ohlcv-item"><span class="ohlcv-label">L</span> <span class="ohlcv-value" id="ohlcvLow">—</span></span>
-              <span class="ohlcv-item"><span class="ohlcv-label">C</span> <span class="ohlcv-value" id="ohlcvClose">—</span></span>
+              <span class="ohlcv-item"><span class="ohlcv-label">${esc(I18n.t("positions-chart-ohlc-open"))}</span> <span class="ohlcv-value" id="ohlcvOpen">—</span></span>
+              <span class="ohlcv-item"><span class="ohlcv-label">${esc(I18n.t("positions-chart-ohlc-high"))}</span> <span class="ohlcv-value" id="ohlcvHigh">—</span></span>
+              <span class="ohlcv-item"><span class="ohlcv-label">${esc(I18n.t("positions-chart-ohlc-low"))}</span> <span class="ohlcv-value" id="ohlcvLow">—</span></span>
+              <span class="ohlcv-item"><span class="ohlcv-label">${esc(I18n.t("positions-chart-ohlc-close"))}</span> <span class="ohlcv-value" id="ohlcvClose">—</span></span>
               <span class="ohlcv-change" id="ohlcvChange">—</span>
             </div>
             <div class="chart-controls">
@@ -59,7 +66,7 @@ export function renderOverviewTab(token, options = {}) {
             <div id="chartLoadingOverlay" class="chart-loading-overlay">
               <div class="chart-loading-content">
                 <div class="chart-loading-spinner"></div>
-                <div class="chart-loading-text">Loading chart data...</div>
+                <div class="chart-loading-text">${esc(I18n.t("positions-chart-loading"))}</div>
               </div>
             </div>
           </div>
@@ -113,7 +120,7 @@ export function renderOverviewBanner(token) {
       class="token-banner"
       role="button"
       tabindex="0"
-      aria-label="Open token banner"
+      aria-label="${esc(I18n.t("tokens-overview-banner-open"))}"
     >
       <img
         src="${Utils.escapeHtml(url)}"
@@ -132,24 +139,24 @@ function buildHeadlineMetrics(token) {
   const changeClass = getChangeClass(change24h);
 
   return `
-    <div class="overview-headline" aria-label="Headline market metrics">
+    <div class="overview-headline" aria-label="${esc(I18n.t("tokens-overview-headline-label"))}">
       <div class="overview-headline-item">
-        <span class="overview-headline-label">Price</span>
+        <span class="overview-headline-label">${esc(I18n.t("tokens-overview-price"))}</span>
         <span class="overview-headline-readout">
-          <span class="overview-headline-value">${token.price_sol ? Utils.formatPriceSubscript(token.price_sol, { precision: 5 }) + " SOL" : "—"}</span>
+          <span class="overview-headline-value">${token.price_sol ? withSolUnit(Utils.formatPriceSubscript(token.price_sol, { precision: 5 })) : "—"}</span>
           ${hasChange24h ? `<span class="overview-headline-change ${changeClass}">${formatChange(change24h)}</span>` : ""}
         </span>
       </div>
       <div class="overview-headline-item">
-        <span class="overview-headline-label">Market Cap</span>
+        <span class="overview-headline-label">${esc(I18n.t("tokens-overview-market-cap"))}</span>
         <span class="overview-headline-value">${token.market_cap ? Utils.formatCompactNumber(token.market_cap, { prefix: "$" }) : token.fdv ? Utils.formatCompactNumber(token.fdv, { prefix: "$" }) : "—"}</span>
       </div>
       <div class="overview-headline-item">
-        <span class="overview-headline-label">Liquidity</span>
+        <span class="overview-headline-label">${esc(I18n.t("tokens-overview-liquidity"))}</span>
         <span class="overview-headline-value">${token.liquidity_usd ? Utils.formatCompactNumber(token.liquidity_usd, { prefix: "$" }) : token.pool_reserves_sol ? Utils.formatSol(token.pool_reserves_sol, { decimals: 2 }) : "—"}</span>
       </div>
       <div class="overview-headline-item">
-        <span class="overview-headline-label">Vol 24H</span>
+        <span class="overview-headline-label">${esc(I18n.t("tokens-overview-volume-24h"))}</span>
         <span class="overview-headline-value">${token.volume_24h ? Utils.formatCompactNumber(token.volume_24h, { prefix: "$" }) : "—"}</span>
       </div>
     </div>
@@ -181,46 +188,47 @@ function buildTokenInfoSection(token, options) {
   const tagsContent =
     token.tags && token.tags.length > 0
       ? `<div class="overview-tags">${token.tags.map((tag) => `<span class="overview-tag">${escapeHtml(tag)}</span>`).join("")}</div>`
-      : '<span class="overview-tags-empty">No tags</span>';
+      : `<span class="overview-tags-empty">${esc(I18n.t("tokens-overview-no-tags"))}</span>`;
 
   return `
     <section class="overview-section">
       <div class="overview-section-header">
-        <span class="overview-section-title">Token Info</span>
+        <span class="overview-section-title">${esc(I18n.t("tokens-overview-info-title"))}</span>
         <div class="overview-section-actions">
-          ${token.profile ? '<span class="overview-verified"><i class="icon-badge-check"></i> Published profile</span>' : ""}
-          ${token.verified ? '<span class="overview-verified"><i class="icon-shield-check"></i> Low risk</span>' : ""}
+          ${token.profile ? `<span class="overview-verified"><i class="icon-badge-check"></i> ${esc(I18n.t("tokens-overview-profile"))}</span>` : ""}
+          ${token.verified ? `<span class="overview-verified"><i class="icon-shield-check"></i> ${esc(I18n.t("positions-risk-low"))}</span>` : ""}
           ${renderHintTrigger("tokenDetails.tokenInfo")}
         </div>
       </div>
       <div class="overview-facts">
           <div class="overview-fact">
-            <span class="overview-fact-label">Mint</span>
+            <span class="overview-fact-label">${esc(I18n.t("tokens-overview-fact-mint"))}</span>
             <button
               type="button"
               class="overview-copy-value"
               data-copy="${escapeHtml(token.mint)}"
-              title="Copy mint address"
-              aria-label="Copy mint address"
+              dir="ltr"
+              title="${esc(I18n.attr("positions-details-copy-mint", "title"))}"
+              aria-label="${esc(I18n.attr("positions-details-copy-mint", "aria-label"))}"
             >${formatShortAddress(token.mint)}</button>
           </div>
           <div class="overview-fact">
-            <span class="overview-fact-label">Decimals</span>
+            <span class="overview-fact-label">${esc(I18n.t("tokens-overview-fact-decimals"))}</span>
             <span class="overview-fact-value">${token.decimals ?? "—"}</span>
           </div>
           <div class="overview-fact">
-            <span class="overview-fact-label">Age</span>
+            <span class="overview-fact-label">${esc(I18n.t("tokens-overview-fact-age"))}</span>
             <span class="overview-fact-value">${age}</span>
           </div>
           <div class="overview-fact">
-            <span class="overview-fact-label">DEX</span>
+            <span class="overview-fact-label">${esc(I18n.t("tokens-overview-fact-dex"))}</span>
             <span class="overview-fact-value">${token.pool_dex ? escapeHtml(token.pool_dex) : "—"}</span>
           </div>
           ${
             token.total_holders
               ? `
           <div class="overview-fact">
-            <span class="overview-fact-label">Holders</span>
+            <span class="overview-fact-label">${esc(I18n.t("tokens-overview-fact-holders"))}</span>
             <span class="overview-fact-value">${Utils.formatNumber(token.total_holders, { decimals: 0 })}</span>
           </div>
           `
@@ -230,7 +238,7 @@ function buildTokenInfoSection(token, options) {
             token.top_10_concentration
               ? `
           <div class="overview-fact">
-            <span class="overview-fact-label">Top 10 Hold</span>
+            <span class="overview-fact-label">${esc(I18n.t("tokens-overview-fact-top-10"))}</span>
             <span class="overview-fact-value">${formatPercentValue(token.top_10_concentration, { decimals: 1, plus: "" })}</span>
           </div>
           `
@@ -238,7 +246,7 @@ function buildTokenInfoSection(token, options) {
           }
       </div>
       <div class="overview-tags-row">
-        <span class="overview-inline-label">Tags</span>
+        <span class="overview-inline-label">${esc(I18n.t("tokens-overview-tags"))}</span>
         ${tagsContent}
       </div>
       ${token.description ? `<p class="overview-description">${escapeHtml(token.description)}</p>` : ""}
@@ -252,24 +260,24 @@ function buildLiquiditySection(token, options) {
   return `
     <section class="overview-section">
       <div class="overview-section-header">
-        <span class="overview-section-title">Liquidity & Market</span>
+        <span class="overview-section-title">${esc(I18n.t("tokens-overview-liquidity-title"))}</span>
         ${renderHintTrigger("tokenDetails.liquidity")}
       </div>
       <div class="overview-facts overview-market-facts">
           <div class="overview-fact overview-fact-emphasis">
-            <span class="overview-fact-label">FDV</span>
+            <span class="overview-fact-label">${esc(I18n.t("tokens-overview-fact-fdv"))}</span>
             <span class="overview-fact-value">${token.fdv ? Utils.formatCurrencyUSD(token.fdv) : "—"}</span>
           </div>
           <div class="overview-fact overview-fact-emphasis">
-            <span class="overview-fact-label">Liquidity</span>
+            <span class="overview-fact-label">${esc(I18n.t("tokens-overview-liquidity"))}</span>
             <span class="overview-fact-value">${token.liquidity_usd ? Utils.formatCurrencyUSD(token.liquidity_usd) : "—"}</span>
           </div>
           <div class="overview-fact">
-            <span class="overview-fact-label">Pool SOL</span>
-            <span class="overview-fact-value">${token.pool_reserves_sol ? Utils.formatNumber(token.pool_reserves_sol, { decimals: 2 }) + " SOL" : "—"}</span>
+            <span class="overview-fact-label">${esc(I18n.t("tokens-overview-fact-pool-sol"))}</span>
+            <span class="overview-fact-value">${token.pool_reserves_sol ? withSolUnit(Utils.formatNumber(token.pool_reserves_sol, { decimals: 2 })) : "—"}</span>
           </div>
           <div class="overview-fact">
-            <span class="overview-fact-label">Pool Token</span>
+            <span class="overview-fact-label">${esc(I18n.t("tokens-overview-fact-pool-token"))}</span>
             <span class="overview-fact-value">${token.pool_reserves_token ? Utils.formatCompactNumber(token.pool_reserves_token) : "—"}</span>
           </div>
       </div>
@@ -277,8 +285,8 @@ function buildLiquiditySection(token, options) {
           token.pool_address
             ? `
         <div class="overview-pool-row">
-          <span class="overview-inline-label">Pool</span>
-          <a href="https://solscan.io/account/${token.pool_address}" target="_blank" rel="noopener" class="overview-pool-link">${formatShortAddress(token.pool_address)}</a>
+          <span class="overview-inline-label">${esc(I18n.t("tokens-overview-pool"))}</span>
+          <a href="https://solscan.io/account/${token.pool_address}" target="_blank" rel="noopener" class="overview-pool-link" dir="ltr">${formatShortAddress(token.pool_address)}</a>
         </div>
         `
             : ""
@@ -295,7 +303,7 @@ function buildMarketPulseSection(token, options) {
   return `
     <section class="overview-section">
       <div class="overview-section-header">
-        <span class="overview-section-title">Market Pulse</span>
+        <span class="overview-section-title">${esc(I18n.t("tokens-overview-pulse-title"))}</span>
         ${renderHintTrigger("tokenDetails.marketPulse")}
       </div>
       <div class="overview-pulse-matrix">
@@ -304,12 +312,12 @@ function buildMarketPulseSection(token, options) {
         <span class="overview-pulse-time">1H</span>
         <span class="overview-pulse-time">6H</span>
         <span class="overview-pulse-time">24H</span>
-        <span class="overview-pulse-label">Price</span>
+        <span class="overview-pulse-label">${esc(I18n.t("tokens-overview-price"))}</span>
         ${buildPulseChange(changes.m5)}
         ${buildPulseChange(changes.h1)}
         ${buildPulseChange(changes.h6)}
         ${buildPulseChange(changes.h24)}
-        <span class="overview-pulse-label">Volume</span>
+        <span class="overview-pulse-label">${esc(I18n.t("tokens-overview-volume"))}</span>
         ${buildPulseVolume(volumes.m5)}
         ${buildPulseVolume(volumes.h1)}
         ${buildPulseVolume(volumes.h6)}
@@ -369,14 +377,14 @@ function buildActivitySection(token, options) {
   return `
     <section class="overview-section">
       <div class="overview-section-header">
-        <span class="overview-section-title">Transaction Activity</span>
+        <span class="overview-section-title">${esc(I18n.t("tokens-overview-activity-title"))}</span>
         <div class="overview-section-actions">
           ${
             typeof buyPct24 === "number"
-              ? `<span class="overview-ratio ${buyPct24 >= 50 ? "bullish" : "bearish"}">${formatPercentValue(buyPct24, { decimals: 0, plus: "" })} Buy</span>`
+              ? `<span class="overview-ratio ${buyPct24 >= 50 ? "bullish" : "bearish"}">${esc(I18n.t("tokens-overview-buy-share", { percent: wholePercent(buyPct24) }))}</span>`
               : ""
           }
-          ${buySellRatio ? `<span class="overview-ratio ${ratioClass}">${formatFixed(buySellRatio, { decimals: 2 })} B/S</span>` : ""}
+          ${buySellRatio ? `<span class="overview-ratio ${ratioClass}">${esc(I18n.t("tokens-overview-buy-sell-ratio", { ratio: formatFixed(buySellRatio, { decimals: 2 }) }))}</span>` : ""}
           ${renderHintTrigger("tokenDetails.activity")}
         </div>
       </div>
@@ -388,32 +396,34 @@ function buildActivitySection(token, options) {
       </div>
       <div class="overview-flow-summary">
         <div class="overview-flow-stat buys">
-          <span class="overview-flow-stat-label">Buys 24H</span>
+          <span class="overview-flow-stat-label">${esc(I18n.t("tokens-overview-buys-24h"))}</span>
           <span class="overview-flow-stat-value">${typeof buys24 === "number" ? Utils.formatNumber(buys24, { decimals: 0 }) : "—"}</span>
         </div>
         <div class="overview-flow-stat sells">
-          <span class="overview-flow-stat-label">Sells 24H</span>
+          <span class="overview-flow-stat-label">${esc(I18n.t("tokens-overview-sells-24h"))}</span>
           <span class="overview-flow-stat-value">${typeof sells24 === "number" ? Utils.formatNumber(sells24, { decimals: 0 }) : "—"}</span>
         </div>
         <div class="overview-flow-stat ${netFlowClass}">
-          <span class="overview-flow-stat-label">Net Flow</span>
+          <span class="overview-flow-stat-label">${esc(I18n.t("tokens-overview-net-flow"))}</span>
           <span class="overview-flow-stat-value">${netFlowLabel}</span>
         </div>
         <div class="overview-flow-stat">
-          <span class="overview-flow-stat-label">24H Total</span>
+          <span class="overview-flow-stat-label">${esc(I18n.t("tokens-overview-total-24h"))}</span>
           <span class="overview-flow-stat-value">${total24 > 0 ? Utils.formatNumber(total24, { decimals: 0 }) : "—"}</span>
         </div>
         <div class="overview-flow-stat">
-          <span class="overview-flow-stat-label">24H Avg</span>
+          <span class="overview-flow-stat-label">${esc(I18n.t("tokens-overview-average-24h"))}</span>
           <span class="overview-flow-stat-value">${
-            total24 > 0 ? `${Utils.formatNumber(total24 / 24, { decimals: 1 })}/h` : "—"
+            total24 > 0
+              ? esc(I18n.t("tokens-overview-rate-per-hour", { amount: Utils.formatNumber(total24 / 24, { decimals: 1 }) }))
+              : "—"
           }</span>
         </div>
         <div class="overview-flow-stat">
-          <span class="overview-flow-stat-label">5M Spike</span>
+          <span class="overview-flow-stat-label">${esc(I18n.t("tokens-overview-spike-5m"))}</span>
           <span class="overview-flow-stat-value">${
             typeof spikeFactor === "number" && Number.isFinite(spikeFactor)
-              ? `${Utils.formatNumber(spikeFactor, { decimals: 2 })}×`
+              ? esc(I18n.t("tokens-overview-spike-factor", { factor: Utils.formatNumber(spikeFactor, { decimals: 2 }) }))
               : "—"
           }</span>
         </div>
@@ -437,26 +447,38 @@ function buildFlowRow(label, data, { minutes }) {
   const buyPct = total > 0 && typeof buys === "number" ? (buys / total) * 100 : 50;
   const sellPct = 100 - buyPct;
 
-  const countsTitle = hasAny
-    ? `Buys: ${typeof buys === "number" ? buys : "—"} (${total > 0 ? formatFixed(buyPct, { decimals: 0 }) : "—"}%), Sells: ${typeof sells === "number" ? sells : "—"} (${total > 0 ? formatFixed(sellPct, { decimals: 0 }) : "—"}%), Total: ${total}`
-    : "No transaction data";
-
   const buyText = typeof buys === "number" ? Utils.formatNumber(buys, { decimals: 0 }) : "—";
   const sellText = typeof sells === "number" ? Utils.formatNumber(sells, { decimals: 0 }) : "—";
+  const countsTitle = hasAny
+    ? I18n.t("tokens-overview-flow-counts", {
+        buys: buyText,
+        buyPercent: total > 0 ? wholePercent(buyPct) : "—",
+        sells: sellText,
+        sellPercent: total > 0 ? wholePercent(sellPct) : "—",
+        total: Utils.formatNumber(total, { decimals: 0 }),
+      })
+    : I18n.t("tokens-overview-flow-no-data");
+
   const ratePerMin = minutes && total >= 0 ? total / minutes : null;
-  const rateText = hasAny ? `${Utils.formatNumber(ratePerMin ?? 0, { decimals: 1 })}/m` : "—";
+  const rateText = hasAny
+    ? I18n.t("tokens-overview-rate-per-minute", {
+        amount: Utils.formatNumber(ratePerMin ?? 0, { decimals: 1 }),
+      })
+    : "—";
   const pctText =
     total > 0
-      ? `${formatPercentValue(buyPct, { decimals: 0, plus: "" })} / ${formatPercentValue(sellPct, { decimals: 0, plus: "" })}`
-      : hasAny ? "0% / 0%" : "—";
+      ? `${wholePercent(buyPct)} / ${wholePercent(sellPct)}`
+      : hasAny
+        ? `${wholePercent(0)} / ${wholePercent(0)}`
+        : "—";
 
   return `
-    <div class="overview-flow-row" title="${countsTitle}">
+    <div class="overview-flow-row" title="${esc(countsTitle)}">
       <div class="overview-flow-time">
         <span class="overview-flow-period">${label}</span>
         <span class="overview-flow-rate">${rateText}</span>
       </div>
-      <div class="overview-flow-bar ${hasAny ? "" : "is-empty"}" aria-label="${countsTitle}">
+      <div class="overview-flow-bar ${hasAny ? "" : "is-empty"}" aria-label="${esc(countsTitle)}">
         <span class="overview-flow-bar-buy" style="width: ${buyPct}%"></span>
         <span class="overview-flow-bar-sell" style="width: ${sellPct}%"></span>
       </div>

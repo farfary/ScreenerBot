@@ -36,6 +36,59 @@ const DATA_SOURCE_STATUS = {
   CACHED: "cached",
 };
 
+const esc = (text) => Utils.escapeHtml(text);
+
+// Ids are the DATA_SOURCE_STATUS values.
+const DATA_SOURCE_STATUS_LABELS = Object.freeze({
+  pending: "tokens-dialog-status-pending",
+  loading: "tokens-dialog-status-loading",
+  success: "tokens-dialog-status-ready",
+  error: "tokens-dialog-status-unavailable",
+  cached: "tokens-dialog-status-cached",
+});
+
+const DATA_SOURCE_STATUS_ICONS = Object.freeze({
+  [DATA_SOURCE_STATUS.PENDING]: "icon-clock-3",
+  [DATA_SOURCE_STATUS.LOADING]: "icon-refresh-cw",
+  [DATA_SOURCE_STATUS.SUCCESS]: "icon-circle-check",
+  [DATA_SOURCE_STATUS.ERROR]: "icon-circle-alert",
+  [DATA_SOURCE_STATUS.CACHED]: "icon-database",
+});
+
+// Ids are the keys of `_dataSourceStatus`.
+const DATA_SOURCE_LABELS = Object.freeze({
+  token: "tokens-dialog-source-token",
+  dexscreener: "tokens-dialog-source-market",
+  rugcheck: "tokens-dialog-source-security",
+  ohlcv: "tokens-dialog-source-chart",
+});
+
+// Ids are the tab ids of `_getDialogTabs`.
+const TOKEN_DETAILS_TAB_LABELS = Object.freeze({
+  overview: "tokens-dialog-tab-overview",
+  security: "tokens-dialog-tab-security",
+  positions: "tokens-dialog-tab-positions",
+  pools: "tokens-dialog-tab-pools",
+  links: "tokens-dialog-tab-links",
+  transactions: "tokens-dialog-tab-transactions",
+});
+
+/** Accessible summary of one source chip, e.g. "Market data: Ready". */
+function sourceSummary(source, status) {
+  return I18n.t("tokens-dialog-source-summary", {
+    source: I18n.label(DATA_SOURCE_LABELS, source),
+    status: I18n.label(DATA_SOURCE_STATUS_LABELS, status),
+  });
+}
+
+function renderSourceChip(source) {
+  return `
+                <span class="source-status" data-source="${source}" data-status="${DATA_SOURCE_STATUS.PENDING}" aria-label="${esc(sourceSummary(source, DATA_SOURCE_STATUS.PENDING))}">
+                  <span class="status-label">${esc(I18n.label(DATA_SOURCE_LABELS, source))}</span>
+                  <i class="status-icon ${DATA_SOURCE_STATUS_ICONS[DATA_SOURCE_STATUS.PENDING]} pending" aria-hidden="true"></i>
+                </span>`;
+}
+
 // How long after opening a token we suppress the "no data" row, so source
 // failures are never shown while the initial fetch/refresh is still in flight.
 const INITIAL_LOAD_GRACE_MS = 6000;
@@ -344,7 +397,7 @@ export class TokenDetailsDialog {
         }
         this._recordPollOutcome(false);
         const content = this.dialogEl?.querySelector(`[data-tab-content="${this.currentTab}"]`);
-        this._renderTabError(content, { title: "Couldn't load token data" });
+        this._renderTabError(content, { title: I18n.t("tokens-dialog-error-title") });
       } else {
         // Already showing good data. Keep the last good content; only show the
         // connection chip if the global backend watcher has confirmed an outage.
@@ -447,7 +500,7 @@ export class TokenDetailsDialog {
       )
       .join("");
 
-    const lead = allFailed ? '<span class="source-issues-lead">No data available</span>' : "";
+    const lead = allFailed ? `<span class="source-issues-lead">${esc(I18n.t("tokens-dialog-no-data"))}</span>` : "";
 
     row.innerHTML = `${lead}${chips}`;
     row.hidden = false;
@@ -462,27 +515,20 @@ export class TokenDetailsDialog {
   _updateDataSourceStatus(source, status) {
     this._dataSourceStatus[source] = status;
 
-    const statusDisplay = {
-      [DATA_SOURCE_STATUS.PENDING]: { icon: "icon-clock-3", label: "Waiting" },
-      [DATA_SOURCE_STATUS.LOADING]: { icon: "icon-refresh-cw", label: "Loading" },
-      [DATA_SOURCE_STATUS.SUCCESS]: { icon: "icon-circle-check", label: "Ready" },
-      [DATA_SOURCE_STATUS.ERROR]: { icon: "icon-circle-alert", label: "Unavailable" },
-      [DATA_SOURCE_STATUS.CACHED]: { icon: "icon-database", label: "Cached" },
-    };
-
     // Source health uses a static semantic glyph. It remains readable without
     // relying on pulse/blink animation or colour alone.
     const indicator = this.dialogEl?.querySelector(`.source-status[data-source="${source}"]`);
     if (indicator) {
       const icon = indicator.querySelector(".status-icon");
-      const sourceLabel = indicator.querySelector(".status-label")?.textContent || source;
-      const display = statusDisplay[status] || statusDisplay[DATA_SOURCE_STATUS.PENDING];
+      const known = Object.hasOwn(DATA_SOURCE_STATUS_ICONS, status);
+      const displayStatus = known ? status : DATA_SOURCE_STATUS.PENDING;
+      const summary = sourceSummary(source, displayStatus);
       if (icon) {
-        icon.className = `status-icon ${display.icon} ${status}`;
+        icon.className = `status-icon ${DATA_SOURCE_STATUS_ICONS[displayStatus]} ${status}`;
       }
       indicator.dataset.status = status;
-      indicator.setAttribute("aria-label", `${sourceLabel} data: ${display.label}`);
-      indicator.title = `${sourceLabel} data: ${display.label}`;
+      indicator.setAttribute("aria-label", summary);
+      indicator.title = summary;
     }
   }
 
@@ -493,6 +539,7 @@ export class TokenDetailsDialog {
       () => {
         this._fetchTokenData();
       },
+      // l10n-ignore: poller diagnostic id
       { label: "TokenRefresh", intervalMs: 5000 }
     );
     this.refreshPoller.start();
@@ -521,6 +568,7 @@ export class TokenDetailsDialog {
       () => {
         this._refreshChartData();
       },
+      // l10n-ignore: poller diagnostic id
       { label: "ChartRefresh", intervalMs: interval }
     );
     this.chartPoller.start();
@@ -539,6 +587,7 @@ export class TokenDetailsDialog {
           this._updateDataIndicator(this.tokenData.mint);
         }
       },
+      // l10n-ignore: poller diagnostic id
       { label: "DataStatus", intervalMs: 5000 }
     );
     this.dataStatusPoller.start();
@@ -599,8 +648,8 @@ export class TokenDetailsDialog {
         if (loadingText) {
           loadingText.textContent =
             this._chartEmptyCount >= 6
-              ? "No chart data available yet — still checking…"
-              : "Waiting for chart data...";
+              ? I18n.t("tokens-dialog-chart-still-checking")
+              : I18n.t("positions-chart-waiting");
         }
         if (loadingOverlay) {
           loadingOverlay.classList.remove("hidden");
@@ -638,7 +687,7 @@ export class TokenDetailsDialog {
     } catch {
       // On error when no data yet, keep showing waiting message
       if (!this.chartDataLoaded && loadingText) {
-        loadingText.textContent = "Waiting for chart data...";
+        loadingText.textContent = I18n.t("positions-chart-waiting");
       }
       if (!this.chartDataLoaded && loadingOverlay) {
         loadingOverlay.classList.remove("hidden");
@@ -864,8 +913,8 @@ export class TokenDetailsDialog {
   }
 
   _getDialogHTML() {
-    const symbol = this.tokenData.symbol || "Unknown";
-    const name = this.tokenData.name || "Unknown Token";
+    const symbol = this.tokenData.symbol || I18n.t("tokens-dialog-unknown-symbol");
+    const name = this.tokenData.name || I18n.t("tokens-dialog-unknown-name");
     const logoUrl = this.tokenData.logo_url || this.tokenData.image_url || "";
     // WSOL/SOL is the base currency, not a tradeable/analyzable token: hide the
     // trade buttons, the per-token actions (favorite/copy/Solscan), and every tab
@@ -888,8 +937,8 @@ export class TokenDetailsDialog {
               </div>
             </div>
             <div class="header-center">
-              <div class="header-price" id="headerPrice" aria-label="Market summary">
-                <div class="price-skeleton" role="status" aria-label="Loading price">
+              <div class="header-price" id="headerPrice" aria-label="${esc(I18n.t("tokens-dialog-market-summary"))}">
+                <div class="price-skeleton" role="status" aria-label="${esc(I18n.t("tokens-dialog-price-loading"))}">
                   <span class="price-skel price-skel-main"></span>
                   <span class="price-skel price-skel-sub"></span>
                   <span class="price-skel price-skel-badge"></span>
@@ -901,63 +950,48 @@ export class TokenDetailsDialog {
                 isSol
                   ? ""
                   : `<div class="header-trade-actions">
-                <button class="trade-btn buy-btn" id="headerBuyBtn" title="Buy this token" type="button">
+                <button class="trade-btn buy-btn" id="headerBuyBtn" title="${esc(I18n.attr("tokens-dialog-buy", "title"))}" type="button">
                   <i class="icon-shopping-cart"></i>
-                  Buy
+                  ${esc(I18n.t("tokens-dialog-buy"))}
                 </button>
-                <button class="trade-btn sell-btn" id="headerSellBtn" title="No open position to sell" type="button" disabled>
+                <button class="trade-btn sell-btn" id="headerSellBtn" title="${esc(I18n.t("tokens-dialog-sell-unavailable"))}" type="button" disabled>
                   <i class="icon-dollar-sign"></i>
-                  Sell
+                  ${esc(I18n.t("tokens-dialog-sell"))}
                 </button>
               </div>
               <div class="dialog-header-actions">
-                <button class="dialog-header-action favorite-btn" id="favoriteBtn" title="Add to Favorites" aria-label="Add to Favorites" type="button">
+                <button class="dialog-header-action favorite-btn" id="favoriteBtn" title="${esc(I18n.t("menu-favorite-add"))}" aria-label="${esc(I18n.t("menu-favorite-add"))}" type="button">
                   <i class="icon-star"></i>
                 </button>
-                <button class="dialog-header-action" id="copyMintBtn" title="Copy Mint Address" aria-label="Copy Mint Address" type="button">
+                <button class="dialog-header-action" id="copyMintBtn" title="${esc(I18n.attr("tokens-dialog-copy-mint", "title"))}" aria-label="${esc(I18n.attr("tokens-dialog-copy-mint", "aria-label"))}" type="button">
                   <i class="icon-copy"></i>
                 </button>
-                <a href="https://solscan.io/token/${this._escapeHtml(this.tokenData.mint)}" target="_blank" rel="noopener noreferrer" class="dialog-header-action" title="View on Solscan" aria-label="View on Solscan">
+                <a href="https://solscan.io/token/${this._escapeHtml(this.tokenData.mint)}" target="_blank" rel="noopener noreferrer" class="dialog-header-action" title="${esc(I18n.t("menu-view-solscan"))}" aria-label="${esc(I18n.t("menu-view-solscan"))}">
                   <i class="icon-external-link"></i>
                 </a>
               </div>`
               }
-              <button class="dialog-close" type="button" title="Close (ESC)" aria-label="Close token details">
+              <button class="dialog-close" type="button" title="${esc(I18n.attr("tokens-dialog-close", "title"))}" aria-label="${esc(I18n.attr("tokens-dialog-close", "aria-label"))}">
                 <i class="icon-x"></i>
               </button>
             </div>
           </div>
           <div class="header-badges-row" id="headerBadgesRow">
             <div class="header-badge-group">
-              <span class="header-meta-label">Details</span>
+              <span class="header-meta-label">${esc(I18n.t("tokens-dialog-details"))}</span>
               <div class="title-badges" id="headerBadges"></div>
             </div>
             <div class="header-status-area">
-              <span class="header-meta-label">Sources</span>
-              <div class="data-sources-status" role="status" aria-label="Data source status">
-                <span class="source-status" data-source="token" data-status="pending" aria-label="Token data: Waiting">
-                  <span class="status-label">Token</span>
-                  <i class="status-icon icon-clock-3 pending" aria-hidden="true"></i>
-                </span>
-                <span class="source-status" data-source="dexscreener" data-status="pending" aria-label="Market data: Waiting">
-                  <span class="status-label">Market</span>
-                  <i class="status-icon icon-clock-3 pending" aria-hidden="true"></i>
-                </span>
-                <span class="source-status" data-source="rugcheck" data-status="pending" aria-label="Security data: Waiting">
-                  <span class="status-label">Security</span>
-                  <i class="status-icon icon-clock-3 pending" aria-hidden="true"></i>
-                </span>
-                <span class="source-status" data-source="ohlcv" data-status="pending" aria-label="Chart data: Waiting">
-                  <span class="status-label">Chart</span>
-                  <i class="status-icon icon-clock-3 pending" aria-hidden="true"></i>
-                </span>
+              <span class="header-meta-label">${esc(I18n.t("tokens-dialog-sources"))}</span>
+              <div class="data-sources-status" role="status" aria-label="${esc(I18n.t("tokens-dialog-sources-status"))}">
+                ${["token", "dexscreener", "rugcheck", "ohlcv"].map(renderSourceChip).join("")}
               </div>
               <div class="tdd-connection-chip" data-state="online" role="status" hidden>
                 <i class="tdd-connection-icon icon-refresh-cw" aria-hidden="true"></i>
                 <span class="tdd-connection-text"></span>
               </div>
               <div class="last-updated" id="lastUpdatedTime">
-                <span class="last-updated-label">Updated</span>
+                <span class="last-updated-label">${esc(I18n.t("tokens-dialog-updated-label"))}</span>
                 <span class="last-updated-value">—</span>
               </div>
             </div>
@@ -970,27 +1004,27 @@ export class TokenDetailsDialog {
           tabs,
           activeTab: this.currentTab,
           idPrefix: "token-details",
-          ariaLabel: "Token details sections",
+          ariaLabel: I18n.t("tokens-dialog-sections"),
         })}
 
         <div class="dialog-body">
           <div class="tab-content active" data-tab-content="overview">
-            ${renderTabState({ kind: "loading", message: "Loading overview…" })}
+            ${renderTabState({ kind: "loading", message: I18n.t("tokens-dialog-loading-overview") })}
           </div>
           <div class="tab-content" data-tab-content="security">
-            ${renderTabState({ kind: "loading", message: "Loading security…" })}
+            ${renderTabState({ kind: "loading", message: I18n.t("tokens-dialog-loading-security") })}
           </div>
           <div class="tab-content" data-tab-content="positions">
-            ${renderTabState({ kind: "loading", message: "Loading position…" })}
+            ${renderTabState({ kind: "loading", message: I18n.t("tokens-positions-loading") })}
           </div>
           <div class="tab-content" data-tab-content="pools">
-            ${renderTabState({ kind: "loading", message: "Loading pools…" })}
+            ${renderTabState({ kind: "loading", message: I18n.t("tokens-dialog-loading-pools") })}
           </div>
           <div class="tab-content" data-tab-content="links">
-            ${renderTabState({ kind: "loading", message: "Loading links…" })}
+            ${renderTabState({ kind: "loading", message: I18n.t("tokens-dialog-loading-links") })}
           </div>
           <div class="tab-content" data-tab-content="transactions">
-            ${renderTabState({ kind: "loading", message: "Loading transactions…" })}
+            ${renderTabState({ kind: "loading", message: I18n.t("tokens-transactions-loading") })}
           </div>
         </div>
       </div>
@@ -999,13 +1033,13 @@ export class TokenDetailsDialog {
 
   _getDialogTabs(isSol = false) {
     const tabs = [
-      { id: "overview", label: "Overview", icon: "icon-info" },
-      { id: "security", label: "Security", icon: "icon-shield" },
-      { id: "positions", label: "Positions", icon: "icon-chart-bar" },
-      { id: "pools", label: "Pools", icon: "icon-droplet" },
-      { id: "links", label: "Links", icon: "icon-link" },
-      { id: "transactions", label: "Txns", icon: "icon-activity" },
-    ];
+      { id: "overview", icon: "icon-info" },
+      { id: "security", icon: "icon-shield" },
+      { id: "positions", icon: "icon-chart-bar" },
+      { id: "pools", icon: "icon-droplet" },
+      { id: "links", icon: "icon-link" },
+      { id: "transactions", icon: "icon-activity" },
+    ].map((tab) => ({ ...tab, label: I18n.label(TOKEN_DETAILS_TAB_LABELS, tab.id) }));
     return isSol ? tabs.slice(0, 1) : tabs;
   }
 
@@ -1045,21 +1079,37 @@ export class TokenDetailsDialog {
       // (cached market-data fallback).
       if (token.price_source) {
         const isPool = token.price_source === "pool";
+        const priceTitle = isPool
+          ? I18n.t("tokens-dialog-badge-pool-price-hint")
+          : I18n.t("tokens-dialog-badge-api-price-hint");
+        const priceLabel = isPool
+          ? I18n.t("tokens-dialog-badge-pool-price")
+          : I18n.t("tokens-dialog-badge-api-price");
         badges.push(
-          `<span class="badge ${isPool ? "badge-success" : "badge-secondary"}" title="${
-            isPool ? "Price from real-time on-chain pool" : "Price from cached market-data (API)"
-          }">${isPool ? "Pool price" : "API price"}</span>`
+          `<span class="badge ${isPool ? "badge-success" : "badge-secondary"}" title="${esc(priceTitle)}">${esc(priceLabel)}</span>`
         );
       }
 
-      if (token.profile) badges.push('<span class="badge badge-profile" title="Paid profile content reviewed for publication; not an audit or ownership verification."><i class="icon-badge-check"></i> Published profile</span>');
-      if (token.verified) badges.push('<span class="badge badge-success" title="Low risk according to the current Rugcheck score; not identity verification.">Low risk</span>');
+      if (token.profile) {
+        badges.push(
+          `<span class="badge badge-profile" title="${esc(I18n.attr("tokens-dialog-badge-profile", "title"))}"><i class="icon-badge-check"></i> ${esc(I18n.t("tokens-dialog-badge-profile"))}</span>`
+        );
+      }
+      if (token.verified) {
+        badges.push(
+          `<span class="badge badge-success" title="${esc(I18n.t("tokens-dialog-badge-low-risk-hint"))}">${esc(I18n.t("positions-risk-low"))}</span>`
+        );
+      }
 
       // Mutable/Immutable badge
       if (token.is_mutable === false) {
-        badges.push('<span class="badge badge-success">Immutable</span>');
+        badges.push(
+          `<span class="badge badge-success">${esc(I18n.t("tokens-dialog-badge-immutable"))}</span>`
+        );
       } else if (token.is_mutable === true) {
-        badges.push('<span class="badge badge-warning">Mutable</span>');
+        badges.push(
+          `<span class="badge badge-warning">${esc(I18n.t("tokens-dialog-badge-mutable"))}</span>`
+        );
       }
 
       // Update Authority badge
@@ -1067,12 +1117,20 @@ export class TokenDetailsDialog {
         const auth = token.update_authority;
         const trunc = auth.slice(0, 4) + "..." + auth.slice(-4);
         badges.push(
-          `<span class="badge badge-secondary" title="Update Authority: ${this._escapeHtml(auth)}">Auth: ${this._escapeHtml(trunc)}</span>`
+          `<span class="badge badge-secondary" title="${esc(I18n.t("tokens-dialog-badge-update-authority"))} ${esc(auth)}">${esc(I18n.t("tokens-dialog-badge-auth"))} <span dir="ltr">${esc(trunc)}</span></span>`
         );
       }
 
-      if (token.has_open_position) badges.push('<span class="badge badge-info">Position</span>');
-      if (token.blacklisted) badges.push('<span class="badge badge-danger">Blacklisted</span>');
+      if (token.has_open_position) {
+        badges.push(
+          `<span class="badge badge-info">${esc(I18n.t("tokens-dialog-badge-position"))}</span>`
+        );
+      }
+      if (token.blacklisted) {
+        badges.push(
+          `<span class="badge badge-danger">${esc(I18n.t("tokens-dialog-badge-blacklisted"))}</span>`
+        );
+      }
 
       // Only repaint when the badge set changed. _updateHeader runs on every 5s
       // poll, and an unconditional innerHTML write would drop any text selection
@@ -1106,7 +1164,7 @@ export class TokenDetailsDialog {
 
         let timeStr = "";
         if (diff < 60000) {
-          timeStr = "Just now";
+          timeStr = I18n.t("tokens-dialog-just-now");
         } else if (diff < 3600000) {
           timeStr = Utils.formatTimeAgo(tsMs);
         } else {
@@ -1114,10 +1172,13 @@ export class TokenDetailsDialog {
         }
 
         lastUpdatedValue.textContent = timeStr;
-        lastUpdatedEl.setAttribute("aria-label", `Updated ${timeStr}`);
+        lastUpdatedEl.setAttribute(
+          "aria-label",
+          I18n.t("tokens-dialog-updated-at", { time: timeStr })
+        );
       } else {
         lastUpdatedValue.textContent = "—";
-        lastUpdatedEl.setAttribute("aria-label", "Update time unavailable");
+        lastUpdatedEl.setAttribute("aria-label", I18n.t("tokens-dialog-updated-unavailable"));
       }
     }
 
@@ -1129,7 +1190,9 @@ export class TokenDetailsDialog {
     const sellBtn = this.dialogEl.querySelector("#headerSellBtn");
     if (sellBtn) {
       sellBtn.disabled = !token.has_open_position;
-      sellBtn.title = token.has_open_position ? "Sell position" : "No open position to sell";
+      sellBtn.title = token.has_open_position
+        ? I18n.attr("tokens-dialog-sell", "title")
+        : I18n.t("tokens-dialog-sell-unavailable");
     }
 
     // Setup copy mint button
@@ -1138,7 +1201,7 @@ export class TokenDetailsDialog {
       copyBtn._hasListener = true;
       copyBtn.addEventListener("click", () => {
         Utils.copyToClipboard(token.mint);
-        Utils.notifyCopied("Mint address");
+        Utils.notifyCopied(I18n.t("positions-details-mint-label"));
       });
     }
 
@@ -1179,7 +1242,7 @@ export class TokenDetailsDialog {
     const btn = this.dialogEl?.querySelector("#favoriteBtn");
     if (!btn) return;
     btn.classList.toggle("active", isFavorite);
-    btn.title = isFavorite ? "Remove from Favorites" : "Add to Favorites";
+    btn.title = isFavorite ? I18n.t("menu-favorite-remove") : I18n.t("menu-favorite-add");
     btn.setAttribute("aria-label", btn.title);
   }
 
@@ -1195,6 +1258,7 @@ export class TokenDetailsDialog {
 
     const currentlyFavorite = btn.classList.contains("active");
     const symbol = this.fullTokenData?.symbol || this.tokenData?.symbol || "";
+    const toastSymbol = symbol || I18n.t("menu-token-fallback");
     const name = this.fullTokenData?.name || this.tokenData?.name || null;
     const logo_url = this.fullTokenData?.logo_url || this.tokenData?.logo_url || null;
 
@@ -1204,9 +1268,9 @@ export class TokenDetailsDialog {
         const response = await fetch(`/api/tokens/favorites/${encodeURIComponent(mint)}`, {
           method: "DELETE",
         });
-        if (!response.ok) throw new Error("Failed to remove favorite");
+        if (!response.ok) throw new Error(I18n.t("menu-favorite-remove-failed"));
         this._updateFavoriteButton(false);
-        Utils.showToast(`${symbol || "Token"} removed from favorites`, "success");
+        Utils.showToast(I18n.t("menu-favorite-removed", { symbol: toastSymbol }), "success");
       } else {
         const response = await fetch("/api/tokens/favorites", {
           method: "POST",
@@ -1218,9 +1282,9 @@ export class TokenDetailsDialog {
             logo_url,
           }),
         });
-        if (!response.ok) throw new Error("Failed to add favorite");
+        if (!response.ok) throw new Error(I18n.t("menu-favorite-add-failed"));
         this._updateFavoriteButton(true);
-        Utils.showToast(`${symbol || "Token"} added to favorites`, "success");
+        Utils.showToast(I18n.t("menu-favorite-added", { symbol: toastSymbol }), "success");
       }
 
       // Emit event for other UI components (context menu, favorites tab, etc.)
@@ -1230,7 +1294,7 @@ export class TokenDetailsDialog {
         })
       );
     } catch (error) {
-      Utils.showToast(error.message || "Failed to update favorites", "error");
+      Utils.showToast(error.message || I18n.t("menu-favorite-update-failed"), "error");
     } finally {
       btn.disabled = false;
     }
@@ -1240,10 +1304,10 @@ export class TokenDetailsDialog {
     return `
       <div class="price-quote">
         <div class="price-block">
-          <span class="market-value-label">Price</span>
+          <span class="market-value-label">${esc(I18n.t("tokens-overview-price"))}</span>
           <div class="price-sol-row">
             <span class="price-sol" data-live-value="price-sol">—</span>
-            <span class="price-sol-unit">SOL</span>
+            <span class="price-sol-unit">${esc(I18n.t("tokens-dialog-unit-sol"))}</span>
           </div>
           <span class="price-usd" data-live-value="price-usd">—</span>
         </div>
@@ -1252,21 +1316,21 @@ export class TokenDetailsDialog {
           <span class="price-change-value" data-live-value="change-24h">—</span>
         </div>
       </div>
-      <div class="price-metrics" role="list" aria-label="Market metrics">
+      <div class="price-metrics" role="list" aria-label="${esc(I18n.t("tokens-dialog-market-metrics"))}">
         <div class="metric-item" role="listitem">
-          <span class="metric-label">Market cap</span>
+          <span class="metric-label">${esc(I18n.t("tokens-dialog-metric-market-cap"))}</span>
           <span class="metric-value" data-live-value="market-cap">—</span>
         </div>
         <div class="metric-item" role="listitem">
-          <span class="metric-label">Liquidity</span>
+          <span class="metric-label">${esc(I18n.t("tokens-overview-liquidity"))}</span>
           <span class="metric-value" data-live-value="liquidity">—</span>
         </div>
         <div class="metric-item" role="listitem">
-          <span class="metric-label">24h volume</span>
+          <span class="metric-label">${esc(I18n.t("tokens-dialog-metric-volume-24h"))}</span>
           <span class="metric-value" data-live-value="volume-24h">—</span>
         </div>
         <div class="metric-item" role="listitem">
-          <span class="metric-label">Holders</span>
+          <span class="metric-label">${esc(I18n.t("tokens-overview-fact-holders"))}</span>
           <span class="metric-value" data-live-value="holders">—</span>
         </div>
       </div>
@@ -1330,7 +1394,10 @@ export class TokenDetailsDialog {
       if (change24h !== null) {
         const changeText = Utils.formatPercentValue(change24h, { decimals: 2, signZero: true });
         update("change-24h", changeText, change24h);
-        changeEl.setAttribute("aria-label", `24 hour change ${changeText}`);
+        changeEl.setAttribute(
+          "aria-label",
+          I18n.t("tokens-dialog-change-24h", { change: changeText })
+        );
       }
     }
   }
@@ -1472,7 +1539,7 @@ export class TokenDetailsDialog {
     const tokenToUse = this.fullTokenData || this.tokenData;
 
     if (!tokenToUse || !tokenToUse.mint) {
-      this._renderTabWaiting(content, "Waiting for token data…");
+      this._renderTabWaiting(content, I18n.t("tokens-dialog-waiting-token"));
       return;
     }
 
@@ -1503,7 +1570,7 @@ export class TokenDetailsDialog {
     const tokenToUse = this.fullTokenData || this.tokenData;
 
     if (!tokenToUse || !tokenToUse.mint) {
-      this._renderTabWaiting(content, "Waiting for token data…");
+      this._renderTabWaiting(content, I18n.t("tokens-dialog-waiting-token"));
       return;
     }
 
@@ -1533,7 +1600,7 @@ export class TokenDetailsDialog {
 
   _loadPoolsTab(content) {
     if (!this.fullTokenData) {
-      this._renderTabWaiting(content, "Waiting for token data…");
+      this._renderTabWaiting(content, I18n.t("tokens-dialog-waiting-token"));
       return;
     }
 
@@ -1551,7 +1618,7 @@ export class TokenDetailsDialog {
 
   _loadLinksTab(content) {
     if (!this.fullTokenData) {
-      this._renderTabWaiting(content, "Waiting for token data…");
+      this._renderTabWaiting(content, I18n.t("tokens-dialog-waiting-token"));
       return;
     }
 
