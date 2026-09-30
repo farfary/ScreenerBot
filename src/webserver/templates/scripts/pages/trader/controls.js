@@ -360,7 +360,7 @@ export function createTraderControls({
           const res = await fetch("/api/trader/force-stop", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ reason: "Manual force stop from dashboard" }),
+            body: JSON.stringify({}),
           });
           if (res.ok) {
             Utils.showToast({

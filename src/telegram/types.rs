@@ -4,6 +4,9 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+
+use crate::events::ScheduledTaskOutcome;
+use crate::i18n::{ids, UiText};
 use std::time::Instant;
 
 // ============================================================================
@@ -37,7 +40,7 @@ pub enum NotificationType {
         token_mint: String,
         pnl_sol: f64,
         pnl_percent: f64,
-        exit_reason: String,
+        exit_reason: Option<String>,
         entry_price: f64,
         exit_price: f64,
         invested: f64,
@@ -80,14 +83,19 @@ pub enum NotificationType {
         open_positions: u32,
     },
 
-    /// Response to a bot command
-    BotCommand { command: String, response: String },
+    /// Result of a scheduled assistant task run. `detail` is the agent's own
+    /// output for a completed run and the failure text otherwise.
+    ScheduledTaskResult {
+        task_name: String,
+        outcome: ScheduledTaskOutcome,
+        detail: String,
+    },
 
     /// Bot startup notification
-    BotStarted { version: String, mode: String },
+    BotStarted { version: String, mode: StartMode },
 
     /// Bot shutdown notification
-    BotStopped { reason: String },
+    BotStopped { reason: StopReason },
 
     /// Progress of an application update
     UpdateStatus {
@@ -101,11 +109,13 @@ pub enum NotificationType {
 
     /// A copy-trading fill, exit, failure or auto-pause
     CopyTrading {
-        task: String,
-        title: String,
+        /// Task name; `None` shows the localized "Task #id".
+        task: Option<String>,
+        task_id: i64,
+        title: UiText,
         token_symbol: Option<String>,
         token_mint: Option<String>,
-        detail: String,
+        detail: UiText,
         /// Paper decisions are gated by their own preference.
         paper: bool,
     },
@@ -115,6 +125,34 @@ pub enum NotificationType {
         session_id: String,
         new_count: usize,
     },
+}
+
+/// How the bot was started.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub enum StartMode {
+    Normal,
+}
+
+impl StartMode {
+    pub fn ui_text(self) -> UiText {
+        match self {
+            Self::Normal => UiText::new(ids::TELEGRAM_NOTIFY_START_MODE_NORMAL),
+        }
+    }
+}
+
+/// Why the bot stopped.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub enum StopReason {
+    Graceful,
+}
+
+impl StopReason {
+    pub fn ui_text(self) -> UiText {
+        match self {
+            Self::Graceful => UiText::new(ids::TELEGRAM_NOTIFY_STOP_REASON_GRACEFUL),
+        }
+    }
 }
 
 /// Where an update has reached in its lifecycle.
@@ -235,7 +273,7 @@ impl Notification {
         token_mint: String,
         pnl_sol: f64,
         pnl_percent: f64,
-        exit_reason: String,
+        exit_reason: Option<String>,
         entry_price: f64,
         exit_price: f64,
         invested: f64,
@@ -263,7 +301,7 @@ impl Notification {
         token_mint: String,
         pnl_sol: f64,
         pnl_percent: f64,
-        exit_reason: String,
+        exit_reason: Option<String>,
         entry_price: f64,
         exit_price: f64,
         invested: f64,
@@ -344,18 +382,26 @@ impl Notification {
         })
     }
 
-    /// Create a bot command response notification
-    pub fn bot_command(command: String, response: String) -> Self {
-        Self::new(NotificationType::BotCommand { command, response })
+    /// Create a scheduled task result notification
+    pub fn scheduled_task_result(
+        task_name: String,
+        outcome: ScheduledTaskOutcome,
+        detail: String,
+    ) -> Self {
+        Self::new(NotificationType::ScheduledTaskResult {
+            task_name,
+            outcome,
+            detail,
+        })
     }
 
     /// Create a bot started notification
-    pub fn bot_started(version: String, mode: String) -> Self {
+    pub fn bot_started(version: String, mode: StartMode) -> Self {
         Self::new(NotificationType::BotStarted { version, mode })
     }
 
     /// Create a bot stopped notification
-    pub fn bot_stopped(reason: String) -> Self {
+    pub fn bot_stopped(reason: StopReason) -> Self {
         Self::new(NotificationType::BotStopped { reason })
     }
 

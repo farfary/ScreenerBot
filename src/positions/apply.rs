@@ -349,10 +349,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                                 if with_config(|c| {
                                     c.telegram.enabled && c.telegram.notify_position_closed
                                 }) {
-                                    let exit_reason = position
-                                        .closed_reason
-                                        .clone()
-                                        .unwrap_or_else(|| "exit".to_owned());
+                                    let exit_reason = position.closed_reason.clone();
                                     // Use position.pnl and position.pnl_percent which were set in the state update above
                                     let final_pnl_sol = position.pnl.unwrap_or_default();
                                     let final_pnl_pct = position.pnl_percent.unwrap_or_default();

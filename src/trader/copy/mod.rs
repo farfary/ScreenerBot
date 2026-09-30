@@ -36,7 +36,7 @@ pub use live::{
     LiveSubmitResult, PreparedLiveEntry,
 };
 pub use matcher::matching_tasks;
-pub use notify::{recent_notices, CopyNotice};
+pub use notify::{recent_notices, task_arg, CopyNotice};
 pub use paper::{simulate_fill, simulate_sell, PaperCosts, PaperMarket, PAPER_REFERRAL_FEE_BPS};
 pub use paper_exits::held_paper_mints;
 pub use pause::pause_text;

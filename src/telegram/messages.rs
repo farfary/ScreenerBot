@@ -4,14 +4,17 @@
 //! language at send time. Icons are prepended here; values arrive as arguments
 //! and are escaped by `tg`.
 
+use crate::events::ScheduledTaskOutcome;
 use crate::i18n::{ids, UiText};
 use crate::telegram::formatters::{
-    code, duration_text, format_ai_reasoning, format_mint_display, format_pnl, format_pnl_bold,
-    format_tokens_f64, nested_arg, pnl_plain, price_arg, row, sol_arg, text_arg, ticker,
+    bold, code, duration_text, format_ai_reasoning, format_mint_display, format_pnl,
+    format_pnl_bold, format_tokens_f64, nested_arg, pnl_plain, price_arg, row, sol_arg, text_arg,
+    ticker,
 };
 use crate::telegram::text::{tg, tg_escape, tg_id, with_icon};
-use crate::telegram::types::ErrorSeverity;
+use crate::telegram::types::{ErrorSeverity, StartMode, StopReason};
 use crate::trader::closed_reason_text;
+use crate::trader::copy::task_arg;
 
 /// `$SYMBOL — P&L` subject line.
 fn symbol_pnl_line(symbol: &str, pnl: String) -> String {
@@ -61,7 +64,8 @@ pub fn msg_position_opened(
     )
 }
 
-/// Format position closed notification. `reason` is the stored close reason.
+/// Format position closed notification. `reason` is the stored close reason,
+/// absent when the position was closed without one.
 pub fn msg_position_closed(
     symbol: &str,
     pnl_sol: f64,
@@ -71,9 +75,13 @@ pub fn msg_position_closed(
     invested: f64,
     received: f64,
     duration_secs: u64,
-    reason: &str,
+    reason: Option<&str>,
     ai_reasoning: &Option<String>,
 ) -> String {
+    let reason = match reason {
+        Some(stored) => closed_reason_text(stored),
+        None => UiText::new(ids::TELEGRAM_NOTIFY_CLOSED_REASON_UNSPECIFIED),
+    };
     let (header_emoji, title) = if pnl_sol >= 0.0 {
         let emoji = if pnl_pct >= 100.0 {
             "🎉"
@@ -113,8 +121,7 @@ pub fn msg_position_closed(
         ),
         row(
             "📋",
-            UiText::new(ids::TELEGRAM_ROW_REASON)
-                .arg("reason", nested_arg(closed_reason_text(reason))),
+            UiText::new(ids::TELEGRAM_ROW_REASON).arg("reason", nested_arg(reason)),
         ),
     ];
 
@@ -215,24 +222,91 @@ pub fn msg_system_error(severity: &ErrorSeverity, message: &str) -> String {
 }
 
 /// Format bot started notification
-pub fn msg_bot_started(version: &str, mode: &str) -> String {
+pub fn msg_bot_started(version: &str, mode: &StartMode) -> String {
     format!(
         "{}\n\n{}\n{}\n\n{}",
         with_icon("🚀", &tg_id(ids::TELEGRAM_NOTIFY_STARTED_TITLE)),
         tg(&UiText::new(ids::TELEGRAM_NOTIFY_STARTED_VERSION).arg("version", text_arg(version))),
-        tg(&UiText::new(ids::TELEGRAM_NOTIFY_STARTED_MODE).arg("mode", text_arg(mode))),
+        tg(&UiText::new(ids::TELEGRAM_NOTIFY_STARTED_MODE).arg("mode", nested_arg(mode.ui_text()))),
         with_icon("✅", &tg_id(ids::TELEGRAM_NOTIFY_STARTED_READY)),
     )
 }
 
 /// Format bot stopped notification
-pub fn msg_bot_stopped(reason: &str) -> String {
+pub fn msg_bot_stopped(reason: &StopReason) -> String {
     format!(
         "{}\n\n{}\n\n{}",
         with_icon("🛑", &tg_id(ids::TELEGRAM_NOTIFY_STOPPED_TITLE)),
-        tg(&UiText::new(ids::TELEGRAM_NOTIFY_STOPPED_REASON).arg("reason", text_arg(reason))),
+        tg(&UiText::new(ids::TELEGRAM_NOTIFY_STOPPED_REASON)
+            .arg("reason", nested_arg(reason.ui_text()))),
         tg(&UiText::new(ids::TELEGRAM_NOTIFY_STOPPED_GOODBYE).arg("icon", text_arg("👋"))),
     )
+}
+
+/// Format a copy-trading notice. `task` is the task name, absent when the task
+/// no longer exists.
+pub fn msg_copy_trading(
+    task: Option<&str>,
+    task_id: i64,
+    title: &UiText,
+    token_symbol: Option<&str>,
+    token_mint: Option<&str>,
+    detail: &UiText,
+    paper: bool,
+) -> String {
+    let token = match (token_symbol, token_mint) {
+        (Some(symbol), Some(mint)) => {
+            format!("\n{} {}", bold(symbol), code(&format_mint_display(mint)))
+        }
+        (None, Some(mint)) => format!("\n{}", code(mint)),
+        _ => String::new(),
+    };
+    let header = if paper {
+        tg(&UiText::new(ids::TELEGRAM_NOTIFY_COPY_HEADER_PAPER)
+            .arg("title", nested_arg(title.clone())))
+    } else {
+        format!("<b>{}</b>", tg(title))
+    };
+    format!(
+        "{}\n{}{}\n{}",
+        with_icon(if paper { "🧪" } else { "🔁" }, &header),
+        tg(&UiText::new(ids::TELEGRAM_NOTIFY_COPY_TASK).arg("task", task_arg(task, task_id))),
+        token,
+        tg(detail)
+    )
+}
+
+/// Format the result of a scheduled task run. `detail` is the agent's output
+/// (or the failure text) and is escaped as data.
+pub fn msg_scheduled_task_result(
+    task_name: &str,
+    outcome: ScheduledTaskOutcome,
+    detail: &str,
+) -> String {
+    let (icon, title) = match outcome {
+        ScheduledTaskOutcome::Completed => ("✅", ids::TELEGRAM_NOTIFY_SCHEDULED_COMPLETED),
+        ScheduledTaskOutcome::Failed => ("❌", ids::TELEGRAM_NOTIFY_SCHEDULED_FAILED),
+        ScheduledTaskOutcome::TimedOut => ("❌", ids::TELEGRAM_NOTIFY_SCHEDULED_TIMED_OUT),
+    };
+    let mut message = format!(
+        "{}\n\n{}\n",
+        with_icon(icon, &tg_id(title)),
+        bold(task_name)
+    );
+    if !detail.is_empty() {
+        message.push('\n');
+        if outcome == ScheduledTaskOutcome::Completed {
+            message.push_str(&tg_escape(detail));
+        } else {
+            message.push_str(&with_icon(
+                "⚠️",
+                &tg(&UiText::new(ids::TELEGRAM_NOTIFY_SCHEDULED_ERROR)
+                    .arg("error", text_arg(detail))),
+            ));
+        }
+        message.push('\n');
+    }
+    message
 }
 
 /// Format daily summary notification

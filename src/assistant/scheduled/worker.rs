@@ -345,9 +345,6 @@ async fn send_task_notification(
         return;
     }
 
-    let emoji = if success { "✅" } else { "❌" };
-    let status = if success { "completed" } else { "failed" };
-
     // Truncate response for Telegram (max ~4000 chars)
     let summary = if response.len() > 500 {
         format!("{}...", safe_truncate(response, 500))
@@ -355,35 +352,18 @@ async fn send_task_notification(
         response.to_string()
     };
 
-    let mut message = format!(
-        "{} <b>Scheduled Task {}</b>\n\n<b>{}</b>\n",
-        emoji, status, task.name
-    );
-
-    if !summary.is_empty() {
-        message.push_str(&format!(
-            "\n{}\n",
-            crate::telegram::formatters::html_escape(&summary)
-        ));
-    }
-
-    if let Some(err) = error {
-        message.push_str(&format!(
-            "\n⚠️ Error: {}\n",
-            crate::telegram::formatters::html_escape(err)
-        ));
-    }
-
-    // Create a notification using the proper notification system
-    use crate::telegram::types::{Notification, NotificationType};
-
-    let notification = Notification {
-        notification_type: NotificationType::BotCommand {
-            command: "scheduled_task".to_owned(),
-            response: message,
-        },
-        timestamp: chrono::Utc::now(),
+    let (outcome, detail) = match (success, error) {
+        (true, _) => (ScheduledTaskOutcome::Completed, summary),
+        (false, err) => (
+            ScheduledTaskOutcome::Failed,
+            err.map(str::to_owned).unwrap_or(summary),
+        ),
     };
+    let notification = crate::telegram::types::Notification::scheduled_task_result(
+        task.name.clone(),
+        outcome,
+        detail,
+    );
 
     // Send via the proper async notification channel
     crate::telegram::notifier::queue_notification(notification);

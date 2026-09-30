@@ -75,6 +75,7 @@ fn every_exit_bucket_has_a_label() {
     ids.extend(rules.into_iter().filter_map(listed).map(|rule| {
         let id = exit_label(Some(rule));
         assert_eq!(id, serialized(&rule, ""));
+        assert_eq!(rule.label_text().id, format!("copy-exit-{}", kebab(&id)));
         id
     }));
     assert_eq!(ids.len(), 6);

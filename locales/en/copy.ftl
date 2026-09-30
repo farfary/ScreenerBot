@@ -899,3 +899,33 @@ copy-editor-error-token-cap = The per-token cap cannot exceed the total budget.
 copy-editor-error-slippage = Slippage must be between { $min } and { $max }.
 copy-editor-error-target-limits = Wallet trade limits must be zero or more.
 copy-editor-error-target-order = The smallest wallet trade cannot exceed the largest.
+
+## Copy notices: toasts, the event log and Telegram (trader/copy/notify.rs).
+
+# $id is the task number, shown when the task has no name.
+copy-notice-task-unnamed = Task #{ $id }
+# $task is the task name, $title the notice title.
+copy-notice-heading = { $task }: { $title }
+# $task is the task name, $title and $detail the notice title and detail.
+copy-notice-event = { $task }: { $title } — { $detail }
+copy-notice-title-paper-buy = Paper copy buy
+copy-notice-title-paper-sell = Paper copy sell
+copy-notice-title-paper-closed = Paper holding closed
+# $rule is the exit rule label.
+copy-notice-title-paper-exit = Paper exit: { $rule }
+copy-notice-title-live-buy-submitted = Live copy buy submitted
+copy-notice-title-live-buy-confirmed = Live copy buy confirmed
+copy-notice-title-live-buy-failed = Live copy buy failed
+copy-notice-title-live-sell-submitted = Live copy sell submitted
+copy-notice-title-live-sell-failed = Live copy sell failed
+copy-notice-title-auto-paused = Copy task auto-paused
+# $amount is a SOL amount.
+copy-notice-detail-bought = Bought for { $amount } { -sol }
+copy-notice-detail-sold = Sold for { $amount } { -sol }
+copy-notice-detail-sized = { $amount } { -sol }
+# $percent is the share of the holding sold, one decimal.
+copy-notice-detail-partial-close = { $percent }% of the holding
+copy-notice-detail-full-close = Full close
+# $error is the failure text reported by the swap.
+copy-notice-detail-error = { $error }
+copy-notice-detail-swap-failed = Swap failed

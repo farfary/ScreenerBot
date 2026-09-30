@@ -38,16 +38,15 @@ static FORCE_STOPPED: AtomicBool = AtomicBool::new(false);
 static FORCE_STOPPED_AT: LazyLock<RwLock<Option<DateTime<Utc>>>> =
     LazyLock::new(|| RwLock::new(None));
 
-/// Force stop reason — why force stop was activated.
-static FORCE_STOPPED_REASON: LazyLock<RwLock<String>> =
-    LazyLock::new(|| RwLock::new(String::new()));
+/// Operator note given when force stop was activated; `None` when no note was supplied.
+static FORCE_STOPPED_REASON: LazyLock<RwLock<Option<String>>> = LazyLock::new(|| RwLock::new(None));
 
 /// Check if trading is force stopped.
 pub fn is_force_stopped() -> bool {
     FORCE_STOPPED.load(std::sync::atomic::Ordering::SeqCst)
 }
 
-/// Set force stop state with reason.
+/// Set force stop state with an optional operator note.
 pub fn set_force_stopped(stopped: bool, reason: Option<&str>) {
     FORCE_STOPPED.store(stopped, std::sync::atomic::Ordering::SeqCst);
     if stopped {
@@ -55,14 +54,14 @@ pub fn set_force_stopped(stopped: bool, reason: Option<&str>) {
             *ts = Some(Utc::now());
         }
         if let Ok(mut r) = FORCE_STOPPED_REASON.write() {
-            *r = reason.unwrap_or("Manual force stop").to_string();
+            *r = reason.map(str::to_owned);
         }
     } else {
         if let Ok(mut ts) = FORCE_STOPPED_AT.write() {
             *ts = None;
         }
         if let Ok(mut r) = FORCE_STOPPED_REASON.write() {
-            r.clear();
+            *r = None;
         }
     }
 }
@@ -72,11 +71,7 @@ pub fn get_force_stop_status() -> ForceStopStatus {
     ForceStopStatus {
         is_stopped: is_force_stopped(),
         stopped_at: FORCE_STOPPED_AT.read().ok().and_then(|ts| *ts),
-        reason: FORCE_STOPPED_REASON
-            .read()
-            .ok()
-            .map(|r| r.clone())
-            .unwrap_or_default(),
+        reason: FORCE_STOPPED_REASON.read().ok().and_then(|r| r.clone()),
     }
 }
 
@@ -85,5 +80,6 @@ pub fn get_force_stop_status() -> ForceStopStatus {
 pub struct ForceStopStatus {
     pub is_stopped: bool,
     pub stopped_at: Option<DateTime<Utc>>,
-    pub reason: String,
+    /// Operator note; `None` when the stop was engaged without one.
+    pub reason: Option<String>,
 }

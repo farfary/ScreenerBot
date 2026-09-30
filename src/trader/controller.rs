@@ -203,8 +203,10 @@ pub fn loss_limit_snapshot() -> LossLimitSnapshot {
 
 /// Engage the emergency stop and switch the trader off so the stop survives a
 /// restart. Recorded in the event log whoever triggers it.
-pub async fn engage_force_stop(reason: &str) -> Result<crate::global::ForceStopStatus, Error> {
-    crate::global::set_force_stopped(true, Some(reason));
+pub async fn engage_force_stop(
+    reason: Option<&str>,
+) -> Result<crate::global::ForceStopStatus, Error> {
+    crate::global::set_force_stopped(true, reason);
     update_config_section(
         |cfg| {
             cfg.trader.enabled = false;
@@ -214,7 +216,13 @@ pub async fn engage_force_stop(reason: &str) -> Result<crate::global::ForceStopS
     .map_err(|e| Error::ConfigUpdate {
         detail: format!("force stop activated but disabling the trader failed: {e}"),
     })?;
-    logger::warning(LogTag::Trader, &format!("FORCE STOP activated: {reason}"));
+    logger::warning(
+        LogTag::Trader,
+        &format!(
+            "FORCE STOP activated: {}",
+            reason.unwrap_or("no reason given")
+        ),
+    );
     record_force_stop_event("ForceStop", serde_json::json!({ "reason": reason })).await;
     Ok(crate::global::get_force_stop_status())
 }

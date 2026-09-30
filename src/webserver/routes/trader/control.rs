@@ -139,10 +139,7 @@ pub async fn force_stop_handler(
     State(_state): State<Arc<AppState>>,
     Json(payload): Json<ForceStopRequest>,
 ) -> Response {
-    let reason = payload
-        .reason
-        .unwrap_or_else(|| "Manual force stop".to_owned());
-    match trader::engage_force_stop(&reason).await {
+    match trader::engage_force_stop(payload.reason.as_deref()).await {
         Ok(status) => success_response(status),
         Err(error) => trader_failure(&error),
     }

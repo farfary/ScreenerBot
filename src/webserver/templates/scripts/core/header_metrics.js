@@ -197,8 +197,11 @@ function announceCopyNotices(copy) {
       showToast({
         key: `copy-notice-${notice.seq}`,
         type: notice.warning ? "warning" : "info",
-        title: `${notice.task}: ${notice.title}`,
-        message: notice.detail,
+        title: I18n.t("copy-notice-heading", {
+          task: notice.task ?? I18n.t("copy-notice-task-unnamed", { id: String(notice.task_id) }),
+          title: I18n.text(notice.title),
+        }),
+        message: I18n.text(notice.detail),
       })
     );
   copyNoticeSeq = newest;

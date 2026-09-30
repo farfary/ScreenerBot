@@ -11,9 +11,9 @@ use serde::Serialize;
 use serde_json::json;
 
 use crate::events::Severity;
+use crate::i18n::{ids, UiArg, UiText};
 use crate::telegram::{Notification, NotificationType};
 
-use super::insights::exit_label;
 use super::{CopyDatabase, CopyOutcome, CopyPauseReason, CopyTask, PaperExitRule};
 
 /// Notices the header keeps for its poll; older ones have been shown already.
@@ -24,9 +24,11 @@ pub struct CopyNotice {
     /// Monotonic per process; the dashboard shows each sequence number once.
     pub seq: u64,
     pub task_id: i64,
-    pub task: String,
-    pub title: String,
-    pub detail: String,
+    /// The task's label or shortened address; `None` when the task no longer
+    /// exists, in which case renderers show [`task_arg`].
+    pub task: Option<String>,
+    pub title: UiText,
+    pub detail: UiText,
     pub mint: Option<String>,
     pub paper: bool,
     pub warning: bool,
@@ -53,9 +55,19 @@ struct Announcement {
     subtype: &'static str,
     warning: bool,
     mint: Option<String>,
-    title: String,
-    detail: String,
+    title: UiText,
+    detail: UiText,
     paper: bool,
+}
+
+/// Message argument naming a task: its name, or the localized "Task #id".
+pub fn task_arg(task: Option<&str>, task_id: i64) -> UiArg {
+    match task {
+        Some(name) => UiArg::Text(name.to_owned()),
+        None => UiArg::Nested(Box::new(
+            UiText::new(ids::COPY_NOTICE_TASK_UNNAMED).arg("id", UiArg::Text(task_id.to_string())),
+        )),
+    }
 }
 
 /// A task's name as the dashboard writes it: its label, or the wallet address
@@ -70,54 +82,70 @@ pub fn task_name(task: &CopyTask) -> String {
     })
 }
 
-fn exit_title(rule: Option<PaperExitRule>) -> String {
+fn exit_title(rule: Option<PaperExitRule>) -> UiText {
     match rule {
-        None => "Paper copy sell".to_owned(),
-        Some(PaperExitRule::Manual) => "Paper holding closed".to_owned(),
-        Some(rule) => format!("Paper exit: {}", exit_label(Some(rule)).replace('_', " ")),
+        None => UiText::new(ids::COPY_NOTICE_TITLE_PAPER_SELL),
+        Some(PaperExitRule::Manual) => UiText::new(ids::COPY_NOTICE_TITLE_PAPER_CLOSED),
+        Some(rule) => UiText::new(ids::COPY_NOTICE_TITLE_PAPER_EXIT)
+            .arg("rule", UiArg::Nested(Box::new(rule.label_text()))),
+    }
+}
+
+/// SOL amount at the four-decimal precision the notices have always shown.
+fn sol(amount: f64) -> UiArg {
+    UiArg::Sol(format!("{amount:.4}"))
+}
+
+fn failure_detail(error: &Option<String>) -> UiText {
+    match error {
+        Some(error) => {
+            UiText::new(ids::COPY_NOTICE_DETAIL_ERROR).arg("error", UiArg::Text(error.clone()))
+        }
+        None => UiText::new(ids::COPY_NOTICE_DETAIL_SWAP_FAILED),
     }
 }
 
 fn announcement(outcome: &CopyOutcome) -> Option<Announcement> {
-    let entry = |task_id, mint: &str, title: &str, detail: String, paper, warning| Announcement {
+    let entry = |task_id, mint: &str, title: UiText, detail: UiText, paper, warning| Announcement {
         task_id,
         subtype: if warning { "copy_failed" } else { "copy_trade" },
         warning,
         mint: Some(mint.to_owned()),
-        title: title.to_owned(),
+        title,
         detail,
         paper,
     };
+    let sized = |amount: f64| UiText::new(ids::COPY_NOTICE_DETAIL_SIZED).arg("amount", sol(amount));
     Some(match outcome {
         CopyOutcome::PaperFilled(d) => entry(
             d.task_id,
             &d.mint,
-            "Paper copy buy",
-            format!("Bought for {:.4} SOL", d.fill.total_cost_sol),
+            UiText::new(ids::COPY_NOTICE_TITLE_PAPER_BUY),
+            UiText::new(ids::COPY_NOTICE_DETAIL_BOUGHT).arg("amount", sol(d.fill.total_cost_sol)),
             true,
             false,
         ),
         CopyOutcome::LiveSubmitted(d) => entry(
             d.task_id,
             &d.mint,
-            "Live copy buy submitted",
-            format!("{:.4} SOL", d.sized_sol),
+            UiText::new(ids::COPY_NOTICE_TITLE_LIVE_BUY_SUBMITTED),
+            sized(d.sized_sol),
             false,
             false,
         ),
         CopyOutcome::LiveConfirmed(d) => entry(
             d.task_id,
             &d.mint,
-            "Live copy buy confirmed",
-            format!("{:.4} SOL", d.sized_sol),
+            UiText::new(ids::COPY_NOTICE_TITLE_LIVE_BUY_CONFIRMED),
+            sized(d.sized_sol),
             false,
             false,
         ),
         CopyOutcome::LiveFailed(d) => entry(
             d.task_id,
             &d.mint,
-            "Live copy buy failed",
-            d.error.clone().unwrap_or_else(|| "Swap failed".to_owned()),
+            UiText::new(ids::COPY_NOTICE_TITLE_LIVE_BUY_FAILED),
+            failure_detail(&d.error),
             false,
             true,
         ),
@@ -126,8 +154,8 @@ fn announcement(outcome: &CopyOutcome) -> Option<Announcement> {
             entry(
                 d.task_id,
                 &d.mint,
-                &exit_title(d.exit_rule),
-                format!("Sold for {:.4} SOL", fill.net_proceeds_sol),
+                exit_title(d.exit_rule),
+                UiText::new(ids::COPY_NOTICE_DETAIL_SOLD).arg("amount", sol(fill.net_proceeds_sol)),
                 true,
                 false,
             )
@@ -135,10 +163,11 @@ fn announcement(outcome: &CopyOutcome) -> Option<Announcement> {
         CopyOutcome::LiveSellSubmitted(d) => entry(
             d.task_id,
             &d.mint,
-            "Live copy sell submitted",
+            UiText::new(ids::COPY_NOTICE_TITLE_LIVE_SELL_SUBMITTED),
             match d.exit_percentage {
-                Some(pct) => format!("{pct:.1}% of the holding"),
-                None => "Full close".to_owned(),
+                Some(pct) => UiText::new(ids::COPY_NOTICE_DETAIL_PARTIAL_CLOSE)
+                    .arg("percent", UiArg::Text(format!("{pct:.1}"))),
+                None => UiText::new(ids::COPY_NOTICE_DETAIL_FULL_CLOSE),
             },
             false,
             false,
@@ -146,8 +175,8 @@ fn announcement(outcome: &CopyOutcome) -> Option<Announcement> {
         CopyOutcome::LiveSellFailed(d) => entry(
             d.task_id,
             &d.mint,
-            "Live copy sell failed",
-            d.error.clone().unwrap_or_else(|| "Swap failed".to_owned()),
+            UiText::new(ids::COPY_NOTICE_TITLE_LIVE_SELL_FAILED),
+            failure_detail(&d.error),
             false,
             true,
         ),
@@ -165,11 +194,7 @@ pub(super) async fn record(
     if database.record_outcome(outcome).await? {
         if let Some(announcement) = announcement {
             let task = database.get_task(announcement.task_id).await.ok().flatten();
-            let name = task
-                .as_ref()
-                .map(task_name)
-                .unwrap_or_else(|| format!("Task {}", announcement.task_id));
-            publish(name, announcement).await;
+            publish(task.as_ref().map(task_name), announcement).await;
         }
     }
     Ok(())
@@ -177,48 +202,22 @@ pub(super) async fn record(
 
 /// Announce a guard pausing a task.
 pub(super) async fn announce_pause(task: &CopyTask, reason: &CopyPauseReason) {
-    let detail = match reason {
-        CopyPauseReason::User => "Paused by the user".to_owned(),
-        CopyPauseReason::LatencyKillSwitch {
-            average_ms,
-            threshold_ms,
-        } => format!(
-            "Target trades arrived {:.1}s late on average (limit {:.1}s)",
-            *average_ms as f64 / 1000.0,
-            *threshold_ms as f64 / 1000.0
-        ),
-        CopyPauseReason::WatchDetached => "The target wallet is no longer watched".to_owned(),
-        CopyPauseReason::WatchBudgetExceeded {
-            page_budget,
-            ..
-        } => format!(
-            "The wallet reached its {}-signature watch check limit before catching up. {} pages are checked per poll.",
-            page_budget * crate::wallets::watch::PAGE_SIZE,
-            page_budget
-        ),
-        CopyPauseReason::HeliusUnavailable => {
-            "Helius high-activity checks are unavailable for this wallet".to_owned()
-        }
-        CopyPauseReason::WatchProcessingFailed => {
-            "Wallet activity could not be processed; the saved position is preserved".to_owned()
-        }
-    };
     publish(
-        task_name(task),
+        Some(task_name(task)),
         Announcement {
             task_id: task.id,
             subtype: "copy_task_paused",
             warning: true,
             mint: None,
-            title: "Copy task auto-paused".to_owned(),
-            detail,
+            title: UiText::new(ids::COPY_NOTICE_TITLE_AUTO_PAUSED),
+            detail: reason.ui_text(),
             paper: false,
         },
     )
     .await;
 }
 
-async fn publish(task: String, announcement: Announcement) {
+async fn publish(task: Option<String>, announcement: Announcement) {
     let Announcement {
         task_id,
         subtype,
@@ -233,7 +232,13 @@ async fn publish(task: String, announcement: Announcement) {
         if warning { Severity::Warn } else { Severity::Info },
         mint.as_deref(),
         Some(&task_id.to_string()),
-        json!({ "task_id": task_id, "task": task, "title": title, "detail": detail, "paper": paper }),
+        crate::events::with_text(
+            json!({ "task_id": task_id, "task": task, "title": title, "detail": detail, "paper": paper }),
+            &UiText::new(ids::COPY_NOTICE_EVENT)
+                .arg("task", task_arg(task.as_deref(), task_id))
+                .arg("title", UiArg::Nested(Box::new(title.clone())))
+                .arg("detail", UiArg::Nested(Box::new(detail.clone()))),
+        ),
     )
     .await;
     if let Ok(mut feed) = FEED.lock() {
@@ -265,6 +270,7 @@ async fn publish(task: String, announcement: Announcement) {
     crate::telegram::notifier::queue_notification(Notification::new(
         NotificationType::CopyTrading {
             task,
+            task_id,
             title,
             token_symbol,
             token_mint: mint,

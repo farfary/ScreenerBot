@@ -7,6 +7,7 @@ use serde_json::json;
 use super::{Tool, ToolCategory, ToolDefinition, ToolResult};
 use crate::events::{self};
 use crate::global;
+use crate::i18n::{ids, UiText};
 use crate::services::{self, ServiceHealth};
 
 /// Health as shown to the agent: the variant name, with the message rendered in the
@@ -72,12 +73,9 @@ impl Tool for GetStatusTool {
         // Get force stop info
         let force_stopped = global::is_force_stopped();
         let force_stop_reason = if force_stopped {
-            let status = global::get_force_stop_status();
-            if !status.reason.is_empty() {
-                Some(status.reason)
-            } else {
-                None
-            }
+            Some(global::get_force_stop_status().reason.unwrap_or_else(|| {
+                UiText::new(ids::TRADER_HALT_REASON_DEFAULT).render_source_plain()
+            }))
         } else {
             None
         };
@@ -279,7 +277,7 @@ impl Tool for ForceStopTool {
             Err(e) => return ToolResult::error(format!("Invalid parameters: {e}")),
         };
 
-        if let Err(e) = crate::trader::engage_force_stop(&params.reason).await {
+        if let Err(e) = crate::trader::engage_force_stop(Some(&params.reason)).await {
             return ToolResult::error(e.to_string());
         }
 

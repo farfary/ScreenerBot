@@ -174,7 +174,7 @@ pub fn handle_help_command() -> String {
 
 /// Execute force stop action
 pub async fn execute_force_stop() -> String {
-    crate::global::set_force_stopped(true, Some("Telegram command"));
+    crate::global::set_force_stopped(true, None);
     logger::warning(LogTag::Telegram, "FORCE STOP activated via Telegram");
 
     with_icon("🚨", &tg_id(ids::TELEGRAM_FORCE_STOP_ACTIVE))

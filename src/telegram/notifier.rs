@@ -9,7 +9,7 @@ use crate::telegram::formatters::{self, nested_arg, text_arg};
 use crate::telegram::keyboards;
 use crate::telegram::messages;
 use crate::telegram::pagination::PAGINATION_MANAGER;
-use crate::telegram::text::{tg, tg_escape, tg_id, with_icon};
+use crate::telegram::text::{tg, tg_id, with_icon};
 use crate::telegram::types::{ErrorSeverity, Notification, NotificationType, UpdateStage};
 use crate::telegram::{Error, Result};
 use teloxide::prelude::*;
@@ -252,7 +252,7 @@ impl TelegramNotifier {
                     *invested,
                     *received,
                     *duration_secs,
-                    exit_reason,
+                    exit_reason.as_deref(),
                     reasoning,
                 )
             }
@@ -292,39 +292,21 @@ impl TelegramNotifier {
 
             NotificationType::CopyTrading {
                 task,
+                task_id,
                 title,
                 token_symbol,
                 token_mint,
                 detail,
                 paper,
-            } => {
-                let token = match (token_symbol, token_mint) {
-                    (Some(symbol), Some(mint)) => format!(
-                        "\n{}",
-                        format!(
-                            "{} {}",
-                            formatters::bold(symbol),
-                            formatters::code(&formatters::format_mint_display(mint))
-                        )
-                    ),
-                    (None, Some(mint)) => format!("\n{}", formatters::code(mint)),
-                    _ => String::new(),
-                };
-                let header = if *paper {
-                    tg(&UiText::new(ids::TELEGRAM_NOTIFY_COPY_HEADER_PAPER)
-                        .arg("title", text_arg(title.as_str())))
-                } else {
-                    formatters::bold(title)
-                };
-                format!(
-                    "{}\n{}{}\n{}",
-                    with_icon(if *paper { "🧪" } else { "🔁" }, &header),
-                    tg(&UiText::new(ids::TELEGRAM_NOTIFY_COPY_TASK)
-                        .arg("task", text_arg(task.as_str()))),
-                    token,
-                    tg_escape(detail)
-                )
-            }
+            } => messages::msg_copy_trading(
+                task.as_deref(),
+                *task_id,
+                title,
+                token_symbol.as_deref(),
+                token_mint.as_deref(),
+                detail,
+                *paper,
+            ),
 
             NotificationType::DailySummary {
                 date,
@@ -342,17 +324,11 @@ impl TelegramNotifier {
                 *open_positions,
             ),
 
-            NotificationType::BotCommand { command, response } => {
-                // `response` is finished Telegram HTML supplied by the producer.
-                format!(
-                    "{}\n\n{response}",
-                    with_icon(
-                        "📟",
-                        &tg(&UiText::new(ids::TELEGRAM_NOTIFY_COMMAND)
-                            .arg("command", text_arg(command.as_str())))
-                    )
-                )
-            }
+            NotificationType::ScheduledTaskResult {
+                task_name,
+                outcome,
+                detail,
+            } => messages::msg_scheduled_task_result(task_name, *outcome, detail),
 
             NotificationType::BotStarted { version, mode } => {
                 messages::msg_bot_started(version, mode)
@@ -548,7 +524,7 @@ fn should_send_notification(notification: &Notification) -> bool {
             ErrorSeverity::Info => false, // Don't send info level unless explicitly enabled
         },
         NotificationType::DailySummary { .. } => config.notify_daily_summary,
-        NotificationType::BotCommand { .. } => true, // Always send command responses
+        NotificationType::ScheduledTaskResult { .. } => true, // Gated per task by the worker
         NotificationType::BotStarted { .. } => config.notify_on_startup,
         NotificationType::BotStopped { .. } => config.notify_on_shutdown,
         NotificationType::NewTokensFound { .. } => config.notify_filtering_alerts,

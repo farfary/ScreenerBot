@@ -72,7 +72,7 @@ pub fn with_text(payload: Value, text: &UiText) -> Value {
 }
 
 /// Outcome of a scheduled task run, recorded as the event subtype.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ScheduledTaskOutcome {
     Completed,
     Failed,

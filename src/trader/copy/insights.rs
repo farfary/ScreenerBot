@@ -8,6 +8,7 @@ use std::collections::{BTreeMap, HashMap};
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 
+use crate::i18n::{ids, UiText};
 use crate::positions::{Position, PositionOrigin};
 
 use super::analytics::{arrival_distance_ms, summarize_arrival_distances};
@@ -134,6 +135,20 @@ pub fn exit_label(rule: Option<PaperExitRule>) -> String {
         Some(PaperExitRule::Manual) => "manual",
     }
     .to_owned()
+}
+
+impl PaperExitRule {
+    /// Catalog text `copy-exit-<label>` for the rule, the same wording the
+    /// dashboard maps in `EXIT_LABELS` (pages/copy/format.js).
+    pub fn label_text(self) -> UiText {
+        UiText::new(match self {
+            Self::StopLoss => ids::COPY_EXIT_STOP_LOSS,
+            Self::TrailingStop => ids::COPY_EXIT_TRAILING_STOP,
+            Self::TakeProfit => ids::COPY_EXIT_TAKE_PROFIT,
+            Self::TimeOverride => ids::COPY_EXIT_TIME_OVERRIDE,
+            Self::Manual => ids::COPY_EXIT_MANUAL,
+        })
+    }
 }
 
 #[derive(Default)]
