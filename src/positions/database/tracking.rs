@@ -227,7 +227,7 @@ impl PositionsDatabase {
                     position_id: row.get(0)?,
                     state,
                     changed_at,
-                    reason: row.get(3)?,
+                    reason: row.get::<_, Option<String>>(3)?.map(state_reason_code),
                 })
             })
             .map_err(|e| DatabaseError::Query {

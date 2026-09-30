@@ -155,10 +155,10 @@ async fn completed_actions_are_deleted_together_with_their_steps() {
         ActionType::SwapSell,
         "6p6xgHyF7AeE6TZkSmFsko444wqoP15icUSqi2jfGiPN".to_owned(),
         vec![
-            "Validating".to_owned(),
-            "Getting Quote".to_owned(),
-            "Executing Swap".to_owned(),
-            "Verifying".to_owned(),
+            screenerbot::actions::ActionStepCode::Validate,
+            screenerbot::actions::ActionStepCode::Quote,
+            screenerbot::actions::ActionStepCode::Swap,
+            screenerbot::actions::ActionStepCode::Verify,
         ],
         serde_json::json!({ "symbol": "TRUMP" }),
     );

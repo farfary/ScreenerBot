@@ -10,20 +10,17 @@ notifications-action-position-partial-exit = Partial Exit
 notifications-action-manual-order = Manual
 notifications-action-unknown = Action
 
-# Trade reasons. Ids are the Debug names of TradeReason in src/trader/types.rs.
-notifications-reason-strategy-signal = Strategy Signal
-notifications-reason-manual-entry = Manual Entry
-notifications-reason-force-buy = Force Buy
-notifications-reason-copy-buy = Copy Buy
-notifications-reason-dca-scheduled = DCA Scheduled
-notifications-reason-take-profit = Take Profit
-notifications-reason-stop-loss = Stop Loss
-notifications-reason-trailing-stop = Trailing Stop
-notifications-reason-time-override = Time Override
-notifications-reason-strategy-exit = Strategy Exit
-notifications-reason-llm-analysis-exit = LLM Analysis Exit
-notifications-reason-manual-exit = Manual Exit
-notifications-reason-risk-management = Risk Management
-notifications-reason-blacklisted = Blacklisted
-notifications-reason-force-sell = Force Sell
-notifications-reason-copy-sell = Copy Sell
+# Action steps. Ids come from ActionStepCode in src/actions/step_code.rs.
+actions-step-evaluate = Evaluating
+actions-step-validate = Validating
+actions-step-quote = Getting Quote
+actions-step-swap = Executing Swap
+actions-step-verify = Verifying
+actions-step-unknown = Processing
+actions-step-evaluate-short = Evaluating
+actions-step-validate-short = Checking
+actions-step-quote-short = Quote
+actions-step-swap-short = Swapping
+actions-step-verify-short = Confirming
+actions-step-unknown-short = Working
+

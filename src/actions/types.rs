@@ -7,6 +7,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use super::step_code::ActionStepCode;
+
 /// Unique identifier for an action (UUID format)
 pub type ActionId = String;
 
@@ -53,10 +55,13 @@ impl Action {
         id: ActionId,
         action_type: ActionType,
         entity_id: String,
-        step_names: Vec<String>,
+        step_names: Vec<ActionStepCode>,
         metadata: Value,
     ) -> Self {
-        let first_step = step_names.first().cloned().unwrap_or_default();
+        let first_step = step_names
+            .first()
+            .copied()
+            .unwrap_or(ActionStepCode::Unknown);
         let total_steps = step_names.len();
 
         let steps: Vec<ActionStep> = step_names
@@ -142,7 +147,7 @@ impl Action {
             step.metadata = meta;
         }
 
-        let step_name = self.steps[step_index].name.clone();
+        let step_name = self.steps[step_index].name;
         self.current_step_index = step_index;
 
         // Update action state
@@ -210,7 +215,7 @@ pub enum ActionType {
 pub enum ActionState {
     /// Action is currently executing
     InProgress {
-        current_step: String,
+        current_step: ActionStepCode,
         current_step_index: usize,
         total_steps: usize,
         progress_pct: u8,
@@ -232,8 +237,8 @@ pub struct ActionStep {
     /// Unique step identifier
     pub step_id: String,
 
-    /// Human-readable step name
-    pub name: String,
+    /// Step code; the dashboard maps it to a label
+    pub name: ActionStepCode,
 
     /// Current step status
     pub status: StepStatus,
@@ -311,7 +316,7 @@ impl ActionUpdate {
     pub fn step_progress(
         action: &Action,
         step_index: usize,
-        step_name: String,
+        step_name: ActionStepCode,
         progress_pct: u8,
     ) -> Self {
         Self {
@@ -331,7 +336,7 @@ impl ActionUpdate {
     pub fn step_completed(
         action: &Action,
         step_index: usize,
-        step_name: String,
+        step_name: ActionStepCode,
         metadata: Value,
     ) -> Self {
         Self {
@@ -351,7 +356,7 @@ impl ActionUpdate {
     pub fn step_failed(
         action: &Action,
         step_index: usize,
-        step_name: String,
+        step_name: ActionStepCode,
         error: String,
     ) -> Self {
         Self {

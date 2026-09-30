@@ -258,96 +258,27 @@ mod tests {
         );
     }
 
-    /// Catalog keys of the labels for each trade reason, as `(notification,
-    /// position close reason, trader exit type)`; entry reasons only have a
-    /// notification label. The match is exhaustive, so a new variant fails to
-    /// compile until it is mapped here and in `TRADE_REASON_LABELS`
-    /// (ui/notification_panel.js), `CLOSE_REASON_LABELS`
-    /// (ui/position_details/summary.js) and `EXIT_TYPE_LABELS` (pages/trader.js).
-    fn label_keys(reason: &TradeReason) -> (&'static str, Option<(&'static str, &'static str)>) {
+    /// Catalog key of the label for each trade reason. The match is exhaustive,
+    /// so a new variant fails to compile until it is mapped here and in
+    /// `TRADE_REASON_LABELS` (ui/trade_reason.js).
+    fn label_key(reason: &TradeReason) -> &'static str {
         match reason {
-            TradeReason::StrategySignal => ("notifications-reason-strategy-signal", None),
-            TradeReason::ManualEntry => ("notifications-reason-manual-entry", None),
-            TradeReason::ForceBuy => ("notifications-reason-force-buy", None),
-            TradeReason::CopyBuy => ("notifications-reason-copy-buy", None),
-            TradeReason::DCAScheduled => ("notifications-reason-dca-scheduled", None),
-            TradeReason::TakeProfit => (
-                "notifications-reason-take-profit",
-                Some((
-                    "positions-close-reason-take-profit",
-                    "trader-exit-type-take-profit-reason",
-                )),
-            ),
-            TradeReason::StopLoss => (
-                "notifications-reason-stop-loss",
-                Some((
-                    "positions-close-reason-stop-loss",
-                    "trader-exit-type-stop-loss-reason",
-                )),
-            ),
-            TradeReason::TrailingStop => (
-                "notifications-reason-trailing-stop",
-                Some((
-                    "positions-close-reason-trailing-stop",
-                    "trader-exit-type-trailing-stop-reason",
-                )),
-            ),
-            TradeReason::TimeOverride => (
-                "notifications-reason-time-override",
-                Some((
-                    "positions-close-reason-time-override",
-                    "trader-exit-type-time-override-reason",
-                )),
-            ),
-            TradeReason::StrategyExit => (
-                "notifications-reason-strategy-exit",
-                Some((
-                    "positions-close-reason-strategy-exit",
-                    "trader-exit-type-strategy-exit-reason",
-                )),
-            ),
-            TradeReason::LlmAnalysisExit => (
-                "notifications-reason-llm-analysis-exit",
-                Some((
-                    "positions-close-reason-llm-analysis-exit",
-                    "trader-exit-type-llm-analysis-exit-reason",
-                )),
-            ),
-            TradeReason::ManualExit => (
-                "notifications-reason-manual-exit",
-                Some((
-                    "positions-close-reason-manual-exit",
-                    "trader-exit-type-manual-exit-reason",
-                )),
-            ),
-            TradeReason::RiskManagement => (
-                "notifications-reason-risk-management",
-                Some((
-                    "positions-close-reason-risk-management",
-                    "trader-exit-type-risk-management-reason",
-                )),
-            ),
-            TradeReason::Blacklisted => (
-                "notifications-reason-blacklisted",
-                Some((
-                    "positions-close-reason-blacklisted",
-                    "trader-exit-type-blacklisted-reason",
-                )),
-            ),
-            TradeReason::ForceSell => (
-                "notifications-reason-force-sell",
-                Some((
-                    "positions-close-reason-force-sell",
-                    "trader-exit-type-force-sell-reason",
-                )),
-            ),
-            TradeReason::CopySell => (
-                "notifications-reason-copy-sell",
-                Some((
-                    "positions-close-reason-copy-sell",
-                    "trader-exit-type-copy-sell-reason",
-                )),
-            ),
+            TradeReason::StrategySignal => "trade-reason-strategy-signal",
+            TradeReason::ManualEntry => "trade-reason-manual-entry",
+            TradeReason::ForceBuy => "trade-reason-force-buy",
+            TradeReason::CopyBuy => "trade-reason-copy-buy",
+            TradeReason::DCAScheduled => "trade-reason-dca-scheduled",
+            TradeReason::TakeProfit => "trade-reason-take-profit",
+            TradeReason::StopLoss => "trade-reason-stop-loss",
+            TradeReason::TrailingStop => "trade-reason-trailing-stop",
+            TradeReason::TimeOverride => "trade-reason-time-override",
+            TradeReason::StrategyExit => "trade-reason-strategy-exit",
+            TradeReason::LlmAnalysisExit => "trade-reason-llm-analysis-exit",
+            TradeReason::ManualExit => "trade-reason-manual-exit",
+            TradeReason::RiskManagement => "trade-reason-risk-management",
+            TradeReason::Blacklisted => "trade-reason-blacklisted",
+            TradeReason::ForceSell => "trade-reason-force-sell",
+            TradeReason::CopySell => "trade-reason-copy-sell",
         }
     }
 
@@ -392,16 +323,23 @@ mod tests {
         for reason in &reasons {
             let id = format!("{reason:?}");
             let suffix = kebab(&id);
-            let (notification, exit) = label_keys(reason);
-            let mut keys = vec![(notification, format!("notifications-reason-{suffix}"))];
-            if let Some((position, trader)) = exit {
-                keys.push((position, format!("positions-close-reason-{suffix}")));
-                keys.push((trader, format!("trader-exit-type-{suffix}-reason")));
-            }
-            for (key, expected) in keys {
-                assert_eq!(key, expected, "key does not follow the id {id}");
-                assert_ne!(crate::i18n::format_en(key, None), key, "missing {key}");
-            }
+            let key = label_key(reason);
+            assert_eq!(
+                key,
+                format!("trade-reason-{suffix}"),
+                "key does not follow the id {id}"
+            );
+            assert_ne!(crate::i18n::format_en(key, None), key, "missing {key}");
+        }
+    }
+
+    #[test]
+    fn close_reason_wrapper_messages_exist_in_the_catalog() {
+        for key in [
+            "trade-reason-pending-verification",
+            "trade-reason-force-closed",
+        ] {
+            assert_ne!(crate::i18n::format_en(key, None), key, "missing {key}");
         }
     }
 }

@@ -5,6 +5,7 @@ import * as Utils from "../core/utils.js";
 import * as AppState from "../core/app_state.js";
 import { DataTable } from "../ui/data_table.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
+import { stepShortLabel } from "../ui/action_step.js";
 import { manualTrade } from "../ui/manual_trade.js";
 import { PositionDetailsDialog } from "../ui/position_details_dialog.js";
 import { PositionRemoveDialog } from "../ui/position_remove_dialog.js";
@@ -41,15 +42,8 @@ const FAILED_LINGER_MS = 8000;
 // A closed position keeps its arrival highlight for this long after exit.
 const JUST_CLOSED_MS = 12000;
 
-// Map a backend step name to a short, user-friendly label for the state caption.
-const shortStep = (step) => {
-  const s = String(step || "").toLowerCase();
-  if (s.includes("valid")) return "Checking";
-  if (s.includes("quote")) return "Quote";
-  if (s.includes("swap")) return "Swapping";
-  if (s.includes("verif")) return "Confirming";
-  return step || "Working";
-};
+// Short label for the state caption of a backend step code.
+const shortStep = (step) => stepShortLabel(step || "unknown");
 
 const actionMint = (n) => n?.entity_id || n?.metadata?.mint || "";
 const actionStatus = (n) => n?.state?.status || "";

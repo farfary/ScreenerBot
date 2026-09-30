@@ -324,6 +324,24 @@ impl std::str::FromStr for PositionState {
     }
 }
 
+/// Reason recorded with the initial `Open` state of a new position.
+pub const POSITION_CREATED_REASON: &str = "position_created";
+
+/// State reasons stored as English text before reasons were codes. They map to
+/// the code the dashboard labels; any other stored reason passes through as is.
+pub const LEGACY_STATE_REASONS: &[(&str, &str)] = &[("Position created", POSITION_CREATED_REASON)];
+
+/// Code for a stored state reason.
+pub fn state_reason_code(stored: String) -> String {
+    match LEGACY_STATE_REASONS
+        .iter()
+        .find(|(legacy, _)| *legacy == stored)
+    {
+        Some((_, code)) => (*code).to_owned(),
+        None => stored,
+    }
+}
+
 /// Position state history record
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PositionStateHistory {
@@ -449,4 +467,29 @@ pub struct PositionsDatabase {
     pub(super) database_path: String,
     pub(super) schema_version: u32,
     pub(super) chain: crate::chains::ChainId,
+}
+
+#[cfg(test)]
+mod state_reason_tests {
+    use super::*;
+
+    #[test]
+    fn legacy_created_reason_maps_to_the_code() {
+        assert_eq!(
+            state_reason_code("Position created".to_owned()),
+            POSITION_CREATED_REASON
+        );
+    }
+
+    #[test]
+    fn new_and_unknown_reasons_pass_through() {
+        assert_eq!(
+            state_reason_code(POSITION_CREATED_REASON.to_owned()),
+            "position_created"
+        );
+        assert_eq!(
+            state_reason_code("Verified on-chain".to_owned()),
+            "Verified on-chain"
+        );
+    }
 }

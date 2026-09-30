@@ -197,17 +197,17 @@ pub async fn update_step(
     // 3. Broadcast appropriate update based on status
     let update = match status {
         StepStatus::InProgress => {
-            let step_name = action_clone.steps[step_index].name.clone();
+            let step_name = action_clone.steps[step_index].name;
             let progress = action_clone.calculate_progress();
             ActionUpdate::step_progress(&action_clone, step_index, step_name, progress)
         }
         StepStatus::Completed => {
-            let step_name = action_clone.steps[step_index].name.clone();
+            let step_name = action_clone.steps[step_index].name;
             let step_metadata = metadata.unwrap_or(Value::Null);
             ActionUpdate::step_completed(&action_clone, step_index, step_name, step_metadata)
         }
         StepStatus::Failed => {
-            let step_name = action_clone.steps[step_index].name.clone();
+            let step_name = action_clone.steps[step_index].name;
             let error_msg = error.unwrap_or_else(|| "Unknown error".to_owned());
             ActionUpdate::step_failed(&action_clone, step_index, step_name, error_msg)
         }

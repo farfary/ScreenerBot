@@ -48,10 +48,12 @@ pub mod broadcast;
 pub mod database;
 pub use database as db;
 pub mod state;
+pub mod step_code;
 pub mod types;
 pub mod verification;
 
 // Re-export commonly used types
+pub use step_code::{ActionStepCode, LEGACY_STEP_NAMES};
 pub use types::{
     Action, ActionId, ActionState, ActionStep, ActionType, ActionUpdate, StepStatus, UpdateType,
 };

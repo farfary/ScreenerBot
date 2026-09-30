@@ -4,6 +4,7 @@
 //! paginated history, startup sync, and cleanup of old entries.
 
 use super::ActionFilters;
+use crate::actions::step_code::ActionStepCode;
 use crate::actions::types::{Action, ActionState, ActionStep, ActionType, StepStatus};
 use crate::actions::{Error, Result};
 use crate::errors::{DataError, DatabaseError};
@@ -161,7 +162,7 @@ impl ActionsDatabase {
 
                 Ok(ActionStep {
                     step_id: row.get(1)?,
-                    name: row.get(2)?,
+                    name: ActionStepCode::from_stored(&row.get::<_, String>(2)?),
                     status,
                     started_at,
                     completed_at,
@@ -372,7 +373,7 @@ impl ActionsDatabase {
                     action_id,
                     ActionStep {
                         step_id: row.get(2)?,
-                        name: row.get(3)?,
+                        name: ActionStepCode::from_stored(&row.get::<_, String>(3)?),
                         status,
                         started_at,
                         completed_at,

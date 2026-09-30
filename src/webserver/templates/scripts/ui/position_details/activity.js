@@ -8,6 +8,11 @@ import * as Utils from "../../core/utils.js";
 import { requestManager } from "../../core/request_manager.js";
 import { activityEventKey, renderActivityCard } from "./activity_event.js";
 
+// State reasons written by src/positions; other stored reasons render as stored.
+const POSITION_STATE_REASON_LABELS = Object.freeze({
+  position_created: "positions-state-reason-position-created",
+});
+
 // The activity endpoint walks every swap and wallet transaction the token ever had, so it is
 // not refetched on the details tick: only when the position's own trades moved, and otherwise
 // at this slower cadence while the position is still open.
@@ -337,7 +342,7 @@ export function applyActivityMixin(PositionDetailsDialog) {
         <i class="pdd-act-glyph icon-history" aria-hidden="true"></i>
         <span class="pdd-act-milestone-main">
           <strong>Position ${Utils.escapeHtml(normalized)}</strong>
-          ${state.reason ? `<span>${Utils.escapeHtml(state.reason)}</span>` : ""}
+          ${state.reason ? `<span>${Utils.escapeHtml(I18n.label(POSITION_STATE_REASON_LABELS, state.reason))}</span>` : ""}
         </span>
         <time title="${Utils.formatTimestamp(state.changed_at)}">${Utils.formatTimestamp(state.changed_at, { includeSeconds: false })}</time>
       </div>`;

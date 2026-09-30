@@ -2,20 +2,35 @@
 
 use crate::actions::{
     complete_action_failed, complete_action_success, register_action, update_step, Action,
-    ActionType, StepStatus,
+    ActionStepCode, ActionType, StepStatus,
 };
 use crate::trader::error::Error;
 use serde_json::json;
 use uuid::Uuid;
 
 /// Steps for automated position open
-const AUTO_OPEN_STEPS: &[&str] = &["Evaluating", "Getting Quote", "Executing Swap", "Verifying"];
+const AUTO_OPEN_STEPS: &[ActionStepCode] = &[
+    ActionStepCode::Evaluate,
+    ActionStepCode::Quote,
+    ActionStepCode::Swap,
+    ActionStepCode::Verify,
+];
 
 /// Steps for automated position close
-const AUTO_CLOSE_STEPS: &[&str] = &["Evaluating", "Getting Quote", "Executing Swap", "Verifying"];
+const AUTO_CLOSE_STEPS: &[ActionStepCode] = &[
+    ActionStepCode::Evaluate,
+    ActionStepCode::Quote,
+    ActionStepCode::Swap,
+    ActionStepCode::Verify,
+];
 
 /// Steps for automated DCA
-const AUTO_DCA_STEPS: &[&str] = &["Evaluating", "Getting Quote", "Executing Swap", "Verifying"];
+const AUTO_DCA_STEPS: &[ActionStepCode] = &[
+    ActionStepCode::Evaluate,
+    ActionStepCode::Quote,
+    ActionStepCode::Swap,
+    ActionStepCode::Verify,
+];
 
 /// Action tracker for automated position open (strategy-triggered buy)
 pub struct AutoOpenAction {
@@ -44,7 +59,7 @@ impl AutoOpenAction {
             action_id.clone(),
             ActionType::PositionOpen,
             mint.to_string(),
-            AUTO_OPEN_STEPS.iter().map(|s| s.to_string()).collect(),
+            AUTO_OPEN_STEPS.to_vec(),
             metadata,
         );
 
@@ -127,7 +142,7 @@ impl AutoCloseAction {
             action_id.clone(),
             ActionType::PositionClose,
             mint.to_string(),
-            AUTO_CLOSE_STEPS.iter().map(|s| s.to_string()).collect(),
+            AUTO_CLOSE_STEPS.to_vec(),
             metadata,
         );
 
@@ -210,7 +225,7 @@ impl AutoDcaAction {
             action_id.clone(),
             ActionType::PositionDca,
             mint.to_string(),
-            AUTO_DCA_STEPS.iter().map(|s| s.to_string()).collect(),
+            AUTO_DCA_STEPS.to_vec(),
             metadata,
         );
 

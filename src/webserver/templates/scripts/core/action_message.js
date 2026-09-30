@@ -3,7 +3,7 @@
  *
  * Split out of `action_toasts.js` so the sentences a user reads during a trade
  * can be asserted directly (`tools/tests/action_message.test.mjs`). Everything
- * here is a pure function of one streamed action: no DOM, no imports, no state.
+ * here is a pure function of one streamed action: no DOM, no state.
  *
  * The backend writes the facts these read into each step's metadata: the router
  * that submitted the swap, and — when a route was refused for what it would
@@ -11,6 +11,9 @@
  * would have locked. A trade that quietly takes longer because it is re-routing
  * looks broken; saying so is the difference.
  */
+
+import { stepLabel } from "../ui/action_step.js";
+import { closeReasonText } from "../ui/trade_reason.js";
 
 /** The backend writes the literal "Unknown" when it could not resolve a symbol. */
 export function symbolOf(action) {
@@ -74,7 +77,8 @@ export function stepMessage(action) {
   if (!step) return null;
 
   const router = routerOf(action);
-  let label = router ? `${step} via ${router}` : step;
+  const stepText = stepLabel(step);
+  let label = router ? `${stepText} via ${router}` : stepText;
   const note = costGuardNote(action);
   if (note) label = `${label} · ${note}`;
   return total > 0 ? `${label} · ${index + 1}/${total}` : label;
@@ -98,5 +102,5 @@ export function outcomeMessage(action) {
     return `${percentage >= 100 ? "Full exit" : `${percentage}% exit`}${via}${avoided}`;
   }
 
-  return typeof meta.reason === "string" && meta.reason ? meta.reason : null;
+  return typeof meta.reason === "string" && meta.reason ? closeReasonText(meta.reason) : null;
 }

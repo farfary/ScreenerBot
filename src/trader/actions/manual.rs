@@ -2,7 +2,7 @@
 
 use crate::actions::{
     complete_action_failed, complete_action_success, register_action, update_step, Action,
-    ActionType, StepStatus,
+    ActionStepCode, ActionType, StepStatus,
 };
 use crate::trader::error::Error;
 use serde_json::{json, Value};
@@ -11,13 +11,28 @@ use uuid::Uuid;
 use super::{STEP_QUOTE, STEP_SWAP, STEP_VALIDATE, STEP_VERIFY};
 
 /// Steps for manual buy action
-const BUY_STEPS: &[&str] = &["Validating", "Getting Quote", "Executing Swap", "Verifying"];
+const BUY_STEPS: &[ActionStepCode] = &[
+    ActionStepCode::Validate,
+    ActionStepCode::Quote,
+    ActionStepCode::Swap,
+    ActionStepCode::Verify,
+];
 
 /// Steps for manual sell action
-const SELL_STEPS: &[&str] = &["Validating", "Getting Quote", "Executing Swap", "Verifying"];
+const SELL_STEPS: &[ActionStepCode] = &[
+    ActionStepCode::Validate,
+    ActionStepCode::Quote,
+    ActionStepCode::Swap,
+    ActionStepCode::Verify,
+];
 
 /// Steps for manual DCA/add action
-const ADD_STEPS: &[&str] = &["Validating", "Getting Quote", "Executing Swap", "Verifying"];
+const ADD_STEPS: &[ActionStepCode] = &[
+    ActionStepCode::Validate,
+    ActionStepCode::Quote,
+    ActionStepCode::Swap,
+    ActionStepCode::Verify,
+];
 
 /// The router that submitted a trade, written by the swap-stage listener.
 type RouterSlot = std::sync::Arc<std::sync::Mutex<Option<String>>>;
@@ -119,7 +134,7 @@ impl ManualBuyAction {
             action_id.clone(),
             ActionType::SwapBuy,
             mint.to_string(),
-            BUY_STEPS.iter().map(|s| s.to_string()).collect(),
+            BUY_STEPS.to_vec(),
             metadata,
         );
 
@@ -325,7 +340,7 @@ impl ManualSellAction {
             action_id.clone(),
             ActionType::SwapSell,
             mint.to_string(),
-            SELL_STEPS.iter().map(|s| s.to_string()).collect(),
+            SELL_STEPS.to_vec(),
             metadata,
         );
 
@@ -533,7 +548,7 @@ impl ManualAddAction {
             action_id.clone(),
             ActionType::PositionDca,
             mint.to_string(),
-            ADD_STEPS.iter().map(|s| s.to_string()).collect(),
+            ADD_STEPS.to_vec(),
             metadata,
         );
 

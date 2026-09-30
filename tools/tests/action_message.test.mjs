@@ -11,6 +11,7 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
+import "./fixtures/i18n_en.mjs";
 
 const MODULE = new URL(
   "../../src/webserver/templates/scripts/core/action_message.js",
@@ -31,7 +32,7 @@ function action({ steps = [], state = {}, metadata = {} } = {}) {
     id: "a1",
     steps,
     metadata,
-    state: { status: "in_progress", current_step: "Executing Swap", total_steps: 4, current_step_index: 2, ...state },
+    state: { status: "in_progress", current_step: "swap", total_steps: 4, current_step_index: 2, ...state },
   };
 }
 

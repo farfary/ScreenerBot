@@ -503,8 +503,12 @@ impl PositionsDatabase {
             })?;
 
         // Record initial state as Open
-        self.record_state_change(position_id, PositionState::Open, Some("Position created"))
-            .await?;
+        self.record_state_change(
+            position_id,
+            PositionState::Open,
+            Some(POSITION_CREATED_REASON),
+        )
+        .await?;
 
         logger::debug(
             LogTag::Positions,

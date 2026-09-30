@@ -5,6 +5,7 @@ import { formatFixed, formatPercentValue } from "../core/format.js";
 import * as Utils from "../core/utils.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
+import { closeReasonText } from "../ui/trade_reason.js";
 import { requestManager, apiErrorMessage } from "../core/request_manager.js";
 import { createTraderConfigCards } from "./trader/config_cards.js";
 import { playToggleOn, playToggleOff, playError } from "../core/sounds.js";
@@ -18,10 +19,8 @@ import {
 } from "./trader/features.js";
 import { createLifecycle as createStrategiesLifecycle } from "./strategies.js";
 
-// exit_type ids: the stored closed_reason. Snake-case ids are the exit-rule ids;
-// CamelCase ids are the `Debug` names of the exit `TradeReason` variants
-// (src/trader/types.rs); the rest are written by src/positions and
-// src/trader/stats.rs.
+// Snake-case exit_type ids written by src/trader/stats.rs. Every other stored
+// closed_reason resolves through `closeReasonText` (ui/trade_reason.js).
 const EXIT_TYPE_LABELS = Object.freeze({
   stop_loss: "trader-exit-type-stop-loss",
   take_profit: "trader-exit-type-take-profit",
@@ -34,21 +33,6 @@ const EXIT_TYPE_LABELS = Object.freeze({
   manual_close: "trader-exit-type-manual-close",
   dca: "trader-exit-type-dca",
   unknown: "trader-exit-type-unknown",
-  TakeProfit: "trader-exit-type-take-profit-reason",
-  StopLoss: "trader-exit-type-stop-loss-reason",
-  TrailingStop: "trader-exit-type-trailing-stop-reason",
-  TimeOverride: "trader-exit-type-time-override-reason",
-  StrategyExit: "trader-exit-type-strategy-exit-reason",
-  LlmAnalysisExit: "trader-exit-type-llm-analysis-exit-reason",
-  ManualExit: "trader-exit-type-manual-exit-reason",
-  RiskManagement: "trader-exit-type-risk-management-reason",
-  Blacklisted: "trader-exit-type-blacklisted-reason",
-  ForceSell: "trader-exit-type-force-sell-reason",
-  CopySell: "trader-exit-type-copy-sell-reason",
-  closed_externally: "trader-exit-type-closed-externally",
-  wallet_history: "trader-exit-type-wallet-history",
-  exit_retry_pending: "trader-exit-type-exit-retry-pending",
-  synthetic_exit_permanent_failure: "trader-exit-type-synthetic-exit-permanent-failure",
 });
 
 // Sub-tabs configuration. Strategy Control is second and the embedded Strategies
@@ -706,8 +690,7 @@ function createLifecycle() {
   function formatExitType(type) {
     const text = String(type || "unknown");
     if (Object.hasOwn(EXIT_TYPE_LABELS, text)) return I18n.label(EXIT_TYPE_LABELS, text);
-    // l10n-ignore: closed_reason also carries "force_closed: <operator text>" and "_pending_verification" suffixed ids, which are not enumerable
-    return text.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+    return closeReasonText(text);
   }
 
   /**

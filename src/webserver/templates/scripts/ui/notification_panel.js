@@ -9,6 +9,8 @@ import {
   formatTimestamp,
   withSolUnit,
 } from "../core/format.js";
+import { stepLabel } from "./action_step.js";
+import { closeReasonText } from "./trade_reason.js";
 import { ConfirmationDialog } from "./confirmation_dialog.js";
 import { enhanceAllSelects } from "./custom_select.js";
 import { playTabSwitch } from "../core/sounds.js";
@@ -23,26 +25,6 @@ const ACTION_TYPE_LABELS = Object.freeze({
   position_partial_exit: "notifications-action-position-partial-exit",
   manual_order: "notifications-action-manual-order",
   unknown: "notifications-action-unknown",
-});
-
-// Trade reason ids: the `Debug` names of `TradeReason` (src/trader/types.rs).
-const TRADE_REASON_LABELS = Object.freeze({
-  StrategySignal: "notifications-reason-strategy-signal",
-  ManualEntry: "notifications-reason-manual-entry",
-  ForceBuy: "notifications-reason-force-buy",
-  CopyBuy: "notifications-reason-copy-buy",
-  DCAScheduled: "notifications-reason-dca-scheduled",
-  TakeProfit: "notifications-reason-take-profit",
-  StopLoss: "notifications-reason-stop-loss",
-  TrailingStop: "notifications-reason-trailing-stop",
-  TimeOverride: "notifications-reason-time-override",
-  StrategyExit: "notifications-reason-strategy-exit",
-  LlmAnalysisExit: "notifications-reason-llm-analysis-exit",
-  ManualExit: "notifications-reason-manual-exit",
-  RiskManagement: "notifications-reason-risk-management",
-  Blacklisted: "notifications-reason-blacklisted",
-  ForceSell: "notifications-reason-force-sell",
-  CopySell: "notifications-reason-copy-sell",
 });
 
 let currentTab = "all";
@@ -753,7 +735,7 @@ function renderNotification(notification) {
     details.push(formatPercentValue(pct, { decimals: pct % 1 === 0 ? 0 : 1, plus: "" }));
   }
 
-  if (md.reason) details.push(I18n.label(TRADE_REASON_LABELS, md.reason));
+  if (md.reason) details.push(closeReasonText(md.reason));
   if (md.strategy_id) details.push(escapeText(md.strategy_id));
 
   const source = sourceFromOperation(md.operation);
@@ -777,8 +759,8 @@ function renderNotification(notification) {
   const currentIndex = progressInfo?.current_step_index ?? notification.current_step_index ?? 0;
   const progressPctRaw = progressInfo?.progress_pct ?? 0;
   const boundedProgressPct = Math.max(0, Math.min(100, Number(progressPctRaw) || 0));
-  const currentStepName = progressInfo?.current_step || steps?.[currentIndex]?.name || "Processing";
-  const safeStepName = escapeText(currentStepName);
+  const currentStepCode = progressInfo?.current_step || steps?.[currentIndex]?.name || "unknown";
+  const safeStepName = escapeText(stepLabel(currentStepCode));
   const stepPosition =
     totalSteps > 0 ? `${Math.min(currentIndex + 1, totalSteps)}/${totalSteps}` : "";
   const safeStepPosition = stepPosition ? escapeText(stepPosition) : "";
