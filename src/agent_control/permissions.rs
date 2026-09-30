@@ -356,6 +356,35 @@ pub fn requires_confirmation(category: &ToolCategory) -> bool {
 mod tests {
     use super::*;
 
+    /// Catalog key of the label for each level. The match is exhaustive, so a
+    /// new variant fails to compile until it is mapped here and in
+    /// `LEVEL_LABELS` (ui/settings/agent_connections_tab.js).
+    fn level_label_key(level: PermissionLevel) -> &'static str {
+        match level {
+            PermissionLevel::Allow => "settings-agent-level-allow",
+            PermissionLevel::AskUser => "settings-agent-level-ask-user",
+            PermissionLevel::Deny => "settings-agent-level-deny",
+        }
+    }
+
+    #[test]
+    fn permission_level_labels_exist_in_the_catalog() {
+        for level in [
+            PermissionLevel::Deny,
+            PermissionLevel::AskUser,
+            PermissionLevel::Allow,
+        ] {
+            let key = level_label_key(level);
+            assert_eq!(
+                key,
+                format!("settings-agent-level-{}", level.to_str().replace('_', "-"))
+            );
+            for id in [key.to_owned(), format!("{key}-hint")] {
+                assert_ne!(crate::i18n::format_en(&id, None), id, "missing {id}");
+            }
+        }
+    }
+
     #[test]
     fn permission_levels_order_from_least_to_most_capable() {
         assert!(PermissionLevel::Deny < PermissionLevel::AskUser);

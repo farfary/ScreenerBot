@@ -40,3 +40,7 @@
 -together-ai = Together AI
 -openrouter = OpenRouter
 -mistral-ai = Mistral AI
+-claude = Claude
+-codex = Codex
+-openclaw = OpenClaw
+-hermes = Hermes

@@ -17,6 +17,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { URL, fileURLToPath } from "node:url";
+import "./fixtures/i18n_en.mjs";
 
 const MODULE = "../../src/webserver/templates/scripts/ui/settings/agent_connections_tab.js";
 
@@ -107,7 +108,10 @@ test("claudeCodeCommand is a native `claude mcp add` with quoted, env-only crede
   // The secret is only ever inside the -e value, never a bare CLI arg.
   assert.equal(cmd.split(SECRET).length - 1, 1);
   // Placeholder path is quoted too.
-  assert.match(claudeCodeCommand(null, CID, SECRET), new RegExp(`-- '${esc(EXE_PLACEHOLDER)}' mcp serve$`));
+  assert.match(
+    claudeCodeCommand(null, CID, SECRET),
+    new RegExp(`-- '${esc(EXE_PLACEHOLDER)}' mcp serve$`)
+  );
 });
 
 test("codexCommand is a native `codex mcp add` with --env and quoting", async () => {
@@ -122,8 +126,14 @@ test("codexCommand is a native `codex mcp add` with --env and quoting", async ()
 test("shell commands survive an executable path with a single quote", async () => {
   const { claudeCodeCommand, codexCommand } = await mod();
   const nasty = "/home/o'brien/screenerbot";
-  assert.match(claudeCodeCommand(nasty, CID, SECRET), /-- '\/home\/o'\\''brien\/screenerbot' mcp serve$/);
-  assert.match(codexCommand(nasty, CID, SECRET), /-- '\/home\/o'\\''brien\/screenerbot' mcp serve$/);
+  assert.match(
+    claudeCodeCommand(nasty, CID, SECRET),
+    /-- '\/home\/o'\\''brien\/screenerbot' mcp serve$/
+  );
+  assert.match(
+    codexCommand(nasty, CID, SECRET),
+    /-- '\/home\/o'\\''brien\/screenerbot' mcp serve$/
+  );
 });
 
 test("generic and Claude Desktop use the mcpServers.screenerbot stdio JSON", async () => {
@@ -239,10 +249,7 @@ test("nothing in the module references the removed install-mcp.sh configurator",
 test("a new connection defaults to full access across every category", async () => {
   const { defaultPermissions, CATEGORIES, presetFor } = await mod();
   const permissions = defaultPermissions();
-  assert.deepEqual(
-    Object.keys(permissions).sort(),
-    CATEGORIES.map((c) => c.key).sort()
-  );
+  assert.deepEqual(Object.keys(permissions).sort(), CATEGORIES.map((c) => c.key).sort());
   assert.ok(Object.values(permissions).every((level) => level === "allow"));
   assert.equal(presetFor(permissions), "full");
 });
@@ -307,7 +314,11 @@ test("a limited connection is summarized by what it cannot do, never as 'custom'
     system: "deny",
   });
   assert.equal(limited.tone, "custom");
-  assert.match(limited.text, /^Limited — asks for trading; no system$/);
+  // Fluent isolates interpolated values in bidi marks; the wording is what is pinned.
+  assert.match(
+    limited.text.replace(/[\u2068\u2069]/g, ""),
+    /^Limited — asks for trading; no system$/
+  );
 });
 
 test("validateLabel matches the backend bounds (1..=64, no control chars)", async () => {

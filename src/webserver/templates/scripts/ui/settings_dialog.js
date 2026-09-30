@@ -6,6 +6,7 @@ import * as Utils from "../core/utils.js";
 import { createFocusTrap } from "../core/utils.js";
 import { pushEscapeHandler } from "../core/escape_stack.js";
 import { getCurrentPage } from "../core/router.js";
+import { apiErrorMessage } from "../core/request_manager.js";
 import { setInterval as setPollingInterval } from "../core/poller.js";
 import { enhanceAllSelects } from "./custom_select.js";
 import { playTabSwitch } from "../core/sounds.js";
@@ -125,7 +126,8 @@ export class SettingsDialog {
       const indicator = document.createElement("span");
       indicator.className = "settings-nav-indicator";
       indicator.innerHTML =
-        '<i class="icon-circle-alert" aria-hidden="true"></i><span class="sr-only">Update needs attention</span>';
+        '<i class="icon-circle-alert" aria-hidden="true"></i><span class="sr-only"></span>';
+      indicator.querySelector(".sr-only").textContent = I18n.t("settings-dialog-update-attention");
       updatesBtn.appendChild(indicator);
     }
   }
@@ -284,7 +286,8 @@ export class SettingsDialog {
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to save settings: ${response.statusText}`);
+        const body = await response.json().catch(() => ({}));
+        throw new Error(apiErrorMessage(body, response.statusText || `HTTP ${response.status}`));
       }
 
       // The server renders localized HTML, so a new display language only
@@ -304,7 +307,7 @@ export class SettingsDialog {
 
       Utils.showToast({
         type: "success",
-        title: "Settings saved successfully",
+        title: I18n.t("settings-dialog-save-success"),
       });
 
       // Apply settings immediately
@@ -314,7 +317,7 @@ export class SettingsDialog {
       console.error("Failed to save settings:", error);
       Utils.showToast({
         type: "error",
-        title: "Failed to save settings",
+        title: I18n.t("settings-dialog-save-failed"),
         message: error.message,
       });
     } finally {
@@ -412,6 +415,7 @@ export class SettingsDialog {
     this.dialogEl = document.createElement("div");
     this.dialogEl.className = "settings-dialog";
     this.dialogEl.innerHTML = this._getDialogHTML();
+    I18n.localizeTree(this.dialogEl);
     document.body.appendChild(this.dialogEl);
   }
 
@@ -425,14 +429,14 @@ export class SettingsDialog {
         <header class="settings-header modal-header">
           <h2 id="settings-dialog-title" class="modal-title">
             <i class="icon-settings"></i>
-            <span>Settings</span>
+            <span data-l10n-id="settings-dialog-title"></span>
           </h2>
           <div class="settings-header-actions">
             <button class="btn btn-primary settings-save-btn" id="settingsSaveBtn" type="button" disabled>
               <i class="icon-save"></i>
-              <span>Save Changes</span>
+              <span data-l10n-id="settings-dialog-save"></span>
             </button>
-            <button class="modal-close" type="button" title="Close (ESC)" aria-label="Close settings">
+            <button class="modal-close" type="button" data-l10n-id="settings-dialog-close">
               <i class="icon-x"></i>
             </button>
           </div>
@@ -442,102 +446,102 @@ export class SettingsDialog {
           <nav class="settings-nav">
             <button class="settings-nav-item active" data-tab="interface">
               <i class="icon-palette"></i>
-              <span>Interface</span>
+              <span data-l10n-id="settings-dialog-tab-interface"></span>
             </button>
             <button class="settings-nav-item" data-tab="navigation">
               <i class="icon-layout-grid"></i>
-              <span>Navigation</span>
+              <span data-l10n-id="settings-dialog-tab-navigation"></span>
             </button>
             <button class="settings-nav-item" data-tab="startup">
               <i class="icon-zap"></i>
-              <span>Startup</span>
+              <span data-l10n-id="settings-dialog-tab-startup"></span>
             </button>
             <button class="settings-nav-item" data-tab="hints">
               <i class="icon-lightbulb"></i>
-              <span>Hints</span>
+              <span data-l10n-id="settings-dialog-tab-hints"></span>
             </button>
             <button class="settings-nav-item" data-tab="data">
               <i class="icon-database"></i>
-              <span>Data</span>
+              <span data-l10n-id="settings-dialog-tab-data"></span>
             </button>
             <button class="settings-nav-item" data-tab="security">
               <i class="icon-lock"></i>
-              <span>Security</span>
+              <span data-l10n-id="settings-dialog-tab-security"></span>
             </button>
             <button class="settings-nav-item" data-tab="account">
               <i class="icon-circle-user"></i>
-              <span>Account</span>
+              <span data-l10n-id="settings-dialog-tab-account"></span>
             </button>
             <button class="settings-nav-item" data-tab="telegram">
               <i class="icon-send"></i>
-              <span>Telegram</span>
+              <span data-l10n-id="settings-dialog-tab-telegram"></span>
             </button>
             <button class="settings-nav-item" data-tab="agent-connections">
               <i class="icon-plug"></i>
-              <span>Agent Connections</span>
+              <span data-l10n-id="settings-dialog-tab-agent-connections"></span>
             </button>
             <div class="settings-nav-divider"></div>
             <button class="settings-nav-item" data-tab="updates">
               <i class="icon-refresh-cw"></i>
-              <span>Updates</span>
+              <span data-l10n-id="settings-dialog-tab-updates"></span>
             </button>
             <button class="settings-nav-item" data-tab="licenses">
               <i class="icon-scale"></i>
-              <span>Licenses</span>
+              <span data-l10n-id="settings-dialog-tab-licenses"></span>
             </button>
             <button class="settings-nav-item" data-tab="about">
               <i class="icon-info"></i>
-              <span>About</span>
+              <span data-l10n-id="settings-dialog-tab-about"></span>
             </button>
             <div class="settings-nav-divider"></div>
             <button class="settings-nav-item settings-nav-link" data-external-url="https://screenerbot.io/privacy">
               <i class="icon-shield"></i>
-              <span>Privacy Policy</span>
+              <span data-l10n-id="settings-dialog-link-privacy"></span>
               <i class="icon-external-link settings-nav-external"></i>
             </button>
             <button class="settings-nav-item settings-nav-link" data-external-url="https://screenerbot.io/terms">
               <i class="icon-file-text"></i>
-              <span>Terms of Service</span>
+              <span data-l10n-id="settings-dialog-link-terms"></span>
               <i class="icon-external-link settings-nav-external"></i>
             </button>
           </nav>
 
           <div class="settings-content">
             <div class="settings-tab active" data-tab-content="interface">
-              <div class="settings-loading">Loading...</div>
+              <div class="settings-loading" data-l10n-id="common-loading"></div>
             </div>
             <div class="settings-tab" data-tab-content="navigation">
-              <div class="settings-loading">Loading...</div>
+              <div class="settings-loading" data-l10n-id="common-loading"></div>
             </div>
             <div class="settings-tab" data-tab-content="startup">
-              <div class="settings-loading">Loading...</div>
+              <div class="settings-loading" data-l10n-id="common-loading"></div>
             </div>
             <div class="settings-tab" data-tab-content="hints">
-              <div class="settings-loading">Loading...</div>
+              <div class="settings-loading" data-l10n-id="common-loading"></div>
             </div>
             <div class="settings-tab" data-tab-content="data">
-              <div class="settings-loading">Loading...</div>
+              <div class="settings-loading" data-l10n-id="common-loading"></div>
             </div>
             <div class="settings-tab" data-tab-content="security">
-              <div class="settings-loading">Loading...</div>
+              <div class="settings-loading" data-l10n-id="common-loading"></div>
             </div>
             <div class="settings-tab" data-tab-content="account">
-              <div class="settings-loading">Loading...</div>
+              <div class="settings-loading" data-l10n-id="common-loading"></div>
             </div>
             <div class="settings-tab" data-tab-content="telegram">
-              <div class="settings-loading">Loading...</div>
+              <div class="settings-loading" data-l10n-id="common-loading"></div>
             </div>
             <div class="settings-tab" data-tab-content="agent-connections">
-              <div class="settings-loading">Loading...</div>
+              <div class="settings-loading" data-l10n-id="common-loading"></div>
             </div>
             <div class="settings-tab" data-tab-content="updates">
-              <div class="settings-loading">Loading...</div>
+              <div class="settings-loading" data-l10n-id="common-loading"></div>
             </div>
             <div class="settings-tab" data-tab-content="licenses">
-              <div class="settings-loading">Loading...</div>
+              <div class="settings-loading" data-l10n-id="common-loading"></div>
             </div>
             <div class="settings-tab" data-tab-content="about">
-              <div class="settings-loading">Loading...</div>
+              <div class="settings-loading" data-l10n-id="common-loading"></div>
             </div>
           </div>
         </div>
@@ -626,6 +630,7 @@ export class SettingsDialog {
     switch (tab) {
       case "interface":
         content.innerHTML = buildInterfaceTab(this.settings);
+        I18n.localizeTree(content);
         attachInterfaceHandlers(this, content);
         break;
       case "navigation":
@@ -634,6 +639,7 @@ export class SettingsDialog {
         break;
       case "startup":
         content.innerHTML = this._buildStartupTab();
+        I18n.localizeTree(content);
         this._attachStartupHandlers(content);
         enhanceAllSelects(content);
         break;
@@ -668,6 +674,7 @@ export class SettingsDialog {
         break;
       case "about":
         content.innerHTML = this._buildAboutTab();
+        I18n.localizeTree(content);
         this._attachAboutHandlers(content);
         break;
     }
@@ -681,13 +688,13 @@ export class SettingsDialog {
 
     return `
       <div class="settings-section">
-        <h3 class="settings-section-title">Startup Behavior</h3>
+        <h3 class="settings-section-title" data-l10n-id="settings-startup-section-title"></h3>
         <div class="settings-group">
           <div class="settings-field settings-field--disabled">
             <div class="settings-field-info">
-              <label>Auto-start Trader</label>
-              <span class="settings-field-hint">Automatically start trader on launch</span>
-              <span class="settings-field-badge">Coming Soon</span>
+              <label data-l10n-id="settings-startup-auto-start-label"></label>
+              <span class="settings-field-hint" data-l10n-id="settings-startup-auto-start-hint"></span>
+              <span class="settings-field-badge" data-l10n-id="settings-startup-coming-soon"></span>
             </div>
             <div class="settings-field-control">
               <label class="toggle">
@@ -699,24 +706,24 @@ export class SettingsDialog {
 
           <div class="settings-field">
             <div class="settings-field-info">
-              <label>Default Page</label>
-              <span class="settings-field-hint">Page to show when opening the app</span>
+              <label data-l10n-id="settings-startup-default-page-label"></label>
+              <span class="settings-field-hint" data-l10n-id="settings-startup-default-page-hint"></span>
             </div>
             <div class="settings-field-control">
               <select id="settingDefaultPage" class="settings-select" data-custom-select>
-                <option value="dashboard" ${startup.default_page === "dashboard" || !startup.default_page ? "selected" : ""}>Dashboard</option>
-                <option value="tokens" ${startup.default_page === "tokens" ? "selected" : ""}>Tokens</option>
-                <option value="positions" ${startup.default_page === "positions" ? "selected" : ""}>Positions</option>
-                <option value="wallet" ${startup.default_page === "wallet" ? "selected" : ""}>Wallet</option>
-                <option value="config" ${startup.default_page === "config" ? "selected" : ""}>Config</option>
+                <option value="dashboard" ${startup.default_page === "dashboard" || !startup.default_page ? "selected" : ""}>${Utils.escapeHtml(I18n.t("settings-startup-page-dashboard"))}</option>
+                <option value="tokens" ${startup.default_page === "tokens" ? "selected" : ""}>${Utils.escapeHtml(I18n.t("settings-startup-page-tokens"))}</option>
+                <option value="positions" ${startup.default_page === "positions" ? "selected" : ""}>${Utils.escapeHtml(I18n.t("settings-startup-page-positions"))}</option>
+                <option value="wallet" ${startup.default_page === "wallet" ? "selected" : ""}>${Utils.escapeHtml(I18n.t("settings-startup-page-wallet"))}</option>
+                <option value="config" ${startup.default_page === "config" ? "selected" : ""}>${Utils.escapeHtml(I18n.t("settings-startup-page-config"))}</option>
               </select>
             </div>
           </div>
 
           <div class="settings-field">
             <div class="settings-field-info">
-              <label>Show Background Notifications</label>
-              <span class="settings-field-hint">Display notifications for background events</span>
+              <label data-l10n-id="settings-startup-notifications-label"></label>
+              <span class="settings-field-hint" data-l10n-id="settings-startup-notifications-hint"></span>
             </div>
             <div class="settings-field-control">
               <label class="toggle">
@@ -800,36 +807,36 @@ export class SettingsDialog {
     return `
       <div class="settings-about">
         <div class="settings-about-logo">
-          <img src="/assets/logo.svg" alt="ScreenerBot" />
+          <img src="/assets/logo.svg" alt="" data-l10n-id="settings-about-logo" />
         </div>
-        <h2 class="settings-about-name">ScreenerBot</h2>
-        <p class="settings-about-tagline">Native Solana Trading Engine</p>
+        <h2 class="settings-about-name" translate="no">ScreenerBot</h2>
+        <p class="settings-about-tagline" data-l10n-id="settings-about-tagline"></p>
         <div class="settings-about-version">
-          <span>v${version}</span>
+          <span translate="no">v${version}</span>
         </div>
 
         <div class="settings-about-links">
           <button class="settings-about-link" data-external-url="https://github.com/farfary/ScreenerBot">
             <i class="icon-github"></i>
-            <span>GitHub</span>
+            <span data-l10n-id="settings-about-link-github"></span>
           </button>
           <button class="settings-about-link" data-external-url="https://screenerbot.io/docs">
             <i class="icon-book-open"></i>
-            <span>Documentation</span>
+            <span data-l10n-id="settings-about-link-docs"></span>
           </button>
           <button class="settings-about-link" data-external-url="https://t.me/screenerbotio">
             <i class="icon-message-circle"></i>
-            <span>Telegram</span>
+            <span data-l10n-id="settings-about-link-telegram"></span>
           </button>
           <button class="settings-about-link" data-external-url="https://screenerbot.io">
             <i class="icon-globe"></i>
-            <span>Website</span>
+            <span data-l10n-id="settings-about-link-website"></span>
           </button>
         </div>
 
         <div class="settings-about-credits">
-          <p>Built for Solana traders</p>
-          <p class="settings-about-copyright">© ${new Date().getFullYear()} ScreenerBot. All rights reserved.</p>
+          <p data-l10n-id="settings-about-credits"></p>
+          <p class="settings-about-copyright" data-l10n-id="settings-about-copyright" data-l10n-args='{"year":"${new Date().getFullYear()}"}'></p>
         </div>
       </div>
     `;
@@ -860,10 +867,12 @@ export class SettingsDialog {
 
     if (this.isSaving) {
       icon.className = "icon-loader";
-      text.textContent = "Saving...";
+      text.textContent = I18n.t("settings-dialog-saving");
     } else {
       icon.className = "icon-save";
-      text.textContent = this.hasChanges ? "Save Changes" : "Saved";
+      text.textContent = this.hasChanges
+        ? I18n.t("settings-dialog-save")
+        : I18n.t("settings-dialog-saved");
     }
   }
 

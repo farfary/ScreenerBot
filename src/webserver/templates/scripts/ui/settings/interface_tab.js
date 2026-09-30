@@ -2,6 +2,7 @@
  * Interface Tab Module - Theme, animations, display settings
  * Extracted from settings_dialog.js
  */
+import * as Utils from "../../core/utils.js";
 import { enhanceAllSelects } from "../custom_select.js";
 import { setSoundsEnabled } from "../../core/sounds.js";
 import { resetFeaturedRowConfigCache } from "../featured_row.js";
@@ -22,56 +23,56 @@ export function buildInterfaceTab(settings) {
 
   return `
     <div class="settings-section">
-      <h3 class="settings-section-title">Appearance</h3>
+      <h3 class="settings-section-title" data-l10n-id="settings-interface-section-appearance"></h3>
       <div class="settings-group">
         <div class="settings-field">
           <div class="settings-field-info">
-            <label>Theme</label>
-            <span class="settings-field-hint">Choose your preferred color scheme</span>
+            <label data-l10n-id="settings-interface-theme-label"></label>
+            <span class="settings-field-hint" data-l10n-id="settings-interface-theme-hint"></span>
           </div>
           <div class="settings-field-control">
             <select id="settingTheme" class="settings-select" data-custom-select>
-              <option value="dark" ${activeTheme === "dark" ? "selected" : ""}>Dark</option>
-              <option value="light" ${activeTheme === "light" ? "selected" : ""}>Light</option>
+              <option value="dark" ${activeTheme === "dark" ? "selected" : ""}>${Utils.escapeHtml(I18n.t("settings-interface-theme-dark"))}</option>
+              <option value="light" ${activeTheme === "light" ? "selected" : ""}>${Utils.escapeHtml(I18n.t("settings-interface-theme-light"))}</option>
             </select>
           </div>
         </div>
 
         <div class="settings-field">
           <div class="settings-field-info">
-            <label>Language</label>
-            <span class="settings-field-hint">Display language of the dashboard</span>
+            <label data-l10n-id="settings-interface-language-label"></label>
+            <span class="settings-field-hint" data-l10n-id="settings-interface-language-hint"></span>
           </div>
           <div class="settings-field-control">
             <select id="settingLanguage" class="settings-select" data-custom-select>
-              <option value="system" selected>${I18n.t("common-language-system")}</option>
+              <option value="system" selected>${Utils.escapeHtml(I18n.t("common-language-system"))}</option>
             </select>
           </div>
         </div>
 
         <div class="settings-field settings-field--logo-shape">
           <div class="settings-field-info">
-            <label id="tokenLogoShapeLabel">Token Logo Shape</label>
-            <span class="settings-field-hint">Circle crops every logo; Natural preserves each artwork's own silhouette</span>
+            <label id="tokenLogoShapeLabel" data-l10n-id="settings-interface-logo-shape-label"></label>
+            <span class="settings-field-hint" data-l10n-id="settings-interface-logo-shape-hint"></span>
           </div>
           <fieldset class="logo-shape-options" aria-labelledby="tokenLogoShapeLabel">
             <label class="logo-shape-option">
               <input type="radio" name="tokenLogoShape" value="circle" ${activeLogoShape === "circle" ? "checked" : ""}>
               <img class="logo-shape-option__preview logo-shape-option__preview--circle" src="/assets/logo.png" alt="">
-              <span>Circle</span>
+              <span data-l10n-id="settings-interface-logo-shape-circle"></span>
             </label>
             <label class="logo-shape-option">
               <input type="radio" name="tokenLogoShape" value="rounded-square" ${activeLogoShape === "rounded-square" ? "checked" : ""}>
               <img class="logo-shape-option__preview logo-shape-option__preview--rounded-square" src="/assets/logo.png" alt="">
-              <span>Natural</span>
+              <span data-l10n-id="settings-interface-logo-shape-natural"></span>
             </label>
           </fieldset>
         </div>
 
         <div class="settings-field">
           <div class="settings-field-info">
-            <label>Enable Animations</label>
-            <span class="settings-field-hint">Smooth transitions and effects</span>
+            <label data-l10n-id="settings-interface-animations-label"></label>
+            <span class="settings-field-hint" data-l10n-id="settings-interface-animations-hint"></span>
           </div>
           <div class="settings-field-control">
             <label class="toggle">
@@ -83,8 +84,8 @@ export function buildInterfaceTab(settings) {
 
         <div class="settings-field">
           <div class="settings-field-info">
-            <label>Compact Mode</label>
-            <span class="settings-field-hint">Reduce padding for more content</span>
+            <label data-l10n-id="settings-interface-compact-label"></label>
+            <span class="settings-field-hint" data-l10n-id="settings-interface-compact-hint"></span>
           </div>
           <div class="settings-field-control">
             <label class="toggle">
@@ -97,29 +98,29 @@ export function buildInterfaceTab(settings) {
     </div>
 
     <div class="settings-section">
-      <h3 class="settings-section-title">Data & Display</h3>
+      <h3 class="settings-section-title" data-l10n-id="settings-interface-section-data"></h3>
       <div class="settings-group">
         <div class="settings-field">
           <div class="settings-field-info">
-            <label>Refresh Interval</label>
-            <span class="settings-field-hint">How often to refresh data</span>
+            <label data-l10n-id="settings-interface-refresh-label"></label>
+            <span class="settings-field-hint" data-l10n-id="settings-interface-refresh-hint"></span>
           </div>
           <div class="settings-field-control">
             <select id="settingPolling" class="settings-select" data-custom-select>
-              <option value="1000" ${iface.polling_interval_ms === 1000 ? "selected" : ""}>1 second</option>
-              <option value="2000" ${iface.polling_interval_ms === 2000 ? "selected" : ""}>2 seconds</option>
-              <option value="5000" ${iface.polling_interval_ms === 5000 || !iface.polling_interval_ms ? "selected" : ""}>5 seconds</option>
-              <option value="10000" ${iface.polling_interval_ms === 10000 ? "selected" : ""}>10 seconds</option>
-              <option value="30000" ${iface.polling_interval_ms === 30000 ? "selected" : ""}>30 seconds</option>
-              <option value="60000" ${iface.polling_interval_ms === 60000 ? "selected" : ""}>1 minute</option>
+              <option value="1000" ${iface.polling_interval_ms === 1000 ? "selected" : ""}>${Utils.escapeHtml(I18n.t("settings-interface-refresh-seconds", { count: 1 }))}</option>
+              <option value="2000" ${iface.polling_interval_ms === 2000 ? "selected" : ""}>${Utils.escapeHtml(I18n.t("settings-interface-refresh-seconds", { count: 2 }))}</option>
+              <option value="5000" ${iface.polling_interval_ms === 5000 || !iface.polling_interval_ms ? "selected" : ""}>${Utils.escapeHtml(I18n.t("settings-interface-refresh-seconds", { count: 5 }))}</option>
+              <option value="10000" ${iface.polling_interval_ms === 10000 ? "selected" : ""}>${Utils.escapeHtml(I18n.t("settings-interface-refresh-seconds", { count: 10 }))}</option>
+              <option value="30000" ${iface.polling_interval_ms === 30000 ? "selected" : ""}>${Utils.escapeHtml(I18n.t("settings-interface-refresh-seconds", { count: 30 }))}</option>
+              <option value="60000" ${iface.polling_interval_ms === 60000 ? "selected" : ""}>${Utils.escapeHtml(I18n.t("settings-interface-refresh-minutes", { count: 1 }))}</option>
             </select>
           </div>
         </div>
 
         <div class="settings-field">
           <div class="settings-field-info">
-            <label>Show Ticker Bar</label>
-            <span class="settings-field-hint">Live metrics ticker in header</span>
+            <label data-l10n-id="settings-interface-ticker-label"></label>
+            <span class="settings-field-hint" data-l10n-id="settings-interface-ticker-hint"></span>
           </div>
           <div class="settings-field-control">
             <label class="toggle">
@@ -131,23 +132,23 @@ export function buildInterfaceTab(settings) {
 
         <div class="settings-field">
           <div class="settings-field-info">
-            <label>Table Page Size</label>
-            <span class="settings-field-hint">Default rows per table page</span>
+            <label data-l10n-id="settings-interface-page-size-label"></label>
+            <span class="settings-field-hint" data-l10n-id="settings-interface-page-size-hint"></span>
           </div>
           <div class="settings-field-control">
             <select id="settingPageSize" class="settings-select" data-custom-select>
-              <option value="10" ${iface.table_page_size === 10 ? "selected" : ""}>10 rows</option>
-              <option value="25" ${iface.table_page_size === 25 || !iface.table_page_size ? "selected" : ""}>25 rows</option>
-              <option value="50" ${iface.table_page_size === 50 ? "selected" : ""}>50 rows</option>
-              <option value="100" ${iface.table_page_size === 100 ? "selected" : ""}>100 rows</option>
+              <option value="10" ${iface.table_page_size === 10 ? "selected" : ""}>${Utils.escapeHtml(I18n.t("settings-interface-page-size-rows", { count: 10 }))}</option>
+              <option value="25" ${iface.table_page_size === 25 || !iface.table_page_size ? "selected" : ""}>${Utils.escapeHtml(I18n.t("settings-interface-page-size-rows", { count: 25 }))}</option>
+              <option value="50" ${iface.table_page_size === 50 ? "selected" : ""}>${Utils.escapeHtml(I18n.t("settings-interface-page-size-rows", { count: 50 }))}</option>
+              <option value="100" ${iface.table_page_size === 100 ? "selected" : ""}>${Utils.escapeHtml(I18n.t("settings-interface-page-size-rows", { count: 100 }))}</option>
             </select>
           </div>
         </div>
 
         <div class="settings-field">
           <div class="settings-field-info">
-            <label>Auto-expand Categories</label>
-            <span class="settings-field-hint">Expand config categories by default</span>
+            <label data-l10n-id="settings-interface-auto-expand-label"></label>
+            <span class="settings-field-hint" data-l10n-id="settings-interface-auto-expand-hint"></span>
           </div>
           <div class="settings-field-control">
             <label class="toggle">
@@ -159,8 +160,8 @@ export function buildInterfaceTab(settings) {
 
         <div class="settings-field">
           <div class="settings-field-info">
-            <label>Show Contextual Hints</label>
-            <span class="settings-field-hint">Display help icons explaining dashboard features</span>
+            <label data-l10n-id="settings-interface-hints-label"></label>
+            <span class="settings-field-hint" data-l10n-id="settings-interface-hints-hint"></span>
           </div>
           <div class="settings-field-control">
             <label class="toggle">
@@ -172,8 +173,8 @@ export function buildInterfaceTab(settings) {
 
         <div class="settings-field">
           <div class="settings-field-info">
-            <label>Show Featured Row</label>
-            <span class="settings-field-hint">Display featured tokens row on Home and Tokens pages</span>
+            <label data-l10n-id="settings-interface-featured-label"></label>
+            <span class="settings-field-hint" data-l10n-id="settings-interface-featured-hint"></span>
           </div>
           <div class="settings-field-control">
             <label class="toggle">
@@ -186,12 +187,12 @@ export function buildInterfaceTab(settings) {
     </div>
 
     <div class="settings-section">
-      <h3 class="settings-section-title">Sound Effects</h3>
+      <h3 class="settings-section-title" data-l10n-id="settings-interface-section-sound"></h3>
       <div class="settings-group">
         <div class="settings-field">
           <div class="settings-field-info">
-            <label>Enable Sounds</label>
-            <span class="settings-field-hint">Tactile cues for navigation, state changes, and outcomes</span>
+            <label data-l10n-id="settings-interface-sounds-label"></label>
+            <span class="settings-field-hint" data-l10n-id="settings-interface-sounds-hint"></span>
           </div>
           <div class="settings-field-control">
             <label class="toggle">

@@ -241,6 +241,44 @@ pub fn create_tool_registry() -> ToolRegistry {
 
 #[cfg(test)]
 mod tests {
+    /// Catalog key of the label for each category. The match is exhaustive, so
+    /// a new variant fails to compile until it is mapped here and in
+    /// `CATEGORY_LABELS` (ui/settings/agent_connections_tab.js).
+    fn category_label_key(category: &ToolCategory) -> &'static str {
+        match category {
+            ToolCategory::Analysis => "settings-agent-category-analysis",
+            ToolCategory::Portfolio => "settings-agent-category-portfolio",
+            ToolCategory::Trading => "settings-agent-category-trading",
+            ToolCategory::Config => "settings-agent-category-config",
+            ToolCategory::System => "settings-agent-category-system",
+        }
+    }
+
+    #[test]
+    fn category_labels_exist_in_the_catalog() {
+        for category in [
+            ToolCategory::Analysis,
+            ToolCategory::Portfolio,
+            ToolCategory::Trading,
+            ToolCategory::Config,
+            ToolCategory::System,
+        ] {
+            let key = category_label_key(&category);
+            let wire = serde_json::to_value(&category).unwrap();
+            assert_eq!(
+                key,
+                format!("settings-agent-category-{}", wire.as_str().unwrap())
+            );
+            for id in [
+                key.to_owned(),
+                format!("{key}-description"),
+                format!("{key}-inline"),
+            ] {
+                assert_ne!(crate::i18n::format_en(&id, None), id, "missing {id}");
+            }
+        }
+    }
+
     use super::*;
 
     #[test]

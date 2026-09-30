@@ -6,12 +6,28 @@ import * as Utils from "../../core/utils.js";
 import { enhanceAllSelects } from "../custom_select.js";
 import { apiErrorMessage } from "../../core/request_manager.js";
 
+// Ids are the chat kinds reported by the Telegram poller (src/telegram/polling.rs).
+const CHAT_TYPE_LABELS = Object.freeze({
+  private: "settings-telegram-chat-type-private",
+  group: "settings-telegram-chat-type-group",
+  supergroup: "settings-telegram-chat-type-supergroup",
+  channel: "settings-telegram-chat-type-channel",
+});
+
+/** Replace a button's content with an icon and an already localized label. */
+function setButton(button, icon, label) {
+  const glyph = document.createElement("i");
+  glyph.className = icon;
+  button.replaceChildren(glyph, ` ${label}`);
+}
+
 /**
  * Load Telegram tab (async because we need to fetch settings and auth state)
  */
 export async function loadTelegramTab(dialog, content) {
   content.innerHTML =
-    '<div class="settings-loading"><i class="icon-loader spin"></i> Loading Telegram settings...</div>';
+    '<div class="settings-loading"><i class="icon-loader spin"></i> <span data-l10n-id="settings-telegram-loading"></span></div>';
+  I18n.localizeTree(content);
 
   try {
     // Fetch telegram status from API
@@ -43,13 +59,16 @@ export async function loadTelegramTab(dialog, content) {
     }
 
     content.innerHTML = buildTelegramTab(settings);
+    I18n.localizeTree(content);
     attachTelegramHandlers(dialog, content, settings);
 
     // Load Password + TOTP authentication state
     await loadTelegramAuthState(dialog, content);
   } catch (error) {
     console.error("[Settings] Failed to load Telegram settings:", error);
-    content.innerHTML = '<div class="settings-error">Failed to load Telegram settings</div>';
+    content.innerHTML =
+      '<div class="settings-error" data-l10n-id="settings-telegram-load-failed"></div>';
+    I18n.localizeTree(content);
   }
 }
 
@@ -65,34 +84,32 @@ function buildTelegramTab(settings) {
             (s) => `
       <div class="session-item" data-session-id="${s.user_id}">
         <div class="session-info">
-          <span class="session-user">${s.username || "Unknown"}</span>
-          <span class="session-time">Active: ${Utils.formatDuration(s.created_at_secs * 1000)}</span>
+          <span class="session-user">${s.username || Utils.escapeHtml(I18n.t("settings-telegram-unknown"))}</span>
+          <span class="session-time">${Utils.escapeHtml(I18n.t("settings-telegram-session-active", { duration: Utils.formatDuration(s.created_at_secs * 1000) }))}</span>
         </div>
         <button class="btn btn-danger btn-sm session-revoke-btn" data-session-id="${s.user_id}">
-          <i class="icon-x"></i> Revoke
+          <i class="icon-x"></i> <span data-l10n-id="settings-telegram-session-revoke"></span>
         </button>
       </div>
     `
           )
           .join("")
-      : '<div class="sessions-empty">No active sessions</div>';
+      : '<div class="sessions-empty" data-l10n-id="settings-telegram-sessions-empty"></div>';
 
   return `
     <!-- Connection Section -->
     <div class="settings-section">
       <h3 class="settings-section-title">
         <i class="icon-send"></i>
-        Connection
+        <span data-l10n-id="settings-telegram-connection-title"></span>
       </h3>
-      <p class="settings-section-description">
-        Connect your Telegram bot to receive notifications and control ScreenerBot remotely.
-      </p>
+      <p class="settings-section-description" data-l10n-id="settings-telegram-connection-description"></p>
 
       <div class="settings-group">
         <div class="settings-field">
           <div class="settings-field-info">
-            <label>Enable Telegram</label>
-            <span class="settings-field-hint">Enable Telegram bot integration</span>
+            <label data-l10n-id="settings-telegram-enable-label"></label>
+            <span class="settings-field-hint" data-l10n-id="settings-telegram-enable-hint"></span>
           </div>
           <div class="settings-field-control">
             <label class="toggle" data-level="root">
@@ -104,12 +121,12 @@ function buildTelegramTab(settings) {
 
         <div class="settings-field">
           <div class="settings-field-info">
-            <label>Bot Token</label>
-            <span class="settings-field-hint">${settings.bot_token && settings.bot_token.endsWith("...") ? '<i class="icon-circle-check" style="color: var(--success);"></i> Token saved' : "Get this from @BotFather on Telegram"}</span>
+            <label data-l10n-id="settings-telegram-token-label"></label>
+            <span class="settings-field-hint">${settings.bot_token && settings.bot_token.endsWith("...") ? '<i class="icon-circle-check" style="color: var(--success);"></i> <span data-l10n-id="settings-telegram-token-saved"></span>' : '<span data-l10n-id="settings-telegram-token-help"></span>'}</span>
           </div>
           <div class="settings-field-control telegram-token-field">
-            <input type="password" id="tgBotToken" class="settings-input" placeholder="${settings.bot_token && settings.bot_token.endsWith("...") ? "Token saved (enter new to change)" : "Enter bot token"}" value="" autocomplete="off">
-            <button class="btn btn-secondary btn-sm btn-icon" id="tgToggleToken" title="Show/Hide">
+            <input type="password" id="tgBotToken" class="settings-input" placeholder="${Utils.escapeHtml(settings.bot_token && settings.bot_token.endsWith("...") ? I18n.attr("settings-telegram-token-input-saved", "placeholder") : I18n.attr("settings-telegram-token-input", "placeholder"))}" value="" autocomplete="off">
+            <button class="btn btn-secondary btn-sm btn-icon" id="tgToggleToken" data-l10n-id="settings-telegram-token-toggle">
               <i class="icon-eye"></i>
             </button>
           </div>
@@ -117,9 +134,9 @@ function buildTelegramTab(settings) {
 
         <div class="settings-field">
           <div class="settings-field-info">
-            <label>Chat ID</label>
+            <label data-l10n-id="settings-telegram-chat-label"></label>
             <span class="settings-field-hint" id="tgChatIdHint">
-              ${settings.chat_id ? `Connected to chat: ${settings.chat_id}` : "Discover your chat ID automatically"}
+              ${settings.chat_id ? `<span data-l10n-id="settings-telegram-chat-connected"></span> <bdi dir="ltr">${settings.chat_id}</bdi>` : '<span data-l10n-id="settings-telegram-chat-discover-hint"></span>'}
             </span>
           </div>
           <div class="settings-field-control" id="tgChatIdControl">
@@ -127,15 +144,15 @@ function buildTelegramTab(settings) {
               settings.chat_id
                 ? `
               <span class="chat-id-display">
-                <code>${settings.chat_id}</code>
-                <button class="btn btn-secondary btn-sm" id="tgChangeChatBtn" title="Change">
+                <code dir="ltr">${settings.chat_id}</code>
+                <button class="btn btn-secondary btn-sm" id="tgChangeChatBtn" data-l10n-id="settings-telegram-chat-change">
                   <i class="icon-pencil"></i>
                 </button>
               </span>
             `
                 : `
               <button class="btn btn-primary btn-sm" id="tgDiscoverBtn">
-                <i class="icon-search"></i> Discover Chat ID
+                <i class="icon-search"></i> <span data-l10n-id="settings-telegram-chat-discover"></span>
               </button>
             `
             }
@@ -148,27 +165,24 @@ function buildTelegramTab(settings) {
             <div class="discovery-instructions">
               <div class="discovery-step">
                 <span class="step-number">1</span>
-                <span>Add your bot to a Telegram group, or start a direct chat with it</span>
+                <span data-l10n-id="settings-telegram-discovery-step-add"></span>
               </div>
               <div class="discovery-step">
                 <span class="step-number">2</span>
-                <span>For groups: Check @BotFather → /mybots → [your bot] → Bot Settings → Group Privacy</span>
+                <span data-l10n-id="settings-telegram-discovery-step-privacy"></span>
               </div>
               <div class="discovery-info-box">
                 <i class="icon-info"></i>
-                <div>
-                  <strong>Privacy Mode OFF:</strong> Bot receives all group messages<br/>
-                  <strong>Privacy Mode ON:</strong> Bot only receives messages when @mentioned
-                </div>
+                <div data-l10n-id="settings-telegram-discovery-privacy" data-l10n-markup></div>
               </div>
               <div class="discovery-step">
                 <span class="step-number">3</span>
-                <span>Send any message (or @mention your bot if Privacy Mode is ON)</span>
+                <span data-l10n-id="settings-telegram-discovery-step-send"></span>
               </div>
             </div>
             <div class="discovery-spinner">
               <i class="icon-loader spin"></i>
-              <span>Listening for messages...</span>
+              <span data-l10n-id="settings-telegram-discovery-listening"></span>
             </div>
           </div>
           <div class="discovered-chats-list" id="tgDiscoveredChats">
@@ -176,19 +190,19 @@ function buildTelegramTab(settings) {
           </div>
           <div class="discovery-actions">
             <button class="btn btn-secondary btn-sm" id="tgCancelDiscovery">
-              <i class="icon-x"></i> Cancel
+              <i class="icon-x"></i> <span data-l10n-id="common-action-cancel"></span>
             </button>
           </div>
         </div>
 
         <div class="settings-field">
           <div class="settings-field-info">
-            <label>Test Connection</label>
-            <span class="settings-field-hint">Send a test message to verify configuration</span>
+            <label data-l10n-id="settings-telegram-test-label"></label>
+            <span class="settings-field-hint" data-l10n-id="settings-telegram-test-hint"></span>
           </div>
           <div class="settings-field-control">
             <button class="btn btn-primary btn-sm" id="tgTestBtn">
-              <i class="icon-send"></i> Send Test
+              <i class="icon-send"></i> <span data-l10n-id="settings-telegram-test-send"></span>
             </button>
           </div>
         </div>
@@ -199,11 +213,9 @@ function buildTelegramTab(settings) {
     <div class="settings-section">
       <h3 class="settings-section-title">
         <i class="icon-shield"></i>
-        Command Authentication
+        <span data-l10n-id="settings-telegram-auth-title"></span>
       </h3>
-      <p class="settings-section-description">
-        Telegram commands use the same 2FA as the dashboard lockscreen.
-      </p>
+      <p class="settings-section-description" data-l10n-id="settings-telegram-auth-description"></p>
 
       <div class="settings-group telegram-auth-section" id="tgAuthSection">
         <!-- Command Authentication Subsection -->
@@ -211,10 +223,10 @@ function buildTelegramTab(settings) {
           <div class="telegram-auth-header">
             <div class="telegram-auth-title">
               <i class="icon-shield"></i>
-              <span>Command Authentication</span>
+              <span data-l10n-id="settings-telegram-auth-title"></span>
             </div>
             <div class="telegram-auth-status" id="tg-auth-status" role="status" aria-live="polite">
-              <i class="icon-loader spin"></i> Loading...
+              <i class="icon-loader spin"></i> <span data-l10n-id="common-loading"></span>
             </div>
           </div>
           <div class="telegram-auth-content" id="tg-auth-content"></div>
@@ -225,21 +237,21 @@ function buildTelegramTab(settings) {
           <div class="telegram-auth-header">
             <div class="telegram-auth-title">
               <i class="icon-clock"></i>
-              <span>Session Timeout</span>
+              <span data-l10n-id="settings-telegram-timeout-title"></span>
             </div>
           </div>
           <div class="telegram-auth-content">
             <div class="telegram-auth-row">
               <div class="telegram-auth-info">
-                <span>How long an authenticated session stays active</span>
+                <span data-l10n-id="settings-telegram-timeout-description"></span>
               </div>
               <select id="tgSessionTimeout" class="settings-select" data-custom-select>
-                <option value="5" ${settings.session_timeout_minutes === 5 ? "selected" : ""}>5 minutes</option>
-                <option value="15" ${settings.session_timeout_minutes === 15 ? "selected" : ""}>15 minutes</option>
-                <option value="30" ${settings.session_timeout_minutes === 30 ? "selected" : ""}>30 minutes</option>
-                <option value="60" ${settings.session_timeout_minutes === 60 ? "selected" : ""}>1 hour</option>
-                <option value="120" ${settings.session_timeout_minutes === 120 ? "selected" : ""}>2 hours</option>
-                <option value="1440" ${settings.session_timeout_minutes === 1440 ? "selected" : ""}>24 hours</option>
+                <option value="5" ${settings.session_timeout_minutes === 5 ? "selected" : ""}>${Utils.escapeHtml(I18n.t("settings-duration-minutes", { count: 5 }))}</option>
+                <option value="15" ${settings.session_timeout_minutes === 15 ? "selected" : ""}>${Utils.escapeHtml(I18n.t("settings-duration-minutes", { count: 15 }))}</option>
+                <option value="30" ${settings.session_timeout_minutes === 30 ? "selected" : ""}>${Utils.escapeHtml(I18n.t("settings-duration-minutes", { count: 30 }))}</option>
+                <option value="60" ${settings.session_timeout_minutes === 60 ? "selected" : ""}>${Utils.escapeHtml(I18n.t("settings-duration-hours", { count: 1 }))}</option>
+                <option value="120" ${settings.session_timeout_minutes === 120 ? "selected" : ""}>${Utils.escapeHtml(I18n.t("settings-duration-hours", { count: 2 }))}</option>
+                <option value="1440" ${settings.session_timeout_minutes === 1440 ? "selected" : ""}>${Utils.escapeHtml(I18n.t("settings-duration-hours", { count: 24 }))}</option>
               </select>
             </div>
           </div>
@@ -251,7 +263,7 @@ function buildTelegramTab(settings) {
     <div class="settings-section">
       <h3 class="settings-section-title">
         <i class="icon-users"></i>
-        Active Sessions
+        <span data-l10n-id="settings-telegram-sessions-title"></span>
       </h3>
       <div id="tgSessionsList" class="sessions-list">
         ${sessionsHtml}
@@ -262,17 +274,15 @@ function buildTelegramTab(settings) {
     <div class="settings-section">
       <h3 class="settings-section-title">
         <i class="icon-bell"></i>
-        Notification Settings
+        <span data-l10n-id="settings-telegram-notifications-title"></span>
       </h3>
-      <p class="settings-section-description">
-        Choose which events trigger Telegram notifications.
-      </p>
+      <p class="settings-section-description" data-l10n-id="settings-telegram-notifications-description"></p>
 
       <div class="settings-group">
         <div class="settings-field">
           <div class="settings-field-info">
-            <label>Position Opened</label>
-            <span class="settings-field-hint">Notify when a new position is opened</span>
+            <label data-l10n-id="settings-telegram-notify-opened-label"></label>
+            <span class="settings-field-hint" data-l10n-id="settings-telegram-notify-opened-hint"></span>
           </div>
           <div class="settings-field-control">
             <label class="toggle" data-level="item">
@@ -284,8 +294,8 @@ function buildTelegramTab(settings) {
 
         <div class="settings-field">
           <div class="settings-field-info">
-            <label>Position Closed</label>
-            <span class="settings-field-hint">Notify when a position is closed</span>
+            <label data-l10n-id="settings-telegram-notify-closed-label"></label>
+            <span class="settings-field-hint" data-l10n-id="settings-telegram-notify-closed-hint"></span>
           </div>
           <div class="settings-field-control">
             <label class="toggle" data-level="item">
@@ -297,8 +307,8 @@ function buildTelegramTab(settings) {
 
         <div class="settings-field">
           <div class="settings-field-info">
-            <label>Partial Exit</label>
-            <span class="settings-field-hint">Notify on partial position exits</span>
+            <label data-l10n-id="settings-telegram-notify-partial-label"></label>
+            <span class="settings-field-hint" data-l10n-id="settings-telegram-notify-partial-hint"></span>
           </div>
           <div class="settings-field-control">
             <label class="toggle" data-level="item">
@@ -310,8 +320,8 @@ function buildTelegramTab(settings) {
 
         <div class="settings-field">
           <div class="settings-field-info">
-            <label>DCA Executed</label>
-            <span class="settings-field-hint">Notify when DCA orders are executed</span>
+            <label data-l10n-id="settings-telegram-notify-dca-label"></label>
+            <span class="settings-field-hint" data-l10n-id="settings-telegram-notify-dca-hint"></span>
           </div>
           <div class="settings-field-control">
             <label class="toggle" data-level="item">
@@ -323,8 +333,8 @@ function buildTelegramTab(settings) {
 
         <div class="settings-field">
           <div class="settings-field-info">
-            <label>Errors</label>
-            <span class="settings-field-hint">Notify on errors and failures</span>
+            <label data-l10n-id="settings-telegram-notify-errors-label"></label>
+            <span class="settings-field-hint" data-l10n-id="settings-telegram-notify-errors-hint"></span>
           </div>
           <div class="settings-field-control">
             <label class="toggle" data-level="item">
@@ -336,8 +346,8 @@ function buildTelegramTab(settings) {
 
         <div class="settings-field">
           <div class="settings-field-info">
-            <label>Startup/Shutdown</label>
-            <span class="settings-field-hint">Notify when bot starts or stops</span>
+            <label data-l10n-id="settings-telegram-notify-startup-label"></label>
+            <span class="settings-field-hint" data-l10n-id="settings-telegram-notify-startup-hint"></span>
           </div>
           <div class="settings-field-control">
             <label class="toggle" data-level="item">
@@ -349,8 +359,8 @@ function buildTelegramTab(settings) {
 
         <div class="settings-field">
           <div class="settings-field-info">
-            <label>Filtering Alerts</label>
-            <span class="settings-field-hint">Notify when new tokens pass filtering criteria</span>
+            <label data-l10n-id="settings-telegram-notify-filtering-label"></label>
+            <span class="settings-field-hint" data-l10n-id="settings-telegram-notify-filtering-hint"></span>
           </div>
           <div class="settings-field-control">
             <label class="toggle" data-level="item">
@@ -362,8 +372,8 @@ function buildTelegramTab(settings) {
 
         <div class="settings-field">
           <div class="settings-field-info">
-            <label>Trade Alerts</label>
-            <span class="settings-field-hint">Notify on significant trades for watched tokens</span>
+            <label data-l10n-id="settings-telegram-notify-trades-label"></label>
+            <span class="settings-field-hint" data-l10n-id="settings-telegram-notify-trades-hint"></span>
           </div>
           <div class="settings-field-control">
             <label class="toggle" data-level="item">
@@ -375,8 +385,8 @@ function buildTelegramTab(settings) {
 
         <div class="settings-field">
           <div class="settings-field-info">
-            <label>Daily Summary</label>
-            <span class="settings-field-hint">Receive daily trading activity and P&L summary</span>
+            <label data-l10n-id="settings-telegram-notify-daily-label"></label>
+            <span class="settings-field-hint" data-l10n-id="settings-telegram-notify-daily-hint"></span>
           </div>
           <div class="settings-field-control">
             <label class="toggle" data-level="item">
@@ -392,17 +402,15 @@ function buildTelegramTab(settings) {
     <div class="settings-section">
       <h3 class="settings-section-title">
         <i class=icon-sliders-horizontal></i>
-        Features
+        <span data-l10n-id="settings-telegram-features-title"></span>
       </h3>
-      <p class="settings-section-description">
-        Configure Telegram bot capabilities.
-      </p>
+      <p class="settings-section-description" data-l10n-id="settings-telegram-features-description"></p>
 
       <div class="settings-group">
         <div class="settings-field">
           <div class="settings-field-info">
-            <label>Enable Commands</label>
-            <span class="settings-field-hint">Allow controlling the bot via Telegram commands</span>
+            <label data-l10n-id="settings-telegram-commands-label"></label>
+            <span class="settings-field-hint" data-l10n-id="settings-telegram-commands-hint"></span>
           </div>
           <div class="settings-field-control">
             <label class="toggle" data-level="group">
@@ -414,8 +422,8 @@ function buildTelegramTab(settings) {
 
         <div class="settings-field">
           <div class="settings-field-info">
-            <label>Require 2FA for Commands</label>
-            <span class="settings-field-hint">When sessions expire, require 2FA code to reactivate. Uses lockscreen 2FA.</span>
+            <label data-l10n-id="settings-telegram-require-2fa-label"></label>
+            <span class="settings-field-hint" data-l10n-id="settings-telegram-require-2fa-hint"></span>
           </div>
           <div class="settings-field-control">
             <label class="toggle" data-level="item">
@@ -427,8 +435,8 @@ function buildTelegramTab(settings) {
 
         <div class="settings-field">
           <div class="settings-field-info">
-            <label>Inline Action Buttons</label>
-            <span class="settings-field-hint">Show action buttons in notification messages</span>
+            <label data-l10n-id="settings-telegram-inline-label"></label>
+            <span class="settings-field-hint" data-l10n-id="settings-telegram-inline-hint"></span>
           </div>
           <div class="settings-field-control">
             <label class="toggle" data-level="item">
@@ -470,7 +478,7 @@ function attachTelegramHandlers(dialog, content, settings) {
         Utils.showToast({
           key: "telegram-setting",
           type: "error",
-          title: "Could not save Telegram setting",
+          title: I18n.t("settings-telegram-setting-save-failed"),
           message: apiErrorMessage(data, null),
         });
       }
@@ -479,7 +487,7 @@ function attachTelegramHandlers(dialog, content, settings) {
       Utils.showToast({
         key: "telegram-setting",
         type: "error",
-        title: "Could not save Telegram setting",
+        title: I18n.t("settings-telegram-setting-save-failed"),
         message: error?.message || null,
       });
     }
@@ -519,7 +527,7 @@ function attachTelegramHandlers(dialog, content, settings) {
         const data = await response.json();
         Utils.showToast({
           type: "error",
-          title: "Could not start discovery",
+          title: I18n.t("settings-telegram-discovery-start-failed"),
           message: apiErrorMessage(data, null),
         });
         return;
@@ -542,7 +550,7 @@ function attachTelegramHandlers(dialog, content, settings) {
         }
       }, 2000);
     } catch {
-      Utils.showToast({ type: "error", title: "Could not start discovery" });
+      Utils.showToast({ type: "error", title: I18n.t("settings-telegram-discovery-start-failed") });
     }
   };
 
@@ -573,17 +581,18 @@ function attachTelegramHandlers(dialog, content, settings) {
         (chat) => `
       <div class="discovered-chat-item" data-chat-id="${chat.chat_id}">
         <div class="chat-info">
-          <span class="chat-name">${chat.first_name || chat.username || "Unknown"}</span>
-          <span class="chat-meta">${chat.chat_type} • ID: ${chat.chat_id}</span>
+          <span class="chat-name">${chat.first_name || chat.username || Utils.escapeHtml(I18n.t("settings-telegram-unknown"))}</span>
+          <span class="chat-meta">${Utils.escapeHtml(Object.hasOwn(CHAT_TYPE_LABELS, chat.chat_type) ? I18n.label(CHAT_TYPE_LABELS, chat.chat_type) : chat.chat_type)} • <span data-l10n-id="settings-telegram-chat-id-label"></span> <bdi dir="ltr">${chat.chat_id}</bdi></span>
           ${chat.message_preview ? `<span class="chat-preview">"${chat.message_preview}"</span>` : ""}
         </div>
         <button class="btn btn-success btn-sm select-chat-btn">
-          <i class="icon-check"></i> Select
+          <i class="icon-check"></i> <span data-l10n-id="settings-telegram-discovery-select"></span>
         </button>
       </div>
     `
       )
       .join("");
+    I18n.localizeTree(discoveredChatsEl);
 
     // Attach click handlers
     discoveredChatsEl.querySelectorAll(".select-chat-btn").forEach((btn) => {
@@ -601,7 +610,7 @@ function attachTelegramHandlers(dialog, content, settings) {
         method: "POST",
       });
       if (response.ok) {
-        Utils.showToast("Chat selected", "success");
+        Utils.showToast(I18n.t("settings-telegram-chat-selected"), "success");
         stopDiscovery();
         // Reload the Telegram tab
         loadTelegramTab(dialog, content);
@@ -609,12 +618,12 @@ function attachTelegramHandlers(dialog, content, settings) {
         const data = await response.json();
         Utils.showToast({
           type: "error",
-          title: "Could not select chat",
+          title: I18n.t("settings-telegram-chat-select-failed"),
           message: apiErrorMessage(data, null),
         });
       }
     } catch {
-      Utils.showToast({ type: "error", title: "Could not select chat" });
+      Utils.showToast({ type: "error", title: I18n.t("settings-telegram-chat-select-failed") });
     }
   };
 
@@ -642,7 +651,7 @@ function attachTelegramHandlers(dialog, content, settings) {
       if (testBtn.dataset.submitting === "true") return;
       testBtn.dataset.submitting = "true";
       testBtn.disabled = true;
-      testBtn.innerHTML = '<i class="icon-loader spin"></i> Sending...';
+      setButton(testBtn, "icon-loader spin", I18n.t("settings-telegram-test-sending"));
       try {
         const response = await fetch("/api/telegram/test", {
           method: "POST",
@@ -651,20 +660,20 @@ function attachTelegramHandlers(dialog, content, settings) {
         });
         const data = await response.json();
         if (response.ok) {
-          Utils.showToast("Test message sent", "success");
+          Utils.showToast(I18n.t("settings-telegram-test-sent"), "success");
         } else {
           Utils.showToast({
             type: "error",
-            title: "Test message failed",
+            title: I18n.t("settings-telegram-test-failed"),
             message: apiErrorMessage(data, null),
           });
         }
       } catch {
-        Utils.showToast({ type: "error", title: "Test message failed" });
+        Utils.showToast({ type: "error", title: I18n.t("settings-telegram-test-failed") });
       } finally {
         testBtn.dataset.submitting = "false";
         testBtn.disabled = false;
-        testBtn.innerHTML = '<i class="icon-send"></i> Send Test';
+        setButton(testBtn, "icon-send", I18n.t("settings-telegram-test-send"));
       }
     });
   }
@@ -687,13 +696,19 @@ function attachTelegramHandlers(dialog, content, settings) {
           method: "POST",
         });
         if (response.ok) {
-          Utils.showToast("Session revoked", "success");
+          Utils.showToast(I18n.t("settings-telegram-session-revoked"), "success");
           loadTelegramTab(dialog, content);
         } else {
-          Utils.showToast({ type: "error", title: "Could not revoke session" });
+          Utils.showToast({
+            type: "error",
+            title: I18n.t("settings-telegram-session-revoke-failed"),
+          });
         }
       } catch {
-        Utils.showToast({ type: "error", title: "Could not revoke session" });
+        Utils.showToast({
+          type: "error",
+          title: I18n.t("settings-telegram-session-revoke-failed"),
+        });
       }
     });
   });
@@ -766,7 +781,7 @@ async function loadTelegramAuthState(dialog, content) {
     const lockscreenData = await lockscreenResponse.json();
 
     if (!lockscreenResponse.ok) {
-      throw new Error(lockscreenData.error || "Failed to load security settings");
+      throw new Error(lockscreenData.error || I18n.t("settings-security-load-failed"));
     }
 
     const totpEnabled = lockscreenData.totp_enabled || false;
@@ -779,7 +794,8 @@ async function loadTelegramAuthState(dialog, content) {
   } catch (error) {
     if (statusEl) {
       statusEl.innerHTML =
-        '<span class="status-error"><i class="icon-circle-alert"></i> Error</span>';
+        '<span class="status-error"><i class="icon-circle-alert"></i> <span data-l10n-id="settings-telegram-auth-error"></span></span>';
+      I18n.localizeTree(statusEl);
     }
     if (contentEl) {
       contentEl.innerHTML = `<div class="telegram-auth-error">${escapeHtml(error.message)}</div>`;
@@ -793,50 +809,53 @@ async function loadTelegramAuthState(dialog, content) {
 function renderAuthSection(dialog, statusEl, contentEl, totpEnabled, require2fa = true) {
   if (totpEnabled && require2fa) {
     statusEl.innerHTML =
-      '<span class="status-success"><i class="icon-circle-check"></i> Protected</span>';
+      '<span class="status-success"><i class="icon-circle-check"></i> <span data-l10n-id="settings-telegram-auth-protected"></span></span>';
     contentEl.innerHTML = `
       <div class="telegram-auth-row">
         <div class="telegram-auth-info">
           <i class="icon-shield" style="color: var(--success); margin-right: 8px;"></i>
-          <span>Commands are protected by lockscreen 2FA. When sessions expire, users must provide their authenticator code via <code>/login</code> command.</span>
+          <span data-l10n-id="settings-telegram-auth-protected-note" data-l10n-markup></span>
         </div>
       </div>
       <div class="telegram-auth-note">
         <i class="icon-info"></i>
-        <span>2FA is managed in <button type="button" class="link-button" id="tg-goto-security-btn">Security Settings</button></span>
+        <span><span data-l10n-id="settings-telegram-auth-managed-in"></span> <button type="button" class="link-button" id="tg-goto-security-btn" data-l10n-id="settings-telegram-security-link"></button></span>
       </div>
     `;
   } else if (totpEnabled && !require2fa) {
     statusEl.innerHTML =
-      '<span class="status-warning"><i class="icon-circle-alert"></i> Disabled</span>';
+      '<span class="status-warning"><i class="icon-circle-alert"></i> <span data-l10n-id="settings-telegram-auth-disabled"></span></span>';
     contentEl.innerHTML = `
       <div class="telegram-auth-row">
         <div class="telegram-auth-info">
           <i class="icon-triangle-alert" style="color: var(--warning); margin-right: 8px;"></i>
-          <span>Lockscreen 2FA is configured but disabled for Telegram. Enable "Require 2FA for Commands" above to protect Telegram commands.</span>
+          <span data-l10n-id="settings-telegram-auth-disabled-note"></span>
         </div>
       </div>
       <div class="telegram-auth-note">
         <i class="icon-info"></i>
-        <span>2FA is managed in <button type="button" class="link-button" id="tg-goto-security-btn">Security Settings</button></span>
+        <span><span data-l10n-id="settings-telegram-auth-managed-in"></span> <button type="button" class="link-button" id="tg-goto-security-btn" data-l10n-id="settings-telegram-security-link"></button></span>
       </div>
     `;
   } else {
     statusEl.innerHTML =
-      '<span class="status-warning"><i class="icon-circle-alert"></i> Not Configured</span>';
+      '<span class="status-warning"><i class="icon-circle-alert"></i> <span data-l10n-id="settings-telegram-auth-not-configured"></span></span>';
     contentEl.innerHTML = `
       <div class="telegram-auth-row">
         <div class="telegram-auth-info">
           <i class="icon-triangle-alert" style="color: var(--warning); margin-right: 8px;"></i>
-          <span>Lockscreen 2FA is not configured. Without 2FA, expired sessions will auto-reactivate without verification.</span>
+          <span data-l10n-id="settings-telegram-auth-missing-note"></span>
         </div>
       </div>
       <div class="telegram-auth-note">
         <i class="icon-info"></i>
-        <span>Configure 2FA in <button type="button" class="link-button" id="tg-goto-security-btn">Security Settings</button> to require verification for Telegram commands.</span>
+        <span><span data-l10n-id="settings-telegram-auth-configure-in"></span> <button type="button" class="link-button" id="tg-goto-security-btn" data-l10n-id="settings-telegram-security-link"></button> <span data-l10n-id="settings-telegram-auth-configure-suffix"></span></span>
       </div>
     `;
   }
+
+  I18n.localizeTree(statusEl);
+  I18n.localizeTree(contentEl);
 
   // Attach handler for security settings button
   const gotoSecurityBtn = contentEl.querySelector("#tg-goto-security-btn");

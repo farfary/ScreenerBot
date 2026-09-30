@@ -62,39 +62,75 @@ export const MAX_LABEL = 64;
 
 /** Tool categories, in the order the permission grid renders them. */
 export const CATEGORIES = [
-  {
-    key: "analysis",
-    label: "Analysis",
-    description: "Token analysis, market data and security checks.",
-  },
-  {
-    key: "portfolio",
-    label: "Portfolio",
-    description: "Open positions, balances and P&L.",
-  },
-  {
-    key: "trading",
-    label: "Trading",
-    description: "Buying, selling and closing positions with real funds.",
-  },
-  {
-    key: "config",
-    label: "Configuration",
-    description: "Every bot setting, including RPC endpoints. Never wallet keys.",
-  },
-  {
-    key: "system",
-    label: "System",
-    description: "Status, events, and the emergency stop.",
-  },
+  { key: "analysis" },
+  { key: "portfolio" },
+  { key: "trading" },
+  { key: "config" },
+  { key: "system" },
 ];
 
+// Ids are the `ToolCategory` values (src/agent_control/tools/mod.rs); the Rust
+// test `category_labels_exist_in_the_catalog` pins the keys.
+const CATEGORY_LABELS = Object.freeze({
+  analysis: "settings-agent-category-analysis",
+  portfolio: "settings-agent-category-portfolio",
+  trading: "settings-agent-category-trading",
+  config: "settings-agent-category-config",
+  system: "settings-agent-category-system",
+});
+
+const CATEGORY_DESCRIPTION_LABELS = Object.freeze({
+  analysis: "settings-agent-category-analysis-description",
+  portfolio: "settings-agent-category-portfolio-description",
+  trading: "settings-agent-category-trading-description",
+  config: "settings-agent-category-config-description",
+  system: "settings-agent-category-system-description",
+});
+
+// The category as it reads inside a sentence.
+const CATEGORY_INLINE_LABELS = Object.freeze({
+  analysis: "settings-agent-category-analysis-inline",
+  portfolio: "settings-agent-category-portfolio-inline",
+  trading: "settings-agent-category-trading-inline",
+  config: "settings-agent-category-config-inline",
+  system: "settings-agent-category-system-inline",
+});
+
 /** The three levels a category can be set to, weakest last. */
-export const LEVELS = [
-  { value: "allow", label: "Allow", hint: "Runs immediately." },
-  { value: "ask_user", label: "Ask", hint: "Waits for your approval in the app." },
-  { value: "deny", label: "Off", hint: "Refused, and hidden from the agent." },
-];
+export const LEVELS = [{ value: "allow" }, { value: "ask_user" }, { value: "deny" }];
+
+// Ids are the serialized `PermissionLevel` values (src/agent_control/permissions.rs).
+const LEVEL_LABELS = Object.freeze({
+  allow: "settings-agent-level-allow",
+  ask_user: "settings-agent-level-ask-user",
+  deny: "settings-agent-level-deny",
+});
+
+const LEVEL_HINT_LABELS = Object.freeze({
+  allow: "settings-agent-level-allow-hint",
+  ask_user: "settings-agent-level-ask-user-hint",
+  deny: "settings-agent-level-deny-hint",
+});
+
+const PRESET_LABELS = Object.freeze({
+  full: "settings-agent-preset-full",
+  ask: "settings-agent-preset-ask",
+  read: "settings-agent-preset-read",
+});
+
+const PRESET_DESCRIPTION_LABELS = Object.freeze({
+  full: "settings-agent-preset-full-description",
+  ask: "settings-agent-preset-ask-description",
+  read: "settings-agent-preset-read-description",
+});
+
+const SETUP_CLIENT_LABELS = Object.freeze({
+  claude: "settings-agent-client-claude",
+  codex: "settings-agent-client-codex",
+  openclaw: "settings-agent-client-openclaw",
+  hermes: "settings-agent-client-hermes",
+  generic: "settings-agent-client-generic",
+});
 
 /** Every category at one level. */
 export function uniformPermissions(level) {
@@ -116,20 +152,14 @@ export function defaultPermissions() {
 export const PRESETS = [
   {
     id: "full",
-    label: "Full access",
-    description: "Everything runs without asking. Wallet keys stay unreachable.",
     permissions: () => defaultPermissions(),
   },
   {
     id: "ask",
-    label: "Ask first",
-    description: "Every action waits for your approval in the app.",
     permissions: () => uniformPermissions("ask_user"),
   },
   {
     id: "read",
-    label: "Read only",
-    description: "Analysis and portfolio reads. Nothing can be changed.",
     permissions: () => ({
       ...uniformPermissions("deny"),
       analysis: "allow",
@@ -164,14 +194,19 @@ export function summarizePermissions(permissions) {
   const normalized = normalizePermissions(permissions);
   const preset = presetFor(normalized);
   if (preset !== "custom") {
-    return { tone: preset, text: PRESETS.find((p) => p.id === preset).label };
+    return { tone: preset, text: I18n.label(PRESET_LABELS, preset) };
   }
-  const asking = CATEGORIES.filter(({ key }) => normalized[key] === "ask_user");
-  const off = CATEGORIES.filter(({ key }) => normalized[key] === "deny");
-  const parts = [];
-  if (asking.length) parts.push(`asks for ${asking.map((c) => c.label.toLowerCase()).join(", ")}`);
-  if (off.length) parts.push(`no ${off.map((c) => c.label.toLowerCase()).join(", ")}`);
-  return { tone: "custom", text: `Limited — ${parts.join("; ")}` };
+  const names = (level) =>
+    CATEGORIES.filter(({ key }) => normalized[key] === level)
+      .map(({ key }) => I18n.label(CATEGORY_INLINE_LABELS, key))
+      .join(I18n.t("settings-agent-list-separator"));
+  const asking = names("ask_user");
+  const off = names("deny");
+  let text;
+  if (asking && off) text = I18n.t("settings-agent-summary-asks-and-off", { asking, off });
+  else if (asking) text = I18n.t("settings-agent-summary-asks-only", { asking });
+  else text = I18n.t("settings-agent-summary-off-only", { off });
+  return { tone: "custom", text };
 }
 
 /**
@@ -179,11 +214,11 @@ export function summarizePermissions(permissions) {
  * `agent_kind` slug (all are valid `[a-z0-9_-]`).
  */
 export const SETUP_CLIENTS = [
-  { id: "claude", label: "Claude Code / Desktop" },
-  { id: "codex", label: "Codex CLI" },
-  { id: "openclaw", label: "OpenClaw" },
-  { id: "hermes", label: "Hermes" },
-  { id: "generic", label: "Generic stdio MCP" },
+  { id: "claude" },
+  { id: "codex" },
+  { id: "openclaw" },
+  { id: "hermes" },
+  { id: "generic" },
 ];
 export const DEFAULT_CLIENT = "claude";
 
@@ -313,33 +348,26 @@ export function openClawCommand(exe, clientId, secret) {
 export function clientSetup(id, exe, clientId, secret) {
   const shared = [];
   if (exePath(exe) === EXE_PLACEHOLDER) {
-    shared.push(
-      `Replace ${EXE_PLACEHOLDER} with the absolute path to your ScreenerBot binary — ` +
-        "the running app could not represent its executable path on this system."
-    );
+    shared.push(I18n.t("settings-agent-note-placeholder"));
   }
-  shared.push(
-    `If you run ScreenerBot with a non-default data directory, also set ${DATA_DIR_ENV} ` +
-      "on the client (another -e / --env flag, or an env entry) to the same path."
-  );
+  shared.push(I18n.t("settings-agent-note-data-dir"));
 
   switch (id) {
     case "codex":
       return {
         notes: [
-          "Run the command, or add the TOML block to ~/.codex/config.toml " +
-            "($CODEX_HOME/config.toml). Restart Codex afterwards.",
-          "`codex mcp get screenerbot` masks the secret in its output.",
+          I18n.t("settings-agent-note-codex-run"),
+          I18n.t("settings-agent-note-codex-get"),
           ...shared,
         ],
         blocks: [
           {
-            label: "Codex CLI — terminal command",
+            label: I18n.t("settings-agent-block-codex-command"),
             lang: "sh",
             body: codexCommand(exe, clientId, secret),
           },
           {
-            label: "Codex CLI — ~/.codex/config.toml (fallback)",
+            label: I18n.t("settings-agent-block-codex-toml"),
             lang: "toml",
             body: codexToml(exe, clientId, secret),
           },
@@ -348,20 +376,18 @@ export function clientSetup(id, exe, clientId, secret) {
     case "claude":
       return {
         notes: [
-          "Claude Code: run the command, then restart Claude Code. `claude mcp get " +
-            "screenerbot` will print the configured environment, including the secret.",
-          "Claude Desktop: merge the JSON into claude_desktop_config.json under " +
-            "`mcpServers` and restart the app.",
+          I18n.t("settings-agent-note-claude-code"),
+          I18n.t("settings-agent-note-claude-desktop"),
           ...shared,
         ],
         blocks: [
           {
-            label: "Claude Code — terminal command",
+            label: I18n.t("settings-agent-block-claude-command"),
             lang: "sh",
             body: claudeCodeCommand(exe, clientId, secret),
           },
           {
-            label: "Claude Desktop — claude_desktop_config.json",
+            label: I18n.t("settings-agent-block-claude-desktop"),
             lang: "json",
             body: genericStdioJson(exe, clientId, secret),
           },
@@ -369,14 +395,10 @@ export function clientSetup(id, exe, clientId, secret) {
       };
     case "openclaw":
       return {
-        notes: [
-          "Run the command, then use `openclaw mcp doctor screenerbot --probe` to verify " +
-            "that the saved stdio server starts and exposes tools.",
-          ...shared,
-        ],
+        notes: [I18n.t("settings-agent-note-openclaw"), ...shared],
         blocks: [
           {
-            label: "OpenClaw — terminal command",
+            label: I18n.t("settings-agent-block-openclaw"),
             lang: "sh",
             body: openClawCommand(exe, clientId, secret),
           },
@@ -384,13 +406,10 @@ export function clientSetup(id, exe, clientId, secret) {
       };
     case "hermes":
       return {
-        notes: [
-          "Add this under `mcp_servers` in Hermes' configuration file, then restart Hermes.",
-          ...shared,
-        ],
+        notes: [I18n.t("settings-agent-note-hermes"), ...shared],
         blocks: [
           {
-            label: "Hermes — mcp_servers (YAML)",
+            label: I18n.t("settings-agent-block-hermes"),
             lang: "yaml",
             body: hermesYaml(exe, clientId, secret),
           },
@@ -399,14 +418,10 @@ export function clientSetup(id, exe, clientId, secret) {
     case "generic":
     default:
       return {
-        notes: [
-          "Any MCP client that speaks stdio: run this command with these args and " +
-            "environment, wherever the client keeps its server list.",
-          ...shared,
-        ],
+        notes: [I18n.t("settings-agent-note-generic"), ...shared],
         blocks: [
           {
-            label: "Generic stdio MCP client",
+            label: I18n.t("settings-agent-block-generic"),
             lang: "json",
             body: genericStdioJson(exe, clientId, secret),
           },
@@ -418,13 +433,13 @@ export function clientSetup(id, exe, clientId, secret) {
 /** Validate a label the way the backend will, so the error shows before the POST. */
 export function validateLabel(raw) {
   const trimmed = String(raw ?? "").trim();
-  if (!trimmed) return { ok: false, error: "Enter a name for this connection." };
+  if (!trimmed) return { ok: false, error: I18n.t("settings-agent-name-required") };
   if ([...trimmed].length > MAX_LABEL) {
-    return { ok: false, error: `Name must be ${MAX_LABEL} characters or fewer.` };
+    return { ok: false, error: I18n.t("settings-agent-name-too-long", { max: MAX_LABEL }) };
   }
   // eslint-disable-next-line no-control-regex
   if (/[\u0000-\u001f\u007f]/.test(trimmed)) {
-    return { ok: false, error: "Name must not contain control characters." };
+    return { ok: false, error: I18n.t("settings-agent-name-control-characters") };
   }
   return { ok: true, value: trimmed };
 }
@@ -443,22 +458,32 @@ let Utils = null;
 function permissionRow(category, level, name) {
   const options = LEVELS.map(
     (option) => `
-      <label class="agent-perm-choice" title="${Utils.escapeHtml(option.hint)}">
+      <label class="agent-perm-choice" title="${Utils.escapeHtml(
+        I18n.label(LEVEL_HINT_LABELS, option.value)
+      )}">
         <input type="radio" name="${Utils.escapeHtml(name)}-${category.key}"
                value="${option.value}" data-perm-key="${category.key}"${
                  option.value === level ? " checked" : ""
                }>
-        <span>${Utils.escapeHtml(option.label)}</span>
+        <span>${Utils.escapeHtml(I18n.label(LEVEL_LABELS, option.value))}</span>
       </label>`
   ).join("");
   return `
     <div class="agent-perm-row">
       <div class="agent-perm-info">
-        <span class="agent-perm-label">${Utils.escapeHtml(category.label)}</span>
-        <span class="agent-perm-desc">${Utils.escapeHtml(category.description)}</span>
+        <span class="agent-perm-label">${Utils.escapeHtml(
+          I18n.label(CATEGORY_LABELS, category.key)
+        )}</span>
+        <span class="agent-perm-desc">${Utils.escapeHtml(
+          I18n.label(CATEGORY_DESCRIPTION_LABELS, category.key)
+        )}</span>
       </div>
       <div class="agent-perm-choices" role="radiogroup"
-           aria-label="${Utils.escapeHtml(category.label)} permission">${options}</div>
+           aria-label="${Utils.escapeHtml(
+             I18n.t("settings-agent-permission-group", {
+               category: I18n.label(CATEGORY_LABELS, category.key),
+             })
+           )}">${options}</div>
     </div>`;
 }
 
@@ -470,17 +495,17 @@ function permissionGrid(permissions, name) {
     (preset) => `
       <button type="button" class="agent-perm-preset${
         preset.id === active ? " active" : ""
-      }" data-preset="${preset.id}" title="${Utils.escapeHtml(preset.description)}">${Utils.escapeHtml(
-        preset.label
-      )}</button>`
+      }" data-preset="${preset.id}" title="${Utils.escapeHtml(
+        I18n.label(PRESET_DESCRIPTION_LABELS, preset.id)
+      )}">${Utils.escapeHtml(I18n.label(PRESET_LABELS, preset.id))}</button>`
   ).join("");
   return `
     <div class="agent-perm-grid" data-perm-grid="${Utils.escapeHtml(name)}">
-      <div class="agent-perm-presets" role="group" aria-label="Permission preset">
+      <div class="agent-perm-presets" role="group" data-l10n-id="settings-agent-preset-group">
         ${presets}
         <span class="agent-perm-custom-note"${
           active === "custom" ? "" : " hidden"
-        }>Custom</span>
+        } data-l10n-id="settings-agent-preset-custom"></span>
       </div>
       ${CATEGORIES.map((category) => permissionRow(category, normalized[category.key], name)).join(
         ""
@@ -502,9 +527,7 @@ function readPermissionGrid(grid) {
 function writePermissionGrid(grid, permissions) {
   const normalized = normalizePermissions(permissions);
   for (const { key } of CATEGORIES) {
-    const input = grid.querySelector(
-      `input[data-perm-key="${key}"][value="${normalized[key]}"]`
-    );
+    const input = grid.querySelector(`input[data-perm-key="${key}"][value="${normalized[key]}"]`);
     if (input) input.checked = true;
   }
   syncPresetState(grid);
@@ -524,13 +547,13 @@ function clientOptions(selected) {
   return SETUP_CLIENTS.map(
     (c) =>
       `<option value="${c.id}"${c.id === selected ? " selected" : ""}>${Utils.escapeHtml(
-        c.label
+        I18n.label(SETUP_CLIENT_LABELS, c.id)
       )}</option>`
   ).join("");
 }
 
 function clientLabel(kind) {
-  return SETUP_CLIENTS.find((client) => client.id === kind)?.label || kind;
+  return Object.hasOwn(SETUP_CLIENT_LABELS, kind) ? I18n.label(SETUP_CLIENT_LABELS, kind) : kind;
 }
 
 function buildShell() {
@@ -538,30 +561,26 @@ function buildShell() {
     <div class="settings-section agent-connections">
       <h3 class="settings-section-title">
         <i class="icon-plug"></i>
-        Agent Connections
+        <span data-l10n-id="settings-agent-title"></span>
       </h3>
-      <p class="settings-section-description">
-        Connect Claude, Codex, Hermes, OpenClaw, or any stdio MCP client. ScreenerBot must remain
-        running. Each connection carries its own permissions: full access by default, limited per
-        connection whenever you want. No connection can ever read or change your wallet key.
-      </p>
+      <p class="settings-section-description" data-l10n-id="settings-agent-description"></p>
 
       <div class="settings-group agent-pair-create">
         <div class="settings-field">
           <div class="settings-field-info">
-            <label for="agentPairLabel">Connection name</label>
-            <span class="settings-field-hint">Shown in the list below so you can tell connections apart.</span>
+            <label for="agentPairLabel" data-l10n-id="settings-agent-name-label"></label>
+            <span class="settings-field-hint" data-l10n-id="settings-agent-name-hint"></span>
           </div>
           <div class="settings-field-control">
             <input type="text" id="agentPairLabel" class="settings-input" maxlength="${MAX_LABEL}"
-                   placeholder="Laptop coding agent" autocomplete="off" spellcheck="false">
+                   data-l10n-id="settings-agent-name-input" autocomplete="off" spellcheck="false">
           </div>
         </div>
 
         <div class="settings-field">
           <div class="settings-field-info">
-            <label for="agentPairClient">Client</label>
-            <span class="settings-field-hint">Picks the setup shown after the connection is created.</span>
+            <label for="agentPairClient" data-l10n-id="settings-agent-client-label"></label>
+            <span class="settings-field-hint" data-l10n-id="settings-agent-client-hint"></span>
           </div>
           <div class="settings-field-control">
             <select id="agentPairClient" class="settings-select" data-custom-select>
@@ -572,10 +591,8 @@ function buildShell() {
 
         <div class="settings-field agent-perm-field">
           <div class="settings-field-info">
-            <span class="settings-field-label">Permissions</span>
-            <span class="settings-field-hint">A new connection can do everything. Limit any
-            category now, or later from the list below — wallet keys are never reachable either
-            way.</span>
+            <span class="settings-field-label" data-l10n-id="settings-agent-permissions-label"></span>
+            <span class="settings-field-hint" data-l10n-id="settings-agent-permissions-hint"></span>
           </div>
           <div class="settings-field-control">
             ${permissionGrid(defaultPermissions(), "create")}
@@ -586,35 +603,33 @@ function buildShell() {
           <p class="form-error" id="agentPairError" hidden></p>
           <button type="button" class="btn btn-primary btn-sm" id="agentPairCreate">
             <i class="icon-plus"></i>
-            Create connection
+            <span data-l10n-id="settings-agent-create"></span>
           </button>
         </div>
       </div>
 
       <div class="agent-issued" id="agentIssued" role="group"
-           aria-label="New connection credential" hidden>
+           data-l10n-id="settings-agent-issued-group" hidden>
         <div class="agent-issued-warn">
           <i class="icon-triangle-alert"></i>
-          <span>Copy the secret now. It is shown once and cannot be retrieved again — revoke and
-          recreate the connection if you lose it. ScreenerBot keeps only a one-way verifier; your
-          MCP client stores the plaintext under its own configuration.</span>
+          <span data-l10n-id="settings-agent-issued-warning"></span>
         </div>
         <div class="agent-issued-fields">
           <div class="agent-issued-row">
-            <span class="agent-issued-key">Client ID</span>
-            <code class="agent-issued-value" id="agentIssuedClientId"></code>
-            <button type="button" class="btn btn-secondary btn-sm" data-copy-issued="client-id">Copy</button>
+            <span class="agent-issued-key" data-l10n-id="settings-agent-issued-client-id"></span>
+            <code class="agent-issued-value" id="agentIssuedClientId" dir="ltr"></code>
+            <button type="button" class="btn btn-secondary btn-sm" data-copy-issued="client-id" data-l10n-id="common-action-copy"></button>
           </div>
           <div class="agent-issued-row">
-            <span class="agent-issued-key">One-time secret</span>
-            <code class="agent-issued-value agent-issued-secret" id="agentIssuedSecret"></code>
-            <button type="button" class="btn btn-secondary btn-sm" data-copy-issued="secret">Copy</button>
+            <span class="agent-issued-key" data-l10n-id="settings-agent-issued-secret"></span>
+            <code class="agent-issued-value agent-issued-secret" id="agentIssuedSecret" dir="ltr"></code>
+            <button type="button" class="btn btn-secondary btn-sm" data-copy-issued="secret" data-l10n-id="common-action-copy"></button>
           </div>
         </div>
 
         <div class="agent-setup">
           <div class="agent-setup-head">
-            <label for="agentSetupClient">Setup for</label>
+            <label for="agentSetupClient" data-l10n-id="settings-agent-setup-for"></label>
             <select id="agentSetupClient" class="settings-select" data-custom-select>
               ${clientOptions(DEFAULT_CLIENT)}
             </select>
@@ -623,16 +638,16 @@ function buildShell() {
           <div class="agent-setup-blocks" id="agentSetupBlocks"></div>
         </div>
 
-        <button type="button" class="btn btn-secondary btn-sm" id="agentIssuedDone">Done</button>
+        <button type="button" class="btn btn-secondary btn-sm" id="agentIssuedDone" data-l10n-id="settings-agent-done"></button>
       </div>
 
       <div class="agent-pair-section">
         <div class="agent-pair-list-head">
-          <h4>Connections</h4>
+          <h4 data-l10n-id="settings-agent-list-title"></h4>
           <span id="agentPairCount"></span>
         </div>
         <div class="agent-pair-list" id="agentPairList">
-          <div class="settings-loading"><i class="icon-loader spin"></i> Loading connections...</div>
+          <div class="settings-loading"><i class="icon-loader spin"></i> <span data-l10n-id="settings-agent-loading"></span></div>
         </div>
       </div>
     </div>
@@ -649,14 +664,15 @@ function permissionBadge(permissions) {
 function renderList(container, rows) {
   const countEl = container.closest(".agent-pair-section")?.querySelector("#agentPairCount");
   if (!Array.isArray(rows) || rows.length === 0) {
-    if (countEl) countEl.textContent = "0 active";
-    container.innerHTML =
-      '<div class="settings-empty">No connections yet. Create one above to pair a client.</div>';
+    if (countEl) countEl.textContent = I18n.t("settings-agent-active-count", { count: 0 });
+    container.innerHTML = '<div class="settings-empty" data-l10n-id="settings-agent-empty"></div>';
+    I18n.localizeTree(container);
     return;
   }
   const active = rows.filter((r) => !r.revoked);
   const revoked = rows.filter((r) => r.revoked);
-  if (countEl) countEl.textContent = `${active.length} active`;
+  if (countEl)
+    countEl.textContent = I18n.t("settings-agent-active-count", { count: active.length });
   const rowHtml = (r) => `
     <div class="agent-pair-row${r.revoked ? " agent-pair-row--revoked" : ""}" role="listitem">
       <div class="agent-pair-main">
@@ -666,12 +682,14 @@ function renderList(container, rows) {
         </span>
       </div>
       <div class="agent-pair-times">
-        <span>Created ${Utils.escapeHtml(Utils.formatTimeAgo(r.created_at))}</span>
-        <span>${
+        <span>${Utils.escapeHtml(
+          I18n.t("settings-agent-created", { time: Utils.formatTimeAgo(r.created_at) })
+        )}</span>
+        <span>${Utils.escapeHtml(
           r.last_used_at
-            ? "Last used " + Utils.escapeHtml(Utils.formatTimeAgo(r.last_used_at))
-            : "Never used"
-        }</span>
+            ? I18n.t("settings-agent-last-used", { time: Utils.formatTimeAgo(r.last_used_at) })
+            : I18n.t("settings-agent-never-used")
+        )}</span>
       </div>
       ${
         r.revoked
@@ -679,10 +697,10 @@ function renderList(container, rows) {
           : `<div class="agent-pair-action">
               <button type="button" class="btn btn-secondary btn-sm" data-edit-perms="${Utils.escapeHtml(
                 r.client_id
-              )}" aria-expanded="false">Permissions</button>
+              )}" aria-expanded="false" data-l10n-id="settings-agent-permissions-edit"></button>
               <button type="button" class="btn btn-danger btn-sm" data-revoke="${Utils.escapeHtml(
                 r.client_id
-              )}" data-label="${Utils.escapeHtml(r.label)}">Revoke</button>
+              )}" data-label="${Utils.escapeHtml(r.label)}" data-l10n-id="settings-agent-revoke"></button>
             </div>`
       }
       ${
@@ -695,10 +713,10 @@ function renderList(container, rows) {
               <div class="agent-perm-editor-actions">
                 <button type="button" class="btn btn-secondary btn-sm" data-perm-cancel="${Utils.escapeHtml(
                   r.client_id
-                )}">Cancel</button>
+                )}" data-l10n-id="common-action-cancel"></button>
                 <button type="button" class="btn btn-primary btn-sm" data-perm-save="${Utils.escapeHtml(
                   r.client_id
-                )}">Save permissions</button>
+                )}" data-l10n-id="settings-agent-permissions-save"></button>
               </div>
             </div>`
       }
@@ -706,13 +724,14 @@ function renderList(container, rows) {
   container.innerHTML =
     (active.length
       ? `<div class="agent-pair-active" role="list">${active.map(rowHtml).join("")}</div>`
-      : '<div class="settings-empty">No active connections.</div>') +
+      : '<div class="settings-empty" data-l10n-id="settings-agent-empty-active"></div>') +
     (revoked.length
       ? `<details class="agent-pair-revoked-group">
-          <summary><i class="icon-chevron-right"></i> Revoked connections <span>${revoked.length}</span></summary>
+          <summary><i class="icon-chevron-right"></i> <span data-l10n-id="settings-agent-revoked-title"></span> <span>${revoked.length}</span></summary>
           <div role="list">${revoked.map(rowHtml).join("")}</div>
         </details>`
       : "");
+  I18n.localizeTree(container);
 }
 
 /**
@@ -723,7 +742,8 @@ export async function loadAgentConnectionsTab(_dialog, content) {
   teardownAgentConnectionsTab();
   const generation = loadGeneration;
   content.innerHTML =
-    '<div class="settings-loading"><i class="icon-loader spin"></i> Loading connections...</div>';
+    '<div class="settings-loading"><i class="icon-loader spin"></i> <span data-l10n-id="settings-agent-loading"></span></div>';
+  I18n.localizeTree(content);
 
   let ConfirmationDialog;
   try {
@@ -733,7 +753,9 @@ export async function loadAgentConnectionsTab(_dialog, content) {
     ]);
   } catch {
     if (generation !== loadGeneration) return;
-    content.innerHTML = '<div class="settings-error">Failed to load Agent Connections</div>';
+    content.innerHTML =
+      '<div class="settings-error" data-l10n-id="settings-agent-load-failed"></div>';
+    I18n.localizeTree(content);
     return;
   }
 
@@ -745,6 +767,7 @@ export async function loadAgentConnectionsTab(_dialog, content) {
   let currentBlocks = [];
 
   content.innerHTML = buildShell();
+  I18n.localizeTree(content);
 
   const listEl = content.querySelector("#agentPairList");
   const errorEl = content.querySelector("#agentPairError");
@@ -784,12 +807,13 @@ export async function loadAgentConnectionsTab(_dialog, content) {
         <div class="agent-setup-block">
           <div class="agent-setup-block-head">
             <span class="agent-setup-block-label">${Utils.escapeHtml(b.label)}</span>
-            <button type="button" class="btn btn-secondary btn-sm" data-copy-block="${i}">Copy</button>
+            <button type="button" class="btn btn-secondary btn-sm" data-copy-block="${i}" data-l10n-id="common-action-copy"></button>
           </div>
-          <pre class="agent-setup-body"><code>${Utils.escapeHtml(b.body)}</code></pre>
+          <pre class="agent-setup-body" dir="ltr"><code>${Utils.escapeHtml(b.body)}</code></pre>
         </div>`
       )
       .join("");
+    I18n.localizeTree(setupBlocksEl);
   }
 
   async function refreshList() {
@@ -799,13 +823,17 @@ export async function loadAgentConnectionsTab(_dialog, content) {
         signal: controller.signal,
       });
       if (!res.ok) {
-        listEl.innerHTML = '<div class="settings-error">Could not load connections</div>';
+        listEl.innerHTML =
+          '<div class="settings-error" data-l10n-id="settings-agent-list-failed"></div>';
+        I18n.localizeTree(listEl);
         return;
       }
       renderList(listEl, await res.json());
     } catch {
       if (controller.signal.aborted) return;
-      listEl.innerHTML = '<div class="settings-error">Could not load connections</div>';
+      listEl.innerHTML =
+        '<div class="settings-error" data-l10n-id="settings-agent-list-failed"></div>';
+      I18n.localizeTree(listEl);
     }
   }
 
@@ -831,7 +859,7 @@ export async function loadAgentConnectionsTab(_dialog, content) {
       const body = await res.json().catch(() => null);
       if (controller.signal.aborted) return;
       if (!res.ok) {
-        showError(apiErrorMessage(body, "Could not create the connection."));
+        showError(apiErrorMessage(body, I18n.t("settings-agent-create-failed")));
         return;
       }
       // Success: hold the secret in memory only, render the one-time panel.
@@ -850,7 +878,7 @@ export async function loadAgentConnectionsTab(_dialog, content) {
       await refreshList();
     } catch {
       if (controller.signal.aborted) return;
-      showError("Could not reach ScreenerBot to create the connection.");
+      showError(I18n.t("settings-agent-unreachable-create"));
     } finally {
       createBtn.disabled = false;
     }
@@ -882,18 +910,21 @@ export async function loadAgentConnectionsTab(_dialog, content) {
       });
       if (controller.signal.aborted) return;
       if (!res.ok) {
-        Utils.showToast({ type: "error", title: "Could not update the permissions" });
+        Utils.showToast({
+          type: "error",
+          title: I18n.t("settings-agent-permissions-update-failed"),
+        });
         return;
       }
       Utils.showToast({
         type: "success",
-        title: "Permissions updated",
-        message: "Applies to the connection's next request.",
+        title: I18n.t("settings-agent-permissions-updated"),
+        message: I18n.t("settings-agent-permissions-updated-detail"),
       });
       await refreshList();
     } catch {
       if (controller.signal.aborted) return;
-      Utils.showToast({ type: "error", title: "Could not reach ScreenerBot to save" });
+      Utils.showToast({ type: "error", title: I18n.t("settings-agent-unreachable-save") });
     } finally {
       if (saveBtn) saveBtn.disabled = false;
     }
@@ -901,10 +932,10 @@ export async function loadAgentConnectionsTab(_dialog, content) {
 
   async function revokePairing(clientId, label) {
     const { confirmed } = await ConfirmationDialog.show({
-      title: "Revoke connection",
-      message: `Revoke "${label}"? The client stops working on its next request and cannot be restored.`,
-      confirmLabel: "Revoke",
-      cancelLabel: "Cancel",
+      title: I18n.t("settings-agent-revoke-title"),
+      message: I18n.t("settings-agent-revoke-message", { label }),
+      confirmLabel: I18n.t("settings-agent-revoke"),
+      cancelLabel: I18n.t("common-action-cancel"),
       variant: "danger",
     });
     if (!confirmed) return;
@@ -915,20 +946,23 @@ export async function loadAgentConnectionsTab(_dialog, content) {
         signal: controller.signal,
       });
       if (!res.ok && res.status !== 404) {
-        Utils.showToast({ type: "error", title: "Could not revoke the connection" });
+        Utils.showToast({ type: "error", title: I18n.t("settings-agent-revoke-failed") });
         return;
       }
       await refreshList();
     } catch {
       if (controller.signal.aborted) return;
-      Utils.showToast({ type: "error", title: "Could not reach ScreenerBot to revoke" });
+      Utils.showToast({ type: "error", title: I18n.t("settings-agent-unreachable-revoke") });
     }
   }
 
   function copyIssuedValue(what) {
     if (!issued) return;
     const value = what === "secret" ? issued.secret : issued.clientId;
-    const labelText = what === "secret" ? "One-time secret" : "Client ID";
+    const labelText =
+      what === "secret"
+        ? I18n.t("settings-agent-issued-secret")
+        : I18n.t("settings-agent-issued-client-id");
     Utils.copyToClipboard(value)
       .then(() => Utils.notifyCopied(labelText))
       .catch((err) => Utils.notifyCopyFailed(err));
@@ -986,7 +1020,10 @@ export async function loadAgentConnectionsTab(_dialog, content) {
       }
       const revokeBtn = e.target.closest("[data-revoke]");
       if (revokeBtn) {
-        revokePairing(revokeBtn.dataset.revoke, revokeBtn.dataset.label || "this connection");
+        revokePairing(
+          revokeBtn.dataset.revoke,
+          revokeBtn.dataset.label || I18n.t("settings-agent-revoke-fallback-name")
+        );
       }
     },
     listenerOptions
