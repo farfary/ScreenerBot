@@ -54,3 +54,8 @@ dir = "ltr"
 code = "zh-Hans"
 name = "简体中文"
 dir = "ltr"
+
+[[locale]]
+code = "ja"
+name = "日本語"
+dir = "ltr"
