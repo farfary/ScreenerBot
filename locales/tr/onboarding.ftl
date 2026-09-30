@@ -1,0 +1,72 @@
+onboarding-welcome-title = { -brand } uygulamasına hoş geldiniz
+onboarding-welcome-description = Önce yerel çalışan Solana işlem yardımcınız — yerel hız için Rust ile geliştirildi. Tokenları keşfedin, piyasaları analiz edin ve işlemleri kendi makinenizden yönetin.
+onboarding-welcome-free-title = Ücretsiz ve kaynak kodu açık
+onboarding-welcome-free-description = Abonelik veya ödeme duvarı yok. GitHub'da yayınlanan kodu inceleyebilirsiniz.
+onboarding-welcome-custody-title = Öz saklama
+onboarding-welcome-custody-description = Özel anahtarlar depolamada şifrelenir ve hiçbir yere iletilmez.
+onboarding-welcome-engine-title = Her zaman açık motor
+onboarding-welcome-engine-description = Sağlık kontrolleri ve düzgün yaşam döngüsü kontrolüyle yönetilen hizmetler.
+onboarding-welcome-realtime-title = Gerçek zamanlı zincir üstü veri
+onboarding-welcome-realtime-description = Doğrudan havuz rezerv hesaplamaları — gecikmeli API anlık görüntüleri değil.
+
+onboarding-discover-title = Keşfet ve filtrele
+onboarding-discover-description = Yeni Solana çiftleri için üç veri kaynağını tarayın, 12'den fazla DEX havuz türünü zincir üstünde çözün, ardından her tokenı yapılandırılabilir kalite ve güvenlik kurallarından geçirin.
+onboarding-discover-dex-title = Çoklu DEX keşfi
+onboarding-discover-dex-description = Yeni { -sol } çiftleri için { -dexscreener }, { -geckoterminal } ve Raydium akışları.
+onboarding-discover-scanner-title = Akıllı token tarayıcı
+onboarding-discover-scanner-description = Likidite, hacim, token yaşı, holder dağılımı ve { -rugcheck } kuralları.
+onboarding-discover-intelligence-title = Token istihbaratı
+onboarding-discover-intelligence-description = Piyasa, güvenlik ve kara liste verileri tek bir görünümde.
+onboarding-discover-price-action-title = Fiyat hareketi takibi
+onboarding-discover-price-action-description = Boşluk algılama ve momentum sinyalleriyle yedi zaman diliminde mum verisi.
+
+onboarding-trade-title = Akıllı işlem
+onboarding-trade-description = Altı kademeli çıkış öncelik sistemiyle otomatik işlem. Pozisyonlara DCA yapın, iz süren stop belirleyin, strateji ağaçları oluşturun — ya da tek tıkla manuel işlem yapın.
+onboarding-trade-auto-title = Otomatik işlem
+onboarding-trade-auto-description = Giriş/çıkış değerlendiricileri, DCA turları, kısmi çıkışlar ve iz süren zarar durdur.
+onboarding-trade-strategy-title = Strateji motoru
+onboarding-trade-strategy-description = Fiyat, hacim ve zamana dayalı sinyalleri birleştiren koşul ağaçları.
+onboarding-trade-routing-title = En iyi fiyat yönlendirmesi
+onboarding-trade-routing-description = Etkin her yönlendiriciden eşzamanlı fiyat teklifleri — en iyi rota kazanır.
+onboarding-trade-safety-title = Güvenlik kontrolleri
+onboarding-trade-safety-description = Acil durdurma, dönemlik zarar limitleri ve bağımsız izleyici anahtarları.
+
+onboarding-connect-title = Bağlantıda kalın
+onboarding-connect-description = Portföyünüzü her yerden izleyin. Dokuz LLM sağlayıcısıyla desteklenen bir Asistan, satır içi işlem özellikli { -telegram } uyarıları ve aranabilir bir olay günlüğü.
+onboarding-connect-assistant-title = Asistan
+onboarding-connect-assistant-description = İşlemler, yapılandırma ve portföy için araç çağırmalı sohbet tabanlı analiz.
+onboarding-connect-telegram-title = { -telegram } entegrasyonu
+onboarding-connect-telegram-description = Telefonunuzdan bildirimler, satır içi komutlar ve 2FA korumalı oturumlar.
+onboarding-connect-wallets-title = Çoklu cüzdan takibi
+onboarding-connect-wallets-description = Tüm Solana cüzdanlarınız ve token varlıklarınız tek bir panelde.
+onboarding-connect-events-title = Canlı olay akışı
+onboarding-connect-events-description = Her işlem, takas ve sistem olayı kategori ve önem derecesiyle kaydedilir.
+
+onboarding-data-title = { -brand } Data
+onboarding-data-description = Her kurulumun herkese açık sağlayıcılar tarafından ayrı ayrı istek sınırına takılmaması için ortak bir piyasa verisi hizmeti işletiyoruz. { -brand } hesabıyla ücretsizdir ve { -brand } hesapsız da çalışır.
+onboarding-data-candles-title = Havuzlanmış mum geçmişi
+onboarding-data-candles-description = Yıllarca geriye giden, tek bir önbellekten sunulan yedi zaman dilimi ortak geçmiş.
+onboarding-data-pools-title = Çözümlenmiş havuzlar ve güvenlik
+onboarding-data-pools-description = Merkezi bir havuz kaydı ve önceden alınmış, önbellekteki { -rugcheck } raporları.
+onboarding-data-signin-title = Kullanmak için oturum açın
+onboarding-data-signin-description = Hesap olmadan bu veri kullanılamaz ve herkese açık sağlayıcılar kullanılır.
+onboarding-data-reading-title = Yalnızca okuma
+onboarding-data-reading-description = Hangi tokenları sorguladığınızı görürüz. Anahtarı, bakiyeyi, pozisyonu veya işlemi asla görmeyiz.
+
+onboarding-privacy-title = Anahtarlarınız, verileriniz
+onboarding-privacy-description = Yapılandırmanız, anahtarlarınız ve işlem geçmişiniz bu makinede kalır. Sonraki adımda, kimlik bilgisi olmadan keşif için Keşif Modu'nu seçin veya tam botu etkinleştirmek için bir cüzdan ve RPC bağlayın — { -brand } verisi istiyorsanız orada oturum açın.
+onboarding-privacy-local-title = Önce yerel mimari
+onboarding-privacy-local-description = Yapılandırma, analitik ve veritabanları masaüstünüzde saklanır.
+onboarding-privacy-wallet-title = Şifreli cüzdan
+onboarding-privacy-wallet-description = Özel anahtarınız depolamada şifrelenir ve hiçbir yere iletilmez.
+onboarding-privacy-security-title = Panel güvenliği
+onboarding-privacy-security-description = Parola kilidi, TOTP iki adımlı doğrulama ve oturum zaman aşımı koruması.
+onboarding-privacy-config-title = Esnek yapılandırma
+onboarding-privacy-config-description = Ayarların çoğu kurulumdan sonra panelden değiştirilebilir.
+
+onboarding-setup-shortcut =
+    .aria-label = Doğrudan cüzdan ve RPC kurulumuna gidin veya Keşif Modu'nu seçin
+onboarding-setup-shortcut-label = Kuruluma git
+onboarding-progress-dot =
+    .aria-label = Slayt { $number } sayfasına git
+onboarding-action-continue-to-setup = Kuruluma devam et
