@@ -172,7 +172,7 @@
 }
 
 .copy-tab-count {
-  margin-left: 6px;
+  margin-inline-start: 6px;
   font-family: var(--font-data);
   font-size: var(--font-size-xs);
   color: var(--text-muted);
@@ -252,7 +252,7 @@
 }
 
 .copy-card-sub {
-  margin-left: var(--spacing-xs);
+  margin-inline-start: var(--spacing-xs);
   font-size: var(--font-size-xs);
   font-weight: 400;
   color: var(--text-muted);
@@ -376,7 +376,7 @@
   font-size: var(--font-size-xs);
   font-weight: 600;
   letter-spacing: 0.04em;
-  text-align: left;
+  text-align: start;
   text-transform: uppercase;
   color: var(--text-muted);
   white-space: nowrap;
@@ -391,7 +391,7 @@
 
 .copy-table .num {
   font-family: var(--font-data);
-  text-align: right;
+  text-align: end;
   white-space: nowrap;
 }
 
@@ -406,17 +406,17 @@
 }
 
 .copy-row-actions {
-  text-align: right;
+  text-align: end;
   white-space: nowrap;
 }
 
 .copy-row-actions .btn + .btn {
-  margin-left: var(--spacing-xs);
+  margin-inline-start: var(--spacing-xs);
 }
 
 /* The mint beside a symbol that several listed tokens share. */
 .copy-token-mint {
-  margin-left: var(--spacing-xs);
+  margin-inline-start: var(--spacing-xs);
   font-family: var(--font-data);
   font-size: var(--font-size-xs);
   color: var(--text-muted);
@@ -433,7 +433,7 @@
 .copy-rules-group th {
   padding: var(--spacing-md) var(--spacing-sm) var(--spacing-xs);
   font-size: var(--font-size-sm);
-  text-align: left;
+  text-align: start;
   color: var(--text-primary);
 }
 
@@ -528,9 +528,10 @@
 }
 
 .copy-event-group details[open] > .copy-events {
-  margin: 0 0 var(--spacing-sm) 156px;
-  border-left: 1px solid var(--border-color);
-  padding-left: var(--spacing-md);
+  margin-block: 0 var(--spacing-sm);
+  margin-inline: 156px 0;
+  border-inline-start: 1px solid var(--border-color);
+  padding-inline-start: var(--spacing-md);
 }
 
 .copy-activity-search {
@@ -560,6 +561,6 @@
   }
 
   .copy-event-group details[open] > .copy-events {
-    margin-left: 0;
+    margin-inline-start: 0;
   }
 }

@@ -104,7 +104,7 @@
 }
 
 .copy-dialog-error {
-  margin-right: auto;
+  margin-inline-end: auto;
   font-size: var(--font-size-xs);
   color: var(--error-color);
 }
@@ -208,7 +208,7 @@
 
 .copy-preview ul {
   margin: 0 0 var(--spacing-xs);
-  padding-left: 1.1rem;
+  padding-inline-start: 1.1rem;
 }
 
 .copy-preview p {

@@ -18,7 +18,7 @@
 
 .transactions-overview {
   padding: 16px 18px;
-  border-right: 1px solid var(--border-color);
+  border-inline-end: 1px solid var(--border-color);
   background: var(--bg-secondary);
 }
 
@@ -65,8 +65,8 @@
 }
 
 .transactions-metrics > div + div {
-  padding-left: 12px;
-  border-left: 1px solid var(--border-color);
+  padding-inline-start: 12px;
+  border-inline-start: 1px solid var(--border-color);
 }
 
 .transactions-metrics span {
@@ -206,7 +206,7 @@
 
   .overview-left {
     max-height: 40vh;
-    border-right: 0;
+    border-inline-end: 0;
     border-bottom: 1px solid var(--border-color);
   }
 
@@ -216,7 +216,7 @@
   }
 
   .transactions-overview {
-    border-right: 0;
+    border-inline-end: 0;
     border-bottom: 1px solid var(--border-color);
   }
 }

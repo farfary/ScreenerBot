@@ -94,7 +94,7 @@
 }
 
 .config-card .card-header > .card-header-actions {
-  margin-left: auto;
+  margin-inline-start: auto;
 }
 
 /* Right-aligned cluster holding the per-card Save/Reset buttons and (for feature

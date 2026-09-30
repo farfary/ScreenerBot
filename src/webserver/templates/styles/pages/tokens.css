@@ -23,7 +23,7 @@
   display: flex;
   align-items: center;
   width: 100%;
-  padding-left: 4px;
+  padding-inline-start: 4px;
   max-height: 100%;
   overflow: hidden;
 }
@@ -38,7 +38,7 @@
   align-items: center;
   gap: 10px;
   min-width: 0;
-  padding-right: 0;
+  padding-inline-end: 0;
   transition: padding-right 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -94,7 +94,7 @@
 .token-cell__actions {
   position: absolute;
   top: 50%;
-  right: 0;
+  inset-inline-end: 0;
   display: inline-flex;
   opacity: 0;
   pointer-events: none;
@@ -113,7 +113,7 @@
 
 .data-table tbody tr:hover .token-cell__identity,
 .data-table tbody tr:focus-within .token-cell__identity {
-  padding-right: var(--token-cell-actions-width);
+  padding-inline-end: var(--token-cell-actions-width);
 }
 
 .data-table tbody tr:hover .token-cell__actions,
@@ -126,7 +126,7 @@
 
 @media (hover: none), (pointer: coarse) {
   .token-cell__identity {
-    padding-right: var(--token-cell-actions-width);
+    padding-inline-end: var(--token-cell-actions-width);
   }
 
   .token-cell__actions {
@@ -344,14 +344,14 @@
   align-items: center;
   width: 100%;
   min-width: 0;
-  padding-right: 0;
+  padding-inline-end: 0;
   transition: padding-right 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .ohlcv-token-actions {
   position: absolute;
   top: 50%;
-  right: 0;
+  inset-inline-end: 0;
   opacity: 0;
   pointer-events: none;
   transform: translate(3px, -50%);
@@ -362,7 +362,7 @@
 
 .data-table tbody tr:hover .ohlcv-token-cell,
 .data-table tbody tr:focus-within .ohlcv-token-cell {
-  padding-right: 34px;
+  padding-inline-end: 34px;
 }
 
 .data-table tbody tr:hover .ohlcv-token-actions,
@@ -375,7 +375,7 @@
 
 @media (hover: none), (pointer: coarse) {
   .ohlcv-token-cell {
-    padding-right: 34px;
+    padding-inline-end: 34px;
   }
 
   .ohlcv-token-actions {
@@ -471,7 +471,7 @@
 .backfill-bar::after {
   content: "";
   position: absolute;
-  left: 0;
+  inset-inline-start: 0;
   top: 0;
   height: 100%;
   width: var(--progress, 0%);

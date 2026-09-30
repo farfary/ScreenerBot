@@ -235,7 +235,7 @@
   gap: 0.5rem;
   max-height: 420px;
   overflow-y: auto;
-  padding-right: 0.25rem;
+  padding-inline-end: 0.25rem;
 }
 
 #recent-decisions-container .empty-state {

@@ -46,33 +46,35 @@
 
 .promo-callout[data-side="bottom"] .promo-callout-pointer {
   top: -7px;
-  margin-left: -6px;
-  border-right: 0;
+  margin-inline-start: -6px;
+  border-inline-end: 0;
   border-bottom: 0;
   transform: rotate(45deg);
 }
 
 .promo-callout[data-side="top"] .promo-callout-pointer {
   bottom: -7px;
-  margin-left: -6px;
+  margin-inline-start: -6px;
   border-top: 0;
-  border-left: 0;
+  border-inline-start: 0;
   transform: rotate(45deg);
 }
 
 .promo-callout[data-side="right"] .promo-callout-pointer {
+  /* rtl-ok: pointer edge follows the panel side that JS places in viewport coordinates */
   left: -7px;
   margin-top: -6px;
   border-top: 0;
-  border-right: 0;
+  border-inline-end: 0;
   transform: rotate(45deg);
 }
 
 .promo-callout[data-side="left"] .promo-callout-pointer {
+  /* rtl-ok: pointer edge follows the panel side that JS places in viewport coordinates */
   right: -7px;
   margin-top: -6px;
   border-bottom: 0;
-  border-left: 0;
+  border-inline-start: 0;
   transform: rotate(45deg);
 }
 
@@ -129,6 +131,7 @@
 
 .promo-caption {
   position: fixed;
+  /* rtl-ok: centered with translateX(-50%) */
   left: 50%;
   transform: translateX(-50%);
   max-width: min(680px, calc(100vw - var(--spacing-2xl) * 2));
@@ -206,9 +209,11 @@
 .promo-cursor {
   position: fixed;
   top: 0;
+  /* rtl-ok: cursor origin is positioned by JS translate3d in viewport coordinates */
   left: 0;
   width: 22px;
   height: 22px;
+  /* rtl-ok: cursor origin is positioned by JS translate3d in viewport coordinates */
   margin: -11px 0 0 -11px;
   border-radius: var(--radius-full);
   background: var(--text-primary);

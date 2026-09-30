@@ -17,7 +17,7 @@
 
 .links-left-col {
   padding: 0 18px;
-  border-right: 1px solid var(--border-color);
+  border-inline-end: 1px solid var(--border-color);
   background: var(--bg-secondary);
 }
 
@@ -239,7 +239,7 @@
   }
 
   .links-left-col {
-    border-right: 0;
+    border-inline-end: 0;
     border-bottom: 1px solid var(--border-color);
   }
 }

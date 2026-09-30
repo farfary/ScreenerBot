@@ -226,7 +226,7 @@
 .tools-page .form-group label .required {
   color: var(--error-color);
   font-weight: 700;
-  margin-left: 2px;
+  margin-inline-start: 2px;
 }
 
 /* Input validation states */
@@ -295,6 +295,7 @@
   content: attr(data-tooltip);
   position: absolute;
   bottom: calc(100% + 8px);
+  /* rtl-ok: centered with translateX(-50%) */
   left: 50%;
   transform: translateX(-50%);
   padding: 6px 10px;
@@ -320,8 +321,9 @@
 
 /* Tooltip positioning for sidebar items */
 .nav-item-status[data-tooltip]::after {
+  /* rtl-ok: resets the physical left: 50% centering of the base rule */
   left: auto;
-  right: 0;
+  inset-inline-end: 0;
   transform: none;
 }
 
@@ -381,7 +383,7 @@
 
   .tools-sidebar {
     max-height: 180px;
-    border-right: none;
+    border-inline-end: none;
     border-bottom: 1px solid var(--border-color);
   }
 
@@ -518,14 +520,15 @@
 .tool-favorites-dropdown {
   position: absolute;
   top: calc(100% - 1px);
-  left: 0;
+  inset-inline-start: 0;
   z-index: var(--z-dropdown);
   min-width: 280px;
   max-width: 320px;
   background: var(--bg-secondary);
   font-family: var(--font-mono);
   border: 1px solid var(--border-color);
-  border-radius: 0 var(--radius-md) var(--radius-md);
+  border-radius: var(--radius-md);
+  border-start-start-radius: 0;
   box-shadow: var(--shadow-floating-md);
   opacity: 0;
   transform: translateY(-4px) scaleY(0.985);
@@ -599,7 +602,7 @@
   background: transparent;
   color: inherit;
   font: inherit;
-  text-align: left;
+  text-align: start;
   cursor: pointer;
 }
 

@@ -4,16 +4,14 @@
  * Localization audit for the desktop dashboard and its catalogs.
  *
  *   node tools/i18n/audit.mjs                  run every check
- *   node tools/i18n/audit.mjs --update-baseline lower or drop baseline entries
- *   node tools/i18n/audit.mjs --init-baseline   write the baseline from current counts
  *
  * Catalog parity, key usage, value-formatting errors (toLocale*String, Intl and the
- * "en-US" literal outside `core/format.js`) and hardcoded user-visible strings always
- * fail; `// l10n-ignore: <reason>` is the only escape for the last. Physical-direction
- * CSS is gated by `baseline.json`: a count may fall, never rise.
+ * "en-US" literal outside `core/format.js`), hardcoded user-visible strings and
+ * physical-direction CSS all fail. The escapes are `// l10n-ignore: <reason>` for a
+ * string and `/* rtl-ok: <reason> *\/` for a CSS declaration.
  */
 
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -24,11 +22,6 @@ import { scanFormatting } from "./formatting.mjs";
 import { scanHtmlHardcoded, scanJsHardcoded } from "./hardcoded.mjs";
 import { scanUsage } from "./usage.mjs";
 
-export const BASELINE_PATH = resolve(REPO_ROOT, "tools/i18n/baseline.json");
-// The categories gated by `baseline.json`. Hardcoded strings have no baseline.
-export const CATEGORIES = ["cssDirection"];
-const UPDATE_COMMAND = "node tools/i18n/audit.mjs --update-baseline";
-
 /** `{ path: count }` for the files with a non-zero count. */
 export function countsOf(results) {
   const counts = {};
@@ -36,66 +29,6 @@ export function countsOf(results) {
     if (result.items.length > 0) counts[path] = result.items.length;
   }
   return counts;
-}
-
-/** Files above their baseline (or new with a count) and files below it. */
-export function compareBaseline(current, baseline) {
-  const exceeded = [];
-  const lowered = [];
-  for (const category of CATEGORIES) {
-    const base = baseline[category] ?? {};
-    const now = current[category] ?? {};
-    for (const [path, count] of Object.entries(now)) {
-      const allowed = base[path] ?? 0;
-      if (count > allowed) exceeded.push({ category, path, count, base: allowed });
-    }
-    for (const [path, allowed] of Object.entries(base)) {
-      const count = now[path] ?? 0;
-      if (count < allowed) lowered.push({ category, path, count, base: allowed });
-    }
-  }
-  return { exceeded, lowered };
-}
-
-function sortedObject(object) {
-  return Object.fromEntries(Object.entries(object).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
-}
-
-/** Baseline written from scratch: every non-zero count. */
-export function initialBaseline(current) {
-  return Object.fromEntries(CATEGORIES.map((category) => [category, sortedObject(current[category] ?? {})]));
-}
-
-/**
- * The baseline after lowering to `current`. Never raises: any file above its
- * baseline is returned in `refused` and the baseline is left unchanged.
- */
-export function lowerBaseline(current, baseline) {
-  const { exceeded } = compareBaseline(current, baseline);
-  if (exceeded.length > 0) return { baseline, refused: exceeded };
-  const next = {};
-  for (const category of CATEGORIES) {
-    next[category] = {};
-    for (const [path, allowed] of Object.entries(baseline[category] ?? {})) {
-      const count = current[category]?.[path] ?? 0;
-      if (count > 0) next[category][path] = Math.min(count, allowed);
-    }
-    next[category] = sortedObject(next[category]);
-  }
-  return { baseline: next, refused: [] };
-}
-
-async function readBaseline() {
-  try {
-    return JSON.parse(await readFile(BASELINE_PATH, "utf8"));
-  } catch (error) {
-    if (error.code === "ENOENT") return { cssDirection: {} };
-    throw error;
-  }
-}
-
-async function writeBaseline(baseline) {
-  await writeFile(BASELINE_PATH, `${JSON.stringify(baseline, null, 2)}\n`);
 }
 
 async function readAll(files) {
@@ -162,6 +95,15 @@ export function analyze({ sources, catalogInput }) {
       });
     }
   }
+  for (const [path, result] of Object.entries(css)) {
+    for (const item of result.items) {
+      errors.push({
+        file: path,
+        line: item.line,
+        message: `physical-direction CSS (${item.kind}): use the logical property or annotate /* rtl-ok: <reason> */`,
+      });
+    }
+  }
   for (const file of sources.js) {
     const result = scanFormatting(file);
     errors.push(...result.errors);
@@ -183,7 +125,7 @@ export function analyze({ sources, catalogInput }) {
 export function formatSummary(result) {
   const lines = ["Localization audit", ""];
   const titles = { hardcoded: "Hardcoded user-visible strings", cssDirection: "Physical-direction CSS declarations" };
-  for (const category of ["hardcoded", ...CATEGORIES]) {
+  for (const category of ["hardcoded", "cssDirection"]) {
     const counts = result.current[category];
     lines.push(`${titles[category]}: ${sum(counts)} in ${Object.keys(counts).length} files`);
     for (const [path, count] of topFiles(counts)) lines.push(`  ${String(count).padStart(5)}  ${path}`);
@@ -197,44 +139,12 @@ export function formatSummary(result) {
 
 const place = (error) => (error.line ? `${error.file}:${error.line}` : error.file);
 
-async function main(argv) {
+async function main() {
   const [sources, catalogInput] = await Promise.all([loadSources(), loadCatalogs()]);
   const result = analyze({ sources, catalogInput });
-  let baseline = await readBaseline();
-  const failures = [];
-
-  if (argv.includes("--init-baseline")) {
-    baseline = initialBaseline(result.current);
-    await writeBaseline(baseline);
-    console.log(`Baseline written to ${repoPath(BASELINE_PATH)}`);
-  } else if (argv.includes("--update-baseline")) {
-    const lowered = lowerBaseline(result.current, baseline);
-    if (lowered.refused.length > 0) {
-      console.error("Refusing to raise the baseline; fix or annotate these files:");
-      for (const item of lowered.refused) console.error(`  ${item.path}: ${item.count} > ${item.base} (${item.category})`);
-      return 1;
-    }
-    baseline = lowered.baseline;
-    await writeBaseline(baseline);
-    console.log(`Baseline lowered in ${repoPath(BASELINE_PATH)}`);
-  }
-
-  const { exceeded, lowered } = compareBaseline(result.current, baseline);
   console.log(formatSummary(result));
 
-  for (const item of exceeded) {
-    failures.push(`${item.path} (${item.category}): ${item.count} exceeds baseline ${item.base}`);
-    for (const detail of result.details[item.category][item.path].items) {
-      failures.push(`    ${item.path}:${detail.line}  ${detail.kind}  ${JSON.stringify(detail.text)}`);
-    }
-  }
-  if (lowered.length > 0) {
-    console.log("\nCounts below baseline:");
-    for (const item of lowered) console.log(`  ${item.path} (${item.category}): ${item.count} < ${item.base}`);
-    failures.push(`Counts dropped; record the improvement with: ${UPDATE_COMMAND}`);
-  }
-
-  const problems = [...result.errors.map((error) => `${place(error)}  ${error.message}`), ...failures];
+  const problems = result.errors.map((error) => `${place(error)}  ${error.message}`);
   if (problems.length > 0) {
     console.error(`\n${problems.length} problem lines:`);
     for (const problem of problems) console.error(`  ${problem}`);
@@ -245,5 +155,5 @@ async function main(argv) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  process.exitCode = await main(process.argv.slice(2));
+  process.exitCode = await main();
 }

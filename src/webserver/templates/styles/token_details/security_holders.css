@@ -64,6 +64,7 @@
 .security-holder-gauge-value,
 .security-holder-gauge-label {
   position: absolute;
+  /* rtl-ok: centered with translateX(-50%) */
   left: 50%;
   transform: translateX(-50%);
   white-space: nowrap;
@@ -112,7 +113,7 @@
 }
 
 .security-holder-metric + .security-holder-metric {
-  border-left: 1px solid var(--border-subtle, var(--border-color));
+  border-inline-start: 1px solid var(--border-subtle, var(--border-color));
 }
 
 .security-holder-metric .security-detail-value {
@@ -229,7 +230,7 @@
   font-feature-settings:
     "tnum" 1,
     "zero" 1;
-  text-align: right;
+  text-align: end;
   white-space: nowrap;
 }
 
@@ -287,7 +288,7 @@
 
   .security-holder-metric + .security-holder-metric {
     border-top: 1px solid var(--border-subtle, var(--border-color));
-    border-left: 0;
+    border-inline-start: 0;
   }
 }
 

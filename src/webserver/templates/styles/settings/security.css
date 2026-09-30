@@ -377,7 +377,8 @@ button.link-button:hover {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
-  margin: var(--spacing-xs, 4px) 0 var(--spacing-xs, 4px) 28px;
+  margin-block: var(--spacing-xs, 4px);
+  margin-inline: 28px 0;
   font-size: 0.8rem;
   color: var(--text-secondary);
 }

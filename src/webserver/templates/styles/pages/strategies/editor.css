@@ -110,7 +110,8 @@
 
 .template-filters select {
   /* Arrow inherited from global `select {}` (form_controls.css). */
-  padding: 0.5rem 2rem 0.5rem 0.5rem;
+  padding-block: 0.5rem;
+  padding-inline: 0.5rem 2rem;
   background-color: var(--background-color);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
@@ -260,7 +261,8 @@
 
 .strategy-type-select {
   /* Arrow inherited from global `select {}` (form_controls.css). */
-  padding: 0.5rem 2rem 0.5rem 0.75rem;
+  padding-block: 0.5rem;
+  padding-inline: 0.75rem 2rem;
   background-color: var(--background-color);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
@@ -384,7 +386,7 @@
 
 .param-field select {
   /* Arrow inherited from global `select {}` (form_controls.css). */
-  padding-right: 28px;
+  padding-inline-end: 28px;
   cursor: pointer;
 }
 

@@ -20,7 +20,8 @@
 /* Assistant-specific filter-select overrides - base in notifications.css.
    Arrow inherited from global `select {}` (form_controls.css). */
 .assistant-page .filter-select {
-  padding: 8px 32px 8px 12px;
+  padding-block: 8px;
+  padding-inline: 12px 32px;
   font-size: 13px;
   border-radius: var(--radius-md);
 }
@@ -33,7 +34,8 @@
 
 .search-input {
   width: 100%;
-  padding: 8px 36px 8px 12px;
+  padding-block: 8px;
+  padding-inline: 12px 36px;
   font-size: 13px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
@@ -344,6 +346,7 @@
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-top-width: 0;
+  /* rtl-ok: menu corner follows the physical viewport position that core/menu_manager.js writes */
   border-radius: var(--radius-lg) 0 var(--radius-lg) var(--radius-lg);
   box-shadow: var(--shadow-floating-sm);
   overflow: hidden;
@@ -370,6 +373,7 @@
 .instruction-context-menu.menu-above {
   border-top-width: 1px;
   border-bottom-width: 0;
+  /* rtl-ok: menu corner follows the physical viewport position that core/menu_manager.js writes */
   border-radius: var(--radius-lg) var(--radius-lg) 0 var(--radius-lg);
   transform: translateY(4px) scaleY(0.985);
   transform-origin: bottom right;
@@ -393,7 +397,7 @@
   border-radius: 0;
   font-family: var(--font-mono);
   font-size: 13px;
-  text-align: left;
+  text-align: start;
   transition: background var(--transition-fast);
 }
 

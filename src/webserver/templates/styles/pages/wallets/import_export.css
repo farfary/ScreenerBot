@@ -205,7 +205,8 @@
 
 .mapping-field select {
   /* Arrow inherited from global `select {}` (form_controls.css). */
-  padding: 8px 32px 8px 12px;
+  padding-block: 8px;
+  padding-inline: 12px 32px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   background-color: var(--input-bg);
@@ -256,7 +257,7 @@
 .preview-table th,
 .preview-table td {
   padding: var(--spacing-sm);
-  text-align: left;
+  text-align: start;
   border-bottom: 1px solid var(--border-color);
   white-space: nowrap;
 }
@@ -429,7 +430,7 @@
 .results-table th,
 .results-table td {
   padding: var(--spacing-sm);
-  text-align: left;
+  text-align: start;
   border-bottom: 1px solid var(--border-color);
 }
 
@@ -485,7 +486,8 @@
 
 .export-options select {
   /* Arrow inherited from global `select {}` (form_controls.css). */
-  padding: 10px 32px 10px 12px;
+  padding-block: 10px;
+  padding-inline: 12px 32px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   background-color: var(--input-bg);
@@ -567,7 +569,8 @@
 
 /* Danger list in confirmation modal */
 .danger-list {
-  margin: var(--spacing-sm) 0 0 var(--spacing-md);
+  margin-block: var(--spacing-sm) 0;
+  margin-inline: var(--spacing-md) 0;
   padding: 0;
   list-style: disc;
 }

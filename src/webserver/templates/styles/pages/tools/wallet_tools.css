@@ -51,7 +51,7 @@
 .wc-wallet-table th,
 .wc-wallet-table td {
   padding: var(--spacing-sm) var(--spacing-md);
-  text-align: left;
+  text-align: start;
   border-bottom: 1px solid var(--border-color);
 }
 
@@ -509,7 +509,7 @@
   font-weight: 500;
   color: var(--success-color);
   min-width: 70px;
-  text-align: right;
+  text-align: end;
 }
 
 /* Confirmation Dialog */

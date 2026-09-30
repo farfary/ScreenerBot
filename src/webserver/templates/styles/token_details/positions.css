@@ -59,7 +59,7 @@
 .position-meta-item + .position-meta-item::before,
 .position-meta-item + .position-state::before {
   content: "·";
-  margin-right: 8px;
+  margin-inline-end: 8px;
   color: var(--text-muted);
 }
 
@@ -96,8 +96,8 @@
 }
 
 .position-headline-item + .position-headline-item {
-  padding-left: clamp(16px, 3vw, 32px);
-  border-left: 1px solid var(--border-color);
+  padding-inline-start: clamp(16px, 3vw, 32px);
+  border-inline-start: 1px solid var(--border-color);
 }
 
 .position-headline-item strong {
@@ -162,7 +162,7 @@
     "tnum" 1,
     "zero" 1;
   font-weight: 650;
-  text-align: right;
+  text-align: end;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -188,9 +188,9 @@
   }
 
   .position-headline-item + .position-headline-item {
-    padding-left: 0;
+    padding-inline-start: 0;
     border-top: 1px solid var(--border-color);
-    border-left: 0;
+    border-inline-start: 0;
   }
 
   .position-facts {

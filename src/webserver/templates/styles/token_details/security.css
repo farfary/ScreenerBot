@@ -19,7 +19,7 @@
 .security-left-col {
   display: flex;
   flex-direction: column;
-  border-right: 1px solid var(--border-color);
+  border-inline-end: 1px solid var(--border-color);
   background: var(--bg-secondary);
 }
 
@@ -105,7 +105,7 @@
   color: var(--text-muted);
   font-size: 0.6rem;
   font-weight: 500;
-  text-align: right;
+  text-align: end;
 }
 
 .security-score-overview {
@@ -288,7 +288,7 @@
 }
 
 .security-metric:nth-child(even) {
-  border-left: 1px solid var(--border-color);
+  border-inline-start: 1px solid var(--border-color);
 }
 
 .security-metric:nth-child(n + 3) {
@@ -323,7 +323,7 @@
   overflow: hidden;
   min-width: 0;
   font-size: 0.7rem;
-  text-align: right;
+  text-align: end;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -383,7 +383,7 @@
 .security-authority-state {
   justify-content: flex-end;
   font-family: var(--font-data);
-  text-align: right;
+  text-align: end;
 }
 
 .security-authority-row.is-safe .security-authority-state {
@@ -397,7 +397,7 @@
 .security-authority-address {
   grid-column: 1 / -1;
   min-width: 0;
-  padding-left: 21px;
+  padding-inline-start: 21px;
 }
 
 .security-authority-address .addr-chip-link {
@@ -414,7 +414,7 @@
 }
 
 .security-detail-value small {
-  margin-left: 4px;
+  margin-inline-start: 4px;
   color: var(--text-muted);
   font-family: var(--font-sans);
   font-size: 0.58rem;
@@ -435,7 +435,7 @@
 }
 
 .security-fact-row + .security-fact-row {
-  border-left: 1px solid var(--border-subtle, var(--border-color));
+  border-inline-start: 1px solid var(--border-subtle, var(--border-color));
 }
 
 .security-fact-row .security-detail-value {
@@ -485,7 +485,7 @@
 
   .security-fact-row + .security-fact-row {
     border-top: 1px solid var(--border-subtle, var(--border-color));
-    border-left: 0;
+    border-inline-start: 0;
   }
 }
 
@@ -506,7 +506,7 @@
   }
 
   .security-metric:nth-child(even) {
-    border-left: 0;
+    border-inline-start: 0;
   }
 
   .security-metric:nth-child(n + 2) {
@@ -527,7 +527,7 @@
   }
 
   .security-left-col {
-    border-right: 0;
+    border-inline-end: 0;
     border-bottom: 1px solid var(--border-color);
   }
 }

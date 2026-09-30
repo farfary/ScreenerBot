@@ -198,6 +198,7 @@
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-top-width: 0;
+  /* rtl-ok: menu corner follows the physical viewport position that core/menu_manager.js writes */
   border-radius: var(--radius-lg) 0 var(--radius-lg) var(--radius-lg);
   box-shadow: var(--shadow-floating-sm);
   padding: 0;
@@ -225,6 +226,7 @@
 .automation-context-menu.menu-above {
   border-top-width: 1px;
   border-bottom-width: 0;
+  /* rtl-ok: menu corner follows the physical viewport position that core/menu_manager.js writes */
   border-radius: var(--radius-lg) var(--radius-lg) 0 var(--radius-lg);
   transform: translateY(4px) scaleY(0.985);
   transform-origin: bottom right;
@@ -247,7 +249,7 @@
   font-size: 13px;
   border-radius: 0;
   cursor: pointer;
-  text-align: left;
+  text-align: start;
   font-family: var(--font-mono);
 }
 

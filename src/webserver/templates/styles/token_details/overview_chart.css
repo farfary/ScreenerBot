@@ -12,7 +12,7 @@
 
 .overview-left {
   overflow-y: auto;
-  border-right: 1px solid var(--border-color);
+  border-inline-end: 1px solid var(--border-color);
   height: 100%;
   background: var(--bg-secondary);
   container-type: inline-size;
@@ -92,7 +92,7 @@
 }
 
 .overview-headline-item:nth-child(even) {
-  border-left: 1px solid var(--border-color);
+  border-inline-start: 1px solid var(--border-color);
 }
 
 .overview-headline-item:nth-child(n + 3) {
@@ -259,7 +259,7 @@
   background: transparent;
   color: var(--link-color);
   cursor: pointer;
-  text-align: left;
+  text-align: start;
 }
 
 .overview-copy-value:hover,
@@ -330,7 +330,7 @@
   font-family: var(--font-data);
   font-size: 0.6rem;
   font-weight: 650;
-  text-align: right;
+  text-align: end;
 }
 
 .overview-pulse-value,
@@ -340,7 +340,7 @@
   font-feature-settings:
     "tnum" 1,
     "zero" 1;
-  text-align: right;
+  text-align: end;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -453,12 +453,12 @@
 
 .overview-flow-buy-count {
   color: var(--success-color);
-  text-align: right;
+  text-align: end;
 }
 
 .overview-flow-sell-count {
   color: var(--danger);
-  text-align: right;
+  text-align: end;
 }
 
 .overview-flow-separator {

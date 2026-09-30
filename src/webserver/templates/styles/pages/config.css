@@ -183,7 +183,7 @@
 /* The bulk expand/collapse control acts on the whole section, so it sits at
    the far end of the toolbar, away from the section-scoped change chips. */
 .config-main-toolbar .expand-toggle {
-  margin-left: auto;
+  margin-inline-start: auto;
 }
 
 .config-info-chip {

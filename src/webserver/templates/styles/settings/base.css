@@ -104,7 +104,7 @@
 .settings-nav {
   width: 240px;
   background: var(--bg-secondary);
-  border-right: 1px solid var(--border-color);
+  border-inline-end: 1px solid var(--border-color);
   padding: 16px 12px;
   display: flex;
   flex-direction: column;
@@ -127,7 +127,7 @@
   font-weight: 500;
   cursor: pointer;
   transition: all var(--transition-base);
-  text-align: left;
+  text-align: start;
   position: relative;
 }
 
@@ -175,7 +175,7 @@
 }
 
 .settings-nav-external {
-  margin-left: auto;
+  margin-inline-start: auto;
   font-size: 0.7rem;
   opacity: 0.4;
 }
@@ -410,7 +410,8 @@
 /* Select */
 .settings-select {
   min-width: 160px;
-  padding: 7px 32px 7px 10px;
+  padding-block: 7px;
+  padding-inline: 10px 32px;
 
   /* background-color (not the `background` shorthand) so the global select arrow survives. */
   background-color: var(--bg-primary);

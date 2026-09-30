@@ -69,13 +69,13 @@
 }
 
 .password-input-wrapper textarea.secure-input {
-  padding-right: 40px;
+  padding-inline-end: 40px;
 }
 
 .password-input-wrapper .toggle-visibility {
   position: absolute;
   top: 8px;
-  right: 8px;
+  inset-inline-end: 8px;
   display: flex;
   align-items: center;
   justify-content: center;

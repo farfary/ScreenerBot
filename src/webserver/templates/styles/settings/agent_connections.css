@@ -291,7 +291,7 @@
 
 .agent-connections .agent-setup-notes {
   margin: 8px 0 10px;
-  padding-left: 18px;
+  padding-inline-start: 18px;
   color: var(--text-secondary);
   font-size: 0.8rem;
   line-height: 1.45;
@@ -419,7 +419,7 @@
   gap: 2px;
   color: var(--text-tertiary);
   font-size: 0.74rem;
-  text-align: right;
+  text-align: end;
 }
 
 .agent-connections .agent-perm-badge {
@@ -475,7 +475,7 @@
 }
 
 .agent-connections .agent-pair-revoked-group summary span {
-  margin-left: auto;
+  margin-inline-start: auto;
   color: var(--text-tertiary);
   font-variant-numeric: tabular-nums;
 }
@@ -525,6 +525,6 @@
     grid-column: 1 / -1;
     flex-direction: row;
     gap: 10px;
-    text-align: left;
+    text-align: start;
   }
 }

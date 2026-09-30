@@ -3,8 +3,7 @@
  *
  * `scripts/core/format.js` owns every number, money, date, time and size
  * display and pins the locale through `I18n.intlLocale`. Dashboard scripts
- * therefore may not format values themselves. Each of these is an error, not a
- * baseline count:
+ * therefore may not format values themselves. Each of these is an error:
  *
  *   - a call to a member named toLocaleString, toLocaleDateString or toLocaleTimeString
  *   - any member of `Intl` (Intl.NumberFormat, Intl.DateTimeFormat, ...)

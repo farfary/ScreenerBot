@@ -59,7 +59,7 @@
 
   /* The letter-spacing above adds trailing space; pull it back so the wordmark
      stays optically centred under the mark. */
-  margin-right: -0.16em;
+  margin-inline-end: -0.16em;
 }
 
 /* Launch state. One line for what is happening, one quiet line under it for

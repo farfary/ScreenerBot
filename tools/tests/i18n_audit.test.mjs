@@ -10,7 +10,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { analyze, compareBaseline, initialBaseline, lowerBaseline } from "../i18n/audit.mjs";
+import { analyze } from "../i18n/audit.mjs";
 import { checkCatalogs, parseServerOnlyDomains } from "../i18n/catalogs.mjs";
 import { scanCss } from "../i18n/css_direction.mjs";
 import { scanFormatting } from "../i18n/formatting.mjs";
@@ -235,6 +235,11 @@ test("css counts physical properties and asymmetric shorthands only", () => {
   assert.equal(count(".a { margin: 0 4px 0 4px; padding: 1px 2px; }"), 0);
   assert.equal(count(".a { border-radius: 4px 4px 0 0; }"), 0);
   assert.equal(count(".a { border-radius: 4px 0 0 4px; }"), 1);
+  assert.equal(count(".a { border-radius: 0 4px 4px; }"), 1);
+  assert.equal(count(".a { border-radius: 0 4px; }"), 1);
+  assert.equal(count(".a { border-radius: 4px 4px 2px; }"), 1);
+  assert.equal(count(".a { border-radius: 4px; }"), 0);
+  assert.equal(count(".a { margin: 0 4px 2px; }"), 0);
   assert.equal(count(".a { transform: translateX(4px); }"), 0);
 });
 
@@ -249,57 +254,41 @@ test("css honours rtl-ok and rejects an empty reason", () => {
   assert.match(empty.errors[0].message, /requires a reason/);
 });
 
-const BASELINE = { cssDirection: { "c.css": 3, "d.css": 2 } };
-
-test("baseline fails on an increase and on a new file", () => {
-  const raised = compareBaseline({ cssDirection: { "c.css": 4, "d.css": 2 } }, BASELINE);
-  assert.deepEqual(raised.exceeded.map((item) => item.path), ["c.css"]);
-  const added = compareBaseline({ cssDirection: { "c.css": 3, "d.css": 2, "new.css": 1 } }, BASELINE);
-  assert.deepEqual(added.exceeded.map((item) => item.path), ["new.css"]);
-});
-
-test("baseline reports a decrease so the update command can record it", () => {
-  const { exceeded, lowered } = compareBaseline({ cssDirection: { "c.css": 1 } }, BASELINE);
-  assert.equal(exceeded.length, 0);
-  assert.deepEqual(lowered.map((item) => `${item.path}:${item.count}`), ["c.css:1", "d.css:0"]);
-});
-
-test("baseline update lowers or drops entries and refuses to raise", () => {
-  const lowered = lowerBaseline({ cssDirection: { "c.css": 1 } }, BASELINE);
-  assert.deepEqual(lowered.refused, []);
-  assert.deepEqual(lowered.baseline, { cssDirection: { "c.css": 1 } });
-  const refused = lowerBaseline({ cssDirection: { "c.css": 9 } }, BASELINE);
-  assert.deepEqual(refused.refused.map((item) => item.path), ["c.css"]);
-  assert.equal(refused.baseline, BASELINE);
-  const fresh = lowerBaseline({ cssDirection: { "z.css": 1 } }, BASELINE);
-  assert.deepEqual(fresh.refused.map((item) => item.path), ["z.css"]);
-});
-
-test("initial baseline sorts keys", () => {
-  const baseline = initialBaseline({ cssDirection: { "b.css": 1, "a.css": 2 } });
-  assert.deepEqual(Object.keys(baseline.cssDirection), ["a.css", "b.css"]);
-});
-
-test("baseline update and init never write a hardcoded section", () => {
-  const counts = { hardcoded: { "a.js": 2 }, cssDirection: { "c.css": 1 } };
-  assert.deepEqual(Object.keys(initialBaseline(counts)), ["cssDirection"]);
-  const lowered = lowerBaseline(counts, { hardcoded: { "a.js": 5 }, cssDirection: { "c.css": 1 } });
-  assert.deepEqual(lowered.refused, []);
-  assert.deepEqual(lowered.baseline, { cssDirection: { "c.css": 1 } });
-});
-
-function analyzeScripts(js) {
+function analyzeSources({ js = [], css = [] }) {
   return analyze({
-    sources: { js, html: [], css: [], rust: [] },
+    sources: { js, html: [], css, rust: [] },
     catalogInput: { catalogs: { en: EN }, registered: new Set(["en"]) },
   });
 }
 
-test("a hardcoded string is an error even with an empty baseline", () => {
+const cssErrors = (result) => result.errors.filter((error) => error.file === "a.css");
+const analyzeScripts = (js) => analyzeSources({ js });
+const cssMessages = (result) => cssErrors(result).map((error) => `${error.file}:${error.line} ${error.message}`).join("\n");
+
+test("a hardcoded string is an error", () => {
   const result = analyzeScripts([{ path: "a.js", source: `el.textContent = "Save changes";` }]);
   const messages = result.errors.map((error) => `${error.file}:${error.line} ${error.message}`).join("\n");
   assert.match(messages, /a\.js:1 hardcoded user-visible string \(assign-textContent\): "Save changes"/);
-  assert.deepEqual(compareBaseline(result.current, { cssDirection: {} }).exceeded, []);
+});
+
+test("a physical-direction declaration is an error", () => {
+  const result = analyzeSources({ css: [{ path: "a.css", source: ".a {\n  margin-left: 4px;\n}" }] });
+  assert.match(
+    cssMessages(result),
+    /a\.css:2 physical-direction CSS \(margin-left\): use the logical property or annotate \/\* rtl-ok: <reason> \*\//
+  );
+  assert.deepEqual(result.current.cssDirection, { "a.css": 1 });
+  const logical = analyzeSources({ css: [{ path: "a.css", source: ".a { margin-inline-start: 4px; }" }] });
+  assert.deepEqual(cssErrors(logical), []);
+});
+
+test("rtl-ok exempts a physical declaration and requires a reason", () => {
+  const exempt = analyzeSources({ css: [{ path: "a.css", source: ".a {\n  /* rtl-ok: chart axis */\n  left: 0;\n}" }] });
+  assert.deepEqual(cssErrors(exempt), []);
+  assert.equal(exempt.rtlOk, 1);
+  const empty = analyzeSources({ css: [{ path: "a.css", source: ".a {\n  /* rtl-ok: */\n  left: 0;\n}" }] });
+  assert.match(cssMessages(empty), /rtl-ok requires a reason/);
+  assert.match(cssMessages(empty), /physical-direction CSS \(left\)/);
 });
 
 test("l10n-ignore still exempts a hardcoded string from the error", () => {

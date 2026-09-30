@@ -106,7 +106,7 @@
 .wallet-qr-popover {
   position: absolute;
   top: calc(100% + 0.55rem);
-  left: 0;
+  inset-inline-start: 0;
   z-index: var(--z-popover);
   width: 16rem;
   padding: 0.75rem;
@@ -201,7 +201,7 @@
 }
 
 .hero-unit {
-  margin-left: 0.35em;
+  margin-inline-start: 0.35em;
   color: var(--text-tertiary);
   font-size: 0.46em;
   font-weight: 600;
@@ -288,7 +288,7 @@
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   min-width: 0;
-  border-left: 1px solid var(--border-color);
+  border-inline-start: 1px solid var(--border-color);
 }
 
 .portfolio-stat {
@@ -302,7 +302,7 @@
 }
 
 .portfolio-stat + .portfolio-stat {
-  border-left: 1px solid var(--border-color);
+  border-inline-start: 1px solid var(--border-color);
 }
 
 .hero-stat-label,
@@ -341,14 +341,14 @@
 }
 
 .hero-stat-value .hero-unit {
-  margin-left: 0.2em;
+  margin-inline-start: 0.2em;
   font-size: 0.6em;
 }
 
 .hero-stat-sub {
   display: block;
   max-width: 100%;
-  margin-left: 0;
+  margin-inline-start: 0;
   overflow: hidden;
   color: var(--text-tertiary);
   font-size: 0.66rem;
@@ -373,7 +373,7 @@
   min-height: 0;
   padding: 0.75rem 1rem;
   overflow: hidden;
-  border-right: 1px solid var(--border-color);
+  border-inline-end: 1px solid var(--border-color);
 }
 
 .workspace-header {
@@ -462,7 +462,7 @@
   font-feature-settings:
     "tnum" 1,
     "zero" 1;
-  text-align: right;
+  text-align: end;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -488,7 +488,7 @@
 }
 
 .pipeline-metric:not(:nth-child(3n + 1)) {
-  border-left: 1px solid var(--border-color);
+  border-inline-start: 1px solid var(--border-color);
 }
 
 .pipeline-metric:nth-child(n + 4) {
@@ -607,7 +607,7 @@
 
   .portfolio-stat:nth-child(3) {
     border-top: 1px solid var(--border-color);
-    border-left: 0;
+    border-inline-start: 0;
   }
 
   .portfolio-stat:nth-child(4) {

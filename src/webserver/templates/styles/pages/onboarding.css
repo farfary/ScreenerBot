@@ -205,7 +205,7 @@
   grid-template-columns: auto 1fr;
   gap: 1rem;
   align-items: start;
-  text-align: left;
+  text-align: start;
   padding: clamp(0.75rem, 1.8vh, 1.25rem);
   background: rgb(255 255 255 / 0.04);
   border: 1px solid rgb(255 255 255 / 0.09);

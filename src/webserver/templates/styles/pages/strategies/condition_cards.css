@@ -251,8 +251,8 @@
 .condition-card .card-body {
   padding: 1.25rem;
   background: linear-gradient(to bottom, rgb(0, 0, 0, 0.01), transparent);
-  border-bottom-left-radius: var(--radius-lg);
-  border-bottom-right-radius: var(--radius-lg);
+  border-end-start-radius: var(--radius-lg);
+  border-end-end-radius: var(--radius-lg);
   display: none;
   animation: slide-down 0.3s ease;
 }
@@ -295,7 +295,7 @@
 
 /* Select field styling — arrow inherited from global `select {}` (form_controls.css). */
 .select-field {
-  padding-right: 2.5rem;
+  padding-inline-end: 2.5rem;
 }
 
 .param-field input:not([type="checkbox"], [type="radio"]),
@@ -313,7 +313,7 @@
 
 .param-field select {
   /* Arrow inherited from global `select {}` (form_controls.css). */
-  padding-right: 28px;
+  padding-inline-end: 28px;
   cursor: pointer;
 }
 
@@ -328,7 +328,7 @@
 .condition-summary {
   font-size: 0.85rem;
   color: var(--text-muted);
-  margin-right: 1rem;
+  margin-inline-end: 1rem;
 }
 
 /* Utilities */

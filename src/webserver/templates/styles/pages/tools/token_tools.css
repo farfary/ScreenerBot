@@ -293,8 +293,7 @@
   content: "";
   position: absolute;
   bottom: 0;
-  left: 0;
-  right: 0;
+  inset-inline: 0;
   height: 2px;
   background: var(--primary-color);
 }
@@ -508,11 +507,11 @@
 }
 
 .ta-authority-item.success {
-  border-left: 3px solid var(--success-color);
+  border-inline-start: 3px solid var(--success-color);
 }
 
 .ta-authority-item.warning {
-  border-left: 3px solid var(--warning-color);
+  border-inline-start: 3px solid var(--warning-color);
 }
 
 .ta-authority-label {
@@ -540,7 +539,7 @@
   font-size: 0.75rem;
   color: var(--text-muted);
   word-break: break-all;
-  padding-left: calc(120px + var(--spacing-sm));
+  padding-inline-start: calc(120px + var(--spacing-sm));
 }
 
 /* Holder Concentration */
@@ -602,16 +601,16 @@
 }
 
 .ta-risk-item.danger {
-  border-left: 3px solid var(--error-color);
+  border-inline-start: 3px solid var(--error-color);
 }
 
 .ta-risk-item.warn,
 .ta-risk-item.warning {
-  border-left: 3px solid var(--warning-color);
+  border-inline-start: 3px solid var(--warning-color);
 }
 
 .ta-risk-item.info {
-  border-left: 3px solid var(--primary-color);
+  border-inline-start: 3px solid var(--primary-color);
 }
 
 .ta-risk-level {
@@ -787,7 +786,7 @@
 .ta-pools-table th,
 .ta-pools-table td {
   padding: var(--spacing-sm) var(--spacing-md);
-  text-align: left;
+  text-align: start;
   border-bottom: 1px solid var(--border-color);
 }
 

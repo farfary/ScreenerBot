@@ -32,7 +32,7 @@
 }
 
 .calendar-weekdays span {
-  padding-left: 0.4rem;
+  padding-inline-start: 0.4rem;
   font-size: 0.56rem;
   font-weight: 700;
   color: var(--text-muted);
@@ -104,7 +104,8 @@
   justify-content: center;
   min-width: 1.15rem;
   height: 1.15rem;
-  margin: -0.1rem 0 0 -0.1rem;
+  margin-block: -0.1rem 0;
+  margin-inline: -0.1rem 0;
   padding: 0 0.2rem;
   background: var(--link-color);
   color: #fff;
@@ -178,12 +179,12 @@
 }
 
 .calendar-summary-stat:first-child {
-  padding-right: 1rem;
+  padding-inline-end: 1rem;
 }
 
 .calendar-summary-stat + .calendar-summary-stat {
-  padding-left: 1rem;
-  border-left: 1px solid var(--border-color);
+  padding-inline-start: 1rem;
+  border-inline-start: 1px solid var(--border-color);
 }
 
 .calendar-summary-label {

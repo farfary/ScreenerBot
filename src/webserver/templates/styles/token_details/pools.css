@@ -17,7 +17,7 @@
 
 .pools-left-col {
   padding: 16px 18px;
-  border-right: 1px solid var(--border-color);
+  border-inline-end: 1px solid var(--border-color);
   background: var(--bg-secondary);
 }
 
@@ -76,8 +76,8 @@
 }
 
 .pools-summary-fact:nth-child(even) {
-  padding-left: 14px;
-  border-left: 1px solid var(--border-color);
+  padding-inline-start: 14px;
+  border-inline-start: 1px solid var(--border-color);
 }
 
 .pools-summary-fact > span,
@@ -205,8 +205,8 @@
 }
 
 .pool-detail-metric + .pool-detail-metric {
-  padding-left: 14px;
-  border-left: 1px solid var(--border-color);
+  padding-inline-start: 14px;
+  border-inline-start: 1px solid var(--border-color);
 }
 
 .pool-detail-addresses {
@@ -290,7 +290,7 @@
   }
 
   .pools-left-col {
-    border-right: 0;
+    border-inline-end: 0;
     border-bottom: 1px solid var(--border-color);
   }
 }

@@ -89,9 +89,8 @@
 
 .setup-error {
   position: absolute;
-  right: 0;
+  inset-inline: 0;
   bottom: 0;
-  left: 0;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
@@ -153,7 +152,7 @@ html[data-input="keyboard"] .setup-screen [tabindex="-1"]:focus-visible {
   }
 
   .setup-split-aside {
-    padding-left: 16px;
+    padding-inline-start: 16px;
   }
 
   .setup-card {
@@ -176,7 +175,7 @@ html[data-input="keyboard"] .setup-screen [tabindex="-1"]:focus-visible {
   }
 
   .setup-split-aside {
-    padding-left: 12px;
+    padding-inline-start: 12px;
   }
 
   .setup-rpc-guidance {
@@ -406,7 +405,8 @@ html[data-input="keyboard"] .setup-screen [tabindex="-1"]:focus-visible {
 
 .setup-restart-indicator span {
   position: absolute;
-  inset: 0 auto 0 0;
+  inset-block: 0;
+  inset-inline: 0 auto;
   width: 38%;
   background: var(--primary-color);
   border-radius: inherit;

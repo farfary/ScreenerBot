@@ -36,13 +36,17 @@ function splitValues(value) {
   return parts;
 }
 
-/** Four-value shorthand whose physical left and right sides differ. */
+/**
+ * Shorthand whose physical left and right sides differ. Box sides only differ with
+ * four values; radius corners expand as [a, b, a, b] / [a, b, c, b] from two or three.
+ */
 function asymmetricShorthand(property, value) {
   const radius = property === "border-radius";
   return value.split("/").some((half) => {
     const parts = splitValues(half);
-    if (parts.length !== 4) return false;
-    return radius ? parts[0] !== parts[1] || parts[2] !== parts[3] : parts[1] !== parts[3];
+    if (!radius) return parts.length === 4 && parts[1] !== parts[3];
+    const [a, b = a, c = a, d = b] = parts;
+    return a !== b || d !== c;
   });
 }
 

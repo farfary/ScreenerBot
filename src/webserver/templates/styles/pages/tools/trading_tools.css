@@ -90,7 +90,7 @@
   font-family: var(--font-mono);
   color: var(--text-secondary);
   min-width: 48px;
-  text-align: right;
+  text-align: end;
 }
 
 .mw-progress-status {
@@ -114,7 +114,7 @@
 .mw-results th,
 .mw-results td {
   padding: var(--spacing-sm) var(--spacing-md);
-  text-align: left;
+  text-align: start;
   border-bottom: 1px solid var(--border-color);
 }
 
@@ -195,7 +195,7 @@
 .mw-wallet-table th,
 .mw-wallet-table td {
   padding: var(--spacing-sm) var(--spacing-md);
-  text-align: left;
+  text-align: start;
   border-bottom: 1px solid var(--border-color);
 }
 
@@ -334,7 +334,7 @@
 .tw-table th,
 .tw-table td {
   padding: var(--spacing-sm) var(--spacing-md);
-  text-align: left;
+  text-align: start;
   border-bottom: 1px solid var(--border-color);
 }
 

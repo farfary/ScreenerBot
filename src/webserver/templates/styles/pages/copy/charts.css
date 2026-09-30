@@ -29,7 +29,7 @@
 
 .copy-chart-y span {
   position: absolute;
-  right: 0;
+  inset-inline-end: 0;
   transform: translateY(-50%);
 }
 

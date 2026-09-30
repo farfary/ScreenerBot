@@ -208,7 +208,7 @@
 }
 
 .tool-placeholder h3 i {
-  margin-right: var(--spacing-sm);
+  margin-inline-end: var(--spacing-sm);
   color: var(--text-muted);
 }
 

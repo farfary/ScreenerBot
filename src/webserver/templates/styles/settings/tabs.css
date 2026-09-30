@@ -198,8 +198,7 @@
   content: "";
   position: absolute;
   top: -2px;
-  left: 0;
-  right: 0;
+  inset-inline: 0;
   height: 3px;
   background: var(--primary-color);
   border-radius: var(--radius-xs);
@@ -210,8 +209,7 @@
   content: "";
   position: absolute;
   bottom: -2px;
-  left: 0;
-  right: 0;
+  inset-inline: 0;
   height: 3px;
   background: var(--primary-color);
   border-radius: var(--radius-xs);
@@ -308,7 +306,7 @@
 }
 
 .settings-nav-tab-toggle {
-  margin-left: 4px;
+  margin-inline-start: 4px;
 }
 
 .settings-nav-tabs-note {
@@ -518,7 +516,7 @@
     flex-direction: row;
     overflow-x: auto;
     padding: 8px;
-    border-right: none;
+    border-inline-end: none;
     border-bottom: 1px solid var(--border-color);
     gap: 4px;
   }
@@ -568,7 +566,7 @@
    ============================================================================= */
 
 .settings-nav-indicator {
-  margin-left: auto;
+  margin-inline-start: auto;
   display: inline-flex;
   color: var(--primary-color);
   font-size: 0.8rem;
