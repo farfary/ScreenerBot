@@ -5,7 +5,13 @@
 //! update that is already downloaded and verified, so the command itself never
 //! touches the network.
 
+use crate::i18n::{ids, MessageId, UiArg, UiText};
+use crate::telegram::text::{tg, tg_id, tg_plain, with_icon};
 use crate::version::{self, UpdateKind, UpdatePhase};
+
+fn version_text(id: MessageId, version: &str) -> UiText {
+    UiText::new(id).arg("version", UiArg::Text(version.to_owned()))
+}
 
 pub async fn handle_update_command() -> String {
     let state = version::get_update_state().await;
@@ -13,53 +19,91 @@ pub async fn handle_update_command() -> String {
 
     let Some(update) = state.available_update.clone() else {
         return match state.phase {
-            UpdatePhase::Applied => {
-                format!("✅ <b>Up to date</b>\n\nRunning v{current}, installed automatically.")
-            }
-            UpdatePhase::CheckFailed => format!(
-                "⚠️ <b>Update check failed</b>\n\n{}",
-                state
-                    .check_error
-                    .map(|error| {
-                        error
-                            .render_plain(&crate::i18n::source_locale().parse().unwrap_or_default())
-                    })
-                    .unwrap_or_else(|| "screenerbot.io could not be reached.".to_owned())
+            UpdatePhase::Applied => with_icon(
+                "✅",
+                &tg(&version_text(
+                    ids::TELEGRAM_UPDATE_UP_TO_DATE_AUTO,
+                    &current,
+                )),
             ),
-            _ => format!("✅ <b>Up to date</b>\n\nRunning v{current}."),
+            UpdatePhase::CheckFailed => {
+                // The failure text comes from another catalog domain and is plain
+                // text, so it travels as an escaped argument, not as markup.
+                let reason = tg_plain(
+                    &state
+                        .check_error
+                        .unwrap_or_else(|| UiText::new(ids::TELEGRAM_UPDATE_UNREACHABLE)),
+                );
+                with_icon(
+                    "⚠️",
+                    &tg(&UiText::new(ids::TELEGRAM_UPDATE_CHECK_FAILED)
+                        .arg("reason", UiArg::Text(reason))),
+                )
+            }
+            _ => with_icon(
+                "✅",
+                &tg(&version_text(ids::TELEGRAM_UPDATE_UP_TO_DATE, &current)),
+            ),
         };
     };
 
     let size_mb = update.transfer_size() as f64 / (1024.0 * 1024.0);
+    let installing = || {
+        with_icon(
+            "🔄",
+            &tg(&version_text(
+                ids::TELEGRAM_UPDATE_INSTALLING,
+                &update.version,
+            )),
+        )
+    };
     match state.phase {
         UpdatePhase::ReadyToApply => match version::apply_now().await {
             Ok(()) => format!(
-                "🔄 <b>Installing v{}</b>\n\nScreenerBot is restarting onto the new version. \
-                 Trading resumes automatically.",
-                update.version
+                "{}\n\n{}",
+                installing(),
+                tg_id(ids::TELEGRAM_UPDATE_RESTARTING)
             ),
-            Err(error) => format!("⚠️ <b>Could not install v{}</b>\n\n{error}", update.version),
+            Err(error) => with_icon(
+                "⚠️",
+                &tg(
+                    &version_text(ids::TELEGRAM_UPDATE_INSTALL_FAILED, &update.version)
+                        .arg("detail", UiArg::Text(error.to_string())),
+                ),
+            ),
         },
-        UpdatePhase::ReadyToInstall => format!(
-            "📦 <b>v{} is downloaded</b>\n\nThis release also updates the desktop app, so its \
-             installer has to run on the machine. Open Settings → Updates there.",
-            update.version
+        UpdatePhase::ReadyToInstall => with_icon(
+            "📦",
+            &tg(&version_text(
+                ids::TELEGRAM_UPDATE_DOWNLOADED,
+                &update.version,
+            )),
         ),
-        UpdatePhase::Downloading | UpdatePhase::Verifying => format!(
-            "⬇️ <b>Downloading v{}</b>\n\n{:.0}% of {size_mb:.1} MB.",
-            update.version, state.download_progress.progress_percent
+        UpdatePhase::Downloading | UpdatePhase::Verifying => with_icon(
+            "⬇️",
+            &tg(
+                &version_text(ids::TELEGRAM_UPDATE_DOWNLOADING, &update.version)
+                    .arg(
+                        "percent",
+                        UiArg::Text(format!("{:.0}", state.download_progress.progress_percent)),
+                    )
+                    .arg("size", UiArg::Text(format!("{size_mb:.1}"))),
+            ),
         ),
-        UpdatePhase::Applying => format!("🔄 <b>Installing v{}</b>", update.version),
+        UpdatePhase::Applying => installing(),
         _ => {
             let how = if update.kind == UpdateKind::Core {
-                "Installs silently with a short restart."
+                ids::TELEGRAM_UPDATE_HOW_CORE
             } else {
-                "Needs the desktop installer to run once."
+                ids::TELEGRAM_UPDATE_HOW_INSTALLER
             };
-            format!(
-                "⬆️ <b>v{} is available</b>\n\n{how}\nDownload size: {size_mb:.1} MB.\n\n\
-                 It downloads on its own; send /update again once it is ready.",
-                update.version
+            with_icon(
+                "⬆️",
+                &tg(
+                    &version_text(ids::TELEGRAM_UPDATE_AVAILABLE, &update.version)
+                        .arg("how", UiArg::Nested(Box::new(UiText::new(how))))
+                        .arg("size", UiArg::Text(format!("{size_mb:.1}"))),
+                ),
             )
         }
     }

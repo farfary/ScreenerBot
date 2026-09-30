@@ -64,14 +64,35 @@ function termRefsOf(node) {
 
 /** Inline tags a message value may use, without attributes. Mirrors ALLOWED_TAGS in src/i18n/markup.rs. */
 export const MARKUP_TAGS = ["strong", "em", "b", "i", "code", "br"];
-const MARKUP_TAG = new RegExp(`^<(?:/?(?:${MARKUP_TAGS.filter((t) => t !== "br").join("|")})|br/?)>`, "i");
+/** Tags Telegram HTML messages may use, without attributes. Links are built in Rust. */
+export const TELEGRAM_MARKUP_TAGS = ["b", "i", "u", "s", "code", "pre"];
+/** Catalog domain rendered as Telegram HTML; it has its own tag allowlist. */
+export const TELEGRAM_DOMAIN = "telegram";
+
+const tagPatterns = new Map();
+
+/** Anchored matcher for one allowlisted tag written without attributes. */
+function markupTagPattern(tags) {
+  if (!tagPatterns.has(tags)) {
+    const paired = tags.filter((t) => t !== "br").join("|");
+    const void_ = tags.includes("br") ? "|br/?" : "";
+    tagPatterns.set(tags, new RegExp(`^<(?:/?(?:${paired})${void_})>`, "i"));
+  }
+  return tagPatterns.get(tags);
+}
+
+/** Tag allowlist of the catalog file `file` (`telegram.ftl` is Telegram HTML). */
+function tagsForFile(file) {
+  return file === `${TELEGRAM_DOMAIN}.ftl` ? TELEGRAM_MARKUP_TAGS : MARKUP_TAGS;
+}
 
 /**
  * Markup used by a message value: `tags` are the allowlisted tags in order
  * (lowercase, closing tags as `/name`), `invalid` the `<` sequences outside the
  * allowlist. Attribute text is plain and not inspected.
  */
-function markupOf(node) {
+function markupOf(node, allowed = MARKUP_TAGS) {
+  const pattern = markupTagPattern(allowed);
   const tags = [];
   const invalid = [];
   if (!node.value) return { tags, invalid, hasSelect: false };
@@ -79,7 +100,7 @@ function markupOf(node) {
   for (const text of texts) {
     let from = text.value.indexOf("<");
     while (from >= 0) {
-      const match = MARKUP_TAG.exec(text.value.slice(from));
+      const match = pattern.exec(text.value.slice(from));
       if (match) {
         tags.push(match[0].slice(1, -1).replace(/\/$/, "").toLowerCase());
         from = text.value.indexOf("<", from + match[0].length);
@@ -94,9 +115,10 @@ function markupOf(node) {
 }
 
 function markupAllowlistErrors(id, node, locale, file) {
-  const { invalid } = markupOf(node);
+  const allowed = tagsForFile(file.split("/").pop());
+  const { invalid } = markupOf(node, allowed);
   if (invalid.length === 0) return [];
-  const list = MARKUP_TAGS.map((tag) => `<${tag}>`).join(", ");
+  const list = allowed.map((tag) => `<${tag}>`).join(", ");
   return [
     {
       file,
@@ -111,8 +133,9 @@ function markupAllowlistErrors(id, node, locale, file) {
  * different variant counts; every other message by tag multiset.
  */
 function markupParityErrors(id, source, target, locale, file) {
-  const want = markupOf(source);
-  const have = markupOf(target);
+  const allowed = tagsForFile(file.split("/").pop());
+  const want = markupOf(source, allowed);
+  const have = markupOf(target, allowed);
   const key = (info) =>
     (want.hasSelect || have.hasSelect ? [...new Set(info.tags)] : [...info.tags]).sort().join(" ");
   if (key(want) === key(have)) return [];

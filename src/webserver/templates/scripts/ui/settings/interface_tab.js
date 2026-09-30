@@ -207,17 +207,19 @@ export function buildInterfaceTab(settings) {
 }
 
 /**
- * Fill the language select with "System" plus every registered locale, each
- * shown by its native name, and select the configured value.
+ * Fill a language select with `first` (an `{ code, name }` entry such as
+ * "System") plus every registered locale, each shown by its native name, and
+ * select the configured value.
  */
-async function populateLanguageOptions(select, current) {
+export async function populateLanguageOptions(select, current, first) {
+  const lead = first ?? { code: "system", name: I18n.t("common-language-system") };
   try {
     const response = await fetch("/api/i18n/locales");
     if (!response.ok) throw new Error(response.statusText);
     const { locales } = await response.json();
-    const options = [{ code: "system", name: I18n.t("common-language-system") }, ...locales];
+    const options = [lead, ...locales];
     // A configured value that is not offered (a developer pseudo-locale) stays
-    // visible, labelled by its code, instead of displaying as "System".
+    // visible, labelled by its code, instead of displaying as the lead entry.
     if (current && !options.some((o) => o.code === current)) {
       options.push({ code: current, name: current });
     }
@@ -229,7 +231,7 @@ async function populateLanguageOptions(select, current) {
         return option;
       })
     );
-    select.value = options.some((o) => o.code === current) ? current : "system";
+    select.value = options.some((o) => o.code === current) ? current : lead.code;
   } catch (error) {
     console.error("Failed to load display languages:", error);
   }

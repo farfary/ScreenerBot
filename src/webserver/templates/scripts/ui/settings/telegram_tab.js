@@ -5,6 +5,7 @@
 import * as Utils from "../../core/utils.js";
 import { enhanceAllSelects } from "../custom_select.js";
 import { apiErrorMessage } from "../../core/request_manager.js";
+import { populateLanguageOptions } from "./interface_tab.js";
 
 // Ids are the chat kinds reported by the Telegram poller (src/telegram/polling.rs).
 const CHAT_TYPE_LABELS = Object.freeze({
@@ -192,6 +193,18 @@ function buildTelegramTab(settings) {
             <button class="btn btn-secondary btn-sm" id="tgCancelDiscovery">
               <i class="icon-x"></i> <span data-l10n-id="common-action-cancel"></span>
             </button>
+          </div>
+        </div>
+
+        <div class="settings-field">
+          <div class="settings-field-info">
+            <label data-l10n-id="settings-telegram-language-label"></label>
+            <span class="settings-field-hint" data-l10n-id="settings-telegram-language-hint"></span>
+          </div>
+          <div class="settings-field-control">
+            <select id="tgLanguage" class="settings-select" data-custom-select>
+              <option value="app" selected>${Utils.escapeHtml(I18n.t("settings-telegram-language-follow-app"))}</option>
+            </select>
           </div>
         </div>
 
@@ -511,6 +524,16 @@ function attachTelegramHandlers(dialog, content, settings) {
       toggleTokenBtn.querySelector("i").className = isPassword ? "icon-eye-off" : "icon-eye";
     });
     tokenField.addEventListener("change", (e) => updateSetting("bot_token", e.target.value));
+  }
+
+  // Message language: "app" follows the dashboard language
+  const languageField = content.querySelector("#tgLanguage");
+  if (languageField) {
+    populateLanguageOptions(languageField, settings.language, {
+      code: "app",
+      name: I18n.t("settings-telegram-language-follow-app"),
+    });
+    languageField.addEventListener("change", (e) => updateSetting("language", e.target.value));
   }
 
   // Chat ID discovery functionality

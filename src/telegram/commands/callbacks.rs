@@ -18,7 +18,9 @@ use super::menu::{send_main_menu, send_positions_menu, send_settings_menu};
 use super::status::{handle_balance_command, handle_stats_command, handle_status_command};
 use super::trading::{handle_pause_entries_command, handle_stop_command};
 use crate::config::{update_config_section, with_config};
+use crate::i18n::ids;
 use crate::logger::{self, LogTag};
+use crate::telegram::text::{tg_id, with_icon};
 use crate::telegram::{formatters, keyboards, pagination::PAGINATION_MANAGER};
 use crate::telegram::{Error, Result};
 use teloxide::prelude::*;
@@ -101,12 +103,15 @@ pub async fn handle_callback_query(
                             detail: e.to_string(),
                         })?;
                 } else {
-                    bot.send_message(chat_id, "⚠️ Pagination session expired.")
-                        .await
-                        .map_err(|e| Error::SendFailed {
-                            chat_id: chat_id.0.to_string(),
-                            detail: e.to_string(),
-                        })?;
+                    bot.send_message(
+                        chat_id,
+                        with_icon("⚠️", &tg_id(ids::TELEGRAM_PAGINATION_EXPIRED)),
+                    )
+                    .await
+                    .map_err(|e| Error::SendFailed {
+                        chat_id: chat_id.0.to_string(),
+                        detail: e.to_string(),
+                    })?;
                 }
             }
             Ok(())
@@ -144,10 +149,8 @@ pub async fn handle_callback_query(
         // Authentication
         ["auth", "cancel"] => send_main_menu(bot, chat_id).await,
         ["auth", "start"] => {
-            let msg = "🔑 <b>Authentication Required</b>\n\n\
-                       Please enter your password to continue.\n\n\
-                       <i>Type your password and send it.</i>";
-            send_with_keyboard(bot, chat_id, msg, keyboards::auth_prompt()).await
+            let msg = with_icon("🔑", &tg_id(ids::TELEGRAM_AUTH_REQUIRED));
+            send_with_keyboard(bot, chat_id, &msg, keyboards::auth_prompt()).await
         }
 
         // Position actions
@@ -325,9 +328,8 @@ async fn handle_settings_section(bot: &Bot, chat_id: ChatId, section: &str) -> R
                 config.notify_dca_executed,
                 config.notify_system_errors,
             );
-            let msg = "🔔 <b>Notification Settings</b>\n\n\
-                       Toggle notifications on/off:";
-            send_with_keyboard(bot, chat_id, msg, keyboard).await
+            let msg = with_icon("🔔", &tg_id(ids::TELEGRAM_SETTINGS_NOTIFICATIONS));
+            send_with_keyboard(bot, chat_id, &msg, keyboard).await
         }
         "trading" => {
             let config = with_config(|c| c.trader.clone());
@@ -336,9 +338,8 @@ async fn handle_settings_section(bot: &Bot, chat_id: ChatId, section: &str) -> R
                 config.exit_monitor_enabled,
                 config.enabled,
             );
-            let msg = "⚡ <b>Trading Controls</b>\n\n\
-                       Toggle trading features:";
-            send_with_keyboard(bot, chat_id, msg, keyboard).await
+            let msg = with_icon("⚡", &tg_id(ids::TELEGRAM_SETTINGS_TRADING));
+            send_with_keyboard(bot, chat_id, &msg, keyboard).await
         }
         _ => send_settings_menu(bot, chat_id).await,
     }

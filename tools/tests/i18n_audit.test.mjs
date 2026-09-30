@@ -79,6 +79,39 @@ test("a translation must use the same markup tags as the source", () => {
   assert.doesNotMatch(messagesOf(run("<em>x</em> und <strong>{ $n }</strong>")), /markup tags/);
 });
 
+test("the telegram domain allows only b, i, u, s, code and pre without attributes", () => {
+  const run = (text) =>
+    checkCatalogs({
+      catalogs: { en: { ...EN, "telegram.ftl": `note = ${text}\n` } },
+      registered: new Set(["en"]),
+    });
+  for (const good of ["<b>x</b> <i>y</i> <u>z</u> <s>w</s> <code>{ $v }</code> <pre>p</pre>", "plain"]) {
+    assert.doesNotMatch(messagesOf(run(good)), /markup allowlist/, good);
+  }
+  const bad = ['<a href="https://x">x</a>', "<strong>x</strong>", "<em>x</em>", "a<br>b", '<b class="x">x</b>', "<b >x</b>"];
+  for (const text of bad) {
+    assert.match(messagesOf(run(text)), /^en: message "note" uses "<" outside the markup allowlist \(<b>, <i>, <u>, <s>, <code>, <pre>/m, text);
+  }
+  const dashboard = checkCatalogs({
+    catalogs: { en: { ...EN, "common.ftl": "note = <strong>x</strong> <br>\n" } },
+    registered: new Set(["en"]),
+  });
+  assert.doesNotMatch(messagesOf(dashboard), /markup allowlist/);
+});
+
+test("a telegram translation keeps the tags of the source message", () => {
+  const en = { ...EN, "telegram.ftl": "note = <b>{ $n }</b> and <code>x</code>\n" };
+  const run = (text) =>
+    checkCatalogs({
+      catalogs: { en, de: { "telegram.ftl": `note = ${text}\n`, "common.ftl": "", "terms.ftl": "-brand = ScreenerBot\n" } },
+      registered: new Set(["en"]),
+    });
+  assert.match(messagesOf(run("<b>{ $n }</b> und x")), /message "note" markup tags \[b \/b\] differ from the source \[b \/b code \/code\]/);
+  assert.match(messagesOf(run("<b>{ $n }</b> <i>x</i>")), /markup tags/);
+  assert.match(messagesOf(run("<em>{ $n }</em> <code>x</code>")), /outside the markup allowlist/);
+  assert.doesNotMatch(messagesOf(run("<code>x</code> und <b>{ $n }</b>")), /markup/);
+});
+
 test("markup parity of select messages compares distinct tag names", () => {
   const en = {
     ...EN,

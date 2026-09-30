@@ -2,7 +2,9 @@
 //!
 //! Handles the interactive menu and navigation.
 
+use crate::i18n::{ids, UiArg, UiText};
 use crate::telegram::keyboards;
+use crate::telegram::text::{tg, tg_escape, tg_id, with_icon};
 use crate::telegram::{Error, Result};
 use teloxide::prelude::*;
 use teloxide::types::{ChatId, ParseMode};
@@ -14,8 +16,7 @@ pub async fn handle_menu_command(bot: &Bot, chat_id: ChatId) -> Result<()> {
 
 /// Send the main menu to the user
 pub async fn send_main_menu(bot: &Bot, chat_id: ChatId) -> Result<()> {
-    let message = "🤖 <b>Control Panel</b>\n\n\
-        Select an option to view information or control the bot.";
+    let message = with_icon("🤖", &tg_id(ids::TELEGRAM_MENU_TITLE));
 
     bot.send_message(chat_id, message)
         .parse_mode(ParseMode::Html)
@@ -37,7 +38,7 @@ pub async fn send_positions_menu(bot: &Bot, chat_id: ChatId) -> Result<()> {
         let keyboard = keyboards::main_menu_compact();
         bot.send_message(
             chat_id,
-            "📦 <b>No Open Positions</b>\n\nWaiting for new opportunities...",
+            with_icon("📦", &tg_id(ids::TELEGRAM_MENU_POSITIONS_EMPTY)),
         )
         .parse_mode(ParseMode::Html)
         .reply_markup(keyboard)
@@ -64,7 +65,12 @@ pub async fn send_positions_menu(bot: &Bot, chat_id: ChatId) -> Result<()> {
 
     let keyboard = keyboards::positions_list(&pos_list);
 
-    let mut message = format!("📊 <b>Positions ({})</b>\n\n", positions.len());
+    let mut message = with_icon(
+        "📊",
+        &tg(&UiText::new(ids::TELEGRAM_MENU_POSITIONS_TITLE)
+            .arg("count", UiArg::Text(positions.len().to_string()))),
+    );
+    message.push_str("\n\n");
     for (i, pos) in positions.iter().take(10).enumerate() {
         let pnl_pct = pos.unrealized_pnl_percent.unwrap_or_default();
         let emoji = if pnl_pct >= 0.0 { "🟢" } else { "🔴" };
@@ -73,12 +79,13 @@ pub async fn send_positions_menu(bot: &Bot, chat_id: ChatId) -> Result<()> {
             "{}. {} <b>${}</b> ({}{:.1}%)\n",
             i + 1,
             emoji,
-            pos.symbol,
+            tg_escape(&pos.symbol),
             sign,
             pnl_pct
         ));
     }
-    message.push_str("\n<i>Tap a position to manage it.</i>");
+    message.push('\n');
+    message.push_str(&tg_id(ids::TELEGRAM_MENU_POSITIONS_HINT));
 
     bot.send_message(chat_id, message)
         .parse_mode(ParseMode::Html)
@@ -94,8 +101,7 @@ pub async fn send_positions_menu(bot: &Bot, chat_id: ChatId) -> Result<()> {
 
 /// Send settings menu
 pub async fn send_settings_menu(bot: &Bot, chat_id: ChatId) -> Result<()> {
-    let message = "⚙️ <b>Settings</b>\n\n\
-        Configure notifications and trading parameters.";
+    let message = with_icon("⚙️", &tg_id(ids::TELEGRAM_MENU_SETTINGS));
 
     bot.send_message(chat_id, message)
         .parse_mode(ParseMode::Html)

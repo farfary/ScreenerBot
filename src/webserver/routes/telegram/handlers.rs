@@ -87,6 +87,7 @@ pub(super) async fn get_settings(State(_state): State<Arc<AppState>>) -> Respons
             }
         },
         chat_id: config.chat_id.clone(),
+        language: config.language.clone(),
         totp_configured: !totp_secret.is_empty(),
         commands_require_2fa: config.commands_require_2fa,
         session_timeout_minutes: config.session_timeout_minutes,
@@ -116,6 +117,18 @@ pub(super) async fn update_settings(
     State(_state): State<Arc<AppState>>,
     Json(req): Json<UpdateSettingsRequest>,
 ) -> Response {
+    if let Some(ref language) = req.language {
+        if language != crate::telegram::text::FOLLOW_APP
+            && crate::i18n::locale_info(language).is_none()
+        {
+            return ApiError::new(
+                ApiErrorCode::InvalidInput,
+                ids::ERRORS_I18N_LOCALE_NOT_REGISTERED,
+            )
+            .details(language.clone())
+            .into_response();
+        }
+    }
     match update_config_section(
         |cfg| {
             if let Some(enabled) = req.enabled {
@@ -129,6 +142,9 @@ pub(super) async fn update_settings(
             }
             if let Some(ref chat_id) = req.chat_id {
                 cfg.telegram.chat_id = chat_id.clone();
+            }
+            if let Some(ref language) = req.language {
+                cfg.telegram.language = language.clone();
             }
             if let Some(timeout) = req.session_timeout_minutes {
                 // Validate range: 5-1440 minutes (5 min to 24 hours)

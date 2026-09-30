@@ -4,9 +4,11 @@
 //! when a chat_id is configured and the bot is fully connected.
 
 use crate::config::with_config;
+use crate::i18n::{ids, MessageId, UiArg, UiText};
 use crate::logger::{self, LogTag};
 use crate::telegram::commands::{handle_auth_attempt, handle_callback_query, handle_command};
 use crate::telegram::session::get_session_manager;
+use crate::telegram::text::{tg, tg_id, tg_plain_id, with_icon};
 use crate::telegram::types::SessionState;
 use crate::telegram::{Error, Result};
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
@@ -184,6 +186,16 @@ async fn poll_updates(bot: &Bot) {
     }
 }
 
+/// Catalog label for a chat kind reported by the discovery poller.
+fn chat_type_label(chat_type: &str) -> MessageId {
+    match chat_type {
+        "group" => ids::TELEGRAM_CHAT_TYPE_GROUP,
+        "supergroup" => ids::TELEGRAM_CHAT_TYPE_SUPERGROUP,
+        "channel" => ids::TELEGRAM_CHAT_TYPE_CHANNEL,
+        _ => ids::TELEGRAM_CHAT_TYPE_PRIVATE,
+    }
+}
+
 /// Handle a message received during discovery mode
 async fn handle_discovery_message(
     bot: &Bot,
@@ -232,14 +244,23 @@ async fn handle_discovery_message(
 
     // Send acknowledgment if this is a new chat
     if is_new {
-        let chat_name = first_name.as_deref().unwrap_or("User");
+        let chat_name = first_name
+            .clone()
+            .unwrap_or_else(|| tg_plain_id(ids::TELEGRAM_DISCOVERY_DEFAULT_NAME));
         let ack_message = format!(
-            "👋 Hello {}!\n\n\
-            ✅ <b>Chat detected!</b>\n\n\
-            Chat ID: <code>{}</code>\n\
-            Type: {}\n\n\
-            Please go to the ScreenerBot dashboard and click on this chat to select it.",
-            chat_name, chat_id.0, chat_type
+            "{}\n\n{}\n\n{}",
+            with_icon(
+                "👋",
+                &tg(&UiText::new(ids::TELEGRAM_DISCOVERY_HELLO)
+                    .arg("name", UiArg::Text(chat_name.clone()))),
+            ),
+            with_icon("✅", &tg_id(ids::TELEGRAM_DISCOVERY_DETECTED)),
+            tg(&UiText::new(ids::TELEGRAM_DISCOVERY_DETAILS)
+                .arg("chat_id", UiArg::Text(chat_id.0.to_string()))
+                .arg(
+                    "chat_type",
+                    UiArg::Nested(Box::new(UiText::new(chat_type_label(chat_type)))),
+                )),
         );
 
         let _ = bot

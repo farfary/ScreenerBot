@@ -24,29 +24,32 @@ pub use trading::{
 pub use updates::handle_update_command;
 
 use crate::config::with_config;
+use crate::i18n::{ids, UiArg, UiText};
 use crate::logger::{self, LogTag};
 use crate::telegram::keyboards;
+use crate::telegram::reply::ReplyCommand;
 use crate::telegram::session::get_session_manager;
+use crate::telegram::text::{tg, tg_escape, tg_id, with_icon};
 use crate::telegram::types::SessionState;
 use crate::telegram::{Error, Result};
 use std::time::Duration;
 use teloxide::prelude::*;
 use teloxide::types::{ChatId, ParseMode};
 
-/// Map keyboard button text to commands
-fn button_to_command(text: &str) -> Option<&'static str> {
-    match text {
-        "📊 Status" => Some("/status"),
-        "💰 Balance" => Some("/balance"),
-        "📈 Positions" => Some("/positions"),
-        "⏸️ Pause" => Some("/pause"),
-        "▶️ Resume" => Some("/resume"),
-        "🛑 Stop" => Some("/force_stop"),
-        "📉 Stats" => Some("/stats"),
-        "⚙️ Menu" => Some("/menu"),
-        "❓ Help" => Some("/help"),
-        _ => None,
-    }
+/// Message shown when a session needs `/login`.
+fn session_expired_message() -> String {
+    with_icon("🔐", &tg_id(ids::TELEGRAM_SESSION_EXPIRED))
+}
+
+/// Message shown while the account is locked after failed attempts.
+fn account_locked_message(remaining_secs: u64) -> String {
+    with_icon(
+        "🔒",
+        &tg(&UiText::new(ids::TELEGRAM_ACCOUNT_LOCKED).arg(
+            "seconds",
+            UiArg::Count(remaining_secs.min(i64::MAX as u64) as i64),
+        )),
+    )
 }
 
 /// Handle a single command from text message
@@ -56,8 +59,8 @@ pub async fn handle_command(bot: &Bot, chat_id: ChatId, user_id: i64, text: &str
     // Map keyboard button text to command, or use text directly if it's a command
     let command = if text.starts_with('/') {
         text.split_whitespace().next().unwrap_or_default()
-    } else if let Some(cmd) = button_to_command(text) {
-        cmd
+    } else if let Some(cmd) = ReplyCommand::from_label(text) {
+        cmd.command()
     } else {
         // Not a command or known button text
         return Ok(());
@@ -147,9 +150,10 @@ pub async fn handle_command(bot: &Bot, chat_id: ChatId, user_id: i64, text: &str
         "/resume_trading" => handle_resume_command().await,
         "/update" | "/updates" => handle_update_command().await,
         "/help" => handle_help_command(),
-        _ => format!(
-            "❓ Unknown command: {}\n\nUse /help to see available commands.",
-            command
+        _ => with_icon(
+            "❓",
+            &tg(&UiText::new(ids::TELEGRAM_UNKNOWN_COMMAND)
+                .arg("command", UiArg::Text(command.to_owned()))),
         ),
     };
 
@@ -196,10 +200,7 @@ pub async fn check_auth(bot: &Bot, chat_id: ChatId, user_id: i64) -> bool {
                 }
 
                 let _ = bot
-                    .send_message(
-                        chat_id,
-                        "🔐 <b>Session Expired</b>\n\nUse /login to re-authenticate.",
-                    )
+                    .send_message(chat_id, session_expired_message())
                     .parse_mode(ParseMode::Html)
                     .await;
                 return false;
@@ -220,20 +221,14 @@ pub async fn check_auth(bot: &Bot, chat_id: ChatId, user_id: i64) -> bool {
             }
 
             let _ = bot
-                .send_message(
-                    chat_id,
-                    "🔐 <b>Session Expired</b>\n\nUse /login to re-authenticate.",
-                )
+                .send_message(chat_id, session_expired_message())
                 .parse_mode(ParseMode::Html)
                 .await;
             false
         }
         SessionState::AwaitingTotp => {
             let _ = bot
-                .send_message(
-                    chat_id,
-                    "🔢 <b>2FA Required</b>\n\nPlease enter your 6-digit authenticator code.",
-                )
+                .send_message(chat_id, with_icon("🔢", &tg_id(ids::TELEGRAM_2FA_REQUIRED)))
                 .parse_mode(ParseMode::Html)
                 .await;
             false
@@ -243,13 +238,7 @@ pub async fn check_auth(bot: &Bot, chat_id: ChatId, user_id: i64) -> bool {
                 .saturating_duration_since(std::time::Instant::now())
                 .as_secs();
             let _ = bot
-                .send_message(
-                    chat_id,
-                    format!(
-                        "🔒 <b>Account Locked</b>\n\nToo many failed attempts.\nTry again in {} seconds.",
-                        remaining
-                    ),
-                )
+                .send_message(chat_id, account_locked_message(remaining))
                 .parse_mode(ParseMode::Html)
                 .await;
             false
@@ -269,7 +258,7 @@ pub async fn handle_auth_attempt(bot: &Bot, chat_id: ChatId, user_id: i64, text:
             // Validate format (6 digits)
             if text.len() != 6 || !text.chars().all(|c| c.is_ascii_digit()) {
                 let _ = bot
-                    .send_message(chat_id, "❌ Please enter a valid 6-digit code.")
+                    .send_message(chat_id, with_icon("❌", &tg_id(ids::TELEGRAM_CODE_INVALID)))
                     .parse_mode(ParseMode::Html)
                     .await;
                 return;
@@ -280,7 +269,7 @@ pub async fn handle_auth_attempt(bot: &Bot, chat_id: ChatId, user_id: i64, text:
                     let _ = bot
                         .send_message(
                             chat_id,
-                            "✅ <b>Authenticated!</b>\n\nYou now have access to bot commands.",
+                            with_icon("✅", &tg_id(ids::TELEGRAM_AUTHENTICATED)),
                         )
                         .parse_mode(ParseMode::Html)
                         .await;
@@ -303,7 +292,11 @@ pub async fn handle_auth_attempt(bot: &Bot, chat_id: ChatId, user_id: i64, text:
                     let _ = bot
                         .send_message(
                             chat_id,
-                            format!("❌ <b>Wrong Code</b>\n\n{remaining} attempts remaining."),
+                            with_icon(
+                                "❌",
+                                &tg(&UiText::new(ids::TELEGRAM_WRONG_CODE)
+                                    .arg("remaining", UiArg::Count(i64::from(remaining)))),
+                            ),
                         )
                         .parse_mode(ParseMode::Html)
                         .await;
@@ -315,7 +308,7 @@ pub async fn handle_auth_attempt(bot: &Bot, chat_id: ChatId, user_id: i64, text:
                 }
                 Err(e) => {
                     let _ = bot
-                        .send_message(chat_id, format!("🔒 {e}"))
+                        .send_message(chat_id, with_icon("🔒", &tg_escape(&e.to_string())))
                         .parse_mode(ParseMode::Html)
                         .await;
                 }
@@ -326,13 +319,7 @@ pub async fn handle_auth_attempt(bot: &Bot, chat_id: ChatId, user_id: i64, text:
                 .saturating_duration_since(std::time::Instant::now())
                 .as_secs();
             let _ = bot
-                .send_message(
-                    chat_id,
-                    format!(
-                        "🔒 <b>Account Locked</b>\n\nToo many failed attempts.\nTry again in {} seconds.",
-                        remaining
-                    ),
-                )
+                .send_message(chat_id, account_locked_message(remaining))
                 .parse_mode(ParseMode::Html)
                 .await;
         }

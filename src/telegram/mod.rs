@@ -21,7 +21,9 @@
 //! ├── discovery.rs     # Chat ID discovery
 //! ├── polling.rs       # Update polling
 //! │
-//! ├── keyboards.rs     # Inline keyboards
+//! ├── text.rs          # Localized message rendering and language
+//! ├── reply.rs         # Reply keyboard commands and label routing
+//! ├── keyboards/       # Reply and inline keyboards
 //! ├── formatters.rs    # HTML message formatters
 //! │
 //! └── commands/        # Command handlers
@@ -85,7 +87,9 @@ pub mod keyboards;
 pub mod notifier;
 pub mod pagination;
 pub mod polling;
+pub(crate) mod reply;
 pub mod session;
+pub(crate) mod text;
 pub mod types;
 pub(crate) mod wallet_alerts;
 

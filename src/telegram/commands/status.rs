@@ -4,9 +4,11 @@
 
 use crate::chains::solana::assets::ata::get_sol_balance;
 use crate::config::with_config;
+use crate::i18n::{ids, UiArg, UiText};
 use crate::positions;
 use crate::sol_price;
 use crate::telegram::formatters::{format_duration, format_mint_display, format_sol};
+use crate::telegram::text::{tg, tg_escape, tg_id, with_icon};
 use crate::version::VERSION;
 
 /// Handle /status command
@@ -21,41 +23,37 @@ pub async fn handle_status_command() -> String {
     let force_stopped = crate::global::is_force_stopped();
 
     let status_emoji = if force_stopped {
-        "�"
+        "🔴"
     } else if trading_enabled {
         "🟢"
     } else {
         "🟡"
     };
 
-    let trading_status = if force_stopped {
-        "<b>STOPPED</b> (Force Stop Active)"
+    let state = if force_stopped {
+        ids::TELEGRAM_STATUS_STATE_STOPPED
     } else if trading_enabled {
-        "<b>ACTIVE</b>"
+        ids::TELEGRAM_STATUS_STATE_ACTIVE
     } else {
-        "<b>PAUSED</b>"
+        ids::TELEGRAM_STATUS_STATE_PAUSED
+    };
+    let on_off = |enabled: bool| {
+        UiArg::Nested(Box::new(UiText::new(if enabled {
+            ids::TELEGRAM_STATUS_ON
+        } else {
+            ids::TELEGRAM_STATUS_OFF
+        })))
     };
 
-    let entry_status = if entry_enabled { "ON" } else { "OFF" };
-    let exit_status = if exit_enabled { "ON" } else { "OFF" };
-
-    format!(
-        "{} <b>System Status</b>\n\n\
-         <b>System</b>\n\
-         State — {}\n\
-         Uptime — {}\n\
-         Version — v{}\n\n\
-         <b>Trading</b>\n\
-         Entries — {}\n\
-         Exits — {}\n\
-         Positions — {}",
+    with_icon(
         status_emoji,
-        trading_status,
-        format_duration(uptime),
-        VERSION,
-        entry_status,
-        exit_status,
-        open_positions,
+        &tg(&UiText::new(ids::TELEGRAM_STATUS_BODY)
+            .arg("state", UiArg::Nested(Box::new(UiText::new(state))))
+            .arg("uptime", UiArg::Text(format_duration(uptime)))
+            .arg("version", UiArg::Text(VERSION.to_owned()))
+            .arg("entries", on_off(entry_enabled))
+            .arg("exits", on_off(exit_enabled))
+            .arg("positions", UiArg::Text(open_positions.to_string()))),
     )
 }
 
@@ -64,10 +62,15 @@ pub async fn handle_positions_command() -> String {
     let positions = positions::get_open_positions().await;
 
     if positions.is_empty() {
-        return "📦 <b>No Open Positions</b>\n\nWaiting for opportunities...".to_owned();
+        return with_icon("📦", &tg_id(ids::TELEGRAM_POSITIONS_EMPTY));
     }
 
-    let mut response = format!("📦 <b>Open Positions ({})</b>\n\n", positions.len());
+    let mut response = with_icon(
+        "📦",
+        &tg(&UiText::new(ids::TELEGRAM_POSITIONS_TITLE)
+            .arg("count", UiArg::Text(positions.len().to_string()))),
+    );
+    response.push_str("\n\n");
 
     let mut total_invested = 0.0;
     let mut total_pnl = 0.0;
@@ -77,37 +80,44 @@ pub async fn handle_positions_command() -> String {
         let pnl_sol = pos.unrealized_pnl.unwrap_or_default();
         let pnl_emoji = if pnl_pct >= 0.0 { "🟢" } else { "🔴" };
         let sign = if pnl_pct >= 0.0 { "+" } else { "" };
-        let symbol = if pos.symbol.len() > 6 {
-            format!("{}..", &pos.symbol[..5])
+        // Count characters, not bytes: symbols may be multibyte.
+        let symbol = if pos.symbol.chars().count() > 6 {
+            format!("{}..", pos.symbol.chars().take(5).collect::<String>())
         } else {
             pos.symbol.clone()
         };
 
-        response.push_str(&format!(
-            "{} <b>{}</b>\n   {}{} SOL ({}{:.1}%)\n",
+        response.push_str(&with_icon(
             pnl_emoji,
-            symbol,
-            sign,
-            format_sol(pnl_sol),
-            sign,
-            pnl_pct
+            &tg(&UiText::new(ids::TELEGRAM_POSITIONS_ROW)
+                .arg("symbol", UiArg::Text(symbol))
+                .arg(
+                    "pnl_sol",
+                    UiArg::Text(format!("{sign}{}", format_sol(pnl_sol))),
+                )
+                .arg("pnl_pct", UiArg::Text(format!("{sign}{pnl_pct:.1}")))),
         ));
+        response.push('\n');
 
         total_invested += pos.total_size_sol;
         total_pnl += pnl_sol;
     }
 
     if positions.len() > 10 {
-        response.push_str(&format!("\n<i>+{} more...</i>\n", positions.len() - 10));
+        response.push('\n');
+        response.push_str(&tg(&UiText::new(ids::TELEGRAM_POSITIONS_MORE)
+            .arg("count", UiArg::Text((positions.len() - 10).to_string()))));
+        response.push('\n');
     }
 
     let sign = if total_pnl >= 0.0 { "+" } else { "" };
-    response.push_str(&format!(
-        "\n<b>Portfolio Summary</b>\nInvested — {} SOL\nNet P&L — {}{} SOL",
-        format_sol(total_invested),
-        sign,
-        format_sol(total_pnl),
-    ));
+    response.push('\n');
+    response.push_str(&tg(&UiText::new(ids::TELEGRAM_POSITIONS_SUMMARY)
+        .arg("invested", UiArg::Text(format_sol(total_invested)))
+        .arg(
+            "pnl",
+            UiArg::Text(format!("{sign}{}", format_sol(total_pnl))),
+        )));
 
     response
 }
@@ -116,24 +126,25 @@ pub async fn handle_positions_command() -> String {
 pub async fn handle_balance_command() -> String {
     let wallet_address = match crate::utils::get_wallet_address() {
         Ok(addr) => addr,
-        Err(e) => return format!("❌ {e}"),
+        Err(e) => return with_icon("❌", &tg_escape(&e.to_string())),
     };
 
     let sol_balance = match get_sol_balance(&wallet_address).await {
         Ok(balance) => balance,
-        Err(e) => return format!("❌ {e}"),
+        Err(e) => return with_icon("❌", &tg_escape(&e.to_string())),
     };
 
     let sol_price_usd = sol_price::get_sol_price();
     let usd_value = sol_balance * sol_price_usd;
 
     format!(
-        "💰 <b>Wallet Balance</b>\n\n\
-         <b>{} SOL</b>\n\
-         ≈ ${:.2} USD\n\n\
-         <a href=\"https://solscan.io/account/{}\">{}</a>",
-        format_sol(sol_balance),
-        usd_value,
+        "{}\n\n<a href=\"https://solscan.io/account/{}\">{}</a>",
+        with_icon(
+            "💰",
+            &tg(&UiText::new(ids::TELEGRAM_BALANCE_BODY)
+                .arg("sol", UiArg::Text(format_sol(sol_balance)))
+                .arg("usd", UiArg::Usd(format!("{usd_value:.2}")))),
+        ),
         wallet_address,
         format_mint_display(&wallet_address),
     )
@@ -155,14 +166,16 @@ pub async fn handle_stats_command() -> String {
     let sign = if total_pnl >= 0.0 { "+" } else { "" };
 
     format!(
-        "📈 <b>Daily Statistics</b>\n\n\
-         Positions — {}\n\
-         Invested — {} SOL\n\
-         P&L — {}{} SOL {}",
-        positions.len(),
-        format_sol(total_invested),
-        sign,
-        format_sol(total_pnl),
-        pnl_emoji,
+        "{} {pnl_emoji}",
+        with_icon(
+            "📈",
+            &tg(&UiText::new(ids::TELEGRAM_STATS_BODY)
+                .arg("positions", UiArg::Text(positions.len().to_string()))
+                .arg("invested", UiArg::Text(format_sol(total_invested)))
+                .arg(
+                    "pnl",
+                    UiArg::Text(format!("{sign}{}", format_sol(total_pnl)))
+                )),
+        )
     )
 }

@@ -60,12 +60,32 @@ impl UiText {
 
     /// Format for `locale` on the Rust side.
     pub fn render(&self, locale: &LanguageIdentifier) -> String {
+        self.render_args(locale, None)
+    }
+
+    /// Like [`UiText::render`], passing every string argument through `escape`
+    /// before formatting, for markup-bearing targets such as Telegram HTML. A
+    /// nested text is rendered through the same escaping and inserted as
+    /// finished markup.
+    pub fn render_with_arg_escape(
+        &self,
+        locale: &LanguageIdentifier,
+        escape: fn(&str) -> String,
+    ) -> String {
+        self.render_args(locale, Some(escape))
+    }
+
+    fn render_args(
+        &self,
+        locale: &LanguageIdentifier,
+        escape: Option<fn(&str) -> String>,
+    ) -> String {
         if self.args.is_empty() {
             return format(locale, &self.id, None);
         }
         let mut args = FluentArgs::new();
         for (name, value) in &self.args {
-            args.set(name.to_string(), fluent_value(value, locale));
+            args.set(name.to_string(), fluent_value(value, locale, escape));
         }
         format(locale, &self.id, Some(&args))
     }
@@ -93,9 +113,16 @@ impl UiText {
 const FSI: char = '\u{2068}';
 const PDI: char = '\u{2069}';
 
-fn fluent_value(arg: &UiArg, locale: &LanguageIdentifier) -> FluentValue<'static> {
+fn fluent_value(
+    arg: &UiArg,
+    locale: &LanguageIdentifier,
+    escape: Option<fn(&str) -> String>,
+) -> FluentValue<'static> {
     match arg {
-        UiArg::Text(s) | UiArg::Sol(s) | UiArg::Usd(s) => FluentValue::from(s.clone()),
+        UiArg::Text(s) | UiArg::Sol(s) | UiArg::Usd(s) => match escape {
+            Some(escape) => FluentValue::from(escape(s)),
+            None => FluentValue::from(s.clone()),
+        },
         UiArg::Count(n) => FluentValue::from(*n),
         UiArg::Number(n) | UiArg::Percent(n) => FluentValue::from(*n),
         UiArg::Time(ms) => FluentValue::from(
@@ -104,6 +131,6 @@ fn fluent_value(arg: &UiArg, locale: &LanguageIdentifier) -> FluentValue<'static
                 .unwrap_or_else(|| ms.to_string()),
         ),
         UiArg::Duration(ms) => FluentValue::from(i64::try_from(*ms).unwrap_or(i64::MAX)),
-        UiArg::Nested(text) => FluentValue::from(text.render(locale)),
+        UiArg::Nested(text) => FluentValue::from(text.render_args(locale, escape)),
     }
 }
