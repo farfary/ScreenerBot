@@ -1,6 +1,10 @@
 //! Token detail, analysis, and refresh handlers
 
-use axum::{extract::Path, http::StatusCode, Json};
+use crate::{
+    i18n::ids,
+    webserver::api_error::{ApiError, ApiErrorCode},
+};
+use axum::{extract::Path, Json};
 
 use super::source_status::build_source_status;
 use super::types::*;
@@ -790,7 +794,7 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
 /// APIs (DexScreener, GeckoTerminal) and adds it to the database before proceeding.
 pub async fn get_token_analysis(
     Path(mint): Path<String>,
-) -> Result<Json<TokenAnalysisResponse>, (StatusCode, Json<serde_json::Value>)> {
+) -> Result<Json<TokenAnalysisResponse>, ApiError> {
     let request_start = std::time::Instant::now();
 
     logger::debug(
@@ -824,12 +828,9 @@ pub async fn get_token_analysis(
                         LogTag::Webserver,
                         &format!("Token not found in DB or external APIs: mint={mint}"),
                     );
-                    return Err((
-                        StatusCode::NOT_FOUND,
-                        Json(serde_json::json!({
-                          "success": false,
-                          "error": "Token not found in database or external sources"
-                        })),
+                    return Err(ApiError::new(
+                        ApiErrorCode::NotFound,
+                        ids::ERRORS_TOKENS_DETAIL_NOT_FOUND,
                     ));
                 }
             }
@@ -839,13 +840,10 @@ pub async fn get_token_analysis(
                 LogTag::Webserver,
                 &format!("Failed to fetch token: mint={mint} error={e}"),
             );
-            return Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({
-                  "success": false,
-                  "error": format!("Failed to fetch token: {e}")
-                })),
-            ));
+            return Err(
+                ApiError::new(ApiErrorCode::Internal, ids::ERRORS_TOKENS_FETCH_FAILED)
+                    .details(e.to_string()),
+            );
         }
     };
 
@@ -1029,7 +1027,7 @@ pub async fn get_token_analysis(
 /// Force refresh token data (immediate update outside scheduled loops)
 pub async fn refresh_token_data(
     Path(mint): Path<String>,
-) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+) -> Result<Json<serde_json::Value>, ApiError> {
     logger::debug(
         LogTag::Webserver,
         &format!("Force refresh requested for mint={mint}"),
@@ -1059,15 +1057,11 @@ pub async fn refresh_token_data(
                         mint, result.failures
                     ),
                 );
-                Err((
-                    StatusCode::SERVICE_UNAVAILABLE,
-                    Json(serde_json::json!({
-                      "success": false,
-                      "mint": mint,
-                      "error": "All data sources failed",
-                      "failures": result.failures,
-                    })),
-                ))
+                Err(ApiError::new(
+                    ApiErrorCode::ServiceUnavailable,
+                    ids::ERRORS_TOKENS_REFRESH_ALL_FAILED,
+                )
+                .details(format!("{:?}", result.failures)))
             }
         }
         Err(e) => {
@@ -1075,14 +1069,10 @@ pub async fn refresh_token_data(
                 LogTag::Webserver,
                 &format!("mint={mint} refresh_error error={e}"),
             );
-            Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({
-                  "success": false,
-                  "mint": mint,
-                  "error": format!("Failed to refresh token: {e}"),
-                })),
-            ))
+            Err(
+                ApiError::new(ApiErrorCode::Internal, ids::ERRORS_TOKENS_REFRESH_FAILED)
+                    .details(e.to_string()),
+            )
         }
     }
 }

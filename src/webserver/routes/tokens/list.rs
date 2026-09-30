@@ -1,5 +1,9 @@
 //! Token listing, stats, filtering, and search handlers
 
+use crate::{
+    i18n::ids,
+    webserver::api_error::{ApiError, ApiErrorCode},
+};
 use axum::{extract::Query, http::StatusCode, Json};
 use std::collections::HashMap;
 
@@ -165,16 +169,13 @@ pub async fn filter_tokens(
 /// Query: q (required), limit (optional, default 20, max 50)
 pub async fn search_tokens(
     Query(query): Query<TokenSearchQuery>,
-) -> Result<Json<TokenSearchResponse>, (StatusCode, Json<serde_json::Value>)> {
+) -> Result<Json<TokenSearchResponse>, ApiError> {
     let search_query = query.q.trim();
 
     if search_query.is_empty() {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({
-              "success": false,
-              "error": "Search query 'q' is required"
-            })),
+        return Err(ApiError::new(
+            ApiErrorCode::InvalidInput,
+            ids::ERRORS_TOKENS_SEARCH_QUERY_REQUIRED,
         ));
     }
 
@@ -208,13 +209,10 @@ pub async fn search_tokens(
                 &format!("Token search failed: q='{search_query}', error={err}"),
             );
 
-            Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({
-                  "success": false,
-                  "error": err.to_string()
-                })),
-            ))
+            Err(
+                ApiError::new(ApiErrorCode::Internal, ids::ERRORS_TOKENS_SEARCH_FAILED)
+                    .details(err.to_string()),
+            )
         }
     }
 }

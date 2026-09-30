@@ -1,6 +1,10 @@
 //! Blacklist management handlers
 
-use axum::{extract::Path, http::StatusCode, Json};
+use crate::{
+    i18n::ids,
+    webserver::api_error::{ApiError, ApiErrorCode},
+};
+use axum::{extract::Path, Json};
 
 use super::types::*;
 use crate::{
@@ -14,7 +18,7 @@ use crate::{
 pub async fn add_to_blacklist(
     Path(mint): Path<String>,
     Json(request): Json<Option<AddBlacklistRequest>>,
-) -> Result<Json<BlacklistResponse>, (StatusCode, Json<serde_json::Value>)> {
+) -> Result<Json<BlacklistResponse>, ApiError> {
     let reason = request
         .map(|r| r.reason)
         .unwrap_or_else(|| "Manual blacklist via UI".to_owned());
@@ -27,12 +31,9 @@ pub async fn add_to_blacklist(
     let db = match get_global_database() {
         Some(db) => db,
         None => {
-            return Err((
-                StatusCode::SERVICE_UNAVAILABLE,
-                Json(serde_json::json!({
-                  "success": false,
-                  "error": "Token database not available"
-                })),
+            return Err(ApiError::new(
+                ApiErrorCode::ServiceUnavailable,
+                ids::ERRORS_TOKENS_DATABASE_UNAVAILABLE,
             ));
         }
     };
@@ -61,26 +62,21 @@ pub async fn add_to_blacklist(
                 LogTag::Webserver,
                 &format!("Failed to blacklist token mint={mint}: {e}"),
             );
-            Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({
-                  "success": false,
-                  "error": format!("Failed to blacklist token: {e}")
-                })),
-            ))
+            Err(
+                ApiError::new(ApiErrorCode::Internal, ids::ERRORS_TOKENS_BLACKLIST_FAILED)
+                    .details(e.to_string()),
+            )
         }
         Err(join_err) => {
             logger::warning(
                 LogTag::Webserver,
                 &format!("Join error blacklisting token mint={mint}: {join_err}"),
             );
-            Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({
-                  "success": false,
-                  "error": "Internal error during blacklist operation"
-                })),
-            ))
+            Err(ApiError::new(
+                ApiErrorCode::Internal,
+                ids::ERRORS_TOKENS_BLACKLIST_INTERNAL,
+            )
+            .details(join_err.to_string()))
         }
     }
 }
@@ -90,7 +86,7 @@ pub async fn add_to_blacklist(
 /// Remove a token from the blacklist
 pub async fn remove_from_blacklist(
     Path(mint): Path<String>,
-) -> Result<Json<BlacklistResponse>, (StatusCode, Json<serde_json::Value>)> {
+) -> Result<Json<BlacklistResponse>, ApiError> {
     logger::debug(
         LogTag::Webserver,
         &format!("Removing from blacklist: mint={mint}"),
@@ -99,12 +95,9 @@ pub async fn remove_from_blacklist(
     let db = match get_global_database() {
         Some(db) => db,
         None => {
-            return Err((
-                StatusCode::SERVICE_UNAVAILABLE,
-                Json(serde_json::json!({
-                  "success": false,
-                  "error": "Token database not available"
-                })),
+            return Err(ApiError::new(
+                ApiErrorCode::ServiceUnavailable,
+                ids::ERRORS_TOKENS_DATABASE_UNAVAILABLE,
             ));
         }
     };
@@ -128,13 +121,11 @@ pub async fn remove_from_blacklist(
                 LogTag::Webserver,
                 &format!("Failed to remove from blacklist mint={mint}: {e}"),
             );
-            Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({
-                  "success": false,
-                  "error": format!("Failed to remove from blacklist: {e}")
-                })),
-            ))
+            Err(ApiError::new(
+                ApiErrorCode::Internal,
+                ids::ERRORS_TOKENS_UNBLACKLIST_FAILED,
+            )
+            .details(e.to_string()))
         }
         Err(join_err) => {
             logger::warning(
@@ -144,13 +135,11 @@ pub async fn remove_from_blacklist(
                     mint, join_err
                 ),
             );
-            Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({
-                  "success": false,
-                  "error": "Internal error during unblacklist operation"
-                })),
-            ))
+            Err(ApiError::new(
+                ApiErrorCode::Internal,
+                ids::ERRORS_TOKENS_UNBLACKLIST_INTERNAL,
+            )
+            .details(join_err.to_string()))
         }
     }
 }
@@ -160,7 +149,7 @@ pub async fn remove_from_blacklist(
 /// Get blacklist status for a token
 pub async fn get_blacklist_status(
     Path(mint): Path<String>,
-) -> Result<Json<BlacklistResponse>, (StatusCode, Json<serde_json::Value>)> {
+) -> Result<Json<BlacklistResponse>, ApiError> {
     logger::debug(
         LogTag::Webserver,
         &format!("Checking blacklist status: mint={mint}"),
@@ -169,12 +158,9 @@ pub async fn get_blacklist_status(
     let db = match get_global_database() {
         Some(db) => db,
         None => {
-            return Err((
-                StatusCode::SERVICE_UNAVAILABLE,
-                Json(serde_json::json!({
-                  "success": false,
-                  "error": "Token database not available"
-                })),
+            return Err(ApiError::new(
+                ApiErrorCode::ServiceUnavailable,
+                ids::ERRORS_TOKENS_DATABASE_UNAVAILABLE,
             ));
         }
     };
@@ -201,13 +187,11 @@ pub async fn get_blacklist_status(
                 LogTag::Webserver,
                 &format!("Failed to check blacklist status mint={mint}: {e}"),
             );
-            Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({
-                  "success": false,
-                  "error": format!("Failed to check blacklist status: {e}")
-                })),
-            ))
+            Err(ApiError::new(
+                ApiErrorCode::Internal,
+                ids::ERRORS_TOKENS_BLACKLIST_STATUS_FAILED,
+            )
+            .details(e.to_string()))
         }
         Err(join_err) => {
             logger::warning(
@@ -217,13 +201,11 @@ pub async fn get_blacklist_status(
                     mint, join_err
                 ),
             );
-            Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({
-                  "success": false,
-                  "error": "Internal error during blacklist status check"
-                })),
-            ))
+            Err(ApiError::new(
+                ApiErrorCode::Internal,
+                ids::ERRORS_TOKENS_BLACKLIST_STATUS_INTERNAL,
+            )
+            .details(join_err.to_string()))
         }
     }
 }

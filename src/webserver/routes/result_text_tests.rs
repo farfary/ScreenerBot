@@ -74,3 +74,87 @@ fn position_management_result_renders_english() {
         .arg("management", UiArg::Text("user_only".to_owned()));
     assert_eq!(render(text), "Position management set to user_only");
 }
+
+#[test]
+fn token_route_errors_render_english() {
+    let cases = [
+        (
+            ids::ERRORS_TOKENS_DATABASE_UNAVAILABLE,
+            "Token database not available",
+        ),
+        (
+            ids::ERRORS_TOKENS_BLACKLIST_FAILED,
+            "Failed to blacklist token",
+        ),
+        (
+            ids::ERRORS_TOKENS_BLACKLIST_INTERNAL,
+            "Internal error during blacklist operation",
+        ),
+        (
+            ids::ERRORS_TOKENS_UNBLACKLIST_FAILED,
+            "Failed to remove from blacklist",
+        ),
+        (
+            ids::ERRORS_TOKENS_UNBLACKLIST_INTERNAL,
+            "Internal error during unblacklist operation",
+        ),
+        (
+            ids::ERRORS_TOKENS_BLACKLIST_STATUS_FAILED,
+            "Failed to check blacklist status",
+        ),
+        (
+            ids::ERRORS_TOKENS_BLACKLIST_STATUS_INTERNAL,
+            "Internal error during blacklist status check",
+        ),
+        (
+            ids::ERRORS_TOKENS_FAVORITES_FETCH_FAILED,
+            "Failed to fetch favorites",
+        ),
+        (
+            ids::ERRORS_TOKENS_FAVORITE_ADD_FAILED,
+            "Failed to add favorite",
+        ),
+        (
+            ids::ERRORS_TOKENS_FAVORITE_REMOVE_FAILED,
+            "Failed to remove favorite",
+        ),
+        (
+            ids::ERRORS_TOKENS_FAVORITE_UPDATE_FAILED,
+            "Failed to update favorite",
+        ),
+        (
+            ids::ERRORS_TOKENS_DETAIL_NOT_FOUND,
+            "Token not found in database or external sources",
+        ),
+        (ids::ERRORS_TOKENS_FETCH_FAILED, "Failed to fetch token"),
+        (
+            ids::ERRORS_TOKENS_REFRESH_ALL_FAILED,
+            "All data sources failed",
+        ),
+        (ids::ERRORS_TOKENS_REFRESH_FAILED, "Failed to refresh token"),
+        (
+            ids::ERRORS_TOKENS_SEARCH_QUERY_REQUIRED,
+            "Search query 'q' is required",
+        ),
+        (ids::ERRORS_TOKENS_SEARCH_FAILED, "Token search failed"),
+    ];
+    for (id, expected) in cases {
+        assert_eq!(render(UiText::new(id)), expected);
+    }
+}
+
+#[test]
+fn action_and_service_lookup_errors_render_english() {
+    assert_eq!(
+        render(
+            UiText::new(ids::ERRORS_ACTIONS_NOT_FOUND).arg("id", UiArg::Text("act-1".to_owned()))
+        ),
+        "Action act-1 not found"
+    );
+    assert_eq!(
+        render(
+            UiText::new(ids::ERRORS_SERVICES_NOT_FOUND).arg("name", UiArg::Text("rpc".to_owned()))
+        ),
+        "Service 'rpc' not found"
+    );
+}

@@ -13,6 +13,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use super::types::*;
+use crate::i18n::ids;
+use crate::webserver::api_error::{ApiError, ApiErrorCode};
 use crate::webserver::state::AppState;
 
 /// Server-Sent Events stream for real-time action updates
@@ -170,16 +172,16 @@ pub(super) async fn get_action_history(
 pub(super) async fn get_action_by_id(
     State(_state): State<Arc<AppState>>,
     Path(action_id): Path<String>,
-) -> impl IntoResponse {
+) -> Result<Json<serde_json::Value>, ApiError> {
     match crate::actions::get_action(&action_id).await {
-        Some(action) => Json(serde_json::json!({
+        Some(action) => Ok(Json(serde_json::json!({
             "success": true,
             "action": action
-        })),
-        None => Json(serde_json::json!({
-            "success": false,
-            "error": format!("Action {action_id} not found")
-        })),
+        }))),
+        None => Err(
+            ApiError::new(ApiErrorCode::NotFound, ids::ERRORS_ACTIONS_NOT_FOUND)
+                .text_arg("id", action_id),
+        ),
     }
 }
 

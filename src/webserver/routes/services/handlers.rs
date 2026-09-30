@@ -1,6 +1,5 @@
 use axum::{
     extract::{Path, State},
-    http::StatusCode,
     response::{IntoResponse, Response},
 };
 use std::sync::Arc;
@@ -9,7 +8,11 @@ use crate::{
     i18n::{ids, UiText},
     logger::{self, LogTag},
     services::ServiceHealth,
-    webserver::{state::AppState, utils::success_response},
+    webserver::{
+        api_error::{ApiError, ApiErrorCode},
+        state::AppState,
+        utils::success_response,
+    },
 };
 
 use super::types::*;
@@ -252,7 +255,9 @@ pub(super) async fn get_service(
             );
             success_response(service)
         }
-        None => (StatusCode::NOT_FOUND, format!("Service '{name}' not found")).into_response(),
+        None => ApiError::new(ApiErrorCode::NotFound, ids::ERRORS_SERVICES_NOT_FOUND)
+            .text_arg("name", name)
+            .into_response(),
     }
 }
 

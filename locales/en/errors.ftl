@@ -414,3 +414,26 @@ errors-positions-bulk-delete-failed = Failed to delete archived positions
 errors-positions-detail-failed = Failed to load position details
 errors-positions-resolve-failed = Failed to resolve position
 errors-positions-wrapped-sol-activity = Wrapped SOL has no token activity
+
+# Tokens
+errors-tokens-database-unavailable = Token database not available
+errors-tokens-blacklist-failed = Failed to blacklist token
+errors-tokens-blacklist-internal = Internal error during blacklist operation
+errors-tokens-unblacklist-failed = Failed to remove from blacklist
+errors-tokens-unblacklist-internal = Internal error during unblacklist operation
+errors-tokens-blacklist-status-failed = Failed to check blacklist status
+errors-tokens-blacklist-status-internal = Internal error during blacklist status check
+errors-tokens-favorites-fetch-failed = Failed to fetch favorites
+errors-tokens-favorite-add-failed = Failed to add favorite
+errors-tokens-favorite-remove-failed = Failed to remove favorite
+errors-tokens-favorite-update-failed = Failed to update favorite
+errors-tokens-detail-not-found = Token not found in database or external sources
+errors-tokens-fetch-failed = Failed to fetch token
+errors-tokens-refresh-all-failed = All data sources failed
+errors-tokens-refresh-failed = Failed to refresh token
+errors-tokens-search-query-required = Search query 'q' is required
+errors-tokens-search-failed = Token search failed
+
+# Actions and services
+errors-actions-not-found = Action { $id } not found
+errors-services-not-found = Service '{ $name }' not found

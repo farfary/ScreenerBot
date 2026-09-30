@@ -1,6 +1,10 @@
 //! Favorites management handlers
 
-use axum::{extract::Path, http::StatusCode, Json};
+use crate::{
+    i18n::ids,
+    webserver::api_error::{ApiError, ApiErrorCode},
+};
+use axum::{extract::Path, Json};
 
 use super::types::*;
 use crate::{
@@ -11,8 +15,7 @@ use crate::{
 /// GET /api/tokens/favorites
 ///
 /// Get all favorite tokens ordered by creation date (newest first)
-pub async fn get_favorites(
-) -> Result<Json<FavoritesListResponse>, (StatusCode, Json<serde_json::Value>)> {
+pub async fn get_favorites() -> Result<Json<FavoritesListResponse>, ApiError> {
     logger::debug(LogTag::Webserver, "Fetching token favorites");
 
     // Return promotional fixtures only for owner-initiated media capture.
@@ -77,13 +80,11 @@ pub async fn get_favorites(
                 LogTag::Webserver,
                 &format!("Failed to fetch favorites: {e}"),
             );
-            Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({
-                  "success": false,
-                  "error": format!("Failed to fetch favorites: {e}")
-                })),
-            ))
+            Err(ApiError::new(
+                ApiErrorCode::Internal,
+                ids::ERRORS_TOKENS_FAVORITES_FETCH_FAILED,
+            )
+            .details(e.to_string()))
         }
     }
 }
@@ -93,7 +94,7 @@ pub async fn get_favorites(
 /// Add a token to favorites
 pub async fn add_favorite(
     Json(request): Json<AddFavoriteRequest>,
-) -> Result<Json<FavoriteResponse>, (StatusCode, Json<serde_json::Value>)> {
+) -> Result<Json<FavoriteResponse>, ApiError> {
     logger::debug(
         LogTag::Webserver,
         &format!("Adding favorite: mint={}", request.mint),
@@ -118,13 +119,11 @@ pub async fn add_favorite(
                 LogTag::Webserver,
                 &format!("Failed to add favorite mint={}: {}", request.mint, e),
             );
-            Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({
-                  "success": false,
-                  "error": format!("Failed to add favorite: {e}")
-                })),
-            ))
+            Err(ApiError::new(
+                ApiErrorCode::Internal,
+                ids::ERRORS_TOKENS_FAVORITE_ADD_FAILED,
+            )
+            .details(e.to_string()))
         }
     }
 }
@@ -132,9 +131,7 @@ pub async fn add_favorite(
 /// DELETE /api/tokens/favorites/:mint
 ///
 /// Remove a token from favorites
-pub async fn remove_favorite(
-    Path(mint): Path<String>,
-) -> Result<Json<FavoriteResponse>, (StatusCode, Json<serde_json::Value>)> {
+pub async fn remove_favorite(Path(mint): Path<String>) -> Result<Json<FavoriteResponse>, ApiError> {
     logger::debug(
         LogTag::Webserver,
         &format!("Removing favorite: mint={mint}"),
@@ -153,12 +150,9 @@ pub async fn remove_favorite(
                     LogTag::Webserver,
                     &format!("Favorite not found: mint={mint}"),
                 );
-                Err((
-                    StatusCode::NOT_FOUND,
-                    Json(serde_json::json!({
-                      "success": false,
-                      "error": "Favorite not found"
-                    })),
+                Err(ApiError::new(
+                    ApiErrorCode::NotFound,
+                    ids::ERRORS_TOOLS_FAVORITE_NOT_FOUND,
                 ))
             }
         }
@@ -167,13 +161,11 @@ pub async fn remove_favorite(
                 LogTag::Webserver,
                 &format!("Failed to remove favorite mint={mint}: {e}"),
             );
-            Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({
-                  "success": false,
-                  "error": format!("Failed to remove favorite: {e}")
-                })),
-            ))
+            Err(ApiError::new(
+                ApiErrorCode::Internal,
+                ids::ERRORS_TOKENS_FAVORITE_REMOVE_FAILED,
+            )
+            .details(e.to_string()))
         }
     }
 }
@@ -184,7 +176,7 @@ pub async fn remove_favorite(
 pub async fn update_favorite(
     Path(mint): Path<String>,
     Json(request): Json<UpdateFavoriteRequest>,
-) -> Result<Json<FavoriteResponse>, (StatusCode, Json<serde_json::Value>)> {
+) -> Result<Json<FavoriteResponse>, ApiError> {
     logger::debug(
         LogTag::Webserver,
         &format!("Updating favorite: mint={mint}"),
@@ -203,12 +195,9 @@ pub async fn update_favorite(
                 LogTag::Webserver,
                 &format!("Favorite not found for update: mint={mint}"),
             );
-            Err((
-                StatusCode::NOT_FOUND,
-                Json(serde_json::json!({
-                  "success": false,
-                  "error": "Favorite not found"
-                })),
+            Err(ApiError::new(
+                ApiErrorCode::NotFound,
+                ids::ERRORS_TOOLS_FAVORITE_NOT_FOUND,
             ))
         }
         Err(e) => {
@@ -216,13 +205,11 @@ pub async fn update_favorite(
                 LogTag::Webserver,
                 &format!("Failed to update favorite mint={mint}: {e}"),
             );
-            Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({
-                  "success": false,
-                  "error": format!("Failed to update favorite: {e}")
-                })),
-            ))
+            Err(ApiError::new(
+                ApiErrorCode::Internal,
+                ids::ERRORS_TOKENS_FAVORITE_UPDATE_FAILED,
+            )
+            .details(e.to_string()))
         }
     }
 }
