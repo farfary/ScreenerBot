@@ -230,7 +230,7 @@ shell-toast-dismiss =
     .aria-label = Dismiss
 shell-confirm-title = Confirm Action
 shell-confirm-message = Are you sure?
-shell-address-open-solscan = — open in Solscan
+shell-address-open-solscan = — open in { -solscan }
 shell-address-copy = Copy address
 
 # Source: scripts/core/global_chat.js

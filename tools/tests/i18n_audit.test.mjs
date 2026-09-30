@@ -50,6 +50,8 @@ test("a message that spells the product name instead of { -brand } is an error",
   assert.match(messagesOf(literal), /de: message "hello" spells "ScreenerBot"/);
   const term = catalogErrors("de", { "common.ftl": "hello = Willkommen bei { -brand }\n", "terms.ftl": "-brand = ScreenerBot\n" });
   assert.doesNotMatch(messagesOf(term), /spells/);
+  const url = catalogErrors("de", { "common.ftl": "hello = screenerbot.io\n", "terms.ftl": "-brand = ScreenerBot\n" });
+  assert.doesNotMatch(messagesOf(url), /spells/);
 });
 
 test("markup outside the allowlist is an error in every locale", () => {

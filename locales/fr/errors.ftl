@@ -138,7 +138,7 @@ errors-updates-install-failed = Impossible d'ouvrir le programme d'installation 
 
 # Telegram
 errors-telegram-settings-update-failed = Échec de la mise à jour des paramètres
-errors-telegram-disabled = Telegram n'est pas activé
+errors-telegram-disabled = { -telegram } n'est pas activé
 errors-telegram-not-configured = Token du bot ou ID de conversation non configuré
 errors-telegram-send-failed = Échec de l'envoi du message
 errors-telegram-notifier-failed = Échec de la création du notificateur

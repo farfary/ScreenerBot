@@ -28,15 +28,22 @@ function* descendants(node) {
   }
 }
 
-/** Text of a message that spells the product name instead of referencing `-brand`. */
-function literalBrandErrors(id, node, code, file, brand) {
-  if (!brand) return [];
-  const literal = [...descendants(node)].some(
-    (child) => child.type === "TextElement" && child.value.includes(brand)
-  );
-  return literal
-    ? [{ file, message: `${code}: message "${id}" spells "${brand}"; reference the term { -brand } instead` }]
-    : [];
+/**
+ * Terms whose value is a distinctive name that messages must reference, never
+ * spell: the product and the third-party services named throughout the UI.
+ * Common words (Medium, Jupiter, X) are not enforced.
+ */
+const ENFORCED_TERMS = ["brand", "dexscreener", "geckoterminal", "rugcheck", "solscan", "telegram"];
+
+/** Messages that spell an enforced term's value instead of referencing it. */
+function literalTermErrors(id, node, code, file, names) {
+  const texts = [...descendants(node)].filter((child) => child.type === "TextElement").map((child) => child.value);
+  return names
+    .filter(({ value }) => texts.some((text) => text.includes(value)))
+    .map(({ term, value }) => ({
+      file,
+      message: `${code}: message "${id}" spells "${value}"; reference the term { -${term} } instead`,
+    }));
 }
 
 /** `{ messages, terms, junk }` for one locale: Maps of id to `{ node, file }`. */
@@ -249,13 +256,14 @@ export function checkCatalogs({ catalogs, registered, source = SOURCE_LOCALE }) 
     errors.push(...markupAllowlistErrors(id, entry.node, source, `locales/${source}/${entry.file}`));
   }
   const sourceTerms = [...en.terms].filter(([, entry]) => entry.file === TERMS_FILE);
-  const brandTerm = en.terms.get("brand");
-  const brand = brandTerm
-    ? brandTerm.node.value.elements.map((element) => element.value ?? "").join("").trim() || null
-    : null;
+  const enforcedNames = ENFORCED_TERMS.flatMap((term) => {
+    const entry = en.terms.get(term);
+    const value = entry?.node.value.elements.map((element) => element.value ?? "").join("").trim();
+    return value ? [{ term, value }] : [];
+  });
   for (const [code, locale] of parsed) {
     for (const [id, entry] of locale.messages) {
-      errors.push(...literalBrandErrors(id, entry.node, code, `locales/${code}/${entry.file}`, brand));
+      errors.push(...literalTermErrors(id, entry.node, code, `locales/${code}/${entry.file}`, enforcedNames));
     }
   }
 

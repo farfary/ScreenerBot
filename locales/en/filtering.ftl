@@ -4,9 +4,9 @@
 filtering-reject-no-decimals = No decimals in database
 filtering-reject-token-too-new = Token too new
 filtering-reject-cooldown-filtered = Cooldown filtered
-filtering-reject-dex-data-missing = DexScreener data missing
-filtering-reject-gecko-data-missing = GeckoTerminal data missing
-filtering-reject-rug-data-missing = Rugcheck data missing
+filtering-reject-dex-data-missing = { -dexscreener } data missing
+filtering-reject-gecko-data-missing = { -geckoterminal } data missing
+filtering-reject-rug-data-missing = { -rugcheck } data missing
 filtering-reject-onchain-numeric-symbol = Numeric-only symbol (scam)
 filtering-reject-onchain-empty-symbol = Empty symbol (scam)
 filtering-reject-onchain-suspicious-symbol = Suspicious symbol (scam)

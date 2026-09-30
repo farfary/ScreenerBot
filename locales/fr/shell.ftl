@@ -192,7 +192,7 @@ shell-toast-dismiss =
     .aria-label = Fermer
 shell-confirm-title = Confirmer l'action
 shell-confirm-message = Êtes-vous sûr ?
-shell-address-open-solscan = — ouvrir dans Solscan
+shell-address-open-solscan = — ouvrir dans { -solscan }
 shell-address-copy = Copier l'adresse
 
 shell-assistant-label = Assistant

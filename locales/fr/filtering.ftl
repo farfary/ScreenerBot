@@ -1,9 +1,9 @@
 filtering-reject-no-decimals = Aucune décimale dans la base de données
 filtering-reject-token-too-new = Token trop récent
 filtering-reject-cooldown-filtered = Filtré par le délai de récupération
-filtering-reject-dex-data-missing = Données DexScreener manquantes
-filtering-reject-gecko-data-missing = Données GeckoTerminal manquantes
-filtering-reject-rug-data-missing = Données Rugcheck manquantes
+filtering-reject-dex-data-missing = Données { -dexscreener } manquantes
+filtering-reject-gecko-data-missing = Données { -geckoterminal } manquantes
+filtering-reject-rug-data-missing = Données { -rugcheck } manquantes
 filtering-reject-onchain-numeric-symbol = Symbole uniquement numérique (arnaque)
 filtering-reject-onchain-empty-symbol = Symbole vide (arnaque)
 filtering-reject-onchain-suspicious-symbol = Symbole suspect (arnaque)

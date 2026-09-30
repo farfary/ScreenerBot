@@ -333,8 +333,8 @@ settings-agent-unreachable-revoke = { -brand } war zum Widerrufen nicht erreichb
 
 ## telegram_tab.js
 
-settings-telegram-loading = Telegram-Einstellungen werden geladen...
-settings-telegram-load-failed = Telegram-Einstellungen konnten nicht geladen werden
+settings-telegram-loading = { -telegram }-Einstellungen werden geladen...
+settings-telegram-load-failed = { -telegram }-Einstellungen konnten nicht geladen werden
 settings-telegram-unknown = Unbekannt
 settings-telegram-session-active = Aktiv: { $duration }
 settings-telegram-sessions-empty = Keine aktiven Sitzungen

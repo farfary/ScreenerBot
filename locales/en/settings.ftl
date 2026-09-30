@@ -342,8 +342,8 @@ settings-agent-unreachable-revoke = Could not reach { -brand } to revoke
 
 ## telegram_tab.js
 
-settings-telegram-loading = Loading Telegram settings...
-settings-telegram-load-failed = Failed to load Telegram settings
+settings-telegram-loading = Loading { -telegram } settings...
+settings-telegram-load-failed = Failed to load { -telegram } settings
 settings-telegram-unknown = Unknown
 settings-telegram-session-active = Active: { $duration }
 settings-telegram-sessions-empty = No active sessions

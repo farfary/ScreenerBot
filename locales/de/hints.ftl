@@ -9,7 +9,7 @@ hints-category-wallet = Wallet
 hints-category-wallets = Wallets
 hints-category-tools = Tools
 hints-category-config = Konfiguration
-hints-category-config-telegram = Telegram
+hints-category-config-telegram = { -telegram }
 hints-category-token-details = Token-Details
 hints-category-ui = Oberfläche
 
@@ -28,7 +28,7 @@ hints-tokens-pool-service-content =
     Klicken Sie auf einen Token, um Details anzusehen und den Blacklist-Status zu verwalten.
 hints-tokens-no-market-title = Keine Marktdaten
 hints-tokens-no-market-content =
-    On-Chain entdeckte Tokens, für die Marktdaten von DexScreener oder GeckoTerminal fehlen.
+    On-Chain entdeckte Tokens, für die Marktdaten von { -dexscreener } oder { -geckoterminal } fehlen.
 
     Häufige Gründe:
     • **Sehr neue Tokens** — noch nicht von Aggregatoren indexiert
@@ -55,7 +55,7 @@ hints-tokens-passed-content =
     • **Liquidität** — Mindestschwelle für SOL-Liquidität
     • **Volumen** — Anforderungen an das 24-Std.-Handelsvolumen
     • **Token-Alter** — Mindestzeit seit der Erstellung
-    • **Sicherheit** — Grenzwerte für den Rugcheck-Risikoscore
+    • **Sicherheit** — Grenzwerte für den { -rugcheck }-Risikoscore
     • **Marktkapitalisierung** — optionale FDV-/MC-Filter
 
     Filter konfigurieren Sie auf der Seite **Filterung**.
@@ -170,34 +170,34 @@ hints-filtering-overview-content =
     Die Filterung bestimmt, welche Tokens für den Handel infrage kommen.
 
     Tokens müssen **alle aktivierten Kriterien** erfüllen, um in der Bestanden-Liste zu erscheinen:
-    • DexScreener-Kennzahlen (Liquidität, Volumen usw.)
-    • GeckoTerminal-Kennzahlen (Marktkapitalisierung, FDV)
-    • Rugcheck-Sicherheitsanalyse
+    • { -dexscreener }-Kennzahlen (Liquidität, Volumen usw.)
+    • { -geckoterminal }-Kennzahlen (Marktkapitalisierung, FDV)
+    • { -rugcheck }-Sicherheitsanalyse
     • Meta-Filter (Token-Alter usw.)
 
     Deaktivierte Kriterien werden vollständig übersprungen.
-hints-filtering-dexscreener-title = DexScreener-Filter
+hints-filtering-dexscreener-title = { -dexscreener }-Filter
 hints-filtering-dexscreener-content =
-    Filter auf Basis der DexScreener-Marktdaten:
+    Filter auf Basis der { -dexscreener }-Marktdaten:
 
     • **Liquidität** — minimale USD-Liquidität in Pools
     • **Volumen 24 Std.** — minimales Handelsvolumen
     • **Transaktionen** — Aktivitätsschwellen (Käufe/Verkäufe)
     • **Preisänderung** — Volatilitätsfilter
 
-    DexScreener-Daten werden alle paar Minuten aktualisiert.
-hints-filtering-geckoterminal-title = GeckoTerminal-Filter
+    { -dexscreener }-Daten werden alle paar Minuten aktualisiert.
+hints-filtering-geckoterminal-title = { -geckoterminal }-Filter
 hints-filtering-geckoterminal-content =
-    Filter auf Basis der GeckoTerminal-Marktdaten:
+    Filter auf Basis der { -geckoterminal }-Marktdaten:
 
     • **Marktkapitalisierung** — minimale Marktkapitalisierung
     • **FDV** — Grenzen der voll verwässerten Bewertung
     • **Reserve-Verhältnis** — Indikatoren für die Pool-Gesundheit
 
-    GeckoTerminal hat oft Daten zu neueren Tokens.
+    { -geckoterminal } hat oft Daten zu neueren Tokens.
 hints-filtering-rugcheck-title = Sicherheitsfilter
 hints-filtering-rugcheck-content =
-    Sicherheitsanalyse von Rugcheck.xyz:
+    Sicherheitsanalyse von { -rugcheck }.xyz:
 
     • **Risikoscore** — Gesamtrisikobewertung (0–100)
     • **Mint-Berechtigung** — können neue Tokens geprägt werden?
@@ -212,7 +212,7 @@ hints-filtering-meta-content =
     • **Token-Alter** — Mindestzeit seit der Token-Erstellung
     • **Pool-Alter** — Mindestzeit seit der Pool-Erstellung
     • **Hat Website** — Social-/Website-Links verlangen
-    • **Hat Socials** — Twitter/Telegram verlangen
+    • **Hat Socials** — Twitter/{ -telegram } verlangen
 
     Sie helfen, sehr neue oder verdächtige Tokens auszusortieren.
 
@@ -470,8 +470,8 @@ hints-tools-trade-watcher-content =
     • Pool-Auswahl (für Kauf-/Verkaufsaktionen)
     • Ausreichendes SOL-Guthaben für die Aktionsbeträge
 
-    { "*" }*Telegram-Integration:**
-    Konfigurieren Sie Telegram unter Konfiguration → Telegram, um sofort benachrichtigt zu werden, wenn Watches auslösen.
+    { "*" }*{ -telegram }-Integration:**
+    Konfigurieren Sie { -telegram } unter Konfiguration → { -telegram }, um sofort benachrichtigt zu werden, wenn Watches auslösen.
 hints-tools-wallet-consolidation-title = Wallet-Zusammenführung
 hints-tools-wallet-consolidation-content =
     { "*" }*Sub-Wallet-Guthaben verwalten und zusammenführen**
@@ -513,16 +513,16 @@ hints-config-overview-content =
     • **Dienste** — Einstellungen der Hintergrunddienste
 
     Änderungen werden sofort wirksam (Hot Reload).
-hints-config-telegram-title = Telegram-Benachrichtigungen
+hints-config-telegram-title = { -telegram }-Benachrichtigungen
 hints-config-telegram-content =
-    { "*" }*Trading-Alarme sofort per Telegram erhalten**
+    { "*" }*Trading-Alarme sofort per { -telegram } erhalten**
 
-    Lassen Sie sich direkt in Telegram über Trades, Positionen und wichtige Ereignisse benachrichtigen.
+    Lassen Sie sich direkt in { -telegram } über Trades, Positionen und wichtige Ereignisse benachrichtigen.
 
     { "*" }*Einrichtungsschritte:**
 
     1. **Bot erstellen:**
-       • Öffnen Sie Telegram und schreiben Sie @BotFather
+       • Öffnen Sie { -telegram } und schreiben Sie @BotFather
        • Senden Sie /newbot und folgen Sie den Anweisungen
        • Kopieren Sie das Bot-Token (sieht so aus: 123456:ABC-DEF...)
 
@@ -542,16 +542,16 @@ hints-config-telegram-content =
     • Fehlerbenachrichtigungen
 
     { "*" }*Datenschutz:**
-    Nachrichten werden direkt von { -brand } an Ihren Telegram-Bot gesendet — ohne Server Dritter.
+    Nachrichten werden direkt von { -brand } an Ihren { -telegram }-Bot gesendet — ohne Server Dritter.
 hints-config-telegram-password-title = Bot-Authentifizierungspasswort
 hints-config-telegram-password-content =
-    { "*" }*Sichern Sie Ihren Telegram-Bot mit Passwortauthentifizierung ab**
+    { "*" }*Sichern Sie Ihren { -telegram }-Bot mit Passwortauthentifizierung ab**
 
-    Wenn Sie mit Ihrem { -brand }-Telegram-Bot interagieren, müssen Sie sich vor sensiblen Befehlen mit diesem Passwort authentifizieren.
+    Wenn Sie mit Ihrem { -brand }-{ -telegram }-Bot interagieren, müssen Sie sich vor sensiblen Befehlen mit diesem Passwort authentifizieren.
 
     { "*" }*Warum ein Passwort festlegen?**
     • Verhindert, dass Unbefugte Ihren Bot steuern
-    • Erforderlich für Trading-Befehle über Telegram
+    • Erforderlich für Trading-Befehle über { -telegram }
     • Muss mindestens 8 Zeichen lang sein
 
     { "*" }*So funktioniert es:**
@@ -595,7 +595,7 @@ hints-token-details-chart-content =
     { "*" }*Warum zwischengespeicherte Daten?**
     • **Zweck:** Wird von automatisierten Strategien und Indikatoren (z. B. RSI, MA) verwendet.
     • **Aktualität:** Aktualisierungen hängen von der Token-Priorität ab (offene Positionen = schnellere Updates).
-    • **Quelle:** Aggregiert von DexScreener/GeckoTerminal, nicht direkt per On-Chain-RPC.
+    • **Quelle:** Aggregiert von { -dexscreener }/{ -geckoterminal }, nicht direkt per On-Chain-RPC.
 
     { "*" }*Die Realität des DEX-Preises:**
     In DeFi werden Tokens über **mehrere Pools** gehandelt (Raydium, Orca, Meteora). Jeder Pool hat je nach Liquiditätstiefe und jüngsten Trades einen eigenen Preis.
@@ -630,7 +630,7 @@ hints-token-details-liquidity-content =
         • Flache Pools können sich schon bei kleinen Trades bewegen
         • Pool-Reserven bestimmen direkt den Swap-Ausführungspreis
 
-        Die Daten werden regelmäßig von DexScreener/GeckoTerminal sowie durch On-Chain-Pool-Abfragen aktualisiert.
+        Die Daten werden regelmäßig von { -dexscreener }/{ -geckoterminal } sowie durch On-Chain-Pool-Abfragen aktualisiert.
 hints-token-details-market-pulse-title = Marktpuls
 hints-token-details-market-pulse-content =
     Preisbewegung und USD-Handelsvolumen teilen dieselbe **5M / 1H / 6H / 24H**-Zeitachse, sodass Momentum und Beteiligung direkt verglichen werden können.
@@ -641,7 +641,7 @@ hints-token-details-market-pulse-content =
     • **Niedriges Volumen** — höhere Slippage, größere Spreads und schwierigere große Ausstiege.
     • **Hohes Volumen + geringe Liquidität** — erhöhte Volatilität und Ausführungsrisiko.
 
-    Marktdaten werden über DexScreener/GeckoTerminal über die großen DEXs aggregiert, daher kann die Preisänderung vom aktuellen On-Chain-Pool-Preis abweichen.
+    Marktdaten werden über { -dexscreener }/{ -geckoterminal } über die großen DEXs aggregiert, daher kann die Preisänderung vom aktuellen On-Chain-Pool-Preis abweichen.
 hints-token-details-activity-title = Transaktionsaktivität (Anzahl)
 hints-token-details-activity-content =
     Analysiert die **Anzahl der Trades** (Käufe vs. Verkäufe) über mehrere Zeiträume. Das zeigt die Absicht der Trader unabhängig von der Trade-Größe.
@@ -663,7 +663,7 @@ hints-token-details-activity-content =
     { "*" }*Strategietipp:** Ein hoher „Kauf-%“ mit hohem „Spike-Faktor“ signalisiert oft einen starken Ausbruchs-Einstieg.
 hints-token-details-security-title = Sicherheitsanalyse
 hints-token-details-security-content =
-    Risikobewertung von Rugcheck.xyz und On-Chain-Analyse.
+    Risikobewertung von { -rugcheck }.xyz und On-Chain-Analyse.
 
     { "*" }*Sicherheitsscore (0–100):**
     Höhere Scores bedeuten sicherere Tokens. Einflussfaktoren:
@@ -700,7 +700,7 @@ hints-token-details-pools-content =
 
 hints-ui-featured-title = Hervorgehoben
 hints-ui-featured-content =
-    Zuerst geboostete Tokens, dann Trend-Projekte von Jupiter und DexScreener.
+    Zuerst geboostete Tokens, dann Trend-Projekte von Jupiter und { -dexscreener }.
 
     { "*" }*Das sehen Sie:**
     • Geboostete Tokens — ihre Teams haben für die Bewerbung bezahlt — vorne angeheftet und golden markiert

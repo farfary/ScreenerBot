@@ -340,8 +340,8 @@ settings-agent-unreachable-revoke = Impossible de joindre { -brand } pour révoq
 
 ## telegram_tab.js
 
-settings-telegram-loading = Chargement des paramètres Telegram…
-settings-telegram-load-failed = Échec du chargement des paramètres Telegram
+settings-telegram-loading = Chargement des paramètres { -telegram }…
+settings-telegram-load-failed = Échec du chargement des paramètres { -telegram }
 settings-telegram-unknown = Inconnu
 settings-telegram-session-active = Active : { $duration }
 settings-telegram-sessions-empty = Aucune session active

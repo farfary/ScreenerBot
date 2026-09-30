@@ -143,7 +143,7 @@ errors-updates-install-failed = Could not open the update installer
 
 # Telegram
 errors-telegram-settings-update-failed = Failed to update settings
-errors-telegram-disabled = Telegram is not enabled
+errors-telegram-disabled = { -telegram } is not enabled
 errors-telegram-not-configured = Bot token or chat ID not configured
 errors-telegram-send-failed = Failed to send message
 errors-telegram-notifier-failed = Failed to create notifier
