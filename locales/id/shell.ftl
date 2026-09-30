@@ -229,6 +229,17 @@ shell-action-manual-order-failed = Order gagal
 shell-action-trade-live = Trade
 shell-action-trade-done = Trade selesai
 shell-action-trade-failed = Trade gagal
+shell-action-via-router = { $action } melalui { $router }
+shell-action-with-note = { $label } · { $note }
+shell-action-step-progress = { $label } · { $current }/{ $total }
+shell-action-cost-guard-avoiding = menghindari { $venue }
+shell-action-cost-guard-avoiding-cost = menghindari { $venue } · { $cost }
+shell-action-cost-guard-avoiding-unnamed = menghindari satu platform
+shell-action-cost-guard-avoiding-unnamed-cost = menghindari satu platform · { $cost }
+shell-action-cost-guard-avoided = { $outcome } · menghindari sewa { $cost } di { $venue }
+shell-action-cost-guard-avoided-unnamed = { $outcome } · menghindari sewa platform { $cost }
+shell-action-exit-full = Exit penuh
+shell-action-exit-percent = Exit { $percent }
 
 shell-exit-title = Tutup { -brand }?
 shell-exit-description = Pilih cara Anda ingin menutup aplikasi

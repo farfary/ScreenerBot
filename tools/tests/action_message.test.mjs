@@ -18,14 +18,14 @@ const MODULE = new URL(
   import.meta.url
 );
 
-const {
-  costGuardNote,
-  costGuardOf,
-  outcomeMessage,
-  routerOf,
-  stepMessage,
-  symbolOf,
-} = await import(MODULE);
+const messages = await import(MODULE);
+const { costGuardOf, routerOf, symbolOf } = messages;
+
+// Fluent isolates every placeable (U+2068/U+2069); the wording is asserted without them.
+const plain = (text) => (typeof text === "string" ? text.replace(/[\u2068\u2069]/g, "") : text);
+const costGuardNote = (action) => plain(messages.costGuardNote(action));
+const outcomeMessage = (action) => plain(messages.outcomeMessage(action));
+const stepMessage = (action) => plain(messages.stepMessage(action));
 
 function action({ steps = [], state = {}, metadata = {} } = {}) {
   return {
@@ -123,4 +123,15 @@ test("an unresolved symbol is treated as no symbol", () => {
   assert.equal(symbolOf({ metadata: { symbol: "Unknown" } }), "");
   assert.equal(symbolOf({ metadata: { symbol: "JUP" } }), "JUP");
   assert.equal(symbolOf({}), "");
+});
+
+test("a router display name renders through its venue label, and an unknown one as received", () => {
+  const direct = { metadata: { router: "Direct Pool" } };
+  assert.equal(stepMessage(action({ steps: [direct] })), "Executing Swap via Direct Pool · 3/4");
+
+  const lower = { metadata: { router: "jupiter" } };
+  assert.equal(stepMessage(action({ steps: [lower] })), "Executing Swap via Jupiter · 3/4");
+
+  const other = { metadata: { router: "SomeRouter" } };
+  assert.equal(stepMessage(action({ steps: [other] })), "Executing Swap via SomeRouter · 3/4");
 });

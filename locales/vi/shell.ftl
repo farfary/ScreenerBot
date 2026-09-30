@@ -227,6 +227,17 @@ shell-action-manual-order-failed = Đặt lệnh thất bại
 shell-action-trade-live = Giao dịch
 shell-action-trade-done = Đã giao dịch
 shell-action-trade-failed = Giao dịch thất bại
+shell-action-via-router = { $action } qua { $router }
+shell-action-with-note = { $label } · { $note }
+shell-action-step-progress = { $label } · { $current }/{ $total }
+shell-action-cost-guard-avoiding = tránh { $venue }
+shell-action-cost-guard-avoiding-cost = tránh { $venue } · { $cost }
+shell-action-cost-guard-avoiding-unnamed = tránh một sàn
+shell-action-cost-guard-avoiding-unnamed-cost = tránh một sàn · { $cost }
+shell-action-cost-guard-avoided = { $outcome } · đã tránh { $cost } phí thuê tại { $venue }
+shell-action-cost-guard-avoided-unnamed = { $outcome } · đã tránh { $cost } phí thuê sàn
+shell-action-exit-full = Thoát toàn bộ
+shell-action-exit-percent = Thoát { $percent }
 
 shell-exit-title = Đóng { -brand }?
 shell-exit-description = Chọn cách bạn muốn đóng ứng dụng

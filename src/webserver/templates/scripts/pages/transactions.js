@@ -443,7 +443,9 @@ function createLifecycle() {
           id: "instructions_count",
           label: I18n.t("transactions-col-instructions"),
           minWidth: 90,
-          render: (value) => Utils.formatNumber(value, { decimals: 0, fallback: "—" }),
+          // Every transaction has at least one instruction; 0 is a row stored before the
+          // count was recorded, so it reads as unknown.
+          render: (value) => Utils.formatNumber(value > 0 ? value : null, { decimals: 0, fallback: "—" }),
         },
       ];
 

@@ -135,6 +135,11 @@ impl TransactionProcessor {
                 None
             };
             temp_transaction.slot = Some(tx_details.slot);
+            // The raw row owns the `instructions_count` column the transaction list reads;
+            // it is counted here because the raw JSON may not be retained.
+            temp_transaction.instructions_count =
+                Transaction::parse_instructions(&tx_details.transaction.message)
+                    .map_or(0, |instructions| instructions.len());
             temp_transaction.block_time = tx_details.block_time;
             if let Some(block_time) = tx_details.block_time {
                 temp_transaction.timestamp =
@@ -338,5 +343,58 @@ mod tests {
 
         assert!(decoded.raw_transaction_data.is_some());
         assert!(!processor.retain_raw_json);
+    }
+
+    /// The count stored on the row and reported by the transaction list is the same list the
+    /// details view shows; a processed transaction never reports zero instructions.
+    #[tokio::test]
+    async fn processed_transaction_counts_its_instructions() {
+        let details: crate::chains::solana::rpc::TransactionDetails =
+            serde_json::from_value(json!({
+                "slot": 42,
+                "transaction": {
+                    "message": {
+                        "accountKeys": [Pubkey::default().to_string()],
+                        "instructions": [
+                            {
+                                "programId": "ComputeBudget111111111111111111111111111111",
+                                "accounts": [],
+                                "data": "3"
+                            },
+                            {
+                                "programId": "11111111111111111111111111111111",
+                                "parsed": { "type": "transfer", "info": {} }
+                            }
+                        ]
+                    },
+                    "signatures": ["signature"]
+                },
+                "meta": {
+                    "err": null,
+                    "preBalances": [1_000_000],
+                    "postBalances": [995_000],
+                    "preTokenBalances": [],
+                    "postTokenBalances": [],
+                    "fee": 5_000,
+                    "computeUnitsConsumed": null,
+                    "logMessages": [],
+                    "innerInstructions": []
+                },
+                "blockTime": 1
+            }))
+            .expect("valid transaction fixture");
+        let processor = TransactionProcessor::new_for_watch_target(Pubkey::default());
+
+        let decoded = processor
+            .create_transaction_from_data("signature", &details)
+            .await
+            .expect("project fixture");
+
+        assert_eq!(decoded.instructions.len(), 2);
+        assert_eq!(decoded.instructions_count, 2);
+        assert_eq!(
+            Transaction::parse_instructions(&details.transaction.message).map(|list| list.len()),
+            Some(2)
+        );
     }
 }

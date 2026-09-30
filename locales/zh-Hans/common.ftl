@@ -71,3 +71,4 @@ common-venue-aldrin = { -aldrin }
 common-venue-serum = { -serum }
 common-venue-openbook = { -openbook }
 common-venue-phoenix = { -phoenix }
+common-venue-direct-pool = 直接流动性池

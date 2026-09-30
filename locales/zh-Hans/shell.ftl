@@ -272,6 +272,17 @@ shell-action-manual-order-failed = 下单失败
 shell-action-trade-live = 交易
 shell-action-trade-done = 交易完成
 shell-action-trade-failed = 交易失败
+shell-action-via-router = { $action }（经由 { $router }）
+shell-action-with-note = { $label } · { $note }
+shell-action-step-progress = { $label } · { $current }/{ $total }
+shell-action-cost-guard-avoiding = 正在避开 { $venue }
+shell-action-cost-guard-avoiding-cost = 正在避开 { $venue } · { $cost }
+shell-action-cost-guard-avoiding-unnamed = 正在避开某个交易场所
+shell-action-cost-guard-avoiding-unnamed-cost = 正在避开某个交易场所 · { $cost }
+shell-action-cost-guard-avoided = { $outcome } · 已避免在 { $venue } 支付 { $cost } 租金
+shell-action-cost-guard-avoided-unnamed = { $outcome } · 已避免 { $cost } 交易场所租金
+shell-action-exit-full = 全部出场
+shell-action-exit-percent = 出场 { $percent }
 
 ## Exit dialog (ui/exit_dialog.js)
 

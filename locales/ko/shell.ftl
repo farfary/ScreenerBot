@@ -272,6 +272,17 @@ shell-action-manual-order-failed = 주문 실패
 shell-action-trade-live = 거래 중
 shell-action-trade-done = 거래 완료
 shell-action-trade-failed = 거래 실패
+shell-action-via-router = { $action } ({ $router } 경유)
+shell-action-with-note = { $label } · { $note }
+shell-action-step-progress = { $label } · { $current }/{ $total }
+shell-action-cost-guard-avoiding = { $venue } 회피 중
+shell-action-cost-guard-avoiding-cost = { $venue } 회피 중 · { $cost }
+shell-action-cost-guard-avoiding-unnamed = 거래소 회피 중
+shell-action-cost-guard-avoiding-unnamed-cost = 거래소 회피 중 · { $cost }
+shell-action-cost-guard-avoided = { $outcome } · { $venue } 렌트 { $cost } 회피
+shell-action-cost-guard-avoided-unnamed = { $outcome } · 거래소 렌트 { $cost } 회피
+shell-action-exit-full = 전체 청산
+shell-action-exit-percent = { $percent } 청산
 
 ## Exit dialog (ui/exit_dialog.js)
 

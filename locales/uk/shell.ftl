@@ -275,6 +275,17 @@ shell-action-manual-order-failed = Ордер не вдався
 shell-action-trade-live = Угода
 shell-action-trade-done = Угоду виконано
 shell-action-trade-failed = Угода не вдалася
+shell-action-via-router = { $action } через { $router }
+shell-action-with-note = { $label } · { $note }
+shell-action-step-progress = { $label } · { $current }/{ $total }
+shell-action-cost-guard-avoiding = в обхід { $venue }
+shell-action-cost-guard-avoiding-cost = в обхід { $venue } · { $cost }
+shell-action-cost-guard-avoiding-unnamed = в обхід майданчика
+shell-action-cost-guard-avoiding-unnamed-cost = в обхід майданчика · { $cost }
+shell-action-cost-guard-avoided = { $outcome } · заощаджено { $cost } ренти на { $venue }
+shell-action-cost-guard-avoided-unnamed = { $outcome } · заощаджено { $cost } ренти майданчика
+shell-action-exit-full = Повний вихід
+shell-action-exit-percent = Вихід { $percent }
 
 ## Exit dialog (ui/exit_dialog.js)
 

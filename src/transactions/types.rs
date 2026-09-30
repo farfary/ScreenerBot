@@ -158,7 +158,7 @@ impl Transaction {
         }
     }
 
-    /// Populate log_messages and instructions from raw_transaction_data
+    /// Populate log_messages, instructions and instructions_count from raw_transaction_data
     /// Call this after loading from database to hydrate these fields
     pub fn populate_from_raw_data(&mut self) {
         if let Some(raw_data) = &self.raw_transaction_data {
@@ -178,43 +178,10 @@ impl Transaction {
             if let Some(instructions) = raw_data
                 .get("transaction")
                 .and_then(|t| t.get("message"))
-                .and_then(|m| m.get("instructions"))
-                .and_then(|i| i.as_array())
+                .and_then(Self::parse_instructions)
             {
-                self.instructions = instructions
-                    .iter()
-                    .filter_map(|inst| {
-                        let program_id = inst.get("programId")?.as_str()?.to_string();
-                        let accounts = inst
-                            .get("accounts")
-                            .and_then(|a| a.as_array())
-                            .map(|arr| {
-                                arr.iter()
-                                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                                    .collect()
-                            })
-                            .unwrap_or_default();
-                        let data = inst
-                            .get("data")
-                            .and_then(|d| d.as_str())
-                            .map(|s| s.to_string());
-
-                        // Try to determine instruction type from parsed info or program ID
-                        let instruction_type = inst
-                            .get("parsed")
-                            .and_then(|p| p.get("type"))
-                            .and_then(|t| t.as_str())
-                            .map(|s| s.to_string())
-                            .unwrap_or_else(|| Self::infer_instruction_type(&program_id));
-
-                        Some(InstructionInfo {
-                            program_id,
-                            instruction_type,
-                            accounts,
-                            data,
-                        })
-                    })
-                    .collect();
+                self.instructions = instructions;
+                self.instructions_count = self.instructions.len();
 
                 // Also populate instruction_info for compatibility
                 if self.instruction_info.is_empty() {
@@ -222,6 +189,51 @@ impl Transaction {
                 }
             }
         }
+    }
+
+    /// The top-level instructions of a `jsonParsed` transaction message
+    /// (`message.instructions`), or `None` when the message carries no instruction array.
+    ///
+    /// The single parse behind both `instructions` (what the transaction details view lists)
+    /// and `instructions_count` (what the stored row and the transaction list report).
+    pub fn parse_instructions(message: &serde_json::Value) -> Option<Vec<InstructionInfo>> {
+        let instructions = message.get("instructions")?.as_array()?;
+        Some(
+            instructions
+                .iter()
+                .filter_map(|inst| {
+                    let program_id = inst.get("programId")?.as_str()?.to_string();
+                    let accounts = inst
+                        .get("accounts")
+                        .and_then(|a| a.as_array())
+                        .map(|arr| {
+                            arr.iter()
+                                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    let data = inst
+                        .get("data")
+                        .and_then(|d| d.as_str())
+                        .map(|s| s.to_string());
+
+                    // Try to determine instruction type from parsed info or program ID
+                    let instruction_type = inst
+                        .get("parsed")
+                        .and_then(|p| p.get("type"))
+                        .and_then(|t| t.as_str())
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| Self::infer_instruction_type(&program_id));
+
+                    Some(InstructionInfo {
+                        program_id,
+                        instruction_type,
+                        accounts,
+                        data,
+                    })
+                })
+                .collect(),
+        )
     }
 
     /// Infer instruction type from program ID

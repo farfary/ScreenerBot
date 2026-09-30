@@ -81,3 +81,5 @@ common-venue-aldrin = { -aldrin }
 common-venue-serum = { -serum }
 common-venue-openbook = { -openbook }
 common-venue-phoenix = { -phoenix }
+# A route that swaps straight against a pool, not a named venue: translated.
+common-venue-direct-pool = Direct Pool

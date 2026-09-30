@@ -230,6 +230,17 @@ shell-action-manual-order-failed = Не удалось разместить ор
 shell-action-trade-live = Сделка
 shell-action-trade-done = Сделка выполнена
 shell-action-trade-failed = Сделка не удалась
+shell-action-via-router = { $action } через { $router }
+shell-action-with-note = { $label } · { $note }
+shell-action-step-progress = { $label } · { $current }/{ $total }
+shell-action-cost-guard-avoiding = в обход { $venue }
+shell-action-cost-guard-avoiding-cost = в обход { $venue } · { $cost }
+shell-action-cost-guard-avoiding-unnamed = в обход площадки
+shell-action-cost-guard-avoiding-unnamed-cost = в обход площадки · { $cost }
+shell-action-cost-guard-avoided = { $outcome } · сэкономлено { $cost } ренты на { $venue }
+shell-action-cost-guard-avoided-unnamed = { $outcome } · сэкономлено { $cost } ренты площадки
+shell-action-exit-full = Полный выход
+shell-action-exit-percent = Выход { $percent }
 
 shell-exit-title = Закрыть { -brand }?
 shell-exit-description = Выберите, как закрыть приложение

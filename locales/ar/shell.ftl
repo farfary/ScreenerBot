@@ -277,6 +277,17 @@ shell-action-manual-order-failed = فشل الأمر
 shell-action-trade-live = صفقة
 shell-action-trade-done = تمت الصفقة
 shell-action-trade-failed = فشلت الصفقة
+shell-action-via-router = { $action } عبر { $router }
+shell-action-with-note = { $label } · { $note }
+shell-action-step-progress = { $label } · { $current }/{ $total }
+shell-action-cost-guard-avoiding = مع تجنّب { $venue }
+shell-action-cost-guard-avoiding-cost = مع تجنّب { $venue } · { $cost }
+shell-action-cost-guard-avoiding-unnamed = مع تجنّب منصة
+shell-action-cost-guard-avoiding-unnamed-cost = مع تجنّب منصة · { $cost }
+shell-action-cost-guard-avoided = { $outcome } · تم تجنّب إيجار بقيمة { $cost } في { $venue }
+shell-action-cost-guard-avoided-unnamed = { $outcome } · تم تجنّب إيجار منصة بقيمة { $cost }
+shell-action-exit-full = خروج كامل
+shell-action-exit-percent = خروج { $percent }
 
 ## Exit dialog (ui/exit_dialog.js)
 

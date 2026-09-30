@@ -14,7 +14,30 @@
 
 import { stepLabel } from "../ui/action_step.js";
 import { closeReasonText } from "../ui/trade_reason.js";
+import { POOL_PROGRAM_LABELS, ROUTER_LABELS, venueLabel } from "../ui/venue.js";
 import { formatNumber, formatSol, withPercentUnit, withSolUnit } from "./format.js";
+
+/**
+ * Router display names the step metadata carries instead of an id (`SwapRouter::name`),
+ * keyed lower-case, for names that match no venue id.
+ */
+const ROUTER_NAME_LABELS = Object.freeze({
+  "direct pool": "common-venue-direct-pool",
+});
+
+/**
+ * The catalog label of a router or venue the backend named. A name that matches a known
+ * venue id case-insensitively ("Jupiter" -> "jupiter") renders through `venueLabel`;
+ * anything else shows as received.
+ */
+function venueText(name) {
+  const key = name.toLowerCase();
+  if (Object.hasOwn(ROUTER_LABELS, key) || Object.hasOwn(POOL_PROGRAM_LABELS, key)) {
+    return venueLabel(key);
+  }
+  if (Object.hasOwn(ROUTER_NAME_LABELS, key)) return I18n.label(ROUTER_NAME_LABELS, key);
+  return name;
+}
 
 /** The backend writes the literal "Unknown" when it could not resolve a symbol. */
 export function symbolOf(action) {
@@ -63,8 +86,21 @@ export function costGuardOf(action) {
 export function costGuardNote(action) {
   const guard = costGuardOf(action);
   if (!guard) return "";
-  const venue = guard.venue || "a venue";
-  return guard.sol ? `avoiding ${venue} · ${guard.sol}` : `avoiding ${venue}`;
+  const cost = guard.sol;
+  if (!guard.venue) {
+    return cost
+      ? I18n.t("shell-action-cost-guard-avoiding-unnamed-cost", { cost })
+      : I18n.t("shell-action-cost-guard-avoiding-unnamed");
+  }
+  const venue = venueText(guard.venue);
+  return cost
+    ? I18n.t("shell-action-cost-guard-avoiding-cost", { venue, cost })
+    : I18n.t("shell-action-cost-guard-avoiding", { venue });
+}
+
+/** "<action> via <router>", or the action alone before a router is recorded. */
+function viaRouter(action, router) {
+  return router ? I18n.t("shell-action-via-router", { action, router: venueText(router) }) : action;
 }
 
 /** "Executing Swap via Jupiter · 3/4" — what the trade is actually doing now. */
@@ -77,30 +113,41 @@ export function stepMessage(action) {
   const index = Number(state.current_step_index) || 0;
   if (!step) return null;
 
-  const router = routerOf(action);
-  const stepText = stepLabel(step);
-  let label = router ? `${stepText} via ${router}` : stepText;
+  let label = viaRouter(stepLabel(step), routerOf(action));
   const note = costGuardNote(action);
-  if (note) label = `${label} · ${note}`;
-  return total > 0 ? `${label} · ${index + 1}/${total}` : label;
+  if (note) label = I18n.t("shell-action-with-note", { label, note });
+  return total > 0
+    ? I18n.t("shell-action-step-progress", { label, current: String(index + 1), total: String(total) })
+    : label;
 }
 
 /** What the trade committed, when the backend recorded it. */
 export function outcomeMessage(action) {
   const meta = action?.metadata || {};
   const router = routerOf(action);
-  const via = router ? ` via ${router}` : "";
   // A trade that dodged a cost is worth saying on the way out too: it explains
   // the route taken, and it is the only place the saving is ever reported.
   const guard = costGuardOf(action);
-  const avoided = guard && guard.sol ? ` · avoided ${guard.sol} in ${guard.venue || "venue"} rent` : "";
+  const settle = (committed) => {
+    const outcome = viaRouter(committed, router);
+    if (!guard || !guard.sol) return outcome;
+    return guard.venue
+      ? I18n.t("shell-action-cost-guard-avoided", { outcome, cost: guard.sol, venue: venueText(guard.venue) })
+      : I18n.t("shell-action-cost-guard-avoided-unnamed", { outcome, cost: guard.sol });
+  };
 
   const size = Number(meta.size_sol);
-  if (Number.isFinite(size) && size > 0) return `${withSolUnit(formatNumber(size, { decimals: 0, maxDecimals: 9, useGrouping: false }))}${via}${avoided}`;
+  if (Number.isFinite(size) && size > 0) {
+    return settle(withSolUnit(formatNumber(size, { decimals: 0, maxDecimals: 9, useGrouping: false })));
+  }
 
   const percentage = Number(meta.percentage);
   if (Number.isFinite(percentage) && percentage > 0) {
-    return `${percentage >= 100 ? "Full exit" : `${withPercentUnit(percentage)} exit`}${via}${avoided}`;
+    return settle(
+      percentage >= 100
+        ? I18n.t("shell-action-exit-full")
+        : I18n.t("shell-action-exit-percent", { percent: withPercentUnit(percentage) })
+    );
   }
 
   return typeof meta.reason === "string" && meta.reason ? closeReasonText(meta.reason) : null;

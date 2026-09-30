@@ -228,6 +228,17 @@ shell-action-manual-order-failed = Emir başarısız
 shell-action-trade-live = İşlem
 shell-action-trade-done = İşlem tamamlandı
 shell-action-trade-failed = İşlem başarısız
+shell-action-via-router = { $router } üzerinden { $action }
+shell-action-with-note = { $label } · { $note }
+shell-action-step-progress = { $label } · { $current }/{ $total }
+shell-action-cost-guard-avoiding = { $venue } atlanıyor
+shell-action-cost-guard-avoiding-cost = { $venue } atlanıyor · { $cost }
+shell-action-cost-guard-avoiding-unnamed = bir platform atlanıyor
+shell-action-cost-guard-avoiding-unnamed-cost = bir platform atlanıyor · { $cost }
+shell-action-cost-guard-avoided = { $outcome } · { $venue } için { $cost } kira ödemesinden kaçınıldı
+shell-action-cost-guard-avoided-unnamed = { $outcome } · { $cost } platform kirasından kaçınıldı
+shell-action-exit-full = Tam çıkış
+shell-action-exit-percent = { $percent } çıkış
 
 shell-exit-title = { -brand } kapatılsın mı?
 shell-exit-description = Uygulamayı nasıl kapatmak istediğinizi seçin

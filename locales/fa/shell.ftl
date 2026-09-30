@@ -273,6 +273,17 @@ shell-action-manual-order-failed = ثبت سفارش ناموفق بود
 shell-action-trade-live = معامله
 shell-action-trade-done = معامله انجام شد
 shell-action-trade-failed = معامله ناموفق بود
+shell-action-via-router = { $action } از طریق { $router }
+shell-action-with-note = { $label } · { $note }
+shell-action-step-progress = { $label } · { $current }/{ $total }
+shell-action-cost-guard-avoiding = با دور زدن { $venue }
+shell-action-cost-guard-avoiding-cost = با دور زدن { $venue } · { $cost }
+shell-action-cost-guard-avoiding-unnamed = با دور زدن یک پلتفرم
+shell-action-cost-guard-avoiding-unnamed-cost = با دور زدن یک پلتفرم · { $cost }
+shell-action-cost-guard-avoided = { $outcome } · از پرداخت اجاره { $cost } در { $venue } جلوگیری شد
+shell-action-cost-guard-avoided-unnamed = { $outcome } · از پرداخت اجاره پلتفرم به مبلغ { $cost } جلوگیری شد
+shell-action-exit-full = خروج کامل
+shell-action-exit-percent = خروج { $percent }
 
 ## Exit dialog (ui/exit_dialog.js)
 

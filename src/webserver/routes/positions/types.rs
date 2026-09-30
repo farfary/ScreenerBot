@@ -298,7 +298,8 @@ pub struct ActivityPositionSummary {
     pub swaps: usize,
     pub sol_invested: f64,
     pub sol_returned: f64,
-    /// Realized P&L booked by this position's exits.
+    /// Realized P&L of this position: the stored row value once it has closed, else the sum
+    /// of its recorded exits.
     pub realized_pnl: f64,
 }
 
@@ -396,7 +397,7 @@ pub struct ActivityTotals {
     pub sol_returned: f64,
     /// Network fees across EVERY event that reported one, wallet events included.
     pub network_fees_sol: f64,
-    /// Sum of the per-exit realized P&L across every position.
+    /// Sum of every position's realized P&L (`ActivityPositionSummary::realized_pnl`).
     pub realized_pnl: f64,
 }
 

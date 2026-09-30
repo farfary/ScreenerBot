@@ -275,6 +275,19 @@ shell-action-trade-live = Trade
 shell-action-trade-done = Trade done
 shell-action-trade-failed = Trade failed
 
+# Source: scripts/core/action_message.js
+shell-action-via-router = { $action } via { $router }
+shell-action-with-note = { $label } · { $note }
+shell-action-step-progress = { $label } · { $current }/{ $total }
+shell-action-cost-guard-avoiding = avoiding { $venue }
+shell-action-cost-guard-avoiding-cost = avoiding { $venue } · { $cost }
+shell-action-cost-guard-avoiding-unnamed = avoiding a venue
+shell-action-cost-guard-avoiding-unnamed-cost = avoiding a venue · { $cost }
+shell-action-cost-guard-avoided = { $outcome } · avoided { $cost } in { $venue } rent
+shell-action-cost-guard-avoided-unnamed = { $outcome } · avoided { $cost } in venue rent
+shell-action-exit-full = Full exit
+shell-action-exit-percent = { $percent } exit
+
 ## Exit dialog (ui/exit_dialog.js)
 
 shell-exit-title = Close { -brand }?

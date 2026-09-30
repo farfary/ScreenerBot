@@ -94,6 +94,7 @@ async fn build_token_activity(current: &Position) -> TokenActivityResponse {
     let mut drafts: Vec<Draft> = Vec::new();
     let mut state_history: Vec<ActivityStateChange> = Vec::new();
     let mut summaries: Vec<ActivityPositionSummary> = Vec::new();
+    let mut settled: HashMap<i64, StoredClose> = HashMap::new();
 
     for (offset, position) in positions.iter().enumerate() {
         let index = offset as u32 + 1;
@@ -104,6 +105,10 @@ async fn build_token_activity(current: &Position) -> TokenActivityResponse {
         ));
         drafts.extend(drafts::pending_drafts(position, index, to_ui).await);
         state_history.extend(load_state_history(position, index).await);
+
+        if let (Some(id), Some(close)) = (position.id, StoredClose::of(position)) {
+            settled.insert(id, close);
+        }
 
         summaries.push(ActivityPositionSummary {
             id: position.id.unwrap_or_default(),
@@ -167,7 +172,8 @@ async fn build_token_activity(current: &Position) -> TokenActivityResponse {
     events.sort_by_key(|event| event.timestamp.unwrap_or(i64::MAX));
     state_history.sort_by_key(|change| change.changed_at);
 
-    let totals = walk(&mut events, &mut summaries);
+    let mut totals = walk(&mut events, &mut summaries);
+    settle_closed_rounds(&mut summaries, &settled, &mut totals);
 
     TokenActivityResponse {
         mint,
@@ -315,6 +321,58 @@ fn walk(events: &mut [ActivityEvent], summaries: &mut [ActivityPositionSummary])
     totals
 }
 
+/// What a CLOSED position row booked for its round: the proceeds and P&L the positions list
+/// reports for it.
+///
+/// The row is the source of truth for a closed round. The timeline walk only sees exits
+/// that have a record, and not every close writes one: a round the wallet-history ledger
+/// closes because the token left the wallet outside the bot
+/// (`positions::ledger::sync::reconcile_owned_position`, `closed_externally`) stores its
+/// chain-reduced proceeds and P&L on the row alone. Walking the records gives such a round
+/// zero returned and zero realized.
+#[derive(Clone, Copy, Debug)]
+struct StoredClose {
+    sol_received: Option<f64>,
+    /// `None` when the row has no P&L it can stand behind (`has_trustworthy_pnl`), the same
+    /// filter the positions stats apply to realized P&L.
+    pnl: Option<f64>,
+}
+
+impl StoredClose {
+    fn of(position: &Position) -> Option<Self> {
+        if position.exit_time.is_none() && !position.synthetic_exit {
+            return None;
+        }
+        Some(Self {
+            sol_received: position.sol_received,
+            pnl: position.pnl.filter(|_| position.has_trustworthy_pnl()),
+        })
+    }
+}
+
+/// Replace each closed round's walked proceeds and realized P&L with the values its row
+/// stored, and move the totals by the same difference so they stay the sum of the rounds.
+/// A value the row does not carry leaves the walked one in place.
+fn settle_closed_rounds(
+    summaries: &mut [ActivityPositionSummary],
+    settled: &HashMap<i64, StoredClose>,
+    totals: &mut ActivityTotals,
+) {
+    for summary in summaries.iter_mut() {
+        let Some(close) = settled.get(&summary.id) else {
+            continue;
+        };
+        if let Some(received) = close.sol_received {
+            totals.sol_returned += received - summary.sol_returned;
+            summary.sol_returned = received;
+        }
+        if let Some(pnl) = close.pnl {
+            totals.realized_pnl += pnl - summary.realized_pnl;
+            summary.realized_pnl = pnl;
+        }
+    }
+}
+
 /// The token's decimals. Read from the stable on-chain `tokens.decimals` column, which
 /// survives the market-data loss that empties an assembled token for a delisted or rugged
 /// mint — the exact case where the activity view still has to render correct amounts.
@@ -396,3 +454,6 @@ async fn load_state_history(position: &Position, index: u32) -> Vec<ActivityStat
         })
         .collect()
 }
+
+#[cfg(test)]
+mod tests;

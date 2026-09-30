@@ -228,6 +228,17 @@ shell-action-manual-order-failed = ऑर्डर विफल
 shell-action-trade-live = ट्रेड
 shell-action-trade-done = ट्रेड पूरा
 shell-action-trade-failed = ट्रेड विफल
+shell-action-via-router = { $router } के ज़रिए { $action }
+shell-action-with-note = { $label } · { $note }
+shell-action-step-progress = { $label } · { $current }/{ $total }
+shell-action-cost-guard-avoiding = { $venue } से बचते हुए
+shell-action-cost-guard-avoiding-cost = { $venue } से बचते हुए · { $cost }
+shell-action-cost-guard-avoiding-unnamed = एक प्लेटफ़ॉर्म से बचते हुए
+shell-action-cost-guard-avoiding-unnamed-cost = एक प्लेटफ़ॉर्म से बचते हुए · { $cost }
+shell-action-cost-guard-avoided = { $outcome } · { $venue } में { $cost } का रेंट बचाया
+shell-action-cost-guard-avoided-unnamed = { $outcome } · प्लेटफ़ॉर्म रेंट में { $cost } बचाए
+shell-action-exit-full = पूरा एग्ज़िट
+shell-action-exit-percent = { $percent } एग्ज़िट
 
 shell-exit-title = { -brand } बंद करें?
 shell-exit-description = चुनें कि आप ऐप्लिकेशन कैसे बंद करना चाहते हैं

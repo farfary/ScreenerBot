@@ -229,6 +229,17 @@ shell-action-manual-order-failed = Ordre échoué
 shell-action-trade-live = Trade
 shell-action-trade-done = Trade terminé
 shell-action-trade-failed = Trade échoué
+shell-action-via-router = { $action } via { $router }
+shell-action-with-note = { $label } · { $note }
+shell-action-step-progress = { $label } · { $current }/{ $total }
+shell-action-cost-guard-avoiding = en évitant { $venue }
+shell-action-cost-guard-avoiding-cost = en évitant { $venue } · { $cost }
+shell-action-cost-guard-avoiding-unnamed = en évitant une plateforme
+shell-action-cost-guard-avoiding-unnamed-cost = en évitant une plateforme · { $cost }
+shell-action-cost-guard-avoided = { $outcome } · { $cost } de loyer évités sur { $venue }
+shell-action-cost-guard-avoided-unnamed = { $outcome } · { $cost } de loyer de plateforme évités
+shell-action-exit-full = Sortie totale
+shell-action-exit-percent = Sortie de { $percent }
 
 shell-exit-title = Fermer { -brand } ?
 shell-exit-description = Choisissez comment fermer l'application

@@ -272,6 +272,17 @@ shell-action-manual-order-failed = 注文失敗
 shell-action-trade-live = 取引
 shell-action-trade-done = 取引完了
 shell-action-trade-failed = 取引失敗
+shell-action-via-router = { $action }（{ $router } 経由）
+shell-action-with-note = { $label } · { $note }
+shell-action-step-progress = { $label } · { $current }/{ $total }
+shell-action-cost-guard-avoiding = { $venue } を回避中
+shell-action-cost-guard-avoiding-cost = { $venue } を回避中 · { $cost }
+shell-action-cost-guard-avoiding-unnamed = 取引所を回避中
+shell-action-cost-guard-avoiding-unnamed-cost = 取引所を回避中 · { $cost }
+shell-action-cost-guard-avoided = { $outcome } · { $venue } のレント { $cost } を回避
+shell-action-cost-guard-avoided-unnamed = { $outcome } · 取引所のレント { $cost } を回避
+shell-action-exit-full = 全量エグジット
+shell-action-exit-percent = { $percent } エグジット
 
 ## Exit dialog (ui/exit_dialog.js)
 

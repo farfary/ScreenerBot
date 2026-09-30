@@ -254,6 +254,17 @@ shell-action-manual-order-failed = Order fehlgeschlagen
 shell-action-trade-live = Trade
 shell-action-trade-done = Trade abgeschlossen
 shell-action-trade-failed = Trade fehlgeschlagen
+shell-action-via-router = { $action } über { $router }
+shell-action-with-note = { $label } · { $note }
+shell-action-step-progress = { $label } · { $current }/{ $total }
+shell-action-cost-guard-avoiding = umgeht { $venue }
+shell-action-cost-guard-avoiding-cost = umgeht { $venue } · { $cost }
+shell-action-cost-guard-avoiding-unnamed = umgeht einen Handelsplatz
+shell-action-cost-guard-avoiding-unnamed-cost = umgeht einen Handelsplatz · { $cost }
+shell-action-cost-guard-avoided = { $outcome } · { $cost } Kontomiete bei { $venue } vermieden
+shell-action-cost-guard-avoided-unnamed = { $outcome } · { $cost } Kontomiete bei einem Handelsplatz vermieden
+shell-action-exit-full = Vollständiger Ausstieg
+shell-action-exit-percent = Ausstieg von { $percent }
 
 ## Exit dialog (ui/exit_dialog.js)
 
