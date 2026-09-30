@@ -5,8 +5,6 @@
     "src/webserver/templates/scripts/pages/config/field_renderers.js": 6,
     "src/webserver/templates/scripts/pages/events.js": 42,
     "src/webserver/templates/scripts/pages/services.js": 45,
-    "src/webserver/templates/scripts/pages/tools/multi_wallet_tools.js": 109,
-    "src/webserver/templates/scripts/pages/tools/wallet_tools.js": 116,
     "src/webserver/templates/scripts/pages/transactions.js": 46,
     "src/webserver/templates/scripts/theme.js": 2,
     "src/webserver/templates/scripts/ui/account/panel.js": 15,

@@ -18,6 +18,7 @@
 -pumpfun = Pump.fun
 -coingecko = CoinGecko
 -jupiter = Jupiter
+-raptor = Raptor
 -twitter = Twitter
 -x = X
 -telegram = Telegram

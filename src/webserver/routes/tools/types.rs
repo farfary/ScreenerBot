@@ -2,6 +2,9 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::actions::ActionFailure;
+use crate::i18n::UiText;
+
 // =============================================================================
 // Multi-Wallet Request/Response Types
 // =============================================================================
@@ -43,8 +46,8 @@ pub struct MultiBuyPreviewResponse {
     pub main_wallet_balance: f64,
     /// Whether operation can proceed
     pub can_proceed: bool,
-    /// Warning message if any
-    pub warning: Option<String>,
+    /// Warning text if any
+    pub warning: Option<UiText>,
     /// Wallet plans (preview of what will happen)
     pub wallet_plans: Vec<WalletPlanResponse>,
 }
@@ -136,8 +139,8 @@ pub struct MultiSellPreviewResponse {
     pub estimated_sol: Option<f64>,
     /// Whether operation can proceed
     pub can_proceed: bool,
-    /// Warning message if any
-    pub warning: Option<String>,
+    /// Warning text if any
+    pub warning: Option<UiText>,
     /// Wallet details
     pub wallets: Vec<WalletTokenBalanceResponse>,
 }
@@ -239,8 +242,8 @@ pub struct SessionStatusResponse {
     pub started_at: String,
     /// Whether operation is complete
     pub is_complete: bool,
-    /// Error message if failed
-    pub error: Option<String>,
+    /// Why the session failed or stopped early
+    pub error: Option<ActionFailure>,
     /// Completed per-wallet outcomes; omitted only while there are none.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub operations: Vec<crate::tools::multi_wallet::WalletOpResult>,
@@ -487,12 +490,11 @@ pub struct BurnableTokenInfo {
     pub decimals: u8,
     pub is_token_2022: bool,
     pub category: TokenCategory,
-    pub category_label: String,
     pub price_sol: Option<f64>,
     pub value_sol: Option<f64>,
     pub has_liquidity: bool,
     pub can_burn: bool,
-    pub burn_warning: Option<String>,
+    pub burn_warning: Option<UiText>,
     /// Estimated SOL to reclaim from closing ATA after burn
     pub rent_reclaimable_sol: f64,
 }
@@ -526,7 +528,7 @@ pub struct BurnResult {
     pub mint: String,
     pub success: bool,
     pub signature: Option<String>,
-    pub error: Option<String>,
+    pub error: Option<ActionFailure>,
 }
 
 /// Response for burn execution
@@ -537,4 +539,54 @@ pub struct BurnTokensResponse {
     pub failed: usize,
     pub results: Vec<BurnResult>,
     pub sol_reclaimed: f64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Catalog keys of the title and description of each burn category. The
+    /// match is exhaustive, so a new variant fails to compile until it is mapped
+    /// here and in `BURN_CATEGORY_LABELS` / `BURN_CATEGORY_HINT_LABELS`
+    /// (pages/tools/wallet_tools.js).
+    fn category_keys(category: &TokenCategory) -> (&'static str, &'static str) {
+        match category {
+            TokenCategory::OpenPosition => (
+                "tools-burn-category-open-position",
+                "tools-burn-category-hint-open-position",
+            ),
+            TokenCategory::ClosedPosition => (
+                "tools-burn-category-closed-position",
+                "tools-burn-category-hint-closed-position",
+            ),
+            TokenCategory::HasValue => (
+                "tools-burn-category-has-value",
+                "tools-burn-category-hint-has-value",
+            ),
+            TokenCategory::ZeroLiquidity => (
+                "tools-burn-category-zero-liquidity",
+                "tools-burn-category-hint-zero-liquidity",
+            ),
+        }
+    }
+
+    #[test]
+    fn burn_category_labels_exist_in_the_catalog() {
+        let categories = [
+            TokenCategory::OpenPosition,
+            TokenCategory::ClosedPosition,
+            TokenCategory::HasValue,
+            TokenCategory::ZeroLiquidity,
+        ];
+        for category in &categories {
+            let id = serde_json::to_value(category).unwrap();
+            let id = id.as_str().expect("category id").replace('_', "-");
+            let (title, hint) = category_keys(category);
+            assert_eq!(title, format!("tools-burn-category-{id}"));
+            assert_eq!(hint, format!("tools-burn-category-hint-{id}"));
+            for key in [title, hint] {
+                assert_ne!(crate::i18n::format_en(key, None), key, "missing {key}");
+            }
+        }
+    }
 }

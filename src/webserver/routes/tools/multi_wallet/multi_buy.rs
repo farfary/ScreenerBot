@@ -6,8 +6,9 @@ use axum::{extract::Path, response::Response, Json};
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
+use crate::actions::ActionFailure;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
-use crate::i18n::ids;
+use crate::i18n::{ids, UiArg, UiText};
 use crate::logger::{self, LogTag};
 use crate::tools::multi_wallet::{
     execute_multi_buy, MultiBuyConfig, SessionProgress, SessionResult, SessionStatus,
@@ -28,6 +29,19 @@ use super::session::{
 // =============================================================================
 // Multi-Buy Handlers
 // =============================================================================
+
+/// SOL amounts keep four decimals and travel as text so they are never regrouped.
+fn insufficient_balance_warning(needed: f64, have: f64) -> UiText {
+    UiText::new(ids::TOOLS_MULTI_BUY_WARNING_INSUFFICIENT)
+        .arg("needed", UiArg::Text(format!("{needed:.4}")))
+        .arg("have", UiArg::Text(format!("{have:.4}")))
+}
+
+fn over_limit_warning(needed: f64, limit: f64) -> UiText {
+    UiText::new(ids::TOOLS_MULTI_BUY_WARNING_OVER_LIMIT)
+        .arg("needed", UiArg::Text(format!("{needed:.4}")))
+        .arg("limit", UiArg::Text(format!("{limit:.4}")))
+}
 
 /// Preview multi-buy operation
 pub async fn preview_multi_buy(Json(request): Json<MultiBuyPreviewRequest>) -> Response {
@@ -107,16 +121,10 @@ pub async fn preview_multi_buy(Json(request): Json<MultiBuyPreviewRequest>) -> R
     // Check if we can proceed
     let can_proceed = main_balance >= total_sol_needed;
     let warning = if !can_proceed {
-        Some(format!(
-            "Insufficient balance. Need {:.4} SOL, have {:.4} SOL",
-            total_sol_needed, main_balance
-        ))
+        Some(insufficient_balance_warning(total_sol_needed, main_balance))
     } else if let Some(limit) = request.total_sol_limit {
         if total_sol_needed > limit {
-            Some(format!(
-                "Total SOL needed ({:.4}) exceeds limit ({:.4})",
-                total_sol_needed, limit
-            ))
+            Some(over_limit_warning(total_sol_needed, limit))
         } else {
             None
         }
@@ -284,7 +292,10 @@ pub async fn start_multi_buy(Json(request): Json<MultiBuyStartRequest>) -> Respo
                         session.status = SessionStatus::Completed;
                     }
                     Err(e) => {
-                        session.result.error = Some(e.to_string());
+                        session.result.error = Some(ActionFailure::with_details(
+                            ids::TOOLS_MULTI_BUY_SESSION_FAILED,
+                            e.to_string(),
+                        ));
                         session.result.success = false;
                         session.status = SessionStatus::Failed;
                         logger::error(
@@ -308,4 +319,21 @@ pub async fn get_multi_buy_status(Path(id): Path<String>) -> Response {
 /// Abort multi-buy session
 pub async fn abort_multi_buy(Path(id): Path<String>) -> Response {
     super::session::abort_session(&id).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn preview_warnings_render_their_english() {
+        assert_eq!(
+            insufficient_balance_warning(0.5, 0.25).render_source_plain(),
+            "Insufficient balance. Need 0.5000 SOL, have 0.2500 SOL"
+        );
+        assert_eq!(
+            over_limit_warning(0.5, 0.25).render_source_plain(),
+            "Total SOL needed (0.5000) exceeds limit (0.2500)"
+        );
+    }
 }

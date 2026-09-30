@@ -4,10 +4,11 @@ use axum::{response::Response, Json};
 use std::collections::HashMap;
 use std::time::Duration;
 
+use crate::actions::ActionFailure;
 use crate::chains::solana::assets::ata::get_all_token_accounts;
 use crate::chains::solana::assets::burn_configured_wallet_token;
 use crate::chains::solana::constants::ATA_RENT_COST_SOL;
-use crate::i18n::ids;
+use crate::i18n::{ids, UiArg, UiText};
 use crate::logger::{self, LogTag};
 use crate::pools;
 use crate::positions;
@@ -21,6 +22,12 @@ use super::types::*;
 // =============================================================================
 // Burn Tokens Handlers
 // =============================================================================
+
+/// Warning shown for a token with market value: the value keeps the six
+/// decimals of the scan and is passed as text so it is never regrouped.
+fn worth_warning(value_sol: f64) -> UiText {
+    UiText::new(ids::TOOLS_BURN_WARNING_WORTH).arg("amount", UiArg::Text(format!("{value_sol:.6}")))
+}
 
 /// Scan wallet for tokens that can be burned, with categorization
 pub async fn scan_burnable_tokens() -> Response {
@@ -112,40 +119,31 @@ pub async fn scan_burnable_tokens() -> Response {
         let value_sol = price_sol.map(|p| p * ui_amount);
 
         // Determine category
-        let (category, category_label, can_burn, burn_warning) =
-            if open_position_mints.contains(&account.mint) {
-                categories.open_positions += 1;
-                (
-                    TokenCategory::OpenPosition,
-                    "Open Position".to_owned(),
-                    false,
-                    Some("Cannot burn tokens from open positions".to_owned()),
-                )
-            } else if closed_position_mints.contains(&account.mint) {
-                categories.closed_positions += 1;
-                (
-                    TokenCategory::ClosedPosition,
-                    "Closed Position".to_owned(),
-                    true,
-                    Some("Leftover from closed position".to_owned()),
-                )
-            } else if has_liquidity && value_sol.is_some_and(|v| v > 0.0001) {
-                categories.has_value += 1;
-                (
-                    TokenCategory::HasValue,
-                    "Has Value".to_owned(),
-                    true,
-                    Some(format!("Worth ~{:.6} SOL", value_sol.unwrap_or_default())),
-                )
-            } else {
-                categories.zero_liquidity += 1;
-                (
-                    TokenCategory::ZeroLiquidity,
-                    "Zero Liquidity".to_owned(),
-                    true,
-                    None,
-                )
-            };
+        let (category, can_burn, burn_warning) = if open_position_mints.contains(&account.mint) {
+            categories.open_positions += 1;
+            (
+                TokenCategory::OpenPosition,
+                false,
+                Some(UiText::new(ids::TOOLS_BURN_WARNING_OPEN_POSITION)),
+            )
+        } else if closed_position_mints.contains(&account.mint) {
+            categories.closed_positions += 1;
+            (
+                TokenCategory::ClosedPosition,
+                true,
+                Some(UiText::new(ids::TOOLS_BURN_WARNING_CLOSED_POSITION)),
+            )
+        } else if has_liquidity && value_sol.is_some_and(|v| v > 0.0001) {
+            categories.has_value += 1;
+            (
+                TokenCategory::HasValue,
+                true,
+                Some(worth_warning(value_sol.unwrap_or_default())),
+            )
+        } else {
+            categories.zero_liquidity += 1;
+            (TokenCategory::ZeroLiquidity, true, None)
+        };
 
         // Only count rent reclaimable for tokens we can burn
         if can_burn {
@@ -161,7 +159,6 @@ pub async fn scan_burnable_tokens() -> Response {
             decimals: account.decimals,
             is_token_2022: account.is_token_2022,
             category,
-            category_label,
             price_sol,
             value_sol,
             has_liquidity,
@@ -270,7 +267,7 @@ pub async fn burn_selected_tokens(Json(request): Json<BurnTokensRequest>) -> Res
                 mint: mint.clone(),
                 success: false,
                 signature: None,
-                error: Some("Cannot burn SOL".to_owned()),
+                error: Some(ActionFailure::new(ids::TOOLS_BURN_FAILURE_NATIVE_ASSET)),
             });
             failed += 1;
             continue;
@@ -282,7 +279,7 @@ pub async fn burn_selected_tokens(Json(request): Json<BurnTokensRequest>) -> Res
                 mint: mint.clone(),
                 success: false,
                 signature: None,
-                error: Some("Cannot burn tokens from open positions".to_owned()),
+                error: Some(ActionFailure::new(ids::TOOLS_BURN_FAILURE_OPEN_POSITION)),
             });
             failed += 1;
             continue;
@@ -296,7 +293,9 @@ pub async fn burn_selected_tokens(Json(request): Json<BurnTokensRequest>) -> Res
                     mint: mint.clone(),
                     success: false,
                     signature: None,
-                    error: Some("Token account not found".to_owned()),
+                    error: Some(ActionFailure::new(
+                        ids::TOOLS_BURN_FAILURE_ACCOUNT_NOT_FOUND,
+                    )),
                 });
                 failed += 1;
                 continue;
@@ -309,7 +308,7 @@ pub async fn burn_selected_tokens(Json(request): Json<BurnTokensRequest>) -> Res
                 mint: mint.clone(),
                 success: false,
                 signature: None,
-                error: Some("Token balance is already zero".to_owned()),
+                error: Some(ActionFailure::new(ids::TOOLS_BURN_FAILURE_ZERO_BALANCE)),
             });
             failed += 1;
             continue;
@@ -353,7 +352,10 @@ pub async fn burn_selected_tokens(Json(request): Json<BurnTokensRequest>) -> Res
                     mint: mint.clone(),
                     success: false,
                     signature: None,
-                    error: Some(format!("Transaction failed: {e}")),
+                    error: Some(ActionFailure::with_details(
+                        ids::TOOLS_BURN_FAILURE_TRANSACTION,
+                        e.to_string(),
+                    )),
                 });
                 failed += 1;
             }
@@ -380,4 +382,71 @@ pub async fn burn_selected_tokens(Json(request): Json<BurnTokensRequest>) -> Res
         results,
         sol_reclaimed,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn english(id: crate::i18n::MessageId, details: &str) -> String {
+        ActionFailure::with_details(id, details).log_text()
+    }
+
+    #[test]
+    fn burn_failures_and_warnings_render_their_english() {
+        assert_eq!(
+            english(ids::TOOLS_BURN_FAILURE_NATIVE_ASSET, ""),
+            "Cannot burn SOL"
+        );
+        assert_eq!(
+            english(ids::TOOLS_BURN_FAILURE_OPEN_POSITION, ""),
+            "Cannot burn tokens from open positions"
+        );
+        assert_eq!(
+            english(ids::TOOLS_BURN_FAILURE_ACCOUNT_NOT_FOUND, ""),
+            "Token account not found"
+        );
+        assert_eq!(
+            english(ids::TOOLS_BURN_FAILURE_ZERO_BALANCE, ""),
+            "Token balance is already zero"
+        );
+        assert_eq!(
+            english(ids::TOOLS_BURN_FAILURE_TRANSACTION, "rpc timeout"),
+            "Transaction failed: rpc timeout"
+        );
+        assert_eq!(
+            UiText::new(ids::TOOLS_BURN_WARNING_OPEN_POSITION).render_source_plain(),
+            "Cannot burn tokens from open positions"
+        );
+        assert_eq!(
+            UiText::new(ids::TOOLS_BURN_WARNING_CLOSED_POSITION).render_source_plain(),
+            "Leftover from closed position"
+        );
+        assert_eq!(
+            worth_warning(0.00123).render_source_plain(),
+            "Worth ~0.001230 SOL"
+        );
+    }
+
+    #[test]
+    fn failed_burn_item_serializes_text_and_details() {
+        let item = BurnResult {
+            mint: "Mint1111".to_owned(),
+            success: false,
+            signature: None,
+            error: Some(ActionFailure::with_details(
+                ids::TOOLS_BURN_FAILURE_TRANSACTION,
+                "rpc timeout",
+            )),
+        };
+        let json = serde_json::to_value(&item).unwrap();
+        assert_eq!(json["mint"], "Mint1111");
+        assert_eq!(json["success"], false);
+        assert_eq!(json["signature"], serde_json::Value::Null);
+        assert_eq!(
+            json["error"]["text"]["id"],
+            "tools-burn-failure-transaction"
+        );
+        assert_eq!(json["error"]["details"], "rpc timeout");
+    }
 }

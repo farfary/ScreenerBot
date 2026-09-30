@@ -8,10 +8,12 @@
 use futures::stream::{self, StreamExt};
 use tokio::time::{sleep, Duration};
 
+use crate::actions::ActionFailure;
 use crate::chains::adapter;
 use crate::chains::solana::assets::transfer::{transfer_sol_for_wallet, transfer_sol_from_main};
 use crate::chains::solana::constants::RENT_EXEMPT_MINIMUM_LAMPORTS;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
+use crate::i18n::ids;
 use crate::logger::{self, LogTag};
 use crate::wallets::Wallet;
 
@@ -49,7 +51,11 @@ pub async fn fund_wallets(targets: Vec<(String, f64)>, concurrency: usize) -> Ve
         .map(|(address, amount)| async move {
             match transfer_sol_from_main(&address, amount).await {
                 Ok(sig) => WalletOpResult::success(0, address, sig, amount, None, None, None),
-                Err(e) => WalletOpResult::failure(0, address, e.to_string()),
+                Err(e) => WalletOpResult::failure(
+                    0,
+                    address,
+                    ActionFailure::with_details(ids::TOOLS_MULTI_OP_TRANSFER_FAILED, e.to_string()),
+                ),
             }
         })
         .buffer_unordered(concurrency)
@@ -122,7 +128,7 @@ pub async fn collect_sol(
                 results.push(WalletOpResult::failure(
                     wallet_id,
                     wallet_address,
-                    format!("Failed to get balance: {e}"),
+                    ActionFailure::with_details(ids::TOOLS_MULTI_OP_BALANCE_FAILED, e.to_string()),
                 ));
                 continue;
             }
@@ -168,7 +174,7 @@ pub async fn collect_sol(
                 results.push(WalletOpResult::failure(
                     wallet_id,
                     wallet_address,
-                    e.to_string(),
+                    ActionFailure::with_details(ids::TOOLS_MULTI_OP_TRANSFER_FAILED, e.to_string()),
                 ));
             }
         }

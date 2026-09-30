@@ -1,5 +1,5 @@
-# Tools page: the shell, the token tools and the trading tools.
-# Wallet and multi-wallet tools are added by their own sections.
+# Tools page: the shell, the token tools, the trading tools, the wallet tools and the
+# multi-wallet tools.
 
 ## Shell (pages/tools.html, scripts/pages/tools.js)
 
@@ -302,3 +302,335 @@ tools-trade-watcher-column-action = Action
 tools-trade-watcher-column-triggered = Triggered
 tools-trade-watcher-stop-watch =
     .title = Stop watch
+
+## Results returned by the tools backend. Failures are catalog text; the technical cause
+## travels separately as details and is appended by the dashboard.
+
+tools-burn-failure-native-asset = Cannot burn { -sol }
+tools-burn-failure-open-position = Cannot burn tokens from open positions
+tools-burn-failure-account-not-found = Token account not found
+tools-burn-failure-zero-balance = Token balance is already zero
+tools-burn-failure-transaction = Transaction failed
+tools-burn-warning-open-position = Cannot burn tokens from open positions
+tools-burn-warning-closed-position = Leftover from closed position
+# $amount is the token value in SOL with six decimals.
+tools-burn-warning-worth = Worth ~{ $amount } { -sol }
+# $needed and $have are SOL amounts with four decimals.
+tools-multi-buy-warning-insufficient = Insufficient balance. Need { $needed } { -sol }, have { $have } { -sol }
+# $needed and $limit are SOL amounts with four decimals.
+tools-multi-buy-warning-over-limit = Total { -sol } needed ({ $needed }) exceeds limit ({ $limit })
+tools-multi-sell-warning-no-wallets = No secondary wallets found
+tools-multi-sell-warning-no-balance = No wallets have token balance
+tools-multi-op-buy-failed = Buy failed
+tools-multi-op-sell-failed = Sell failed
+tools-multi-op-transfer-failed = Transfer failed
+tools-multi-op-balance-failed = Failed to get balance
+tools-multi-op-mint-invalid = Invalid mint address
+tools-multi-buy-session-failed = Multi-buy failed
+tools-multi-sell-session-failed = Multi-sell failed
+tools-multi-session-aborted = Operation aborted by user
+
+## Shared by the wallet tools (scripts/pages/tools/wallet_tools.js)
+
+tools-wallet-action-scan = Scan Wallet
+tools-wallet-action-scanning = Scanning...
+# $reason is the technical cause of the failure.
+tools-wallet-scan-failed = Scan failed: { $reason }
+# $amount is an amount with its unit.
+tools-wallet-amount-approx = ~{ $amount }
+tools-wallet-amount-gain = +{ $amount }
+tools-wallet-selected =
+    { $count ->
+        [one] Selected: { $count } wallet
+       *[other] Selected: { $count } wallets
+    }
+tools-wallet-transfer-failed = Transfer failed: { $reason }
+tools-wallet-cleanup-failed = Cleanup failed: { $reason }
+
+## Wallet cleanup (scripts/pages/tools/wallet_tools.js)
+
+tools-wallet-cleanup-results-title = Scan Results
+tools-wallet-cleanup-stat-empty = Empty ATAs
+tools-wallet-cleanup-stat-reclaimable = Reclaimable { -sol }
+tools-wallet-cleanup-stat-failed = Failed (cached)
+tools-wallet-cleanup-prompt = Click "Scan Wallet" to find empty ATAs
+tools-wallet-cleanup-prompt-hint = This will check all token accounts in your wallet
+tools-wallet-cleanup-action-cleanup = Cleanup All
+tools-wallet-cleanup-action-cleaning = Cleaning...
+tools-wallet-cleanup-scanning = Scanning wallet...
+# $amount is the reclaimable rent with its unit.
+tools-wallet-cleanup-found =
+    { $count ->
+        [one] Found { $count } empty ATA worth ~{ $amount }
+       *[other] Found { $count } empty ATAs worth ~{ $amount }
+    }
+tools-wallet-cleanup-clean = No empty ATAs found - wallet is clean!
+tools-wallet-cleanup-scan-failed = Failed to scan ATAs
+tools-wallet-cleanup-done =
+    { $count ->
+        [one] Cleaned { $count } ATA
+       *[other] Cleaned { $count } ATAs
+    }
+
+## Burn tokens (scripts/pages/tools/wallet_tools.js)
+
+tools-burn-section-title = Burn Tokens
+tools-burn-info-title = What is burning?
+tools-burn-info-body = Burning permanently destroys tokens, making them unrecoverable. After burning, run Wallet Cleanup to close empty ATAs and reclaim ~0.002 { -sol } rent per token.
+tools-burn-stat-total = Total Tokens
+tools-burn-stat-selected = Selected
+tools-burn-stat-rent = Rent Reclaimable
+tools-burn-prompt = Click "Scan Wallet" to find tokens
+tools-burn-scanning = Scanning wallet for tokens...
+tools-burn-scan-failed = Failed to scan tokens
+tools-burn-empty = No tokens found in wallet
+# $count is the number of selected tokens.
+tools-burn-action-burn = Burn Selected ({ $count })
+tools-burn-action-burning = Burning...
+tools-burn-cannot-burn = Cannot burn
+tools-burn-no-value = No value
+
+# Category titles and descriptions. Ids are the token categories of the scan.
+tools-burn-category-open-position = Open Positions
+tools-burn-category-has-value = Has Value
+tools-burn-category-closed-position = Closed Positions
+tools-burn-category-zero-liquidity = Zero Liquidity
+tools-burn-category-hint-open-position = Cannot burn tokens from open positions
+tools-burn-category-hint-has-value = Consider selling instead of burning
+tools-burn-category-hint-closed-position = Leftovers from closed trades
+tools-burn-category-hint-zero-liquidity = Safe to burn - no market value
+
+tools-burn-confirm-title = Confirm Burn
+tools-burn-confirm-message =
+    { $count ->
+        [one] Are you sure you want to burn <strong>{ $count }</strong> token?
+       *[other] Are you sure you want to burn <strong>{ $count }</strong> tokens?
+    }
+# $amount is the estimated value with its unit.
+tools-burn-confirm-value = Total estimated value: <strong>{ $amount }</strong>
+tools-burn-confirm-continue = Continue
+tools-burn-final-title = Final Warning
+tools-burn-final-headline = This action is IRREVERSIBLE!
+tools-burn-final-message =
+    { $count ->
+        [one] The following { $count } token will be permanently destroyed and cannot be recovered under any circumstances.
+       *[other] The following { $count } tokens will be permanently destroyed and cannot be recovered under any circumstances.
+    }
+tools-burn-final-confirm = Yes, Burn Tokens
+# $successful and $total count tokens; $amount is the reclaimable rent with its unit.
+tools-burn-toast-burned =
+    { $total ->
+        [one] Burned { $successful }/{ $total } token. Run Wallet Cleanup to reclaim ~{ $amount }
+       *[other] Burned { $successful }/{ $total } tokens. Run Wallet Cleanup to reclaim ~{ $amount }
+    }
+tools-burn-toast-failed =
+    { $count ->
+        [one] { $count } token failed to burn
+       *[other] { $count } tokens failed to burn
+    }
+tools-burn-failed = Burn failed: { $reason }
+
+## Airdrop checker (scripts/pages/tools/wallet_tools.js)
+
+tools-airdrop-about-title = About
+tools-airdrop-about-body = Check for pending airdrops, claimable rewards, and unclaimed allocations across popular Solana protocols.
+tools-airdrop-list-title = Available Airdrops
+tools-airdrop-prompt = Click "Check Airdrops" to scan for available claims
+tools-airdrop-action-check = Check Airdrops
+tools-airdrop-action-claim-all = Claim All
+
+## Wallet generator (scripts/pages/tools/wallet_tools.js)
+
+tools-generator-options-title = Generator Options
+tools-generator-warning-title = Store your private keys securely!
+tools-generator-warning-body = Generated keypairs are created locally and never transmitted. Always backup your keys in a secure location.
+tools-generator-count-label = Number of Wallets
+tools-generator-vanity-label = Vanity Address (starts with specific characters)
+tools-generator-prefix-label = Prefix
+tools-generator-prefix-input =
+    .placeholder = e.g., SOL
+tools-generator-prefix-hint = Longer prefixes take exponentially longer to generate
+tools-generator-list-title = Generated Wallets
+tools-generator-empty = No wallets generated yet
+tools-generator-action-generate = Generate
+tools-generator-action-generating = Generating...
+tools-generator-count-invalid = Please enter a number between 1 and 10
+tools-generator-no-keypairs = No keypairs returned
+tools-generator-generated =
+    { $count ->
+        [one] Generated { $count } wallet
+       *[other] Generated { $count } wallets
+    }
+tools-generator-failed = Failed to generate wallets: { $reason }
+tools-generator-copy-public-key =
+    .title = Copy public key
+tools-generator-copy-private-key =
+    .title = Copy private key
+tools-generator-remove =
+    .title = Remove from list
+tools-generator-reveal =
+    .title = Reveal private key
+tools-generator-public-key-label = Public Key:
+tools-generator-private-key-label = Private Key:
+# Names the copied value in the shared copied toast.
+tools-generator-public-key-name = Public key
+tools-generator-private-key-copied = Private key copied
+tools-generator-private-key-warning = Anyone with this key controls the wallet
+tools-generator-export-empty = No wallets to export
+tools-generator-exported = Wallets exported - store securely
+
+## Wallet consolidation (scripts/pages/tools/wallet_tools.js)
+
+tools-consolidation-summary-title = Summary
+tools-consolidation-stat-wallets = Sub-wallets
+tools-consolidation-stat-sol = Total { -sol }
+tools-consolidation-stat-tokens = Token Types
+tools-consolidation-stat-rent = Reclaimable Rent
+tools-consolidation-wallets-title = Wallets
+tools-consolidation-loading-wallets = Loading wallets...
+tools-consolidation-loading-data = Loading wallet data...
+tools-consolidation-action-transfer-sol = Transfer { -sol }
+tools-consolidation-action-transfer-tokens = Transfer All Tokens
+tools-consolidation-action-cleanup = Cleanup ATAs
+tools-consolidation-action-transferring = Transferring...
+tools-consolidation-column-name = Name
+tools-consolidation-column-address = Address
+tools-consolidation-column-sol = { -sol } Balance
+tools-consolidation-column-tokens = Tokens
+tools-consolidation-column-atas = Empty ATAs
+tools-consolidation-empty = No sub-wallets found
+tools-consolidation-empty-hint = Create sub-wallets using Multi-Buy to get started
+tools-consolidation-load-failed = Failed to load: { $reason }
+tools-consolidation-select-prompt = Select wallets to consolidate
+# $amount is the selected balance with its unit.
+tools-consolidation-selection-totals =
+    | { $amount } | { $tokens ->
+        [one] { $tokens } token
+       *[other] { $tokens } tokens
+    } | { $atas ->
+        [one] { $atas } empty ATA
+       *[other] { $atas } empty ATAs
+    }
+# $amount is the transferred balance with its unit.
+tools-consolidation-transferred-sol = Transferred { $amount } to main wallet
+tools-consolidation-transferred-tokens =
+    { $count ->
+        [one] Transferred { $count } token to main wallet
+       *[other] Transferred { $count } tokens to main wallet
+    }
+# $amount is the reclaimed rent with its unit.
+tools-consolidation-cleaned =
+    { $count ->
+        [one] Closed { $count } ATA, reclaimed { $amount }
+       *[other] Closed { $count } ATAs, reclaimed { $amount }
+    }
+
+## Shared by the multi-wallet tools (scripts/pages/tools/multi_wallet_tools.js)
+
+tools-multi-token-title = Token
+tools-multi-mint-label = Token Mint Address
+tools-multi-mint-input =
+    .placeholder = Paste token mint address...
+tools-multi-execution-title = Execution Settings
+tools-multi-delay-min-label = Delay Min (ms)
+tools-multi-delay-max-label = Delay Max (ms)
+tools-multi-concurrency-label = Concurrency
+tools-multi-concurrency-sequential = { $count } (Sequential)
+tools-multi-concurrency-parallel = { $count } parallel
+tools-multi-slippage-label = Slippage (%)
+tools-multi-router-label = Router
+tools-multi-router-auto = Auto (Best Route)
+tools-multi-router-jupiter = { -jupiter }
+tools-multi-router-direct = Direct Pool
+tools-multi-router-raptor = { -raptor }
+tools-multi-progress-title = Progress
+tools-multi-progress-preparing = Preparing...
+# $label is the session state, $completed and $total count wallet operations.
+tools-multi-status-line = { $label } ({ $completed }/{ $total })
+tools-multi-column-wallet = Wallet
+tools-multi-column-route = Route
+tools-multi-column-status = Status
+tools-multi-op-completed = Completed
+tools-multi-op-failed = Failed
+tools-multi-action-stop = Stop
+tools-multi-action-loading = Loading...
+# $reason is the technical cause of the failure.
+tools-multi-start-failed = Failed to start: { $reason }
+
+# Session states. Ids are the states of a multi-wallet session.
+tools-multi-state-pending = Pending
+tools-multi-state-funding = Funding
+tools-multi-state-executing = Executing
+tools-multi-state-consolidating = Consolidating
+tools-multi-state-completed = Completed
+tools-multi-state-failed = Failed
+tools-multi-state-aborted = Aborted
+
+## Multi-buy (scripts/pages/tools/multi_wallet_tools.js)
+
+tools-multi-buy-mint-hint = The token you want to buy across multiple wallets
+tools-multi-buy-wallets-title = Wallet Settings
+tools-multi-buy-wallet-count-label = Wallet Count
+tools-multi-buy-wallet-count-option =
+    { $count ->
+        [one] { $count } wallet
+       *[other] { $count } wallets
+    }
+tools-multi-buy-wallet-count-hint = Number of sub-wallets to use
+tools-multi-buy-buffer-label = { -sol } Buffer per Wallet
+tools-multi-buy-buffer-hint = Reserved for fees (0.015 { -sol } min)
+tools-multi-buy-amounts-title = Amount Settings
+tools-multi-buy-min-label = Min { -sol } per Wallet
+tools-multi-buy-min-hint = Minimum buy amount
+tools-multi-buy-max-label = Max { -sol } per Wallet
+tools-multi-buy-max-hint = Maximum buy amount
+tools-multi-buy-limit-label = Total { -sol } Limit (optional)
+tools-multi-buy-limit-hint = Maximum total spend
+tools-multi-buy-preview-title = Preview
+tools-multi-buy-preview-create = Wallets to Create
+tools-multi-buy-preview-amount = Amount per Wallet
+# $min and $max are amounts with their unit.
+tools-multi-buy-preview-range = { $min } - { $max }
+tools-multi-buy-preview-total = Total { -sol } Needed
+tools-multi-buy-preview-balance = Main Balance
+tools-multi-buy-action-preview = Preview
+tools-multi-buy-action-start = Start Multi-Buy
+tools-multi-buy-executing = Executing buys...
+tools-multi-buy-column-spent = { -sol } Spent
+tools-multi-buy-column-tokens = Tokens
+tools-multi-buy-preview-failed = Preview failed: { $reason }
+tools-multi-buy-started = Multi-buy started
+tools-multi-buy-stopped = Multi-buy stopped
+tools-multi-buy-completed = Multi-buy completed! { $successful }/{ $total } successful
+
+## Multi-sell (scripts/pages/tools/multi_wallet_tools.js)
+
+tools-multi-sell-mint-hint = Enter a token address to scan for wallets holding it
+tools-multi-sell-action-scan = Scan
+tools-multi-sell-settings-title = Sell Settings
+tools-multi-sell-percent-label = Sell Percentage
+tools-multi-sell-percent-hint = % of tokens to sell per wallet
+tools-multi-sell-min-fee-label = Min { -sol } for Fee
+tools-multi-sell-min-fee-hint = Minimum { -sol } needed for tx fee
+tools-multi-sell-topup-label = Auto topup if needed
+tools-multi-sell-topup-hint = Transfer { -sol } from main wallet if sub-wallet has insufficient balance
+tools-multi-sell-post-title = Post-Sell Actions
+tools-multi-sell-consolidate-label = Consolidate { -sol } to main wallet
+tools-multi-sell-consolidate-hint = Transfer all { -sol } from sub-wallets back to main wallet
+tools-multi-sell-close-atas-label = Close token ATAs after sell
+tools-multi-sell-close-atas-hint = Reclaim ~0.002 { -sol } per ATA
+tools-multi-sell-wallets-title = Wallets with Token
+tools-multi-sell-empty = No sub-wallets hold this token
+tools-multi-sell-column-tokens = Tokens
+tools-multi-sell-column-sol = { -sol } Balance
+tools-multi-sell-column-topup = Needs Topup
+tools-multi-sell-none-selected = No wallets selected
+tools-multi-sell-select-required = Please select at least one wallet
+tools-multi-sell-action-start = Start Multi-Sell
+tools-multi-sell-executing = Executing sells...
+tools-multi-sell-column-sold = Tokens Sold
+tools-multi-sell-column-received = { -sol } Received
+tools-multi-sell-started = Multi-sell started
+tools-multi-sell-stopped = Multi-sell stopped
+# $amount is the received amount with its unit.
+tools-multi-sell-completed = Multi-sell completed! { $amount } received

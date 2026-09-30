@@ -5,7 +5,9 @@
 use tokio::time::{sleep, Duration};
 use uuid::Uuid;
 
+use crate::actions::ActionFailure;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
+use crate::i18n::ids;
 use crate::logger::{self, LogTag};
 use crate::tools::Error;
 use crate::wallets::{self, Wallet, WalletRole};
@@ -175,7 +177,7 @@ async fn transfer_token_to_main(
         return Some(WalletOpResult::failure(
             wallet_id,
             wallet_address,
-            "Invalid mint address".to_owned(),
+            ActionFailure::new(ids::TOOLS_MULTI_OP_MINT_INVALID),
         ));
     }
 
@@ -202,7 +204,7 @@ async fn transfer_token_to_main(
         Err(e) => Some(WalletOpResult::failure(
             wallet_id,
             wallet_address,
-            e.to_string(),
+            ActionFailure::with_details(ids::TOOLS_MULTI_OP_TRANSFER_FAILED, e.to_string()),
         )),
     }
 }

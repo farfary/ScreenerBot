@@ -8,8 +8,10 @@ use std::sync::atomic::Ordering;
 use tokio::time::{sleep, Duration};
 use uuid::Uuid;
 
+use crate::actions::ActionFailure;
 use crate::chains::adapter;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
+use crate::i18n::ids;
 use crate::logger::{self, LogTag};
 use crate::tools::swap_executor::tool_sell;
 use crate::tools::Error;
@@ -121,7 +123,7 @@ pub async fn execute_multi_sell(config: MultiSellConfig) -> Result<SessionResult
                     LogTag::Tools,
                     &format!("Multi-sell session {} aborted by user", &session_id[..8]),
                 );
-                result.error = Some("Operation aborted by user".to_owned());
+                result.error = Some(ActionFailure::new(ids::TOOLS_MULTI_SESSION_ABORTED));
                 result.finalize();
                 return Ok(result);
             }
@@ -354,6 +356,10 @@ async fn execute_single_sell(
                 Some(swap_result.route_plan),
             )
         }
-        Err(e) => WalletOpResult::failure(wallet_id, wallet_address, e.to_string()),
+        Err(e) => WalletOpResult::failure(
+            wallet_id,
+            wallet_address,
+            ActionFailure::with_details(ids::TOOLS_MULTI_OP_SELL_FAILED, e.to_string()),
+        ),
     }
 }

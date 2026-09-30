@@ -8,6 +8,31 @@ import * as Utils from "../../core/utils.js";
 import * as Hints from "../../core/hints.js";
 import { HintTrigger } from "../../ui/hint_popover.js";
 import { enhanceAllSelects } from "../../ui/custom_select.js";
+import { apiErrorMessage } from "../../core/request_manager.js";
+
+// Ids are the states of a multi-wallet session.
+const SESSION_STATE_LABELS = Object.freeze({
+  pending: "tools-multi-state-pending",
+  funding: "tools-multi-state-funding",
+  executing: "tools-multi-state-executing",
+  consolidating: "tools-multi-state-consolidating",
+  completed: "tools-multi-state-completed",
+  failed: "tools-multi-state-failed",
+  aborted: "tools-multi-state-aborted",
+});
+
+/** Replace a button's content with an icon and an already localized label. */
+function setButton(button, icon, label) {
+  const glyph = document.createElement("i");
+  glyph.className = icon;
+  button.replaceChildren(glyph, ` ${label}`);
+}
+
+/** Message of a failed response: the localized envelope text, else the HTTP status. */
+async function responseError(response) {
+  const body = await response.json().catch(() => ({}));
+  return new Error(apiErrorMessage(body, `HTTP ${response.status}`));
+}
 
 // =============================================================================
 // Multi-Buy Tool
@@ -67,14 +92,14 @@ function renderBuyMultiWalletsTool(container, actionsContainer) {
       <!-- Token Input -->
       <div class="tool-section">
         <div class="section-header">
-          <h3><i class="icon-coins"></i> Token</h3>
+          <h3><i class="icon-coins"></i> <span data-l10n-id="tools-multi-token-title"></span></h3>
           ${hintHtml}
         </div>
         <div class="section-content">
           <div class="form-group">
-            <label for="mb-token-mint">Token Mint Address <span class="required">*</span></label>
-            <input type="text" id="mb-token-mint" placeholder="Paste token mint address..." />
-            <small>The token you want to buy across multiple wallets</small>
+            <label for="mb-token-mint"><span data-l10n-id="tools-multi-mint-label"></span> <span class="required">*</span></label>
+            <input type="text" id="mb-token-mint" data-l10n-id="tools-multi-mint-input" />
+            <small data-l10n-id="tools-multi-buy-mint-hint"></small>
           </div>
         </div>
       </div>
@@ -82,28 +107,28 @@ function renderBuyMultiWalletsTool(container, actionsContainer) {
       <!-- Wallet Settings -->
       <div class="tool-section">
         <div class="section-header">
-          <h3><i class="icon-wallet"></i> Wallet Settings</h3>
+          <h3><i class="icon-wallet"></i> <span data-l10n-id="tools-multi-buy-wallets-title"></span></h3>
         </div>
         <div class="section-content">
           <form class="tool-form" id="mb-wallet-form">
             <div class="form-row">
               <div class="form-group">
-                <label for="mb-wallet-count">Wallet Count</label>
+                <label for="mb-wallet-count" data-l10n-id="tools-multi-buy-wallet-count-label"></label>
                 <select id="mb-wallet-count" data-custom-select>
-                  <option value="2">2 wallets</option>
-                  <option value="3">3 wallets</option>
-                  <option value="4">4 wallets</option>
-                  <option value="5" selected>5 wallets</option>
-                  <option value="6">6 wallets</option>
-                  <option value="8">8 wallets</option>
-                  <option value="10">10 wallets</option>
+                  <option value="2" data-l10n-id="tools-multi-buy-wallet-count-option" data-l10n-args='{"count":2}'></option>
+                  <option value="3" data-l10n-id="tools-multi-buy-wallet-count-option" data-l10n-args='{"count":3}'></option>
+                  <option value="4" data-l10n-id="tools-multi-buy-wallet-count-option" data-l10n-args='{"count":4}'></option>
+                  <option value="5" data-l10n-id="tools-multi-buy-wallet-count-option" data-l10n-args='{"count":5}' selected></option>
+                  <option value="6" data-l10n-id="tools-multi-buy-wallet-count-option" data-l10n-args='{"count":6}'></option>
+                  <option value="8" data-l10n-id="tools-multi-buy-wallet-count-option" data-l10n-args='{"count":8}'></option>
+                  <option value="10" data-l10n-id="tools-multi-buy-wallet-count-option" data-l10n-args='{"count":10}'></option>
                 </select>
-                <small>Number of sub-wallets to use</small>
+                <small data-l10n-id="tools-multi-buy-wallet-count-hint"></small>
               </div>
               <div class="form-group">
-                <label for="mb-sol-buffer">SOL Buffer per Wallet</label>
+                <label for="mb-sol-buffer" data-l10n-id="tools-multi-buy-buffer-label"></label>
                 <input type="number" id="mb-sol-buffer" value="0.015" min="0.005" step="0.005" />
-                <small>Reserved for fees (0.015 SOL min)</small>
+                <small data-l10n-id="tools-multi-buy-buffer-hint"></small>
               </div>
             </div>
           </form>
@@ -113,25 +138,25 @@ function renderBuyMultiWalletsTool(container, actionsContainer) {
       <!-- Amount Settings -->
       <div class="tool-section">
         <div class="section-header">
-          <h3><i class="icon-dollar-sign"></i> Amount Settings</h3>
+          <h3><i class="icon-dollar-sign"></i> <span data-l10n-id="tools-multi-buy-amounts-title"></span></h3>
         </div>
         <div class="section-content">
           <form class="tool-form">
             <div class="form-row">
               <div class="form-group">
-                <label for="mb-min-sol">Min SOL per Wallet</label>
+                <label for="mb-min-sol" data-l10n-id="tools-multi-buy-min-label"></label>
                 <input type="number" id="mb-min-sol" value="0.01" min="0.001" step="0.01" />
-                <small>Minimum buy amount</small>
+                <small data-l10n-id="tools-multi-buy-min-hint"></small>
               </div>
               <div class="form-group">
-                <label for="mb-max-sol">Max SOL per Wallet</label>
+                <label for="mb-max-sol" data-l10n-id="tools-multi-buy-max-label"></label>
                 <input type="number" id="mb-max-sol" value="0.05" min="0.001" step="0.01" />
-                <small>Maximum buy amount</small>
+                <small data-l10n-id="tools-multi-buy-max-hint"></small>
               </div>
               <div class="form-group">
-                <label for="mb-total-limit">Total SOL Limit (optional)</label>
+                <label for="mb-total-limit" data-l10n-id="tools-multi-buy-limit-label"></label>
                 <input type="number" id="mb-total-limit" placeholder="—" min="0" step="0.1" />
-                <small>Maximum total spend</small>
+                <small data-l10n-id="tools-multi-buy-limit-hint"></small>
               </div>
             </div>
           </form>
@@ -141,40 +166,40 @@ function renderBuyMultiWalletsTool(container, actionsContainer) {
       <!-- Execution Settings -->
       <div class="tool-section">
         <div class="section-header">
-          <h3><i class="icon-settings"></i> Execution Settings</h3>
+          <h3><i class="icon-settings"></i> <span data-l10n-id="tools-multi-execution-title"></span></h3>
         </div>
         <div class="section-content">
           <form class="tool-form">
             <div class="form-row">
               <div class="form-group">
-                <label for="mb-delay-min">Delay Min (ms)</label>
+                <label for="mb-delay-min" data-l10n-id="tools-multi-delay-min-label"></label>
                 <input type="number" id="mb-delay-min" value="1000" min="500" step="100" />
               </div>
               <div class="form-group">
-                <label for="mb-delay-max">Delay Max (ms)</label>
+                <label for="mb-delay-max" data-l10n-id="tools-multi-delay-max-label"></label>
                 <input type="number" id="mb-delay-max" value="2000" min="500" step="100" />
               </div>
               <div class="form-group">
-                <label for="mb-concurrency">Concurrency</label>
+                <label for="mb-concurrency" data-l10n-id="tools-multi-concurrency-label"></label>
                 <select id="mb-concurrency" data-custom-select>
-                  <option value="1" selected>1 (Sequential)</option>
-                  <option value="2">2 parallel</option>
-                  <option value="3">3 parallel</option>
+                  <option value="1" data-l10n-id="tools-multi-concurrency-sequential" data-l10n-args='{"count":1}' selected></option>
+                  <option value="2" data-l10n-id="tools-multi-concurrency-parallel" data-l10n-args='{"count":2}'></option>
+                  <option value="3" data-l10n-id="tools-multi-concurrency-parallel" data-l10n-args='{"count":3}'></option>
                 </select>
               </div>
             </div>
             <div class="form-row">
               <div class="form-group">
-                <label for="mb-slippage">Slippage (%)</label>
+                <label for="mb-slippage" data-l10n-id="tools-multi-slippage-label"></label>
                 <input type="number" id="mb-slippage" value="5" min="0.5" max="50" step="0.5" />
               </div>
               <div class="form-group">
-                <label for="mb-router">Router</label>
+                <label for="mb-router" data-l10n-id="tools-multi-router-label"></label>
                 <select id="mb-router" data-custom-select data-router-choice>
-                  <option value="auto" selected>Auto (Best Route)</option>
-                  <option value="jupiter" data-router="jupiter">Jupiter</option>
-                  <option value="direct" data-router="direct">Direct Pool</option>
-                  <option value="raptor" data-router="raptor">Raptor</option>
+                  <option value="auto" data-l10n-id="tools-multi-router-auto" selected></option>
+                  <option value="jupiter" data-router="jupiter" data-l10n-id="tools-multi-router-jupiter"></option>
+                  <option value="direct" data-router="direct" data-l10n-id="tools-multi-router-direct"></option>
+                  <option value="raptor" data-router="raptor" data-l10n-id="tools-multi-router-raptor"></option>
                 </select>
               </div>
             </div>
@@ -185,7 +210,7 @@ function renderBuyMultiWalletsTool(container, actionsContainer) {
       <!-- Preview Section -->
       <div class="tool-section" id="mb-preview-section" style="display: none;">
         <div class="section-header">
-          <h3><i class="icon-eye"></i> Preview</h3>
+          <h3><i class="icon-eye"></i> <span data-l10n-id="tools-multi-buy-preview-title"></span></h3>
         </div>
         <div class="section-content">
           <div class="mw-preview-grid" id="mb-preview-grid">
@@ -197,7 +222,7 @@ function renderBuyMultiWalletsTool(container, actionsContainer) {
       <!-- Progress Section -->
       <div class="tool-section" id="mb-progress-section" style="display: none;">
         <div class="section-header">
-          <h3><i class="icon-activity"></i> Progress</h3>
+          <h3><i class="icon-activity"></i> <span data-l10n-id="tools-multi-progress-title"></span></h3>
         </div>
         <div class="section-content">
           <div class="mw-progress-container">
@@ -207,7 +232,7 @@ function renderBuyMultiWalletsTool(container, actionsContainer) {
               </div>
               <span class="mw-progress-percent" id="mb-progress-percent">0%</span>
             </div>
-            <div class="mw-progress-status" id="mb-progress-status">Preparing...</div>
+            <div class="mw-progress-status" id="mb-progress-status" data-l10n-id="tools-multi-progress-preparing"></div>
           </div>
           <div class="mw-results-table" id="mb-results-table">
             <!-- Results populated dynamically -->
@@ -217,21 +242,24 @@ function renderBuyMultiWalletsTool(container, actionsContainer) {
     </div>
   `;
 
+  I18n.localizeTree(container);
+
   HintTrigger.initAll();
   enhanceAllSelects(container);
   void syncRouterChoices(container);
 
   actionsContainer.innerHTML = `
     <button class="btn" id="mb-preview-btn">
-      <i class="icon-eye"></i> Preview
+      <i class="icon-eye"></i> <span data-l10n-id="tools-multi-buy-action-preview"></span>
     </button>
     <button class="btn success" id="mb-start-btn" disabled>
-      <i class="icon-shopping-cart"></i> Start Multi-Buy
+      <i class="icon-shopping-cart"></i> <span data-l10n-id="tools-multi-buy-action-start"></span>
     </button>
     <button class="btn danger" id="mb-stop-btn" style="display: none;">
-      <i class="icon-x"></i> Stop
+      <i class="icon-x"></i> <span data-l10n-id="tools-multi-action-stop"></span>
     </button>
   `;
+  I18n.localizeTree(actionsContainer);
 
   // Wire up event handlers
   const previewBtn = $("#mb-preview-btn");
@@ -246,7 +274,7 @@ function renderBuyMultiWalletsTool(container, actionsContainer) {
 async function handleMultiBuyPreview() {
   const tokenMint = $("#mb-token-mint")?.value?.trim();
   if (!tokenMint) {
-    Utils.showToast("Please enter a token mint address", "error");
+    Utils.showToast(I18n.t("tools-validation-mint-required"), "error");
     return;
   }
 
@@ -258,7 +286,7 @@ async function handleMultiBuyPreview() {
   if (!previewBtn || !previewSection || !previewGrid) return;
 
   previewBtn.disabled = true;
-  previewBtn.innerHTML = '<i class="icon-loader spin"></i> Loading...';
+  setButton(previewBtn, "icon-loader spin", I18n.t("tools-multi-action-loading"));
 
   const config = {
     token_mint: tokenMint,
@@ -277,34 +305,38 @@ async function handleMultiBuyPreview() {
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || `HTTP ${response.status}`);
+      throw await responseError(response);
     }
 
     const preview = await response.json();
 
     previewSection.style.display = "block";
+    const range = I18n.t("tools-multi-buy-preview-range", {
+      min: Utils.formatSol(config.min_amount_sol),
+      max: Utils.formatSol(config.max_amount_sol),
+    });
     previewGrid.innerHTML = `
       <div class="mw-preview-item">
-        <span class="mw-preview-label">Wallets to Create</span>
+        <span class="mw-preview-label" data-l10n-id="tools-multi-buy-preview-create"></span>
         <span class="mw-preview-value">${preview.wallets_to_create}</span>
       </div>
       <div class="mw-preview-item">
-        <span class="mw-preview-label">Amount per Wallet</span>
-        <span class="mw-preview-value">${Utils.formatSol(config.min_amount_sol)} - ${Utils.formatSol(config.max_amount_sol)}</span>
+        <span class="mw-preview-label" data-l10n-id="tools-multi-buy-preview-amount"></span>
+        <span class="mw-preview-value">${Utils.escapeHtml(range)}</span>
       </div>
       <div class="mw-preview-item">
-        <span class="mw-preview-label">Total SOL Needed</span>
+        <span class="mw-preview-label" data-l10n-id="tools-multi-buy-preview-total"></span>
         <span class="mw-preview-value">${Utils.formatSol(preview.total_sol_needed)}</span>
       </div>
       <div class="mw-preview-item ${preview.can_proceed ? "success" : "error"}">
-        <span class="mw-preview-label">Main Balance</span>
+        <span class="mw-preview-label" data-l10n-id="tools-multi-buy-preview-balance"></span>
         <span class="mw-preview-value">${Utils.formatSol(preview.main_wallet_balance)} ${preview.can_proceed ? "✓" : "✗"}</span>
       </div>
     `;
+    I18n.localizeTree(previewGrid);
 
     if (preview.warning) {
-      Utils.showToast(preview.warning, "warning");
+      Utils.showToast(I18n.text(preview.warning), "warning");
     }
 
     if (startBtn) {
@@ -312,11 +344,11 @@ async function handleMultiBuyPreview() {
     }
   } catch (error) {
     console.error("Multi-buy preview failed:", error);
-    Utils.showToast(`Preview failed: ${error.message}`, "error");
+    Utils.showToast(I18n.t("tools-multi-buy-preview-failed", { reason: error.message }), "error");
     previewSection.style.display = "none";
   } finally {
     previewBtn.disabled = false;
-    previewBtn.innerHTML = '<i class="icon-eye"></i> Preview';
+    setButton(previewBtn, "icon-eye", I18n.t("tools-multi-buy-action-preview"));
   }
 }
 
@@ -356,8 +388,7 @@ async function handleMultiBuyStart() {
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || `HTTP ${response.status}`);
+      throw await responseError(response);
     }
 
     const result = await response.json();
@@ -366,10 +397,10 @@ async function handleMultiBuyStart() {
 
     // Start polling for status
     startMultiBuyPolling();
-    Utils.showToast("Multi-buy started", "success");
+    Utils.showToast(I18n.t("tools-multi-buy-started"), "success");
   } catch (error) {
     console.error("Multi-buy start failed:", error);
-    Utils.showToast(`Failed to start: ${error.message}`, "error");
+    Utils.showToast(I18n.t("tools-multi-start-failed", { reason: error.message }), "error");
     resetMultiBuyUI();
   }
 }
@@ -395,8 +426,11 @@ function startMultiBuyPolling() {
         stopMultiBuyPolling();
         multiBuyState.status = status.status;
         Utils.showToast(
-          status.error ||
-            `Multi-buy completed! ${status.successful_ops}/${status.total_wallets} successful`,
+          apiErrorMessage({ error: status.error }, null) ||
+            I18n.t("tools-multi-buy-completed", {
+              successful: status.successful_ops,
+              total: status.total_wallets,
+            }),
           status.error ? "error" : "success"
         );
       }
@@ -426,7 +460,7 @@ function updateMultiBuyProgress(status) {
   if (progressStatus) {
     progressStatus.textContent = sessionStatusLine(
       status,
-      "Executing buys...",
+      I18n.t("tools-multi-buy-executing"),
       completed,
       status.total_wallets
     );
@@ -434,14 +468,19 @@ function updateMultiBuyProgress(status) {
 
   if (resultsTable && status.operations) {
     resultsTable.innerHTML = renderOperationRows(status.operations, [
-      { head: "Wallet", cell: (op) => Utils.formatAddressCompact(op.wallet_address), mono: true },
       {
-        head: "SOL Spent",
+        head: I18n.t("tools-multi-column-wallet"),
+        cell: (op) => Utils.formatAddressCompact(op.wallet_address),
+        mono: true,
+        ltr: true,
+      },
+      {
+        head: I18n.t("tools-multi-buy-column-spent"),
         cell: (op) => Utils.formatSol(op.amount_sol, { suffix: "" }),
         mono: true,
       },
       {
-        head: "Tokens",
+        head: I18n.t("tools-multi-buy-column-tokens"),
         cell: (op) => (op.token_amount ? Utils.formatNumber(op.token_amount) : "—"),
         mono: true,
       },
@@ -462,8 +501,8 @@ function sessionProgress(status) {
 }
 
 /**
- * The status line under the progress bar. Every other backend status is a plain
- * lowercase word, so it is sentence-cased rather than shown raw.
+ * The status line under the progress bar. While operations run it names the
+ * tool's own activity; every other session state has a catalog label.
  * @param {{status?: string}} status
  * @param {string} executingLabel What to say while operations are running
  * @param {number} completed
@@ -471,9 +510,13 @@ function sessionProgress(status) {
  */
 function sessionStatusLine(status, executingLabel, completed, total) {
   const state = status.status || "";
-  const label =
-    state === "executing" ? executingLabel : state.charAt(0).toUpperCase() + state.slice(1);
-  return `${label} (${completed}/${total || completed})`;
+  let label = "";
+  if (state === "executing") {
+    label = executingLabel;
+  } else if (state) {
+    label = I18n.label(SESSION_STATE_LABELS, state);
+  }
+  return I18n.t("tools-multi-status-line", { label, completed, total: total || completed });
 }
 
 /**
@@ -481,17 +524,17 @@ function sessionStatusLine(status, executingLabel, completed, total) {
  * outcome columns never do. The route is the router that actually executed plus
  * the venue it traded on — with "Auto" that is the only place the answer shows.
  * @param {Array<Object>} operations
- * @param {Array<{head: string, cell: (op: Object) => string, mono?: boolean}>} columns
+ * @param {Array<{head: string, cell: (op: Object) => string, mono?: boolean, ltr?: boolean}>} columns
  */
 function renderOperationRows(operations, columns) {
-  const head = columns.map((column) => `<th>${column.head}</th>`).join("");
+  const head = columns.map((column) => `<th>${Utils.escapeHtml(column.head)}</th>`).join("");
   const rows = operations
     .map((op) => {
       const state = op.success ? "success" : "failed";
       const cells = columns
         .map(
           (column) =>
-            `<td class="${column.mono ? "mono" : ""}">${Utils.escapeHtml(String(column.cell(op)))}</td>`
+            `<td class="${column.mono ? "mono" : ""}"${column.ltr ? ' dir="ltr"' : ""}>${Utils.escapeHtml(String(column.cell(op)))}</td>`
         )
         .join("");
       const route = [op.router, op.venue].filter(Boolean).join(" · ") || "—";
@@ -499,14 +542,14 @@ function renderOperationRows(operations, columns) {
       // under it, not squeezed into a capitalized pill.
       const reason =
         !op.success && op.error
-          ? `<div class="mw-op-error">${Utils.escapeHtml(op.error)}</div>`
+          ? `<div class="mw-op-error">${Utils.escapeHtml(apiErrorMessage({ error: op.error }, ""))}</div>`
           : "";
       return `
             <tr class="${state}">
               ${cells}
               <td>${Utils.escapeHtml(route)}</td>
               <td>
-                <span class="mw-status-badge ${state}">${op.success ? "Completed" : "Failed"}</span>
+                <span class="mw-status-badge ${state}">${Utils.escapeHtml(op.success ? I18n.t("tools-multi-op-completed") : I18n.t("tools-multi-op-failed"))}</span>
                 ${reason}
               </td>
             </tr>`;
@@ -516,7 +559,7 @@ function renderOperationRows(operations, columns) {
   return `
       <table class="mw-results">
         <thead>
-          <tr>${head}<th>Route</th><th>Status</th></tr>
+          <tr>${head}<th>${Utils.escapeHtml(I18n.t("tools-multi-column-route"))}</th><th>${Utils.escapeHtml(I18n.t("tools-multi-column-status"))}</th></tr>
         </thead>
         <tbody>${rows}</tbody>
       </table>
@@ -529,7 +572,7 @@ async function handleMultiBuyStop() {
   try {
     await fetch(`/api/tools/multi-buy/${multiBuyState.sessionId}/abort`, { method: "POST" });
     stopMultiBuyPolling();
-    Utils.showToast("Multi-buy stopped", "info");
+    Utils.showToast(I18n.t("tools-multi-buy-stopped"), "info");
     resetMultiBuyUI();
   } catch (error) {
     console.error("Failed to stop multi-buy:", error);
@@ -566,19 +609,19 @@ function renderSellMultiWalletsTool(container, actionsContainer) {
       <!-- Token Input -->
       <div class="tool-section">
         <div class="section-header">
-          <h3><i class="icon-coins"></i> Token</h3>
+          <h3><i class="icon-coins"></i> <span data-l10n-id="tools-multi-token-title"></span></h3>
           ${hintHtml}
         </div>
         <div class="section-content">
           <div class="form-group">
-            <label for="ms-token-mint">Token Mint Address <span class="required">*</span></label>
+            <label for="ms-token-mint"><span data-l10n-id="tools-multi-mint-label"></span> <span class="required">*</span></label>
             <div class="input-group">
-              <input type="text" id="ms-token-mint" placeholder="Paste token mint address..." />
+              <input type="text" id="ms-token-mint" data-l10n-id="tools-multi-mint-input" />
               <button class="btn" id="ms-scan-btn" type="button">
-                <i class="icon-search"></i> Scan
+                <i class="icon-search"></i> <span data-l10n-id="tools-multi-sell-action-scan"></span>
               </button>
             </div>
-            <small>Enter a token address to scan for wallets holding it</small>
+            <small data-l10n-id="tools-multi-sell-mint-hint"></small>
           </div>
         </div>
       </div>
@@ -586,28 +629,28 @@ function renderSellMultiWalletsTool(container, actionsContainer) {
       <!-- Sell Settings -->
       <div class="tool-section">
         <div class="section-header">
-          <h3><i class="icon-settings"></i> Sell Settings</h3>
+          <h3><i class="icon-settings"></i> <span data-l10n-id="tools-multi-sell-settings-title"></span></h3>
         </div>
         <div class="section-content">
           <form class="tool-form">
             <div class="form-row">
               <div class="form-group">
-                <label for="ms-sell-percent">Sell Percentage</label>
+                <label for="ms-sell-percent" data-l10n-id="tools-multi-sell-percent-label"></label>
                 <input type="number" id="ms-sell-percent" value="100" min="1" max="100" step="1" />
-                <small>% of tokens to sell per wallet</small>
+                <small data-l10n-id="tools-multi-sell-percent-hint"></small>
               </div>
               <div class="form-group">
-                <label for="ms-min-sol-fee">Min SOL for Fee</label>
+                <label for="ms-min-sol-fee" data-l10n-id="tools-multi-sell-min-fee-label"></label>
                 <input type="number" id="ms-min-sol-fee" value="0.01" min="0.005" step="0.005" />
-                <small>Minimum SOL needed for tx fee</small>
+                <small data-l10n-id="tools-multi-sell-min-fee-hint"></small>
               </div>
             </div>
             <div class="form-group checkbox-group">
               <label>
                 <input type="checkbox" id="ms-auto-topup" checked />
-                Auto topup if needed
+                <span data-l10n-id="tools-multi-sell-topup-label"></span>
               </label>
-              <small>Transfer SOL from main wallet if sub-wallet has insufficient balance</small>
+              <small data-l10n-id="tools-multi-sell-topup-hint"></small>
             </div>
           </form>
         </div>
@@ -616,23 +659,23 @@ function renderSellMultiWalletsTool(container, actionsContainer) {
       <!-- Post-Sell Actions -->
       <div class="tool-section">
         <div class="section-header">
-          <h3><i class="icon-arrow-right"></i> Post-Sell Actions</h3>
+          <h3><i class="icon-arrow-right"></i> <span data-l10n-id="tools-multi-sell-post-title"></span></h3>
         </div>
         <div class="section-content">
           <form class="tool-form">
             <div class="form-group checkbox-group">
               <label>
                 <input type="checkbox" id="ms-consolidate" checked />
-                Consolidate SOL to main wallet
+                <span data-l10n-id="tools-multi-sell-consolidate-label"></span>
               </label>
-              <small>Transfer all SOL from sub-wallets back to main wallet</small>
+              <small data-l10n-id="tools-multi-sell-consolidate-hint"></small>
             </div>
             <div class="form-group checkbox-group">
               <label>
                 <input type="checkbox" id="ms-close-atas" checked />
-                Close token ATAs after sell
+                <span data-l10n-id="tools-multi-sell-close-atas-label"></span>
               </label>
-              <small>Reclaim ~0.002 SOL per ATA</small>
+              <small data-l10n-id="tools-multi-sell-close-atas-hint"></small>
             </div>
           </form>
         </div>
@@ -641,40 +684,40 @@ function renderSellMultiWalletsTool(container, actionsContainer) {
       <!-- Execution Settings -->
       <div class="tool-section">
         <div class="section-header">
-          <h3><i class="icon-zap"></i> Execution Settings</h3>
+          <h3><i class="icon-zap"></i> <span data-l10n-id="tools-multi-execution-title"></span></h3>
         </div>
         <div class="section-content">
           <form class="tool-form">
             <div class="form-row">
               <div class="form-group">
-                <label for="ms-delay-min">Delay Min (ms)</label>
+                <label for="ms-delay-min" data-l10n-id="tools-multi-delay-min-label"></label>
                 <input type="number" id="ms-delay-min" value="1000" min="500" step="100" />
               </div>
               <div class="form-group">
-                <label for="ms-delay-max">Delay Max (ms)</label>
+                <label for="ms-delay-max" data-l10n-id="tools-multi-delay-max-label"></label>
                 <input type="number" id="ms-delay-max" value="2000" min="500" step="100" />
               </div>
               <div class="form-group">
-                <label for="ms-concurrency">Concurrency</label>
+                <label for="ms-concurrency" data-l10n-id="tools-multi-concurrency-label"></label>
                 <select id="ms-concurrency" data-custom-select>
-                  <option value="1" selected>1 (Sequential)</option>
-                  <option value="2">2 parallel</option>
-                  <option value="3">3 parallel</option>
+                  <option value="1" data-l10n-id="tools-multi-concurrency-sequential" data-l10n-args='{"count":1}' selected></option>
+                  <option value="2" data-l10n-id="tools-multi-concurrency-parallel" data-l10n-args='{"count":2}'></option>
+                  <option value="3" data-l10n-id="tools-multi-concurrency-parallel" data-l10n-args='{"count":3}'></option>
                 </select>
               </div>
             </div>
             <div class="form-row">
               <div class="form-group">
-                <label for="ms-slippage">Slippage (%)</label>
+                <label for="ms-slippage" data-l10n-id="tools-multi-slippage-label"></label>
                 <input type="number" id="ms-slippage" value="5" min="0.5" max="50" step="0.5" />
               </div>
               <div class="form-group">
-                <label for="ms-router">Router</label>
+                <label for="ms-router" data-l10n-id="tools-multi-router-label"></label>
                 <select id="ms-router" data-custom-select data-router-choice>
-                  <option value="auto" selected>Auto (Best Route)</option>
-                  <option value="jupiter" data-router="jupiter">Jupiter</option>
-                  <option value="direct" data-router="direct">Direct Pool</option>
-                  <option value="raptor" data-router="raptor">Raptor</option>
+                  <option value="auto" data-l10n-id="tools-multi-router-auto" selected></option>
+                  <option value="jupiter" data-router="jupiter" data-l10n-id="tools-multi-router-jupiter"></option>
+                  <option value="direct" data-router="direct" data-l10n-id="tools-multi-router-direct"></option>
+                  <option value="raptor" data-router="raptor" data-l10n-id="tools-multi-router-raptor"></option>
                 </select>
               </div>
             </div>
@@ -685,9 +728,9 @@ function renderSellMultiWalletsTool(container, actionsContainer) {
       <!-- Wallets with Token -->
       <div class="tool-section" id="ms-wallets-section" style="display: none;">
         <div class="section-header">
-          <h3><i class="icon-wallet"></i> Wallets with Token</h3>
+          <h3><i class="icon-wallet"></i> <span data-l10n-id="tools-multi-sell-wallets-title"></span></h3>
           <div class="section-actions">
-            <button class="btn btn-sm" id="ms-select-all-btn" type="button">Select All</button>
+            <button class="btn btn-sm" id="ms-select-all-btn" type="button" data-l10n-id="common-action-select-all"></button>
           </div>
         </div>
         <div class="section-content">
@@ -703,7 +746,7 @@ function renderSellMultiWalletsTool(container, actionsContainer) {
       <!-- Progress Section -->
       <div class="tool-section" id="ms-progress-section" style="display: none;">
         <div class="section-header">
-          <h3><i class="icon-activity"></i> Progress</h3>
+          <h3><i class="icon-activity"></i> <span data-l10n-id="tools-multi-progress-title"></span></h3>
         </div>
         <div class="section-content">
           <div class="mw-progress-container">
@@ -713,7 +756,7 @@ function renderSellMultiWalletsTool(container, actionsContainer) {
               </div>
               <span class="mw-progress-percent" id="ms-progress-percent">0%</span>
             </div>
-            <div class="mw-progress-status" id="ms-progress-status">Preparing...</div>
+            <div class="mw-progress-status" id="ms-progress-status" data-l10n-id="tools-multi-progress-preparing"></div>
           </div>
           <div class="mw-results-table" id="ms-results-table">
             <!-- Results populated dynamically -->
@@ -723,18 +766,21 @@ function renderSellMultiWalletsTool(container, actionsContainer) {
     </div>
   `;
 
+  I18n.localizeTree(container);
+
   HintTrigger.initAll();
   enhanceAllSelects(container);
   void syncRouterChoices(container);
 
   actionsContainer.innerHTML = `
     <button class="btn success" id="ms-start-btn" disabled>
-      <i class="icon-package"></i> Start Multi-Sell
+      <i class="icon-package"></i> <span data-l10n-id="tools-multi-sell-action-start"></span>
     </button>
     <button class="btn danger" id="ms-stop-btn" style="display: none;">
-      <i class="icon-x"></i> Stop
+      <i class="icon-x"></i> <span data-l10n-id="tools-multi-action-stop"></span>
     </button>
   `;
+  I18n.localizeTree(actionsContainer);
 
   // Wire up event handlers
   const scanBtn = $("#ms-scan-btn");
@@ -751,7 +797,7 @@ function renderSellMultiWalletsTool(container, actionsContainer) {
 async function handleMultiSellScan() {
   const tokenMint = $("#ms-token-mint")?.value?.trim();
   if (!tokenMint) {
-    Utils.showToast("Please enter a token mint address", "error");
+    Utils.showToast(I18n.t("tools-validation-mint-required"), "error");
     return;
   }
 
@@ -762,7 +808,9 @@ async function handleMultiSellScan() {
   if (!scanBtn || !walletsSection || !walletList) return;
 
   scanBtn.disabled = true;
-  scanBtn.innerHTML = '<i class="icon-loader spin"></i>';
+  const spinner = document.createElement("i");
+  spinner.className = "icon-loader spin";
+  scanBtn.replaceChildren(spinner);
 
   try {
     // The preview endpoint IS the scan: it reports every sub-wallet holding the
@@ -776,8 +824,7 @@ async function handleMultiSellScan() {
       }),
     });
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || `HTTP ${response.status}`);
+      throw await responseError(response);
     }
 
     const data = await response.json();
@@ -786,9 +833,10 @@ async function handleMultiSellScan() {
       walletList.innerHTML = `
         <div class="empty-state">
           <i class="icon-inbox"></i>
-          <p>No sub-wallets hold this token</p>
+          <p data-l10n-id="tools-multi-sell-empty"></p>
         </div>
       `;
+      I18n.localizeTree(walletList);
       walletsSection.style.display = "block";
       return;
     }
@@ -798,10 +846,10 @@ async function handleMultiSellScan() {
         <thead>
           <tr>
             <th><input type="checkbox" id="ms-check-all" checked /></th>
-            <th>Wallet</th>
-            <th>Tokens</th>
-            <th>SOL Balance</th>
-            <th>Needs Topup</th>
+            <th data-l10n-id="tools-multi-column-wallet"></th>
+            <th data-l10n-id="tools-multi-sell-column-tokens"></th>
+            <th data-l10n-id="tools-multi-sell-column-sol"></th>
+            <th data-l10n-id="tools-multi-sell-column-topup"></th>
           </tr>
         </thead>
         <tbody>
@@ -813,7 +861,7 @@ async function handleMultiSellScan() {
               <td>${Utils.escapeHtml(w.wallet_name)}</td>
               <td class="mono">${Utils.formatNumber(w.token_balance)}</td>
               <td class="mono">${Utils.formatSol(w.sol_balance, { suffix: "" })}</td>
-              <td>${w.needs_sol_topup ? '<span class="warning">Yes</span>' : '<span class="success">No</span>'}</td>
+              <td>${w.needs_sol_topup ? `<span class="warning">${Utils.escapeHtml(I18n.t("format-yes"))}</span>` : `<span class="success">${Utils.escapeHtml(I18n.t("format-no"))}</span>`}</td>
             </tr>
           `
             )
@@ -821,6 +869,8 @@ async function handleMultiSellScan() {
         </tbody>
       </table>
     `;
+
+    I18n.localizeTree(walletList);
 
     walletsSection.style.display = "block";
     updateMultiSellSelectionSummary();
@@ -840,10 +890,10 @@ async function handleMultiSellScan() {
     });
   } catch (error) {
     console.error("Multi-sell scan failed:", error);
-    Utils.showToast(`Scan failed: ${error.message}`, "error");
+    Utils.showToast(I18n.t("tools-wallet-scan-failed", { reason: error.message }), "error");
   } finally {
     scanBtn.disabled = false;
-    scanBtn.innerHTML = '<i class="icon-search"></i> Scan';
+    setButton(scanBtn, "icon-search", I18n.t("tools-multi-sell-action-scan"));
   }
 }
 
@@ -867,9 +917,9 @@ function updateMultiSellSelectionSummary() {
 
   if (summary) {
     if (selectedCount === 0) {
-      summary.innerHTML = '<span class="text-muted">No wallets selected</span>';
+      summary.innerHTML = `<span class="text-muted">${Utils.escapeHtml(I18n.t("tools-multi-sell-none-selected"))}</span>`;
     } else {
-      summary.innerHTML = `<span class="text-primary">Selected: ${selectedCount} wallet${selectedCount > 1 ? "s" : ""}</span>`;
+      summary.innerHTML = `<span class="text-primary">${Utils.escapeHtml(I18n.t("tools-wallet-selected", { count: selectedCount }))}</span>`;
     }
   }
 
@@ -886,7 +936,7 @@ async function handleMultiSellStart() {
     Number(c.dataset.walletId)
   );
   if (selectedWallets.length === 0) {
-    Utils.showToast("Please select at least one wallet", "error");
+    Utils.showToast(I18n.t("tools-multi-sell-select-required"), "error");
     return;
   }
 
@@ -923,8 +973,7 @@ async function handleMultiSellStart() {
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || `HTTP ${response.status}`);
+      throw await responseError(response);
     }
 
     const result = await response.json();
@@ -932,10 +981,10 @@ async function handleMultiSellStart() {
     multiSellState.status = "running";
 
     startMultiSellPolling();
-    Utils.showToast("Multi-sell started", "success");
+    Utils.showToast(I18n.t("tools-multi-sell-started"), "success");
   } catch (error) {
     console.error("Multi-sell start failed:", error);
-    Utils.showToast(`Failed to start: ${error.message}`, "error");
+    Utils.showToast(I18n.t("tools-multi-start-failed", { reason: error.message }), "error");
     resetMultiSellUI();
   }
 }
@@ -961,8 +1010,10 @@ function startMultiSellPolling() {
         stopMultiSellPolling();
         multiSellState.status = status.status;
         Utils.showToast(
-          status.error ||
-            `Multi-sell completed! ${Utils.formatSol(status.total_sol_recovered)} received`,
+          apiErrorMessage({ error: status.error }, null) ||
+            I18n.t("tools-multi-sell-completed", {
+              amount: Utils.formatSol(status.total_sol_recovered),
+            }),
           status.error ? "error" : "success"
         );
       }
@@ -992,7 +1043,7 @@ function updateMultiSellProgress(status) {
   if (progressStatus) {
     progressStatus.textContent = sessionStatusLine(
       status,
-      "Executing sells...",
+      I18n.t("tools-multi-sell-executing"),
       completed,
       status.total_wallets
     );
@@ -1000,14 +1051,19 @@ function updateMultiSellProgress(status) {
 
   if (resultsTable && status.operations) {
     resultsTable.innerHTML = renderOperationRows(status.operations, [
-      { head: "Wallet", cell: (op) => Utils.formatAddressCompact(op.wallet_address), mono: true },
       {
-        head: "Tokens Sold",
+        head: I18n.t("tools-multi-column-wallet"),
+        cell: (op) => Utils.formatAddressCompact(op.wallet_address),
+        mono: true,
+        ltr: true,
+      },
+      {
+        head: I18n.t("tools-multi-sell-column-sold"),
         cell: (op) => (op.token_amount ? Utils.formatNumber(op.token_amount) : "—"),
         mono: true,
       },
       {
-        head: "SOL Received",
+        head: I18n.t("tools-multi-sell-column-received"),
         cell: (op) => Utils.formatSol(op.amount_sol, { suffix: "" }),
         mono: true,
       },
@@ -1021,7 +1077,7 @@ async function handleMultiSellStop() {
   try {
     await fetch(`/api/tools/multi-sell/${multiSellState.sessionId}/abort`, { method: "POST" });
     stopMultiSellPolling();
-    Utils.showToast("Multi-sell stopped", "info");
+    Utils.showToast(I18n.t("tools-multi-sell-stopped"), "info");
     resetMultiSellUI();
   } catch (error) {
     console.error("Failed to stop multi-sell:", error);

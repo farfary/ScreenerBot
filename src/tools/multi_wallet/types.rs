@@ -8,6 +8,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 
+use crate::actions::ActionFailure;
 use crate::tools::types::DelayConfig;
 use crate::tools::Error;
 
@@ -356,8 +357,8 @@ pub struct WalletOpResult {
     pub router: Option<String>,
     /// Venue/route reported by the executed quote when available.
     pub venue: Option<String>,
-    /// Error message (if failed)
-    pub error: Option<String>,
+    /// Why the operation failed: catalog text plus the technical cause
+    pub error: Option<ActionFailure>,
 }
 
 impl WalletOpResult {
@@ -385,7 +386,7 @@ impl WalletOpResult {
     }
 
     /// Create a failed result
-    pub fn failure(wallet_id: i64, wallet_address: String, error: String) -> Self {
+    pub fn failure(wallet_id: i64, wallet_address: String, error: ActionFailure) -> Self {
         Self {
             wallet_id,
             wallet_address,
@@ -419,8 +420,8 @@ pub struct SessionResult {
     pub total_sol_recovered: f64,
     /// Individual operation results
     pub operations: Vec<WalletOpResult>,
-    /// Error message (if overall failure)
-    pub error: Option<String>,
+    /// Why the session failed or stopped early: catalog text plus the technical cause
+    pub error: Option<ActionFailure>,
 }
 
 impl SessionResult {
@@ -457,5 +458,98 @@ impl SessionResult {
         self.total_wallets = self.operations.len();
         // Consider success if more than half succeeded
         self.success = self.successful_ops > self.failed_ops || self.failed_ops == 0;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::i18n::{ids, MessageId};
+
+    /// Catalog key of the label for each session state. The match is exhaustive,
+    /// so a new variant fails to compile until it is mapped here and in
+    /// `SESSION_STATE_LABELS` (pages/tools/multi_wallet_tools.js).
+    fn state_label_key(status: &SessionStatus) -> &'static str {
+        match status {
+            SessionStatus::Pending => "tools-multi-state-pending",
+            SessionStatus::Funding => "tools-multi-state-funding",
+            SessionStatus::Executing => "tools-multi-state-executing",
+            SessionStatus::Consolidating => "tools-multi-state-consolidating",
+            SessionStatus::Completed => "tools-multi-state-completed",
+            SessionStatus::Failed => "tools-multi-state-failed",
+            SessionStatus::Aborted => "tools-multi-state-aborted",
+        }
+    }
+
+    #[test]
+    fn session_state_labels_exist_in_the_catalog() {
+        let states = [
+            SessionStatus::Pending,
+            SessionStatus::Funding,
+            SessionStatus::Executing,
+            SessionStatus::Consolidating,
+            SessionStatus::Completed,
+            SessionStatus::Failed,
+            SessionStatus::Aborted,
+        ];
+        for status in &states {
+            let key = state_label_key(status);
+            assert_eq!(key, format!("tools-multi-state-{status}"));
+            assert_ne!(crate::i18n::format_en(key, None), key, "missing {key}");
+        }
+    }
+
+    fn english(id: MessageId, details: &str) -> String {
+        ActionFailure::with_details(id, details).log_text()
+    }
+
+    #[test]
+    fn operation_failures_render_their_english() {
+        assert_eq!(
+            english(ids::TOOLS_MULTI_OP_MINT_INVALID, ""),
+            "Invalid mint address"
+        );
+        assert_eq!(
+            english(ids::TOOLS_MULTI_SESSION_ABORTED, ""),
+            "Operation aborted by user"
+        );
+        assert_eq!(
+            english(ids::TOOLS_MULTI_OP_BUY_FAILED, "rpc"),
+            "Buy failed: rpc"
+        );
+        assert_eq!(
+            english(ids::TOOLS_MULTI_OP_SELL_FAILED, "rpc"),
+            "Sell failed: rpc"
+        );
+        assert_eq!(
+            english(ids::TOOLS_MULTI_OP_TRANSFER_FAILED, "rpc"),
+            "Transfer failed: rpc"
+        );
+        assert_eq!(
+            english(ids::TOOLS_MULTI_OP_BALANCE_FAILED, "rpc"),
+            "Failed to get balance: rpc"
+        );
+        assert_eq!(
+            english(ids::TOOLS_MULTI_BUY_SESSION_FAILED, "rpc"),
+            "Multi-buy failed: rpc"
+        );
+        assert_eq!(
+            english(ids::TOOLS_MULTI_SELL_SESSION_FAILED, "rpc"),
+            "Multi-sell failed: rpc"
+        );
+    }
+
+    #[test]
+    fn failed_operation_serializes_text_and_details() {
+        let op = WalletOpResult::failure(
+            7,
+            "Wallet1111".to_owned(),
+            ActionFailure::with_details(ids::TOOLS_MULTI_OP_BUY_FAILED, "rpc timeout"),
+        );
+        let json = serde_json::to_value(&op).unwrap();
+        assert_eq!(json["success"], false);
+        assert_eq!(json["signature"], serde_json::Value::Null);
+        assert_eq!(json["error"]["text"]["id"], "tools-multi-op-buy-failed");
+        assert_eq!(json["error"]["details"], "rpc timeout");
     }
 }

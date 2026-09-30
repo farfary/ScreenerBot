@@ -6,8 +6,9 @@ use axum::{extract::Path, response::Response, Json};
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
+use crate::actions::ActionFailure;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
-use crate::i18n::ids;
+use crate::i18n::{ids, UiText};
 use crate::logger::{self, LogTag};
 use crate::tokens::decimals;
 use crate::tools::multi_wallet::{
@@ -82,7 +83,7 @@ pub async fn preview_multi_sell(Json(request): Json<MultiSellPreviewRequest>) ->
             token_to_sell: 0.0,
             estimated_sol: None,
             can_proceed: false,
-            warning: Some("No secondary wallets found".to_owned()),
+            warning: Some(UiText::new(ids::TOOLS_MULTI_SELL_WARNING_NO_WALLETS)),
             wallets: vec![],
         });
     }
@@ -134,7 +135,7 @@ pub async fn preview_multi_sell(Json(request): Json<MultiSellPreviewRequest>) ->
     let token_to_sell = total_token_balance * (request.sell_percentage / 100.0);
     let can_proceed = !wallets_with_balance.is_empty();
     let warning = if !can_proceed {
-        Some("No wallets have token balance".to_owned())
+        Some(UiText::new(ids::TOOLS_MULTI_SELL_WARNING_NO_BALANCE))
     } else {
         None
     };
@@ -276,7 +277,10 @@ pub async fn start_multi_sell(Json(request): Json<MultiSellStartRequest>) -> Res
                         session.status = SessionStatus::Completed;
                     }
                     Err(e) => {
-                        session.result.error = Some(e.to_string());
+                        session.result.error = Some(ActionFailure::with_details(
+                            ids::TOOLS_MULTI_SELL_SESSION_FAILED,
+                            e.to_string(),
+                        ));
                         session.result.success = false;
                         session.status = SessionStatus::Failed;
                         logger::error(
@@ -304,4 +308,21 @@ pub async fn get_multi_sell_status(Path(id): Path<String>) -> Response {
 /// Abort multi-sell session
 pub async fn abort_multi_sell(Path(id): Path<String>) -> Response {
     super::session::abort_session(&id).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn preview_warnings_render_their_english() {
+        assert_eq!(
+            UiText::new(ids::TOOLS_MULTI_SELL_WARNING_NO_WALLETS).render_source_plain(),
+            "No secondary wallets found"
+        );
+        assert_eq!(
+            UiText::new(ids::TOOLS_MULTI_SELL_WARNING_NO_BALANCE).render_source_plain(),
+            "No wallets have token balance"
+        );
+    }
 }

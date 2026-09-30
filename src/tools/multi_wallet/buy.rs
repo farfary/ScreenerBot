@@ -8,7 +8,9 @@ use std::sync::atomic::Ordering;
 use tokio::time::{sleep, Duration};
 use uuid::Uuid;
 
+use crate::actions::ActionFailure;
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
+use crate::i18n::ids;
 use crate::logger::{self, LogTag};
 use crate::tools::swap_executor::tool_buy;
 use crate::tools::Error;
@@ -119,7 +121,7 @@ pub async fn execute_multi_buy(config: MultiBuyConfig) -> Result<SessionResult, 
                     LogTag::Tools,
                     &format!("Multi-buy session {} aborted by user", &session_id[..8]),
                 );
-                result.error = Some("Operation aborted by user".to_owned());
+                result.error = Some(ActionFailure::new(ids::TOOLS_MULTI_SESSION_ABORTED));
                 result.finalize();
                 return Ok(result);
             }
@@ -281,6 +283,10 @@ async fn execute_single_buy(
             Some(swap_result.router_name),
             Some(swap_result.route_plan),
         ),
-        Err(e) => WalletOpResult::failure(wallet_id, wallet_address, e.to_string()),
+        Err(e) => WalletOpResult::failure(
+            wallet_id,
+            wallet_address,
+            ActionFailure::with_details(ids::TOOLS_MULTI_OP_BUY_FAILED, e.to_string()),
+        ),
     }
 }

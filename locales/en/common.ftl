@@ -23,6 +23,7 @@ common-action-import = Import
 common-action-edit = Edit
 common-action-duplicate = Duplicate
 common-action-add = Add
+common-action-select-all = Select All
 
 # On/off state of a switch or a feature.
 common-state-enabled = Enabled

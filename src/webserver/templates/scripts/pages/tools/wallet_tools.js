@@ -9,6 +9,43 @@ import * as Hints from "../../core/hints.js";
 import { HintTrigger } from "../../ui/hint_popover.js";
 import { apiErrorMessage } from "../../core/request_manager.js";
 
+// Ids are the categories of the burn scan.
+const BURN_CATEGORY_LABELS = Object.freeze({
+  open_position: "tools-burn-category-open-position",
+  has_value: "tools-burn-category-has-value",
+  closed_position: "tools-burn-category-closed-position",
+  zero_liquidity: "tools-burn-category-zero-liquidity",
+});
+
+const BURN_CATEGORY_HINT_LABELS = Object.freeze({
+  open_position: "tools-burn-category-hint-open-position",
+  has_value: "tools-burn-category-hint-has-value",
+  closed_position: "tools-burn-category-hint-closed-position",
+  zero_liquidity: "tools-burn-category-hint-zero-liquidity",
+});
+
+/** Replace a button's content with an icon and an already localized label. */
+function setButton(button, icon, label) {
+  const glyph = document.createElement("i");
+  glyph.className = icon;
+  button.replaceChildren(glyph, ` ${label}`);
+}
+
+/** Message of a failed response: the localized envelope text, else the HTTP status. */
+async function responseError(response) {
+  const body = await response.json().catch(() => ({}));
+  return new Error(apiErrorMessage(body, `HTTP ${response.status}`));
+}
+
+function errorStateHtml(text) {
+  return `
+      <div class="error-state">
+        <i class="icon-circle-alert"></i>
+        <p>${Utils.escapeHtml(text)}</p>
+      </div>
+    `;
+}
+
 // =============================================================================
 // Wallet Cleanup Tool
 // =============================================================================
@@ -21,7 +58,7 @@ function renderWalletCleanupTool(container, actionsContainer) {
     <div class="tool-panel wallet-cleanup-tool">
       <div class="tool-section">
         <div class="section-header">
-          <h3><i class="icon-search"></i> Scan Results</h3>
+          <h3><i class="icon-search"></i> <span data-l10n-id="tools-wallet-cleanup-results-title"></span></h3>
           <div class="section-header-actions">
             ${hintHtml}
           </div>
@@ -30,39 +67,41 @@ function renderWalletCleanupTool(container, actionsContainer) {
           <div class="scan-stats">
             <div class="stat-card">
               <div class="stat-value" id="empty-atas-count">—</div>
-              <div class="stat-label">Empty ATAs</div>
+              <div class="stat-label" data-l10n-id="tools-wallet-cleanup-stat-empty"></div>
             </div>
             <div class="stat-card">
               <div class="stat-value" id="reclaimable-sol">—</div>
-              <div class="stat-label">Reclaimable SOL</div>
+              <div class="stat-label" data-l10n-id="tools-wallet-cleanup-stat-reclaimable"></div>
             </div>
             <div class="stat-card">
               <div class="stat-value" id="failed-atas-count">—</div>
-              <div class="stat-label">Failed (cached)</div>
+              <div class="stat-label" data-l10n-id="tools-wallet-cleanup-stat-failed"></div>
             </div>
           </div>
           <div class="ata-list" id="ata-list">
             <div class="empty-state">
               <i class="icon-scan"></i>
-              <p>Click "Scan Wallet" to find empty ATAs</p>
-              <small>This will check all token accounts in your wallet</small>
+              <p data-l10n-id="tools-wallet-cleanup-prompt"></p>
+              <small data-l10n-id="tools-wallet-cleanup-prompt-hint"></small>
             </div>
           </div>
         </div>
       </div>
     </div>
   `;
+  I18n.localizeTree(container);
 
   HintTrigger.initAll();
 
   actionsContainer.innerHTML = `
     <button class="btn primary" id="scan-atas-btn">
-      <i class="icon-scan"></i> Scan Wallet
+      <i class="icon-scan"></i> <span data-l10n-id="tools-wallet-action-scan"></span>
     </button>
     <button class="btn success" id="cleanup-atas-btn" disabled>
-      <i class="icon-trash-2"></i> Cleanup All
+      <i class="icon-trash-2"></i> <span data-l10n-id="tools-wallet-cleanup-action-cleanup"></span>
     </button>
   `;
+  I18n.localizeTree(actionsContainer);
 
   // Wire up event handlers
   const scanBtn = $("#scan-atas-btn");
@@ -83,21 +122,15 @@ async function handleScanATAs() {
   if (!scanBtn || !listEl) return;
 
   scanBtn.disabled = true;
-  scanBtn.innerHTML = '<i class="icon-loader spin"></i> Scanning...';
-  listEl.innerHTML =
-    '<div class="loading-state"><i class="icon-loader spin"></i> Scanning wallet...</div>';
+  setButton(scanBtn, "icon-loader spin", I18n.t("tools-wallet-action-scanning"));
+  listEl.innerHTML = `<div class="loading-state"><i class="icon-loader spin"></i> ${Utils.escapeHtml(I18n.t("tools-wallet-cleanup-scanning"))}</div>`;
 
   try {
     const response = await fetch("/api/tools/ata-scan");
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+      throw await responseError(response);
     }
     const stats = await response.json();
-
-    // Check for error response
-    if (stats.error) {
-      throw new Error(stats.error);
-    }
 
     const countEl = $("#empty-atas-count");
     const solEl = $("#reclaimable-sol");
@@ -109,10 +142,14 @@ async function handleScanATAs() {
     if (failedEl) failedEl.textContent = stats.failed_count || 0;
 
     if (stats.empty_count > 0) {
+      const found = I18n.t("tools-wallet-cleanup-found", {
+        count: stats.empty_count,
+        amount: Utils.formatSol(stats.reclaimable_sol || 0),
+      });
       listEl.innerHTML = `
         <div class="success-state">
           <i class="icon-circle-check"></i>
-          <p>Found ${stats.empty_count} empty ATAs worth ~${Utils.formatSol(stats.reclaimable_sol || 0)} SOL</p>
+          <p>${Utils.escapeHtml(found)}</p>
         </div>
       `;
       if (cleanupBtn) cleanupBtn.disabled = false;
@@ -120,22 +157,18 @@ async function handleScanATAs() {
       listEl.innerHTML = `
         <div class="empty-state">
           <i class="icon-circle-check"></i>
-          <p>No empty ATAs found - wallet is clean!</p>
+          <p data-l10n-id="tools-wallet-cleanup-clean"></p>
         </div>
       `;
+      I18n.localizeTree(listEl);
     }
   } catch (error) {
     console.error("ATA scan failed:", error);
-    listEl.innerHTML = `
-      <div class="error-state">
-        <i class="icon-circle-alert"></i>
-        <p>Scan failed: ${error.message}</p>
-      </div>
-    `;
-    Utils.showToast("Failed to scan ATAs", "error");
+    listEl.innerHTML = errorStateHtml(I18n.t("tools-wallet-scan-failed", { reason: error.message }));
+    Utils.showToast(I18n.t("tools-wallet-cleanup-scan-failed"), "error");
   } finally {
     scanBtn.disabled = false;
-    scanBtn.innerHTML = '<i class="icon-scan"></i> Scan Wallet';
+    setButton(scanBtn, "icon-scan", I18n.t("tools-wallet-action-scan"));
   }
 }
 
@@ -144,24 +177,27 @@ async function handleCleanupATAs() {
   if (!cleanupBtn) return;
 
   cleanupBtn.disabled = true;
-  cleanupBtn.innerHTML = '<i class="icon-loader spin"></i> Cleaning...';
+  setButton(cleanupBtn, "icon-loader spin", I18n.t("tools-wallet-cleanup-action-cleaning"));
 
   try {
     const response = await fetch("/api/tools/ata-cleanup", { method: "POST" });
-    const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(apiErrorMessage(data, `HTTP ${response.status}`));
+      throw await responseError(response);
     }
+    const data = await response.json().catch(() => ({}));
 
-    Utils.showToast(`Cleaned ${data.closed_count || 0} ATAs`, "success");
+    Utils.showToast(
+      I18n.t("tools-wallet-cleanup-done", { count: data.closed_count || 0 }),
+      "success"
+    );
     // Refresh scan
     handleScanATAs();
   } catch (error) {
     console.error("ATA cleanup failed:", error);
-    Utils.showToast(`Cleanup failed: ${error.message}`, "error");
+    Utils.showToast(I18n.t("tools-wallet-cleanup-failed", { reason: error.message }), "error");
   } finally {
     cleanupBtn.disabled = false;
-    cleanupBtn.innerHTML = '<i class="icon-trash-2"></i> Cleanup All';
+    setButton(cleanupBtn, "icon-trash-2", I18n.t("tools-wallet-cleanup-action-cleanup"));
   }
 }
 
@@ -184,7 +220,7 @@ function renderBurnTokensTool(container, actionsContainer) {
     <div class="tool-panel burn-tokens-tool">
       <div class="tool-section">
         <div class="section-header">
-          <h3><i class="icon-flame"></i> Burn Tokens</h3>
+          <h3><i class="icon-flame"></i> <span data-l10n-id="tools-burn-section-title"></span></h3>
           <div class="section-header-actions">
             ${hintHtml}
           </div>
@@ -193,47 +229,49 @@ function renderBurnTokensTool(container, actionsContainer) {
           <div class="burn-info-box">
             <i class="icon-info"></i>
             <div class="burn-info-content">
-              <p><strong>What is burning?</strong></p>
-              <p>Burning permanently destroys tokens, making them unrecoverable. After burning, run Wallet Cleanup to close empty ATAs and reclaim ~0.002 SOL rent per token.</p>
+              <p><strong data-l10n-id="tools-burn-info-title"></strong></p>
+              <p data-l10n-id="tools-burn-info-body"></p>
             </div>
           </div>
           
           <div class="burn-stats" id="burn-stats">
             <div class="stat-card">
               <div class="stat-value" id="burn-total-tokens">—</div>
-              <div class="stat-label">Total Tokens</div>
+              <div class="stat-label" data-l10n-id="tools-burn-stat-total"></div>
             </div>
             <div class="stat-card">
               <div class="stat-value" id="burn-selected-count">0</div>
-              <div class="stat-label">Selected</div>
+              <div class="stat-label" data-l10n-id="tools-burn-stat-selected"></div>
             </div>
             <div class="stat-card">
               <div class="stat-value" id="burn-rent-reclaimable">—</div>
-              <div class="stat-label">Rent Reclaimable</div>
+              <div class="stat-label" data-l10n-id="tools-burn-stat-rent"></div>
             </div>
           </div>
 
           <div class="burn-token-list" id="burn-token-list">
             <div class="empty-state">
               <i class="icon-search"></i>
-              <p>Click "Scan Wallet" to find tokens</p>
+              <p data-l10n-id="tools-burn-prompt"></p>
             </div>
           </div>
         </div>
       </div>
     </div>
   `;
+  I18n.localizeTree(container);
 
   HintTrigger.initAll();
 
   actionsContainer.innerHTML = `
     <button class="btn primary" id="scan-burn-tokens-btn">
-      <i class="icon-search"></i> Scan Wallet
+      <i class="icon-search"></i> <span data-l10n-id="tools-wallet-action-scan"></span>
     </button>
     <button class="btn danger" id="burn-selected-btn" disabled>
-      <i class="icon-flame"></i> Burn Selected (0)
+      <i class="icon-flame"></i> ${Utils.escapeHtml(I18n.t("tools-burn-action-burn", { count: 0 }))}
     </button>
   `;
+  I18n.localizeTree(actionsContainer);
 
   // Wire up event handlers
   const scanBtn = $("#scan-burn-tokens-btn");
@@ -263,16 +301,15 @@ async function handleScanBurnTokens() {
 
   burnTokensState.isLoading = true;
   scanBtn.disabled = true;
-  scanBtn.innerHTML = '<i class="icon-loader spin"></i> Scanning...';
-  listEl.innerHTML =
-    '<div class="loading-state"><i class="icon-loader spin"></i> Scanning wallet for tokens...</div>';
+  setButton(scanBtn, "icon-loader spin", I18n.t("tools-wallet-action-scanning"));
+  listEl.innerHTML = `<div class="loading-state"><i class="icon-loader spin"></i> ${Utils.escapeHtml(I18n.t("tools-burn-scanning"))}</div>`;
 
   try {
     const response = await fetch("/api/tools/burn-tokens/scan");
-    const result = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(apiErrorMessage(result, `HTTP ${response.status}`));
+      throw await responseError(response);
     }
+    const result = await response.json().catch(() => ({}));
 
     const data = result.data || result;
     burnTokensState.tokens = data.tokens || [];
@@ -289,17 +326,12 @@ async function handleScanBurnTokens() {
     renderBurnTokenList();
   } catch (error) {
     console.error("Burn tokens scan failed:", error);
-    listEl.innerHTML = `
-      <div class="error-state">
-        <i class="icon-circle-alert"></i>
-        <p>Scan failed: ${error.message}</p>
-      </div>
-    `;
-    Utils.showToast("Failed to scan tokens", "error");
+    listEl.innerHTML = errorStateHtml(I18n.t("tools-wallet-scan-failed", { reason: error.message }));
+    Utils.showToast(I18n.t("tools-burn-scan-failed"), "error");
   } finally {
     burnTokensState.isLoading = false;
     scanBtn.disabled = false;
-    scanBtn.innerHTML = '<i class="icon-search"></i> Scan Wallet';
+    setButton(scanBtn, "icon-search", I18n.t("tools-wallet-action-scan"));
   }
 }
 
@@ -313,9 +345,10 @@ function renderBurnTokenList() {
     listEl.innerHTML = `
       <div class="empty-state">
         <i class="icon-circle-check"></i>
-        <p>No tokens found in wallet</p>
+        <p data-l10n-id="tools-burn-empty"></p>
       </div>
     `;
+    I18n.localizeTree(listEl);
     return;
   }
 
@@ -327,53 +360,39 @@ function renderBurnTokenList() {
     zero_liquidity: tokens.filter((t) => t.category === "zero_liquidity"),
   };
 
+  const categoryIcons = {
+    open_position: "icon-lock",
+    has_value: "icon-dollar-sign",
+    closed_position: "icon-archive",
+    zero_liquidity: "icon-trash-2",
+  };
+
+  // Open positions (warning, cannot burn), has value (caution), closed
+  // positions (info) and zero liquidity (safe to burn), in that order.
   let html = "";
-
-  // Open Positions (warning, can't burn)
-  if (groups.open_position.length > 0) {
-    html += renderBurnCategory(
-      "Open Positions",
-      "icon-lock",
-      groups.open_position,
-      "Cannot burn tokens from open positions",
-      "warning"
-    );
-  }
-
-  // Has Value (caution)
-  if (groups.has_value.length > 0) {
-    html += renderBurnCategory(
-      "Has Value",
-      "icon-dollar-sign",
-      groups.has_value,
-      "Consider selling instead of burning",
-      "caution"
-    );
-  }
-
-  // Closed Positions
-  if (groups.closed_position.length > 0) {
-    html += renderBurnCategory(
-      "Closed Positions",
-      "icon-archive",
-      groups.closed_position,
-      "Leftovers from closed trades",
-      "info"
-    );
-  }
-
-  // Zero Liquidity (safe to burn)
-  if (groups.zero_liquidity.length > 0) {
-    html += renderBurnCategory(
-      "Zero Liquidity",
-      "icon-trash-2",
-      groups.zero_liquidity,
-      "Safe to burn - no market value",
-      "safe"
-    );
+  for (const category of ["open_position", "has_value", "closed_position", "zero_liquidity"]) {
+    if (groups[category].length > 0) {
+      html += renderBurnCategory(
+        I18n.label(BURN_CATEGORY_LABELS, category),
+        categoryIcons[category],
+        groups[category],
+        I18n.label(BURN_CATEGORY_HINT_LABELS, category),
+        getCategoryType(category)
+      );
+    }
   }
 
   listEl.innerHTML = html;
+  I18n.localizeTree(listEl);
+
+  // The lock tooltip is the localized warning the scan returned.
+  const byMint = new Map(tokens.map((t) => [t.mint, t]));
+  listEl.querySelectorAll("[data-burn-lock]").forEach((icon) => {
+    const token = byMint.get(icon.closest(".burn-token-row")?.dataset.mint);
+    icon.title = token?.burn_warning
+      ? I18n.text(token.burn_warning)
+      : I18n.t("tools-burn-cannot-burn");
+  });
 
   // Wire up checkbox events
   wireUpBurnCheckboxes();
@@ -391,8 +410,8 @@ function renderBurnCategory(title, icon, tokens, description, type) {
         <div class="burn-category-info">
           <i class="${icon}"></i>
           <div class="burn-category-text">
-            <span class="burn-category-title">${title}</span>
-            <span class="burn-category-desc">${description}</span>
+            <span class="burn-category-title">${Utils.escapeHtml(title)}</span>
+            <span class="burn-category-desc">${Utils.escapeHtml(description)}</span>
           </div>
           <span class="burn-category-count">${tokens.length}</span>
         </div>
@@ -400,7 +419,7 @@ function renderBurnCategory(title, icon, tokens, description, type) {
           burnableTokens.length > 0
             ? `<label class="burn-select-all">
             <input type="checkbox" data-category="${type}" ${allSelected ? "checked" : ""}>
-            <span>Select All</span>
+            <span data-l10n-id="common-action-select-all"></span>
           </label>`
             : ""
         }
@@ -414,7 +433,7 @@ function renderBurnCategory(title, icon, tokens, description, type) {
 
 function renderBurnTokenRow(token) {
   const isSelected = burnTokensState.selectedMints.has(token.mint);
-  const symbol = token.symbol || "Unknown";
+  const symbol = token.symbol || I18n.t("format-unknown");
   const displayName = token.name || token.mint.substring(0, 8) + "...";
 
   return `
@@ -423,15 +442,15 @@ function renderBurnTokenRow(token) {
         ${
           token.can_burn
             ? `<input type="checkbox" class="burn-token-checkbox" data-mint="${token.mint}" ${isSelected ? "checked" : ""}>`
-            : `<i class="icon-lock" title="${token.burn_warning || "Cannot burn"}"></i>`
+            : `<i class="icon-lock" data-burn-lock></i>`
         }
       </div>
       <div class="burn-token-info">
         <div class="burn-token-name">
-          <span class="burn-token-symbol">${symbol}</span>
-          <span class="burn-token-title">${displayName}</span>
+          <span class="burn-token-symbol">${Utils.escapeHtml(symbol)}</span>
+          <span class="burn-token-title">${Utils.escapeHtml(displayName)}</span>
         </div>
-        <div class="burn-token-mint" title="${token.mint}">
+        <div class="burn-token-mint" dir="ltr" title="${token.mint}">
           ${token.mint.substring(0, 8)}...${token.mint.substring(token.mint.length - 6)}
         </div>
       </div>
@@ -439,17 +458,16 @@ function renderBurnTokenRow(token) {
         <span class="burn-token-amount">${Utils.formatCompactNumber(token.ui_amount)}</span>
         ${
           token.value_sol && token.value_sol > 0.0001
-            ? `<span class="burn-token-value">~${Utils.formatSol(token.value_sol)}</span>`
-            : '<span class="burn-token-value no-value">No value</span>'
+            ? `<span class="burn-token-value">${Utils.escapeHtml(I18n.t("tools-wallet-amount-approx", { amount: Utils.formatSol(token.value_sol) }))}</span>`
+            : `<span class="burn-token-value no-value">${Utils.escapeHtml(I18n.t("tools-burn-no-value"))}</span>`
         }
       </div>
       <div class="burn-token-rent">
-        ${token.can_burn ? `+${Utils.formatSol(token.rent_reclaimable_sol)}` : "—"}
+        ${token.can_burn ? Utils.escapeHtml(I18n.t("tools-wallet-amount-gain", { amount: Utils.formatSol(token.rent_reclaimable_sol) })) : "—"}
       </div>
     </div>
   `;
 }
-
 function wireUpBurnCheckboxes() {
   // Individual token checkboxes
   const checkboxes = $$(".burn-token-checkbox");
@@ -519,7 +537,7 @@ function updateBurnSelectionUI() {
   if (countEl) countEl.textContent = count;
   if (burnBtn) {
     burnBtn.disabled = count === 0 || burnTokensState.isBurning;
-    burnBtn.innerHTML = `<i class="icon-flame"></i> Burn Selected (${count})`;
+    setButton(burnBtn, "icon-flame", I18n.t("tools-burn-action-burn", { count }));
   }
 
   // Update category select-all states
@@ -556,26 +574,26 @@ async function handleBurnSelectedTokens() {
 
   // First confirmation
   const firstConfirm = await showBurnConfirmation(
-    "Confirm Burn",
-    `Are you sure you want to burn <strong>${selectedCount}</strong> token${selectedCount !== 1 ? "s" : ""}?` +
+    I18n.t("tools-burn-confirm-title"),
+    I18n.markup("tools-burn-confirm-message", { count: selectedCount }) +
       (totalValue > 0.0001
-        ? `<br><br><i class="icon-triangle-alert"></i> Total estimated value: <strong>${Utils.formatSol(totalValue)}</strong>`
+        ? `<br><br><i class="icon-triangle-alert"></i> ${I18n.markup("tools-burn-confirm-value", { amount: Utils.formatSol(totalValue) })}`
         : ""),
-    "Continue",
-    "Cancel"
+    I18n.t("tools-burn-confirm-continue"),
+    I18n.t("common-action-cancel")
   );
 
   if (!firstConfirm) return;
 
   // Second confirmation (critical warning)
   const secondConfirm = await showBurnConfirmation(
-    "Final Warning",
+    I18n.t("tools-burn-final-title"),
     `<div class="burn-final-warning">
-      <p><strong>This action is IRREVERSIBLE!</strong></p>
-      <p>The following ${selectedCount} token${selectedCount !== 1 ? "s" : ""} will be permanently destroyed and cannot be recovered under any circumstances.</p>
+      <p><strong>${Utils.escapeHtml(I18n.t("tools-burn-final-headline"))}</strong></p>
+      <p>${Utils.escapeHtml(I18n.t("tools-burn-final-message", { count: selectedCount }))}</p>
     </div>`,
-    "Yes, Burn Tokens",
-    "Cancel",
+    I18n.t("tools-burn-final-confirm"),
+    I18n.t("common-action-cancel"),
     true
   );
 
@@ -584,7 +602,7 @@ async function handleBurnSelectedTokens() {
   // Execute burn
   burnTokensState.isBurning = true;
   burnBtn.disabled = true;
-  burnBtn.innerHTML = '<i class="icon-loader spin"></i> Burning...';
+  setButton(burnBtn, "icon-loader spin", I18n.t("tools-burn-action-burning"));
 
   try {
     const response = await fetch("/api/tools/burn-tokens/burn", {
@@ -594,7 +612,7 @@ async function handleBurnSelectedTokens() {
     });
 
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+      throw await responseError(response);
     }
 
     const result = await response.json();
@@ -602,29 +620,34 @@ async function handleBurnSelectedTokens() {
 
     if (data.successful > 0) {
       Utils.showToast(
-        `Burned ${data.successful}/${data.total} tokens. Run Wallet Cleanup to reclaim ~${Utils.formatSol(data.sol_reclaimed)} SOL`,
+        I18n.t("tools-burn-toast-burned", {
+          successful: data.successful,
+          total: data.total,
+          amount: Utils.formatSol(data.sol_reclaimed),
+        }),
         "success"
       );
     }
 
     if (data.failed > 0) {
-      Utils.showToast(
-        `${data.failed} token${data.failed !== 1 ? "s" : ""} failed to burn`,
-        "warning"
-      );
+      Utils.showToast(I18n.t("tools-burn-toast-failed", { count: data.failed }), "warning");
     }
 
     // Refresh the list
     await handleScanBurnTokens();
   } catch (error) {
     console.error("Burn tokens failed:", error);
-    Utils.showToast(`Burn failed: ${error.message}`, "error");
+    Utils.showToast(I18n.t("tools-burn-failed", { reason: error.message }), "error");
   } finally {
     burnTokensState.isBurning = false;
     updateBurnSelectionUI();
   }
 }
 
+/**
+ * Two-step confirmation dialog. `message` is markup built by the caller from
+ * escaped or sanitized text; the other labels are plain text.
+ */
 function showBurnConfirmation(title, message, confirmText, cancelText, isDanger = false) {
   return new Promise((resolve) => {
     // Create overlay
@@ -633,14 +656,14 @@ function showBurnConfirmation(title, message, confirmText, cancelText, isDanger 
     overlay.innerHTML = `
       <div class="burn-confirm-dialog ${isDanger ? "danger" : ""}">
         <div class="burn-confirm-header">
-          <h3>${title}</h3>
+          <h3>${Utils.escapeHtml(title)}</h3>
         </div>
         <div class="burn-confirm-body">
           ${message}
         </div>
         <div class="burn-confirm-actions">
-          <button class="btn" id="burn-confirm-cancel">${cancelText}</button>
-          <button class="btn ${isDanger ? "danger" : "primary"}" id="burn-confirm-ok">${confirmText}</button>
+          <button class="btn" id="burn-confirm-cancel">${Utils.escapeHtml(cancelText)}</button>
+          <button class="btn ${isDanger ? "danger" : "primary"}" id="burn-confirm-ok">${Utils.escapeHtml(confirmText)}</button>
         </div>
       </div>
     `;
@@ -677,46 +700,44 @@ function showBurnConfirmation(title, message, confirmText, cancelText, isDanger 
   });
 }
 
-
 function renderAirdropCheckerTool(container, actionsContainer) {
   container.innerHTML = `
     <div class="tool-panel airdrop-checker-tool">
       <div class="tool-section">
         <div class="section-header">
-          <h3><i class="icon-info"></i> About</h3>
+          <h3><i class="icon-info"></i> <span data-l10n-id="tools-airdrop-about-title"></span></h3>
         </div>
         <div class="section-content">
-          <p class="tool-info">
-            Check for pending airdrops, claimable rewards, and unclaimed allocations 
-            across popular Solana protocols.
-          </p>
+          <p class="tool-info" data-l10n-id="tools-airdrop-about-body"></p>
         </div>
       </div>
 
       <div class="tool-section">
         <div class="section-header">
-          <h3><i class="icon-gift"></i> Available Airdrops</h3>
+          <h3><i class="icon-gift"></i> <span data-l10n-id="tools-airdrop-list-title"></span></h3>
         </div>
         <div class="section-content">
           <div class="airdrop-list" id="airdrop-list">
             <div class="empty-state">
               <i class="icon-scan"></i>
-              <p>Click "Check Airdrops" to scan for available claims</p>
+              <p data-l10n-id="tools-airdrop-prompt"></p>
             </div>
           </div>
         </div>
       </div>
     </div>
   `;
+  I18n.localizeTree(container);
 
   actionsContainer.innerHTML = `
     <button class="btn primary" id="check-airdrops-btn">
-      <i class="icon-scan"></i> Check Airdrops
+      <i class="icon-scan"></i> <span data-l10n-id="tools-airdrop-action-check"></span>
     </button>
     <button class="btn success" id="claim-all-btn" disabled>
-      <i class="icon-gift"></i> Claim All
+      <i class="icon-gift"></i> <span data-l10n-id="tools-airdrop-action-claim-all"></span>
     </button>
   `;
+  I18n.localizeTree(actionsContainer);
 
   // TODO: Wire up airdrop checker functionality
 }
@@ -729,30 +750,29 @@ function renderWalletGeneratorTool(container, actionsContainer) {
     <div class="tool-panel wallet-generator-tool">
       <div class="tool-section">
         <div class="section-header">
-          <h3><i class="icon-settings"></i> Generator Options</h3>
+          <h3><i class="icon-settings"></i> <span data-l10n-id="tools-generator-options-title"></span></h3>
           ${hintHtml}
         </div>
         <div class="section-content">
           <div class="warning-box">
-            <p><strong>Store your private keys securely!</strong></p>
-            <p>Generated keypairs are created locally and never transmitted. 
-               Always backup your keys in a secure location.</p>
+            <p><strong data-l10n-id="tools-generator-warning-title"></strong></p>
+            <p data-l10n-id="tools-generator-warning-body"></p>
           </div>
           <form class="tool-form" id="generator-form">
             <div class="form-group">
-              <label for="wallet-count">Number of Wallets</label>
+              <label for="wallet-count" data-l10n-id="tools-generator-count-label"></label>
               <input type="number" id="wallet-count" value="1" min="1" max="10" />
             </div>
             <div class="form-group checkbox-group">
               <label>
                 <input type="checkbox" id="vanity-enabled" />
-                Vanity Address (starts with specific characters)
+                <span data-l10n-id="tools-generator-vanity-label"></span>
               </label>
             </div>
             <div class="form-group" id="vanity-prefix-group" style="display: none;">
-              <label for="vanity-prefix">Prefix</label>
-              <input type="text" id="vanity-prefix" placeholder="e.g., SOL" maxlength="4" />
-              <small>Longer prefixes take exponentially longer to generate</small>
+              <label for="vanity-prefix" data-l10n-id="tools-generator-prefix-label"></label>
+              <input type="text" id="vanity-prefix" data-l10n-id="tools-generator-prefix-input" maxlength="4" />
+              <small data-l10n-id="tools-generator-prefix-hint"></small>
             </div>
           </form>
         </div>
@@ -760,30 +780,32 @@ function renderWalletGeneratorTool(container, actionsContainer) {
 
       <div class="tool-section">
         <div class="section-header">
-          <h3><i class="icon-key"></i> Generated Wallets</h3>
+          <h3><i class="icon-key"></i> <span data-l10n-id="tools-generator-list-title"></span></h3>
         </div>
         <div class="section-content">
           <div class="generated-wallets" id="generated-wallets">
             <div class="empty-state">
               <i class="icon-key"></i>
-              <p>No wallets generated yet</p>
+              <p data-l10n-id="tools-generator-empty"></p>
             </div>
           </div>
         </div>
       </div>
     </div>
   `;
+  I18n.localizeTree(container);
 
   HintTrigger.initAll();
 
   actionsContainer.innerHTML = `
     <button class="btn primary" id="generate-wallet-btn">
-      <i class="icon-plus"></i> Generate
+      <i class="icon-plus"></i> <span data-l10n-id="tools-generator-action-generate"></span>
     </button>
     <button class="btn" id="export-wallets-btn" disabled>
-      <i class="icon-download"></i> Export
+      <i class="icon-download"></i> <span data-l10n-id="common-action-export"></span>
     </button>
   `;
+  I18n.localizeTree(actionsContainer);
 
   // Wire up vanity checkbox toggle
   const vanityCheckbox = $("#vanity-enabled");
@@ -821,12 +843,12 @@ async function handleGenerateWallets() {
 
   const count = parseInt(countInput?.value || "1", 10);
   if (count < 1 || count > 10) {
-    Utils.showToast("Please enter a number between 1 and 10", "error");
+    Utils.showToast(I18n.t("tools-generator-count-invalid"), "error");
     return;
   }
 
   generateBtn.disabled = true;
-  generateBtn.innerHTML = '<i class="icon-loader spin"></i> Generating...';
+  setButton(generateBtn, "icon-loader spin", I18n.t("tools-generator-action-generating"));
 
   try {
     const response = await fetch("/api/tools/generate-keypairs", {
@@ -835,16 +857,16 @@ async function handleGenerateWallets() {
       body: JSON.stringify({ count }),
     });
 
-    const result = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error(apiErrorMessage(result, `HTTP ${response.status}`));
+      throw await responseError(response);
     }
+    const result = await response.json().catch(() => ({}));
 
     // The API returns { success: true, data: [...] }
     const keypairs = result.data || result;
 
     if (!Array.isArray(keypairs) || keypairs.length === 0) {
-      throw new Error("No keypairs returned");
+      throw new Error(I18n.t("tools-generator-no-keypairs"));
     }
 
     // Add to our generated wallets list
@@ -856,17 +878,13 @@ async function handleGenerateWallets() {
     // Enable export button
     const exportBtn = $("#export-wallets-btn");
     if (exportBtn) exportBtn.disabled = false;
-
-    Utils.showToast(
-      `Generated ${keypairs.length} wallet${keypairs.length > 1 ? "s" : ""}`,
-      "success"
-    );
+    Utils.showToast(I18n.t("tools-generator-generated", { count: keypairs.length }), "success");
   } catch (error) {
     console.error("Failed to generate wallets:", error);
-    Utils.showToast(`Failed to generate wallets: ${error.message}`, "error");
+    Utils.showToast(I18n.t("tools-generator-failed", { reason: error.message }), "error");
   } finally {
     generateBtn.disabled = false;
-    generateBtn.innerHTML = '<i class="icon-plus"></i> Generate';
+    setButton(generateBtn, "icon-plus", I18n.t("tools-generator-action-generate"));
   }
 }
 
@@ -880,9 +898,10 @@ function renderGeneratedWallets(container) {
     container.innerHTML = `
       <div class="empty-state">
         <i class="icon-key"></i>
-        <p>No wallets generated yet</p>
+        <p data-l10n-id="tools-generator-empty"></p>
       </div>
     `;
+    I18n.localizeTree(container);
     return;
   }
 
@@ -893,25 +912,25 @@ function renderGeneratedWallets(container) {
         <div class="wallet-header">
           <span class="wallet-index">#${index + 1}</span>
           <div class="wallet-actions">
-            <button class="btn-icon" data-action="copy-pubkey" data-pubkey="${wallet.pubkey}" title="Copy public key">
+            <button class="btn-icon" data-action="copy-pubkey" data-pubkey="${wallet.pubkey}" data-l10n-id="tools-generator-copy-public-key">
               <i class="icon-copy"></i>
             </button>
-            <button class="btn-icon" data-action="copy-secret" data-secret="${wallet.secret}" title="Copy private key">
+            <button class="btn-icon" data-action="copy-secret" data-secret="${wallet.secret}" data-l10n-id="tools-generator-copy-private-key">
               <i class="icon-key"></i>
             </button>
-            <button class="btn-icon danger" data-action="remove" data-index="${index}" title="Remove from list">
+            <button class="btn-icon danger" data-action="remove" data-index="${index}" data-l10n-id="tools-generator-remove">
               <i class="icon-x"></i>
             </button>
           </div>
         </div>
         <div class="wallet-pubkey">
-          <span class="label">Public Key:</span>
-          <code class="pubkey-value">${wallet.pubkey}</code>
+          <span class="label" data-l10n-id="tools-generator-public-key-label"></span>
+          <code class="pubkey-value" dir="ltr">${wallet.pubkey}</code>
         </div>
         <div class="wallet-secret">
-          <span class="label">Private Key:</span>
-          <code class="secret-value masked">••••••••••••••••</code>
-          <button class="btn-icon btn-reveal" data-action="reveal" data-secret="${wallet.secret}" title="Reveal private key">
+          <span class="label" data-l10n-id="tools-generator-private-key-label"></span>
+          <code class="secret-value masked" dir="ltr">••••••••••••••••</code>
+          <button class="btn-icon btn-reveal" data-action="reveal" data-secret="${wallet.secret}" data-l10n-id="tools-generator-reveal">
             <i class="icon-eye"></i>
           </button>
         </div>
@@ -919,7 +938,7 @@ function renderGeneratedWallets(container) {
     `
     )
     .join("");
-
+  I18n.localizeTree(container);
   // Wire up action buttons
   container.querySelectorAll("[data-action]").forEach((btn) => {
     on(btn, "click", handleWalletAction);
@@ -937,7 +956,7 @@ function handleWalletAction(event) {
     case "copy-pubkey": {
       const pubkey = btn.dataset.pubkey;
       Utils.copyToClipboard(pubkey);
-      Utils.notifyCopied("Public key");
+      Utils.notifyCopied(I18n.t("tools-generator-public-key-name"));
       break;
     }
     case "copy-secret": {
@@ -948,8 +967,8 @@ function handleWalletAction(event) {
       Utils.showToast({
         key: "clipboard",
         type: "warning",
-        title: "Private key copied",
-        message: "Anyone with this key controls the wallet",
+        title: I18n.t("tools-generator-private-key-copied"),
+        message: I18n.t("tools-generator-private-key-warning"),
       });
       break;
     }
@@ -991,7 +1010,7 @@ function handleWalletAction(event) {
  */
 function handleExportGeneratedWallets() {
   if (generatedWallets.length === 0) {
-    Utils.showToast("No wallets to export", "warning");
+    Utils.showToast(I18n.t("tools-generator-export-empty"), "warning");
     return;
   }
 
@@ -1011,7 +1030,7 @@ function handleExportGeneratedWallets() {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 
-  Utils.showToast("Wallets exported - store securely", "warning");
+  Utils.showToast(I18n.t("tools-generator-exported"), "warning");
 }
 
 // =============================================================================
@@ -1034,26 +1053,26 @@ function renderWalletConsolidationTool(container, actionsContainer) {
       <!-- Summary Section -->
       <div class="tool-section">
         <div class="section-header">
-          <h3><i class="icon-chart-pie"></i> Summary</h3>
+          <h3><i class="icon-chart-pie"></i> <span data-l10n-id="tools-consolidation-summary-title"></span></h3>
           ${hintHtml}
         </div>
         <div class="section-content">
           <div class="wc-summary-grid" id="wc-summary-grid">
             <div class="wc-summary-item">
               <span class="wc-summary-value" id="wc-wallet-count">—</span>
-              <span class="wc-summary-label">Sub-wallets</span>
+              <span class="wc-summary-label" data-l10n-id="tools-consolidation-stat-wallets"></span>
             </div>
             <div class="wc-summary-item">
               <span class="wc-summary-value" id="wc-total-sol">—</span>
-              <span class="wc-summary-label">Total SOL</span>
+              <span class="wc-summary-label" data-l10n-id="tools-consolidation-stat-sol"></span>
             </div>
             <div class="wc-summary-item">
               <span class="wc-summary-value" id="wc-total-tokens">—</span>
-              <span class="wc-summary-label">Token Types</span>
+              <span class="wc-summary-label" data-l10n-id="tools-consolidation-stat-tokens"></span>
             </div>
             <div class="wc-summary-item">
               <span class="wc-summary-value" id="wc-reclaimable">—</span>
-              <span class="wc-summary-label">Reclaimable Rent</span>
+              <span class="wc-summary-label" data-l10n-id="tools-consolidation-stat-rent"></span>
             </div>
           </div>
         </div>
@@ -1062,10 +1081,10 @@ function renderWalletConsolidationTool(container, actionsContainer) {
       <!-- Wallets Table -->
       <div class="tool-section">
         <div class="section-header">
-          <h3><i class="icon-wallet"></i> Wallets</h3>
+          <h3><i class="icon-wallet"></i> <span data-l10n-id="tools-consolidation-wallets-title"></span></h3>
           <div class="section-actions">
             <button class="btn btn-sm" id="wc-refresh-btn" type="button">
-              <i class="icon-refresh-cw"></i> Refresh
+              <i class="icon-refresh-cw"></i> <span data-l10n-id="common-action-refresh"></span>
             </button>
           </div>
         </div>
@@ -1073,7 +1092,7 @@ function renderWalletConsolidationTool(container, actionsContainer) {
           <div class="wc-wallets-container" id="wc-wallets-container">
             <div class="loading-state">
               <i class="icon-loader spin"></i>
-              <p>Loading wallets...</p>
+              <p data-l10n-id="tools-consolidation-loading-wallets"></p>
             </div>
           </div>
           <div class="wc-selection-summary" id="wc-selection-summary">
@@ -1083,20 +1102,22 @@ function renderWalletConsolidationTool(container, actionsContainer) {
       </div>
     </div>
   `;
+  I18n.localizeTree(container);
 
   HintTrigger.initAll();
 
   actionsContainer.innerHTML = `
     <button class="btn" id="wc-transfer-sol-btn" disabled>
-      <i class="icon-arrow-right"></i> Transfer SOL
+      <i class="icon-arrow-right"></i> <span data-l10n-id="tools-consolidation-action-transfer-sol"></span>
     </button>
     <button class="btn" id="wc-transfer-tokens-btn" disabled>
-      <i class="icon-send"></i> Transfer All Tokens
+      <i class="icon-send"></i> <span data-l10n-id="tools-consolidation-action-transfer-tokens"></span>
     </button>
     <button class="btn primary" id="wc-cleanup-btn" disabled>
-      <i class="icon-trash-2"></i> Cleanup ATAs
+      <i class="icon-trash-2"></i> <span data-l10n-id="tools-consolidation-action-cleanup"></span>
     </button>
   `;
+  I18n.localizeTree(actionsContainer);
 
   // Wire up event handlers
   const refreshBtn = $("#wc-refresh-btn");
@@ -1127,15 +1148,15 @@ async function loadConsolidationData() {
   container.innerHTML = `
     <div class="loading-state">
       <i class="icon-loader spin"></i>
-      <p>Loading wallet data...</p>
+      <p data-l10n-id="tools-consolidation-loading-data"></p>
     </div>
   `;
+  I18n.localizeTree(container);
 
   try {
     const response = await fetch("/api/tools/wallets/summary");
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || `HTTP ${response.status}`);
+      throw await responseError(response);
     }
 
     const data = await response.json();
@@ -1150,17 +1171,22 @@ async function loadConsolidationData() {
     if (walletCount) walletCount.textContent = data.wallet_count || 0;
     if (totalSol) totalSol.textContent = Utils.formatSol(data.total_sol || 0);
     if (totalTokens) totalTokens.textContent = data.token_types || 0;
-    if (reclaimable) reclaimable.textContent = `~${Utils.formatSol(data.reclaimable_rent || 0)}`;
+    if (reclaimable) {
+      reclaimable.textContent = I18n.t("tools-wallet-amount-approx", {
+        amount: Utils.formatSol(data.reclaimable_rent || 0),
+      });
+    }
 
     // Render wallets table
     if (consolidationState.wallets.length === 0) {
       container.innerHTML = `
         <div class="empty-state">
           <i class="icon-wallet"></i>
-          <p>No sub-wallets found</p>
-          <small>Create sub-wallets using Multi-Buy to get started</small>
+          <p data-l10n-id="tools-consolidation-empty"></p>
+          <small data-l10n-id="tools-consolidation-empty-hint"></small>
         </div>
       `;
+      I18n.localizeTree(container);
       return;
     }
 
@@ -1169,11 +1195,11 @@ async function loadConsolidationData() {
         <thead>
           <tr>
             <th><input type="checkbox" id="wc-check-all" /></th>
-            <th>Name</th>
-            <th>Address</th>
-            <th>SOL Balance</th>
-            <th>Tokens</th>
-            <th>Empty ATAs</th>
+            <th data-l10n-id="tools-consolidation-column-name"></th>
+            <th data-l10n-id="tools-consolidation-column-address"></th>
+            <th data-l10n-id="tools-consolidation-column-sol"></th>
+            <th data-l10n-id="tools-consolidation-column-tokens"></th>
+            <th data-l10n-id="tools-consolidation-column-atas"></th>
           </tr>
         </thead>
         <tbody>
@@ -1183,7 +1209,7 @@ async function loadConsolidationData() {
             <tr data-address="${w.address}" class="${w.sol_balance === 0 && w.token_count === 0 ? "empty-wallet" : ""}">
               <td><input type="checkbox" class="wc-wallet-check" data-address="${w.address}" /></td>
               <td>${Utils.escapeHtml(w.name)}</td>
-              <td class="mono">${Utils.formatAddressCompact(w.address)}</td>
+              <td class="mono" dir="ltr">${Utils.formatAddressCompact(w.address)}</td>
               <td class="mono">${Utils.formatSol(w.sol_balance, { suffix: "" })}</td>
               <td class="mono">${w.token_count}</td>
               <td class="mono">${w.empty_atas}</td>
@@ -1194,6 +1220,7 @@ async function loadConsolidationData() {
         </tbody>
       </table>
     `;
+    I18n.localizeTree(container);
 
     // Wire up checkboxes
     const checkAll = $("#wc-check-all");
@@ -1226,16 +1253,13 @@ async function loadConsolidationData() {
     updateConsolidationSelectionSummary();
   } catch (error) {
     console.error("Failed to load consolidation data:", error);
-    container.innerHTML = `
-      <div class="error-state">
-        <i class="icon-circle-alert"></i>
-        <p>Failed to load: ${error.message}</p>
-      </div>
-    `;
+    container.innerHTML = errorStateHtml(
+      I18n.t("tools-consolidation-load-failed", { reason: error.message })
+    );
   } finally {
     if (refreshBtn) {
       refreshBtn.disabled = false;
-      refreshBtn.innerHTML = '<i class="icon-refresh-cw"></i> Refresh';
+      setButton(refreshBtn, "icon-refresh-cw", I18n.t("common-action-refresh"));
     }
   }
 }
@@ -1263,11 +1287,17 @@ function updateConsolidationSelectionSummary() {
 
   if (summary) {
     if (selectedCount === 0) {
-      summary.innerHTML = '<span class="text-muted">Select wallets to consolidate</span>';
+      summary.innerHTML = `<span class="text-muted">${Utils.escapeHtml(I18n.t("tools-consolidation-select-prompt"))}</span>`;
     } else {
       summary.innerHTML = `
-        <span class="text-primary">Selected: ${selectedCount} wallet${selectedCount > 1 ? "s" : ""}</span>
-        <span class="text-secondary">| ${Utils.formatSol(totalSol)} | ${totalTokens} tokens | ${totalEmptyAtas} empty ATAs</span>
+        <span class="text-primary">${Utils.escapeHtml(I18n.t("tools-wallet-selected", { count: selectedCount }))}</span>
+        <span class="text-secondary">${Utils.escapeHtml(
+          I18n.t("tools-consolidation-selection-totals", {
+            amount: Utils.formatSol(totalSol),
+            tokens: totalTokens,
+            atas: totalEmptyAtas,
+          })
+        )}</span>
       `;
     }
   }
@@ -1286,7 +1316,7 @@ async function handleConsolidateSOL() {
   if (!transferSolBtn) return;
 
   transferSolBtn.disabled = true;
-  transferSolBtn.innerHTML = '<i class="icon-loader spin"></i> Transferring...';
+  setButton(transferSolBtn, "icon-loader spin", I18n.t("tools-consolidation-action-transferring"));
 
   try {
     const response = await fetch("/api/tools/wallets/consolidate", {
@@ -1296,22 +1326,27 @@ async function handleConsolidateSOL() {
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || `HTTP ${response.status}`);
+      throw await responseError(response);
     }
 
     const result = await response.json();
     Utils.showToast(
-      `Transferred ${Utils.formatSol(result.total_transferred)} to main wallet`,
+      I18n.t("tools-consolidation-transferred-sol", {
+        amount: Utils.formatSol(result.total_transferred),
+      }),
       "success"
     );
     loadConsolidationData();
   } catch (error) {
     console.error("SOL consolidation failed:", error);
-    Utils.showToast(`Transfer failed: ${error.message}`, "error");
+    Utils.showToast(I18n.t("tools-wallet-transfer-failed", { reason: error.message }), "error");
   } finally {
     transferSolBtn.disabled = false;
-    transferSolBtn.innerHTML = '<i class="icon-arrow-right"></i> Transfer SOL';
+    setButton(
+      transferSolBtn,
+      "icon-arrow-right",
+      I18n.t("tools-consolidation-action-transfer-sol")
+    );
   }
 }
 
@@ -1323,7 +1358,11 @@ async function handleConsolidateTokens() {
   if (!transferTokensBtn) return;
 
   transferTokensBtn.disabled = true;
-  transferTokensBtn.innerHTML = '<i class="icon-loader spin"></i> Transferring...';
+  setButton(
+    transferTokensBtn,
+    "icon-loader spin",
+    I18n.t("tools-consolidation-action-transferring")
+  );
 
   try {
     const response = await fetch("/api/tools/wallets/consolidate", {
@@ -1333,19 +1372,25 @@ async function handleConsolidateTokens() {
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || `HTTP ${response.status}`);
+      throw await responseError(response);
     }
 
     const result = await response.json();
-    Utils.showToast(`Transferred ${result.tokens_transferred} tokens to main wallet`, "success");
+    Utils.showToast(
+      I18n.t("tools-consolidation-transferred-tokens", { count: result.tokens_transferred }),
+      "success"
+    );
     loadConsolidationData();
   } catch (error) {
     console.error("Token consolidation failed:", error);
-    Utils.showToast(`Transfer failed: ${error.message}`, "error");
+    Utils.showToast(I18n.t("tools-wallet-transfer-failed", { reason: error.message }), "error");
   } finally {
     transferTokensBtn.disabled = false;
-    transferTokensBtn.innerHTML = '<i class="icon-send"></i> Transfer All Tokens';
+    setButton(
+      transferTokensBtn,
+      "icon-send",
+      I18n.t("tools-consolidation-action-transfer-tokens")
+    );
   }
 }
 
@@ -1357,7 +1402,7 @@ async function handleConsolidateCleanup() {
   if (!cleanupBtn) return;
 
   cleanupBtn.disabled = true;
-  cleanupBtn.innerHTML = '<i class="icon-loader spin"></i> Cleaning...';
+  setButton(cleanupBtn, "icon-loader spin", I18n.t("tools-wallet-cleanup-action-cleaning"));
 
   try {
     const response = await fetch("/api/tools/wallets/cleanup-atas", {
@@ -1367,25 +1412,26 @@ async function handleConsolidateCleanup() {
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || `HTTP ${response.status}`);
+      throw await responseError(response);
     }
 
     const result = await response.json();
     Utils.showToast(
-      `Closed ${result.atas_closed} ATAs, reclaimed ${Utils.formatSol(result.sol_reclaimed)}`,
+      I18n.t("tools-consolidation-cleaned", {
+        count: result.atas_closed,
+        amount: Utils.formatSol(result.sol_reclaimed),
+      }),
       "success"
     );
     loadConsolidationData();
   } catch (error) {
     console.error("ATA cleanup failed:", error);
-    Utils.showToast(`Cleanup failed: ${error.message}`, "error");
+    Utils.showToast(I18n.t("tools-wallet-cleanup-failed", { reason: error.message }), "error");
   } finally {
     cleanupBtn.disabled = false;
-    cleanupBtn.innerHTML = '<i class="icon-trash-2"></i> Cleanup ATAs';
+    setButton(cleanupBtn, "icon-trash-2", I18n.t("tools-consolidation-action-cleanup"));
   }
 }
-
 
 // =============================================================================
 // Exports
