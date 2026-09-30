@@ -391,4 +391,13 @@
   };
 
   window.I18n = I18n;
+
+  // The Electron shell renders its own menus, dialogs and tray text; it follows
+  // the language this page was served in. A language change reloads the page,
+  // so this one report covers both first load and later switches.
+  try {
+    if (data && window.electronAPI && typeof window.electronAPI.setLanguage === "function") {
+      window.electronAPI.setLanguage(locale);
+    }
+  } catch { /* not in Electron */ }
 })();

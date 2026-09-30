@@ -51,8 +51,31 @@ function logsDirectory(base = resolveBaseDirectory()) {
   return path.join(base, 'logs');
 }
 
+/**
+ * Localization resources shared with the backend and the dashboard.
+ *
+ * Packaged builds receive the catalog directory and the vendored Fluent bundle
+ * through `extraResource` (forge.config.js), which places each under Resources
+ * by its own name. A development run reads them from the repository.
+ * @param {{ isPackaged: boolean, resourcesPath?: string }} runtime
+ */
+function l10nResources({ isPackaged, resourcesPath }) {
+  if (isPackaged) {
+    return {
+      localesDir: path.join(resourcesPath, 'locales'),
+      bundlePath: path.join(resourcesPath, 'fluent-bundle.js'),
+    };
+  }
+  const repoRoot = path.join(__dirname, '..', '..');
+  return {
+    localesDir: path.join(repoRoot, 'locales'),
+    bundlePath: path.join(repoRoot, 'src', 'webserver', 'assets', 'fluent-bundle.js'),
+  };
+}
+
 module.exports = {
   APP_DIR,
+  l10nResources,
   resolveBaseDirectory,
   dataDirectory,
   coreDirectory,

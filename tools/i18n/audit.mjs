@@ -38,12 +38,14 @@ async function readAll(files) {
 async function loadSources() {
   const templates = await walk(TEMPLATES_ROOT);
   const rust = await walk(resolve(REPO_ROOT, "src"));
+  const shell = (await walk(resolve(REPO_ROOT, "electron/src"))).filter((file) => /\.(js|html)$/.test(file)).sort();
   const pick = (files, extension) => files.filter((file) => file.endsWith(extension)).sort();
   return {
     js: await readAll(pick(templates, ".js")),
     html: await readAll(pick(templates, ".html")),
     css: await readAll(pick(templates, ".css")),
     // Test modules do not count as usage: a key referenced only by tests is unused.
+    shell: await readAll(shell),
     rust: await readAll(pick(rust, ".rs").filter((file) => !/(^|\/)tests?(_\w+)?\.rs$/.test(file))),
   };
 }
@@ -59,7 +61,13 @@ const sum = (counts) => Object.values(counts).reduce((total, count) => total + c
 /** Run every scan. Pure over the loaded sources and catalogs. */
 export function analyze({ sources, catalogInput }) {
   const catalog = checkCatalogs(catalogInput);
-  const usage = scanUsage({ ids: catalog.sourceIds, js: sources.js, html: sources.html, rust: sources.rust });
+  const usage = scanUsage({
+    ids: catalog.sourceIds,
+    js: sources.js,
+    html: sources.html,
+    rust: sources.rust,
+    shell: sources.shell,
+  });
   const errors = [...catalog.errors, ...usage.errors];
   /* A server-only domain is never in the dashboard payload, so a dashboard reference renders the raw id. */
   const serverOnly = catalogInput.serverOnly ?? new Set();

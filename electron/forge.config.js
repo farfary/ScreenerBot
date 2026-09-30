@@ -35,6 +35,10 @@ module.exports = {
     },
     extraResource: [
       path.join(__dirname, '..', 'target', 'release', binaryName),
+      // Fluent catalogs and the vendored bundle the shell renders them with;
+      // Resources/locales and Resources/fluent-bundle.js (see src/paths.js).
+      path.join(__dirname, '..', 'locales'),
+      path.join(__dirname, '..', 'src', 'webserver', 'assets', 'fluent-bundle.js'),
       ...(isWindows ? [
         path.join(__dirname, 'redist', isArm64 ? 'vc_redist.arm64.exe' : 'vc_redist.x64.exe')
       ] : [])

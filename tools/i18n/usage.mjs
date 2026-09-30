@@ -166,6 +166,15 @@ export function scanRustUsage({ source, ids }) {
   return used;
 }
 
+/** Ids referenced from the Electron shell sources as quoted literals (single or double quotes). */
+export function scanShellUsage({ source, ids }) {
+  const used = new Set();
+  for (const match of source.matchAll(/["']([a-z][a-z0-9-]*)["']/g)) {
+    if (ids.has(match[1])) used.add(match[1]);
+  }
+  return used;
+}
+
 export function unusedErrors({ ids, used, namespaces = DYNAMIC_NAMESPACES }) {
   const prefixes = Object.keys(namespaces);
   return [...ids]
@@ -175,10 +184,10 @@ export function unusedErrors({ ids, used, namespaces = DYNAMIC_NAMESPACES }) {
 }
 
 /**
- * Aggregate over `{ js, html, rust }` arrays of `{ path, source }`. `dashboardUsed` maps each id
+ * Aggregate over `{ js, html, rust, shell }` arrays of `{ path, source }`. `dashboardUsed` maps each id
  * referenced by dashboard JS or HTML to the first file that references it.
  */
-export function scanUsage({ ids, js, html, rust, namespaces = DYNAMIC_NAMESPACES }) {
+export function scanUsage({ ids, js, html, rust, shell = [], namespaces = DYNAMIC_NAMESPACES }) {
   const used = new Set();
   const dashboardUsed = new Map();
   const errors = [];
@@ -192,6 +201,7 @@ export function scanUsage({ ids, js, html, rust, namespaces = DYNAMIC_NAMESPACES
   for (const file of js) record(file, scanJsUsage({ ...file, ids, namespaces }));
   for (const file of html) record(file, scanHtmlUsage({ ...file, ids, namespaces }));
   for (const file of rust) scanRustUsage({ source: file.source, ids }).forEach((id) => used.add(id));
+  for (const file of shell) scanShellUsage({ source: file.source, ids }).forEach((id) => used.add(id));
   errors.push(...unusedErrors({ ids, used, namespaces }));
   return { used, dashboardUsed, errors };
 }

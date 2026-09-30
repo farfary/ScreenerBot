@@ -8,6 +8,7 @@ const { pathToFileURL } = require('url');
 const appPaths = require('./paths');
 const { APP_ID } = require('./app_identity');
 const coreResolver = require('./core_resolver');
+const { createLocalizer } = require('./l10n');
 const { createLineDecoder, shouldRollbackStagedCore } = require('./backend_launch');
 
 // ============================================================================
@@ -70,6 +71,8 @@ let bootErrorShown = false; // True once a boot-error screen has actually been r
 let isRecovering = false; // True while a one-click recovery (e.g. wallet reset) is in progress
 let dashboardLoaded = false; // True once the dashboard URL has been loaded successfully
 let currentTheme = 'dark'; // Last-run UI theme ('light'|'dark'), persisted in window-state.json
+let l10n = null; // Shell localizer (tray, menus, dialogs, splash); see initLocalizer()
+let shellLanguage = null; // Registered locale code the dashboard last reported, persisted in window-state.json
 let backendRestartRequested = false;
 let backendRestartTarget = '/home';
 
@@ -108,6 +111,34 @@ async function terminateBackendChild(child) {
   });
 }
 
+/** Localized shell text; the message id stands in only when no catalog could be loaded. */
+function t(id, args) {
+  return l10n ? l10n.t(id, args) : id;
+}
+
+function createShellLocalizer(code) {
+  return createLocalizer({
+    ...appPaths.l10nResources({ isPackaged: app.isPackaged, resourcesPath: process.resourcesPath }),
+    locale: code
+  });
+}
+
+/**
+ * Resolve the shell language: the code the dashboard last reported, else the
+ * closest registered match for the operating-system preference.
+ */
+function initLocalizer() {
+  try {
+    const probe = createShellLocalizer(null);
+    const saved = loadWindowState().language;
+    shellLanguage = probe.codes.includes(saved) ? saved : null;
+    const code = shellLanguage || probe.negotiate(app.getPreferredSystemLanguages());
+    l10n = code === probe.locale ? probe : createShellLocalizer(code);
+  } catch (err) {
+    console.error('[Electron] Failed to load shell catalogs:', err);
+  }
+}
+
 function recoverFailedStagedCore(core, generation, detail, failedChild = backendProcess) {
   if (!shouldRollbackStagedCore({
     staged: core?.staged,
@@ -133,15 +164,13 @@ function recoverFailedStagedCore(core, generation, detail, failedChild = backend
       if (backendProcess === failedChild) backendProcess = null;
       if (generation !== launchGeneration) return;
       await restartBackendFromDashboard(backendRestartTarget, {
-        message: `Restoring v${app.getVersion()}`,
-        detail: `Update v${failedVersion} did not start, so the previous version is taking over.`
+        message: t('desktop-splash-restoring', { version: app.getVersion() }),
+        detail: t('desktop-splash-restoring-detail', { failed: failedVersion })
       }, bundledCore('rollback after staged-core startup failure'));
     } catch (err) {
       console.error('[Electron] Staged core recovery failed:', err);
       if (generation === launchGeneration) {
-        showBootError(genericBootError(
-          `The updated backend failed and the previous version could not be restored (${err.message}).`
-        ));
+        showBootError(genericBootError('desktop-boot-error-restore-failed', { error: err.message }));
       }
     }
   });
@@ -288,63 +317,8 @@ function createTray() {
   }
   
   tray = new Tray(trayIcon);
-  tray.setToolTip('ScreenerBot - Solana Trading Bot');
-  
-  const contextMenu = Menu.buildFromTemplate([
-    {
-      label: 'Show ScreenerBot',
-      click: () => {
-        if (mainWindow) {
-          mainWindow.show();
-          mainWindow.focus();
-        }
-      }
-    },
-    { type: 'separator' },
-    {
-      label: 'Open Dashboard',
-      click: () => {
-        if (mainWindow) {
-          mainWindow.show();
-          mainWindow.focus();
-        }
-      }
-    },
-    {
-      label: 'Open Data Folder',
-      click: () => {
-        shell.openPath(appPaths.dataDirectory(SCREENERBOT_BASE_DIR));
-      }
-    },
-    {
-      label: 'Open Logs Folder',
-      click: openScreenerBotLogs
-    },
-    { type: 'separator' },
-    {
-      label: 'Documentation',
-      click: async () => {
-        await shell.openExternal('https://screenerbot.io/docs');
-      }
-    },
-    {
-      label: 'Telegram Support',
-      click: async () => {
-        await shell.openExternal('https://t.me/screenerbotio_support');
-      }
-    },
-    { type: 'separator' },
-    {
-      label: 'Quit ScreenerBot',
-      click: () => {
-        isQuitting = true;
-        app.quit();
-      }
-    }
-  ]);
-  
-  tray.setContextMenu(contextMenu);
-  
+  refreshTray();
+
   // Double-click to show window (Windows)
   tray.on('double-click', () => {
     if (mainWindow) {
@@ -354,6 +328,67 @@ function createTray() {
   });
   
   console.log('[Electron] System tray created');
+}
+
+/** Apply the current language to the tray tooltip and context menu. */
+function refreshTray() {
+  if (!tray) return;
+  tray.setToolTip(t('desktop-tray-tooltip'));
+
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: t('desktop-tray-show'),
+      click: () => {
+        if (mainWindow) {
+          mainWindow.show();
+          mainWindow.focus();
+        }
+      }
+    },
+    { type: 'separator' },
+    {
+      label: t('desktop-tray-open-dashboard'),
+      click: () => {
+        if (mainWindow) {
+          mainWindow.show();
+          mainWindow.focus();
+        }
+      }
+    },
+    {
+      label: t('desktop-menu-open-data-folder'),
+      click: () => {
+        shell.openPath(appPaths.dataDirectory(SCREENERBOT_BASE_DIR));
+      }
+    },
+    {
+      label: t('desktop-menu-open-logs-folder'),
+      click: openScreenerBotLogs
+    },
+    { type: 'separator' },
+    {
+      label: t('desktop-menu-documentation'),
+      click: async () => {
+        await shell.openExternal('https://screenerbot.io/docs');
+      }
+    },
+    {
+      label: t('desktop-menu-telegram-support'),
+      click: async () => {
+        await shell.openExternal('https://t.me/screenerbotio_support');
+      }
+    },
+    { type: 'separator' },
+    {
+      label: t('desktop-tray-quit'),
+      click: () => {
+        isQuitting = true;
+        app.quit();
+      }
+    }
+  ]);
+  
+  tray.setContextMenu(contextMenu);
 }
 
 /**
@@ -370,12 +405,12 @@ async function showExitDialog() {
   try {
     const result = await dialog.showMessageBox(mainWindow, {
       type: 'question',
-      buttons: ['Minimize to Tray', 'Quit Completely', 'Cancel'],
+      buttons: [t('desktop-close-minimize'), t('desktop-close-quit'), t('desktop-close-cancel')],
       defaultId: 0,
       cancelId: 2,
-      title: 'Close ScreenerBot',
-      message: 'What would you like to do?',
-      detail: 'ScreenerBot can continue running in the background. The trading bot will keep monitoring and trading while minimized to the system tray.',
+      title: t('desktop-close-title'),
+      message: t('desktop-close-message'),
+      detail: t('desktop-close-detail'),
       icon: nativeImage.createFromPath(path.join(__dirname, '..', 'assets', 'icon.png'))
     });
     
@@ -435,14 +470,14 @@ function bundledCore(reason = '') {
  * version already in use, and saying "installing update" there would describe
  * work that finished days ago.
  */
-function describeCoreLaunch(core, fallbackMessage = 'Starting ScreenerBot') {
+function describeCoreLaunch(core, fallbackId = 'desktop-splash-starting') {
   if (core.staged && core.firstRun) {
     return {
-      message: `Updating to v${core.version}`,
-      detail: 'Your settings and data stay exactly as they are.'
+      message: t('desktop-splash-updating', { version: core.version }),
+      detail: t('desktop-splash-updating-detail')
     };
   }
-  return { message: fallbackMessage, detail: null };
+  return { message: t(fallbackId), detail: null };
 }
 
 /**
@@ -636,7 +671,10 @@ function startBackend(extraArgs = [], core = null) {
         // what makes a core-only update decidable, and the staged flag tells the
         // dashboard it is running an update that was applied without an installer.
         SCREENERBOT_SHELL_REVISION: SHELL_REVISION,
-        SCREENERBOT_CORE_STAGED: activeCore.staged ? '1' : '0'
+        SCREENERBOT_CORE_STAGED: activeCore.staged ? '1' : '0',
+        // Startup errors are rendered by the backend before any UI exists, so it
+        // needs the language the shell is already showing.
+        ...(l10n ? { SCREENERBOT_UI_LOCALE: l10n.locale } : {})
       }
     });
     backendProcess = child;
@@ -712,7 +750,7 @@ function startBackend(extraArgs = [], core = null) {
       if (generation !== launchGeneration) return;
       console.error('[Electron] Failed to start backend:', err.message);
       console.error('[Electron] Error code:', err.code);
-      startupError = genericBootError(`The backend program could not be started (${err.code || err.message}).`);
+      startupError = genericBootError('desktop-boot-error-spawn-failed', { error: err.code || err.message });
       recoverFailedStagedCore(launchedCore, generation, `spawn error ${err.code || err.message}`, child);
       if (backendReadyResolve) {
         backendReadyResolve(false);
@@ -762,8 +800,10 @@ function startBackend(extraArgs = [], core = null) {
         return;
       }
 
-      const phase = dashboardLoaded ? 'while the dashboard was running' : 'before the dashboard was ready';
-      showBootError(genericBootError(`The backend stopped ${phase} (exit code ${code}).`));
+      showBootError(genericBootError(
+        dashboardLoaded ? 'desktop-boot-error-exited-running' : 'desktop-boot-error-exited-early',
+        { code }
+      ));
     });
 
     console.log('[Electron] Backend process spawned with PID:', child.pid);
@@ -801,7 +841,7 @@ function stopBackend() {
  * quiet line under it. Both are kept here so a detail can be revised without
  * losing the headline it belongs to.
  */
-let loadingMessage = 'Starting ScreenerBot';
+let loadingMessage = null; // null keeps the splash's own initial text
 let loadingDetail = null;
 
 function pushLoadingStatus() {
@@ -856,7 +896,8 @@ function loadWindowState() {
     y: undefined,
     isMaximized: false,
     zoomLevel: 0,
-    theme: 'dark'
+    theme: 'dark',
+    language: null
   };
 }
 
@@ -875,7 +916,8 @@ function saveWindowState() {
       y: bounds.y,
       isMaximized: mainWindow.isMaximized(),
       zoomLevel: mainWindow.webContents.getZoomLevel(),
-      theme: currentTheme
+      theme: currentTheme,
+      language: shellLanguage
     };
     
     const statePath = getWindowStatePath();
@@ -932,15 +974,15 @@ async function checkAndInstallVCRedist() {
   }
 
   console.log('[Electron] VCRedist check: DLL missing, prompting user...');
-  updateLoadingStatus('Checking dependencies');
+  updateLoadingStatus(t('desktop-splash-checking-dependencies'));
 
   // 2. Prompt User
   const { response } = await dialog.showMessageBox(mainWindow, {
     type: 'warning',
-    title: 'Missing Dependency',
-    message: 'Visual C++ Redistributable is missing',
-    detail: 'ScreenerBot requires Microsoft Visual C++ Redistributable to run. Would you like to install it now?',
-    buttons: ['Install & Fix', 'Exit'],
+    title: t('desktop-vcredist-missing-title'),
+    message: t('desktop-vcredist-missing-message'),
+    detail: t('desktop-vcredist-missing-detail'),
+    buttons: [t('desktop-vcredist-install'), t('desktop-vcredist-exit')],
     defaultId: 0,
     cancelId: 1,
     icon: nativeImage.createFromPath(path.join(__dirname, '..', 'assets', 'icon.png'))
@@ -968,7 +1010,10 @@ async function checkAndInstallVCRedist() {
     : 'https://aka.ms/vs/17/release/vc_redist.x64.exe';
 
   if (!fs.existsSync(redistPath)) {
-    dialog.showErrorBox('Installer Not Found', `Could not locate ${redistName} correctly.`);
+    dialog.showErrorBox(
+      t('desktop-vcredist-not-found-title'),
+      t('desktop-vcredist-not-found-message', { name: redistName })
+    );
     shell.openExternal(downloadUrl);
     app.quit();
     return false;
@@ -977,8 +1022,8 @@ async function checkAndInstallVCRedist() {
   // 4. Run Installer
   // /install /passive /norestart -> Installs with progress bar but no user interaction required
   updateLoadingStatus(
-    'Installing system dependencies',
-    'ScreenerBot needs the Microsoft Visual C++ Redistributable to run.'
+    t('desktop-splash-installing-dependencies'),
+    t('desktop-splash-installing-dependencies-detail')
   );
   
   try {
@@ -999,17 +1044,20 @@ async function checkAndInstallVCRedist() {
 
     dialog.showMessageBox(mainWindow, {
       type: 'info',
-      title: 'Installation Complete',
-      message: 'Dependencies installed successfully.',
-      detail: 'ScreenerBot will now start.',
-      buttons: ['OK']
+      title: t('desktop-vcredist-done-title'),
+      message: t('desktop-vcredist-done-message'),
+      detail: t('desktop-vcredist-done-detail'),
+      buttons: [t('desktop-action-ok')]
     });
     
     return true; // Proceed to start backend
 
   } catch (err) {
     console.error('[Electron] Redist installation failed:', err);
-    dialog.showErrorBox('Installation Failed', 'Please install Visual C++ Redistributable manually.');
+    dialog.showErrorBox(
+      t('desktop-vcredist-failed-title'),
+      t('desktop-vcredist-failed-message')
+    );
     shell.openExternal(downloadUrl);
     app.quit();
     return false;
@@ -1125,19 +1173,22 @@ function createWindow() {
   mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
     if (!isMainFrame || errorCode === -3 || !isDashboardUrl(validatedURL) || isQuitting) return;
     dashboardLoaded = false;
-    showBootError(genericBootError(`The dashboard failed to load (${errorDescription}, ${errorCode}).`));
+    showBootError(genericBootError('desktop-boot-error-dashboard-load', {
+      description: errorDescription,
+      code: errorCode
+    }));
   });
 
   mainWindow.webContents.on('render-process-gone', (_event, details) => {
     if (isQuitting) return;
     dashboardLoaded = false;
-    showBootError(genericBootError(`The dashboard renderer stopped (${details.reason}).`));
+    showBootError(genericBootError('desktop-boot-error-renderer-gone', { reason: details.reason }));
   });
 
   mainWindow.on('unresponsive', () => {
     if (isQuitting) return;
     dashboardLoaded = false;
-    showBootError(genericBootError('The dashboard became unresponsive.'));
+    showBootError(genericBootError('desktop-boot-error-unresponsive'));
   });
 
   // Ensure zoom shortcuts work consistently across keyboard layouts.
@@ -1201,8 +1252,32 @@ function createWindow() {
   return mainWindow;
 }
 
+function showAboutDialog() {
+  dialog.showMessageBox(mainWindow, {
+    type: 'info',
+    title: t('desktop-about-title'),
+    message: t('desktop-about-message'),
+    detail: t('desktop-about-detail', { version: app.getVersion() }),
+    buttons: [t('desktop-action-ok')]
+  });
+}
+
+function showShortcutsDialog() {
+  const body = process.platform === 'darwin'
+    ? t('desktop-shortcuts-body-mac')
+    : t('desktop-shortcuts-body-other');
+  dialog.showMessageBox(mainWindow, {
+    type: 'info',
+    title: t('desktop-shortcuts-title'),
+    message: t('desktop-shortcuts-message'),
+    detail: body.trim(),
+    buttons: [t('desktop-action-ok')]
+  });
+}
+
 /**
- * Create the application menu with keyboard shortcuts
+ * Create the application menu with keyboard shortcuts. Rebuilt whenever the
+ * shell language changes.
  */
 function createApplicationMenu() {
   const isMac = process.platform === 'darwin';
@@ -1213,20 +1288,12 @@ function createApplicationMenu() {
       label: app.name,
       submenu: [
         {
-          label: 'About ScreenerBot',
-          click: () => {
-            dialog.showMessageBox(mainWindow, {
-              type: 'info',
-              title: 'About ScreenerBot',
-              message: 'ScreenerBot',
-              detail: `Version ${app.getVersion()}\n\nAdvanced Solana wallet management and auto-trading bot.\n\nhttps://screenerbot.io\n\n© 2024-2026 ScreenerBot`,
-              buttons: ['OK']
-            });
-          }
+          label: t('desktop-menu-about'),
+          click: showAboutDialog
         },
         { type: 'separator' },
         {
-          label: 'Check for Updates...',
+          label: t('desktop-menu-check-updates'),
           click: () => {
             mainWindow?.webContents.send('updates:check');
           }
@@ -1244,17 +1311,17 @@ function createApplicationMenu() {
     
     // File menu
     {
-      label: 'File',
+      label: t('desktop-menu-file'),
       submenu: [
         {
-          label: 'Open Data Folder',
+          label: t('desktop-menu-open-data-folder'),
           accelerator: isMac ? 'Cmd+Shift+D' : 'Ctrl+Shift+D',
           click: () => {
             shell.openPath(appPaths.dataDirectory(SCREENERBOT_BASE_DIR));
           }
         },
         {
-          label: 'Open Logs Folder',
+          label: t('desktop-menu-open-logs-folder'),
           click: openScreenerBotLogs
         },
         { type: 'separator' },
@@ -1264,7 +1331,7 @@ function createApplicationMenu() {
     
     // Edit menu
     {
-      label: 'Edit',
+      label: t('desktop-menu-edit'),
       submenu: [
         { role: 'undo' },
         { role: 'redo' },
@@ -1286,14 +1353,14 @@ function createApplicationMenu() {
     
     // View menu - CRITICAL FOR ZOOM SHORTCUTS
     {
-      label: 'View',
+      label: t('desktop-menu-view'),
       submenu: [
         { role: 'reload' },
         { role: 'forceReload' },
         { type: 'separator' },
-        { label: 'Reset Zoom', accelerator: 'CmdOrCtrl+0', click: () => resetZoomLevel() },
-        { label: 'Zoom In', accelerator: 'CmdOrCtrl+=', click: () => adjustZoomLevel(0.5) },
-        { label: 'Zoom Out', accelerator: 'CmdOrCtrl+-', click: () => adjustZoomLevel(-0.5) },
+        { label: t('desktop-menu-reset-zoom'), accelerator: 'CmdOrCtrl+0', click: () => resetZoomLevel() },
+        { label: t('desktop-menu-zoom-in'), accelerator: 'CmdOrCtrl+=', click: () => adjustZoomLevel(0.5) },
+        { label: t('desktop-menu-zoom-out'), accelerator: 'CmdOrCtrl+-', click: () => adjustZoomLevel(-0.5) },
         { type: 'separator' },
         { role: 'togglefullscreen' },
         { type: 'separator' },
@@ -1303,7 +1370,7 @@ function createApplicationMenu() {
     
     // Window menu
     {
-      label: 'Window',
+      label: t('desktop-menu-window'),
       submenu: [
         { role: 'minimize' },
         { role: 'zoom' },
@@ -1320,103 +1387,54 @@ function createApplicationMenu() {
     
     // Help menu
     {
-      label: 'Help',
+      label: t('desktop-menu-help'),
       submenu: [
         {
-          label: 'Documentation',
+          label: t('desktop-menu-documentation'),
           accelerator: 'F1',
           click: async () => {
             await shell.openExternal('https://screenerbot.io/docs');
           }
         },
         {
-          label: 'Keyboard Shortcuts',
-          click: () => {
-            const shortcuts = isMac ? `
-Keyboard Shortcuts:
-
-Window Controls:
-  Cmd+M          Minimize
-  Cmd+W          Close Window
-  Cmd+Q          Quit
-  Cmd+Ctrl+F     Toggle Fullscreen
-
-Zoom:
-  Cmd++          Zoom In
-  Cmd+-          Zoom Out
-  Cmd+0          Reset Zoom
-
-Navigation:
-  Cmd+R          Reload Dashboard
-  Cmd+Shift+D    Open Data Folder
-
-Other:
-  F1             Open Documentation
-  Cmd+Alt+I      Toggle DevTools
-` : `
-Keyboard Shortcuts:
-
-Window Controls:
-  Alt+F4         Quit
-  F11            Toggle Fullscreen
-
-Zoom:
-  Ctrl++         Zoom In
-  Ctrl+-         Zoom Out
-  Ctrl+0         Reset Zoom
-
-Navigation:
-  Ctrl+R         Reload Dashboard
-  Ctrl+Shift+D   Open Data Folder
-
-Other:
-  F1             Open Documentation
-  Ctrl+Shift+I   Toggle DevTools
-`;
-            dialog.showMessageBox(mainWindow, {
-              type: 'info',
-              title: 'Keyboard Shortcuts',
-              message: 'ScreenerBot Keyboard Shortcuts',
-              detail: shortcuts.trim(),
-              buttons: ['OK']
-            });
-          }
+          label: t('desktop-menu-keyboard-shortcuts'),
+          click: showShortcutsDialog
         },
         { type: 'separator' },
         {
-          label: 'Telegram Channel',
+          label: t('desktop-menu-telegram-channel'),
           click: async () => {
             await shell.openExternal('https://t.me/screenerbotio');
           }
         },
         {
-          label: 'Telegram Community',
+          label: t('desktop-menu-telegram-community'),
           click: async () => {
             await shell.openExternal('https://t.me/screenerbotio_talk');
           }
         },
         {
-          label: 'Telegram Support',
+          label: t('desktop-menu-telegram-support'),
           click: async () => {
             await shell.openExternal('https://t.me/screenerbotio_support');
           }
         },
         { type: 'separator' },
         {
-          label: 'Follow on X (Twitter)',
+          label: t('desktop-menu-follow-x'),
           click: async () => {
             await shell.openExternal('https://x.com/screenerbotio');
           }
         },
         {
-          label: 'Visit Website',
+          label: t('desktop-menu-visit-website'),
           click: async () => {
             await shell.openExternal('https://screenerbot.io');
           }
         },
         { type: 'separator' },
         {
-          label: 'Check for Updates...',
+          label: t('desktop-menu-check-updates'),
           click: () => {
             mainWindow?.webContents.send('updates:check');
           }
@@ -1424,16 +1442,8 @@ Other:
         ...(!isMac ? [
           { type: 'separator' },
           {
-            label: 'About ScreenerBot',
-            click: () => {
-              dialog.showMessageBox(mainWindow, {
-                type: 'info',
-                title: 'About ScreenerBot',
-                message: 'ScreenerBot',
-                detail: `Version ${app.getVersion()}\n\nAdvanced Solana wallet management and auto-trading bot.\n\nhttps://screenerbot.io\n\n© 2024-2026 ScreenerBot`,
-                buttons: ['OK']
-              });
-            }
+            label: t('desktop-menu-about'),
+            click: showAboutDialog
           }
         ] : [])
       ]
@@ -1464,7 +1474,7 @@ function loadMainApp(route = '/') {
   dashboardLoaded = false;
   mainWindow.loadURL(appUrl.href).catch(err => {
     if (!isQuitting) {
-      showBootError(genericBootError(`The dashboard URL could not be loaded (${err.message}).`));
+      showBootError(genericBootError('desktop-boot-error-url-failed', { error: err.message }));
     }
   });
 }
@@ -1488,7 +1498,7 @@ async function restartBackendFromDashboard(targetRoute, statusOverride, coreOver
   // Claim the screen before resolving the core, which can spend a moment hashing
   // a staged binary. Otherwise the splash sits on its "Starting ScreenerBot"
   // default and then jumps, which reads as a stutter rather than a restart.
-  const opening = statusOverride || { message: 'Restarting ScreenerBot', detail: null };
+  const opening = statusOverride || { message: t('desktop-splash-restarting'), detail: null };
   updateLoadingStatus(opening.message, opening.detail);
 
   CONFIG.port = null;
@@ -1502,7 +1512,7 @@ async function restartBackendFromDashboard(targetRoute, statusOverride, coreOver
   // quarantine record or pointer removal from being persisted.
   const core = coreOverride || await resolveBackendBinary();
   if (!statusOverride) {
-    const launch = describeCoreLaunch(core, 'Restarting ScreenerBot');
+    const launch = describeCoreLaunch(core, 'desktop-splash-restarting');
     updateLoadingStatus(launch.message, launch.detail);
   }
 
@@ -1511,7 +1521,7 @@ async function restartBackendFromDashboard(targetRoute, statusOverride, coreOver
   isRecovering = false;
   if (!backend) {
     if (recoverFailedStagedCore(core, generation, 'spawn threw before a child was created')) return;
-    showBootError(genericBootError('Could not relaunch the backend after setup.'));
+    showBootError(genericBootError('desktop-boot-error-relaunch-setup'));
     return;
   }
 
@@ -1519,7 +1529,7 @@ async function restartBackendFromDashboard(targetRoute, statusOverride, coreOver
   if (generation !== launchGeneration) return;
   if (isReady) {
     await recordCoreAdoption(core);
-    updateLoadingStatus('Opening dashboard');
+    updateLoadingStatus(t('desktop-splash-opening-dashboard'));
     loadMainApp(targetRoute || '/home');
   } else if (recoverFailedStagedCore(
     core,
@@ -1532,7 +1542,7 @@ async function restartBackendFromDashboard(targetRoute, statusOverride, coreOver
   } else if (startupError) {
     showBootError(startupError);
   } else {
-    showBootError(genericBootError('The backend did not come back online after restart.'));
+    showBootError(genericBootError('desktop-boot-error-restart-offline'));
   }
 }
 
@@ -1540,15 +1550,16 @@ async function restartBackendFromDashboard(targetRoute, statusOverride, coreOver
  * Build a generic boot-error payload for unexplained early failures, mirroring
  * the structured SCREENERBOT_ERROR shape so the renderer can treat both alike.
  */
-function genericBootError(detail) {
+function genericBootError(detailId = 'desktop-boot-error-default', detailArgs) {
   const logsPath = path.join(appPaths.logsDirectory(SCREENERBOT_BASE_DIR), 'latest.log');
   return {
     code: 'generic',
-    title: 'ScreenerBot could not start',
-    detail: detail || 'The backend stopped unexpectedly before the dashboard was ready.',
-    remedy: 'Open the logs folder to see what happened, then restart the app. If the problem '
-      + 'persists, contact support at t.me/screenerbotio_support.',
-    log_path: logsPath
+    title: t('desktop-boot-error-title'),
+    detail: t(detailId, detailArgs),
+    remedy: t('desktop-boot-error-remedy'),
+    log_path: logsPath,
+    locale: l10n ? l10n.locale : 'en',
+    dir: l10n ? l10n.dir : 'ltr'
   };
 }
 
@@ -1590,6 +1601,7 @@ function loadLoadingPage() {
  * Initialize the application
  */
 async function initialize() {
+  initLocalizer();
   console.log('[Electron] Initializing application...');
   console.log('[Electron] Packaged:', app.isPackaged);
   console.log('[Electron] Process arch:', process.arch);
@@ -1641,9 +1653,7 @@ async function initialize() {
   if (!backend) {
     if (recoverFailedStagedCore(core, generation, 'spawn threw before a child was created')) return;
     console.error('[Electron] Failed to start backend process');
-    showBootError(genericBootError(
-      'The backend program could not be started. It may be missing or blocked by security software.'
-    ));
+    showBootError(genericBootError('desktop-boot-error-spawn-missing'));
     return;
   }
 
@@ -1656,7 +1666,7 @@ async function initialize() {
 
   if (isReady) {
     await recordCoreAdoption(core);
-    updateLoadingStatus('Opening dashboard');
+    updateLoadingStatus(t('desktop-splash-opening-dashboard'));
     loadMainApp();
   } else if (recoverFailedStagedCore(
     core,
@@ -1671,10 +1681,7 @@ async function initialize() {
     showBootError(startupError);
   } else {
     // No structured error but never became ready (e.g. health-check timeout).
-    showBootError(genericBootError(
-      'The backend did not finish starting in time. This can happen on a slow first run or if '
-      + 'another program is blocking the connection.'
-    ));
+    showBootError(genericBootError('desktop-boot-error-start-timeout'));
   }
 }
 
@@ -1777,7 +1784,7 @@ async function recoverAndRestart(extraArgs, statusOverride) {
   if (mainWindow.webContents.isLoading()) {
     await new Promise(resolve => mainWindow.webContents.once('did-finish-load', resolve));
   }
-  const recovery = statusOverride || { message: 'Recovering', detail: null };
+  const recovery = statusOverride || { message: t('desktop-splash-recovering'), detail: null };
   updateLoadingStatus(recovery.message, recovery.detail);
 
   // Ensure any prior backend is gone before relaunching.
@@ -1792,7 +1799,7 @@ async function recoverAndRestart(extraArgs, statusOverride) {
   isRecovering = false;
   if (!backend) {
     if (recoverFailedStagedCore(core, generation, 'spawn threw before a child was created')) return;
-    showBootError(genericBootError('Could not relaunch the backend for recovery.'));
+    showBootError(genericBootError('desktop-boot-error-relaunch-recovery'));
     return;
   }
 
@@ -1802,7 +1809,7 @@ async function recoverAndRestart(extraArgs, statusOverride) {
     // A recovery launch adopts a staged core just like any other, so it counts:
     // without this the next ordinary launch would announce the update again.
     await recordCoreAdoption(core);
-    updateLoadingStatus('Opening dashboard');
+    updateLoadingStatus(t('desktop-splash-opening-dashboard'));
     loadMainApp();
   } else if (recoverFailedStagedCore(
     core,
@@ -1815,15 +1822,15 @@ async function recoverAndRestart(extraArgs, statusOverride) {
   } else if (startupError) {
     showBootError(startupError);
   } else {
-    showBootError(genericBootError('Recovery finished but the backend did not become ready.'));
+    showBootError(genericBootError('desktop-boot-error-recovery-offline'));
   }
 }
 
 ipcMain.handle('boot:reset-wallet-data', async () => {
   console.log('[Electron] Boot recovery requested: reset wallet data');
   await recoverAndRestart(['--clean-wallet-data'], {
-    message: 'Resetting wallet data',
-    detail: 'The existing wallet data is backed up before it is cleared.'
+    message: t('desktop-splash-resetting-wallet'),
+    detail: t('desktop-splash-resetting-wallet-detail')
   });
   return true;
 });
@@ -1849,6 +1856,37 @@ ipcMain.handle('theme:set', (event, theme) => {
   }
   saveWindowState();
   return currentTheme;
+});
+
+// The dashboard reports the locale its page was served in; the shell follows it
+// so native text matches the interface. Unregistered codes (pseudo-locales, a
+// stale value) leave the current language untouched.
+ipcMain.handle('app:set-language', (event, code) => {
+  if (l10n && typeof code === 'string' && l10n.codes.includes(code)) {
+    const changed = code !== l10n.locale;
+    if (changed) l10n = createShellLocalizer(code);
+    if (changed || shellLanguage !== code) {
+      shellLanguage = code;
+      saveWindowState();
+    }
+    if (changed) {
+      createApplicationMenu();
+      refreshTray();
+    }
+  }
+  return l10n ? l10n.locale : null;
+});
+
+// Splash and boot-error text, synchronous so boot.js can fill the page before
+// it is first shown.
+ipcMain.on('app:get-shell-strings', (event) => {
+  event.returnValue = l10n
+    ? {
+        locale: l10n.locale,
+        dir: l10n.dir,
+        strings: l10n.stringsWithPrefix(['desktop-splash-', 'desktop-boot-'])
+      }
+    : { locale: 'en', dir: 'ltr', strings: {} };
 });
 
 ipcMain.handle('app:minimize', () => {

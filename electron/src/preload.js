@@ -44,6 +44,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Persist the UI theme so the next launch's splash + window match it.
   saveTheme: (theme) => ipcRenderer.invoke('theme:set', theme),
 
+  // Tell the shell which language the dashboard page was served in, so native
+  // menus, dialogs and the tray follow it. Resolves to the applied code.
+  setLanguage: (code) => ipcRenderer.invoke('app:set-language', code),
+
+  // Splash and boot-error text for the shell language: `{ locale, dir, strings }`.
+  getShellStrings: () => ipcRenderer.sendSync('app:get-shell-strings'),
+
   // Splash state: `{ message, detail }` describing what the launch is doing.
   onLoadingStatus: (callback) => {
     const handler = (event, status) => callback(status);

@@ -20,6 +20,21 @@
 
   if (!window.electronAPI) return;
 
+  // Shell text for the current language. The same call supplies the document
+  // language and direction, applied before the page is first shown.
+  const shellText = window.electronAPI.getShellStrings() || {};
+  const strings = shellText.strings || {};
+  if (shellText.locale) document.documentElement.lang = shellText.locale;
+  if (shellText.dir) document.documentElement.dir = shellText.dir;
+
+  function text(id) {
+    return typeof strings[id] === 'string' ? strings[id] : id;
+  }
+
+  document.querySelectorAll('[data-l10n-id]').forEach((el) => {
+    el.textContent = text(el.getAttribute('data-l10n-id'));
+  });
+
   // Version badge.
   window.electronAPI
     .getVersion()
@@ -47,24 +62,29 @@
     renderBootError(payload || {});
   });
 
-  const SUBTITLES = {
-    wallet_mismatch: 'A different wallet was detected',
-    port_in_use: 'A required network port is busy',
-    lock_held: 'ScreenerBot is already running',
-    config_invalid: 'Configuration problem',
-    directory_setup: 'Storage problem',
-    generic: 'Startup error'
+  const SUBTITLE_IDS = {
+    wallet_mismatch: 'desktop-boot-subtitle-wallet-mismatch',
+    port_in_use: 'desktop-boot-subtitle-port-in-use',
+    lock_held: 'desktop-boot-subtitle-lock-held',
+    config_invalid: 'desktop-boot-subtitle-config-invalid',
+    directory_setup: 'desktop-boot-subtitle-directory-setup',
+    generic: 'desktop-boot-subtitle-generic'
   };
 
   function renderBootError(payload) {
     document.getElementById('splashScreen').classList.add('hidden');
 
+    // The payload is finished text in its own locale; keep the page's language
+    // and direction consistent with it.
+    if (payload.locale) document.documentElement.lang = payload.locale;
+    if (payload.dir) document.documentElement.dir = payload.dir;
+
     document.getElementById('bootErrorTitle').textContent =
-      payload.title || 'ScreenerBot could not start';
+      payload.title || text('desktop-boot-title-fallback');
     document.getElementById('bootErrorSubtitle').textContent =
-      SUBTITLES[payload.code] || SUBTITLES.generic;
+      text(SUBTITLE_IDS[payload.code] || SUBTITLE_IDS.generic);
     document.getElementById('bootErrorDetail').textContent =
-      payload.detail || 'The backend stopped unexpectedly.';
+      payload.detail || text('desktop-boot-detail-fallback');
 
     const remedyWrap = document.getElementById('bootErrorRemedyWrap');
     if (payload.remedy) {
@@ -74,50 +94,56 @@
       remedyWrap.hidden = true;
     }
 
-    document.getElementById('bootErrorLogPath').textContent = payload.log_path
-      ? 'Log file: ' + payload.log_path
-      : '';
+    // The path is a machine value: keep it in its own left-to-right run.
+    const logPathEl = document.getElementById('bootErrorLogPath');
+    logPathEl.textContent = '';
+    if (payload.log_path) {
+      const pathEl = document.createElement('bdi');
+      pathEl.dir = 'ltr';
+      pathEl.textContent = payload.log_path;
+      logPathEl.append(text('desktop-boot-log-file-label') + ' ', pathEl);
+    }
 
     const actions = document.getElementById('bootErrorActions');
     actions.innerHTML = '';
 
     if (payload.recovery && payload.recovery.action === 'reset_wallet_data') {
       actions.appendChild(
-        makeButton('Reset wallet data & restart', 'primary', async (btn) => {
+        makeButton(text('desktop-boot-action-reset-wallet'), 'primary', async (btn) => {
           btn.disabled = true;
-          btn.textContent = 'Working...';
+          btn.textContent = text('desktop-boot-action-working');
           try {
             await window.electronAPI.bootResetWalletData();
           } catch (e) {
             btn.disabled = false;
-            btn.textContent = 'Reset wallet data & restart';
+            btn.textContent = text('desktop-boot-action-reset-wallet');
           }
         })
       );
     }
 
     actions.appendChild(
-      makeButton('Open logs folder', 'secondary', () => {
+      makeButton(text('desktop-boot-action-open-logs'), 'secondary', () => {
         window.electronAPI.bootOpenLogs();
       })
     );
 
     actions.appendChild(
-      makeButton('Copy details', 'secondary', (btn) => {
+      makeButton(text('desktop-boot-action-copy'), 'secondary', (btn) => {
         const text = [
           payload.title || '',
           '',
           payload.detail || '',
           '',
-          payload.remedy ? 'How to fix:\n' + payload.remedy : '',
-          payload.log_path ? '\nLog file: ' + payload.log_path : ''
+          payload.remedy ? text('desktop-boot-remedy-label') + '\n' + payload.remedy : '',
+          payload.log_path ? '\n' + text('desktop-boot-log-file-label') + ' ' + payload.log_path : ''
         ].join('\n');
         navigator.clipboard
           .writeText(text)
           .then(() => {
-            btn.textContent = 'Copied';
+            btn.textContent = text('desktop-boot-action-copied');
             setTimeout(() => {
-              btn.textContent = 'Copy details';
+              btn.textContent = text('desktop-boot-action-copy');
             }, 1500);
           })
           .catch(() => {});
@@ -125,7 +151,7 @@
     );
 
     actions.appendChild(
-      makeButton('Quit', 'ghost', () => {
+      makeButton(text('desktop-boot-action-quit'), 'ghost', () => {
         window.electronAPI.bootQuit();
       })
     );

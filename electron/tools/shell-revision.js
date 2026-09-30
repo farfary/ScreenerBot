@@ -32,6 +32,17 @@ const REVISION_LENGTH = 12;
 
 const INPUT_DIRECTORIES = ['src', 'assets'];
 const INPUT_FILES = ['forge.config.js', 'tools/windows-installer.js'];
+/**
+ * Files outside electron/ that are packaged into the shell (`extraResource`) and
+ * that decide what it renders. Only these: the other catalogs belong to the
+ * core and change on every release.
+ */
+const REPO_ROOT = path.join(SHELL_ROOT, '..');
+const EXTERNAL_INPUTS = [
+  'locales/registry.toml',
+  'src/webserver/assets/fluent-bundle.js',
+];
+const EXTERNAL_CATALOGS = ['desktop.ftl', 'terms.ftl'];
 /** Never part of the identity: generated, or noise that is not shipped. */
 const EXCLUDED = new Set(['shell_revision.json', '.DS_Store']);
 
@@ -107,7 +118,17 @@ function computeShellRevision() {
     ...INPUT_FILES.map((file) => path.join(SHELL_ROOT, file)).filter((file) => fs.existsSync(file)),
   ];
 
-  const entries = files
+  const localeDirectories = fs.existsSync(path.join(REPO_ROOT, 'locales'))
+    ? fs.readdirSync(path.join(REPO_ROOT, 'locales'), { withFileTypes: true }).filter((e) => e.isDirectory())
+    : [];
+  const externalFiles = [
+    ...EXTERNAL_INPUTS,
+    ...localeDirectories.flatMap((dir) => EXTERNAL_CATALOGS.map((name) => `locales/${dir.name}/${name}`)),
+  ]
+    .map((relative) => path.join(REPO_ROOT, relative))
+    .filter((file) => fs.existsSync(file));
+
+  const entries = [...files, ...externalFiles]
     .map((file) => ({ key: path.relative(SHELL_ROOT, file).split(path.sep).join('/'), file }))
     .sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
 
