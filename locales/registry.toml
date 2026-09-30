@@ -64,3 +64,8 @@ dir = "ltr"
 code = "ko"
 name = "한국어"
 dir = "ltr"
+
+[[locale]]
+code = "hi"
+name = "हिन्दी"
+dir = "ltr"

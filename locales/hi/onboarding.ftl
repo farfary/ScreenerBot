@@ -1,0 +1,72 @@
+onboarding-welcome-title = { -brand } में आपका स्वागत है
+onboarding-welcome-description = आपका लोकल-फ़र्स्ट Solana ट्रेडिंग साथी — नेटिव स्पीड के लिए Rust में बना। अपनी ही मशीन से टोकन खोजें, मार्केट का विश्लेषण करें और ट्रेडिंग नियंत्रित करें।
+onboarding-welcome-free-title = मुफ़्त और सोर्स-अवेलेबल
+onboarding-welcome-free-description = कोई सब्सक्रिप्शन या पेवॉल नहीं। GitHub पर प्रकाशित कोड खुद जांचें।
+onboarding-welcome-custody-title = सेल्फ़-कस्टडी
+onboarding-welcome-custody-description = प्राइवेट की स्टोरेज में एन्क्रिप्टेड रहती हैं और कहीं भेजी नहीं जातीं।
+onboarding-welcome-engine-title = हमेशा चालू इंजन
+onboarding-welcome-engine-description = हेल्थ चेक और सुचारु लाइफ़साइकल कंट्रोल वाली ऑर्केस्ट्रेटेड सर्विस।
+onboarding-welcome-realtime-title = रियल-टाइम ऑन-चेन डेटा
+onboarding-welcome-realtime-description = सीधी पूल रिज़र्व गणना — देरी वाले API स्नैपशॉट नहीं।
+
+onboarding-discover-title = खोजें और फ़िल्टर करें
+onboarding-discover-description = नए Solana पेयर के लिए तीन डेटा स्रोत स्कैन करें, 12+ DEX पूल प्रकार ऑन-चेन डिकोड करें, फिर हर टोकन को कॉन्फ़िगर करने योग्य क्वालिटी और सिक्योरिटी नियमों से गुज़ारें।
+onboarding-discover-dex-title = मल्टी-DEX डिस्कवरी
+onboarding-discover-dex-description = ताज़ा { -sol } पेयर के लिए { -dexscreener }, { -geckoterminal } और Raydium फ़ीड।
+onboarding-discover-scanner-title = स्मार्ट टोकन स्कैनर
+onboarding-discover-scanner-description = लिक्विडिटी, वॉल्यूम, टोकन की आयु, होल्डर वितरण और { -rugcheck } नियम।
+onboarding-discover-intelligence-title = टोकन इंटेलिजेंस
+onboarding-discover-intelligence-description = मार्केट, सिक्योरिटी और ब्लैकलिस्ट डेटा एक ही व्यू में।
+onboarding-discover-price-action-title = प्राइस एक्शन ट्रैकिंग
+onboarding-discover-price-action-description = गैप डिटेक्शन और मोमेंटम सिग्नल के साथ सात टाइमफ़्रेम का कैंडल डेटा।
+
+onboarding-trade-title = स्मार्ट ट्रेड करें
+onboarding-trade-description = छह-स्तरीय एग्ज़िट प्राथमिकता प्रणाली के साथ ऑटोमेटेड ट्रेडिंग। पोज़िशन में DCA करें, ट्रेलिंग स्टॉप सेट करें, स्ट्रैटेजी ट्री बनाएं — या एक क्लिक में मैन्युअल ट्रेड करें।
+onboarding-trade-auto-title = ऑटो-ट्रेडिंग
+onboarding-trade-auto-description = एंट्री/एग्ज़िट इवैल्यूएटर, DCA राउंड, आंशिक एग्ज़िट और ट्रेलिंग स्टॉप-लॉस।
+onboarding-trade-strategy-title = स्ट्रैटेजी इंजन
+onboarding-trade-strategy-description = प्राइस, वॉल्यूम और समय-आधारित सिग्नल जोड़ने वाले कंडीशन ट्री।
+onboarding-trade-routing-title = बेस्ट-प्राइस रूटिंग
+onboarding-trade-routing-description = हर चालू राउटर से एक साथ कोट — सबसे अच्छा रूट जीतता है।
+onboarding-trade-safety-title = सेफ़्टी कंट्रोल
+onboarding-trade-safety-description = इमरजेंसी स्टॉप, अवधि-आधारित लॉस लिमिट और स्वतंत्र मॉनिटर टॉगल।
+
+onboarding-connect-title = जुड़े रहें
+onboarding-connect-description = कहीं से भी अपना पोर्टफ़ोलियो मॉनिटर करें। नौ LLM प्रोवाइडर वाला असिस्टेंट, इनलाइन ट्रेडिंग के साथ { -telegram } अलर्ट, और खोजने योग्य इवेंट लॉग।
+onboarding-connect-assistant-title = असिस्टेंट
+onboarding-connect-assistant-description = ट्रेड, कॉन्फ़िग और पोर्टफ़ोलियो के लिए टूल कॉलिंग के साथ चैट-आधारित विश्लेषण।
+onboarding-connect-telegram-title = { -telegram } इंटीग्रेशन
+onboarding-connect-telegram-description = अपने फ़ोन से नोटिफ़िकेशन, इनलाइन कमांड और 2FA-सुरक्षित सेशन।
+onboarding-connect-wallets-title = मल्टी-वॉलेट ट्रैकिंग
+onboarding-connect-wallets-description = आपके सभी Solana वॉलेट और टोकन होल्डिंग एक ही डैशबोर्ड में।
+onboarding-connect-events-title = लाइव इवेंट स्ट्रीम
+onboarding-connect-events-description = हर ट्रेड, स्वैप और सिस्टम इवेंट श्रेणी और गंभीरता के साथ लॉग होता है।
+
+onboarding-data-title = { -brand } डेटा
+onboarding-data-description = हम एक साझा मार्केट-डेटा सर्विस चलाते हैं ताकि हर इंस्टॉल पर पब्लिक प्रोवाइडर की अलग रेट लिमिट न लगे। यह { -brand } अकाउंट के साथ मुफ़्त है, और { -brand } बिना अकाउंट के भी काम करता है।
+onboarding-data-candles-title = पूल्ड कैंडल इतिहास
+onboarding-data-candles-description = सात टाइमफ़्रेम का साझा इतिहास, कई साल गहरा, एक ही कैश से उपलब्ध।
+onboarding-data-pools-title = रिज़ॉल्व्ड पूल और सिक्योरिटी
+onboarding-data-pools-description = एक केंद्रीय पूल रजिस्ट्री और पहले से लाई गई कैश्ड { -rugcheck } रिपोर्ट।
+onboarding-data-signin-title = इस्तेमाल के लिए साइन इन करें
+onboarding-data-signin-description = अकाउंट के बिना यह डेटा उपलब्ध नहीं है और पब्लिक प्रोवाइडर इस्तेमाल होते हैं।
+onboarding-data-reading-title = केवल पढ़ना
+onboarding-data-reading-description = हमें दिखता है कि आप कौन से टोकन खोजते हैं। कभी की, बैलेंस, पोज़िशन या ट्रेड नहीं।
+
+onboarding-privacy-title = आपकी की, आपका डेटा
+onboarding-privacy-description = आपका कॉन्फ़िगरेशन, की और ट्रेडिंग इतिहास इसी मशीन पर रहते हैं। आगे, बिना क्रेडेंशियल के डिस्कवरी के लिए एक्सप्लोर मोड चुनें, या पूरा बॉट चालू करने के लिए वॉलेट और RPC लिंक करें — और { -brand } डेटा चाहिए तो वहीं साइन इन करें।
+onboarding-privacy-local-title = लोकल-फ़र्स्ट आर्किटेक्चर
+onboarding-privacy-local-description = कॉन्फ़िग, एनालिटिक्स और डेटाबेस आपके डेस्कटॉप पर सहेजे जाते हैं।
+onboarding-privacy-wallet-title = एन्क्रिप्टेड वॉलेट
+onboarding-privacy-wallet-description = आपकी प्राइवेट की स्टोरेज में एन्क्रिप्टेड रहती है और कभी भेजी नहीं जाती।
+onboarding-privacy-security-title = डैशबोर्ड सिक्योरिटी
+onboarding-privacy-security-description = पासवर्ड लॉक, TOTP टू-फ़ैक्टर और सेशन टाइमआउट सुरक्षा।
+onboarding-privacy-config-title = लचीला कॉन्फ़िगरेशन
+onboarding-privacy-config-description = ज़्यादातर सेटिंग्स सेटअप के बाद डैशबोर्ड से बदली जा सकती हैं।
+
+onboarding-setup-shortcut =
+    .aria-label = सीधे वॉलेट और RPC सेटअप पर जाएं या एक्सप्लोर मोड चुनें
+onboarding-setup-shortcut-label = सेटअप पर जाएं
+onboarding-progress-dot =
+    .aria-label = स्लाइड { $number } पर जाएं
+onboarding-action-continue-to-setup = सेटअप पर आगे बढ़ें
