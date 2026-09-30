@@ -9,3 +9,8 @@ dir = "ltr"
 code = "de"
 name = "Deutsch"
 dir = "ltr"
+
+[[locale]]
+code = "fr"
+name = "Français"
+dir = "ltr"

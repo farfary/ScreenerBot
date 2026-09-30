@@ -43,8 +43,11 @@ fn explicit_setting_wins() {
 
 #[test]
 fn system_setting_negotiates_request_language() {
-    let resolved = resolve_locale("system", Some("fr-CA,fr;q=0.9,en;q=0.8"));
-    assert_eq!(resolved, langid("en"));
+    let unregistered = resolve_locale("system", Some("sw-KE,sw;q=0.9,en;q=0.8"));
+    assert_eq!(unregistered, langid("en"));
+    let regional = resolve_locale("system", Some("fr-CA,fr;q=0.9,en;q=0.8"));
+    let expected = if locale_info("fr").is_some() { "fr" } else { "en" };
+    assert_eq!(regional, langid(expected));
 }
 
 #[test]

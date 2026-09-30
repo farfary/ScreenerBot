@@ -1,0 +1,72 @@
+onboarding-welcome-title = Bienvenue dans { -brand }
+onboarding-welcome-description = Votre compagnon de trading Solana local d'abord — conçu en Rust pour une vitesse native. Découvrez des tokens, analysez les marchés et pilotez le trading depuis votre propre machine.
+onboarding-welcome-free-title = Gratuit et code source disponible
+onboarding-welcome-free-description = Ni abonnement ni accès payant. Inspectez le code publié sur GitHub.
+onboarding-welcome-custody-title = Autogarde
+onboarding-welcome-custody-description = Clés privées chiffrées au repos et jamais transmises nulle part.
+onboarding-welcome-engine-title = Moteur toujours actif
+onboarding-welcome-engine-description = Services orchestrés avec contrôles de santé et gestion propre du cycle de vie.
+onboarding-welcome-realtime-title = Données on-chain en temps réel
+onboarding-welcome-realtime-description = Calculs directs des réserves des pools — pas d'instantanés d'API en retard.
+
+onboarding-discover-title = Découvrir et filtrer
+onboarding-discover-description = Analysez trois sources de données pour trouver de nouvelles paires Solana, décodez plus de 12 types de pools DEX on-chain, puis passez chaque token dans des règles de qualité et de sécurité configurables.
+onboarding-discover-dex-title = Découverte multi-DEX
+onboarding-discover-dex-description = Flux DexScreener, GeckoTerminal et Raydium pour les nouvelles paires en { -sol }.
+onboarding-discover-scanner-title = Scanner de tokens intelligent
+onboarding-discover-scanner-description = Règles de liquidité, de volume, d'âge du token, de répartition des holders et Rugcheck.
+onboarding-discover-intelligence-title = Intelligence des tokens
+onboarding-discover-intelligence-description = Données de marché, de sécurité et de liste noire réunies dans une seule vue.
+onboarding-discover-price-action-title = Suivi de l'évolution des prix
+onboarding-discover-price-action-description = Sept périodes de bougies avec détection de lacunes et signaux de momentum.
+
+onboarding-trade-title = Tradez malin
+onboarding-trade-description = Trading automatisé avec un système de priorité de sortie à six niveaux. Renforcez vos positions en DCA, définissez des trailing stops, construisez des arbres de stratégies — ou tradez manuellement en un clic.
+onboarding-trade-auto-title = Trading automatique
+onboarding-trade-auto-description = Évaluateurs d'entrée/sortie, cycles de DCA, sorties partielles et stop loss suiveur.
+onboarding-trade-strategy-title = Moteur de stratégies
+onboarding-trade-strategy-description = Arbres de conditions combinant des signaux de prix, de volume et de temps.
+onboarding-trade-routing-title = Routage au meilleur prix
+onboarding-trade-routing-description = Cotations simultanées de chaque routeur activé — la meilleure route l'emporte.
+onboarding-trade-safety-title = Contrôles de sécurité
+onboarding-trade-safety-description = Arrêt d'urgence, limites de perte par période et activation indépendante des moniteurs.
+
+onboarding-connect-title = Restez connecté
+onboarding-connect-description = Suivez votre portefeuille où que vous soyez. Un assistant appuyé par neuf fournisseurs de LLM, des alertes Telegram avec trading intégré et un journal d'événements consultable.
+onboarding-connect-assistant-title = Assistant
+onboarding-connect-assistant-description = Analyse par conversation avec appel d'outils pour les trades, la configuration et le portefeuille.
+onboarding-connect-telegram-title = Intégration Telegram
+onboarding-connect-telegram-description = Notifications, commandes intégrées et sessions sécurisées par 2FA depuis votre téléphone.
+onboarding-connect-wallets-title = Suivi multi-portefeuilles
+onboarding-connect-wallets-description = Tous vos portefeuilles Solana et vos tokens détenus dans un seul tableau de bord.
+onboarding-connect-events-title = Flux d'événements en direct
+onboarding-connect-events-description = Chaque trade, swap et événement système est journalisé avec sa catégorie et sa gravité.
+
+onboarding-data-title = Données { -brand }
+onboarding-data-description = Nous exploitons un service de données de marché partagé pour que chaque installation ne soit pas limitée séparément en débit par les fournisseurs publics. Il est gratuit avec un compte { -brand }, et { -brand } fonctionne sans compte.
+onboarding-data-candles-title = Historique de bougies mutualisé
+onboarding-data-candles-description = Sept périodes d'historique partagé, sur plusieurs années, servies depuis un seul cache.
+onboarding-data-pools-title = Pools résolus et sécurité
+onboarding-data-pools-description = Un registre central de pools et des rapports Rugcheck en cache, déjà récupérés.
+onboarding-data-signin-title = Connectez-vous pour l'utiliser
+onboarding-data-signin-description = Sans compte, ces données sont indisponibles et les fournisseurs publics sont utilisés.
+onboarding-data-reading-title = Lecture seule
+onboarding-data-reading-description = Nous voyons quels tokens vous recherchez. Jamais une clé, un solde, une position ou un trade.
+
+onboarding-privacy-title = Vos clés, vos données
+onboarding-privacy-description = Votre configuration, vos clés et votre historique de trading restent sur cette machine. Ensuite, choisissez le mode Explorer pour découvrir sans identifiants, ou liez un portefeuille et un RPC pour activer le bot complet — et connectez-vous à ce moment-là si vous voulez les données { -brand }.
+onboarding-privacy-local-title = Architecture locale d'abord
+onboarding-privacy-local-description = Configuration, analyses et bases de données stockées sur votre ordinateur.
+onboarding-privacy-wallet-title = Portefeuille chiffré
+onboarding-privacy-wallet-description = Votre clé privée est chiffrée au repos et jamais transmise.
+onboarding-privacy-security-title = Sécurité du tableau de bord
+onboarding-privacy-security-description = Verrouillage par mot de passe, TOTP à deux facteurs et expiration de session.
+onboarding-privacy-config-title = Configuration flexible
+onboarding-privacy-config-description = La plupart des paramètres peuvent être ajustés depuis le tableau de bord après la configuration.
+
+onboarding-setup-shortcut =
+    .aria-label = Aller directement à la configuration du portefeuille et du RPC ou choisir le mode Explorer
+onboarding-setup-shortcut-label = Aller à la configuration
+onboarding-progress-dot =
+    .aria-label = Aller à la diapositive { $number }
+onboarding-action-continue-to-setup = Continuer vers la configuration
