@@ -5,6 +5,7 @@
 
 use crate::database;
 use crate::errors::{DatabaseError, InternalError};
+use crate::i18n::ids;
 use crate::llm_analysis::error::{Error, Result};
 use crate::logger::{self, LogTag};
 use rusqlite::{params, Connection, OptionalExtension};
@@ -666,42 +667,48 @@ pub fn get_builtin_templates() -> Vec<InstructionTemplate> {
     vec![
         InstructionTemplate {
             id: "liquidity_guard",
-            name: "Liquidity Guard",
+            name: ids::ASSISTANT_TEMPLATE_LIQUIDITY_GUARD_NAME,
+            description: ids::ASSISTANT_TEMPLATE_LIQUIDITY_GUARD_DESCRIPTION,
             category: "filtering",
             content: "Reject any token with total liquidity below $10,000 USD. Low liquidity increases slippage risk and makes exit difficult. For tokens under $50K liquidity, flag as HIGH RISK even if other metrics are acceptable.",
             tags: &["safety", "liquidity", "risk-management"],
         },
         InstructionTemplate {
             id: "holder_distribution",
-            name: "Holder Distribution Check",
+            name: ids::ASSISTANT_TEMPLATE_HOLDER_DISTRIBUTION_NAME,
+            description: ids::ASSISTANT_TEMPLATE_HOLDER_DISTRIBUTION_DESCRIPTION,
             category: "filtering",
             content: "Flag tokens where the top 10 holders control more than 50% of the supply as MEDIUM RISK. If top 5 holders control >40%, consider it HIGH RISK. Concentrated ownership increases pump-and-dump risk and manipulation potential.",
             tags: &["holders", "distribution", "rug-risk"],
         },
         InstructionTemplate {
             id: "honeypot_detection",
-            name: "Honeypot Detection",
+            name: ids::ASSISTANT_TEMPLATE_HONEYPOT_DETECTION_NAME,
+            description: ids::ASSISTANT_TEMPLATE_HONEYPOT_DETECTION_DESCRIPTION,
             category: "filtering",
             content: "Analyze token authority settings and contract permissions. REJECT if: freeze authority is enabled, mint authority is still active after initial distribution, or there are unusual transfer restrictions. Check for contract upgrade authority that could enable malicious changes.",
             tags: &["security", "honeypot", "authority"],
         },
         InstructionTemplate {
             id: "momentum_filter",
-            name: "Momentum Filter",
+            name: ids::ASSISTANT_TEMPLATE_MOMENTUM_FILTER_NAME,
+            description: ids::ASSISTANT_TEMPLATE_MOMENTUM_FILTER_DESCRIPTION,
             category: "trading",
             content: "Prefer tokens showing positive price momentum over 1h, 6h, and 24h timeframes. Look for increasing volume trend alongside price action. Be cautious of sudden spikes without volume confirmation - these are often pump schemes.",
             tags: &["momentum", "price-action", "volume"],
         },
         InstructionTemplate {
             id: "new_token_caution",
-            name: "New Token Caution",
+            name: ids::ASSISTANT_TEMPLATE_NEW_TOKEN_CAUTION_NAME,
+            description: ids::ASSISTANT_TEMPLATE_NEW_TOKEN_CAUTION_DESCRIPTION,
             category: "analysis",
             content: "Exercise extra caution with tokens less than 24 hours old. Require higher confidence thresholds and stronger fundamentals. New tokens lack price history and holder stability - what looks promising in hour 1 often dumps by hour 12.",
             tags: &["age", "new-tokens", "caution"],
         },
         InstructionTemplate {
             id: "whale_activity",
-            name: "Whale Activity Monitor",
+            name: ids::ASSISTANT_TEMPLATE_WHALE_ACTIVITY_NAME,
+            description: ids::ASSISTANT_TEMPLATE_WHALE_ACTIVITY_DESCRIPTION,
             category: "analysis",
             content: "Monitor for large holder changes (>5% of supply moving). Whale accumulation can signal upcoming price action, but whale distribution often precedes dumps. Flag unusual wallet activity, especially from deployer/early wallets.",
             tags: &["whales", "large-holders", "activity"],
@@ -739,6 +746,28 @@ mod tests {
         assert_eq!(templates.len(), 6);
         assert!(templates.iter().any(|t| t.id == "liquidity_guard"));
         assert!(templates.iter().any(|t| t.id == "whale_activity"));
+    }
+
+    /// The dashboard labels a template by its name and description messages, its
+    /// category through `assistant-instructions-category-*` and each tag through
+    /// `assistant-template-tag-*`; every built-in template needs all of them.
+    #[test]
+    fn every_builtin_template_has_catalog_text() {
+        let present = |key: &str| crate::i18n::format_en(key, None) != key;
+        for template in get_builtin_templates() {
+            assert!(present(template.name.as_str()), "missing {}", template.name);
+            assert!(
+                present(template.description.as_str()),
+                "missing {}",
+                template.description
+            );
+            let category = format!("assistant-instructions-category-{}", template.category);
+            assert!(present(&category), "missing {category}");
+            for tag in template.tags {
+                let key = format!("assistant-template-tag-{tag}");
+                assert!(present(&key), "missing {key}");
+            }
+        }
     }
 
     #[test]

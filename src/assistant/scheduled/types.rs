@@ -148,3 +148,69 @@ pub struct AutomationStats {
     pub avg_duration_ms: f64,
     pub runs_today: i64,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::i18n::format_en;
+
+    fn assert_catalog_text(key: String) {
+        assert_ne!(format_en(&key, None), key, "missing {key}");
+    }
+
+    /// `SCHEDULE_TYPE_LABELS` (pages/assistant/automation_tab.js) is keyed by `as_str`.
+    #[test]
+    fn every_schedule_type_has_catalog_text() {
+        for kind in [
+            ScheduleType::Interval,
+            ScheduleType::Daily,
+            ScheduleType::Weekly,
+        ] {
+            let listed = match kind {
+                ScheduleType::Interval => "interval",
+                ScheduleType::Daily => "daily",
+                ScheduleType::Weekly => "weekly",
+            };
+            assert_eq!(kind.as_str(), listed);
+            assert_catalog_text(format!("assistant-automation-schedule-type-{listed}"));
+            assert_catalog_text(format!("assistant-automation-hint-{listed}"));
+        }
+    }
+
+    /// `TOOL_PERMISSION_LABELS` and `TOOL_PERMISSION_OPTION_LABELS` use the
+    /// `as_str` value with hyphens.
+    #[test]
+    fn every_tool_permission_has_catalog_text() {
+        for permission in [TaskToolPermissions::ReadOnly, TaskToolPermissions::Full] {
+            let listed = match permission {
+                TaskToolPermissions::ReadOnly => "read-only",
+                TaskToolPermissions::Full => "full",
+            };
+            assert_eq!(permission.as_str().replace('_', "-"), listed);
+            assert_catalog_text(format!("assistant-automation-permission-{listed}"));
+            assert_catalog_text(format!("assistant-automation-permission-option-{listed}"));
+        }
+    }
+
+    /// `RUN_STATUS_LABELS` is keyed by `as_str`.
+    #[test]
+    fn every_run_status_has_catalog_text() {
+        for status in [
+            RunStatus::Running,
+            RunStatus::Success,
+            RunStatus::Failed,
+            RunStatus::Timeout,
+            RunStatus::Skipped,
+        ] {
+            let listed = match status {
+                RunStatus::Running => "running",
+                RunStatus::Success => "success",
+                RunStatus::Failed => "failed",
+                RunStatus::Timeout => "timeout",
+                RunStatus::Skipped => "skipped",
+            };
+            assert_eq!(status.as_str(), listed);
+            assert_catalog_text(format!("assistant-automation-run-status-{listed}"));
+        }
+    }
+}

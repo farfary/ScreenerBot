@@ -1,8 +1,59 @@
 import { $ } from "../../core/dom.js";
 import { closeMenu, openMenu, trackAnchoredMenu } from "../../core/menu_manager.js";
-import { formatTimeSpan } from "../../core/format.js";
+import { formatNumber, formatPercentValue, formatTimeSpan, formatWeekday } from "../../core/format.js";
+import { apiErrorMessage } from "../../core/request_manager.js";
 import * as Utils from "../../core/utils.js";
+import { AGENT_TOOL_LABELS } from "../../ui/agent_tool.js";
 import { ConfirmationDialog } from "../../ui/confirmation_dialog.js";
+import { LLM_PROVIDER_LABELS } from "../../ui/llm_provider.js";
+import { TOOL_CALL_STATUS_LABELS } from "../../ui/tool_call_status.js";
+
+const esc = Utils.escapeHtml;
+
+// Message key of each `ScheduleType` (src/assistant/scheduled/types.rs), by `as_str`.
+const SCHEDULE_TYPE_LABELS = Object.freeze({
+  interval: "assistant-automation-schedule-type-interval",
+  daily: "assistant-automation-schedule-type-daily",
+  weekly: "assistant-automation-schedule-type-weekly",
+});
+
+// Message key of each `TaskToolPermissions`, by `as_str`: the badge label and
+// the longer picker option.
+const TOOL_PERMISSION_LABELS = Object.freeze({
+  read_only: "assistant-automation-permission-read-only",
+  full: "assistant-automation-permission-full",
+});
+const TOOL_PERMISSION_OPTION_LABELS = Object.freeze({
+  read_only: "assistant-automation-permission-option-read-only",
+  full: "assistant-automation-permission-option-full",
+});
+
+// Message key of each `RunStatus`, by `as_str`.
+const RUN_STATUS_LABELS = Object.freeze({
+  running: "assistant-automation-run-status-running",
+  success: "assistant-automation-run-status-success",
+  failed: "assistant-automation-run-status-failed",
+  timeout: "assistant-automation-run-status-timeout",
+  skipped: "assistant-automation-run-status-skipped",
+});
+
+// Weekly schedule values name days with these fixed tokens; the value is the
+// day index `formatWeekday` takes (0 is Sunday).
+const WEEKDAY_INDEX = Object.freeze({ sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 });
+
+// Example schedule values for the input placeholder of each schedule type.
+const SCHEDULE_PLACEHOLDERS = Object.freeze({
+  interval: "300",
+  daily: "14:00",
+  // l10n-ignore: weekly schedule syntax example; the day tokens are fixed machine values
+  weekly: "mon,wed,fri:09:00",
+});
+
+const SCHEDULE_HINT_LABELS = Object.freeze({
+  interval: "assistant-automation-hint-interval",
+  daily: "assistant-automation-hint-daily",
+  weekly: "assistant-automation-hint-weekly",
+});
 
 export function createAutomationTab({ state, _eventCleanups, addTrackedListener }) {
   let activeAutomationMenu = null;
@@ -55,13 +106,16 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
       const e = $(`#${id}`);
       if (e) e.textContent = val;
     };
-    el("auto-stat-total", stats.total_tasks || 0);
-    el("auto-stat-active", stats.active_tasks || 0);
-    el("auto-stat-runs", stats.total_runs || 0);
+    el("auto-stat-total", formatNumber(stats.total_tasks || 0, 0));
+    el("auto-stat-active", formatNumber(stats.active_tasks || 0, 0));
+    el("auto-stat-runs", formatNumber(stats.total_runs || 0, 0));
     el(
       "auto-stat-success-rate",
       stats.total_runs > 0
-        ? Math.round((stats.successful_runs / stats.total_runs) * 100) + "%"
+        ? formatPercentValue((stats.successful_runs / stats.total_runs) * 100, {
+            decimals: 0,
+            includeSign: false,
+          })
         : "—"
     );
   }
@@ -79,27 +133,31 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
       container.innerHTML = `
       <div class="empty-state" id="no-automation-tasks">
         <i class="empty-icon icon-zap"></i>
-        <p class="empty-text">No scheduled tasks yet</p>
-        <p class="empty-state-subtitle">Create your first automated Assistant task to get started</p>
-        <button class="btn btn-secondary" onclick="window.assistantPage.createAutomationTask()">Create Your First Task</button>
+        <p class="empty-text" data-l10n-id="assistant-automation-empty"></p>
+        <p class="empty-state-subtitle" data-l10n-id="assistant-automation-empty-subtitle"></p>
+        <button class="btn btn-secondary" data-l10n-id="assistant-automation-empty-add" onclick="window.assistantPage.createAutomationTask()"></button>
       </div>
     `;
+      I18n.localizeTree(container);
       return;
     }
 
     container.innerHTML = tasks
       .map((task) => {
         const statusClass = task.enabled ? "active" : "paused";
-        const statusLabel = task.enabled ? "Active" : "Paused";
+        const statusLabel = task.enabled
+          ? I18n.t("assistant-automation-task-active")
+          : I18n.t("assistant-automation-task-paused");
         const scheduleLabel = formatSchedule(task.schedule_type, task.schedule_value);
         const lastRun = task.last_run_at
           ? Utils.formatTimeAgo(new Date(task.last_run_at))
-          : "Never";
+          : I18n.t("assistant-automation-never");
         const nextRun =
           task.next_run_at && task.enabled
             ? Utils.formatTimeUntil(new Date(task.next_run_at))
             : "—";
-        const permLabel = task.tool_permissions === "full" ? "Full Access" : "Read Only";
+        const permKey = task.tool_permissions === "full" ? "full" : "read_only";
+        const permLabel = I18n.label(TOOL_PERMISSION_LABELS, permKey);
         const permClass = task.tool_permissions === "full" ? "full" : "readonly";
 
         return `
@@ -107,30 +165,31 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
         <div class="automation-task-info">
           <div class="automation-task-name">${Utils.escapeHtml(task.name)}</div>
           <div class="automation-task-meta">
-            <span class="schedule-badge"><i class="icon-clock"></i> ${scheduleLabel}</span>
-            <span class="perm-badge ${permClass}">${permLabel}</span>
+            <span class="schedule-badge"><i class="icon-clock"></i> ${esc(scheduleLabel)}</span>
+            <span class="perm-badge ${permClass}">${esc(permLabel)}</span>
             <span class="meta-sep">·</span>
-            <span class="meta-text">Last: ${lastRun}</span>
+            <span class="meta-text">${esc(I18n.t("assistant-automation-last-run", { when: lastRun }))}</span>
             <span class="meta-sep">·</span>
-            <span class="meta-text">Next: ${nextRun}</span>
+            <span class="meta-text">${esc(I18n.t("assistant-automation-next-run", { when: nextRun }))}</span>
           </div>
         </div>
         <div class="automation-task-actions">
-          <span class="status-indicator ${statusClass}">${statusLabel}</span>
+          <span class="status-indicator ${statusClass}">${esc(statusLabel)}</span>
           <label class="toggle toggle-sm">
             <input type="checkbox" ${task.enabled ? "checked" : ""}
                    onchange="window.assistantPage.toggleAutomationTask(${task.id}, this.checked)">
             <span class="toggle-track"></span>
           </label>
-          <button class="btn btn-sm btn-secondary" onclick="window.assistantPage.runAutomationTask(${task.id})" title="Run Now">
+          <button class="btn btn-sm btn-secondary" data-l10n-id="assistant-automation-run-now" onclick="window.assistantPage.runAutomationTask(${task.id})">
             <i class="icon-play"></i>
           </button>
-          <button class="automation-menu-btn" type="button" aria-label="Automation actions" aria-haspopup="menu" aria-expanded="false" onclick="window.assistantPage.showAutomationMenu(event, ${task.id})">⋮</button>
+          <button class="automation-menu-btn" type="button" data-l10n-id="assistant-automation-actions" aria-haspopup="menu" aria-expanded="false" onclick="window.assistantPage.showAutomationMenu(event, ${task.id})"><span aria-hidden="true">⋮</span></button>
         </div>
       </div>
     `;
       })
       .join("");
+    I18n.localizeTree(container);
   }
 
   function renderAutomationRuns(runs) {
@@ -141,10 +200,18 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
     const container = $("#automation-runs-list");
     const countEl = $("#auto-runs-count");
     if (!container) return;
-    if (countEl) countEl.textContent = runs.length > 0 ? `${runs.length} runs` : "";
+    if (countEl) countEl.textContent =
+        runs.length > 0
+          ? I18n.t("assistant-automation-runs-count", {
+              count: runs.length,
+              amount: formatNumber(runs.length, 0),
+            })
+          : "";
 
     if (!runs || runs.length === 0) {
-      container.innerHTML = '<div class="automation-runs-empty">No runs yet</div>';
+      container.innerHTML =
+        '<div class="automation-runs-empty" data-l10n-id="assistant-automation-runs-empty"></div>';
+      I18n.localizeTree(container);
       return;
     }
 
@@ -159,8 +226,7 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
               : "icon-circle-x";
         const statusClass =
           run.status === "success" ? "success" : run.status === "running" ? "running" : "failed";
-        const taskName =
-          state.automationTasks.find((t) => t.id === run.task_id)?.name || `Task #${run.task_id}`;
+        const taskName = runTaskName(run.task_id);
         const time = run.started_at ? Utils.formatTimeAgo(new Date(run.started_at)) : "";
         const duration = run.duration_ms
           ? formatTimeSpan(run.duration_ms / 1000, { decimals: 1 })
@@ -170,31 +236,66 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
       <div class="automation-run-item ${statusClass}" onclick="window.assistantPage.viewAutomationRun(${run.id})">
         <i class="${statusIcon} run-status-icon"></i>
         <div class="run-info">
-          <span class="run-task-name">${Utils.escapeHtml(taskName)}</span>
-          <span class="run-time">${time}</span>
+          <span class="run-task-name">${esc(taskName)}</span>
+          <span class="run-time">${esc(time)}</span>
         </div>
-        <span class="run-duration">${duration}</span>
+        <span class="run-duration">${esc(duration)}</span>
       </div>
     `;
       })
       .join("");
   }
 
+  function runTaskName(taskId) {
+    return (
+      state.automationTasks.find((t) => t.id === taskId)?.name ||
+      I18n.t("assistant-automation-task-fallback", { id: String(taskId) })
+    );
+  }
+
   function formatSchedule(type, value) {
     if (type === "interval") {
       const secs = parseInt(value);
-      if (secs >= 3600) return `Every ${formatTimeSpan(Math.round(secs / 3600), { unit: "hour" })}`;
-      if (secs >= 60) return `Every ${formatTimeSpan(Math.round(secs / 60), { unit: "minute" })}`;
-      return `Every ${formatTimeSpan(secs)}`;
+      const span =
+        secs >= 3600
+          ? formatTimeSpan(Math.round(secs / 3600), { unit: "hour" })
+          : secs >= 60
+            ? formatTimeSpan(Math.round(secs / 60), { unit: "minute" })
+            : formatTimeSpan(secs);
+      return I18n.t("assistant-automation-schedule-every", { span });
     }
-    if (type === "daily") return `Daily at ${value} UTC`;
+    if (type === "daily") return I18n.t("assistant-automation-schedule-daily", { time: value });
     if (type === "weekly") {
       const parts = value.split(":");
-      const days = parts[0];
+      const days = parts[0]
+        .split(",")
+        .map((day) => {
+          const index = WEEKDAY_INDEX[day.trim().toLowerCase()];
+          return index === undefined ? day : formatWeekday(index);
+        })
+        .join(I18n.t("assistant-automation-schedule-day-separator"));
       const time = parts.slice(1).join(":");
-      return `${days} at ${time} UTC`;
+      return I18n.t("assistant-automation-schedule-weekly", { days, time });
     }
     return value;
+  }
+
+  function scheduleTypeOptions(selected) {
+    return Object.keys(SCHEDULE_TYPE_LABELS)
+      .map(
+        (id) =>
+          `<option value="${id}" ${id === selected ? "selected" : ""}>${esc(I18n.label(SCHEDULE_TYPE_LABELS, id))}</option>`
+      )
+      .join("");
+  }
+
+  function permissionOptions(labels, selected) {
+    return Object.keys(labels)
+      .map(
+        (id) =>
+          `<option value="${id}" ${id === selected ? "selected" : ""}>${esc(I18n.label(labels, id))}</option>`
+      )
+      .join("");
   }
 
   async function createAutomationTask() {
@@ -205,43 +306,36 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
     modal.innerHTML = `
     <div class="modal-dialog automation-modal">
       <div class="modal-header">
-        <h3><i class="icon-plus"></i> Create Automation Task</h3>
-        <button class="modal-close" onclick="this.closest('.modal-overlay').remove()"><i class="icon-x"></i></button>
+        <h3><i class="icon-plus"></i> <span data-l10n-id="assistant-automation-create-title"></span></h3>
+        <button class="modal-close" data-l10n-id="assistant-modal-close" onclick="this.closest('.modal-overlay').remove()"><i class="icon-x"></i></button>
       </div>
       <div class="modal-body">
         <div class="form-group">
-          <label>Task Name</label>
-          <input type="text" id="auto-name" placeholder="e.g., Portfolio Monitor">
+          <label data-l10n-id="assistant-automation-field-name"></label>
+          <input type="text" id="auto-name" data-l10n-id="assistant-automation-name-input">
         </div>
         <div class="form-group">
-          <label>Instruction</label>
-          <textarea id="auto-instruction" rows="6" class="instruction-editor" placeholder="What should the Assistant do? e.g., Check open positions for reversal signs and report findings."></textarea>
+          <label data-l10n-id="assistant-automation-field-instruction"></label>
+          <textarea id="auto-instruction" rows="6" class="instruction-editor" data-l10n-id="assistant-automation-instruction-input"></textarea>
         </div>
         <div class="form-row">
           <div class="form-group form-group-half">
-            <label>Schedule Type</label>
-            <select id="auto-schedule-type" data-custom-select onchange="window.assistantPage.updateScheduleHint()">
-              <option value="interval">Interval</option>
-              <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
-            </select>
+            <label data-l10n-id="assistant-automation-field-schedule-type"></label>
+            <select id="auto-schedule-type" data-custom-select onchange="window.assistantPage.updateScheduleHint()">${scheduleTypeOptions("interval")}</select>
           </div>
           <div class="form-group form-group-half">
-            <label>Schedule Value</label>
-            <input type="text" id="auto-schedule-value" placeholder="300">
-            <small class="form-hint" id="schedule-hint">Interval in seconds (e.g., 300 = every 5 minutes)</small>
+            <label data-l10n-id="assistant-automation-field-schedule-value"></label>
+            <input type="text" id="auto-schedule-value" placeholder="${SCHEDULE_PLACEHOLDERS.interval}">
+            <small class="form-hint" id="schedule-hint" data-l10n-id="assistant-automation-hint-interval"></small>
           </div>
         </div>
         <div class="form-row">
           <div class="form-group form-group-half">
-            <label>Tool Permissions</label>
-            <select id="auto-tool-permissions" data-custom-select>
-              <option value="read_only">Read Only (safe)</option>
-              <option value="full">Full Access (can trade)</option>
-            </select>
+            <label data-l10n-id="assistant-automation-field-permissions"></label>
+            <select id="auto-tool-permissions" data-custom-select>${permissionOptions(TOOL_PERMISSION_OPTION_LABELS, "read_only")}</select>
           </div>
           <div class="form-group form-group-half">
-            <label>Timeout (seconds)</label>
+            <label data-l10n-id="assistant-automation-field-timeout"></label>
             <input type="number" id="auto-timeout" value="120" min="30" max="600">
           </div>
         </div>
@@ -249,27 +343,28 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
           <div class="checkbox-group">
             <label class="checkbox-label">
               <input type="checkbox" id="auto-notify-telegram" checked>
-              <span>Notify via Telegram</span>
+              <span data-l10n-id="assistant-automation-notify-telegram"></span>
             </label>
             <label class="checkbox-label">
               <input type="checkbox" id="auto-notify-success" checked>
-              <span>Notify on success</span>
+              <span data-l10n-id="assistant-automation-notify-success"></span>
             </label>
             <label class="checkbox-label">
               <input type="checkbox" id="auto-notify-failure" checked>
-              <span>Notify on failure</span>
+              <span data-l10n-id="assistant-automation-notify-failure"></span>
             </label>
           </div>
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+        <button class="btn btn-secondary" data-l10n-id="common-action-cancel" onclick="this.closest('.modal-overlay').remove()"></button>
         <button class="btn btn-primary" onclick="window.assistantPage.saveNewAutomationTask()">
-          <i class="icon-plus"></i> Create Task
+          <i class="icon-plus"></i> <span data-l10n-id="assistant-automation-create-task"></span>
         </button>
       </div>
     </div>
   `;
+    I18n.localizeTree(modal);
     document.body.appendChild(modal);
   }
 
@@ -279,15 +374,9 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
     const input = $("#auto-schedule-value");
     if (!hint || !input) return;
 
-    if (type === "interval") {
-      hint.textContent = "Interval in seconds (e.g., 300 = every 5 minutes)";
-      input.placeholder = "300";
-    } else if (type === "daily") {
-      hint.textContent = "Time in HH:MM UTC (e.g., 14:00)";
-      input.placeholder = "14:00";
-    } else if (type === "weekly") {
-      hint.textContent = "Days and time: mon,wed,fri:09:00";
-      input.placeholder = "mon,wed,fri:09:00";
+    if (Object.hasOwn(SCHEDULE_PLACEHOLDERS, type)) {
+      hint.textContent = I18n.label(SCHEDULE_HINT_LABELS, type);
+      input.placeholder = SCHEDULE_PLACEHOLDERS[type];
     }
   }
 
@@ -305,8 +394,8 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
     if (!name || !instruction || !scheduleValue) {
       Utils.showToast({
         type: "error",
-        title: "Validation",
-        message: "Please fill in all required fields",
+        title: I18n.t("assistant-automation-validation-title"),
+        message: I18n.t("assistant-automation-validation-required"),
       });
       return;
     }
@@ -317,8 +406,8 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
       if (isNaN(secs) || secs < 60) {
         Utils.showToast({
           type: "error",
-          title: "Validation",
-          message: "Interval must be at least 60 seconds",
+          title: I18n.t("assistant-automation-validation-title"),
+          message: I18n.t("assistant-automation-validation-interval"),
         });
         return;
       }
@@ -326,8 +415,8 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
       if (!/^([01]?\d|2[0-3]):[0-5]\d$/.test(scheduleValue)) {
         Utils.showToast({
           type: "error",
-          title: "Validation",
-          message: "Daily schedule must be in HH:MM format",
+          title: I18n.t("assistant-automation-validation-title"),
+          message: I18n.t("assistant-automation-validation-daily"),
         });
         return;
       }
@@ -335,8 +424,8 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
       if (!/^[a-z,]+(:\d{1,2}:\d{2})?$/i.test(scheduleValue)) {
         Utils.showToast({
           type: "error",
-          title: "Validation",
-          message: "Weekly schedule must be in format: mon,wed,fri:09:00",
+          title: I18n.t("assistant-automation-validation-title"),
+          message: I18n.t("assistant-automation-validation-weekly"),
         });
         return;
       }
@@ -361,11 +450,11 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
 
       if (!response.ok) {
         const err = await response.json().catch(() => ({}));
-        throw new Error(err.error || "Failed to create task");
+        throw new Error(apiErrorMessage(err, I18n.t("assistant-automation-create-failed")));
       }
 
       document.querySelector(".modal-overlay")?.remove();
-      Utils.showToast({ type: "success", title: "Task created" });
+      Utils.showToast({ type: "success", title: I18n.t("assistant-automation-created") });
       await loadAutomationTasks();
       await loadAutomationStats();
     } catch (error) {
@@ -384,7 +473,7 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
       });
       if (!response.ok) {
         const err = await response.json().catch(() => ({}));
-        throw new Error(err.error || "Failed to toggle task");
+        throw new Error(apiErrorMessage(err, I18n.t("assistant-automation-toggle-failed")));
       }
       await loadAutomationTasks();
       await loadAutomationStats();
@@ -408,9 +497,9 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
       });
       if (!response.ok) {
         const err = await response.json().catch(() => ({}));
-        throw new Error(err.error || "Failed to trigger task");
+        throw new Error(apiErrorMessage(err, I18n.t("assistant-automation-trigger-failed")));
       }
-      Utils.showToast({ type: "success", title: "Task triggered" });
+      Utils.showToast({ type: "success", title: I18n.t("assistant-automation-triggered") });
       setTimeout(() => loadAutomationRuns(), 2000);
     } catch (error) {
       Utils.showToast({ type: "error", title: error.message });
@@ -424,18 +513,20 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
 
   async function deleteAutomationTask(id) {
     const confirmed = await ConfirmationDialog.show({
-      title: "Delete Task",
-      message:
-        "Are you sure you want to delete this automation task? This action cannot be undone.",
-      confirmText: "Delete",
+      title: I18n.t("assistant-automation-delete-title"),
+      message: I18n.t("assistant-automation-delete-message"),
+      confirmText: I18n.t("common-action-delete"),
       type: "danger",
     });
     if (!confirmed) return;
 
     try {
       const response = await fetch(`/api/assistant/automation/${id}`, { method: "DELETE" });
-      if (!response.ok) throw new Error("Failed to delete task");
-      Utils.showToast({ type: "success", title: "Task deleted" });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(apiErrorMessage(err, I18n.t("assistant-automation-delete-failed")));
+      }
+      Utils.showToast({ type: "success", title: I18n.t("assistant-automation-deleted") });
       await loadAutomationTasks();
       await loadAutomationStats();
     } catch (error) {
@@ -453,42 +544,35 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
     modal.innerHTML = `
     <div class="modal-dialog automation-modal">
       <div class="modal-header">
-        <h3><i class="icon-square-pen"></i> Edit Task</h3>
-        <button class="modal-close" onclick="this.closest('.modal-overlay').remove()"><i class="icon-x"></i></button>
+        <h3><i class="icon-square-pen"></i> <span data-l10n-id="assistant-automation-edit-title"></span></h3>
+        <button class="modal-close" data-l10n-id="assistant-modal-close" onclick="this.closest('.modal-overlay').remove()"><i class="icon-x"></i></button>
       </div>
       <div class="modal-body">
         <div class="form-group">
-          <label>Task Name</label>
-          <input type="text" id="edit-auto-name" value="${Utils.escapeHtml(task.name)}">
+          <label data-l10n-id="assistant-automation-field-name"></label>
+          <input type="text" id="edit-auto-name" value="${esc(task.name)}">
         </div>
         <div class="form-group">
-          <label>Instruction</label>
-          <textarea id="edit-auto-instruction" rows="6" class="instruction-editor">${Utils.escapeHtml(task.instruction)}</textarea>
+          <label data-l10n-id="assistant-automation-field-instruction"></label>
+          <textarea id="edit-auto-instruction" rows="6" class="instruction-editor">${esc(task.instruction)}</textarea>
         </div>
         <div class="form-row">
           <div class="form-group form-group-half">
-            <label>Schedule Type</label>
-            <select id="edit-auto-schedule-type" data-custom-select>
-              <option value="interval" ${task.schedule_type === "interval" ? "selected" : ""}>Interval</option>
-              <option value="daily" ${task.schedule_type === "daily" ? "selected" : ""}>Daily</option>
-              <option value="weekly" ${task.schedule_type === "weekly" ? "selected" : ""}>Weekly</option>
-            </select>
+            <label data-l10n-id="assistant-automation-field-schedule-type"></label>
+            <select id="edit-auto-schedule-type" data-custom-select>${scheduleTypeOptions(task.schedule_type)}</select>
           </div>
           <div class="form-group form-group-half">
-            <label>Schedule Value</label>
-            <input type="text" id="edit-auto-schedule-value" value="${Utils.escapeHtml(task.schedule_value)}">
+            <label data-l10n-id="assistant-automation-field-schedule-value"></label>
+            <input type="text" id="edit-auto-schedule-value" value="${esc(task.schedule_value)}">
           </div>
         </div>
         <div class="form-row">
           <div class="form-group form-group-half">
-            <label>Tool Permissions</label>
-            <select id="edit-auto-tool-permissions" data-custom-select>
-              <option value="read_only" ${task.tool_permissions !== "full" ? "selected" : ""}>Read Only</option>
-              <option value="full" ${task.tool_permissions === "full" ? "selected" : ""}>Full Access</option>
-            </select>
+            <label data-l10n-id="assistant-automation-field-permissions"></label>
+            <select id="edit-auto-tool-permissions" data-custom-select>${permissionOptions(TOOL_PERMISSION_LABELS, task.tool_permissions === "full" ? "full" : "read_only")}</select>
           </div>
           <div class="form-group form-group-half">
-            <label>Timeout (seconds)</label>
+            <label data-l10n-id="assistant-automation-field-timeout"></label>
             <input type="number" id="edit-auto-timeout" value="${task.timeout_seconds || 120}" min="30" max="600">
           </div>
         </div>
@@ -496,27 +580,28 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
           <div class="checkbox-group">
             <label class="checkbox-label">
               <input type="checkbox" id="edit-auto-notify-telegram" ${task.notify_telegram !== false ? "checked" : ""}>
-              <span>Notify via Telegram</span>
+              <span data-l10n-id="assistant-automation-notify-telegram"></span>
             </label>
             <label class="checkbox-label">
               <input type="checkbox" id="edit-auto-notify-success" ${task.notify_on_success !== false ? "checked" : ""}>
-              <span>Notify on success</span>
+              <span data-l10n-id="assistant-automation-notify-success"></span>
             </label>
             <label class="checkbox-label">
               <input type="checkbox" id="edit-auto-notify-failure" ${task.notify_on_failure !== false ? "checked" : ""}>
-              <span>Notify on failure</span>
+              <span data-l10n-id="assistant-automation-notify-failure"></span>
             </label>
           </div>
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+        <button class="btn btn-secondary" data-l10n-id="common-action-cancel" onclick="this.closest('.modal-overlay').remove()"></button>
         <button class="btn btn-primary" onclick="window.assistantPage.saveEditedAutomationTask(${id})">
-          <i class="icon-check"></i> Save Changes
+          <i class="icon-check"></i> <span data-l10n-id="assistant-automation-save-changes"></span>
         </button>
       </div>
     </div>
   `;
+    I18n.localizeTree(modal);
     document.body.appendChild(modal);
   }
 
@@ -534,8 +619,8 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
     if (!name || !instruction || !scheduleValue) {
       Utils.showToast({
         type: "error",
-        title: "Validation",
-        message: "Please fill in all required fields",
+        title: I18n.t("assistant-automation-validation-title"),
+        message: I18n.t("assistant-automation-validation-required"),
       });
       return;
     }
@@ -556,9 +641,12 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
           notify_on_failure: notifyFailure,
         }),
       });
-      if (!response.ok) throw new Error("Failed to update task");
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(apiErrorMessage(err, I18n.t("assistant-automation-update-failed")));
+      }
       document.querySelector(".modal-overlay")?.remove();
-      Utils.showToast({ type: "success", title: "Task updated" });
+      Utils.showToast({ type: "success", title: I18n.t("assistant-automation-updated") });
       await loadAutomationTasks();
     } catch (error) {
       Utils.showToast({ type: "error", title: error.message });
@@ -570,11 +658,13 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
     document.querySelectorAll(".modal-overlay.automation-modal-overlay").forEach((m) => m.remove());
     try {
       const response = await fetch(`/api/assistant/automation/runs/${runId}`);
-      if (!response.ok) throw new Error("Failed to load run details");
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(apiErrorMessage(err, I18n.t("assistant-automation-run-load-failed")));
+      }
       const data = await response.json();
       const run = data.run;
-      const taskName =
-        state.automationTasks.find((t) => t.id === run.task_id)?.name || `Task #${run.task_id}`;
+      const taskName = runTaskName(run.task_id);
       let toolCalls = [];
       try {
         toolCalls = run.tool_calls ? JSON.parse(run.tool_calls) : [];
@@ -587,34 +677,45 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
       modal.innerHTML = `
       <div class="modal-dialog automation-modal">
         <div class="modal-header">
-          <h3><i class="icon-file-text"></i> Run Details</h3>
-          <button class="modal-close" onclick="this.closest('.modal-overlay').remove()"><i class="icon-x"></i></button>
+          <h3><i class="icon-file-text"></i> <span data-l10n-id="assistant-automation-run-details-title"></span></h3>
+          <button class="modal-close" data-l10n-id="assistant-modal-close" onclick="this.closest('.modal-overlay').remove()"><i class="icon-x"></i></button>
         </div>
         <div class="modal-body">
           <div class="run-detail-grid">
-            <div class="run-detail-item"><span class="run-detail-label">Task</span><span class="run-detail-value">${Utils.escapeHtml(taskName)}</span></div>
-            <div class="run-detail-item"><span class="run-detail-label">Status</span><span class="run-detail-value status-${run.status}">${Utils.escapeHtml(run.status)}</span></div>
-            <div class="run-detail-item"><span class="run-detail-label">Started</span><span class="run-detail-value">${run.started_at ? Utils.formatTimestamp(run.started_at) : "—"}</span></div>
-            <div class="run-detail-item"><span class="run-detail-label">Duration</span><span class="run-detail-value">${run.duration_ms ? formatTimeSpan(run.duration_ms / 1000, { decimals: 1 }) : "—"}</span></div>
-            ${run.provider ? `<div class="run-detail-item"><span class="run-detail-label">Provider</span><span class="run-detail-value">${Utils.escapeHtml(String(run.provider))}</span></div>` : ""}
-            ${run.tokens_used ? `<div class="run-detail-item"><span class="run-detail-label">Tokens</span><span class="run-detail-value">${Utils.escapeHtml(String(run.tokens_used))}</span></div>` : ""}
+            <div class="run-detail-item"><span class="run-detail-label" data-l10n-id="assistant-automation-run-task"></span><span class="run-detail-value">${esc(taskName)}</span></div>
+            <div class="run-detail-item"><span class="run-detail-label" data-l10n-id="assistant-automation-run-status"></span><span class="run-detail-value status-${esc(run.status)}">${esc(I18n.label(RUN_STATUS_LABELS, run.status))}</span></div>
+            <div class="run-detail-item"><span class="run-detail-label" data-l10n-id="assistant-automation-run-started"></span><span class="run-detail-value">${run.started_at ? esc(Utils.formatTimestamp(run.started_at)) : "—"}</span></div>
+            <div class="run-detail-item"><span class="run-detail-label" data-l10n-id="assistant-automation-run-duration"></span><span class="run-detail-value">${run.duration_ms ? esc(formatTimeSpan(run.duration_ms / 1000, { decimals: 1 })) : "—"}</span></div>
+            ${run.provider ? `<div class="run-detail-item"><span class="run-detail-label" data-l10n-id="assistant-automation-run-provider"></span><span class="run-detail-value">${esc(I18n.label(LLM_PROVIDER_LABELS, String(run.provider)))}</span></div>` : ""}
+            ${run.tokens_used ? `<div class="run-detail-item"><span class="run-detail-label" data-l10n-id="assistant-automation-run-tokens"></span><span class="run-detail-value">${esc(formatNumber(Number(run.tokens_used), 0))}</span></div>` : ""}
           </div>
-          ${run.error_message ? `<div class="run-error-box"><i class="icon-triangle-alert"></i> ${Utils.escapeHtml(run.error_message)}</div>` : ""}
+          ${run.error_message ? `<div class="run-error-box"><i class="icon-triangle-alert"></i> ${esc(run.error_message)}</div>` : ""}
           ${
             toolCalls.length > 0
               ? `
             <div class="run-tools-section">
-              <h4>Tool Calls (${toolCalls.length})</h4>
+              <h4>${esc(I18n.t("assistant-automation-run-tools-title", { amount: formatNumber(toolCalls.length, 0) }))}</h4>
               <div class="run-tools-list">
                 ${toolCalls
-                  .map(
-                    (tc) => `
+                  .map((tc) => {
+                    const toolId = tc.tool_name || tc.name;
+                    const toolLabel = toolId
+                      ? I18n.label(AGENT_TOOL_LABELS, toolId)
+                      : I18n.t("assistant-chat-tool-unknown");
+                    const statusKey = String(tc.status || "").toLowerCase();
+                    const statusLabel = tc.status
+                      ? I18n.label(
+                          TOOL_CALL_STATUS_LABELS,
+                          Object.hasOwn(TOOL_CALL_STATUS_LABELS, statusKey) ? statusKey : "pending"
+                        )
+                      : "—";
+                    return `
                   <div class="run-tool-item">
-                    <span class="tool-name">${Utils.escapeHtml(tc.tool_name || tc.name || "unknown")}</span>
-                    <span class="tool-status ${tc.status === "Executed" ? "success" : "failed"}">${tc.status || "—"}</span>
+                    <span class="tool-name" title="${esc(toolId || "")}">${esc(toolLabel)}</span>
+                    <span class="tool-status ${tc.status === "Executed" ? "success" : "failed"}">${esc(statusLabel)}</span>
                   </div>
-                `
-                  )
+                `;
+                  })
                   .join("")}
               </div>
             </div>
@@ -625,18 +726,19 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
             run.ai_response
               ? `
             <div class="run-response-section">
-              <h4>Assistant Response</h4>
-              <div class="run-response-content">${Utils.escapeHtml(run.ai_response)}</div>
+              <h4 data-l10n-id="assistant-automation-run-response"></h4>
+              <div class="run-response-content">${esc(run.ai_response)}</div>
             </div>
           `
               : ""
           }
         </div>
         <div class="modal-footer">
-          <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Close</button>
+          <button class="btn btn-secondary" data-l10n-id="common-action-close" onclick="this.closest('.modal-overlay').remove()"></button>
         </div>
       </div>
     `;
+      I18n.localizeTree(modal);
       document.body.appendChild(modal);
     } catch (error) {
       Utils.showToast({ type: "error", title: error.message });
@@ -659,16 +761,17 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
     menu.setAttribute("role", "menu");
     menu.innerHTML = `
     <button class="context-menu-item" type="button" role="menuitem" data-action="edit">
-      <i class="icon-square-pen"></i> Edit
+      <i class="icon-square-pen"></i> <span data-l10n-id="common-action-edit"></span>
     </button>
     <button class="context-menu-item" type="button" role="menuitem" data-action="runs">
-      <i class="icon-clock"></i> View Runs
+      <i class="icon-clock"></i> <span data-l10n-id="assistant-automation-view-runs"></span>
     </button>
     <hr>
     <button class="context-menu-item danger" type="button" role="menuitem" data-action="delete">
-      <i class="icon-trash"></i> Delete
+      <i class="icon-trash"></i> <span data-l10n-id="common-action-delete"></span>
     </button>
   `;
+    I18n.localizeTree(menu);
     document.body.appendChild(menu);
 
     let stopPositionTracking = null;
@@ -763,7 +866,10 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
     document.querySelectorAll(".modal-overlay.automation-modal-overlay").forEach((m) => m.remove());
     try {
       const response = await fetch(`/api/assistant/automation/${id}/runs`);
-      if (!response.ok) throw new Error("Failed to load runs");
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(apiErrorMessage(err, I18n.t("assistant-automation-runs-load-failed")));
+      }
       const data = await response.json();
       const task = state.automationTasks.find((t) => t.id === id);
       const runs = data.runs || [];
@@ -773,13 +879,13 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
       modal.innerHTML = `
       <div class="modal-dialog automation-modal">
         <div class="modal-header">
-          <h3><i class="icon-clock"></i> Run History — ${Utils.escapeHtml(task?.name || "Task")}</h3>
-          <button class="modal-close" onclick="this.closest('.modal-overlay').remove()"><i class="icon-x"></i></button>
+          <h3><i class="icon-clock"></i> <span>${esc(I18n.t("assistant-automation-runs-history-title", { task: task?.name || I18n.t("assistant-automation-task-generic") }))}</span></h3>
+          <button class="modal-close" data-l10n-id="assistant-modal-close" onclick="this.closest('.modal-overlay').remove()"><i class="icon-x"></i></button>
         </div>
         <div class="modal-body">
           ${
             runs.length === 0
-              ? '<div class="automation-runs-empty">No runs yet for this task</div>'
+              ? '<div class="automation-runs-empty" data-l10n-id="assistant-automation-task-runs-empty"></div>'
               : `<div class="automation-runs-list modal-runs-list">
               ${runs
                 .map((run) => {
@@ -794,10 +900,10 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
                   <div class="automation-run-item ${statusClass}" onclick="window.assistantPage.viewAutomationRun(${run.id}); this.closest('.modal-overlay').remove();">
                     <i class="${statusIcon} run-status-icon"></i>
                     <div class="run-info">
-                      <span class="run-task-name">${Utils.escapeHtml(task?.name || `Task #${run.task_id}`)}</span>
-                      <span class="run-time">${time}</span>
+                      <span class="run-task-name">${esc(task?.name || runTaskName(run.task_id))}</span>
+                      <span class="run-time">${esc(time)}</span>
                     </div>
-                    <span class="run-duration">${duration}</span>
+                    <span class="run-duration">${esc(duration)}</span>
                   </div>
                 `;
                 })
@@ -806,10 +912,11 @@ export function createAutomationTab({ state, _eventCleanups, addTrackedListener 
           }
         </div>
         <div class="modal-footer">
-          <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Close</button>
+          <button class="btn btn-secondary" data-l10n-id="common-action-close" onclick="this.closest('.modal-overlay').remove()"></button>
         </div>
       </div>
     `;
+      I18n.localizeTree(modal);
       document.body.appendChild(modal);
     } catch (error) {
       Utils.showToast({ type: "error", title: error.message });

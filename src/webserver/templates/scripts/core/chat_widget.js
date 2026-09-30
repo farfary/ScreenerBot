@@ -9,22 +9,13 @@
 import * as Utils from "./utils.js";
 import { formatNumber, formatTimestamp } from "./format.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
+import { AGENT_TOOL_LABELS } from "../ui/agent_tool.js";
+import { TOOL_CALL_STATUS_LABELS } from "../ui/tool_call_status.js";
 import { playSuccess, playError } from "./sounds.js";
 import { apiErrorMessage } from "./request_manager.js";
 
 // Longest message the composer accepts.
 const MESSAGE_LIMIT = 4000;
-
-// Message key of each tool-call status, keyed by the lowercased `ToolCallStatus`
-// variant of src/assistant/chat/types.rs. `pending` is the fallback for a status
-// the widget does not know.
-const TOOL_CALL_STATUS_LABELS = Object.freeze({
-  executed: "assistant-chat-tool-status-executed",
-  failed: "assistant-chat-tool-status-failed",
-  denied: "assistant-chat-tool-status-denied",
-  pendingconfirmation: "assistant-chat-tool-status-pending-confirmation",
-  pending: "assistant-chat-tool-status-pending",
-});
 
 // Message key of each message author role.
 const CHAT_ROLE_LABELS = Object.freeze({
@@ -1015,10 +1006,9 @@ export class ChatWidget {
           ? "circle-x"
           : "clock-3";
 
-    const toolName = tool.tool_name || tool.name || I18n.t("assistant-chat-tool-unknown");
-    const toolLabel = toolName
-      .replace(/[_-]+/g, " ")
-      .replace(/^\w/, (character) => character.toUpperCase());
+    const toolId = tool.tool_name || tool.name;
+    const toolName = toolId || I18n.t("assistant-chat-tool-unknown");
+    const toolLabel = toolId ? I18n.label(AGENT_TOOL_LABELS, toolId) : toolName;
 
     return `
       <div class="tool-call ${statusClass}">
@@ -1100,7 +1090,7 @@ export class ChatWidget {
       const row = document.createElement("div");
       row.className = "agent-progress-tool running";
       row.dataset.toolName = event.tool_name;
-      row.innerHTML = `<i class="icon-clock-3"></i><span>${Utils.escapeHtml(event.tool_name.replace(/[_-]+/g, " "))}</span><small>${Utils.escapeHtml(I18n.t("assistant-chat-progress-running"))}</small>`;
+      row.innerHTML = `<i class="icon-clock-3"></i><span>${Utils.escapeHtml(I18n.label(AGENT_TOOL_LABELS, event.tool_name))}</span><small>${Utils.escapeHtml(I18n.t("assistant-chat-progress-running"))}</small>`;
       tools.appendChild(row);
       this._scrollToBottom();
       return;
@@ -1184,7 +1174,12 @@ export class ChatWidget {
     const name = this.$(".cw-tool-name");
     const desc = this.$(".cw-tool-description");
     const inp = this.$(".cw-tool-input");
-    if (name) name.textContent = confirmation.tool_name || I18n.t("assistant-chat-tool-unknown");
+    if (name) {
+      name.textContent = confirmation.tool_name
+        ? I18n.label(AGENT_TOOL_LABELS, confirmation.tool_name)
+        : I18n.t("assistant-chat-tool-unknown");
+      name.title = confirmation.tool_name || "";
+    }
     if (desc)
       desc.textContent =
         confirmation.description || I18n.t("assistant-chat-tool-default-description");

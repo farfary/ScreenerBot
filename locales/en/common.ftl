@@ -20,6 +20,8 @@ common-action-reset = Reset
 common-action-refresh = Refresh
 common-action-export = Export
 common-action-import = Import
+common-action-edit = Edit
+common-action-duplicate = Duplicate
 
 # On/off state of a switch or a feature.
 common-state-enabled = Enabled

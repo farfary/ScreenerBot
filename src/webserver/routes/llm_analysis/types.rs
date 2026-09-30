@@ -1,5 +1,6 @@
 //! Request/response types for the model-scored analysis API (`/api/llm-analysis`).
 
+use crate::i18n::UiText;
 use serde::{Deserialize, Serialize};
 
 pub use crate::webserver::routes::llm::types::ProviderStatus;
@@ -166,7 +167,8 @@ pub struct InstructionsListResponse {
 #[derive(Debug, Serialize)]
 pub struct TemplateResponse {
     pub id: String,
-    pub name: String,
+    pub name: UiText,
+    pub description: UiText,
     pub category: String,
     pub content: String,
     pub tags: Vec<String>,

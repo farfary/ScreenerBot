@@ -17,6 +17,8 @@
  * runs in a browser; the pure helpers below are unit-tested under node.
  */
 
+import { AGENT_TOOL_LABELS } from "../ui/agent_tool.js";
+
 export const PENDING_URL = "/api/agent-control/approvals";
 export const decideUrl = (id) => `${PENDING_URL}/${encodeURIComponent(id)}/decide`;
 
@@ -117,7 +119,7 @@ if (isBrowser()) {
             const hasSummary = typeof item.args_summary === "string" && item.args_summary.length;
             const requestArgs = {
               client: item.client_label || I18n.t("shell-agent-request-client-fallback"),
-              tool: item.tool,
+              tool: I18n.label(AGENT_TOOL_LABELS, item.tool),
               expiry: expiryText(item.expires_at),
             };
             const { confirmed } = await ConfirmationDialog.show({

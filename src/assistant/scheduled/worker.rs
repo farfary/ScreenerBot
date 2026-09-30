@@ -265,7 +265,10 @@ async fn execute_scheduled_task(
         }
         Err(_) => {
             // Timeout
-            let error_msg = format!("Task timed out after {timeout_secs}s");
+            let timeout = assistant_error::Error::Timeout {
+                waited_ms: timeout_secs * 1000,
+            };
+            let error_msg = timeout.to_string();
 
             if let Err(e) = scheduled_db::record_run_complete(
                 pool,
@@ -299,10 +302,7 @@ async fn execute_scheduled_task(
             // Record timeout event
             record_scheduled_task_event(ScheduledTaskOutcome::TimedOut, &task.name, &error_msg);
 
-            Err(assistant_error::Error::Timeout {
-                waited_ms: timeout_secs * 1000,
-            }
-            .into())
+            Err(timeout.into())
         }
     }
 }

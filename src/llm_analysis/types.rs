@@ -1,5 +1,6 @@
 //! LLM analysis data types — decisions, factors, evaluation context and instruction records.
 
+use crate::i18n::MessageId;
 use serde::{Deserialize, Serialize};
 
 /// LLM-analysis evaluation priority levels
@@ -100,7 +101,8 @@ pub struct DecisionRecord {
 #[derive(Debug, Clone)]
 pub struct InstructionTemplate {
     pub id: &'static str,
-    pub name: &'static str,
+    pub name: MessageId,
+    pub description: MessageId,
     pub category: &'static str,
     pub content: &'static str,
     pub tags: &'static [&'static str],

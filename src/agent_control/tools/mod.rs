@@ -260,6 +260,20 @@ mod tests {
         assert!(by_category.contains_key(&ToolCategory::System));
     }
 
+    /// `AGENT_TOOL_LABELS` (ui/agent_tool.js) labels every registered tool with
+    /// `assistant-tool-<id with hyphens>`; a new tool fails here until labelled.
+    #[test]
+    fn every_registered_tool_has_a_catalog_label() {
+        for name in create_tool_registry()
+            .list_definitions()
+            .into_iter()
+            .map(|def| def.name)
+        {
+            let key = format!("assistant-tool-{}", name.replace('_', "-"));
+            assert_ne!(crate::i18n::format_en(&key, None), key, "missing {key}");
+        }
+    }
+
     #[test]
     fn test_tool_retrieval() {
         let registry = create_tool_registry();

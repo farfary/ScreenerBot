@@ -7,7 +7,7 @@ use axum::{
 };
 use std::sync::Arc;
 
-use crate::i18n::ids;
+use crate::i18n::{ids, UiText};
 use crate::llm_analysis::db;
 use crate::logger::{self, LogTag};
 use crate::webserver::api_error::{ApiError, ApiErrorCode};
@@ -244,7 +244,8 @@ pub async fn list_templates(State(_state): State<Arc<AppState>>) -> Response {
         .into_iter()
         .map(|t| TemplateResponse {
             id: t.id.to_string(),
-            name: t.name.to_string(),
+            name: UiText::new(t.name),
+            description: UiText::new(t.description),
             category: t.category.to_string(),
             content: t.content.to_string(),
             tags: t.tags.iter().map(|s| s.to_string()).collect(),

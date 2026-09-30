@@ -119,7 +119,7 @@ mod tests {
     use crate::i18n::format_en;
 
     /// The dashboard labels a tool call by the lowercased serialized variant
-    /// (`TOOL_CALL_STATUS_LABELS` in core/chat_widget.js); every variant needs a
+    /// (`TOOL_CALL_STATUS_LABELS` in ui/tool_call_status.js); every variant needs a
     /// catalog message named after its hyphenated form.
     #[test]
     fn every_tool_call_status_has_catalog_text() {

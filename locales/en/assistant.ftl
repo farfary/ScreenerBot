@@ -308,3 +308,288 @@ assistant-chat-delete-title = Delete Chat Session
 assistant-chat-delete-message = Are you sure you want to delete this chat session? This action cannot be undone.
 assistant-chat-delete-done = Chat session deleted
 assistant-chat-delete-failed = Failed to delete chat session
+
+# Agent tool labels. Ids are the tool names registered by
+# `create_tool_registry` in src/agent_control/tools/mod.rs, with hyphens.
+assistant-tool-analyze-token = Analyze Token
+assistant-tool-get-market-data = Get Market Data
+assistant-tool-check-security = Check Security
+assistant-tool-get-positions = Get Positions
+assistant-tool-get-position = Get Position
+assistant-tool-get-balance = Get Balance
+assistant-tool-get-pnl = Get Profit and Loss
+assistant-tool-buy-token = Buy Token
+assistant-tool-add-to-position = Add to Position
+assistant-tool-sell-token = Sell Token
+assistant-tool-close-position = Close Position
+assistant-tool-get-config = Get Configuration
+assistant-tool-describe-config = Describe Configuration
+assistant-tool-update-config = Update Configuration
+assistant-tool-get-status = Get Status
+assistant-tool-get-events = Get Events
+assistant-tool-force-stop = Force Stop
+assistant-tool-clear-force-stop = Clear Force Stop
+assistant-tool-get-trader-status = Get Trader Status
+assistant-tool-get-trader-stats = Get Trader Statistics
+assistant-tool-set-trader-enabled = Set Trader Enabled
+assistant-tool-set-trader-monitor = Set Trader Monitor
+assistant-tool-manage-loss-limit = Manage Loss Limit
+assistant-tool-list-trader-templates = List Trader Templates
+assistant-tool-apply-trader-template = Apply Trader Template
+assistant-tool-get-copy-trading-overview = Get Copy Trading Overview
+assistant-tool-get-copy-task = Get Copy Task
+assistant-tool-get-copy-activity = Get Copy Activity
+assistant-tool-create-copy-task = Create Copy Task
+assistant-tool-update-copy-task = Update Copy Task
+assistant-tool-delete-copy-task = Delete Copy Task
+assistant-tool-set-copy-task-mode = Set Copy Task Mode
+assistant-tool-get-copy-insights = Get Copy Insights
+assistant-tool-get-copy-wallet-profile = Get Copy Wallet Profile
+assistant-tool-clone-copy-task = Clone Copy Task
+assistant-tool-reset-copy-paper-book = Reset Copy Paper Book
+assistant-tool-close-copy-paper-holding = Close Copy Paper Holding
+
+# Built-in instruction templates (src/llm_analysis/database.rs
+# `get_builtin_templates`). The template body is model input and stays in Rust.
+assistant-template-liquidity-guard-name = Liquidity Guard
+assistant-template-liquidity-guard-description = Rejects tokens with thin liquidity, which raises slippage risk and makes exits difficult.
+assistant-template-holder-distribution-name = Holder Distribution Check
+assistant-template-holder-distribution-description = Flags tokens whose largest holders control a large share of the supply.
+assistant-template-honeypot-detection-name = Honeypot Detection
+assistant-template-honeypot-detection-description = Rejects tokens with active freeze or mint authority or unusual transfer restrictions.
+assistant-template-momentum-filter-name = Momentum Filter
+assistant-template-momentum-filter-description = Prefers tokens with positive price momentum confirmed by rising volume.
+assistant-template-new-token-caution-name = New Token Caution
+assistant-template-new-token-caution-description = Requires higher confidence for tokens that are less than a day old.
+assistant-template-whale-activity-name = Whale Activity Monitor
+assistant-template-whale-activity-description = Watches for large holder movements and unusual deployer or early-wallet activity.
+
+# Template tags; ids are the `tags` of a built-in template.
+assistant-template-tag-activity = Activity
+assistant-template-tag-age = Age
+assistant-template-tag-authority = Authority
+assistant-template-tag-caution = Caution
+assistant-template-tag-distribution = Distribution
+assistant-template-tag-holders = Holders
+assistant-template-tag-honeypot = Honeypot
+assistant-template-tag-large-holders = Large Holders
+assistant-template-tag-liquidity = Liquidity
+assistant-template-tag-momentum = Momentum
+assistant-template-tag-new-tokens = New Tokens
+assistant-template-tag-price-action = Price Action
+assistant-template-tag-risk-management = Risk Management
+assistant-template-tag-rug-risk = Rug Risk
+assistant-template-tag-safety = Safety
+assistant-template-tag-security = Security
+assistant-template-tag-volume = Volume
+assistant-template-tag-whales = Whales
+
+# Shared by the Assistant tab dialogs.
+assistant-modal-close =
+    .aria-label = Close
+
+# providers_tab.js: provider list.
+assistant-providers-load-failed = Could not load providers
+assistant-providers-select-default =
+    .title = Set as default
+assistant-providers-use-default =
+    .aria-label = Use { $name } as the default provider
+assistant-providers-model-none = Not configured
+assistant-providers-status-ready = Ready
+assistant-providers-status-not-set-up = Not Set Up
+assistant-providers-status-default = Default
+assistant-providers-test = Test
+assistant-providers-configure = Configure
+assistant-providers-default-set-title = Default Provider Set
+assistant-providers-default-set-message = { $name } is now the default provider
+assistant-providers-default-set-failed = Failed to set default provider
+assistant-providers-testing-title = Testing Provider
+assistant-providers-testing-message = Testing { $name }...
+assistant-providers-test-http = HTTP { $status }
+assistant-providers-test-success-title = Connection Successful
+assistant-providers-test-success-message = { $name } is working correctly
+assistant-providers-test-failed = Test Failed
+
+# providers_tab.js: configuration dialog.
+assistant-providers-config-title = { $name } Configuration
+assistant-providers-api-key = API Key
+assistant-providers-key-saved = Key saved
+assistant-providers-key-missing = No key set
+assistant-providers-api-key-update =
+    .placeholder = Enter new key to update...
+assistant-providers-api-key-enter =
+    .placeholder = Enter API key...
+assistant-providers-key-toggle =
+    .title = Show/Hide
+assistant-providers-key-help-saved = Leave empty to keep current key, or enter a new key to update
+assistant-providers-key-help-new = Your API key is stored securely and never shared
+assistant-providers-model = Model
+assistant-providers-model-input =
+    .placeholder = e.g., gpt-4, claude-3-opus...
+assistant-providers-model-help = The model to use for Assistant analysis requests
+assistant-providers-enable = Enable this provider
+assistant-providers-enable-help = When enabled, this provider will be available for Assistant analysis
+assistant-providers-connection-test = Connection Test
+assistant-providers-test-connection = Test Connection
+assistant-providers-testing = Testing...
+assistant-providers-save = Save Configuration
+assistant-providers-saving = Saving...
+assistant-providers-missing-key-title = Missing API Key
+assistant-providers-missing-key-test = Please enter an API key first
+assistant-providers-missing-key-enable = Please enter an API key to enable this provider
+assistant-providers-missing-model-title = Missing Model
+assistant-providers-missing-model-message = Please enter a model name
+assistant-providers-test-save-failed = Failed to save config for testing
+assistant-providers-test-connected = Connection successful!
+assistant-providers-detail-model = Model:
+assistant-providers-detail-none = N/A
+assistant-providers-detail-latency = Latency:
+assistant-providers-detail-tokens = Tokens:
+assistant-providers-saved-title = Provider Saved
+assistant-providers-saved-message = { $name } configuration saved
+assistant-providers-save-failed = Failed to save provider configuration
+
+# instructions_tab.js: list, templates and dialogs.
+assistant-instructions-load-failed = Failed to load instructions
+assistant-instructions-priority = Priority: { $position }
+assistant-instructions-actions =
+    .aria-label = Instruction actions
+assistant-instructions-hint-filtering = Instructions for token filtering decisions - helps LLM analysis determine which tokens to skip
+assistant-instructions-hint-trading = Instructions for entry/exit analysis - guides model-scored trading decisions
+assistant-instructions-hint-analysis = General market-analysis guidelines for model-scored decisions
+assistant-instructions-hint-general = Other instructions for model-backed behavior
+assistant-instructions-char-count =
+    { $count ->
+        [one] { $amount } character
+       *[other] { $amount } characters
+    }
+assistant-instructions-reordered-title = Reordered
+assistant-instructions-reordered-message = Instructions reordered successfully
+assistant-instructions-reorder-failed = Failed to reorder instructions
+assistant-templates-empty = No templates available
+assistant-templates-preview-title = Template Preview: { $name }
+assistant-templates-preview-content = Content:
+assistant-templates-customize-add = Customize & Add
+assistant-templates-customize-title = Customize Template
+assistant-instructions-field-name = Name
+assistant-instructions-field-category = Category
+assistant-instructions-field-content = Content
+assistant-instructions-name-input =
+    .placeholder = e.g., Liquidity Guard
+assistant-instructions-content-input =
+    .placeholder = Enter your instruction...
+assistant-instructions-create = Create
+assistant-instructions-create-title = Create Instruction
+assistant-instructions-missing-title = Missing Fields
+assistant-instructions-missing-message = Name and content are required
+assistant-instructions-created-title = Created
+assistant-instructions-created-message = Instruction created successfully
+assistant-instructions-created-from-template = Instruction created from template: { $name }
+assistant-instructions-create-failed = Failed to create instruction
+assistant-instructions-create-from-template-failed = Failed to create instruction from template
+assistant-instructions-toggle-failed = Failed to toggle instruction
+assistant-instructions-edit-title = Edit Instruction
+assistant-instructions-preview = Preview
+assistant-instructions-save-changes = Save Changes
+assistant-instructions-untitled = Untitled
+assistant-instructions-load-item-failed = Failed to load instruction data
+assistant-instructions-updated-title = Updated
+assistant-instructions-updated-message = Instruction updated successfully
+assistant-instructions-update-failed = Failed to update instruction
+assistant-instructions-delete-title = Delete Instruction
+assistant-instructions-delete-message = Are you sure you want to delete this instruction?
+assistant-instructions-deleted-title = Deleted
+assistant-instructions-deleted-message = Instruction deleted successfully
+assistant-instructions-delete-failed = Failed to delete instruction
+assistant-instructions-copy-name = { $name } (Copy)
+assistant-instructions-duplicated-title = Duplicated
+assistant-instructions-duplicated-message = Instruction duplicated successfully
+assistant-instructions-duplicate-failed = Failed to duplicate instruction
+
+# automation_tab.js: task list, runs and dialogs. Schedule type, permission and
+# run status ids are the `as_str` values of `ScheduleType`, `TaskToolPermissions`
+# and `RunStatus` in src/assistant/scheduled/types.rs.
+assistant-automation-schedule-type-interval = Interval
+assistant-automation-schedule-type-daily = Daily
+assistant-automation-schedule-type-weekly = Weekly
+assistant-automation-permission-read-only = Read Only
+assistant-automation-permission-full = Full Access
+assistant-automation-permission-option-read-only = Read Only (safe)
+assistant-automation-permission-option-full = Full Access (can trade)
+assistant-automation-run-status-running = Running
+assistant-automation-run-status-success = Success
+assistant-automation-run-status-failed = Failed
+assistant-automation-run-status-timeout = Timed Out
+assistant-automation-run-status-skipped = Skipped
+assistant-automation-hint-interval = Interval in seconds (e.g., 300 = every 5 minutes)
+assistant-automation-hint-daily = Time in HH:MM UTC (e.g., 14:00)
+assistant-automation-hint-weekly = Days and time: mon,wed,fri:09:00
+assistant-automation-schedule-every = Every { $span }
+assistant-automation-schedule-daily = Daily at { $time } UTC
+assistant-automation-schedule-weekly = { $days } at { $time } UTC
+assistant-automation-schedule-day-separator = { ", " }
+assistant-automation-task-active = Active
+assistant-automation-task-paused = Paused
+assistant-automation-never = Never
+assistant-automation-last-run = Last: { $when }
+assistant-automation-next-run = Next: { $when }
+assistant-automation-run-now =
+    .title = Run Now
+    .aria-label = Run Now
+assistant-automation-actions =
+    .aria-label = Automation actions
+assistant-automation-runs-count =
+    { $count ->
+        [one] { $amount } run
+       *[other] { $amount } runs
+    }
+assistant-automation-runs-empty = No runs yet
+assistant-automation-task-runs-empty = No runs yet for this task
+assistant-automation-task-fallback = Task #{ $id }
+assistant-automation-task-generic = Task
+assistant-automation-create-title = Create Automation Task
+assistant-automation-edit-title = Edit Task
+assistant-automation-field-name = Task Name
+assistant-automation-name-input =
+    .placeholder = e.g., Portfolio Monitor
+assistant-automation-field-instruction = Instruction
+assistant-automation-instruction-input =
+    .placeholder = What should the Assistant do? e.g., Check open positions for reversal signs and report findings.
+assistant-automation-field-schedule-type = Schedule Type
+assistant-automation-field-schedule-value = Schedule Value
+assistant-automation-field-permissions = Tool Permissions
+assistant-automation-field-timeout = Timeout (seconds)
+assistant-automation-notify-telegram = Notify via { -telegram }
+assistant-automation-notify-success = Notify on success
+assistant-automation-notify-failure = Notify on failure
+assistant-automation-create-task = Create Task
+assistant-automation-save-changes = Save Changes
+assistant-automation-validation-title = Validation
+assistant-automation-validation-required = Please fill in all required fields
+assistant-automation-validation-interval = Interval must be at least 60 seconds
+assistant-automation-validation-daily = Daily schedule must be in HH:MM format
+assistant-automation-validation-weekly = Weekly schedule must be in format: mon,wed,fri:09:00
+assistant-automation-created = Task created
+assistant-automation-create-failed = Failed to create task
+assistant-automation-updated = Task updated
+assistant-automation-update-failed = Failed to update task
+assistant-automation-toggle-failed = Failed to toggle task
+assistant-automation-triggered = Task triggered
+assistant-automation-trigger-failed = Failed to trigger task
+assistant-automation-delete-title = Delete Task
+assistant-automation-delete-message = Are you sure you want to delete this automation task? This action cannot be undone.
+assistant-automation-deleted = Task deleted
+assistant-automation-delete-failed = Failed to delete task
+assistant-automation-view-runs = View Runs
+assistant-automation-runs-load-failed = Failed to load runs
+assistant-automation-runs-history-title = Run History — { $task }
+assistant-automation-run-load-failed = Failed to load run details
+assistant-automation-run-details-title = Run Details
+assistant-automation-run-task = Task
+assistant-automation-run-status = Status
+assistant-automation-run-started = Started
+assistant-automation-run-duration = Duration
+assistant-automation-run-provider = Provider
+assistant-automation-run-tokens = Tokens
+assistant-automation-run-tools-title = Tool Calls ({ $amount })
+assistant-automation-run-response = Assistant Response

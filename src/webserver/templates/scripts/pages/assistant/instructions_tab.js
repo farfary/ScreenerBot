@@ -1,7 +1,57 @@
 import { $, $$ } from "../../core/dom.js";
 import { closeMenu, openMenu, trackAnchoredMenu } from "../../core/menu_manager.js";
 import * as Utils from "../../core/utils.js";
+import { formatNumber } from "../../core/format.js";
 import { ConfirmationDialog } from "../../ui/confirmation_dialog.js";
+
+// Message key of each instruction category; the static filter in assistant.html
+// uses the same messages.
+const INSTRUCTION_CATEGORY_LABELS = Object.freeze({
+  filtering: "assistant-instructions-category-filtering",
+  trading: "assistant-instructions-category-trading",
+  analysis: "assistant-instructions-category-analysis",
+  general: "assistant-instructions-category-general",
+});
+
+// Message key of the one-line guidance shown under the category picker.
+const INSTRUCTION_CATEGORY_HINT_LABELS = Object.freeze({
+  filtering: "assistant-instructions-hint-filtering",
+  trading: "assistant-instructions-hint-trading",
+  analysis: "assistant-instructions-hint-analysis",
+  general: "assistant-instructions-hint-general",
+});
+
+const INSTRUCTION_CATEGORY_ICONS = Object.freeze({
+  filtering: "funnel",
+  trading: "trending-up",
+  analysis: "chart-bar",
+  general: "info",
+});
+
+// Message key of each built-in template tag; ids are the `tags` of
+// `get_builtin_templates` in src/llm_analysis/database.rs.
+const INSTRUCTION_TAG_LABELS = Object.freeze({
+  activity: "assistant-template-tag-activity",
+  age: "assistant-template-tag-age",
+  authority: "assistant-template-tag-authority",
+  caution: "assistant-template-tag-caution",
+  distribution: "assistant-template-tag-distribution",
+  holders: "assistant-template-tag-holders",
+  honeypot: "assistant-template-tag-honeypot",
+  "large-holders": "assistant-template-tag-large-holders",
+  liquidity: "assistant-template-tag-liquidity",
+  momentum: "assistant-template-tag-momentum",
+  "new-tokens": "assistant-template-tag-new-tokens",
+  "price-action": "assistant-template-tag-price-action",
+  "risk-management": "assistant-template-tag-risk-management",
+  "rug-risk": "assistant-template-tag-rug-risk",
+  safety: "assistant-template-tag-safety",
+  security: "assistant-template-tag-security",
+  volume: "assistant-template-tag-volume",
+  whales: "assistant-template-tag-whales",
+});
+
+const esc = Utils.escapeHtml;
 
 export function createInstructionsTab({ state, _eventCleanups }) {
   let activeInstructionMenu = null;
@@ -22,7 +72,8 @@ export function createInstructionsTab({ state, _eventCleanups }) {
       console.error("[Assistant] Error loading instructions:", error);
       const container = $("#instructions-list");
       if (container) {
-        container.innerHTML = '<div class="empty-state">Failed to load instructions</div>';
+        container.innerHTML = '<div class="empty-state" data-l10n-id="assistant-instructions-load-failed"></div>';
+        I18n.localizeTree(container);
       }
     }
   }
@@ -54,10 +105,11 @@ export function createInstructionsTab({ state, _eventCleanups }) {
       container.innerHTML = `
       <div class="empty-state" id="no-instructions">
         <span class="empty-icon">📝</span>
-        <p class="empty-text">No custom instructions yet</p>
-        <button class="btn btn-secondary" onclick="window.assistantPage.createInstruction()">Add Your First Instruction</button>
+        <p class="empty-text" data-l10n-id="assistant-instructions-empty"></p>
+        <button class="btn btn-secondary" data-l10n-id="assistant-instructions-empty-add" onclick="window.assistantPage.createInstruction()"></button>
       </div>
     `;
+      I18n.localizeTree(container);
       return;
     }
 
@@ -73,8 +125,8 @@ export function createInstructionsTab({ state, _eventCleanups }) {
       <div class="instruction-info">
         <div class="instruction-name">${Utils.escapeHtml(inst.name)}</div>
         <div class="instruction-meta">
-          <span class="category-tag ${inst.category || "general"}">${inst.category || "general"}</span>
-          <span class="priority-text">Priority: ${index + 1}</span>
+          <span class="category-tag ${inst.category || "general"}">${esc(I18n.label(INSTRUCTION_CATEGORY_LABELS, inst.category || "general"))}</span>
+          <span class="priority-text">${esc(I18n.t("assistant-instructions-priority", { position: String(index + 1) }))}</span>
         </div>
       </div>
       <div class="instruction-actions">
@@ -83,12 +135,13 @@ export function createInstructionsTab({ state, _eventCleanups }) {
                  onchange="window.assistantPage.toggleInstruction('${inst.id}', this.checked)">
           <span class="toggle-track"></span>
         </label>
-        <button class="instruction-menu-btn" type="button" aria-label="Instruction actions" aria-haspopup="menu" aria-expanded="false" onclick="window.assistantPage.showInstructionMenu(event, '${inst.id}')">⋮</button>
+        <button class="instruction-menu-btn" type="button" data-l10n-id="assistant-instructions-actions" aria-haspopup="menu" aria-expanded="false" onclick="window.assistantPage.showInstructionMenu(event, '${inst.id}')"><span aria-hidden="true">⋮</span></button>
       </div>
     </div>
   `
       )
       .join("");
+    I18n.localizeTree(container);
 
     // Setup drag and drop
     setupDragAndDrop();
@@ -163,15 +216,16 @@ export function createInstructionsTab({ state, _eventCleanups }) {
     menu.setAttribute("role", "menu");
     menu.innerHTML = `
     <button class="context-menu-item" type="button" role="menuitem" data-action="edit">
-      <i class="icon-square-pen"></i> Edit
+      <i class="icon-square-pen"></i> <span data-l10n-id="common-action-edit"></span>
     </button>
     <button class="context-menu-item" type="button" role="menuitem" data-action="duplicate">
-      <i class="icon-copy"></i> Duplicate
+      <i class="icon-copy"></i> <span data-l10n-id="common-action-duplicate"></span>
     </button>
     <button class="context-menu-item danger" type="button" role="menuitem" data-action="delete">
-      <i class="icon-trash"></i> Delete
+      <i class="icon-trash"></i> <span data-l10n-id="common-action-delete"></span>
     </button>
   `;
+    I18n.localizeTree(menu);
     document.body.appendChild(menu);
 
     let stopPositionTracking = null;
@@ -267,13 +321,32 @@ export function createInstructionsTab({ state, _eventCleanups }) {
    * Get category label with icon
    */
   function getCategoryLabel(category) {
-    const labels = {
-      filtering: '<i class="icon-funnel"></i> Filtering',
-      trading: '<i class="icon-trending-up"></i> Trading',
-      analysis: '<i class="icon-chart-bar"></i> Analysis',
-      general: '<i class="icon-info"></i> General',
-    };
-    return labels[category] || category;
+    const label = esc(I18n.label(INSTRUCTION_CATEGORY_LABELS, category));
+    return Object.hasOwn(INSTRUCTION_CATEGORY_ICONS, category)
+      ? `<i class="icon-${INSTRUCTION_CATEGORY_ICONS[category]}"></i> ${label}`
+      : label;
+  }
+
+  /**
+   * Category picker options with `selected` applied to one category.
+   */
+  function categoryOptions(selected) {
+    return Object.keys(INSTRUCTION_CATEGORY_LABELS)
+      .map(
+        (category) =>
+          `<option value="${category}" ${category === selected ? "selected" : ""}>${esc(I18n.label(INSTRUCTION_CATEGORY_LABELS, category))}</option>`
+      )
+      .join("");
+  }
+
+  /**
+   * Character counter readout for an instruction body.
+   */
+  function characterCount(length) {
+    return I18n.t("assistant-instructions-char-count", {
+      count: length,
+      amount: formatNumber(length, 0),
+    });
   }
 
   /**
@@ -377,15 +450,18 @@ export function createInstructionsTab({ state, _eventCleanups }) {
 
       Utils.showToast({
         type: "success",
-        title: "Reordered",
-        message: "Instructions reordered successfully",
+        title: I18n.t("assistant-instructions-reordered-title"),
+        message: I18n.t("assistant-instructions-reordered-message"),
       });
 
       // Reload to get updated priorities
       await loadInstructions();
     } catch (error) {
       console.error("[Assistant] Error reordering instructions:", error);
-      Utils.showToast({ type: "error", title: "Failed to reorder instructions" });
+      Utils.showToast({
+        type: "error",
+        title: I18n.t("assistant-instructions-reorder-failed"),
+      });
       // Reload to restore original order
       await loadInstructions();
     }
@@ -401,9 +477,10 @@ export function createInstructionsTab({ state, _eventCleanups }) {
     if (!templates || templates.length === 0) {
       container.innerHTML = `
       <div class="empty-state">
-        <p class="empty-text">No templates available</p>
+        <p class="empty-text" data-l10n-id="assistant-templates-empty"></p>
       </div>
     `;
+      I18n.localizeTree(container);
       return;
     }
 
@@ -411,8 +488,8 @@ export function createInstructionsTab({ state, _eventCleanups }) {
       .map(
         (t) => `
     <div class="template-card" data-id="${t.id}" onclick="window.assistantPage.customizeTemplate('${t.id}')">
-      <div class="template-name">${Utils.escapeHtml(t.name)}</div>
-      <div class="template-description">${Utils.escapeHtml(t.description || t.content.substring(0, 100) + "...")}</div>
+      <div class="template-name">${esc(I18n.text(t.name))}</div>
+      <div class="template-description">${esc(I18n.text(t.description))}</div>
     </div>
   `
       )
@@ -431,29 +508,30 @@ export function createInstructionsTab({ state, _eventCleanups }) {
     modal.innerHTML = `
     <div class="modal-dialog instruction-modal template-preview-modal">
       <div class="modal-header">
-        <h3><i class="icon-eye"></i> Template Preview: ${Utils.escapeHtml(template.name)}</h3>
-        <button class="modal-close" onclick="this.closest('.modal-overlay').remove()"><i class="icon-x"></i></button>
+        <h3><i class="icon-eye"></i> <span>${esc(I18n.t("assistant-templates-preview-title", { name: I18n.text(template.name) }))}</span></h3>
+        <button class="modal-close" data-l10n-id="assistant-modal-close" onclick="this.closest('.modal-overlay').remove()"><i class="icon-x"></i></button>
       </div>
       <div class="modal-body">
         <div class="template-preview-info">
           <div class="preview-meta">
             <span class="template-category badge-${template.category}">${getCategoryLabel(template.category)}</span>
-            <div class="template-tags">${template.tags.map((tag) => `<span class="tag">${tag}</span>`).join("")}</div>
+            <div class="template-tags">${template.tags.map((tag) => `<span class="tag">${esc(I18n.label(INSTRUCTION_TAG_LABELS, tag))}</span>`).join("")}</div>
           </div>
         </div>
         <div class="template-preview-content">
-          <h4>Content:</h4>
+          <h4 data-l10n-id="assistant-templates-preview-content"></h4>
           <pre class="template-content-display">${Utils.escapeHtml(template.content)}</pre>
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Close</button>
+        <button class="btn btn-secondary" data-l10n-id="common-action-close" onclick="this.closest('.modal-overlay').remove()"></button>
         <button class="btn btn-primary" onclick="window.assistantPage.customizeTemplate('${template.id}'); this.closest('.modal-overlay').remove();">
-          <i class="icon-square-pen"></i> Customize & Add
+          <i class="icon-square-pen"></i> <span data-l10n-id="assistant-templates-customize-add"></span>
         </button>
       </div>
     </div>
   `;
+    I18n.localizeTree(modal);
     document.body.appendChild(modal);
   }
 
@@ -470,40 +548,34 @@ export function createInstructionsTab({ state, _eventCleanups }) {
     modal.innerHTML = `
     <div class="modal-dialog instruction-modal">
       <div class="modal-header">
-        <h3><i class="icon-square-pen"></i> Customize Template</h3>
-        <button class="modal-close" onclick="this.closest('.modal-overlay').remove()"><i class="icon-x"></i></button>
+        <h3><i class="icon-square-pen"></i> <span data-l10n-id="assistant-templates-customize-title"></span></h3>
+        <button class="modal-close" data-l10n-id="assistant-modal-close" onclick="this.closest('.modal-overlay').remove()"><i class="icon-x"></i></button>
       </div>
       <div class="modal-body">
         <div class="form-group">
-          <label>Name</label>
-          <input type="text" id="inst-name" value="${Utils.escapeHtml(template.name)}" placeholder="e.g., Liquidity Guard">
+          <label data-l10n-id="assistant-instructions-field-name"></label>
+          <input type="text" id="inst-name" value="${esc(I18n.text(template.name))}" data-l10n-id="assistant-instructions-name-input">
         </div>
         <div class="form-group">
-          <label>Category</label>
-          <select id="inst-category" data-custom-select>
-            <option value="filtering" ${template.category === "filtering" ? "selected" : ""}>Filtering</option>
-            <option value="trading" ${template.category === "trading" ? "selected" : ""}>Trading</option>
-            <option value="analysis" ${template.category === "analysis" ? "selected" : ""}>Analysis</option>
-            <option value="general" ${template.category === "general" ? "selected" : ""}>General</option>
-          </select>
-          <small class="form-hint">${getCategoryHint(template.category)}</small>
+          <label data-l10n-id="assistant-instructions-field-category"></label>
+          <select id="inst-category" data-custom-select>${categoryOptions(template.category)}</select>
+          <small class="form-hint">${esc(getCategoryHint(template.category))}</small>
         </div>
         <div class="form-group">
-          <label>Content</label>
-          <textarea id="inst-content" rows="12" class="instruction-editor" placeholder="Enter your instruction...">${Utils.escapeHtml(template.content)}</textarea>
-          <div class="char-count">
-            <span id="char-counter">${template.content.length}</span> characters
-          </div>
+          <label data-l10n-id="assistant-instructions-field-content"></label>
+          <textarea id="inst-content" rows="12" class="instruction-editor" data-l10n-id="assistant-instructions-content-input">${esc(template.content)}</textarea>
+          <div class="char-count" id="char-counter">${esc(characterCount(template.content.length))}</div>
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+        <button class="btn btn-secondary" data-l10n-id="common-action-cancel" onclick="this.closest('.modal-overlay').remove()"></button>
         <button class="btn btn-primary" onclick="window.assistantPage.saveNewInstruction()">
-          <i class="icon-plus"></i> Create
+          <i class="icon-plus"></i> <span data-l10n-id="assistant-instructions-create"></span>
         </button>
       </div>
     </div>
   `;
+    I18n.localizeTree(modal);
     document.body.appendChild(modal);
 
     // Add character counter
@@ -511,7 +583,7 @@ export function createInstructionsTab({ state, _eventCleanups }) {
     const counter = $("#char-counter");
     if (textarea && counter) {
       textarea.addEventListener("input", () => {
-        counter.textContent = textarea.value.length;
+        counter.textContent = characterCount(textarea.value.length);
       });
     }
   }
@@ -520,14 +592,9 @@ export function createInstructionsTab({ state, _eventCleanups }) {
    * Get category hint text
    */
   function getCategoryHint(category) {
-    const hints = {
-      filtering:
-        "Instructions for token filtering decisions - helps LLM analysis determine which tokens to skip",
-      trading: "Instructions for entry/exit analysis - guides model-scored trading decisions",
-      analysis: "General market-analysis guidelines for model-scored decisions",
-      general: "Other instructions for model-backed behavior",
-    };
-    return hints[category] || "";
+    return Object.hasOwn(INSTRUCTION_CATEGORY_HINT_LABELS, category)
+      ? I18n.label(INSTRUCTION_CATEGORY_HINT_LABELS, category)
+      : "";
   }
 
   /**
@@ -540,40 +607,34 @@ export function createInstructionsTab({ state, _eventCleanups }) {
     modal.innerHTML = `
     <div class="modal-dialog instruction-modal">
       <div class="modal-header">
-        <h3><i class="icon-plus"></i> Create Instruction</h3>
-        <button class="modal-close" onclick="this.closest('.modal-overlay').remove()"><i class="icon-x"></i></button>
+        <h3><i class="icon-plus"></i> <span data-l10n-id="assistant-instructions-create-title"></span></h3>
+        <button class="modal-close" data-l10n-id="assistant-modal-close" onclick="this.closest('.modal-overlay').remove()"><i class="icon-x"></i></button>
       </div>
       <div class="modal-body">
         <div class="form-group">
-          <label>Name</label>
-          <input type="text" id="inst-name" placeholder="e.g., Liquidity Guard">
+          <label data-l10n-id="assistant-instructions-field-name"></label>
+          <input type="text" id="inst-name" data-l10n-id="assistant-instructions-name-input">
         </div>
         <div class="form-group">
-          <label>Category</label>
-          <select id="inst-category" data-custom-select>
-            <option value="filtering">Filtering</option>
-            <option value="trading">Trading</option>
-            <option value="analysis">Analysis</option>
-            <option value="general">General</option>
-          </select>
-          <small class="form-hint" id="category-hint">Instructions for token filtering decisions</small>
+          <label data-l10n-id="assistant-instructions-field-category"></label>
+          <select id="inst-category" data-custom-select>${categoryOptions("filtering")}</select>
+          <small class="form-hint" id="category-hint">${esc(getCategoryHint("filtering"))}</small>
         </div>
         <div class="form-group">
-          <label>Content</label>
-          <textarea id="inst-content" rows="12" class="instruction-editor" placeholder="Enter your instruction..."></textarea>
-          <div class="char-count">
-            <span id="char-counter">0</span> characters
-          </div>
+          <label data-l10n-id="assistant-instructions-field-content"></label>
+          <textarea id="inst-content" rows="12" class="instruction-editor" data-l10n-id="assistant-instructions-content-input"></textarea>
+          <div class="char-count" id="char-counter">${esc(characterCount(0))}</div>
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+        <button class="btn btn-secondary" data-l10n-id="common-action-cancel" onclick="this.closest('.modal-overlay').remove()"></button>
         <button class="btn btn-primary" onclick="window.assistantPage.saveNewInstruction()">
-          <i class="icon-plus"></i> Create
+          <i class="icon-plus"></i> <span data-l10n-id="assistant-instructions-create"></span>
         </button>
       </div>
     </div>
   `;
+    I18n.localizeTree(modal);
     document.body.appendChild(modal);
 
     // Setup category hint updater
@@ -590,7 +651,7 @@ export function createInstructionsTab({ state, _eventCleanups }) {
     const counter = $("#char-counter");
     if (textarea && counter) {
       textarea.addEventListener("input", () => {
-        counter.textContent = textarea.value.length;
+        counter.textContent = characterCount(textarea.value.length);
       });
     }
   }
@@ -606,8 +667,8 @@ export function createInstructionsTab({ state, _eventCleanups }) {
     if (!name || !content) {
       Utils.showToast({
         type: "warning",
-        title: "Missing Fields",
-        message: "Name and content are required",
+        title: I18n.t("assistant-instructions-missing-title"),
+        message: I18n.t("assistant-instructions-missing-message"),
       });
       return;
     }
@@ -625,12 +686,12 @@ export function createInstructionsTab({ state, _eventCleanups }) {
       await loadInstructions();
       Utils.showToast({
         type: "success",
-        title: "Created",
-        message: "Instruction created successfully",
+        title: I18n.t("assistant-instructions-created-title"),
+        message: I18n.t("assistant-instructions-created-message"),
       });
     } catch (error) {
       console.error("[Assistant] Error creating instruction:", error);
-      Utils.showToast({ type: "error", title: "Failed to create instruction" });
+      Utils.showToast({ type: "error", title: I18n.t("assistant-instructions-create-failed") });
     }
   }
 
@@ -652,7 +713,7 @@ export function createInstructionsTab({ state, _eventCleanups }) {
       // Revert the checkbox on failure
       const checkbox = document.querySelector(`.instruction-item[data-id="${id}"] .toggle input`);
       if (checkbox) checkbox.checked = !enabled;
-      Utils.showToast({ type: "error", title: "Failed to toggle instruction" });
+      Utils.showToast({ type: "error", title: I18n.t("assistant-instructions-toggle-failed") });
     }
   }
 
@@ -672,33 +733,26 @@ export function createInstructionsTab({ state, _eventCleanups }) {
       modal.innerHTML = `
       <div class="modal-dialog instruction-modal">
         <div class="modal-header">
-          <h3><i class="icon-square-pen"></i> Edit Instruction</h3>
-          <button class="modal-close" aria-label="Close" onclick="this.closest('.modal-overlay').remove()"><i class="icon-x"></i></button>
+          <h3><i class="icon-square-pen"></i> <span data-l10n-id="assistant-instructions-edit-title"></span></h3>
+          <button class="modal-close" data-l10n-id="assistant-modal-close" onclick="this.closest('.modal-overlay').remove()"><i class="icon-x"></i></button>
         </div>
         <div class="modal-body">
           <div class="form-group">
-            <label>Name</label>
-            <input type="text" id="edit-inst-name" value="${Utils.escapeHtml(inst.name)}" placeholder="e.g., Liquidity Guard">
+            <label data-l10n-id="assistant-instructions-field-name"></label>
+            <input type="text" id="edit-inst-name" value="${esc(inst.name)}" data-l10n-id="assistant-instructions-name-input">
           </div>
           <div class="form-group">
-            <label>Category</label>
-            <select id="edit-inst-category" data-custom-select>
-              <option value="filtering" ${inst.category === "filtering" ? "selected" : ""}>Filtering</option>
-              <option value="trading" ${inst.category === "trading" ? "selected" : ""}>Trading</option>
-              <option value="analysis" ${inst.category === "analysis" ? "selected" : ""}>Analysis</option>
-              <option value="general" ${inst.category === "general" ? "selected" : ""}>General</option>
-            </select>
-            <small class="form-hint" id="edit-category-hint">${getCategoryHint(inst.category)}</small>
+            <label data-l10n-id="assistant-instructions-field-category"></label>
+            <select id="edit-inst-category" data-custom-select>${categoryOptions(inst.category)}</select>
+            <small class="form-hint" id="edit-category-hint">${esc(getCategoryHint(inst.category))}</small>
           </div>
           <div class="form-group">
-            <label>Content</label>
-            <textarea id="edit-inst-content" rows="12" class="instruction-editor" placeholder="Enter your instruction...">${Utils.escapeHtml(inst.content)}</textarea>
-            <div class="char-count">
-              <span id="edit-char-counter">${inst.content.length}</span> characters
-            </div>
+            <label data-l10n-id="assistant-instructions-field-content"></label>
+            <textarea id="edit-inst-content" rows="12" class="instruction-editor" data-l10n-id="assistant-instructions-content-input">${esc(inst.content)}</textarea>
+            <div class="char-count" id="edit-char-counter">${esc(characterCount(inst.content.length))}</div>
           </div>
           <div class="instruction-preview-section">
-            <h4><i class="icon-eye"></i> Preview</h4>
+            <h4><i class="icon-eye"></i> <span data-l10n-id="assistant-instructions-preview"></span></h4>
             <div class="instruction-preview">
               <div class="preview-header">
                 <span class="preview-name">${Utils.escapeHtml(inst.name)}</span>
@@ -709,13 +763,14 @@ export function createInstructionsTab({ state, _eventCleanups }) {
           </div>
         </div>
         <div class="modal-footer">
-          <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+          <button class="btn btn-secondary" data-l10n-id="common-action-cancel" onclick="this.closest('.modal-overlay').remove()"></button>
           <button class="btn btn-primary" onclick="window.assistantPage.saveEditedInstruction(${id})">
-            <i class="icon-save"></i> Save Changes
+            <i class="icon-save"></i> <span data-l10n-id="assistant-instructions-save-changes"></span>
           </button>
         </div>
       </div>
     `;
+      I18n.localizeTree(modal);
       document.body.appendChild(modal);
 
       // Setup live preview updater
@@ -730,7 +785,7 @@ export function createInstructionsTab({ state, _eventCleanups }) {
 
       function updatePreview() {
         if (nameInput && previewName) {
-          previewName.textContent = nameInput.value || "Untitled";
+          previewName.textContent = nameInput.value || I18n.t("assistant-instructions-untitled");
         }
         if (categorySelect && previewCategory) {
           const cat = categorySelect.value;
@@ -757,13 +812,13 @@ export function createInstructionsTab({ state, _eventCleanups }) {
         contentTextarea.addEventListener("input", () => {
           updatePreview();
           if (counter) {
-            counter.textContent = contentTextarea.value.length;
+            counter.textContent = characterCount(contentTextarea.value.length);
           }
         });
       }
     } catch (error) {
       console.error("[Assistant] Error loading instruction for edit:", error);
-      Utils.showToast({ type: "error", title: "Failed to load instruction data" });
+      Utils.showToast({ type: "error", title: I18n.t("assistant-instructions-load-item-failed") });
     }
   }
 
@@ -778,8 +833,8 @@ export function createInstructionsTab({ state, _eventCleanups }) {
     if (!name || !content) {
       Utils.showToast({
         type: "warning",
-        title: "Missing Fields",
-        message: "Name and content are required",
+        title: I18n.t("assistant-instructions-missing-title"),
+        message: I18n.t("assistant-instructions-missing-message"),
       });
       return;
     }
@@ -797,12 +852,12 @@ export function createInstructionsTab({ state, _eventCleanups }) {
       await loadInstructions();
       Utils.showToast({
         type: "success",
-        title: "Updated",
-        message: "Instruction updated successfully",
+        title: I18n.t("assistant-instructions-updated-title"),
+        message: I18n.t("assistant-instructions-updated-message"),
       });
     } catch (error) {
       console.error("[Assistant] Error updating instruction:", error);
-      Utils.showToast({ type: "error", title: "Failed to update instruction" });
+      Utils.showToast({ type: "error", title: I18n.t("assistant-instructions-update-failed") });
     }
   }
 
@@ -811,10 +866,10 @@ export function createInstructionsTab({ state, _eventCleanups }) {
    */
   async function deleteInstruction(id) {
     const confirmed = await ConfirmationDialog.show({
-      title: "Delete Instruction",
-      message: "Are you sure you want to delete this instruction?",
-      confirmText: "Delete",
-      cancelText: "Cancel",
+      title: I18n.t("assistant-instructions-delete-title"),
+      message: I18n.t("assistant-instructions-delete-message"),
+      confirmText: I18n.t("common-action-delete"),
+      cancelText: I18n.t("common-action-cancel"),
       type: "danger",
     });
 
@@ -825,12 +880,12 @@ export function createInstructionsTab({ state, _eventCleanups }) {
       await loadInstructions();
       Utils.showToast({
         type: "success",
-        title: "Deleted",
-        message: "Instruction deleted successfully",
+        title: I18n.t("assistant-instructions-deleted-title"),
+        message: I18n.t("assistant-instructions-deleted-message"),
       });
     } catch (error) {
       console.error("[Assistant] Error deleting instruction:", error);
-      Utils.showToast({ type: "error", title: "Failed to delete instruction" });
+      Utils.showToast({ type: "error", title: I18n.t("assistant-instructions-delete-failed") });
     }
   }
 
@@ -845,7 +900,7 @@ export function createInstructionsTab({ state, _eventCleanups }) {
       const inst = await response.json();
 
       // Create a copy with modified name
-      const copyName = `${inst.name} (Copy)`;
+      const copyName = I18n.t("assistant-instructions-copy-name", { name: inst.name });
 
       const createResponse = await fetch("/api/llm-analysis/instructions", {
         method: "POST",
@@ -862,12 +917,12 @@ export function createInstructionsTab({ state, _eventCleanups }) {
       await loadInstructions();
       Utils.showToast({
         type: "success",
-        title: "Duplicated",
-        message: "Instruction duplicated successfully",
+        title: I18n.t("assistant-instructions-duplicated-title"),
+        message: I18n.t("assistant-instructions-duplicated-message"),
       });
     } catch (error) {
       console.error("[Assistant] Error duplicating instruction:", error);
-      Utils.showToast({ type: "error", title: "Failed to duplicate instruction" });
+      Utils.showToast({ type: "error", title: I18n.t("assistant-instructions-duplicate-failed") });
     }
   }
 
@@ -883,7 +938,7 @@ export function createInstructionsTab({ state, _eventCleanups }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: template.name,
+          name: I18n.text(template.name),
           category: template.category,
           content: template.content,
         }),
@@ -891,12 +946,17 @@ export function createInstructionsTab({ state, _eventCleanups }) {
       await loadInstructions();
       Utils.showToast({
         type: "success",
-        title: "Created",
-        message: `Instruction created from template: ${template.name}`,
+        title: I18n.t("assistant-instructions-created-title"),
+        message: I18n.t("assistant-instructions-created-from-template", {
+          name: I18n.text(template.name),
+        }),
       });
     } catch (error) {
       console.error("[Assistant] Error using template:", error);
-      Utils.showToast({ type: "error", title: "Failed to create instruction from template" });
+      Utils.showToast({
+        type: "error",
+        title: I18n.t("assistant-instructions-create-from-template-failed"),
+      });
     }
   }
 
