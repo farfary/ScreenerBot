@@ -5,6 +5,30 @@ import { openCopyForWallet } from "../../ui/copy_handoff.js";
 
 const SOLANA_ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
+// Second status line per `WatchDisableReason` kind (src/wallets/watch/types.rs).
+// `unknown` has no detail line.
+const WATCH_DISABLE_DETAIL_LABELS = Object.freeze({
+  user: "wallets-watch-reason-user",
+  signature_budget: "wallets-watch-reason-signature-budget",
+  helius_unavailable: "wallets-watch-reason-helius-unavailable",
+  processing_failed: "wallets-watch-reason-processing-failed",
+});
+
+// Display states derived in `render()` from the target and its status.
+const WATCH_STATE_LABELS = Object.freeze({
+  paused: "wallets-watch-state-paused",
+  catching_up: "wallets-watch-state-catching-up",
+  watching: "wallets-watch-state-watching",
+  streaming: "wallets-watch-state-streaming",
+  polling: "wallets-watch-state-polling",
+});
+
+function disableDetail(reason) {
+  return Object.hasOwn(WATCH_DISABLE_DETAIL_LABELS, reason?.kind)
+    ? I18n.label(WATCH_DISABLE_DETAIL_LABELS, reason.kind)
+    : "";
+}
+
 export function createWatchedWallets({
   $,
   on,
@@ -27,22 +51,22 @@ export function createWatchedWallets({
   const COLUMNS = [
     {
       id: "label",
-      label: "Wallet",
+      label: I18n.t("wallets-watched-col-wallet"),
       sortable: true,
       minWidth: 160,
       render: (value, row) => {
-        const label = Utils.escapeHtml(row.label || "Unlabelled wallet");
+        const label = Utils.escapeHtml(row.label || I18n.t("wallets-watched-unlabelled"));
         const address = row.address || "";
         const short = address ? `${address.slice(0, 6)}...${address.slice(-4)}` : "—";
         const copyBtn = address
-          ? `<button type="button" class="copy-btn-mini" data-copy-address="${Utils.escapeHtml(address)}" title="Copy address"><i class="icon-copy"></i></button>`
+          ? `<button type="button" class="copy-btn-mini" data-copy-address="${Utils.escapeHtml(address)}" title="${Utils.escapeHtml(I18n.t("wallets-address-copy"))}"><i class="icon-copy"></i></button>`
           : "";
-        return `<div class="wt-token-meta"><span class="wt-symbol">${label}</span><span class="wt-name wt-mint-cell"><span class="wt-mint-addr">${short}</span>${copyBtn}</span></div>`;
+        return `<div class="wt-token-meta"><span class="wt-symbol">${label}</span><span class="wt-name wt-mint-cell"><span class="wt-mint-addr" dir="ltr">${short}</span>${copyBtn}</span></div>`;
       },
     },
     {
       id: "_state",
-      label: "Status",
+      label: I18n.t("wallets-watched-col-status"),
       sortable: true,
       minWidth: 290,
       render: (value, row) =>
@@ -50,30 +74,43 @@ export function createWatchedWallets({
     },
     {
       id: "_lastActivity",
-      label: "Progress saved",
+      label: I18n.t("wallets-watched-col-progress"),
       sortable: true,
       minWidth: 140,
-      render: (value) => (value ? formatTime(value) : "Not synced yet"),
+      render: (value) => (value ? formatTime(value) : I18n.t("wallets-watched-not-synced")),
     },
     {
       id: "_lastCheck",
-      label: "Last check",
+      label: I18n.t("wallets-watched-col-last-check"),
       sortable: true,
       minWidth: 150,
-      render: (value) => (value ? formatTime(value) : "Not checked yet"),
+      render: (value) => (value ? formatTime(value) : I18n.t("wallets-watched-not-checked")),
     },
     {
       id: "actions",
       label: "",
       sortable: false,
       minWidth: 240,
-      render: (value, row) => `
+      render: (value, row) => {
+        const restore = row.disable_reason?.kind === "signature_budget";
+        const retry = ["helius_unavailable", "processing_failed"].includes(
+          row.disable_reason?.kind
+        );
+        const toggleLabel = row.enabled
+          ? I18n.t("wallets-watched-action-pause")
+          : I18n.t("wallets-watched-action-enable");
+        const budgetLabel = restore
+          ? I18n.t("wallets-watched-action-restore")
+          : I18n.t("wallets-watched-action-options");
+        const removeName = row.label || I18n.t("wallets-watched-generic-name");
+        return `
         <div class="watched-wallet-actions">
-          <button class="btn" type="button" data-watch-action="copy" data-watch-id="${row.id}" title="Open this wallet in Copy Trading">Copy trade</button>
-          <button class="btn" type="button" data-watch-action="budget" data-watch-id="${row.id}">${row.disable_reason?.kind === "signature_budget" ? "Restore watch" : "Watch options"}</button>
-          ${row.disable_reason?.kind === "signature_budget" ? "" : ["helius_unavailable", "processing_failed"].includes(row.disable_reason?.kind) ? `<button class="btn btn-primary" type="button" data-watch-action="retry" data-watch-id="${row.id}">Retry watch</button>` : `<button class="btn" type="button" data-watch-action="toggle" data-watch-id="${row.id}">${row.enabled ? "Pause" : "Enable"}</button>`}
-          <button class="btn-icon danger" type="button" data-watch-action="delete" data-watch-id="${row.id}" title="Remove" aria-label="Remove ${Utils.escapeHtml(row.label || "wallet")}"><i class="icon-trash-2"></i></button>
-        </div>`,
+          <button class="btn" type="button" data-watch-action="copy" data-watch-id="${row.id}" title="${Utils.escapeHtml(I18n.attr("wallets-watched-action-copy", "title"))}">${Utils.escapeHtml(I18n.t("wallets-watched-action-copy"))}</button>
+          <button class="btn" type="button" data-watch-action="budget" data-watch-id="${row.id}">${Utils.escapeHtml(budgetLabel)}</button>
+          ${restore ? "" : retry ? `<button class="btn btn-primary" type="button" data-watch-action="retry" data-watch-id="${row.id}">${Utils.escapeHtml(I18n.t("wallets-watched-action-retry"))}</button>` : `<button class="btn" type="button" data-watch-action="toggle" data-watch-id="${row.id}">${Utils.escapeHtml(toggleLabel)}</button>`}
+          <button class="btn-icon danger" type="button" data-watch-action="delete" data-watch-id="${row.id}" title="${Utils.escapeHtml(I18n.attr("wallets-watched-action-remove", "title"))}" aria-label="${Utils.escapeHtml(I18n.attr("wallets-watched-action-remove", "aria-label", { name: removeName }))}"><i class="icon-trash-2"></i></button>
+        </div>`;
+      },
     },
   ];
 
@@ -140,42 +177,49 @@ export function createWatchedWallets({
       input.value = String(pausedForBudget ? Math.min(5000, currentLimit + 500) : currentLimit);
     const title = $("#watch-budget-title");
     if (title)
-      title.textContent = pausedForBudget ? "Restore wallet watch" : "Wallet watch options";
+      title.textContent = pausedForBudget
+        ? I18n.t("wallets-watch-budget-title-restore")
+        : I18n.t("wallets-watch-budget-title-options");
     const status = statuses.get(target.id);
     const helius = status?.catch_up_options?.find((option) => option.provider === "helius");
     const highActivity = status?.mode === "helius_high_activity";
     const label = $("#watch-page-budget-label");
     if (label)
       label.textContent = highActivity
-        ? "Successful full transactions checked per check"
-        : "Signatures checked per check";
+        ? I18n.t("wallets-watch-budget-label-transactions")
+        : I18n.t("wallets-watch-budget-label-signatures");
     const hint = $("#watch-budget-hint");
+    const formattedLimit = Utils.formatNumber(currentLimit, 0);
     if (hint)
       hint.textContent = highActivity
-        ? `Current limit: ${Utils.formatNumber(currentLimit, 0)}. Choose 500–5,000 successful transactions per check in steps of 100.`
-        : `Current limit: ${Utils.formatNumber(currentLimit, 0)}. Choose 500–5,000 signatures per check in steps of 100.`;
+        ? I18n.t("wallets-watch-budget-hint-transactions", { limit: formattedLimit })
+        : I18n.t("wallets-watch-budget-hint-signatures", { limit: formattedLimit });
     const heliusDescription = $("#watch-helius-description");
     const heliusAction = $("#watch-helius-action");
     if (heliusDescription && heliusAction) {
       heliusAction.classList.toggle("hidden", !target.high_activity_approved && !helius?.available);
       heliusAction.textContent = target.high_activity_approved
-        ? "Stop Helius catch-up for this wallet"
+        ? I18n.t("wallets-watch-helius-stop")
         : pausedForBudget
-          ? "Try to catch up using Helius"
-          : "Allow Helius catch-up if needed";
+          ? I18n.t("wallets-watch-helius-try")
+          : I18n.t("wallets-watch-helius-allow");
       heliusDescription.textContent = target.high_activity_approved
-        ? "Helius catch-up is allowed for this wallet. Turning it off returns to standard checks, which may fall behind on a busy wallet."
+        ? I18n.t("wallets-watch-helius-description-approved")
         : helius?.available
-          ? "Helius can check successful Solana transactions from the saved position without skipping the unchecked interval. It may use more provider credits and can still fall behind."
+          ? I18n.t("wallets-watch-helius-description-available")
           : helius
-            ? "Helius catch-up is unavailable. Configure an enabled Helius RPC endpoint to use it."
-            : "No catch-up provider is supported for this watch. Resume from now is available if the watch reaches its limit.";
+            ? I18n.t("wallets-watch-helius-description-unavailable")
+            : I18n.t("wallets-watch-helius-description-unsupported");
     }
     $("#watch-budget-resume-notice")?.classList.toggle("hidden", !pausedForBudget);
     const ack = $("#watch-budget-ack");
     if (ack) ack.checked = false;
     const button = $("#watch-budget-save");
-    if (button) button.textContent = pausedForBudget ? "Resume from now" : "Save limit";
+    if (button) {
+      button.textContent = pausedForBudget
+        ? I18n.t("wallets-watch-budget-resume")
+        : I18n.t("wallets-watch-budget-save");
+    }
     const error = $("#watch-budget-error");
     if (error) {
       error.textContent = "";
@@ -218,15 +262,14 @@ export function createWatchedWallets({
     const error = $("#watch-budget-error");
     if (!Number.isInteger(pageBudget) || pageBudget < 5 || pageBudget > 50) {
       if (error) {
-        error.textContent = "Choose between 500 and 5,000 records per check in 100-record steps.";
+        error.textContent = I18n.t("wallets-watch-budget-error-range");
         error.classList.remove("hidden");
       }
       return;
     }
     if (pausedForBudget && !ack?.checked) {
       if (error) {
-        error.textContent =
-          "Acknowledge that signatures since the last completed check will be skipped.";
+        error.textContent = I18n.t("wallets-watch-budget-error-ack");
         error.classList.remove("hidden");
       }
       return;
@@ -251,15 +294,15 @@ export function createWatchedWallets({
       hideBudgetModal();
       Utils.showToast(
         pausedForBudget
-          ? "Watch resumed from the current wallet head"
-          : "Wallet watch limit updated",
+          ? I18n.t("wallets-watch-budget-resumed")
+          : I18n.t("wallets-watch-budget-updated"),
         "success"
       );
       await load({ force: true });
     } catch (requestError) {
       if (error) {
         error.textContent =
-          requestError.detail || requestError.message || "Watch limit could not be saved.";
+          requestError.detail || requestError.message || I18n.t("wallets-watch-budget-save-failed");
         error.classList.remove("hidden");
       }
     } finally {
@@ -293,15 +336,26 @@ export function createWatchedWallets({
       zebra: true,
       fitToContainer: true,
       sorting: { mode: "client", column: "label", direction: "asc" },
-      emptyTitle: "No watched addresses",
-      emptyMessage: "Use Watch Wallet to record a public wallet's on-chain activity.",
+      emptyTitle: I18n.t("wallets-watched-empty-title"),
+      emptyMessage: I18n.t("wallets-watched-empty-message"),
       toolbar: {
-        summary: [{ id: "watched-count", label: "Watched", value: "0", variant: "secondary" }],
-        search: { enabled: true, mode: "client", placeholder: "Search watched wallets..." },
+        summary: [
+          {
+            id: "watched-count",
+            label: I18n.t("wallets-watched-count"),
+            value: "0",
+            variant: "secondary",
+          },
+        ],
+        search: {
+          enabled: true,
+          mode: "client",
+          placeholder: I18n.attr("wallets-watched-search", "placeholder"),
+        },
         buttons: [
           {
             id: "watched-add",
-            label: "Watch Wallet",
+            label: I18n.t("wallets-watched-add"),
             icon: "icon-plus",
             variant: "primary",
             onClick: () => showAddModal(),
@@ -309,7 +363,7 @@ export function createWatchedWallets({
           {
             id: "watched-refresh",
             icon: "icon-refresh-cw",
-            tooltip: "Refresh watched wallets",
+            tooltip: I18n.t("wallets-watched-refresh"),
             onClick: (btn) => onRefresh?.(btn),
           },
         ],
@@ -321,7 +375,7 @@ export function createWatchedWallets({
       if (!btn) return;
       e.stopPropagation();
       Utils.copyToClipboard(btn.dataset.copyAddress);
-      Utils.notifyCopied("Address");
+      Utils.notifyCopied(I18n.t("wallets-copied-address"));
     };
     root.addEventListener("click", copyClickHandler);
     return table;
@@ -334,8 +388,8 @@ export function createWatchedWallets({
     if (!hasLoadedOnce && t?.showBlockingState) {
       t.showBlockingState({
         variant: "loading",
-        title: "Loading watched wallets...",
-        description: "Fetching observation targets.",
+        title: I18n.t("wallets-watched-loading-title"),
+        description: I18n.t("wallets-watched-loading-description"),
       });
     }
     try {
@@ -363,11 +417,11 @@ export function createWatchedWallets({
       if (!hasLoadedOnce) {
         t?.showBlockingState?.({
           variant: "error",
-          title: "Watched addresses could not be loaded",
-          description: "Use refresh to try again.",
+          title: I18n.t("wallets-watched-load-error-title"),
+          description: I18n.t("wallets-watched-load-error-description"),
         });
       } else {
-        Utils.showToast("Watched addresses could not be loaded", "error");
+        Utils.showToast(I18n.t("wallets-watched-load-error-title"), "error");
       }
     } finally {
       loading = false;
@@ -381,7 +435,7 @@ export function createWatchedWallets({
     const submit = event.currentTarget.querySelector('button[type="submit"]');
     const address = addressInput?.value.trim() || "";
     if (!SOLANA_ADDRESS_RE.test(address)) {
-      setAddressError("Enter a valid Solana wallet address.");
+      setAddressError(I18n.t("wallets-watched-address-invalid"));
       addressInput?.focus();
       return;
     }
@@ -396,13 +450,13 @@ export function createWatchedWallets({
         skipDedup: true,
       });
       hideAddModal();
-      Utils.showToast("Wallet watch added", "success");
+      Utils.showToast(I18n.t("wallets-watched-added"), "success");
       await load({ force: true });
     } catch (error) {
       const message =
         error.status === 409
-          ? "That wallet is already watched."
-          : "Wallet watch could not be added.";
+          ? I18n.t("wallets-watched-duplicate")
+          : I18n.t("wallets-watched-add-failed");
       setAddressError(message);
       Utils.showToast(message, "error");
     } finally {
@@ -418,19 +472,17 @@ export function createWatchedWallets({
     const result = await confirm(
       approved
         ? {
-            title: "Allow Helius catch-up for this wallet",
-            message:
-              "Helius can check successful Solana transactions from the saved position without skipping the unchecked interval. It currently charges 10 credits per 100 full transactions returned, rounded up, with a 10 credit minimum per request. A check can make multiple requests; usage and provider pricing may vary. Copy tasks remain paused until resumed separately.",
-            confirmLabel: "Allow for this wallet",
-            cancelLabel: "Cancel",
+            title: I18n.t("wallets-watch-helius-allow-title"),
+            message: I18n.t("wallets-watch-helius-allow-message"),
+            confirmLabel: I18n.t("wallets-watch-helius-allow-confirm"),
+            cancelLabel: I18n.t("common-action-cancel"),
             variant: "warning",
           }
         : {
-            title: "Stop Helius catch-up for this wallet",
-            message:
-              "This wallet will return to standard checks. A busy wallet may reach its watch limit and pause again. Other wallets and your Helius RPC configuration are unchanged.",
-            confirmLabel: "Stop for this wallet",
-            cancelLabel: "Keep allowed",
+            title: I18n.t("wallets-watch-helius-stop"),
+            message: I18n.t("wallets-watch-helius-stop-message"),
+            confirmLabel: I18n.t("wallets-watch-helius-stop-confirm"),
+            cancelLabel: I18n.t("wallets-watch-helius-stop-keep"),
             variant: "warning",
           }
     );
@@ -448,15 +500,15 @@ export function createWatchedWallets({
       Utils.showToast(
         approved
           ? target.disable_reason?.kind === "signature_budget"
-            ? "Watch restored from saved progress; copy tasks remain paused"
-            : "Helius catch-up allowed for this wallet when needed"
-          : "Helius catch-up stopped for this wallet",
+            ? I18n.t("wallets-watch-helius-restored")
+            : I18n.t("wallets-watch-helius-allowed")
+          : I18n.t("wallets-watch-helius-stopped"),
         "success"
       );
       await load({ force: true });
     } catch (error) {
       Utils.showToast(
-        error.detail || error.message || "Wallet catch-up setting could not be updated",
+        error.detail || error.message || I18n.t("wallets-watch-helius-update-failed"),
         "error"
       );
       button.disabled = false;
@@ -493,10 +545,10 @@ export function createWatchedWallets({
         });
         Utils.showToast(
           action === "retry"
-            ? "Wallet watch restored with its saved cursor"
+            ? I18n.t("wallets-watched-retried")
             : target.enabled
-              ? "Wallet watch paused"
-              : "Wallet watch enabled",
+              ? I18n.t("wallets-watched-paused")
+              : I18n.t("wallets-watched-enabled"),
           "success"
         );
       } else if (action === "delete") {
@@ -505,13 +557,13 @@ export function createWatchedWallets({
           priority: "high",
           skipDedup: true,
         });
-        Utils.showToast("Wallet watch removed", "success");
+        Utils.showToast(I18n.t("wallets-watched-removed"), "success");
       }
       await load({ force: true });
     } catch (error) {
       console.error("[Wallets] Watch action failed:", error);
       Utils.showToast(
-        error.detail || error.message || "Wallet watch could not be updated",
+        error.detail || error.message || I18n.t("wallets-watched-update-failed"),
         "error"
       );
       button.disabled = false;
@@ -526,14 +578,14 @@ export function createWatchedWallets({
       const status = statuses.get(target.id);
       const highActivity = status?.mode === "helius_high_activity";
       const state = !target.enabled
-        ? "Paused"
+        ? "paused"
         : status?.catching_up
-          ? "Catching up"
+          ? "catching_up"
           : highActivity
-            ? "Watching"
+            ? "watching"
             : status?.subscribed
-              ? "Streaming"
-              : "Polling";
+              ? "streaming"
+              : "polling";
       const stateClass = !target.enabled
         ? "is-paused"
         : status?.catching_up
@@ -543,21 +595,12 @@ export function createWatchedWallets({
             : "is-polling";
       return {
         ...target,
-        _state: state,
+        _state: I18n.label(WATCH_STATE_LABELS, state),
         _stateClass: stateClass,
-        _reason:
-          target.disable_reason?.kind === "signature_budget"
-            ? "This wallet has more activity than its current watch can check."
-            : target.disable_reason?.kind === "user"
-              ? "Paused by you."
-              : target.disable_reason?.kind === "helius_unavailable"
-                ? "Helius checks failed. Saved progress is preserved."
-                : target.disable_reason?.kind === "processing_failed"
-                  ? "Wallet activity could not be processed. Saved progress is preserved."
-                  : "",
+        _reason: disableDetail(target.disable_reason),
         _detail: target.enabled
           ? (status?.last_error ? I18n.text(status.last_error) : "") ||
-            (highActivity ? "Checking through Helius for this wallet." : "")
+            (highActivity ? I18n.t("wallets-watched-detail-helius") : "")
           : "",
         _lastActivity: status?.last_activity_at || null,
         _lastCheck: status?.last_checked_at || null,
@@ -568,7 +611,7 @@ export function createWatchedWallets({
   }
 
   function formatTime(value) {
-    return Utils.formatTimestamp(value, { fallback: "Unknown" });
+    return Utils.formatTimestamp(value, { fallback: I18n.t("format-unknown") });
   }
 
   function reset() {

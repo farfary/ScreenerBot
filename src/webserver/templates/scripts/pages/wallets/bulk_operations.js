@@ -5,12 +5,17 @@
 
 import { apiErrorMessage } from "../../core/request_manager.js";
 
+// Phrase typed to confirm an export that includes private keys. It is compared
+// verbatim and shown to the user in its own element, so it is never translated.
+const EXPORT_KEYS_CONFIRMATION = "EXPORT KEYS";
+
 export function createBulkOperations({
   $,
   Utils,
   on,
   showModal,
   hideModal,
+  setButtonContent,
   enhanceAllSelects,
   loadAllData,
   walletsData,
@@ -118,7 +123,7 @@ export function createBulkOperations({
     const ext = file.name.toLowerCase().slice(file.name.lastIndexOf("."));
 
     if (!validExtensions.includes(ext)) {
-      Utils.showToast("Invalid file type. Please use CSV or Excel files.", "error");
+      Utils.showToast(I18n.t("wallets-bulk-file-invalid"), "error");
       return;
     }
 
@@ -216,7 +221,7 @@ export function createBulkOperations({
     const nextBtn = $("#import-step1-next");
     if (nextBtn) {
       nextBtn.disabled = true;
-      nextBtn.innerHTML = '<i class="icon-loader spin"></i> Processing...';
+      setButtonContent(nextBtn, "icon-loader spin", I18n.t("wallets-bulk-preview-busy"));
     }
 
     try {
@@ -230,7 +235,7 @@ export function createBulkOperations({
 
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(apiErrorMessage(data, "Failed to process file"));
+        throw new Error(apiErrorMessage(data, I18n.t("wallets-bulk-preview-fallback")));
       }
 
       importPreviewData = data;
@@ -241,12 +246,12 @@ export function createBulkOperations({
       return true;
     } catch (error) {
       console.error("[Wallets] File preview failed:", error);
-      Utils.showToast(`Failed to process file: ${error.message}`, "error");
+      Utils.showToast(I18n.t("wallets-bulk-preview-failed", { reason: error.message }), "error");
       return false;
     } finally {
       if (nextBtn) {
         nextBtn.disabled = false;
-        nextBtn.innerHTML = '<i class="icon-arrow-right"></i> Next';
+        setButtonContent(nextBtn, "icon-arrow-right", I18n.t("common-action-next"));
       }
     }
   }
@@ -257,9 +262,9 @@ export function createBulkOperations({
 
     const columns = preview.columns || [];
     const fields = [
-      { id: "name", label: "Wallet Name", required: true },
-      { id: "private_key", label: "Private Key", required: true },
-      { id: "notes", label: "Notes", required: false },
+      { id: "name", label: I18n.t("wallets-field-name"), required: true },
+      { id: "private_key", label: I18n.t("wallets-field-private-key"), required: true },
+      { id: "notes", label: I18n.t("wallets-field-notes"), required: false },
     ];
 
     const optionsList = columns
@@ -277,9 +282,9 @@ export function createBulkOperations({
 
         return `
           <div class="mapping-field">
-            <label>${field.label} ${requiredMark}</label>
+            <label>${Utils.escapeHtml(field.label)} ${requiredMark}</label>
             <select data-field="${field.id}" data-custom-select>
-              <option value="">-- Select column --</option>
+              <option value="">${Utils.escapeHtml(I18n.t("wallets-bulk-column-select"))}</option>
               ${optionsList}
             </select>
           </div>
@@ -334,7 +339,7 @@ export function createBulkOperations({
     const rows = preview.rows || [];
 
     if (rows.length === 0) {
-      container.innerHTML = '<p class="info-text">No data rows found in file</p>';
+      container.innerHTML = `<p class="info-text">${Utils.escapeHtml(I18n.t("wallets-bulk-preview-empty"))}</p>`;
       return;
     }
 
@@ -353,7 +358,7 @@ export function createBulkOperations({
     container.innerHTML = `
       <table class="preview-table">
         <thead>
-          <tr>${headerCells}<th>Status</th></tr>
+          <tr>${headerCells}<th>${Utils.escapeHtml(I18n.t("wallets-bulk-preview-status"))}</th></tr>
         </thead>
         <tbody>
           ${bodyRows}
@@ -366,11 +371,12 @@ export function createBulkOperations({
     if (!validation) return '<span class="validation-badge">—</span>';
 
     if (validation.status === "valid") {
-      return '<span class="validation-badge valid"><i class="icon-check"></i> Valid</span>';
+      return `<span class="validation-badge valid"><i class="icon-check"></i> ${Utils.escapeHtml(I18n.t("wallets-bulk-status-valid"))}</span>`;
     } else if (validation.status === "duplicate") {
-      return '<span class="validation-badge duplicate"><i class="icon-copy"></i> Duplicate</span>';
+      return `<span class="validation-badge duplicate"><i class="icon-copy"></i> ${Utils.escapeHtml(I18n.t("wallets-bulk-status-duplicate"))}</span>`;
     } else {
-      return `<span class="validation-badge invalid"><i class="icon-x"></i> ${Utils.escapeHtml(validation.reason || "Invalid")}</span>`;
+      // The reason is a per-row validation outcome from the backend, shown as sent.
+      return `<span class="validation-badge invalid"><i class="icon-x"></i> ${Utils.escapeHtml(validation.reason || I18n.t("wallets-bulk-status-invalid"))}</span>`; // api-body-ok: per-row validation outcome field
     }
   }
 
@@ -393,13 +399,17 @@ export function createBulkOperations({
       else invalid++;
     });
 
-    const validEl = $("#valid-count");
-    const invalidEl = $("#invalid-count");
-    const duplicateEl = $("#duplicate-count");
+    const validEl = $("#import-summary-valid");
+    const invalidEl = $("#import-summary-invalid");
+    const duplicateEl = $("#import-summary-duplicate");
 
-    if (validEl) validEl.textContent = valid;
-    if (invalidEl) invalidEl.textContent = invalid;
-    if (duplicateEl) duplicateEl.textContent = duplicate;
+    if (validEl) validEl.innerHTML = I18n.markup("wallets-bulk-summary-valid", { count: valid });
+    if (invalidEl) {
+      invalidEl.innerHTML = I18n.markup("wallets-bulk-summary-invalid", { count: invalid });
+    }
+    if (duplicateEl) {
+      duplicateEl.innerHTML = I18n.markup("wallets-bulk-summary-duplicate", { count: duplicate });
+    }
   }
 
   function validateImportMapping() {
@@ -417,7 +427,7 @@ export function createBulkOperations({
     const executeBtn = $("#import-step2-execute");
     if (executeBtn) {
       executeBtn.disabled = true;
-      executeBtn.innerHTML = '<i class="icon-loader spin"></i> Importing...';
+      setButtonContent(executeBtn, "icon-loader spin", I18n.t("wallets-bulk-import-busy"));
     }
 
     try {
@@ -432,21 +442,21 @@ export function createBulkOperations({
 
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(apiErrorMessage(data, "Import failed"));
+        throw new Error(apiErrorMessage(data, I18n.t("wallets-import-failed")));
       }
 
       renderImportResults(data);
       goToImportStep(3);
 
       const successCount = data.results?.filter((r) => r.success).length || 0;
-      Utils.showToast(`Imported ${successCount} wallet(s)`, "success");
+      Utils.showToast(I18n.t("wallets-bulk-import-toast", { count: successCount }), "success");
     } catch (error) {
       console.error("[Wallets] Import failed:", error);
-      Utils.showToast(`Import failed: ${error.message}`, "error");
+      Utils.showToast(I18n.t("wallets-bulk-import-error", { reason: error.message }), "error");
     } finally {
       if (executeBtn) {
         executeBtn.disabled = false;
-        executeBtn.innerHTML = '<i class="icon-upload"></i> Import Wallets';
+        setButtonContent(executeBtn, "icon-upload", I18n.t("wallets-bulk-import-submit"));
       }
     }
   }
@@ -466,18 +476,21 @@ export function createBulkOperations({
     if (errorCount === 0) {
       resultClass = "success";
       icon = "icon-circle-check";
-      title = "Import Successful";
-      subtitle = `All ${successCount} wallet(s) imported successfully`;
+      title = I18n.t("wallets-bulk-result-success-title");
+      subtitle = I18n.t("wallets-bulk-result-success-detail", { count: successCount });
     } else if (successCount > 0) {
       resultClass = "partial";
       icon = "icon-triangle-alert";
-      title = "Partial Success";
-      subtitle = `${successCount} imported, ${errorCount} failed`;
+      title = I18n.t("wallets-bulk-result-partial-title");
+      subtitle = I18n.t("wallets-bulk-result-partial-detail", {
+        imported: successCount,
+        failed: errorCount,
+      });
     } else {
       resultClass = "error";
       icon = "icon-circle-x";
-      title = "Import Failed";
-      subtitle = `All ${errorCount} wallet(s) failed to import`;
+      title = I18n.t("wallets-bulk-result-failed-title");
+      subtitle = I18n.t("wallets-bulk-result-failed-detail", { count: errorCount });
     }
 
     headerEl.className = `import-results-header ${resultClass}`;
@@ -485,8 +498,8 @@ export function createBulkOperations({
       <div class="results-summary">
         <i class="${icon}"></i>
         <div class="results-text">
-          <strong>${title}</strong>
-          <span>${subtitle}</span>
+          <strong>${Utils.escapeHtml(title)}</strong>
+          <span>${Utils.escapeHtml(subtitle)}</span>
         </div>
       </div>
     `;
@@ -496,13 +509,13 @@ export function createBulkOperations({
       .map((result) => {
         const rowClass = result.success ? "success-row" : "error-row";
         const statusIcon = result.success
-          ? '<span class="result-status success"><i class="icon-check"></i> Imported</span>'
-          : `<span class="result-status error"><i class="icon-x"></i> ${Utils.escapeHtml(result.error || "Failed")}</span>`; // api-body-ok: per-row import outcome field (wallets/bulk/types.rs)
+          ? `<span class="result-status success"><i class="icon-check"></i> ${Utils.escapeHtml(I18n.t("wallets-bulk-result-imported"))}</span>`
+          : `<span class="result-status error"><i class="icon-x"></i> ${Utils.escapeHtml(result.error || I18n.t("wallets-bulk-result-failed"))}</span>`; // api-body-ok: per-row import outcome field (wallets/bulk/types.rs)
 
         return `
           <tr class="${rowClass}">
             <td>${Utils.escapeHtml(result.name || "—")}</td>
-            <td><code>${result.address ? `${result.address.slice(0, 8)}...${result.address.slice(-6)}` : "—"}</code></td>
+            <td><code dir="ltr">${result.address ? `${result.address.slice(0, 8)}...${result.address.slice(-6)}` : "—"}</code></td>
             <td>${statusIcon}</td>
           </tr>
         `;
@@ -513,9 +526,9 @@ export function createBulkOperations({
       <table class="results-table">
         <thead>
           <tr>
-            <th>Name</th>
-            <th>Address</th>
-            <th>Status</th>
+            <th>${Utils.escapeHtml(I18n.t("wallets-list-col-name"))}</th>
+            <th>${Utils.escapeHtml(I18n.t("wallets-field-address"))}</th>
+            <th>${Utils.escapeHtml(I18n.t("wallets-bulk-preview-status"))}</th>
           </tr>
         </thead>
         <tbody>
@@ -579,9 +592,12 @@ export function createBulkOperations({
         }
       });
 
+      const tokenEl = $("#export-confirm-token");
+      if (tokenEl) tokenEl.textContent = EXPORT_KEYS_CONFIRMATION;
+
       if (confirmInput && confirmBtn) {
         on(confirmInput, "input", () => {
-          confirmBtn.disabled = confirmInput.value !== "EXPORT KEYS";
+          confirmBtn.disabled = confirmInput.value !== EXPORT_KEYS_CONFIRMATION;
         });
       }
 
@@ -607,8 +623,10 @@ export function createBulkOperations({
     const includeInactive = $("#export-include-inactive")?.checked;
     const totalCount = includeInactive ? walletsData().length : activeCount;
 
-    const countEl = $("#export-wallet-count");
-    if (countEl) countEl.textContent = totalCount;
+    const warningEl = $("#export-keys-warning");
+    if (warningEl) {
+      warningEl.innerHTML = I18n.markup("wallets-bulk-confirm-warning", { count: totalCount });
+    }
 
     const confirmInput = $("#export-confirm-input");
     const confirmBtn = $("#export-keys-confirm-btn");
@@ -631,7 +649,7 @@ export function createBulkOperations({
 
     if (exportBtn) {
       exportBtn.disabled = true;
-      exportBtn.innerHTML = '<i class="icon-loader spin"></i> Exporting...';
+      setButtonContent(exportBtn, "icon-loader spin", I18n.t("wallets-bulk-export-busy"));
     }
 
     try {
@@ -647,7 +665,7 @@ export function createBulkOperations({
 
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(apiErrorMessage(data, "Export failed"));
+        throw new Error(apiErrorMessage(data, I18n.t("wallets-bulk-export-fallback")));
       }
 
       // Get filename from header or generate one
@@ -669,11 +687,11 @@ export function createBulkOperations({
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
 
-      Utils.showToast(`Exported wallets to ${filename}`, "success");
+      Utils.showToast(I18n.t("wallets-bulk-export-done", { filename }), "success");
       hideBulkExportModal();
     } catch (error) {
       console.error("[Wallets] Export failed:", error);
-      Utils.showToast(`Export failed: ${error.message}`, "error");
+      Utils.showToast(I18n.t("wallets-bulk-export-error", { reason: error.message }), "error");
     } finally {
       if (exportBtn) {
         exportBtn.disabled = false;

@@ -56,7 +56,8 @@ test("watch recovery keeps the copy task paused until a separate resume", async 
   assert.doesNotMatch(workspace, /Retry watch and resume|Wallet watch and copy task resumed/);
   assert.doesNotMatch(wording, /Retry watch and resume|Wallet watch and copy task resumed/);
   assert.match(englishI18n.t("copy-watch-retry-started"), /copy task remains paused/);
-  assert.match(watched, />Retry watch</);
+  assert.match(watched, /"wallets-watched-action-retry"/);
+  assert.match(englishI18n.t("wallets-watched-action-retry"), /^Retry watch$/);
   assert.match(watched, /processing_failed/);
 });
 
@@ -80,7 +81,11 @@ test("Helius catch-up is offered only for a capable watch and requires per-walle
   assert.match(workspace, /The wallet watch has not been restored/);
   assert.match(watched, /option\.provider === "helius"/);
   assert.doesNotMatch(watched, /Disable Helius|Use Helius/);
-  assert.match(watched, /10 credit minimum per request/);
+  assert.match(watched, /"wallets-watch-helius-allow-message"/);
+  assert.match(
+    englishI18n.t("wallets-watch-helius-allow-message"),
+    /10 credit minimum per request/
+  );
   assert.match(watched, /acknowledge_provider_usage: approved/);
 });
 

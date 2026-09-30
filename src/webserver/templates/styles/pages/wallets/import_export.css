@@ -588,3 +588,10 @@
 .import-step-content.hidden {
   display: none;
 }
+
+/* Fixed confirmation phrase shown above the dangerous-export input. */
+.export-confirm-token {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--text-primary);
+}

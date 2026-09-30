@@ -47,7 +47,9 @@ export function createWalletRenderers({
     const escaped = Utils.escapeHtml(address);
     const short = `${address.slice(0, 6)}...${address.slice(-4)}`;
     const url = `https://solscan.io/account/${encodeURIComponent(address)}`;
-    return `<div class="wt-mint-cell"><span class="wt-mint-addr">${short}</span><button type="button" class="copy-btn-mini" data-copy-address="${escaped}" title="Copy address"><i class="icon-copy"></i></button><a class="wt-mint-link" href="${url}" target="_blank" rel="noopener" title="View on Solscan"><i class="icon-external-link"></i></a></div>`;
+    const copyTitle = Utils.escapeHtml(I18n.t("wallets-address-copy"));
+    const linkTitle = Utils.escapeHtml(I18n.t("links-view-solscan"));
+    return `<div class="wt-mint-cell"><span class="wt-mint-addr" dir="ltr">${short}</span><button type="button" class="copy-btn-mini" data-copy-address="${escaped}" title="${copyTitle}"><i class="icon-copy"></i></button><a class="wt-mint-link" href="${url}" target="_blank" rel="noopener" title="${linkTitle}"><i class="icon-external-link"></i></a></div>`;
   }
 
   // Delegated click handler for the address copy button — mirrors the mint-copy
@@ -58,7 +60,7 @@ export function createWalletRenderers({
       if (!btn) return;
       e.stopPropagation();
       Utils.copyToClipboard(btn.dataset.copyAddress);
-      Utils.notifyCopied("Address");
+      Utils.notifyCopied(I18n.t("wallets-copied-address"));
     };
     rootEl.addEventListener("click", handler);
     return handler;
@@ -68,10 +70,10 @@ export function createWalletRenderers({
   const TOKEN_COLUMNS = [
     {
       id: "symbol",
-      label: "Token",
+      label: I18n.t("wallets-holdings-col-token"),
       sortable: true,
       render: (value, row) => {
-        const sym = Utils.escapeHtml(row.symbol || "Unknown");
+        const sym = Utils.escapeHtml(row.symbol || I18n.t("format-unknown"));
         const name = row.name ? Utils.escapeHtml(row.name) : null;
         const logo = row.logo_url || "";
         const logoHtml = logo
@@ -82,42 +84,47 @@ export function createWalletRenderers({
     },
     {
       id: "ui_amount",
-      label: "Balance",
+      label: I18n.t("wallets-holdings-col-balance"),
       sortable: true,
       render: (value) => (value != null ? Utils.formatNumber(value, { decimals: 4 }) : "—"),
     },
     {
       id: "value_sol",
-      label: "Value (SOL)",
+      label: I18n.t("wallets-holdings-col-value"),
       sortable: true,
       render: (value) => (value != null ? Utils.formatSol(value, { decimals: 4 }) : "—"),
     },
     {
       id: "is_token_2022",
-      label: "Type",
+      label: I18n.t("wallets-holdings-col-type"),
       sortable: true,
+      // l10n-ignore: token program standard names
       value: (row) => (row.is_token_2022 ? "Token-2022" : "SPL"),
       render: (value, row) =>
         row.is_token_2022
-          ? '<span class="wt-type-badge token2022">Token-2022</span>'
-          : '<span class="wt-type-badge spl">SPL</span>',
+          ? // l10n-ignore: token program standard name
+            '<span class="wt-type-badge token2022">Token-2022</span>'
+          : // l10n-ignore: token program standard name
+            '<span class="wt-type-badge spl">SPL</span>',
     },
     {
       id: "decimals",
-      label: "Decimals",
+      label: I18n.t("wallets-holdings-col-decimals"),
       sortable: true,
       render: (value) => (value != null ? value : "—"),
     },
     {
       id: "mint",
-      label: "Mint",
+      label: I18n.t("wallets-holdings-col-mint"),
       sortable: false,
       render: (value) => {
         if (!value) return "—";
         const escaped = Utils.escapeHtml(value);
         const short = `${value.slice(0, 6)}...${value.slice(-4)}`;
         const url = `https://solscan.io/token/${encodeURIComponent(value)}`;
-        return `<div class="wt-mint-cell"><span class="wt-mint-addr">${short}</span><button type="button" class="copy-btn-mini" data-copy-mint="${escaped}" title="Copy mint"><i class="icon-copy"></i></button><a class="wt-mint-link" href="${url}" target="_blank" rel="noopener" title="View on Solscan"><i class="icon-external-link"></i></a></div>`;
+        const copyTitle = Utils.escapeHtml(I18n.attr("links-copy-mint", "title"));
+        const linkTitle = Utils.escapeHtml(I18n.t("links-view-solscan"));
+        return `<div class="wt-mint-cell"><span class="wt-mint-addr" dir="ltr">${short}</span><button type="button" class="copy-btn-mini" data-copy-mint="${escaped}" title="${copyTitle}"><i class="icon-copy"></i></button><a class="wt-mint-link" href="${url}" target="_blank" rel="noopener" title="${linkTitle}"><i class="icon-external-link"></i></a></div>`;
       },
     },
   ];
@@ -127,34 +134,34 @@ export function createWalletRenderers({
   const WALLET_LIST_COLUMNS_BASE = [
     {
       id: "name",
-      label: "Name",
+      label: I18n.t("wallets-list-col-name"),
       sortable: true,
       className: "wallet-name-cell",
       render: (value) => Utils.escapeHtml(value || "—"),
     },
     {
       id: "address",
-      label: "Address",
+      label: I18n.t("wallets-field-address"),
       sortable: false,
       render: (value, row) => _addressCellHtml(row.address),
     },
     {
       id: "balance",
-      label: "Balance (SOL)",
+      label: I18n.t("wallets-list-col-balance"),
       sortable: true,
       className: "wallet-balance-cell",
       render: (value) => (value != null ? Utils.formatSol(value, { decimals: 4 }) : "—"),
     },
     {
       id: "wallet_type",
-      label: "Type",
+      label: I18n.t("wallets-list-col-type"),
       sortable: true,
       render: (value, row) =>
         `<span class="wallet-badge ${row.wallet_type}">${Utils.escapeHtml(I18n.label(WALLET_TYPE_LABELS, row.wallet_type))}</span>`,
     },
     {
       id: "created_at",
-      label: "Created",
+      label: I18n.t("wallets-list-col-created"),
       sortable: true,
       render: (value) => (value ? Utils.formatTimestamp(value, { variant: "short" }) : "—"),
     },
@@ -164,7 +171,7 @@ export function createWalletRenderers({
     ...WALLET_LIST_COLUMNS_BASE,
     {
       id: "actions",
-      label: "Actions",
+      label: I18n.t("wallets-list-col-actions"),
       type: "actions",
       sortable: false,
       actions: {
@@ -172,14 +179,14 @@ export function createWalletRenderers({
           {
             id: "export",
             icon: '<i class="icon-key"></i>',
-            tooltip: "Export private key",
+            tooltip: I18n.t("wallets-list-action-export"),
             size: "sm",
             onClick: (row) => handleWalletAction("export", row.id),
           },
           {
             id: "archive",
             icon: '<i class="icon-archive"></i>',
-            tooltip: "Archive wallet",
+            tooltip: I18n.t("wallets-list-action-archive"),
             size: "sm",
             onClick: (row) => handleWalletAction("archive", row.id),
           },
@@ -192,7 +199,7 @@ export function createWalletRenderers({
     ...WALLET_LIST_COLUMNS_BASE,
     {
       id: "actions",
-      label: "Actions",
+      label: I18n.t("wallets-list-col-actions"),
       type: "actions",
       sortable: false,
       actions: {
@@ -200,7 +207,7 @@ export function createWalletRenderers({
           {
             id: "restore",
             icon: '<i class="icon-archive-restore"></i>',
-            tooltip: "Restore wallet",
+            tooltip: I18n.t("wallets-list-action-restore"),
             variant: "success",
             size: "sm",
             onClick: (row) => handleWalletAction("restore", row.id),
@@ -208,14 +215,14 @@ export function createWalletRenderers({
           {
             id: "export",
             icon: '<i class="icon-key"></i>',
-            tooltip: "Export private key",
+            tooltip: I18n.t("wallets-list-action-export"),
             size: "sm",
             onClick: (row) => handleWalletAction("export", row.id),
           },
           {
             id: "delete",
             icon: '<i class="icon-trash-2"></i>',
-            tooltip: "Delete permanently",
+            tooltip: I18n.t("wallets-list-action-delete"),
             variant: "danger",
             size: "sm",
             onClick: (row) => handleWalletAction("delete", row.id),
@@ -241,8 +248,8 @@ export function createWalletRenderers({
     if (loading) {
       table.showBlockingState?.({
         variant: "loading",
-        title: "Loading wallets…",
-        description: "Preparing the selected wallet view.",
+        title: I18n.t("wallets-list-loading-title"),
+        description: I18n.t("wallets-list-loading-description"),
       });
     } else {
       table.hideBlockingState?.();
@@ -271,8 +278,8 @@ export function createWalletRenderers({
     const wallet = mainWallet();
 
     tokenTable.setToolbarIdentity({
-      title: wallet?.name || "No main wallet",
-      tag: wallet ? "Main" : "",
+      title: wallet?.name || I18n.t("wallets-holdings-no-main"),
+      tag: wallet ? I18n.t("wallets-holdings-main-tag") : "",
       address: {
         value: wallet?.address || "—",
         href: solscanAccountUrl(wallet?.address) || "#",
@@ -289,7 +296,7 @@ export function createWalletRenderers({
         id: "wt-last-used",
         value: wallet?.last_used_at
           ? Utils.formatTimestamp(wallet.last_used_at, { variant: "relative" })
-          : "Never",
+          : I18n.t("wallets-holdings-never"),
       },
     ]);
 
@@ -326,37 +333,47 @@ export function createWalletRenderers({
         column: "ui_amount",
         direction: "desc",
       },
-      emptyTitle: "No token holdings",
-      emptyMessage: "Tokens held by this wallet will appear here.",
+      emptyTitle: I18n.t("wallets-holdings-empty-title"),
+      emptyMessage: I18n.t("wallets-holdings-empty-message"),
       toolbar: {
         // Identity nodes are always rendered (even before the wallet loads) so
         // `setToolbarIdentity` can fill them in place on the first poll.
         identity: {
           icon: "icon-wallet",
-          title: wallet?.name || "Main Wallet",
-          tag: "Main",
+          title: wallet?.name || I18n.t("wallets-holdings-main-title"),
+          tag: I18n.t("wallets-holdings-main-tag"),
           address: {
             value: wallet?.address || "—",
             href: solscanAccountUrl(wallet?.address) || "#",
-            linkTooltip: "View on Solscan",
+            linkTooltip: I18n.t("links-view-solscan"),
           },
         },
         summary: [
-          { id: "wt-sol-balance", label: "SOL", value: "—" },
-          { id: "wt-tokens-count", label: "Tokens", value: "0", variant: "secondary" },
-          { id: "wt-last-used", label: "Last used", value: "—", variant: "secondary" },
+          { id: "wt-sol-balance", label: I18n.t("wallets-summary-sol"), value: "—" },
+          {
+            id: "wt-tokens-count",
+            label: I18n.t("wallets-holdings-tokens"),
+            value: "0",
+            variant: "secondary",
+          },
+          {
+            id: "wt-last-used",
+            label: I18n.t("wallets-holdings-last-used"),
+            value: "—",
+            variant: "secondary",
+          },
         ],
         search: {
           enabled: true,
           mode: "client",
-          placeholder: "Search by symbol or mint...",
+          placeholder: I18n.attr("wallets-holdings-search", "placeholder"),
         },
         buttons: [
           {
             id: "wt-export-key",
-            label: "Export Key",
+            label: I18n.t("wallets-holdings-export"),
             icon: "icon-key",
-            tooltip: "Export this wallet's private key",
+            tooltip: I18n.t("wallets-holdings-export-tooltip"),
             onClick: () => {
               const current = mainWallet();
               if (current) handleWalletAction("export", current.id);
@@ -365,7 +382,7 @@ export function createWalletRenderers({
           {
             id: "wt-refresh",
             icon: "icon-refresh-cw",
-            tooltip: "Refresh",
+            tooltip: I18n.t("common-action-refresh"),
             onClick: (btn) => onRefresh?.(btn),
           },
         ],
@@ -382,7 +399,7 @@ export function createWalletRenderers({
       if (btn) {
         e.stopPropagation();
         Utils.copyToClipboard(btn.dataset.copyMint);
-        Utils.notifyCopied("Mint address");
+        Utils.notifyCopied(I18n.t("wallets-copied-mint"));
       }
     };
     dtRoot.addEventListener("click", tokenTableClickHandler);
@@ -446,18 +463,26 @@ export function createWalletRenderers({
         zebra: true,
         fitToContainer: true,
         sorting: { mode: "client", column: "created_at", direction: "desc" },
-        emptyTitle: "No secondary wallets",
-        emptyMessage:
-          "Create additional wallets to organize your trading activities across multiple accounts.",
+        emptyTitle: I18n.t("wallets-secondaries-empty-title"),
+        emptyMessage: I18n.t("wallets-secondaries-empty-message"),
         toolbar: {
           summary: [
-            { id: "secondaries-count", label: "Wallets", value: "0", variant: "secondary" },
+            {
+              id: "secondaries-count",
+              label: I18n.t("wallets-list-count"),
+              value: "0",
+              variant: "secondary",
+            },
           ],
-          search: { enabled: true, mode: "client", placeholder: "Search by name or address..." },
+          search: {
+            enabled: true,
+            mode: "client",
+            placeholder: I18n.attr("wallets-list-search", "placeholder"),
+          },
           buttons: [
             {
               id: "secondaries-add",
-              label: "Add Wallet",
+              label: I18n.t("wallets-secondaries-add"),
               icon: "icon-plus",
               variant: "primary",
               onClick: () => onAddWallet?.(),
@@ -466,14 +491,14 @@ export function createWalletRenderers({
             // collapse into the overflow menu rather than widening the bar.
             {
               id: "secondaries-import",
-              label: "Import",
+              label: I18n.t("common-action-import"),
               icon: "icon-upload",
               overflow: true,
               onClick: () => onImportWallets?.(),
             },
             {
               id: "secondaries-export",
-              label: "Export",
+              label: I18n.t("common-action-export"),
               icon: "icon-download",
               overflow: true,
               onClick: () => onExportWallets?.(),
@@ -481,7 +506,7 @@ export function createWalletRenderers({
             {
               id: "secondaries-refresh",
               icon: "icon-refresh-cw",
-              tooltip: "Refresh",
+              tooltip: I18n.t("common-action-refresh"),
               onClick: (btn) => onRefresh?.(btn),
             },
           ],
@@ -519,16 +544,27 @@ export function createWalletRenderers({
         zebra: true,
         fitToContainer: true,
         sorting: { mode: "client", column: "created_at", direction: "desc" },
-        emptyTitle: "No archived wallets",
-        emptyMessage: "Wallets you archive will be safely stored here for future reference.",
+        emptyTitle: I18n.t("wallets-archive-empty-title"),
+        emptyMessage: I18n.t("wallets-archive-empty-message"),
         toolbar: {
-          summary: [{ id: "archive-count", label: "Wallets", value: "0", variant: "secondary" }],
-          search: { enabled: true, mode: "client", placeholder: "Search by name or address..." },
+          summary: [
+            {
+              id: "archive-count",
+              label: I18n.t("wallets-list-count"),
+              value: "0",
+              variant: "secondary",
+            },
+          ],
+          search: {
+            enabled: true,
+            mode: "client",
+            placeholder: I18n.attr("wallets-list-search", "placeholder"),
+          },
           buttons: [
             {
               id: "archive-refresh",
               icon: "icon-refresh-cw",
-              tooltip: "Refresh",
+              tooltip: I18n.t("common-action-refresh"),
               onClick: (btn) => onRefresh?.(btn),
             },
           ],

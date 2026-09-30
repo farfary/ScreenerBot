@@ -22,12 +22,26 @@ import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 
 const POLL_INTERVAL = 30000; // 30 seconds for balance updates
 
-const WALLET_TABS = [
-  { id: "main", label: '<i class="icon-star"></i> Main Wallet' },
-  { id: "secondaries", label: '<i class="icon-wallet"></i> Secondaries' },
-  { id: "archive", label: '<i class="icon-archive"></i> Archive' },
-  { id: "watched", label: '<i class="icon-eye"></i> Watched' },
+const walletTab = (id, icon, name) => ({
+  id,
+  label: `<i class="${icon}"></i> ${Utils.escapeHtml(name)}`,
+});
+
+const buildWalletTabs = () => [
+  walletTab("main", "icon-star", I18n.t("wallets-tab-main")),
+  walletTab("secondaries", "icon-wallet", I18n.t("wallets-tab-secondaries")),
+  walletTab("archive", "icon-archive", I18n.t("wallets-tab-archive")),
+  walletTab("watched", "icon-eye", I18n.t("wallets-tab-watched")),
 ];
+
+// Replaces a button's content with an icon and a text label built through the DOM.
+function setButtonContent(button, iconClass, label) {
+  const icon = document.createElement("i");
+  icon.className = iconClass;
+  const text = document.createElement("span");
+  text.textContent = label;
+  button.replaceChildren(icon, " ", text);
+}
 
 // =============================================================================
 // State
@@ -69,6 +83,7 @@ function createLifecycle() {
         showModal,
         hideModal,
         confirm: (config) => ConfirmationDialog.show(config),
+        setButtonContent,
         enhanceAllSelects,
         loadAllData,
         walletsData: () => walletsData,
@@ -100,7 +115,7 @@ function createLifecycle() {
       // Initialize tab bar
       tabBar = new TabBar({
         container: "#subTabsContainer",
-        tabs: WALLET_TABS,
+        tabs: buildWalletTabs(),
         defaultTab: "main",
         stateKey: "wallets.activeTab",
         pageName: "wallets",
@@ -146,6 +161,7 @@ function createLifecycle() {
           async () => {
             await loadActiveTab();
           },
+          // l10n-ignore: poller diagnostic label, never displayed
           { label: "Wallets", intervalMs: POLL_INTERVAL }
         );
       }
@@ -328,7 +344,7 @@ function setupExportModal() {
       const keyEl = $("#exported-key");
       if (keyEl && keyEl.textContent !== "...") {
         Utils.copyToClipboard(keyEl.textContent);
-        Utils.notifyCopied("Private key");
+        Utils.notifyCopied(I18n.t("wallets-copied-private-key"));
       }
     });
   }
@@ -470,7 +486,11 @@ async function handleRefresh(btn) {
     // No success toast: the table repaints and the button's spinner stops.
     await loadActiveTab({ force: true });
   } catch {
-    Utils.showToast({ key: "wallets-load", type: "error", title: "Could not refresh wallets" });
+    Utils.showToast({
+      key: "wallets-load",
+      type: "error",
+      title: I18n.t("wallets-refresh-failed"),
+    });
   } finally {
     if (icon) icon.classList.remove("spin");
     btn.disabled = false;
@@ -484,7 +504,7 @@ async function handleCreateWallet(e) {
   const originalHtml = submitBtn.innerHTML;
 
   submitBtn.disabled = true;
-  submitBtn.innerHTML = '<i class="icon-loader spin"></i> Creating...';
+  setButtonContent(submitBtn, "icon-loader spin", I18n.t("wallets-create-busy"));
 
   try {
     const response = await fetch("/api/wallets", {
@@ -498,16 +518,16 @@ async function handleCreateWallet(e) {
 
     const data = await response.json();
     if (!response.ok) {
-      throw new Error(apiErrorMessage(data, "Creation failed"));
+      throw new Error(apiErrorMessage(data, I18n.t("wallets-create-fallback")));
     }
 
-    Utils.showToast(`Wallet "${data.wallet.name}" created!`, "success");
+    Utils.showToast(I18n.t("wallets-create-done", { name: data.wallet.name }), "success");
     form.reset();
     hideModal("add-wallet-modal");
     await loadAllData();
   } catch (error) {
     console.error("[Wallets] Create failed:", error);
-    Utils.showToast(`Failed: ${error.message}`, "error");
+    Utils.showToast(I18n.t("wallets-toast-failed", { reason: error.message }), "error");
   } finally {
     submitBtn.disabled = false;
     submitBtn.innerHTML = originalHtml;
@@ -521,7 +541,7 @@ async function handleImportWallet(e) {
   const originalHtml = submitBtn.innerHTML;
 
   submitBtn.disabled = true;
-  submitBtn.innerHTML = '<i class="icon-loader spin"></i> Importing...';
+  setButtonContent(submitBtn, "icon-loader spin", I18n.t("wallets-import-busy"));
 
   try {
     const response = await fetch("/api/wallets/import", {
@@ -536,16 +556,16 @@ async function handleImportWallet(e) {
 
     const data = await response.json();
     if (!response.ok) {
-      throw new Error(apiErrorMessage(data, "Import failed"));
+      throw new Error(apiErrorMessage(data, I18n.t("wallets-import-failed")));
     }
 
-    Utils.showToast(`Wallet "${data.wallet.name}" imported!`, "success");
+    Utils.showToast(I18n.t("wallets-import-done", { name: data.wallet.name }), "success");
     form.reset();
     hideModal("add-wallet-modal");
     await loadAllData();
   } catch (error) {
     console.error("[Wallets] Import failed:", error);
-    Utils.showToast(`Failed: ${error.message}`, "error");
+    Utils.showToast(I18n.t("wallets-toast-failed", { reason: error.message }), "error");
   } finally {
     submitBtn.disabled = false;
     submitBtn.innerHTML = originalHtml;
@@ -573,8 +593,12 @@ function showArchiveModal(id) {
   currentArchiveWalletId = id;
   const wallet = walletsData.find((w) => w.id === parseInt(id, 10));
 
-  const nameEl = $("#archive-wallet-name");
-  if (nameEl && wallet) nameEl.textContent = wallet.name;
+  const textEl = $("#archive-confirm-text");
+  if (textEl) {
+    textEl.innerHTML = I18n.markup("wallets-archive-confirm-text", {
+      name: wallet ? wallet.name : I18n.t("wallets-this-wallet"),
+    });
+  }
 
   showModal("archive-modal");
 }
@@ -585,7 +609,7 @@ async function handleArchiveWallet() {
   const confirmBtn = $("#confirm-archive-btn");
   if (confirmBtn) {
     confirmBtn.disabled = true;
-    confirmBtn.innerHTML = '<i class="icon-loader spin"></i> Archiving...';
+    setButtonContent(confirmBtn, "icon-loader spin", I18n.t("wallets-archive-busy"));
   }
 
   try {
@@ -593,16 +617,16 @@ async function handleArchiveWallet() {
       method: "POST",
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(apiErrorMessage(data, "Failed"));
+    if (!response.ok) throw new Error(apiErrorMessage(data, I18n.t("wallets-action-failed")));
 
-    Utils.showToast("Wallet archived", "success");
+    Utils.showToast(I18n.t("wallets-archive-done"), "success");
     closeArchiveModal();
     await loadAllData();
   } catch (error) {
-    Utils.showToast(`Failed: ${error.message}`, "error");
+    Utils.showToast(I18n.t("wallets-toast-failed", { reason: error.message }), "error");
     if (confirmBtn) {
       confirmBtn.disabled = false;
-      confirmBtn.innerHTML = '<i class="icon-archive"></i> Yes, Archive';
+      setButtonContent(confirmBtn, "icon-archive", I18n.t("wallets-archive-confirm"));
     }
   }
 }
@@ -614,7 +638,7 @@ function closeArchiveModal() {
   const confirmBtn = $("#confirm-archive-btn");
   if (confirmBtn) {
     confirmBtn.disabled = false;
-    confirmBtn.innerHTML = '<i class="icon-archive"></i> Yes, Archive';
+    setButtonContent(confirmBtn, "icon-archive", I18n.t("wallets-archive-confirm"));
   }
 }
 
@@ -622,12 +646,12 @@ async function restoreWallet(id) {
   try {
     const response = await fetch(`/api/wallets/${id}/restore`, { method: "POST" });
     const data = await response.json();
-    if (!response.ok) throw new Error(apiErrorMessage(data, "Failed"));
+    if (!response.ok) throw new Error(apiErrorMessage(data, I18n.t("wallets-action-failed")));
 
-    Utils.showToast("Wallet restored", "success");
+    Utils.showToast(I18n.t("wallets-restore-done"), "success");
     await loadAllData();
   } catch (error) {
-    Utils.showToast(`Failed: ${error.message}`, "error");
+    Utils.showToast(I18n.t("wallets-toast-failed", { reason: error.message }), "error");
   }
 }
 
@@ -654,7 +678,7 @@ async function handleExportKey() {
   const confirmBtn = $("#confirm-export-btn");
   if (confirmBtn) {
     confirmBtn.disabled = true;
-    confirmBtn.innerHTML = '<i class="icon-loader spin"></i> Decrypting...';
+    setButtonContent(confirmBtn, "icon-loader spin", I18n.t("wallets-export-busy"));
   }
 
   try {
@@ -662,7 +686,7 @@ async function handleExportKey() {
       method: "POST",
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(apiErrorMessage(data, "Failed"));
+    if (!response.ok) throw new Error(apiErrorMessage(data, I18n.t("wallets-action-failed")));
 
     const keyDisplay = $("#export-key-display");
     const keyEl = $("#exported-key");
@@ -671,9 +695,9 @@ async function handleExportKey() {
     if (keyDisplay) keyDisplay.classList.remove("hidden");
     if (confirmBtn) confirmBtn.classList.add("hidden");
 
-    Utils.showToast("Key revealed - handle with care", "warning");
+    Utils.showToast(I18n.t("wallets-export-revealed"), "warning");
   } catch (error) {
-    Utils.showToast(`Failed: ${error.message}`, "error");
+    Utils.showToast(I18n.t("wallets-toast-failed", { reason: error.message }), "error");
     closeExportModal();
   }
 }
@@ -690,8 +714,12 @@ function showDeleteModal(id) {
   currentDeleteWalletId = id;
   const wallet = walletsData.find((w) => w.id === parseInt(id, 10));
 
-  const nameEl = $("#delete-wallet-name");
-  if (nameEl && wallet) nameEl.textContent = wallet.name;
+  const textEl = $("#delete-confirm-text");
+  if (textEl) {
+    textEl.innerHTML = I18n.markup("wallets-delete-confirm-text", {
+      name: wallet ? wallet.name : I18n.t("wallets-this-wallet"),
+    });
+  }
 
   showModal("delete-modal");
 }
@@ -702,7 +730,7 @@ async function handleDeleteWallet() {
   const confirmBtn = $("#confirm-delete-btn");
   if (confirmBtn) {
     confirmBtn.disabled = true;
-    confirmBtn.innerHTML = '<i class="icon-loader spin"></i> Deleting...';
+    setButtonContent(confirmBtn, "icon-loader spin", I18n.t("wallets-delete-busy"));
   }
 
   try {
@@ -710,16 +738,16 @@ async function handleDeleteWallet() {
       method: "DELETE",
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(apiErrorMessage(data, "Failed"));
+    if (!response.ok) throw new Error(apiErrorMessage(data, I18n.t("wallets-action-failed")));
 
-    Utils.showToast("Wallet deleted permanently", "success");
+    Utils.showToast(I18n.t("wallets-delete-done"), "success");
     closeDeleteModal();
     await loadAllData();
   } catch (error) {
-    Utils.showToast(`Failed: ${error.message}`, "error");
+    Utils.showToast(I18n.t("wallets-toast-failed", { reason: error.message }), "error");
     if (confirmBtn) {
       confirmBtn.disabled = false;
-      confirmBtn.innerHTML = '<i class="icon-trash-2"></i> Yes, Delete';
+      setButtonContent(confirmBtn, "icon-trash-2", I18n.t("wallets-delete-confirm"));
     }
   }
 }
@@ -731,7 +759,7 @@ function closeDeleteModal() {
   const confirmBtn = $("#confirm-delete-btn");
   if (confirmBtn) {
     confirmBtn.disabled = false;
-    confirmBtn.innerHTML = '<i class="icon-trash-2"></i> Yes, Delete';
+    setButtonContent(confirmBtn, "icon-trash-2", I18n.t("wallets-delete-confirm"));
   }
 }
 

@@ -309,6 +309,22 @@ mod tests {
         }
     }
 
+    /// Kinds that show a detail line under the watch status. Mirrors
+    /// `WATCH_DISABLE_DETAIL_LABELS` (pages/wallets/watched.js), which omits
+    /// `unknown` on purpose.
+    #[test]
+    fn every_disable_reason_but_unknown_has_a_detail_line() {
+        for reason in disable_reasons() {
+            let kind = serde_json::to_value(&reason).unwrap()["kind"]
+                .as_str()
+                .unwrap()
+                .replace('_', "-");
+            let key = format!("wallets-watch-reason-{kind}");
+            let present = format_en(&key, None) != key;
+            assert_eq!(present, reason != WatchDisableReason::Unknown, "{key}");
+        }
+    }
+
     #[test]
     fn every_runtime_error_has_catalog_text() {
         for error in runtime_errors() {
