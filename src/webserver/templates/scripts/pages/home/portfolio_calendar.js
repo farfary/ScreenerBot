@@ -166,10 +166,7 @@ export function createCalendar(fetcher) {
     if (pnlEl) {
       const mp = data.month_net_pnl_sol || 0;
       const cls = mp > 0 ? "profit" : mp < 0 ? "loss" : "flat";
-      pnlEl.textContent = `${mp > 0 ? "+" : ""}${Utils.formatSol(mp, {
-        decimals: 3,
-        suffix: "",
-      })} SOL`;
+      pnlEl.textContent = `${mp > 0 ? "+" : ""}${Utils.formatSol(mp, { decimals: 3 })}`;
       pnlEl.className = `calendar-summary-value ${cls}`;
     }
     const tradesEl = document.getElementById("calendarMonthTrades");

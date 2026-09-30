@@ -24,6 +24,10 @@ import {
   formatAddressCompact,
   formatSecondsToTime,
   formatList,
+  formatFixed,
+  withPercentUnit,
+  withSolUnit,
+  withUsdSymbol,
 } from "./format.js";
 
 (function () {
@@ -431,7 +435,7 @@ import {
     );
     lines.push(
       `Confidence: ${
-        price.confidence != null ? (Number(price.confidence) * 100).toFixed(1) + "%" : "N/A"
+        price.confidence != null ? formatPercentValue(Number(price.confidence) * 100, { decimals: 1, plus: "" }) : "N/A"
       }`
     );
     lines.push(
@@ -441,18 +445,18 @@ import {
     );
     lines.push(
       `Market Cap: ${
-        market.market_cap != null ? "$" + formatNumber(market.market_cap, DEBUG_COUNT) : "N/A"
+        market.market_cap != null ? withUsdSymbol(formatNumber(market.market_cap, DEBUG_COUNT)) : "N/A"
       }`
     );
-    lines.push(`FDV: ${market.fdv != null ? "$" + formatNumber(market.fdv, DEBUG_COUNT) : "N/A"}`);
+    lines.push(`FDV: ${market.fdv != null ? withUsdSymbol(formatNumber(market.fdv, DEBUG_COUNT)) : "N/A"}`);
     lines.push(
       `Liquidity: ${
-        market.liquidity_usd != null ? "$" + formatNumber(market.liquidity_usd, DEBUG_COUNT) : "N/A"
+        market.liquidity_usd != null ? withUsdSymbol(formatNumber(market.liquidity_usd, DEBUG_COUNT)) : "N/A"
       }`
     );
     lines.push(
       `24h Volume: ${
-        market.volume_24h != null ? "$" + formatNumber(market.volume_24h, DEBUG_COUNT) : "N/A"
+        market.volume_24h != null ? withUsdSymbol(formatNumber(market.volume_24h, DEBUG_COUNT)) : "N/A"
       }`
     );
     lines.push("");
@@ -489,7 +493,7 @@ import {
     lines.push(
       `Top 10 Concentration: ${
         security.top_10_concentration != null
-          ? Number(security.top_10_concentration).toFixed(2) + "%"
+          ? formatPercentValue(security.top_10_concentration, { decimals: 2, plus: "" })
           : "N/A"
       }`
     );
@@ -512,10 +516,10 @@ import {
         lines.push(`Open Positions: ${pos.open_position ? "1" : "0"}`);
         lines.push(`Closed Positions: ${pos.closed_positions_count ?? "0"}`);
         lines.push(
-          `Total P&L: ${pos.total_pnl != null ? Number(pos.total_pnl).toFixed(4) + " SOL" : "N/A"}`
+          `Total P&L: ${pos.total_pnl != null ? formatSol(pos.total_pnl, { decimals: 4 }) : "N/A"}`
         );
         lines.push(
-          `Win Rate: ${pos.win_rate != null ? Number(pos.win_rate).toFixed(1) + "%" : "N/A"}`
+          `Win Rate: ${pos.win_rate != null ? formatPercentValue(pos.win_rate, { decimals: 1, plus: "" }) : "N/A"}`
         );
         if (pos.open_position) {
           const o = pos.open_position;
@@ -527,7 +531,7 @@ import {
           );
           lines.push(
             `  Entry Size: ${
-              o.entry_size_sol != null ? Number(o.entry_size_sol).toFixed(4) + " SOL" : "N/A"
+              o.entry_size_sol != null ? formatSol(o.entry_size_sol, { decimals: 4 }) : "N/A"
             }`
           );
           lines.push(
@@ -537,13 +541,13 @@ import {
           );
           lines.push(
             `  Unrealized P&L: ${
-              o.unrealized_pnl != null ? Number(o.unrealized_pnl).toFixed(4) + " SOL" : "N/A"
+              o.unrealized_pnl != null ? formatSol(o.unrealized_pnl, { decimals: 4 }) : "N/A"
             }`
           );
           lines.push(
             `  Unrealized P&L %: ${
               o.unrealized_pnl_percent != null
-                ? Number(o.unrealized_pnl_percent).toFixed(2) + "%"
+                ? formatPercentValue(o.unrealized_pnl_percent, { decimals: 2, plus: "" })
                 : "N/A"
             }`
           );
@@ -565,28 +569,28 @@ import {
           const historyPrice =
             p.price_sol != null ? formatPriceSol(p.price_sol, { fallback: "N/A" }) : "N/A";
           lines.push(
-            `  ${i + 1}. ${date} - ${historyPrice} SOL (conf: ${(p.confidence * 100).toFixed(1)}%)`
+            `  ${i + 1}. ${date} - ${withSolUnit(historyPrice)} (conf: ${formatPercentValue(p.confidence * 100, { decimals: 1, plus: "" })})`
           );
         });
       }
       if (pd.price_stats) {
         const ps = pd.price_stats;
         lines.push(
-          `Min Price: ${formatPriceSol(ps.min_price, {
-            fallback: "N/A",
-          })} SOL`
+          `Min Price: ${withSolUnit(
+            formatPriceSol(ps.min_price, { fallback: "N/A" })
+          )}`
         );
         lines.push(
-          `Max Price: ${formatPriceSol(ps.max_price, {
-            fallback: "N/A",
-          })} SOL`
+          `Max Price: ${withSolUnit(
+            formatPriceSol(ps.max_price, { fallback: "N/A" })
+          )}`
         );
         lines.push(
-          `Avg Price: ${formatPriceSol(ps.avg_price, {
-            fallback: "N/A",
-          })} SOL`
+          `Avg Price: ${withSolUnit(
+            formatPriceSol(ps.avg_price, { fallback: "N/A" })
+          )}`
         );
-        lines.push(`Volatility: ${Number(ps.price_volatility).toFixed(2)}%`);
+        lines.push(`Volatility: ${formatPercentValue(ps.price_volatility, { decimals: 2, plus: "" })}`);
         lines.push(`Data Points: ${ps.data_points}`);
         lines.push(
           `Time Span: ${ps.time_span_seconds}s (${(ps.time_span_seconds / 60).toFixed(0)} min)`
@@ -666,22 +670,22 @@ import {
       if (pd.fee_details) {
         lines.push("Fees:");
         lines.push(
-          `  Entry: ${pd.fee_details.entry_fee_sol?.toFixed(6) || "N/A"} SOL (${
+          `  Entry: ${withSolUnit(formatFixed(pd.fee_details.entry_fee_sol, { decimals: 6, fallback: "N/A" }))} (${
             pd.fee_details.entry_fee_lamports || 0
           } lamports)`
         );
         lines.push(
-          `  Exit: ${pd.fee_details.exit_fee_sol?.toFixed(6) || "N/A"} SOL (${
+          `  Exit: ${withSolUnit(formatFixed(pd.fee_details.exit_fee_sol, { decimals: 6, fallback: "N/A" }))} (${
             pd.fee_details.exit_fee_lamports || 0
           } lamports)`
         );
-        lines.push(`  Total: ${pd.fee_details.total_fees_sol.toFixed(6)} SOL`);
+        lines.push(`  Total: ${withSolUnit(formatFixed(pd.fee_details.total_fees_sol, { decimals: 6 }))}`);
       }
       if (pd.profit_targets) {
         lines.push(
-          `Profit Targets: Min ${
+          `Profit Targets: Min ${withPercentUnit(
             pd.profit_targets.min_target_percent || "N/A"
-          }%, Max ${pd.profit_targets.max_target_percent || "N/A"}%`
+          )}, Max ${withPercentUnit(pd.profit_targets.max_target_percent || "N/A")}`
         );
         lines.push(`Liquidity Tier: ${pd.profit_targets.liquidity_tier || "N/A"}`);
       }
@@ -691,10 +695,10 @@ import {
         lines.push(`  Low: ${pd.price_tracking.price_lowest}`);
         lines.push(`  Current: ${pd.price_tracking.current_price || "N/A"}`);
         if (pd.price_tracking.drawdown_from_high) {
-          lines.push(`  Drawdown from High: ${pd.price_tracking.drawdown_from_high.toFixed(2)}%`);
+          lines.push(`  Drawdown from High: ${formatPercentValue(pd.price_tracking.drawdown_from_high, { decimals: 2, plus: "" })}`);
         }
         if (pd.price_tracking.gain_from_low) {
-          lines.push(`  Gain from Low: ${pd.price_tracking.gain_from_low.toFixed(2)}%`);
+          lines.push(`  Gain from Low: ${formatPercentValue(pd.price_tracking.gain_from_low, { decimals: 2, plus: "" })}`);
         }
       }
       if (pd.phantom_details) {

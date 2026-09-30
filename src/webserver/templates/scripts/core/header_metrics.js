@@ -1,7 +1,7 @@
 // Live metrics and effective Auto Trader state for the global dashboard header.
 import { Poller } from "./poller.js";
 import { requestManager } from "./request_manager.js";
-import { formatFixed, formatPercentValue, formatSol } from "./format.js";
+import { formatFixed, formatPercentValue, formatSol, withUsdSymbol } from "./format.js";
 import { formatNumber, showToast } from "./utils.js";
 
 const METRICS_POLL_INTERVAL = 5000;
@@ -139,7 +139,7 @@ function updateSolPriceCard(sol) {
   const price = finiteNumber(sol?.price_usd);
   value.textContent =
     Number.isFinite(price) && price > 0
-      ? `$${formatNumber(price, 2)}`
+      ? withUsdSymbol(formatNumber(price, 2))
       : "—";
 
   const percent = finiteNumber(sol?.change_24h_percent);

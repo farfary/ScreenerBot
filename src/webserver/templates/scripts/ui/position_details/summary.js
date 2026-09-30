@@ -6,7 +6,7 @@
  * token's risk and the market it trades in. Flat sections separated by rules, never cards.
  */
 import * as Utils from "../../core/utils.js";
-import { formatPercentValue, withAgo } from "../../core/format.js";
+import { formatPercentValue, withAgo, withSolUnit } from "../../core/format.js";
 import { closeReasonText } from "../trade_reason.js";
 
 // Labels, sub-lines and titles are plain text and escaped here; values are HTML.
@@ -164,8 +164,8 @@ export function applySummaryMixin(PositionDetailsDialog) {
     const maxEntry = prices.length > 1 ? Math.max(...prices) : null;
 
     const rows = [
-      fact(I18n.t("positions-range-peak"), `${this._formatPrice(peak)} SOL`, { sub: vsEntry(peak) }),
-      fact(I18n.t("positions-range-low"), `${this._formatPrice(low)} SOL`, { sub: vsEntry(low) }),
+      fact(I18n.t("positions-range-peak"), withSolUnit(this._formatPrice(peak)), { sub: vsEntry(peak) }),
+      fact(I18n.t("positions-range-low"), withSolUnit(this._formatPrice(low)), { sub: vsEntry(low) }),
       fromPeak !== null
         ? fact(
             settled ? I18n.t("positions-fact-exit-vs-peak") : I18n.t("positions-fact-now-vs-peak"),

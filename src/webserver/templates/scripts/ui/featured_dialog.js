@@ -405,7 +405,7 @@ class FeaturedDialog {
             <span class="feat-card-stat-label">${this._escapeHtml(label)}</span>
             <span class="feat-card-stat-value">${
               kind === "compact"
-                ? Utils.formatCompactNumber(value, { prefix: "$" })
+                ? Utils.formatCompactNumber(value, { usd: true })
                 : Utils.formatCompactNumber(value)
             }</span>
           </div>`

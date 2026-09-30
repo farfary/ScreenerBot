@@ -9,6 +9,8 @@ import {
   formatFixed,
   formatPercentValue,
   formatTimeSpan,
+  withApprox,
+  withPercentUnit,
   withSolUnit,
 } from "../../core/format.js";
 
@@ -251,13 +253,13 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
     // Receive leg. The server's pre-formatted string says "tokens"; prefer our own
     // symbol-aware formatting and fall back to it only when the symbol is unknown.
     const knowsOutUnit = Boolean(symbol) || isSell;
-    this.quoteOutputEl.textContent = `≈ ${
+    this.quoteOutputEl.textContent = withApprox(
       knowsOutUnit ? formatAmount(quote.output_amount, outUnit) : quote.output_formatted
-    }`;
+    );
     if (this.quoteUnitPriceEl) {
       const pp = quote.price_per_token_sol;
       this.quoteUnitPriceEl.textContent =
-        typeof pp === "number" && pp > 0 ? `1 ${tokenUnit} ≈ ${withSolUnit(trimSol(pp))}` : "";
+        typeof pp === "number" && pp > 0 ? `1 ${tokenUnit} ${withApprox(withSolUnit(trimSol(pp)))}` : "";
     }
 
     // Price impact with color
@@ -287,10 +289,10 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
     // Fees
     this.quotePlatformFeeEl.textContent =
       quote.platform_fee_sol == null
-        ? `${quote.platform_fee_pct}%`
-        : `${quote.platform_fee_pct}% · ${withSolUnit(trimSol(quote.platform_fee_sol))}`;
+        ? withPercentUnit(quote.platform_fee_pct)
+        : `${withPercentUnit(quote.platform_fee_pct)} · ${withSolUnit(trimSol(quote.platform_fee_sol))}`;
     this.quoteNetworkFeeEl.textContent =
-      quote.network_fee_sol == null ? "—" : `≈ ${withSolUnit(trimSol(quote.network_fee_sol))}`;
+      quote.network_fee_sol == null ? "—" : withApprox(withSolUnit(trimSol(quote.network_fee_sol)));
 
     this.quoteSlippageEl.textContent = formatPercentValue(quote.slippage_bps / 100, { decimals: 1, plus: "" });
 

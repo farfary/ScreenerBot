@@ -16,7 +16,7 @@
 
 import { $, dirSign, scrollStart } from "../core/dom.js";
 import { escapeHtml, resolveTokenLogoUrl } from "../core/utils.js";
-import { formatFixed, formatPercentValue } from "../core/format.js";
+import { formatFixed, formatPercentValue, withUsdSymbol } from "../core/format.js";
 import { openFeaturedDialog } from "./featured_dialog.js";
 import { boostTier, formatBoostCount } from "../core/boosts.js";
 import * as Hints from "../core/hints.js";
@@ -429,7 +429,7 @@ class FeaturedRow {
       } else if (token.price_usd != null) {
         const price = token.price_usd;
         const shown = formatFixed(price, { decimals: price < 0.01 ? 4 : 2 });
-        metric = `<span class="row-metric">$${shown}</span>`;
+        metric = `<span class="row-metric">${withUsdSymbol(shown)}</span>`;
       }
     }
 

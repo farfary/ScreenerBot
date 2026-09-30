@@ -14,6 +14,7 @@
 
 import { stepLabel } from "../ui/action_step.js";
 import { closeReasonText } from "../ui/trade_reason.js";
+import { formatNumber, formatSol, withPercentUnit, withSolUnit } from "./format.js";
 
 /** The backend writes the literal "Unknown" when it could not resolve a symbol. */
 export function symbolOf(action) {
@@ -35,7 +36,7 @@ function solFromLamports(lamports) {
   if (!Number.isFinite(value) || value <= 0) return "";
   // Four decimals resolves every rent deposit a venue realistically charges
   // without turning a toast into a number nobody can read.
-  return `${Number(value / 1e9).toFixed(4)} SOL`;
+  return formatSol(value / 1e9, { decimals: 4 });
 }
 
 /**
@@ -95,11 +96,11 @@ export function outcomeMessage(action) {
   const avoided = guard && guard.sol ? ` · avoided ${guard.sol} in ${guard.venue || "venue"} rent` : "";
 
   const size = Number(meta.size_sol);
-  if (Number.isFinite(size) && size > 0) return `${size} SOL${via}${avoided}`;
+  if (Number.isFinite(size) && size > 0) return `${withSolUnit(formatNumber(size, { decimals: 0, maxDecimals: 9, useGrouping: false }))}${via}${avoided}`;
 
   const percentage = Number(meta.percentage);
   if (Number.isFinite(percentage) && percentage > 0) {
-    return `${percentage >= 100 ? "Full exit" : `${percentage}% exit`}${via}${avoided}`;
+    return `${percentage >= 100 ? "Full exit" : `${withPercentUnit(percentage)} exit`}${via}${avoided}`;
   }
 
   return typeof meta.reason === "string" && meta.reason ? closeReasonText(meta.reason) : null;

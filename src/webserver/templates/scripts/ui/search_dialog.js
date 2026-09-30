@@ -13,7 +13,7 @@
 
 import { $, create, show, hide, on, off } from "../core/dom.js";
 import { showToast, notifyCopied } from "../core/utils.js";
-import { formatCompactFixed, formatNumber } from "../core/format.js";
+import { formatCompactFixed, formatNumber, withUsdSymbol } from "../core/format.js";
 import { ConfirmationDialog } from "./confirmation_dialog.js";
 import { apiErrorMessage } from "../core/request_manager.js";
 
@@ -70,7 +70,7 @@ const formatMarketCap = (value) => formatCompactFixed(value);
 /** Price in USD with two to six decimals. */
 const formatPriceUSD = (value) => {
   const text = formatNumber(value, { decimals: 2, maxDecimals: 6, fallback: "" });
-  return text === "" ? "—" : `$${text}`;
+  return text === "" ? "—" : withUsdSymbol(text);
 };
 
 /**

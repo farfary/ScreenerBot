@@ -3,6 +3,7 @@
  * formatting shared by the header, summary, chart and activity, and guarded region painting.
  */
 import * as Utils from "../../core/utils.js";
+import { withPercentUnit, withSolUnit } from "../../core/format.js";
 
 const LAMPORTS_PER_SOL = 1e9;
 
@@ -57,20 +58,19 @@ export function applyUtilitiesMixin(PositionDetailsDialog) {
     const num = Number(value);
     if (value === null || value === undefined || !Number.isFinite(num)) return "—";
     const abs = Math.abs(num);
-    const suffix = unit ? " SOL" : "";
     const prefix = num < 0 ? "-" : sign && num > 0 ? "+" : "";
-    if (abs > 0 && abs < 0.00000001) return `${prefix}<0.00000001${suffix}`;
+    if (abs > 0 && abs < 0.00000001) return unit ? withSolUnit(`${prefix}<0.00000001`) : `${prefix}<0.00000001`;
     const decimals = abs === 0 || abs >= 0.01 ? 4 : abs >= 0.0001 ? 6 : 8;
     const text = Utils.formatSol(abs, { decimals, suffix: "" });
     // Zeros past the fourth decimal are noise: 0.005000 printed beside 0.0198 in one column.
     const trimmed = decimals > 4 ? text.replace(/(\.\d{4}\d*?)0+$/, "$1") : text;
-    return `${prefix}${trimmed}${suffix}`;
+    return unit ? withSolUnit(`${prefix}${trimmed}`) : `${prefix}${trimmed}`;
   };
 
   proto._formatPct = function (value, decimals = 2) {
     const num = Number(value);
     if (value === null || value === undefined || !Number.isFinite(num)) return "—";
-    return `${num > 0 ? "+" : ""}${Utils.formatNumber(num, decimals)}%`;
+    return withPercentUnit(`${num > 0 ? "+" : ""}${Utils.formatNumber(num, decimals)}`);
   };
 
   /** A signed SOL amount in USD at today's SOL price, or "" when that price is unknown. */

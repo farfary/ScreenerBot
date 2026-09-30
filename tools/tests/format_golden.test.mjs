@@ -156,8 +156,8 @@ test("de keeps decimals and rounding; only the separators change", () => {
   assert.equal(fmt.formatCurrencyUSD(1.005), "$1,00");
   assert.equal(fmt.formatCurrencyUSD(1234.5678), "$1,23K");
   assert.equal(fmt.formatPriceSol(0.000123456789, { decimals: 9 }), "0,000123457");
-  assert.equal(fmt.formatPercentValue(12.345), "+12,35%");
-  assert.equal(fmt.formatPercent(-3.14159, { style: "plain", decimals: 3 }), "-3,142%");
+  assert.equal(fmt.formatPercentValue(12.345), "+12,35\u00a0%");
+  assert.equal(fmt.formatPercent(-3.14159, { style: "plain", decimals: 3 }), "-3,142\u00a0%");
   assert.equal(fmt.formatSol(1.23456789), "1,2346 SOL");
   assert.equal(fmt.formatBytes(1536), "1,5 KB");
   assert.equal(fmt.formatDuration(1500), "1,5µs");

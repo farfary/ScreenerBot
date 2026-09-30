@@ -5,6 +5,7 @@
  * stay behind Details, so a long token history remains easy to scan.
  */
 import * as Utils from "../../core/utils.js";
+import { withPercentUnit, withSolUnit } from "../../core/format.js";
 import { directionLabel } from "../transaction_direction.js";
 import { TRANSACTION_STATUS_LABELS } from "../transaction_status.js";
 
@@ -135,7 +136,7 @@ function eventOutcome(event, ctx) {
     const tone = pnl > 0 ? "pdd-positive" : pnl < 0 ? "pdd-negative" : "";
     const pct =
       event.realized_pnl_percent != null
-        ? ` (${event.realized_pnl_percent > 0 ? "+" : ""}${Utils.formatNumber(event.realized_pnl_percent, 2)}%)`
+        ? ` (${withPercentUnit(`${event.realized_pnl_percent > 0 ? "+" : ""}${Utils.formatNumber(event.realized_pnl_percent, 2)}`)})`
         : "";
     return `<span class="pdd-act-outcome ${tone}">${ctx.formatSol(pnl, { sign: true })}${pct}</span>`;
   }
@@ -166,7 +167,7 @@ function renderPositionAfter(event, ctx) {
         ${metric(I18n.t("positions-event-capital-invested"), ctx.formatSol(event.invested_after))}
         ${metric(
           I18n.t("positions-event-average-entry"),
-          avgEntry ? `${ctx.formatPrice(avgEntry)} SOL` : null
+          avgEntry ? withSolUnit(ctx.formatPrice(avgEntry)) : null
         )}
       </div>
     </section>`;
@@ -215,7 +216,7 @@ function renderDetails(event, ctx) {
       I18n.t("positions-event-token-amount"),
       event.token_amount != null ? Utils.formatNumber(event.token_amount) : null
     ),
-    metric(I18n.t("positions-event-trade-price"), event.price != null ? `${ctx.formatPrice(event.price)} SOL` : null),
+    metric(I18n.t("positions-event-trade-price"), event.price != null ? withSolUnit(ctx.formatPrice(event.price)) : null),
     metric(I18n.t("positions-event-sol-amount"), event.sol_amount != null ? ctx.formatSol(event.sol_amount) : null),
     metric(I18n.t("positions-event-cost-basis"), event.cost_basis != null ? ctx.formatSol(event.cost_basis) : null),
     metric(

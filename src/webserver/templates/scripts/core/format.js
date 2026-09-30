@@ -11,7 +11,7 @@
  *   decimals (1.005 -> 1.01) where `toFixed` rounds the exact binary value
  *   (1.005 -> 1.00), so Intl is used for rounding only where it always was.
  * - Words and unit names come from the `format-*` catalog messages. Symbols
- *   (`%`, `$`, `K`/`M`/`B`, the fallback dashes) are code constants. The plus and
+ *   (`K`/`M`/`B`, the fallback dashes) are code constants. The plus and
  *   minus signs come from Intl (`signPrefix`) so a locale's direction marks are kept.
  *
  * Loaded after `core/i18n.js`, which provides the `I18n` global.
@@ -194,15 +194,15 @@ export function formatCompactFixed(
 }
 
 export function formatCompactNumber(value, digitsOrOptions = 2, maybeFallback = DASH) {
-  // Support both (value, digits, fallback) and (value, { digits, fallback, prefix })
+  // Support both (value, digits, fallback) and (value, { digits, fallback, usd })
   let digits = digitsOrOptions;
   let fallback = maybeFallback;
-  let prefix = "";
+  let usd = false;
 
   if (typeof digitsOrOptions === "object" && digitsOrOptions !== null) {
     digits = digitsOrOptions.digits ?? 2;
     fallback = digitsOrOptions.fallback ?? DASH;
-    prefix = digitsOrOptions.prefix ?? "";
+    usd = digitsOrOptions.usd ?? false;
   }
 
   const num = coerceNumber(value);
@@ -215,7 +215,7 @@ export function formatCompactNumber(value, digitsOrOptions = 2, maybeFallback = 
     maximumFractionDigits: digits,
   }).format(num);
 
-  return prefix + formatted;
+  return usd ? withUsdSymbol(formatted) : formatted;
 }
 
 export function formatBooleanFlag(value, unknownLabel) {
@@ -224,12 +224,31 @@ export function formatBooleanFlag(value, unknownLabel) {
   return orElse(unknownLabel, () => plain(I18n.t("format-unknown")));
 }
 
-export function formatCurrencyUSD(value, { fallback = DASH } = {}) {
+/** An already formatted US dollar amount with the dollar symbol ("1.23K" -> "$1.23K"). */
+export function withUsdSymbol(amount) {
+  return plain(I18n.t("format-usd-amount", { amount: String(amount) }));
+}
+
+/** An already formatted percentage number with the percent sign ("12.5" -> "12.5%"). */
+export function withPercentUnit(amount) {
+  return plain(I18n.t("format-percent-amount", { amount: String(amount) }));
+}
+
+/** An already formatted amount marked approximate ("$1.23K" -> "≈ $1.23K"). */
+export function withApprox(text) {
+  return plain(I18n.t("format-approx", { value: String(text) }));
+}
+
+export function formatCurrencyUSD(value, { fallback = DASH, approx = false } = {}) {
   const num = coerceNumber(value);
   if (!Number.isFinite(num)) {
     return fallback;
   }
+  const text = usdText(num);
+  return approx ? withApprox(text) : text;
+}
 
+function usdText(num) {
   const abs = Math.abs(num);
   let scaled = num;
   let suffix = "";
@@ -246,10 +265,10 @@ export function formatCurrencyUSD(value, { fallback = DASH } = {}) {
   } else if (abs > 0 && abs < 0.01) {
     // Sub-cent prices round to $0.00 with toFixed(2); render the real value in
     // subscript notation (e.g. $0.0₅8142) so tiny token prices stay visible.
-    return `$${formatPriceSubscript(num, { fallback, precision: 4 })}`;
+    return withUsdSymbol(formatPriceSubscript(num, { precision: 4 }));
   }
 
-  return `$${localizeDecimal(scaled.toFixed(2))}${suffix}`;
+  return withUsdSymbol(`${localizeDecimal(scaled.toFixed(2))}${suffix}`);
 }
 
 /**
@@ -328,6 +347,49 @@ export function formatPriceSol(price, { fallback, decimals = 12 } = {}) {
   return localizeDecimal(formatted);
 }
 
+/**
+ * Move the decimal point of a non-negative `toFixed` digit string two places left
+ * ("12.35" -> "0.1235"), the exact decimal form of value / 100. Intl percent
+ * formatting scales by 100, so feeding it this string reproduces the `toFixed`
+ * digits with no binary rounding in between.
+ */
+function shiftPercent(digits) {
+  const [whole, fraction = ""] = digits.split(".");
+  const all = whole + fraction;
+  const point = whole.length - 2;
+  return point > 0 ? `${all.slice(0, point)}.${all.slice(point) || "0"}` : `0.${"0".repeat(-point)}${all}`;
+}
+
+/**
+ * A percentage at fixed decimals through Intl percent style, so the symbol, its
+ * spacing and the sign placement follow the locale. The digits are the `toFixed`
+ * digits of |value|. `sign`: "auto" shows a minus for negatives and a plus for
+ * positives, "negative" only the minus, "none" no sign, "always" plus for zero too.
+ */
+function percentText(num, decimals, sign) {
+  const digits = Math.abs(num).toFixed(decimals);
+  const negative = num < 0;
+  if (!/^\d+(\.\d+)?$/.test(digits)) {
+    // Magnitudes from 1e21 stringify in exponent form, which has no decimal
+    // shift; they keep their exponent text and are not locale placed.
+    const shown = negative ? signPrefix(true) : sign === "auto" || sign === "always" ? signPrefix(false) : "";
+    return `${shown}${localizeDecimal(digits)}%`;
+  }
+  const magnitude = shiftPercent(digits);
+  let signDisplay = "never";
+  if (negative && sign !== "none") signDisplay = "always";
+  else if (!negative && (sign === "always" || (sign === "auto" && num > 0))) signDisplay = "always";
+  return plain(
+    intl(Intl.NumberFormat, {
+      style: "percent",
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+      useGrouping: false,
+      signDisplay,
+    }).format(negative ? `-${magnitude}` : magnitude)
+  );
+}
+
 export function formatPercentValue(
   value,
   { fallback = DASH, decimals = 2, includeSign = true, plus = "+", signZero = false } = {}
@@ -336,17 +398,13 @@ export function formatPercentValue(
   if (!Number.isFinite(num)) {
     return fallback;
   }
-
-  const magnitude = localizeDecimal(Math.abs(num).toFixed(decimals));
   if (!includeSign) {
-    return `${magnitude}%`;
+    return percentText(Math.abs(num), decimals, "none");
   }
-
-  if (num > 0 || (signZero && num === 0)) {
-    return `${plus === "+" ? signPrefix(false) : plus}${magnitude}%`;
+  if (num === 0) {
+    return percentText(0, decimals, signZero && plus === "+" ? "always" : "none");
   }
-  if (num < 0) return `${signPrefix(true)}${magnitude}%`;
-  return `${magnitude}%`;
+  return percentText(num, decimals, plus === "+" ? "auto" : "negative");
 }
 
 export function formatPercent(value, { style = "plain", decimals = 2, fallback = HYPHEN } = {}) {
@@ -358,25 +416,19 @@ export function formatPercent(value, { style = "plain", decimals = 2, fallback =
     return fallback;
   }
 
+  const text = percentText(num === 0 ? 0 : num, decimals, "auto");
+
   if (style === "token") {
     const color = num > 0 ? "#16a34a" : num < 0 ? "#ef4444" : "inherit";
-    const sign = num > 0 ? signPrefix(false) : "";
-    return `<span style="color:${color};">${sign}${localizeDecimal(num.toFixed(decimals))}%</span>`;
+    return `<span style="color:${color};">${text}</span>`;
   }
 
   if (style === "pnl") {
-    const magnitude = localizeDecimal(Math.abs(num).toFixed(decimals));
-    if (num > 0) {
-      return `<span class="pnl-positive">${signPrefix(false)}${magnitude}%</span>`;
-    }
-    if (num < 0) {
-      return `<span class="pnl-negative">${signPrefix(true)}${magnitude}%</span>`;
-    }
-    return `<span class="pnl-neutral">${magnitude}%</span>`;
+    const tone = num > 0 ? "positive" : num < 0 ? "negative" : "neutral";
+    return `<span class="pnl-${tone}">${text}</span>`;
   }
 
-  const sign = num > 0 ? signPrefix(false) : num < 0 ? signPrefix(true) : "";
-  return `${sign}${localizeDecimal(Math.abs(num).toFixed(decimals))}%`;
+  return text;
 }
 
 export function formatSol(amount, { decimals = 4, fallback = HYPHEN, suffix } = {}) {

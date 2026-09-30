@@ -2,6 +2,7 @@ import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
 import { apiErrorMessage, requestManager } from "../core/request_manager.js";
 import * as Utils from "../core/utils.js";
+import { withPercentUnit } from "../core/format.js";
 import * as AppState from "../core/app_state.js";
 import { DataTable } from "../ui/data_table.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
@@ -236,7 +237,7 @@ function createLifecycle() {
     if (acquired <= 0) return "—";
     const pct = Math.round((remaining / acquired) * 100);
     const cls = pct === 100 ? "success" : pct >= 50 ? "warning" : "danger";
-    return `<span class="chip ${cls}">${pct}%</span>`;
+    return `<span class="chip ${cls}">${withPercentUnit(pct)}</span>`;
   };
 
   // Compact "Remove" (archive/delete) button for closed rows.

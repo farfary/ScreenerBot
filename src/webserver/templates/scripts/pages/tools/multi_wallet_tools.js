@@ -5,6 +5,7 @@
 
 import { $, $$, on } from "../../core/dom.js";
 import * as Utils from "../../core/utils.js";
+import { withPercentUnit } from "../../core/format.js";
 import * as Hints from "../../core/hints.js";
 import { HintTrigger } from "../../ui/hint_popover.js";
 import { enhanceAllSelects } from "../../ui/custom_select.js";
@@ -456,7 +457,7 @@ function updateMultiBuyProgress(status) {
   const { completed, percent } = sessionProgress(status);
 
   if (progressFill) progressFill.style.width = `${percent}%`;
-  if (progressPercent) progressPercent.textContent = `${percent}%`;
+  if (progressPercent) progressPercent.textContent = withPercentUnit(percent);
   if (progressStatus) {
     progressStatus.textContent = sessionStatusLine(
       status,
@@ -1039,7 +1040,7 @@ function updateMultiSellProgress(status) {
   const { completed, percent } = sessionProgress(status);
 
   if (progressFill) progressFill.style.width = `${percent}%`;
-  if (progressPercent) progressPercent.textContent = `${percent}%`;
+  if (progressPercent) progressPercent.textContent = withPercentUnit(percent);
   if (progressStatus) {
     progressStatus.textContent = sessionStatusLine(
       status,

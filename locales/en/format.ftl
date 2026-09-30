@@ -12,6 +12,15 @@ format-unknown = Unknown
 # Amount of SOL, for example "0.1500 SOL".
 format-sol-amount = { $amount } { -sol }
 
+# Amount in US dollars, for example "$1.23K". $amount is the formatted number.
+format-usd-amount = ${ $amount }
+
+# A percentage whose digits were formatted by the caller, for example "12.5%".
+format-percent-amount = { $amount }%
+
+# An approximate amount, for example "≈ $1.23K". $value is the formatted amount.
+format-approx = ≈ { $value }
+
 # Time elapsed since a moment.
 format-ago-second =
     { $count ->

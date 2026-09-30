@@ -4,6 +4,7 @@
  */
 import * as Utils from "../core/utils.js";
 import { createFocusTrap } from "../core/utils.js";
+import { withSolUnit } from "../core/format.js";
 import { requestManager, apiErrorMessage } from "../core/request_manager.js";
 import { DialogTabBar, renderDialogTabRow } from "./dialog_tab_bar.js";
 import { typeIcon, typeLabel } from "./transaction_type.js";
@@ -606,9 +607,9 @@ export class TransactionDetailsDialog {
     if (price !== null && price !== undefined) {
       add(
         I18n.t("transactions-dialog-metric-execution-price"),
-        `${Utils.formatPriceSol(price, { decimals: 8 })} SOL`,
+        withSolUnit(Utils.formatPriceSol(price, { decimals: 8 })),
         "",
-        `${Utils.formatPriceSol(price, { decimals: 12 })} SOL`
+        withSolUnit(Utils.formatPriceSol(price, { decimals: 12 }))
       );
     }
 

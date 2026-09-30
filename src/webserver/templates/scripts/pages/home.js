@@ -1,7 +1,7 @@
 /* global */
 import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
-import { formatTimeSpan } from "../core/format.js";
+import { formatTimeSpan, withApprox, withUsdSymbol } from "../core/format.js";
 import * as Utils from "../core/utils.js";
 import { requestManager, createScopedFetcher } from "../core/request_manager.js";
 import { showFeaturedRow, hideFeaturedRow } from "../ui/featured_row.js";
@@ -309,7 +309,7 @@ function createLifecycle() {
     if (usdEl) {
       const usd = (wallet.total_equity_sol || 0) * (wallet.sol_price_usd || 0);
       if (usd > 0) {
-        usdEl.textContent = `≈ $${Utils.formatNumber(usd, 2)}`;
+        usdEl.textContent = withApprox(withUsdSymbol(Utils.formatNumber(usd, 2)));
         usdEl.style.display = "";
       } else {
         usdEl.style.display = "none";

@@ -1371,17 +1371,17 @@ export class TokenDetailsDialog {
     update("price-usd", priceUsd === null ? "—" : Utils.formatCurrencyUSD(priceUsd), priceUsd);
     update(
       "market-cap",
-      marketCap === null ? "—" : Utils.formatCompactNumber(marketCap, { prefix: "$" }),
+      marketCap === null ? "—" : Utils.formatCompactNumber(marketCap, { usd: true }),
       marketCap
     );
     update(
       "liquidity",
-      liquidity === null ? "—" : Utils.formatCompactNumber(liquidity, { prefix: "$" }),
+      liquidity === null ? "—" : Utils.formatCompactNumber(liquidity, { usd: true }),
       liquidity
     );
     update(
       "volume-24h",
-      volume24h === null ? "—" : Utils.formatCompactNumber(volume24h, { prefix: "$" }),
+      volume24h === null ? "—" : Utils.formatCompactNumber(volume24h, { usd: true }),
       volume24h
     );
     update("holders", holders === null ? "—" : Utils.formatCompactNumber(holders), holders);

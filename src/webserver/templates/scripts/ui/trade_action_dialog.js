@@ -1,7 +1,7 @@
 import { on, off } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
 import { createFocusTrap } from "../core/utils.js";
-import { formatFixed, formatPercentValue, formatSol, withSolUnit } from "../core/format.js";
+import { formatFixed, formatPercentValue, formatSol, withPercentUnit, withSolUnit } from "../core/format.js";
 import { pushEscapeHandler } from "../core/escape_stack.js";
 import * as Hints from "../core/hints.js";
 import { HintTrigger } from "./hint_popover.js";
@@ -1607,7 +1607,7 @@ export class TradeActionDialog {
       return;
     }
     if (this._sliderUnit === "%") {
-      this.sliderReadoutEl.textContent = `${Math.round(value)}%`;
+      this.sliderReadoutEl.textContent = withPercentUnit(Math.round(value));
     } else {
       this.sliderReadoutEl.textContent = withSolUnit(
         formatFixed(value, { decimals: 6, trim: true, fallback: "0" })

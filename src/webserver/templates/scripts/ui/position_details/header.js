@@ -43,6 +43,7 @@ export function applyHeaderMixin(PositionDetailsDialog) {
 
   proto._renderIdentity = function (pos) {
     const symbol = pos.symbol || "";
+    const cashtag = `$${Utils.escapeHtml(symbol.toUpperCase())}`; // format-ok: token ticker cashtag, not an amount
     const name = pos.name || symbol || Utils.formatAddressCompact(pos.mint);
     const logoUrl = pos.logo_url || this.fullDetails?.token_info?.image_url || "";
     const status = this._status();
@@ -56,7 +57,7 @@ export function applyHeaderMixin(PositionDetailsDialog) {
       <div class="header-identity">
         <div class="header-title">
           <span class="title-main" id="pdd-dialog-title" title="${Utils.escapeHtml(name)}">${Utils.escapeHtml(name)}</span>
-          ${symbol ? `<span class="title-symbol token-symbol-type">$${Utils.escapeHtml(symbol.toUpperCase())}</span>` : ""}
+          ${symbol ? `<span class="title-symbol token-symbol-type">${cashtag}</span>` : ""}
           ${status ? `<span class="pdd-badge pdd-status is-${status}">${esc(I18n.label(POSITION_STATUS_LABELS, status))}</span>` : ""}
         </div>
         <div class="header-mint-full" dir="ltr">${Utils.escapeHtml(pos.mint)}</div>

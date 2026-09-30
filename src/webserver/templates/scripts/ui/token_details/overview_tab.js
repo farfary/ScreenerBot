@@ -149,15 +149,15 @@ function buildHeadlineMetrics(token) {
       </div>
       <div class="overview-headline-item">
         <span class="overview-headline-label">${esc(I18n.t("tokens-overview-market-cap"))}</span>
-        <span class="overview-headline-value">${token.market_cap ? Utils.formatCompactNumber(token.market_cap, { prefix: "$" }) : token.fdv ? Utils.formatCompactNumber(token.fdv, { prefix: "$" }) : "—"}</span>
+        <span class="overview-headline-value">${token.market_cap ? Utils.formatCompactNumber(token.market_cap, { usd: true }) : token.fdv ? Utils.formatCompactNumber(token.fdv, { usd: true }) : "—"}</span>
       </div>
       <div class="overview-headline-item">
         <span class="overview-headline-label">${esc(I18n.t("tokens-overview-liquidity"))}</span>
-        <span class="overview-headline-value">${token.liquidity_usd ? Utils.formatCompactNumber(token.liquidity_usd, { prefix: "$" }) : token.pool_reserves_sol ? Utils.formatSol(token.pool_reserves_sol, { decimals: 2 }) : "—"}</span>
+        <span class="overview-headline-value">${token.liquidity_usd ? Utils.formatCompactNumber(token.liquidity_usd, { usd: true }) : token.pool_reserves_sol ? Utils.formatSol(token.pool_reserves_sol, { decimals: 2 }) : "—"}</span>
       </div>
       <div class="overview-headline-item">
         <span class="overview-headline-label">${esc(I18n.t("tokens-overview-volume-24h"))}</span>
-        <span class="overview-headline-value">${token.volume_24h ? Utils.formatCompactNumber(token.volume_24h, { prefix: "$" }) : "—"}</span>
+        <span class="overview-headline-value">${token.volume_24h ? Utils.formatCompactNumber(token.volume_24h, { usd: true }) : "—"}</span>
       </div>
     </div>
   `;
@@ -332,7 +332,7 @@ function buildPulseChange(value) {
 }
 
 function buildPulseVolume(value) {
-  return `<span class="overview-pulse-volume">${value ? Utils.formatCompactNumber(value, { prefix: "$" }) : "—"}</span>`;
+  return `<span class="overview-pulse-volume">${value ? Utils.formatCompactNumber(value, { usd: true }) : "—"}</span>`;
 }
 
 function buildActivitySection(token, options) {
