@@ -109,6 +109,7 @@ shell-status-bar-version = v
 shell-status-bar-uptime = Hoạt động
 shell-status-bar-memory = Bộ nhớ
 shell-status-bar-rpc = RPC
+shell-status-rpc-per-minute = { $rate }/phút
 shell-status-bar-trading = Giao dịch
 shell-status-bar-positions = Vị thế
 shell-status-bar-tokens = Token

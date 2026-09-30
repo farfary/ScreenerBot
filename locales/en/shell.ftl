@@ -122,6 +122,8 @@ shell-status-bar-version = v
 shell-status-bar-uptime = Up
 shell-status-bar-memory = Mem
 shell-status-bar-rpc = RPC
+# RPC calls in the last minute; $rate is a formatted number.
+shell-status-rpc-per-minute = { $rate }/min
 shell-status-bar-trading = Trading
 shell-status-bar-positions = Pos
 shell-status-bar-tokens = Tokens

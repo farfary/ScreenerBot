@@ -44,7 +44,7 @@ export function buildInterfaceTab(settings) {
             <span class="settings-field-hint" data-l10n-id="settings-interface-language-hint"></span>
           </div>
           <div class="settings-field-control">
-            <select id="settingLanguage" class="settings-select" data-custom-select>
+            <select id="settingLanguage" class="settings-select" data-custom-select data-cs-fit-options>
               <option value="system" selected>${Utils.escapeHtml(I18n.t("common-language-system"))}</option>
             </select>
           </div>
@@ -224,10 +224,16 @@ export async function populateLanguageOptions(select, current, first) {
       options.push({ code: current, name: current });
     }
     select.replaceChildren(
-      ...options.map(({ code, name }) => {
+      ...options.map(({ code, name, dir }) => {
         const option = document.createElement("option");
         option.value = code;
         option.textContent = name;
+        // A registered locale carries its direction: its native name renders in
+        // its own script and direction.
+        if (dir) {
+          option.lang = code;
+          option.dir = dir;
+        }
         return option;
       })
     );

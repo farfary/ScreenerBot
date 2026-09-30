@@ -122,6 +122,7 @@ shell-status-bar-version = v
 shell-status-bar-uptime = 가동
 shell-status-bar-memory = 메모리
 shell-status-bar-rpc = RPC
+shell-status-rpc-per-minute = { $rate }/분
 shell-status-bar-trading = 거래
 shell-status-bar-positions = 포지션
 shell-status-bar-tokens = 토큰

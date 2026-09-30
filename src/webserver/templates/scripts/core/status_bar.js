@@ -1,6 +1,6 @@
 // Status Bar - Fetches and displays system metrics
 
-import { formatLatencyMs, formatMemoryMb, formatPercentValue, formatUptime } from "./format.js";
+import { formatLatencyMs, formatMemoryMb, formatNumber, formatPercentValue, formatUptime } from "./format.js";
 
 (function () {
   "use strict";
@@ -61,7 +61,7 @@ import { formatLatencyMs, formatMemoryMb, formatPercentValue, formatUptime } fro
       // RPC Rate (calls per minute)
       if (elements.rpcRate) {
         const rate = rpc.recent_calls_per_minute || 0;
-        elements.rpcRate.textContent = `${Math.round(rate)}/min`;
+        elements.rpcRate.textContent = I18n.t("shell-status-rpc-per-minute", { rate: formatNumber(rate, 0) });
       }
 
       // RPC Success Rate

@@ -8,6 +8,7 @@ import { boostTierForMint, boostCountForMint, formatBoostCount } from "../../cor
 import * as AppState from "../../core/app_state.js";
 import * as Hints from "../../core/hints.js";
 import { HintTrigger } from "../../ui/hint_popover.js";
+import { tokenLogoPlaceholder } from "../../ui/token_identity.js";
 import { SORT_KEY_TO_COLUMN, TOKEN_VIEWS } from "./constants.js";
 
 export function findFirstDifferenceIndex(a, b) {
@@ -95,7 +96,7 @@ export function tokenCell(row) {
   const src = row.logo_url || row.image_url;
   const logo = src
     ? `<img class="token-logo token-logo-artwork clickable-logo" alt="" src="${Utils.escapeHtml(src)}" data-logo-url="${Utils.escapeHtml(src)}" data-token-symbol="${Utils.escapeHtml(row.symbol || "")}" data-token-name="${Utils.escapeHtml(row.name || "")}" data-token-mint="${Utils.escapeHtml(row.mint || "")}" title="${Utils.escapeHtml(I18n.t("tokens-cell-logo-enlarge"))}" />`
-    : `<span class="token-logo">${Utils.escapeHtml(I18n.t("format-not-available"))}</span>`;
+    : tokenLogoPlaceholder(row.symbol, "token-logo");
   const sym = Utils.escapeHtml(row.symbol || "—");
   const name = row.name ? `<div class="token-name">${Utils.escapeHtml(row.name)}</div>` : "";
   // A boosted token's owner paid for visibility, so the mark rides beside the

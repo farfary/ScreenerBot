@@ -315,6 +315,21 @@
   color: var(--text-muted);
 }
 
+/* The wrapper is an LTR island so the value, its reserved padding and the
+   visibility toggle all sit on the physical right. An empty field shows its
+   localized placeholder in the page direction; the padding stays physical so
+   the toggle never covers the text. */
+[dir="rtl"] .setup-input-wrapper textarea:placeholder-shown {
+  /* rtl-ok: placeholder follows the RTL page inside an LTR island */
+  direction: rtl;
+  /* rtl-ok: placeholder follows the RTL page inside an LTR island */
+  text-align: right;
+  /* rtl-ok: toggle is pinned to the physical right of the LTR island */
+  padding-left: 11px;
+  /* rtl-ok: toggle is pinned to the physical right of the LTR island */
+  padding-right: 36px;
+}
+
 .setup-input[aria-invalid="true"] {
   border-color: var(--error-color);
 }

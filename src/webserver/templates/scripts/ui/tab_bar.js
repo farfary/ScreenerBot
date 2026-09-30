@@ -179,6 +179,7 @@ export class TabBar {
   _setupScrollNavigation() {
     // Mouse wheel horizontal scroll support
     this.wheelHandler = (event) => {
+      if (!this._ownsContainer()) return;
       // Only handle if there's horizontal overflow
       if (this.container.scrollWidth <= this.container.clientWidth) return;
 
@@ -192,12 +193,14 @@ export class TabBar {
     this.container.addEventListener("wheel", this.wheelHandler, { passive: false });
 
     // Track scroll position for indicators
-    this.scrollHandler = () => this._updateScrollIndicators();
+    this.scrollHandler = () => {
+      if (this._ownsContainer()) this._updateScrollIndicators();
+    };
     this.container.addEventListener("scroll", this.scrollHandler, { passive: true });
 
     // Watch for resize to update indicators
     this.resizeObserver = new ResizeObserver(() => {
-      this._updateScrollIndicators();
+      if (this._ownsContainer()) this._updateScrollIndicators();
     });
     this.resizeObserver.observe(this.container);
 
@@ -246,7 +249,17 @@ export class TabBar {
     }
   }
 
+  /**
+   * #subTabsContainer is shared by every page, and a cached page's TabBar keeps its
+   * delegated listeners while hidden. Only the bar that currently owns the container
+   * (show()/mount stamp `data-page`, hide() clears it) may react to its events.
+   */
+  _ownsContainer() {
+    return this.container.getAttribute("data-page") === this.pageName;
+  }
+
   _handleClick(event) {
+    if (!this._ownsContainer()) return;
     const button = event.target.closest("[data-tab-id]");
     if (!button) return;
 
@@ -257,6 +270,7 @@ export class TabBar {
   }
 
   _handleKeyboard(event) {
+    if (!this._ownsContainer()) return;
     const buttons = Array.from(this.container.querySelectorAll("[data-tab-id]"));
     const currentIndex = buttons.findIndex(
       (btn) => btn.getAttribute("data-tab-id") === this.activeTab

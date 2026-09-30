@@ -202,7 +202,7 @@ function buildTelegramTab(settings) {
             <span class="settings-field-hint" data-l10n-id="settings-telegram-language-hint"></span>
           </div>
           <div class="settings-field-control">
-            <select id="tgLanguage" class="settings-select" data-custom-select>
+            <select id="tgLanguage" class="settings-select" data-custom-select data-cs-fit-options>
               <option value="app" selected>${Utils.escapeHtml(I18n.t("settings-telegram-language-follow-app"))}</option>
             </select>
           </div>

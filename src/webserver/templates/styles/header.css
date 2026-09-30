@@ -536,3 +536,10 @@ html[data-input="keyboard"] .modern-header a:focus-visible {
     animation: none;
   }
 }
+
+/* Uppercase tracking spreads CJK glyphs apart, and CJK scripts have no case: header
+   labels that track their uppercase text keep normal spacing in those locales. */
+:is(:lang(zh), :lang(ja), :lang(ko))
+  :is(.nav-tabs a, .explore-setup-title, .modern-header .card-status, .modern-header .card-sub) {
+  letter-spacing: normal;
+}

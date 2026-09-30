@@ -4,6 +4,7 @@
  */
 
 import { registerPage } from "../core/lifecycle.js";
+import { getBootstrapState } from "../core/bootstrap.js";
 import { $, on } from "../core/dom.js";
 import { Poller } from "../core/poller.js";
 import { requestManager, apiErrorMessage } from "../core/request_manager.js";
@@ -429,7 +430,11 @@ async function loadWallets() {
     // Fetch balance for main wallet
     await fetchMainWalletBalance();
   } catch (error) {
-    console.error("[Wallets] Failed to load wallets:", error);
+    // Explore Mode runs without the wallet database, so the failed read is the
+    // expected empty state there rather than an error.
+    if (!getBootstrapState().status?.explore_mode) {
+      console.error("[Wallets] Failed to load wallets:", error);
+    }
     walletsData = [];
   }
 }

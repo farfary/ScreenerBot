@@ -122,6 +122,7 @@ shell-status-bar-version = v
 shell-status-bar-uptime = 稼働
 shell-status-bar-memory = メモリ
 shell-status-bar-rpc = RPC
+shell-status-rpc-per-minute = { $rate }/分
 shell-status-bar-trading = 取引
 shell-status-bar-positions = ポジ
 shell-status-bar-tokens = トークン

@@ -109,6 +109,7 @@ shell-status-bar-version = v
 shell-status-bar-uptime = Çalışma
 shell-status-bar-memory = Bel.
 shell-status-bar-rpc = RPC
+shell-status-rpc-per-minute = { $rate }/dk
 shell-status-bar-trading = İşlem
 shell-status-bar-positions = Poz.
 shell-status-bar-tokens = Tokenlar

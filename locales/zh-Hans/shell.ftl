@@ -122,6 +122,7 @@ shell-status-bar-version = v
 shell-status-bar-uptime = 运行
 shell-status-bar-memory = 内存
 shell-status-bar-rpc = RPC
+shell-status-rpc-per-minute = { $rate }/分钟
 shell-status-bar-trading = 交易
 shell-status-bar-positions = 仓位
 shell-status-bar-tokens = 代币

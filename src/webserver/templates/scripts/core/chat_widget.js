@@ -834,8 +834,8 @@ export class ChatWidget {
         html += `
           <div class="session-item ${isActive ? "active" : ""}" data-session-id="${session.id}">
             <div class="session-info">
-              <div class="session-title">${title}</div>
-              ${preview ? `<div class="session-preview">${preview}${session.summary.length > 60 ? "..." : ""}</div>` : ""}
+              <div class="session-title" dir="auto">${title}</div>
+              ${preview ? `<div class="session-preview" dir="auto">${preview}${session.summary.length > 60 ? "..." : ""}</div>` : ""}
             </div>
             ${isActive ? '<button class="session-delete" type="button"><i class="icon-trash-2"></i></button>' : ""}
           </div>`;
@@ -986,7 +986,7 @@ export class ChatWidget {
         <div class="message-content">
           <div class="message-author">${Utils.escapeHtml(I18n.label(CHAT_ROLE_LABELS, isUser ? "user" : "assistant"))}</div>
           ${toolCallsHtml}
-          ${msg.content ? `<div class="message-bubble">${isUser ? Utils.escapeHtml(msg.content) : this._formatMarkdown(msg.content)}</div>` : ""}
+          ${msg.content ? `<div class="message-bubble" dir="auto">${isUser ? Utils.escapeHtml(msg.content) : this._formatMarkdown(msg.content)}</div>` : ""}
           <div class="message-footer"><div class="message-meta">${timestamp}</div>${actionsHtml}</div>
         </div>
       </div>`;

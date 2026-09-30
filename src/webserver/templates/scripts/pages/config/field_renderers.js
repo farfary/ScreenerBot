@@ -206,7 +206,11 @@ export function buildFieldLabelHtml({ label, pathLabel, metadata = {}, defaultVa
     const defaultText = Utils.escapeHtml(
       I18n.t("system-config-field-default", {
         value:
-          typeof defaultValue === "object" ? JSON.stringify(defaultValue) : String(defaultValue),
+          typeof defaultValue === "boolean"
+            ? Utils.formatBooleanFlag(defaultValue)
+            : typeof defaultValue === "object"
+              ? JSON.stringify(defaultValue)
+              : String(defaultValue),
       })
     );
     meta.push(`<span class="config-field-default" title="${defaultText}">${defaultText}</span>`);

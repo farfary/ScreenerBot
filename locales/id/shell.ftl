@@ -111,6 +111,7 @@ shell-status-bar-version = v
 shell-status-bar-uptime = Aktif
 shell-status-bar-memory = Mem
 shell-status-bar-rpc = RPC
+shell-status-rpc-per-minute = { $rate }/mnt
 shell-status-bar-trading = Trading
 shell-status-bar-positions = Pos
 shell-status-bar-tokens = Token

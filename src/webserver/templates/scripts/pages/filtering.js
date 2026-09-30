@@ -14,6 +14,7 @@ import { $ } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
 import * as AppState from "../core/app_state.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
+import { tokenLogoPlaceholder } from "../ui/token_identity.js";
 import {
   buildFilterTabs,
   REJECTION_SOURCE_LABELS,
@@ -782,10 +783,8 @@ export function createLifecycle() {
           AppState.save("filtering_activeTab", active);
         }
       } else {
-        // Re-register deactivate cleanup (cleanups are cleared after each deactivate)
-        // and force-show tab bar to handle race conditions with TabBarManager
-        ctx.manageTabBar(tabBar);
-        // Ensure registry is up to date in case of page reload/HMR
+        // Ensure registry is up to date in case of page reload/HMR, then force-show
+        // the tab bar to handle race conditions with TabBarManager.
         TabBarManager.register("filtering", tabBar);
 
         // Force show in next frame to ensure DOM is ready and override any race conditions
@@ -1209,7 +1208,7 @@ window.filteringPage = {
           const src = t.image_url;
           const logo = src
             ? `<img class="token-logo token-logo-artwork" alt="" src="${esc(src)}" loading="lazy" />`
-            : '<div class="token-logo token-logo-placeholder">?</div>';
+            : tokenLogoPlaceholder(t.symbol, "token-logo token-logo-placeholder");
           const sym = esc(t.symbol || "—");
           const name = esc(t.name || I18n.t("format-unknown"));
 

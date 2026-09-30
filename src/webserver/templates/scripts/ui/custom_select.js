@@ -17,18 +17,46 @@ const MAX_DROPDOWN_HEIGHT = 280;
 const VIEWPORT_MARGIN = 8;
 const CLOSE_ANIMATION_MS = 220;
 let customSelectId = 0;
+let measureContext = null;
+
+/** Shared 2D context for text measurement (`fitOptions`). */
+function getMeasureContext() {
+  if (!measureContext && typeof document !== "undefined") {
+    measureContext = document.createElement("canvas").getContext("2d");
+  }
+  return measureContext;
+}
+
+/**
+ * Write a label, carrying the option's own `lang` and `dir` so a native language
+ * name renders in its own script and direction. The direction applies to an
+ * isolated inner `<bdi>`, so the label still aligns with the page direction.
+ */
+function setLabelText(el, text, opt) {
+  if (opt?.lang) el.lang = opt.lang;
+  else el.removeAttribute("lang");
+  if (!opt?.dir) {
+    el.textContent = text;
+    return;
+  }
+  const isolate = document.createElement("bdi");
+  isolate.dir = opt.dir;
+  isolate.textContent = text;
+  el.replaceChildren(isolate);
+}
 
 export class CustomSelect {
   /**
    * @param {Object} options Configuration options
    * @param {HTMLElement} options.container Container element to render into
-   * @param {Array<{value: string, label: string, selected?: boolean, disabled?: boolean}>} options.options Select options
+   * @param {Array<{value: string, label: string, selected?: boolean, disabled?: boolean, lang?: string, dir?: string}>} options.options Select options
    * @param {string} [options.placeholder] Placeholder text; defaults to the localized "Select..."
    * @param {Function} [options.onChange] Callback when value changes
    * @param {string} [options.id] ID for the component
    * @param {string} [options.name] Name for the hidden input (form submission)
    * @param {boolean} [options.disabled=false] Whether the select is disabled
    * @param {string} [options.className] Additional CSS class for the wrapper
+   * @param {boolean} [options.fitOptions=false] Floor the trigger width at the widest option label
    */
   constructor(options = {}) {
     this.container = options.container;
@@ -41,6 +69,7 @@ export class CustomSelect {
     this.className = options.className || "";
     this.ariaLabel = options.ariaLabel || "";
     this.ariaLabelledBy = options.ariaLabelledBy || "";
+    this.fitOptions = options.fitOptions === true;
 
     // State
     this.isOpen = false;
@@ -100,6 +129,7 @@ export class CustomSelect {
 
     this._render();
     this._attachEvents();
+    this._fitTriggerToOptions();
   }
 
   /**
@@ -120,6 +150,8 @@ export class CustomSelect {
       label: opt.textContent?.trim() || "",
       selected: opt.selected,
       disabled: opt.disabled,
+      lang: opt.lang,
+      dir: opt.getAttribute("dir") || "",
     }));
     const associatedLabels = new Set(Array.from(selectElement.labels || []));
     const wrappingLabel = selectElement.closest("label");
@@ -188,6 +220,7 @@ export class CustomSelect {
       className: sourceClassName,
       ariaLabel: resolvedAriaLabel,
       ariaLabelledBy: explicitLabelledBy,
+      fitOptions: selectElement.hasAttribute("data-cs-fit-options"),
       ...extraOptions,
       onChange: (value) => {
         // Sync value back to original select for form compatibility
@@ -286,6 +319,8 @@ export class CustomSelect {
           label: opt.textContent?.trim() || "",
           selected: opt.selected,
           disabled: opt.disabled,
+          lang: opt.lang,
+          dir: opt.getAttribute("dir") || "",
         }));
         customSelect.setOptions(opts);
         syncSourceValue();
@@ -293,7 +328,7 @@ export class CustomSelect {
       });
       optionObserver.observe(selectElement, {
         attributes: true,
-        attributeFilter: ["disabled", "label", "selected", "value"],
+        attributeFilter: ["disabled", "label", "selected", "value", "lang", "dir"],
         childList: true,
         subtree: true,
       });
@@ -418,7 +453,7 @@ export class CustomSelect {
       optionEl.id = `${this.optionsContainerEl.id}-option-${index}`;
       optionEl.dataset.value = opt.value;
       optionEl.dataset.index = index;
-      optionEl.textContent = opt.label;
+      setLabelText(optionEl, opt.label, opt);
       optionEl.title = opt.label; // full text on hover when a long label is ellipsized
       optionEl.setAttribute("role", "option");
       optionEl.setAttribute("aria-selected", "false");
@@ -440,11 +475,11 @@ export class CustomSelect {
   _updateDisplayValue() {
     const selectedOpt = this.options.find((o) => o.value === this.selectedValue);
     if (selectedOpt) {
-      this.valueEl.textContent = selectedOpt.label;
+      setLabelText(this.valueEl, selectedOpt.label, selectedOpt);
       this.valueEl.title = selectedOpt.label;
       this.valueEl.classList.remove("placeholder");
     } else {
-      this.valueEl.textContent = this.placeholder;
+      setLabelText(this.valueEl, this.placeholder, null);
       this.valueEl.removeAttribute("title");
       this.valueEl.classList.add("placeholder");
     }
@@ -1016,9 +1051,42 @@ export class CustomSelect {
 
     this._renderOptions();
     this._updateDisplayValue();
+    this._fitTriggerToOptions();
     if (this.isOpen) {
       this._lastPositionSignature = "";
     }
+  }
+
+  /**
+   * With `fitOptions`, floor the trigger at the widest option label plus the
+   * trigger's own padding, border, gap and chevron, so no option is clipped. The
+   * menu keeps the trigger's width, so it widens with it. Measured with canvas
+   * text metrics from the computed font, which needs no layout and so also works
+   * while the control sits in a hidden tab.
+   */
+  _fitTriggerToOptions() {
+    if (!this.fitOptions || !this.triggerEl?.isConnected) return;
+    const context = getMeasureContext();
+    if (!context) return;
+
+    const valueStyle = window.getComputedStyle(this.valueEl);
+    context.font = valueStyle.font;
+    const widest = this.options.reduce(
+      (max, opt) => Math.max(max, context.measureText(opt.label || "").width),
+      0
+    );
+
+    const triggerStyle = window.getComputedStyle(this.triggerEl);
+    const chrome = [
+      triggerStyle.paddingInlineStart,
+      triggerStyle.paddingInlineEnd,
+      triggerStyle.borderInlineStartWidth,
+      triggerStyle.borderInlineEndWidth,
+      triggerStyle.columnGap,
+      window.getComputedStyle(this.arrowEl).width,
+    ].reduce((sum, value) => sum + (parseFloat(value) || 0), 0);
+
+    this.triggerEl.style.minInlineSize = `${Math.ceil(widest + chrome) + 1}px`;
   }
 
   /**

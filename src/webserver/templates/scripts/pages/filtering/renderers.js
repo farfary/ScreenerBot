@@ -224,7 +224,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
             <div class="rej-bar" style="width: ${barWidth}%"></div>
             <span class="rej-label">${Utils.escapeHtml(reasonLabel({ reason, reason_text }))}</span>
             <span class="rej-source-tag ${Utils.escapeHtml(source)}">${Utils.escapeHtml(I18n.label(REJECTION_SOURCE_LABELS, source))}</span>
-            <span class="rej-count">${Utils.Utils.formatNumber(count, 0)}</span>
+            <span class="rej-count">${Utils.formatNumber(count, 0)}</span>
           </div>`;
         })
         .join("");

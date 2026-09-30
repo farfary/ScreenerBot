@@ -222,3 +222,19 @@
   font-size: 0.75rem;
   white-space: nowrap;
 }
+
+/* A logo placeholder with no text shows a bare glyph: icons never sit on a tile. */
+:root .token-logo.token-logo-glyph,
+:root .ti-logo-fallback.token-logo-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 0;
+  box-shadow: none;
+}
+
+:root .token-logo-glyph > i {
+  font-size: 1rem;
+  line-height: 1;
+}

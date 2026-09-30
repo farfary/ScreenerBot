@@ -191,7 +191,7 @@ tokens-overview-spike-5m = جهش 5M
 # $amount is the formatted average number of transactions per hour.
 tokens-overview-rate-per-hour = { $amount }/h
 # $amount is the formatted average number of transactions per minute.
-tokens-overview-rate-per-minute = { $amount }/m
+tokens-overview-rate-per-minute = { $amount }/دقیقه
 # $factor is the formatted ratio of the 5-minute rate to the 1-hour rate.
 tokens-overview-spike-factor = { $factor }×
 # Tooltip of one activity row. Counts and percentages are formatted; "—" marks a missing value.

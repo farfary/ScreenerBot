@@ -122,6 +122,7 @@ shell-status-bar-version = v
 shell-status-bar-uptime = التشغيل
 shell-status-bar-memory = الذاكرة
 shell-status-bar-rpc = RPC
+shell-status-rpc-per-minute = { $rate }/دقيقة
 shell-status-bar-trading = التداول
 shell-status-bar-positions = المراكز
 shell-status-bar-tokens = الرموز

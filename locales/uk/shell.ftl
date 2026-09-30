@@ -122,6 +122,7 @@ shell-status-bar-version = v
 shell-status-bar-uptime = Аптайм
 shell-status-bar-memory = Пам.
 shell-status-bar-rpc = RPC
+shell-status-rpc-per-minute = { $rate }/хв
 shell-status-bar-trading = Торгівля
 shell-status-bar-positions = Поз.
 shell-status-bar-tokens = Токени

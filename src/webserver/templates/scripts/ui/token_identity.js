@@ -135,10 +135,22 @@ async function fetchIdentities(mints) {
   }
 }
 
+/**
+ * Placeholder for an asset with no logo: the first grapheme of `seed` uppercased,
+ * or a bare coin glyph when there is no text. The glyph variant carries
+ * `token-logo-glyph`, which drops the avatar tile so the icon stays bare.
+ */
+export function tokenLogoPlaceholder(seed, className) {
+  const initial = Array.from(String(seed ?? "").trim())[0];
+  if (initial) {
+    return `<span class="${className}">${Utils.escapeHtml(initial.toUpperCase())}</span>`;
+  }
+  return `<span class="${className} token-logo-glyph"><i class="icon-coins" aria-hidden="true"></i></span>`;
+}
+
 /** Letter avatar for an asset with no logo — first character of symbol, else mint. */
 function logoPlaceholder(identity) {
-  const seed = identity.symbol || identity.mint || "?";
-  return `<span class="ti-logo-fallback">${Utils.escapeHtml(seed.charAt(0).toUpperCase())}</span>`;
+  return tokenLogoPlaceholder(identity.symbol || identity.mint, "ti-logo-fallback");
 }
 
 /**

@@ -69,7 +69,19 @@
 }
 
 .password-input-wrapper textarea.secure-input {
-  padding-inline-end: 40px;
+  /* rtl-ok: the wrapper is an LTR island; the toggle sits on its physical right */
+  padding-right: 40px;
+}
+
+/* The wrapper is an LTR island so the key, its reserved padding and the
+   visibility toggle all sit on the physical right. An empty field shows its
+   localized placeholder in the page direction; the physical padding above keeps
+   the toggle clear of the text. */
+[dir="rtl"] .password-input-wrapper textarea.secure-input:placeholder-shown {
+  /* rtl-ok: placeholder follows the RTL page inside an LTR island */
+  direction: rtl;
+  /* rtl-ok: placeholder follows the RTL page inside an LTR island */
+  text-align: right;
 }
 
 .password-input-wrapper .toggle-visibility {

@@ -726,7 +726,7 @@ function createLifecycle() {
         <td>${percentText(item.confidence, "—")}</td>
         <td>${Utils.escapeHtml(analysisLabel(ANALYSIS_RISK_LABELS, item.risk_level))}</td>
         <td class="decision-reasoning">
-          <span title="${Utils.escapeHtml(reasoning)}">${Utils.escapeHtml(reasoning)}</span>
+          <span dir="auto" title="${Utils.escapeHtml(reasoning)}">${Utils.escapeHtml(reasoning)}</span>
         </td>
         <td class="decision-model">${Utils.escapeHtml(item.model || item.provider || "—")}${item.cached ? ` <span class="badge secondary">${Utils.escapeHtml(I18n.t("assistant-history-cached"))}</span>` : ""}</td>
         <td class="decision-latency">${formatLatencyMs(Math.round(item.latency_ms || 0))}</td>

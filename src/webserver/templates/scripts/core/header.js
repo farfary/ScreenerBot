@@ -438,11 +438,15 @@ function initHeaderTabsScroll() {
   headerRow.addEventListener("wheel", wheelHandler, { passive: false });
   headerRow.addEventListener("scroll", scrollHandler, { passive: true });
 
-  // Watch for resize to update indicators
+  // The overflow changes when the row resizes AND when the tabs themselves do
+  // (web fonts landing, the nav rebuilt by the settings dialog), so observe both.
   const resizeObserver = new ResizeObserver(() => {
     updateScrollIndicators();
   });
   resizeObserver.observe(headerRow);
+  const navTabs = document.getElementById("navTabs");
+  if (navTabs) resizeObserver.observe(navTabs);
+  document.fonts?.ready.then(updateScrollIndicators).catch(() => {});
 
   // Initial update
   requestAnimationFrame(updateScrollIndicators);
@@ -474,6 +478,7 @@ function initNavTabsIndicator() {
   if (!navTabs) return;
 
   let indicator = null;
+  let lastActive = null;
 
   const ensureIndicator = () => {
     if (indicator?.isConnected) return indicator;
@@ -498,6 +503,13 @@ function initNavTabsIndicator() {
     navTabs.style.setProperty("--nav-indicator-x", `${active.offsetLeft}px`);
     navTabs.style.setProperty("--nav-indicator-w", `${active.offsetWidth}px`);
     bar.classList.add("is-visible");
+
+    // A newly active tab is brought into the scrollable row's view; the scroll
+    // handler then refreshes the edge fades.
+    if (active !== lastActive) {
+      lastActive = active;
+      active.scrollIntoView({ inline: "nearest", block: "nearest" });
+    }
 
     // Placed first, animated after: otherwise the very first measurement slides the bar
     // in from the row's left edge on every page load.

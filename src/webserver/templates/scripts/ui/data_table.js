@@ -938,10 +938,27 @@ export class DataTable {
   }
 
   /**
+   * True when a search query or a filter narrows the rows. Every toolbar filter
+   * keeps an entry in `state.filters`, so a filter only counts when it differs
+   * from its declared default (or, without one, holds a value other than empty,
+   * off or "all").
+   */
+  _hasActiveFilters() {
+    if (this.state.searchQuery) return true;
+    return Object.entries(this.state.filters || {}).some(([filterId, value]) => {
+      const filter =
+        this.toolbarView?.getItem(filterId) ||
+        this.options.toolbar?.filters?.find((item) => item?.id === filterId);
+      if (filter && filter.defaultValue !== undefined) return value !== filter.defaultValue;
+      return value !== "" && value !== null && value !== undefined && value !== false && value !== "all";
+    });
+  }
+
+  /**
    * Render empty state
    */
   _renderEmptyState() {
-    const hasFilters = this.state.searchQuery || Object.keys(this.state.filters || {}).length > 0;
+    const hasFilters = this._hasActiveFilters();
     const emptyIcon = hasFilters ? "icon-search" : "icon-inbox";
     const emptyTitle = hasFilters
       ? I18n.t("table-empty-filtered-title")
