@@ -69,3 +69,8 @@ dir = "ltr"
 code = "hi"
 name = "हिन्दी"
 dir = "ltr"
+
+[[locale]]
+code = "ar"
+name = "العربية"
+dir = "rtl"
