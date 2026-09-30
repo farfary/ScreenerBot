@@ -7,6 +7,8 @@ import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 import { playToggleOn, playToggleOff, playSuccess, playError } from "../core/sounds.js";
 import { ChatWidget } from "../core/chat_widget.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
+import { formatLatencyMs, formatPercentValue } from "../core/format.js";
+import { LLM_PROVIDER_LABELS } from "../ui/llm_provider.js";
 
 // Import tab modules
 import { createProvidersTab } from "./assistant/providers_tab.js";
@@ -23,34 +25,69 @@ import {
 // Constants
 const DEFAULT_TAB = "chat";
 const ASSISTANT_STATE_KEY = "assistant.activeTab";
-const ASSISTANT_TABS = [
-  { id: "chat", label: "Chat" },
-  { id: "stats", label: "Overview" },
-  { id: "providers", label: "Providers" },
-  { id: "instructions", label: "Instructions" },
-  { id: "automation", label: "Automation" },
-  { id: "history", label: "History" },
-  { id: "testing", label: "Testing" },
-  { id: "settings", label: "Settings" },
-];
-const ASSISTANT_TAB_IDS = new Set(ASSISTANT_TABS.map(({ id }) => id));
+const ASSISTANT_TAB_IDS = new Set([
+  "chat",
+  "stats",
+  "providers",
+  "instructions",
+  "automation",
+  "history",
+  "testing",
+  "settings",
+]);
+
+// Message key of each tab label.
+const ASSISTANT_TAB_LABELS = Object.freeze({
+  chat: "assistant-tab-chat",
+  stats: "assistant-tab-overview",
+  providers: "assistant-tab-providers",
+  instructions: "assistant-tab-instructions",
+  automation: "assistant-tab-automation",
+  history: "assistant-tab-history",
+  testing: "assistant-tab-testing",
+  settings: "assistant-tab-settings",
+});
+
+// Verdict ids written by src/llm_analysis/engine.rs; `allow` is the alias the
+// overview feed may carry.
+const ANALYSIS_DECISION_LABELS = Object.freeze({
+  allow: "assistant-decision-allow",
+  pass: "assistant-decision-pass",
+  reject: "assistant-decision-reject",
+  buy: "assistant-decision-buy",
+  sell: "assistant-decision-sell",
+  hold: "assistant-decision-hold",
+});
+
+// `RiskLevel` ids of src/llm_analysis/types.rs.
+const ANALYSIS_RISK_LABELS = Object.freeze({
+  low: "assistant-risk-low",
+  medium: "assistant-risk-medium",
+  high: "assistant-risk-high",
+  critical: "assistant-risk-critical",
+});
+
+function buildAssistantTabs() {
+  return [...ASSISTANT_TAB_IDS].map((id) => ({
+    id,
+    label: I18n.label(ASSISTANT_TAB_LABELS, id),
+  }));
+}
+
+/** Label for an id the model or history API reported; empty values show a dash. */
+function analysisLabel(map, value) {
+  if (!value) return "—";
+  const id = String(value).toLowerCase();
+  return I18n.label(map, Object.hasOwn(map, id) ? id : value);
+}
+
+function percentText(value, fallback) {
+  return formatPercentValue(value, { decimals: 0, includeSign: false, fallback });
+}
 
 // Decisions per History page. Sent as `per_page` and used to compute the page
 // count, so one constant keeps the request and the pager agreeing.
 const HISTORY_PAGE_SIZE = 20;
-
-// Provider names mapping
-const PROVIDER_NAMES = {
-  openai: "OpenAI",
-  anthropic: "Anthropic",
-  groq: "Groq",
-  deepseek: "DeepSeek",
-  gemini: "Google Gemini",
-  ollama: "Ollama",
-  together: "Together AI",
-  openrouter: "OpenRouter",
-  mistral: "Mistral AI",
-};
 
 function createLifecycle() {
   // Component references
@@ -182,7 +219,7 @@ function createLifecycle() {
       Utils.showToast({
         key: "assistant-load",
         type: "error",
-        title: "Could not load model-feature status",
+        title: I18n.t("assistant-status-load-failed"),
       });
     }
   }
@@ -205,14 +242,18 @@ function createLifecycle() {
 
     // Update status text
     if (statusText) {
-      statusText.textContent = enabled ? "Assistant Active" : "Assistant Disabled";
+      statusText.textContent = enabled
+        ? I18n.t("assistant-status-active")
+        : I18n.t("assistant-status-disabled");
     }
 
     // Update toggle
     toggle.checked = enabled;
     toggle.disabled = false;
     if (toggleLabel) {
-      toggleLabel.textContent = enabled ? "ON" : "OFF";
+      toggleLabel.textContent = enabled
+        ? I18n.t("assistant-toggle-on")
+        : I18n.t("assistant-toggle-off");
     }
   }
 
@@ -232,13 +273,13 @@ function createLifecycle() {
     const cacheHitRate = $("#metric-cache-hit-rate");
     if (cacheHitRate) {
       const rate = metrics.cache_hit_rate || 0;
-      cacheHitRate.textContent = `${Math.round(rate * 100)}%`;
+      cacheHitRate.textContent = percentText(Math.round(rate * 100));
     }
 
     // Avg Latency
     const avgLatency = $("#metric-avg-latency");
     if (avgLatency) {
-      avgLatency.textContent = `${Math.round(metrics.avg_response_time_ms || 0)}ms`;
+      avgLatency.textContent = formatLatencyMs(Math.round(metrics.avg_response_time_ms || 0));
     }
 
     // Active Providers
@@ -262,7 +303,7 @@ function createLifecycle() {
     if (!container) return;
 
     if (!decisions || decisions.length === 0) {
-      container.innerHTML = '<div class="empty-state">No recent decisions</div>';
+      container.innerHTML = `<div class="empty-state">${Utils.escapeHtml(I18n.t("assistant-decisions-empty"))}</div>`;
       return;
     }
 
@@ -271,25 +312,31 @@ function createLifecycle() {
         const decision = (d.decision || "").toLowerCase();
         const state = decision === "allow" ? "allow" : decision === "reject" ? "reject" : "neutral";
         const icon = state === "allow" ? "circle-check" : state === "reject" ? "circle-x" : "info";
-        const time = d.timestamp ? Utils.formatTimeAgo(new Date(d.timestamp)) : "";
-        const confidence = Math.round((d.confidence || 0) * 100);
-        const latency = Math.round(d.latency_ms || 0);
+        const time = d.timestamp
+          ? Utils.formatTimeAgo(new Date(d.timestamp))
+          : I18n.t("format-just-now");
+        const confidence = percentText(Math.round((d.confidence || 0) * 100));
+        const latency = formatLatencyMs(Math.round(d.latency_ms || 0));
+        const latencyTitle = Utils.escapeHtml(I18n.attr("assistant-decision-latency", "title"));
+        const confidenceTitle = Utils.escapeHtml(
+          I18n.attr("assistant-decision-confidence", "title")
+        );
 
         return `
           <div class="decision-card" data-decision="${state}">
             <div class="decision-icon"><i class="icon-${icon}"></i></div>
             <div class="decision-main">
               <div class="decision-top">
-                <span class="decision-token">${Utils.escapeHtml(d.token || "N/A")}</span>
+                <span class="decision-token">${Utils.escapeHtml(d.token || I18n.t("format-not-available"))}</span>
                 ${d.context ? `<span class="decision-context">${Utils.escapeHtml(d.context)}</span>` : ""}
               </div>
-              <div class="decision-time"><i class="icon-clock"></i> ${time || "just now"}</div>
+              <div class="decision-time"><i class="icon-clock"></i> ${Utils.escapeHtml(time)}</div>
             </div>
             <div class="decision-side">
-              <span class="decision-result">${Utils.escapeHtml((d.decision || "").toUpperCase() || "N/A")}</span>
+              <span class="decision-result">${Utils.escapeHtml(analysisLabel(ANALYSIS_DECISION_LABELS, d.decision))}</span>
               <div class="decision-stats">
-                <span title="Latency"><i class="icon-zap"></i> ${latency}ms</span>
-                <span title="Confidence"><i class="icon-activity"></i> ${confidence}%</span>
+                <span title="${latencyTitle}"><i class="icon-zap"></i> ${latency}</span>
+                <span title="${confidenceTitle}"><i class="icon-activity"></i> ${confidence}</span>
               </div>
             </div>
           </div>
@@ -315,17 +362,19 @@ function createLifecycle() {
       enabled ? playToggleOn() : playToggleOff();
       Utils.showToast({
         type: "success",
-        title: enabled ? "Assistant Enabled" : "Assistant Disabled",
+        title: enabled
+          ? I18n.t("assistant-toggle-enabled-title")
+          : I18n.t("assistant-toggle-disabled-title"),
         message: enabled
-          ? "Model-backed features are now active"
-          : "Model-backed features are disabled",
+          ? I18n.t("assistant-toggle-enabled-message")
+          : I18n.t("assistant-toggle-disabled-message"),
       });
 
       await loadAiStatus();
     } catch (error) {
       console.error("[Assistant] Failed to toggle model features:", error);
       playError();
-      Utils.showToast({ type: "error", title: "Failed to update model-feature status" });
+      Utils.showToast({ type: "error", title: I18n.t("assistant-toggle-failed") });
 
       // Revert toggle
       const toggle = $("#stats-assistant-toggle");
@@ -366,7 +415,7 @@ function createLifecycle() {
       Utils.showToast({
         key: "assistant-load",
         type: "error",
-        title: "Could not load analysis configuration",
+        title: I18n.t("assistant-config-load-failed"),
       });
     }
   }
@@ -387,11 +436,12 @@ function createLifecycle() {
     const defaultProvider = $("#setting-default-provider");
     if (defaultProvider) {
       // Populate provider options
-      defaultProvider.innerHTML =
-        '<option value="">Select Provider...</option>' +
-        Object.keys(PROVIDER_NAMES)
-          .map((id) => `<option value="${id}">${PROVIDER_NAMES[id]}</option>`)
-          .join("");
+      defaultProvider.replaceChildren(
+        new window.Option(I18n.t("assistant-provider-select"), ""),
+        ...Object.keys(LLM_PROVIDER_LABELS).map(
+          (id) => new window.Option(I18n.label(LLM_PROVIDER_LABELS, id), id)
+        )
+      );
       defaultProvider.value = config.default_provider || "";
     }
 
@@ -443,10 +493,9 @@ function createLifecycle() {
    */
   async function clearCache() {
     const confirmed = await ConfirmationDialog.show({
-      title: "Clear Cache",
-      message:
-        "Are you sure you want to clear the analysis cache? This will remove all cached model decisions.",
-      confirmText: "Clear Cache",
+      title: I18n.t("assistant-cache-clear"),
+      message: I18n.t("assistant-cache-clear-message"),
+      confirmText: I18n.t("assistant-cache-clear"),
       confirmClass: "danger",
     });
 
@@ -459,15 +508,15 @@ function createLifecycle() {
       playSuccess();
       Utils.showToast({
         type: "success",
-        title: "Cache Cleared",
-        message: "The analysis cache is empty",
+        title: I18n.t("assistant-cache-cleared-title"),
+        message: I18n.t("assistant-cache-cleared-message"),
       });
 
       await loadCacheStats();
     } catch (error) {
       console.error("[Assistant] Failed to clear cache:", error);
       playError();
-      Utils.showToast({ type: "error", title: "Failed to clear cache" });
+      Utils.showToast({ type: "error", title: I18n.t("assistant-cache-clear-failed") });
     }
   }
 
@@ -511,15 +560,15 @@ function createLifecycle() {
           playSuccess();
           Utils.showToast({
             type: "success",
-            title: "Saved",
-            message: "Configuration saved successfully",
+            title: I18n.t("assistant-config-saved-title"),
+            message: I18n.t("assistant-config-saved-message"),
           });
 
           await loadConfig();
         } catch (error) {
           console.error("[Assistant] Failed to save config:", error);
           playError();
-          Utils.showToast({ type: "error", title: "Failed to save configuration" });
+          Utils.showToast({ type: "error", title: I18n.t("assistant-config-save-failed") });
         }
       });
     }
@@ -596,7 +645,7 @@ function createLifecycle() {
       console.error("[Assistant] Error loading history:", error);
       const container = $("#history-list");
       if (container) {
-        container.innerHTML = '<div class="empty-state">Failed to load history</div>';
+        container.innerHTML = `<div class="empty-state">${Utils.escapeHtml(I18n.t("assistant-history-load-failed"))}</div>`;
       }
     }
   }
@@ -611,7 +660,7 @@ function createLifecycle() {
     if (!decisions || decisions.length === 0) {
       container.innerHTML = `
         <div class="empty-state">
-          <p class="empty-text">No LLM-analysis requests yet</p>
+          <p class="empty-text">${Utils.escapeHtml(I18n.t("assistant-history-empty"))}</p>
         </div>
       `;
       return;
@@ -623,14 +672,14 @@ function createLifecycle() {
       <table class="history-table">
         <thead>
           <tr>
-            <th>Token</th>
-            <th>Decision</th>
-            <th>Confidence</th>
-            <th>Risk</th>
-            <th>Reasoning</th>
-            <th>Model</th>
-            <th>Latency</th>
-            <th>When</th>
+            <th>${Utils.escapeHtml(I18n.t("assistant-history-column-token"))}</th>
+            <th>${Utils.escapeHtml(I18n.t("assistant-history-column-decision"))}</th>
+            <th>${Utils.escapeHtml(I18n.t("assistant-history-column-confidence"))}</th>
+            <th>${Utils.escapeHtml(I18n.t("assistant-history-column-risk"))}</th>
+            <th>${Utils.escapeHtml(I18n.t("assistant-history-column-reasoning"))}</th>
+            <th>${Utils.escapeHtml(I18n.t("assistant-history-column-model"))}</th>
+            <th>${Utils.escapeHtml(I18n.t("assistant-history-column-latency"))}</th>
+            <th>${Utils.escapeHtml(I18n.t("assistant-history-column-when"))}</th>
           </tr>
         </thead>
         <tbody>
@@ -643,12 +692,12 @@ function createLifecycle() {
         <div class="pagination">
           <button class="btn btn-sm btn-secondary" ${page <= 1 ? "disabled" : ""}
                   onclick="window.assistantPage.loadHistory(${page - 1})">
-            <i class="icon-chevron-left"></i> Previous
+            <i class="icon-chevron-left"></i> ${Utils.escapeHtml(I18n.t("assistant-history-previous"))}
           </button>
-          <span class="pagination-info">Page ${page} of ${totalPages}</span>
+          <span class="pagination-info">${Utils.escapeHtml(I18n.t("assistant-history-page", { page, total: totalPages }))}</span>
           <button class="btn btn-sm btn-secondary" ${page >= totalPages ? "disabled" : ""}
                   onclick="window.assistantPage.loadHistory(${page + 1})">
-            Next <i class="icon-chevron-right"></i>
+            ${Utils.escapeHtml(I18n.t("common-action-next"))} <i class="icon-chevron-right"></i>
           </button>
         </div>
       `
@@ -670,17 +719,17 @@ function createLifecycle() {
     return `
       <tr class="decision-row ${allowed ? "pass" : "reject"}">
         <td>
-          <span class="token-symbol">${Utils.escapeHtml(item.symbol || "Unknown")}</span>
+          <span class="token-symbol">${Utils.escapeHtml(item.symbol || I18n.t("format-unknown"))}</span>
           <span class="token-mint">${Utils.formatAddressCompact(item.mint)}</span>
         </td>
-        <td><span class="badge ${allowed ? "success" : "error"}">${Utils.escapeHtml(item.decision || "—")}</span></td>
-        <td>${item.confidence ?? "—"}%</td>
-        <td>${Utils.escapeHtml(item.risk_level || "—")}</td>
+        <td><span class="badge ${allowed ? "success" : "error"}">${Utils.escapeHtml(analysisLabel(ANALYSIS_DECISION_LABELS, item.decision))}</span></td>
+        <td>${percentText(item.confidence, "—")}</td>
+        <td>${Utils.escapeHtml(analysisLabel(ANALYSIS_RISK_LABELS, item.risk_level))}</td>
         <td class="decision-reasoning">
           <span title="${Utils.escapeHtml(reasoning)}">${Utils.escapeHtml(reasoning)}</span>
         </td>
-        <td class="decision-model">${Utils.escapeHtml(item.model || item.provider || "—")}${item.cached ? ' <span class="badge secondary">cached</span>' : ""}</td>
-        <td class="decision-latency">${Math.round(item.latency_ms || 0)}ms</td>
+        <td class="decision-model">${Utils.escapeHtml(item.model || item.provider || "—")}${item.cached ? ` <span class="badge secondary">${Utils.escapeHtml(I18n.t("assistant-history-cached"))}</span>` : ""}</td>
+        <td class="decision-latency">${formatLatencyMs(Math.round(item.latency_ms || 0))}</td>
         <td class="decision-when">${when}</td>
       </tr>
     `;
@@ -880,7 +929,7 @@ function createLifecycle() {
       if (!subTabBar) {
         subTabBar = new TabBar({
           container: "#subTabsContainer",
-          tabs: ASSISTANT_TABS,
+          tabs: buildAssistantTabs(),
           defaultTab: state.currentTab,
           stateKey: ASSISTANT_STATE_KEY,
           pageName: "assistant",
@@ -910,7 +959,7 @@ function createLifecycle() {
               await loadAiStatus();
             }
           },
-          { label: "Assistant Status", intervalMs: 5000 }
+          { label: "Assistant Status", intervalMs: 5000 } // l10n-ignore: poller name used in logs, never displayed
         );
       }
 
@@ -921,7 +970,7 @@ function createLifecycle() {
               await providersTab.loadProviders();
             }
           },
-          { label: "Assistant Providers", intervalMs: 10000 }
+          { label: "Assistant Providers", intervalMs: 10000 } // l10n-ignore: poller name used in logs, never displayed
         );
       }
 
@@ -932,7 +981,7 @@ function createLifecycle() {
               await loadCacheStats();
             }
           },
-          { label: "Cache Stats", intervalMs: 5000 }
+          { label: "Cache Stats", intervalMs: 5000 } // l10n-ignore: poller name used in logs, never displayed
         );
       }
 
@@ -943,7 +992,7 @@ function createLifecycle() {
               await loadSessions();
             }
           },
-          { label: "Chat Sessions", intervalMs: 3000 }
+          { label: "Chat Sessions", intervalMs: 3000 } // l10n-ignore: poller name used in logs, never displayed
         );
       }
 
@@ -956,7 +1005,7 @@ function createLifecycle() {
               await automationTab.loadAutomationStats();
             }
           },
-          { label: "Automation Tasks", intervalMs: 10000 }
+          { label: "Automation Tasks", intervalMs: 10000 } // l10n-ignore: poller name used in logs, never displayed
         );
       }
 

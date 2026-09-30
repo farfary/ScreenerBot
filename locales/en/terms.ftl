@@ -30,3 +30,12 @@
 -instagram = Instagram
 -linkedin = LinkedIn
 -tiktok = TikTok
+-openai = OpenAI
+-anthropic = Anthropic
+-groq = Groq
+-deepseek = DeepSeek
+-google-gemini = Google Gemini
+-ollama = Ollama
+-together-ai = Together AI
+-openrouter = OpenRouter
+-mistral-ai = Mistral AI

@@ -112,3 +112,31 @@ pub(super) struct ConfirmationState {
     pub(super) current_index: usize,
     pub(super) created_at: std::time::Instant,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::i18n::format_en;
+
+    /// The dashboard labels a tool call by the lowercased serialized variant
+    /// (`TOOL_CALL_STATUS_LABELS` in core/chat_widget.js); every variant needs a
+    /// catalog message named after its hyphenated form.
+    #[test]
+    fn every_tool_call_status_has_catalog_text() {
+        let listed = |status: ToolCallStatus| match status {
+            ToolCallStatus::Executed => "executed",
+            ToolCallStatus::PendingConfirmation => "pending-confirmation",
+            ToolCallStatus::Denied => "denied",
+            ToolCallStatus::Failed => "failed",
+        };
+        for status in [
+            ToolCallStatus::Executed,
+            ToolCallStatus::PendingConfirmation,
+            ToolCallStatus::Denied,
+            ToolCallStatus::Failed,
+        ] {
+            let key = format!("assistant-chat-tool-status-{}", listed(status));
+            assert_ne!(format_en(&key, None), key, "missing {key}");
+        }
+    }
+}

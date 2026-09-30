@@ -372,6 +372,15 @@ mod tests {
         assert_eq!(Provider::from_str("invalid"), None);
     }
 
+    /// `LLM_PROVIDER_LABELS` (ui/llm_provider.js) is keyed by `as_str`.
+    #[test]
+    fn every_provider_has_a_catalog_name() {
+        for provider in Provider::all() {
+            let key = format!("assistant-provider-{}", provider.as_str());
+            assert_ne!(crate::i18n::format_en(&key, None), key, "missing {key}");
+        }
+    }
+
     #[test]
     fn test_message_builders() {
         let sys = ChatMessage::system("You are a helpful assistant");

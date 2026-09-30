@@ -7,10 +7,8 @@
       <!-- Stats Panel (Overview) -->
       <div id="stats-panel" class="assistant-panel-content">
         <div class="assistant-panel-header">
-          <h2 class="assistant-panel-title">Assistant Overview</h2>
-          <p class="assistant-panel-description">
-            Live LLM and analysis status, performance metrics, and the latest model evaluations.
-          </p>
+          <h2 class="assistant-panel-title" data-l10n-id="assistant-overview-title"></h2>
+          <p class="assistant-panel-description" data-l10n-id="assistant-overview-description"></p>
         </div>
 
         <!-- Shared model-feature status control -->
@@ -20,14 +18,22 @@
               <i class="icon-bot"></i>
             </div>
             <div class="status-bar-info">
-              <span class="status-bar-title">Model Features</span>
-              <span class="status-bar-status" id="assistant-status-text">Loading...</span>
+              <span class="status-bar-title" data-l10n-id="assistant-features-title"></span>
+              <span
+                class="status-bar-status"
+                id="assistant-status-text"
+                data-l10n-id="common-loading"
+              ></span>
             </div>
           </div>
           <label class="toggle" data-level="root">
             <input type="checkbox" id="stats-assistant-toggle" disabled />
             <span class="toggle-track"></span>
-            <span class="toggle-state" id="stats-toggle-label">OFF</span>
+            <span
+              class="toggle-state"
+              id="stats-toggle-label"
+              data-l10n-id="assistant-toggle-off"
+            ></span>
           </label>
         </div>
 
@@ -36,28 +42,28 @@
           <div class="metric-card metric-card--with-icon" data-accent="primary">
             <div class="metric-icon"><i class="icon-hash"></i></div>
             <div class="metric-content">
-              <div class="metric-label">Total Evaluations</div>
+              <div class="metric-label" data-l10n-id="assistant-metric-total-evaluations"></div>
               <div class="metric-value" id="metric-total-evaluations">0</div>
             </div>
           </div>
           <div class="metric-card metric-card--with-icon" data-accent="success">
             <div class="metric-icon"><i class="icon-zap"></i></div>
             <div class="metric-content">
-              <div class="metric-label">Cache Hit Rate</div>
+              <div class="metric-label" data-l10n-id="assistant-metric-cache-hit-rate"></div>
               <div class="metric-value" id="metric-cache-hit-rate">0%</div>
             </div>
           </div>
           <div class="metric-card metric-card--with-icon" data-accent="info">
             <div class="metric-icon"><i class="icon-timer"></i></div>
             <div class="metric-content">
-              <div class="metric-label">Avg Latency</div>
+              <div class="metric-label" data-l10n-id="assistant-metric-avg-latency"></div>
               <div class="metric-value" id="metric-avg-latency">0ms</div>
             </div>
           </div>
           <div class="metric-card metric-card--with-icon" data-accent="warning">
             <div class="metric-icon"><i class="icon-server"></i></div>
             <div class="metric-content">
-              <div class="metric-label">Active Providers</div>
+              <div class="metric-label" data-l10n-id="assistant-metric-active-providers"></div>
               <div class="metric-value" id="metric-providers">0 / 9</div>
             </div>
           </div>
@@ -66,8 +72,10 @@
         <!-- Recent Decisions Section -->
         <div class="stats-section stats-section-decisions">
           <div class="section-header">
-            <h3><i class="icon-list"></i> Recent Decisions</h3>
-            <span class="section-subtitle">Latest model-analysis decisions</span>
+            <h3>
+              <i class="icon-list"></i> <span data-l10n-id="assistant-decisions-title"></span>
+            </h3>
+            <span class="section-subtitle" data-l10n-id="assistant-decisions-subtitle"></span>
           </div>
           <div id="recent-decisions-container"></div>
         </div>
@@ -76,10 +84,8 @@
       <!-- Providers Panel -->
       <div id="providers-panel" class="assistant-panel-content">
         <div class="assistant-panel-header">
-          <h2 class="assistant-panel-title">LLM Providers</h2>
-          <p class="assistant-panel-description">
-            Configure the shared LLM providers used by analysis and the Assistant
-          </p>
+          <h2 class="assistant-panel-title" data-l10n-id="assistant-providers-title"></h2>
+          <p class="assistant-panel-description" data-l10n-id="assistant-providers-description"></p>
         </div>
 
         <div class="providers-list-container">
@@ -95,16 +101,21 @@
         <!-- Master Settings Card -->
         <div class="settings-card">
           <div class="settings-card-header">
-            <h3 class="settings-card-title">Master Settings</h3>
-            <p class="settings-card-description">Shared LLM master switch and provider selection</p>
+            <h3 class="settings-card-title" data-l10n-id="assistant-master-title"></h3>
+            <p class="settings-card-description" data-l10n-id="assistant-master-description"></p>
           </div>
           <div class="settings-card-body">
             <div class="setting-item">
               <div class="setting-info">
-                <label class="setting-label" for="setting-enabled">Model Features</label>
-                <span class="setting-description"
-                  >Enable intelligent token analysis using LLM providers</span
-                >
+                <label
+                  class="setting-label"
+                  for="setting-enabled"
+                  data-l10n-id="assistant-features-title"
+                ></label>
+                <span
+                  class="setting-description"
+                  data-l10n-id="assistant-setting-enabled-description"
+                ></span>
               </div>
               <div class="setting-control">
                 <label class="toggle">
@@ -115,14 +126,19 @@
             </div>
             <div class="setting-item">
               <div class="setting-info">
-                <label class="setting-label" for="setting-default-provider">Default Provider</label>
-                <span class="setting-description"
-                  >The one provider used by analysis, the Assistant, and scheduled tasks</span
-                >
+                <label
+                  class="setting-label"
+                  for="setting-default-provider"
+                  data-l10n-id="assistant-setting-default-provider-label"
+                ></label>
+                <span
+                  class="setting-description"
+                  data-l10n-id="assistant-setting-default-provider-description"
+                ></span>
               </div>
               <div class="setting-control">
                 <select id="setting-default-provider" data-custom-select>
-                  <option value="">Select Provider...</option>
+                  <option value="" data-l10n-id="assistant-provider-select"></option>
                 </select>
               </div>
             </div>
@@ -132,20 +148,21 @@
         <!-- Filtering Card -->
         <div class="settings-card">
           <div class="settings-card-header">
-            <h3 class="settings-card-title">Filtering</h3>
-            <p class="settings-card-description">
-              Assistant-powered token filtering before entry decisions
-            </p>
+            <h3 class="settings-card-title" data-l10n-id="assistant-filtering-title"></h3>
+            <p class="settings-card-description" data-l10n-id="assistant-filtering-description"></p>
           </div>
           <div class="settings-card-body">
             <div class="setting-item">
               <div class="setting-info">
-                <label class="setting-label" for="setting-filtering-enabled"
-                  >Assistant Token Filtering</label
-                >
-                <span class="setting-description"
-                  >Evaluate tokens with Assistant before allowing entry trades</span
-                >
+                <label
+                  class="setting-label"
+                  for="setting-filtering-enabled"
+                  data-l10n-id="assistant-setting-filtering-enabled-label"
+                ></label>
+                <span
+                  class="setting-description"
+                  data-l10n-id="assistant-setting-filtering-enabled-description"
+                ></span>
               </div>
               <div class="setting-control">
                 <label class="toggle">
@@ -156,10 +173,15 @@
             </div>
             <div class="setting-item">
               <div class="setting-info">
-                <label class="setting-label" for="setting-min-confidence">Minimum Confidence</label>
-                <span class="setting-description"
-                  >Tokens must score at least this confidence level to pass (0-100)</span
-                >
+                <label
+                  class="setting-label"
+                  for="setting-min-confidence"
+                  data-l10n-id="assistant-setting-min-confidence-label"
+                ></label>
+                <span
+                  class="setting-description"
+                  data-l10n-id="assistant-setting-min-confidence-description"
+                ></span>
               </div>
               <div class="setting-control">
                 <div class="range-slider">
@@ -177,10 +199,15 @@
             </div>
             <div class="setting-item">
               <div class="setting-info">
-                <label class="setting-label" for="setting-fallback-pass">Fallback to Pass</label>
-                <span class="setting-description"
-                  >Allow token entry if Assistant evaluation fails or times out</span
-                >
+                <label
+                  class="setting-label"
+                  for="setting-fallback-pass"
+                  data-l10n-id="assistant-setting-fallback-pass-label"
+                ></label>
+                <span
+                  class="setting-description"
+                  data-l10n-id="assistant-setting-fallback-pass-description"
+                ></span>
               </div>
               <div class="setting-control">
                 <label class="toggle">
@@ -195,16 +222,21 @@
         <!-- Trading Card -->
         <div class="settings-card">
           <div class="settings-card-header">
-            <h3 class="settings-card-title">Trading</h3>
-            <p class="settings-card-description">Assistant analysis during trading operations</p>
+            <h3 class="settings-card-title" data-l10n-id="assistant-trading-title"></h3>
+            <p class="settings-card-description" data-l10n-id="assistant-trading-description"></p>
           </div>
           <div class="settings-card-body">
             <div class="setting-item">
               <div class="setting-info">
-                <label class="setting-label" for="setting-entry-analysis">Entry Analysis</label>
-                <span class="setting-description"
-                  >Run Assistant analysis before opening positions</span
-                >
+                <label
+                  class="setting-label"
+                  for="setting-entry-analysis"
+                  data-l10n-id="assistant-setting-entry-analysis-label"
+                ></label>
+                <span
+                  class="setting-description"
+                  data-l10n-id="assistant-setting-entry-analysis-description"
+                ></span>
               </div>
               <div class="setting-control">
                 <label class="toggle">
@@ -215,10 +247,15 @@
             </div>
             <div class="setting-item">
               <div class="setting-info">
-                <label class="setting-label" for="setting-exit-analysis">Exit Analysis</label>
-                <span class="setting-description"
-                  >Run Assistant analysis before closing positions</span
-                >
+                <label
+                  class="setting-label"
+                  for="setting-exit-analysis"
+                  data-l10n-id="assistant-setting-exit-analysis-label"
+                ></label>
+                <span
+                  class="setting-description"
+                  data-l10n-id="assistant-setting-exit-analysis-description"
+                ></span>
               </div>
               <div class="setting-control">
                 <label class="toggle">
@@ -229,12 +266,15 @@
             </div>
             <div class="setting-item">
               <div class="setting-info">
-                <label class="setting-label" for="setting-trailing-stop"
-                  >Trailing Stop Analysis</label
-                >
-                <span class="setting-description"
-                  >Run Assistant analysis when trailing stops are triggered</span
-                >
+                <label
+                  class="setting-label"
+                  for="setting-trailing-stop"
+                  data-l10n-id="assistant-setting-trailing-stop-label"
+                ></label>
+                <span
+                  class="setting-description"
+                  data-l10n-id="assistant-setting-trailing-stop-description"
+                ></span>
               </div>
               <div class="setting-control">
                 <label class="toggle">
@@ -249,20 +289,21 @@
         <!-- Auto Blacklist Card -->
         <div class="settings-card">
           <div class="settings-card-header">
-            <h3 class="settings-card-title">Auto Blacklist</h3>
-            <p class="settings-card-description">
-              Automatically block tokens based on Assistant scores
-            </p>
+            <h3 class="settings-card-title" data-l10n-id="assistant-blacklist-title"></h3>
+            <p class="settings-card-description" data-l10n-id="assistant-blacklist-description"></p>
           </div>
           <div class="settings-card-body">
             <div class="setting-item">
               <div class="setting-info">
-                <label class="setting-label" for="setting-auto-blacklist-enabled"
-                  >Auto Blacklist</label
-                >
-                <span class="setting-description"
-                  >Automatically blacklist tokens with very low Assistant scores</span
-                >
+                <label
+                  class="setting-label"
+                  for="setting-auto-blacklist-enabled"
+                  data-l10n-id="assistant-setting-auto-blacklist-label"
+                ></label>
+                <span
+                  class="setting-description"
+                  data-l10n-id="assistant-setting-auto-blacklist-description"
+                ></span>
               </div>
               <div class="setting-control">
                 <label class="toggle">
@@ -273,12 +314,15 @@
             </div>
             <div class="setting-item">
               <div class="setting-info">
-                <label class="setting-label" for="setting-blacklist-min-confidence"
-                  >Blacklist Threshold</label
-                >
-                <span class="setting-description"
-                  >Tokens scoring below this level will be auto-blacklisted (0-100)</span
-                >
+                <label
+                  class="setting-label"
+                  for="setting-blacklist-min-confidence"
+                  data-l10n-id="assistant-setting-blacklist-threshold-label"
+                ></label>
+                <span
+                  class="setting-description"
+                  data-l10n-id="assistant-setting-blacklist-threshold-description"
+                ></span>
               </div>
               <div class="setting-control">
                 <div class="range-slider">
@@ -300,16 +344,24 @@
         <!-- Performance Card -->
         <div class="settings-card">
           <div class="settings-card-header">
-            <h3 class="settings-card-title">Performance</h3>
-            <p class="settings-card-description">Caching and concurrency settings</p>
+            <h3 class="settings-card-title" data-l10n-id="assistant-performance-title"></h3>
+            <p
+              class="settings-card-description"
+              data-l10n-id="assistant-performance-description"
+            ></p>
           </div>
           <div class="settings-card-body">
             <div class="setting-item">
               <div class="setting-info">
-                <label class="setting-label" for="setting-cache-ttl">Cache TTL</label>
-                <span class="setting-description"
-                  >How long to cache Assistant results (60-3600 seconds)</span
-                >
+                <label
+                  class="setting-label"
+                  for="setting-cache-ttl"
+                  data-l10n-id="assistant-setting-cache-ttl-label"
+                ></label>
+                <span
+                  class="setting-description"
+                  data-l10n-id="assistant-setting-cache-ttl-description"
+                ></span>
               </div>
               <div class="setting-control">
                 <div class="range-slider">
@@ -327,10 +379,15 @@
             </div>
             <div class="setting-item">
               <div class="setting-info">
-                <label class="setting-label" for="setting-max-evaluations">Max Evaluations</label>
-                <span class="setting-description"
-                  >Maximum concurrent Assistant evaluations allowed (1-20)</span
-                >
+                <label
+                  class="setting-label"
+                  for="setting-max-evaluations"
+                  data-l10n-id="assistant-setting-max-evaluations-label"
+                ></label>
+                <span
+                  class="setting-description"
+                  data-l10n-id="assistant-setting-max-evaluations-description"
+                ></span>
               </div>
               <div class="setting-control">
                 <div class="range-slider">
@@ -352,22 +409,22 @@
         <!-- Cache Management Card -->
         <div class="settings-card">
           <div class="settings-card-header">
-            <h3 class="settings-card-title">Cache Management</h3>
-            <p class="settings-card-description">View and clear cached Assistant evaluations</p>
+            <h3 class="settings-card-title" data-l10n-id="assistant-cache-title"></h3>
+            <p class="settings-card-description" data-l10n-id="assistant-cache-description"></p>
           </div>
           <div class="settings-card-body">
             <div class="cache-stats">
               <div class="cache-stat">
-                <span class="cache-stat-label">Cache Size:</span>
+                <span class="cache-stat-label" data-l10n-id="assistant-cache-size-label"></span>
                 <span class="cache-stat-value" id="cache-size">0</span>
               </div>
               <div class="cache-stat">
-                <span class="cache-stat-label">Memory Usage:</span>
-                <span class="cache-stat-value" id="cache-memory">0 KB</span>
+                <span class="cache-stat-label" data-l10n-id="assistant-cache-memory-label"></span>
+                <span class="cache-stat-value" id="cache-memory">—</span>
               </div>
             </div>
             <button type="button" class="btn btn-secondary" id="clear-cache-btn">
-              <i class="icon-trash-2"></i> Clear Cache
+              <i class="icon-trash-2"></i> <span data-l10n-id="assistant-cache-clear"></span>
             </button>
           </div>
         </div>
@@ -377,38 +434,48 @@
       <div id="testing-panel" class="assistant-panel-content">
         <div class="testing-section">
           <div class="section-header">
-            <h3><i class="icon-flask-conical"></i> Assistant Testing Playground</h3>
-            <span class="section-subtitle">Test Assistant analysis on any token</span>
+            <h3>
+              <i class="icon-flask-conical"></i>
+              <span data-l10n-id="assistant-testing-title"></span>
+            </h3>
+            <span class="section-subtitle" data-l10n-id="assistant-testing-subtitle"></span>
           </div>
 
           <div class="testing-form">
             <div class="form-group">
-              <label for="test-mint-address">Mint Address</label>
+              <label for="test-mint-address" data-l10n-id="assistant-testing-mint-label"></label>
               <input
                 type="text"
                 id="test-mint-address"
                 class="form-control"
-                placeholder="Enter Solana token mint address..."
+                data-l10n-id="assistant-testing-mint-input"
               />
             </div>
 
             <div class="form-group">
-              <label for="test-priority">Priority</label>
+              <label for="test-priority" data-l10n-id="assistant-testing-priority-label"></label>
               <select id="test-priority" class="form-control" data-custom-select>
-                <option value="low">Low</option>
-                <option value="medium" selected>Medium</option>
-                <option value="high">High</option>
+                <option value="low" data-l10n-id="assistant-testing-priority-low"></option>
+                <option
+                  value="medium"
+                  selected
+                  data-l10n-id="assistant-testing-priority-medium"
+                ></option>
+                <option value="high" data-l10n-id="assistant-testing-priority-high"></option>
               </select>
             </div>
 
             <button type="button" class="btn btn-primary" id="evaluate-btn">
-              <i class="icon-play"></i> Evaluate
+              <i class="icon-play"></i> <span data-l10n-id="assistant-testing-evaluate"></span>
             </button>
           </div>
 
           <div id="testing-results" class="testing-results" style="display: none">
             <div class="section-header">
-              <h4><i class="icon-file-text"></i> Results</h4>
+              <h4>
+                <i class="icon-file-text"></i>
+                <span data-l10n-id="assistant-testing-results"></span>
+              </h4>
             </div>
             <div id="testing-results-content"></div>
           </div>
@@ -419,13 +486,14 @@
       <div id="instructions-panel" class="assistant-panel-content">
         <div class="assistant-panel-header">
           <div class="panel-header-content">
-            <h2 class="assistant-panel-title">Custom Instructions</h2>
-            <p class="assistant-panel-description">
-              Add custom prompts that are injected into Assistant evaluations
-            </p>
+            <h2 class="assistant-panel-title" data-l10n-id="assistant-instructions-title"></h2>
+            <p
+              class="assistant-panel-description"
+              data-l10n-id="assistant-instructions-description"
+            ></p>
           </div>
           <button type="button" class="btn btn-primary" id="new-instruction-btn">
-            <i class="icon-plus"></i> New Instruction
+            <i class="icon-plus"></i> <span data-l10n-id="assistant-instructions-new"></span>
           </button>
         </div>
 
@@ -433,23 +501,38 @@
         <div class="instructions-toolbar">
           <div class="filter-group">
             <select id="instructions-category-filter" class="filter-select" data-custom-select>
-              <option value="all">All Categories</option>
-              <option value="filtering">Filtering</option>
-              <option value="trading">Trading</option>
-              <option value="analysis">Analysis</option>
-              <option value="general">General</option>
+              <option value="all" data-l10n-id="assistant-instructions-category-all"></option>
+              <option
+                value="filtering"
+                data-l10n-id="assistant-instructions-category-filtering"
+              ></option>
+              <option
+                value="trading"
+                data-l10n-id="assistant-instructions-category-trading"
+              ></option>
+              <option
+                value="analysis"
+                data-l10n-id="assistant-instructions-category-analysis"
+              ></option>
+              <option
+                value="general"
+                data-l10n-id="assistant-instructions-category-general"
+              ></option>
             </select>
             <select id="instructions-status-filter" class="filter-select" data-custom-select>
-              <option value="all">All Status</option>
-              <option value="active">Active Only</option>
-              <option value="inactive">Inactive Only</option>
+              <option value="all" data-l10n-id="assistant-instructions-status-all"></option>
+              <option value="active" data-l10n-id="assistant-instructions-status-active"></option>
+              <option
+                value="inactive"
+                data-l10n-id="assistant-instructions-status-inactive"
+              ></option>
             </select>
           </div>
           <div class="search-box">
             <input
               type="text"
               id="instructions-search"
-              placeholder="Search instructions..."
+              data-l10n-id="assistant-instructions-search"
               class="search-input"
             />
             <i class="search-icon icon-search"></i>
@@ -462,10 +545,13 @@
             <!-- Rendered by JavaScript -->
             <div class="empty-state" id="no-instructions">
               <i class="empty-icon icon-file-text"></i>
-              <p class="empty-text">No custom instructions yet</p>
-              <button type="button" class="btn btn-secondary" id="empty-add-instruction-btn">
-                Add Your First Instruction
-              </button>
+              <p class="empty-text" data-l10n-id="assistant-instructions-empty"></p>
+              <button
+                type="button"
+                class="btn btn-secondary"
+                id="empty-add-instruction-btn"
+                data-l10n-id="assistant-instructions-empty-add"
+              ></button>
             </div>
           </div>
         </div>
@@ -475,12 +561,12 @@
           <div class="templates-header" id="templates-toggle-btn">
             <div class="templates-title">
               <i class="templates-icon icon-library"></i>
-              <span>Instruction Templates</span>
+              <span data-l10n-id="assistant-templates-title"></span>
             </div>
             <span class="templates-toggle" id="templates-toggle">▼</span>
           </div>
           <div class="templates-body" id="templates-body">
-            <p class="templates-description">Pre-built instruction templates you can add</p>
+            <p class="templates-description" data-l10n-id="assistant-templates-description"></p>
             <div class="templates-grid" id="templates-list">
               <!-- Rendered by JavaScript -->
             </div>
@@ -492,18 +578,19 @@
       <div id="automation-panel" class="assistant-panel-content">
         <div class="assistant-panel-header">
           <div class="panel-header-content">
-            <h2 class="assistant-panel-title">Automation</h2>
-            <p class="assistant-panel-description">
-              Schedule Assistant tasks to run automatically on intervals or at specific times
-            </p>
+            <h2 class="assistant-panel-title" data-l10n-id="assistant-automation-title"></h2>
+            <p
+              class="assistant-panel-description"
+              data-l10n-id="assistant-automation-description"
+            ></p>
           </div>
           <button
             type="button"
             class="btn btn-primary"
             id="new-automation-btn"
-            aria-label="Create new automation task"
+            data-l10n-id="assistant-automation-new"
           >
-            <i class="icon-plus"></i> New Task
+            <i class="icon-plus"></i> <span data-l10n-id="assistant-automation-new-label"></span>
           </button>
         </div>
 
@@ -511,19 +598,19 @@
         <div class="automation-stats" id="automation-stats">
           <div class="automation-stat-card">
             <div class="stat-value" id="auto-stat-total">0</div>
-            <div class="stat-label">Total Tasks</div>
+            <div class="stat-label" data-l10n-id="assistant-automation-stat-total"></div>
           </div>
           <div class="automation-stat-card">
             <div class="stat-value" id="auto-stat-active">0</div>
-            <div class="stat-label">Active</div>
+            <div class="stat-label" data-l10n-id="assistant-automation-stat-active"></div>
           </div>
           <div class="automation-stat-card">
             <div class="stat-value" id="auto-stat-runs">0</div>
-            <div class="stat-label">Total Runs</div>
+            <div class="stat-label" data-l10n-id="assistant-automation-stat-runs"></div>
           </div>
           <div class="automation-stat-card">
             <div class="stat-value" id="auto-stat-success-rate">—</div>
-            <div class="stat-label">Success Rate</div>
+            <div class="stat-label" data-l10n-id="assistant-automation-stat-success-rate"></div>
           </div>
         </div>
 
@@ -532,18 +619,17 @@
           <div class="automation-list" id="automation-list">
             <div class="empty-state" id="no-automation-tasks">
               <i class="empty-icon icon-zap"></i>
-              <p class="empty-text">No scheduled tasks yet</p>
-              <p class="empty-state-subtitle">
-                Create your first automated Assistant task to get started
-              </p>
+              <p class="empty-text" data-l10n-id="assistant-automation-empty"></p>
+              <p
+                class="empty-state-subtitle"
+                data-l10n-id="assistant-automation-empty-subtitle"
+              ></p>
               <button
                 type="button"
                 class="btn btn-secondary"
                 id="empty-add-automation-btn"
-                aria-label="Create first automation task"
-              >
-                Create Your First Task
-              </button>
+                data-l10n-id="assistant-automation-empty-add"
+              ></button>
             </div>
           </div>
         </div>
@@ -551,7 +637,10 @@
         <!-- Recent Runs Timeline -->
         <div class="automation-runs-section">
           <div class="automation-runs-header">
-            <h3 class="automation-runs-title"><i class="icon-clock"></i> Recent Runs</h3>
+            <h3 class="automation-runs-title">
+              <i class="icon-clock"></i>
+              <span data-l10n-id="assistant-automation-runs-title"></span>
+            </h3>
             <span class="automation-runs-count" id="auto-runs-count"></span>
           </div>
           <div class="automation-runs-list" id="automation-runs-list">
@@ -564,8 +653,8 @@
       <div id="history-panel" class="assistant-panel-content">
         <div class="history-section">
           <div class="section-header">
-            <h3><i class="icon-clock"></i> Decision History</h3>
-            <span class="section-subtitle">Recent Assistant evaluations</span>
+            <h3><i class="icon-clock"></i> <span data-l10n-id="assistant-history-title"></span></h3>
+            <span class="section-subtitle" data-l10n-id="assistant-history-subtitle"></span>
           </div>
           <div id="history-list" class="history-list"></div>
         </div>

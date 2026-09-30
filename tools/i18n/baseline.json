@@ -1,10 +1,7 @@
 {
   "hardcoded": {
-    "src/webserver/templates/pages/assistant.html": 94,
     "src/webserver/templates/pages/config.html": 7,
     "src/webserver/templates/pages/tools.html": 35,
-    "src/webserver/templates/scripts/core/chat_widget.js": 90,
-    "src/webserver/templates/scripts/pages/assistant.js": 52,
     "src/webserver/templates/scripts/pages/assistant/automation_tab.js": 83,
     "src/webserver/templates/scripts/pages/assistant/instructions_tab.js": 88,
     "src/webserver/templates/scripts/pages/assistant/providers_tab.js": 47,

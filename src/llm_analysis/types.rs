@@ -105,3 +105,58 @@ pub struct InstructionTemplate {
     pub content: &'static str,
     pub tags: &'static [&'static str],
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::i18n::format_en;
+    use crate::llm_analysis::schemas::{FilterAction, TradeAction};
+
+    fn assert_catalog(key: String) {
+        assert_ne!(format_en(&key, None), key, "missing {key}");
+    }
+
+    /// Mirrors `ANALYSIS_RISK_LABELS` in pages/assistant.js.
+    #[test]
+    fn every_risk_level_has_catalog_text() {
+        for level in [
+            RiskLevel::Low,
+            RiskLevel::Medium,
+            RiskLevel::High,
+            RiskLevel::Critical,
+        ] {
+            let id = match level {
+                RiskLevel::Low => "low",
+                RiskLevel::Medium => "medium",
+                RiskLevel::High => "high",
+                RiskLevel::Critical => "critical",
+            };
+            assert_catalog(format!("assistant-risk-{id}"));
+        }
+    }
+
+    /// The verdict ids the engine records, mirrored by `ANALYSIS_DECISION_LABELS`
+    /// in pages/assistant.js.
+    #[test]
+    fn every_recorded_decision_has_catalog_text() {
+        let filter = |action: FilterAction| match action {
+            FilterAction::Pass => "pass",
+            FilterAction::Reject => "reject",
+        };
+        let trade = |action: TradeAction| match action {
+            TradeAction::Buy => "buy",
+            TradeAction::Sell => "sell",
+            TradeAction::Hold => "hold",
+        };
+        let ids = [
+            filter(FilterAction::Pass),
+            filter(FilterAction::Reject),
+            trade(TradeAction::Buy),
+            trade(TradeAction::Sell),
+            trade(TradeAction::Hold),
+        ];
+        for id in ids {
+            assert_catalog(format!("assistant-decision-{id}"));
+        }
+    }
+}

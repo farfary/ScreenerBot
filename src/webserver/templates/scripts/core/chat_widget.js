@@ -12,6 +12,59 @@ import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 import { playSuccess, playError } from "./sounds.js";
 import { apiErrorMessage } from "./request_manager.js";
 
+// Longest message the composer accepts.
+const MESSAGE_LIMIT = 4000;
+
+// Message key of each tool-call status, keyed by the lowercased `ToolCallStatus`
+// variant of src/assistant/chat/types.rs. `pending` is the fallback for a status
+// the widget does not know.
+const TOOL_CALL_STATUS_LABELS = Object.freeze({
+  executed: "assistant-chat-tool-status-executed",
+  failed: "assistant-chat-tool-status-failed",
+  denied: "assistant-chat-tool-status-denied",
+  pendingconfirmation: "assistant-chat-tool-status-pending-confirmation",
+  pending: "assistant-chat-tool-status-pending",
+});
+
+// Message key of each message author role.
+const CHAT_ROLE_LABELS = Object.freeze({
+  user: "assistant-chat-role-user",
+  assistant: "assistant-chat-role-assistant",
+});
+
+// Message key of each session date group, in display order.
+const SESSION_GROUP_LABELS = Object.freeze({
+  today: "assistant-chat-group-today",
+  yesterday: "assistant-chat-group-yesterday",
+  week: "assistant-chat-group-week",
+  older: "assistant-chat-group-older",
+});
+
+// Starter prompts. `send` submits the prompt at once; a prompt that ends with an
+// open subject is placed in the composer for the user to complete.
+function quickPrompts() {
+  return [
+    {
+      icon: "wallet",
+      label: I18n.t("assistant-chat-prompt-positions-label"),
+      text: I18n.t("assistant-chat-prompt-positions-text"),
+      send: true,
+    },
+    {
+      icon: "shield-check",
+      label: I18n.t("assistant-chat-prompt-token-label"),
+      text: I18n.t("assistant-chat-prompt-token-text"),
+      send: false,
+    },
+    {
+      icon: "activity",
+      label: I18n.t("assistant-chat-prompt-activity-label"),
+      text: I18n.t("assistant-chat-prompt-activity-text"),
+      send: true,
+    },
+  ];
+}
+
 export class ChatWidget {
   /**
    * @param {HTMLElement} root - Container element to render chat into
@@ -45,7 +98,6 @@ export class ChatWidget {
 
     this._buildHTML();
     this._setupHandlers();
-    this._updateKeyboardHint();
   }
 
   // ---------------------------------------------------------------------------
@@ -71,71 +123,69 @@ export class ChatWidget {
 
   _buildHTML() {
     const hostClass = ` cw-host-${this.opts.layout}`;
+    const quickPromptsHtml = quickPrompts()
+      .map(
+        (prompt) => `
+                <button class="quick-prompt" type="button" data-prompt="${Utils.escapeHtml(prompt.text)}" data-send="${prompt.send}">
+                  <i class="icon-${prompt.icon}"></i><span>${Utils.escapeHtml(prompt.label)}</span><i class="icon-arrow-up-right"></i>
+                </button>`
+      )
+      .join("");
     this.root.innerHTML = `
       <div class="chat-widget chat-container${hostClass}">
         <div class="chat-sessions-sidebar">
           <div class="sessions-header">
-            <h3>Sessions</h3>
-            <button class="new-session-btn" type="button" title="New Chat" aria-label="Create new chat session">
+            <h3 data-l10n-id="assistant-chat-sessions-title"></h3>
+            <button class="new-session-btn" type="button" data-l10n-id="assistant-chat-sidebar-new">
               <i class="icon-plus"></i>
             </button>
           </div>
           <div class="sessions-search">
             <i class="icon-search"></i>
-            <input type="text" class="cw-sessions-search" placeholder="Search chats..." aria-label="Search chat sessions" />
+            <input type="text" class="cw-sessions-search" data-l10n-id="assistant-chat-search" />
           </div>
           <div class="sessions-list cw-sessions-list"></div>
         </div>
-        <button class="chat-sessions-scrim" type="button" aria-label="Close chat history"></button>
+        <button class="chat-sessions-scrim" type="button" data-l10n-id="assistant-chat-history-close"></button>
 
         <div class="chat-main">
           <div class="chat-header">
-            <span class="chat-title cw-chat-title">New Chat</span>
+            <span class="chat-title cw-chat-title" data-l10n-id="assistant-chat-title-new"></span>
             <div class="chat-actions">
-              <button class="chat-action-btn cw-sessions-toggle" type="button" title="Chat history" aria-label="Open chat history" aria-expanded="false">
+              <button class="chat-action-btn cw-sessions-toggle" type="button" data-l10n-id="assistant-chat-history-open" aria-expanded="false">
                 <i class="icon-panel-left"></i>
               </button>
-              <button class="chat-action-btn cw-new-session-btn" type="button" title="New Chat" aria-label="Start a new chat">
+              <button class="chat-action-btn cw-new-session-btn" type="button" data-l10n-id="assistant-chat-header-new">
                 <i class="icon-plus"></i>
               </button>
-              <button class="chat-action-btn cw-delete-btn" type="button" title="Delete" aria-label="Delete session">
+              <button class="chat-action-btn cw-delete-btn" type="button" data-l10n-id="assistant-chat-delete">
                 <i class="icon-trash"></i>
               </button>
-              ${this.opts.onClose ? '<button class="chat-action-btn cw-close-btn" type="button" title="Close" aria-label="Close Assistant"><i class="icon-x"></i></button>' : ""}
+              ${this.opts.onClose ? '<button class="chat-action-btn cw-close-btn" type="button" data-l10n-id="assistant-chat-close"><i class="icon-x"></i></button>' : ""}
             </div>
           </div>
 
           <div class="chat-messages cw-chat-messages" aria-live="polite" aria-atomic="false">
             <div class="chat-empty-state cw-empty-state">
-              <div class="empty-state-kicker"><i class="icon-bot-message-square"></i><span>Assistant</span></div>
-              <h3>How can I help you today?</h3>
-              <p class="empty-state-subtitle">Review your portfolio, investigate a token, or understand recent trading activity.</p>
-              <div class="quick-prompts">
-                <button class="quick-prompt" type="button" data-prompt="What's my current wallet balance and open positions?">
-                  <i class="icon-wallet"></i><span>Review open positions</span><i class="icon-arrow-up-right"></i>
-                </button>
-                <button class="quick-prompt" type="button" data-prompt="Analyze the security and risks of this token: ">
-                  <i class="icon-shield-check"></i><span>Analyze a token</span><i class="icon-arrow-up-right"></i>
-                </button>
-                <button class="quick-prompt" type="button" data-prompt="Explain my recent trading activity and any important outcomes">
-                  <i class="icon-activity"></i><span>Explain recent activity</span><i class="icon-arrow-up-right"></i>
-                </button>
-              </div>
+              <div class="empty-state-kicker"><i class="icon-bot-message-square"></i><span data-l10n-id="assistant-chat-empty-kicker"></span></div>
+              <h3 data-l10n-id="assistant-chat-empty-title"></h3>
+              <p class="empty-state-subtitle" data-l10n-id="assistant-chat-empty-subtitle"></p>
+              <div class="quick-prompts">${quickPromptsHtml}</div>
             </div>
           </div>
 
           <section class="tool-confirmation cw-tool-modal" aria-live="polite" hidden>
             <div class="tool-confirmation-copy">
-              <div class="tool-confirmation-title"><i class="icon-triangle-alert"></i><strong class="cw-tool-name">Tool Name</strong></div>
-              <p class="cw-tool-description">This action requires your approval.</p>
+              <div class="tool-confirmation-title"><i class="icon-triangle-alert"></i><strong class="cw-tool-name"></strong></div>
+              <p class="cw-tool-description"></p>
               <details class="tool-confirmation-details">
-                <summary>Review input</summary>
-                <pre class="cw-tool-input tool-call-code">{}</pre>
+                <summary data-l10n-id="assistant-chat-tool-review"></summary>
+                <pre class="cw-tool-input tool-call-code"></pre>
               </details>
             </div>
             <div class="confirmation-actions">
-              <button class="btn btn-secondary cw-deny-tool" type="button">Deny</button>
-              <button class="btn btn-primary cw-confirm-tool" type="button">Allow</button>
+              <button class="btn btn-secondary cw-deny-tool" type="button" data-l10n-id="assistant-chat-tool-deny"></button>
+              <button class="btn btn-primary cw-confirm-tool" type="button" data-l10n-id="assistant-chat-tool-allow"></button>
             </div>
           </section>
 
@@ -143,11 +193,15 @@ export class ChatWidget {
             <div class="chat-context cw-chat-context"></div>
             <div class="chat-input-container cw-input-container">
               <div class="chat-input-wrapper">
-                <textarea class="cw-chat-input" placeholder="Message Assistant..." rows="1" aria-label="Message input"></textarea>
-                <div class="input-hint cw-input-hint"><kbd>Enter</kbd> to send <span>·</span> <kbd>Shift</kbd><kbd>Enter</kbd> for a new line</div>
+                <textarea class="cw-chat-input" rows="1" data-l10n-id="assistant-chat-input"></textarea>
+                <div class="input-hint cw-input-hint">
+                  <kbd data-l10n-id="assistant-chat-hint-key-enter"></kbd><span data-l10n-id="assistant-chat-hint-send"></span>
+                  <span>·</span>
+                  <kbd data-l10n-id="assistant-chat-hint-key-shift"></kbd><kbd data-l10n-id="assistant-chat-hint-key-enter"></kbd><span data-l10n-id="assistant-chat-hint-newline"></span>
+                </div>
               </div>
               <div class="chat-input-actions">
-                <button class="send-btn cw-send-btn" type="button" disabled aria-label="Send message" title="Send message">
+                <button class="send-btn cw-send-btn" type="button" disabled data-l10n-id="assistant-chat-send">
                   <i class="icon-send"></i>
                 </button>
               </div>
@@ -160,6 +214,7 @@ export class ChatWidget {
         </div>
       </div>
     `;
+    I18n.localizeTree(this.root);
   }
 
   // ---------------------------------------------------------------------------
@@ -201,10 +256,11 @@ export class ChatWidget {
         if (!prompt) return;
         const chatInput = this.$(".cw-chat-input");
         if (!chatInput) return;
-        chatInput.value = prompt;
+        const sendNow = btn.dataset.send === "true";
+        chatInput.value = sendNow ? prompt : `${prompt} `;
         chatInput.focus();
         chatInput.dispatchEvent(new Event("input", { bubbles: true }));
-        if (!prompt.trim().endsWith(":")) this.sendMessage();
+        if (sendNow) this.sendMessage();
       });
     });
 
@@ -223,9 +279,11 @@ export class ChatWidget {
             const orig = icon.className;
             icon.className = "icon-check";
             setTimeout(() => (icon.className = orig), 1500);
-            Utils.notifyCopied("Message");
+            Utils.notifyCopied(I18n.t("assistant-chat-copied-message"));
           })
-          .catch(() => Utils.showToast({ type: "error", title: "Failed to copy message" }));
+          .catch(() =>
+            Utils.showToast({ type: "error", title: I18n.t("assistant-chat-copy-failed") })
+          );
       } else if (action === "regenerate") {
         this.regenerateLastMessage();
       }
@@ -298,7 +356,7 @@ export class ChatWidget {
       Utils.showToast({
         key: "chat-sessions",
         type: "error",
-        title: "Could not load chat sessions",
+        title: I18n.t("assistant-chat-sessions-load-failed"),
       });
     }
   }
@@ -332,10 +390,10 @@ export class ChatWidget {
     if (this.state.isLoading) this.cancelRequest();
     try {
       const confirmed = await ConfirmationDialog.show({
-        title: "Delete Chat Session",
-        message: "Are you sure you want to delete this chat session? This action cannot be undone.",
-        confirmText: "Delete",
-        cancelText: "Cancel",
+        title: I18n.t("assistant-chat-delete-title"),
+        message: I18n.t("assistant-chat-delete-message"),
+        confirmText: I18n.t("common-action-delete"),
+        cancelText: I18n.t("common-action-cancel"),
         type: "danger",
       });
       if (!confirmed) return;
@@ -353,11 +411,11 @@ export class ChatWidget {
       }
 
       await this.loadSessions();
-      Utils.showToast({ type: "success", title: "Chat session deleted" });
+      Utils.showToast({ type: "success", title: I18n.t("assistant-chat-delete-done") });
     } catch (error) {
       console.error("[ChatWidget] Error deleting session:", error);
       playError();
-      Utils.showToast({ type: "error", title: "Failed to delete chat session" });
+      Utils.showToast({ type: "error", title: I18n.t("assistant-chat-delete-failed") });
     }
   }
 
@@ -390,11 +448,13 @@ export class ChatWidget {
     const message = input.value.trim();
     if (!message) return;
 
-    if (message.length > 4000) {
+    if (message.length > MESSAGE_LIMIT) {
       Utils.showToast({
         type: "error",
-        title: "Message too long",
-        message: "Please shorten your message to under 4,000 characters",
+        title: I18n.t("assistant-chat-message-too-long-title"),
+        message: I18n.t("assistant-chat-message-too-long-message", {
+          limit: formatNumber(MESSAGE_LIMIT, 0),
+        }),
       });
       return;
     }
@@ -416,7 +476,7 @@ export class ChatWidget {
         this._showChatInterface();
       } catch (error) {
         console.error("[ChatWidget] Error auto-creating session:", error);
-        Utils.showToast({ type: "error", title: "Failed to start chat session" });
+        Utils.showToast({ type: "error", title: I18n.t("assistant-chat-start-failed") });
         return;
       }
     }
@@ -450,7 +510,10 @@ export class ChatWidget {
       this._hideTypingIndicator();
       this._updateInputStatus("");
 
-      if (data.error) throw new Error(apiErrorMessage(data, "Unknown error")); // api-body-ok: presence check of the streamed envelope, rendered by apiErrorMessage
+      const streamedError = data.error; // api-body-ok: presence check of the streamed envelope, rendered by apiErrorMessage
+      if (streamedError) {
+        throw new Error(apiErrorMessage(data, I18n.t("assistant-chat-error-unknown")));
+      }
 
       if (data.content !== undefined) {
         this.state.messages.push({
@@ -493,7 +556,7 @@ export class ChatWidget {
       }
 
       this._updateInputStatus(
-        '<i class="icon-circle-alert"></i> Assistant could not complete the response. Your message is ready to retry.',
+        `<i class="icon-circle-alert"></i> ${Utils.escapeHtml(I18n.t("assistant-chat-send-failed"))}`,
         "error"
       );
     } finally {
@@ -507,7 +570,7 @@ export class ChatWidget {
   async regenerateLastMessage() {
     const lastUserIndex = this.state.messages.map((m) => m.role).lastIndexOf("user");
     if (lastUserIndex === -1) {
-      Utils.showToast({ type: "error", title: "No message to regenerate" });
+      Utils.showToast({ type: "error", title: I18n.t("assistant-chat-regenerate-none") });
       return;
     }
 
@@ -516,7 +579,7 @@ export class ChatWidget {
     if (!previousAssistant?.id || previousAssistant.role !== "assistant") {
       Utils.showToast({
         type: "error",
-        title: "Reload the chat before regenerating this response",
+        title: I18n.t("assistant-chat-regenerate-reload"),
       });
       return;
     }
@@ -547,7 +610,10 @@ export class ChatWidget {
       this._hideTypingIndicator();
       this._updateInputStatus("");
 
-      if (data.error) throw new Error(apiErrorMessage(data, "Unknown error")); // api-body-ok: presence check of the streamed envelope, rendered by apiErrorMessage
+      const streamedError = data.error; // api-body-ok: presence check of the streamed envelope, rendered by apiErrorMessage
+      if (streamedError) {
+        throw new Error(apiErrorMessage(data, I18n.t("assistant-chat-error-unknown")));
+      }
 
       if (data.content !== undefined) {
         this.state.messages.push({
@@ -569,8 +635,8 @@ export class ChatWidget {
 
       Utils.showToast({
         type: "success",
-        title: "Regenerated",
-        message: "Response regenerated successfully",
+        title: I18n.t("assistant-chat-regenerate-done-title"),
+        message: I18n.t("assistant-chat-regenerate-done-message"),
       });
     } catch (error) {
       if (error.name === "AbortError") return;
@@ -580,11 +646,14 @@ export class ChatWidget {
       playError();
       this._hideTypingIndicator();
       this._updateInputStatus(
-        `<i class="icon-circle-alert"></i> ${Utils.escapeHtml(error.message || "Failed to regenerate")}`,
+        `<i class="icon-circle-alert"></i> ${Utils.escapeHtml(error.message || I18n.t("assistant-chat-regenerate-failed"))}`,
         "error"
       );
       setTimeout(() => this._updateInputStatus(""), 5000);
-      Utils.showToast({ type: "error", title: error.message || "Failed to regenerate response" });
+      Utils.showToast({
+        type: "error",
+        title: error.message || I18n.t("assistant-chat-regenerate-failed-toast"),
+      });
     } finally {
       this._abortController = null;
       this.state.isLoading = false;
@@ -605,10 +674,14 @@ export class ChatWidget {
     this.state.isLoading = false;
     this._hideTypingIndicator();
     this._updateSendButton();
-    this._updateInputStatus("Request cancelled", "");
+    this._updateInputStatus(Utils.escapeHtml(I18n.t("assistant-chat-cancelled-message")), "");
     setTimeout(() => this._updateInputStatus(""), 2000);
 
-    Utils.showToast({ type: "info", title: "Cancelled", message: "Request cancelled" });
+    Utils.showToast({
+      type: "info",
+      title: I18n.t("assistant-chat-cancelled-title"),
+      message: I18n.t("assistant-chat-cancelled-message"),
+    });
   }
 
   async confirmTool(approved) {
@@ -629,9 +702,13 @@ export class ChatWidget {
 
       if (approved) {
         playSuccess();
-        Utils.showToast({ type: "success", title: "Tool executed" });
+        Utils.showToast({ type: "success", title: I18n.t("assistant-chat-tool-executed") });
       } else {
-        Utils.showToast({ type: "info", title: "Cancelled", message: "Tool execution cancelled" });
+        Utils.showToast({
+          type: "info",
+          title: I18n.t("assistant-chat-cancelled-title"),
+          message: I18n.t("assistant-chat-tool-cancelled"),
+        });
       }
 
       this.state.pendingConfirmation = data.pending_confirmations?.[0] || null;
@@ -641,7 +718,7 @@ export class ChatWidget {
     } catch (error) {
       console.error("[ChatWidget] Error confirming tool:", error);
       playError();
-      Utils.showToast({ type: "error", title: "Failed to confirm tool execution" });
+      Utils.showToast({ type: "error", title: I18n.t("assistant-chat-tool-confirm-failed") });
       this._showToolConfirmation(confirmation);
     }
   }
@@ -723,8 +800,8 @@ export class ChatWidget {
       container.innerHTML = `
         <div class="sessions-empty">
           <i class="icon-message-square"></i>
-          <p>${searchQuery ? "No matching chats" : "No chat sessions yet"}</p>
-          ${!searchQuery ? '<button class="btn btn-sm cw-empty-new-session"><i class="icon-plus"></i> New Chat</button>' : ""}
+          <p>${searchQuery ? Utils.escapeHtml(I18n.t("assistant-chat-sessions-empty-search")) : Utils.escapeHtml(I18n.t("assistant-chat-sessions-empty"))}</p>
+          ${!searchQuery ? `<button class="btn btn-sm cw-empty-new-session"><i class="icon-plus"></i> ${Utils.escapeHtml(I18n.t("assistant-chat-sessions-new"))}</button>` : ""}
         </div>`;
       this._prevSessionsJson = "";
       // Wire up the empty-state new-session button
@@ -753,14 +830,14 @@ export class ChatWidget {
     const groups = this._groupSessionsByDate(sessions);
     let html = "";
 
-    for (const [groupName, groupSessions] of Object.entries(groups)) {
+    for (const [groupId, groupSessions] of Object.entries(groups)) {
       if (groupSessions.length === 0) continue;
       html += '<div class="sessions-group">';
-      html += `<div class="sessions-group-header">${groupName}</div>`;
+      html += `<div class="sessions-group-header">${Utils.escapeHtml(I18n.label(SESSION_GROUP_LABELS, groupId))}</div>`;
 
       for (const session of groupSessions) {
         const isActive = session.id === this.state.currentSession;
-        const title = Utils.escapeHtml(session.title || "New Chat");
+        const title = Utils.escapeHtml(session.title || I18n.t("assistant-chat-title-new"));
         const preview = session.summary ? Utils.escapeHtml(session.summary.substring(0, 60)) : "";
 
         html += `
@@ -904,11 +981,11 @@ export class ChatWidget {
         : "";
 
     const actionsHtml = msg.content
-      ? `<div class="message-actions" aria-label="Message actions">
-          <button class="message-action-btn" type="button" title="Copy" aria-label="Copy message" data-action="copy" data-content="${Utils.escapeHtml(msg.content)}">
+      ? `<div class="message-actions" aria-label="${Utils.escapeHtml(I18n.attr("assistant-chat-message-actions", "aria-label"))}">
+          <button class="message-action-btn" type="button" title="${Utils.escapeHtml(I18n.attr("assistant-chat-message-copy", "title"))}" aria-label="${Utils.escapeHtml(I18n.attr("assistant-chat-message-copy", "aria-label"))}" data-action="copy" data-content="${Utils.escapeHtml(msg.content)}">
             <i class="icon-copy"></i>
           </button>
-          ${!isUser ? '<button class="message-action-btn" type="button" title="Regenerate" aria-label="Regenerate response" data-action="regenerate"><i class="icon-refresh-cw"></i></button>' : ""}
+          ${!isUser ? `<button class="message-action-btn" type="button" title="${Utils.escapeHtml(I18n.attr("assistant-chat-message-regenerate", "title"))}" aria-label="${Utils.escapeHtml(I18n.attr("assistant-chat-message-regenerate", "aria-label"))}" data-action="regenerate"><i class="icon-refresh-cw"></i></button>` : ""}
         </div>`
       : "";
 
@@ -916,7 +993,7 @@ export class ChatWidget {
       <div class="message ${isUser ? "user" : "assistant"}">
         ${isUser ? "" : '<div class="message-avatar" aria-hidden="true"><i class="icon-bot"></i></div>'}
         <div class="message-content">
-          <div class="message-author">${isUser ? "You" : "Assistant"}</div>
+          <div class="message-author">${Utils.escapeHtml(I18n.label(CHAT_ROLE_LABELS, isUser ? "user" : "assistant"))}</div>
           ${toolCallsHtml}
           ${msg.content ? `<div class="message-bubble">${isUser ? Utils.escapeHtml(msg.content) : this._formatMarkdown(msg.content)}</div>` : ""}
           <div class="message-footer"><div class="message-meta">${timestamp}</div>${actionsHtml}</div>
@@ -927,16 +1004,10 @@ export class ChatWidget {
   _renderToolCall(tool) {
     const statusRaw = tool.status || "pending";
     const statusClass = statusRaw.toLowerCase();
-    const statusText =
-      statusClass === "executed"
-        ? "Executed"
-        : statusClass === "failed"
-          ? "Failed"
-          : statusClass === "denied"
-            ? "Denied"
-            : statusClass === "pendingconfirmation"
-              ? "Awaiting Confirmation"
-              : "Pending";
+    const statusText = I18n.label(
+      TOOL_CALL_STATUS_LABELS,
+      Object.hasOwn(TOOL_CALL_STATUS_LABELS, statusClass) ? statusClass : "pending"
+    );
     const statusIcon =
       statusClass === "executed" || statusClass === "success"
         ? "circle-check"
@@ -944,7 +1015,7 @@ export class ChatWidget {
           ? "circle-x"
           : "clock-3";
 
-    const toolName = tool.tool_name || tool.name || "Unknown Tool";
+    const toolName = tool.tool_name || tool.name || I18n.t("assistant-chat-tool-unknown");
     const toolLabel = toolName
       .replace(/[_-]+/g, " ")
       .replace(/^\w/, (character) => character.toUpperCase());
@@ -953,16 +1024,16 @@ export class ChatWidget {
       <div class="tool-call ${statusClass}">
         <button class="tool-call-header" type="button" aria-expanded="false">
           <span class="tool-call-title" title="${Utils.escapeHtml(toolName)}"><i class="icon-wrench"></i><span>${Utils.escapeHtml(toolLabel)}</span></span>
-          <span class="tool-call-status ${statusClass}"><i class="icon-${statusIcon}"></i><span>${statusText}</span></span>
+          <span class="tool-call-status ${statusClass}"><i class="icon-${statusIcon}"></i><span>${Utils.escapeHtml(statusText)}</span></span>
           <i class="tool-call-expand-icon icon-chevron-down" aria-hidden="true"></i>
         </button>
         <div class="tool-call-body" hidden>
           <div class="tool-call-section">
-            <div class="tool-call-label">Input:</div>
+            <div class="tool-call-label">${Utils.escapeHtml(I18n.t("assistant-chat-tool-section-input"))}</div>
             <div class="tool-call-input"><pre class="tool-call-code">${Utils.escapeHtml(JSON.stringify(tool.input || {}, null, 2))}</pre></div>
           </div>
-          ${tool.output ? `<div class="tool-call-section"><div class="tool-call-label">Output:</div><div class="tool-call-output"><pre class="tool-call-code">${Utils.escapeHtml(JSON.stringify(tool.output, null, 2))}</pre></div></div>` : ""}
-          ${tool.error ? `<div class="tool-call-section"><div class="tool-call-label">Error:</div><div class="tool-call-error"><pre class="tool-call-code">${Utils.escapeHtml(tool.error)}</pre></div></div>` : ""}
+          ${tool.output ? `<div class="tool-call-section"><div class="tool-call-label">${Utils.escapeHtml(I18n.t("assistant-chat-tool-section-output"))}</div><div class="tool-call-output"><pre class="tool-call-code">${Utils.escapeHtml(JSON.stringify(tool.output, null, 2))}</pre></div></div>` : ""}
+          ${tool.error ? `<div class="tool-call-section"><div class="tool-call-label">${Utils.escapeHtml(I18n.t("assistant-chat-tool-section-error"))}</div><div class="tool-call-error"><pre class="tool-call-code">${Utils.escapeHtml(tool.error)}</pre></div></div>` : ""}
         </div>
       </div>`;
   }
@@ -990,12 +1061,12 @@ export class ChatWidget {
     const indicator = document.createElement("div");
     indicator.className = "typing-indicator";
     indicator.setAttribute("role", "status");
-    indicator.setAttribute("aria-label", "Assistant is thinking");
+    indicator.setAttribute("aria-label", I18n.attr("assistant-chat-typing", "aria-label"));
     indicator.innerHTML = `
       <div class="message-avatar"><i class="icon-bot"></i></div>
       <div class="typing-content">
-        <span class="message-author">Assistant</span>
-        <div class="agent-progress-line"><span class="typing-label">Preparing response</span>
+        <span class="message-author">${Utils.escapeHtml(I18n.label(CHAT_ROLE_LABELS, "assistant"))}</span>
+        <div class="agent-progress-line"><span class="typing-label">${Utils.escapeHtml(I18n.t("assistant-chat-progress-preparing"))}</span>
         <span class="typing-dots" aria-hidden="true">
           <span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>
         </span></div>
@@ -1017,16 +1088,19 @@ export class ChatWidget {
     const tools = indicator.querySelector(".agent-progress-tools");
     if (event.type === "thinking") {
       if (label)
-        label.textContent = event.iteration > 0 ? "Reviewing tool results" : "Planning response";
+        label.textContent =
+          event.iteration > 0
+            ? I18n.t("assistant-chat-progress-reviewing")
+            : I18n.t("assistant-chat-progress-planning");
       return;
     }
     if (event.type === "tool_started") {
-      if (label) label.textContent = "Using tools";
+      if (label) label.textContent = I18n.t("assistant-chat-progress-using-tools");
       if (!tools) return;
       const row = document.createElement("div");
       row.className = "agent-progress-tool running";
       row.dataset.toolName = event.tool_name;
-      row.innerHTML = `<i class="icon-clock-3"></i><span>${Utils.escapeHtml(event.tool_name.replace(/[_-]+/g, " "))}</span><small>Running</small>`;
+      row.innerHTML = `<i class="icon-clock-3"></i><span>${Utils.escapeHtml(event.tool_name.replace(/[_-]+/g, " "))}</span><small>${Utils.escapeHtml(I18n.t("assistant-chat-progress-running"))}</small>`;
       tools.appendChild(row);
       this._scrollToBottom();
       return;
@@ -1040,7 +1114,9 @@ export class ChatWidget {
         const failed = String(call.status).toLowerCase() === "failed";
         row.className = `agent-progress-tool ${failed ? "failed" : "complete"}`;
         row.querySelector("i").className = failed ? "icon-circle-x" : "icon-circle-check";
-        row.querySelector("small").textContent = failed ? "Failed" : "Complete";
+        row.querySelector("small").textContent = failed
+          ? I18n.t("assistant-chat-progress-failed")
+          : I18n.t("assistant-chat-progress-complete");
       }
     }
   }
@@ -1054,9 +1130,14 @@ export class ChatWidget {
     });
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(apiErrorMessage(errorData, `API error: ${response.status}`));
+      throw new Error(
+        apiErrorMessage(
+          errorData,
+          I18n.t("assistant-chat-stream-http", { status: String(response.status) })
+        )
+      );
     }
-    if (!response.body) throw new Error("Assistant progress stream is unavailable");
+    if (!response.body) throw new Error(I18n.t("assistant-chat-stream-unavailable"));
 
     const reader = response.body.getReader();
     const decoder = new window.TextDecoder();
@@ -1079,8 +1160,8 @@ export class ChatWidget {
           throw new Error(
             apiErrorMessage(
               { error: { text: event.text, details: event.details } },
-              "Assistant request failed",
-            ),
+              I18n.t("assistant-chat-stream-failed")
+            )
           );
         }
         onEvent?.(event);
@@ -1088,7 +1169,7 @@ export class ChatWidget {
       }
       if (done) break;
     }
-    if (!finalResponse) throw new Error("Assistant response ended before completion");
+    if (!finalResponse) throw new Error(I18n.t("assistant-chat-stream-incomplete"));
     return finalResponse;
   }
 
@@ -1103,9 +1184,10 @@ export class ChatWidget {
     const name = this.$(".cw-tool-name");
     const desc = this.$(".cw-tool-description");
     const inp = this.$(".cw-tool-input");
-    if (name) name.textContent = confirmation.tool_name || "Unknown Tool";
+    if (name) name.textContent = confirmation.tool_name || I18n.t("assistant-chat-tool-unknown");
     if (desc)
-      desc.textContent = confirmation.description || "This tool requires your approval to execute.";
+      desc.textContent =
+        confirmation.description || I18n.t("assistant-chat-tool-default-description");
     if (inp) inp.textContent = JSON.stringify(confirmation.input || {}, null, 2);
     modal.hidden = false;
   }
@@ -1117,7 +1199,7 @@ export class ChatWidget {
 
   _updateChatHeader(session) {
     const title = this.$(".cw-chat-title");
-    if (title) title.textContent = session.title || "New Chat";
+    if (title) title.textContent = session.title || I18n.t("assistant-chat-title-new");
 
     const deleteBtn = this.$(".cw-delete-btn");
     if (deleteBtn) {
@@ -1137,7 +1219,7 @@ export class ChatWidget {
     this._renderSessions();
     this._renderMessagesForce();
     const title = this.$(".cw-chat-title");
-    if (title) title.textContent = "New Chat";
+    if (title) title.textContent = I18n.t("assistant-chat-title-new");
     const deleteButton = this.$(".cw-delete-btn");
     if (deleteButton) deleteButton.disabled = true;
   }
@@ -1147,13 +1229,6 @@ export class ChatWidget {
     if (emptyState && this.state.messages.length === 0 && !this.state.currentSession) {
       emptyState.style.display = "flex";
     }
-  }
-
-  _updateKeyboardHint() {
-    const hint = this.$(".cw-input-hint");
-    if (!hint) return;
-    hint.innerHTML =
-      "<kbd>Enter</kbd> to send <span>·</span> <kbd>Shift</kbd><kbd>Enter</kbd> for a new line";
   }
 
   _handleInputChange() {
@@ -1174,11 +1249,11 @@ export class ChatWidget {
     if (len === 0) {
       counter.textContent = "";
       counter.className = "char-count cw-char-count";
-    } else if (len > 4000) {
-      counter.textContent = `${formatNumber(len, 0)} / ${formatNumber(4000, 0)}`;
+    } else if (len > MESSAGE_LIMIT) {
+      counter.textContent = `${formatNumber(len, 0)} / ${formatNumber(MESSAGE_LIMIT, 0)}`;
       counter.className = "char-count cw-char-count danger";
     } else if (len > 3500) {
-      counter.textContent = `${formatNumber(len, 0)} / ${formatNumber(4000, 0)}`;
+      counter.textContent = `${formatNumber(len, 0)} / ${formatNumber(MESSAGE_LIMIT, 0)}`;
       counter.className = "char-count cw-char-count warning";
     } else if (len > 100) {
       counter.textContent = formatNumber(len, 0);
@@ -1203,15 +1278,20 @@ export class ChatWidget {
     if (!sendBtn || !input) return;
 
     const hasText = input.value.trim().length > 0;
-    const isOverLimit = input.value.length > 4000;
+    const isOverLimit = input.value.length > MESSAGE_LIMIT;
     const canSend = hasText && !this.state.isLoading && !isOverLimit;
 
     sendBtn.disabled = this.state.isLoading ? false : !canSend;
-    sendBtn.setAttribute(
-      "aria-label",
-      this.state.isLoading ? "Stop response" : canSend ? "Send message" : "Type a message to send"
-    );
-    sendBtn.setAttribute("title", this.state.isLoading ? "Stop response (Esc)" : "Send message");
+    if (this.state.isLoading) {
+      sendBtn.setAttribute("aria-label", I18n.attr("assistant-chat-stop", "aria-label"));
+      sendBtn.setAttribute("title", I18n.attr("assistant-chat-stop", "title"));
+    } else {
+      const labelText = canSend
+        ? I18n.attr("assistant-chat-send", "aria-label")
+        : I18n.attr("assistant-chat-send-empty", "aria-label");
+      sendBtn.setAttribute("aria-label", labelText);
+      sendBtn.setAttribute("title", I18n.attr("assistant-chat-send", "title"));
+    }
     sendBtn.classList.toggle("is-stopping", this.state.isLoading);
     const icon = sendBtn.querySelector("i");
     if (icon) icon.className = this.state.isLoading ? "icon-square" : "icon-send";
@@ -1261,14 +1341,14 @@ export class ChatWidget {
     const weekAgo = new Date(today);
     weekAgo.setDate(weekAgo.getDate() - 7);
 
-    const groups = { Today: [], Yesterday: [], "Previous 7 Days": [], Older: [] };
+    const groups = { today: [], yesterday: [], week: [], older: [] };
 
     for (const session of sessions) {
       const date = new Date(session.updated_at || session.created_at);
-      if (date >= today) groups["Today"].push(session);
-      else if (date >= yesterday) groups["Yesterday"].push(session);
-      else if (date >= weekAgo) groups["Previous 7 Days"].push(session);
-      else groups["Older"].push(session);
+      if (date >= today) groups.today.push(session);
+      else if (date >= yesterday) groups.yesterday.push(session);
+      else if (date >= weekAgo) groups.week.push(session);
+      else groups.older.push(session);
     }
 
     return groups;

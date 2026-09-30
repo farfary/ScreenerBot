@@ -240,6 +240,7 @@ pub async fn get_ui_script(Path(file): Path<String>) -> Response {
         "strategy_type.js" => Some(embeds::STRATEGY_TYPE_UI),
         "position_management.js" => Some(embeds::POSITION_MANAGEMENT_UI),
         "position_status.js" => Some(embeds::POSITION_STATUS_UI),
+        "llm_provider.js" => Some(embeds::LLM_PROVIDER_UI),
         "transaction_type.js" => Some(embeds::TRANSACTION_TYPE_UI),
         "transaction_details_dialog.js" => Some(embeds::TRANSACTION_DETAILS_DIALOG_UI),
         "position_details_dialog.js" => Some(embeds::POSITION_DETAILS_DIALOG_UI),
