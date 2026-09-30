@@ -5,9 +5,12 @@
 //! payload because event search matches the stored JSON and agent tools read it
 //! as plain text. `message` is always derived from `text` through [`write_text`].
 
-use crate::events::Severity;
+use crate::events::{EventCategory, Severity};
 use crate::i18n::{ids, UiArg, UiText};
+use crate::logger::{self, LogTag};
 use serde_json::{Map, Value};
+use std::collections::HashSet;
+use std::sync::{LazyLock, Mutex};
 
 /// Write `text` and its source-locale rendering into a payload object.
 pub(super) fn write_text(payload: &mut Map<String, Value>, text: &UiText) {
@@ -21,14 +24,39 @@ pub(super) fn write_text(payload: &mut Map<String, Value>, text: &UiText) {
     );
 }
 
-/// Write the default text unless the producer already supplied a `message`.
+/// Categories that already logged a stray-`message` warning.
+static STRAY_MESSAGE_WARNED: LazyLock<Mutex<HashSet<EventCategory>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
+
+/// Write the default text for a payload that carries no `text`.
+///
+/// A `message` without `text` is a producer that bypassed [`with_text`]. It is
+/// overwritten with the default text so `message` always derives from `text`,
+/// and the first occurrence per category is logged.
 pub(super) fn write_default_text(
+    category: &EventCategory,
     payload: &mut Map<String, Value>,
     default: impl FnOnce() -> UiText,
 ) {
-    if !payload.get("message").is_some_and(Value::is_string) {
-        write_text(payload, &default());
+    if payload.contains_key("text") {
+        return;
     }
+    if payload.contains_key("message") {
+        let first = STRAY_MESSAGE_WARNED
+            .lock()
+            .map(|mut warned| warned.insert(category.clone()))
+            .unwrap_or(false);
+        if first {
+            logger::warning(
+                LogTag::System,
+                &format!(
+                    "Event payload in category '{}' carried a message without text; replaced with the default text",
+                    category.to_string()
+                ),
+            );
+        }
+    }
+    write_text(payload, &default());
 }
 
 /// Attach display text to a recorder payload. The result is an object; a
@@ -110,18 +138,32 @@ mod tests {
     }
 
     #[test]
-    fn default_text_yields_to_a_producer_message() {
-        let mut supplied = Map::from_iter([("message".to_owned(), json!("from producer"))]);
-        write_default_text(&mut supplied, || UiText::new(ids::EVENTS_MESSAGE_NONE));
-        assert_eq!(supplied["message"], "from producer");
-        assert!(!supplied.contains_key("text"));
-
-        let mut empty = Map::new();
+    fn default_text_overwrites_a_stray_message() {
         let subtype =
             || UiText::new(ids::EVENTS_TRADER_DEFAULT).arg("subtype", UiArg::Text("x".into()));
-        write_default_text(&mut empty, subtype);
+
+        let mut stray = Map::from_iter([("message".to_owned(), json!("from producer"))]);
+        write_default_text(&EventCategory::Trader, &mut stray, subtype);
+        assert_eq!(stray["message"], "Trader event: x");
+        assert_eq!(stray["text"]["id"], "events-trader-default");
+
+        let mut empty = Map::new();
+        write_default_text(&EventCategory::Trader, &mut empty, subtype);
         assert_eq!(empty["message"], "Trader event: x");
         assert_eq!(empty["text"]["id"], "events-trader-default");
+    }
+
+    #[test]
+    fn default_text_keeps_text_supplied_by_the_producer() {
+        let supplied = with_text(json!({}), &UiText::new(ids::EVENTS_MESSAGE_NONE));
+        let Value::Object(mut payload) = supplied else {
+            panic!("with_text returns an object");
+        };
+        write_default_text(&EventCategory::Ohlcv, &mut payload, || {
+            UiText::new(ids::EVENTS_OHLCV_DEFAULT).arg("subtype", UiArg::Text("x".into()))
+        });
+        assert_eq!(payload["text"]["id"], "events-message-none");
+        assert_eq!(payload["message"], "No message");
     }
 
     #[test]

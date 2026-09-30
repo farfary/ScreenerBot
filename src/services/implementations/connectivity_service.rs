@@ -76,10 +76,13 @@ impl Service for ConnectivityService {
                         "system",
                         "service_initialized",
                         Severity::Info,
-                        serde_json::json!({
-                            "monitor_count": monitor_count,
-                            "message": format!("Connectivity service initialized with {monitor_count} monitors"),
-                        }),
+                        crate::events::with_text(
+                            serde_json::json!({
+                                "monitor_count": monitor_count,
+                            }),
+                            &UiText::new(ids::EVENTS_CONNECTIVITY_SERVICE_INITIALIZED)
+                                .arg("count", UiArg::Text(monitor_count.to_string())),
+                        ),
                     )
                     .await;
                 }
@@ -113,10 +116,13 @@ impl Service for ConnectivityService {
                     "system",
                     "service_started",
                     Severity::Info,
-                    serde_json::json!({
-                        "check_interval_secs": check_interval,
-                        "message": format!("Connectivity monitoring started (interval={check_interval}s)"),
-                    }),
+                    crate::events::with_text(
+                        serde_json::json!({
+                            "check_interval_secs": check_interval,
+                        }),
+                        &UiText::new(ids::EVENTS_CONNECTIVITY_MONITORING_STARTED)
+                            .arg("seconds", UiArg::Text(check_interval.to_string())),
+                    ),
                 )
                 .await;
             }
@@ -147,9 +153,10 @@ impl Service for ConnectivityService {
                 "system",
                 "service_stopped",
                 Severity::Info,
-                serde_json::json!({
-                    "message": "Connectivity monitoring stopped",
-                }),
+                crate::events::with_text(
+                    serde_json::json!({}),
+                    &UiText::new(ids::EVENTS_CONNECTIVITY_MONITORING_STOPPED),
+                ),
             )
             .await;
         });

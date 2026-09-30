@@ -2,6 +2,7 @@
 
 use crate::config::with_config;
 use crate::events::{record_ohlcv_event, Severity};
+use crate::i18n::{ids, UiArg, UiText};
 use crate::logger::{self, LogTag};
 use crate::ohlcvs::aggregator::OhlcvAggregator;
 use crate::ohlcvs::cache::OhlcvCache;
@@ -493,10 +494,13 @@ impl OhlcvMonitor {
                             Severity::Debug,
                             Some(mint.as_str()),
                             None,
-                            json!({
-                              "message": format!("Token {mint} was missing during processing"),
-                              "action": "skip_cycle",
-                            }),
+                            crate::events::with_text(
+                                json!({
+                                  "action": "skip_cycle",
+                                }),
+                                &UiText::new(ids::EVENTS_OHLCV_TOKEN_MISSING)
+                                    .arg("mint", UiArg::Text(mint.to_string())),
+                            ),
                         )
                         .await;
                     }
@@ -510,13 +514,13 @@ impl OhlcvMonitor {
                             Severity::Warn,
                             Some(mint.as_str()),
                             None,
-                            json!({
-                              "message": format!(
-                                "No healthy pools available for {}; deferring",
-                                mint
-                              ),
-                              "reason": "pool_health",
-                            }),
+                            crate::events::with_text(
+                                json!({
+                                  "reason": "pool_health",
+                                }),
+                                &UiText::new(ids::EVENTS_OHLCV_POOL_UNAVAILABLE)
+                                    .arg("mint", UiArg::Text(mint.to_string())),
+                            ),
                         )
                         .await;
                     }
@@ -527,15 +531,15 @@ impl OhlcvMonitor {
                             Severity::Warn,
                             Some(mint.as_str()),
                             None,
-                            json!({
-                              "message": format!(
-                                "Rate limit triggered while processing {}",
-                                mint
-                              ),
-                              "rate_limit_per_minute": rate_limit,
-                              "delay_ms": delay_ms,
-                              "tokens_in_cycle": processed_count,
-                            }),
+                            crate::events::with_text(
+                                json!({
+                                  "rate_limit_per_minute": rate_limit,
+                                  "delay_ms": delay_ms,
+                                  "tokens_in_cycle": processed_count,
+                                }),
+                                &UiText::new(ids::EVENTS_OHLCV_RATE_LIMIT_HIT)
+                                    .arg("mint", UiArg::Text(mint.to_string())),
+                            ),
                         )
                         .await;
                         logger::warning(
@@ -554,10 +558,14 @@ impl OhlcvMonitor {
                             severity,
                             Some(mint.as_str()),
                             None,
-                            json!({
-                              "message": format!("Error processing {mint}: {e}"),
-                              "error_kind": kind,
-                            }),
+                            crate::events::with_text(
+                                json!({
+                                  "error_kind": kind,
+                                }),
+                                &UiText::new(ids::EVENTS_OHLCV_PROCESS_TOKEN_ERROR)
+                                    .arg("mint", UiArg::Text(mint.to_string()))
+                                    .arg("error", UiArg::Text(e.to_string())),
+                            ),
                         )
                         .await;
                         logger::error(LogTag::Ohlcv, &format!("Error processing {mint}: {e}"));
@@ -644,14 +652,14 @@ impl OhlcvMonitor {
                             Severity::Info,
                             Some(mint),
                             first_pool_address.as_deref(),
-                            json!({
-                              "message": format!(
-                                "Discovered pools for {}",
-                                mint
-                              ),
-                              "discovered_pools": discovered,
-                              "previous_failures": previous_failures,
-                            }),
+                            crate::events::with_text(
+                                json!({
+                                  "discovered_pools": discovered,
+                                  "previous_failures": previous_failures,
+                                }),
+                                &UiText::new(ids::EVENTS_OHLCV_POOL_DISCOVERY_SUCCESS)
+                                    .arg("mint", UiArg::Text(mint.to_string())),
+                            ),
                         )
                         .await;
                     }
@@ -692,14 +700,14 @@ impl OhlcvMonitor {
                                 Severity::Warn,
                                 Some(mint),
                                 None,
-                                json!({
-                                  "message": format!(
-                                    "Pool discovery failed for {}",
-                                    mint
-                                  ),
-                                  "attempt": config.consecutive_pool_failures,
-                                  "next_retry": config.get_next_retry_description(),
-                                }),
+                                crate::events::with_text(
+                                    json!({
+                                      "attempt": config.consecutive_pool_failures,
+                                      "next_retry": config.get_next_retry_description(),
+                                    }),
+                                    &UiText::new(ids::EVENTS_OHLCV_POOL_DISCOVERY_FAILED)
+                                        .arg("mint", UiArg::Text(mint.to_string())),
+                                ),
                             )
                             .await;
                         }
@@ -775,14 +783,15 @@ impl OhlcvMonitor {
                         Severity::Debug,
                         Some(mint),
                         Some(pool_address.as_str()),
-                        json!({
-                          "message": format!(
-                            "Empty OHLCV fetch for {} via {}",
-                            mint, pool_address
-                          ),
-                          "batch_size": batch_size,
-                          "priority": priority.to_string(),
-                        }),
+                        crate::events::with_text(
+                            json!({
+                              "batch_size": batch_size,
+                              "priority": priority.to_string(),
+                            }),
+                            &UiText::new(ids::EVENTS_OHLCV_EMPTY_FETCH)
+                                .arg("mint", UiArg::Text(mint.to_string()))
+                                .arg("pool", UiArg::Text(pool_address.to_string())),
+                        ),
                     )
                     .await;
                 } else {
@@ -819,13 +828,14 @@ impl OhlcvMonitor {
                             Severity::Warn,
                             Some(mint),
                             Some(pool_address.as_str()),
-                            json!({
-                              "message": format!(
-                                "Retention backfill failed for {} via {}",
-                                mint, pool_address
-                              ),
-                              "error": e.to_string(),
-                            }),
+                            crate::events::with_text(
+                                json!({
+                                  "error": e.to_string(),
+                                }),
+                                &UiText::new(ids::EVENTS_OHLCV_RETENTION_BACKFILL_FAILED)
+                                    .arg("mint", UiArg::Text(mint.to_string()))
+                                    .arg("pool", UiArg::Text(pool_address.to_string())),
+                            ),
                         )
                         .await;
                     }
@@ -863,17 +873,18 @@ impl OhlcvMonitor {
                             Severity::Info,
                             Some(mint),
                             Some(pool_address.as_str()),
-                            json!({
-                              "message": format!(
-                                "Stored {} OHLCV points for {}",
-                                stored_points.len(), mint
-                              ),
-                              "inserted_points": stored_points.len(),
-                              "earliest_timestamp": earliest,
-                              "latest_timestamp": latest,
-                              "priority": priority.to_string(),
-                              "batch_size": batch_size,
-                            }),
+                            crate::events::with_text(
+                                json!({
+                                  "inserted_points": stored_points.len(),
+                                  "earliest_timestamp": earliest,
+                                  "latest_timestamp": latest,
+                                  "priority": priority.to_string(),
+                                  "batch_size": batch_size,
+                                }),
+                                &UiText::new(ids::EVENTS_OHLCV_FETCH_SUCCESS)
+                                    .arg("count", UiArg::Text(stored_points.len().to_string()))
+                                    .arg("mint", UiArg::Text(mint.to_string())),
+                            ),
                         )
                         .await;
                     }
@@ -897,13 +908,14 @@ impl OhlcvMonitor {
                                 Severity::Warn,
                                 Some(mint),
                                 Some(pool_address.as_str()),
-                                json!({
-                                  "message": format!(
-                                    "Gap detection failed for {} via {}",
-                                    mint, pool_address
-                                  ),
-                                  "error": e.to_string(),
-                                }),
+                                crate::events::with_text(
+                                    json!({
+                                      "error": e.to_string(),
+                                    }),
+                                    &UiText::new(ids::EVENTS_OHLCV_GAP_DETECTION_FAILED)
+                                        .arg("mint", UiArg::Text(mint.to_string()))
+                                        .arg("pool", UiArg::Text(pool_address.to_string())),
+                                ),
                             )
                             .await;
                         }
@@ -929,15 +941,17 @@ impl OhlcvMonitor {
                         severity,
                         Some(mint),
                         Some(pool_address.as_str()),
-                        json!({
-                          "message": format!(
-                            "Failed to fetch OHLCV for {} via {}: {}",
-                            mint, pool_address, e
-                          ),
-                          "error_kind": kind,
-                          "batch_size": batch_size,
-                          "priority": priority.to_string(),
-                        }),
+                        crate::events::with_text(
+                            json!({
+                              "error_kind": kind,
+                              "batch_size": batch_size,
+                              "priority": priority.to_string(),
+                            }),
+                            &UiText::new(ids::EVENTS_OHLCV_FETCH_FAILED)
+                                .arg("mint", UiArg::Text(mint.to_string()))
+                                .arg("pool", UiArg::Text(pool_address.to_string()))
+                                .arg("error", UiArg::Text(e.to_string())),
+                        ),
                     )
                     .await;
                 }
@@ -1280,14 +1294,15 @@ impl OhlcvMonitor {
             Severity::Info,
             Some(mint),
             Some(pool_address),
-            json!({
-              "message": format!(
-                "Scheduled multi-timeframe backfill for {} via {}",
-                mint, pool_address
-              ),
-              "retention_days": retention_days,
-              "timeframes": ["1d", "12h", "4h", "1h", "15m", "5m", "1m"],
-            }),
+            crate::events::with_text(
+                json!({
+                  "retention_days": retention_days,
+                  "timeframes": ["1d", "12h", "4h", "1h", "15m", "5m", "1m"],
+                }),
+                &UiText::new(ids::EVENTS_OHLCV_BACKFILL_SCHEDULED)
+                    .arg("mint", UiArg::Text(mint.to_string()))
+                    .arg("pool", UiArg::Text(pool_address.to_string())),
+            ),
         )
         .await;
 
@@ -1426,13 +1441,13 @@ impl OhlcvMonitor {
                         Severity::Error,
                         Some(mint.as_str()),
                         None,
-                        json!({
-                          "message": format!(
-                            "Gap fill error for {}",
-                            mint
-                          ),
-                          "error": e.to_string(),
-                        }),
+                        crate::events::with_text(
+                            json!({
+                              "error": e.to_string(),
+                            }),
+                            &UiText::new(ids::EVENTS_OHLCV_GAP_FILL_FAILED)
+                                .arg("mint", UiArg::Text(mint.to_string())),
+                        ),
                     )
                     .await;
                 }
@@ -1883,11 +1898,13 @@ impl OhlcvMonitor {
                             Severity::Error,
                             None,
                             None,
-                            json!({
-                              "message": "Failed to cleanup filled gap records",
-                              "error": e.to_string(),
-                              "retention_days": retention_days,
-                            }),
+                            crate::events::with_text(
+                                json!({
+                                  "error": e.to_string(),
+                                  "retention_days": retention_days,
+                                }),
+                                &UiText::new(ids::EVENTS_OHLCV_GAP_CLEANUP_FAILED),
+                            ),
                         )
                         .await;
                     }
@@ -1914,10 +1931,12 @@ impl OhlcvMonitor {
                     Severity::Error,
                     None,
                     None,
-                    json!({
-                      "message": "Failed to cleanup OHLCV cache",
-                      "error": e.to_string(),
-                    }),
+                    crate::events::with_text(
+                        json!({
+                          "error": e.to_string(),
+                        }),
+                        &UiText::new(ids::EVENTS_OHLCV_CACHE_CLEANUP_FAILED),
+                    ),
                 )
                 .await;
             }

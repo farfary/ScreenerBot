@@ -51,6 +51,11 @@ pub mod maintenance;
 pub mod recorders;
 pub mod types;
 
+#[cfg(test)]
+mod producer_guard_tests;
+#[cfg(test)]
+mod producer_text_tests;
+
 use crate::logger::{self, LogTag};
 use db::EventsDatabase;
 pub use error::{Error, Result};

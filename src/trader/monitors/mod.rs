@@ -13,6 +13,7 @@ pub use entry::monitor_entries;
 pub use exit::monitor_positions;
 
 use crate::events::{record_trader_event, Severity};
+use crate::i18n::{ids, UiText};
 use crate::logger::{self, LogTag};
 use serde_json::json;
 
@@ -28,10 +29,12 @@ pub async fn start_automated_trading(
         Severity::Info,
         None,
         None,
-        json!({
-            "system": "auto_trading",
-            "message": "Automated trading monitors starting up",
-        }),
+        crate::events::with_text(
+            json!({
+                "system": "auto_trading",
+            }),
+            &UiText::new(ids::EVENTS_MONITORS_STARTING),
+        ),
     )
     .await;
 
@@ -90,10 +93,12 @@ pub async fn start_automated_trading(
         Severity::Info,
         None,
         None,
-        json!({
-            "system": "auto_trading",
-            "message": "Automated trading monitors stopped",
-        }),
+        crate::events::with_text(
+            json!({
+                "system": "auto_trading",
+            }),
+            &UiText::new(ids::EVENTS_MONITORS_STOPPED),
+        ),
     )
     .await;
 

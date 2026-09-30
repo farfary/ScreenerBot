@@ -9,6 +9,7 @@
 //! - Action tracking for dashboard visibility
 
 use crate::errors::ErrorClass;
+use crate::i18n::{ids, UiText};
 use crate::logger::{self, LogTag};
 use crate::positions;
 use crate::trader::types::{TradeDecision, TradePriority};
@@ -29,10 +30,12 @@ pub async fn monitor_positions(
         crate::events::Severity::Info,
         None,
         None,
-        serde_json::json!({
-          "monitor": "exit",
-          "message": "Exit/position monitor started",
-        }),
+        crate::events::with_text(
+            serde_json::json!({
+              "monitor": "exit",
+            }),
+            &UiText::new(ids::EVENTS_EXIT_MONITOR_STARTED),
+        ),
     )
     .await;
 

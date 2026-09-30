@@ -10,6 +10,7 @@
 //! Token reservation and the submission pipeline (execute trade, event recording, action
 //! tracking) live in `trader::entry`, shared with any other entry source.
 
+use crate::i18n::{ids, UiText};
 use crate::logger::{self, LogTag};
 use crate::pools;
 use crate::trader::{config, constants, entry, evaluators};
@@ -27,10 +28,12 @@ pub async fn monitor_entries(
         crate::events::Severity::Info,
         None,
         None,
-        serde_json::json!({
-            "monitor": "entry",
-            "message": "Entry opportunity monitor started",
-        }),
+        crate::events::with_text(
+            serde_json::json!({
+                "monitor": "entry",
+            }),
+            &UiText::new(ids::EVENTS_ENTRY_MONITOR_STARTED),
+        ),
     )
     .await;
 

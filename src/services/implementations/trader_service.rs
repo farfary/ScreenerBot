@@ -1,6 +1,7 @@
 //! Trader service — orchestrates automated trading strategies and position management.
 
 use crate::events::{record_trader_event, Severity};
+use crate::i18n::{ids, UiText};
 use crate::logger::{self, LogTag};
 use crate::services::{Service, ServiceHealth};
 use crate::trader::config;
@@ -78,10 +79,12 @@ impl Service for TraderService {
             Severity::Info,
             None,
             None,
-            json!({
-                "action": "startup",
-                "message": "Trader service initialization beginning",
-            }),
+            crate::events::with_text(
+                json!({
+                    "action": "startup",
+                }),
+                &UiText::new(ids::EVENTS_TRADER_SERVICE_INITIALIZING),
+            ),
         )
         .await;
 
@@ -98,10 +101,12 @@ impl Service for TraderService {
                 Severity::Warn,
                 None,
                 None,
-                json!({
-                    "enabled": false,
-                    "message": "Trading is disabled in configuration",
-                }),
+                crate::events::with_text(
+                    json!({
+                        "enabled": false,
+                    }),
+                    &UiText::new(ids::EVENTS_TRADER_TRADING_DISABLED),
+                ),
             )
             .await;
         } else {
@@ -111,10 +116,12 @@ impl Service for TraderService {
                 Severity::Info,
                 None,
                 None,
-                json!({
-                    "enabled": true,
-                    "message": "Trading is enabled and active",
-                }),
+                crate::events::with_text(
+                    json!({
+                        "enabled": true,
+                    }),
+                    &UiText::new(ids::EVENTS_TRADER_TRADING_ENABLED),
+                ),
             )
             .await;
         }
@@ -137,10 +144,12 @@ impl Service for TraderService {
                     Severity::Error,
                     None,
                     None,
-                    json!({
-                        "error": e.to_string(),
-                        "message": "Auto trading encountered an error",
-                    }),
+                    crate::events::with_text(
+                        json!({
+                            "error": e.to_string(),
+                        }),
+                        &UiText::new(ids::EVENTS_TRADER_AUTO_TRADING_ERROR),
+                    ),
                 )
                 .await;
             }
@@ -153,10 +162,12 @@ impl Service for TraderService {
             Severity::Info,
             None,
             None,
-            json!({
-                "status": "running",
-                "message": "Trader service fully initialized and running",
-            }),
+            crate::events::with_text(
+                json!({
+                    "status": "running",
+                }),
+                &UiText::new(ids::EVENTS_TRADER_SERVICE_STARTED),
+            ),
         )
         .await;
 
@@ -171,10 +182,12 @@ impl Service for TraderService {
             Severity::Info,
             None,
             None,
-            json!({
-                "action": "shutdown",
-                "message": "Trader service shutdown initiated",
-            }),
+            crate::events::with_text(
+                json!({
+                    "action": "shutdown",
+                }),
+                &UiText::new(ids::EVENTS_TRADER_SERVICE_STOPPING),
+            ),
         )
         .await;
 
@@ -191,10 +204,12 @@ impl Service for TraderService {
             Severity::Info,
             None,
             None,
-            json!({
-                "status": "stopped",
-                "message": "Trader service gracefully stopped",
-            }),
+            crate::events::with_text(
+                json!({
+                    "status": "stopped",
+                }),
+                &UiText::new(ids::EVENTS_TRADER_SERVICE_STOPPED),
+            ),
         )
         .await;
 

@@ -8,6 +8,7 @@ use crate::connectivity::monitors::{
 };
 use crate::connectivity::state;
 use crate::events::{record_connectivity_event, Severity};
+use crate::i18n::{ids, UiArg, UiText};
 use crate::logger::{self, LogTag};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -156,11 +157,14 @@ impl ConnectivityChecker {
                                 &name,
                                 "healthy",
                                 Severity::Info,
-                                serde_json::json!({
-                                    "latency_ms": latency,
-                                    "previous_state": from_state,
-                                    "message": format!("Endpoint recovered from {from_state} to healthy"),
-                                }),
+                                crate::events::with_text(
+                                    serde_json::json!({
+                                        "latency_ms": latency,
+                                        "previous_state": from_state,
+                                    }),
+                                    &UiText::new(ids::EVENTS_CONNECTIVITY_ENDPOINT_RECOVERED)
+                                        .arg("from", UiArg::Text(from_state.to_string())),
+                                ),
                             )
                             .await;
                         }
@@ -362,11 +366,14 @@ impl ConnectivityChecker {
                                 "system",
                                 "critical_endpoints_unhealthy",
                                 Severity::Error,
-                                serde_json::json!({
-                                    "unhealthy_count": count,
-                                    "unhealthy_endpoints": unhealthy_list,
-                                    "message": format!("{count} critical endpoint(s) unhealthy - System should pause operations"),
-                                }),
+                                crate::events::with_text(
+                                    serde_json::json!({
+                                        "unhealthy_count": count,
+                                        "unhealthy_endpoints": unhealthy_list,
+                                    }),
+                                    &UiText::new(ids::EVENTS_CONNECTIVITY_CRITICAL_UNHEALTHY)
+                                        .arg("count", UiArg::Text(count.to_string())),
+                                ),
                             )
                             .await;
                         }
