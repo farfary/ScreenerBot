@@ -33,7 +33,7 @@ function* descendants(node) {
  * spell: the product and the third-party services named throughout the UI.
  * Common words (Medium, Jupiter, X) are not enforced.
  */
-const ENFORCED_TERMS = ["brand", "dexscreener", "geckoterminal", "rugcheck", "solscan", "telegram"];
+const ENFORCED_TERMS = ["brand", "dexscreener", "birdeye", "photon", "rugcheck", "bubblemaps", "solscan", "solanafm", "helius", "quicknode", "alchemy", "solana-explorer", "geckoterminal", "dextools", "gmgn", "pumpfun", "coingecko", "jupiter", "raptor", "twitter", "telegram", "discord", "github", "youtube", "reddit", "facebook", "instagram", "linkedin", "tiktok", "openai", "anthropic", "groq", "deepseek", "google-gemini", "ollama", "together-ai", "openrouter", "mistral-ai", "claude", "codex", "openclaw", "hermes"];
 
 /** Messages that spell an enforced term's value instead of referencing it. */
 function literalTermErrors(id, node, code, file, names) {

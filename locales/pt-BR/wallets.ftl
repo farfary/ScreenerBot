@@ -16,7 +16,7 @@ wallets-watch-disabled-processing-failed = Pausado: não foi possível processar
 # Last runtime problem of a watch. Ids come from WatchRuntimeError in
 # src/wallets/watch/types.rs.
 wallets-watch-error-provider-unavailable = Provedor de alta atividade indisponível; monitoramento pausado
-wallets-watch-error-provider-repeated-failure = As verificações do Helius falharam repetidamente; monitoramento pausado
+wallets-watch-error-provider-repeated-failure = As verificações do { -helius } falharam repetidamente; monitoramento pausado
 wallets-watch-error-processing-repeated-failure = O processamento da atividade da carteira falhou repetidamente; monitoramento pausado
 wallets-watch-error-position-unreadable = O monitoramento da carteira não conseguiu ler a posição salva; tentando novamente
 wallets-watch-error-provider-check-failed = Falha na verificação do provedor de alta atividade; tentando novamente

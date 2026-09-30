@@ -249,7 +249,7 @@ errors-wallet-watch-remove-failed = Gagal menghapus target pantau
 errors-wallet-watch-update-failed = Gagal memperbarui target pantau
 errors-wallet-watch-budget-failed = Anggaran pantau tidak dapat diperbarui
 errors-wallet-watch-resume-failed = Pemantauan tidak dapat dilanjutkan
-errors-wallet-watch-approval-failed = Persetujuan Helius tidak dapat diperbarui
+errors-wallet-watch-approval-failed = Persetujuan { -helius } tidak dapat diperbarui
 errors-wallet-watch-status-failed = Gagal mengambil status pemantauan
 
 errors-tools-wallet-failed = Gagal mengambil dompet

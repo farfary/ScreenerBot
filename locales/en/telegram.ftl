@@ -473,7 +473,11 @@ telegram-position-history-empty =
 
     No closed positions yet.
 telegram-position-history-title = <b>Recent Trades</b>
-telegram-position-history-more = <i>+{ $count } more trades...</i>
+telegram-position-history-more =
+    <i>+{ $count } { $count ->
+        [one] more trade
+       *[other] more trades
+    }...</i>
 telegram-position-confirm-hint = <i>Confirm within 30s to execute.</i>
 telegram-position-confirm-close-title = <b>Close Position?</b>
 telegram-position-confirm-close-selling = Selling { $tokens } tokens

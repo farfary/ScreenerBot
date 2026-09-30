@@ -43,7 +43,7 @@ copy-pause-user = Bạn đã tạm dừng
 copy-pause-latency-kill-switch = Tự động tạm dừng: giao dịch đến trễ trung bình { $average } giây (giới hạn { $threshold } giây)
 copy-pause-watch-detached = Tự động tạm dừng: ví không còn được theo dõi
 copy-pause-watch-budget-exceeded = Đã tạm dừng: ví này đạt giới hạn { $limit } chữ ký cho mỗi lần kiểm tra theo dõi trước khi bắt kịp
-copy-pause-helius-unavailable = Đã tạm dừng: kiểm tra ví qua Helius thất bại
+copy-pause-helius-unavailable = Đã tạm dừng: kiểm tra ví qua { -helius } thất bại
 copy-pause-watch-processing-failed = Đã tạm dừng: không thể xử lý hoạt động của ví
 copy-pause-unspecified = Đã tạm dừng
 

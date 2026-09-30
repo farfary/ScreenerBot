@@ -204,7 +204,7 @@ hints-filtering-meta-content =
     • **Antigüedad del token** — tiempo mínimo desde la creación del token
     • **Antigüedad del pool** — tiempo mínimo desde la creación del pool
     • **Tiene sitio web** — exige sitio web o enlaces sociales
-    • **Tiene redes sociales** — exige Twitter/{ -telegram }
+    • **Tiene redes sociales** — exige { -twitter }/{ -telegram }
 
     Ayudan a descartar tokens muy nuevos o sospechosos.
 
@@ -391,7 +391,7 @@ hints-tools-multi-buy-content =
     • **Retraso** — retraso aleatorio entre transacciones
     • **Concurrencia** — ejecución en paralelo (1 = secuencial)
     • **Deslizamiento** — deslizamiento máximo aceptable
-    • **Enrutador** — enrutamiento del swap (Auto, Jupiter, Raydium)
+    • **Enrutador** — enrutamiento del swap (Auto, { -jupiter }, Raydium)
 
     { "*" }*Importante:**
     • Requiere suficiente SOL en la billetera principal
@@ -676,7 +676,7 @@ hints-token-details-pools-content =
 
 hints-ui-featured-title = Destacados
 hints-ui-featured-content =
-    Primero los tokens impulsados y después los proyectos en tendencia de Jupiter y { -dexscreener }.
+    Primero los tokens impulsados y después los proyectos en tendencia de { -jupiter } y { -dexscreener }.
 
     { "*" }*Qué verás:**
     • Tokens impulsados — sus equipos pagaron por promocionarlos — fijados al principio y marcados en dorado

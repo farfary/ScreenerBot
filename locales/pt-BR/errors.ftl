@@ -249,7 +249,7 @@ errors-wallet-watch-remove-failed = Falha ao remover o alvo de monitoramento
 errors-wallet-watch-update-failed = Falha ao atualizar o alvo de monitoramento
 errors-wallet-watch-budget-failed = Não foi possível atualizar o orçamento de monitoramento
 errors-wallet-watch-resume-failed = Não foi possível retomar o monitoramento
-errors-wallet-watch-approval-failed = Não foi possível atualizar a aprovação do Helius
+errors-wallet-watch-approval-failed = Não foi possível atualizar a aprovação do { -helius }
 errors-wallet-watch-status-failed = Falha ao obter o status do monitoramento
 
 errors-tools-wallet-failed = Falha ao obter a carteira

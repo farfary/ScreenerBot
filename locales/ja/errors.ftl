@@ -249,7 +249,7 @@ errors-wallet-watch-remove-failed = ウォッチ対象を削除できません�
 errors-wallet-watch-update-failed = ウォッチ対象を更新できませんでした
 errors-wallet-watch-budget-failed = ウォッチの予算を更新できませんでした
 errors-wallet-watch-resume-failed = ウォッチを再開できませんでした
-errors-wallet-watch-approval-failed = Helius の承認を更新できませんでした
+errors-wallet-watch-approval-failed = { -helius } の承認を更新できませんでした
 errors-wallet-watch-status-failed = ウォッチのステータスを取得できませんでした
 
 errors-tools-wallet-failed = ウォレットを取得できませんでした

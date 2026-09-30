@@ -217,7 +217,7 @@ hints-filtering-meta-content =
     • **Token Age** — minimum time since token creation
     • **Pool Age** — minimum time since pool creation
     • **Has Website** — require social/website links
-    • **Has Socials** — require Twitter/{ -telegram }
+    • **Has Socials** — require { -twitter }/{ -telegram }
 
     These help filter out very new or suspicious tokens.
 
@@ -414,7 +414,7 @@ hints-tools-multi-buy-content =
     • **Delay** — random delay between transactions
     • **Concurrency** — parallel execution (1 = sequential)
     • **Slippage** — maximum acceptable slippage
-    • **Router** — swap routing (Auto, Jupiter, Raydium)
+    • **Router** — swap routing (Auto, { -jupiter }, Raydium)
 
     { "*" }*Important:**
     • Requires sufficient SOL in main wallet
@@ -705,7 +705,7 @@ hints-token-details-pools-content =
 
 hints-ui-featured-title = Featured
 hints-ui-featured-content =
-    Boosted tokens first, then trending projects from Jupiter and { -dexscreener }.
+    Boosted tokens first, then trending projects from { -jupiter } and { -dexscreener }.
 
     { "*" }*What you'll see:**
     • Boosted tokens — their teams paid to promote them — pinned to the front, marked in gold

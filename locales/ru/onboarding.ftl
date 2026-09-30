@@ -1,7 +1,7 @@
 onboarding-welcome-title = Добро пожаловать в { -brand }
 onboarding-welcome-description = Ваш локальный торговый помощник для Solana — написан на Rust для нативной скорости. Находите токены, анализируйте рынки и управляйте торговлей со своего компьютера.
 onboarding-welcome-free-title = Бесплатно и с открытым исходным кодом
-onboarding-welcome-free-description = Никаких подписок и платных ограничений. Изучайте код, опубликованный на GitHub.
+onboarding-welcome-free-description = Никаких подписок и платных ограничений. Изучайте код, опубликованный на { -github }.
 onboarding-welcome-custody-title = Самостоятельное хранение
 onboarding-welcome-custody-description = Приватные ключи хранятся в зашифрованном виде и никуда не передаются.
 onboarding-welcome-engine-title = Движок, работающий постоянно

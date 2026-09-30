@@ -10,7 +10,6 @@ updates-defer-needs-installer = 此版本还会更新桌面外壳，因此需要
 ## Update check failure. `cause` is the technical error text.
 
 updates-check-failed = { $cause }
-updates-check-failed-legacy = { $cause }
 
 ## Progress and outcome of update actions
 

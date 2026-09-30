@@ -270,7 +270,7 @@ pub fn check_failed_text(cause: String) -> UiText {
 
 /// Reads `check_error` from either shape. Builds before this field carried
 /// catalog text persisted the error as a plain string; that string becomes the
-/// `cause` of the legacy message so stored state still loads.
+/// `cause` of the check-failed message so stored state still loads.
 fn deserialize_check_error<'de, D>(deserializer: D) -> Result<Option<UiText>, D::Error>
 where
     D: Deserializer<'de>,
@@ -285,9 +285,7 @@ where
     Ok(
         Option::<Stored>::deserialize(deserializer)?.map(|stored| match stored {
             Stored::Text(text) => text,
-            Stored::Legacy(cause) => {
-                UiText::new(ids::UPDATES_CHECK_FAILED_LEGACY).arg("cause", UiArg::Text(cause))
-            }
+            Stored::Legacy(cause) => check_failed_text(cause),
         }),
     )
 }
@@ -483,7 +481,7 @@ mod tests {
             serde_json::from_str(r#"{"phase":"check_failed","check_error":"connection refused"}"#)
                 .unwrap();
         let text = loaded.check_error.expect("legacy error is kept");
-        assert_eq!(text.id, "updates-check-failed-legacy");
+        assert_eq!(text.id, "updates-check-failed");
         assert_eq!(
             text.args.get("cause"),
             Some(&UiArg::Text("connection refused".into()))

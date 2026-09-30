@@ -10,7 +10,6 @@ updates-defer-needs-installer = 이 릴리스는 데스크톱 셸도 업데이�
 ## Update check failure. `cause` is the technical error text.
 
 updates-check-failed = { $cause }
-updates-check-failed-legacy = { $cause }
 
 ## Progress and outcome of update actions
 

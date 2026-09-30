@@ -212,7 +212,7 @@ hints-filtering-meta-content =
     • **Tuổi token** — thời gian tối thiểu kể từ khi tạo token
     • **Tuổi pool** — thời gian tối thiểu kể từ khi tạo pool
     • **Có website** — yêu cầu có liên kết mạng xã hội/website
-    • **Có mạng xã hội** — yêu cầu có Twitter/{ -telegram }
+    • **Có mạng xã hội** — yêu cầu có { -twitter }/{ -telegram }
 
     Các bộ lọc này giúp loại bỏ các token quá mới hoặc đáng ngờ.
 
@@ -409,7 +409,7 @@ hints-tools-multi-buy-content =
     • **Độ trễ** — độ trễ ngẫu nhiên giữa các giao dịch
     • **Số luồng đồng thời** — thực thi song song (1 = tuần tự)
     • **Trượt giá** — mức trượt giá tối đa chấp nhận được
-    • **Router** — định tuyến swap (Auto, Jupiter, Raydium)
+    • **Router** — định tuyến swap (Auto, { -jupiter }, Raydium)
 
     { "*" }*Lưu ý quan trọng:**
     • Cần đủ SOL trong ví chính
@@ -700,7 +700,7 @@ hints-token-details-pools-content =
 
 hints-ui-featured-title = Nổi bật
 hints-ui-featured-content =
-    Token được boost trước, sau đó là các dự án thịnh hành từ Jupiter và { -dexscreener }.
+    Token được boost trước, sau đó là các dự án thịnh hành từ { -jupiter } và { -dexscreener }.
 
     { "*" }*Bạn sẽ thấy:**
     • Token được boost — đội ngũ dự án đã trả tiền để quảng bá — được ghim lên đầu, đánh dấu màu vàng

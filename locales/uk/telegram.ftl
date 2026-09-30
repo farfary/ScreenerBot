@@ -471,7 +471,7 @@ telegram-position-history-empty =
 
     Закритих позицій ще немає.
 telegram-position-history-title = <b>Останні угоди</b>
-telegram-position-history-more = <i>+ ще угод: { $count }...</i>
+telegram-position-history-more = <i>Ще угод: { $count }...</i>
 telegram-position-confirm-hint = <i>Підтвердьте протягом 30 с, щоб виконати.</i>
 telegram-position-confirm-close-title = <b>Закрити позицію?</b>
 telegram-position-confirm-close-selling = Продаж токенів: { $tokens }

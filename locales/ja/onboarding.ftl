@@ -5,7 +5,7 @@
 onboarding-welcome-title = { -brand } へようこそ
 onboarding-welcome-description = ローカルファーストの Solana トレーディングパートナー。ネイティブの速度を実現するため Rust で構築されています。トークンの探索、マーケットの分析、取引の管理を、すべてお使いのマシン上で行えます。
 onboarding-welcome-free-title = 無料・ソース公開
-onboarding-welcome-free-description = サブスクリプションも有料の壁もありません。GitHub で公開されているコードを確認できます。
+onboarding-welcome-free-description = サブスクリプションも有料の壁もありません。{ -github } で公開されているコードを確認できます。
 onboarding-welcome-custody-title = セルフカストディ
 onboarding-welcome-custody-description = 秘密鍵は保存時に暗号化され、どこにも送信されません。
 onboarding-welcome-engine-title = 常時稼働エンジン

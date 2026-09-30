@@ -43,7 +43,7 @@ copy-pause-user = Von Ihnen pausiert
 copy-pause-latency-kill-switch = Automatisch pausiert: Trades kamen durchschnittlich { $average } s zu spät an (Limit { $threshold } s)
 copy-pause-watch-detached = Automatisch pausiert: Die Wallet wird nicht mehr beobachtet
 copy-pause-watch-budget-exceeded = Pausiert: Diese Wallet hat ihr Limit von { $limit } Signaturen pro Beobachtungsprüfung erreicht, bevor sie aufgeholt hat
-copy-pause-helius-unavailable = Pausiert: Wallet-Prüfungen über Helius sind fehlgeschlagen
+copy-pause-helius-unavailable = Pausiert: Wallet-Prüfungen über { -helius } sind fehlgeschlagen
 copy-pause-watch-processing-failed = Pausiert: Wallet-Aktivität konnte nicht verarbeitet werden
 copy-pause-unspecified = Pausiert
 

@@ -217,7 +217,7 @@ hints-filtering-meta-content =
     • **토큰 경과 기간** — 토큰 생성 이후 최소 경과 시간
     • **풀 경과 기간** — 풀 생성 이후 최소 경과 시간
     • **웹사이트 보유** — 소셜/웹사이트 링크 필수
-    • **소셜 보유** — Twitter/{ -telegram } 필수
+    • **소셜 보유** — { -twitter }/{ -telegram } 필수
 
     매우 새롭거나 의심스러운 토큰을 걸러내는 데 도움이 됩니다.
 
@@ -414,7 +414,7 @@ hints-tools-multi-buy-content =
     • **지연** — 트랜잭션 사이의 무작위 지연
     • **동시 실행** — 병렬 실행 (1 = 순차)
     • **슬리피지** — 허용하는 최대 슬리피지
-    • **라우터** — 스왑 라우팅 (자동, Jupiter, Raydium)
+    • **라우터** — 스왑 라우팅 (자동, { -jupiter }, Raydium)
 
     { "*" }*중요:**
     • 메인 지갑에 충분한 SOL이 필요합니다
@@ -705,7 +705,7 @@ hints-token-details-pools-content =
 
 hints-ui-featured-title = 추천
 hints-ui-featured-content =
-    부스트된 토큰이 먼저 표시되고, 이어서 Jupiter와 { -dexscreener }의 트렌딩 프로젝트가 표시됩니다.
+    부스트된 토큰이 먼저 표시되고, 이어서 { -jupiter }와 { -dexscreener }의 트렌딩 프로젝트가 표시됩니다.
 
     { "*" }*표시 내용:**
     • 부스트된 토큰 — 팀이 홍보 비용을 지불한 토큰 — 맨 앞에 고정되고 금색으로 표시

@@ -246,7 +246,7 @@ errors-wallet-watch-remove-failed = वॉच टारगेट हटाने
 errors-wallet-watch-update-failed = वॉच टारगेट अपडेट करने में विफल
 errors-wallet-watch-budget-failed = वॉच बजट अपडेट नहीं हो सका
 errors-wallet-watch-resume-failed = वॉच फिर से शुरू नहीं हो सकी
-errors-wallet-watch-approval-failed = Helius अनुमोदन अपडेट नहीं हो सका
+errors-wallet-watch-approval-failed = { -helius } अनुमोदन अपडेट नहीं हो सका
 errors-wallet-watch-status-failed = वॉच की स्थिति प्राप्त करने में विफल
 
 errors-tools-wallet-failed = वॉलेट प्राप्त करने में विफल

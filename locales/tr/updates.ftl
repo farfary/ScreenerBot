@@ -3,7 +3,6 @@ updates-defer-trading-active = Bir pozisyon, işlem veya araç operasyonu aktif 
 updates-defer-needs-installer = Bu sürüm masaüstü kabuğunu da güncellediğinden yükleyicinin bir kez çalıştırılması gerekir.
 
 updates-check-failed = { $cause }
-updates-check-failed-legacy = { $cause }
 
 updates-download-started = v{ $version } güncellemesi indiriliyor...
 updates-apply-started = Güncelleme yükleniyor. { -brand } otomatik olarak yeniden başlar ve yeniden bağlanır.

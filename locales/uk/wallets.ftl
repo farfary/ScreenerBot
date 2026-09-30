@@ -16,7 +16,7 @@ wallets-watch-disabled-processing-failed = Призупинено: не вдал
 # Last runtime problem of a watch. Ids come from WatchRuntimeError in
 # src/wallets/watch/types.rs.
 wallets-watch-error-provider-unavailable = Провайдер для високої активності недоступний; стеження призупинено
-wallets-watch-error-provider-repeated-failure = Перевірки через Helius раз у раз завершуються помилкою; стеження призупинено
+wallets-watch-error-provider-repeated-failure = Перевірки через { -helius } раз у раз завершуються помилкою; стеження призупинено
 wallets-watch-error-processing-repeated-failure = Обробка активності гаманця раз у раз завершується помилкою; стеження призупинено
 wallets-watch-error-position-unreadable = Стеження не змогло прочитати збережену позицію; повторна спроба
 wallets-watch-error-provider-check-failed = Перевірка через провайдера для високої активності не вдалася; повторна спроба

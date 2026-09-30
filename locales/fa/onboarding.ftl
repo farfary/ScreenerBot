@@ -5,7 +5,7 @@
 onboarding-welcome-title = به { -brand } خوش آمدید
 onboarding-welcome-description = همراه معاملاتی محلی Solana شما — ساخته‌شده با Rust برای سرعت بومی. توکن‌ها را کشف کنید، بازار را تحلیل کنید و معاملات را از دستگاه خودتان کنترل کنید.
 onboarding-welcome-free-title = رایگان و با کد منبع در دسترس
-onboarding-welcome-free-description = بدون اشتراک و بدون محدودیت پولی. کد منتشرشده در GitHub را بررسی کنید.
+onboarding-welcome-free-description = بدون اشتراک و بدون محدودیت پولی. کد منتشرشده در { -github } را بررسی کنید.
 onboarding-welcome-custody-title = نگهداری شخصی
 onboarding-welcome-custody-description = کلیدهای خصوصی در حالت ذخیره رمزگذاری می‌شوند و هرگز به جایی ارسال نمی‌شوند.
 onboarding-welcome-engine-title = موتور همیشه‌فعال

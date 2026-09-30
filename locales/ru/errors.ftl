@@ -246,7 +246,7 @@ errors-wallet-watch-remove-failed = Не удалось удалить цель 
 errors-wallet-watch-update-failed = Не удалось обновить цель отслеживания
 errors-wallet-watch-budget-failed = Не удалось обновить бюджет отслеживания
 errors-wallet-watch-resume-failed = Не удалось возобновить отслеживание
-errors-wallet-watch-approval-failed = Не удалось обновить подтверждение Helius
+errors-wallet-watch-approval-failed = Не удалось обновить подтверждение { -helius }
 errors-wallet-watch-status-failed = Не удалось получить статус отслеживания
 
 errors-tools-wallet-failed = Не удалось получить кошелёк

@@ -43,7 +43,7 @@ copy-pause-user = Pausada por ti
 copy-pause-latency-kill-switch = Pausa automática: las operaciones llegaron con { $average } s de retraso de media (límite { $threshold } s)
 copy-pause-watch-detached = Pausa automática: la billetera ya no está en seguimiento
 copy-pause-watch-budget-exceeded = Pausada: esta billetera alcanzó su límite de { $limit } firmas por comprobación de seguimiento antes de ponerse al día
-copy-pause-helius-unavailable = Pausada: fallaron las comprobaciones de la billetera con Helius
+copy-pause-helius-unavailable = Pausada: fallaron las comprobaciones de la billetera con { -helius }
 copy-pause-watch-processing-failed = Pausada: no se pudo procesar la actividad de la billetera
 copy-pause-unspecified = En pausa
 

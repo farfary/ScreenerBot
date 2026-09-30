@@ -471,7 +471,7 @@ telegram-position-history-empty =
 
     لا توجد مراكز مغلقة بعد.
 telegram-position-history-title = <b>الصفقات الأخيرة</b>
-telegram-position-history-more = <i>+{ $count } صفقات أخرى...</i>
+telegram-position-history-more = <i>صفقات أخرى: { $count }...</i>
 telegram-position-confirm-hint = <i>أكّد خلال 30ث للتنفيذ.</i>
 telegram-position-confirm-close-title = <b>إغلاق المركز؟</b>
 telegram-position-confirm-close-selling = بيع { $tokens } من الرموز

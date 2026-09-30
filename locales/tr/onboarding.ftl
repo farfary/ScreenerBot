@@ -1,7 +1,7 @@
 onboarding-welcome-title = { -brand } uygulamasına hoş geldiniz
 onboarding-welcome-description = Önce yerel çalışan Solana işlem yardımcınız — yerel hız için Rust ile geliştirildi. Tokenları keşfedin, piyasaları analiz edin ve işlemleri kendi makinenizden yönetin.
 onboarding-welcome-free-title = Ücretsiz ve kaynak kodu açık
-onboarding-welcome-free-description = Abonelik veya ödeme duvarı yok. GitHub'da yayınlanan kodu inceleyebilirsiniz.
+onboarding-welcome-free-description = Abonelik veya ödeme duvarı yok. { -github }'da yayınlanan kodu inceleyebilirsiniz.
 onboarding-welcome-custody-title = Öz saklama
 onboarding-welcome-custody-description = Özel anahtarlar depolamada şifrelenir ve hiçbir yere iletilmez.
 onboarding-welcome-engine-title = Her zaman açık motor

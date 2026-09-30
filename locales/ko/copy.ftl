@@ -43,7 +43,7 @@ copy-pause-user = 사용자가 일시 중지함
 copy-pause-latency-kill-switch = 자동 일시 중지: 거래가 평균 { $average }초 늦게 도착했습니다 (한도 { $threshold }초)
 copy-pause-watch-detached = 자동 일시 중지: 지갑을 더 이상 감시하지 않습니다
 copy-pause-watch-budget-exceeded = 일시 중지: 이 지갑이 따라잡기 전에 서명 { $limit }건의 감시 확인 한도에 도달했습니다
-copy-pause-helius-unavailable = 일시 중지: Helius 지갑 확인에 실패했습니다
+copy-pause-helius-unavailable = 일시 중지: { -helius } 지갑 확인에 실패했습니다
 copy-pause-watch-processing-failed = 일시 중지: 지갑 활동을 처리하지 못했습니다
 copy-pause-unspecified = 일시 중지됨
 

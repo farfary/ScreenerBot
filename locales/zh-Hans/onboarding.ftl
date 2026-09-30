@@ -5,7 +5,7 @@
 onboarding-welcome-title = 欢迎使用 { -brand }
 onboarding-welcome-description = 您的本地优先 Solana 交易伙伴，以 Rust 构建，拥有原生速度。在您自己的设备上发现代币、分析市场并控制交易。
 onboarding-welcome-free-title = 免费且源码可见
-onboarding-welcome-free-description = 无订阅，无付费墙。可查看发布在 GitHub 上的代码。
+onboarding-welcome-free-description = 无订阅，无付费墙。可查看发布在 { -github } 上的代码。
 onboarding-welcome-custody-title = 自主托管
 onboarding-welcome-custody-description = 私钥静态加密存储，绝不会传输到任何地方。
 onboarding-welcome-engine-title = 常驻引擎

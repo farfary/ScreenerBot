@@ -4,7 +4,7 @@
 
 use super::callbacks::send_with_keyboard;
 use super::trading::execute_force_stop;
-use crate::i18n::{ids, UiText};
+use crate::i18n::{ids, UiArg, UiText};
 use crate::logger::{self, LogTag};
 use crate::positions;
 use crate::telegram::formatters::{self, row, text_arg};
@@ -102,7 +102,7 @@ pub(super) async fn send_history(bot: &Bot, chat_id: ChatId) -> Result<()> {
     if positions.len() > 10 {
         msg.push('\n');
         msg.push_str(&tg(&UiText::new(ids::TELEGRAM_POSITION_HISTORY_MORE)
-            .arg("count", text_arg((positions.len() - 10).to_string()))));
+            .arg("count", UiArg::Count((positions.len() - 10) as i64))));
     }
 
     send_with_keyboard(bot, chat_id, &msg, keyboards::main_menu_compact()).await

@@ -10,7 +10,6 @@ updates-defer-needs-installer = يحدّث هذا الإصدار أيضًا غل
 ## Update check failure. `cause` is the technical error text.
 
 updates-check-failed = { $cause }
-updates-check-failed-legacy = { $cause }
 
 ## Progress and outcome of update actions
 

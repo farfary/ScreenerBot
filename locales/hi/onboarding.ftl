@@ -1,7 +1,7 @@
 onboarding-welcome-title = { -brand } में आपका स्वागत है
 onboarding-welcome-description = आपका लोकल-फ़र्स्ट Solana ट्रेडिंग साथी — नेटिव स्पीड के लिए Rust में बना। अपनी ही मशीन से टोकन खोजें, मार्केट का विश्लेषण करें और ट्रेडिंग नियंत्रित करें।
 onboarding-welcome-free-title = मुफ़्त और सोर्स-अवेलेबल
-onboarding-welcome-free-description = कोई सब्सक्रिप्शन या पेवॉल नहीं। GitHub पर प्रकाशित कोड खुद जांचें।
+onboarding-welcome-free-description = कोई सब्सक्रिप्शन या पेवॉल नहीं। { -github } पर प्रकाशित कोड खुद जांचें।
 onboarding-welcome-custody-title = सेल्फ़-कस्टडी
 onboarding-welcome-custody-description = प्राइवेट की स्टोरेज में एन्क्रिप्टेड रहती हैं और कहीं भेजी नहीं जातीं।
 onboarding-welcome-engine-title = हमेशा चालू इंजन

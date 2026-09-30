@@ -217,7 +217,7 @@ hints-filtering-meta-content =
     • **代币年龄**——自代币创建以来的最短时间
     • **流动性池年龄**——自流动性池创建以来的最短时间
     • **有网站**——要求提供社交/网站链接
-    • **有社交账号**——要求提供 Twitter/{ -telegram }
+    • **有社交账号**——要求提供 { -twitter }/{ -telegram }
 
     这些条件有助于过滤掉非常新或可疑的代币。
 
@@ -414,7 +414,7 @@ hints-tools-multi-buy-content =
     • **延迟**——交易之间的随机延迟
     • **并发数**——并行执行（1 = 顺序执行）
     • **滑点**——可接受的最大滑点
-    • **路由**——兑换路由（自动、Jupiter、Raydium）
+    • **路由**——兑换路由（自动、{ -jupiter }、Raydium）
 
     { "*" }*重要提示：**
     • 需要主钱包中有足够的 SOL
@@ -705,7 +705,7 @@ hints-token-details-pools-content =
 
 hints-ui-featured-title = 精选
 hints-ui-featured-content =
-    优先显示已加速的代币，其后是来自 Jupiter 和 { -dexscreener } 的热门项目。
+    优先显示已加速的代币，其后是来自 { -jupiter } 和 { -dexscreener } 的热门项目。
 
     { "*" }*您将看到：**
     • 已加速的代币（其团队付费推广）固定在最前，以金色标记

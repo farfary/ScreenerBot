@@ -3,7 +3,6 @@ updates-defer-trading-active = कोई पोज़िशन, ट्रेड 
 updates-defer-needs-installer = इस रिलीज़ में डेस्कटॉप शेल भी अपडेट होता है, इसलिए इंस्टॉलर को एक बार चलाना होगा।
 
 updates-check-failed = { $cause }
-updates-check-failed-legacy = { $cause }
 
 updates-download-started = अपडेट v{ $version } डाउनलोड हो रहा है...
 updates-apply-started = अपडेट इंस्टॉल हो रहा है। { -brand } अपने आप रीस्टार्ट होकर दोबारा कनेक्ट होगा।

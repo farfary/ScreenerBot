@@ -3,7 +3,6 @@ updates-defer-trading-active = Выполняется операция с поз
 updates-defer-needs-installer = Этот выпуск также обновляет оболочку приложения, поэтому нужно один раз запустить установщик.
 
 updates-check-failed = { $cause }
-updates-check-failed-legacy = { $cause }
 
 updates-download-started = Загрузка обновления v{ $version }...
 updates-apply-started = Установка обновления. { -brand } перезапустится и переподключится автоматически.

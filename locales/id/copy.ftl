@@ -43,7 +43,7 @@ copy-pause-user = Dijeda oleh Anda
 copy-pause-latency-kill-switch = Dijeda otomatis: trade tiba terlambat rata-rata { $average }d (batas { $threshold }d)
 copy-pause-watch-detached = Dijeda otomatis: dompet tidak lagi dipantau
 copy-pause-watch-budget-exceeded = Dijeda: dompet ini mencapai batas pemeriksaan pantau { $limit } signature sebelum berhasil menyusul
-copy-pause-helius-unavailable = Dijeda: pemeriksaan dompet Helius gagal
+copy-pause-helius-unavailable = Dijeda: pemeriksaan dompet { -helius } gagal
 copy-pause-watch-processing-failed = Dijeda: aktivitas dompet tidak dapat diproses
 copy-pause-unspecified = Dijeda
 

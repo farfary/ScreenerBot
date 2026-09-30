@@ -10,7 +10,6 @@ updates-defer-needs-installer = این نسخه پوسته دسکتاپ را ه�
 ## Update check failure. `cause` is the technical error text.
 
 updates-check-failed = { $cause }
-updates-check-failed-legacy = { $cause }
 
 ## Progress and outcome of update actions
 

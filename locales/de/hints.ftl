@@ -212,7 +212,7 @@ hints-filtering-meta-content =
     • **Token-Alter** — Mindestzeit seit der Token-Erstellung
     • **Pool-Alter** — Mindestzeit seit der Pool-Erstellung
     • **Hat Website** — Social-/Website-Links verlangen
-    • **Hat Socials** — Twitter/{ -telegram } verlangen
+    • **Hat Socials** — { -twitter }/{ -telegram } verlangen
 
     Sie helfen, sehr neue oder verdächtige Tokens auszusortieren.
 
@@ -409,7 +409,7 @@ hints-tools-multi-buy-content =
     • **Verzögerung** — zufällige Verzögerung zwischen Transaktionen
     • **Parallelität** — parallele Ausführung (1 = sequenziell)
     • **Slippage** — maximal akzeptable Slippage
-    • **Router** — Swap-Routing (Auto, Jupiter, Raydium)
+    • **Router** — Swap-Routing (Auto, { -jupiter }, Raydium)
 
     { "*" }*Wichtig:**
     • Erfordert ausreichend SOL in der Haupt-Wallet
@@ -700,7 +700,7 @@ hints-token-details-pools-content =
 
 hints-ui-featured-title = Hervorgehoben
 hints-ui-featured-content =
-    Zuerst geboostete Tokens, dann Trend-Projekte von Jupiter und { -dexscreener }.
+    Zuerst geboostete Tokens, dann Trend-Projekte von { -jupiter } und { -dexscreener }.
 
     { "*" }*Das sehen Sie:**
     • Geboostete Tokens — ihre Teams haben für die Bewerbung bezahlt — vorne angeheftet und golden markiert

@@ -45,7 +45,7 @@ copy-pause-user = Mise en pause par vous
 copy-pause-latency-kill-switch = Mise en pause automatique : les trades sont arrivés avec { $average } s de retard en moyenne (limite : { $threshold } s)
 copy-pause-watch-detached = Mise en pause automatique : le portefeuille n'est plus surveillé
 copy-pause-watch-budget-exceeded = En pause : ce portefeuille a atteint sa limite de { $limit } signatures vérifiées avant d'avoir rattrapé son retard
-copy-pause-helius-unavailable = En pause : les vérifications de portefeuille via Helius ont échoué
+copy-pause-helius-unavailable = En pause : les vérifications de portefeuille via { -helius } ont échoué
 copy-pause-watch-processing-failed = En pause : l'activité du portefeuille n'a pas pu être traitée
 copy-pause-unspecified = En pause
 

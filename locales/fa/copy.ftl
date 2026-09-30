@@ -43,7 +43,7 @@ copy-pause-user = توسط شما متوقف شد
 copy-pause-latency-kill-switch = توقف خودکار: معاملات به‌طور میانگین { $average } ثانیه دیر رسیدند (حد { $threshold } ثانیه)
 copy-pause-watch-detached = توقف خودکار: کیف پول دیگر پایش نمی‌شود
 copy-pause-watch-budget-exceeded = متوقف شد: این کیف پول پیش از رسیدن به وضعیت به‌روز، به سقف { $limit } امضا در هر بررسی پایش رسید
-copy-pause-helius-unavailable = متوقف شد: بررسی کیف پول از طریق Helius ناموفق بود
+copy-pause-helius-unavailable = متوقف شد: بررسی کیف پول از طریق { -helius } ناموفق بود
 copy-pause-watch-processing-failed = متوقف شد: فعالیت کیف پول قابل پردازش نبود
 copy-pause-unspecified = متوقف
 

@@ -43,7 +43,7 @@ copy-pause-user = Призупинено вами
 copy-pause-latency-kill-switch = Автопауза: угоди надходили із середнім запізненням { $average } с (ліміт { $threshold } с)
 copy-pause-watch-detached = Автопауза: за гаманцем більше не стежать
 copy-pause-watch-budget-exceeded = Призупинено: цей гаманець досяг ліміту перевірок стеження (підписів за перевірку: { $limit }), не наздогнавши активність
-copy-pause-helius-unavailable = Призупинено: перевірки гаманця через Helius не вдалися
+copy-pause-helius-unavailable = Призупинено: перевірки гаманця через { -helius } не вдалися
 copy-pause-watch-processing-failed = Призупинено: не вдалося обробити активність гаманця
 copy-pause-unspecified = Призупинено
 

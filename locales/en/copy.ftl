@@ -50,7 +50,7 @@ copy-pause-user = Paused by you
 copy-pause-latency-kill-switch = Auto-paused: trades arrived { $average }s late on average (limit { $threshold }s)
 copy-pause-watch-detached = Auto-paused: the wallet is no longer watched
 copy-pause-watch-budget-exceeded = Paused: this wallet reached its { $limit }-signature watch check limit before catching up
-copy-pause-helius-unavailable = Paused: Helius wallet checks failed
+copy-pause-helius-unavailable = Paused: { -helius } wallet checks failed
 copy-pause-watch-processing-failed = Paused: wallet activity could not be processed
 # A paused task with no recorded reason.
 copy-pause-unspecified = Paused

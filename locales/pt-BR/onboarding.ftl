@@ -5,7 +5,7 @@
 onboarding-welcome-title = Boas-vindas ao { -brand }
 onboarding-welcome-description = Seu companheiro de trading na Solana com foco no local, feito em Rust para velocidade nativa. Descubra tokens, analise mercados e controle o trading a partir da sua própria máquina.
 onboarding-welcome-free-title = Gratuito e com código disponível
-onboarding-welcome-free-description = Sem assinaturas nem paywalls. Inspecione o código publicado no GitHub.
+onboarding-welcome-free-description = Sem assinaturas nem paywalls. Inspecione o código publicado no { -github }.
 onboarding-welcome-custody-title = Autocustódia
 onboarding-welcome-custody-description = Chaves privadas criptografadas em repouso e nunca transmitidas a lugar nenhum.
 onboarding-welcome-engine-title = Motor sempre ativo

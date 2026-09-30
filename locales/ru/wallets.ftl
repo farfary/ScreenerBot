@@ -9,7 +9,7 @@ wallets-watch-disabled-helius-unavailable = Пауза: провайдер дл�
 wallets-watch-disabled-processing-failed = Пауза: не удалось обработать активность кошелька; курсор сохранён
 
 wallets-watch-error-provider-unavailable = Провайдер для кошельков с высокой активностью недоступен; отслеживание приостановлено
-wallets-watch-error-provider-repeated-failure = Проверки через Helius неоднократно завершались ошибкой; отслеживание приостановлено
+wallets-watch-error-provider-repeated-failure = Проверки через { -helius } неоднократно завершались ошибкой; отслеживание приостановлено
 wallets-watch-error-processing-repeated-failure = Обработка активности кошелька неоднократно завершалась ошибкой; отслеживание приостановлено
 wallets-watch-error-position-unreadable = Отслеживанию кошелька не удалось прочитать сохранённую позицию; повторная попытка
 wallets-watch-error-provider-check-failed = Проверка через провайдера для кошельков с высокой активностью не удалась; повторная попытка

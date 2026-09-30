@@ -212,7 +212,7 @@ hints-filtering-meta-content =
     • **Token Yaşı** — token oluşturulduktan sonra geçen asgari süre
     • **Havuz Yaşı** — havuz oluşturulduktan sonra geçen asgari süre
     • **Web Sitesi Var** — sosyal medya/web sitesi bağlantıları iste
-    • **Sosyal Medya Var** — Twitter/{ -telegram } iste
+    • **Sosyal Medya Var** — { -twitter }/{ -telegram } iste
 
     Bunlar çok yeni veya şüpheli tokenları elemeye yardımcı olur.
 
@@ -409,7 +409,7 @@ hints-tools-multi-buy-content =
     • **Gecikme** — işlemler arasında rastgele gecikme
     • **Eşzamanlılık** — paralel yürütme (1 = sıralı)
     • **Kayma** — kabul edilebilir azami kayma
-    • **Yönlendirici** — takas yönlendirmesi (Otomatik, Jupiter, Raydium)
+    • **Yönlendirici** — takas yönlendirmesi (Otomatik, { -jupiter }, Raydium)
 
     { "*" }*Önemli:**
     • Ana cüzdanda yeterli SOL gerekir
@@ -700,7 +700,7 @@ hints-token-details-pools-content =
 
 hints-ui-featured-title = Öne Çıkan
 hints-ui-featured-content =
-    Önce boost'lu tokenlar, ardından Jupiter ve { -dexscreener } üzerindeki trend projeler.
+    Önce boost'lu tokenlar, ardından { -jupiter } ve { -dexscreener } üzerindeki trend projeler.
 
     { "*" }*Göreceğiniz içerik:**
     • Boost'lu tokenlar — ekipleri tanıtım için ödeme yaptı — öne sabitlenir ve altın rengiyle işaretlenir

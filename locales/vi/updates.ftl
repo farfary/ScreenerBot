@@ -3,7 +3,6 @@ updates-defer-trading-active = Đang có vị thế, giao dịch hoặc thao tá
 updates-defer-needs-installer = Bản phát hành này cũng cập nhật lớp vỏ desktop nên cần chạy trình cài đặt một lần.
 
 updates-check-failed = { $cause }
-updates-check-failed-legacy = { $cause }
 
 updates-download-started = Đang tải bản cập nhật v{ $version }...
 updates-apply-started = Đang cài đặt bản cập nhật. { -brand } sẽ tự khởi động lại và kết nối lại.

@@ -6,7 +6,6 @@ updates-defer-trading-active = Ada posisi, trade, atau operasi alat yang aktif, 
 updates-defer-needs-installer = Rilis ini juga memperbarui shell desktop, sehingga installer perlu dijalankan sekali.
 
 updates-check-failed = { $cause }
-updates-check-failed-legacy = { $cause }
 
 updates-download-started = Mengunduh pembaruan v{ $version }...
 updates-apply-started = Memasang pembaruan. { -brand } dimulai ulang dan terhubung kembali secara otomatis.

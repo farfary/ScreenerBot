@@ -5,7 +5,7 @@
 onboarding-welcome-title = { -brand }에 오신 것을 환영합니다
 onboarding-welcome-description = 로컬 우선 Solana 트레이딩 파트너로, 네이티브 속도를 위해 Rust로 제작되었습니다. 내 컴퓨터에서 토큰을 발굴하고 시장을 분석하며 거래를 제어하세요.
 onboarding-welcome-free-title = 무료 및 소스 공개
-onboarding-welcome-free-description = 구독이나 유료 장벽이 없습니다. GitHub에 공개된 코드를 직접 확인하세요.
+onboarding-welcome-free-description = 구독이나 유료 장벽이 없습니다. { -github }에 공개된 코드를 직접 확인하세요.
 onboarding-welcome-custody-title = 자기 보관
 onboarding-welcome-custody-description = 개인 키는 암호화되어 저장되며 어디로도 전송되지 않습니다.
 onboarding-welcome-engine-title = 상시 가동 엔진

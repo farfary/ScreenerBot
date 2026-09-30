@@ -10,7 +10,6 @@ updates-defer-needs-installer = Esta versão também atualiza a interface deskto
 ## Update check failure. `cause` is the technical error text.
 
 updates-check-failed = { $cause }
-updates-check-failed-legacy = { $cause }
 
 ## Progress and outcome of update actions
 

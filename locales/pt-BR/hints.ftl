@@ -217,7 +217,7 @@ hints-filtering-meta-content =
     • **Idade do token** — tempo mínimo desde a criação do token
     • **Idade do pool** — tempo mínimo desde a criação do pool
     • **Tem site** — exige links de site/redes sociais
-    • **Tem redes sociais** — exige Twitter/{ -telegram }
+    • **Tem redes sociais** — exige { -twitter }/{ -telegram }
 
     Ajudam a filtrar tokens muito novos ou suspeitos.
 
@@ -414,7 +414,7 @@ hints-tools-multi-buy-content =
     • **Atraso** — atraso aleatório entre transações
     • **Concorrência** — execução em paralelo (1 = sequencial)
     • **Slippage** — slippage máximo aceitável
-    • **Roteador** — roteamento do swap (Auto, Jupiter, Raydium)
+    • **Roteador** — roteamento do swap (Auto, { -jupiter }, Raydium)
 
     { "*" }*Importante:**
     • Exige SOL suficiente na carteira principal
@@ -705,7 +705,7 @@ hints-token-details-pools-content =
 
 hints-ui-featured-title = Em destaque
 hints-ui-featured-content =
-    Primeiro os tokens impulsionados, depois os projetos em alta da Jupiter e do { -dexscreener }.
+    Primeiro os tokens impulsionados, depois os projetos em alta da { -jupiter } e do { -dexscreener }.
 
     { "*" }*O que você verá:**
     • Tokens impulsionados — suas equipes pagaram para promovê-los — fixados no início, marcados em dourado

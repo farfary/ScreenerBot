@@ -3,7 +3,6 @@ updates-defer-trading-active = Une position, un trade ou une opération d'outil 
 updates-defer-needs-installer = Cette version met aussi à jour le shell de bureau ; le programme d'installation doit donc être exécuté une fois.
 
 updates-check-failed = { $cause }
-updates-check-failed-legacy = { $cause }
 
 updates-download-started = Téléchargement de la mise à jour v{ $version }...
 updates-apply-started = Installation de la mise à jour. { -brand } redémarre et se reconnecte automatiquement.

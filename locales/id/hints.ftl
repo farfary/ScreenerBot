@@ -215,7 +215,7 @@ hints-filtering-meta-content =
     • **Usia Token** — waktu minimum sejak token dibuat
     • **Usia Pool** — waktu minimum sejak pool dibuat
     • **Punya Website** — wajibkan tautan sosial/website
-    • **Punya Sosial** — wajibkan Twitter/{ -telegram }
+    • **Punya Sosial** — wajibkan { -twitter }/{ -telegram }
 
     Ini membantu menyaring token yang sangat baru atau mencurigakan.
 
@@ -412,7 +412,7 @@ hints-tools-multi-buy-content =
     • **Jeda** — jeda acak antar transaksi
     • **Konkurensi** — eksekusi paralel (1 = berurutan)
     • **Slippage** — slippage maksimum yang dapat diterima
-    • **Router** — rute swap (Auto, Jupiter, Raydium)
+    • **Router** — rute swap (Auto, { -jupiter }, Raydium)
 
     { "*" }*Penting:**
     • Membutuhkan SOL yang cukup di dompet utama
@@ -703,7 +703,7 @@ hints-token-details-pools-content =
 
 hints-ui-featured-title = Unggulan
 hints-ui-featured-content =
-    Token yang di-boost lebih dulu, lalu proyek trending dari Jupiter dan { -dexscreener }.
+    Token yang di-boost lebih dulu, lalu proyek trending dari { -jupiter } dan { -dexscreener }.
 
     { "*" }*Yang akan Anda lihat:**
     • Token yang di-boost — tim mereka membayar untuk promosi — disematkan di depan, ditandai emas

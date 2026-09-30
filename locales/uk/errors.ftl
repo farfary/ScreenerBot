@@ -246,7 +246,7 @@ errors-wallet-watch-remove-failed = Не вдалося видалити ціл�
 errors-wallet-watch-update-failed = Не вдалося оновити ціль стеження
 errors-wallet-watch-budget-failed = Не вдалося оновити бюджет стеження
 errors-wallet-watch-resume-failed = Не вдалося відновити стеження
-errors-wallet-watch-approval-failed = Не вдалося оновити підтвердження Helius
+errors-wallet-watch-approval-failed = Не вдалося оновити підтвердження { -helius }
 errors-wallet-watch-status-failed = Не вдалося отримати статус стеження
 
 errors-tools-wallet-failed = Не вдалося отримати гаманець

@@ -1,7 +1,7 @@
 onboarding-welcome-title = Chào mừng đến với { -brand }
 onboarding-welcome-description = Trợ thủ giao dịch Solana ưu tiên chạy cục bộ - viết bằng Rust cho tốc độ gốc. Khám phá token, phân tích thị trường và điều khiển giao dịch ngay trên máy của bạn.
 onboarding-welcome-free-title = Miễn phí & mã nguồn mở
-onboarding-welcome-free-description = Không đăng ký trả phí hay tường phí. Xem mã nguồn được công bố trên GitHub.
+onboarding-welcome-free-description = Không đăng ký trả phí hay tường phí. Xem mã nguồn được công bố trên { -github }.
 onboarding-welcome-custody-title = Tự lưu ký
 onboarding-welcome-custody-description = Khóa riêng tư được mã hóa khi lưu trữ và không bao giờ được gửi đi đâu.
 onboarding-welcome-engine-title = Bộ máy luôn hoạt động

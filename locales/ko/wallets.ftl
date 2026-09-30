@@ -16,7 +16,7 @@ wallets-watch-disabled-processing-failed = 일시 중지됨: 지갑 활동을 �
 # Last runtime problem of a watch. Ids come from WatchRuntimeError in
 # src/wallets/watch/types.rs.
 wallets-watch-error-provider-unavailable = 고활동 제공자를 사용할 수 없어 감시가 일시 중지되었습니다
-wallets-watch-error-provider-repeated-failure = Helius 확인이 반복해서 실패하여 감시가 일시 중지되었습니다
+wallets-watch-error-provider-repeated-failure = { -helius } 확인이 반복해서 실패하여 감시가 일시 중지되었습니다
 wallets-watch-error-processing-repeated-failure = 지갑 활동 처리가 반복해서 실패하여 감시가 일시 중지되었습니다
 wallets-watch-error-position-unreadable = 지갑 감시가 저장된 위치를 읽지 못했습니다. 다시 시도합니다
 wallets-watch-error-provider-check-failed = 고활동 제공자 확인에 실패했습니다. 다시 시도합니다
