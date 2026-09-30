@@ -1,7 +1,7 @@
 // Live metrics and effective Auto Trader state for the global dashboard header.
 import { Poller } from "./poller.js";
 import { requestManager } from "./request_manager.js";
-import { formatPercentValue, formatSignedSol, withUsdSymbol } from "./format.js";
+import { formatPercentValue, formatSignedSol, signedTone, withUsdSymbol } from "./format.js";
 import { formatNumber, showToast } from "./utils.js";
 
 const METRICS_POLL_INTERVAL = 5000;
@@ -35,9 +35,10 @@ function finiteNumber(value) {
   return typeof value === "number" && Number.isFinite(value) ? value : Number.NaN;
 }
 
-function setValueClass(element, value) {
+/** Tone class of a signed amount as shown at `decimals`; a rounded zero is neutral. */
+function setValueClass(element, value, decimals) {
   element.classList.remove("positive", "negative", "neutral");
-  element.classList.add(value > 0 ? "positive" : value < 0 ? "negative" : "neutral");
+  element.classList.add(signedTone(value, decimals));
 }
 
 function updateBotCard(trader, state) {
@@ -72,7 +73,7 @@ function updateBotCard(trader, state) {
   }
 
   pnl.innerHTML = `<span class="pnl-num">${formatSignedSol(value, { decimals: 3, unit: false })}</span><span class="pnl-unit"> SOL</span>`;
-  setValueClass(pnl, value);
+  setValueClass(pnl, value, 3);
 }
 
 // The card headlines the wallet's full WORTH (cash + every token held), which is the
@@ -112,7 +113,7 @@ function updateWalletCard(wallet, state) {
         decimals: 1,
         includeSign: false,
       })}`;
-      setValueClass(change, changePercent);
+      setValueClass(change, changePercent, 1);
     } else {
       change.textContent = "—";
       change.classList.remove("positive", "negative", "neutral");
@@ -144,7 +145,7 @@ function updateSolPriceCard(sol) {
   const percent = finiteNumber(sol?.change_24h_percent);
   if (Number.isFinite(percent)) {
     change.textContent = formatPercentValue(percent, { decimals: 2 });
-    setValueClass(change, percent);
+    setValueClass(change, percent, 2);
   } else {
     change.textContent = "—";
     change.classList.remove("positive", "negative", "neutral");
@@ -237,15 +238,26 @@ function updateTicker(metrics) {
     const percent = finiteNumber(metrics.trader?.today_pnl_percent);
     if (Number.isFinite(pnl) && Number.isFinite(percent)) {
       todayPnl.textContent = `${formatSignedSol(pnl, { decimals: 3 })} (${formatPercentValue(percent, { decimals: 1 })})`;
-      setValueClass(todayPnl, pnl);
+      setValueClass(todayPnl, pnl, 3);
     } else {
       todayPnl.textContent = "—";
       todayPnl.classList.remove("positive", "negative", "neutral");
     }
   }
 
-  if (rpcCalls) rpcCalls.textContent = formatNumber(metrics.rpc?.calls_per_minute, 1);
-  if (rpcSuccess) rpcSuccess.textContent = formatNumber(metrics.rpc?.success_rate_percent, 0);
+  // Each value and its unit are one text run, so the ticker's flex gap never splits them.
+  if (rpcCalls) {
+    const calls = finiteNumber(metrics.rpc?.calls_per_minute);
+    rpcCalls.textContent = Number.isFinite(calls)
+      ? I18n.t("shell-ticker-rpc-rate", { amount: formatNumber(calls, 1) })
+      : "—";
+  }
+  if (rpcSuccess) {
+    rpcSuccess.textContent = formatPercentValue(metrics.rpc?.success_rate_percent, {
+      decimals: 0,
+      includeSign: false,
+    });
+  }
 
   if (servicesText && metrics.system) {
     if (metrics.system.all_services_healthy) {

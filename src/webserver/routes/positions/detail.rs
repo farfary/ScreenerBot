@@ -100,7 +100,11 @@ pub async fn get_position_details(Path(key): Path<String>) -> Response {
             // Get pool info from pool service
             let pool_info = pools::get_pool_price(mint).map(|price_result| PositionPoolInfo {
                 pool_address: Some(price_result.pool_address.clone()),
-                dex_name: price_result.source_pool.clone(),
+                pool_program: crate::chains::solana::pools::service::get_pool_program(
+                    mint,
+                    &price_result.pool_address,
+                )
+                .map(str::to_owned),
                 liquidity_sol: Some(price_result.sol_reserves),
             });
 

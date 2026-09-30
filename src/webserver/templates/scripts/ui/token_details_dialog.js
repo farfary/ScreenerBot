@@ -1356,8 +1356,13 @@ export class TokenDetailsDialog {
       Utils.updateLiveNumber(element, text, value(raw));
     };
 
-    const priceSol = value(token.price_sol);
-    const priceUsd = value(token.price_usd);
+    // A price at or below zero is an unquoted token, shown as the unknown placeholder.
+    const price = (raw) => {
+      const number = value(raw);
+      return number !== null && number > 0 ? number : null;
+    };
+    const priceSol = price(token.price_sol);
+    const priceUsd = price(token.price_usd);
     const marketCap = value(token.market_cap);
     const liquidity = value(token.liquidity_usd);
     const volume24h = value(token.volume_24h);

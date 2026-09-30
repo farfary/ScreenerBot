@@ -311,9 +311,11 @@ function usdText(num) {
  * @param {Object} options - Formatting options
  * @param {string} options.fallback - Value to return if price is invalid
  * @param {number} options.precision - Number of significant digits
+ * @param {string} options.sign - "negative" signs only negatives; "always" also adds the
+ *   locale's plus to a positive (a price change). Zero stays unsigned.
  * @returns {string} Formatted price string
  */
-export function formatPriceSubscript(price, { fallback = DASH, precision = 5 } = {}) {
+export function formatPriceSubscript(price, { fallback = DASH, precision = 5, sign: signMode = "negative" } = {}) {
   const num = coerceNumber(price);
   if (!Number.isFinite(num)) {
     return fallback;
@@ -321,7 +323,7 @@ export function formatPriceSubscript(price, { fallback = DASH, precision = 5 } =
   if (num === 0) return "0";
 
   const absPrice = Math.abs(num);
-  const sign = num < 0 ? signPrefix(true) : "";
+  const sign = num < 0 ? signPrefix(true) : signMode === "always" ? signPrefix(false) : "";
 
   // Normal-sized numbers (>= 0.0001) get the SAME significant-digit budget as
   // the subscript branch below: decimals are derived from the magnitude, never
@@ -487,6 +489,54 @@ export function withSolUnit(amount) {
 }
 
 /**
+ * The `toFixed` magnitude digits of a signed amount as it will be shown, and whether
+ * they read as zero. `minDecimals` drops trailing fraction zeros down to that count.
+ * Every signed formatter and `signedTone` take the sign from this rounding, so a value
+ * that rounds to zero is unsigned and neutral everywhere.
+ */
+function roundedMagnitude(num, decimals, minDecimals = decimals) {
+  let digits = Math.abs(num).toFixed(decimals);
+  if (minDecimals < decimals) {
+    digits = digits.replace(new RegExp(`(\\.\\d{${minDecimals}}\\d*?)0+$`), "$1").replace(/\.$/, "");
+  }
+  return { digits, zero: Number(digits) === 0 };
+}
+
+/** A `toFixed` digit string with the locale's grouping and decimal separator, digits unchanged. */
+function groupedDecimal(digits) {
+  if (!/^\d+(\.\d+)?$/.test(digits)) return localizeDecimal(digits);
+  const fraction = digits.split(".")[1]?.length ?? 0;
+  // A decimal string is formatted exactly, with no binary rounding in between.
+  return plain(
+    intl(Intl.NumberFormat, {
+      minimumFractionDigits: fraction,
+      maximumFractionDigits: fraction,
+      useGrouping: true,
+    }).format(digits)
+  );
+}
+
+/** Signed digits of a finite number: the locale's sign (per `sign`) before the rounded magnitude. */
+function signedDigits(num, { decimals, minDecimals = decimals, sign = "always", grouping = false }) {
+  const { digits, zero } = roundedMagnitude(num, decimals, minDecimals);
+  const shown = zero || (num > 0 && sign !== "always") ? "" : signPrefix(num < 0);
+  return `${shown}${grouping ? groupedDecimal(digits) : localizeDecimal(digits)}`;
+}
+
+/**
+ * Tone of a signed amount as shown at `decimals`: "positive", "negative", or "neutral"
+ * for a value that rounds to zero (or is not a number). Colour classes take this, never
+ * the raw value, so a displayed "0.0000" is never green or red.
+ */
+export function signedTone(value, decimals = 4) {
+  const num = coerceNumber(value);
+  if (!Number.isFinite(num) || roundedMagnitude(num, decimals).zero) {
+    return "neutral";
+  }
+  return num > 0 ? "positive" : "negative";
+}
+
+/**
  * A signed SOL amount ("+0.1500 SOL", "-0.0077 SOL"). The sign is the locale's own
  * (`signPrefix`), attached to the digits before the unit, so it stays at the number's
  * start in right-to-left text. The sign follows the rounded digits: a value that rounds
@@ -502,14 +552,25 @@ export function formatSignedSol(
   if (!Number.isFinite(num)) {
     return fallback;
   }
-  let digits = Math.abs(num).toFixed(decimals);
-  if (minDecimals < decimals) {
-    digits = digits.replace(new RegExp(`(\\.\\d{${minDecimals}}\\d*?)0+$`), "$1").replace(/\.$/, "");
-  }
-  const zero = Number(digits) === 0;
-  const shown = zero || (num > 0 && sign !== "always") ? "" : signPrefix(num < 0);
-  const text = `${shown}${localizeDecimal(digits)}`;
+  const text = signedDigits(num, { decimals, minDecimals, sign });
   return withUnit ? withSolUnit(text) : text;
+}
+
+/**
+ * A signed plain number with the locale's grouping ("+1,234.50", "-0.25"), such as a
+ * token amount change. Sign and rounding follow `formatSignedSol`: the sign is the
+ * locale's own and comes from the `toFixed` digits, so a value that rounds to zero
+ * shows none. `sign`: "always" signs both directions, "negative" only decreases.
+ */
+export function formatSignedNumber(
+  value,
+  { decimals = 2, minDecimals = decimals, sign = "always", fallback = HYPHEN } = {}
+) {
+  const num = coerceNumber(value);
+  if (!Number.isFinite(num)) {
+    return fallback;
+  }
+  return signedDigits(num, { decimals, minDecimals, sign, grouping: true });
 }
 
 export function formatPnL(value, { decimals = 4, fallback = HYPHEN } = {}) {
@@ -527,11 +588,11 @@ export function formatPnL(value, { decimals = 4, fallback = HYPHEN } = {}) {
   }
 
   // The sign follows the value as shown: an amount that rounds to zero is neutral.
-  const shownZero = Number(Math.abs(num).toFixed(decimals)) === 0;
-  if (num > 0 && !shownZero) {
+  const tone = signedTone(num, decimals);
+  if (tone === "positive") {
     return `<span class="pnl-positive">${signPrefix(false)}${formatted}</span>`;
   }
-  if (num < 0 && !shownZero) {
+  if (tone === "negative") {
     return `<span class="pnl-negative">${signPrefix(true)}${formatted}</span>`;
   }
   return `<span class="pnl-neutral">${formatted}</span>`;
@@ -614,11 +675,13 @@ export function formatTimestamp(
 
 /**
  * Calendar day only. A release date, a report day or an expiry is about the
- * day itself, and formatTimestamp's time-of-day is noise there.
+ * day itself, and formatTimestamp's time-of-day is noise there. `calendar`
+ * ("gregory") overrides the locale's calendar for a surface laid out on a fixed
+ * calendar grid; digits stay Latin.
  */
 export function formatDate(
   value,
-  { fallback, includeYear = true, weekday = false, utc = false } = {}
+  { fallback, includeYear = true, weekday = false, utc = false, calendar } = {}
 ) {
   const date = toDate(value);
   if (!date) {
@@ -636,6 +699,9 @@ export function formatDate(
   if (utc) {
     options.timeZone = "UTC";
   }
+  if (calendar) {
+    options.calendar = calendar;
+  }
   return intl(Intl.DateTimeFormat, options).format(date);
 }
 
@@ -649,10 +715,18 @@ export function formatDatePart(value, { part = "year", fallback } = {}) {
   return intl(Intl.DateTimeFormat, options).format(date);
 }
 
-/** Month name and year of a UTC calendar month (`month` is 1-12), for calendar headings. */
-export function formatMonthYear(year, month) {
+/**
+ * Month name and year of a UTC Gregorian calendar month (`month` is 1-12), for calendar
+ * headings. `calendar` ("gregory") names it in that calendar instead of the locale's
+ * (fa defaults to the Persian calendar); a Gregorian month grid needs it.
+ */
+export function formatMonthYear(year, month, { calendar } = {}) {
   const date = new Date(Date.UTC(year, month - 1, 1));
-  const text = intl(Intl.DateTimeFormat, { month: "long", year: "numeric", timeZone: "UTC" }).format(date);
+  const options = { month: "long", year: "numeric", timeZone: "UTC" };
+  if (calendar) {
+    options.calendar = calendar;
+  }
+  const text = intl(Intl.DateTimeFormat, options).format(date);
   // Some locales write month names lowercase (ru "сентябрь 2026 г."); this is a title.
   const [first] = intl(Intl.Segmenter, { granularity: "grapheme" }).segment(text);
   if (!first) return text;

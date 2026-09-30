@@ -757,11 +757,11 @@ export class TransactionDetailsDialog {
         <div class="balance-summary">
           <div class="summary-item">
             <span class="summary-label">${Utils.escapeHtml(I18n.t("transactions-dialog-balances-net-sol"))}</span>
-            <span class="summary-value ${tx.sol_balance_change >= 0 ? "positive" : "negative"}">${renderTokenLogo(SOL_MINT, { size: "xs" })} ${Utils.formatPnL(tx.sol_balance_change, { decimals: 9 })}</span>
+            <span class="summary-value ${Utils.signedTone(tx.sol_balance_change, 9)}">${renderTokenLogo(SOL_MINT, { size: "xs" })} ${Utils.formatPnL(tx.sol_balance_change, { decimals: 9 })}</span>
           </div>
           <div class="summary-item">
             <span class="summary-label">${Utils.escapeHtml(I18n.t("transactions-dialog-balances-fee"))}</span>
-            <span class="summary-value negative">${renderTokenLogo(SOL_MINT, { size: "xs" })} -${Utils.formatSol(tx.fee_sol, { decimals: 9 })}</span>
+            <span class="summary-value ${Utils.signedTone(-Math.abs(tx.fee_sol), 9)}">${renderTokenLogo(SOL_MINT, { size: "xs" })} ${Utils.formatSignedSol(-Math.abs(tx.fee_sol), { decimals: 9, sign: "negative" })}</span>
           </div>
         </div>
       </div>
@@ -776,7 +776,7 @@ export class TransactionDetailsDialog {
         <td class="tx-address-cell">${renderAddress(c.account, { explorer: "account" })}</td>
         <td class="numeric">${Utils.formatSol(c.pre_balance, { decimals: 9, suffix: "" })}</td>
         <td class="numeric">${Utils.formatSol(c.post_balance, { decimals: 9, suffix: "" })}</td>
-        <td class="numeric ${c.change >= 0 ? "positive" : "negative"}">${Utils.formatSignedSol(c.change, { decimals: 9, unit: false })}</td>
+        <td class="numeric ${Utils.signedTone(c.change, 9)}">${Utils.formatSignedSol(c.change, { decimals: 9, unit: false })}</td>
       </tr>
     `
       )
@@ -806,7 +806,7 @@ export class TransactionDetailsDialog {
         <td class="tx-mint-cell">${renderAddress(c.mint)}</td>
         <td class="numeric">${c.pre_balance !== null ? Utils.formatNumber(c.pre_balance, { decimals: c.decimals || 9 }) : "—"}</td>
         <td class="numeric">${c.post_balance !== null ? Utils.formatNumber(c.post_balance, { decimals: c.decimals || 9 }) : "—"}</td>
-        <td class="numeric ${c.change >= 0 ? "positive" : "negative"}">${c.change >= 0 ? "+" : ""}${Utils.formatNumber(c.change, { decimals: c.decimals || 9 })}</td>
+        <td class="numeric ${Utils.signedTone(c.change, c.decimals || 9)}">${Utils.formatSignedNumber(c.change, { decimals: c.decimals || 9 })}</td>
       </tr>
     `
       )
@@ -1039,7 +1039,7 @@ export class TransactionDetailsDialog {
           </div>
           <div class="ata-stat">
             <span class="stat-label">${Utils.escapeHtml(I18n.t("transactions-dialog-ata-rent-spent"))}</span>
-            <span class="stat-value negative">${renderTokenLogo(SOL_MINT, { size: "xs" })} -${Utils.formatSol(analysis.total_rent_spent || 0, { decimals: 9 })}</span>
+            <span class="stat-value ${Utils.signedTone(-Math.abs(analysis.total_rent_spent || 0), 9)}">${renderTokenLogo(SOL_MINT, { size: "xs" })} ${Utils.formatSignedSol(-Math.abs(analysis.total_rent_spent || 0), { decimals: 9, sign: "negative" })}</span>
           </div>
           <div class="ata-stat">
             <span class="stat-label">${Utils.escapeHtml(I18n.t("transactions-dialog-ata-rent-recovered"))}</span>

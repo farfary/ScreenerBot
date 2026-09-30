@@ -170,7 +170,8 @@ pub struct PositionSecuritySummary {
 #[derive(Debug, Serialize)]
 pub struct PositionPoolInfo {
     pub pool_address: Option<String>,
-    pub dex_name: Option<String>,
+    /// Program of the pricing pool, as `ProgramKind::protocol_slug()`.
+    pub pool_program: Option<String>,
     pub liquidity_sol: Option<f64>,
 }
 

@@ -9,6 +9,7 @@ use crate::chains::solana::pools::analyzer::PoolAnalyzer;
 use crate::chains::solana::pools::calculator::PriceCalculator;
 use crate::chains::solana::pools::discovery::PoolDiscovery;
 use crate::chains::solana::pools::fetcher::AccountFetcher;
+use crate::chains::solana::pools::types::ProgramKind;
 use crate::chains::solana::rpc::get_rpc_client;
 use crate::logger::{self, LogTag};
 use crate::pools::types::PoolDescriptor;
@@ -76,6 +77,17 @@ pub fn get_token_pools(mint: &str) -> Vec<PoolDescriptor> {
     }
 
     pools
+}
+
+/// Program of a registered pool of `mint`, as the stable `ProgramKind::protocol_slug()`
+/// that presentation layers label (the dashboard's `POOL_PROGRAM_LABELS`), never the
+/// display name. A legacy display-name identity maps to its slug; a pool the analyzer
+/// does not know returns `None`.
+pub fn get_pool_program(mint: &str, pool_address: &str) -> Option<&'static str> {
+    get_token_pools(mint)
+        .into_iter()
+        .find(|pool| pool.pool_id.address() == pool_address)
+        .map(|pool| ProgramKind::from_protocol_id(&pool.program_kind).protocol_slug())
 }
 
 /// Initialize the concrete Solana pool runtime components (discovery, analyzer,

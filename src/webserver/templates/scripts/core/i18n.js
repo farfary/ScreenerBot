@@ -307,12 +307,28 @@
     return args;
   }
 
+  let graphemeSegmenter;
+
   const I18n = {
     locale,
     intlLocale,
     dir,
     source,
     pseudo,
+
+    /**
+     * User-perceived characters of a string (grapheme clusters), so a combining mark or
+     * a conjunct is never separated from its base. Runtimes without `Intl.Segmenter`
+     * fall back to code points, never UTF-16 units.
+     */
+    graphemes(text) {
+      const value = String(text == null ? "" : text);
+      if (typeof Intl.Segmenter !== "function") return Array.from(value);
+      if (!graphemeSegmenter) {
+        graphemeSegmenter = new Intl.Segmenter(intlLocale, { granularity: "grapheme" });
+      }
+      return Array.from(graphemeSegmenter.segment(value), (part) => part.segment);
+    },
 
     /** Formatted message value, or the id when the catalog has no value for it. */
     t(id, args) {

@@ -1,5 +1,6 @@
 // Status Bar - Fetches and displays system metrics
 
+import { whenInitialized } from "./bootstrap.js";
 import { formatLatencyMs, formatMemoryMb, formatNumber, formatPercentValue, formatUptime } from "./format.js";
 
 (function () {
@@ -169,10 +170,12 @@ import { formatLatencyMs, formatMemoryMb, formatNumber, formatPercentValue, form
     resumePolling: startPolling,
   };
 
-  // Initialize when DOM is ready
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init);
-  } else {
-    init();
-  }
+  // Poll only an initialized backend; a first-run launch answers 503 until setup completes.
+  whenInitialized(() => {
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", init);
+    } else {
+      init();
+    }
+  });
 })();

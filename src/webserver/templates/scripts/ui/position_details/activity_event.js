@@ -5,7 +5,7 @@
  * stay behind Details, so a long token history remains easy to scan.
  */
 import * as Utils from "../../core/utils.js";
-import { withPercentUnit, withSolUnit } from "../../core/format.js";
+import { withSolUnit } from "../../core/format.js";
 import { directionLabel } from "../transaction_direction.js";
 import { TRANSACTION_STATUS_LABELS } from "../transaction_status.js";
 
@@ -136,7 +136,7 @@ function eventOutcome(event, ctx) {
     const tone = pnl > 0 ? "pdd-positive" : pnl < 0 ? "pdd-negative" : "";
     const pct =
       event.realized_pnl_percent != null
-        ? ` (${withPercentUnit(`${event.realized_pnl_percent > 0 ? "+" : ""}${Utils.formatNumber(event.realized_pnl_percent, 2)}`)})`
+        ? ` (${Utils.formatPercentValue(event.realized_pnl_percent, { decimals: 2 })})`
         : "";
     return `<span class="pdd-act-outcome ${tone}">${ctx.formatSol(pnl, { sign: true })}${pct}</span>`;
   }

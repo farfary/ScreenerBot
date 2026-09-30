@@ -677,13 +677,17 @@ class LockscreenController {
 // Create and export global instance
 const Lockscreen = new LockscreenController();
 
-// Initialize on DOM ready
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", () => Lockscreen.init());
-} else {
-  // DOM already loaded (e.g., script at end of body)
-  Lockscreen.init();
-}
+// Initialize once the launch settles on an initialized backend (`bootstrap.js` emits
+// `screenerbot:bootstrap-settled` exactly once, after this classic script has run). A
+// first-run launch answers 503 until setup completes, and completing it reloads the page.
+window.addEventListener(
+  "screenerbot:bootstrap-settled",
+  (event) => {
+    if (event.detail?.status?.initialization_required) return;
+    Lockscreen.init();
+  },
+  { once: true }
+);
 
 // Export for use in other modules
 window.Lockscreen = Lockscreen;

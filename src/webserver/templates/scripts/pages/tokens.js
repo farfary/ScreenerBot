@@ -144,7 +144,7 @@ function createLifecycle() {
     }
 
     const numericPrice = Number(row.price_sol);
-    if (!Number.isFinite(numericPrice)) {
+    if (!Number.isFinite(numericPrice) || numericPrice <= 0) {
       priceHistory.delete(mint);
       row.price_change_meta = null;
       return row;
@@ -882,6 +882,11 @@ function createLifecycle() {
    * Build columns array based on current view
    * Different views show different conditional columns (Actions, reject_reason, blacklist_reason)
    */
+  // USD columns are not LTR islands (a locale's compact unit keeps its own order, e.g.
+  // "$999.99 مليار"), so they must fit their widest realistic value instead of
+  // ellipsizing: 14 data-font characters ("999,99 mil M $") plus the compact cell padding.
+  const USD_COLUMN_MIN_WIDTH = 130;
+
   const buildColumns = () => {
     return [
       {
@@ -906,7 +911,7 @@ function createLifecycle() {
         id: "liquidity_usd",
         label: I18n.t("tokens-column-liquidity"),
         sortable: true,
-        minWidth: 110,
+        minWidth: USD_COLUMN_MIN_WIDTH,
         wrap: false,
         render: (v) => usdCell(v),
       },
@@ -914,7 +919,7 @@ function createLifecycle() {
         id: "volume_24h",
         label: I18n.t("tokens-column-volume-24h"),
         sortable: true,
-        minWidth: 110,
+        minWidth: USD_COLUMN_MIN_WIDTH,
         wrap: false,
         render: (v) => usdCell(v),
       },
@@ -922,7 +927,7 @@ function createLifecycle() {
         id: "fdv",
         label: I18n.t("tokens-column-fdv"),
         sortable: true,
-        minWidth: 110,
+        minWidth: USD_COLUMN_MIN_WIDTH,
         wrap: false,
         render: (v) => usdCell(v),
       },
@@ -930,7 +935,7 @@ function createLifecycle() {
         id: "market_cap",
         label: I18n.t("tokens-column-market-cap"),
         sortable: true,
-        minWidth: 110,
+        minWidth: USD_COLUMN_MIN_WIDTH,
         wrap: false,
         render: (v) => usdCell(v),
       },
@@ -940,6 +945,7 @@ function createLifecycle() {
         sortable: true,
         minWidth: 90,
         wrap: false,
+        className: "dt-cell-numeric",
         render: (v) => percentCell(v),
       },
       {
@@ -948,13 +954,14 @@ function createLifecycle() {
         sortable: true,
         minWidth: 90,
         wrap: false,
+        className: "dt-cell-numeric",
         render: (v) => percentCell(v),
       },
       {
         id: "txns_5m",
         label: I18n.t("tokens-column-txns-5m"),
         sortable: true,
-        minWidth: 80,
+        minWidth: 120,
         wrap: false,
         className: "dt-cell-numeric",
         render: (_v, row) => {
@@ -968,7 +975,7 @@ function createLifecycle() {
         id: "txns_1h",
         label: I18n.t("tokens-column-txns-1h"),
         sortable: true,
-        minWidth: 80,
+        minWidth: 120,
         wrap: false,
         className: "dt-cell-numeric",
         render: (_v, row) => {

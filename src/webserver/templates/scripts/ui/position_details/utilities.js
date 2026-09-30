@@ -3,7 +3,7 @@
  * formatting shared by the header, summary, chart and activity, and guarded region painting.
  */
 import * as Utils from "../../core/utils.js";
-import { withPercentUnit, withSolUnit } from "../../core/format.js";
+import { withSolUnit } from "../../core/format.js";
 
 const LAMPORTS_PER_SOL = 1e9;
 
@@ -75,7 +75,7 @@ export function applyUtilitiesMixin(PositionDetailsDialog) {
   proto._formatPct = function (value, decimals = 2) {
     const num = Number(value);
     if (value === null || value === undefined || !Number.isFinite(num)) return "—";
-    return withPercentUnit(`${num > 0 ? "+" : ""}${Utils.formatNumber(num, decimals)}`);
+    return Utils.formatPercentValue(num, { decimals });
   };
 
   /** A signed SOL amount in USD at today's SOL price, or "" when that price is unknown. */

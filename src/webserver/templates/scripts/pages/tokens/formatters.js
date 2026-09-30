@@ -31,7 +31,11 @@ export function findFirstDifferenceIndex(a, b) {
 }
 
 export function priceCell(value, row = null) {
-  const formatted = Utils.formatPriceSol(value, { fallback: "—", decimals: 12 });
+  // A price at or below zero is an unquoted token (the API reports 0.0), not a real
+  // price: it takes the same placeholder as any other unknown value.
+  const price = value === null || value === undefined || value === "" ? Number.NaN : Number(value);
+  const known = Number.isFinite(price) && price > 0;
+  const formatted = known ? Utils.formatPriceSol(price, { fallback: "—", decimals: 12 }) : "—";
   const baseValue = Utils.escapeHtml(formatted);
 
   let directionClass = "price-change--neutral";

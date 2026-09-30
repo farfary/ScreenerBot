@@ -390,11 +390,6 @@ pub fn assistant_content() -> String {
     render_page(ASSISTANT_PAGE)
 }
 
-pub fn initialization_content() -> String {
-    // Legacy redirect - initialization now uses the setup screen
-    render_page(SETUP_PAGE)
-}
-
 pub fn home_content() -> String {
     render_page(HOME_PAGE)
 }

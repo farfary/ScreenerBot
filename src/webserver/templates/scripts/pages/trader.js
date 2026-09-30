@@ -436,9 +436,10 @@ function createLifecycle() {
         const el = $(`#${id}`);
         if (el) el.textContent = text;
       };
+      // Tone of a SOL amount as shown (4 decimals): a value that rounds to zero is untoned.
       const tone = (value) => {
-        if (!Number.isFinite(value) || value === 0) return null;
-        return value > 0 ? "positive" : "negative";
+        const shown = Utils.signedTone(value, 4);
+        return shown === "neutral" ? null : shown;
       };
 
       // Net P&L — the booked, fee- and DCA-aware SOL the window actually returned.
@@ -612,7 +613,8 @@ function createLifecycle() {
       totalEl.textContent = finite
         ? Utils.formatSignedSol(totalPnlSol, { fallback: "—" })
         : "—";
-      totalEl.className = `daily-pnl-total${finite && totalPnlSol !== 0 ? (totalPnlSol > 0 ? " positive" : " negative") : ""}`;
+      const totalTone = Utils.signedTone(totalPnlSol, 4);
+      totalEl.className = `daily-pnl-total${totalTone === "neutral" ? "" : ` ${totalTone}`}`;
     }
 
     if (!Array.isArray(days) || days.every((d) => (d.trades || 0) === 0)) {
@@ -746,7 +748,7 @@ function createLifecycle() {
           <div class="exit-breakdown-row">
             <div class="exit-breakdown-head">
               <span class="exit-breakdown-type">${Utils.escapeHtml(formatExitType(e.exit_type))}</span>
-              <span class="exit-breakdown-pnl ${barClass}">${Utils.formatSignedSol(netSol, { fallback: "—" })}</span>
+              <span class="exit-breakdown-pnl ${Utils.signedTone(netSol, 4)}">${Utils.formatSignedSol(netSol, { fallback: "—" })}</span>
             </div>
             <div class="exit-breakdown-bar">
               <div class="exit-breakdown-fill ${barClass}" style="width: ${share}%"></div>

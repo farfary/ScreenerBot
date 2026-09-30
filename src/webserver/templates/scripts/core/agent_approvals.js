@@ -69,8 +69,12 @@ function isBrowser() {
 if (isBrowser()) {
   // Dynamic import so a node `import` of this module for testing never pulls in
   // the DOM-coupled Poller / ConfirmationDialog dependency graphs.
-  Promise.all([import("./poller.js"), import("../ui/confirmation_dialog.js")])
-    .then(([{ Poller }, { ConfirmationDialog }]) => {
+  Promise.all([
+    import("./poller.js"),
+    import("../ui/confirmation_dialog.js"),
+    import("./bootstrap.js"),
+  ])
+    .then(([{ Poller }, { ConfirmationDialog }, { whenInitialized }]) => {
       const handled = new Set();
       const queued = new Set();
       const deferredUntil = new Map();
@@ -167,7 +171,7 @@ if (isBrowser()) {
         intervalMs: POLL_INTERVAL_MS,
         pauseWhenHidden: true,
       });
-      poller.start({ silent: true });
+      whenInitialized(() => poller.start({ silent: true }));
       window.addEventListener("pagehide", () => poller.cleanup(), { once: true });
     })
     .catch(() => {

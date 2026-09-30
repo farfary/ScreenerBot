@@ -20,6 +20,8 @@
 
 /* Horizontally scrollable primary navigation with fixed edge fades. */
 .header-row-2-wrapper {
+  --nav-edge-fade: 40px;
+
   position: relative;
   overflow: hidden;
 }
@@ -29,7 +31,7 @@
   content: "";
   position: absolute;
   inset-block: 0;
-  width: 40px;
+  width: var(--nav-edge-fade);
   z-index: var(--z-dropdown);
   opacity: 0;
   pointer-events: none;
@@ -54,6 +56,8 @@
 .header-row-2 {
   height: 36px;
   overflow: auto hidden;
+  /* A tab scrolled into view stops clear of the edge fades. */
+  scroll-padding-inline: var(--nav-edge-fade);
   border-top: 1px solid var(--border-color);
   background: var(--bg-secondary);
   scrollbar-width: none;

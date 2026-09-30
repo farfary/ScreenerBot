@@ -234,6 +234,29 @@ export function waitForReady() {
   return readyPromise;
 }
 
+/**
+ * Whether a settled bootstrap status still requires first-run setup. Until setup
+ * completes, the endpoints behind the dashboard chrome (header metrics, status,
+ * agent approvals, lockscreen) answer 503.
+ */
+export function requiresInitialization(status) {
+  return Boolean(status?.initialization_required);
+}
+
+/**
+ * Run `callback` once the launch has settled on an initialized backend. On a first-run
+ * launch the callback never runs on this page: completing setup or entering Explore
+ * Mode reloads the dashboard, and the next load settles initialized. Resolves to
+ * whether the callback ran, after an async callback has finished; its failure rejects.
+ */
+export function whenInitialized(callback) {
+  return readyPromise.then(async (status) => {
+    if (requiresInitialization(status)) return false;
+    await callback(status);
+    return true;
+  });
+}
+
 export function subscribeToBootstrap(callback) {
   if (typeof callback !== "function") {
     return () => {};

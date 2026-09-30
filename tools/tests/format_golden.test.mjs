@@ -301,3 +301,40 @@ test("de keeps digits for the surface formatters; only separators change", () =>
   assert.equal(fmt.formatSizeAt(1.5, { unit: "mb", decimals: 1 }), "1,5 MB");
   assert.equal(fmt.formatNumber(1234.56789, { decimals: 0, maxDecimals: 3 }), "1.234,568");
 });
+
+test("signed plain numbers group per locale and take the locale's sign", () => {
+  const de = load("de-u-nu-latn").fmt;
+  assert.equal(de.formatSignedNumber(1234567.891, { decimals: 2 }), "+1.234.567,89");
+  assert.equal(de.formatSignedNumber(-0.5, { decimals: 1 }), "-0,5");
+  const ar = load("ar-u-nu-latn").fmt;
+  assert.equal(ar.formatSignedNumber(1234.5, { decimals: 2 }), "‎+1,234.50");
+  assert.equal(ar.formatSignedNumber(-1234.5, { decimals: 2 }), "‎-1,234.50");
+  assert.equal(ar.formatSignedNumber(-0.004, { decimals: 2 }), "0.00");
+  assert.equal(ar.signedTone(-0.00004, 4), "neutral");
+  const hi = load("hi-u-nu-latn").fmt;
+  assert.equal(hi.formatSignedNumber(1234567.5, { decimals: 1 }), "+12,34,567.5");
+});
+
+test("a price change signs both directions and leaves zero unsigned", () => {
+  const en = load("en-u-nu-latn").fmt;
+  assert.equal(en.formatPriceSubscript(0.00000123, { sign: "always" }), "+0.0₅123");
+  assert.equal(en.formatPriceSubscript(-0.00000123, { sign: "always" }), "-0.0₅123");
+  assert.equal(en.formatPriceSubscript(12.5, { sign: "always" }), "+12.5");
+  assert.equal(en.formatPriceSubscript(0, { sign: "always" }), "0");
+  assert.equal(load("ar-u-nu-latn").fmt.formatPriceSubscript(12.5, { sign: "always" }), "‎+12.5");
+});
+
+test("a Gregorian calendar grid names Gregorian months in fa, with Latin digits", () => {
+  const fa = load("fa-u-nu-latn").fmt;
+  const day = Date.UTC(2026, 8, 19);
+  assert.equal(fa.formatMonthYear(2026, 9, { calendar: "gregory" }), "سپتامبر 2026");
+  assert.equal(
+    fa.formatDate(day, { includeYear: false, weekday: true, utc: true, calendar: "gregory" }),
+    "شنبه 19 سپتامبر"
+  );
+  assert.equal(fa.formatDate(day, { utc: true, calendar: "gregory" }), "19 سپتامبر 2026");
+  // Other surfaces keep the locale's own calendar.
+  assert.equal(fa.formatMonthYear(2026, 9), "1405 شهریور");
+  const en = load("en-u-nu-latn").fmt;
+  assert.equal(en.formatMonthYear(2026, 9, { calendar: "gregory" }), "September 2026");
+});

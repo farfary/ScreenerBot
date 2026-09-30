@@ -5,7 +5,7 @@ import { dirSign, scrollStart } from "./dom.js";
 import { notificationManager } from "./notifications.js";
 import * as NotificationPanel from "../ui/notification_panel.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
-import { subscribeToBootstrap, waitForReady } from "./bootstrap.js";
+import { subscribeToBootstrap, whenInitialized } from "./bootstrap.js";
 import { createHeaderMetrics } from "./header_metrics.js";
 import { showSettingsDialog } from "../ui/settings_dialog.js";
 import { SetupDialog } from "../ui/setup_dialog.js";
@@ -231,18 +231,16 @@ function initTraderControls() {
   initNavTabsIndicator();
   initNavTabsKeyboard();
 
-  waitForReady()
-    .then(async () => {
-      try {
-        await headerMetrics.fetchHeaderMetrics();
-      } catch {
-        // The poller remains active and will recover after a transient first fetch.
-      }
-      headerMetrics.startMetricsPolling();
-    })
-    .catch((error) => {
-      console.error("[Header] Failed to initialize after bootstrap", error);
-    });
+  whenInitialized(async () => {
+    try {
+      await headerMetrics.fetchHeaderMetrics();
+    } catch {
+      // The poller remains active and will recover after a transient first fetch.
+    }
+    headerMetrics.startMetricsPolling();
+  }).catch((error) => {
+    console.error("[Header] Failed to initialize after bootstrap", error);
+  });
 }
 
 function initHeaderActionsToggle() {

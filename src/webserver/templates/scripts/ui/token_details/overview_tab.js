@@ -4,6 +4,7 @@
  */
 import * as Utils from "../../core/utils.js";
 import { formatFixed, formatPercentValue, withSolUnit } from "../../core/format.js";
+import { venueLabel } from "../venue.js";
 
 const esc = (text) => Utils.escapeHtml(text);
 
@@ -222,7 +223,7 @@ function buildTokenInfoSection(token, options) {
           </div>
           <div class="overview-fact">
             <span class="overview-fact-label">${esc(I18n.t("tokens-overview-fact-dex"))}</span>
-            <span class="overview-fact-value">${token.pool_dex ? escapeHtml(token.pool_dex) : "—"}</span>
+            <span class="overview-fact-value">${token.pool_program ? escapeHtml(venueLabel(token.pool_program)) : "—"}</span>
           </div>
           ${
             token.total_holders
@@ -367,12 +368,9 @@ function buildActivitySection(token, options) {
   const netFlow24h = typeof token.net_flow_24h === "number" ? token.net_flow_24h : null;
   const netFlowLabel =
     typeof netFlow24h === "number"
-      ? netFlow24h > 0
-        ? `+${Utils.formatNumber(netFlow24h, { decimals: 0 })}`
-        : Utils.formatNumber(netFlow24h, { decimals: 0 })
+      ? Utils.formatSignedNumber(netFlow24h, { decimals: 0, fallback: "—" })
       : "—";
-  const netFlowClass =
-    typeof netFlow24h === "number" ? (netFlow24h >= 0 ? "positive" : "negative") : "";
+  const netFlowClass = typeof netFlow24h === "number" ? Utils.signedTone(netFlow24h, 0) : "";
 
   return `
     <section class="overview-section">

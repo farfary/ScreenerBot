@@ -9,6 +9,8 @@ import {
   formatPercent,
   formatSol,
   formatSignedSol,
+  formatSignedNumber,
+  signedTone,
   formatPnL,
   formatTimeFromSeconds,
   formatTimestamp,
@@ -38,43 +40,65 @@ import {
     toastManager = module.toastManager;
   });
 
+  // Characters that belong to the animated numeric run of a live value: digits (including
+  // subscript digits), separators, signs, currency symbols, percent and the dash placeholder.
+  const LIVE_NUMBER_NUMERIC = /^[\p{Nd}\p{No}\p{Sc}.,'%\u2030+\-\u2212\u066B\u066C\u2013\u2014]$/u;
+  // Spaces and format marks join a numeric run only when a numeric character sits on both sides.
+  const LIVE_NUMBER_NEUTRAL = /^[\s\p{Cf}]+$/u;
+
   /**
-   * Update a live numeric label without repainting the stable characters.
-   *
-   * The element keeps one span per character. Characters that are unchanged
-   * retain their DOM nodes; only changed characters are replaced, which lets
-   * CSS animate the exact digits that moved without flashing or shifting the
-   * rest of a large number.
-   *
-   * @param {HTMLElement} element
-   * @param {string} text - Already-formatted display value
-   * @param {number|null|undefined} numericValue - Raw value used for direction
-   * @param {Object} options
-   * @param {boolean} options.animate
-   * @returns {boolean} Whether the displayed text changed
+   * Split a formatted value into alternating runs: `digits` runs (animated per grapheme)
+   * and `text` runs (a localized unit word or suffix, kept whole so its script shapes).
    */
-  function updateLiveNumber(element, text, numericValue, { animate = true } = {}) {
-    if (!element) return false;
+  function liveNumberRuns(text) {
+    const graphemes = I18n.graphemes(text);
+    const kinds = graphemes.map((g) =>
+      LIVE_NUMBER_NEUTRAL.test(g) ? null : LIVE_NUMBER_NUMERIC.test(g) ? "digits" : "text"
+    );
+    const resolved = kinds.map((kind, index) => {
+      if (kind) return kind;
+      let before = null;
+      for (let i = index - 1; i >= 0 && !before; i -= 1) before = kinds[i];
+      let after = null;
+      for (let i = index + 1; i < kinds.length && !after; i += 1) after = kinds[i];
+      return before === "digits" && after === "digits" ? "digits" : "text";
+    });
 
-    const nextText = String(text ?? "—");
-    const nextChars = Array.from(nextText);
-    const previous = element.__liveNumberState;
+    const runs = [];
+    graphemes.forEach((grapheme, index) => {
+      const kind = resolved[index];
+      const last = runs[runs.length - 1];
+      if (last && last.kind === kind) {
+        last.chars.push(grapheme);
+      } else {
+        runs.push({ kind, chars: [grapheme] });
+      }
+    });
+    return runs.map((run) => ({ kind: run.kind, chars: run.chars, text: run.chars.join("") }));
+  }
 
-    element.classList.add("live-number");
-    if (previous?.text === nextText) return false;
+  /** Replace only the changed characters of one digit run, keeping stable nodes in place. */
+  function patchDigitRun(runElement, previousChars, nextChars, createCharacter) {
+    const previousNodes = Array.from(runElement.children);
+    const stable =
+      previousNodes.length === previousChars.length &&
+      previousNodes.every((node, index) => node.textContent === previousChars[index]);
 
-    const previousText = previous?.text || "";
-    const previousChars = Array.from(previousText);
-    const previousNodes = Array.from(element.children);
-    const previousValue = previous?.value;
-    const nextValue =
-      numericValue === null || numericValue === undefined || numericValue === ""
-        ? Number.NaN
-        : Number(numericValue);
-    const hasDirection =
-      Number.isFinite(previousValue) && Number.isFinite(nextValue) && previousValue !== nextValue;
-    const direction = hasDirection ? (nextValue > previousValue ? "up" : "down") : null;
-    const shouldAnimate = Boolean(animate && previousText && direction);
+    if (!stable) {
+      const fragment = document.createDocumentFragment();
+      nextChars.forEach((char) => fragment.appendChild(createCharacter(char)));
+      runElement.replaceChildren(fragment);
+      return;
+    }
+
+    if (previousChars.length === nextChars.length) {
+      nextChars.forEach((char, index) => {
+        if (previousChars[index] !== char) {
+          previousNodes[index].replaceWith(createCharacter(char));
+        }
+      });
+      return;
+    }
 
     let sharedPrefix = 0;
     while (
@@ -95,6 +119,58 @@ import {
       sharedSuffix += 1;
     }
 
+    const previousMiddleEnd = previousChars.length - sharedSuffix;
+    const nextMiddleEnd = nextChars.length - sharedSuffix;
+    const suffixAnchor = previousNodes[previousMiddleEnd] || null;
+
+    for (let index = sharedPrefix; index < previousMiddleEnd; index += 1) {
+      previousNodes[index].remove();
+    }
+    for (let index = sharedPrefix; index < nextMiddleEnd; index += 1) {
+      runElement.insertBefore(createCharacter(nextChars[index]), suffixAnchor);
+    }
+  }
+
+  /**
+   * Update a live numeric label without repainting the stable characters.
+   *
+   * The value is split into runs. Each numeric run (digits, separators, sign, currency
+   * symbol, percent) is a `.live-number-digits` LTR island holding one span per grapheme;
+   * characters that are unchanged retain their DOM nodes and only changed characters are
+   * replaced, which lets CSS animate the exact digits that moved. Any other text (a
+   * localized unit word such as "مليار" or "लाख") is one plain `.live-number-text` run, so
+   * its script joins and shapes, and the outer element keeps the page direction so number
+   * and unit order follow the locale.
+   *
+   * @param {HTMLElement} element
+   * @param {string} text - Already-formatted display value
+   * @param {number|null|undefined} numericValue - Raw value used for direction
+   * @param {Object} options
+   * @param {boolean} options.animate
+   * @returns {boolean} Whether the displayed text changed
+   */
+  function updateLiveNumber(element, text, numericValue, { animate = true } = {}) {
+    if (!element) return false;
+
+    const nextText = String(text ?? "—");
+    const previous = element.__liveNumberState;
+
+    element.classList.add("live-number");
+    if (previous?.text === nextText) return false;
+
+    const previousText = previous?.text || "";
+    const previousRuns = previous?.runs || [];
+    const nextRuns = liveNumberRuns(nextText);
+    const previousValue = previous?.value;
+    const nextValue =
+      numericValue === null || numericValue === undefined || numericValue === ""
+        ? Number.NaN
+        : Number(numericValue);
+    const hasDirection =
+      Number.isFinite(previousValue) && Number.isFinite(nextValue) && previousValue !== nextValue;
+    const direction = hasDirection ? (nextValue > previousValue ? "up" : "down") : null;
+    const shouldAnimate = Boolean(animate && previousText && direction);
+
     const createCharacter = (char) => {
       const character = document.createElement("span");
       character.className = "live-number-char";
@@ -105,36 +181,45 @@ import {
       return character;
     };
 
-    const hasStableCharacterNodes =
-      previousText &&
-      previousNodes.length === previousChars.length &&
-      previousNodes.every((node, index) => node.textContent === previousChars[index]);
+    const createRun = (run) => {
+      const runElement = document.createElement("span");
+      if (run.kind === "digits") {
+        runElement.className = "live-number-digits";
+        run.chars.forEach((char) => runElement.appendChild(createCharacter(char)));
+      } else {
+        runElement.className = "live-number-text";
+        runElement.textContent = run.text;
+      }
+      return runElement;
+    };
 
-    if (!hasStableCharacterNodes) {
-      const fragment = document.createDocumentFragment();
-      nextChars.forEach((char) => fragment.appendChild(createCharacter(char)));
-      element.replaceChildren(fragment);
-    } else if (previousChars.length === nextChars.length) {
-      nextChars.forEach((char, index) => {
-        if (previousChars[index] !== char) {
-          previousNodes[index].replaceWith(createCharacter(char));
+    // Stable nodes are reused only when the run layout is unchanged: the same kinds in
+    // the same order and the same text runs. Otherwise the value is rebuilt.
+    const runNodes = Array.from(element.children);
+    const sameLayout =
+      runNodes.length === previousRuns.length &&
+      previousRuns.length === nextRuns.length &&
+      nextRuns.every(
+        (run, index) =>
+          run.kind === previousRuns[index].kind &&
+          (run.kind === "digits" || run.text === previousRuns[index].text)
+      );
+
+    if (sameLayout) {
+      nextRuns.forEach((run, index) => {
+        if (run.kind === "digits" && run.text !== previousRuns[index].text) {
+          patchDigitRun(runNodes[index], previousRuns[index].chars, run.chars, createCharacter);
         }
       });
     } else {
-      const previousMiddleEnd = previousChars.length - sharedSuffix;
-      const nextMiddleEnd = nextChars.length - sharedSuffix;
-      const suffixAnchor = previousNodes[previousMiddleEnd] || null;
-
-      for (let index = sharedPrefix; index < previousMiddleEnd; index += 1) {
-        previousNodes[index].remove();
-      }
-      for (let index = sharedPrefix; index < nextMiddleEnd; index += 1) {
-        element.insertBefore(createCharacter(nextChars[index]), suffixAnchor);
-      }
+      const fragment = document.createDocumentFragment();
+      nextRuns.forEach((run) => fragment.appendChild(createRun(run)));
+      element.replaceChildren(fragment);
     }
 
     element.__liveNumberState = {
       text: nextText,
+      runs: nextRuns,
       value: Number.isFinite(nextValue) ? nextValue : null,
     };
     return true;
@@ -983,6 +1068,8 @@ import {
     formatPercent,
     formatSol,
     formatSignedSol,
+    formatSignedNumber,
+    signedTone,
     formatPnL,
     formatTimeFromSeconds,
     formatTimestamp,
@@ -1054,6 +1141,8 @@ export {
   formatPercent,
   formatSol,
   formatSignedSol,
+  formatSignedNumber,
+  signedTone,
   formatPnL,
   formatTimeFromSeconds,
   formatTimestamp,

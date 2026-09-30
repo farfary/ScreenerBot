@@ -182,13 +182,16 @@ select.cs-enhanced-source {
   transform: translateY(0) scaleY(1);
 }
 
-/* Search container */
+/* Search container. Options are positioned (`.cs-option` is relative), so the sticky
+   search box needs its own stacking layer and the menu's opaque background or scrolled
+   options paint over it. */
 .cs-search-container {
   padding: 8px;
   border-bottom: 1px solid var(--border-color);
   background: var(--bg-secondary);
   position: sticky;
   top: 0;
+  z-index: 1;
 }
 
 .cs-search-input {

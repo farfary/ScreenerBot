@@ -2,6 +2,15 @@
 import { firstDayOfWeek, formatMonthYear, formatWeekday } from "../../core/format.js";
 import * as Utils from "../../core/utils.js";
 
+// The grid is a Gregorian month, so its title and day labels name Gregorian dates in
+// every locale (fa would otherwise name the Persian month over Gregorian days).
+const GRID_CALENDAR = "gregory";
+
+// P&L amounts on the calendar are shown at 3 decimals; tone follows that rounding.
+const PNL_DECIMALS = 3;
+const PNL_CLASSES = Object.freeze({ positive: "profit", negative: "loss", neutral: "flat" });
+const POPOVER_PNL_CLASSES = Object.freeze({ positive: "profit", negative: "loss", neutral: "" });
+
 /**
  * Create a portfolio calendar controller bound to the home page DOM.
  * @param {(url:string, opts?:object)=>Promise<any>} fetcher scoped fetch
@@ -53,7 +62,7 @@ export function createCalendar(fetcher) {
     const { firstWeekday, daysInMonth } = monthMeta(year, month);
 
     const labelEl = monthLabel();
-    if (labelEl) labelEl.textContent = formatMonthYear(year, month);
+    if (labelEl) labelEl.textContent = formatMonthYear(year, month, { calendar: GRID_CALENDAR });
 
     const todayIso = new Date().toISOString().slice(0, 10);
     const cells = [];
@@ -98,7 +107,9 @@ export function createCalendar(fetcher) {
     const isLight = theme === "light";
 
     const labelEl = monthLabel();
-    if (labelEl) labelEl.textContent = formatMonthYear(data.year, data.month);
+    if (labelEl) {
+      labelEl.textContent = formatMonthYear(data.year, data.month, { calendar: GRID_CALENDAR });
+    }
 
     // Heatmap scale: largest absolute daily P&L in the month.
     let maxAbs = 0;
@@ -134,17 +145,18 @@ export function createCalendar(fetcher) {
       // pale pastel that white cell text can't sit on. Keep it saturated so the
       // white text (matching dark theme) always reads.
       let style = "";
-      if (d.has_data && maxAbs > 0 && pnl !== 0) {
+      const tone = Utils.signedTone(pnl, PNL_DECIMALS);
+      if (d.has_data && maxAbs > 0 && tone !== "neutral") {
         const ratio = Math.sqrt(Math.abs(pnl) / maxAbs);
         const intensity = isLight
           ? Math.min(0.96, 0.78 + ratio * 0.18)
           : Math.min(0.9, 0.35 + ratio * 0.55);
-        const rgb = pnl > 0 ? "63, 185, 80" : "248, 81, 73";
+        const rgb = tone === "positive" ? "63, 185, 80" : "248, 81, 73";
         style = ` style="background: rgba(${rgb}, ${intensity.toFixed(3)});"`;
       }
 
       const pnlText = d.has_data
-        ? Utils.formatSignedSol(pnl, { decimals: 3, unit: false })
+        ? Utils.formatSignedSol(pnl, { decimals: PNL_DECIMALS, unit: false })
         : "";
       const valText =
         d.portfolio_value_sol != null
@@ -170,8 +182,8 @@ export function createCalendar(fetcher) {
     const pnlEl = document.getElementById("calendarMonthPnl");
     if (pnlEl) {
       const mp = data.month_net_pnl_sol || 0;
-      const cls = mp > 0 ? "profit" : mp < 0 ? "loss" : "flat";
-      pnlEl.textContent = Utils.formatSignedSol(mp, { decimals: 3 });
+      const cls = PNL_CLASSES[Utils.signedTone(mp, PNL_DECIMALS)];
+      pnlEl.textContent = Utils.formatSignedSol(mp, { decimals: PNL_DECIMALS });
       pnlEl.className = `calendar-summary-value ${cls}`;
     }
     const tradesEl = document.getElementById("calendarMonthTrades");
@@ -222,28 +234,50 @@ export function createCalendar(fetcher) {
 
   function buildPopoverHtml(d) {
     const pnl = d.net_pnl_sol || 0;
-    const pnlCls = pnl > 0 ? "profit" : pnl < 0 ? "loss" : "";
+    const pnlCls = POPOVER_PNL_CLASSES[Utils.signedTone(pnl, PNL_DECIMALS)];
     const dt = new Date(`${d.date}T00:00:00Z`);
-    const dateStr = Utils.formatDate(dt, { includeYear: false, weekday: true, utc: true });
+    const dateStr = Utils.formatDate(dt, {
+      includeYear: false,
+      weekday: true,
+      utc: true,
+      calendar: GRID_CALENDAR,
+    });
     const trades = d.trades || 0;
     const wins = d.wins || 0;
     const losses = Math.max(0, trades - wins);
     const winRate = trades > 0 ? Math.round((wins / trades) * 100) : 0;
 
     const rows = [
-      popoverRow(I18n.t("home-calendar-pop-net-pnl"), Utils.formatSignedSol(pnl, { decimals: 3 }), pnlCls),
+      popoverRow(I18n.t("home-calendar-pop-net-pnl"), Utils.formatSignedSol(pnl, { decimals: PNL_DECIMALS }), pnlCls),
       popoverRow(I18n.t("home-calendar-trades"), String(trades)),
       popoverRow(
         I18n.t("home-calendar-pop-win-rate"),
         I18n.t("home-calendar-pop-win-rate-value", {
-          rate: Utils.formatPercent(winRate, { decimals: 0 }),
+          rate: Utils.formatPercentValue(winRate, { decimals: 0, includeSign: false }),
           wins,
           losses,
         })
       ),
     ];
-    if (d.profit_sol) rows.push(popoverRow(I18n.t("home-calendar-pop-gross-profit"), Utils.formatSignedSol(d.profit_sol, { decimals: 3 }), "profit"));
-    if (d.loss_sol) rows.push(popoverRow(I18n.t("home-calendar-pop-gross-loss"), Utils.formatSignedSol(-Math.abs(d.loss_sol), { decimals: 3 }), "loss"));
+    if (d.profit_sol) {
+      rows.push(
+        popoverRow(
+          I18n.t("home-calendar-pop-gross-profit"),
+          Utils.formatSignedSol(d.profit_sol, { decimals: PNL_DECIMALS }),
+          POPOVER_PNL_CLASSES[Utils.signedTone(d.profit_sol, PNL_DECIMALS)]
+        )
+      );
+    }
+    if (d.loss_sol) {
+      const loss = -Math.abs(d.loss_sol);
+      rows.push(
+        popoverRow(
+          I18n.t("home-calendar-pop-gross-loss"),
+          Utils.formatSignedSol(loss, { decimals: PNL_DECIMALS }),
+          POPOVER_PNL_CLASSES[Utils.signedTone(loss, PNL_DECIMALS)]
+        )
+      );
+    }
     if (d.portfolio_value_sol != null) {
       rows.push(popoverRow(I18n.t("home-calendar-pop-end-balance"), fmtSol(d.portfolio_value_sol)));
     }

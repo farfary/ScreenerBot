@@ -228,11 +228,12 @@ function createLifecycle() {
     return `${Utils.formatSignedSol(value || 0, { decimals, unit: false })}<span class="hero-unit">SOL</span>`;
   }
 
-  // Profit/loss/flat semantic class for a signed value.
-  function pnlClass(value) {
-    if (value > 0) return "profit";
-    if (value < 0) return "loss";
-    return "flat";
+  const PNL_CLASSES = Object.freeze({ positive: "profit", negative: "loss", neutral: "flat" });
+
+  // Profit/loss/flat semantic class for a signed value as shown at `decimals`: a value
+  // that rounds to zero is flat.
+  function pnlClass(value, decimals) {
+    return PNL_CLASSES[Utils.signedTone(value, decimals)];
   }
 
   // Render the balance-trend sparkline from an oldest-first array of SOL values.
@@ -307,7 +308,7 @@ function createLifecycle() {
     // Today change (equity vs start-of-day baseline).
     const changeEl = document.getElementById("homeWalletChange");
     if (changeEl) {
-      const cls = pnlClass(wallet.change_sol);
+      const cls = pnlClass(wallet.change_sol, 4);
       changeEl.className = `hero-change ${cls}`;
       changeEl.innerHTML = `
         <span class="hero-change-value change-value ${cls}">${Utils.formatSignedSol(
@@ -351,7 +352,7 @@ function createLifecycle() {
       openPnlEl.innerHTML = `${signedSolHtml(
         v
       )} <span class="hero-stat-sub">${Utils.formatPercent(pct, { decimals: 1 })}</span>`;
-      openPnlEl.className = `hero-stat-value ${pnlClass(v)}`;
+      openPnlEl.className = `hero-stat-value ${pnlClass(v, 4)}`;
     }
 
     // Realized Today — banked net P&L today, from trader analytics.
@@ -359,7 +360,7 @@ function createLifecycle() {
     if (realizedEl && data.trader && data.trader.today) {
       const v = data.trader.today.net_pnl_sol || 0;
       realizedEl.innerHTML = signedSolHtml(v);
-      realizedEl.className = `hero-stat-value ${pnlClass(v)}`;
+      realizedEl.className = `hero-stat-value ${pnlClass(v, 4)}`;
     }
 
     // Balance-trend sparkline.
@@ -406,7 +407,7 @@ function createLifecycle() {
         bestEl.textContent = `${positions.best_performer.symbol} ${Utils.formatPercent(pnl, {
           decimals: 1,
         })}`;
-        bestEl.className = `position-value ${pnlClass(pnl)}`;
+        bestEl.className = `position-value ${pnlClass(pnl, 1)}`;
       } else {
         bestEl.textContent = "—";
         bestEl.className = "position-value";
@@ -418,7 +419,7 @@ function createLifecycle() {
         worstEl.textContent = `${positions.worst_performer.symbol} ${Utils.formatPercent(pnl, {
           decimals: 1,
         })}`;
-        worstEl.className = `position-value ${pnlClass(pnl)}`;
+        worstEl.className = `position-value ${pnlClass(pnl, 1)}`;
       } else {
         worstEl.textContent = "—";
         worstEl.className = "position-value";

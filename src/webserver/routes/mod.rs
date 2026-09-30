@@ -176,15 +176,11 @@ async fn assistant_page(headers: HeaderMap) -> Html<String> {
     Html(templates::base_template("assistant", &content, &locale))
 }
 
-/// Initialization page handler
+/// Initialization page handler. The setup screen itself is part of every base
+/// template (`{{SETUP_SCREEN}}`), so this page carries no content of its own.
 async fn initialization_page(headers: HeaderMap) -> Html<String> {
-    let content = templates::initialization_content();
     let locale = crate::i18n::resolve_request_locale(&headers);
-    Html(templates::base_template(
-        "initialization",
-        &content,
-        &locale,
-    ))
+    Html(templates::base_template("initialization", "", &locale))
 }
 
 /// Login page handler
@@ -254,7 +250,6 @@ async fn get_page_content(AxumPath(page): AxumPath<String>, headers: HeaderMap) 
         "tools" => templates::tools_content(),
         "config" => templates::config_content(),
         "trader" => templates::trader_content(),
-        "initialization" => templates::initialization_content(),
         "assistant" => templates::assistant_content(),
         _ => {
             // Escape page name to prevent XSS

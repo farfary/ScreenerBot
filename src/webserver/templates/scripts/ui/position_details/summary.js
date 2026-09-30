@@ -9,6 +9,7 @@ import * as Utils from "../../core/utils.js";
 import { formatPercentValue, withAgo, withSolUnit } from "../../core/format.js";
 import { closeReasonText } from "../trade_reason.js";
 import { rugcheckRiskName } from "../rugcheck_risk.js";
+import { venueLabel } from "../venue.js";
 
 // Labels, sub-lines and titles are plain text and escaped here; values are HTML.
 const fact = (label, value, { sub = "", tone = "", title = "" } = {}) => `
@@ -282,16 +283,20 @@ export function applySummaryMixin(PositionDetailsDialog) {
     const usd = (value) => (value ? Utils.formatCurrencyUSD(value) : "—");
     const rows = [];
 
-    if (pool?.dex_name || pool?.liquidity_sol != null) {
+    if (pool?.pool_program || pool?.liquidity_sol != null) {
       rows.push(
-        fact(I18n.t("positions-fact-pool"), Utils.escapeHtml(pool.dex_name || "—"), {
-          sub:
-            pool.liquidity_sol != null
-              ? I18n.t("positions-fact-pool-liquidity", {
-                  amount: Utils.formatCompactNumber(pool.liquidity_sol),
-                })
-              : "",
-        })
+        fact(
+          I18n.t("positions-fact-pool"),
+          pool.pool_program ? Utils.escapeHtml(venueLabel(pool.pool_program)) : "—",
+          {
+            sub:
+              pool.liquidity_sol != null
+                ? I18n.t("positions-fact-pool-liquidity", {
+                    amount: Utils.formatCompactNumber(pool.liquidity_sol),
+                  })
+                : "",
+          }
+        )
       );
     }
 
@@ -315,12 +320,12 @@ export function applySummaryMixin(PositionDetailsDialog) {
         rows.push(
           fact(
             I18n.t("positions-fact-price-change"),
-            changes
+            `<span class="pdd-changes">${changes
               .map(
                 ([period, value]) =>
                   `<span class="pdd-change">${Utils.escapeHtml(period)} <span class="${this._toneClass(value)}">${this._formatPct(value, 1)}</span></span>`
               )
-              .join("")
+              .join("")}</span>`
           )
         );
       }

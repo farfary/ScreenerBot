@@ -43,9 +43,15 @@
   unicode-bidi: isolate;
 }
 
-/* `Utils.updateLiveNumber` splits a value into one inline-block per character; without an
-   LTR island an RTL parent lays those atoms out right to left and reverses the digits. */
+/* `Utils.updateLiveNumber` splits the numeric run of a value into one inline-block per
+   character; without an LTR island an RTL parent lays those atoms out right to left and
+   reverses the digits. Only the numeric run is the island: a localized unit word beside it
+   stays in the page direction so it shapes, and number and unit order follow the locale. */
 .live-number {
+  unicode-bidi: isolate;
+}
+
+.live-number-digits {
   direction: ltr;
   unicode-bidi: isolate;
 }

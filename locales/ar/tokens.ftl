@@ -189,7 +189,7 @@ tokens-overview-activity-title = نشاط المعاملات
 # $percent is the formatted share of buys among the 24h transactions.
 tokens-overview-buy-share = شراء { $percent }
 # $ratio is the formatted buy-to-sell ratio.
-tokens-overview-buy-sell-ratio = { $ratio } B/S
+tokens-overview-buy-sell-ratio = شراء/بيع { $ratio }
 tokens-overview-buys-24h = الشراء 24H
 tokens-overview-sells-24h = البيع 24H
 tokens-overview-net-flow = صافي التدفق
@@ -197,7 +197,7 @@ tokens-overview-total-24h = إجمالي 24H
 tokens-overview-average-24h = متوسط 24H
 tokens-overview-spike-5m = قفزة 5M
 # $amount is the formatted average number of transactions per hour.
-tokens-overview-rate-per-hour = { $amount }/h
+tokens-overview-rate-per-hour = { $amount }/ساعة
 # $amount is the formatted average number of transactions per minute.
 tokens-overview-rate-per-minute = { $amount }/دقيقة
 # $factor is the formatted ratio of the 5-minute rate to the 1-hour rate.

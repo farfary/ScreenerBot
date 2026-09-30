@@ -83,7 +83,7 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
                 fdv: None,
                 market_cap: None,
                 pool_address: None,
-                pool_dex: None,
+                pool_program: None,
                 pool_reserves_sol: None,
                 pool_reserves_token: None,
                 txn_periods: PeriodStats::empty(),
@@ -196,7 +196,7 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
         price_confidence,
         _price_updated_at,
         pool_address,
-        pool_dex,
+        price_source_pool,
         pool_reserves_sol,
         pool_reserves_token,
     ) = if let Some(price_result) = pools::get_pool_price(&mint) {
@@ -217,6 +217,9 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
     } else {
         (None, None, None, None, None, None, None)
     };
+    let pool_program = pool_address.as_deref().and_then(|address| {
+        crate::chains::solana::pools::service::get_pool_program(&mint, address).map(str::to_owned)
+    });
 
     logger::debug(
         LogTag::Webserver,
@@ -245,7 +248,7 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
         let mut fallback_pool = pool_address
             .clone()
             .or_else(|| token.pool_price_last_used_pool.clone());
-        let mut fallback_dex = pool_dex.clone();
+        let mut fallback_dex = price_source_pool;
 
         if fallback_pool.is_none() {
             let mint_clone = mint.clone();
@@ -737,7 +740,7 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
         fdv: token.fdv,
         market_cap: token.market_cap,
         pool_address,
-        pool_dex,
+        pool_program,
         pool_reserves_sol,
         pool_reserves_token,
         txn_periods,

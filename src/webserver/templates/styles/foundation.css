@@ -331,6 +331,10 @@
   --font-script:
     "ScreenerBot Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans SC",
     "ScreenerBot Sans JP", "Vazirmatn", "Noto Sans Devanagari";
+  /* Korean separates words with spaces; breaking between syllables splits a word
+     across lines. A long token without spaces still wraps. */
+  word-break: keep-all;
+  overflow-wrap: anywhere;
 }
 
 /* An element with its own language (a native name in the language picker) re-resolves its family. */

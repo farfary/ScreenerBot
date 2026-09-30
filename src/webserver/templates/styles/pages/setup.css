@@ -299,7 +299,7 @@
   height: 100%;
   min-height: 0;
   padding-block: 10px;
-  padding-inline: 11px 36px;
+  padding-inline: 11px;
   resize: none;
   overflow: auto;
   color: var(--text-primary);
@@ -311,19 +311,29 @@
   border-radius: var(--radius-md);
 }
 
+/* Only the key field has a visibility toggle, so only it reserves the end. */
+.setup-card-wallet .setup-input {
+  padding-inline-end: 36px;
+}
+
+/* The typed value keeps the data font; the placeholder is localized prose. */
 .setup-input::placeholder {
   color: var(--text-muted);
+  font-family: var(--font-sans);
 }
 
 /* The wrapper is an LTR island so the value, its reserved padding and the
    visibility toggle all sit on the physical right. An empty field shows its
-   localized placeholder in the page direction; the padding stays physical so
-   the toggle never covers the text. */
+   localized placeholder in the page direction. */
 [dir="rtl"] .setup-input-wrapper textarea:placeholder-shown {
   /* rtl-ok: placeholder follows the RTL page inside an LTR island */
   direction: rtl;
   /* rtl-ok: placeholder follows the RTL page inside an LTR island */
   text-align: right;
+}
+
+/* The key field's padding stays physical so the toggle never covers the text. */
+[dir="rtl"] .setup-card-wallet .setup-input-wrapper textarea:placeholder-shown {
   /* rtl-ok: toggle is pinned to the physical right of the LTR island */
   padding-left: 11px;
   /* rtl-ok: toggle is pinned to the physical right of the LTR island */

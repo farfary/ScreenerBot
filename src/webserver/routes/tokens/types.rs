@@ -180,7 +180,8 @@ pub struct TokenDetailResponse {
 
     // Pool info
     pub pool_address: Option<String>,
-    pub pool_dex: Option<String>,
+    /// Program of the pricing pool, as `ProgramKind::protocol_slug()`.
+    pub pool_program: Option<String>,
     pub pool_reserves_sol: Option<f64>,
     pub pool_reserves_token: Option<f64>,
 

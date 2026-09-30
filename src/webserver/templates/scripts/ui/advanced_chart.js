@@ -795,7 +795,10 @@
       refs.open.textContent = this._formatPrice(bar.open);
       refs.high.textContent = this._formatPrice(bar.high);
       refs.low.textContent = this._formatPrice(bar.low);
-      refs.delta.textContent = `${delta >= 0 ? "+" : "-"}${this._formatPrice(Math.abs(delta))}`;
+      refs.delta.textContent = window.Utils.formatPriceSubscript(delta, {
+        precision: this.options.pricePrecision,
+        sign: "always",
+      });
       refs.delta.className = `tooltip-value ${changeClass}`;
       refs.range.textContent = rangePercent === null ? "—" : window.Utils.formatPercentValue(rangePercent, { decimals: 2, plus: "" });
       // Always rendered, including 0: a row that appears and disappears between
