@@ -11,5 +11,8 @@
     "script-type": "off",
     "empty-heading": "off",
     "text-content": "off"
+  },
+  "transform": {
+    "^.*\\.html$": "tools/html/l10n_transform.mjs"
   }
 }

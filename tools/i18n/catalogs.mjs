@@ -285,6 +285,14 @@ export function readServerOnlyDomains() {
   return parseServerOnlyDomains(readFileSync(resolve(REPO_ROOT, "src/i18n/mod.rs"), "utf8"));
 }
 
+/** Attributes a message may write to an element: `L10N_ATTRIBUTES` in src/i18n/html.rs. */
+export function readL10nAttributes() {
+  const source = readFileSync(resolve(REPO_ROOT, "src/i18n/html.rs"), "utf8");
+  const list = source.match(/L10N_ATTRIBUTES:\s*&\[&str\]\s*=\s*&\[([^\]]*)\]/);
+  if (!list) throw new Error("L10N_ATTRIBUTES not found in src/i18n/html.rs");
+  return [...list[1].matchAll(/"([^"]+)"/g)].map((match) => match[1]);
+}
+
 /** Codes listed in `registry.toml` (`code = "xx"` entries). */
 export function registeredCodes(toml) {
   return new Set([...toml.matchAll(/^\s*code\s*=\s*"([^"]+)"/gm)].map((match) => match[1]));

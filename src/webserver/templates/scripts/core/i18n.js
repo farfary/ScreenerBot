@@ -12,7 +12,7 @@
   "use strict";
 
   // Message attributes that may be written to an element. Mirrors
-  // L10N_ATTRIBUTES in src/i18n/html.rs.
+  // L10N_ATTRIBUTES in src/i18n/html.rs (pinned by html_l10n_transform.test.mjs).
   const ATTRIBUTE_ALLOWLIST = [
     "title",
     "aria-label",
