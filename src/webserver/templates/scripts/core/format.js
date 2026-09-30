@@ -23,8 +23,17 @@ const SUBSCRIPT_DIGITS = "₀₁₂₃₄₅₆₇₈₉";
 
 // Fluent wraps placeables in bidi isolates. Formatter output is a compact
 // display string compared, sliced and diffed by callers, so the marks are removed.
-const ISOLATES = /[⁨⁩]/g;
-const plain = (text) => text.replace(ISOLATES, "");
+const ISOLATES = /[\u2066-\u2069]/g;
+
+/**
+ * Text without bidi isolation marks (U+2066-U+2069), for strings that are compared or
+ * sliced and for surfaces that show the controls literally, such as the document title.
+ */
+export function stripIsolates(text) {
+  return String(text).replace(ISOLATES, "");
+}
+
+const plain = stripIsolates;
 
 const instances = new Map();
 
@@ -173,9 +182,48 @@ export function formatFixed(value, { decimals = 2, fallback = DASH, trim = false
 }
 
 /**
- * A magnitude scaled to `K`, `M` or `B` at fixed decimals ("1.50K"); values
- * below one thousand use `belowDecimals` (optionally trimmed). `billions: false`
- * keeps the scale at `M` for surfaces that never show `B`.
+ * Compact notation ("1.50K", "81.24万", "1,23 Mio.") at the given fraction digits. The
+ * locale owns the scale steps and their symbols, so every compact figure on a page
+ * agrees on one system.
+ */
+function compactText(num, minimumFractionDigits, maximumFractionDigits = minimumFractionDigits) {
+  return plain(
+    intl(Intl.NumberFormat, { notation: "compact", minimumFractionDigits, maximumFractionDigits }).format(num)
+  );
+}
+
+let kmbSteps = null;
+
+/** Whether the locale's compact steps are the `K`/`M`/`B` thousands steps. */
+function usesKmbSteps() {
+  if (kmbSteps === null) {
+    kmbSteps = compactText(1e3, 0) === "1K" && compactText(1e6, 0) === "1M" && compactText(1e9, 0) === "1B";
+  }
+  return kmbSteps;
+}
+
+/**
+ * A compact figure (magnitude of at least one thousand) at exactly `decimals` fraction
+ * digits. Under `K`/`M`/`B` steps a figure keeps its own step where Intl would change it:
+ * a value whose rounding reaches 1000 of its step ("1000.00K"), a magnitude past the
+ * billions ("1000.00B"), and past the millions when `billions` is off ("2500.0M").
+ */
+function compactFixed(num, decimals, billions = true) {
+  if (usesKmbSteps()) {
+    const abs = Math.abs(num);
+    const [divisor, suffix] = billions && abs >= 1e9 ? [1e9, "B"] : abs >= 1e6 ? [1e6, "M"] : [1e3, "K"];
+    const digits = (num / divisor).toFixed(decimals);
+    if (Math.abs(Number(digits)) >= 1000) {
+      return `${localizeDecimal(digits)}${suffix}`;
+    }
+  }
+  return compactText(num, decimals);
+}
+
+/**
+ * A magnitude of at least one thousand in the locale's compact notation at fixed
+ * decimals ("1.50K"); values below one thousand use `belowDecimals` (optionally
+ * trimmed). `billions: false` keeps `K`/`M`/`B` steps at `M` for surfaces that never show `B`.
  */
 export function formatCompactFixed(
   value,
@@ -186,10 +234,7 @@ export function formatCompactFixed(
     return fallback;
   }
   const abs = Math.abs(num);
-  const scaled = (divisor, suffix) => `${localizeDecimal((num / divisor).toFixed(decimals))}${suffix}`;
-  if (billions && abs >= 1e9) return scaled(1e9, "B");
-  if (abs >= 1e6) return scaled(1e6, "M");
-  if (abs >= 1e3) return scaled(1e3, "K");
+  if (abs >= 1e3) return compactFixed(num, decimals, billions);
   return formatFixed(num, { decimals: belowDecimals, trim: trimBelow });
 }
 
@@ -210,10 +255,7 @@ export function formatCompactNumber(value, digitsOrOptions = 2, maybeFallback = 
     return fallback;
   }
 
-  const formatted = intl(Intl.NumberFormat, {
-    notation: "compact",
-    maximumFractionDigits: digits,
-  }).format(num);
+  const formatted = compactText(num, 0, digits);
 
   return usd ? withUsdSymbol(formatted) : formatted;
 }
@@ -250,25 +292,16 @@ export function formatCurrencyUSD(value, { fallback = DASH, approx = false } = {
 
 function usdText(num) {
   const abs = Math.abs(num);
-  let scaled = num;
-  let suffix = "";
-
-  if (abs >= 1_000_000_000) {
-    scaled = num / 1_000_000_000;
-    suffix = "B";
-  } else if (abs >= 1_000_000) {
-    scaled = num / 1_000_000;
-    suffix = "M";
-  } else if (abs >= 1_000) {
-    scaled = num / 1_000;
-    suffix = "K";
-  } else if (abs > 0 && abs < 0.01) {
+  if (abs >= 1_000) {
+    return withUsdSymbol(compactFixed(num, 2));
+  }
+  if (abs > 0 && abs < 0.01) {
     // Sub-cent prices round to $0.00 with toFixed(2); render the real value in
     // subscript notation (e.g. $0.0₅8142) so tiny token prices stay visible.
     return withUsdSymbol(formatPriceSubscript(num, { precision: 4 }));
   }
 
-  return withUsdSymbol(`${localizeDecimal(scaled.toFixed(2))}${suffix}`);
+  return withUsdSymbol(localizeDecimal(num.toFixed(2)));
 }
 
 /**
@@ -453,6 +486,32 @@ export function withSolUnit(amount) {
   return plain(I18n.t("format-sol-amount", { amount }));
 }
 
+/**
+ * A signed SOL amount ("+0.1500 SOL", "-0.0077 SOL"). The sign is the locale's own
+ * (`signPrefix`), attached to the digits before the unit, so it stays at the number's
+ * start in right-to-left text. The sign follows the rounded digits: a value that rounds
+ * to zero shows none. `sign`: "always" signs both directions, "negative" only losses.
+ * `minDecimals` drops trailing fraction zeros down to that count ("0.005000" -> "0.005").
+ * `unit: false` returns the signed digits alone.
+ */
+export function formatSignedSol(
+  amount,
+  { decimals = 4, minDecimals = decimals, fallback = HYPHEN, unit: withUnit = true, sign = "always" } = {}
+) {
+  const num = coerceNumber(amount);
+  if (!Number.isFinite(num)) {
+    return fallback;
+  }
+  let digits = Math.abs(num).toFixed(decimals);
+  if (minDecimals < decimals) {
+    digits = digits.replace(new RegExp(`(\\.\\d{${minDecimals}}\\d*?)0+$`), "$1").replace(/\.$/, "");
+  }
+  const zero = Number(digits) === 0;
+  const shown = zero || (num > 0 && sign !== "always") ? "" : signPrefix(num < 0);
+  const text = `${shown}${localizeDecimal(digits)}`;
+  return withUnit ? withSolUnit(text) : text;
+}
+
 export function formatPnL(value, { decimals = 4, fallback = HYPHEN } = {}) {
   const num = coerceNumber(value);
   if (!Number.isFinite(num)) {
@@ -467,10 +526,12 @@ export function formatPnL(value, { decimals = 4, fallback = HYPHEN } = {}) {
     return fallback;
   }
 
-  if (num > 0) {
+  // The sign follows the value as shown: an amount that rounds to zero is neutral.
+  const shownZero = Number(Math.abs(num).toFixed(decimals)) === 0;
+  if (num > 0 && !shownZero) {
     return `<span class="pnl-positive">${signPrefix(false)}${formatted}</span>`;
   }
-  if (num < 0) {
+  if (num < 0 && !shownZero) {
     return `<span class="pnl-negative">${signPrefix(true)}${formatted}</span>`;
   }
   return `<span class="pnl-neutral">${formatted}</span>`;
@@ -592,6 +653,21 @@ export function formatDatePart(value, { part = "year", fallback } = {}) {
 export function formatMonthYear(year, month) {
   const date = new Date(Date.UTC(year, month - 1, 1));
   return intl(Intl.DateTimeFormat, { month: "long", year: "numeric", timeZone: "UTC" }).format(date);
+}
+
+let weekStart = null;
+
+/**
+ * The locale's first day of the week as a day index where 0 is Sunday, for calendar
+ * grids. Intl numbers days 1-7 from Monday; runtimes without week data start on Sunday.
+ */
+export function firstDayOfWeek() {
+  if (weekStart === null) {
+    const locale = new Intl.Locale(I18n.intlLocale);
+    const firstDay = (locale.getWeekInfo?.() ?? locale.weekInfo)?.firstDay;
+    weekStart = Number.isInteger(firstDay) ? firstDay % 7 : 0;
+  }
+  return weekStart;
 }
 
 /** Short weekday name for a day index where 0 is Sunday, for calendar column headings. */

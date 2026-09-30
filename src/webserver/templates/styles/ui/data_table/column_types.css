@@ -556,7 +556,9 @@
    Trading Terminal Numeric Styles
    ============================================================================= */
 
-/* Numeric cells in tables - using JetBrains Mono for tabular figures */
+/* Numeric cells in tables - using JetBrains Mono for tabular figures. Each cell is an
+   LTR island, so digits keep their order in an RTL table and an ellipsis on a
+   truncated value cuts its least significant end. */
 .data-table td[data-type="number"],
 .data-table td[data-type="price"],
 .data-table td[data-type="percent"],
@@ -570,6 +572,23 @@
   font-weight: 500;
   letter-spacing: -0.01em;
   text-align: end;
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+/* Inside the LTR island `end` is the physical right; an RTL table's numeric end is
+   its left, which is the island's `start`. */
+[dir="rtl"]
+  .data-table
+  :is(
+    td[data-type="number"],
+    td[data-type="price"],
+    td[data-type="percent"],
+    td[data-type="sol"],
+    td[data-type="currency"],
+    .dt-cell-numeric
+  ) {
+  text-align: start;
 }
 
 /* Positive values (profit, gain) */

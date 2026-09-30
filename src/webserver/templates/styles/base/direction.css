@@ -43,6 +43,13 @@
   unicode-bidi: isolate;
 }
 
+/* `Utils.updateLiveNumber` splits a value into one inline-block per character; without an
+   LTR island an RTL parent lays those atoms out right to left and reverses the digits. */
+.live-number {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
 [dir="rtl"] :is(input[type="number"], input[inputmode="decimal"], input[inputmode="numeric"], input[type="url"]) {
   direction: ltr;
 }

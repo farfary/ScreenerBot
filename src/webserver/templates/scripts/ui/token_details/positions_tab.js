@@ -287,7 +287,7 @@ function fmtPnl(sol, pct) {
   const hasPct = pct !== null && pct !== undefined && Number.isFinite(Number(pct));
   if (!hasSol && !hasPct) return "—";
   const solStr = hasSol
-    ? `${Number(sol) >= 0 ? "+" : ""}${withSolUnit(Utils.formatNumber(Number(sol), { decimals: 4 }))}`
+    ? Utils.formatSignedSol(sol, { decimals: 4 })
     : "";
   const pctStr = hasPct ? formatPercentValue(pct, { decimals: 2, signZero: true }) : "";
   return [solStr, pctStr].filter(Boolean).join("  ");

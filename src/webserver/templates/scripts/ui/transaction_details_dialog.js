@@ -775,7 +775,7 @@ export class TransactionDetailsDialog {
         <td class="tx-address-cell">${renderAddress(c.account, { explorer: "account" })}</td>
         <td class="numeric">${Utils.formatSol(c.pre_balance, { decimals: 9, suffix: "" })}</td>
         <td class="numeric">${Utils.formatSol(c.post_balance, { decimals: 9, suffix: "" })}</td>
-        <td class="numeric ${c.change >= 0 ? "positive" : "negative"}">${c.change >= 0 ? "+" : ""}${Utils.formatSol(c.change, { decimals: 9, suffix: "" })}</td>
+        <td class="numeric ${c.change >= 0 ? "positive" : "negative"}">${Utils.formatSignedSol(c.change, { decimals: 9, unit: false })}</td>
       </tr>
     `
       )
@@ -1042,11 +1042,11 @@ export class TransactionDetailsDialog {
           </div>
           <div class="ata-stat">
             <span class="stat-label">${Utils.escapeHtml(I18n.t("transactions-dialog-ata-rent-recovered"))}</span>
-            <span class="stat-value positive">${renderTokenLogo(SOL_MINT, { size: "xs" })} +${Utils.formatSol(analysis.total_rent_recovered || 0, { decimals: 9 })}</span>
+            <span class="stat-value positive">${renderTokenLogo(SOL_MINT, { size: "xs" })} ${Utils.formatSignedSol(analysis.total_rent_recovered || 0, { decimals: 9 })}</span>
           </div>
           <div class="ata-stat highlight">
             <span class="stat-label">${Utils.escapeHtml(I18n.t("transactions-dialog-ata-net-rent"))}</span>
-            <span class="stat-value ${analysis.net_rent_impact >= 0 ? "positive" : "negative"}">${renderTokenLogo(SOL_MINT, { size: "xs" })} ${analysis.net_rent_impact >= 0 ? "+" : ""}${Utils.formatSol(analysis.net_rent_impact || 0, { decimals: 9 })}</span>
+            <span class="stat-value ${analysis.net_rent_impact >= 0 ? "positive" : "negative"}">${renderTokenLogo(SOL_MINT, { size: "xs" })} ${Utils.formatSignedSol(analysis.net_rent_impact || 0, { decimals: 9 })}</span>
           </div>
         </div>
       </div>

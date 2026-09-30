@@ -1,7 +1,7 @@
 // Live metrics and effective Auto Trader state for the global dashboard header.
 import { Poller } from "./poller.js";
 import { requestManager } from "./request_manager.js";
-import { formatFixed, formatPercentValue, formatSol, withUsdSymbol } from "./format.js";
+import { formatPercentValue, formatSignedSol, withUsdSymbol } from "./format.js";
 import { formatNumber, showToast } from "./utils.js";
 
 const METRICS_POLL_INTERVAL = 5000;
@@ -71,8 +71,7 @@ function updateBotCard(trader, state) {
     return;
   }
 
-  const sign = value > 0 ? "+" : value < 0 ? "−" : "";
-  pnl.innerHTML = `<span class="pnl-num">${sign}${formatFixed(Math.abs(value), { decimals: 3 })}</span><span class="pnl-unit"> SOL</span>`;
+  pnl.innerHTML = `<span class="pnl-num">${formatSignedSol(value, { decimals: 3, unit: false })}</span><span class="pnl-unit"> SOL</span>`;
   setValueClass(pnl, value);
 }
 
@@ -237,8 +236,7 @@ function updateTicker(metrics) {
     const pnl = finiteNumber(metrics.trader?.today_pnl_sol);
     const percent = finiteNumber(metrics.trader?.today_pnl_percent);
     if (Number.isFinite(pnl) && Number.isFinite(percent)) {
-      const sign = pnl > 0 ? "+" : pnl < 0 ? "−" : "";
-      todayPnl.textContent = `${sign}${formatSol(Math.abs(pnl), { decimals: 3 })} (${formatPercentValue(percent, { decimals: 1 })})`;
+      todayPnl.textContent = `${formatSignedSol(pnl, { decimals: 3 })} (${formatPercentValue(percent, { decimals: 1 })})`;
       setValueClass(todayPnl, pnl);
     } else {
       todayPnl.textContent = "—";

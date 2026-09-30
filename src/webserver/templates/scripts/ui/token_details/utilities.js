@@ -7,7 +7,7 @@ import * as Hints from "../../core/hints.js";
 import {
   formatAddressCompact,
   formatPercentValue,
-  formatSol,
+  formatSignedSol,
 } from "../../core/format.js";
 import { HintTrigger } from "../hint_popover.js";
 
@@ -42,8 +42,7 @@ export function applyUtilitiesMixin(DialogClass) {
 
     if (!Number.isFinite(solNum)) return "—";
 
-    const sign = solNum >= 0 ? "+" : "-";
-    let result = `${sign}${formatSol(Math.abs(solNum), { decimals: 4 })}`;
+    let result = formatSignedSol(solNum, { decimals: 4 });
 
     if (Number.isFinite(percentNum)) {
       result += ` (${formatPercentValue(percentNum, { decimals: 2, signZero: true })})`;

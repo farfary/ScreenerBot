@@ -1,5 +1,5 @@
 // Portfolio calendar — month grid of daily realized P&L + end-of-day portfolio value.
-import { formatMonthYear, formatWeekday } from "../../core/format.js";
+import { firstDayOfWeek, formatMonthYear, formatWeekday } from "../../core/format.js";
 import * as Utils from "../../core/utils.js";
 
 /**
@@ -32,6 +32,11 @@ export function createCalendar(fetcher) {
     return year === n.getUTCFullYear() && month === n.getUTCMonth() + 1;
   }
 
+  // Blank cells before the 1st: its weekday (0 = Sunday) counted from the locale's week start.
+  function leadingBlanks(weekday) {
+    return (weekday - firstDayOfWeek() + 7) % 7;
+  }
+
   // Compute weekday offset + day count for a month, client-side (UTC).
   function monthMeta(y, m) {
     return {
@@ -52,7 +57,7 @@ export function createCalendar(fetcher) {
 
     const todayIso = new Date().toISOString().slice(0, 10);
     const cells = [];
-    for (let i = 0; i < firstWeekday; i++) {
+    for (let i = 0; i < leadingBlanks(firstWeekday); i++) {
       cells.push('<div class="calendar-cell blank"></div>');
     }
     for (let d = 1; d <= daysInMonth; d++) {
@@ -107,7 +112,7 @@ export function createCalendar(fetcher) {
     dayMap.clear();
 
     // Leading blanks so the 1st lands on the correct weekday.
-    for (let i = 0; i < data.first_weekday; i++) {
+    for (let i = 0; i < leadingBlanks(data.first_weekday); i++) {
       cells.push('<div class="calendar-cell blank"></div>');
     }
 
@@ -139,7 +144,7 @@ export function createCalendar(fetcher) {
       }
 
       const pnlText = d.has_data
-        ? `${pnl > 0 ? "+" : ""}${Utils.formatSol(pnl, { decimals: 3, suffix: "" })}`
+        ? Utils.formatSignedSol(pnl, { decimals: 3, unit: false })
         : "";
       const valText =
         d.portfolio_value_sol != null
@@ -166,7 +171,7 @@ export function createCalendar(fetcher) {
     if (pnlEl) {
       const mp = data.month_net_pnl_sol || 0;
       const cls = mp > 0 ? "profit" : mp < 0 ? "loss" : "flat";
-      pnlEl.textContent = `${mp > 0 ? "+" : ""}${Utils.formatSol(mp, { decimals: 3 })}`;
+      pnlEl.textContent = Utils.formatSignedSol(mp, { decimals: 3 });
       pnlEl.className = `calendar-summary-value ${cls}`;
     }
     const tradesEl = document.getElementById("calendarMonthTrades");
@@ -226,7 +231,7 @@ export function createCalendar(fetcher) {
     const winRate = trades > 0 ? Math.round((wins / trades) * 100) : 0;
 
     const rows = [
-      popoverRow(I18n.t("home-calendar-pop-net-pnl"), `${pnl >= 0 ? "+" : ""}${fmtSol(pnl)}`, pnlCls),
+      popoverRow(I18n.t("home-calendar-pop-net-pnl"), Utils.formatSignedSol(pnl, { decimals: 3 }), pnlCls),
       popoverRow(I18n.t("home-calendar-trades"), String(trades)),
       popoverRow(
         I18n.t("home-calendar-pop-win-rate"),
@@ -237,8 +242,8 @@ export function createCalendar(fetcher) {
         })
       ),
     ];
-    if (d.profit_sol) rows.push(popoverRow(I18n.t("home-calendar-pop-gross-profit"), `+${fmtSol(d.profit_sol)}`, "profit"));
-    if (d.loss_sol) rows.push(popoverRow(I18n.t("home-calendar-pop-gross-loss"), `-${fmtSol(d.loss_sol)}`, "loss"));
+    if (d.profit_sol) rows.push(popoverRow(I18n.t("home-calendar-pop-gross-profit"), Utils.formatSignedSol(d.profit_sol, { decimals: 3 }), "profit"));
+    if (d.loss_sol) rows.push(popoverRow(I18n.t("home-calendar-pop-gross-loss"), Utils.formatSignedSol(-Math.abs(d.loss_sol), { decimals: 3 }), "loss"));
     if (d.portfolio_value_sol != null) {
       rows.push(popoverRow(I18n.t("home-calendar-pop-end-balance"), fmtSol(d.portfolio_value_sol)));
     }
@@ -325,7 +330,7 @@ export function createCalendar(fetcher) {
       });
 
       document.querySelectorAll(".calendar-weekdays span").forEach((el, index) => {
-        el.textContent = formatWeekday(index);
+        el.textContent = formatWeekday((firstDayOfWeek() + index) % 7);
       });
 
       updateNavState();

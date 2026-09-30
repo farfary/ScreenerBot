@@ -445,7 +445,7 @@ function createLifecycle() {
       setValue(
         "net-pnl",
         Number.isFinite(data.total_pnl_sol)
-          ? `${data.total_pnl_sol > 0 ? "+" : ""}${sol(data.total_pnl_sol)}`
+          ? Utils.formatSignedSol(data.total_pnl_sol, { fallback: "—" })
           : "—",
         tone(data.total_pnl_sol)
       );
@@ -610,7 +610,7 @@ function createLifecycle() {
     if (totalEl) {
       const finite = Number.isFinite(totalPnlSol);
       totalEl.textContent = finite
-        ? `${totalPnlSol > 0 ? "+" : ""}${Utils.formatSol(totalPnlSol, { fallback: "—" })}`
+        ? Utils.formatSignedSol(totalPnlSol, { fallback: "—" })
         : "—";
       totalEl.className = `daily-pnl-total${finite && totalPnlSol !== 0 ? (totalPnlSol > 0 ? " positive" : " negative") : ""}`;
     }
@@ -658,6 +658,8 @@ function createLifecycle() {
 
     const first = days[0];
     const last = days[days.length - 1];
+    // Days are UTC calendar dates ("2026-08-31"), shown as a short month and day.
+    const axisDate = (date) => Utils.formatDate(`${date}T00:00:00Z`, { includeYear: false, utc: true });
     container.dir = "ltr";
     container.innerHTML = `
       <svg class="daily-pnl-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img"
@@ -667,8 +669,8 @@ function createLifecycle() {
         <polyline class="daily-pnl-line" points="${points}"></polyline>
       </svg>
       <div class="daily-pnl-axis">
-        <span>${Utils.escapeHtml(first.date)}</span>
-        <span>${Utils.escapeHtml(last.date)}</span>
+        <span>${Utils.escapeHtml(axisDate(first.date))}</span>
+        <span>${Utils.escapeHtml(axisDate(last.date))}</span>
       </div>`;
   }
 
@@ -744,7 +746,7 @@ function createLifecycle() {
           <div class="exit-breakdown-row">
             <div class="exit-breakdown-head">
               <span class="exit-breakdown-type">${Utils.escapeHtml(formatExitType(e.exit_type))}</span>
-              <span class="exit-breakdown-pnl ${barClass}">${netSol > 0 ? "+" : ""}${Utils.formatSol(netSol, { fallback: "—" })}</span>
+              <span class="exit-breakdown-pnl ${barClass}">${Utils.formatSignedSol(netSol, { fallback: "—" })}</span>
             </div>
             <div class="exit-breakdown-bar">
               <div class="exit-breakdown-fill ${barClass}" style="width: ${share}%"></div>

@@ -217,13 +217,6 @@ function createLifecycle() {
     updateTokenStats(data.tokens);
   }
 
-  // Format a signed SOL value, e.g. "+0.1234" / "-0.0500" / "0.0000".
-  function formatSignedSol(value, decimals = 4) {
-    const v = value || 0;
-    const sign = v > 0 ? "+" : v < 0 ? "-" : "";
-    return `${sign}${Utils.formatSol(Math.abs(v), { decimals })}`;
-  }
-
   // Number + a small muted "SOL" unit span. Suppress formatSol's built-in
   // " SOL" suffix so the unit isn't doubled.
   function solHtml(value, decimals = 4) {
@@ -232,12 +225,7 @@ function createLifecycle() {
 
   // Signed variant of solHtml for the P&L stats.
   function signedSolHtml(value, decimals = 4) {
-    const v = value || 0;
-    const sign = v > 0 ? "+" : v < 0 ? "-" : "";
-    return `${sign}${Utils.formatSol(Math.abs(v), {
-      decimals,
-      suffix: "",
-    })}<span class="hero-unit">SOL</span>`;
+    return `${Utils.formatSignedSol(value || 0, { decimals, unit: false })}<span class="hero-unit">SOL</span>`;
   }
 
   // Profit/loss/flat semantic class for a signed value.
@@ -322,8 +310,8 @@ function createLifecycle() {
       const cls = pnlClass(wallet.change_sol);
       changeEl.className = `hero-change ${cls}`;
       changeEl.innerHTML = `
-        <span class="hero-change-value change-value ${cls}">${formatSignedSol(
-          wallet.change_sol
+        <span class="hero-change-value change-value ${cls}">${Utils.formatSignedSol(
+          wallet.change_sol || 0
         )}</span>
         <span class="change-percent ${cls}">(${Utils.formatPercent(wallet.change_percent, {
           decimals: 2,

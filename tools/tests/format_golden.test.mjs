@@ -154,7 +154,9 @@ test("de keeps decimals and rounding; only the separators change", () => {
   assert.equal(fmt.formatNumber(1234.5678, 4), "1.234,5678");
   assert.equal(fmt.formatNumber(1234.5678, { useGrouping: false }), "1234,57");
   assert.equal(fmt.formatCurrencyUSD(1.005), "$1,00");
-  assert.equal(fmt.formatCurrencyUSD(1234.5678), "$1,23K");
+  // Compact figures follow the locale's compact system: de has no short thousands step.
+  assert.equal(fmt.formatCurrencyUSD(1234.5678), "$1234,57");
+  assert.equal(fmt.formatCurrencyUSD(1234567.891), "$1,23\u00a0Mio.");
   assert.equal(fmt.formatPriceSol(0.000123456789, { decimals: 9 }), "0,000123457");
   assert.equal(fmt.formatPercentValue(12.345), "+12,35\u00a0%");
   assert.equal(fmt.formatPercent(-3.14159, { style: "plain", decimals: 3 }), "-3,142\u00a0%");
@@ -270,9 +272,24 @@ test("surface formatter options: trimmed fixed text, extra decimals, zero sign a
   assert.equal(fmt.formatUptime(7200, { style: "hm" }), "2h 0m");
 });
 
+test("the calendar week starts on the locale's first day", () => {
+  assert.equal(load("en-u-nu-latn").fmt.firstDayOfWeek(), 0);
+  assert.equal(load("de-u-nu-latn").fmt.firstDayOfWeek(), 1);
+  assert.equal(load("fa-u-nu-latn").fmt.firstDayOfWeek(), 6);
+});
+
+test("every compact figure uses one compact system per locale", () => {
+  const zh = load("zh-Hans-u-nu-latn").fmt;
+  assert.equal(zh.formatCurrencyUSD(812350), "$81.24万");
+  assert.equal(zh.formatCompactFixed(812350), "81.24万");
+  assert.equal(zh.formatCompactNumber(812350, { usd: true }), "$81.24万");
+  const ar = load("ar-u-nu-latn").fmt;
+  assert.equal(ar.formatCurrencyUSD(810060), ar.formatCompactNumber(810060, { usd: true }));
+});
+
 test("de keeps digits for the surface formatters; only separators change", () => {
   const { fmt } = load("de-u-nu-latn");
-  assert.equal(fmt.formatCompactFixed(1234567), "1,23M");
+  assert.equal(fmt.formatCompactFixed(1234567), "1,23\u00a0Mio.");
   assert.equal(fmt.formatFixed(0.5, { decimals: 4, trim: true }), "0,5");
   assert.equal(fmt.formatLatencyMs(1500), "1,50s");
   assert.equal(fmt.formatMemoryMb(1536), "1,5GB");

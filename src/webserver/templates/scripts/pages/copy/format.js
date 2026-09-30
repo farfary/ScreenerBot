@@ -6,6 +6,7 @@ import {
   formatFixed,
   formatPercentValue,
   formatPriceSol,
+  formatSignedSol,
   formatSol,
   formatTimeAgo,
   formatTimeSpan,
@@ -159,9 +160,7 @@ export function sol(value, decimals = 4) {
 const changeSign = (number) => (number > 0 ? "+" : number < 0 ? "−" : "");
 
 export function signedSol(value, decimals = 4) {
-  const number = finite(value);
-  if (number === null) return "—";
-  return `${changeSign(number)}${formatSol(Math.abs(number), { decimals })}`;
+  return formatSignedSol(value, { decimals, fallback: "—" });
 }
 
 export function signedPct(value, decimals = 1) {

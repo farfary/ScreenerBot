@@ -58,13 +58,18 @@ export function applyUtilitiesMixin(PositionDetailsDialog) {
     const num = Number(value);
     if (value === null || value === undefined || !Number.isFinite(num)) return "—";
     const abs = Math.abs(num);
-    const prefix = num < 0 ? "-" : sign && num > 0 ? "+" : "";
-    if (abs > 0 && abs < 0.00000001) return unit ? withSolUnit(`${prefix}<0.00000001`) : `${prefix}<0.00000001`;
+    if (abs > 0 && abs < 0.00000001) {
+      const prefix = num < 0 ? "-" : sign ? "+" : "";
+      return unit ? withSolUnit(`${prefix}<0.00000001`) : `${prefix}<0.00000001`;
+    }
     const decimals = abs === 0 || abs >= 0.01 ? 4 : abs >= 0.0001 ? 6 : 8;
-    const text = Utils.formatSol(abs, { decimals, suffix: "" });
     // Zeros past the fourth decimal are noise: 0.005000 printed beside 0.0198 in one column.
-    const trimmed = decimals > 4 ? text.replace(/(\.\d{4}\d*?)0+$/, "$1") : text;
-    return unit ? withSolUnit(`${prefix}${trimmed}`) : `${prefix}${trimmed}`;
+    return Utils.formatSignedSol(num, {
+      decimals,
+      minDecimals: 4,
+      unit,
+      sign: sign ? "always" : "negative",
+    });
   };
 
   proto._formatPct = function (value, decimals = 2) {

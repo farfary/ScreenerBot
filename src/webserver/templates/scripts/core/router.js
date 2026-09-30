@@ -5,6 +5,7 @@ import * as AppState from "./app_state.js";
 import { waitForReady } from "./bootstrap.js";
 import { playClick, playTabSwitch } from "./sounds.js";
 import { closeStackedOverlays } from "./escape_stack.js";
+import { stripIsolates } from "./format.js";
 
 const assetVersion = window.__ASSET_VERSION__ || "";
 const assetQuery = assetVersion ? `?v=${encodeURIComponent(assetVersion)}` : "";
@@ -73,7 +74,8 @@ function updateDocumentTitle(pageName) {
   const title = PAGE_IDS.includes(pageName)
     ? I18n.t("nav-page-title-" + pageName) // l10n-dynamic: nav-
     : I18n.t("shell-page-title-fallback");
-  document.title = I18n.t("shell-document-title", { page: title });
+  // Window titles render bidi controls literally, so the message's isolates are removed.
+  document.title = stripIsolates(I18n.t("shell-document-title", { page: title }));
 }
 
 function waitForPageStylesheet(pageName, link) {

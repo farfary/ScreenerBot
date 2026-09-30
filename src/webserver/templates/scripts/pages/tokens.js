@@ -897,8 +897,9 @@ function createLifecycle() {
         id: "price_sol",
         label: I18n.t("tokens-column-price-sol"),
         sortable: true,
-        minWidth: 120,
+        minWidth: 150,
         wrap: false,
+        className: "dt-cell-numeric",
         render: (v, row) => priceCell(v, row),
       },
       {
@@ -955,6 +956,7 @@ function createLifecycle() {
         sortable: true,
         minWidth: 80,
         wrap: false,
+        className: "dt-cell-numeric",
         render: (_v, row) => {
           const buys = row.txns_5m_buys || 0;
           const sells = row.txns_5m_sells || 0;
@@ -968,6 +970,7 @@ function createLifecycle() {
         sortable: true,
         minWidth: 80,
         wrap: false,
+        className: "dt-cell-numeric",
         render: (_v, row) => {
           const buys = row.txns_1h_buys || 0;
           const sells = row.txns_1h_sells || 0;
@@ -979,8 +982,9 @@ function createLifecycle() {
         id: "txns_6h",
         label: I18n.t("tokens-column-txns-6h"),
         sortable: true,
-        minWidth: 80,
+        minWidth: 120,
         wrap: false,
+        className: "dt-cell-numeric",
         render: (_v, row) => {
           const buys = row.txns_6h_buys || 0;
           const sells = row.txns_6h_sells || 0;
@@ -992,8 +996,9 @@ function createLifecycle() {
         id: "txns_24h",
         label: I18n.t("tokens-column-txns-24h"),
         sortable: true,
-        minWidth: 90,
+        minWidth: 120,
         wrap: false,
+        className: "dt-cell-numeric",
         render: (_v, row) => {
           const buys = row.txns_24h_buys || 0;
           const sells = row.txns_24h_sells || 0;
