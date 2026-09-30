@@ -173,21 +173,24 @@ export function unusedErrors({ ids, used, namespaces = DYNAMIC_NAMESPACES }) {
     .map((id) => ({ file: "locales/en", message: `message "${id}" is not used anywhere` }));
 }
 
-/** Aggregate over `{ js, html, rust }` arrays of `{ path, source }`. */
+/**
+ * Aggregate over `{ js, html, rust }` arrays of `{ path, source }`. `dashboardUsed` maps each id
+ * referenced by dashboard JS or HTML to the first file that references it.
+ */
 export function scanUsage({ ids, js, html, rust, namespaces = DYNAMIC_NAMESPACES }) {
   const used = new Set();
+  const dashboardUsed = new Map();
   const errors = [];
-  for (const file of js) {
-    const result = scanJsUsage({ ...file, ids, namespaces });
-    result.used.forEach((id) => used.add(id));
+  const record = (file, result) => {
+    result.used.forEach((id) => {
+      used.add(id);
+      if (!dashboardUsed.has(id)) dashboardUsed.set(id, file.path);
+    });
     errors.push(...result.errors);
-  }
-  for (const file of html) {
-    const result = scanHtmlUsage({ ...file, ids, namespaces });
-    result.used.forEach((id) => used.add(id));
-    errors.push(...result.errors);
-  }
+  };
+  for (const file of js) record(file, scanJsUsage({ ...file, ids, namespaces }));
+  for (const file of html) record(file, scanHtmlUsage({ ...file, ids, namespaces }));
   for (const file of rust) scanRustUsage({ source: file.source, ids }).forEach((id) => used.add(id));
   errors.push(...unusedErrors({ ids, used, namespaces }));
-  return { used, errors };
+  return { used, dashboardUsed, errors };
 }

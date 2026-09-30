@@ -37,7 +37,7 @@ pub use unic_langid::LanguageIdentifier;
 
 /// Catalog domains that are rendered by the backend only and never sent to the
 /// dashboard.
-pub const SERVER_ONLY_DOMAINS: &[&str] = &["telegram", "shell"];
+pub const SERVER_ONLY_DOMAINS: &[&str] = &["telegram"];
 
 /// One embedded Fluent file: `locales/<locale>/<domain>.ftl`.
 pub(crate) struct CatalogFile {

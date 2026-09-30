@@ -126,6 +126,14 @@ export function analyze({ sources, catalogInput }) {
   const catalog = checkCatalogs(catalogInput);
   const usage = scanUsage({ ids: catalog.sourceIds, js: sources.js, html: sources.html, rust: sources.rust });
   const errors = [...catalog.errors, ...usage.errors];
+  /* A server-only domain is never in the dashboard payload, so a dashboard reference renders the raw id. */
+  const serverOnly = catalogInput.serverOnly ?? new Set();
+  for (const [id, file] of usage.dashboardUsed) {
+    const domain = catalog.sourceDomains.get(id);
+    if (serverOnly.has(domain)) {
+      errors.push({ file, message: `"${id}" is used by the dashboard but ${domain}.ftl is server-only` });
+    }
+  }
 
   const hardcoded = {};
   const css = {};

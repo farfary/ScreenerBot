@@ -6,6 +6,7 @@
  * matching shape, variables, plural coverage and untranslated terms.
  */
 
+import { readFileSync } from "node:fs";
 import { readFile, readdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Resource, Term, parse, serialize } from "@fluent/syntax";
@@ -201,7 +202,20 @@ export function checkCatalogs({ catalogs, registered, source = SOURCE_LOCALE }) 
     }
   }
 
-  return { errors, info, completeness, sourceIds: new Set(en.messages.keys()) };
+  const sourceDomains = new Map([...en.messages].map(([id, entry]) => [id, entry.file.replace(/\.ftl$/, "")]));
+  return { errors, info, completeness, sourceIds: new Set(en.messages.keys()), sourceDomains };
+}
+
+/** Domains listed in `SERVER_ONLY_DOMAINS` (src/i18n/mod.rs): never sent to the dashboard. */
+export function parseServerOnlyDomains(rustSource) {
+  const list = rustSource.match(/SERVER_ONLY_DOMAINS:\s*&\[&str\]\s*=\s*&\[([^\]]*)\]/);
+  if (!list) throw new Error("SERVER_ONLY_DOMAINS not found in src/i18n/mod.rs");
+  return new Set([...list[1].matchAll(/"([^"]+)"/g)].map((match) => match[1]));
+}
+
+/** The server-only domains, read from the Rust source that owns them. */
+export function readServerOnlyDomains() {
+  return parseServerOnlyDomains(readFileSync(resolve(REPO_ROOT, "src/i18n/mod.rs"), "utf8"));
 }
 
 /** Codes listed in `registry.toml` (`code = "xx"` entries). */
@@ -221,5 +235,5 @@ export async function loadCatalogs() {
     catalogs[entry.name] = files;
   }
   const registry = await readFile(resolve(LOCALES_ROOT, "registry.toml"), "utf8");
-  return { catalogs, registered: registeredCodes(registry) };
+  return { catalogs, registered: registeredCodes(registry), serverOnly: readServerOnlyDomains() };
 }

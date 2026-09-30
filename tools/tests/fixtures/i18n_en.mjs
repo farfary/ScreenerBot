@@ -2,11 +2,12 @@
 // tests that assert on rendered wording. Importing this file installs it.
 import fs from "node:fs";
 import vm from "node:vm";
+import { readServerOnlyDomains } from "../../i18n/catalogs.mjs";
 
 const WEBSERVER = new URL("../../../src/webserver/", import.meta.url);
 const CATALOGS = new URL("../../../locales/en/", import.meta.url);
-// Domains the server keeps out of the dashboard payload (SERVER_ONLY_DOMAINS).
-const SERVER_ONLY = new Set(["telegram", "shell"]);
+// Domains the server keeps out of the dashboard payload.
+const SERVER_ONLY = readServerOnlyDomains();
 
 function catalog() {
   const domains = fs

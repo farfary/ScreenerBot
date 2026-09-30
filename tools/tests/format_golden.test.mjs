@@ -19,6 +19,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import vm from "node:vm";
+import { readServerOnlyDomains } from "../i18n/catalogs.mjs";
 
 const WEBSERVER = new URL("../../src/webserver/", import.meta.url);
 const read = (rel) => fs.readFileSync(new URL(rel, WEBSERVER), "utf8");
@@ -29,8 +30,8 @@ const BUNDLE_JS = read("assets/fluent-bundle.js");
 const RUNTIME_JS = read("templates/scripts/core/i18n.js");
 const FORMAT_JS = read("templates/scripts/core/format.js");
 
-// Domains the server keeps out of the dashboard payload (SERVER_ONLY_DOMAINS).
-const SERVER_ONLY = new Set(["telegram", "shell"]);
+// Domains the server keeps out of the dashboard payload.
+const SERVER_ONLY = readServerOnlyDomains();
 
 /** The source catalogs as `dashboard_catalog` concatenates them: terms first. */
 function enCatalog() {

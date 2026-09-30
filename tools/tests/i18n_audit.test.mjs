@@ -10,8 +10,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { compareBaseline, initialBaseline, lowerBaseline } from "../i18n/audit.mjs";
-import { checkCatalogs } from "../i18n/catalogs.mjs";
+import { analyze, compareBaseline, initialBaseline, lowerBaseline } from "../i18n/audit.mjs";
+import { checkCatalogs, parseServerOnlyDomains } from "../i18n/catalogs.mjs";
 import { scanCss } from "../i18n/css_direction.mjs";
 import { scanFormatting } from "../i18n/formatting.mjs";
 import { scanHtmlHardcoded, scanJsHardcoded } from "../i18n/hardcoded.mjs";
@@ -277,4 +277,29 @@ test("formatting honours l10n-format-ok with a reason and rejects it without one
 test("formatting reports a script that cannot be parsed", () => {
   const result = formattingOf("const = ;", "pages/a.js");
   assert.match(result.errors[0].message, /cannot parse/);
+});
+
+test("the server-only domain list is read from its Rust declaration", () => {
+  const rust = `pub const SERVER_ONLY_DOMAINS: &[&str] = &["telegram", "desktop"];`;
+  assert.deepEqual([...parseServerOnlyDomains(rust)], ["telegram", "desktop"]);
+  assert.throws(() => parseServerOnlyDomains("pub const OTHER: u8 = 1;"), /SERVER_ONLY_DOMAINS not found/);
+});
+
+test("a dashboard reference to a server-only domain is an error", () => {
+  const result = analyze({
+    sources: {
+      js: [{ path: "a.js", source: `I18n.t("bot-hello");` }],
+      html: [],
+      css: [],
+      rust: [{ path: "b.rs", source: `ids::BOT_OTHER` }],
+    },
+    catalogInput: {
+      catalogs: { en: { "bot.ftl": "bot-hello = Hello\nbot-other = Other\n", "terms.ftl": "-brand = B\n" } },
+      registered: new Set(["en"]),
+      serverOnly: new Set(["bot"]),
+    },
+  });
+  const messages = result.errors.map((error) => error.message).join("\n");
+  assert.match(messages, /"bot-hello" is used by the dashboard but bot\.ftl is server-only/);
+  assert.doesNotMatch(messages, /bot-other/);
 });
