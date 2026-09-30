@@ -25,6 +25,7 @@ import { hasMarkup, lineIndex, scanMarkup, stripPlaceholders } from "./markup.mj
 export const DYNAMIC_NAMESPACES = {
   "config-": "config_catalog_covers_fields",
   "nav-": "nav_catalog_covers_tabs_and_pages",
+  "strategies-condition-": "strategies_catalog_covers_conditions",
 };
 
 const CALLS = new Set(["t", "attr", "has"]);

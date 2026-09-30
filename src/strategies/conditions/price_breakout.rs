@@ -121,33 +121,28 @@ impl ConditionEvaluator for PriceBreakoutCondition {
     fn parameter_schema(&self) -> serde_json::Value {
         json!({
             "type": "PriceBreakout",
-            "name": "Price Breakout",
             "category": "Price Analysis",
             "tags": ["breakout", "resistance", "support", "momentum"],
             "icon": "icon-rocket",
             "origin": "strategy",
-            "description": "Detect price breaking above resistance (period high) or below support (period low)",
             "parameters": {
                 "timeframe": {
                     "type": "enum",
-                    "name": "Timeframe",
-                    "description": "Candle timeframe to analyze (defaults to strategy timeframe if not set)",
                     "default": null,
                     "optional": true,
                     "options": [
-                        { "value": "1m", "label": "1 Minute" },
-                        { "value": "5m", "label": "5 Minutes" },
-                        { "value": "15m", "label": "15 Minutes" },
-                        { "value": "1h", "label": "1 Hour" },
-                        { "value": "4h", "label": "4 Hours" },
-                        { "value": "12h", "label": "12 Hours" },
-                        { "value": "1d", "label": "1 Day" }
+                        { "value": "1m" },
+                        { "value": "5m" },
+                        { "value": "15m" },
+                        { "value": "1h" },
+                        { "value": "4h" },
+                        { "value": "12h" },
+                        { "value": "1d" }
                     ]
                 },
                 "lookback": {
                     "type": "number",
-                    "name": "Lookback Period",
-                    "description": "Number of candles to find support/resistance level",
+                    "unit": "candles",
                     "default": 20,
                     "min": 2,
                     "max": 100,
@@ -155,18 +150,14 @@ impl ConditionEvaluator for PriceBreakoutCondition {
                 },
                 "direction": {
                     "type": "enum",
-                    "name": "Breakout Direction",
-                    "description": "Direction of the breakout",
                     "default": "UPWARD",
                     "options": [
-                        { "value": "UPWARD", "label": "Upward (Resistance Break)" },
-                        { "value": "DOWNWARD", "label": "Downward (Support Break)" }
+                        { "value": "UPWARD" },
+                        { "value": "DOWNWARD" }
                     ]
                 },
                 "confirmation": {
                     "type": "percent",
-                    "name": "Confirmation %",
-                    "description": "How far past the level to confirm breakout (avoids false signals)",
                     "default": 1.0,
                     "min": 0.0,
                     "max": 20.0,

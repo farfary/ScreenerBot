@@ -30,9 +30,9 @@ let nextKey = 0;
 /** Category id the API sends for a display name. */
 const categoryIdOf = (name) => name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
 
-function field(type, label, { hint, unit, category, impact } = {}) {
+function field(type, label, { hint, unit, subject, category, impact } = {}) {
   const key = `config-fixture-${nextKey++}`;
-  catalog.set(key, { value: label, attributes: { hint, unit } });
+  catalog.set(key, { value: label, attributes: { hint, unit, subject } });
   catalog.set("config-category-general", { value: "General", attributes: {} });
   const meta = { type, key };
   if (category !== undefined) {
@@ -68,11 +68,11 @@ function dexscreenerMetadata() {
       max_price_change_24h: number("Max Price Change 24h", { category: "Price Change", unit: "%" }),
       max_price_change_5m: number("Max Price Change 5m", { category: "Price Change", unit: "%" }),
       max_price_change_6h: number("Max Price Change 6h", { category: "Price Change", unit: "%" }),
-      min_fdv_usd: number("Min FDV", { category: "FDV", unit: "USD", impact: "critical" }),
-      min_price_change_1h: number("Min Price Change 1h", { category: "Price Change", unit: "%" }),
-      min_price_change_24h: number("Min Price Change 24h", { category: "Price Change", unit: "%" }),
-      min_price_change_5m: number("Min Price Change 5m", { category: "Price Change", unit: "%" }),
-      min_price_change_6h: number("Min Price Change 6h", { category: "Price Change", unit: "%" }),
+      min_fdv_usd: number("Min FDV", { subject: "FDV", category: "FDV", unit: "USD", impact: "critical" }),
+      min_price_change_1h: number("Min Price Change 1h", { subject: "Price Change 1h", category: "Price Change", unit: "%" }),
+      min_price_change_24h: number("Min Price Change 24h", { subject: "Price Change 24h", category: "Price Change", unit: "%" }),
+      min_price_change_5m: number("Min Price Change 5m", { subject: "Price Change 5m", category: "Price Change", unit: "%" }),
+      min_price_change_6h: number("Min Price Change 6h", { subject: "Price Change 6h", category: "Price Change", unit: "%" }),
       min_transactions_1h: number("Min TX (1h)", { category: "Activity", unit: "txs" }),
       min_transactions_5min: number("Min TX (5min)", { category: "Activity", unit: "txs" }),
     }),
@@ -151,11 +151,11 @@ test("the same category name under two sources stays two groups", () => {
     dexscreener: source({
       liquidity_enabled: boolean("Enable Liquidity Checks", { category: "Liquidity" }),
       max_liquidity_usd: number("Max Liquidity", { category: "Liquidity", unit: "USD" }),
-      min_liquidity_usd: number("Min Liquidity", { category: "Liquidity", unit: "USD" }),
+      min_liquidity_usd: number("Min Liquidity", { subject: "Liquidity", category: "Liquidity", unit: "USD" }),
     }),
     geckoterminal: source({
       max_liquidity_usd: number("Max Liquidity", { category: "Liquidity", unit: "USD" }),
-      min_liquidity_usd: number("Min Liquidity", { category: "Liquidity", unit: "USD" }),
+      min_liquidity_usd: number("Min Liquidity", { subject: "Liquidity", category: "Liquidity", unit: "USD" }),
     }),
   });
 

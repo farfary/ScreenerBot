@@ -2,17 +2,17 @@
   <!-- Left Sidebar: Strategy Management -->
   <aside class="strategies-sidebar">
     <div class="strategy-filter-bar">
-      <button type="button" class="filter-tab active" data-filter="all">All</button>
-      <button type="button" class="filter-tab" data-filter="entry">Entry</button>
-      <button type="button" class="filter-tab" data-filter="exit">Exit</button>
+      <button type="button" class="filter-tab active" data-filter="all" data-l10n-id="strategies-filter-all"></button>
+      <button type="button" class="filter-tab" data-filter="entry" data-l10n-id="strategies-filter-entry"></button>
+      <button type="button" class="filter-tab" data-filter="exit" data-l10n-id="strategies-filter-exit"></button>
     </div>
 
     <div class="sidebar-content">
       <div class="strategy-list" id="strategy-list">
         <div class="empty-state">
           <i class="icon-square-pen"></i>
-          <p>No strategies yet</p>
-          <small>Create your first strategy</small>
+          <p data-l10n-id="strategies-list-empty-title"></p>
+          <small data-l10n-id="strategies-list-empty-hint"></small>
         </div>
       </div>
     </div>
@@ -20,9 +20,9 @@
     <div class="sidebar-footer">
       <div class="sidebar-footer-row">
         <button type="button" class="btn primary flex-1" id="create-strategy">
-          <i class="icon-plus"></i> New Strategy
+          <i class="icon-plus"></i> <span data-l10n-id="strategies-new"></span>
         </button>
-        <button type="button" class="btn-icon" id="import-strategy" title="Import Strategy" aria-label="Import Strategy">
+        <button type="button" class="btn-icon" id="import-strategy" data-l10n-id="strategies-import">
           <i class="icon-download"></i>
         </button>
       </div>
@@ -35,29 +35,29 @@
     <header class="editor-header" id="editor-header">
       <div class="editor-identity">
         <span class="strategy-type-badge entry" id="strategy-type-badge">
-          <i class="icon-trending-up"></i> ENTRY
+          <i class="icon-trending-up"></i> <span data-l10n-id="strategies-type-entry"></span>
         </span>
         <input
           type="text"
           id="strategy-name"
-          placeholder="Strategy name"
+          data-l10n-id="strategies-editor-name"
           class="strategy-name-input"
           spellcheck="false"
         />
-        <span class="editor-dirty-dot" id="editor-dirty-dot" title="Unsaved changes"></span>
+        <span class="editor-dirty-dot" id="editor-dirty-dot" data-l10n-id="strategies-editor-dirty"></span>
       </div>
       <div class="editor-controls">
         <label class="toggle enable-toggle" data-level="root">
           <input type="checkbox" id="strategy-enabled-toggle" />
           <span class="toggle-track"></span>
-          <span class="toggle-label">Enabled</span>
+          <span class="toggle-label" data-l10n-id="common-state-enabled"></span>
         </label>
         <span class="editor-sep"></span>
         <button type="button" class="btn ghost btn-sm" id="validate-strategy">
-          <i class="icon-circle-check"></i> Validate
+          <i class="icon-circle-check"></i> <span data-l10n-id="strategies-action-validate"></span>
         </button>
         <button type="button" class="btn primary btn-sm editor-save-btn" id="save-strategy">
-          <i class="icon-save"></i> Save
+          <i class="icon-save"></i> <span data-l10n-id="common-action-save"></span>
         </button>
       </div>
     </header>
@@ -65,7 +65,7 @@
     <!-- Empty state: shown when no strategy is selected -->
     <div class="editor-empty" id="editor-empty">
       <i class="icon-square-pen"></i>
-      <p>Select a strategy to edit, or create a new one</p>
+      <p data-l10n-id="strategies-editor-empty"></p>
     </div>
 
     <!-- Scrollable Content Area -->
@@ -74,8 +74,8 @@
         <div class="conditions-list" id="conditions-list">
           <div class="empty-state">
             <i class="icon-puzzle"></i>
-            <p>No conditions yet</p>
-            <small>Use "Add Condition" to start building</small>
+            <p data-l10n-id="strategies-conditions-empty-title"></p>
+            <small data-l10n-id="strategies-conditions-empty-hint"></small>
           </div>
         </div>
       </div>
@@ -84,7 +84,7 @@
     <!-- Sticky Footer -->
     <footer class="editor-footer" id="editor-footer">
       <button type="button" class="btn dashed full-width" id="add-condition">
-        <i class="icon-plus"></i> Add Condition
+        <i class="icon-plus"></i> <span data-l10n-id="strategies-add-condition"></span>
       </button>
     </footer>
   </main>
@@ -93,8 +93,8 @@
   <div class="modal-overlay condition-catalog-modal" id="condition-catalog-modal" hidden>
     <div class="modal-dialog condition-catalog-content">
       <div class="modal-header">
-        <h3><i class="icon-puzzle"></i> Add Condition</h3>
-        <button type="button" class="modal-close" id="close-condition-catalog" aria-label="Close">
+        <h3><i class="icon-puzzle"></i> <span data-l10n-id="strategies-add-condition"></span></h3>
+        <button type="button" class="modal-close" id="close-condition-catalog" data-l10n-id="strategies-modal-close">
           <i class="icon-x"></i>
         </button>
       </div>
@@ -103,19 +103,19 @@
           <input
             type="text"
             id="condition-search"
-            placeholder="Search conditions..."
+            data-l10n-id="strategies-catalog-search"
             class="search-input"
           />
-          <button type="button" class="btn-icon" id="clear-search">✕</button>
+          <button type="button" class="btn-icon" id="clear-search" data-l10n-id="strategies-catalog-search-clear"><i class="icon-x"></i></button>
         </div>
         <div class="condition-catalog-actions">
           <button type="button" class="catalog-toggle-btn" id="collapse-all-categories">
             <i class="icon-chevrons-up"></i>
-            Fold All
+            <span data-l10n-id="strategies-catalog-fold-all"></span>
           </button>
           <button type="button" class="catalog-toggle-btn" id="expand-all-categories">
             <i class="icon-chevrons-down"></i>
-            Unfold All
+            <span data-l10n-id="strategies-catalog-unfold-all"></span>
           </button>
         </div>
         <div class="condition-categories" id="condition-categories">
@@ -125,53 +125,32 @@
     </div>
   </div>
 
-  <!-- Parameter Editor Modal (Optional, kept for complex edits if needed) -->
-  <div class="modal-overlay parameter-editor-modal" id="parameter-editor-modal" hidden>
-    <div class="modal-dialog parameter-editor-content">
-      <div class="modal-header">
-        <h3><i class="icon-settings"></i> Edit Parameters</h3>
-        <button type="button" class="modal-close" id="close-parameter-editor" aria-label="Close">
-          <i class="icon-x"></i>
-        </button>
-      </div>
-      <div class="modal-body" id="parameter-editor-body">
-        <!-- Dynamic content -->
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" id="cancel-parameter-edit">Cancel</button>
-        <button type="button" class="btn btn-primary" id="apply-parameter-edit">
-          Apply Changes
-        </button>
-      </div>
-    </div>
-  </div>
-
   <!-- Create Strategy Type Selection Modal -->
   <div class="modal-overlay create-strategy-modal" id="create-strategy-modal" hidden>
     <div class="modal-dialog modal-sm">
       <div class="modal-header">
-        <h3><i class="icon-plus"></i> Create New Strategy</h3>
-        <button type="button" class="modal-close" id="create-strategy-close" aria-label="Close">
+        <h3><i class="icon-plus"></i> <span data-l10n-id="strategies-create-title"></span></h3>
+        <button type="button" class="modal-close" id="create-strategy-close" data-l10n-id="strategies-modal-close">
           <i class="icon-x"></i>
         </button>
       </div>
       <div class="modal-body">
-        <p class="modal-desc">Choose the type of strategy you want to create:</p>
+        <p class="modal-desc" data-l10n-id="strategies-create-prompt"></p>
         <div class="strategy-type-cards">
           <button type="button" class="type-card" data-type="ENTRY">
             <span class="type-icon"><i class="icon-trending-up"></i></span>
-            <span class="type-name">Entry Strategy</span>
-            <span class="type-desc">Define conditions for when to BUY a token</span>
+            <span class="type-name" data-l10n-id="strategies-create-entry-name"></span>
+            <span class="type-desc" data-l10n-id="strategies-create-entry-description"></span>
           </button>
           <button type="button" class="type-card" data-type="EXIT">
             <span class="type-icon"><i class="icon-trending-down"></i></span>
-            <span class="type-name">Exit Strategy</span>
-            <span class="type-desc">Define conditions for when to SELL a token</span>
+            <span class="type-name" data-l10n-id="strategies-create-exit-name"></span>
+            <span class="type-desc" data-l10n-id="strategies-create-exit-description"></span>
           </button>
         </div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" id="cancel-create-strategy">Cancel</button>
+        <button type="button" class="btn btn-secondary" id="cancel-create-strategy" data-l10n-id="common-action-cancel"></button>
       </div>
     </div>
   </div>

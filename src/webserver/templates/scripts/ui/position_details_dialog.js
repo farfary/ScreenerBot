@@ -311,7 +311,7 @@ export class PositionDetailsDialog {
                 <button class="dialog-header-action favorite-btn" id="pddFavoriteBtn" type="button" data-l10n-id="positions-details-favorite-add">
                   <i class="icon-star"></i>
                 </button>
-                <button class="dialog-header-action" id="pddCopyMintBtn" type="button" data-l10n-id="tokens-copy-mint">
+                <button class="dialog-header-action" id="pddCopyMintBtn" type="button" data-l10n-id="links-copy-mint">
                   <i class="icon-copy"></i>
                 </button>
                 <a class="dialog-header-action" href="https://solscan.io/token/${mint}" target="_blank" rel="noopener" data-l10n-id="positions-details-view-solscan">

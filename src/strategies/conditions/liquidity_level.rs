@@ -73,17 +73,13 @@ impl ConditionEvaluator for LiquidityLevelCondition {
     fn parameter_schema(&self) -> serde_json::Value {
         json!({
             "type": "LiquidityLevel",
-            "name": "Pool Liquidity Level",
             "category": "Market Context",
             "tags": ["liquidity", "safety", "sol", "risk"],
             "icon": "icon-droplet",
             "origin": "strategy",
-            "description": "Check pool liquidity in SOL (Entry: ensure sufficient liquidity, Exit: detect liquidity drain)",
             "parameters": {
                 "threshold": {
                     "type": "number",
-                    "name": "Liquidity Threshold (SOL)",
-                    "description": "Pool liquidity level in SOL",
                     "default": 50.0,
                     "min": 0.0,
                     "max": 100000.0,
@@ -91,14 +87,12 @@ impl ConditionEvaluator for LiquidityLevelCondition {
                 },
                 "comparison": {
                     "type": "enum",
-                    "name": "Comparison",
-                    "description": "How to compare pool liquidity to threshold",
                     "default": "GREATER_THAN",
                     "options": [
-                        { "value": "GREATER_THAN", "label": "Greater Than (>)" },
-                        { "value": "GREATER_EQUAL", "label": "Greater or Equal (≥)" },
-                        { "value": "LESS_THAN", "label": "Less Than (<)" },
-                        { "value": "LESS_EQUAL", "label": "Less or Equal (≤)" }
+                        { "value": "GREATER_THAN" },
+                        { "value": "GREATER_EQUAL" },
+                        { "value": "LESS_THAN" },
+                        { "value": "LESS_EQUAL" }
                     ]
                 }
             }

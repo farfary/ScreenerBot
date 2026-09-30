@@ -208,8 +208,8 @@ function buildTokenInfoSection(token, options) {
               class="overview-copy-value"
               data-copy="${escapeHtml(token.mint)}"
               dir="ltr"
-              title="${esc(I18n.attr("tokens-copy-mint", "title"))}"
-              aria-label="${esc(I18n.attr("tokens-copy-mint", "aria-label"))}"
+              title="${esc(I18n.attr("links-copy-mint", "title"))}"
+              aria-label="${esc(I18n.attr("links-copy-mint", "aria-label"))}"
             >${formatShortAddress(token.mint)}</button>
           </div>
           <div class="overview-fact">

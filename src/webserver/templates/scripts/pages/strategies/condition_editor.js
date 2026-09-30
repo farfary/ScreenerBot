@@ -3,6 +3,19 @@
  * Handles the vertical card-based condition editor for building strategies
  */
 
+import { formatFixed } from "../../core/format.js";
+import {
+  categoryLabel,
+  conditionDescription,
+  conditionName,
+  formatParamValue,
+  inputUnitText,
+  optionLabel,
+  optionValue,
+  paramDescription,
+  paramLabel,
+} from "./condition_text.js";
+
 export function createConditionEditor({
   state,
   conditions,
@@ -10,6 +23,7 @@ export function createConditionEditor({
   $,
   $$,
   Utils,
+  announce,
   enhanceAllSelects,
   addTrackedListener,
   clearScope,
@@ -22,8 +36,7 @@ export function createConditionEditor({
     const list = $("#conditions-list");
     if (!list) return;
     if (!conditions.length) {
-      list.innerHTML =
-        '<div class="empty-state"><i class="icon-puzzle"></i><p>No conditions yet</p><small>Use "Add Condition" to start building</small></div>';
+      list.innerHTML = `<div class="empty-state"><i class="icon-puzzle"></i><p>${Utils.escapeHtml(I18n.t("strategies-conditions-empty-title"))}</p><small>${Utils.escapeHtml(I18n.t("strategies-conditions-empty-hint"))}</small></div>`;
       return;
     }
 
@@ -118,6 +131,12 @@ export function createConditionEditor({
     );
   }
 
+  /** Icon-only action button of a condition card. */
+  function iconButton(action, icon, title) {
+    const text = Utils.escapeHtml(title);
+    return `<button class="btn-icon" data-action="${action}" title="${text}" aria-label="${text}"><i class="${icon}"></i></button>`;
+  }
+
   /**
    * Render a single condition card
    */
@@ -125,7 +144,8 @@ export function createConditionEditor({
     const schema = conditionSchemas?.[c.type] || {};
     const iconClass = schema.icon || getConditionIcon(c.type);
     const category = schema.category || "General";
-    const description = schema.description || "";
+    const name = conditionName(schema, c.type);
+    const description = conditionDescription(schema);
     const summary = buildConditionSummary(c);
     const body = renderParamEditor(c, schema, idx);
     const statusClass = c.enabled ? "status-enabled" : "status-disabled";
@@ -140,24 +160,24 @@ export function createConditionEditor({
             </div>
             <div class="condition-info">
               <div class="condition-name">
-                ${Utils.escapeHtml(c.name || c.type)}
-                <span class="condition-category-badge category-${categorySlug}">${Utils.escapeHtml(category)}</span>
+                ${Utils.escapeHtml(name)}
+                <span class="condition-category-badge category-${categorySlug}">${Utils.escapeHtml(categoryLabel(schema))}</span>
               </div>
               <div class="condition-description">${Utils.escapeHtml(description)}</div>
             </div>
           </div>
           <div class="card-header-right">
             <div class="condition-status">
-              <label class="toggle" data-level="item" title="${c.enabled ? "Enabled" : "Disabled"}">
+              <label class="toggle" data-level="item" title="${Utils.escapeHtml(c.enabled ? I18n.t("common-state-enabled") : I18n.t("common-state-disabled"))}">
                 <input type="checkbox" class="toggle-enabled" ${c.enabled ? "checked" : ""}/>
                 <span class="toggle-track"></span>
               </label>
             </div>
             <div class="condition-actions">
-              <button class="btn-icon" data-action="move-up" title="Move up"><i class="icon-chevron-up"></i></button>
-              <button class="btn-icon" data-action="move-down" title="Move down"><i class="icon-chevron-down"></i></button>
-              <button class="btn-icon" data-action="duplicate" title="Duplicate"><i class="icon-copy"></i></button>
-              <button class="btn-icon" data-action="delete" title="Delete"><i class="icon-trash-2"></i></button>
+              ${iconButton("move-up", "icon-chevron-up", I18n.attr("strategies-card-move-up", "title"))}
+              ${iconButton("move-down", "icon-chevron-down", I18n.attr("strategies-card-move-down", "title"))}
+              ${iconButton("duplicate", "icon-copy", I18n.attr("strategies-card-duplicate", "title"))}
+              ${iconButton("delete", "icon-trash-2", I18n.attr("strategies-card-delete", "title"))}
             </div>
             <span class="expand-indicator"><i class="icon-chevron-down"></i></span>
           </div>
@@ -185,106 +205,47 @@ export function createConditionEditor({
     const schema = conditionSchemas?.[c.type] || {};
     const params = schema.parameters || {};
     const parts = [];
+    // A lookback given as `time_value` + `time_unit` is one "Period" entry, written last.
+    const hasPeriod = c.params.time_value !== undefined && c.params.time_unit !== undefined;
 
-    // Special handling for conditions with time period (time_value + time_unit)
-    if (c.params.time_value !== undefined && c.params.time_unit !== undefined) {
-      const timeValue = c.params.time_value;
-      const timeUnit = c.params.time_unit;
-      const unitLabel = timeUnit === "SECONDS" ? "sec" : timeUnit === "MINUTES" ? "min" : "hrs";
-      const timePart = `${timeValue} ${unitLabel}`;
+    Object.entries(c.params).forEach(([key, value]) => {
+      if (hasPeriod && (key === "time_value" || key === "time_unit")) return;
+      const spec = params[key];
+      if (!spec) return;
+      parts.push(
+        I18n.t("strategies-summary-param", {
+          label: paramLabel(spec, key),
+          value: formatParamValue(value, spec),
+        })
+      );
+    });
 
-      // Add other parameters (skip time_value and time_unit as they're combined)
-      Object.entries(c.params).forEach(([key, value]) => {
-        if (key === "time_value" || key === "time_unit") return;
-        const spec = params[key];
-        if (!spec) return;
-
-        const label = spec.name || key;
-        const formattedValue = formatParamValueWithUnit(value, spec);
-        parts.push(`${label}: ${formattedValue}`);
-      });
-
-      // Add time period last
-      parts.push(`Period: ${timePart}`);
-    } else {
-      // Build human-readable summary based on condition type
-      Object.entries(c.params).forEach(([key, value]) => {
-        const spec = params[key];
-        if (!spec) return;
-
-        const label = spec.name || key;
-        const formattedValue = formatParamValueWithUnit(value, spec);
-        parts.push(`${label}: ${formattedValue}`);
-      });
+    if (hasPeriod) {
+      // Ids are the `time_unit` values of the price change condition.
+      const amount = formatFixed(Number(c.params.time_value), { decimals: 4, trim: true });
+      switch (c.params.time_unit) {
+        case "SECONDS":
+          parts.push(I18n.t("strategies-summary-period-seconds", { amount }));
+          break;
+        case "MINUTES":
+          parts.push(I18n.t("strategies-summary-period-minutes", { amount }));
+          break;
+        case "HOURS":
+          parts.push(I18n.t("strategies-summary-period-hours", { amount }));
+          break;
+        default:
+          parts.push(amount);
+      }
     }
 
-    return parts.slice(0, 3).join(", ") || "No parameters";
-  }
-
-  /**
-   * Format parameter value (simple version)
-   */
-  function formatParamValue(v) {
-    if (v === undefined || v === null) return "";
-    if (typeof v === "number") return String(v);
-    if (typeof v === "boolean") return v ? "true" : "false";
-    return String(v);
-  }
-
-  /**
-   * Format parameter value with unit (for display in summary)
-   */
-  function formatParamValueWithUnit(value, spec) {
-    if (value === undefined || value === null) return "—";
-
-    // Handle enum types - show label instead of value
-    if (spec.type === "enum" && spec.options) {
-      const option = spec.options.find((opt) => {
-        const optValue = typeof opt === "object" ? opt.value : opt;
-        return optValue === value;
-      });
-      if (option) {
-        return typeof option === "object" ? option.label : option;
-      }
-      return String(value);
-    }
-
-    // Handle boolean
-    if (spec.type === "boolean") {
-      return value
-        ? '<i class="icon-check" style="color: var(--success);"></i> Yes'
-        : '<i class="icon-x" style="color: var(--error);"></i> No';
-    }
-
-    // Handle numbers with units
-    if (typeof value === "number") {
-      // Percent type
-      if (spec.type === "percent") {
-        return `${value}%`;
-      }
-      // SOL type
-      if (spec.type === "sol") {
-        return `${value} SOL`;
-      }
-      // Check name for hints about unit
-      const name = (spec.name || "").toLowerCase();
-      if (name.includes("hour")) {
-        return value === 1 ? `${value} hour` : `${value} hours`;
-      }
-      if (name.includes("minute")) {
-        return value === 1 ? `${value} minute` : `${value} minutes`;
-      }
-      if (name.includes("candle") || name.includes("period") || name.includes("lookback")) {
-        return value === 1 ? `${value} candle` : `${value} candles`;
-      }
-      if (name.includes("multiplier") || name.includes("ratio")) {
-        return `${value}×`;
-      }
-      // Default number formatting
-      return value % 1 === 0 ? String(value) : value.toFixed(2);
-    }
-
-    return String(value);
+    const shown = parts.slice(0, 3);
+    if (!shown.length) return I18n.t("strategies-summary-none");
+    return I18n.t("strategies-summary-parts", {
+      count: shown.length,
+      first: shown[0],
+      second: shown[1] ?? "",
+      third: shown[2] ?? "",
+    });
   }
 
   /**
@@ -292,16 +253,18 @@ export function createConditionEditor({
    */
   function renderParamEditor(c, schema, idx) {
     const entries = Object.entries(schema.parameters || {});
-    if (!entries.length) return '<div class="param-row">No parameters</div>';
+    if (!entries.length)
+      return `<div class="param-row">${Utils.escapeHtml(I18n.t("strategies-summary-none"))}</div>`;
     // Basic approach: show all params; could gate last N as advanced in future
     const fields = entries.map(([key, spec]) => {
-      const label = spec.name || key;
+      const label = paramLabel(spec, key);
+      const description = paramDescription(spec);
       const val = c.params[key] ?? spec.default ?? "";
       return `
         <div class="param-field">
           <label>${Utils.escapeHtml(label)}</label>
           ${renderParamInput(idx, key, spec, val)}
-          ${spec.description ? `<div class="property-description">${Utils.escapeHtml(spec.description)}</div>` : ""}
+          ${description ? `<div class="property-description">${Utils.escapeHtml(description)}</div>` : ""}
         </div>
       `;
     });
@@ -321,27 +284,12 @@ export function createConditionEditor({
     switch (spec.type) {
       // A unit is written straight after its input — `ui/number_field.js` builds
       // the numeric shell around both, so no wrapper of our own is needed here.
-      case "percent": {
-        return `<input id="${id}" ${data} type="number" value="${value}" ${min} ${max} ${step} placeholder="0">
-          <span class="input-unit">%</span>`;
-      }
-      case "sol": {
-        return `<input id="${id}" ${data} type="number" value="${value}" ${min} ${max} ${step} placeholder="0">
-          <span class="input-unit">SOL</span>`;
-      }
+      case "percent":
+      case "sol":
       case "number": {
-        // Check if we should add a unit based on the name
-        const name = (spec.name || "").toLowerCase();
-        let unit = "";
-        if (name.includes("hour")) unit = "hrs";
-        else if (name.includes("minute")) unit = "min";
-        else if (name.includes("multiplier")) unit = "×";
-
-        if (unit) {
-          return `<input id="${id}" ${data} type="number" value="${value}" ${min} ${max} ${step} placeholder="0">
-            <span class="input-unit">${unit}</span>`;
-        }
-        return `<input id="${id}" ${data} type="number" value="${value}" ${min} ${max} ${step} placeholder="0">`;
+        const unit = inputUnitText(spec);
+        const input = `<input id="${id}" ${data} type="number" value="${value}" ${min} ${max} ${step} placeholder="0">`;
+        return unit ? `${input}\n          <span class="input-unit">${Utils.escapeHtml(unit)}</span>` : input;
       }
       case "boolean":
         return `<label class="toggle">
@@ -352,10 +300,9 @@ export function createConditionEditor({
         const options = spec.options || spec.values || [];
         const optionsHtml = options
           .map((opt) => {
-            const optValue = typeof opt === "object" ? opt.value : opt;
-            const optLabel = typeof opt === "object" ? opt.label : opt;
+            const optValue = optionValue(opt);
             const selected = optValue === value ? "selected" : "";
-            return `<option value="${Utils.escapeHtml(String(optValue))}" ${selected}>${Utils.escapeHtml(String(optLabel))}</option>`;
+            return `<option value="${Utils.escapeHtml(String(optValue))}" ${selected}>${Utils.escapeHtml(optionLabel(opt))}</option>`;
           })
           .join("");
         return `<select id="${id}" ${data} class="select-field" data-custom-select>${optionsHtml}</select>`;
@@ -395,21 +342,22 @@ export function createConditionEditor({
    */
   function addCondition(conditionType) {
     const schema = conditionSchemas?.[conditionType];
-    if (!schema)
-      return Utils.showToast({
-        type: "error",
-        title: "Unknown Condition",
-        message: "Condition type not found",
-      });
+    if (!schema) {
+      return announce(
+        "error",
+        I18n.t("strategies-toast-unknown-condition"),
+        I18n.attr("strategies-toast-unknown-condition", "message")
+      );
+    }
 
     // Auto-create strategy if none exists (first condition added)
     // Show modal to select type first
     if (!state.currentStrategy) {
-      Utils.showToast({
-        type: "warning",
-        title: "Create Strategy First",
-        message: "Click 'New Strategy' to create a strategy before adding conditions",
-      });
+      announce(
+        "warning",
+        I18n.t("strategies-toast-create-first"),
+        I18n.attr("strategies-toast-create-first", "message")
+      );
       return;
     }
 
@@ -419,17 +367,17 @@ export function createConditionEditor({
     });
     conditions.push({
       type: conditionType,
-      name: schema.name || conditionType,
       enabled: true,
       params,
     });
     renderConditionsList();
     updateRuleTreeFromEditor();
-    Utils.showToast({
-      type: "success",
-      title: "Condition Added",
-      message: `${schema.name || conditionType} added to strategy`,
-    });
+    const args = { name: conditionName(schema, conditionType) };
+    announce(
+      "success",
+      I18n.t("strategies-toast-condition-added", args),
+      I18n.attr("strategies-toast-condition-added", "message", args)
+    );
   }
 
   /**
@@ -491,7 +439,6 @@ export function createConditionEditor({
       });
       conditions.push({
         type: cond.type,
-        name: schema.name || cond.type,
         enabled: true,
         params,
       });
@@ -519,8 +466,6 @@ export function createConditionEditor({
     renderConditionsList,
     renderConditionCard,
     buildConditionSummary,
-    formatParamValue,
-    formatParamValueWithUnit,
     renderParamEditor,
     renderParamInput,
     updateRuleTreeFromEditor,

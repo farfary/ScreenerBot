@@ -107,33 +107,28 @@ impl ConditionEvaluator for PriceToMaCondition {
     fn parameter_schema(&self) -> serde_json::Value {
         json!({
             "type": "PriceToMA",
-            "name": "Price vs Moving Average",
             "category": "Technical Indicators",
             "tags": ["ma", "sma", "trend", "technical"],
             "icon": "icon-chart-line",
             "origin": "strategy",
-            "description": "Check if price is above, below, or within range of its Simple Moving Average",
             "parameters": {
                 "timeframe": {
                     "type": "enum",
-                    "name": "Timeframe",
-                    "description": "Candle timeframe to analyze (defaults to strategy timeframe if not set)",
                     "default": null,
                     "optional": true,
                     "options": [
-                        { "value": "1m", "label": "1 Minute" },
-                        { "value": "5m", "label": "5 Minutes" },
-                        { "value": "15m", "label": "15 Minutes" },
-                        { "value": "1h", "label": "1 Hour" },
-                        { "value": "4h", "label": "4 Hours" },
-                        { "value": "12h", "label": "12 Hours" },
-                        { "value": "1d", "label": "1 Day" }
+                        { "value": "1m" },
+                        { "value": "5m" },
+                        { "value": "15m" },
+                        { "value": "1h" },
+                        { "value": "4h" },
+                        { "value": "12h" },
+                        { "value": "1d" }
                     ]
                 },
                 "period": {
                     "type": "number",
-                    "name": "MA Period",
-                    "description": "Number of candles for moving average calculation",
+                    "unit": "candles",
                     "default": 20,
                     "min": 2,
                     "max": 200,
@@ -141,19 +136,15 @@ impl ConditionEvaluator for PriceToMaCondition {
                 },
                 "position": {
                     "type": "enum",
-                    "name": "Position",
-                    "description": "Price position relative to MA",
                     "default": "ABOVE",
                     "options": [
-                        { "value": "ABOVE", "label": "Above MA" },
-                        { "value": "BELOW", "label": "Below MA" },
-                        { "value": "WITHIN", "label": "Within Range" }
+                        { "value": "ABOVE" },
+                        { "value": "BELOW" },
+                        { "value": "WITHIN" }
                     ]
                 },
                 "distance": {
                     "type": "percent",
-                    "name": "Distance %",
-                    "description": "Minimum distance from MA (for ABOVE/BELOW) or maximum range (for WITHIN)",
                     "default": 2.0,
                     "min": 0.1,
                     "max": 100.0,

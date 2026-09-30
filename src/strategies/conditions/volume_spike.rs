@@ -99,33 +99,28 @@ impl ConditionEvaluator for VolumeSpikeCondition {
     fn parameter_schema(&self) -> serde_json::Value {
         json!({
             "type": "VolumeSpike",
-            "name": "Volume Spike",
             "category": "Volume Analysis",
             "tags": ["volume", "spike", "momentum", "interest"],
             "icon": "icon-chart-bar",
             "origin": "strategy",
-            "description": "Detect volume spikes compared to average volume (indicates increased interest)",
             "parameters": {
                 "timeframe": {
                     "type": "enum",
-                    "name": "Timeframe",
-                    "description": "Candle timeframe to analyze (defaults to strategy timeframe if not set)",
                     "default": null,
                     "optional": true,
                     "options": [
-                        { "value": "1m", "label": "1 Minute" },
-                        { "value": "5m", "label": "5 Minutes" },
-                        { "value": "15m", "label": "15 Minutes" },
-                        { "value": "1h", "label": "1 Hour" },
-                        { "value": "4h", "label": "4 Hours" },
-                        { "value": "12h", "label": "12 Hours" },
-                        { "value": "1d", "label": "1 Day" }
+                        { "value": "1m" },
+                        { "value": "5m" },
+                        { "value": "15m" },
+                        { "value": "1h" },
+                        { "value": "4h" },
+                        { "value": "12h" },
+                        { "value": "1d" }
                     ]
                 },
                 "lookback": {
                     "type": "number",
-                    "name": "Lookback Period",
-                    "description": "Number of candles to calculate average volume",
+                    "unit": "candles",
                     "default": 20,
                     "min": 2,
                     "max": 100,
@@ -133,8 +128,7 @@ impl ConditionEvaluator for VolumeSpikeCondition {
                 },
                 "multiplier": {
                     "type": "number",
-                    "name": "Volume Multiplier",
-                    "description": "How many times above average (e.g., 2.0 = 200% of average)",
+                    "unit": "multiplier",
                     "default": 2.0,
                     "min": 1.0,
                     "max": 50.0,

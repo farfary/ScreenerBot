@@ -1,8 +1,3 @@
-# Copy button for a token mint address, shared by the token and position details dialogs.
-tokens-copy-mint =
-    .title = Copy mint address
-    .aria-label = Copy mint address
-
 # Token data source status. Ids come from build_source_status in
 # src/webserver/routes/tokens/source_status.rs. $label is a provider name and is
 # not translated.

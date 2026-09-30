@@ -963,7 +963,7 @@ export class TokenDetailsDialog {
                 <button class="dialog-header-action favorite-btn" id="favoriteBtn" title="${esc(I18n.t("menu-favorite-add"))}" aria-label="${esc(I18n.t("menu-favorite-add"))}" type="button">
                   <i class="icon-star"></i>
                 </button>
-                <button class="dialog-header-action" id="copyMintBtn" title="${esc(I18n.attr("tokens-copy-mint", "title"))}" aria-label="${esc(I18n.attr("tokens-copy-mint", "aria-label"))}" type="button">
+                <button class="dialog-header-action" id="copyMintBtn" title="${esc(I18n.attr("links-copy-mint", "title"))}" aria-label="${esc(I18n.attr("links-copy-mint", "aria-label"))}" type="button">
                   <i class="icon-copy"></i>
                 </button>
                 <a href="https://solscan.io/token/${this._escapeHtml(this.tokenData.mint)}" target="_blank" rel="noopener noreferrer" class="dialog-header-action" title="${esc(I18n.t("links-view-solscan"))}" aria-label="${esc(I18n.t("links-view-solscan"))}">

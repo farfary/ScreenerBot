@@ -130,3 +130,43 @@ impl fmt::Display for FilterRejectionReason {
         write!(f, "{}", self.label())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::FilterSource;
+
+    /// Catalog key of the label for each source. The match is exhaustive, so a new
+    /// variant fails to compile until it is mapped here and in
+    /// `REJECTION_SOURCE_LABELS` (pages/filtering/config_metadata.js).
+    fn label_key(source: FilterSource) -> &'static str {
+        match source {
+            FilterSource::Core => "filtering-source-core",
+            FilterSource::OnChain => "filtering-source-onchain",
+            FilterSource::DexScreener => "filtering-source-dexscreener",
+            FilterSource::GeckoTerminal => "filtering-source-geckoterminal",
+            FilterSource::Rugcheck => "filtering-source-rugcheck",
+            FilterSource::LlmAnalysis => "filtering-source-llm-analysis",
+        }
+    }
+
+    #[test]
+    fn source_labels_exist_in_the_catalog() {
+        for source in [
+            FilterSource::Core,
+            FilterSource::OnChain,
+            FilterSource::DexScreener,
+            FilterSource::GeckoTerminal,
+            FilterSource::Rugcheck,
+            FilterSource::LlmAnalysis,
+        ] {
+            let key = label_key(source);
+            assert_eq!(
+                key,
+                format!("filtering-source-{}", source.as_str().replace('_', "-")),
+                "key does not follow the id {}",
+                source.as_str()
+            );
+            assert_ne!(crate::i18n::format_en(key, None), key, "missing {key}");
+        }
+    }
+}

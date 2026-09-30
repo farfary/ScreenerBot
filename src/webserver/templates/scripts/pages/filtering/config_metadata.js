@@ -6,39 +6,69 @@
  * amount of grouping logic unique to the filtering workspace.
  */
 
-import { formatTimestamp } from "../../core/format.js";
+import { formatTimeAgo, formatTimestamp } from "../../core/format.js";
 import {
   categoryLabel,
   fieldHint,
   fieldLabel,
+  fieldSubject,
   fieldUnit,
 } from "../config/field_text.js";
 
-export const FILTER_TABS = [
-  { id: "status", label: '<i class="icon-chart-bar"></i> Status' },
-  { id: "analytics", label: '<i class="icon-chart-pie"></i> Analytics' },
-  { id: "explorer", label: '<i class="icon-folder"></i> Explorer' },
-  { id: "meta", label: '<i class="icon-settings"></i> Core' },
-  { id: "onchain", label: '<i class="icon-shield"></i> On-Chain' },
-  { id: "dexscreener", label: '<i class="icon-trending-up"></i> DexScreener' },
-  { id: "geckoterminal", label: '<i class="icon-trending-up"></i> GeckoTerminal' },
-  { id: "rugcheck", label: '<i class="icon-shield"></i> RugCheck' },
-];
+// Ids are the settings sub-tabs: the `meta` (core) settings and the sources of the
+// filtering config.
+export const SOURCE_LABELS = Object.freeze({
+  meta: "filtering-source-core",
+  onchain: "filtering-source-onchain",
+  dexscreener: "filtering-source-dexscreener",
+  geckoterminal: "filtering-source-geckoterminal",
+  rugcheck: "filtering-source-rugcheck",
+});
+
+// Ids are `FilterSource::as_str` (src/filtering/sources/mod.rs), as sent by the
+// rejection statistics.
+export const REJECTION_SOURCE_LABELS = Object.freeze({
+  core: "filtering-source-core",
+  onchain: "filtering-source-onchain",
+  dexscreener: "filtering-source-dexscreener",
+  geckoterminal: "filtering-source-geckoterminal",
+  rugcheck: "filtering-source-rugcheck",
+  llm_analysis: "filtering-source-llm-analysis",
+});
+
+// Ids are the keys of TIME_RANGE_PRESETS.
+export const TIME_RANGE_LABELS = Object.freeze({
+  "1h": "filtering-range-1h",
+  "6h": "filtering-range-6h",
+  "24h": "filtering-range-24h",
+  "7d": "filtering-range-7d",
+  all: "filtering-range-all",
+});
+
+/**
+ * The sub-tabs, each labelled with its icon and localized name. `escapeHtml` escapes the
+ * name, which the tab bar inserts as markup.
+ */
+export function buildFilterTabs(escapeHtml) {
+  const tab = (id, icon, name) => ({ id, label: `<i class="${icon}"></i> ${escapeHtml(name)}` });
+  return [
+    tab("status", "icon-chart-bar", I18n.t("filtering-tab-status")),
+    tab("analytics", "icon-chart-pie", I18n.t("filtering-tab-analytics")),
+    tab("explorer", "icon-folder", I18n.t("filtering-tab-explorer")),
+    tab("meta", "icon-settings", I18n.label(SOURCE_LABELS, "meta")),
+    tab("onchain", "icon-shield", I18n.label(SOURCE_LABELS, "onchain")),
+    tab("dexscreener", "icon-trending-up", I18n.label(SOURCE_LABELS, "dexscreener")),
+    tab("geckoterminal", "icon-trending-up", I18n.label(SOURCE_LABELS, "geckoterminal")),
+    tab("rugcheck", "icon-shield", I18n.label(SOURCE_LABELS, "rugcheck")),
+  ];
+}
 
 export const TIME_RANGE_PRESETS = {
-  "1h": { label: "1H", seconds: 60 * 60 },
-  "6h": { label: "6H", seconds: 6 * 60 * 60 },
-  "24h": { label: "24H", seconds: 24 * 60 * 60 },
-  "7d": { label: "7D", seconds: 7 * 24 * 60 * 60 },
-  all: { label: "All", seconds: null },
-};
-
-export const SOURCE_LABELS = {
-  meta: "Core",
-  onchain: "On-Chain",
-  dexscreener: "DexScreener",
-  geckoterminal: "GeckoTerminal",
-  rugcheck: "RugCheck",
+  "1h": { seconds: 60 * 60 },
+  "6h": { seconds: 6 * 60 * 60 },
+  "24h": { seconds: 24 * 60 * 60 },
+  "7d": { seconds: 7 * 24 * 60 * 60 },
+  all: { seconds: null },
 };
 
 /** The sub-tabs that edit configuration; the rest read filtering results. */
@@ -67,13 +97,6 @@ const TIMEFRAME_RANK = {
 function boundOf(key) {
   const match = /^(min|max)_(.+)$/.exec(key);
   return match ? { bound: match[1], subject: match[2] } : null;
-}
-
-/** "Min Liquidity" and "Max Liquidity" are the same subject: "Liquidity". */
-function subjectLabel(label) {
-  return String(label || "")
-    .replace(/^(min|max|minimum|maximum)\s+/i, "")
-    .trim();
 }
 
 function timeframeRank(subject) {
@@ -105,12 +128,13 @@ function buildRows(fields) {
     const partner = bound
       ? byKey.get(`${bound.bound === "min" ? "max" : "min"}_${bound.subject}`)
       : undefined;
+    // The lower bound's catalog message names the shared subject ("Liquidity") in `.subject`.
     const pairable =
       bound &&
       partner &&
       partner.type === field.type &&
       field.type !== "boolean" &&
-      subjectLabel(field.label) === subjectLabel(partner.label);
+      Boolean(bound.bound === "min" ? field.subject : partner.subject);
 
     if (pairable) {
       const [min, max] = bound.bound === "min" ? [field, partner] : [partner, field];
@@ -120,7 +144,7 @@ function buildRows(fields) {
         kind: "range",
         key: `${min.key}+${max.key}`,
         subject: bound.subject,
-        label: subjectLabel(min.label),
+        label: min.subject,
         hint: min.hint || max.hint,
         unit: min.unit || max.unit,
         impact: strongerImpact(min.impact, max.impact),
@@ -160,6 +184,7 @@ function withCatalogText(key, metadata) {
     key,
     catalogKey: metadata.key,
     label: fieldLabel(metadata.key),
+    subject: fieldSubject(metadata.key),
     hint: fieldHint(metadata.key),
     unit: fieldUnit(metadata.key),
   };
@@ -239,21 +264,23 @@ export function formatTimestampForInput(timestamp) {
 
 export function getTimeRangeLabel(timeRange) {
   const { preset, startTime, endTime } = timeRange;
-  if (preset === "all" || (!startTime && !endTime)) return "All Time";
+  if (preset === "all" || (!startTime && !endTime)) return I18n.t("filtering-range-all-time");
   if (preset === "custom") {
     const start = startTime ? formatTimestamp(startTime) : "∞";
-    const end = endTime ? formatTimestamp(endTime) : "Now";
-    return `${start} → ${end}`;
+    const end = endTime ? formatTimestamp(endTime) : I18n.t("filtering-range-now");
+    return I18n.t("filtering-range-span", { start, end });
   }
-  return TIME_RANGE_PRESETS[preset]?.label || "Custom";
+  return Object.hasOwn(TIME_RANGE_PRESETS, preset)
+    ? I18n.label(TIME_RANGE_LABELS, preset)
+    : I18n.t("filtering-range-custom");
 }
 
-export function getStatusMessage({ isSaving, isRefreshing, hasChanges, lastSaved, Utils }) {
-  if (isSaving) return "Saving changes...";
-  if (isRefreshing) return "Refreshing snapshot...";
-  if (hasChanges) return "Unsaved changes pending";
-  if (lastSaved) return `Last saved ${Utils.formatTimeAgo(lastSaved)}`;
-  return "Configuration in sync";
+export function getStatusMessage({ isSaving, isRefreshing, hasChanges, lastSaved }) {
+  if (isSaving) return I18n.t("filtering-footer-saving");
+  if (isRefreshing) return I18n.t("filtering-footer-refreshing");
+  if (hasChanges) return I18n.t("filtering-footer-unsaved");
+  if (lastSaved) return I18n.t("filtering-footer-last-saved", { time: formatTimeAgo(lastSaved) });
+  return I18n.t("filtering-footer-in-sync");
 }
 
 /** The schema's declared default for one field, or `undefined` if it has none. */

@@ -79,10 +79,6 @@ pub enum Error {
     /// A position-detail key was not a valid position identifier.
     #[error("{detail}")]
     InvalidPositionKey { detail: String },
-
-    /// A stored strategy template could not be read or decoded.
-    #[error("{detail}")]
-    TemplateDecode { detail: String },
 }
 
 /// Result alias for the webserver module.
@@ -106,7 +102,7 @@ impl ErrorClass for Error {
             | Error::ServiceStartup { .. }
             | Error::ExternalFeed { .. }
             | Error::Api { .. } => true,
-            Error::InvalidPositionKey { .. } | Error::TemplateDecode { .. } => false,
+            Error::InvalidPositionKey { .. } => false,
         }
     }
 
@@ -124,8 +120,7 @@ impl ErrorClass for Error {
             | Error::UnknownConfigKey { .. }
             | Error::InvalidUiState { .. }
             | Error::InvalidLockscreenPassword { .. }
-            | Error::InvalidPositionKey { .. }
-            | Error::TemplateDecode { .. } => None,
+            | Error::InvalidPositionKey { .. } => None,
             Error::InvalidInitialization { .. } => None,
         }
     }
@@ -140,8 +135,7 @@ impl ErrorClass for Error {
             | Error::TotpQrCode { .. }
             | Error::ServiceStartup { .. }
             | Error::ExternalFeed { .. }
-            | Error::Api { .. }
-            | Error::TemplateDecode { .. } => Severity::Error,
+            | Error::Api { .. } => Severity::Error,
             Error::InvalidTotpCode
             | Error::InvalidImport { .. }
             | Error::UnknownConfigKey { .. }
@@ -169,8 +163,7 @@ impl ErrorClass for Error {
             | Error::TotpQrCode { .. }
             | Error::ServiceStartup { .. }
             | Error::ExternalFeed { .. }
-            | Error::Api { .. }
-            | Error::TemplateDecode { .. } => 500,
+            | Error::Api { .. } => 500,
         }
     }
 }

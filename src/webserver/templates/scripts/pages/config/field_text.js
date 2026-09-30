@@ -2,8 +2,8 @@
  * Display text of configuration fields, read from the localization catalog.
  *
  * `/api/config/metadata` carries each field's catalog key (`config-<section>-
- * <field>...`). The label is the message value; `hint`, `unit` and
- * `placeholder` are message attributes. The metadata carries category and
+ * <field>...`). The label is the message value; `hint`, `unit`, `placeholder`
+ * and `subject` are message attributes. The metadata carries category and
  * impact as ids; their names are `config-category-<id>` and
  * `config-impact-<id>` messages.
  *
@@ -28,6 +28,14 @@ export function fieldHint(key) {
 /** Unit of a field's value, or `undefined`. */
 export function fieldUnit(key) {
   return fieldAttribute(key, "unit");
+}
+
+/**
+ * Name of the parameter a lower bound shares with its upper bound ("Liquidity" for
+ * "Min Liquidity" and "Max Liquidity"), or `undefined` for a field without a pair.
+ */
+export function fieldSubject(key) {
+  return fieldAttribute(key, "subject");
 }
 
 /** Input placeholder of a field, or `undefined`. */

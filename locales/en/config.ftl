@@ -1,4 +1,5 @@
 # Configuration field labels. Generated once from the schema metadata; edited here from now on.
+# Attributes: `.hint`, `.unit`, `.placeholder`, and `.subject` on the lower bound of a min/max pair (the parameter both bounds share).
 
 ## account
 
@@ -145,24 +146,31 @@ config-filtering-dexscreener-max-price-change-m5 = Max Price Change 5m
     .hint = Maximum 5 minute price change %
     .unit = %
 config-filtering-dexscreener-min-fdv-usd = Min FDV
+    .subject = FDV
     .hint = Minimum fully diluted valuation in USD
     .unit = USD
 config-filtering-dexscreener-min-liquidity-usd = Min Liquidity
+    .subject = Liquidity
     .hint = $1 very low, $1000+ for serious trading
     .unit = USD
 config-filtering-dexscreener-min-market-cap-usd = Min Market Cap
+    .subject = Market Cap
     .hint = $1000 filters micro-cap tokens
     .unit = USD
 config-filtering-dexscreener-min-price-change-h1 = Min Price Change 1h
+    .subject = Price Change 1h
     .hint = Minimum 1h price change % (negative = dump filter)
     .unit = %
 config-filtering-dexscreener-min-price-change-h24 = Min Price Change 24h
+    .subject = Price Change 24h
     .hint = Minimum 24h price change %
     .unit = %
 config-filtering-dexscreener-min-price-change-h6 = Min Price Change 6h
+    .subject = Price Change 6h
     .hint = Minimum 6h price change %
     .unit = %
 config-filtering-dexscreener-min-price-change-m5 = Min Price Change 5m
+    .subject = Price Change 5m
     .hint = Minimum 5 minute price change %
     .unit = %
 config-filtering-dexscreener-min-transactions-1h = Min TX (1h)
@@ -224,21 +232,27 @@ config-filtering-geckoterminal-max-price-change-m5 = Max Price Change 5m
     .hint = Maximum 5 minute price change %
     .unit = %
 config-filtering-geckoterminal-min-liquidity-usd = Min Liquidity
+    .subject = Liquidity
     .hint = Minimum liquidity in USD
     .unit = USD
 config-filtering-geckoterminal-min-market-cap-usd = Min Market Cap
+    .subject = Market Cap
     .hint = Minimum market cap in USD
     .unit = USD
 config-filtering-geckoterminal-min-pool-count = Min Pool Count
+    .subject = Pool Count
     .hint = Minimum number of pools tracked
     .unit = pools
 config-filtering-geckoterminal-min-price-change-h1 = Min Price Change 1h
+    .subject = Price Change 1h
     .hint = Minimum 1 hour price change %
     .unit = %
 config-filtering-geckoterminal-min-price-change-h24 = Min Price Change 24h
+    .subject = Price Change 24h
     .hint = Minimum 24 hour price change %
     .unit = %
 config-filtering-geckoterminal-min-price-change-m5 = Min Price Change 5m
+    .subject = Price Change 5m
     .hint = Minimum 5 minute price change %
     .unit = %
 config-filtering-geckoterminal-min-reserve-usd = Min Reserve USD

@@ -69,17 +69,14 @@ impl ConditionEvaluator for PositionHoldingTimeCondition {
     fn parameter_schema(&self) -> serde_json::Value {
         json!({
             "type": "PositionHoldingTime",
-            "name": "Position Holding Time",
             "category": "Position & Performance",
             "tags": ["position", "time", "duration", "exit"],
             "icon": "icon-hourglass",
             "origin": "strategy",
-            "description": "Check how long a position has been held (for exit strategies - time-based exits)",
             "parameters": {
                 "hours": {
                     "type": "number",
-                    "name": "Time Threshold (Hours)",
-                    "description": "Duration in hours since position opened",
+                    "unit": "hours",
                     "default": 1.0,
                     "min": 0.0,
                     "max": 720.0,
@@ -87,14 +84,12 @@ impl ConditionEvaluator for PositionHoldingTimeCondition {
                 },
                 "comparison": {
                     "type": "enum",
-                    "name": "Comparison",
-                    "description": "How to compare position age to threshold",
                     "default": "GREATER_THAN",
                     "options": [
-                        { "value": "GREATER_THAN", "label": "Older Than (>)" },
-                        { "value": "GREATER_EQUAL", "label": "At Least (≥)" },
-                        { "value": "LESS_THAN", "label": "Younger Than (<)" },
-                        { "value": "LESS_EQUAL", "label": "At Most (≤)" }
+                        { "value": "GREATER_THAN" },
+                        { "value": "GREATER_EQUAL" },
+                        { "value": "LESS_THAN" },
+                        { "value": "LESS_EQUAL" }
                     ]
                 }
             }

@@ -247,7 +247,7 @@ function renderResults() {
         <button class="btn-icon btn-icon-sm search-action-btn action-blacklist" data-action="blacklist" title="${escapeHTML(I18n.attr("tokens-search-action-blacklist", "title"))}" aria-label="${escapeHTML(I18n.attr("tokens-search-action-blacklist", "aria-label"))}">
           <i class="icon-slash"></i>
         </button>
-        <button class="btn-icon btn-icon-sm search-action-btn" data-action="copy" title="${escapeHTML(I18n.attr("tokens-copy-mint", "title"))}" aria-label="${escapeHTML(I18n.attr("tokens-copy-mint", "aria-label"))}">
+        <button class="btn-icon btn-icon-sm search-action-btn" data-action="copy" title="${escapeHTML(I18n.attr("links-copy-mint", "title"))}" aria-label="${escapeHTML(I18n.attr("links-copy-mint", "aria-label"))}">
           <i class="icon-copy"></i>
         </button>
         <button class="btn-icon btn-icon-sm search-action-btn" data-action="view" title="${escapeHTML(I18n.attr("links-view-dexscreener", "title"))}" aria-label="${escapeHTML(I18n.attr("links-view-dexscreener", "aria-label"))}">

@@ -12,7 +12,6 @@ mod crud;
 mod deployment;
 mod performance;
 mod schemas;
-mod templates;
 mod testing;
 mod types;
 mod utils;
@@ -38,7 +37,6 @@ pub fn routes() -> Router<Arc<AppState>> {
         // Condition schemas
         .route("/conditions/schemas", get(schemas::get_condition_schemas))
         // Templates
-        .route("/templates", get(templates::list_templates))
         // Routes with path parameters (must come after static routes)
         .route("/{id}/enabled", patch(crud::set_strategy_enabled_handler))
         .route(

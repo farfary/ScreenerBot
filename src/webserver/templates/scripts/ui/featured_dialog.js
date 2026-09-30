@@ -476,7 +476,7 @@ class FeaturedDialog {
       <button class="feat-card-link" data-action="solscan" data-mint="${safeMint}" title="${this._escapeHtml(I18n.t("links-explorer-solscan"))}">
         <i class="icon-search"></i>
       </button>
-      <button class="feat-card-link" data-action="copy" data-mint="${safeMint}" title="${this._escapeHtml(I18n.attr("tokens-copy-mint", "title"))}">
+      <button class="feat-card-link" data-action="copy" data-mint="${safeMint}" title="${this._escapeHtml(I18n.attr("links-copy-mint", "title"))}">
         <i class="icon-copy"></i>
       </button>
     `;

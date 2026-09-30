@@ -141,45 +141,37 @@ impl ConditionEvaluator for CandleSizeCondition {
     fn parameter_schema(&self) -> serde_json::Value {
         json!({
             "type": "CandleSize",
-            "name": "Candle Size Pattern",
             "category": "Candle Patterns",
             "tags": ["candles", "pattern", "doji", "wick"],
             "icon": "icon-expand",
             "origin": "strategy",
-            "description": "Detect specific candle patterns: large body, small body (doji), long wicks",
             "parameters": {
                 "timeframe": {
                     "type": "enum",
-                    "name": "Timeframe",
-                    "description": "Candle timeframe to analyze (defaults to strategy timeframe if not set)",
                     "default": null,
                     "optional": true,
                     "options": [
-                        { "value": "1m", "label": "1 Minute" },
-                        { "value": "5m", "label": "5 Minutes" },
-                        { "value": "15m", "label": "15 Minutes" },
-                        { "value": "1h", "label": "1 Hour" },
-                        { "value": "4h", "label": "4 Hours" },
-                        { "value": "12h", "label": "12 Hours" },
-                        { "value": "1d", "label": "1 Day" }
+                        { "value": "1m" },
+                        { "value": "5m" },
+                        { "value": "15m" },
+                        { "value": "1h" },
+                        { "value": "4h" },
+                        { "value": "12h" },
+                        { "value": "1d" }
                     ]
                 },
                 "pattern": {
                     "type": "enum",
-                    "name": "Pattern Type",
-                    "description": "Candle pattern to detect",
                     "default": "LARGE_BODY",
                     "options": [
-                        { "value": "LARGE_BODY", "label": "Large Body (Strong Move)" },
-                        { "value": "SMALL_BODY", "label": "Small Body (Doji/Indecision)" },
-                        { "value": "LONG_UPPER_WICK", "label": "Long Upper Wick (Rejection)" },
-                        { "value": "LONG_LOWER_WICK", "label": "Long Lower Wick (Support)" }
+                        { "value": "LARGE_BODY" },
+                        { "value": "SMALL_BODY" },
+                        { "value": "LONG_UPPER_WICK" },
+                        { "value": "LONG_LOWER_WICK" }
                     ]
                 },
                 "threshold": {
                     "type": "percent",
-                    "name": "Size Threshold %",
-                    "description": "Percentage threshold for pattern detection",
                     "default": 50.0,
                     "min": 10.0,
                     "max": 100.0,

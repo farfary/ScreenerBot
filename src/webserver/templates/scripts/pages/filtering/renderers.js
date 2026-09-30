@@ -5,6 +5,7 @@
  * Uses factory pattern to get access to state and dependencies.
  */
 
+import { impactLabel } from "../config/field_text.js";
 import {
   buildConfigGroups,
   formatTimestampForInput,
@@ -15,8 +16,11 @@ import {
   getSourceEnabled,
   getSourceMasterField,
   getFieldDefault,
+  REJECTION_SOURCE_LABELS,
   SETTINGS_TABS,
   SOURCE_LABELS,
+  TIME_RANGE_LABELS,
+  TIME_RANGE_PRESETS,
 } from "./config_metadata.js";
 
 let reasonClickBound = false;
@@ -61,7 +65,22 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
   // be handed to a time formatter — the state has to be read, not inferred.
   function refreshedLabel(updatedAt, snapshotState = state.stats?.snapshot_state) {
     if (updatedAt) return Utils.formatTimeAgo(new Date(updatedAt));
-    return snapshotState === "building" ? "Building…" : "Never";
+    return snapshotState === "building"
+      ? I18n.t("filtering-refresh-building")
+      : I18n.t("filtering-refresh-never");
+  }
+
+  // A count followed by its share of the total, e.g. "120 (4.0%)".
+  function countWithShare(count, share) {
+    return I18n.t("filtering-count-share", {
+      count: Utils.formatNumber(count, 0),
+      share: Utils.formatPercentValue(share, { includeSign: false, decimals: 1 }),
+    });
+  }
+
+  // The token count line of a chart bar, e.g. "120 tokens".
+  function tokensCount(count) {
+    return I18n.t("filtering-tokens-count", { count, amount: Utils.formatNumber(count, 0) });
   }
 
   function renderInfoBar() {
@@ -82,34 +101,36 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
 
     return `
       <div class="info-item highlight">
-        <span class="label">Total:</span>
+        <span class="label">${Utils.escapeHtml(I18n.t("filtering-info-total"))}</span>
         <span class="value">${Utils.escapeHtml(Utils.formatNumber(total_tokens, 0))}</span>
       </div>
       <div class="info-item">
-        <span class="label">Priced:</span>
-        <span class="value">${Utils.escapeHtml(Utils.formatNumber(with_pool_price, 0))} (${Utils.escapeHtml(Utils.formatPercentValue(priceRate, { includeSign: false, decimals: 1 }))})</span>
+        <span class="label">${Utils.escapeHtml(I18n.t("filtering-info-priced"))}</span>
+        <span class="value">${Utils.escapeHtml(countWithShare(with_pool_price, priceRate))}</span>
       </div>
       <div class="info-item highlight">
-        <span class="label">Passed:</span>
-        <span class="value">${Utils.escapeHtml(Utils.formatNumber(passed_filtering, 0))} (${Utils.escapeHtml(Utils.formatPercentValue(passedRate, { includeSign: false, decimals: 1 }))})</span>
+        <span class="label">${Utils.escapeHtml(I18n.t("filtering-info-passed"))}</span>
+        <span class="value">${Utils.escapeHtml(countWithShare(passed_filtering, passedRate))}</span>
       </div>
       <div class="info-item">
-        <span class="label">Positions:</span>
+        <span class="label">${Utils.escapeHtml(I18n.t("filtering-info-positions"))}</span>
         <span class="value">${Utils.escapeHtml(Utils.formatNumber(open_positions, 0))}</span>
       </div>
       <div class="info-item warning">
-        <span class="label">Blacklisted:</span>
+        <span class="label">${Utils.escapeHtml(I18n.t("filtering-info-blacklisted"))}</span>
         <span class="value">${Utils.escapeHtml(Utils.formatNumber(blacklisted, 0))}</span>
       </div>
       <div class="info-item">
-        <span class="label">Cache:</span>
+        <span class="label">${Utils.escapeHtml(I18n.t("filtering-info-cache"))}</span>
         <span class="value">${Utils.escapeHtml(cacheAge)}</span>
       </div>
   `;
   }
 
   function renderStatusView() {
-    if (!state.stats) return '<div class="filtering-config-empty">Loading statistics...</div>';
+    if (!state.stats) {
+      return `<div class="filtering-config-empty">${Utils.escapeHtml(I18n.t("filtering-status-loading"))}</div>`;
+    }
 
     const {
       total_tokens,
@@ -128,50 +149,56 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
     // While the snapshot builds, every metric card below shows "—" (its value is null) and
     // this line says why, instead of the cards asserting a corpus of zero tokens.
     const cacheDetail = building
-      ? "Snapshot building — counts land on the next refresh"
-      : "In filtering cache";
+      ? I18n.t("filtering-status-total-detail-building")
+      : I18n.t("filtering-status-total-detail");
+    const refreshDetail = updated_at
+      ? Utils.formatTimestamp(updated_at)
+      : building
+        ? I18n.t("filtering-status-refresh-building")
+        : I18n.t("filtering-status-refresh-none");
+    const shareText = (rate) => Utils.formatPercentValue(rate, { includeSign: false, decimals: 1 });
 
     const metricsHtml = `
       <div class="status-view">
         <div class="metric-card" data-accent="primary">
-          <span class="metric-label">Total Tokens</span>
+          <span class="metric-label">${Utils.escapeHtml(I18n.t("filtering-status-total"))}</span>
           <span class="metric-value">${Utils.formatNumber(total_tokens, 0)}</span>
           <span class="metric-detail">${Utils.escapeHtml(cacheDetail)}</span>
         </div>
         <div class="metric-card">
-          <span class="metric-label">With Price</span>
+          <span class="metric-label">${Utils.escapeHtml(I18n.t("filtering-status-priced"))}</span>
           <span class="metric-value">${Utils.formatNumber(with_pool_price, 0)}</span>
-          <span class="metric-detail">${Utils.formatPercentValue(priceRate, { includeSign: false, decimals: 1 })} have pricing</span>
+          <span class="metric-detail">${Utils.escapeHtml(I18n.t("filtering-status-priced-detail", { share: shareText(priceRate) }))}</span>
         </div>
         <div class="metric-card" data-accent="primary">
-          <span class="metric-label">Passed Filters</span>
+          <span class="metric-label">${Utils.escapeHtml(I18n.t("filtering-status-passed"))}</span>
           <span class="metric-value">${Utils.formatNumber(passed_filtering, 0)}</span>
-          <span class="metric-detail">${Utils.formatPercentValue(passedRate, { includeSign: false, decimals: 1 })} passed</span>
+          <span class="metric-detail">${Utils.escapeHtml(I18n.t("filtering-status-passed-detail", { share: shareText(passedRate) }))}</span>
         </div>
         <div class="metric-card">
-          <span class="metric-label">Open Positions</span>
+          <span class="metric-label">${Utils.escapeHtml(I18n.t("filtering-status-positions"))}</span>
           <span class="metric-value">${Utils.formatNumber(open_positions, 0)}</span>
-          <span class="metric-detail">Active trades</span>
+          <span class="metric-detail">${Utils.escapeHtml(I18n.t("filtering-status-positions-detail"))}</span>
         </div>
         <div class="metric-card" data-accent="warning">
-          <span class="metric-label">Blacklisted</span>
+          <span class="metric-label">${Utils.escapeHtml(I18n.t("filtering-status-blacklisted"))}</span>
           <span class="metric-value">${Utils.formatNumber(blacklisted, 0)}</span>
-          <span class="metric-detail">Flagged tokens</span>
+          <span class="metric-detail">${Utils.escapeHtml(I18n.t("filtering-status-blacklisted-detail"))}</span>
         </div>
         <div class="metric-card">
-          <span class="metric-label">With OHLCV</span>
+          <span class="metric-label">${Utils.escapeHtml(I18n.t("filtering-status-ohlcv"))}</span>
           <span class="metric-value">${Utils.formatNumber(with_ohlcv, 0)}</span>
-          <span class="metric-detail">Historical data</span>
+          <span class="metric-detail">${Utils.escapeHtml(I18n.t("filtering-status-ohlcv-detail"))}</span>
         </div>
         <div class="metric-card">
-          <span class="metric-label">Last Refresh</span>
+          <span class="metric-label">${Utils.escapeHtml(I18n.t("filtering-status-refresh"))}</span>
           <span class="metric-value">${Utils.escapeHtml(refreshedLabel(updated_at))}</span>
-          <span class="metric-detail">${updated_at ? Utils.escapeHtml(Utils.formatTimestamp(updated_at)) : building ? "First snapshot in progress" : "No refresh yet"}</span>
+          <span class="metric-detail">${Utils.escapeHtml(refreshDetail)}</span>
         </div>
       </div>
     `;
 
-    let rejectionHtml = '<div class="status-rejection-empty">No rejection data available</div>';
+    let rejectionHtml = `<div class="status-rejection-empty">${Utils.escapeHtml(I18n.t("filtering-status-no-rejections"))}</div>`;
 
     if (state.rejectionStats?.stats?.length > 0) {
       const bySource = state.rejectionStats.by_source || {};
@@ -183,7 +210,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
         .map(
           ([src, cnt]) => `
           <div class="rej-source-pill ${Utils.escapeHtml(src)}">
-            <span class="rej-source-name">${Utils.escapeHtml(src)}</span>
+            <span class="rej-source-name">${Utils.escapeHtml(I18n.label(REJECTION_SOURCE_LABELS, src))}</span>
             <span class="rej-source-count">${Utils.formatNumber(cnt, 0)}</span>
           </div>`
         )
@@ -196,8 +223,8 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
           <div class="rejection-item">
             <div class="rej-bar" style="width: ${barWidth}%"></div>
             <span class="rej-label">${Utils.escapeHtml(reasonLabel({ reason, reason_text }))}</span>
-            <span class="rej-source-tag ${Utils.escapeHtml(source)}">${Utils.escapeHtml(source)}</span>
-            <span class="rej-count">${Utils.formatNumber(count, 0)}</span>
+            <span class="rej-source-tag ${Utils.escapeHtml(source)}">${Utils.escapeHtml(I18n.label(REJECTION_SOURCE_LABELS, source))}</span>
+            <span class="rej-count">${Utils.Utils.formatNumber(count, 0)}</span>
           </div>`;
         })
         .join("");
@@ -223,7 +250,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
   function renderAnalyticsView() {
     // Show loading state when switching time ranges or initially loading
     if (state.isLoadingAnalytics || !state.analytics) {
-      return `<div class="loading-spinner">Loading analytics for ${getTimeRangeLabel(state.timeRange)}…</div>`;
+      return `<div class="loading-spinner">${Utils.escapeHtml(I18n.t("filtering-analytics-loading", { range: getTimeRangeLabel(state.timeRange) }))}</div>`;
     }
 
     const data = state.analytics;
@@ -232,15 +259,16 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
     const headerHtml = `
     <div class="time-range-filter">
       <div class="time-range-presets">
-        <button class="time-preset-btn ${state.timeRange.preset === "1h" ? "active" : ""}" onclick="window.filteringPage.setTimeRangePreset('1h')">1H</button>
-        <button class="time-preset-btn ${state.timeRange.preset === "6h" ? "active" : ""}" onclick="window.filteringPage.setTimeRangePreset('6h')">6H</button>
-        <button class="time-preset-btn ${state.timeRange.preset === "24h" ? "active" : ""}" onclick="window.filteringPage.setTimeRangePreset('24h')">24H</button>
-        <button class="time-preset-btn ${state.timeRange.preset === "7d" ? "active" : ""}" onclick="window.filteringPage.setTimeRangePreset('7d')">7D</button>
-        <button class="time-preset-btn ${state.timeRange.preset === "all" ? "active" : ""}" onclick="window.filteringPage.setTimeRangePreset('all')">All</button>
+        ${Object.keys(TIME_RANGE_PRESETS)
+          .map(
+            (preset) =>
+              `<button class="time-preset-btn ${state.timeRange.preset === preset ? "active" : ""}" onclick="window.filteringPage.setTimeRangePreset('${preset}')">${Utils.escapeHtml(I18n.label(TIME_RANGE_LABELS, preset))}</button>`
+          )
+          .join("")}
       </div>
       <div class="time-range-custom">
         <div class="custom-range-toggle ${state.timeRange.preset === "custom" ? "active" : ""}" onclick="window.filteringPage.toggleCustomRange()">
-          <i class="icon-calendar"></i> Custom
+          <i class="icon-calendar"></i> ${Utils.escapeHtml(I18n.t("filtering-range-custom"))}
         </div>
         <div class="custom-range-inputs ${state.timeRange.preset === "custom" ? "show" : ""}">
           <input type="datetime-local" id="time-range-start" class="time-input" 
@@ -250,7 +278,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
           <input type="datetime-local" id="time-range-end" class="time-input" 
             value="${formatTimestampForInput(state.timeRange.endTime)}"
             onchange="window.filteringPage.updateCustomRange()">
-          <button class="btn btn-sm btn-primary" onclick="window.filteringPage.applyCustomRange()">Apply</button>
+          <button class="btn btn-sm btn-primary" onclick="window.filteringPage.applyCustomRange()">${Utils.escapeHtml(I18n.t("common-action-apply"))}</button>
         </div>
       </div>
     </div>
@@ -262,10 +290,10 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
       <!-- Total Tokens -->
       <div class="kpi-card">
         <div class="kpi-content">
-          <span class="kpi-label">Total Scanned</span>
+          <span class="kpi-label">${Utils.escapeHtml(I18n.t("filtering-analytics-scanned"))}</span>
           <span class="kpi-value">${Utils.formatNumber(data.total_tokens, 0)}</span>
           <span class="kpi-subtext">
-            <i class="icon-clock"></i> Updated ${Utils.escapeHtml(refreshedLabel(data.last_updated, data.snapshot_state))}
+            <i class="icon-clock"></i> ${Utils.escapeHtml(I18n.t("filtering-analytics-updated", { time: refreshedLabel(data.last_updated, data.snapshot_state) }))}
           </span>
         </div>
         <i class="icon-database kpi-icon"></i>
@@ -274,10 +302,10 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
       <!-- Passed -->
       <div class="kpi-card">
         <div class="kpi-content">
-          <span class="kpi-label">Passed Tokens</span>
+          <span class="kpi-label">${Utils.escapeHtml(I18n.t("filtering-analytics-passed"))}</span>
           <span class="kpi-value text-success">${Utils.formatNumber(data.total_passed, 0)}</span>
           <span class="kpi-subtext">
-            <span class="text-success">${Utils.formatPercentValue(data.pass_rate, { includeSign: false })}</span> pass rate
+            <span class="kpi-rate kpi-rate--success">${I18n.markup("filtering-analytics-pass-rate", { share: Utils.formatPercentValue(data.pass_rate, { includeSign: false }) })}</span>
           </span>
         </div>
         <i class="icon-circle-check kpi-icon text-success" style="opacity: 0.2"></i>
@@ -289,10 +317,10 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
       <!-- Rejected -->
       <div class="kpi-card">
         <div class="kpi-content">
-          <span class="kpi-label">Rejected Tokens</span>
+          <span class="kpi-label">${Utils.escapeHtml(I18n.t("filtering-analytics-rejected"))}</span>
           <span class="kpi-value text-error">${Utils.formatNumber(data.total_rejected, 0)}</span>
           <span class="kpi-subtext">
-            <span class="text-error">${Utils.formatPercentValue(data.rejection_rate, { includeSign: false })}</span> rejection rate
+            <span class="kpi-rate kpi-rate--error">${I18n.markup("filtering-analytics-rejection-rate", { share: Utils.formatPercentValue(data.rejection_rate, { includeSign: false }) })}</span>
           </span>
         </div>
         <i class="icon-circle-x kpi-icon text-error" style="opacity: 0.2"></i>
@@ -306,7 +334,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
       <!-- Rejection by Category -->
       <div class="chart-card">
         <div class="chart-header">
-          <div class="chart-title"><i class="icon-layers"></i> Rejection by Category</div>
+          <div class="chart-title"><i class="icon-layers"></i> ${Utils.escapeHtml(I18n.t("filtering-analytics-by-category"))}</div>
         </div>
         <div class="chart-body">
           ${
@@ -324,7 +352,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
                   <div class="bar-fill" style="width: ${Math.min(cat.percentage, 100)}%; background-color: var(--error-color)"></div>
                 </div>
                 <div class="bar-meta">
-                  <span>${Utils.formatNumber(cat.count, 0)} tokens</span>
+                  <span>${Utils.escapeHtml(tokensCount(cat.count))}</span>
                   <span>${Utils.formatPercentValue(cat.percentage, { includeSign: false })}</span>
                 </div>
               </div>
@@ -332,7 +360,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
           `
                   )
                   .join("")
-              : '<div class="analytics-empty">No category data</div>'
+              : `<div class="analytics-empty">${Utils.escapeHtml(I18n.t("filtering-analytics-no-category"))}</div>`
           }
         </div>
       </div>
@@ -340,7 +368,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
       <!-- Rejection by Source -->
       <div class="chart-card">
         <div class="chart-header">
-          <div class="chart-title"><i class="icon-git-branch"></i> Rejection by Source</div>
+          <div class="chart-title"><i class="icon-git-branch"></i> ${Utils.escapeHtml(I18n.t("filtering-analytics-by-source"))}</div>
         </div>
         <div class="chart-body">
           ${
@@ -350,14 +378,14 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
                     (src) => `
             <div class="bar-chart-row">
               <div class="bar-label-col">
-                <div class="bar-label font-bold w-auto">${Utils.escapeHtml(src.source)}</div>
+                <div class="bar-label font-bold w-auto">${Utils.escapeHtml(I18n.label(REJECTION_SOURCE_LABELS, src.source))}</div>
               </div>
               <div class="bar-track-col">
                 <div class="bar-track">
                   <div class="bar-fill" style="width: ${Math.min(src.percentage, 100)}%; background-color: var(--warning-color)"></div>
                 </div>
                 <div class="bar-meta">
-                  <span>${Utils.formatNumber(src.count, 0)} tokens</span>
+                  <span>${Utils.escapeHtml(tokensCount(src.count))}</span>
                   <span>${Utils.formatPercentValue(src.percentage, { includeSign: false })}</span>
                 </div>
               </div>
@@ -365,7 +393,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
           `
                   )
                   .join("")
-              : '<div class="analytics-empty">No source data</div>'
+              : `<div class="analytics-empty">${Utils.escapeHtml(I18n.t("filtering-analytics-no-source"))}</div>`
           }
         </div>
       </div>
@@ -378,17 +406,17 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
       <!-- Top Rejection Reasons -->
       <div class="chart-card span-2">
         <div class="chart-header">
-          <div class="chart-title"><i class="icon-list"></i> Top Rejection Reasons</div>
+          <div class="chart-title"><i class="icon-list"></i> ${Utils.escapeHtml(I18n.t("filtering-analytics-top-reasons"))}</div>
         </div>
         <div class="reasons-table-container">
           <table class="reasons-table">
             <thead>
               <tr>
-                <th>Reason</th>
-                <th>Category</th>
-                <th class="text-end">Count</th>
-                <th class="text-end">%</th>
-                <th class="text-end">Impact</th>
+                <th>${Utils.escapeHtml(I18n.t("filtering-analytics-column-reason"))}</th>
+                <th>${Utils.escapeHtml(I18n.t("filtering-analytics-column-category"))}</th>
+                <th class="text-end">${Utils.escapeHtml(I18n.t("filtering-analytics-column-count"))}</th>
+                <th class="text-end">${Utils.escapeHtml(I18n.t("filtering-analytics-column-share"))}</th>
+                <th class="text-end">${Utils.escapeHtml(I18n.t("filtering-analytics-column-impact"))}</th>
               </tr>
             </thead>
             <tbody>
@@ -422,7 +450,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
                 `;
                       })
                       .join("")
-                  : '<tr><td colspan="5" class="text-center p-20">No data available</td></tr>'
+                  : `<tr><td colspan="5" class="text-center p-20">${Utils.escapeHtml(I18n.t("filtering-analytics-no-data"))}</td></tr>`
               }
             </tbody>
           </table>
@@ -455,7 +483,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
     <div class="explorer-overview">
       <div class="explorer-overview-col">
         <div class="overview-col-header">
-          <span class="overview-col-title">Top Reasons</span>
+          <span class="overview-col-title">${Utils.escapeHtml(I18n.t("filtering-explorer-top-reasons"))}</span>
           <span class="overview-col-count">${topReasons.length}</span>
         </div>
         <div class="overview-col-list">
@@ -470,12 +498,12 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
           `
             )
             .join("")}
-          ${topReasons.length === 0 ? '<div class="analytics-empty-compact">No data</div>' : ""}
+          ${topReasons.length === 0 ? `<div class="analytics-empty-compact">${Utils.escapeHtml(I18n.t("filtering-explorer-none"))}</div>` : ""}
         </div>
       </div>
       <div class="explorer-overview-col explorer-overview-col--sep">
         <div class="overview-col-header">
-          <span class="overview-col-title">Recent Rejections</span>
+          <span class="overview-col-title">${Utils.escapeHtml(I18n.t("filtering-explorer-recent"))}</span>
           <span class="overview-col-count">${recentRejections.length}</span>
         </div>
         <div class="overview-col-list">
@@ -499,7 +527,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
             `;
             })
             .join("")}
-          ${recentRejections.length === 0 ? '<div class="analytics-empty-compact">No recent</div>' : ""}
+          ${recentRejections.length === 0 ? `<div class="analytics-empty-compact">${Utils.escapeHtml(I18n.t("filtering-explorer-none-recent"))}</div>` : ""}
         </div>
       </div>
     </div>
@@ -508,7 +536,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
 
   function renderExplorerView() {
     if (!state.analytics) {
-      return '<div class="loading-spinner">Loading…</div>';
+      return `<div class="loading-spinner">${Utils.escapeHtml(I18n.t("common-loading"))}</div>`;
     }
 
     const data = state.analytics;
@@ -525,13 +553,13 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
         <div class="explorer-sidebar-search">
           <div class="explorer-search-input-wrapper">
             <i class="icon-search"></i>
-            <input type="text" placeholder="Search reasons..." oninput="window.filteringPage.filterExplorerTree(this.value)">
+            <input type="text" placeholder="${Utils.escapeHtml(I18n.attr("filtering-explorer-search", "placeholder"))}" oninput="window.filteringPage.filterExplorerTree(this.value)">
           </div>
         </div>
 
         <div class="explorer-nav-overview ${!window.filteringPage.currentReason ? "active" : ""}" onclick="window.filteringPage.selectSummary()">
           <i class="icon-chart-bar tree-icon"></i>
-          <span class="tree-label">Overview</span>
+          <span class="tree-label">${Utils.escapeHtml(I18n.t("filtering-explorer-overview"))}</span>
           ${rejectionRate ? `<span class="explorer-nav-rate">${rejectionRate}</span>` : ""}
           <span class="tree-count">${Utils.formatCompactNumber(totalRejected)}</span>
         </div>
@@ -566,7 +594,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
           `
             )
             .join("")}
-          <div class="tree-empty-state" id="explorer-tree-empty" style="display: none">No matching reasons</div>
+          <div class="tree-empty-state" id="explorer-tree-empty" style="display: none">${Utils.escapeHtml(I18n.t("filtering-explorer-no-match"))}</div>
         </div>
       </div>
       <div class="explorer-content">
@@ -627,6 +655,11 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
       </label>`;
   }
 
+  // "3 parameters"; `count` selects the plural.
+  function parameterCount(count) {
+    return I18n.t("filtering-parameter-count", { count, amount: Utils.formatNumber(count, 0) });
+  }
+
   function groupsFor(source) {
     return buildConfigGroups(state.metadata).filter((group) => group.source === source);
   }
@@ -681,7 +714,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
     if (inactive) classes.push("config-field--inactive");
 
     const impact = row.impact
-      ? `<span class="config-field-impact ${Utils.escapeHtml(row.impact)}">${Utils.escapeHtml(row.impact)}</span>`
+      ? `<span class="config-field-impact ${Utils.escapeHtml(row.impact)}">${Utils.escapeHtml(impactLabel(row.impact))}</span>`
       : "";
     const hint = row.hint
       ? `<div class="config-field-hint">${Utils.escapeHtml(row.hint)}</div>`
@@ -714,6 +747,11 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
     if (defaults.some((value) => value === undefined || value === null)) {
       return '<button type="button" class="config-field-reset" hidden></button>';
     }
+    const defaultText =
+      defaults.length === 2
+        ? I18n.t("filtering-range-bounds", { min: defaults[0], max: defaults[1] })
+        : defaults.join(", ");
+    const resetArgs = { default: defaultText, label: row.label };
 
     const atDefault = row.fields.every(
       (field, index) => getConfigValue(state.draft, source, field.key) === defaults[index]
@@ -726,8 +764,8 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
         class="config-field-reset"
         data-reset-keys="${Utils.escapeHtml(keys)}"
         data-reset-source="${Utils.escapeHtml(source)}"
-        title="Reset to default (${Utils.escapeHtml(defaults.join(" – "))})"
-        aria-label="Reset ${Utils.escapeHtml(row.label)} to default"
+        title="${Utils.escapeHtml(I18n.attr("filtering-field-reset", "title", resetArgs))}"
+        aria-label="${Utils.escapeHtml(I18n.attr("filtering-field-reset", "aria-label", resetArgs))}"
         ${atDefault ? "disabled" : ""}
       ><i class="icon-rotate-ccw" aria-hidden="true"></i></button>`;
   }
@@ -741,13 +779,13 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
       return `
         <div class="config-field-range">
           <span class="config-field-bound">
-            <span class="config-field-bound-label">Min</span>
-            ${renderNumberInput(min, source, `Minimum ${row.label}`)}
+            <span class="config-field-bound-label">${Utils.escapeHtml(I18n.t("filtering-field-min"))}</span>
+            ${renderNumberInput(min, source, I18n.attr("filtering-field-min-aria", "aria-label", { label: row.label }))}
           </span>
           <span class="config-field-range-sep" aria-hidden="true">–</span>
           <span class="config-field-bound">
-            <span class="config-field-bound-label">Max</span>
-            ${renderNumberInput(max, source, `Maximum ${row.label}`)}
+            <span class="config-field-bound-label">${Utils.escapeHtml(I18n.t("filtering-field-max"))}</span>
+            ${renderNumberInput(max, source, I18n.attr("filtering-field-max-aria", "aria-label", { label: row.label }))}
           </span>
           ${unit}
         </div>`;
@@ -772,7 +810,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
 
     const enableToggle = group.enableKey
       ? `
-        <label class="toggle" data-level="group" ${group.enableHint ? `title="${Utils.escapeHtml(group.enableHint)}"` : ""} aria-label="Enable ${Utils.escapeHtml(group.title)} checks">
+        <label class="toggle" data-level="group" ${group.enableHint ? `title="${Utils.escapeHtml(group.enableHint)}"` : ""} aria-label="${Utils.escapeHtml(I18n.attr("filtering-group-enable", "aria-label", { group: group.title }))}">
           <input
             type="checkbox"
             data-category-toggle="${Utils.escapeHtml(group.source)}"
@@ -787,7 +825,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
       <section class="filtering-group" data-group="${Utils.escapeHtml(group.id)}">
         <div class="filtering-group-header">
           <h3 class="filtering-group-title">${Utils.escapeHtml(group.title)}</h3>
-          <span class="filtering-group-count">${rows.length} ${rows.length === 1 ? "parameter" : "parameters"}</span>
+          <span class="filtering-group-count">${Utils.escapeHtml(parameterCount(rows.length))}</span>
           ${enableToggle}
         </div>
         <div class="filtering-group-body">${rows.map((row) => renderRow(row, group)).join("")}</div>
@@ -796,7 +834,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
 
   function renderConfigPanels() {
     if (!state.draft) {
-      return '<div class="filtering-config-empty">Loading configuration…</div>';
+      return `<div class="filtering-config-empty">${Utils.escapeHtml(I18n.t("filtering-config-loading"))}</div>`;
     }
 
     // Status tab shows overview
@@ -819,16 +857,16 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
 
     if (!groups) {
       const reason = state.searchQuery
-        ? `No parameter matches “${Utils.escapeHtml(state.searchQuery)}”`
-        : "This source exposes no parameters";
-      return `<div class="filtering-config-empty">${reason}</div>`;
+        ? I18n.t("filtering-config-no-match", { query: state.searchQuery })
+        : I18n.t("filtering-config-no-parameters");
+      return `<div class="filtering-config-empty">${Utils.escapeHtml(reason)}</div>`;
     }
 
     // One line of prose instead of a page of silently dimmed controls: a source
     // whose master switch is off evaluates none of these parameters.
     const sourceOff =
       source !== "meta" && !getSourceEnabled(state.draft, source)
-        ? `<p class="filtering-source-off">${Utils.escapeHtml(SOURCE_LABELS[source] || source)} filtering is off — these parameters are not evaluated.</p>`
+        ? `<p class="filtering-source-off">${Utils.escapeHtml(I18n.t("filtering-source-off", { source: I18n.label(SOURCE_LABELS, source) }))}</p>`
         : "";
 
     return `<div class="config-scroll-area"><div class="filtering-config-list">${sourceOff}${groups}</div></div>`;
@@ -850,7 +888,7 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
         <label class="toggle filtering-source-switch" data-level="root" ${master.hint ? `title="${Utils.escapeHtml(master.hint)}"` : ""}>
           <input type="checkbox" data-source-toggle="${Utils.escapeHtml(state.activeTab)}" ${enabled ? "checked" : ""} />
           <span class="toggle-track"></span>
-          <span class="toggle-state" id="filtering-source-state">${enabled ? "Enabled" : "Disabled"}</span>
+          <span class="toggle-state" id="filtering-source-state">${Utils.escapeHtml(enabled ? I18n.t("common-state-enabled") : I18n.t("common-state-disabled"))}</span>
         </label>`
       : "";
 
@@ -859,14 +897,14 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
         <input
           type="text"
           id="filtering-search"
-          placeholder="Filter parameters"
+          placeholder="${Utils.escapeHtml(I18n.attr("filtering-toolbar-filter", "placeholder"))}"
           value="${Utils.escapeHtml(state.searchQuery)}"
           autocomplete="off"
           spellcheck="false"
-          aria-label="Filter parameters"
+          aria-label="${Utils.escapeHtml(I18n.attr("filtering-toolbar-filter", "aria-label"))}"
         />
         <i class="icon-search search-icon" aria-hidden="true"></i>
-        <button type="button" class="search-clear" id="filtering-search-clear" aria-label="Clear filter">
+        <button type="button" class="search-clear" id="filtering-search-clear" aria-label="${Utils.escapeHtml(I18n.attr("filtering-toolbar-clear", "aria-label"))}">
           <i class="icon-x" aria-hidden="true"></i>
         </button>
       </div>
@@ -884,8 +922,14 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
         if (rowMatchesSearch(row, group)) visible += row.fields.length;
       }
     }
-    if (state.searchQuery) return `${visible} of ${total} parameters`;
-    return `${total} ${total === 1 ? "parameter" : "parameters"}`;
+    if (state.searchQuery) {
+      return I18n.t("filtering-parameter-count-filtered", {
+        count: total,
+        visible: Utils.formatNumber(visible, 0),
+        total: Utils.formatNumber(total, 0),
+      });
+    }
+    return parameterCount(total);
   }
 
   function renderShell() {
@@ -894,7 +938,6 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
       isRefreshing: state.isRefreshing,
       hasChanges: state.hasChanges,
       lastSaved: state.lastSaved,
-      Utils,
     });
 
     return `
@@ -910,11 +953,11 @@ export function createFilteringRenderers({ state, $: _$, Utils, requestManager: 
             <span id="filtering-status-message">${Utils.escapeHtml(statusMsg)}</span>
           </div>
           <div class="footer-actions">
-            <button class="filtering-footer-btn ghost" id="reset-config-btn"><i class="icon-rotate-ccw"></i> Reset</button>
-            <button class="filtering-footer-btn ghost" id="refresh-snapshot-btn"><i class="icon-refresh-cw"></i> Refresh</button>
-            <button class="filtering-footer-btn ghost" id="export-config-btn"><i class="icon-download"></i> Export</button>
-            <button class="filtering-footer-btn ghost" id="import-config-btn"><i class="icon-upload"></i> Import</button>
-            <button class="filtering-footer-btn primary" id="save-config-btn"><i class="icon-save"></i> Save</button>
+            <button class="filtering-footer-btn ghost" id="reset-config-btn"><i class="icon-rotate-ccw"></i> ${Utils.escapeHtml(I18n.t("common-action-reset"))}</button>
+            <button class="filtering-footer-btn ghost" id="refresh-snapshot-btn"><i class="icon-refresh-cw"></i> ${Utils.escapeHtml(I18n.t("common-action-refresh"))}</button>
+            <button class="filtering-footer-btn ghost" id="export-config-btn"><i class="icon-download"></i> ${Utils.escapeHtml(I18n.t("common-action-export"))}</button>
+            <button class="filtering-footer-btn ghost" id="import-config-btn"><i class="icon-upload"></i> ${Utils.escapeHtml(I18n.t("common-action-import"))}</button>
+            <button class="filtering-footer-btn primary" id="save-config-btn"><i class="icon-save"></i> ${Utils.escapeHtml(I18n.t("common-action-save"))}</button>
           </div>
         </footer>
       </div>

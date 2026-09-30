@@ -178,33 +178,27 @@ impl ConditionEvaluator for PriceChangePercentCondition {
     fn parameter_schema(&self) -> serde_json::Value {
         json!({
             "type": "PriceChangePercent",
-            "name": "Price Change %",
             "category": "Price Analysis",
             "tags": ["price", "percentage", "change", "time"],
             "icon": "icon-percent",
             "origin": "strategy",
-            "description": "Check if price changed by a percentage threshold within a time period",
             "parameters": {
                 "timeframe": {
                     "type": "enum",
-                    "name": "Timeframe",
-                    "description": "Candle timeframe to analyze (defaults to strategy timeframe if not set)",
                     "default": null,
                     "optional": true,
                     "options": [
-                        { "value": "1m", "label": "1 Minute" },
-                        { "value": "5m", "label": "5 Minutes" },
-                        { "value": "15m", "label": "15 Minutes" },
-                        { "value": "1h", "label": "1 Hour" },
-                        { "value": "4h", "label": "4 Hours" },
-                        { "value": "12h", "label": "12 Hours" },
-                        { "value": "1d", "label": "1 Day" }
+                        { "value": "1m" },
+                        { "value": "5m" },
+                        { "value": "15m" },
+                        { "value": "1h" },
+                        { "value": "4h" },
+                        { "value": "12h" },
+                        { "value": "1d" }
                     ]
                 },
                 "percentage": {
                     "type": "percent",
-                    "name": "Change Threshold %",
-                    "description": "Percentage price change to trigger (0.1-1000%)",
                     "default": 10.0,
                     "min": 0.1,
                     "max": 1000.0,
@@ -212,19 +206,15 @@ impl ConditionEvaluator for PriceChangePercentCondition {
                 },
                 "direction": {
                     "type": "enum",
-                    "name": "Direction",
-                    "description": "Price movement direction",
                     "default": "ABOVE",
                     "options": [
-                        { "value": "ABOVE", "label": "Gain (+%)" },
-                        { "value": "BELOW", "label": "Loss (-%)" },
-                        { "value": "WITHIN", "label": "Within Range (±%)" }
+                        { "value": "ABOVE" },
+                        { "value": "BELOW" },
+                        { "value": "WITHIN" }
                     ]
                 },
                 "time_value": {
                     "type": "number",
-                    "name": "Time Period",
-                    "description": "Lookback period value (1-3600 for seconds, 1-1440 for minutes, 1-720 for hours)",
                     "default": 5.0,
                     "min": 1.0,
                     "max": 3600.0,
@@ -232,13 +222,11 @@ impl ConditionEvaluator for PriceChangePercentCondition {
                 },
                 "time_unit": {
                     "type": "enum",
-                    "name": "Time Unit",
-                    "description": "Time unit for lookback period",
                     "default": "MINUTES",
                     "options": [
-                        { "value": "SECONDS", "label": "Seconds" },
-                        { "value": "MINUTES", "label": "Minutes" },
-                        { "value": "HOURS", "label": "Hours" }
+                        { "value": "SECONDS" },
+                        { "value": "MINUTES" },
+                        { "value": "HOURS" }
                     ]
                 }
             }

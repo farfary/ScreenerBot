@@ -112,3 +112,181 @@ filtering-reject-category-data-quality = Missing Data
 filtering-reject-category-timing = Timing Filters
 filtering-reject-category-market = Market Data
 filtering-reject-category-other = Other
+
+# Filtering page: sub-tabs, sources, status, analytics, explorer and configuration.
+
+## Sub-tabs and sources. Source ids are FilterSource::as_str plus the `meta` settings tab.
+
+filtering-tab-status = Status
+filtering-tab-analytics = Analytics
+filtering-tab-explorer = Explorer
+filtering-source-core = Core
+filtering-source-onchain = On-Chain
+filtering-source-dexscreener = { -dexscreener }
+filtering-source-geckoterminal = { -geckoterminal }
+filtering-source-rugcheck = { -rugcheck }
+filtering-source-llm-analysis = LLM Analysis
+
+## Time range
+
+filtering-range-1h = 1H
+filtering-range-6h = 6H
+filtering-range-24h = 24H
+filtering-range-7d = 7D
+filtering-range-all = All
+filtering-range-all-time = All Time
+filtering-range-custom = Custom
+filtering-range-now = Now
+# $start and $end are formatted moments, or the open-ended markers.
+filtering-range-span = { $start } → { $end }
+# $min and $max are the two ends of a value range.
+filtering-range-bounds = { $min } – { $max }
+
+## Footer status line
+
+filtering-footer-saving = Saving changes...
+filtering-footer-refreshing = Refreshing snapshot...
+filtering-footer-unsaved = Unsaved changes pending
+# $time is a relative time such as "5m ago".
+filtering-footer-last-saved = Last saved { $time }
+filtering-footer-in-sync = Configuration in sync
+
+## Info bar and status metrics
+
+filtering-info-total = Total:
+filtering-info-priced = Priced:
+filtering-info-passed = Passed:
+filtering-info-positions = Positions:
+filtering-info-blacklisted = Blacklisted:
+filtering-info-cache = Cache:
+# A count followed by its share of the total, e.g. "120 (4.0%)".
+filtering-count-share = { $count } ({ $share })
+filtering-refresh-building = Building…
+filtering-refresh-never = Never
+
+filtering-status-loading = Loading statistics...
+filtering-status-total = Total Tokens
+filtering-status-total-detail = In filtering cache
+filtering-status-total-detail-building = Snapshot building — counts land on the next refresh
+filtering-status-priced = With Price
+filtering-status-priced-detail = { $share } have pricing
+filtering-status-passed = Passed Filters
+filtering-status-passed-detail = { $share } passed
+filtering-status-positions = Open Positions
+filtering-status-positions-detail = Active trades
+filtering-status-blacklisted = Blacklisted
+filtering-status-blacklisted-detail = Flagged tokens
+filtering-status-ohlcv = With OHLCV
+filtering-status-ohlcv-detail = Historical data
+filtering-status-refresh = Last Refresh
+filtering-status-refresh-building = First snapshot in progress
+filtering-status-refresh-none = No refresh yet
+filtering-status-no-rejections = No rejection data available
+
+## Analytics
+
+filtering-analytics-loading = Loading analytics for { $range }…
+filtering-analytics-scanned = Total Scanned
+# $time is a relative time such as "5m ago".
+filtering-analytics-updated = Updated { $time }
+filtering-analytics-passed = Passed Tokens
+filtering-analytics-pass-rate = <strong>{ $share }</strong> pass rate
+filtering-analytics-rejected = Rejected Tokens
+filtering-analytics-rejection-rate = <strong>{ $share }</strong> rejection rate
+filtering-analytics-by-category = Rejection by Category
+filtering-analytics-by-source = Rejection by Source
+filtering-analytics-no-category = No category data
+filtering-analytics-no-source = No source data
+filtering-analytics-top-reasons = Top Rejection Reasons
+filtering-analytics-no-data = No data available
+filtering-analytics-column-reason = Reason
+filtering-analytics-column-category = Category
+filtering-analytics-column-count = Count
+filtering-analytics-column-share = %
+filtering-analytics-column-impact = Impact
+# $amount is the formatted count, $count selects the plural.
+filtering-tokens-count =
+    { $count ->
+        [one] { $amount } token
+       *[other] { $amount } tokens
+    }
+
+## Explorer
+
+filtering-explorer-top-reasons = Top Reasons
+filtering-explorer-recent = Recent Rejections
+filtering-explorer-none = No data
+filtering-explorer-none-recent = No recent
+filtering-explorer-search =
+    .placeholder = Search reasons...
+filtering-explorer-overview = Overview
+filtering-explorer-no-match = No matching reasons
+filtering-explorer-column-token = Token
+filtering-explorer-column-source = Source
+filtering-explorer-column-time = Time
+filtering-explorer-page = Page { $page }
+filtering-explorer-no-results = No results
+filtering-explorer-empty = No tokens found
+filtering-explorer-empty-filtered = No tokens found matching filter
+filtering-explorer-load-failed = Failed to load tokens
+
+## Configuration panels
+
+filtering-config-loading = Loading configuration…
+# $query is the text typed in the filter box.
+filtering-config-no-match = No parameter matches “{ $query }”
+filtering-config-no-parameters = This source exposes no parameters
+# $source is the source name.
+filtering-source-off = { $source } filtering is off — these parameters are not evaluated.
+filtering-toolbar-filter =
+    .placeholder = Filter parameters
+    .aria-label = Filter parameters
+filtering-toolbar-clear =
+    .aria-label = Clear filter
+# $count selects the plural, $amount is the number shown.
+filtering-parameter-count =
+    { $count ->
+        [one] { $amount } parameter
+       *[other] { $amount } parameters
+    }
+# $count is the total and selects the plural.
+filtering-parameter-count-filtered =
+    { $count ->
+        [one] { $visible } of { $total } parameter
+       *[other] { $visible } of { $total } parameters
+    }
+filtering-group-enable =
+    .aria-label = Enable { $group } checks
+filtering-field-min = Min
+filtering-field-max = Max
+# $label is the parameter name.
+filtering-field-min-aria =
+    .aria-label = Minimum { $label }
+filtering-field-max-aria =
+    .aria-label = Maximum { $label }
+# $default is the shipped value, $label the parameter name.
+filtering-field-reset =
+    .title = Reset to default ({ $default })
+    .aria-label = Reset { $label } to default
+
+## Toasts. A message value is the title; `.message` is the body.
+
+filtering-toast-saved = Configuration Saved
+    .message = Filtering settings saved and snapshot refreshed
+filtering-toast-save-failed = Save Failed
+    .message = Failed to save filtering configuration
+filtering-toast-reset = Changes Reset
+    .message = Configuration restored to last saved state
+filtering-toast-refresh-failed = Refresh Failed
+    .message = Failed to refresh filtering snapshot
+filtering-toast-exported = Configuration Exported
+    .message = Filtering settings saved to file
+filtering-toast-imported = Configuration Imported
+    .message = Filtering settings loaded from file
+filtering-toast-import-failed = Import Failed
+    .message = Failed to import configuration - invalid file format
+filtering-toast-load-failed = Load Failed
+    .message = Failed to load filtering configuration
+filtering-toast-range-missing = Please select both start and end dates
+filtering-toast-range-order = Start time must be before end time
+filtering-toast-range-future = End time cannot be in the future

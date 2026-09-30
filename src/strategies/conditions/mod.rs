@@ -1,5 +1,6 @@
 //! Strategy condition evaluators for rule-tree nodes (price, volume, candle patterns).
 mod candle_size;
+mod catalog;
 mod consecutive_candles;
 mod liquidity_level;
 mod position_holding_time;
@@ -150,7 +151,8 @@ pub trait ConditionEvaluator: Send + Sync {
     /// Validate condition parameters
     fn validate(&self, condition: &Condition) -> Result<()>;
 
-    /// Get parameter description for UI
+    /// Structure of the parameters for the UI. Carries no display text: the registry adds
+    /// the localization keys (see `catalog`).
     fn parameter_schema(&self) -> serde_json::Value;
 }
 
@@ -199,7 +201,9 @@ impl ConditionRegistry {
     pub fn get_all_schemas(&self) -> serde_json::Value {
         let mut schemas = serde_json::Map::new();
         for (name, evaluator) in &self.evaluators {
-            schemas.insert(name.clone(), evaluator.parameter_schema());
+            let mut schema = evaluator.parameter_schema();
+            catalog::attach_text_keys(&mut schema);
+            schemas.insert(name.clone(), schema);
         }
         serde_json::Value::Object(schemas)
     }

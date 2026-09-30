@@ -3,30 +3,32 @@ import { $, $$ } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
 import * as AppState from "../core/app_state.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
-import { InputDialog } from "../ui/input_dialog.js";
 import { requestManager } from "../core/request_manager.js";
 import { enhanceAllSelects } from "../ui/custom_select.js";
 import { createConditionEditor } from "./strategies/condition_editor.js";
 import { createConditionCatalog } from "./strategies/condition_catalog.js";
 
+// Ids are the `strategy_type` values of the strategies API.
+const STRATEGY_TYPE_LABELS = Object.freeze({
+  ENTRY: "strategies-type-entry",
+  EXIT: "strategies-type-exit",
+});
+
 export function createLifecycle() {
   // State
   let currentStrategy = null;
   let strategies = [];
-  let templates = [];
   let conditionSchemas = null;
   let categoryStates = { data: null }; // Wrapped in object to pass by reference
 
   // Editor state (vertical cards)
-  let conditions = []; // [{ type, name, enabled, params: {k: v} }]
+  let conditions = []; // [{ type, enabled, params: {k: v} }]
 
   // Pollers
   let strategiesPoller = null;
-  let templatesPoller = null;
 
   // Hash guards — skip re-render when polled data is unchanged
   let _lastStrategiesKey = null;
-  let _lastTemplatesKey = null;
 
   // Dirty tracking — unsaved editor changes
   let _isDirty = false;
@@ -37,9 +39,7 @@ export function createLifecycle() {
   const CleanupScope = {
     STATIC: "static",
     STRATEGIES_LIST: "strategies-list",
-    TEMPLATE_LIST: "strategy-templates",
     CONDITION_CARDS: "condition-cards",
-    PROPERTY_PANEL: "condition-properties",
     MODAL: "condition-modal",
   };
 
@@ -104,6 +104,11 @@ export function createLifecycle() {
     if (header) header.classList.remove("dirty");
   }
 
+  // Toast with a title and a body; both come from one message and its `.message` attribute.
+  function announce(type, title, message) {
+    Utils.showToast({ type, title, message });
+  }
+
   // Initialize sub-modules
   const conditionEditor = createConditionEditor({
     state: { get currentStrategy() { return currentStrategy; }, set currentStrategy(val) { currentStrategy = val; } },
@@ -114,6 +119,7 @@ export function createLifecycle() {
     $,
     $$,
     Utils,
+    announce,
     enhanceAllSelects,
     addTrackedListener,
     clearScope,
@@ -186,26 +192,15 @@ export function createLifecycle() {
           async () => {
             await loadStrategies();
           },
-          { label: "Strategies", intervalMs: 10000 }
-        )
-      );
-
-      templatesPoller = ctx.managePoller(
-        new Poller(
-          async () => {
-            await loadTemplates();
-          },
-          { label: "Templates", intervalMs: 30000 }
+          { label: "Strategies", intervalMs: 10000 } // l10n-ignore: poller label used in logs only
         )
       );
 
       // Start pollers
       strategiesPoller.start();
-      templatesPoller.start();
 
       // Initial load
       await loadStrategies();
-      await loadTemplates();
     },
 
     deactivate() {
@@ -223,10 +218,8 @@ export function createLifecycle() {
       // Cleanup state
       currentStrategy = null;
       strategies = [];
-      templates = [];
       conditions = [];
       _lastStrategiesKey = null;
-      _lastTemplatesKey = null;
       _isDirty = false;
       _loadingStrategy = false;
     },
@@ -336,19 +329,12 @@ export function createLifecycle() {
   // Editor actions (add condition, load template)
   function setupEditorActions() {
     const addBtn = $("#add-condition");
-    const loadTemplateBtn = $("#load-template");
     const catalog = $("#condition-catalog-modal");
     const closeCatalog = $("#close-condition-catalog");
     const searchInput = $("#condition-search");
 
     if (addBtn) {
       addTrackedListener(addBtn, "click", () => openConditionCatalog());
-    }
-    if (loadTemplateBtn) {
-      addTrackedListener(loadTemplateBtn, "click", () => {
-        const templatesTab = $(".tab-btn[data-tab='templates']");
-        if (templatesTab) templatesTab.click();
-      });
     }
     if (closeCatalog && catalog) {
       addTrackedListener(closeCatalog, "click", () => (catalog.hidden = true));
@@ -424,10 +410,7 @@ export function createLifecycle() {
   // Toolbar Actions
   function setupToolbarActions() {
     const saveBtn = $("#save-strategy");
-    const saveAsBtn = $("#save-as-strategy");
-    const duplicateBtn = $("#duplicate-strategy");
     const validateBtn = $("#validate-strategy");
-    const testBtn = $("#test-strategy");
     const enableToggle = $("#strategy-enabled-toggle");
     const nameInput = $("#strategy-name");
 
@@ -446,34 +429,16 @@ export function createLifecycle() {
         // Validate first before saving
         const isValid = await validateStrategy();
         if (!isValid) {
-          window.showToast?.("Please fix validation errors before saving", "error");
+          Utils.showToast(I18n.t("strategies-toast-fix-validation"), "error");
           return;
         }
         await saveStrategy();
       });
     }
 
-    if (saveAsBtn) {
-      addTrackedListener(saveAsBtn, "click", async () => {
-        await saveStrategyAs();
-      });
-    }
-
-    if (duplicateBtn) {
-      addTrackedListener(duplicateBtn, "click", () => {
-        duplicateStrategy();
-      });
-    }
-
     if (validateBtn) {
       addTrackedListener(validateBtn, "click", async () => {
         await validateStrategy();
-      });
-    }
-
-    if (testBtn) {
-      addTrackedListener(testBtn, "click", async () => {
-        await testStrategy();
       });
     }
 
@@ -514,18 +479,27 @@ export function createLifecycle() {
       });
 
       await loadStrategies();
-      Utils.showToast({
-        type: "success",
-        title: currentStrategy.enabled ? "Strategy Enabled" : "Strategy Disabled",
-        message: `"${currentStrategy.name}" ${currentStrategy.enabled ? "enabled" : "disabled"}`,
-      });
+      const args = { name: currentStrategy.name };
+      if (currentStrategy.enabled) {
+        announce(
+          "success",
+          I18n.t("strategies-toast-enabled", args),
+          I18n.attr("strategies-toast-enabled", "message", args)
+        );
+      } else {
+        announce(
+          "success",
+          I18n.t("strategies-toast-disabled", args),
+          I18n.attr("strategies-toast-disabled", "message", args)
+        );
+      }
     } catch (error) {
       console.error("Failed to toggle strategy:", error);
-      Utils.showToast({
-        type: "error",
-        title: "Toggle Failed",
-        message: "Failed to update strategy status",
-      });
+      announce(
+        "error",
+        I18n.t("strategies-toast-toggle-failed"),
+        I18n.attr("strategies-toast-toggle-failed", "message")
+      );
       // Revert toggle state
       const toggle = $("#strategy-enabled-toggle");
       if (toggle) toggle.checked = !currentStrategy.enabled;
@@ -578,25 +552,11 @@ export function createLifecycle() {
       renderStrategies();
     } catch (error) {
       console.error("Failed to load strategies:", error);
-      Utils.showToast({
-        type: "error",
-        title: "Load Failed",
-        message: "Failed to load strategies from server",
-      });
-    }
-  }
-
-  async function loadTemplates() {
-    try {
-      const data = await requestManager.fetch("/api/strategies/templates", {
-        priority: "normal",
-      });
-      templates = data.items || [];
-
-      renderTemplates();
-    } catch (error) {
-      console.error("Failed to load templates:", error);
-      // Don't show error toast for templates as they're optional
+      announce(
+        "error",
+        I18n.t("strategies-toast-load-failed"),
+        I18n.attr("strategies-toast-load-failed", "message")
+      );
     }
   }
 
@@ -627,34 +587,38 @@ export function createLifecycle() {
       listContainer.innerHTML = `
         <div class="empty-state">
           <span class="icon"><i class="icon-file-text"></i></span>
-          <p>No strategies yet</p>
-          <small>Create your first strategy</small>
+          <p>${Utils.escapeHtml(I18n.t("strategies-list-empty-title"))}</p>
+          <small>${Utils.escapeHtml(I18n.t("strategies-list-empty-hint"))}</small>
         </div>
       `;
       return;
     }
 
     listContainer.innerHTML = strategies
-      .map(
-        (strategy) => `
+      .map((strategy) => {
+        const deleteTitle = I18n.t("common-action-delete");
+        const toggleTitle = strategy.enabled
+          ? I18n.attr("strategies-item-disable", "title")
+          : I18n.attr("strategies-item-enable", "title");
+        return `
       <div class="strategy-item ${currentStrategy?.id === strategy.id ? "active" : ""}"
            data-strategy-id="${strategy.id}">
         <div class="strategy-item-name">${Utils.escapeHtml(strategy.name)}</div>
         <div class="strategy-item-row">
           <div class="strategy-item-tags">
-            <span class="strategy-type-tag ${strategy.type.toLowerCase()}">${strategy.type}</span>
-            <span class="strategy-state-tag ${strategy.enabled ? "enabled" : "disabled"}">${strategy.enabled ? "Enabled" : "Disabled"}</span>
+            <span class="strategy-type-tag ${strategy.type.toLowerCase()}">${Utils.escapeHtml(I18n.label(STRATEGY_TYPE_LABELS, strategy.type))}</span>
+            <span class="strategy-state-tag ${strategy.enabled ? "enabled" : "disabled"}">${Utils.escapeHtml(strategy.enabled ? I18n.t("common-state-enabled") : I18n.t("common-state-disabled"))}</span>
           </div>
           <div class="strategy-item-btns">
-            <button class="btn-icon btn-icon-sm" data-action="toggle" title="${strategy.enabled ? "Disable" : "Enable"}">
+            <button class="btn-icon btn-icon-sm" data-action="toggle" title="${Utils.escapeHtml(toggleTitle)}" aria-label="${Utils.escapeHtml(toggleTitle)}">
               <i class="${strategy.enabled ? "icon-toggle-right" : "icon-toggle-left"}"></i>
             </button>
-            <button class="btn-icon btn-icon-sm" data-action="delete" title="Delete"><i class="icon-trash-2"></i></button>
+            <button class="btn-icon btn-icon-sm" data-action="delete" title="${Utils.escapeHtml(deleteTitle)}" aria-label="${Utils.escapeHtml(deleteTitle)}"><i class="icon-trash-2"></i></button>
           </div>
         </div>
       </div>
-    `
-      )
+    `;
+      })
       .join("");
 
     // Attach event listeners
@@ -707,387 +671,16 @@ export function createLifecycle() {
     filterStrategies(filter);
   }
 
-  function renderTemplates() {
-    const key = JSON.stringify(templates);
-    if (key === _lastTemplatesKey) return;
-    _lastTemplatesKey = key;
-
-    clearScope(CleanupScope.TEMPLATE_LIST);
-
-    const listContainer = $("#template-list");
-    if (!listContainer) return;
-
-    if (templates.length === 0) {
-      listContainer.innerHTML = `
-        <div class="empty-state">
-          <span class="icon"><i class="icon-package"></i></span>
-          <p>No templates available</p>
-        </div>
-      `;
-      return;
-    }
-
-    listContainer.innerHTML = templates
-      .map(
-        (template) => `
-      <div class="template-item" data-template-id="${template.id}">
-        <div class="template-item-header">
-          <div class="template-item-title">${Utils.escapeHtml(template.name)}</div>
-          <span class="risk-badge ${template.risk_level || "medium"}">
-            ${(template.risk_level || "medium").toUpperCase()}
-          </span>
-        </div>
-        <div class="template-item-description">
-          ${Utils.escapeHtml(template.description || "No description")}
-        </div>
-        <div class="template-item-footer">
-          <span class="strategy-badge">${template.category || "General"}</span>
-          <button class="btn" data-action="use">Use Template</button>
-        </div>
-      </div>
-    `
-      )
-      .join("");
-
-    // Attach event listeners
-    $$(".template-item").forEach((item) => {
-      const useBtn = item.querySelector("[data-action='use']");
-      if (useBtn) {
-        addTrackedListener(
-          useBtn,
-          "click",
-          () => {
-            const templateId = item.dataset.templateId;
-            useTemplate(templateId);
-          },
-          CleanupScope.TEMPLATE_LIST
-        );
-      }
-    });
-  }
-
-  function filterTemplates() {
-    const categorySelect = $("#template-category");
-    const riskSelect = $("#template-risk");
-
-    if (!categorySelect || !riskSelect) return;
-
-    const category = categorySelect.value;
-    const risk = riskSelect.value;
-
-    const items = $$(".template-item");
-    items.forEach((item) => {
-      const templateId = item.dataset.templateId;
-      const template = templates.find((t) => t.id === templateId);
-
-      if (!template) {
-        item.style.display = "none";
-        return;
-      }
-
-      const matchesCategory =
-        category === "all" || (template.category || "").toLowerCase() === category;
-      const matchesRisk = risk === "all" || (template.risk_level || "").toLowerCase() === risk;
-
-      item.style.display = matchesCategory && matchesRisk ? "" : "none";
-    });
-  }
-
   function openConditionCatalog() {
     const modal = $("#condition-catalog-modal");
     if (modal) modal.hidden = false;
-  }
-
-  function renderPropertiesPanel(node) {
-    clearScope(CleanupScope.PROPERTY_PANEL);
-    const editor = $("#property-editor");
-    if (!editor) return;
-
-    if (!node) {
-      editor.innerHTML = `
-        <div class="empty-state">
-          <span class="icon"><i class="icon-target"></i></span>
-          <p>No selection</p>
-          <small>Select a node to edit properties</small>
-        </div>
-      `;
-      return;
-    }
-
-    const schema = conditionSchemas[node.conditionType];
-    if (!schema) {
-      editor.innerHTML = `
-        <div class="empty-state">
-          <i class="icon-triangle-alert"></i>
-          <p>Unknown condition type</p>
-        </div>
-      `;
-      return;
-    }
-
-    let html = `
-      <div class="property-group">
-        <div class="property-group-title">Condition Details</div>
-        <div class="property-field">
-          <label class="property-label">Name</label>
-          <input type="text" class="property-input" id="node-name" value="${Utils.escapeHtml(node.name)}">
-        </div>
-        <div class="property-field">
-          <label class="property-label">Type</label>
-          <input type="text" class="property-input" value="${Utils.escapeHtml(node.conditionType)}" disabled>
-        </div>
-      </div>
-    `;
-
-    if (schema.parameters && Object.keys(schema.parameters).length > 0) {
-      html += `
-        <div class="property-group">
-          <div class="property-group-title">Parameters</div>
-      `;
-
-      Object.entries(schema.parameters).forEach(([key, paramSchema]) => {
-        const value = node.parameters[key] ?? paramSchema.default ?? "";
-        html += renderParameterField(key, paramSchema, value);
-      });
-
-      html += "</div>";
-    }
-
-    editor.innerHTML = html;
-
-    // Attach event listeners with cleanup tracking
-    const nameInput = $("#node-name");
-    if (nameInput) {
-      const handler = (e) => {
-        node.name = e.target.value;
-        conditionEditor.renderConditionsList();
-      };
-      addTrackedListener(nameInput, "input", handler, CleanupScope.PROPERTY_PANEL);
-    }
-
-    // Parameter inputs with cleanup tracking
-    if (schema.parameters) {
-      Object.keys(schema.parameters).forEach((key) => {
-        const input = $(`#param-${key}`);
-        if (input) {
-          const handler = (e) => {
-            const paramSchema = schema.parameters[key];
-            let value = e.target.value;
-
-            // Convert to appropriate type
-            if (paramSchema.type === "number") {
-              value = parseFloat(value) || 0;
-            } else if (paramSchema.type === "boolean") {
-              value = e.target.checked;
-            }
-
-            const existing = node.parameters[key];
-            const defaultVal = paramSchema.default !== undefined ? paramSchema.default : null;
-            if (existing && typeof existing === "object" && "value" in existing) {
-              node.parameters[key] = { ...existing, value };
-            } else {
-              node.parameters[key] = { value, default: defaultVal };
-            }
-            conditionEditor.updateRuleTreeFromEditor();
-          };
-          addTrackedListener(input, "input", handler, CleanupScope.PROPERTY_PANEL);
-          addTrackedListener(input, "change", handler, CleanupScope.PROPERTY_PANEL);
-        }
-      });
-    }
-  }
-
-  function renderParameterField(key, schema, value) {
-    const type = schema.type || "string";
-    const effectiveValue =
-      value && typeof value === "object" && "value" in value ? value.value : value;
-    const description = schema.description
-      ? `<div class="property-description">${Utils.escapeHtml(schema.description)}</div>`
-      : "";
-
-    let inputHtml = "";
-
-    switch (type) {
-      case "number":
-        inputHtml = `<input type="number" class="property-input" id="param-${key}" value="${effectiveValue}" 
-          ${schema.min !== undefined ? `min="${schema.min}"` : ""} 
-          ${schema.max !== undefined ? `max="${schema.max}"` : ""} 
-          ${schema.step !== undefined ? `step="${schema.step}"` : ""}>`;
-        break;
-
-      case "boolean":
-        inputHtml = `<input type="checkbox" id="param-${key}" ${effectiveValue ? "checked" : ""}>`;
-        break;
-
-      case "enum":
-        {
-          const opts =
-            schema.values && Array.isArray(schema.values) ? schema.values : schema.options || [];
-          if (opts && Array.isArray(opts) && opts.length > 0) {
-            inputHtml = `<select class="property-input" id="param-${key}" data-custom-select>
-              ${opts.map((v) => `<option value="${v}" ${v === effectiveValue ? "selected" : ""}>${v}</option>`).join("")}
-            </select>`;
-          } else {
-            inputHtml = `<input type="text" class="property-input" id="param-${key}" value="${Utils.escapeHtml(String(effectiveValue))}">`;
-          }
-        }
-        break;
-
-      default:
-        if (schema.options && Array.isArray(schema.options) && schema.options.length > 0) {
-          inputHtml = `<select class="property-input" id="param-${key}" data-custom-select>
-            ${schema.options.map((v) => `<option value="${v}" ${v === effectiveValue ? "selected" : ""}>${v}</option>`).join("")}
-          </select>`;
-        } else {
-          inputHtml = `<input type="text" class="property-input" id="param-${key}" value="${Utils.escapeHtml(String(effectiveValue))}">`;
-        }
-    }
-
-    return `
-      <div class="property-field">
-        <label class="property-label">${schema.name || key}</label>
-        ${inputHtml}
-        ${description}
-      </div>
-    `;
-  }
-
-  // Parameter Editor Modal Functions (kept for potential future use, not auto-opened)
-  function openParameterEditor(node) {
-    const modal = $("#parameter-editor-modal");
-    const body = $("#parameter-editor-body");
-    if (!modal || !body) return;
-
-    const schema = conditionSchemas[node.conditionType];
-    if (!schema) {
-      Utils.showToast("Unknown condition type", "error");
-      return;
-    }
-
-    let html = `
-      <div class="property-group">
-        <div class="property-group-title">Condition Details</div>
-        <div class="property-field">
-          <label class="property-label">Name</label>
-          <input type="text" class="property-input" id="modal-node-name" value="${Utils.escapeHtml(node.name)}">
-        </div>
-        <div class="property-field">
-          <label class="property-label">Type</label>
-          <input type="text" class="property-input" value="${Utils.escapeHtml(node.conditionType)}" disabled>
-        </div>
-      </div>
-    `;
-
-    if (schema.parameters && Object.keys(schema.parameters).length > 0) {
-      html += `
-        <div class="property-group">
-          <div class="property-group-title">Parameters</div>
-      `;
-
-      Object.entries(schema.parameters).forEach(([key, paramSchema]) => {
-        const value = node.parameters[key] ?? paramSchema.default ?? "";
-        html += renderParameterField(key, paramSchema, value);
-      });
-
-      html += "</div>";
-    }
-
-    body.innerHTML = html;
-
-    // Enhance native selects with custom styling
-    enhanceAllSelects(body);
-
-    // Store reference to the current node being edited
-    modal.dataset.editingNodeId = node.id;
-
-    // Show modal
-    modal.hidden = false;
-
-    // Setup event listeners
-    setupParameterEditorListeners(node, schema);
-  }
-
-  function setupParameterEditorListeners(node, schema) {
-    const modal = $("#parameter-editor-modal");
-    const closeBtn = $("#close-parameter-editor");
-    const cancelBtn = $("#cancel-parameter-edit");
-    const applyBtn = $("#apply-parameter-edit");
-
-    clearScope(CleanupScope.MODAL);
-
-    // Close handlers
-    const closeModal = () => {
-      modal.hidden = true;
-      clearScope(CleanupScope.MODAL);
-    };
-
-    addTrackedListener(closeBtn, "click", closeModal, CleanupScope.MODAL);
-    addTrackedListener(cancelBtn, "click", closeModal, CleanupScope.MODAL);
-
-    // Click outside to close
-    const outsideClickHandler = (e) => {
-      if (e.target === modal) {
-        closeModal();
-      }
-    };
-    addTrackedListener(modal, "click", outsideClickHandler, CleanupScope.MODAL);
-
-    // Apply changes
-    const applyHandler = () => {
-      // Update node name
-      const nameInput = $("#modal-node-name");
-      if (nameInput) {
-        node.name = nameInput.value;
-      }
-
-      // Update parameters
-      if (schema.parameters) {
-        Object.keys(schema.parameters).forEach((key) => {
-          const input = $(`#param-${key}`);
-          if (input) {
-            const paramSchema = schema.parameters[key];
-            let value = input.value;
-
-            // Convert to appropriate type
-            if (paramSchema.type === "number") {
-              value = parseFloat(value) || 0;
-            } else if (paramSchema.type === "boolean") {
-              value = input.checked;
-            }
-
-            const existing = node.parameters[key];
-            const defaultVal = paramSchema.default !== undefined ? paramSchema.default : null;
-            if (existing && typeof existing === "object" && "value" in existing) {
-              node.parameters[key] = { ...existing, value };
-            } else {
-              node.parameters[key] = { value, default: defaultVal };
-            }
-          }
-        });
-      }
-
-      conditionEditor.updateRuleTreeFromEditor();
-      conditionEditor.renderConditionsList();
-      closeModal();
-      Utils.showToast("Parameters updated", "success");
-    };
-    addTrackedListener(applyBtn, "click", applyHandler, CleanupScope.MODAL);
-
-    // ESC key to close (with cleanup tracking)
-    const escHandler = (e) => {
-      if (e.key === "Escape") {
-        closeModal();
-        document.removeEventListener("keydown", escHandler);
-      }
-    };
-    addTrackedListener(document, "keydown", escHandler, CleanupScope.MODAL);
   }
 
   // Strategy Operations
   function createNewStrategy(strategyType = "ENTRY") {
     currentStrategy = {
       id: null,
-      name: "New Strategy",
+      name: I18n.t("strategies-new-name"),
       type: strategyType,
       enabled: true,
       priority: 10,
@@ -1114,13 +707,13 @@ export function createLifecycle() {
 
     showEditor();
     markDirty(); // new strategy is always unsaved
-    renderPropertiesPanel(null);
 
-    Utils.showToast({
-      type: "success",
-      title: "New Strategy",
-      message: `Created new ${strategyType.toLowerCase()} strategy`,
-    });
+    const args = { type: strategyType };
+    announce(
+      "success",
+      I18n.t("strategies-toast-created", args),
+      I18n.attr("strategies-toast-created", "message", args)
+    );
   }
 
   function updateTypeBadge(type) {
@@ -1129,7 +722,7 @@ export function createLifecycle() {
 
     badge.className = `strategy-type-badge ${type.toLowerCase()}`;
     const icon = type === "ENTRY" ? "icon-trending-up" : "icon-trending-down";
-    badge.innerHTML = `<i class="${icon}"></i> ${type}`;
+    badge.innerHTML = `<i class="${icon}"></i> ${Utils.escapeHtml(I18n.label(STRATEGY_TYPE_LABELS, type))}`;
   }
 
   async function loadStrategy(strategyId) {
@@ -1182,27 +775,27 @@ export function createLifecycle() {
       });
     } catch (error) {
       console.error("Failed to load strategy:", error);
-      Utils.showToast("Failed to load strategy", "error");
+      Utils.showToast(I18n.t("strategies-toast-load-strategy-failed"), "error");
     }
   }
 
   async function saveStrategy() {
     if (!currentStrategy) {
-      Utils.showToast({
-        type: "error",
-        title: "No Strategy Created",
-        message: "Add at least one condition or click 'New Strategy' to create a strategy first",
-      });
+      announce(
+        "error",
+        I18n.t("strategies-toast-no-strategy"),
+        I18n.attr("strategies-toast-no-strategy", "message")
+      );
       return;
     }
 
     // Validate strategy has conditions
     if (conditions.length === 0) {
-      Utils.showToast({
-        type: "warning",
-        title: "No Conditions",
-        message: "Add at least one condition to the strategy before saving",
-      });
+      announce(
+        "warning",
+        I18n.t("strategies-toast-no-conditions-save"),
+        I18n.attr("strategies-toast-no-conditions-save", "message")
+      );
       return;
     }
 
@@ -1216,11 +809,11 @@ export function createLifecycle() {
 
       // Validate name
       if (!currentStrategy.name) {
-        Utils.showToast({
-          type: "warning",
-          title: "Name Required",
-          message: "Enter a strategy name before saving",
-        });
+        announce(
+        "warning",
+        I18n.t("strategies-toast-name-required"),
+        I18n.attr("strategies-toast-name-required", "message")
+      );
         if (nameInput) nameInput.focus();
         return;
       }
@@ -1254,68 +847,25 @@ export function createLifecycle() {
 
       clearDirty();
       await loadStrategies();
-      Utils.showToast({
-        type: "success",
-        title: "Strategy Saved",
-        message: `"${currentStrategy.name}" saved successfully`,
-      });
+      const args = { name: currentStrategy.name };
+      announce(
+        "success",
+        I18n.t("strategies-toast-saved", args),
+        I18n.attr("strategies-toast-saved", "message", args)
+      );
     } catch (error) {
       console.error("Failed to save strategy:", error);
-      Utils.showToast({
-        type: "error",
-        title: "Save Failed",
-        message: "Failed to save strategy to database",
-      });
+      announce(
+        "error",
+        I18n.t("strategies-toast-save-failed"),
+        I18n.attr("strategies-toast-save-failed", "message")
+      );
     }
-  }
-
-  async function saveStrategyAs() {
-    if (!currentStrategy) {
-      Utils.showToast("No strategy to save", "warning");
-      return;
-    }
-
-    const result = await InputDialog.show({
-      title: "Duplicate Strategy",
-      message: "Enter name for the copied strategy",
-      placeholder: "Strategy name...",
-      defaultValue: `${currentStrategy.name} (Copy)`,
-      confirmLabel: "Save",
-      validate: (value) => {
-        if (!value || !value.trim()) return "Strategy name is required";
-        return null;
-      },
-      formatValue: (value) => value.trim(),
-    });
-    if (!result) return;
-    const newName = result.value;
-    const newStrategy = { ...currentStrategy, id: null, name: newName };
-    currentStrategy = newStrategy;
-
-    await saveStrategy();
-  }
-
-  function duplicateStrategy() {
-    if (!currentStrategy) {
-      Utils.showToast("No strategy to duplicate", "warning");
-      return;
-    }
-
-    currentStrategy = {
-      ...currentStrategy,
-      id: null,
-      name: `${currentStrategy.name} (Copy)`,
-    };
-
-    const nameInput = $("#strategy-name");
-    if (nameInput) nameInput.value = currentStrategy.name;
-
-    Utils.showToast("Strategy duplicated", "success");
   }
 
   async function validateStrategy() {
     if (!currentStrategy) {
-      Utils.showToast("No strategy to validate", "warning");
+      Utils.showToast(I18n.t("strategies-toast-no-strategy-validate"), "warning");
       return false;
     }
 
@@ -1324,12 +874,11 @@ export function createLifecycle() {
 
     // Check if strategy has conditions
     if (!currentStrategy.rules) {
-      Utils.showToast({
-        type: "warning",
-        title: "No Conditions",
-        message: "Add at least one condition before validating",
-      });
-      updateValidationStatus(false, "No conditions defined");
+      announce(
+        "warning",
+        I18n.t("strategies-toast-no-conditions-validate"),
+        I18n.attr("strategies-toast-no-conditions-validate", "message")
+      );
       return false;
     }
 
@@ -1364,40 +913,15 @@ export function createLifecycle() {
       }
 
       if (data.valid) {
-        updateValidationStatus(true, "Strategy is valid");
-        Utils.showToast("Strategy is valid", "success");
+        Utils.showToast(I18n.t("strategies-toast-valid"), "success");
         return true;
-      } else {
-        updateValidationStatus(false, data.errors?.join(", ") || "Invalid strategy");
-        Utils.showToast("Strategy has errors", "error");
-        return false;
       }
+      Utils.showToast(I18n.t("strategies-toast-invalid"), "error");
+      return false;
     } catch (error) {
       console.error("Validation failed:", error);
-      updateValidationStatus(false, error.message);
-      Utils.showToast("Validation failed", "error");
+      Utils.showToast(I18n.t("strategies-toast-validation-failed"), "error");
       return false;
-    }
-  }
-
-  async function testStrategy() {
-    if (!currentStrategy?.id) {
-      Utils.showToast("Please save the strategy first", "warning");
-      return;
-    }
-
-    try {
-      const data = await requestManager.fetch(`/api/strategies/${currentStrategy.id}/test`, {
-        method: "POST",
-        priority: "high",
-      });
-      Utils.showToast(
-        `Test result: ${data.result ? "Passed" : "Failed"}`,
-        data.result ? "success" : "error"
-      );
-    } catch (error) {
-      console.error("Test failed:", error);
-      Utils.showToast("Test failed", "error");
     }
   }
 
@@ -1429,10 +953,15 @@ export function createLifecycle() {
       });
 
       await loadStrategies();
-      Utils.showToast(`Strategy ${strategy.enabled ? "disabled" : "enabled"}`, "success");
+      Utils.showToast(
+        strategy.enabled
+          ? I18n.t("strategies-toast-item-disabled")
+          : I18n.t("strategies-toast-item-enabled"),
+        "success"
+      );
     } catch (error) {
       console.error("Failed to toggle strategy:", error);
-      Utils.showToast("Failed to toggle strategy", "error");
+      Utils.showToast(I18n.t("strategies-toast-item-toggle-failed"), "error");
     }
   }
 
@@ -1441,10 +970,10 @@ export function createLifecycle() {
     if (!strategy) return;
 
     const { confirmed } = await ConfirmationDialog.show({
-      title: "Delete Strategy",
-      message: `Delete strategy "${strategy.name}"? This action cannot be undone.`,
-      confirmLabel: "Delete",
-      cancelLabel: "Cancel",
+      title: I18n.t("strategies-delete-title"),
+      message: I18n.t("strategies-delete-message", { name: strategy.name }),
+      confirmLabel: I18n.t("common-action-delete"),
+      cancelLabel: I18n.t("common-action-cancel"),
       variant: "danger",
     });
 
@@ -1462,18 +991,19 @@ export function createLifecycle() {
       }
 
       await loadStrategies();
-      Utils.showToast({
-        type: "success",
-        title: "Strategy Deleted",
-        message: `"${strategy.name}" removed successfully`,
-      });
+      const args = { name: strategy.name };
+      announce(
+        "success",
+        I18n.t("strategies-toast-deleted", args),
+        I18n.attr("strategies-toast-deleted", "message", args)
+      );
     } catch (error) {
       console.error("Failed to delete strategy:", error);
-      Utils.showToast({
-        type: "error",
-        title: "Delete Failed",
-        message: "Failed to delete strategy from database",
-      });
+      announce(
+        "error",
+        I18n.t("strategies-toast-delete-failed"),
+        I18n.attr("strategies-toast-delete-failed", "message")
+      );
     }
   }
 
@@ -1498,71 +1028,14 @@ export function createLifecycle() {
         if (nameInput) nameInput.value = currentStrategy.name;
         if (typeSelect) typeSelect.value = currentStrategy.type;
 
-        Utils.showToast("Strategy imported", "success");
+        Utils.showToast(I18n.t("strategies-toast-imported"), "success");
       } catch (error) {
         console.error("Failed to import strategy:", error);
-        Utils.showToast("Failed to import strategy", "error");
+        Utils.showToast(I18n.t("strategies-toast-import-failed"), "error");
       }
     };
 
     input.click();
-  }
-
-  function useTemplate(templateId) {
-    const template = templates.find((t) => t.id === templateId);
-    if (!template) return;
-
-    currentStrategy = {
-      id: null,
-      name: template.name,
-      type: "ENTRY",
-      enabled: false,
-      priority: 10,
-      rules: template.rules,
-      parameters: template.parameters || {},
-    };
-
-    // Update UI
-    const nameInput = $("#strategy-name");
-    const typeSelect = $("#strategy-type");
-
-    if (nameInput) nameInput.value = currentStrategy.name;
-    if (typeSelect) typeSelect.value = currentStrategy.type;
-
-    // Render into vertical editor (suppress dirty during load)
-    _loadingStrategy = true;
-    conditionEditor.parseRuleTreeToConditions(currentStrategy.rules);
-    conditionEditor.renderConditionsList();
-    _loadingStrategy = false;
-
-    showEditor();
-    markDirty(); // template is not yet saved
-
-    // Switch to strategies tab
-    const strategiesTab = $(".tab-btn[data-tab='strategies']");
-    if (strategiesTab) strategiesTab.click();
-
-    Utils.showToast(`Loaded template: ${template.name}`, "success");
-  }
-
-  function updateValidationStatus(valid, message) {
-    const status = $("#validation-status");
-    if (!status) return;
-
-    const icon = status.querySelector(".status-icon");
-    const text = status.querySelector(".status-text");
-
-    if (valid) {
-      status.classList.remove("invalid");
-      status.classList.add("valid");
-      if (icon) icon.innerHTML = '<i class="icon-check"></i>';
-    } else {
-      status.classList.remove("valid");
-      status.classList.add("invalid");
-      if (icon) icon.innerHTML = '<i class="icon-x"></i>';
-    }
-
-    if (text) text.textContent = message;
   }
 }
 

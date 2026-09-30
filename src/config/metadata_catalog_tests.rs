@@ -125,7 +125,7 @@ fn config_catalog_covers_fields() {
         let hint = format_message(&english(), key, None).unwrap();
         for (name, _) in &hint.attributes {
             assert!(
-                matches!(name.as_str(), "hint" | "unit" | "placeholder"),
+                matches!(name.as_str(), "hint" | "unit" | "placeholder" | "subject"),
                 "`{key}` has unsupported attribute `.{name}`"
             );
         }

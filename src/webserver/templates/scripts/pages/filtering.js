@@ -15,7 +15,8 @@ import * as Utils from "../core/utils.js";
 import * as AppState from "../core/app_state.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
 import {
-  FILTER_TABS,
+  buildFilterTabs,
+  REJECTION_SOURCE_LABELS,
   TIME_RANGE_PRESETS,
   setConfigValue,
   getFieldDefault,
@@ -60,6 +61,11 @@ const TABBAR_STATE_KEY = "filtering.tab";
 
 let tabBar = null;
 const eventCleanups = [];
+
+// Failure text with the technical cause of a request error appended.
+function failureMessage(error, message) {
+  return error?.message ? I18n.t("errors-with-details", { message, details: error.message }) : message;
+}
 
 // Helper to track event listeners
 function addTrackedListener(element, event, handler) {
@@ -349,7 +355,6 @@ function updateStatusMessage() {
       isRefreshing: state.isRefreshing,
       hasChanges: state.hasChanges,
       lastSaved: state.lastSaved,
-      Utils,
     });
     statusEl.textContent = statusMsg;
   }
@@ -427,7 +432,11 @@ function handleSourceToggle(event) {
   // The switch and its word are already correct in the DOM — record that, so the
   // next full render leaves the control the user is still holding focus on alone.
   const stateLabel = $("#filtering-source-state");
-  if (stateLabel) stateLabel.textContent = input.checked ? "Enabled" : "Disabled";
+  if (stateLabel) {
+    stateLabel.textContent = input.checked
+      ? I18n.t("common-state-enabled")
+      : I18n.t("common-state-disabled");
+  }
   _lastToolbarKey = toolbarKey();
 
   updateConfigPanels({ preserveScroll: true });
@@ -499,15 +508,15 @@ async function handleSaveConfig() {
 
     Utils.showToast({
       type: "success",
-      title: "Configuration Saved",
-      message: "Filtering settings saved and snapshot refreshed",
+      title: I18n.t("filtering-toast-saved"),
+      message: I18n.attr("filtering-toast-saved", "message"),
     });
   } catch (error) {
     console.error("Failed to save config:", error);
     Utils.showToast({
       type: "error",
-      title: "Save Failed",
-      message: error.message || "Failed to save filtering configuration",
+      title: I18n.t("filtering-toast-save-failed"),
+      message: failureMessage(error, I18n.attr("filtering-toast-save-failed", "message")),
     });
   } finally {
     state.isSaving = false;
@@ -524,8 +533,8 @@ function handleResetConfig() {
   render(); // Need full render to restore original values
   Utils.showToast({
     type: "info",
-    title: "Changes Reset",
-    message: "Configuration restored to last saved state",
+    title: I18n.t("filtering-toast-reset"),
+    message: I18n.attr("filtering-toast-reset", "message"),
   });
 }
 
@@ -544,8 +553,8 @@ async function handleRefreshSnapshot() {
     console.error("Failed to refresh snapshot:", error);
     Utils.showToast({
       type: "error",
-      title: "Refresh Failed",
-      message: error.message || "Failed to refresh filtering snapshot",
+      title: I18n.t("filtering-toast-refresh-failed"),
+      message: failureMessage(error, I18n.attr("filtering-toast-refresh-failed", "message")),
     });
   } finally {
     state.isRefreshing = false;
@@ -565,8 +574,8 @@ function handleExportConfig() {
   URL.revokeObjectURL(url);
   Utils.showToast({
     type: "success",
-    title: "Configuration Exported",
-    message: "Filtering settings saved to file",
+    title: I18n.t("filtering-toast-exported"),
+    message: I18n.attr("filtering-toast-exported", "message"),
   });
 }
 
@@ -587,15 +596,15 @@ function handleImportConfig() {
       render();
       Utils.showToast({
         type: "success",
-        title: "Configuration Imported",
-        message: "Filtering settings loaded from file",
+        title: I18n.t("filtering-toast-imported"),
+        message: I18n.attr("filtering-toast-imported", "message"),
       });
     } catch (error) {
       console.error("Failed to import config:", error);
       Utils.showToast({
         type: "error",
-        title: "Import Failed",
-        message: error.message || "Failed to import configuration - invalid file format",
+        title: I18n.t("filtering-toast-import-failed"),
+        message: failureMessage(error, I18n.attr("filtering-toast-import-failed", "message")),
       });
     }
   });
@@ -617,8 +626,8 @@ async function loadConfig() {
     console.error("Failed to load config:", error);
     Utils.showToast({
       type: "error",
-      title: "Load Failed",
-      message: error.message || "Failed to load filtering configuration",
+      title: I18n.t("filtering-toast-load-failed"),
+      message: failureMessage(error, I18n.attr("filtering-toast-load-failed", "message")),
     });
   }
 }
@@ -742,7 +751,7 @@ export function createLifecycle() {
       if (!tabBar) {
         tabBar = new TabBar({
           container: "#subTabsContainer",
-          tabs: FILTER_TABS,
+          tabs: buildFilterTabs(Utils.escapeHtml),
           defaultTab: state.activeTab,
           stateKey: TABBAR_STATE_KEY,
           pageName: "filtering",
@@ -788,7 +797,7 @@ export function createLifecycle() {
       if (!poller) {
         poller = ctx.managePoller(
           new Poller(async () => await loadStats(), {
-            label: "Filtering Stats",
+            label: "Filtering Stats", // l10n-ignore: poller label used in logs only
             intervalMs: 5000,
           })
         );
@@ -882,20 +891,20 @@ window.filteringPage = {
 
     // Validation: ensure both dates are provided
     if (!startTime || !endTime) {
-      Utils.showToast("Please select both start and end dates", "error");
+      Utils.showToast(I18n.t("filtering-toast-range-missing"), "error");
       return;
     }
 
     // Validation: start must be before end
     if (startTime >= endTime) {
-      Utils.showToast("Start time must be before end time", "error");
+      Utils.showToast(I18n.t("filtering-toast-range-order"), "error");
       return;
     }
 
     // Validation: end cannot be in the future (with 1 minute tolerance)
     const now = Math.floor(Date.now() / 1000);
     if (endTime > now + 60) {
-      Utils.showToast("End time cannot be in the future", "error");
+      Utils.showToast(I18n.t("filtering-toast-range-future"), "error");
       return;
     }
 
@@ -1072,7 +1081,7 @@ window.filteringPage = {
     try {
       const url = `/api/filtering/rejected-tokens?limit=${limit}&offset=${testPage * limit}&reason=${encodeURIComponent(reason)}`;
       const response = await fetch(url);
-      if (!response.ok) throw new Error("Failed to fetch tokens");
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const tokens = await response.json();
 
       if (tokens.length === 0) {
@@ -1083,7 +1092,7 @@ window.filteringPage = {
           const mid = Math.floor((low + high) / 2);
           const checkUrl = `/api/filtering/rejected-tokens?limit=${limit}&offset=${mid * limit}&reason=${encodeURIComponent(reason)}`;
           const checkRes = await fetch(checkUrl);
-          if (!checkRes.ok) throw new Error("Failed to fetch tokens");
+          if (!checkRes.ok) throw new Error(`HTTP ${checkRes.status}`);
           const checkTokens = await checkRes.json();
           if (checkTokens.length === 0) {
             high = mid;
@@ -1125,19 +1134,26 @@ window.filteringPage = {
 
     if (!container || !reason) return;
 
+    const esc = Utils.escapeHtml;
+
+    // Pagination strip; `hasMore` is unknown while a page is loading.
+    const renderPagination = ({ first, previous, next, last, label }) => `
+          <button class="page-btn" onclick="window.filteringPage.firstPage()" ${first ? "" : "disabled"} title="${esc(I18n.t("table-pagination-first-page"))}" aria-label="${esc(I18n.t("table-pagination-first-page"))}"><i class="icon-chevrons-left"></i></button>
+          <button class="page-btn" onclick="window.filteringPage.prevPage()" ${previous ? "" : "disabled"} title="${esc(I18n.t("table-pagination-previous-page"))}" aria-label="${esc(I18n.t("table-pagination-previous-page"))}"><i class="icon-chevron-left"></i></button>
+          <span class="page-info">${esc(label)}</span>
+          <button class="page-btn" onclick="window.filteringPage.nextPage()" ${next ? "" : "disabled"} title="${esc(I18n.t("table-pagination-next-page"))}" aria-label="${esc(I18n.t("table-pagination-next-page"))}"><i class="icon-chevron-right"></i></button>
+          <button class="page-btn" onclick="window.filteringPage.lastPage()" ${last ? "" : "disabled"} title="${esc(I18n.t("table-pagination-last-page"))}" aria-label="${esc(I18n.t("table-pagination-last-page"))}"><i class="icon-chevrons-right"></i></button>
+        `;
+
     // Initial render — just table + pagination, no header
     if (page === 0 && !container.querySelector(".explorer-table-wrapper")) {
       container.innerHTML = `
         <div class="explorer-table-wrapper">
-          <div class="loading-spinner small explorer-loading-full">Loading…</div>
+          <div class="loading-spinner small explorer-loading-full">${esc(I18n.t("common-loading"))}</div>
         </div>
-        <div class="pagination-controls">
-          <button class="page-btn" onclick="window.filteringPage.firstPage()" disabled title="First"><i class="icon-chevrons-left"></i></button>
-          <button class="page-btn" onclick="window.filteringPage.prevPage()" disabled title="Previous"><i class="icon-chevron-left"></i></button>
-          <span class="page-info">Page ${page + 1}</span>
-          <button class="page-btn" onclick="window.filteringPage.nextPage()" disabled title="Next"><i class="icon-chevron-right"></i></button>
-          <button class="page-btn" onclick="window.filteringPage.lastPage()" disabled title="Last"><i class="icon-chevrons-right"></i></button>
-        </div>
+        <div class="pagination-controls">${renderPagination({
+          label: I18n.t("filtering-explorer-page", { page: Utils.formatNumber(page + 1, 0) }),
+        })}</div>
       `;
     } else {
       const wrapper = container.querySelector(".explorer-table-wrapper");
@@ -1152,7 +1168,7 @@ window.filteringPage = {
       }
 
       const response = await fetch(url);
-      if (!response.ok) throw new Error("Failed to fetch tokens");
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
       const tokens = await response.json();
       const wrapper = container.querySelector(".explorer-table-wrapper");
@@ -1160,20 +1176,15 @@ window.filteringPage = {
       if (!wrapper) return;
 
       if (tokens.length === 0) {
+        const emptyText = searchQuery
+          ? I18n.t("filtering-explorer-empty-filtered")
+          : I18n.t("filtering-explorer-empty");
         wrapper.innerHTML = `
-          <div class="explorer-empty-state">
-            No tokens found${searchQuery ? " matching filter" : ""}
-          </div>`;
+          <div class="explorer-empty-state">${esc(emptyText)}</div>`;
         // Update pagination
         const pagination = container.querySelector(".pagination-controls");
         if (pagination) {
-          pagination.innerHTML = `
-            <button class="page-btn" disabled><i class="icon-chevrons-left"></i></button>
-            <button class="page-btn" disabled><i class="icon-chevron-left"></i></button>
-            <span class="page-info">No results</span>
-            <button class="page-btn" disabled><i class="icon-chevron-right"></i></button>
-            <button class="page-btn" disabled><i class="icon-chevrons-right"></i></button>
-          `;
+          pagination.innerHTML = renderPagination({ label: I18n.t("filtering-explorer-no-results") });
         }
         return;
       }
@@ -1182,22 +1193,25 @@ window.filteringPage = {
         <table class="reasons-table">
           <thead>
             <tr>
-              <th>Token</th>
-              <th>Source</th>
-              <th class="text-end">Time</th>
+              <th>${esc(I18n.t("filtering-explorer-column-token"))}</th>
+              <th>${esc(I18n.t("filtering-explorer-column-source"))}</th>
+              <th class="text-end">${esc(I18n.t("filtering-explorer-column-time"))}</th>
             </tr>
           </thead>
           <tbody>
       `;
 
+      const copyMintTitle = esc(I18n.attr("links-copy-mint", "title"));
+      const dexscreenerTitle = esc(I18n.attr("links-view-dexscreener", "title"));
+
       html += tokens
         .map((t) => {
           const src = t.image_url;
           const logo = src
-            ? `<img class="token-logo token-logo-artwork" alt="" src="${Utils.escapeHtml(src)}" loading="lazy" />`
+            ? `<img class="token-logo token-logo-artwork" alt="" src="${esc(src)}" loading="lazy" />`
             : '<div class="token-logo token-logo-placeholder">?</div>';
-          const sym = Utils.escapeHtml(t.symbol || "—");
-          const name = Utils.escapeHtml(t.name || "Unknown");
+          const sym = esc(t.symbol || "—");
+          const name = esc(t.name || I18n.t("format-unknown"));
 
           return `
         <tr>
@@ -1211,17 +1225,17 @@ window.filteringPage = {
                 <div class="token-name">${name}</div>
               </div>
               <div class="token-actions">
-                <button class="btn-icon small" onclick="Utils.copyToClipboard('${t.mint}')" title="Copy Mint">
+                <button class="btn-icon small" onclick="Utils.copyToClipboard('${t.mint}')" title="${copyMintTitle}" aria-label="${copyMintTitle}">
                   <i class="icon-copy"></i>
                 </button>
-                <a href="https://dexscreener.com/solana/${t.mint}" target="_blank" class="btn-icon small" title="DexScreener">
+                <a href="https://dexscreener.com/solana/${t.mint}" target="_blank" class="btn-icon small" title="${dexscreenerTitle}" aria-label="${dexscreenerTitle}">
                   <i class="icon-external-link"></i>
                 </a>
               </div>
             </div>
           </td>
           <td>
-            <span class="source-badge ${t.source.toLowerCase()}">${Utils.escapeHtml(t.source)}</span>
+            <span class="source-badge ${t.source.toLowerCase()}">${esc(I18n.label(REJECTION_SOURCE_LABELS, t.source))}</span>
           </td>
           <td class="table-time-cell">
             ${Utils.formatTimeAgo(new Date(t.rejected_at))}
@@ -1238,19 +1252,23 @@ window.filteringPage = {
       const pagination = container.querySelector(".pagination-controls");
       if (pagination) {
         const hasMore = tokens.length >= window.filteringPage.explorerLimit;
-        pagination.innerHTML = `
-          <button class="page-btn" onclick="window.filteringPage.firstPage()" ${page === 0 ? "disabled" : ""} title="First"><i class="icon-chevrons-left"></i></button>
-          <button class="page-btn" onclick="window.filteringPage.prevPage()" ${page === 0 ? "disabled" : ""} title="Previous"><i class="icon-chevron-left"></i></button>
-          <span class="page-info">Page ${page + 1}</span>
-          <button class="page-btn" onclick="window.filteringPage.nextPage()" ${!hasMore ? "disabled" : ""} title="Next"><i class="icon-chevron-right"></i></button>
-          <button class="page-btn" onclick="window.filteringPage.lastPage()" ${!hasMore ? "disabled" : ""} title="Last"><i class="icon-chevrons-right"></i></button>
-        `;
+        pagination.innerHTML = renderPagination({
+          first: page !== 0,
+          previous: page !== 0,
+          next: hasMore,
+          last: hasMore,
+          label: I18n.t("filtering-explorer-page", { page: Utils.formatNumber(page + 1, 0) }),
+        });
       }
     } catch (err) {
       console.error("Failed to load explorer:", err);
       const wrapper = container.querySelector(".explorer-table-wrapper");
       if (wrapper) {
-        wrapper.innerHTML = `<div class="error-message p-lg">Failed to load tokens: ${err.message}</div>`;
+        const message = I18n.t("errors-with-details", {
+          message: I18n.t("filtering-explorer-load-failed"),
+          details: String(err?.message ?? err),
+        });
+        wrapper.innerHTML = `<div class="error-message p-lg">${esc(message)}</div>`;
       }
     }
   },

@@ -18,3 +18,8 @@ links-view-solana-fm = View on { -solanafm }
 links-view-dexscreener =
     .title = View on { -dexscreener }
     .aria-label = View on { -dexscreener }
+
+# Copy button for a token mint address, used by the token, position and filtering surfaces.
+links-copy-mint =
+    .title = Copy mint address
+    .aria-label = Copy mint address

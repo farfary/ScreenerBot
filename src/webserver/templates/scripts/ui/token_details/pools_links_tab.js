@@ -296,7 +296,7 @@ function buildTokenReferenceSection(token, mint, options = {}) {
           <span>${esc(I18n.t("tokens-links-mint-address"))}</span>
           <div class="links-info-value">
             <code dir="ltr" title="${safeMint}">${formatShortAddress(mint)}</code>
-            <button class="copy-btn-mini" type="button" data-copy="${safeMint}" title="${esc(I18n.attr("tokens-copy-mint", "title"))}">
+            <button class="copy-btn-mini" type="button" data-copy="${safeMint}" title="${esc(I18n.attr("links-copy-mint", "title"))}">
               <i class="icon-copy" aria-hidden="true"></i>
             </button>
           </div>

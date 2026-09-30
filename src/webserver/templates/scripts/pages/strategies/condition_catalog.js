@@ -3,6 +3,12 @@
  * Handles the condition catalog modal and browsing functionality
  */
 
+import {
+  categoryLabel,
+  conditionDescription,
+  conditionName,
+} from "./condition_text.js";
+
 export function createConditionCatalog({
   conditionSchemas,
   categoryStates,
@@ -40,10 +46,10 @@ export function createConditionCatalog({
         const isCollapsed = savedStates[category] !== false; // Default to collapsed
         return `
           <div class="condition-category">
-            <div class="category-header ${isCollapsed ? "collapsed" : ""}" data-category="${category}">
+            <div class="category-header ${isCollapsed ? "collapsed" : ""}" data-category="${Utils.escapeHtml(category)}">
               <div class="category-title">
                 <span class="icon"><i class="${getCategoryIcon(category)}"></i></span>
-                ${category}
+                ${Utils.escapeHtml(categoryLabel(list[0]))}
               </div>
               <span class="category-toggle">▶</span>
             </div>
@@ -92,10 +98,10 @@ export function createConditionCatalog({
       <div class="condition-item" draggable="true" data-condition-type="${condition.type}">
         <div class="condition-item-header">
           <i class="${iconClass}"></i>
-          <span class="condition-name">${Utils.escapeHtml(condition.name || condition.type)}</span>
+          <span class="condition-name">${Utils.escapeHtml(conditionName(condition, condition.type))}</span>
         </div>
         <div class="condition-description">
-          ${condition.description || "No description available"}
+          ${Utils.escapeHtml(conditionDescription(condition) || I18n.t("strategies-catalog-no-description"))}
         </div>
       </div>
     `;
@@ -250,20 +256,11 @@ export function createConditionCatalog({
     return icons[type] || "icon-puzzle";
   }
 
-  /**
-   * Get human-readable label for a category
-   */
-  function getCategoryLabel(category) {
-    // Category names are already human-readable
-    return category;
-  }
-
   return {
     initializeConditionCatalog,
     renderConditionItem,
     getCategoryIcon,
     getConditionIcon,
-    getCategoryLabel,
     getCategoryStates,
     applyCategoryCollapsedState,
     setAllCategoriesCollapsed,

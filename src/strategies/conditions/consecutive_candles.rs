@@ -113,33 +113,28 @@ impl ConditionEvaluator for ConsecutiveCandlesCondition {
     fn parameter_schema(&self) -> serde_json::Value {
         json!({
             "type": "ConsecutiveCandles",
-            "name": "Consecutive Candles",
             "category": "Candle Patterns",
             "tags": ["candles", "pattern", "momentum", "streak"],
             "icon": "icon-chart-candlestick",
             "origin": "strategy",
-            "description": "Detect consecutive green (bullish) or red (bearish) candles with minimum size filter",
             "parameters": {
                 "timeframe": {
                     "type": "enum",
-                    "name": "Timeframe",
-                    "description": "Candle timeframe to analyze (defaults to strategy timeframe if not set)",
                     "default": null,
                     "optional": true,
                     "options": [
-                        { "value": "1m", "label": "1 Minute" },
-                        { "value": "5m", "label": "5 Minutes" },
-                        { "value": "15m", "label": "15 Minutes" },
-                        { "value": "1h", "label": "1 Hour" },
-                        { "value": "4h", "label": "4 Hours" },
-                        { "value": "12h", "label": "12 Hours" },
-                        { "value": "1d", "label": "1 Day" }
+                        { "value": "1m" },
+                        { "value": "5m" },
+                        { "value": "15m" },
+                        { "value": "1h" },
+                        { "value": "4h" },
+                        { "value": "12h" },
+                        { "value": "1d" }
                     ]
                 },
                 "count": {
                     "type": "number",
-                    "name": "Candle Count",
-                    "description": "Number of consecutive candles required",
+                    "unit": "candles",
                     "default": 3,
                     "min": 2,
                     "max": 20,
@@ -147,18 +142,14 @@ impl ConditionEvaluator for ConsecutiveCandlesCondition {
                 },
                 "direction": {
                     "type": "enum",
-                    "name": "Candle Direction",
-                    "description": "Color/direction of consecutive candles",
                     "default": "GREEN",
                     "options": [
-                        { "value": "GREEN", "label": "Green (Bullish)" },
-                        { "value": "RED", "label": "Red (Bearish)" }
+                        { "value": "GREEN" },
+                        { "value": "RED" }
                     ]
                 },
                 "minimum_change": {
                     "type": "percent",
-                    "name": "Minimum Change %",
-                    "description": "Minimum % change for each candle (filters noise)",
                     "default": 0.5,
                     "min": 0.1,
                     "max": 50.0,

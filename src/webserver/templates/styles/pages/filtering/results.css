@@ -98,6 +98,18 @@
   margin-top: 4px;
 }
 
+.kpi-rate strong {
+  font-weight: inherit;
+}
+
+.kpi-rate--success strong {
+  color: var(--success-color);
+}
+
+.kpi-rate--error strong {
+  color: var(--error-color);
+}
+
 .kpi-icon {
   font-size: 1.5rem;
   color: var(--text-muted);

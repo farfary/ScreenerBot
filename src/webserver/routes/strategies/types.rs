@@ -166,25 +166,3 @@ pub struct ConditionSchemasResponse {
     pub schemas: serde_json::Value,
     pub timestamp: String,
 }
-
-/// Strategy templates list response
-#[derive(Debug, Serialize)]
-pub struct StrategyTemplatesResponse {
-    pub items: Vec<StrategyTemplateItem>,
-    pub total: usize,
-    pub timestamp: String,
-}
-
-/// Strategy template item
-#[derive(Debug, Serialize)]
-pub struct StrategyTemplateItem {
-    pub id: String,
-    pub name: String,
-    pub description: Option<String>,
-    pub category: String,
-    pub risk_level: String,
-    pub rules: serde_json::Value,
-    pub parameters: HashMap<String, serde_json::Value>,
-    pub created_at: String,
-    pub author: Option<String>,
-}
