@@ -1,9 +1,8 @@
 /**
  * Hardcoded user-visible strings in dashboard markup and scripts.
  *
- * The counts are baseline-gated: existing debt may only shrink, and files
- * outside the baseline may not gain any. `// l10n-ignore: <reason>` on the
- * same or the previous line skips a candidate; the reason is mandatory.
+ * Every candidate is an audit error. `// l10n-ignore: <reason>` on the same or
+ * the previous line skips a candidate; the reason is mandatory.
  */
 
 import {

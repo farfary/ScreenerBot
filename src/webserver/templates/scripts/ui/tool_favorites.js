@@ -53,19 +53,19 @@ export class ToolFavorites {
       <div class="tool-favorites">
         <button class="tool-favorites-trigger" type="button" aria-haspopup="menu" aria-expanded="false">
           <i class="icon-star"></i>
-          <span>Favorites</span>
+          <span>${Utils.escapeHtml(I18n.t("tools-favorites-title"))}</span>
           <span class="favorites-count" style="display: none;">0</span>
           <i class="icon-chevron-down"></i>
         </button>
         <div class="tool-favorites-dropdown" role="menu" hidden>
           <div class="favorites-header">
-            <span>Saved Favorites</span>
+            <span>${Utils.escapeHtml(I18n.t("tools-favorites-saved"))}</span>
             <button class="btn btn-xs" id="favorites-save-btn" type="button" role="menuitem">
-              <i class="icon-plus"></i> Save Current
+              <i class="icon-plus"></i> ${Utils.escapeHtml(I18n.t("tools-favorites-save-current"))}
             </button>
           </div>
           <div class="favorites-list">
-            <div class="favorites-empty">No favorites saved yet</div>
+            <div class="favorites-empty">${Utils.escapeHtml(I18n.t("tools-favorites-empty"))}</div>
           </div>
         </div>
       </div>
@@ -182,7 +182,7 @@ export class ToolFavorites {
     }
 
     if (this.favorites.length === 0) {
-      this.listEl.innerHTML = '<div class="favorites-empty">No favorites saved yet</div>';
+      this.listEl.innerHTML = `<div class="favorites-empty">${Utils.escapeHtml(I18n.t("tools-favorites-empty"))}</div>`;
       return;
     }
 
@@ -192,16 +192,16 @@ export class ToolFavorites {
     this.listEl.innerHTML = sorted
       .map(
         (fav) => `
-      <div class="favorite-item" data-id="${fav.id}">
+      <div class="favorite-item" data-id="${Utils.escapeHtml(fav.id)}">
         <button class="favorite-info" data-action="select" type="button" role="menuitem">
           <div class="favorite-token">
-            ${fav.logo_url ? `<img src="${fav.logo_url}" class="favorite-logo token-logo-artwork" alt="">` : '<i class="icon-circle"></i>'}
-            <span class="favorite-symbol token-symbol-type">${fav.symbol || fav.mint.slice(0, 6)}</span>
+            ${fav.logo_url ? `<img src="${Utils.escapeHtml(fav.logo_url)}" class="favorite-logo token-logo-artwork" alt="">` : '<i class="icon-circle"></i>'}
+            <span class="favorite-symbol token-symbol-type">${Utils.escapeHtml(fav.symbol || fav.mint.slice(0, 6))}</span>
           </div>
-          <div class="favorite-label">${fav.label || "No label"}</div>
-          ${fav.use_count > 0 ? `<span class="favorite-uses">${fav.use_count}x</span>` : ""}
+          <div class="favorite-label">${fav.label ? Utils.escapeHtml(fav.label) : Utils.escapeHtml(I18n.t("tools-favorites-no-label"))}</div>
+          ${fav.use_count > 0 ? `<span class="favorite-uses">${Utils.escapeHtml(I18n.t("tools-favorites-uses", { count: fav.use_count }))}</span>` : ""}
         </button>
-        <button class="favorite-delete-btn" data-action="delete" type="button" role="menuitem" title="Remove">
+        <button class="favorite-delete-btn" data-action="delete" type="button" role="menuitem" title="${Utils.escapeHtml(I18n.t("tools-favorites-remove"))}">
           <i class="icon-x"></i>
         </button>
       </div>
@@ -248,24 +248,29 @@ export class ToolFavorites {
     this.closeDropdown();
     this.onSelect({ ...favorite, config });
 
-    Utils.showToast(`Loaded favorite: ${favorite.label || favorite.symbol || "Config"}`, "success");
+    Utils.showToast(
+      I18n.t("tools-favorites-loaded", {
+        name: favorite.label || favorite.symbol || I18n.t("tools-favorites-default-name"),
+      }),
+      "success"
+    );
   }
 
   async saveCurrent() {
     // Get current config from the form
     const config = this.getConfig();
     if (!config.mint) {
-      Utils.showToast("Please enter a token mint address first", "warning");
+      Utils.showToast(I18n.t("tools-favorites-mint-required"), "warning");
       return;
     }
 
     // Prompt for label
     const result = await InputDialog.show({
-      title: "Add Favorite",
-      message: "Enter a label for this favorite",
-      placeholder: "Label (optional)...",
+      title: I18n.t("tools-favorites-add-title"),
+      message: I18n.t("tools-favorites-add-message"),
+      placeholder: I18n.t("tools-favorites-add-placeholder"),
       defaultValue: config.symbol || "",
-      confirmLabel: "Save",
+      confirmLabel: I18n.t("common-action-save"),
     });
     if (!result) return; // Cancelled
     const label = result.value;
@@ -287,19 +292,19 @@ export class ToolFavorites {
 
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
-      Utils.showToast("Saved to favorites", "success");
+      Utils.showToast(I18n.t("tools-favorites-saved-toast"), "success");
       await this.loadFavorites();
     } catch (error) {
       console.error("Failed to save favorite:", error);
-      Utils.showToast("Failed to save favorite", "error");
+      Utils.showToast(I18n.t("tools-favorites-save-failed"), "error");
     }
   }
 
   async deleteFavorite(id) {
     const result = await ConfirmationDialog.show({
-      title: "Remove Favorite",
-      message: "Remove this favorite?",
-      confirmLabel: "Remove",
+      title: I18n.t("tools-favorites-remove-title"),
+      message: I18n.t("tools-favorites-remove-message"),
+      confirmLabel: I18n.t("common-action-remove"),
       variant: "warning",
     });
     if (!result.confirmed) return;
@@ -310,11 +315,11 @@ export class ToolFavorites {
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
-      Utils.showToast("Favorite removed", "success");
+      Utils.showToast(I18n.t("tools-favorites-removed-toast"), "success");
       await this.loadFavorites();
     } catch (error) {
       console.error("Failed to delete favorite:", error);
-      Utils.showToast("Failed to remove favorite", "error");
+      Utils.showToast(I18n.t("tools-favorites-remove-failed"), "error");
     }
   }
 

@@ -5,6 +5,8 @@
  * stay behind Details, so a long token history remains easy to scan.
  */
 import * as Utils from "../../core/utils.js";
+import { directionLabel } from "../transaction_direction.js";
+import { TRANSACTION_STATUS_LABELS } from "../transaction_status.js";
 
 const KIND_ICONS = Object.freeze({
   entry: "icon-circle-arrow-down",
@@ -37,32 +39,20 @@ const EVENT_STATE_LABELS = Object.freeze({
   synthetic: "positions-event-state-synthetic",
 });
 
-// `TransactionDirection` (src/transactions/types.rs) as sent by the activity endpoint.
-const DIRECTION_LABELS = Object.freeze({
-  Incoming: "positions-direction-incoming",
-  Outgoing: "positions-direction-outgoing",
-  Internal: "positions-direction-internal",
-  Unknown: "positions-direction-unknown",
-});
-
 // Plain chain statuses; a failed status carries the error after "Failed:".
-const CHAIN_STATUS_LABELS = Object.freeze({
-  Pending: "positions-chain-status-pending",
-  Confirmed: "positions-chain-status-confirmed",
-  Finalized: "positions-chain-status-finalized",
-});
+const PLAIN_CHAIN_STATUSES = ["Pending", "Confirmed", "Finalized"];
 const FAILED_STATUS_PREFIX = "Failed:";
 
 const esc = (text) => Utils.escapeHtml(text);
 
 function chainStatusText(status) {
-  if (Object.hasOwn(CHAIN_STATUS_LABELS, status)) return I18n.label(CHAIN_STATUS_LABELS, status);
+  if (PLAIN_CHAIN_STATUSES.includes(status)) return I18n.label(TRANSACTION_STATUS_LABELS, status);
   if (status.startsWith(FAILED_STATUS_PREFIX)) {
     return I18n.t("positions-chain-status-failed-detail", {
       error: status.slice(FAILED_STATUS_PREFIX.length).trim(),
     });
   }
-  return I18n.t("positions-chain-status-failed");
+  return I18n.label(TRANSACTION_STATUS_LABELS, "Failed");
 }
 
 export function activityEventKey(event) {
@@ -247,7 +237,7 @@ function renderDetails(event, ctx) {
     ),
     metric(
       I18n.t("positions-event-direction"),
-      event.direction ? esc(I18n.label(DIRECTION_LABELS, event.direction)) : null
+      event.direction ? esc(directionLabel(event.direction)) : null
     ),
     metric(
       I18n.t("positions-event-wallet-sol-change"),

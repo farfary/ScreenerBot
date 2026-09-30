@@ -36,6 +36,8 @@ pub mod debug;
 mod debug_helpers;
 pub mod deltas;
 mod error;
+#[cfg(test)]
+mod label_tests;
 pub mod manager;
 pub mod service;
 pub mod subject;

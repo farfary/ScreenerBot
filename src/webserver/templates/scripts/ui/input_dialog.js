@@ -28,8 +28,8 @@ class InputDialog {
    * @param {string} [config.message] - Optional description text
    * @param {string} [config.placeholder=''] - Input placeholder
    * @param {string} [config.defaultValue=''] - Default input value
-   * @param {string} [config.confirmLabel='Continue'] - Confirm button label
-   * @param {string} [config.cancelLabel='Cancel'] - Cancel button label
+   * @param {string} [config.confirmLabel] - Confirm button label, "Continue" by default
+   * @param {string} [config.cancelLabel] - Cancel button label, "Cancel" by default
    * @param {string} [config.variant='default'] - Variant: default, warning
    * @param {string} [config.type='text'] - Input type: text, number
    * @param {Function} [config.validate] - Validation function (value) => string|null (null = valid)
@@ -51,12 +51,12 @@ class InputDialog {
 
   constructor(config, resolver) {
     this.config = {
-      title: config.title || "Enter Value",
+      title: config.title || I18n.t("common-input-dialog-title"),
       message: config.message || null,
       placeholder: config.placeholder || "",
       defaultValue: config.defaultValue || "",
-      confirmLabel: config.confirmLabel || "Continue",
-      cancelLabel: config.cancelLabel || "Cancel",
+      confirmLabel: config.confirmLabel || I18n.t("common-action-continue"),
+      cancelLabel: config.cancelLabel || I18n.t("common-action-cancel"),
       variant: config.variant || "default",
       type: config.type || "text",
       validate: config.validate || null,

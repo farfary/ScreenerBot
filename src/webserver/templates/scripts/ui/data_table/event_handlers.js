@@ -930,7 +930,7 @@ export function applyEventHandlersMixin(DataTable) {
         return;
       }
       copyToClipboard(value)
-        .then(() => notifyCopied("Address"))
+        .then(() => notifyCopied(I18n.t("common-copied-address")))
         .catch(notifyCopyFailed);
     };
     this._addEventListener(copyBtn, "click", handler);

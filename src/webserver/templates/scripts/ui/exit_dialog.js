@@ -81,10 +81,8 @@ class ExitDialog {
         <div class="exit-dialog__icon-wrapper">
           <i class="exit-dialog__icon icon-power"></i>
         </div>
-        <h2 class="exit-dialog__title" id="exit-dialog-title">Close ScreenerBot?</h2>
-        <p class="exit-dialog__description" id="exit-dialog-description">
-          Choose how you'd like to close the application
-        </p>
+        <h2 class="exit-dialog__title" id="exit-dialog-title" data-l10n-id="shell-exit-title"></h2>
+        <p class="exit-dialog__description" id="exit-dialog-description" data-l10n-id="shell-exit-description"></p>
       </div>
 
       <div class="exit-dialog__options">
@@ -93,8 +91,8 @@ class ExitDialog {
             <i class="icon-minimize-2"></i>
           </div>
           <div class="exit-dialog__option-content">
-            <span class="exit-dialog__option-title">Minimize to Tray</span>
-            <span class="exit-dialog__option-subtitle">Keep running in background</span>
+            <span class="exit-dialog__option-title" data-l10n-id="shell-exit-minimize"></span>
+            <span class="exit-dialog__option-subtitle" data-l10n-id="shell-exit-minimize-detail"></span>
           </div>
           <div class="exit-dialog__option-arrow">
             <i class="icon-chevron-right"></i>
@@ -106,8 +104,8 @@ class ExitDialog {
             <i class="icon-power-off"></i>
           </div>
           <div class="exit-dialog__option-content">
-            <span class="exit-dialog__option-title">Exit App</span>
-            <span class="exit-dialog__option-subtitle">Close completely and stop all services</span>
+            <span class="exit-dialog__option-title" data-l10n-id="shell-exit-quit"></span>
+            <span class="exit-dialog__option-subtitle" data-l10n-id="shell-exit-quit-detail"></span>
           </div>
           <div class="exit-dialog__option-arrow">
             <i class="icon-chevron-right"></i>
@@ -118,13 +116,14 @@ class ExitDialog {
       <div class="exit-dialog__footer">
         <button class="exit-dialog__cancel" data-action="cancel" type="button">
           <i class="icon-x"></i>
-          <span>Cancel</span>
+          <span data-l10n-id="common-action-cancel"></span>
         </button>
       </div>
 
       <div class="exit-dialog__glow exit-dialog__glow--1"></div>
       <div class="exit-dialog__glow exit-dialog__glow--2"></div>
     `;
+    I18n.localizeTree(this.element);
 
     // Attach event listeners
     this._attachEventListeners();

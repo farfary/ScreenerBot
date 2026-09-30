@@ -3,6 +3,12 @@ import { Poller } from "../core/poller.js";
 import * as Utils from "../core/utils.js";
 import { DataTable } from "../ui/data_table.js";
 import { EventDetailsDialog, eventMessageText } from "../ui/events_dialog.js";
+import {
+  EVENT_SEVERITY_LABELS,
+  eventCategoryLabel,
+  eventSubtypeLabel,
+  severityBadge,
+} from "../ui/event_labels.js";
 import { requestManager } from "../core/request_manager.js";
 
 const DEFAULT_FILTERS = {
@@ -12,22 +18,26 @@ const DEFAULT_FILTERS = {
 
 const PAGE_LIMIT = 100;
 
-function formatSeverityBadge(value) {
-  const key = (value || "").toLowerCase();
-  const badges = {
-    info: '<span class="badge"><i class="icon-info"></i> Info</span>',
-    warn: '<span class="badge warning"><i class="icon-triangle-alert"></i> Warning</span>',
-    warning: '<span class="badge warning"><i class="icon-triangle-alert"></i> Warning</span>',
-    error: '<span class="badge error"><i class="icon-x"></i> Error</span>',
-    critical: '<span class="badge error"><i class="icon-circle-alert"></i> Critical</span>',
-    debug: '<span class="badge secondary"><i class="icon-bug"></i> Debug</span>',
-  };
-  if (badges[key]) {
-    return badges[key];
-  }
-  const label = value ? Utils.escapeHtml(String(value)) : "—";
-  return `<span class="badge">${label}</span>`;
-}
+// Values the category and severity filters offer, in display order: the
+// `EventCategory` string ids the server accepts as a `category` filter.
+const CATEGORY_FILTER_VALUES = [
+  "swap",
+  "transaction",
+  "pool",
+  "position",
+  "token",
+  "wallet",
+  "trader",
+  "system",
+  "ohlcv",
+  "rpc",
+  "api",
+  "security",
+  "connectivity",
+  "filtering",
+  "scheduled_task",
+];
+const SEVERITY_FILTER_VALUES = ["info", "warn", "error", "debug"];
 
 function formatMint(mint) {
   if (!mint) {
@@ -43,18 +53,8 @@ function formatMint(mint) {
   )}</span>`;
 }
 
-/** Message key of each stable scheduled-task subtype code; older rows keep their stored subtype. */
-const EVENT_SUBTYPE_LABELS = Object.freeze({
-  task_completed: "events-subtype-task-completed",
-  task_failed: "events-subtype-task-failed",
-  task_timed_out: "events-subtype-task-timed-out",
-});
-
 function formatSubtype(value) {
-  if (!value) {
-    return "—";
-  }
-  return Object.hasOwn(EVENT_SUBTYPE_LABELS, value) ? I18n.label(EVENT_SUBTYPE_LABELS, value) : value;
+  return value ? eventSubtypeLabel(value) : "—";
 }
 
 function formatMessagePreview(row) {
@@ -88,7 +88,7 @@ function formatPayloadPreview(value) {
   });
 
   const remaining = entries.length - previewParts.length;
-  const preview = previewParts.join(", ") + (remaining > 0 ? `, +${remaining} more` : "");
+  const preview = previewParts.join(", ") + (remaining > 0 ? `, ${Utils.escapeHtml(I18n.t("events-payload-more", { count: remaining }))}` : "");
   const fullJson = Utils.escapeHtml(JSON.stringify(value, null, 2));
 
   return `<span class="mono-text" title="${fullJson}">${preview}</span>`;
@@ -131,11 +131,10 @@ function createLifecycle() {
     table.updateToolbarSummary([
       {
         id: "events-total",
-        label: "Total",
+        label: I18n.t("events-summary-total"),
         value: Utils.formatNumber(total, 0),
       },
     ]);
-
   };
 
   const loadEventsPage = async ({ direction, cursor, reason, signal }) => {
@@ -184,7 +183,7 @@ function createLifecycle() {
     if (!state.hasLoadedOnce && reason !== "poll" && table?.showBlockingState) {
       table.showBlockingState({
         variant: "loading",
-        title: "Loading events...",
+        title: I18n.t("events-loading"),
       });
     }
 
@@ -257,11 +256,15 @@ function createLifecycle() {
       if (!state.hasLoadedOnce) {
         table?.showBlockingState?.({
           variant: "error",
-          title: "Failed to load events",
-          description: "Waiting for the backend to respond. We will retry automatically.",
+          title: I18n.t("events-load-failed"),
+          description: I18n.t("events-load-failed-description"),
         });
       } else if (reason !== "poll") {
-        Utils.showToast({ key: "events-load", type: "warning", title: "Could not load events" });
+        Utils.showToast({
+          key: "events-load",
+          type: "warning",
+          title: I18n.t("events-load-error"),
+        });
       }
       throw error;
     }
@@ -309,7 +312,7 @@ function createLifecycle() {
       const columns = [
         {
           id: "event_time",
-          label: "Time",
+          label: I18n.t("events-col-time"),
           minWidth: 165,
           sortable: true,
           floating: true,
@@ -320,15 +323,15 @@ function createLifecycle() {
         },
         {
           id: "category",
-          label: "Category",
+          label: I18n.t("events-col-category"),
           minWidth: 110,
           sortable: true,
           wrap: false,
-          render: (value) => value || "—",
+          render: (value) => (value ? Utils.escapeHtml(eventCategoryLabel(value)) : "—"),
         },
         {
           id: "subtype",
-          label: "Type",
+          label: I18n.t("events-col-type"),
           minWidth: 120,
           sortable: true,
           wrap: false,
@@ -336,27 +339,27 @@ function createLifecycle() {
         },
         {
           id: "severity",
-          label: "Severity",
+          label: I18n.t("events-col-severity"),
           minWidth: 110,
           sortable: true,
-          render: (value) => formatSeverityBadge(value),
+          render: (value) => severityBadge(value) || '<span class="badge">—</span>',
         },
         {
           id: "message",
-          label: "Message",
+          label: I18n.t("events-col-message"),
           minWidth: 320,
           wrap: false,
           render: (_value, row) => formatMessagePreview(row),
         },
         {
           id: "mint",
-          label: "Token",
+          label: I18n.t("events-col-token"),
           minWidth: 140,
           render: (value) => formatMint(value),
         },
         {
           id: "payload",
-          label: "Details",
+          label: I18n.t("events-col-details"),
           minWidth: 200,
           wrap: false,
           render: (value) => formatPayloadPreview(value),
@@ -396,11 +399,11 @@ function createLifecycle() {
           onPageLoaded: handlePageLoaded,
         },
         toolbar: {
-          summary: [{ id: "events-total", label: "Total", value: "0" }],
+          summary: [{ id: "events-total", label: I18n.t("events-summary-total"), value: "0" }],
           search: {
             enabled: true,
             mode: "server",
-            placeholder: "Search events...",
+            placeholder: I18n.t("events-search-placeholder"),
             onChange: (value, el, options) => {
               state.search = (value || "").trim();
               // Skip if this is state restoration
@@ -418,27 +421,17 @@ function createLifecycle() {
           filters: [
             {
               id: "category",
-              label: "Category",
+              label: I18n.t("events-filter-category"),
               mode: "server",
               defaultValue: DEFAULT_FILTERS.category,
               autoApply: false,
               filterFn: () => true,
               options: [
-                { value: "all", label: "All Categories" },
-                { value: "swap", label: "Swap" },
-                { value: "transaction", label: "Transaction" },
-                { value: "pool", label: "Pool" },
-                { value: "position", label: "Position" },
-                { value: "token", label: "Token" },
-                { value: "wallet", label: "Wallet" },
-                { value: "entry", label: "Entry" },
-                { value: "system", label: "System" },
-                { value: "ohlcv", label: "OHLCV" },
-                { value: "rpc", label: "RPC" },
-                { value: "security", label: "Security" },
-                { value: "connectivity", label: "Connectivity" },
-                { value: "learner", label: "Learner" },
-                { value: "other", label: "Other" },
+                { value: "all", label: I18n.t("events-filter-all-categories") },
+                ...CATEGORY_FILTER_VALUES.map((value) => ({
+                  value,
+                  label: eventCategoryLabel(value),
+                })),
               ],
               onChange: (value, el, options) => {
                 state.filters.category = value === "all" ? "all" : value;
@@ -454,17 +447,17 @@ function createLifecycle() {
             },
             {
               id: "severity",
-              label: "Severity",
+              label: I18n.t("events-col-severity"),
               mode: "server",
               defaultValue: DEFAULT_FILTERS.severity,
               autoApply: false,
               filterFn: () => true,
               options: [
-                { value: "all", label: "All Severities" },
-                { value: "info", label: "Info" },
-                { value: "warn", label: "Warning" },
-                { value: "error", label: "Error" },
-                { value: "debug", label: "Debug" },
+                { value: "all", label: I18n.t("events-filter-all-severities") },
+                ...SEVERITY_FILTER_VALUES.map((value) => ({
+                  value,
+                  label: I18n.label(EVENT_SEVERITY_LABELS, value),
+                })),
               ],
               onChange: (value, el, options) => {
                 state.filters.severity = value === "all" ? "all" : value;
@@ -482,7 +475,7 @@ function createLifecycle() {
           buttons: [
             {
               id: "reset",
-              label: "Reset",
+              label: I18n.t("common-action-reset"),
               onClick: () => resetFilters(),
             },
           ],
@@ -518,7 +511,7 @@ function createLifecycle() {
       if (!poller) {
         poller = ctx.managePoller(
           new Poller(() => requestReload("poll", { silent: true, preserveScroll: true }), {
-            label: "Events",
+            label: "Events", // l10n-ignore: poller log name
           })
         );
       }

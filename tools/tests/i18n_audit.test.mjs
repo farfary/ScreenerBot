@@ -249,35 +249,65 @@ test("css honours rtl-ok and rejects an empty reason", () => {
   assert.match(empty.errors[0].message, /requires a reason/);
 });
 
-const BASELINE = { hardcoded: { "a.js": 3, "b.js": 2 }, cssDirection: { "c.css": 1 } };
+const BASELINE = { cssDirection: { "c.css": 3, "d.css": 2 } };
 
 test("baseline fails on an increase and on a new file", () => {
-  const raised = compareBaseline({ hardcoded: { "a.js": 4, "b.js": 2 }, cssDirection: { "c.css": 1 } }, BASELINE);
-  assert.deepEqual(raised.exceeded.map((item) => item.path), ["a.js"]);
-  const added = compareBaseline({ hardcoded: { "a.js": 3, "b.js": 2, "new.js": 1 }, cssDirection: { "c.css": 1 } }, BASELINE);
-  assert.deepEqual(added.exceeded.map((item) => item.path), ["new.js"]);
+  const raised = compareBaseline({ cssDirection: { "c.css": 4, "d.css": 2 } }, BASELINE);
+  assert.deepEqual(raised.exceeded.map((item) => item.path), ["c.css"]);
+  const added = compareBaseline({ cssDirection: { "c.css": 3, "d.css": 2, "new.css": 1 } }, BASELINE);
+  assert.deepEqual(added.exceeded.map((item) => item.path), ["new.css"]);
 });
 
 test("baseline reports a decrease so the update command can record it", () => {
-  const { exceeded, lowered } = compareBaseline({ hardcoded: { "a.js": 1 }, cssDirection: { "c.css": 1 } }, BASELINE);
+  const { exceeded, lowered } = compareBaseline({ cssDirection: { "c.css": 1 } }, BASELINE);
   assert.equal(exceeded.length, 0);
-  assert.deepEqual(lowered.map((item) => `${item.path}:${item.count}`), ["a.js:1", "b.js:0"]);
+  assert.deepEqual(lowered.map((item) => `${item.path}:${item.count}`), ["c.css:1", "d.css:0"]);
 });
 
 test("baseline update lowers or drops entries and refuses to raise", () => {
-  const lowered = lowerBaseline({ hardcoded: { "a.js": 1 }, cssDirection: {} }, BASELINE);
+  const lowered = lowerBaseline({ cssDirection: { "c.css": 1 } }, BASELINE);
   assert.deepEqual(lowered.refused, []);
-  assert.deepEqual(lowered.baseline, { hardcoded: { "a.js": 1 }, cssDirection: {} });
-  const refused = lowerBaseline({ hardcoded: { "a.js": 9 }, cssDirection: { "c.css": 1 } }, BASELINE);
-  assert.deepEqual(refused.refused.map((item) => item.path), ["a.js"]);
+  assert.deepEqual(lowered.baseline, { cssDirection: { "c.css": 1 } });
+  const refused = lowerBaseline({ cssDirection: { "c.css": 9 } }, BASELINE);
+  assert.deepEqual(refused.refused.map((item) => item.path), ["c.css"]);
   assert.equal(refused.baseline, BASELINE);
-  const fresh = lowerBaseline({ hardcoded: { "z.js": 1 }, cssDirection: {} }, BASELINE);
-  assert.deepEqual(fresh.refused.map((item) => item.path), ["z.js"]);
+  const fresh = lowerBaseline({ cssDirection: { "z.css": 1 } }, BASELINE);
+  assert.deepEqual(fresh.refused.map((item) => item.path), ["z.css"]);
 });
 
 test("initial baseline sorts keys", () => {
-  const baseline = initialBaseline({ hardcoded: { "b.js": 1, "a.js": 2 }, cssDirection: {} });
-  assert.deepEqual(Object.keys(baseline.hardcoded), ["a.js", "b.js"]);
+  const baseline = initialBaseline({ cssDirection: { "b.css": 1, "a.css": 2 } });
+  assert.deepEqual(Object.keys(baseline.cssDirection), ["a.css", "b.css"]);
+});
+
+test("baseline update and init never write a hardcoded section", () => {
+  const counts = { hardcoded: { "a.js": 2 }, cssDirection: { "c.css": 1 } };
+  assert.deepEqual(Object.keys(initialBaseline(counts)), ["cssDirection"]);
+  const lowered = lowerBaseline(counts, { hardcoded: { "a.js": 5 }, cssDirection: { "c.css": 1 } });
+  assert.deepEqual(lowered.refused, []);
+  assert.deepEqual(lowered.baseline, { cssDirection: { "c.css": 1 } });
+});
+
+function analyzeScripts(js) {
+  return analyze({
+    sources: { js, html: [], css: [], rust: [] },
+    catalogInput: { catalogs: { en: EN }, registered: new Set(["en"]) },
+  });
+}
+
+test("a hardcoded string is an error even with an empty baseline", () => {
+  const result = analyzeScripts([{ path: "a.js", source: `el.textContent = "Save changes";` }]);
+  const messages = result.errors.map((error) => `${error.file}:${error.line} ${error.message}`).join("\n");
+  assert.match(messages, /a\.js:1 hardcoded user-visible string \(assign-textContent\): "Save changes"/);
+  assert.deepEqual(compareBaseline(result.current, { cssDirection: {} }).exceeded, []);
+});
+
+test("l10n-ignore still exempts a hardcoded string from the error", () => {
+  const result = analyzeScripts([
+    { path: "a.js", source: `el.textContent = "Brand Name"; // l10n-ignore: brand` },
+  ]);
+  assert.deepEqual(result.errors.filter((error) => /hardcoded/.test(error.message)), []);
+  assert.equal(result.ignores, 1);
 });
 
 const SCRIPTS = "src/webserver/templates/scripts";

@@ -427,14 +427,6 @@ positions-event-kind-other = Transaction
 positions-event-state-pending = Pending
 positions-event-state-failed = Failed
 positions-event-state-synthetic = Synthetic
-positions-direction-incoming = Incoming
-positions-direction-outgoing = Outgoing
-positions-direction-internal = Internal
-positions-direction-unknown = Unknown
-positions-chain-status-pending = Pending
-positions-chain-status-confirmed = Confirmed
-positions-chain-status-finalized = Finalized
-positions-chain-status-failed = Failed
 # $error is the failure text reported by the chain.
 positions-chain-status-failed-detail = Failed: { $error }
 positions-event-tokens-fallback = tokens

@@ -7,6 +7,7 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
+import "./fixtures/i18n_en.mjs";
 
 import { TableToolbarView } from "../../src/webserver/templates/scripts/ui/table_toolbar.js";
 

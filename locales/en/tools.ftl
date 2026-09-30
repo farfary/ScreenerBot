@@ -634,3 +634,27 @@ tools-multi-sell-started = Multi-sell started
 tools-multi-sell-stopped = Multi-sell stopped
 # $amount is the received amount with its unit.
 tools-multi-sell-completed = Multi-sell completed! { $amount } received
+
+## Favorites dropdown (scripts/ui/tool_favorites.js)
+
+tools-favorites-title = Favorites
+tools-favorites-saved = Saved Favorites
+tools-favorites-save-current = Save Current
+tools-favorites-empty = No favorites saved yet
+tools-favorites-no-label = No label
+# $count is how many times the favorite was used.
+tools-favorites-uses = { $count }x
+tools-favorites-remove = Remove
+# $name is the favorite's label or symbol.
+tools-favorites-loaded = Loaded favorite: { $name }
+tools-favorites-default-name = Config
+tools-favorites-mint-required = Please enter a token mint address first
+tools-favorites-add-title = Add Favorite
+tools-favorites-add-message = Enter a label for this favorite
+tools-favorites-add-placeholder = Label (optional)...
+tools-favorites-saved-toast = Saved to favorites
+tools-favorites-save-failed = Failed to save favorite
+tools-favorites-remove-title = Remove Favorite
+tools-favorites-remove-message = Remove this favorite?
+tools-favorites-removed-toast = Favorite removed
+tools-favorites-remove-failed = Failed to remove favorite

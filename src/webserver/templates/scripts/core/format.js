@@ -719,6 +719,14 @@ export function formatAddressCompact(address, options = {}) {
   return `${address.slice(0, start)}${ellipsis}${address.slice(-end)}`;
 }
 
+/**
+ * Locale-aware list of already-formatted strings ("a, b, and c"). `type` is
+ * "conjunction" (and), "disjunction" (or) or "unit" (bare separators).
+ */
+export function formatList(items, { type = "conjunction" } = {}) {
+  return intl(Intl.ListFormat, { type, style: "long" }).format((items ?? []).map(String));
+}
+
 export function formatSecondsToTime(seconds, fallback = HYPHEN) {
   if (typeof seconds !== "number" || !Number.isFinite(seconds) || seconds < 0) {
     return fallback;

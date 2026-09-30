@@ -37,6 +37,7 @@
  * generators below import cleanly under node for unit testing.
  */
 import { apiErrorMessage } from "../../core/request_manager.js";
+import { formatList } from "../../core/format.js";
 
 const LIST_URL = "/api/agent-control/pairings";
 const pairingUrl = (clientId) => `${LIST_URL}/${encodeURIComponent(clientId)}`;
@@ -196,12 +197,16 @@ export function summarizePermissions(permissions) {
   if (preset !== "custom") {
     return { tone: preset, text: I18n.label(PRESET_LABELS, preset) };
   }
-  const names = (level) =>
-    CATEGORIES.filter(({ key }) => normalized[key] === level)
-      .map(({ key }) => I18n.label(CATEGORY_INLINE_LABELS, key))
-      .join(I18n.t("settings-agent-list-separator"));
-  const asking = names("ask_user");
-  const off = names("deny");
+  const names = (level, type) =>
+    formatList(
+      CATEGORIES.filter(({ key }) => normalized[key] === level).map(({ key }) =>
+        I18n.label(CATEGORY_INLINE_LABELS, key)
+      ),
+      { type }
+    );
+  // "asks for A and B; no C or D".
+  const asking = names("ask_user", "conjunction");
+  const off = names("deny", "disjunction");
   let text;
   if (asking && off) text = I18n.t("settings-agent-summary-asks-and-off", { asking, off });
   else if (asking) text = I18n.t("settings-agent-summary-asks-only", { asking });

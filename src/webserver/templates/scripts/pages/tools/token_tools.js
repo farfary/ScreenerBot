@@ -3,7 +3,7 @@
  * Contains token-related utilities: create token, token watch, and token analyzer
  */
 
-import { $, $$, on } from "../../core/dom.js";
+import { $, $$, on, logoFallbackAttr } from "../../core/dom.js";
 import {
   formatBooleanFlag,
   formatCurrencyUSD,
@@ -566,7 +566,7 @@ function renderTaTokenHeader(overview) {
   headerEl.innerHTML = `
     <div class="ta-header-left">
       <div class="ta-logo token-logo-frame">
-        ${logoUrl ? `<img class="token-logo-artwork" src="${escapeHtml(logoUrl)}" alt="${escapeHtml(symbol)}" onerror="this.parentElement.innerHTML='<div class=\\'ta-logo-placeholder\\'>${escapeHtml(symbol.charAt(0))}</div>'" />` : `<div class="ta-logo-placeholder">${escapeHtml(symbol.charAt(0))}</div>`}
+        ${logoUrl ? `<img class="token-logo-artwork" src="${escapeHtml(logoUrl)}" alt="${escapeHtml(symbol)}" ${logoFallbackAttr("ta-logo-placeholder")} />` : `<div class="ta-logo-placeholder">${escapeHtml(symbol.charAt(0))}</div>`}
       </div>
       <div class="ta-header-info">
         <span class="ta-symbol">${escapeHtml(symbol)}</span>

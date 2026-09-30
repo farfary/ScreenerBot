@@ -41,3 +41,29 @@ actions-failure-verification-gave-up = Verification gave up
 actions-failure-transaction-failed = The transaction failed on chain
 actions-failure-sell-transaction-failed = The sell transaction failed on chain
 actions-failure-dca-verification-failed = DCA verification failed
+
+# Notification drawer behaviour (ui/notification_panel.js). Labels of the drawer chrome are in shell.ftl.
+notifications-empty-all = No actions
+notifications-empty-active = No active actions
+notifications-empty-completed = No completed actions
+notifications-empty-failed = No failed actions
+notifications-source-auto = Auto
+notifications-source-manual = Manual
+notifications-state-locked = State is controlled by tab
+notifications-cancelled = Cancelled
+notifications-dismiss = Dismiss
+notifications-dismiss-failed = Failed to dismiss notification
+notifications-load-failed = Failed to load
+notifications-mark-read-failed = Failed to mark notifications read
+notifications-clear-title = Clear notifications
+notifications-clear-message = Dismiss all notifications from this list? They remain in the Completed/Failed history.
+notifications-clear-failed = Failed to clear notifications
+notifications-stream-lag-title = Action stream fell behind
+# $count is how many updates were skipped.
+notifications-stream-lag-missed =
+    Missed { $count ->
+        [one] { $count } update
+       *[other] { $count } updates
+    } — refreshing
+notifications-stream-lag-refreshing = Refreshing
+notifications-sync-failed = Could not refresh actions

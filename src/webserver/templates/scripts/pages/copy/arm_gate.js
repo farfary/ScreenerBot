@@ -11,6 +11,7 @@ import {
   sol,
   taskName,
 } from "./format.js";
+import { formatList } from "../../core/format.js";
 import { readinessChecks } from "./overview.js";
 import { RULES, ruleSummary } from "./policy.js";
 
@@ -81,11 +82,11 @@ export function createArmGate(page) {
     const shared = siblings.length
       ? `<p class="copy-warning" role="note"><i class="icon-triangle-alert" aria-hidden="true"></i>${esc(
           I18n.t("copy-arm-shared", {
-            tasks: siblings
-              .map((other) =>
+            tasks: formatList(
+              siblings.map((other) =>
                 I18n.t("copy-task-ref", { name: taskName(other), mode: modeLabel(other.mode) })
               )
-              .join(", "),
+            ),
           })
         )}</p>`
       : "";

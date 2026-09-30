@@ -2,6 +2,7 @@
 // filters, Exits (presets and every rule field, inherited values shown) and a
 // Review of what the task will run under. Pure markup, collection and checks.
 import { escapeHtml } from "../../core/utils.js";
+import { formatList } from "../../core/format.js";
 import { renderAddress } from "../../ui/token_identity.js";
 import {
   SOLANA_ADDRESS_RE,
@@ -130,9 +131,9 @@ export function duplicateNote({ draft, mode, source, tasks }, esc) {
     ? (tasks || []).filter((task) => task.target_address === address && task.id !== source?.id)
     : [];
   if (!others.length) return "";
-  const tasksText = others
-    .map((task) => I18n.t("copy-task-ref", { name: taskName(task), mode: modeLabel(task.mode) }))
-    .join(", ");
+  const tasksText = formatList(
+    others.map((task) => I18n.t("copy-task-ref", { name: taskName(task), mode: modeLabel(task.mode) }))
+  );
   return `<p class="copy-warning" role="note"><i class="icon-triangle-alert" aria-hidden="true"></i>${esc(I18n.t("copy-editor-duplicate", { tasks: tasksText }))}</p>`;
 }
 

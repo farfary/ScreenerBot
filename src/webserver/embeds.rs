@@ -389,6 +389,10 @@ pub const LLM_PROVIDER_UI: &str = include_str!("templates/scripts/ui/llm_provide
 pub const AGENT_TOOL_UI: &str = include_str!("templates/scripts/ui/agent_tool.js");
 pub const TOOL_CALL_STATUS_UI: &str = include_str!("templates/scripts/ui/tool_call_status.js");
 pub const TRANSACTION_TYPE_UI: &str = include_str!("templates/scripts/ui/transaction_type.js");
+pub const TRANSACTION_DIRECTION_UI: &str =
+    include_str!("templates/scripts/ui/transaction_direction.js");
+pub const TRANSACTION_STATUS_UI: &str = include_str!("templates/scripts/ui/transaction_status.js");
+pub const EVENT_LABELS_UI: &str = include_str!("templates/scripts/ui/event_labels.js");
 pub const TRANSACTION_DETAILS_DIALOG_UI: &str =
     include_str!("templates/scripts/ui/transaction_details_dialog.js");
 pub const POSITION_DETAILS_DIALOG_UI: &str =

@@ -162,43 +162,44 @@ export class TableSettingsDialog {
     overlay.innerHTML = `
       <div class="table-settings-dialog" role="dialog" aria-modal="true" aria-labelledby="table-settings-title" tabindex="-1">
         <header class="table-settings-header">
-          <h2 id="table-settings-title" class="table-settings-title">Table Settings</h2>
-          <button type="button" class="table-settings-close" data-action="close" aria-label="Close dialog">&times;</button>
+          <h2 id="table-settings-title" class="table-settings-title" data-l10n-id="table-settings-title"></h2>
+          <button type="button" class="table-settings-close" data-action="close" data-l10n-id="table-settings-close">&times;</button>
         </header>
         <div class="table-settings-body">
           ${this._renderPaginationToggle()}
           <div class="table-settings-controls">
-            <section class="table-settings-controls-group" aria-label="Visibility controls">
-              <h3 class="table-settings-controls-title">Visibility</h3>
+            <section class="table-settings-controls-group" data-l10n-id="table-settings-visibility-group">
+              <h3 class="table-settings-controls-title" data-l10n-id="table-settings-visibility"></h3>
               <div class="table-settings-controls-buttons">
-                <button type="button" class="btn btn-outline" data-quick-action="show-all">Show All</button>
-                <button type="button" class="btn btn-outline" data-quick-action="hide-all">Hide All</button>
-                <button type="button" class="btn btn-outline" data-quick-action="invert-visibility">Invert</button>
+                <button type="button" class="btn btn-outline" data-quick-action="show-all" data-l10n-id="table-settings-show-all"></button>
+                <button type="button" class="btn btn-outline" data-quick-action="hide-all" data-l10n-id="table-settings-hide-all"></button>
+                <button type="button" class="btn btn-outline" data-quick-action="invert-visibility" data-l10n-id="table-settings-invert"></button>
               </div>
             </section>
-            <section class="table-settings-controls-group" aria-label="Ordering controls">
-              <h3 class="table-settings-controls-title">Ordering</h3>
+            <section class="table-settings-controls-group" data-l10n-id="table-settings-ordering-group">
+              <h3 class="table-settings-controls-title" data-l10n-id="table-settings-ordering"></h3>
               <div class="table-settings-controls-buttons">
-                <button type="button" class="btn btn-outline" data-quick-action="reset-order">Reset Order</button>
-                <button type="button" class="btn btn-outline" data-quick-action="alphabetical">Sort A→Z</button>
+                <button type="button" class="btn btn-outline" data-quick-action="reset-order" data-l10n-id="table-settings-reset-order"></button>
+                <button type="button" class="btn btn-outline" data-quick-action="alphabetical" data-l10n-id="table-settings-sort-alphabetical"></button>
               </div>
             </section>
           </div>
           <div class="table-settings-search-container">
-            <input type="text" class="table-settings-search" placeholder="Filter columns..." aria-label="Filter columns">
+            <input type="text" class="table-settings-search" data-l10n-id="table-settings-filter">
           </div>
           <div class="table-settings-column-list" role="list"></div>
         </div>
         <footer class="table-settings-footer">
-          <button type="button" class="btn btn-secondary" data-action="reset">Reset to Defaults</button>
+          <button type="button" class="btn btn-secondary" data-action="reset" data-l10n-id="table-settings-reset-defaults"></button>
           <div class="table-settings-footer-actions">
-            <button type="button" class="btn btn-ghost" data-action="cancel">Cancel</button>
-            <button type="button" class="btn btn-primary" data-action="apply">Apply</button>
+            <button type="button" class="btn btn-ghost" data-action="cancel" data-l10n-id="common-action-cancel"></button>
+            <button type="button" class="btn btn-primary" data-action="apply" data-l10n-id="common-action-apply"></button>
           </div>
         </footer>
       </div>
     `;
 
+    I18n.localizeTree(overlay);
     document.body.appendChild(overlay);
 
     this.root = overlay;
@@ -361,7 +362,7 @@ export class TableSettingsDialog {
     const visibility = this._workingState.visibility;
 
     if (!columns || columns.length === 0) {
-      this.columnListEl.innerHTML = '<div class="table-settings-empty">No columns available.</div>';
+      this.columnListEl.innerHTML = `<div class="table-settings-empty">${Utils.escapeHtml(I18n.t("table-settings-empty"))}</div>`;
       return;
     }
 
@@ -397,8 +398,7 @@ export class TableSettingsDialog {
     });
 
     if (pinnedColumns.length === 0 && unpinnedColumns.length === 0) {
-      this.columnListEl.innerHTML =
-        '<div class="table-settings-empty">No columns match your search.</div>';
+      this.columnListEl.innerHTML = `<div class="table-settings-empty">${Utils.escapeHtml(I18n.t("table-settings-no-match"))}</div>`;
       return;
     }
 
@@ -408,7 +408,8 @@ export class TableSettingsDialog {
       const isVisible = visibility[column.id] !== false;
       const canToggle = canToggleVisibility(column);
       const disableToggleAttr = canToggle ? "" : " disabled";
-      const visibilityLabel = canToggle ? "" : " (locked)";
+      const visibilityLabel = canToggle ? "" : ` ${Utils.escapeHtml(I18n.t("table-settings-column-locked"))}`;
+      const columnId = Utils.escapeHtml(column.id);
 
       const canFloat = canFloatColumn(column);
       const isPinned = floatingSet.has(column.id);
@@ -422,36 +423,36 @@ export class TableSettingsDialog {
       const moveBottomDisabled = pos.index === pos.length - 1;
 
       return `
-        <div class="table-settings-column-item${isPinned ? " is-pinned" : ""}" draggable="${!isFiltered}" data-column-id="${column.id}" role="listitem">
-          <div class="table-settings-drag-handle" aria-hidden="true" title="Drag to reorder">⋮⋮</div>
+        <div class="table-settings-column-item${isPinned ? " is-pinned" : ""}" draggable="${!isFiltered}" data-column-id="${columnId}" role="listitem">
+          <div class="table-settings-drag-handle" aria-hidden="true" title="${Utils.escapeHtml(I18n.t("table-settings-drag-handle"))}">⋮⋮</div>
           <span class="table-settings-column-index" aria-hidden="true">${index + 1}</span>
           <label class="table-settings-column-label${canToggle ? "" : " is-locked"}">
-            <input type="checkbox" data-role="visibility-toggle" data-column-id="${column.id}" ${isVisible ? "checked" : ""}${disableToggleAttr} />
+            <input type="checkbox" data-role="visibility-toggle" data-column-id="${columnId}" ${isVisible ? "checked" : ""}${disableToggleAttr} />
             <span class="column-name">${Utils.escapeHtml(column.label)}${visibilityLabel}</span>
           </label>
-          <div class="table-settings-column-actions" aria-label="Column controls">
-            <button type="button" class="table-settings-btn-pin${isPinned ? " is-active" : ""}" data-role="floating-toggle" data-column-id="${column.id}"${pinDisabledAttr} aria-pressed="${isPinned ? "true" : "false"}" title="${isPinned ? "Unpin from left" : "Pin to left"}">
+          <div class="table-settings-column-actions" aria-label="${Utils.escapeHtml(I18n.t("table-settings-column-controls"))}">
+            <button type="button" class="table-settings-btn-pin${isPinned ? " is-active" : ""}" data-role="floating-toggle" data-column-id="${columnId}"${pinDisabledAttr} aria-pressed="${isPinned ? "true" : "false"}" title="${isPinned ? Utils.escapeHtml(I18n.t("table-column-unpin")) : Utils.escapeHtml(I18n.t("table-column-pin"))}">
               <i class="icon ${isPinned ? "icon-pin-off" : "icon-pin"}" aria-hidden="true"></i>
-              <span class="sr-only">${isPinned ? "Unpin column" : "Pin column to left"}</span>
+              <span class="sr-only">${isPinned ? Utils.escapeHtml(I18n.t("table-settings-unpin-column")) : Utils.escapeHtml(I18n.t("table-settings-pin-column"))}</span>
             </button>
-            <div class="table-settings-move-group" role="group" aria-label="Move up or down">
-              <button type="button" class="table-settings-btn-move" data-action="move-up" data-column-id="${column.id}" ${moveUpDisabled || isFiltered ? "disabled" : ""} title="Move up">
+            <div class="table-settings-move-group" role="group" aria-label="${Utils.escapeHtml(I18n.t("table-settings-move-vertical-group"))}">
+              <button type="button" class="table-settings-btn-move" data-action="move-up" data-column-id="${columnId}" ${moveUpDisabled || isFiltered ? "disabled" : ""} title="${Utils.escapeHtml(I18n.t("table-settings-move-up"))}">
                 <span class="icon" aria-hidden="true">↑</span>
-                <span class="sr-only">Move up</span>
+                <span class="sr-only">${Utils.escapeHtml(I18n.t("table-settings-move-up"))}</span>
               </button>
-              <button type="button" class="table-settings-btn-move" data-action="move-down" data-column-id="${column.id}" ${moveDownDisabled || isFiltered ? "disabled" : ""} title="Move down">
+              <button type="button" class="table-settings-btn-move" data-action="move-down" data-column-id="${columnId}" ${moveDownDisabled || isFiltered ? "disabled" : ""} title="${Utils.escapeHtml(I18n.t("table-settings-move-down"))}">
                 <span class="icon" aria-hidden="true">↓</span>
-                <span class="sr-only">Move down</span>
+                <span class="sr-only">${Utils.escapeHtml(I18n.t("table-settings-move-down"))}</span>
               </button>
             </div>
-            <div class="table-settings-move-group" role="group" aria-label="Move to extremes">
-              <button type="button" class="table-settings-btn-move" data-action="move-top" data-column-id="${column.id}" ${moveTopDisabled || isFiltered ? "disabled" : ""} title="Move to top">
+            <div class="table-settings-move-group" role="group" aria-label="${Utils.escapeHtml(I18n.t("table-settings-move-extremes-group"))}">
+              <button type="button" class="table-settings-btn-move" data-action="move-top" data-column-id="${columnId}" ${moveTopDisabled || isFiltered ? "disabled" : ""} title="${Utils.escapeHtml(I18n.t("table-settings-move-top"))}">
                 <span class="icon" aria-hidden="true">⇡</span>
-                <span class="sr-only">Move to top</span>
+                <span class="sr-only">${Utils.escapeHtml(I18n.t("table-settings-move-top"))}</span>
               </button>
-              <button type="button" class="table-settings-btn-move" data-action="move-bottom" data-column-id="${column.id}" ${moveBottomDisabled || isFiltered ? "disabled" : ""} title="Move to bottom">
+              <button type="button" class="table-settings-btn-move" data-action="move-bottom" data-column-id="${columnId}" ${moveBottomDisabled || isFiltered ? "disabled" : ""} title="${Utils.escapeHtml(I18n.t("table-settings-move-bottom"))}">
                 <span class="icon" aria-hidden="true">⇣</span>
-                <span class="sr-only">Move to bottom</span>
+                <span class="sr-only">${Utils.escapeHtml(I18n.t("table-settings-move-bottom"))}</span>
               </button>
             </div>
           </div>
@@ -462,9 +463,9 @@ export class TableSettingsDialog {
     let html = "";
 
     if (pinnedColumns.length > 0) {
-      html += '<div class="table-settings-group-heading">Pinned (floating)</div>';
+      html += `<div class="table-settings-group-heading">${Utils.escapeHtml(I18n.t("table-settings-group-pinned"))}</div>`;
       html += pinnedColumns.map(renderItem).join("");
-      html += '<div class="table-settings-group-heading">Other columns</div>';
+      html += `<div class="table-settings-group-heading">${Utils.escapeHtml(I18n.t("table-settings-group-other"))}</div>`;
     }
 
     html += unpinnedColumns.map(renderItem).join("");
@@ -807,14 +808,14 @@ export class TableSettingsDialog {
     const checked = this.options.paginationEnabled ? "checked" : "";
 
     return `
-      <div class="table-settings-pagination-toggle" aria-label="Pagination settings">
+      <div class="table-settings-pagination-toggle" data-l10n-id="table-settings-pagination-group">
         <label class="table-settings-pagination-label">
           <input type="checkbox" 
                  data-role="pagination-toggle" 
                  ${checked} />
-          <span class="table-settings-pagination-text">Enable Pagination</span>
+          <span class="table-settings-pagination-text" data-l10n-id="table-settings-pagination-enable"></span>
         </label>
-        <span class="table-settings-pagination-hint">Show data in pages instead of all at once</span>
+        <span class="table-settings-pagination-hint" data-l10n-id="table-settings-pagination-hint"></span>
       </div>
     `;
   }

@@ -3,6 +3,7 @@
  * Full-screen dialog showing comprehensive token information with multiple tabs
  */
 import * as Utils from "../core/utils.js";
+import { logoFallbackAttr } from "../core/dom.js";
 import { createFocusTrap } from "../core/utils.js";
 import { Poller } from "../core/poller.js";
 import { pushEscapeHandler } from "../core/escape_stack.js";
@@ -929,7 +930,7 @@ export class TokenDetailsDialog {
           <div class="header-top-row">
             <div class="header-left">
               <div class="header-logo token-logo-frame">
-                ${logoUrl ? `<img class="token-logo-artwork" src="${this._escapeHtml(logoUrl)}" alt="${this._escapeHtml(symbol)}" onerror="this.parentElement.innerHTML='<div class=\\'logo-placeholder\\'>${this._escapeHtml(symbol.charAt(0))}</div>'" />` : `<div class="logo-placeholder">${this._escapeHtml(symbol.charAt(0))}</div>`}
+                ${logoUrl ? `<img class="token-logo-artwork" src="${this._escapeHtml(logoUrl)}" alt="${this._escapeHtml(symbol)}" ${logoFallbackAttr("logo-placeholder")} />` : `<div class="logo-placeholder">${this._escapeHtml(symbol.charAt(0))}</div>`}
               </div>
               <div class="header-title">
                 <span class="title-main">${this._escapeHtml(symbol)}</span>
@@ -1063,7 +1064,7 @@ export class TokenDetailsDialog {
       const sym = resolvedTokenSymbol(token.symbol) || "?";
       const logoUrl = token.logo_url || token.image_url || "";
       const logoHtml = logoUrl
-        ? `<img class="token-logo-artwork" src="${this._escapeHtml(logoUrl)}" alt="${this._escapeHtml(sym)}" onerror="this.parentElement.innerHTML='<div class=\\'logo-placeholder\\'>${this._escapeHtml(sym.charAt(0))}</div>'" />`
+        ? `<img class="token-logo-artwork" src="${this._escapeHtml(logoUrl)}" alt="${this._escapeHtml(sym)}" ${logoFallbackAttr("logo-placeholder")} />`
         : `<div class="logo-placeholder">${this._escapeHtml(sym.charAt(0))}</div>`;
       this._renderHtmlIfChanged(logoEl, logoHtml, "__logoHtml");
     }

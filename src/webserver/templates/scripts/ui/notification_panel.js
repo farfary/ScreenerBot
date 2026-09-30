@@ -28,6 +28,20 @@ const ACTION_TYPE_LABELS = Object.freeze({
   unknown: "notifications-action-unknown",
 });
 
+// Tab ids of the drawer (`data-tab` in base.html).
+const EMPTY_TAB_LABELS = Object.freeze({
+  all: "notifications-empty-all",
+  active: "notifications-empty-active",
+  completed: "notifications-empty-completed",
+  failed: "notifications-empty-failed",
+});
+
+// Values returned by `sourceFromOperation`.
+const SOURCE_LABELS = Object.freeze({
+  auto: "notifications-source-auto",
+  manual: "notifications-source-manual",
+});
+
 let currentTab = "all";
 let isInitialized = false;
 let isOpen = false;
@@ -320,7 +334,7 @@ function toggleHistoryControls(tab) {
       stateFilterEl.value = "";
       stateFilterEl.style.opacity = "0.5";
       stateFilterEl.style.cursor = "not-allowed";
-      stateFilterEl.title = "State is controlled by tab";
+      stateFilterEl.title = I18n.t("notifications-state-locked");
     } else {
       stateFilterEl.disabled = false;
       stateFilterEl.style.opacity = "1";
@@ -355,7 +369,7 @@ function setupActions() {
         await notificationManager.markAllAsRead();
       } catch (error) {
         console.error("[NotificationPanel] Failed to mark all read:", error);
-        Utils.showToast("Failed to mark notifications read", "error");
+        Utils.showToast(I18n.t("notifications-mark-read-failed"), "error");
       }
     };
     markAllReadBtn.addEventListener("click", handlers.markAllRead);
@@ -364,11 +378,10 @@ function setupActions() {
   if (clearAllBtn) {
     handlers.clearAll = async () => {
       const { confirmed } = await ConfirmationDialog.show({
-        title: "Clear notifications",
-        message:
-          "Dismiss all notifications from this list? They remain in the Completed/Failed history.",
-        confirmLabel: "Clear",
-        cancelLabel: "Cancel",
+        title: I18n.t("notifications-clear-title"),
+        message: I18n.t("notifications-clear-message"),
+        confirmLabel: I18n.t("common-action-clear"),
+        cancelLabel: I18n.t("common-action-cancel"),
         variant: "warning",
       });
 
@@ -378,7 +391,7 @@ function setupActions() {
           await notificationManager.clearAll();
         } catch (error) {
           console.error("[NotificationPanel] Failed to clear notifications:", error);
-          Utils.showToast("Failed to clear notifications", "error");
+          Utils.showToast(I18n.t("notifications-clear-failed"), "error");
         }
       }
     };
@@ -422,8 +435,11 @@ function subscribeToUpdates() {
       Utils.showToast({
         key: "actions-stream",
         type: "warning",
-        title: "Action stream fell behind",
-        message: skipped > 0 ? `Missed ${skipped} updates — refreshing` : "Refreshing",
+        title: I18n.t("notifications-stream-lag-title"),
+        message:
+          skipped > 0
+            ? I18n.t("notifications-stream-lag-missed", { count: skipped })
+            : I18n.t("notifications-stream-lag-refreshing"),
       });
     }
 
@@ -433,7 +449,7 @@ function subscribeToUpdates() {
       Utils.showToast({
         key: "actions-stream",
         type: "warning",
-        title: "Could not refresh actions",
+        title: I18n.t("notifications-sync-failed"),
         message: event.error || null,
       });
     }
@@ -539,7 +555,7 @@ async function renderNotifications() {
         list.innerHTML = `
           <div class="notification-empty">
             <i class="icon-triangle-alert"></i>
-            <p>Failed to load</p>
+            <p>${Utils.escapeHtml(I18n.t("notifications-load-failed"))}</p>
           </div>
         `;
         return;
@@ -572,7 +588,7 @@ async function renderNotifications() {
     list.innerHTML = `
       <div class="notification-empty">
         <i class="icon-inbox"></i>
-        <p>No ${currentTab === "all" ? "" : currentTab + " "}actions</p>
+        <p>${Utils.escapeHtml(I18n.label(EMPTY_TAB_LABELS, currentTab))}</p>
       </div>
     `;
     return;
@@ -785,16 +801,16 @@ function renderNotification(notification) {
     const failedStep = steps?.find((step) => step.status === "failed");
     const errorMsg = apiErrorMessage(
       { error: state?.error || failedStep?.error },
-      notification.error || "Unknown error"
+      notification.error || I18n.t("actions-failure-unknown")
     );
     errorHtml = `<div class="notification-error">${escapeText(errorMsg)}</div>`;
   } else if (isCancelled) {
-    errorHtml = '<div class="notification-error">Cancelled</div>';
+    errorHtml = `<div class="notification-error">${escapeText(I18n.t("notifications-cancelled"))}</div>`;
   }
 
   const safeId = escapeText(id);
   const sourceBadge = source
-    ? `<span class="notification-source notification-source--${source}">${source}</span>`
+    ? `<span class="notification-source notification-source--${source}">${escapeText(I18n.label(SOURCE_LABELS, source))}</span>`
     : "";
   const footerHtml = `
     <div class="notification-footer">
@@ -811,7 +827,7 @@ function renderNotification(notification) {
           ${symbol ? `<span class="notification-symbol">${symbol}</span>` : ""}
           ${sourceBadge}
         </div>
-        <button class="notification-dismiss" data-id="${safeId}" title="Dismiss">×</button>
+        <button class="notification-dismiss" data-id="${safeId}" title="${escapeText(I18n.t("notifications-dismiss"))}">×</button>
       </div>
       ${detailChips}
       ${progressHtml}
@@ -860,7 +876,7 @@ function setupNotificationListDelegation() {
       if (id) {
         notificationManager.dismiss(id).catch((error) => {
           console.error("[NotificationPanel] Failed to dismiss notification:", error);
-          Utils.showToast("Failed to dismiss notification", "error");
+          Utils.showToast(I18n.t("notifications-dismiss-failed"), "error");
         });
       }
       return;

@@ -2,6 +2,7 @@ import { on, off } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
 import { createFocusTrap } from "../core/utils.js";
 import { formatAddressCompact } from "../core/format.js";
+import { eventCategoryLabel, eventSubtypeLabel, severityBadge } from "./event_labels.js";
 
 /** Display text of an event: catalog text when the row carries it, else the stored message. */
 export function eventMessageText(event) {
@@ -9,25 +10,7 @@ export function eventMessageText(event) {
 }
 
 // EventDetailsDialog renders a modal overlay for inspecting full event data.
-const SEVERITY_BADGES = {
-  info: '<span class="badge"><i class="icon-info"></i> Info</span>',
-  warn: '<span class="badge warning"><i class="icon-triangle-alert"></i> Warning</span>',
-  warning: '<span class="badge warning"><i class="icon-triangle-alert"></i> Warning</span>',
-  error: '<span class="badge error"><i class="icon-x"></i> Error</span>',
-  critical: '<span class="badge error"><i class="icon-circle-alert"></i> Critical</span>',
-  debug: '<span class="badge secondary"><i class="icon-bug"></i> Debug</span>',
-};
-
-function formatSeverityBadge(value) {
-  if (!value) {
-    return "";
-  }
-  const key = String(value).toLowerCase();
-  if (SEVERITY_BADGES[key]) {
-    return SEVERITY_BADGES[key];
-  }
-  return `<span class="badge">${Utils.escapeHtml(String(value))}</span>`;
-}
+const notAvailable = () => I18n.t("events-dialog-not-available");
 
 function formatMintDisplay(mint) {
   if (!mint) {
@@ -98,32 +81,33 @@ export class EventDetailsDialog {
       <div class="events-dialog" role="dialog" aria-modal="true" aria-labelledby="events-dialog-title" tabindex="-1">
         <header class="events-dialog-header">
           <div class="events-dialog-heading">
-            <h2 id="events-dialog-title" class="events-dialog-title">Event details</h2>
+            <h2 id="events-dialog-title" class="events-dialog-title" data-l10n-id="events-dialog-title"></h2>
             <div class="events-dialog-subtitle"></div>
           </div>
-          <button type="button" class="events-dialog-close" data-action="close" aria-label="Close dialog">&times;</button>
+          <button type="button" class="events-dialog-close" data-action="close" data-l10n-id="events-dialog-close">&times;</button>
     </header>
         <div class="events-dialog-body">
           <div class="events-dialog-message" data-visible="false"></div>
           <div class="events-dialog-fields"></div>
           <section class="events-dialog-payload" data-visible="false">
-            <h3 class="events-dialog-section-title">Payload</h3>
+            <h3 class="events-dialog-section-title" data-l10n-id="events-dialog-payload"></h3>
             <pre class="events-dialog-payload-code"><code></code></pre>
           </section>
         </div>
         <footer class="events-dialog-footer">
-          <button type="button" class="events-dialog-copy" data-action="copy" title="Copy all event details">
+          <button type="button" class="events-dialog-copy" data-action="copy" data-l10n-id="events-dialog-copy-title">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
               <rect x="5" y="5" width="9" height="9" rx="1.5"></rect>
               <path d="M3 10V3a1.5 1.5 0 0 1 1.5-1.5H10"></path>
             </svg>
-            <span>Copy Details</span>
+            <span data-l10n-id="events-dialog-copy"></span>
           </button>
-          <button type="button" class="events-dialog-dismiss" data-action="close">Close</button>
+          <button type="button" class="events-dialog-dismiss" data-action="close" data-l10n-id="common-action-close"></button>
         </footer>
       </div>
     `;
 
+    I18n.localizeTree(overlay);
     document.body.appendChild(overlay);
 
     this.root = overlay;
@@ -261,29 +245,31 @@ export class EventDetailsDialog {
     }
 
     const message = coerceText(eventMessageText(event)).trim();
-    const fallback = event.category ? `${event.category} event` : "Event details";
+    const fallback = event.category
+      ? I18n.t("events-dialog-category-event", { category: eventCategoryLabel(event.category) })
+      : I18n.t("events-dialog-title");
     const heading = message
       ? message.length > 140
         ? `${message.slice(0, 140)}...`
         : message
       : fallback;
 
-    this.titleEl.textContent = heading || "Event details";
+    this.titleEl.textContent = heading || I18n.t("events-dialog-title");
     this.titleEl.title = message || fallback;
     this.dialog.setAttribute("aria-label", this.titleEl.textContent);
 
-    const severityBadge = formatSeverityBadge(event.severity);
+    const badge = severityBadge(event.severity);
     const metaParts = [];
     if (event.category) {
-      metaParts.push(Utils.escapeHtml(String(event.category)));
+      metaParts.push(Utils.escapeHtml(eventCategoryLabel(event.category)));
     }
     if (event.subtype) {
-      metaParts.push(Utils.escapeHtml(String(event.subtype)));
+      metaParts.push(Utils.escapeHtml(eventSubtypeLabel(event.subtype)));
     }
     if (event.event_time) {
       const formatted = Utils.formatTimestamp(event.event_time, {
         includeSeconds: true,
-        fallback: "N/A",
+        fallback: notAvailable(),
       });
       metaParts.push(Utils.escapeHtml(formatted));
     }
@@ -293,8 +279,8 @@ export class EventDetailsDialog {
         ? `<span class="events-dialog-subtitle-meta">${metaParts.join(" &bull; ")}</span>`
         : "";
     const pieces = [];
-    if (severityBadge) {
-      pieces.push(severityBadge);
+    if (badge) {
+      pieces.push(badge);
     }
     if (metaHtml) {
       pieces.push(metaHtml);
@@ -326,41 +312,55 @@ export class EventDetailsDialog {
 
     const fields = [];
 
-    fields.push({ label: "Event ID", value: event.id });
+    fields.push({ label: I18n.t("events-dialog-field-id"), value: event.id });
     if (event.severity) {
-      fields.push({ label: "Severity", value: formatSeverityBadge(event.severity), isHtml: true });
+      fields.push({
+        label: I18n.t("events-dialog-field-severity"),
+        value: severityBadge(event.severity),
+        isHtml: true,
+      });
     }
     if (event.category) {
-      fields.push({ label: "Category", value: event.category });
+      fields.push({
+        label: I18n.t("events-dialog-field-category"),
+        value: eventCategoryLabel(event.category),
+      });
     }
     if (event.subtype) {
-      fields.push({ label: "Subtype", value: event.subtype });
+      fields.push({
+        label: I18n.t("events-dialog-field-subtype"),
+        value: eventSubtypeLabel(event.subtype),
+      });
     }
     if (event.mint) {
-      fields.push({ label: "Token Mint", value: formatMintDisplay(event.mint), isHtml: true });
+      fields.push({
+        label: I18n.t("events-dialog-field-mint"),
+        value: formatMintDisplay(event.mint),
+        isHtml: true,
+      });
     }
     if (event.reference_id) {
-      fields.push({ label: "Reference", value: event.reference_id });
+      fields.push({ label: I18n.t("events-dialog-field-reference"), value: event.reference_id });
     }
     if (event.event_time) {
       fields.push({
-        label: "Event Time",
+        label: I18n.t("events-dialog-field-time"),
         value: Utils.formatTimestamp(event.event_time, {
           includeSeconds: true,
-          fallback: "N/A",
+          fallback: notAvailable(),
         }),
       });
       fields.push({
-        label: "Age",
+        label: I18n.t("events-dialog-field-age"),
         value: Utils.formatTimeAgo(event.event_time, { fallback: "-" }),
       });
     }
     if (event.created_at) {
       fields.push({
-        label: "Created",
+        label: I18n.t("events-dialog-field-created"),
         value: Utils.formatTimestamp(event.created_at, {
           includeSeconds: true,
-          fallback: "N/A",
+          fallback: notAvailable(),
         }),
       });
     }
@@ -471,46 +471,51 @@ export class EventDetailsDialog {
     const lines = [];
 
     lines.push("=".repeat(60));
-    lines.push("EVENT DETAILS");
+    lines.push(I18n.t("events-dialog-export-heading"));
     lines.push("=".repeat(60));
     lines.push("");
 
     // Basic info
-    lines.push(`Event ID: ${event.id || "N/A"}`);
-    lines.push(`Severity: ${event.severity || "N/A"}`);
-    lines.push(`Category: ${event.category || "N/A"}`);
-    lines.push(`Subtype: ${event.subtype || "N/A"}`);
+    const line = (label, value) =>
+      lines.push(I18n.t("events-dialog-export-line", { label, value }));
+    line(I18n.t("events-dialog-field-id"), event.id || notAvailable());
+    line(I18n.t("events-dialog-field-severity"), event.severity || notAvailable());
+    line(I18n.t("events-dialog-field-category"), event.category || notAvailable());
+    line(I18n.t("events-dialog-field-subtype"), event.subtype || notAvailable());
 
     if (event.event_time) {
       const formatted = Utils.formatTimestamp(event.event_time, {
         includeSeconds: true,
-        fallback: "N/A",
+        fallback: notAvailable(),
       });
-      lines.push(`Event Time: ${formatted}`);
-      lines.push(`Age: ${Utils.formatTimeAgo(event.event_time, { fallback: "-" })}`);
+      line(I18n.t("events-dialog-field-time"), formatted);
+      line(
+        I18n.t("events-dialog-field-age"),
+        Utils.formatTimeAgo(event.event_time, { fallback: "-" })
+      );
     }
 
     if (event.created_at) {
       const formatted = Utils.formatTimestamp(event.created_at, {
         includeSeconds: true,
-        fallback: "N/A",
+        fallback: notAvailable(),
       });
-      lines.push(`Created: ${formatted}`);
+      line(I18n.t("events-dialog-field-created"), formatted);
     }
 
     if (event.mint) {
-      lines.push(`Token Mint: ${event.mint}`);
+      line(I18n.t("events-dialog-field-mint"), event.mint);
     }
 
     if (event.reference_id) {
-      lines.push(`Reference: ${event.reference_id}`);
+      line(I18n.t("events-dialog-field-reference"), event.reference_id);
     }
 
     // Message
     if (event.message) {
       lines.push("");
       lines.push("-".repeat(60));
-      lines.push("MESSAGE");
+      lines.push(I18n.t("events-dialog-export-message"));
       lines.push("-".repeat(60));
       lines.push(event.message);
     }
@@ -519,7 +524,7 @@ export class EventDetailsDialog {
     if (event.payload && typeof event.payload === "object") {
       lines.push("");
       lines.push("-".repeat(60));
-      lines.push("PAYLOAD");
+      lines.push(I18n.t("events-dialog-export-payload"));
       lines.push("-".repeat(60));
       try {
         lines.push(JSON.stringify(event.payload, null, 2));
@@ -529,7 +534,7 @@ export class EventDetailsDialog {
     } else if (event.payload !== null && event.payload !== undefined) {
       lines.push("");
       lines.push("-".repeat(60));
-      lines.push("PAYLOAD");
+      lines.push(I18n.t("events-dialog-export-payload"));
       lines.push("-".repeat(60));
       lines.push(String(event.payload));
     }
@@ -549,9 +554,11 @@ export class EventDetailsDialog {
     const icon = success
       ? '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8l3 3 7-7"></path></svg>'
       : '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l8 8M12 4l-8 8"></path></svg>';
-    const text = success ? "Copied!" : "Failed";
+    const text = success
+      ? I18n.t("events-dialog-copy-done")
+      : I18n.t("events-dialog-copy-failed");
 
-    this.copyButton.innerHTML = `${icon}<span>${text}</span>`;
+    this.copyButton.innerHTML = `${icon}<span>${Utils.escapeHtml(text)}</span>`;
     this.copyButton.classList.add(success ? "success" : "error");
     this.copyButton.disabled = true;
 

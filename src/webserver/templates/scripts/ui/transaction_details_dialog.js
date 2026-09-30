@@ -7,6 +7,8 @@ import { createFocusTrap } from "../core/utils.js";
 import { requestManager, apiErrorMessage } from "../core/request_manager.js";
 import { DialogTabBar, renderDialogTabRow } from "./dialog_tab_bar.js";
 import { typeIcon, typeLabel } from "./transaction_type.js";
+import { directionBadge } from "./transaction_direction.js";
+import { statusBadge } from "./transaction_status.js";
 import {
   getIdentity,
   isSolMint,
@@ -17,6 +19,12 @@ import {
   resolveIdentities,
   SOL_MINT,
 } from "./token_identity.js";
+
+// `AtaOperationType` (src/transactions/types.rs) as serialized in `ata_operations`.
+const ATA_OPERATION_LABELS = Object.freeze({
+  Creation: "transactions-ata-operation-creation",
+  Closure: "transactions-ata-operation-closure",
+});
 
 export class TransactionDetailsDialog {
   constructor(options = {}) {
@@ -89,7 +97,9 @@ export class TransactionDetailsDialog {
         }
       );
       if (!data) {
-        throw new Error("Transaction not found");
+        const missing = new Error("transaction not found");
+        missing.notFound = true;
+        throw missing;
       }
       this.fullTransactionData = data;
       // Resolve every asset the transaction touches BEFORE the first render, so no
@@ -107,14 +117,16 @@ export class TransactionDetailsDialog {
 
   /** The API's own error message when the response carries one, else a generic line. */
   async _describeLoadError(error) {
-    const fallback = "Failed to load transaction details";
+    const fallback = I18n.t("transactions-dialog-load-failed");
     if (!error?.response) {
-      return error?.message === "Transaction not found" ? error.message : fallback;
+      return error?.notFound ? I18n.t("transactions-dialog-not-found") : fallback;
     }
     try {
       const body = await error.response.json();
       const message = apiErrorMessage(body);
-      return message ? `${fallback}: ${message}` : fallback;
+      return message
+        ? I18n.t("transactions-dialog-load-failed-reason", { reason: message })
+        : fallback;
     } catch {
       return fallback;
     }
@@ -190,13 +202,14 @@ export class TransactionDetailsDialog {
     this.dialogEl = document.createElement("div");
     this.dialogEl.className = "transaction-details-dialog";
     this.dialogEl.innerHTML = this._getDialogHTML();
+    I18n.localizeTree(this.dialogEl);
     document.body.appendChild(this.dialogEl);
   }
 
   _getDialogHTML() {
     const tx = this.transactionData;
     const typeLabel = this._getTypeLabel(tx.transaction_type);
-    const statusBadge = this._getStatusBadge(tx.status, tx.success);
+    const statusHtml = statusBadge(tx.status, tx.success);
     const tabs = this._getDialogTabs(tx);
 
     return `
@@ -216,30 +229,30 @@ export class TransactionDetailsDialog {
             </div>
             <div class="header-right">
               <div class="dialog-header-actions">
-                <button class="dialog-header-action" id="copySignatureBtn" title="Copy Signature">
+                <button class="dialog-header-action" id="copySignatureBtn" data-l10n-id="transactions-dialog-copy-signature">
                   <i class="icon-copy"></i>
                 </button>
-                <a href="https://solscan.io/tx/${Utils.escapeHtml(tx.signature)}" target="_blank" class="dialog-header-action" title="View on Solscan">
+                <a href="https://solscan.io/tx/${Utils.escapeHtml(tx.signature)}" target="_blank" class="dialog-header-action" title="${Utils.escapeHtml(I18n.t("links-view-solscan"))}">
                   <i class="icon-external-link"></i>
                 </a>
-                <a href="https://solana.fm/tx/${Utils.escapeHtml(tx.signature)}" target="_blank" class="dialog-header-action" title="View on Solana FM">
+                <a href="https://solana.fm/tx/${Utils.escapeHtml(tx.signature)}" target="_blank" class="dialog-header-action" title="${Utils.escapeHtml(I18n.t("links-view-solana-fm"))}">
                   <i class="icon-external-link"></i>
                 </a>
               </div>
-              <button class="dialog-close" type="button" title="Close (ESC)">
+              <button class="dialog-close" type="button" data-l10n-id="transactions-dialog-close">
                 <i class="icon-x"></i>
               </button>
             </div>
           </div>
           <div class="header-meta-row" id="headerMetaRow">
             <div class="header-badges" id="headerBadges">
-              ${statusBadge}
-              ${this._getDirectionBadge(tx.direction)}
+              ${statusHtml}
+              ${directionBadge(tx.direction)}
             </div>
             <div class="header-meta-items">
               <span class="meta-item" id="metaTimestamp"><i class="icon-clock"></i> <span>—</span></span>
-              <span class="meta-item" id="metaSlot"><i class="icon-layers"></i> Slot: <span>—</span></span>
-              <span class="meta-item" id="metaFee"><i class="icon-zap"></i> Fee: <span>—</span></span>
+              <span class="meta-item" id="metaSlot"><i class="icon-layers"></i> ${Utils.escapeHtml(I18n.t("transactions-dialog-meta-slot"))} <span>—</span></span>
+              <span class="meta-item" id="metaFee"><i class="icon-zap"></i> ${Utils.escapeHtml(I18n.t("transactions-dialog-meta-fee"))} <span>—</span></span>
             </div>
           </div>
         </div>
@@ -248,28 +261,19 @@ export class TransactionDetailsDialog {
           tabs,
           activeTab: this.currentTab,
           idPrefix: "transaction-details",
-          ariaLabel: "Transaction details sections",
+          ariaLabel: I18n.t("transactions-dialog-tabs-label"),
         })}
 
         <div class="dialog-body">
           <div class="tab-content active" data-tab-content="overview">
-            <div class="loading-spinner">Loading transaction details...</div>
+            <div class="loading-spinner">${Utils.escapeHtml(I18n.t("transactions-dialog-loading-details"))}</div>
           </div>
-          <div class="tab-content" data-tab-content="balances">
-            <div class="loading-spinner">Loading...</div>
-          </div>
-          <div class="tab-content" data-tab-content="instructions">
-            <div class="loading-spinner">Loading...</div>
-          </div>
-          <div class="tab-content" data-tab-content="logs">
-            <div class="loading-spinner">Loading...</div>
-          </div>
-          <div class="tab-content" data-tab-content="ata">
-            <div class="loading-spinner">Loading...</div>
-          </div>
-          <div class="tab-content" data-tab-content="raw">
-            <div class="loading-spinner">Loading...</div>
-          </div>
+          ${["balances", "instructions", "logs", "ata", "raw"]
+            .map(
+              (tab) =>
+                `<div class="tab-content" data-tab-content="${tab}"><div class="loading-spinner">${Utils.escapeHtml(I18n.t("transactions-dialog-loading"))}</div></div>`
+            )
+            .join("")}
         </div>
       </div>
     `;
@@ -277,24 +281,24 @@ export class TransactionDetailsDialog {
 
   _getDialogTabs(tx) {
     return [
-      { id: "overview", label: "Overview", icon: "icon-info" },
-      { id: "balances", label: "Balances", icon: "icon-wallet" },
+      { id: "overview", label: I18n.t("transactions-dialog-tab-overview"), icon: "icon-info" },
+      { id: "balances", label: I18n.t("transactions-dialog-tab-balances"), icon: "icon-wallet" },
       {
         id: "instructions",
-        label: "Instructions",
+        label: I18n.t("transactions-dialog-tab-instructions"),
         icon: "icon-code",
         badge: tx.instructions_count || 0,
         badgeId: "instructionsBadge",
       },
       {
         id: "logs",
-        label: "Logs",
+        label: I18n.t("transactions-dialog-tab-logs"),
         icon: "icon-file-text",
         badge: 0,
         badgeId: "logsBadge",
       },
-      { id: "ata", label: "ATA", icon: "icon-layers" },
-      { id: "raw", label: "Raw", icon: "icon-braces" },
+      { id: "ata", label: I18n.t("transactions-dialog-tab-ata"), icon: "icon-layers" },
+      { id: "raw", label: I18n.t("transactions-dialog-tab-raw"), icon: "icon-braces" },
     ];
   }
 
@@ -391,8 +395,8 @@ export class TransactionDetailsDialog {
     const badgesEl = this.dialogEl?.querySelector("#headerBadges");
     if (badgesEl) {
       badgesEl.innerHTML = `
-        ${this._getStatusBadge(tx.status, tx.success)}
-        ${this._getDirectionBadge(tx.direction)}
+        ${statusBadge(tx.status, tx.success)}
+        ${directionBadge(tx.direction)}
       `;
     }
 
@@ -445,7 +449,7 @@ export class TransactionDetailsDialog {
     if (copyBtn) {
       copyBtn.addEventListener("click", () => {
         Utils.copyToClipboard(this.transactionData.signature);
-        Utils.notifyCopied("Signature");
+        Utils.notifyCopied(I18n.t("common-copied-signature"));
       });
     }
 
@@ -465,7 +469,7 @@ export class TransactionDetailsDialog {
     if (!content) return;
 
     if (!this.fullTransactionData) {
-      content.innerHTML = '<div class="loading-spinner">Loading transaction details...</div>';
+      content.innerHTML = `<div class="loading-spinner">${Utils.escapeHtml(I18n.t("transactions-dialog-loading-details"))}</div>`;
       return;
     }
 
@@ -500,14 +504,14 @@ export class TransactionDetailsDialog {
     if (!tx) return;
 
     const failed = tx.success === false || Boolean(tx.status?.Failed);
-    const failureMessage = tx.error_message || (failed ? "No program error was provided." : "");
+    const failureMessage = tx.error_message || (failed ? I18n.t("transactions-dialog-no-program-error") : "");
     const routeHtml = this._buildOverviewRoute(tx);
 
     content.innerHTML = `
       <div class="tx-overview-layout">
         ${
           failureMessage
-            ? `<div class="tx-failure-callout" role="alert"><i class="icon-circle-alert"></i><div><strong>Transaction failed</strong><span>${Utils.escapeHtml(failureMessage)}</span></div></div>`
+            ? `<div class="tx-failure-callout" role="alert"><i class="icon-circle-alert"></i><div><strong>${Utils.escapeHtml(I18n.t("transactions-dialog-failed-title"))}</strong><span>${Utils.escapeHtml(failureMessage)}</span></div></div>`
             : ""
         }
         ${this._buildOverviewStory(tx)}
@@ -523,14 +527,14 @@ export class TransactionDetailsDialog {
   _buildOverviewStory(tx) {
     const swap = tx.token_swap_info || tx.token_info;
     if (swap) {
-      const router = swap.router ? `via ${Utils.escapeHtml(swap.router)}` : "";
+      const router = swap.router ? Utils.escapeHtml(I18n.t("transactions-dialog-router-via", { router: swap.router })) : "";
       return `
         <section class="tx-story-card">
-          <div class="tx-story-heading"><span>What happened</span>${router ? `<small>${router}</small>` : ""}</div>
+          <div class="tx-story-heading"><span>${Utils.escapeHtml(I18n.t("transactions-dialog-story-title"))}</span>${router ? `<small>${router}</small>` : ""}</div>
           <div class="tx-flow">
-            ${this._buildFlowSide("Paid", swap.input_ui_amount, swap.input_mint, "")}
+            ${this._buildFlowSide(I18n.t("transactions-dialog-flow-paid"), swap.input_ui_amount, swap.input_mint, "")}
             <span class="tx-flow-arrow" aria-hidden="true"><i class="icon-arrow-right"></i></span>
-            ${this._buildFlowSide("Received", swap.output_ui_amount, swap.output_mint, "tx-flow-received")}
+            ${this._buildFlowSide(I18n.t("transactions-dialog-flow-received"), swap.output_ui_amount, swap.output_mint, "tx-flow-received")}
           </div>
         </section>`;
     }
@@ -543,20 +547,20 @@ export class TransactionDetailsDialog {
       const mint = solTransfer ? SOL_MINT : transfer.mint;
       return `
         <section class="tx-story-card">
-          <div class="tx-story-heading"><span>What happened</span><small>${Utils.escapeHtml(this._getTypeLabel(tx.transaction_type))}</small></div>
+          <div class="tx-story-heading"><span>${Utils.escapeHtml(I18n.t("transactions-dialog-story-title"))}</span><small>${Utils.escapeHtml(this._getTypeLabel(tx.transaction_type))}</small></div>
           <div class="tx-transfer-asset">${renderTokenChip(mint, { size: "md", showMint: true })}</div>
           <div class="tx-flow">
             <div class="tx-flow-side">
-              <span class="tx-flow-label">From</span>
+              <span class="tx-flow-label">${Utils.escapeHtml(I18n.t("transactions-dialog-flow-from"))}</span>
               <strong class="tx-flow-address" title="${Utils.escapeHtml(transfer.from || "")}">${this._shortenAddress(transfer.from)}</strong>
             </div>
             <span class="tx-flow-arrow" aria-hidden="true"><i class="icon-arrow-right"></i></span>
             <div class="tx-flow-side tx-flow-received">
-              <span class="tx-flow-label">To</span>
+              <span class="tx-flow-label">${Utils.escapeHtml(I18n.t("transactions-dialog-flow-to"))}</span>
               <strong class="tx-flow-address" title="${Utils.escapeHtml(transfer.to || "")}">${this._shortenAddress(transfer.to)}</strong>
             </div>
           </div>
-          <div class="tx-story-amount"><span>Amount</span><strong>${this._formatOverviewAmount(transfer.amount)} ${renderAssetInline(mint, { size: "xs" })}</strong></div>
+          <div class="tx-story-amount"><span>${Utils.escapeHtml(I18n.t("transactions-dialog-flow-amount"))}</span><strong>${this._formatOverviewAmount(transfer.amount)} ${renderAssetInline(mint, { size: "xs" })}</strong></div>
         </section>`;
     }
 
@@ -564,10 +568,10 @@ export class TransactionDetailsDialog {
     const hasNetChange = Number.isFinite(netChange);
     return `
       <section class="tx-story-card">
-        <div class="tx-story-heading"><span>What happened</span></div>
+        <div class="tx-story-heading"><span>${Utils.escapeHtml(I18n.t("transactions-dialog-story-title"))}</span></div>
         <div class="tx-generic-result">
           <i class="${this._getTypeIcon(tx.transaction_type)}"></i>
-          <div><strong>${Utils.escapeHtml(this._getTypeLabel(tx.transaction_type))}</strong><span>${hasNetChange ? `Net wallet change: ${Utils.formatPnL(netChange, { decimals: 6 })}` : "Processed on Solana"}</span></div>
+          <div><strong>${Utils.escapeHtml(this._getTypeLabel(tx.transaction_type))}</strong><span>${hasNetChange ? `${Utils.escapeHtml(I18n.t("transactions-dialog-net-wallet-change"))} ${Utils.formatPnL(netChange, { decimals: 6 })}` : Utils.escapeHtml(I18n.t("transactions-dialog-processed"))}</span></div>
         </div>
       </section>`;
   }
@@ -581,7 +585,7 @@ export class TransactionDetailsDialog {
         <strong title="${this._formatOverviewExact(amount)}">${this._formatOverviewAmount(amount)}</strong>
         <span class="tx-flow-asset">
           ${renderTokenLogo(identity, { size: "xs" })}
-          <span>${Utils.escapeHtml(identity.symbol || "Unknown asset")}</span>
+          <span>${Utils.escapeHtml(identity.symbol || I18n.t("transactions-dialog-unknown-asset"))}</span>
         </span>
         ${mint ? renderAddress(mint) : ""}
       </div>`;
@@ -601,7 +605,7 @@ export class TransactionDetailsDialog {
     const price = pnl?.calculated_price_sol ?? tx.calculated_token_price_sol;
     if (price !== null && price !== undefined) {
       add(
-        "Execution price",
+        I18n.t("transactions-dialog-metric-execution-price"),
         `${Utils.formatPriceSol(price, { decimals: 8 })} SOL`,
         "",
         `${Utils.formatPriceSol(price, { decimals: 12 })} SOL`
@@ -614,7 +618,9 @@ export class TransactionDetailsDialog {
       const effective = isSell ? pnl.effective_sol_received : pnl.effective_sol_spent;
       if (effective !== null && effective !== undefined) {
         add(
-          isSell ? "Effective received" : "Effective spent",
+          isSell
+            ? I18n.t("transactions-dialog-metric-effective-received")
+            : I18n.t("transactions-dialog-metric-effective-spent"),
           Utils.formatSol(effective, { decimals: 6 }),
           "",
           Utils.formatSol(effective, { decimals: 9 })
@@ -624,7 +630,7 @@ export class TransactionDetailsDialog {
 
     if (tx.fee_sol !== null && tx.fee_sol !== undefined) {
       add(
-        "Network fee",
+        I18n.t("transactions-dialog-metric-network-fee"),
         Utils.formatSol(tx.fee_sol, { decimals: 6 }),
         "",
         Utils.formatSol(tx.fee_sol, { decimals: 9 })
@@ -634,20 +640,20 @@ export class TransactionDetailsDialog {
     if (pnl?.estimated_pnl_sol !== null && pnl?.estimated_pnl_sol !== undefined) {
       const tone =
         pnl.estimated_pnl_sol > 0 ? "positive" : pnl.estimated_pnl_sol < 0 ? "negative" : "";
-      add("Estimated P&L", Utils.formatPnL(pnl.estimated_pnl_sol, { decimals: 6 }), tone);
+      add(I18n.t("transactions-dialog-metric-estimated-pnl"), Utils.formatPnL(pnl.estimated_pnl_sol, { decimals: 6 }), tone);
     }
 
     if (!swap && Number.isFinite(Number(tx.sol_balance_change))) {
       const change = Number(tx.sol_balance_change);
       add(
-        "Net SOL change",
+        I18n.t("transactions-dialog-metric-net-sol-change"),
         Utils.formatPnL(change, { decimals: 6 }),
         change > 0 ? "positive" : change < 0 ? "negative" : ""
       );
     }
 
     return metrics.length > 0
-      ? `<section class="tx-execution-strip"><div class="tx-section-label">Execution</div><div class="tx-execution-grid">${metrics.join("")}</div></section>`
+      ? `<section class="tx-execution-strip"><div class="tx-section-label">${Utils.escapeHtml(I18n.t("transactions-dialog-execution-title"))}</div><div class="tx-execution-grid">${metrics.join("")}</div></section>`
       : "";
   }
 
@@ -656,42 +662,42 @@ export class TransactionDetailsDialog {
     if (!swap) return "";
     const rows = [];
     if (swap.router)
-      rows.push(["Router", `<span class="tx-router-name">${Utils.escapeHtml(swap.router)}</span>`]);
-    rows.push(["Input asset", this._buildOverviewAsset(swap.input_mint)]);
-    rows.push(["Output asset", this._buildOverviewAsset(swap.output_mint)]);
+      rows.push([I18n.t("transactions-dialog-route-router"), `<span class="tx-router-name">${Utils.escapeHtml(swap.router)}</span>`]);
+    rows.push([I18n.t("transactions-dialog-route-input-asset"), this._buildOverviewAsset(swap.input_mint)]);
+    rows.push([I18n.t("transactions-dialog-route-output-asset"), this._buildOverviewAsset(swap.output_mint)]);
     if (swap.pool_address)
-      rows.push(["Pool", renderAddress(swap.pool_address, { explorer: "account" })]);
+      rows.push([I18n.t("transactions-dialog-route-pool"), renderAddress(swap.pool_address, { explorer: "account" })]);
     if (swap.program_id)
-      rows.push(["Program", renderAddress(swap.program_id, { explorer: "account" })]);
-    return `<section class="tx-detail-card"><div class="tx-detail-heading">Route and assets</div><div class="tx-detail-list">${rows.map(([label, value]) => this._buildOverviewDetailRow(label, value)).join("")}</div></section>`;
+      rows.push([I18n.t("transactions-dialog-route-program"), renderAddress(swap.program_id, { explorer: "account" })]);
+    return `<section class="tx-detail-card"><div class="tx-detail-heading">${Utils.escapeHtml(I18n.t("transactions-dialog-route-title"))}</div><div class="tx-detail-list">${rows.map(([label, value]) => this._buildOverviewDetailRow(label, value)).join("")}</div></section>`;
   }
 
   _buildOverviewTechnical(tx) {
     const rows = [
-      ["Signature", renderAddress(tx.signature, { explorer: "tx" })],
-      ["Timestamp", Utils.formatTimestamp(tx.timestamp || tx.block_time)],
+      [I18n.t("transactions-dialog-tech-signature"), renderAddress(tx.signature, { explorer: "tx" })],
+      [I18n.t("transactions-dialog-tech-timestamp"), Utils.formatTimestamp(tx.timestamp || tx.block_time)],
       [
-        "Slot",
+        I18n.t("transactions-dialog-tech-slot"),
         tx.slot !== null && tx.slot !== undefined
           ? Utils.formatNumber(tx.slot, { decimals: 0 })
           : "—",
       ],
       [
-        "Exact fee",
+        I18n.t("transactions-dialog-tech-exact-fee"),
         tx.fee_sol !== null && tx.fee_sol !== undefined
           ? Utils.formatSol(tx.fee_sol, { decimals: 9 })
           : "—",
       ],
-      ["Accounts", Utils.formatNumber(tx.accounts_count ?? 0, { decimals: 0 })],
-      ["Instructions", Utils.formatNumber(tx.instructions_count ?? 0, { decimals: 0 })],
+      [I18n.t("transactions-dialog-tech-accounts"), Utils.formatNumber(tx.accounts_count ?? 0, { decimals: 0 })],
+      [I18n.t("transactions-dialog-tech-instructions"), Utils.formatNumber(tx.instructions_count ?? 0, { decimals: 0 })],
     ];
     if (tx.compute_units_consumed !== null && tx.compute_units_consumed !== undefined) {
-      rows.push(["Compute units", Utils.formatNumber(tx.compute_units_consumed, { decimals: 0 })]);
+      rows.push([I18n.t("transactions-dialog-tech-compute-units"), Utils.formatNumber(tx.compute_units_consumed, { decimals: 0 })]);
     }
     if (tx.token_decimals !== null && tx.token_decimals !== undefined) {
-      rows.push(["Token decimals", String(tx.token_decimals)]);
+      rows.push([I18n.t("transactions-dialog-tech-token-decimals"), String(tx.token_decimals)]);
     }
-    return `<details class="tx-technical-card"><summary><span><strong>Technical details</strong><small>Signature, slot and resources</small></span><i class="icon-chevron-down"></i></summary><div class="tx-detail-list">${rows.map(([label, value]) => this._buildOverviewDetailRow(label, value)).join("")}</div></details>`;
+    return `<details class="tx-technical-card"><summary><span><strong>${Utils.escapeHtml(I18n.t("transactions-dialog-tech-title"))}</strong><small>${Utils.escapeHtml(I18n.t("transactions-dialog-tech-summary"))}</small></span><i class="icon-chevron-down"></i></summary><div class="tx-detail-list">${rows.map(([label, value]) => this._buildOverviewDetailRow(label, value)).join("")}</div></details>`;
   }
 
   _buildOverviewDetailRow(label, value) {
@@ -714,7 +720,7 @@ export class TransactionDetailsDialog {
 
   _formatOverviewExact(value) {
     const number = Number(value);
-    return Number.isFinite(number) ? Utils.formatNumber(number, { decimals: 9 }) : "Unavailable";
+    return Number.isFinite(number) ? Utils.formatNumber(number, { decimals: 9 }) : I18n.t("transactions-dialog-unavailable");
   }
 
   // =========================================================================
@@ -732,27 +738,27 @@ export class TransactionDetailsDialog {
       <div class="tx-balances-layout">
         <div class="balance-section">
           <div class="section-header">
-            <span class="section-title">${renderTokenLogo(SOL_MINT, { size: "xs" })} SOL Balance Changes</span>
+            <span class="section-title">${renderTokenLogo(SOL_MINT, { size: "xs" })} ${Utils.escapeHtml(I18n.t("transactions-dialog-balances-sol-title"))}</span>
             <span class="section-count">${solChanges.length}</span>
           </div>
-          ${solChanges.length > 0 ? this._buildSolChangesTable(solChanges) : '<div class="empty-message">No SOL balance changes</div>'}
+          ${solChanges.length > 0 ? this._buildSolChangesTable(solChanges) : `<div class="empty-message">${Utils.escapeHtml(I18n.t("transactions-dialog-balances-sol-empty"))}</div>`}
         </div>
 
         <div class="balance-section">
           <div class="section-header">
-            <span class="section-title"><i class="icon-coins"></i> Token Balance Changes</span>
+            <span class="section-title"><i class="icon-coins"></i> ${Utils.escapeHtml(I18n.t("transactions-dialog-balances-token-title"))}</span>
             <span class="section-count">${tokenChanges.length}</span>
           </div>
-          ${tokenChanges.length > 0 ? this._buildTokenChangesTable(tokenChanges) : '<div class="empty-message">No token balance changes</div>'}
+          ${tokenChanges.length > 0 ? this._buildTokenChangesTable(tokenChanges) : `<div class="empty-message">${Utils.escapeHtml(I18n.t("transactions-dialog-balances-token-empty"))}</div>`}
         </div>
 
         <div class="balance-summary">
           <div class="summary-item">
-            <span class="summary-label">Net SOL Change</span>
+            <span class="summary-label">${Utils.escapeHtml(I18n.t("transactions-dialog-balances-net-sol"))}</span>
             <span class="summary-value ${tx.sol_balance_change >= 0 ? "positive" : "negative"}">${renderTokenLogo(SOL_MINT, { size: "xs" })} ${Utils.formatPnL(tx.sol_balance_change, { decimals: 9 })}</span>
           </div>
           <div class="summary-item">
-            <span class="summary-label">Transaction Fee</span>
+            <span class="summary-label">${Utils.escapeHtml(I18n.t("transactions-dialog-balances-fee"))}</span>
             <span class="summary-value negative">${renderTokenLogo(SOL_MINT, { size: "xs" })} -${Utils.formatSol(tx.fee_sol, { decimals: 9 })}</span>
           </div>
         </div>
@@ -778,10 +784,10 @@ export class TransactionDetailsDialog {
       <table class="balance-table">
         <thead>
           <tr>
-            <th>Account</th>
-            <th>Pre Balance</th>
-            <th>Post Balance</th>
-            <th>Change</th>
+            <th>${Utils.escapeHtml(I18n.t("transactions-dialog-col-account"))}</th>
+            <th>${Utils.escapeHtml(I18n.t("transactions-dialog-col-pre-balance"))}</th>
+            <th>${Utils.escapeHtml(I18n.t("transactions-dialog-col-post-balance"))}</th>
+            <th>${Utils.escapeHtml(I18n.t("transactions-dialog-col-change"))}</th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>
@@ -808,11 +814,11 @@ export class TransactionDetailsDialog {
       <table class="balance-table">
         <thead>
           <tr>
-            <th>Token</th>
-            <th>Mint Address</th>
-            <th>Pre Balance</th>
-            <th>Post Balance</th>
-            <th>Change</th>
+            <th>${Utils.escapeHtml(I18n.t("transactions-dialog-col-token"))}</th>
+            <th>${Utils.escapeHtml(I18n.t("transactions-dialog-col-mint"))}</th>
+            <th>${Utils.escapeHtml(I18n.t("transactions-dialog-col-pre-balance"))}</th>
+            <th>${Utils.escapeHtml(I18n.t("transactions-dialog-col-post-balance"))}</th>
+            <th>${Utils.escapeHtml(I18n.t("transactions-dialog-col-change"))}</th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>
@@ -831,8 +837,7 @@ export class TransactionDetailsDialog {
     const instructions = tx.instructions || tx.instruction_info || [];
 
     if (instructions.length === 0) {
-      content.innerHTML =
-        '<div class="empty-state"><i class="icon-code"></i><p>No instructions found</p></div>';
+      content.innerHTML = `<div class="empty-state"><i class="icon-code"></i><p>${Utils.escapeHtml(I18n.t("transactions-dialog-instructions-empty"))}</p></div>`;
       return;
     }
 
@@ -843,7 +848,7 @@ export class TransactionDetailsDialog {
     content.innerHTML = `
       <div class="tx-instructions-layout">
         <div class="instructions-header">
-          <span class="instructions-count">${instructions.length} instruction${instructions.length !== 1 ? "s" : ""}</span>
+          <span class="instructions-count">${Utils.escapeHtml(I18n.t("transactions-dialog-instructions-count", { count: instructions.length }))}</span>
         </div>
         <div class="instructions-list">
           ${instructionCards}
@@ -861,8 +866,8 @@ export class TransactionDetailsDialog {
   }
 
   _buildInstructionCard(instr, idx) {
-    const programId = instr.program_id || "Unknown";
-    const instrType = instr.instruction_type || "Unknown";
+    const programId = instr.program_id || I18n.t("transactions-dialog-unknown");
+    const instrType = instr.instruction_type || I18n.t("transactions-dialog-unknown");
     const accounts = instr.accounts || [];
 
     return `
@@ -879,14 +884,14 @@ export class TransactionDetailsDialog {
         </div>
         <div class="instruction-card-body">
           <div class="instruction-detail">
-            <span class="detail-label">Program ID</span>
+            <span class="detail-label">${Utils.escapeHtml(I18n.t("transactions-dialog-instruction-program-id"))}</span>
             <span class="detail-value">${renderAddress(programId, { explorer: "account" })}</span>
           </div>
           ${
             accounts.length > 0
               ? `
             <div class="instruction-accounts">
-              <span class="detail-label">Accounts (${accounts.length})</span>
+              <span class="detail-label">${Utils.escapeHtml(I18n.t("transactions-dialog-instruction-accounts", { count: accounts.length }))}</span>
               <div class="accounts-list">
                 ${accounts.map((acc, i) => `<div class="account-item"><span class="account-index">${i}</span>${renderAddress(acc, { explorer: "account" })}</div>`).join("")}
               </div>
@@ -898,7 +903,7 @@ export class TransactionDetailsDialog {
             instr.data
               ? `
             <div class="instruction-data">
-              <span class="detail-label">Data</span>
+              <span class="detail-label">${Utils.escapeHtml(I18n.t("transactions-dialog-instruction-data"))}</span>
               <pre class="data-preview">${Utils.escapeHtml(instr.data.slice(0, 200))}${instr.data.length > 200 ? "..." : ""}</pre>
             </div>
           `
@@ -920,16 +925,15 @@ export class TransactionDetailsDialog {
     const logs = tx.log_messages || [];
 
     if (logs.length === 0) {
-      content.innerHTML =
-        '<div class="empty-state"><i class="icon-file-text"></i><p>No logs available</p></div>';
+      content.innerHTML = `<div class="empty-state"><i class="icon-file-text"></i><p>${Utils.escapeHtml(I18n.t("transactions-dialog-logs-empty"))}</p></div>`;
       return;
     }
 
     content.innerHTML = `
       <div class="tx-logs-layout">
         <div class="logs-toolbar">
-          <input type="text" class="logs-search" placeholder="Filter logs..." id="logsSearchInput" value="${Utils.escapeHtml(this.logSearchQuery)}" />
-          <span class="logs-count">${logs.length} log${logs.length !== 1 ? "s" : ""}</span>
+          <input type="text" class="logs-search" placeholder="${Utils.escapeHtml(I18n.t("transactions-dialog-logs-filter"))}" id="logsSearchInput" value="${Utils.escapeHtml(this.logSearchQuery)}" />
+          <span class="logs-count">${Utils.escapeHtml(I18n.t("transactions-dialog-logs-count", { count: logs.length }))}</span>
         </div>
         <div class="logs-container" id="logsContainer">
           ${this._buildLogsList(logs, this.logSearchQuery)}
@@ -957,7 +961,7 @@ export class TransactionDetailsDialog {
       : logs;
 
     if (filteredLogs.length === 0) {
-      return '<div class="empty-message">No matching logs</div>';
+      return `<div class="empty-message">${Utils.escapeHtml(I18n.t("transactions-dialog-logs-no-match"))}</div>`;
     }
 
     return filteredLogs
@@ -1006,8 +1010,7 @@ export class TransactionDetailsDialog {
     const ataOps = tx.ata_operations || [];
 
     if (!ataAnalysis && ataOps.length === 0) {
-      content.innerHTML =
-        '<div class="empty-state"><i class="icon-layers"></i><p>No ATA operations in this transaction</p></div>';
+      content.innerHTML = `<div class="empty-state"><i class="icon-layers"></i><p>${Utils.escapeHtml(I18n.t("transactions-dialog-ata-empty"))}</p></div>`;
       return;
     }
 
@@ -1022,26 +1025,26 @@ export class TransactionDetailsDialog {
   _buildAtaSummary(analysis) {
     return `
       <div class="ata-summary">
-        <div class="section-header">ATA Analysis Summary</div>
+        <div class="section-header">${Utils.escapeHtml(I18n.t("transactions-dialog-ata-summary-title"))}</div>
         <div class="ata-stats-grid">
           <div class="ata-stat">
-            <span class="stat-label">Creations</span>
+            <span class="stat-label">${Utils.escapeHtml(I18n.t("transactions-dialog-ata-creations"))}</span>
             <span class="stat-value">${analysis.total_ata_creations || 0}</span>
           </div>
           <div class="ata-stat">
-            <span class="stat-label">Closures</span>
+            <span class="stat-label">${Utils.escapeHtml(I18n.t("transactions-dialog-ata-closures"))}</span>
             <span class="stat-value">${analysis.total_ata_closures || 0}</span>
           </div>
           <div class="ata-stat">
-            <span class="stat-label">Rent Spent</span>
+            <span class="stat-label">${Utils.escapeHtml(I18n.t("transactions-dialog-ata-rent-spent"))}</span>
             <span class="stat-value negative">${renderTokenLogo(SOL_MINT, { size: "xs" })} -${Utils.formatSol(analysis.total_rent_spent || 0, { decimals: 9 })}</span>
           </div>
           <div class="ata-stat">
-            <span class="stat-label">Rent Recovered</span>
+            <span class="stat-label">${Utils.escapeHtml(I18n.t("transactions-dialog-ata-rent-recovered"))}</span>
             <span class="stat-value positive">${renderTokenLogo(SOL_MINT, { size: "xs" })} +${Utils.formatSol(analysis.total_rent_recovered || 0, { decimals: 9 })}</span>
           </div>
           <div class="ata-stat highlight">
-            <span class="stat-label">Net Rent Impact</span>
+            <span class="stat-label">${Utils.escapeHtml(I18n.t("transactions-dialog-ata-net-rent"))}</span>
             <span class="stat-value ${analysis.net_rent_impact >= 0 ? "positive" : "negative"}">${renderTokenLogo(SOL_MINT, { size: "xs" })} ${analysis.net_rent_impact >= 0 ? "+" : ""}${Utils.formatSol(analysis.net_rent_impact || 0, { decimals: 9 })}</span>
           </div>
         </div>
@@ -1055,7 +1058,7 @@ export class TransactionDetailsDialog {
         const mint = op.token_mint || op.mint;
         return `
       <tr>
-        <td><span class="badge ${op.operation_type === "Creation" ? "info" : "warning"}">${op.operation_type}</span></td>
+        <td><span class="badge ${op.operation_type === "Creation" ? "info" : "warning"}">${Utils.escapeHtml(I18n.label(ATA_OPERATION_LABELS, op.operation_type))}</span></td>
         <td class="tx-address-cell">${renderAddress(op.account_address, { explorer: "account" })}</td>
         <td>${renderTokenChip(mint, { size: "sm", showName: false })}</td>
         <td class="tx-mint-cell">${renderAddress(mint)}</td>
@@ -1068,15 +1071,15 @@ export class TransactionDetailsDialog {
 
     return `
       <div class="ata-operations">
-        <div class="section-header">ATA Operations (${operations.length})</div>
+        <div class="section-header">${Utils.escapeHtml(I18n.t("transactions-dialog-ata-operations-title", { count: operations.length }))}</div>
         <table class="ata-table">
           <thead>
             <tr>
-              <th>Type</th>
-              <th>Account</th>
-              <th>Token</th>
-              <th>Mint Address</th>
-              <th>Rent (SOL)</th>
+              <th>${Utils.escapeHtml(I18n.t("transactions-dialog-col-type"))}</th>
+              <th>${Utils.escapeHtml(I18n.t("transactions-dialog-col-account"))}</th>
+              <th>${Utils.escapeHtml(I18n.t("transactions-dialog-col-token"))}</th>
+              <th>${Utils.escapeHtml(I18n.t("transactions-dialog-col-mint"))}</th>
+              <th>${Utils.escapeHtml(I18n.t("transactions-dialog-col-rent"))}</th>
               <th>WSOL</th>
             </tr>
           </thead>
@@ -1101,15 +1104,15 @@ export class TransactionDetailsDialog {
         <div class="raw-toolbar">
           <button class="raw-copy-btn" id="copyRawBtn">
             <i class="icon-copy"></i>
-            Copy JSON
+            ${Utils.escapeHtml(I18n.t("transactions-dialog-raw-copy"))}
           </button>
           <button class="raw-expand-btn" id="expandAllBtn">
             <i class="icon-chevrons-down"></i>
-            Expand All
+            ${Utils.escapeHtml(I18n.t("common-action-expand-all"))}
           </button>
         </div>
         <div class="raw-json-container">
-          <pre class="raw-json" id="rawJsonPre">${rawData ? Utils.escapeHtml(JSON.stringify(rawData, null, 2)) : "No raw data available"}</pre>
+          <pre class="raw-json" id="rawJsonPre">${rawData ? Utils.escapeHtml(JSON.stringify(rawData, null, 2)) : Utils.escapeHtml(I18n.t("transactions-dialog-raw-empty"))}</pre>
         </div>
       </div>
     `;
@@ -1119,7 +1122,7 @@ export class TransactionDetailsDialog {
     if (copyBtn && rawData) {
       copyBtn.addEventListener("click", () => {
         Utils.copyToClipboard(JSON.stringify(rawData, null, 2));
-        Utils.notifyCopied("JSON");
+        Utils.notifyCopied(I18n.t("common-copied-json"));
       });
     }
   }
@@ -1134,46 +1137,6 @@ export class TransactionDetailsDialog {
 
   _getTypeIcon(type) {
     return typeIcon(type);
-  }
-
-  _getStatusBadge(status, success) {
-    if (!status) return '<span class="badge secondary">Unknown</span>';
-
-    // Handle string status
-    if (typeof status === "string") {
-      const badges = {
-        Pending: '<span class="badge warning"><i class="icon-loader"></i> Pending</span>',
-        Confirmed: '<span class="badge success"><i class="icon-check"></i> Confirmed</span>',
-        Finalized: '<span class="badge success"><i class="icon-check-check"></i> Finalized</span>',
-      };
-      if (badges[status]) return badges[status];
-    }
-
-    // Handle Failed variant with message
-    if (status.Failed) {
-      return '<span class="badge error"><i class="icon-x"></i> Failed</span>';
-    }
-
-    // Fallback based on success boolean
-    if (success === true) {
-      return '<span class="badge success"><i class="icon-check"></i> Success</span>';
-    }
-    if (success === false) {
-      return '<span class="badge error"><i class="icon-x"></i> Failed</span>';
-    }
-
-    return '<span class="badge secondary">Unknown</span>';
-  }
-
-  _getDirectionBadge(direction) {
-    if (!direction) return "";
-    const badges = {
-      Incoming: '<span class="badge success">↓ Incoming</span>',
-      Outgoing: '<span class="badge error">↑ Outgoing</span>',
-      Internal: '<span class="badge secondary">⟲ Internal</span>',
-      Unknown: '<span class="badge secondary">? Unknown</span>',
-    };
-    return badges[direction] || "";
   }
 
   _shortenAddress(address) {

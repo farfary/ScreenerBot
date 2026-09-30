@@ -265,7 +265,6 @@ settings-agent-permission-group = { $category } permission
 settings-agent-summary-asks-only = Limited — asks for { $asking }
 settings-agent-summary-off-only = Limited — no { $off }
 settings-agent-summary-asks-and-off = Limited — asks for { $asking }; no { $off }
-settings-agent-list-separator = { ", " }
 
 # Client kinds offered for setup.
 settings-agent-client-claude = { -claude } Code / Desktop

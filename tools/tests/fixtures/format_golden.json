@@ -3673,4 +3673,14 @@
 {"fn":"formatWeekday","args":[3],"out":"Wed"},
 {"fn":"formatWeekday","args":[4],"out":"Thu"},
 {"fn":"formatWeekday","args":[5],"out":"Fri"},
-{"fn":"formatWeekday","args":[6],"out":"Sat"}]}
+{"fn":"formatWeekday","args":[6],"out":"Sat"},
+{"fn":"formatList","args":[["a","b","c"]],"out":"a, b, and c"},
+{"fn":"formatList","args":[["a","b"]],"out":"a and b"},
+{"fn":"formatList","args":[["a"]],"out":"a"},
+{"fn":"formatList","args":[[]],"out":""},
+{"fn":"formatList","args":[[1,2]],"out":"1 and 2"},
+{"fn":"formatList","args":[["a","b","c"],{"type":"conjunction"}],"out":"a, b, and c"},
+{"fn":"formatList","args":[["a","b","c"],{"type":"disjunction"}],"out":"a, b, or c"},
+{"fn":"formatList","args":[["a","b"],{"type":"disjunction"}],"out":"a or b"},
+{"fn":"formatList","args":[["a","b","c"],{"type":"unit"}],"out":"a, b, c"},
+{"fn":"formatList","args":[{"$":"undefined"}],"out":""}]}

@@ -44,9 +44,13 @@
       themeIcon.className =
         targetTheme === "light" ? "action-icon icon-sun" : "action-icon icon-moon";
     }
-    if (themeText) themeText.textContent = targetTheme === "light" ? "Light" : "Dark";
+    if (themeText) themeText.textContent =
+        targetTheme === "light" ? I18n.t("shell-theme-light") : I18n.t("shell-theme-dark");
     if (themeToggle) {
-      const label = `Switch to ${targetTheme} theme`;
+      const label =
+        targetTheme === "light"
+          ? I18n.t("shell-theme-switch-to-light")
+          : I18n.t("shell-theme-switch-to-dark");
       themeToggle.setAttribute("aria-label", label);
       themeToggle.title = label;
     }

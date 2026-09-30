@@ -23,6 +23,7 @@ import {
   formatSignatureCompact,
   formatAddressCompact,
   formatSecondsToTime,
+  formatList,
 } from "./format.js";
 
 (function () {
@@ -354,7 +355,7 @@ import {
 
   function copyMint(mint) {
     return copyToClipboard(mint)
-      .then(() => notifyCopied("Mint address"))
+      .then(() => notifyCopied(I18n.t("links-mint-address")))
       .catch((err) => {
         notifyCopyFailed(err);
         throw err;
@@ -381,7 +382,7 @@ import {
       const data = await res.json();
       const text = generateDebugText(data, type);
       await copyToClipboard(text);
-      notifyCopied("Debug info");
+      notifyCopied(I18n.t("common-copied-debug-info"));
     } catch (err) {
       console.error("copyDebugInfo error:", err);
       notifyCopyFailed(err);
@@ -780,7 +781,7 @@ import {
   // Copy an address and surface a toast (use for wallet/pool/authority addresses).
   function copyAddress(address) {
     return copyToClipboard(address)
-      .then(() => notifyCopied("Address"))
+      .then(() => notifyCopied(I18n.t("common-copied-address")))
       .catch((err) => {
         notifyCopyFailed(err);
         throw err;
@@ -991,6 +992,7 @@ import {
     formatSignatureCompact,
     formatAddressCompact,
     formatSecondsToTime,
+    formatList,
     escapeHtml,
     setText,
     setHtml,
@@ -1060,6 +1062,7 @@ export {
   formatSignatureCompact,
   formatAddressCompact,
   formatSecondsToTime,
+  formatList,
 };
 
 // Export the remaining helpers from the IIFE result
@@ -1162,7 +1165,7 @@ if (typeof document !== "undefined" && !window.__copyDelegationInstalled) {
     if (!text) return;
     event.preventDefault();
     copyToClipboard(text)
-      .then(() => notifyCopied("Value"))
+      .then(() => notifyCopied(I18n.t("common-copied-value")))
       .catch(notifyCopyFailed);
   });
 }

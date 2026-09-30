@@ -74,6 +74,36 @@ export function setIconLabel(button, iconClass, label) {
   button.replaceChildren(icon, " ", label);
 }
 
+const LOGO_FALLBACK_ATTR = "data-logo-fallback";
+
+/**
+ * Attribute for a logo `<img>` that should give way to a letter placeholder when
+ * the image fails to load. `placeholderClass` must be a static class name, never an
+ * external value. The placeholder shows the first character of the image's `alt`.
+ */
+export function logoFallbackAttr(placeholderClass) {
+  return `${LOGO_FALLBACK_ATTR}="${placeholderClass}"`;
+}
+
+// `error` does not bubble, so the listener runs in the capture phase on the document.
+if (typeof document !== "undefined" && !window.__logoFallbackInstalled) {
+  window.__logoFallbackInstalled = true;
+  document.addEventListener(
+    "error",
+    (event) => {
+      const img = event.target;
+      if (img?.tagName !== "IMG" || !img.hasAttribute(LOGO_FALLBACK_ATTR)) return;
+      const parent = img.parentElement;
+      if (!parent) return;
+      const placeholder = document.createElement("div");
+      placeholder.className = img.getAttribute(LOGO_FALLBACK_ATTR);
+      placeholder.textContent = img.alt.charAt(0);
+      parent.replaceChildren(placeholder);
+    },
+    true
+  );
+}
+
 // Show/hide element
 export function show(element) {
   if (!element) return;

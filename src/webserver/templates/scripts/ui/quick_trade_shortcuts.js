@@ -63,7 +63,7 @@ export async function openQuickTrade(action) {
   const mint = dialog.currentContext?.mint;
   if (!mint) {
     playError();
-    window.showToast?.({ type: "error", title: "No token selected" });
+    window.showToast?.({ type: "error", title: I18n.t("trade-quick-no-token") });
     return;
   }
 

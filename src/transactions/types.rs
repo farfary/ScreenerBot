@@ -850,33 +850,3 @@ impl TransactionStats {
         }
     }
 }
-
-#[cfg(test)]
-mod direction_label_tests {
-    use super::TransactionDirection;
-
-    /// Catalog key of the label for each direction. The match is exhaustive, so a
-    /// new variant fails to compile until it is mapped here and in
-    /// `DIRECTION_LABELS` (ui/position_details/activity_event.js).
-    fn label_key(direction: &TransactionDirection) -> &'static str {
-        match direction {
-            TransactionDirection::Incoming => "positions-direction-incoming",
-            TransactionDirection::Outgoing => "positions-direction-outgoing",
-            TransactionDirection::Internal => "positions-direction-internal",
-            TransactionDirection::Unknown => "positions-direction-unknown",
-        }
-    }
-
-    #[test]
-    fn direction_labels_exist_in_the_catalog() {
-        for direction in [
-            TransactionDirection::Incoming,
-            TransactionDirection::Outgoing,
-            TransactionDirection::Internal,
-            TransactionDirection::Unknown,
-        ] {
-            let key = label_key(&direction);
-            assert_ne!(crate::i18n::format_en(key, None), key, "missing {key}");
-        }
-    }
-}

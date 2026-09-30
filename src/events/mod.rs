@@ -45,6 +45,8 @@
 pub mod database;
 mod display_text;
 mod error;
+#[cfg(test)]
+mod label_tests;
 pub use database as db;
 pub use display_text::{with_text, ScheduledTaskOutcome};
 pub mod maintenance;

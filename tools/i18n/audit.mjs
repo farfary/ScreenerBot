@@ -7,9 +7,10 @@
  *   node tools/i18n/audit.mjs --update-baseline lower or drop baseline entries
  *   node tools/i18n/audit.mjs --init-baseline   write the baseline from current counts
  *
- * Catalog parity, key usage and value-formatting errors (toLocale*String, Intl and the
- * "en-US" literal outside `core/format.js`) always fail. Hardcoded strings and
- * physical-direction CSS are gated by `baseline.json`: a count may fall, never rise.
+ * Catalog parity, key usage, value-formatting errors (toLocale*String, Intl and the
+ * "en-US" literal outside `core/format.js`) and hardcoded user-visible strings always
+ * fail; `// l10n-ignore: <reason>` is the only escape for the last. Physical-direction
+ * CSS is gated by `baseline.json`: a count may fall, never rise.
  */
 
 import { readFile, writeFile } from "node:fs/promises";
@@ -24,7 +25,8 @@ import { scanHtmlHardcoded, scanJsHardcoded } from "./hardcoded.mjs";
 import { scanUsage } from "./usage.mjs";
 
 export const BASELINE_PATH = resolve(REPO_ROOT, "tools/i18n/baseline.json");
-export const CATEGORIES = ["hardcoded", "cssDirection"];
+// The categories gated by `baseline.json`. Hardcoded strings have no baseline.
+export const CATEGORIES = ["cssDirection"];
 const UPDATE_COMMAND = "node tools/i18n/audit.mjs --update-baseline";
 
 /** `{ path: count }` for the files with a non-zero count. */
@@ -87,7 +89,7 @@ async function readBaseline() {
   try {
     return JSON.parse(await readFile(BASELINE_PATH, "utf8"));
   } catch (error) {
-    if (error.code === "ENOENT") return { hardcoded: {}, cssDirection: {} };
+    if (error.code === "ENOENT") return { cssDirection: {} };
     throw error;
   }
 }
@@ -151,6 +153,15 @@ export function analyze({ sources, catalogInput }) {
   scan(sources.js, scanJsHardcoded, hardcoded, (n) => (ignores += n));
   scan(sources.html, scanHtmlHardcoded, hardcoded, (n) => (ignores += n));
   scan(sources.css, scanCss, css, (n) => (rtlOk += n));
+  for (const [path, result] of Object.entries(hardcoded)) {
+    for (const item of result.items) {
+      errors.push({
+        file: path,
+        line: item.line,
+        message: `hardcoded user-visible string (${item.kind}): ${JSON.stringify(item.text)}; localize it or annotate // l10n-ignore: <reason>`,
+      });
+    }
+  }
   for (const file of sources.js) {
     const result = scanFormatting(file);
     errors.push(...result.errors);
@@ -172,7 +183,7 @@ export function analyze({ sources, catalogInput }) {
 export function formatSummary(result) {
   const lines = ["Localization audit", ""];
   const titles = { hardcoded: "Hardcoded user-visible strings", cssDirection: "Physical-direction CSS declarations" };
-  for (const category of CATEGORIES) {
+  for (const category of ["hardcoded", ...CATEGORIES]) {
     const counts = result.current[category];
     lines.push(`${titles[category]}: ${sum(counts)} in ${Object.keys(counts).length} files`);
     for (const [path, count] of topFiles(counts)) lines.push(`  ${String(count).padStart(5)}  ${path}`);

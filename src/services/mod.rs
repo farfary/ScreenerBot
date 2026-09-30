@@ -2,6 +2,8 @@
 mod global;
 mod health;
 pub mod implementations;
+#[cfg(test)]
+mod label_tests;
 mod logging;
 mod metrics;
 pub mod startup;

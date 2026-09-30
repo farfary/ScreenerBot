@@ -5,6 +5,8 @@ import { DataTable } from "../ui/data_table.js";
 import { requestManager } from "../core/request_manager.js";
 import { TransactionDetailsDialog } from "../ui/transaction_details_dialog.js";
 import { TYPE_FILTER_OPTIONS, typeLabel, typeVariant } from "../ui/transaction_type.js";
+import { directionBadge, directionLabel } from "../ui/transaction_direction.js";
+import { listStatusBadge, statusLabel } from "../ui/transaction_status.js";
 
 const PAGE_LIMIT = 100;
 const DEFAULT_FILTERS = {
@@ -24,42 +26,17 @@ function formatTypeBadge(value) {
   return `<span class="badge ${typeVariant(value)}">${Utils.escapeHtml(typeLabel(value))}</span>`;
 }
 
-function formatDirectionBadge(value) {
-  if (!value) return "—";
-  const map = {
-    Incoming: { text: "↓ Incoming", variant: "success" },
-    Outgoing: { text: "↑ Outgoing", variant: "error" },
-    Internal: { text: "⟲ Internal", variant: "secondary" },
-    // Only rows written before the wallet-relative direction landed can still be
-    // Unknown; the reclassification sweep clears them.
-    Unknown: { text: "Unclassified", variant: "secondary" },
-  };
-  const info = map[value] ?? null;
-  if (!info) {
-    return Utils.escapeHtml(value);
-  }
-  return `<span class="badge ${info.variant}">${info.text}</span>`;
-}
-
 function formatStatusBadge(status, success) {
   if (!status) return "—";
-  const map = {
-    Pending: { text: '<i class="icon-loader"></i> Pending', variant: "warning" },
-    Confirmed: { text: '<i class="icon-check"></i> Confirmed', variant: "success" },
-    Finalized: { text: '<i class="icon-check-check"></i> Finalized', variant: "success" },
-    Failed: { text: '<i class="icon-x"></i> Failed', variant: "error" },
-  };
-  const info = map[status];
-  if (!info) {
-    if (success === true) {
-      return `<span class="badge success">${Utils.escapeHtml(status)}</span>`;
-    }
-    if (success === false) {
-      return `<span class="badge error">${Utils.escapeHtml(status)}</span>`;
-    }
-    return Utils.escapeHtml(status);
+  const badge = listStatusBadge(status);
+  if (badge) return badge;
+  if (success === true) {
+    return `<span class="badge success">${Utils.escapeHtml(status)}</span>`;
   }
-  return `<span class="badge ${info.variant}">${info.text}</span>`;
+  if (success === false) {
+    return `<span class="badge error">${Utils.escapeHtml(status)}</span>`;
+  }
+  return Utils.escapeHtml(status);
 }
 
 function formatTokenDisplay(row) {
@@ -147,17 +124,17 @@ function createLifecycle() {
     table.updateToolbarSummary([
       {
         id: "tx-total",
-        label: "Total",
+        label: I18n.t("transactions-summary-total"),
         value: totalValue === null ? "—" : Utils.formatNumber(totalValue, { decimals: 0 }),
       },
       {
         id: "tx-estimate",
-        label: "Estimate",
+        label: I18n.t("transactions-summary-estimate"),
         value: totalEstimate === null ? "—" : Utils.formatNumber(totalEstimate, { decimals: 0 }),
       },
       {
         id: "tx-success",
-        label: "Success",
+        label: I18n.t("transactions-summary-success"),
         value:
           successCountGlobal === null
             ? "—"
@@ -169,7 +146,7 @@ function createLifecycle() {
       },
       {
         id: "tx-failed",
-        label: "Failed",
+        label: I18n.t("transactions-summary-failed"),
         value:
           failedCountGlobal === null ? "—" : Utils.formatNumber(failedCountGlobal, { decimals: 0 }),
         variant:
@@ -314,7 +291,7 @@ function createLifecycle() {
         Utils.showToast({
           key: "transactions-load",
           type: "warning",
-          title: "Could not refresh transactions",
+          title: I18n.t("transactions-load-failed"),
         });
       }
       throw error;
@@ -408,62 +385,62 @@ function createLifecycle() {
       const columns = [
         {
           id: "timestamp",
-          label: "Time",
+          label: I18n.t("transactions-col-time"),
           minWidth: 160,
           floating: true,
           render: (value) => Utils.formatTimestamp(value, { fallback: "—" }),
         },
         {
           id: "signature",
-          label: "Signature",
+          label: I18n.t("transactions-col-signature"),
           minWidth: 300,
           render: (value) => formatSignatureLink(value),
         },
         {
           id: "transaction_type",
-          label: "Type",
+          label: I18n.t("transactions-col-type"),
           minWidth: 150,
           render: (value) => formatTypeBadge(value),
         },
         {
           id: "direction",
-          label: "Direction",
+          label: I18n.t("transactions-col-direction"),
           minWidth: 130,
-          render: (value) => formatDirectionBadge(value),
+          render: (value) => directionBadge(value, "—"),
         },
         {
           id: "status",
-          label: "Status",
+          label: I18n.t("transactions-col-status"),
           minWidth: 120,
           render: (value, row) => formatStatusBadge(value, row?.success),
         },
         {
           id: "sol_delta",
-          label: "Δ SOL",
+          label: I18n.t("transactions-col-sol-delta"),
           minWidth: 140,
           render: (value) => Utils.formatPnL(value, { decimals: 6, fallback: "—" }),
         },
         {
           id: "fee_sol",
-          label: "Fees (SOL)",
+          label: I18n.t("transactions-col-fees"),
           minWidth: 130,
           render: (value) => Utils.formatSol(value, { decimals: 6, fallback: "—" }),
         },
         {
           id: "token_mint",
-          label: "Token",
+          label: I18n.t("transactions-col-token"),
           minWidth: 140,
           render: (value, row) => formatTokenDisplay(row),
         },
         {
           id: "router",
-          label: "Router",
+          label: I18n.t("transactions-col-router"),
           minWidth: 140,
-          render: (value) => value ?? "—",
+          render: (value) => (value === null || value === undefined ? "—" : Utils.escapeHtml(value)),
         },
         {
           id: "instructions_count",
-          label: "Instr.",
+          label: I18n.t("transactions-col-instructions"),
           minWidth: 90,
           render: (value) => Utils.formatNumber(value, { decimals: 0, fallback: "—" }),
         },
@@ -498,21 +475,31 @@ function createLifecycle() {
           layout: "query-row",
           identity: {
             icon: "icon-arrow-left-right",
-            title: "Transaction history",
+            title: I18n.t("transactions-toolbar-title"),
           },
           summary: [
-            { id: "tx-total", label: "Total", value: "—" },
-            { id: "tx-estimate", label: "Estimate", value: "—" },
-            { id: "tx-success", label: "Success", value: "—", variant: "secondary" },
-            { id: "tx-failed", label: "Failed", value: "—", variant: "success" },
+            { id: "tx-total", label: I18n.t("transactions-summary-total"), value: "—" },
+            { id: "tx-estimate", label: I18n.t("transactions-summary-estimate"), value: "—" },
+            {
+              id: "tx-success",
+              label: I18n.t("transactions-summary-success"),
+              value: "—",
+              variant: "secondary",
+            },
+            {
+              id: "tx-failed",
+              label: I18n.t("transactions-summary-failed"),
+              value: "—",
+              variant: "success",
+            },
           ],
           controls: [
             {
               id: "search",
               type: "search",
               mode: "server",
-              placeholder: "Search signatures…",
-              ariaLabel: "Search transaction signatures",
+              placeholder: I18n.attr("transactions-search", "placeholder"),
+              ariaLabel: I18n.attr("transactions-search", "aria-label"),
               onChange: (value, el, options) => {
                 state.signature = (value || "").trim();
                 if (options?.restored) {
@@ -531,11 +518,11 @@ function createLifecycle() {
             {
               id: "subject",
               type: "select",
-              label: "Wallet",
+              label: I18n.t("transactions-filter-wallet"),
               mode: "server",
               autoApply: false,
               minWidth: "170px",
-              options: [{ value: "", label: "Main wallet" }],
+              options: [{ value: "", label: I18n.t("transactions-wallet-main") }],
               onChange: (value, el, options) => {
                 state.subject = value || "";
                 state.summary = null;
@@ -553,7 +540,7 @@ function createLifecycle() {
             {
               id: "type",
               type: "select",
-              label: "Type",
+              label: I18n.t("transactions-filter-type"),
               mode: "server",
               defaultValue: state.filters.type,
               autoApply: false,
@@ -573,15 +560,15 @@ function createLifecycle() {
             {
               id: "direction",
               type: "select",
-              label: "Direction",
+              label: I18n.t("transactions-filter-direction"),
               mode: "server",
               defaultValue: state.filters.direction,
               autoApply: false,
               options: [
-                { value: "all", label: "All Directions" },
-                { value: "Incoming", label: "Incoming" },
-                { value: "Outgoing", label: "Outgoing" },
-                { value: "Internal", label: "Internal" },
+                { value: "all", label: I18n.t("transactions-filter-all-directions") },
+                { value: "Incoming", label: directionLabel("Incoming") },
+                { value: "Outgoing", label: directionLabel("Outgoing") },
+                { value: "Internal", label: directionLabel("Internal") },
               ],
               onChange: (value, el, options) => {
                 state.filters.direction = value || "all";
@@ -598,16 +585,16 @@ function createLifecycle() {
             {
               id: "status",
               type: "select",
-              label: "Status",
+              label: I18n.t("transactions-filter-status"),
               mode: "server",
               defaultValue: state.filters.status,
               autoApply: false,
               options: [
-                { value: "all", label: "All Statuses" },
-                { value: "Pending", label: "Pending" },
-                { value: "Confirmed", label: "Confirmed" },
-                { value: "Finalized", label: "Finalized" },
-                { value: "Failed", label: "Failed" },
+                { value: "all", label: I18n.t("transactions-filter-all-statuses") },
+                { value: "Pending", label: statusLabel("Pending") },
+                { value: "Confirmed", label: statusLabel("Confirmed") },
+                { value: "Finalized", label: statusLabel("Finalized") },
+                { value: "Failed", label: statusLabel("Failed") },
               ],
               onChange: (value, el, options) => {
                 state.filters.status = value || "all";
@@ -625,7 +612,7 @@ function createLifecycle() {
           buttons: [
             {
               id: "reset",
-              label: "Reset",
+              label: I18n.t("common-action-reset"),
               icon: "icon-rotate-ccw",
               onClick: () => resetFilters(),
             },
@@ -680,7 +667,7 @@ function createLifecycle() {
               fetchSummary({});
               requestReload("poll", { silent: true, preserveScroll: true });
             },
-            { label: "Transactions" }
+            { label: "Transactions" } // l10n-ignore: poller log name
           )
         );
       }
@@ -726,7 +713,7 @@ function createLifecycle() {
   async function setupSubjectSelector() {
     if (!table) return;
 
-    const options = [{ value: "", label: "Main wallet" }];
+    const options = [{ value: "", label: I18n.t("transactions-wallet-main") }];
     let targetsLoaded = false;
     try {
       const data = await requestManager.fetch("/api/wallets/watch", { priority: "normal" });

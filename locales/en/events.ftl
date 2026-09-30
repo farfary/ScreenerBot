@@ -53,3 +53,73 @@ events-connectivity-monitoring-started = Connectivity monitoring started (interv
 events-connectivity-service-initialized = Connectivity service initialized with { $count } monitors
 events-connectivity-critical-unhealthy = { $count } critical endpoint(s) unhealthy - System should pause operations
 events-connectivity-endpoint-recovered = Endpoint recovered from { $from } to healthy
+
+## Events page (pages/events.js, ui/event_labels.js)
+
+# Category ids from EventCategory in src/events/types.rs, plus the legacy entry and learner categories.
+events-category-swap = Swap
+events-category-transaction = Transaction
+events-category-pool = Pool
+events-category-position = Position
+events-category-token = Token
+events-category-wallet = Wallet
+events-category-trader = Trader
+events-category-entry = Entry
+events-category-system = System
+events-category-ohlcv = OHLCV
+events-category-rpc = RPC
+events-category-api = API
+events-category-security = Security
+events-category-connectivity = Connectivity
+events-category-filtering = Filtering
+events-category-scheduled-task = Scheduled task
+events-category-learner = Learner
+events-category-other = Other
+
+events-loading = Loading events...
+events-load-failed = Failed to load events
+events-load-failed-description = Waiting for the backend to respond. We will retry automatically.
+events-load-error = Could not load events
+events-search-placeholder = Search events...
+events-summary-total = Total
+events-filter-category = Category
+events-filter-all-categories = All Categories
+events-filter-all-severities = All Severities
+events-col-time = Time
+events-col-category = Category
+events-col-type = Type
+events-col-severity = Severity
+events-col-message = Message
+events-col-token = Token
+events-col-details = Details
+# $count is the number of payload entries not shown in the preview.
+events-payload-more = +{ $count } more
+
+## Event details dialog (ui/events_dialog.js)
+
+events-dialog-title = Event details
+events-dialog-close =
+    .aria-label = Close dialog
+events-dialog-payload = Payload
+events-dialog-copy = Copy Details
+events-dialog-copy-title =
+    .title = Copy all event details
+events-dialog-copy-done = Copied!
+events-dialog-copy-failed = Failed
+events-dialog-not-available = N/A
+# $category is the category label; shown when an event has no message.
+events-dialog-category-event = { $category } event
+events-dialog-field-id = Event ID
+events-dialog-field-severity = Severity
+events-dialog-field-category = Category
+events-dialog-field-subtype = Subtype
+events-dialog-field-mint = Token Mint
+events-dialog-field-reference = Reference
+events-dialog-field-time = Event Time
+events-dialog-field-age = Age
+events-dialog-field-created = Created
+# Copied event text: section headings and one "label: value" line per field.
+events-dialog-export-heading = EVENT DETAILS
+events-dialog-export-message = MESSAGE
+events-dialog-export-payload = PAYLOAD
+events-dialog-export-line = { $label }: { $value }

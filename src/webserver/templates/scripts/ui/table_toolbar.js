@@ -249,7 +249,7 @@ function normalizeConfig(config = {}) {
       ? null
       : {
           icon: (cfg.settings && cfg.settings.icon) || "icon-settings",
-          tooltip: (cfg.settings && cfg.settings.tooltip) || "Table settings",
+          tooltip: (cfg.settings && cfg.settings.tooltip) || I18n.t("table-toolbar-settings"),
         };
 
   const index = new Map();
@@ -310,7 +310,9 @@ function renderText(item) {
 }
 
 function renderSearch(item, state = {}) {
-  const placeholder = item.placeholder ? escapeHtml(item.placeholder) : "Search table...";
+  const placeholder = item.placeholder
+    ? escapeHtml(item.placeholder)
+    : escapeHtml(I18n.t("table-toolbar-search-default"));
   const value = state.searchQuery ? escapeHtml(state.searchQuery) : "";
   const grow = item.grow === false ? ' data-grow="false"' : "";
   const ariaLabel = item.ariaLabel
@@ -332,7 +334,7 @@ function renderSearch(item, state = {}) {
         autocomplete="off"
         spellcheck="false"
       />
-      <button type="button" class="table-toolbar-search__clear" aria-label="Clear search" hidden>
+      <button type="button" class="table-toolbar-search__clear" aria-label="${escapeHtml(I18n.t("table-toolbar-search-clear"))}" hidden>
         <i class="icon-x"></i>
       </button>
     </div>
@@ -355,8 +357,8 @@ function renderSwitch(item, stateFilters = {}) {
   const label = item.label
     ? `<span class="table-toolbar-field__label">${escapeHtml(item.label)}</span>`
     : "";
-  const onLabel = item.switchLabels?.on ?? "On";
-  const offLabel = item.switchLabels?.off ?? "All";
+  const onLabel = item.switchLabels?.on ?? I18n.t("table-toolbar-switch-on");
+  const offLabel = item.switchLabels?.off ?? I18n.t("table-toolbar-switch-all");
 
   return `
     <div class="table-toolbar-field table-toolbar-field--switch" data-filter-id="${escapeHtml(item.id)}" ${commonAttrs(item)}>
@@ -460,7 +462,7 @@ function renderInput(item, stateControls = {}) {
           spellcheck="false"
           ${dataAttrs.join(" ")}
         />
-        ${item.clearable ? '<button type="button" class="table-toolbar-input__clear" aria-label="Clear" hidden><i class="icon-x"></i></button>' : ""}
+        ${item.clearable ? `<button type="button" class="table-toolbar-input__clear" aria-label="${escapeHtml(I18n.t("common-action-clear"))}" hidden><i class="icon-x"></i></button>` : ""}
       </div>
     </div>
   `;
@@ -587,13 +589,13 @@ function renderIdentity(identity) {
         ? ""
         : `<button type="button" class="table-toolbar-identity__act" data-toolbar-copy="${escapeHtml(
             address.value
-          )}" title="Copy address" aria-label="Copy address"><i class="icon-copy"></i></button>`;
+          )}" title="${escapeHtml(I18n.t("table-toolbar-copy-address"))}" aria-label="${escapeHtml(I18n.t("table-toolbar-copy-address"))}"><i class="icon-copy"></i></button>`;
     const linkBtn = address.href
       ? `<a class="table-toolbar-identity__act" href="${escapeHtml(
           address.href
         )}" target="_blank" rel="noopener" title="${escapeHtml(
-          address.linkTooltip || "Open in explorer"
-        )}" aria-label="${escapeHtml(address.linkTooltip || "Open in explorer")}"><i class="icon-external-link"></i></a>`
+          address.linkTooltip || I18n.t("table-toolbar-open-explorer")
+        )}" aria-label="${escapeHtml(address.linkTooltip || I18n.t("table-toolbar-open-explorer"))}"><i class="icon-external-link"></i></a>`
       : "";
     addressMarkup = `
       <span class="table-toolbar-identity__address-group">
@@ -769,8 +771,8 @@ export class TableToolbarView {
           <button
             type="button"
             class="table-toolbar-btn table-toolbar-btn--icon table-toolbar-overflow__trigger"
-            title="More actions"
-            aria-label="More actions"
+            title="${escapeHtml(I18n.t("table-toolbar-more-actions"))}"
+            aria-label="${escapeHtml(I18n.t("table-toolbar-more-actions"))}"
             aria-haspopup="menu"
             aria-expanded="false"
           >
@@ -1011,8 +1013,8 @@ export class TableToolbarView {
         select.checked = checked;
         const status = select.closest(".toggle")?.querySelector(".toggle-state");
         if (status) {
-          const onLabel = status.dataset.onLabel || "On";
-          const offLabel = status.dataset.offLabel || "All";
+          const onLabel = status.dataset.onLabel || I18n.t("table-toolbar-switch-on");
+          const offLabel = status.dataset.offLabel || I18n.t("table-toolbar-switch-all");
           status.textContent = checked ? onLabel : offLabel;
         }
       } else {

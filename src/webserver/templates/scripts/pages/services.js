@@ -5,6 +5,57 @@ import * as Utils from "../core/utils.js";
 import { DataTable } from "../ui/data_table.js";
 import { requestManager } from "../core/request_manager.js";
 
+// Service ids from `Service::name()` (src/services/implementations/*.rs); a Rust test pins each to the catalog.
+const SERVICE_NAME_LABELS = Object.freeze({
+  account: "services-name-account",
+  assistant_scheduled_tasks: "services-name-assistant-scheduled-tasks",
+  ata_cleanup: "services-name-ata-cleanup",
+  connectivity: "services-name-connectivity",
+  copy_trading: "services-name-copy-trading",
+  events: "services-name-events",
+  filtering: "services-name-filtering",
+  llm_analysis: "services-name-llm-analysis",
+  ohlcv: "services-name-ohlcv",
+  pool_analyzer: "services-name-pool-analyzer",
+  pool_calculator: "services-name-pool-calculator",
+  pool_discovery: "services-name-pool-discovery",
+  pool_fetcher: "services-name-pool-fetcher",
+  pools: "services-name-pools",
+  positions: "services-name-positions",
+  referral: "services-name-referral",
+  rpc_stats: "services-name-rpc-stats",
+  sol_price: "services-name-sol-price",
+  telegram: "services-name-telegram",
+  tokens: "services-name-tokens",
+  trader: "services-name-trader",
+  transactions: "services-name-transactions",
+  update_check: "services-name-update-check",
+  wallet: "services-name-wallet",
+  wallet_watch: "services-name-wallet-watch",
+  webserver: "services-name-webserver",
+});
+
+// `ServiceHealth` status tags (src/services/health.rs); `unknown` covers a row without health.
+const HEALTH_STATUS_LABELS = Object.freeze({
+  healthy: "services-status-healthy",
+  starting: "services-status-starting",
+  degraded: "services-status-degraded",
+  unhealthy: "services-status-unhealthy",
+  stopping: "services-status-stopping",
+  disabled: "services-status-disabled",
+  unknown: "services-status-unknown",
+});
+
+const HEALTH_STYLES = {
+  healthy: { variant: "success", icon: "icon-check" },
+  starting: { variant: "warning", icon: "icon-loader" },
+  degraded: { variant: "warning", icon: "icon-triangle-alert" },
+  unhealthy: { variant: "error", icon: "icon-x" },
+};
+const HEALTH_STYLE_FALLBACK = { variant: "secondary", icon: "icon-pause" };
+
+const serviceName = (id) => I18n.label(SERVICE_NAME_LABELS, id);
+
 // Helper functions
 function healthRank(status) {
   const ranks = { healthy: 4, disabled: 3, degraded: 2, starting: 1, unhealthy: 0 };
@@ -13,16 +64,11 @@ function healthRank(status) {
 
 function getHealthBadge(health) {
   const status = health?.status || "unknown";
-  const badges = {
-    healthy: '<span class="badge success"><i class="icon-check"></i> Healthy</span>',
-    starting: '<span class="badge warning"><i class="icon-loader"></i> Starting</span>',
-    degraded: '<span class="badge warning"><i class="icon-triangle-alert"></i> Degraded</span>',
-    unhealthy: '<span class="badge error"><i class="icon-x"></i> Unhealthy</span>',
-    disabled: '<span class="badge secondary"><i class="icon-pause"></i> Disabled</span>',
-  };
-  return (
-    badges[status] || `<span class="badge secondary"><i class="icon-pause"></i> ${status}</span>`
-  );
+  const { variant, icon } = HEALTH_STYLES[status] ?? HEALTH_STYLE_FALLBACK;
+  // Degraded and unhealthy services carry the reason as a UiText.
+  const reason = health?.message ? I18n.text(health.message) : "";
+  const title = reason ? ` title="${Utils.escapeHtml(reason)}"` : "";
+  return `<span class="badge ${variant}"${title}><i class="${icon}"></i> ${Utils.escapeHtml(I18n.label(HEALTH_STATUS_LABELS, status))}</span>`;
 }
 
 function getActivityBar(metrics) {
@@ -40,7 +86,7 @@ function getActivityBar(metrics) {
             : "#9ca3af";
 
   return `
-    <div class="activity-cell" title="${Utils.formatPercentValue(activity, { decimals: 1, includeSign: false })} busy">
+    <div class="activity-cell" title="${Utils.escapeHtml(I18n.t("services-activity-busy", { percent: Utils.formatPercentValue(activity, { decimals: 1, includeSign: false }) }))}">
       <div class="activity-track">
         <div class="activity-fill" style="width:${activity.toFixed(
           1
@@ -48,7 +94,7 @@ function getActivityBar(metrics) {
       </div>
       <div class="activity-meta">
         <span>${Utils.formatPercentValue(activity, { decimals: 1, includeSign: false })}</span>
-        <span>${metrics.total_polls || 0} polls</span>
+        <span>${Utils.escapeHtml(I18n.t("services-activity-polls", { count: metrics.total_polls || 0 }))}</span>
       </div>
     </div>
   `;
@@ -84,21 +130,24 @@ function createLifecycle() {
     table.updateToolbarSummary([
       {
         id: "services-total",
-        label: "Total",
+        label: I18n.t("services-summary-total"),
         value: Utils.formatNumber(total, 0),
       },
       {
         id: "services-healthy",
-        label: "Healthy",
+        label: I18n.label(HEALTH_STATUS_LABELS, "healthy"),
         value: Utils.formatNumber(healthy, 0),
         variant: "success",
       },
       {
         id: "services-alerts",
-        label: "Alerts",
+        label: I18n.t("services-summary-alerts"),
         value: Utils.formatNumber(alerts, 0),
         variant: alerts > 0 ? "warning" : "success",
-        tooltip: `${Utils.formatNumber(degraded, 0)} degraded / ${Utils.formatNumber(unhealthy, 0)} unhealthy`,
+        tooltip: I18n.t("services-summary-alerts-tooltip", {
+          degraded: Utils.formatNumber(degraded, 0),
+          unhealthy: Utils.formatNumber(unhealthy, 0),
+        }),
       },
     ]);
   };
@@ -107,7 +156,7 @@ function createLifecycle() {
     if (!state.hasLoadedOnce && reason !== "poll" && table?.showBlockingState) {
       table.showBlockingState({
         variant: "loading",
-        title: "Loading services...",
+        title: I18n.t("services-loading"),
       });
     }
 
@@ -143,12 +192,15 @@ function createLifecycle() {
       if (!state.hasLoadedOnce) {
         table?.showBlockingState?.({
           variant: "error",
-          title: "Failed to load services",
-          description: "Waiting for the backend to respond. We will retry automatically.",
+          title: I18n.t("services-load-failed"),
+          description: I18n.t("services-load-failed-description"),
         });
       } else if (reason !== "poll") {
-
-        Utils.showToast({ key: "services-load", type: "warning", title: "Could not refresh services" });
+        Utils.showToast({
+          key: "services-load",
+          type: "warning",
+          title: I18n.t("services-refresh-failed"),
+        });
       }
       throw error;
     }
@@ -176,15 +228,15 @@ function createLifecycle() {
       const columns = [
         {
           id: "name",
-          label: "Service",
+          label: I18n.t("services-col-service"),
           sortable: true,
           floating: true,
           minWidth: 140,
-          render: (v) => `<strong>${v || "-"}</strong>`,
+          render: (v) => `<strong>${v ? Utils.escapeHtml(serviceName(v)) : "-"}</strong>`,
         },
         {
           id: "health",
-          label: "Health",
+          label: I18n.t("services-col-health"),
           sortable: true,
           minWidth: 120,
           render: (v, row) => getHealthBadge(row.health),
@@ -192,14 +244,14 @@ function createLifecycle() {
         },
         {
           id: "priority",
-          label: "Priority",
+          label: I18n.t("services-col-priority"),
           sortable: true,
           minWidth: 72,
           render: (v) => v ?? "-",
         },
         {
           id: "enabled",
-          label: "Enabled",
+          label: I18n.t("common-state-enabled"),
           sortable: true,
           minWidth: 72,
           render: (v) =>
@@ -209,7 +261,7 @@ function createLifecycle() {
         },
         {
           id: "uptime",
-          label: "Uptime",
+          label: I18n.t("services-col-uptime"),
           sortable: true,
           minWidth: 96,
           render: (v, row) => Utils.formatUptime(row.uptime_seconds, { style: "compact" }),
@@ -217,7 +269,7 @@ function createLifecycle() {
         },
         {
           id: "activity",
-          label: "Activity",
+          label: I18n.t("services-col-activity"),
           sortable: true,
           minWidth: 200,
           render: (v, row) => getActivityBar(row.metrics || {}),
@@ -232,7 +284,7 @@ function createLifecycle() {
         },
         {
           id: "lastCycle",
-          label: "Last Cycle",
+          label: I18n.t("services-col-last-cycle"),
           sortable: true,
           minWidth: 96,
           render: (v, row) => Utils.formatDuration(row.metrics?.last_cycle_duration_ns || 0),
@@ -241,7 +293,7 @@ function createLifecycle() {
         },
         {
           id: "avgCycle",
-          label: "Avg Cycle",
+          label: I18n.t("services-col-avg-cycle"),
           sortable: true,
           minWidth: 96,
           render: (v, row) => Utils.formatDuration(row.metrics?.avg_cycle_duration_ns || 0),
@@ -250,7 +302,7 @@ function createLifecycle() {
         },
         {
           id: "avgPoll",
-          label: "Avg Poll",
+          label: I18n.t("services-col-avg-poll"),
           sortable: true,
           minWidth: 96,
           render: (v, row) => Utils.formatDuration(row.metrics?.mean_poll_duration_ns || 0),
@@ -259,7 +311,7 @@ function createLifecycle() {
         },
         {
           id: "cycleRate",
-          label: "Cycle Rate",
+          label: I18n.t("services-col-cycle-rate"),
           sortable: true,
           minWidth: 90,
           render: (v, row) => {
@@ -271,30 +323,29 @@ function createLifecycle() {
         },
         {
           id: "tasks",
-          label: "Tasks",
+          label: I18n.t("services-col-tasks"),
           sortable: true,
           minWidth: 90,
           render: (v, row) => {
             const m = row.metrics || {};
             const taskInfo =
               m.task_count > 0
-                ? `${m.task_count} tasks\nLast: ${Utils.formatDuration(
-                    m.last_cycle_duration_ns
-                  )}\nAvg: ${Utils.formatDuration(
-                    m.avg_cycle_duration_ns
-                  )}\nPoll: ${Utils.formatDuration(
-                    m.mean_poll_duration_ns
-                  )}\nIdle: ${Utils.formatDuration(
-                    m.mean_idle_duration_ns
-                  )}\nTotal Polls: ${m.total_polls || 0}`
-                : "No instrumented tasks";
-            return `<span title="${taskInfo}">${m.task_count || 0}</span>`;
+                ? I18n.t("services-tasks-tooltip", {
+                    count: m.task_count,
+                    last: Utils.formatDuration(m.last_cycle_duration_ns),
+                    avg: Utils.formatDuration(m.avg_cycle_duration_ns),
+                    poll: Utils.formatDuration(m.mean_poll_duration_ns),
+                    idle: Utils.formatDuration(m.mean_idle_duration_ns),
+                    polls: m.total_polls || 0,
+                  })
+                : I18n.t("services-tasks-none");
+            return `<span title="${Utils.escapeHtml(taskInfo)}">${m.task_count || 0}</span>`;
           },
           sortFn: (a, b) => (a.metrics?.task_count || 0) - (b.metrics?.task_count || 0),
         },
         {
           id: "ops",
-          label: "Ops/sec",
+          label: I18n.t("services-col-ops"),
           sortable: true,
           minWidth: 90,
           render: (v, row) => formatFixed(row.metrics?.operations_per_second || 0),
@@ -303,7 +354,7 @@ function createLifecycle() {
         },
         {
           id: "errors",
-          label: "Errors",
+          label: I18n.t("services-col-errors"),
           sortable: true,
           minWidth: 80,
           render: (v, row) => row.metrics?.errors_total || 0,
@@ -311,19 +362,19 @@ function createLifecycle() {
         },
         {
           id: "dependencies",
-          label: "Dependencies",
+          label: I18n.t("services-col-dependencies"),
           sortable: false,
           minWidth: 160,
           render: (v, row) => {
             const deps = Array.isArray(row.dependencies) ? row.dependencies : [];
             if (deps.length === 0) {
-              return '<span class="dependency-badge dependency-badge--none">None</span>';
+              return `<span class="dependency-badge dependency-badge--none">${Utils.escapeHtml(I18n.t("services-dependencies-none"))}</span>`;
             }
             // Clamp the badge list to a couple of rows; full list on hover.
             const badges = deps
-              .map((dep) => `<span class="dependency-badge">${Utils.escapeHtml(String(dep))}</span>`)
+              .map((dep) => `<span class="dependency-badge">${Utils.escapeHtml(serviceName(String(dep)))}</span>`)
               .join(" ");
-            const full = deps.map((dep) => String(dep)).join("\n");
+            const full = deps.map((dep) => serviceName(String(dep))).join("\n");
             return `<div class="dt-longtext" data-tooltip="${Utils.escapeHtml(full)}" data-tooltip-truncated>${badges}</div>`;
           },
         },
@@ -353,44 +404,44 @@ function createLifecycle() {
         },
         toolbar: {
           summary: [
-            { id: "services-total", label: "Total", value: "0" },
+            { id: "services-total", label: I18n.t("services-summary-total"), value: "0" },
             {
               id: "services-healthy",
-              label: "Healthy",
+              label: I18n.label(HEALTH_STATUS_LABELS, "healthy"),
               value: "0",
               variant: "success",
             },
             {
               id: "services-alerts",
-              label: "Alerts",
+              label: I18n.t("services-summary-alerts"),
               value: "0",
               variant: "warning",
             },
           ],
           search: {
             enabled: true,
-            placeholder: "Search services...",
+            placeholder: I18n.t("services-search-placeholder"),
           },
           filters: [
             {
               id: "status",
-              label: "Status",
+              label: I18n.t("services-filter-status"),
               options: [
-                { value: "all", label: "All Statuses" },
-                { value: "healthy", label: "Healthy" },
-                { value: "starting", label: "Starting" },
-                { value: "degraded", label: "Degraded" },
-                { value: "unhealthy", label: "Unhealthy" },
+                { value: "all", label: I18n.t("services-filter-all-statuses") },
+                { value: "healthy", label: I18n.label(HEALTH_STATUS_LABELS, "healthy") },
+                { value: "starting", label: I18n.label(HEALTH_STATUS_LABELS, "starting") },
+                { value: "degraded", label: I18n.label(HEALTH_STATUS_LABELS, "degraded") },
+                { value: "unhealthy", label: I18n.label(HEALTH_STATUS_LABELS, "unhealthy") },
               ],
               filterFn: (row, value) => value === "all" || row.health?.status === value,
             },
             {
               id: "enabled",
-              label: "Enabled",
+              label: I18n.t("common-state-enabled"),
               options: [
-                { value: "all", label: "All Services" },
-                { value: "enabled", label: "Enabled Only" },
-                { value: "disabled", label: "Disabled Only" },
+                { value: "all", label: I18n.t("services-filter-all-services") },
+                { value: "enabled", label: I18n.t("services-filter-enabled-only") },
+                { value: "disabled", label: I18n.t("services-filter-disabled-only") },
               ],
               filterFn: (row, value) => {
                 if (value === "all") return true;
@@ -412,7 +463,7 @@ function createLifecycle() {
       if (!poller) {
         poller = ctx.managePoller(
           new Poller(() => requestReload("poll", { silent: true, preserveScroll: true }), {
-            label: "Services",
+            label: "Services", // l10n-ignore: poller log name
           })
         );
       }

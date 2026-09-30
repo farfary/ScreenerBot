@@ -272,3 +272,26 @@ shell-action-manual-order-failed = Order failed
 shell-action-trade-live = Trade
 shell-action-trade-done = Trade done
 shell-action-trade-failed = Trade failed
+
+## Exit dialog (ui/exit_dialog.js)
+
+shell-exit-title = Close ScreenerBot?
+shell-exit-description = Choose how you'd like to close the application
+shell-exit-minimize = Minimize to Tray
+shell-exit-minimize-detail = Keep running in background
+shell-exit-quit = Exit App
+shell-exit-quit-detail = Close completely and stop all services
+
+## Image lightbox (ui/image_lightbox.js)
+
+shell-lightbox-save =
+    .title = Save image
+shell-lightbox-close =
+    .title = Close (ESC)
+
+## Theme control (scripts/theme.js)
+
+shell-theme-light = Light
+shell-theme-dark = Dark
+shell-theme-switch-to-light = Switch to light theme
+shell-theme-switch-to-dark = Switch to dark theme

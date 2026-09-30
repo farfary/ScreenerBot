@@ -22,7 +22,7 @@ export class CustomSelect {
    * @param {Object} options Configuration options
    * @param {HTMLElement} options.container Container element to render into
    * @param {Array<{value: string, label: string, selected?: boolean, disabled?: boolean}>} options.options Select options
-   * @param {string} [options.placeholder='Select...'] Placeholder text
+   * @param {string} [options.placeholder] Placeholder text; defaults to the localized "Select..."
    * @param {Function} [options.onChange] Callback when value changes
    * @param {string} [options.id] ID for the component
    * @param {string} [options.name] Name for the hidden input (form submission)
@@ -32,7 +32,7 @@ export class CustomSelect {
   constructor(options = {}) {
     this.container = options.container;
     this.options = options.options || [];
-    this.placeholder = options.placeholder || "Select...";
+    this.placeholder = options.placeholder || I18n.t("table-select-placeholder");
     this.onChange = options.onChange || (() => {});
     this.id = options.id || null;
     this.name = options.name || null;
@@ -176,7 +176,9 @@ export class CustomSelect {
       container,
       options,
       placeholder:
-        selectElement.dataset.placeholder || selectElement.options[0]?.textContent || "Select...",
+        selectElement.dataset.placeholder ||
+        selectElement.options[0]?.textContent ||
+        I18n.t("table-select-placeholder"),
       id: selectElement.id ? `${selectElement.id}-custom` : null,
       // The native source remains the successful form control; giving the
       // helper input the same name would submit the value twice.
@@ -352,9 +354,9 @@ export class CustomSelect {
     this.searchInputEl = document.createElement("input");
     this.searchInputEl.type = "text";
     this.searchInputEl.className = "cs-search-input";
-    this.searchInputEl.placeholder = "Search...";
+    this.searchInputEl.placeholder = I18n.t("table-select-search");
     this.searchInputEl.autocomplete = "off";
-    this.searchInputEl.setAttribute("aria-label", "Filter options");
+    this.searchInputEl.setAttribute("aria-label", I18n.t("table-select-filter-options"));
     this.searchInputEl.setAttribute("aria-controls", listboxId);
     this.searchContainerEl.appendChild(this.searchInputEl);
 
@@ -367,7 +369,7 @@ export class CustomSelect {
     // Create no results message
     this.noResultsEl = document.createElement("div");
     this.noResultsEl.className = "cs-no-results";
-    this.noResultsEl.textContent = "No results found";
+    this.noResultsEl.textContent = I18n.t("table-select-no-results");
     this.noResultsEl.style.display = "none";
 
     this.dropdownEl.appendChild(this.searchContainerEl);
