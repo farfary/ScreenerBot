@@ -24,6 +24,8 @@ pub mod worker;
 
 // Suffix appended to closed_reason while exit verification is pending
 pub const PENDING_VERIFICATION_SUFFIX: &str = "_pending_verification";
+// Prefix of closed_reason for a force-closed position, followed by the operator's note
+pub const FORCE_CLOSED_PREFIX: &str = "force_closed:";
 
 // Public API exports
 pub use operations::{

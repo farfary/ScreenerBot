@@ -46,13 +46,7 @@ pub fn install() {
                 panic_message
             };
 
-            let message = format!(
-                "🚨 <b>Bot Crashed!</b>\n\n\
-                 <b>Location:</b> <code>{}</code>\n\
-                 <b>Error:</b> {}\n\n\
-                 ⚠️ Please restart the bot.",
-                location, panic_message
-            );
+            let message = crate::telegram::crash::crash_message(&location, &panic_message);
 
             let bot_token_clone = bot_token.clone();
             let chat_id_clone = chat_id.clone();

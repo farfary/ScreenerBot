@@ -3,10 +3,13 @@
 //! Provides the core message sending functionality.
 
 use crate::config::with_config;
+use crate::i18n::{ids, UiArg, UiText};
 use crate::logger::{self, LogTag};
-use crate::telegram::formatters;
+use crate::telegram::formatters::{self, nested_arg, text_arg};
 use crate::telegram::keyboards;
+use crate::telegram::messages;
 use crate::telegram::pagination::PAGINATION_MANAGER;
+use crate::telegram::text::{tg, tg_escape, tg_id, with_icon};
 use crate::telegram::types::{ErrorSeverity, Notification, NotificationType, UpdateStage};
 use crate::telegram::{Error, Result};
 use teloxide::prelude::*;
@@ -156,7 +159,8 @@ impl TelegramNotifier {
         Ok(())
     }
 
-    /// Format a notification into a Telegram message
+    /// Format a notification into a Telegram message, in the Telegram language
+    /// at the time of sending.
     fn format_notification(&self, notification: &Notification) -> String {
         match &notification.notification_type {
             NotificationType::TradeAlert {
@@ -166,24 +170,31 @@ impl TelegramNotifier {
                 amount_sol,
                 wallet,
             } => {
-                let emoji = if trade_type == "buy" { "🔵" } else { "🔴" };
-                let action = if trade_type == "buy" {
-                    "bought"
+                let is_buy = trade_type == "buy";
+                let action = UiText::new(if is_buy {
+                    ids::TELEGRAM_NOTIFY_ALERT_BOUGHT
                 } else {
-                    "sold"
-                };
+                    ids::TELEGRAM_NOTIFY_ALERT_SOLD
+                })
+                .arg("amount", text_arg(format!("{amount_sol:.4}")));
+                let rows = [
+                    tg(&UiText::new(ids::TELEGRAM_NOTIFY_ALERT_TOKEN)
+                        .arg("symbol", text_arg(token_symbol.as_str()))),
+                    tg(&UiText::new(ids::TELEGRAM_NOTIFY_ALERT_MINT)
+                        .arg("mint", text_arg(token_mint.as_str()))),
+                    tg(&action),
+                    tg(&UiText::new(ids::TELEGRAM_NOTIFY_ALERT_WALLET).arg(
+                        "wallet",
+                        text_arg(formatters::shorten_middle(wallet, 6, 4, 12)),
+                    )),
+                ];
                 format!(
-                    "{} <b>Trade Alert</b>\n\n\
-                     Token: <code>${}</code>\n\
-                     Mint: <code>{}</code>\n\
-                     Action: {} {:.4} SOL\n\
-                     Wallet: <code>{}</code>",
-                    emoji,
-                    token_symbol,
-                    token_mint,
-                    action,
-                    amount_sol,
-                    Self::truncate_address(wallet)
+                    "{}\n\n{}",
+                    with_icon(
+                        if is_buy { "🔵" } else { "🔴" },
+                        &tg_id(ids::TELEGRAM_NOTIFY_ALERT_TITLE)
+                    ),
+                    rows.join("\n")
                 )
             }
 
@@ -201,20 +212,19 @@ impl TelegramNotifier {
                     &None
                 };
 
-                formatters::msg_position_opened(
+                messages::msg_position_opened(
                     token_symbol,
                     token_mint,
                     *amount_sol,
                     *entry_price,
                     0.0, // tokens not provided in basic notification
-                    "Unknown",
+                    None,
                     reasoning,
                 )
             }
 
             NotificationType::PositionClosed {
                 token_symbol,
-                token_mint,
                 pnl_sol,
                 pnl_percent,
                 exit_reason,
@@ -224,6 +234,7 @@ impl TelegramNotifier {
                 received,
                 duration_secs,
                 ai_reasoning,
+                ..
             } => {
                 let should_include_ai = with_config(|c| c.telegram.include_ai_reasoning);
                 let reasoning = if should_include_ai {
@@ -232,9 +243,8 @@ impl TelegramNotifier {
                     &None
                 };
 
-                formatters::msg_position_closed(
+                messages::msg_position_closed(
                     token_symbol,
-                    token_mint,
                     *pnl_sol,
                     *pnl_percent,
                     *entry_price,
@@ -249,13 +259,12 @@ impl TelegramNotifier {
 
             NotificationType::PartialExit {
                 token_symbol,
-                token_mint,
                 exit_percent,
                 pnl_sol,
                 remaining_percent,
-            } => formatters::msg_partial_exit(
+                ..
+            } => messages::msg_partial_exit(
                 token_symbol,
-                token_mint,
                 *exit_percent,
                 *pnl_sol,
                 0.0, // pnl_pct not provided
@@ -265,13 +274,12 @@ impl TelegramNotifier {
 
             NotificationType::DcaExecuted {
                 token_symbol,
-                token_mint,
                 dca_amount_sol,
                 total_invested_sol,
                 dca_count,
-            } => formatters::msg_dca_executed(
+                ..
+            } => messages::msg_dca_executed(
                 token_symbol,
-                token_mint,
                 *dca_amount_sol,
                 *total_invested_sol,
                 *dca_count,
@@ -279,7 +287,7 @@ impl TelegramNotifier {
             ),
 
             NotificationType::SystemError { message, severity } => {
-                formatters::msg_system_error(&severity.to_string(), message)
+                messages::msg_system_error(severity, message)
             }
 
             NotificationType::CopyTrading {
@@ -292,21 +300,29 @@ impl TelegramNotifier {
             } => {
                 let token = match (token_symbol, token_mint) {
                     (Some(symbol), Some(mint)) => format!(
-                        "\n<b>{}</b> <code>{}</code>",
-                        formatters::html_escape(symbol),
-                        formatters::format_mint_display(mint)
+                        "\n{}",
+                        format!(
+                            "{} {}",
+                            formatters::bold(symbol),
+                            formatters::code(&formatters::format_mint_display(mint))
+                        )
                     ),
-                    (None, Some(mint)) => format!("\n<code>{}</code>", mint),
+                    (None, Some(mint)) => format!("\n{}", formatters::code(mint)),
                     _ => String::new(),
                 };
+                let header = if *paper {
+                    tg(&UiText::new(ids::TELEGRAM_NOTIFY_COPY_HEADER_PAPER)
+                        .arg("title", text_arg(title.as_str())))
+                } else {
+                    formatters::bold(title)
+                };
                 format!(
-                    "{} <b>{}</b>{}\nTask: {}{}\n{}",
-                    if *paper { "🧪" } else { "🔁" },
-                    formatters::html_escape(title),
-                    if *paper { " (paper)" } else { "" },
-                    formatters::html_escape(task),
+                    "{}\n{}{}\n{}",
+                    with_icon(if *paper { "🧪" } else { "🔁" }, &header),
+                    tg(&UiText::new(ids::TELEGRAM_NOTIFY_COPY_TASK)
+                        .arg("task", text_arg(task.as_str()))),
                     token,
-                    formatters::html_escape(detail)
+                    tg_escape(detail)
                 )
             }
 
@@ -317,7 +333,7 @@ impl TelegramNotifier {
                 losing_trades,
                 total_pnl_sol,
                 open_positions,
-            } => formatters::msg_daily_summary(
+            } => messages::msg_daily_summary(
                 date,
                 *total_trades,
                 *winning_trades,
@@ -327,16 +343,22 @@ impl TelegramNotifier {
             ),
 
             NotificationType::BotCommand { command, response } => {
-                format!("📟 <b>Command:</b> /{command}\n\n{response}")
+                // `response` is finished Telegram HTML supplied by the producer.
+                format!(
+                    "{}\n\n{response}",
+                    with_icon(
+                        "📟",
+                        &tg(&UiText::new(ids::TELEGRAM_NOTIFY_COMMAND)
+                            .arg("command", text_arg(command.as_str())))
+                    )
+                )
             }
 
             NotificationType::BotStarted { version, mode } => {
-                formatters::msg_bot_started(version, mode, "", 0.0)
+                messages::msg_bot_started(version, mode)
             }
 
-            NotificationType::BotStopped { reason } => {
-                formatters::msg_bot_stopped(reason, 0, 0, 0.0)
-            }
+            NotificationType::BotStopped { reason } => messages::msg_bot_stopped(reason),
 
             NotificationType::UpdateStatus {
                 version,
@@ -344,45 +366,50 @@ impl TelegramNotifier {
                 silent,
                 transfer_bytes,
             } => {
-                let megabytes = *transfer_bytes as f64 / (1024.0 * 1024.0);
+                let version = text_arg(version.as_str());
+                let installs_silently = *silent;
                 match stage {
-                    UpdateStage::Available => format!(
-                        "\u{2b06}\u{fe0f} <b>Update v{version} available</b>\n\n{}\nDownload size: {megabytes:.1} MB",
-                        if *silent {
-                            "Installs silently with a short restart."
+                    UpdateStage::Available => {
+                        let how = if installs_silently {
+                            ids::TELEGRAM_UPDATE_HOW_CORE
                         } else {
-                            "This release also updates the desktop app, so its installer has to run once."
-                        }
-                    ),
-                    UpdateStage::Staged => format!(
-                        "\u{2705} <b>Update v{version} ready</b>\n\n{}",
-                        if *silent {
-                            "Send /update to apply it now, or it installs the next time ScreenerBot starts."
+                            ids::TELEGRAM_NOTIFY_UPDATE_HOW_INSTALLER
+                        };
+                        let megabytes = *transfer_bytes as f64 / (1024.0 * 1024.0);
+                        with_icon(
+                            "\u{2b06}\u{fe0f}",
+                            &tg(&UiText::new(ids::TELEGRAM_NOTIFY_UPDATE_AVAILABLE)
+                                .arg("version", version)
+                                .arg("how", nested_arg(UiText::new(how)))
+                                .arg("size", text_arg(format!("{megabytes:.1}")))),
+                        )
+                    }
+                    UpdateStage::Staged => {
+                        let how = if installs_silently {
+                            ids::TELEGRAM_NOTIFY_UPDATE_READY_SILENT
                         } else {
-                            "Open Settings \u{2192} Updates to run the installer."
-                        }
-                    ),
-                    UpdateStage::Applying => format!(
-                        "\u{1f504} <b>Installing v{version}</b>\n\nThe backend is restarting; trading resumes automatically."
+                            ids::TELEGRAM_NOTIFY_UPDATE_READY_INSTALLER
+                        };
+                        with_icon(
+                            "\u{2705}",
+                            &tg(&UiText::new(ids::TELEGRAM_NOTIFY_UPDATE_READY)
+                                .arg("version", version)
+                                .arg("how", nested_arg(UiText::new(how)))),
+                        )
+                    }
+                    UpdateStage::Applying => with_icon(
+                        "\u{1f504}",
+                        &tg(&UiText::new(ids::TELEGRAM_NOTIFY_UPDATE_APPLYING)
+                            .arg("version", version)),
                     ),
                 }
             }
 
-            NotificationType::NewTokensFound { new_count, .. } => {
-                format!(
-                    "🔍 <b>Filtering Alert</b>\n\nFound {} new tokens matching your criteria.",
-                    new_count
-                )
-            }
-        }
-    }
-
-    /// Truncate an address for display
-    fn truncate_address(address: &str) -> String {
-        if address.len() > 12 {
-            format!("{}...{}", &address[..6], &address[address.len() - 4..])
-        } else {
-            address.to_string()
+            NotificationType::NewTokensFound { new_count, .. } => with_icon(
+                "🔍",
+                &tg(&UiText::new(ids::TELEGRAM_NOTIFY_NEW_TOKENS)
+                    .arg("count", UiArg::Count(*new_count as i64))),
+            ),
         }
     }
 }

@@ -3,9 +3,12 @@
 //! Handles token explorer, token lists, token details, buy/blacklist actions.
 
 use super::callbacks::send_with_keyboard;
+use crate::i18n::{ids, MessageId, UiArg, UiText};
 use crate::logger::{self, LogTag};
 use crate::positions;
-use crate::telegram::{formatters, keyboards};
+use crate::telegram::formatters::{self, nested_arg, row, text_arg};
+use crate::telegram::keyboards;
+use crate::telegram::text::{tg, tg_escape, tg_id, with_icon};
 use crate::telegram::{Error, Result};
 use crate::trader::manual::manual_add;
 use teloxide::prelude::*;
@@ -20,23 +23,30 @@ pub async fn send_tokens_menu(bot: &Bot, chat_id: ChatId) -> Result<()> {
     let stats = match crate::filtering::fetch_stats().await {
         Ok(s) => s,
         Err(e) => {
-            let msg = format!("❌ Failed to fetch stats: {e}");
+            let msg = row(
+                "❌",
+                UiText::new(ids::TELEGRAM_TOKEN_STATS_FAILED)
+                    .arg("detail", text_arg(e.to_string())),
+            );
             return send_with_keyboard(bot, chat_id, &msg, keyboards::main_menu_compact()).await;
         }
     };
 
-    let msg = format!(
-        "🔍 <b>Market Explorer</b>\n\n\
-         <b>Overview</b>\n\
-         Passed Filter — {}\n\
-         Rejected — {}\n\
-         Active Prices — {}\n\
-         Total Discovered — {}\n\n\
-         <i>Select a category to browse:</i>",
-        stats.passed_filtering,
-        stats.total_tokens.saturating_sub(stats.passed_filtering),
-        stats.with_pool_price,
-        stats.total_tokens
+    let msg = row(
+        "🔍",
+        UiText::new(ids::TELEGRAM_TOKEN_EXPLORER)
+            .arg("passed", text_arg(stats.passed_filtering.to_string()))
+            .arg(
+                "rejected",
+                text_arg(
+                    stats
+                        .total_tokens
+                        .saturating_sub(stats.passed_filtering)
+                        .to_string(),
+                ),
+            )
+            .arg("priced", text_arg(stats.with_pool_price.to_string()))
+            .arg("total", text_arg(stats.total_tokens.to_string())),
     );
 
     send_with_keyboard(bot, chat_id, &msg, keyboards::tokens_menu()).await
@@ -76,13 +86,27 @@ pub(super) async fn send_tokens_page(
     let result = match crate::filtering::query_tokens(query).await {
         Ok(r) => r,
         Err(e) => {
-            let msg = format!("❌ Failed to fetch tokens: {e}");
+            let msg = row(
+                "❌",
+                UiText::new(ids::TELEGRAM_TOKEN_LIST_FAILED).arg("detail", text_arg(e.to_string())),
+            );
             return send_with_keyboard(bot, chat_id, &msg, keyboards::tokens_menu()).await;
         }
     };
 
+    let view_name = match view {
+        "passed" => nested_arg(UiText::new(ids::TELEGRAM_TOKEN_VIEW_PASSED)),
+        "rejected" => nested_arg(UiText::new(ids::TELEGRAM_TOKEN_VIEW_REJECTED)),
+        "recent" => nested_arg(UiText::new(ids::TELEGRAM_TOKEN_VIEW_RECENT)),
+        "all" => nested_arg(UiText::new(ids::TELEGRAM_TOKEN_VIEW_ALL)),
+        _ => text_arg(view),
+    };
+
     if result.items.is_empty() {
-        let msg = format!("📭 No tokens found in <b>{view}</b> view.");
+        let msg = row(
+            "📭",
+            UiText::new(ids::TELEGRAM_TOKEN_LIST_EMPTY).arg("view", view_name),
+        );
         return send_with_keyboard(bot, chat_id, &msg, keyboards::tokens_menu()).await;
     }
 
@@ -94,43 +118,33 @@ pub(super) async fn send_tokens_page(
         _ => "📊",
     };
 
-    let view_name = match view {
-        "passed" => "Passed Filter",
-        "rejected" => "Rejected",
-        "recent" => "Recently Added",
-        "all" => "All Tokens",
-        _ => view,
-    };
-
-    let mut msg = format!(
-        "{} <b>{}</b> (Page {}/{})\n\n",
-        view_emoji, view_name, result.page, result.total_pages
+    let mut msg = row(
+        view_emoji,
+        UiText::new(ids::TELEGRAM_TOKEN_LIST_TITLE)
+            .arg("name", view_name)
+            .arg("page", text_arg(result.page.to_string()))
+            .arg("total", text_arg(result.total_pages.to_string())),
     );
+    msg.push_str("\n\n");
 
     for (i, token) in result.items.iter().enumerate() {
         let idx = (page - 1) * 10 + i + 1;
         let symbol = &token.symbol;
-        let mint_short = &token.mint[..8.min(token.mint.len())];
+        // Characters, not bytes: the prefix is also the /token_ command argument.
+        let mint_short: String = token.mint.chars().take(8).collect();
 
-        // Format liquidity
-        let liquidity = token
-            .liquidity_usd
-            .map(|l| {
-                if l >= 1_000_000.0 {
-                    format!("${:.1}M", l / 1_000_000.0)
-                } else if l >= 1_000.0 {
-                    format!("${:.1}K", l / 1_000.0)
-                } else {
-                    format!("${:.0}", l)
-                }
-            })
-            .unwrap_or_else(|| "N/A".to_owned());
+        let liquidity = match token.liquidity_usd {
+            Some(l) => nested_arg(formatters::usd_compact_text(l)),
+            None => not_available(),
+        };
 
-        // Format price
         let price = if token.price_sol > 0.0 {
-            format!("{} SOL", formatters::format_price(token.price_sol))
+            nested_arg(
+                UiText::new(ids::TELEGRAM_PRICE_SOL)
+                    .arg("price", formatters::price_arg(token.price_sol)),
+            )
         } else {
-            "N/A".to_owned()
+            not_available()
         };
 
         // Add rejection reason for rejected view
@@ -138,19 +152,25 @@ pub(super) async fn send_tokens_page(
             result
                 .rejection_reasons
                 .get(&token.mint)
-                .map(|r| format!("\n   └ ⚠️ {r}"))
+                .map(|r| format!("\n   └ ⚠️ {}", tg_escape(r)))
                 .unwrap_or_default()
         } else {
             String::new()
         };
 
         msg.push_str(&format!(
-            "{}. <b>${}</b> ({})\n   Liq: {} • Price: {}{}\n   /token_{}\n\n",
-            idx, symbol, mint_short, liquidity, price, reason_part, mint_short
+            "{idx}. {} ({})",
+            formatters::ticker(symbol),
+            tg_escape(&mint_short)
         ));
+        msg.push_str("\n   ");
+        msg.push_str(&tg(&UiText::new(ids::TELEGRAM_TOKEN_LIST_STATS)
+            .arg("liquidity", liquidity)
+            .arg("price", price)));
+        msg.push_str(&format!("{reason_part}\n   /token_{mint_short}\n\n"));
     }
 
-    msg.push_str("<i>Tap /token_ID to view details</i>");
+    msg.push_str(&tg_id(ids::TELEGRAM_TOKEN_LIST_HINT));
 
     let keyboard = keyboards::tokens_list_keyboard(view, page, result.total_pages);
     send_with_keyboard(bot, chat_id, &msg, keyboard).await
@@ -161,7 +181,11 @@ pub(super) async fn send_filter_stats(bot: &Bot, chat_id: ChatId) -> Result<()> 
     let stats = match crate::filtering::fetch_stats().await {
         Ok(s) => s,
         Err(e) => {
-            let msg = format!("❌ Failed to fetch stats: {e}");
+            let msg = row(
+                "❌",
+                UiText::new(ids::TELEGRAM_TOKEN_STATS_FAILED)
+                    .arg("detail", text_arg(e.to_string())),
+            );
             return send_with_keyboard(bot, chat_id, &msg, keyboards::main_menu_compact()).await;
         }
     };
@@ -178,29 +202,73 @@ pub(super) async fn send_filter_stats(bot: &Bot, chat_id: ChatId) -> Result<()> 
         0.0
     };
 
-    let msg = format!(
-        "📊 <b>Filter Analysis</b>\n\n\
-         <b>Distribution</b>\n\
-         ✅ Passed — {} ({:.1}%)\n\
-         ❌ Rejected — {} ({:.1}%)\n\
-         🚫 Blacklisted — {}\n\n\
-         <b>Coverage</b>\n\
-         💰 With Pool Price — {}\n\
-         📈 Open Positions — {}\n\
-         📋 Total Discovered — {}\n\n\
-         <b>Last Updated</b>\n\
-         🕐 {}\n\n\
-         <i>Auto-refreshes every 3m</i>",
-        stats.passed_filtering,
-        passed_pct,
-        rejected_count,
-        rejected_pct,
-        stats.blacklisted,
-        stats.with_pool_price,
-        stats.open_positions,
-        stats.total_tokens,
-        stats.updated_at.format("%H:%M:%S UTC")
-    );
+    let count = |id: MessageId, value: usize, percent: Option<f64>| {
+        let mut text = UiText::new(id).arg("count", text_arg(value.to_string()));
+        if let Some(percent) = percent {
+            text = text.arg("percent", text_arg(format!("{percent:.1}")));
+        }
+        text
+    };
+    let msg = [
+        with_icon("📊", &tg_id(ids::TELEGRAM_TOKEN_FILTER_TITLE)),
+        String::new(),
+        tg_id(ids::TELEGRAM_TOKEN_FILTER_DISTRIBUTION),
+        row(
+            "✅",
+            count(
+                ids::TELEGRAM_TOKEN_FILTER_PASSED,
+                stats.passed_filtering,
+                Some(passed_pct),
+            ),
+        ),
+        row(
+            "❌",
+            count(
+                ids::TELEGRAM_TOKEN_FILTER_REJECTED,
+                rejected_count,
+                Some(rejected_pct),
+            ),
+        ),
+        row(
+            "🚫",
+            count(
+                ids::TELEGRAM_TOKEN_FILTER_BLACKLISTED,
+                stats.blacklisted,
+                None,
+            ),
+        ),
+        String::new(),
+        tg_id(ids::TELEGRAM_TOKEN_FILTER_COVERAGE),
+        row(
+            "💰",
+            count(
+                ids::TELEGRAM_TOKEN_FILTER_PRICED,
+                stats.with_pool_price,
+                None,
+            ),
+        ),
+        row(
+            "📈",
+            count(ids::TELEGRAM_TOKEN_FILTER_OPEN, stats.open_positions, None),
+        ),
+        row(
+            "📋",
+            count(ids::TELEGRAM_TOKEN_FILTER_TOTAL, stats.total_tokens, None),
+        ),
+        String::new(),
+        tg_id(ids::TELEGRAM_TOKEN_FILTER_UPDATED),
+        row(
+            "🕐",
+            UiText::new(ids::TELEGRAM_TOKEN_FILTER_TIME).arg(
+                "time",
+                text_arg(stats.updated_at.format("%H:%M:%S").to_string()),
+            ),
+        ),
+        String::new(),
+        tg(&UiText::new(ids::TELEGRAM_TOKEN_FILTER_REFRESH)
+            .arg("interval", nested_arg(formatters::duration_text(180)))),
+    ]
+    .join("\n");
 
     send_with_keyboard(bot, chat_id, &msg, keyboards::filter_stats_keyboard()).await
 }
@@ -211,8 +279,8 @@ pub async fn send_token_detail(bot: &Bot, chat_id: ChatId, mint_short: &str) -> 
     let token = match find_token_by_prefix(mint_short).await {
         Some(t) => t,
         None => {
-            let msg = "❌ Token not found. Try searching with a longer prefix.";
-            return send_with_keyboard(bot, chat_id, msg, keyboards::tokens_menu()).await;
+            let msg = with_icon("❌", &tg_id(ids::TELEGRAM_TOKEN_NOT_FOUND_PREFIX));
+            return send_with_keyboard(bot, chat_id, &msg, keyboards::tokens_menu()).await;
         }
     };
 
@@ -222,23 +290,19 @@ pub async fn send_token_detail(bot: &Bot, chat_id: ChatId, mint_short: &str) -> 
         .iter()
         .any(|p| p.mint == token.mint);
 
-    // Format token details
-    let liquidity = token
-        .liquidity_usd
-        .map(|l| formatters::format_usd(l))
-        .unwrap_or_else(|| "N/A".to_owned());
-    let volume_24h = token
-        .volume_h24
-        .map(|v| formatters::format_usd(v))
-        .unwrap_or_else(|| "N/A".to_owned());
-    let price_change = token
-        .price_change_h24
-        .map(|c| format!("{:+.2}%", c))
-        .unwrap_or_else(|| "N/A".to_owned());
+    let usd = |value: Option<f64>| match value {
+        Some(v) => text_arg(formatters::format_usd(v)),
+        None => not_available(),
+    };
+    let price_change = match token.price_change_h24 {
+        Some(c) => nested_arg(
+            UiText::new(ids::TELEGRAM_PERCENT_VALUE).arg("percent", text_arg(format!("{c:+.2}"))),
+        ),
+        None => not_available(),
+    };
 
-    let risk_text = token
-        .security_score_normalised
-        .map(|s| {
+    let risk_text = match token.security_score_normalised {
+        Some(s) => {
             let emoji = if s <= 30 {
                 "🟢"
             } else if s <= 60 {
@@ -246,35 +310,47 @@ pub async fn send_token_detail(bot: &Bot, chat_id: ChatId, mint_short: &str) -> 
             } else {
                 "🔴"
             };
-            format!("{emoji} Risk Assessment: {s}/100")
-        })
-        .unwrap_or_else(|| "⚪ Risk Assessment: Unknown".to_owned());
-
-    let position_text = if has_position {
-        "✅ <b>Active Position</b>\n\n"
-    } else {
-        ""
+            row(
+                emoji,
+                UiText::new(ids::TELEGRAM_TOKEN_DETAIL_RISK).arg("score", text_arg(s.to_string())),
+            )
+        }
+        None => row("⚪", UiText::new(ids::TELEGRAM_TOKEN_DETAIL_RISK_UNKNOWN)),
     };
 
+    let position_text = if has_position {
+        format!(
+            "{}\n\n",
+            with_icon("✅", &tg_id(ids::TELEGRAM_TOKEN_DETAIL_ACTIVE))
+        )
+    } else {
+        String::new()
+    };
+
+    let rows = [
+        tg(&UiText::new(ids::TELEGRAM_TOKEN_DETAIL_PRICE)
+            .arg("price", formatters::price_arg(token.price_sol))),
+        tg(&UiText::new(ids::TELEGRAM_TOKEN_DETAIL_LIQUIDITY)
+            .arg("value", usd(token.liquidity_usd))),
+        tg(&UiText::new(ids::TELEGRAM_TOKEN_DETAIL_VOLUME).arg("value", usd(token.volume_h24))),
+        tg(&UiText::new(ids::TELEGRAM_TOKEN_DETAIL_CHANGE).arg("value", price_change)),
+    ];
+
     let msg = format!(
-        "🪙 <b>{}</b> (${})\n\
-         <code>{}</code>\n\n\
-         {}\
-         Price — {} SOL\n\
-         Liquidity — {}\n\
-         24h Volume — {}\n\
-         24h Change — {}\n\n\
-         {}\n\n\
-         <i>Select action:</i>",
-        token.name,
-        token.symbol,
-        formatters::format_mint_display(&token.mint),
+        "{}\n{}\n\n{}{}\n\n{}\n\n{}",
+        with_icon(
+            "🪙",
+            &format!(
+                "{} (${})",
+                formatters::bold(&token.name),
+                tg_escape(&token.symbol)
+            )
+        ),
+        formatters::code(&formatters::format_mint_display(&token.mint)),
         position_text,
-        formatters::format_price(token.price_sol),
-        liquidity,
-        volume_24h,
-        price_change,
-        risk_text
+        rows.join("\n"),
+        risk_text,
+        tg_id(ids::TELEGRAM_TOKEN_DETAIL_ACTION),
     );
 
     send_with_keyboard(
@@ -307,10 +383,8 @@ async fn find_token_by_prefix(prefix: &str) -> Option<crate::tokens::types::Toke
 
 /// Send search prompt
 pub(super) async fn send_search_prompt(bot: &Bot, chat_id: ChatId) -> Result<()> {
-    let msg = "🔍 <b>Search Market</b>\n\n\
-               Enter symbol or mint address to search:\n\n\
-               <i>Example: /token_BONK or /token_So11111</i>";
-    send_with_keyboard(bot, chat_id, msg, keyboards::tokens_menu()).await
+    let msg = with_icon("🔍", &tg_id(ids::TELEGRAM_TOKEN_SEARCH));
+    send_with_keyboard(bot, chat_id, &msg, keyboards::tokens_menu()).await
 }
 
 /// Confirmation dialog for buying a token (from token explorer)
@@ -323,20 +397,19 @@ pub(super) async fn send_confirm_token_buy(
     let token = match find_token_by_prefix(mint_short).await {
         Some(t) => t,
         None => {
-            let msg = "❌ Token not found";
-            return send_with_keyboard(bot, chat_id, msg, keyboards::tokens_menu()).await;
+            return send_token_not_found(bot, chat_id).await;
         }
     };
 
-    let msg = format!(
-        "💰 <b>Confirm Direct Buy</b>\n\n\
-         Token — ${}\n\
-         Mint — <code>{}</code>\n\
-         Amount — {} SOL\n\n\
-         <i>Confirm within 30s to execute.</i>",
-        token.symbol,
-        formatters::format_mint_display(&token.mint),
-        amount
+    let msg = row(
+        "💰",
+        UiText::new(ids::TELEGRAM_TOKEN_CONFIRM_BUY)
+            .arg("symbol", text_arg(token.symbol.as_str()))
+            .arg(
+                "mint",
+                text_arg(formatters::format_mint_display(&token.mint)),
+            )
+            .arg("amount", text_arg(amount.to_string())),
     );
 
     send_with_keyboard(
@@ -357,18 +430,18 @@ pub(super) async fn send_confirm_token_blacklist(
     let token = match find_token_by_prefix(mint_short).await {
         Some(t) => t,
         None => {
-            let msg = "❌ Token not found";
-            return send_with_keyboard(bot, chat_id, msg, keyboards::tokens_menu()).await;
+            return send_token_not_found(bot, chat_id).await;
         }
     };
 
-    let msg = format!(
-        "🚫 <b>Blacklist Token?</b>\n\n\
-         Token — ${}\n\
-         Mint — <code>{}</code>\n\n\
-         <i>This will prevent this token from satisfying filters.</i>",
-        token.symbol,
-        formatters::format_mint_display(&token.mint)
+    let msg = row(
+        "🚫",
+        UiText::new(ids::TELEGRAM_TOKEN_CONFIRM_BLACKLIST)
+            .arg("symbol", text_arg(token.symbol.as_str()))
+            .arg(
+                "mint",
+                text_arg(formatters::format_mint_display(&token.mint)),
+            ),
     );
 
     send_with_keyboard(
@@ -389,8 +462,7 @@ pub(super) async fn execute_token_blacklist(
     let token = match find_token_by_prefix(mint_short).await {
         Some(t) => t,
         None => {
-            let msg = "❌ Token not found";
-            return send_with_keyboard(bot, chat_id, msg, keyboards::tokens_menu()).await;
+            return send_token_not_found(bot, chat_id).await;
         }
     };
 
@@ -414,22 +486,21 @@ pub(super) async fn execute_token_blacklist(
 
     match blacklist_result {
         Ok(Ok(())) => {
-            let msg = format!(
-                "🚫 <b>Token Blacklisted</b>\n\n\
-                 Token — ${}\n\
-                 Status — Added to blacklist",
-                token.symbol
+            let msg = row(
+                "🚫",
+                UiText::new(ids::TELEGRAM_TOKEN_BLACKLISTED)
+                    .arg("symbol", text_arg(token.symbol.as_str())),
             );
             send_with_keyboard(bot, chat_id, &msg, keyboards::tokens_menu()).await
         }
         Ok(Err(e)) => {
             logger::warning(LogTag::Telegram, &format!("Failed to blacklist token: {e}"));
-            let msg = format!("❌ <b>Blacklist Failed</b>\n\nError: {e}");
+            let msg = failure_screen(ids::TELEGRAM_TOKEN_BLACKLIST_FAILED, &e.to_string());
             send_with_keyboard(bot, chat_id, &msg, keyboards::tokens_menu()).await
         }
         Err(e) => {
             logger::warning(LogTag::Telegram, &format!("Failed to blacklist token: {e}"));
-            let msg = format!("❌ <b>Blacklist Failed</b>\n\nError: {e}");
+            let msg = failure_screen(ids::TELEGRAM_TOKEN_BLACKLIST_FAILED, &e.to_string());
             send_with_keyboard(bot, chat_id, &msg, keyboards::tokens_menu()).await
         }
     }
@@ -446,16 +517,15 @@ pub(super) async fn execute_token_buy(
     let token = match find_token_by_prefix(mint_short).await {
         Some(t) => t,
         None => {
-            let msg = "❌ Token not found";
-            return send_with_keyboard(bot, chat_id, msg, keyboards::tokens_menu()).await;
+            return send_token_not_found(bot, chat_id).await;
         }
     };
 
-    let msg = format!(
-        "💰 <b>Processing Buy...</b>\n\n\
-         Token — ${}\n\
-         Amount — {} SOL",
-        token.symbol, amount
+    let msg = row(
+        "💰",
+        UiText::new(ids::TELEGRAM_TOKEN_BUY_PROCESSING)
+            .arg("symbol", text_arg(token.symbol.as_str()))
+            .arg("amount", text_arg(amount.to_string())),
     );
 
     bot.send_message(chat_id, &msg)
@@ -469,23 +539,41 @@ pub(super) async fn execute_token_buy(
     // Execute the buy via manual trading system
     match manual_add(&token.mint, amount, None).await {
         Ok(_) => {
-            let success_msg = format!(
-                "✅ <b>Buy Successful</b>\n\n\
-                 Token — ${}\n\
-                 Amount — {} SOL\n\n\
-                 <i>View details in /positions</i>",
-                token.symbol, amount
+            let success_msg = row(
+                "✅",
+                UiText::new(ids::TELEGRAM_TOKEN_BUY_DONE)
+                    .arg("symbol", text_arg(token.symbol.as_str()))
+                    .arg("amount", text_arg(amount.to_string())),
             );
             send_with_keyboard(bot, chat_id, &success_msg, keyboards::main_menu_compact()).await
         }
         Err(e) => {
-            let error_msg = format!(
-                "❌ <b>Buy Failed</b>\n\n\
-                 Token — ${}\n\
-                 Error — {}",
-                token.symbol, e
+            let error_msg = row(
+                "❌",
+                UiText::new(ids::TELEGRAM_TOKEN_BUY_FAILED)
+                    .arg("symbol", text_arg(token.symbol.as_str()))
+                    .arg("detail", text_arg(e.to_string())),
             );
             send_with_keyboard(bot, chat_id, &error_msg, keyboards::tokens_menu()).await
         }
     }
+}
+
+/// `N/A` placeholder for a missing value.
+fn not_available() -> UiArg {
+    nested_arg(UiText::new(ids::TELEGRAM_VALUE_NA))
+}
+
+async fn send_token_not_found(bot: &Bot, chat_id: ChatId) -> Result<()> {
+    let msg = with_icon("❌", &tg_id(ids::TELEGRAM_TOKEN_NOT_FOUND));
+    send_with_keyboard(bot, chat_id, &msg, keyboards::tokens_menu()).await
+}
+
+/// Failure title followed by the error detail.
+fn failure_screen(title: MessageId, detail: &str) -> String {
+    format!(
+        "{}\n\n{}",
+        with_icon("❌", &tg_id(title)),
+        tg(&UiText::new(ids::TELEGRAM_ERROR_LINE).arg("detail", text_arg(detail)))
+    )
 }

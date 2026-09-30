@@ -179,6 +179,8 @@ trade-reason-synthetic-exit-permanent-failure = Synthetic Exit Permanent Failure
 trade-reason-pending-verification = { $reason } (pending verification)
 # $note is the operator text of a force close.
 trade-reason-force-closed = Force closed: { $note }
+# $reason is a stored closed_reason that has no label; it is shown as stored.
+trade-reason-stored = { $reason }
 
 # Toast shown when a quick-trade shortcut runs without a token selected (ui/quick_trade_shortcuts.js).
 trade-quick-no-token = No token selected

@@ -1,5 +1,26 @@
 //! Blocking Telegram crash notification, used from panic-hook context.
 
+use crate::i18n::{ids, UiText};
+use crate::telegram::text::{locale_nonblocking, tg_with, with_icon};
+
+/// Crash message in the Telegram language. Resolves the language without
+/// waiting on the configuration lock, so it is safe to call from a panic hook.
+/// The panic text is escaped by the renderer.
+pub(crate) fn crash_message(location: &str, panic_message: &str) -> String {
+    let locale = locale_nonblocking();
+    let body = UiText::new(ids::TELEGRAM_NOTIFY_CRASH)
+        .arg("location", crate::i18n::UiArg::Text(location.to_owned()))
+        .arg("error", crate::i18n::UiArg::Text(panic_message.to_owned()));
+    format!(
+        "{}\n\n{}",
+        with_icon("🚨", &tg_with(&locale, &body)),
+        with_icon(
+            "⚠️",
+            &tg_with(&locale, &UiText::new(ids::TELEGRAM_NOTIFY_CRASH_RESTART))
+        )
+    )
+}
+
 /// Send crash notification directly via Telegram API (blocking, for panic context)
 pub(crate) fn send_crash_notification(bot_token: &str, chat_id: &str, message: &str) {
     use std::collections::HashMap;

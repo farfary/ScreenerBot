@@ -36,7 +36,7 @@ pub(super) async fn force_close_position(
         .and_then(|b| b.reason.clone())
         .unwrap_or_else(|| "manual force close".to_owned());
 
-    let closed_reason = format!("force_closed: {reason_text}");
+    let closed_reason = format!("{} {reason_text}", positions::FORCE_CLOSED_PREFIX);
 
     // 1. Look up the position in memory by ID
     let position = match positions::get_position_by_id(position_id).await {

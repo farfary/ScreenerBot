@@ -343,3 +343,280 @@ telegram-update-available =
     It downloads on its own; send /update again once it is ready.
 telegram-update-how-core = Installs silently with a short restart.
 telegram-update-how-installer = Needs the desktop installer to run once.
+
+## Shared values and units. Numbers arrive formatted; only the unit words live here.
+
+telegram-value-unknown = Unknown
+telegram-value-na = N/A
+telegram-percent-value = { $percent }%
+telegram-price-sol = { $price } { -sol }
+telegram-amount-usd = ${ $amount }
+telegram-amount-usd-thousands = ${ $amount }K
+telegram-amount-usd-millions = ${ $amount }M
+telegram-duration-seconds = { $seconds }s
+telegram-duration-minutes = { $minutes }m
+telegram-duration-minutes-seconds = { $minutes }m { $seconds }s
+telegram-duration-hours = { $hours }h
+telegram-duration-hours-minutes = { $hours }h { $minutes }m
+telegram-duration-days = { $days }d
+telegram-duration-days-hours = { $days }d { $hours }h
+telegram-pnl = { $sol } { -sol } ({ $percent }%)
+telegram-amount-sol = { $amount } { -sol }
+telegram-error-line = Error: { $detail }
+telegram-ai-reasoning =
+    <b>LLM Analysis</b>
+    <i>{ $reasoning }</i>
+
+## Rows shared by several notification and position screens. Icons come from Rust.
+
+telegram-row-entry = Entry — { $price } { -sol }
+telegram-row-exit = Exit — { $price } { -sol }
+telegram-row-current = Current — { $price } { -sol }
+telegram-row-invested = Invested — { $amount } { -sol }
+telegram-row-received = Received — { $amount } { -sol }
+telegram-row-value = Value — { $amount } { -sol }
+telegram-row-total = Total — { $amount } { -sol }
+telegram-row-tokens = Tokens — { $tokens }
+telegram-row-duration = Duration — { $duration }
+telegram-row-reason = Reason — { $reason }
+telegram-row-remaining = Remaining — { $percent }%
+telegram-row-pnl = P{ "&amp;" }L — { $pnl }
+telegram-row-dca = DCA — #{ $count }
+
+## Notifications.
+
+telegram-notify-opened-title = <b>Position Opened</b>
+telegram-notify-opened-size = Size — <b>{ $amount } { -sol }</b>
+telegram-notify-opened-price = Price — { $price } { -sol }
+telegram-notify-opened-dex = DEX — { $dex }
+telegram-notify-closed-title-profit = <b>Position Closed</b> — Profit
+telegram-notify-closed-title-loss = <b>Position Closed</b> — Loss
+telegram-notify-partial-title = <b>Partial Exit</b>
+telegram-notify-partial-sold = <b>${ $symbol }</b> — Sold { $percent }%
+telegram-notify-dca-title = <b>DCA #{ $count }</b>
+telegram-notify-dca-added = Added — <b>{ $amount } { -sol }</b>
+telegram-notify-dca-avg = Avg — { $price } { -sol }
+telegram-notify-severity-critical = <b>Critical Error</b>
+telegram-notify-severity-error = <b>Error</b>
+telegram-notify-severity-warning = <b>Warning</b>
+telegram-notify-severity-info = <b>Info</b>
+telegram-notify-alert-title = <b>Trade Alert</b>
+telegram-notify-alert-token = Token: <code>${ $symbol }</code>
+telegram-notify-alert-mint = Mint: <code>{ $mint }</code>
+telegram-notify-alert-bought = Action: bought { $amount } { -sol }
+telegram-notify-alert-sold = Action: sold { $amount } { -sol }
+telegram-notify-alert-wallet = Wallet: <code>{ $wallet }</code>
+telegram-notify-copy-header-paper = <b>{ $title }</b> (paper)
+telegram-notify-copy-task = Task: { $task }
+telegram-notify-command = <b>Command:</b> /{ $command }
+telegram-notify-summary-title = <b>Daily Summary</b> — { $date }
+telegram-notify-summary-performance = <b>Performance</b>
+telegram-notify-summary-trades = Trades — { $total } ({ $wins }{ $win_icon } { $losses }{ $loss_icon })
+telegram-notify-summary-win-rate = Win Rate — { $percent }%
+telegram-notify-summary-pnl = P{ "&amp;" }L — <b>{ $amount } { -sol }</b> { $icon }
+telegram-notify-summary-open = Open Positions — { $count }
+telegram-notify-started-title = <b>{ -brand } Started</b>
+telegram-notify-started-version = <b>Version</b> — { $version }
+telegram-notify-started-mode = <b>Mode</b> — { $mode }
+telegram-notify-started-ready = Ready for trading!
+telegram-notify-stopped-title = <b>{ -brand } Stopped</b>
+telegram-notify-stopped-reason = <b>Reason</b> — { $reason }
+telegram-notify-stopped-goodbye = Goodbye! { $icon }
+telegram-notify-update-available =
+    <b>Update v{ $version } available</b>
+
+    { $how }
+    Download size: { $size } MB
+telegram-notify-update-how-installer = This release also updates the desktop app, so its installer has to run once.
+telegram-notify-update-ready =
+    <b>Update v{ $version } ready</b>
+
+    { $how }
+telegram-notify-update-ready-silent = Send /update to apply it now, or it installs the next time { -brand } starts.
+telegram-notify-update-ready-installer = Open Settings → Updates to run the installer.
+telegram-notify-update-applying =
+    <b>Installing v{ $version }</b>
+
+    The backend is restarting; trading resumes automatically.
+telegram-notify-new-tokens =
+    <b>Filtering Alert</b>
+
+    { $count ->
+        [one] Found { $count } new token matching your criteria.
+       *[other] Found { $count } new tokens matching your criteria.
+    }
+telegram-notify-crash =
+    <b>Bot Crashed!</b>
+
+    <b>Location:</b> <code>{ $location }</code>
+    <b>Error:</b> <code>{ $error }</code>
+telegram-notify-crash-restart = Please restart the bot.
+
+## Filter results page.
+
+telegram-filter-results-title = <b>Filter Results</b> ({ $count })
+telegram-filter-results-empty = <i>No tokens found.</i>
+telegram-filter-results-page = <i>Page { $page } of { $total }</i>
+
+## Position screens.
+
+telegram-position-not-found = Position not found
+telegram-position-no-positions = No positions to close
+telegram-position-history-empty =
+    <b>Trade History</b>
+
+    No closed positions yet.
+telegram-position-history-title = <b>Recent Trades</b>
+telegram-position-history-more = <i>+{ $count } more trades...</i>
+telegram-position-confirm-hint = <i>Confirm within 30s to execute.</i>
+telegram-position-confirm-close-title = <b>Close Position?</b>
+telegram-position-confirm-close-selling = Selling { $tokens } tokens
+telegram-position-confirm-close-estimated = Estimated — <b>{ $amount } { -sol }</b>
+telegram-position-confirm-close-hint = <i>Confirm within 30 seconds</i>
+telegram-position-confirm-sell =
+    <b>Confirm Sell</b>
+
+    Token — { $symbol }
+    Amount — { $percent }%
+    Tokens — { $tokens }
+telegram-position-confirm-dca =
+    <b>Confirm Buy More</b>
+
+    Token — { $symbol }
+    Add — { $amount } { -sol }
+telegram-position-confirm-close-all =
+    <b>Close All Positions?</b>
+
+    Count — { $count }
+telegram-position-confirm-close-all-hint =
+    <i>This will market sell all open positions.
+    Confirm within 30s.</i>
+telegram-position-confirm-force-stop =
+    <b>FORCE STOP</b>
+
+    This will immediately halt ALL trading:
+    • No new entries
+    • No exits
+    • No DCA
+telegram-position-confirm-force-stop-warning = <b>This is an emergency action.</b>
+telegram-position-confirm-blacklist =
+    <b>Blacklist Token?</b>
+
+    Token — { $symbol }
+    Mint — <code>{ $mint }</code>
+telegram-position-confirm-blacklist-hint = <i>This will close the position and prevent future entries.</i>
+telegram-position-selling = Selling { $percent }% of { $symbol }...
+telegram-position-sell-done =
+    <b>Sell Executed</b>
+
+    Token — { $symbol }
+    Sold — { $percent }%
+    Received — { $amount } { -sol }
+telegram-position-sell-failed = <b>Sell Failed</b>
+telegram-position-adding = Adding { $amount } { -sol } to { $symbol }...
+telegram-position-dca-done =
+    <b>DCA Executed</b>
+
+    Token — { $symbol }
+    Added — { $amount } { -sol }
+telegram-position-dca-failed = <b>DCA Failed</b>
+telegram-position-closing-all = Closing all positions...
+telegram-position-close-all-done =
+    <b>Close All Complete</b>
+
+    Closed — { $closed }
+    Failed — { $failed }
+telegram-position-blacklisted =
+    <b>Token Blacklisted</b>
+
+    Token — { $symbol }
+    Status — Closed { "&amp;" } Blacklisted
+
+## Token screens.
+
+telegram-token-not-found = Token not found
+telegram-token-not-found-prefix = Token not found. Try searching with a longer prefix.
+telegram-token-stats-failed = Failed to fetch stats: { $detail }
+telegram-token-list-failed = Failed to fetch tokens: { $detail }
+telegram-token-list-empty = No tokens found in <b>{ $view }</b> view.
+telegram-token-view-passed = Passed Filter
+telegram-token-view-rejected = Rejected
+telegram-token-view-recent = Recently Added
+telegram-token-view-all = All Tokens
+telegram-token-list-title = <b>{ $name }</b> (Page { $page }/{ $total })
+telegram-token-list-stats = Liq: { $liquidity } • Price: { $price }
+telegram-token-list-hint = <i>Tap /token_ID to view details</i>
+telegram-token-explorer =
+    <b>Market Explorer</b>
+
+    <b>Overview</b>
+    Passed Filter — { $passed }
+    Rejected — { $rejected }
+    Active Prices — { $priced }
+    Total Discovered — { $total }
+
+    <i>Select a category to browse:</i>
+telegram-token-filter-title = <b>Filter Analysis</b>
+telegram-token-filter-distribution = <b>Distribution</b>
+telegram-token-filter-passed = Passed — { $count } ({ $percent }%)
+telegram-token-filter-rejected = Rejected — { $count } ({ $percent }%)
+telegram-token-filter-blacklisted = Blacklisted — { $count }
+telegram-token-filter-coverage = <b>Coverage</b>
+telegram-token-filter-priced = With Pool Price — { $count }
+telegram-token-filter-open = Open Positions — { $count }
+telegram-token-filter-total = Total Discovered — { $count }
+telegram-token-filter-updated = <b>Last Updated</b>
+telegram-token-filter-time = { $time } UTC
+telegram-token-filter-refresh = <i>Auto-refreshes every { $interval }</i>
+telegram-token-detail-active = <b>Active Position</b>
+telegram-token-detail-price = Price — { $price } { -sol }
+telegram-token-detail-liquidity = Liquidity — { $value }
+telegram-token-detail-volume = 24h Volume — { $value }
+telegram-token-detail-change = 24h Change — { $value }
+telegram-token-detail-risk = Risk Assessment: { $score }/100
+telegram-token-detail-risk-unknown = Risk Assessment: Unknown
+telegram-token-detail-action = <i>Select action:</i>
+telegram-token-search =
+    <b>Search Market</b>
+
+    Enter symbol or mint address to search:
+
+    <i>Example: /token_BONK or /token_So11111</i>
+telegram-token-confirm-buy =
+    <b>Confirm Direct Buy</b>
+
+    Token — ${ $symbol }
+    Mint — <code>{ $mint }</code>
+    Amount — { $amount } { -sol }
+
+    <i>Confirm within 30s to execute.</i>
+telegram-token-confirm-blacklist =
+    <b>Blacklist Token?</b>
+
+    Token — ${ $symbol }
+    Mint — <code>{ $mint }</code>
+
+    <i>This will prevent this token from satisfying filters.</i>
+telegram-token-blacklisted =
+    <b>Token Blacklisted</b>
+
+    Token — ${ $symbol }
+    Status — Added to blacklist
+telegram-token-blacklist-failed = <b>Blacklist Failed</b>
+telegram-token-buy-processing =
+    <b>Processing Buy...</b>
+
+    Token — ${ $symbol }
+    Amount — { $amount } { -sol }
+telegram-token-buy-done =
+    <b>Buy Successful</b>
+
+    Token — ${ $symbol }
+    Amount — { $amount } { -sol }
+
+    <i>View details in /positions</i>
+telegram-token-buy-failed =
+    <b>Buy Failed</b>
+
+    Token — ${ $symbol }
+    Error — { $detail }

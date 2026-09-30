@@ -1,5 +1,7 @@
 //! Core trader types and structures
 
+use crate::i18n::{ids, MessageId, UiArg, UiText};
+use crate::positions::FORCE_CLOSED_PREFIX;
 use chrono::{DateTime, Utc};
 
 /// Represents a decision to trade
@@ -61,6 +63,91 @@ pub enum TradeReason {
     Blacklisted,
     ForceSell,
     CopySell,
+}
+
+/// `closed_reason` values written outside the trade-reason path
+/// (`positions/apply.rs`, `positions/ledger/sync.rs`) and their labels.
+const WRITTEN_REASON_LABELS: [(&str, MessageId); 4] = [
+    (
+        crate::positions::ledger::CLOSED_EXTERNALLY,
+        ids::TRADE_REASON_CLOSED_EXTERNALLY,
+    ),
+    ("wallet_history", ids::TRADE_REASON_WALLET_HISTORY),
+    ("exit_retry_pending", ids::TRADE_REASON_EXIT_RETRY_PENDING),
+    (
+        "synthetic_exit_permanent_failure",
+        ids::TRADE_REASON_SYNTHETIC_EXIT_PERMANENT_FAILURE,
+    ),
+];
+
+impl TradeReason {
+    /// Every reason; the `Debug` name of each is its persisted id.
+    pub const ALL: [TradeReason; 16] = [
+        TradeReason::StrategySignal,
+        TradeReason::ManualEntry,
+        TradeReason::ForceBuy,
+        TradeReason::CopyBuy,
+        TradeReason::DCAScheduled,
+        TradeReason::TakeProfit,
+        TradeReason::StopLoss,
+        TradeReason::TrailingStop,
+        TradeReason::TimeOverride,
+        TradeReason::StrategyExit,
+        TradeReason::LlmAnalysisExit,
+        TradeReason::ManualExit,
+        TradeReason::RiskManagement,
+        TradeReason::Blacklisted,
+        TradeReason::ForceSell,
+        TradeReason::CopySell,
+    ];
+}
+
+/// Display text of a trade reason. The match is exhaustive, so a new variant
+/// fails to compile until it is labelled here and in `TRADE_REASON_LABELS`
+/// (ui/trade_reason.js).
+pub fn trade_reason_text(reason: &TradeReason) -> UiText {
+    UiText::new(match reason {
+        TradeReason::StrategySignal => ids::TRADE_REASON_STRATEGY_SIGNAL,
+        TradeReason::ManualEntry => ids::TRADE_REASON_MANUAL_ENTRY,
+        TradeReason::ForceBuy => ids::TRADE_REASON_FORCE_BUY,
+        TradeReason::CopyBuy => ids::TRADE_REASON_COPY_BUY,
+        TradeReason::DCAScheduled => ids::TRADE_REASON_DCA_SCHEDULED,
+        TradeReason::TakeProfit => ids::TRADE_REASON_TAKE_PROFIT,
+        TradeReason::StopLoss => ids::TRADE_REASON_STOP_LOSS,
+        TradeReason::TrailingStop => ids::TRADE_REASON_TRAILING_STOP,
+        TradeReason::TimeOverride => ids::TRADE_REASON_TIME_OVERRIDE,
+        TradeReason::StrategyExit => ids::TRADE_REASON_STRATEGY_EXIT,
+        TradeReason::LlmAnalysisExit => ids::TRADE_REASON_LLM_ANALYSIS_EXIT,
+        TradeReason::ManualExit => ids::TRADE_REASON_MANUAL_EXIT,
+        TradeReason::RiskManagement => ids::TRADE_REASON_RISK_MANAGEMENT,
+        TradeReason::Blacklisted => ids::TRADE_REASON_BLACKLISTED,
+        TradeReason::ForceSell => ids::TRADE_REASON_FORCE_SELL,
+        TradeReason::CopySell => ids::TRADE_REASON_COPY_SELL,
+    })
+}
+
+/// Display text of a stored `positions.closed_reason`. Mirrors `closeReasonText`
+/// (ui/trade_reason.js): the pending-verification suffix and the force-close
+/// prefix wrap the base reason, and a value with no label is shown as stored.
+pub fn closed_reason_text(stored: &str) -> UiText {
+    if let Some(base) = stored.strip_suffix(crate::positions::PENDING_VERIFICATION_SUFFIX) {
+        return UiText::new(ids::TRADE_REASON_PENDING_VERIFICATION)
+            .arg("reason", UiArg::Nested(Box::new(closed_reason_text(base))));
+    }
+    if let Some(note) = stored.strip_prefix(FORCE_CLOSED_PREFIX) {
+        return UiText::new(ids::TRADE_REASON_FORCE_CLOSED)
+            .arg("note", UiArg::Text(note.trim().to_owned()));
+    }
+    if let Some(reason) = TradeReason::ALL
+        .iter()
+        .find(|reason| format!("{reason:?}") == stored)
+    {
+        return trade_reason_text(reason);
+    }
+    if let Some((_, id)) = WRITTEN_REASON_LABELS.iter().find(|(id, _)| *id == stored) {
+        return UiText::new(*id);
+    }
+    UiText::new(ids::TRADE_REASON_STORED).arg("reason", UiArg::Text(stored.to_owned()))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -258,30 +345,6 @@ mod tests {
         );
     }
 
-    /// Catalog key of the label for each trade reason. The match is exhaustive,
-    /// so a new variant fails to compile until it is mapped here and in
-    /// `TRADE_REASON_LABELS` (ui/trade_reason.js).
-    fn label_key(reason: &TradeReason) -> &'static str {
-        match reason {
-            TradeReason::StrategySignal => "trade-reason-strategy-signal",
-            TradeReason::ManualEntry => "trade-reason-manual-entry",
-            TradeReason::ForceBuy => "trade-reason-force-buy",
-            TradeReason::CopyBuy => "trade-reason-copy-buy",
-            TradeReason::DCAScheduled => "trade-reason-dca-scheduled",
-            TradeReason::TakeProfit => "trade-reason-take-profit",
-            TradeReason::StopLoss => "trade-reason-stop-loss",
-            TradeReason::TrailingStop => "trade-reason-trailing-stop",
-            TradeReason::TimeOverride => "trade-reason-time-override",
-            TradeReason::StrategyExit => "trade-reason-strategy-exit",
-            TradeReason::LlmAnalysisExit => "trade-reason-llm-analysis-exit",
-            TradeReason::ManualExit => "trade-reason-manual-exit",
-            TradeReason::RiskManagement => "trade-reason-risk-management",
-            TradeReason::Blacklisted => "trade-reason-blacklisted",
-            TradeReason::ForceSell => "trade-reason-force-sell",
-            TradeReason::CopySell => "trade-reason-copy-sell",
-        }
-    }
-
     /// `StopLoss` -> `stop-loss`, `DCAScheduled` -> `dca-scheduled`.
     fn kebab(id: &str) -> String {
         let chars: Vec<char> = id.chars().collect();
@@ -302,35 +365,58 @@ mod tests {
 
     #[test]
     fn trade_reason_labels_exist_in_the_catalog() {
-        let reasons = [
-            TradeReason::StrategySignal,
-            TradeReason::ManualEntry,
-            TradeReason::ForceBuy,
-            TradeReason::CopyBuy,
-            TradeReason::DCAScheduled,
-            TradeReason::TakeProfit,
-            TradeReason::StopLoss,
-            TradeReason::TrailingStop,
-            TradeReason::TimeOverride,
-            TradeReason::StrategyExit,
-            TradeReason::LlmAnalysisExit,
-            TradeReason::ManualExit,
-            TradeReason::RiskManagement,
-            TradeReason::Blacklisted,
-            TradeReason::ForceSell,
-            TradeReason::CopySell,
-        ];
-        for reason in &reasons {
+        for reason in &TradeReason::ALL {
             let id = format!("{reason:?}");
             let suffix = kebab(&id);
-            let key = label_key(reason);
+            let key = trade_reason_text(reason).id.into_owned();
             assert_eq!(
                 key,
                 format!("trade-reason-{suffix}"),
                 "key does not follow the id {id}"
             );
-            assert_ne!(crate::i18n::format_en(key, None), key, "missing {key}");
+            assert_ne!(crate::i18n::format_en(&key, None), key, "missing {key}");
         }
+    }
+
+    /// Every entry of `TRADE_REASON_LABELS` (ui/trade_reason.js) resolves to the
+    /// same message here, and Rust knows no reason the dashboard lacks.
+    #[test]
+    fn closed_reason_labels_match_the_dashboard_map() {
+        let js = include_str!("../webserver/templates/scripts/ui/trade_reason.js");
+        let map = js
+            .split("TRADE_REASON_LABELS = Object.freeze({")
+            .nth(1)
+            .and_then(|rest| rest.split("});").next())
+            .expect("TRADE_REASON_LABELS block");
+        let entries: Vec<(&str, &str)> = map
+            .lines()
+            .filter_map(|line| {
+                let (name, key) = line.trim().trim_end_matches(',').split_once(": ")?;
+                Some((name, key.trim_matches('"')))
+            })
+            .collect();
+        assert_eq!(
+            entries.len(),
+            TradeReason::ALL.len() + WRITTEN_REASON_LABELS.len()
+        );
+        for (name, key) in entries {
+            assert_eq!(closed_reason_text(name).id, key, "{name}");
+        }
+    }
+
+    #[test]
+    fn closed_reason_wrappers_and_unknown_values() {
+        let en = |text: UiText| text.render_source_plain();
+        assert_eq!(en(closed_reason_text("StopLoss")), "Stop Loss");
+        assert_eq!(
+            en(closed_reason_text("TakeProfit_pending_verification")),
+            "Take Profit (pending verification)"
+        );
+        assert_eq!(
+            en(closed_reason_text("force_closed: stuck swap ")),
+            "Force closed: stuck swap"
+        );
+        assert_eq!(en(closed_reason_text("exit")), "exit");
     }
 
     #[test]

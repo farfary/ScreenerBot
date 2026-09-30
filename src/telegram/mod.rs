@@ -84,6 +84,7 @@ pub mod discovery;
 mod error;
 pub mod formatters;
 pub mod keyboards;
+pub mod messages;
 pub mod notifier;
 pub mod pagination;
 pub mod polling;

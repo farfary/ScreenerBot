@@ -4,10 +4,13 @@
 
 use super::callbacks::send_with_keyboard;
 use super::trading::execute_force_stop;
+use crate::i18n::{ids, UiText};
 use crate::logger::{self, LogTag};
 use crate::positions;
+use crate::telegram::formatters::{self, row, text_arg};
+use crate::telegram::text::{tg, tg_id, with_icon};
 use crate::telegram::Result;
-use crate::telegram::{formatters, keyboards};
+use crate::telegram::{keyboards, messages};
 use crate::trader::manual::{manual_add, manual_sell};
 use teloxide::prelude::*;
 use teloxide::types::{ChatId, ParseMode};
@@ -35,7 +38,7 @@ pub(super) async fn send_position_details(
             let current_price = pos.current_price.unwrap_or(pos.average_entry_price);
             let current_value = tokens * current_price;
 
-            let msg = formatters::msg_position_detail(
+            let msg = messages::msg_position_detail(
                 &pos.symbol,
                 &pos.mint,
                 pos.average_entry_price,
@@ -57,10 +60,7 @@ pub(super) async fn send_position_details(
             )
             .await
         }
-        None => {
-            let msg = "❌ Position not found";
-            send_with_keyboard(bot, chat_id, msg, keyboards::main_menu_compact()).await
-        }
+        None => send_not_found(bot, chat_id).await,
     }
 }
 
@@ -77,26 +77,32 @@ pub(super) async fn send_history(bot: &Bot, chat_id: ChatId) -> Result<()> {
     };
 
     if positions.is_empty() {
-        let msg = "📋 <b>Trade History</b>\n\nNo closed positions yet.";
-        return send_with_keyboard(bot, chat_id, msg, keyboards::main_menu_compact()).await;
+        let msg = with_icon("📋", &tg_id(ids::TELEGRAM_POSITION_HISTORY_EMPTY));
+        return send_with_keyboard(bot, chat_id, &msg, keyboards::main_menu_compact()).await;
     }
 
-    let mut msg = "📋 <b>Recent Trades</b>\n\n".to_owned();
+    let mut msg = with_icon("📋", &tg_id(ids::TELEGRAM_POSITION_HISTORY_TITLE));
+    msg.push_str("\n\n");
     for pos in positions.iter().take(10) {
         let pnl = pos.pnl.unwrap_or_default();
         let pnl_emoji = if pnl >= 0.0 { "🟢" } else { "🔴" };
         let pnl_sign = if pnl >= 0.0 { "+" } else { "" };
-        msg.push_str(&format!(
-            "{} <b>{}</b>: {}{:.4} SOL\n",
-            pnl_emoji, pos.symbol, pnl_sign, pnl
+        msg.push_str(&with_icon(
+            pnl_emoji,
+            &format!(
+                "{}: {}",
+                formatters::bold(&pos.symbol),
+                tg(&UiText::new(ids::TELEGRAM_AMOUNT_SOL)
+                    .arg("amount", text_arg(format!("{pnl_sign}{pnl:.4}"))))
+            ),
         ));
+        msg.push('\n');
     }
 
     if positions.len() > 10 {
-        msg.push_str(&format!(
-            "\n<i>+{} more trades...</i>",
-            positions.len() - 10
-        ));
+        msg.push('\n');
+        msg.push_str(&tg(&UiText::new(ids::TELEGRAM_POSITION_HISTORY_MORE)
+            .arg("count", text_arg((positions.len() - 10).to_string()))));
     }
 
     send_with_keyboard(bot, chat_id, &msg, keyboards::main_menu_compact()).await
@@ -122,15 +128,15 @@ pub(super) async fn send_confirm_sell(
             let tokens = pos
                 .remaining_token_amount
                 .unwrap_or(pos.token_amount.unwrap_or_default()) as f64;
-            let msg = format!(
-                "⚠️ <b>Confirm Sell</b>\n\n\
-                 Token — {}\n\
-                 Amount — {}%\n\
-                 Tokens — {:.0}\n\n\
-                 <i>Confirm within 30s to execute.</i>",
-                pos.symbol,
-                percent,
-                tokens * (percent as f64 / 100.0)
+            let msg = confirm_screen(
+                UiText::new(ids::TELEGRAM_POSITION_CONFIRM_SELL)
+                    .arg("symbol", text_arg(pos.symbol.as_str()))
+                    .arg("percent", text_arg(percent.to_string()))
+                    .arg(
+                        "tokens",
+                        text_arg(format!("{:.0}", tokens * (percent as f64 / 100.0))),
+                    ),
+                ids::TELEGRAM_POSITION_CONFIRM_HINT,
             );
             send_with_keyboard(
                 bot,
@@ -140,10 +146,7 @@ pub(super) async fn send_confirm_sell(
             )
             .await
         }
-        None => {
-            let msg = "❌ Position not found";
-            send_with_keyboard(bot, chat_id, msg, keyboards::main_menu_compact()).await
-        }
+        None => send_not_found(bot, chat_id).await,
     }
 }
 
@@ -160,12 +163,11 @@ pub(super) async fn send_confirm_dca(
 
     match position {
         Some(pos) => {
-            let msg = format!(
-                "⚠️ <b>Confirm Buy More</b>\n\n\
-                 Token — {}\n\
-                 Add — {} SOL\n\n\
-                 <i>Confirm within 30s to execute.</i>",
-                pos.symbol, amount
+            let msg = confirm_screen(
+                UiText::new(ids::TELEGRAM_POSITION_CONFIRM_DCA)
+                    .arg("symbol", text_arg(pos.symbol.as_str()))
+                    .arg("amount", text_arg(amount.to_string())),
+                ids::TELEGRAM_POSITION_CONFIRM_HINT,
             );
             send_with_keyboard(
                 bot,
@@ -175,10 +177,7 @@ pub(super) async fn send_confirm_dca(
             )
             .await
         }
-        None => {
-            let msg = "❌ Position not found";
-            send_with_keyboard(bot, chat_id, msg, keyboards::main_menu_compact()).await
-        }
+        None => send_not_found(bot, chat_id).await,
     }
 }
 
@@ -194,7 +193,7 @@ pub(super) async fn send_confirm_close(bot: &Bot, chat_id: ChatId, mint_short: &
                 .remaining_token_amount
                 .unwrap_or(pos.token_amount.unwrap_or_default()) as f64;
             let est_receive = tokens * pos.current_price.unwrap_or(pos.average_entry_price);
-            let msg = formatters::msg_confirm_close(
+            let msg = messages::msg_confirm_close(
                 &pos.symbol,
                 pos.unrealized_pnl.unwrap_or_default(),
                 pos.unrealized_pnl_percent.unwrap_or_default(),
@@ -209,32 +208,30 @@ pub(super) async fn send_confirm_close(bot: &Bot, chat_id: ChatId, mint_short: &
             )
             .await
         }
-        None => {
-            let msg = "❌ Position not found";
-            send_with_keyboard(bot, chat_id, msg, keyboards::main_menu_compact()).await
-        }
+        None => send_not_found(bot, chat_id).await,
     }
 }
 
 pub(super) async fn send_confirm_close_all(bot: &Bot, chat_id: ChatId) -> Result<()> {
     let positions = positions::get_open_positions().await;
-    let msg = format!(
-        "⚠️ <b>Close All Positions?</b>\n\n\
-         Count — {}\n\n\
-         <i>This will market sell all open positions.\nConfirm within 30s.</i>",
-        positions.len()
+    let msg = confirm_screen(
+        UiText::new(ids::TELEGRAM_POSITION_CONFIRM_CLOSE_ALL)
+            .arg("count", text_arg(positions.len().to_string())),
+        ids::TELEGRAM_POSITION_CONFIRM_CLOSE_ALL_HINT,
     );
     send_with_keyboard(bot, chat_id, &msg, keyboards::confirm_close_all()).await
 }
 
 pub(super) async fn send_confirm_force_stop(bot: &Bot, chat_id: ChatId) -> Result<()> {
-    let msg = "🚨 <b>FORCE STOP</b>\n\n\
-         This will immediately halt ALL trading:\n\
-         • No new entries\n\
-         • No exits\n\
-         • No DCA\n\n\
-         ⚠️ <b>This is an emergency action.</b>";
-    send_with_keyboard(bot, chat_id, msg, keyboards::confirm_force_stop()).await
+    let msg = format!(
+        "{}\n\n{}",
+        with_icon("🚨", &tg_id(ids::TELEGRAM_POSITION_CONFIRM_FORCE_STOP)),
+        with_icon(
+            "⚠️",
+            &tg_id(ids::TELEGRAM_POSITION_CONFIRM_FORCE_STOP_WARNING)
+        ),
+    );
+    send_with_keyboard(bot, chat_id, &msg, keyboards::confirm_force_stop()).await
 }
 
 pub(super) async fn send_confirm_blacklist(
@@ -250,12 +247,14 @@ pub(super) async fn send_confirm_blacklist(
     match position {
         Some(pos) => {
             let msg = format!(
-                "🚫 <b>Blacklist Token?</b>\n\n\
-                 Token — {}\n\
-                 Mint — <code>{}</code>\n\n\
-                 <i>This will close the position and prevent future entries.</i>",
-                pos.symbol,
-                formatters::format_mint_display(&pos.mint)
+                "{}\n\n{}",
+                with_icon(
+                    "🚫",
+                    &tg(&UiText::new(ids::TELEGRAM_POSITION_CONFIRM_BLACKLIST)
+                        .arg("symbol", text_arg(pos.symbol.as_str()))
+                        .arg("mint", text_arg(formatters::format_mint_display(&pos.mint))))
+                ),
+                tg_id(ids::TELEGRAM_POSITION_CONFIRM_BLACKLIST_HINT)
             );
             send_with_keyboard(
                 bot,
@@ -265,10 +264,7 @@ pub(super) async fn send_confirm_blacklist(
             )
             .await
         }
-        None => {
-            let msg = "❌ Position not found";
-            send_with_keyboard(bot, chat_id, msg, keyboards::main_menu_compact()).await
-        }
+        None => send_not_found(bot, chat_id).await,
     }
 }
 
@@ -289,7 +285,12 @@ pub(super) async fn execute_sell(
 
     match position {
         Some(pos) => {
-            let msg = format!("⏳ Selling {}% of {}...", percent, pos.symbol);
+            let msg = row(
+                "⏳",
+                UiText::new(ids::TELEGRAM_POSITION_SELLING)
+                    .arg("percent", text_arg(percent.to_string()))
+                    .arg("symbol", text_arg(pos.symbol.as_str())),
+            );
             let _ = bot
                 .send_message(chat_id, &msg)
                 .parse_mode(ParseMode::Html)
@@ -297,27 +298,28 @@ pub(super) async fn execute_sell(
 
             match manual_sell(&pos.mint, Some(percent as f64), None).await {
                 Ok(result) => {
-                    let msg = format!(
-                        "✅ <b>Sell Executed</b>\n\n\
-                         Token — {}\n\
-                         Sold — {}%\n\
-                         Received — {:.4} SOL",
-                        pos.symbol,
-                        percent,
-                        result.executed_size_sol.unwrap_or_default()
+                    let msg = row(
+                        "✅",
+                        UiText::new(ids::TELEGRAM_POSITION_SELL_DONE)
+                            .arg("symbol", text_arg(pos.symbol.as_str()))
+                            .arg("percent", text_arg(percent.to_string()))
+                            .arg(
+                                "amount",
+                                text_arg(format!(
+                                    "{:.4}",
+                                    result.executed_size_sol.unwrap_or_default()
+                                )),
+                            ),
                     );
                     send_with_keyboard(bot, chat_id, &msg, keyboards::main_menu_compact()).await
                 }
                 Err(e) => {
-                    let msg = format!("❌ <b>Sell Failed</b>\n\nError: {e}");
+                    let msg = failure_screen(ids::TELEGRAM_POSITION_SELL_FAILED, &e.to_string());
                     send_with_keyboard(bot, chat_id, &msg, keyboards::main_menu_compact()).await
                 }
             }
         }
-        None => {
-            let msg = "❌ Position not found";
-            send_with_keyboard(bot, chat_id, msg, keyboards::main_menu_compact()).await
-        }
+        None => send_not_found(bot, chat_id).await,
     }
 }
 
@@ -334,7 +336,12 @@ pub(super) async fn execute_dca(
 
     match position {
         Some(pos) => {
-            let msg = format!("⏳ Adding {} SOL to {}...", amount, pos.symbol);
+            let msg = row(
+                "⏳",
+                UiText::new(ids::TELEGRAM_POSITION_ADDING)
+                    .arg("amount", text_arg(amount.to_string()))
+                    .arg("symbol", text_arg(pos.symbol.as_str())),
+            );
             let _ = bot
                 .send_message(chat_id, &msg)
                 .parse_mode(ParseMode::Html)
@@ -342,24 +349,21 @@ pub(super) async fn execute_dca(
 
             match manual_add(&pos.mint, amount, None).await {
                 Ok(_) => {
-                    let msg = format!(
-                        "✅ <b>DCA Executed</b>\n\n\
-                         Token — {}\n\
-                         Added — {} SOL",
-                        pos.symbol, amount
+                    let msg = row(
+                        "✅",
+                        UiText::new(ids::TELEGRAM_POSITION_DCA_DONE)
+                            .arg("symbol", text_arg(pos.symbol.as_str()))
+                            .arg("amount", text_arg(amount.to_string())),
                     );
                     send_with_keyboard(bot, chat_id, &msg, keyboards::main_menu_compact()).await
                 }
                 Err(e) => {
-                    let msg = format!("❌ <b>DCA Failed</b>\n\nError: {e}");
+                    let msg = failure_screen(ids::TELEGRAM_POSITION_DCA_FAILED, &e.to_string());
                     send_with_keyboard(bot, chat_id, &msg, keyboards::main_menu_compact()).await
                 }
             }
         }
-        None => {
-            let msg = "❌ Position not found";
-            send_with_keyboard(bot, chat_id, msg, keyboards::main_menu_compact()).await
-        }
+        None => send_not_found(bot, chat_id).await,
     }
 }
 
@@ -371,12 +375,15 @@ pub(super) async fn execute_close_all(bot: &Bot, chat_id: ChatId) -> Result<()> 
     let positions = positions::get_open_positions().await;
 
     if positions.is_empty() {
-        let msg = "❌ No positions to close";
-        return send_with_keyboard(bot, chat_id, msg, keyboards::main_menu_compact()).await;
+        let msg = with_icon("❌", &tg_id(ids::TELEGRAM_POSITION_NO_POSITIONS));
+        return send_with_keyboard(bot, chat_id, &msg, keyboards::main_menu_compact()).await;
     }
 
     let _ = bot
-        .send_message(chat_id, "⏳ Closing all positions...")
+        .send_message(
+            chat_id,
+            with_icon("⏳", &tg_id(ids::TELEGRAM_POSITION_CLOSING_ALL)),
+        )
         .parse_mode(ParseMode::Html)
         .await;
 
@@ -390,11 +397,11 @@ pub(super) async fn execute_close_all(bot: &Bot, chat_id: ChatId) -> Result<()> 
         }
     }
 
-    let msg = format!(
-        "📊 <b>Close All Complete</b>\n\n\
-         ✅ Closed — {}\n\
-         ❌ Failed — {}",
-        success, failed
+    let msg = row(
+        "📊",
+        UiText::new(ids::TELEGRAM_POSITION_CLOSE_ALL_DONE)
+            .arg("closed", text_arg(success.to_string()))
+            .arg("failed", text_arg(failed.to_string())),
     );
     send_with_keyboard(bot, chat_id, &msg, keyboards::main_menu()).await
 }
@@ -439,17 +446,36 @@ pub(super) async fn execute_blacklist(bot: &Bot, chat_id: ChatId, mint_short: &s
                 logger::warning(LogTag::Telegram, &format!("Failed to blacklist: {e}"));
             }
 
-            let msg = format!(
-                "🚫 <b>Token Blacklisted</b>\n\n\
-                 Token — {}\n\
-                 Status — Closed & Blacklisted",
-                pos.symbol
+            let msg = row(
+                "🚫",
+                UiText::new(ids::TELEGRAM_POSITION_BLACKLISTED)
+                    .arg("symbol", text_arg(pos.symbol.as_str())),
             );
             send_with_keyboard(bot, chat_id, &msg, keyboards::main_menu()).await
         }
-        None => {
-            let msg = "❌ Position not found";
-            send_with_keyboard(bot, chat_id, msg, keyboards::main_menu_compact()).await
-        }
+        None => send_not_found(bot, chat_id).await,
     }
+}
+
+// ============================================================================
+// SHARED SCREENS
+// ============================================================================
+
+async fn send_not_found(bot: &Bot, chat_id: ChatId) -> Result<()> {
+    let msg = with_icon("❌", &tg_id(ids::TELEGRAM_POSITION_NOT_FOUND));
+    send_with_keyboard(bot, chat_id, &msg, keyboards::main_menu_compact()).await
+}
+
+/// Confirmation prompt: warning icon, body and a closing hint.
+fn confirm_screen(body: UiText, hint: crate::i18n::MessageId) -> String {
+    format!("{}\n\n{}", with_icon("⚠️", &tg(&body)), tg_id(hint))
+}
+
+/// Failure title followed by the error detail.
+fn failure_screen(title: crate::i18n::MessageId, detail: &str) -> String {
+    format!(
+        "{}\n\n{}",
+        with_icon("❌", &tg_id(title)),
+        tg(&UiText::new(ids::TELEGRAM_ERROR_LINE).arg("detail", text_arg(detail)))
+    )
 }
