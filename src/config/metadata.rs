@@ -8,8 +8,10 @@ mod category;
 mod category_tests;
 mod impact;
 
+#[cfg(test)]
 pub(crate) use category::category_key;
 pub use category::ConfigCategory;
+#[cfg(test)]
 pub(crate) use impact::impact_key;
 pub use impact::ConfigImpact;
 
