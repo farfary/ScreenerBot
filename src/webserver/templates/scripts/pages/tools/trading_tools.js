@@ -4,12 +4,20 @@
  */
 
 import { $, on } from "../../core/dom.js";
+import { formatNumber } from "../../core/format.js";
 import * as Utils from "../../core/utils.js";
 import * as Hints from "../../core/hints.js";
 import { HintTrigger } from "../../ui/hint_popover.js";
 import { enhanceAllSelects } from "../../ui/custom_select.js";
 import { PoolSelector } from "../../ui/pool_selector.js";
 import { apiErrorMessage } from "../../core/request_manager.js";
+
+// Message key of each watch type, as the badge in the active watches table.
+const WATCH_TYPE_LABELS = Object.freeze({
+  "buy-on-sell": "tools-watch-type-buy-on-sell",
+  "sell-on-buy": "tools-watch-type-sell-on-buy",
+  "notify-only": "tools-watch-type-notify",
+});
 
 // =============================================================================
 // Trade Watcher Tool
@@ -29,7 +37,7 @@ function renderTradeWatcherTool(container, actionsContainer) {
     <div class="tool-panel trade-watcher-tool">
       <div class="tool-section">
         <div class="section-header">
-          <h3><i class="icon-target"></i> Setup Watch</h3>
+          <h3><i class="icon-target"></i> <span data-l10n-id="tools-trade-watcher-setup-title"></span></h3>
           <div class="section-header-actions">
             ${hintHtml}
           </div>
@@ -38,11 +46,11 @@ function renderTradeWatcherTool(container, actionsContainer) {
           <form class="tool-form" id="tw-form">
             <div class="form-row">
               <div class="form-group flex-2">
-                <label for="tw-mint">Token Mint Address</label>
+                <label for="tw-mint" data-l10n-id="tools-trade-watcher-mint-label"></label>
                 <div class="input-with-action">
-                  <input type="text" id="tw-mint" placeholder="Enter token mint address..." />
+                  <input type="text" id="tw-mint" data-l10n-id="tools-trade-watcher-mint-input" />
                   <button type="button" class="btn btn-sm" id="tw-search-pools-btn">
-                    <i class="icon-search"></i> Search Pools
+                    <i class="icon-search"></i> <span data-l10n-id="tools-trade-watcher-action-search-pools"></span>
                   </button>
                 </div>
               </div>
@@ -50,10 +58,10 @@ function renderTradeWatcherTool(container, actionsContainer) {
 
             <div class="form-row" id="tw-pool-row" style="display: none;">
               <div class="form-group">
-                <label>Selected Pool</label>
+                <label data-l10n-id="tools-trade-watcher-pool-label"></label>
                 <div class="selected-pool-card" id="tw-selected-pool">
-                  <span class="pool-info">No pool selected</span>
-                  <button type="button" class="btn btn-sm btn-icon" id="tw-clear-pool-btn" title="Clear pool">
+                  <span class="pool-info" data-l10n-id="tools-trade-watcher-pool-none"></span>
+                  <button type="button" class="btn btn-sm btn-icon" id="tw-clear-pool-btn" data-l10n-id="tools-trade-watcher-pool-clear">
                     <i class="icon-x"></i>
                   </button>
                 </div>
@@ -62,31 +70,31 @@ function renderTradeWatcherTool(container, actionsContainer) {
 
             <div class="form-row">
               <div class="form-group">
-                <label for="tw-watch-type">Watch Type</label>
+                <label for="tw-watch-type" data-l10n-id="tools-trade-watcher-type-label"></label>
                 <select id="tw-watch-type" data-custom-select>
-                  <option value="buy-on-sell">Buy on Sell</option>
-                  <option value="sell-on-buy">Sell on Buy</option>
-                  <option value="notify-only">Notify Only</option>
+                  <option value="buy-on-sell" data-l10n-id="tools-watch-type-buy-on-sell"></option>
+                  <option value="sell-on-buy" data-l10n-id="tools-watch-type-sell-on-buy"></option>
+                  <option value="notify-only" data-l10n-id="tools-watch-type-notify-only"></option>
                 </select>
-                <small class="form-hint">Buy on Sell: Automatically buy when someone sells. Sell on Buy: Automatically sell when someone buys.</small>
+                <small class="form-hint" data-l10n-id="tools-trade-watcher-type-hint"></small>
               </div>
             </div>
 
             <div class="form-row" id="tw-trigger-row">
               <div class="form-group">
-                <label for="tw-trigger-amount">Trigger Amount (SOL)</label>
+                <label for="tw-trigger-amount" data-l10n-id="tools-trade-watcher-trigger-label"></label>
                 <input type="number" id="tw-trigger-amount" placeholder="0.1" min="0.001" step="0.001" value="0.1" />
-                <small class="form-hint">Minimum trade size in SOL to trigger the action</small>
+                <small class="form-hint" data-l10n-id="tools-trade-watcher-trigger-hint"></small>
               </div>
               <div class="form-group">
-                <label for="tw-action-amount">Action Amount (SOL)</label>
+                <label for="tw-action-amount" data-l10n-id="tools-trade-watcher-action-amount-label"></label>
                 <input type="number" id="tw-action-amount" placeholder="0.1" min="0.001" step="0.001" value="0.1" />
-                <small class="form-hint">Amount to buy/sell when triggered</small>
+                <small class="form-hint" data-l10n-id="tools-trade-watcher-action-amount-hint"></small>
               </div>
               <div class="form-group">
-                <label for="tw-slippage">Slippage (%)</label>
+                <label for="tw-slippage" data-l10n-id="tools-trade-watcher-slippage-label"></label>
                 <input type="number" id="tw-slippage" placeholder="5" min="0.5" max="50" step="0.5" value="5" />
-                <small class="form-hint">Maximum acceptable slippage for trades</small>
+                <small class="form-hint" data-l10n-id="tools-trade-watcher-slippage-hint"></small>
               </div>
             </div>
           </form>
@@ -95,33 +103,35 @@ function renderTradeWatcherTool(container, actionsContainer) {
 
       <div class="tool-section">
         <div class="section-header">
-          <h3><i class="icon-activity"></i> Active Watches</h3>
+          <h3><i class="icon-activity"></i> <span data-l10n-id="tools-trade-watcher-active-title"></span></h3>
           <span class="section-badge" id="tw-watch-count">0</span>
         </div>
         <div class="section-content">
           <div class="tw-watches-table" id="tw-watches-table">
             <div class="empty-state">
               <i class="icon-eye-off"></i>
-              <p>No active watches</p>
-              <small>Configure a watch above and click "Start Watch" to begin monitoring</small>
+              <p data-l10n-id="tools-trade-watcher-empty"></p>
+              <small data-l10n-id="tools-trade-watcher-empty-hint"></small>
             </div>
           </div>
         </div>
       </div>
     </div>
   `;
+  I18n.localizeTree(container);
 
   HintTrigger.initAll();
   enhanceAllSelects(container);
 
   actionsContainer.innerHTML = `
     <button class="btn primary" id="tw-start-btn" disabled>
-      <i class="icon-play"></i> Start Watch
+      <i class="icon-play"></i> <span data-l10n-id="tools-trade-watcher-action-start"></span>
     </button>
     <button class="btn danger" id="tw-stop-all-btn" disabled>
-      <i class="icon-square"></i> Stop All
+      <i class="icon-square"></i> <span data-l10n-id="tools-trade-watcher-action-stop-all"></span>
     </button>
   `;
+  I18n.localizeTree(actionsContainer);
 
   // Wire up event handlers
   initTradeWatcher();
@@ -191,13 +201,13 @@ function handleTwSearchPools() {
   const mint = mintInput?.value?.trim();
 
   if (!mint) {
-    Utils.showToast("Please enter a token mint address", "warning");
+    Utils.showToast(I18n.t("tools-validation-mint-required"), "warning");
     return;
   }
 
   // Validate mint format
   if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(mint)) {
-    Utils.showToast("Invalid token mint address format", "error");
+    Utils.showToast(I18n.t("tools-validation-mint-format"), "error");
     return;
   }
 
@@ -209,7 +219,11 @@ function handleTwSearchPools() {
         updateTwPoolDisplay();
         updateTwStartButtonState();
         Utils.showToast(
-          `Selected pool: ${pool.dex} ${pool.base_symbol}/${pool.quote_symbol}`,
+          I18n.t("tools-trade-watcher-pool-selected", {
+            dex: pool.dex,
+            base: pool.base_symbol,
+            quote: pool.quote_symbol,
+          }),
           "success"
         );
       },
@@ -232,14 +246,15 @@ function updateTwPoolDisplay() {
     poolRow.style.display = "flex";
     poolCard.innerHTML = `
       <div class="pool-info">
-        <span class="pool-dex">${Utils.escapeHtml(twSelectedPool.dex || "Unknown")}</span>
+        <span class="pool-dex">${Utils.escapeHtml(twSelectedPool.dex || I18n.t("format-unknown"))}</span>
         <span class="pool-pair">${Utils.escapeHtml(twSelectedPool.base_symbol || "?")}/${Utils.escapeHtml(twSelectedPool.quote_symbol || "?")}</span>
         <span class="pool-source ${(twSelectedPool.source || "").toLowerCase()}">${Utils.escapeHtml(twSelectedPool.source || "")}</span>
       </div>
-      <button type="button" class="btn btn-sm btn-icon" id="tw-clear-pool-btn" title="Clear pool">
+      <button type="button" class="btn btn-sm btn-icon" id="tw-clear-pool-btn" data-l10n-id="tools-trade-watcher-pool-clear">
         <i class="icon-x"></i>
       </button>
     `;
+    I18n.localizeTree(poolCard);
 
     // Re-wire clear button
     const clearBtn = $("#tw-clear-pool-btn");
@@ -252,7 +267,9 @@ function updateTwPoolDisplay() {
     }
   } else {
     poolRow.style.display = "none";
-    poolCard.innerHTML = '<span class="pool-info">No pool selected</span>';
+    poolCard.innerHTML =
+      '<span class="pool-info" data-l10n-id="tools-trade-watcher-pool-none"></span>';
+    I18n.localizeTree(poolCard);
   }
 }
 
@@ -294,12 +311,14 @@ async function handleTwStartWatch() {
   const slippage = parseFloat(slippageInput?.value) || 5;
 
   if (!mint) {
-    Utils.showToast("Please enter a token mint address", "warning");
+    Utils.showToast(I18n.t("tools-validation-mint-required"), "warning");
     return;
   }
 
   startBtn.disabled = true;
-  startBtn.innerHTML = '<i class="icon-loader spin"></i> Starting...';
+  startBtn.innerHTML =
+    '<i class="icon-loader spin"></i> <span data-l10n-id="tools-trade-watcher-action-starting"></span>';
+  I18n.localizeTree(startBtn);
 
   try {
     const response = await fetch("/api/tools/trade-watcher/start", {
@@ -318,10 +337,13 @@ async function handleTwStartWatch() {
     const data = await response.json();
 
     if (!response.ok || !data.success) {
-      throw new Error(apiErrorMessage(data, "Failed to start watch"));
+      throw new Error(apiErrorMessage(data, I18n.t("tools-trade-watcher-start-failed")));
     }
 
-    Utils.showToast(`Watch started for ${data.symbol || mint.slice(0, 8)}...`, "success");
+    Utils.showToast(
+      I18n.t("tools-trade-watcher-started", { token: data.symbol || mint.slice(0, 8) }),
+      "success"
+    );
 
     // Clear form
     mintInput.value = "";
@@ -332,10 +354,12 @@ async function handleTwStartWatch() {
     // Refresh watches list
     loadTwActiveWatches();
   } catch (error) {
-    Utils.showToast(`Error: ${error.message}`, "error");
+    Utils.showToast(I18n.t("common-error-with-message", { message: error.message }), "error");
   } finally {
     startBtn.disabled = false;
-    startBtn.innerHTML = '<i class="icon-play"></i> Start Watch';
+    startBtn.innerHTML =
+      '<i class="icon-play"></i> <span data-l10n-id="tools-trade-watcher-action-start"></span>';
+    I18n.localizeTree(startBtn);
     updateTwStartButtonState();
   }
 }
@@ -347,7 +371,9 @@ async function handleTwStopAllWatches() {
   const stopAllBtn = $("#tw-stop-all-btn");
 
   stopAllBtn.disabled = true;
-  stopAllBtn.innerHTML = '<i class="icon-loader spin"></i> Stopping...';
+  stopAllBtn.innerHTML =
+    '<i class="icon-loader spin"></i> <span data-l10n-id="tools-trade-watcher-action-stopping"></span>';
+  I18n.localizeTree(stopAllBtn);
 
   try {
     const response = await fetch("/api/tools/trade-watcher/stop-all", {
@@ -357,16 +383,18 @@ async function handleTwStopAllWatches() {
     const data = await response.json();
 
     if (!response.ok || !data.success) {
-      throw new Error(apiErrorMessage(data, "Failed to stop watches"));
+      throw new Error(apiErrorMessage(data, I18n.t("tools-trade-watcher-stop-all-failed")));
     }
 
-    Utils.showToast("All watches stopped", "success");
+    Utils.showToast(I18n.t("tools-trade-watcher-stopped-all"), "success");
     loadTwActiveWatches();
   } catch (error) {
-    Utils.showToast(`Error: ${error.message}`, "error");
+    Utils.showToast(I18n.t("common-error-with-message", { message: error.message }), "error");
   } finally {
     stopAllBtn.disabled = false;
-    stopAllBtn.innerHTML = '<i class="icon-square"></i> Stop All';
+    stopAllBtn.innerHTML =
+      '<i class="icon-square"></i> <span data-l10n-id="tools-trade-watcher-action-stop-all"></span>';
+    I18n.localizeTree(stopAllBtn);
   }
 }
 
@@ -385,22 +413,23 @@ async function loadTwActiveWatches() {
     const data = await response.json();
 
     if (!response.ok || !data.success) {
-      throw new Error(apiErrorMessage(data, "Failed to load watches"));
+      throw new Error(apiErrorMessage(data, I18n.t("tools-trade-watcher-load-failed")));
     }
 
     const watches = data.watches || [];
 
-    if (countEl) countEl.textContent = watches.length;
+    if (countEl) countEl.textContent = formatNumber(watches.length, 0);
     if (stopAllBtn) stopAllBtn.disabled = watches.length === 0;
 
     if (watches.length === 0) {
       tableEl.innerHTML = `
         <div class="empty-state">
           <i class="icon-eye-off"></i>
-          <p>No active watches</p>
-          <small>Configure a watch above and click "Start Watch" to begin monitoring</small>
+          <p data-l10n-id="tools-trade-watcher-empty"></p>
+          <small data-l10n-id="tools-trade-watcher-empty-hint"></small>
         </div>
       `;
+      I18n.localizeTree(tableEl);
       return;
     }
 
@@ -408,11 +437,11 @@ async function loadTwActiveWatches() {
       <table class="tw-table">
         <thead>
           <tr>
-            <th>Token</th>
-            <th>Type</th>
-            <th>Trigger</th>
-            <th>Action</th>
-            <th>Triggered</th>
+            <th data-l10n-id="tools-trade-watcher-column-token"></th>
+            <th data-l10n-id="tools-trade-watcher-column-type"></th>
+            <th data-l10n-id="tools-trade-watcher-column-trigger"></th>
+            <th data-l10n-id="tools-trade-watcher-column-action"></th>
+            <th data-l10n-id="tools-trade-watcher-column-triggered"></th>
             <th></th>
           </tr>
         </thead>
@@ -423,18 +452,18 @@ async function loadTwActiveWatches() {
             <tr data-id="${watch.id}">
               <td>
                 <div class="tw-token-cell">
-                  <span class="tw-symbol">${Utils.escapeHtml(watch.symbol || "Unknown")}</span>
-                  <span class="tw-mint">${watch.mint.slice(0, 8)}...</span>
+                  <span class="tw-symbol">${Utils.escapeHtml(watch.symbol || I18n.t("format-unknown"))}</span>
+                  <span class="tw-mint" dir="ltr">${watch.mint.slice(0, 8)}...</span>
                 </div>
               </td>
               <td>
-                <span class="tw-type-badge ${watch.watch_type}">${formatWatchType(watch.watch_type)}</span>
+                <span class="tw-type-badge ${watch.watch_type}">${Utils.escapeHtml(I18n.label(WATCH_TYPE_LABELS, watch.watch_type))}</span>
               </td>
               <td class="mono">${watch.trigger_amount_sol ? Utils.formatSol(watch.trigger_amount_sol) : "—"}</td>
               <td class="mono">${watch.action_amount_sol ? Utils.formatSol(watch.action_amount_sol) : "—"}</td>
-              <td class="mono">${watch.trigger_count || 0}</td>
+              <td class="mono">${formatNumber(watch.trigger_count || 0, 0)}</td>
               <td>
-                <button class="btn btn-sm btn-icon danger tw-stop-btn" title="Stop watch">
+                <button class="btn btn-sm btn-icon danger tw-stop-btn" data-l10n-id="tools-trade-watcher-stop-watch">
                   <i class="icon-x"></i>
                 </button>
               </td>
@@ -445,6 +474,7 @@ async function loadTwActiveWatches() {
         </tbody>
       </table>
     `;
+    I18n.localizeTree(tableEl);
 
     // Wire up stop buttons
     tableEl.querySelectorAll(".tw-stop-btn").forEach((btn) => {
@@ -461,9 +491,10 @@ async function loadTwActiveWatches() {
     tableEl.innerHTML = `
       <div class="error-state">
         <i class="icon-circle-alert"></i>
-        <p>Failed to load watches</p>
+        <p data-l10n-id="tools-trade-watcher-load-failed"></p>
       </div>
     `;
+    I18n.localizeTree(tableEl);
   }
 }
 
@@ -479,29 +510,13 @@ async function stopTwWatch(watchId) {
     const data = await response.json();
 
     if (!response.ok || !data.success) {
-      throw new Error(apiErrorMessage(data, "Failed to stop watch"));
+      throw new Error(apiErrorMessage(data, I18n.t("tools-trade-watcher-stop-failed")));
     }
 
-    Utils.showToast("Watch stopped", "success");
+    Utils.showToast(I18n.t("tools-trade-watcher-stopped"), "success");
     loadTwActiveWatches();
   } catch (error) {
-    Utils.showToast(`Error: ${error.message}`, "error");
-  }
-}
-
-/**
- * Format watch type for display
- */
-function formatWatchType(type) {
-  switch (type) {
-    case "buy-on-sell":
-      return "Buy on Sell";
-    case "sell-on-buy":
-      return "Sell on Buy";
-    case "notify-only":
-      return "Notify";
-    default:
-      return type;
+    Utils.showToast(I18n.t("common-error-with-message", { message: error.message }), "error");
   }
 }
 
@@ -528,6 +543,4 @@ function cleanupTradeWatcher() {
 // Exports
 // =============================================================================
 
-export {
-  renderTradeWatcherTool,
-};
+export { renderTradeWatcherTool };

@@ -4,39 +4,61 @@
  */
 
 import { $, $$, on } from "../../core/dom.js";
-import { formatFixed, formatPercentValue } from "../../core/format.js";
+import {
+  formatBooleanFlag,
+  formatCurrencyUSD,
+  formatFixed,
+  formatNumber,
+  formatPercentValue,
+  withSolUnit,
+} from "../../core/format.js";
 import * as Utils from "../../core/utils.js";
 import { ConfirmationDialog } from "../../ui/confirmation_dialog.js";
 import { apiErrorMessage } from "../../core/request_manager.js";
+import { RISK_SEVERITY_LABELS } from "../../ui/risk_severity.js";
+
+// Ids are the bands of getTaScoreBand.
+const SCORE_BAND_LABELS = Object.freeze({
+  good: "tools-analyzer-score-good",
+  moderate: "tools-analyzer-score-moderate",
+  risky: "tools-analyzer-score-risky",
+  unknown: "format-unknown",
+});
+
+// Authority state by whether the authority is still set.
+const AUTHORITY_STATE_LABELS = Object.freeze({
+  active: "tools-analyzer-authority-active",
+  revoked: "tools-analyzer-authority-revoked",
+});
 
 function renderCreateTokenTool(container, actionsContainer) {
   container.innerHTML = `
     <div class="tool-panel create-token-tool">
       <div class="tool-section">
         <div class="section-header">
-          <h3><i class="icon-file-plus"></i> Token Details</h3>
+          <h3><i class="icon-file-plus"></i> <span data-l10n-id="tools-create-token-details-title"></span></h3>
         </div>
         <div class="section-content">
           <form class="tool-form" id="create-token-form">
             <div class="form-group">
-              <label for="token-name">Token Name</label>
-              <input type="text" id="token-name" placeholder="My Token" maxlength="32" />
+              <label for="token-name" data-l10n-id="tools-create-token-name-label"></label>
+              <input type="text" id="token-name" data-l10n-id="tools-create-token-name-input" maxlength="32" />
             </div>
             <div class="form-group">
-              <label for="token-symbol">Symbol</label>
-              <input type="text" id="token-symbol" placeholder="MTK" maxlength="10" />
+              <label for="token-symbol" data-l10n-id="tools-create-token-symbol-label"></label>
+              <input type="text" id="token-symbol" data-l10n-id="tools-create-token-symbol-input" maxlength="10" />
             </div>
             <div class="form-group">
-              <label for="token-decimals">Decimals</label>
+              <label for="token-decimals" data-l10n-id="tools-create-token-decimals-label"></label>
               <input type="number" id="token-decimals" value="9" min="0" max="9" />
             </div>
             <div class="form-group">
-              <label for="token-supply">Initial Supply</label>
+              <label for="token-supply" data-l10n-id="tools-create-token-supply-label"></label>
               <input type="number" id="token-supply" placeholder="1000000000" min="1" />
             </div>
             <div class="form-group">
-              <label for="token-description">Description</label>
-              <textarea id="token-description" placeholder="Token description..." rows="3"></textarea>
+              <label for="token-description" data-l10n-id="tools-create-token-description-label"></label>
+              <textarea id="token-description" data-l10n-id="tools-create-token-description-input" rows="3"></textarea>
             </div>
           </form>
         </div>
@@ -44,13 +66,13 @@ function renderCreateTokenTool(container, actionsContainer) {
 
       <div class="tool-section">
         <div class="section-header">
-          <h3><i class="icon-image"></i> Token Image</h3>
+          <h3><i class="icon-image"></i> <span data-l10n-id="tools-create-token-image-title"></span></h3>
         </div>
         <div class="section-content">
           <div class="image-upload-area" id="token-image-upload">
             <i class="icon-upload"></i>
-            <p>Drop image here or click to upload</p>
-            <small>Recommended: 512x512 PNG</small>
+            <p data-l10n-id="tools-create-token-image-drop"></p>
+            <small data-l10n-id="tools-create-token-image-hint"></small>
           </div>
         </div>
       </div>
@@ -59,12 +81,14 @@ function renderCreateTokenTool(container, actionsContainer) {
 
   actionsContainer.innerHTML = `
     <button class="btn" id="preview-token-btn">
-      <i class="icon-eye"></i> Preview
+      <i class="icon-eye"></i> <span data-l10n-id="tools-create-token-action-preview"></span>
     </button>
     <button class="btn primary" id="create-token-btn">
-      <i class="icon-circle-plus"></i> Create Token
+      <i class="icon-circle-plus"></i> <span data-l10n-id="tools-create-token-action-create"></span>
     </button>
   `;
+  I18n.localizeTree(container);
+  I18n.localizeTree(actionsContainer);
 
   // TODO: Wire up token creation functionality
 }
@@ -75,10 +99,11 @@ function renderTokenWatchTool(container, actionsContainer) {
     <div class="tool-panel holder-watch-tool">
       <div class="hw-loading">
         <i class="icon-loader spin"></i>
-        <p>Loading settings...</p>
+        <p data-l10n-id="tools-holder-watch-loading"></p>
       </div>
     </div>
   `;
+  I18n.localizeTree(container);
 
   loadHolderWatchConfig().then((config) => {
     renderHolderWatchContent(container, actionsContainer, config);
@@ -142,14 +167,14 @@ async function saveHolderWatchConfig() {
     });
 
     if (res.ok) {
-      Utils.showToast("Holder Watch settings saved", "success");
+      Utils.showToast(I18n.t("tools-holder-watch-saved"), "success");
     } else {
       const errData = await res.json().catch(() => ({}));
-      Utils.showToast(errData.error || "Failed to save settings", "error");
+      Utils.showToast(apiErrorMessage(errData, I18n.t("tools-holder-watch-save-failed")), "error");
     }
   } catch (e) {
     console.error("[HolderWatch] Save error:", e);
-    Utils.showToast("Error saving settings", "error");
+    Utils.showToast(I18n.t("tools-holder-watch-save-error"), "error");
   }
 }
 
@@ -161,12 +186,12 @@ function renderHolderWatchContent(container, actionsContainer, config) {
     <div class="tool-panel holder-watch-tool">
       <div class="tool-section">
         <div class="section-header">
-          <h3><i class="icon-settings"></i> Holder Watch Settings</h3>
+          <h3><i class="icon-settings"></i> <span data-l10n-id="tools-holder-watch-settings-title"></span></h3>
         </div>
         <div class="section-content">
           <div class="hw-form-row">
             <div class="hw-form-group hw-toggle-group">
-              <label for="hw-enabled">Enable Holder Watching</label>
+              <label for="hw-enabled" data-l10n-id="tools-holder-watch-enabled-label"></label>
               <label class="toggle">
                 <input type="checkbox" id="hw-enabled" ${config.enabled ? "checked" : ""}>
                 <span class="toggle-track"></span>
@@ -176,29 +201,29 @@ function renderHolderWatchContent(container, actionsContainer, config) {
 
           <div class="hw-form-row hw-two-cols">
             <div class="hw-form-group">
-              <label for="hw-interval">Check Interval (seconds)</label>
+              <label for="hw-interval" data-l10n-id="tools-holder-watch-interval-label"></label>
               <input type="number" id="hw-interval" class="form-input" 
                 value="${config.check_interval_secs || 60}" min="10" max="3600" step="10">
-              <span class="hint">How often to check holder counts (10-3600s)</span>
+              <span class="hint" data-l10n-id="tools-holder-watch-interval-hint"></span>
             </div>
             <div class="hw-form-group">
-              <label for="hw-max-tokens">Max Watched Tokens</label>
+              <label for="hw-max-tokens" data-l10n-id="tools-holder-watch-max-tokens-label"></label>
               <input type="number" id="hw-max-tokens" class="form-input" 
                 value="${config.max_watched_tokens || 20}" min="1" max="100">
-              <span class="hint">Maximum tokens to watch simultaneously</span>
+              <span class="hint" data-l10n-id="tools-holder-watch-max-tokens-hint"></span>
             </div>
           </div>
 
           <div class="hw-form-row hw-two-cols">
             <div class="hw-form-group hw-toggle-group">
-              <label for="hw-notify-new">Notify on New Holders</label>
+              <label for="hw-notify-new" data-l10n-id="tools-holder-watch-notify-new-label"></label>
               <label class="toggle">
                 <input type="checkbox" id="hw-notify-new" ${config.notify_new_holders ? "checked" : ""}>
                 <span class="toggle-track"></span>
               </label>
             </div>
             <div class="hw-form-group hw-toggle-group">
-              <label for="hw-notify-drop">Notify on Holder Drop</label>
+              <label for="hw-notify-drop" data-l10n-id="tools-holder-watch-notify-drop-label"></label>
               <label class="toggle">
                 <input type="checkbox" id="hw-notify-drop" ${config.notify_holder_drop ? "checked" : ""}>
                 <span class="toggle-track"></span>
@@ -208,22 +233,22 @@ function renderHolderWatchContent(container, actionsContainer, config) {
 
           <div class="hw-form-row hw-two-cols">
             <div class="hw-form-group">
-              <label for="hw-min-change">Min Holder Change</label>
+              <label for="hw-min-change" data-l10n-id="tools-holder-watch-min-change-label"></label>
               <input type="number" id="hw-min-change" class="form-input" 
                 value="${config.min_holder_change || 5}" min="1" max="1000">
-              <span class="hint">Minimum holder change to trigger notification</span>
+              <span class="hint" data-l10n-id="tools-holder-watch-min-change-hint"></span>
             </div>
             <div class="hw-form-group">
-              <label for="hw-drop-percent">Holder Drop Threshold (%)</label>
+              <label for="hw-drop-percent" data-l10n-id="tools-holder-watch-drop-percent-label"></label>
               <input type="number" id="hw-drop-percent" class="form-input" 
                 value="${config.holder_drop_percent || 10.0}" min="1" max="100" step="0.5">
-              <span class="hint">Percentage drop to trigger alert</span>
+              <span class="hint" data-l10n-id="tools-holder-watch-drop-percent-hint"></span>
             </div>
           </div>
 
           <div class="hw-form-actions">
             <button class="btn primary" id="hw-save-config">
-              <i class="icon-save"></i> Save Settings
+              <i class="icon-save"></i> <span data-l10n-id="tools-holder-watch-action-save"></span>
             </button>
           </div>
         </div>
@@ -231,27 +256,28 @@ function renderHolderWatchContent(container, actionsContainer, config) {
 
       <div class="tool-section">
         <div class="section-header">
-          <h3><i class="icon-eye"></i> Watched Tokens</h3>
+          <h3><i class="icon-eye"></i> <span data-l10n-id="tools-holder-watch-tokens-title"></span></h3>
         </div>
         <div class="section-content">
           <div class="hw-add-token-group">
             <input type="text" id="hw-token-input" class="form-input" 
-              placeholder="Enter token mint address...">
+              data-l10n-id="tools-holder-watch-token-input">
             <button class="btn primary" id="hw-add-token">
-              <i class="icon-plus"></i> Add
+              <i class="icon-plus"></i> <span data-l10n-id="common-action-add"></span>
             </button>
           </div>
           <div id="hw-token-list" class="hw-token-list">
             <div class="empty-state">
               <i class="icon-eye-off"></i>
-              <p>No tokens being watched</p>
-              <small>Add a token mint address above to start watching</small>
+              <p data-l10n-id="tools-holder-watch-empty"></p>
+              <small data-l10n-id="tools-holder-watch-empty-hint"></small>
             </div>
           </div>
         </div>
       </div>
     </div>
   `;
+  I18n.localizeTree(container);
 
   // Wire up save config button
   const saveBtn = $("#hw-save-config");
@@ -266,10 +292,10 @@ function renderHolderWatchContent(container, actionsContainer, config) {
     addBtn.addEventListener("click", () => {
       const mint = tokenInput.value.trim();
       if (mint && mint.length >= 32) {
-        Utils.showToast("Token watching feature coming soon", "info");
+        Utils.showToast(I18n.t("tools-holder-watch-coming-soon"), "info");
         tokenInput.value = "";
       } else {
-        Utils.showToast("Please enter a valid mint address", "error");
+        Utils.showToast(I18n.t("tools-validation-mint-invalid"), "error");
       }
     });
 
@@ -283,9 +309,10 @@ function renderHolderWatchContent(container, actionsContainer, config) {
   // Render action bar
   actionsContainer.innerHTML = `
     <button class="btn" id="hw-refresh-action">
-      <i class="icon-refresh-cw"></i> Refresh
+      <i class="icon-refresh-cw"></i> <span data-l10n-id="common-action-refresh"></span>
     </button>
   `;
+  I18n.localizeTree(actionsContainer);
 
   const refreshBtn = $("#hw-refresh-action");
   if (refreshBtn) {
@@ -310,13 +337,13 @@ function renderTokenAnalyzerTool(container, actionsContainer) {
       <!-- Token Input Section -->
       <div class="tool-section ta-input-section">
         <div class="section-header">
-          <h3><i class="icon-search"></i> Analyze Token</h3>
+          <h3><i class="icon-search"></i> <span data-l10n-id="tools-analyzer-input-title"></span></h3>
         </div>
         <div class="section-content">
           <div class="ta-input-group">
-            <input type="text" id="ta-mint-input" placeholder="Paste token mint address..." />
+            <input type="text" id="ta-mint-input" data-l10n-id="tools-analyzer-mint-input" />
             <button class="btn primary" id="ta-analyze-btn">
-              <i class="icon-search"></i> Analyze
+              <i class="icon-search"></i> <span data-l10n-id="tools-analyzer-action-analyze"></span>
             </button>
           </div>
         </div>
@@ -325,7 +352,7 @@ function renderTokenAnalyzerTool(container, actionsContainer) {
       <!-- Loading State -->
       <div id="ta-loading" class="ta-loading" style="display: none;">
         <i class="icon-loader spin"></i>
-        <p>Analyzing token...</p>
+        <p data-l10n-id="tools-analyzer-loading"></p>
       </div>
 
       <!-- Error State -->
@@ -339,16 +366,16 @@ function renderTokenAnalyzerTool(container, actionsContainer) {
         <!-- Subtabs -->
         <div class="ta-tabs">
           <button class="ta-tab active" data-tab="overview">
-            <i class="icon-info"></i> Overview
+            <i class="icon-info"></i> <span data-l10n-id="tools-analyzer-tab-overview"></span>
           </button>
           <button class="ta-tab" data-tab="security">
-            <i class="icon-shield"></i> Security
+            <i class="icon-shield"></i> <span data-l10n-id="tools-analyzer-tab-security"></span>
           </button>
           <button class="ta-tab" data-tab="market">
-            <i class="icon-trending-up"></i> Market
+            <i class="icon-trending-up"></i> <span data-l10n-id="tools-analyzer-tab-market"></span>
           </button>
           <button class="ta-tab" data-tab="liquidity">
-            <i class="icon-droplet"></i> Liquidity
+            <i class="icon-droplet"></i> <span data-l10n-id="tools-analyzer-tab-liquidity"></span>
           </button>
         </div>
 
@@ -359,20 +386,22 @@ function renderTokenAnalyzerTool(container, actionsContainer) {
       <!-- Empty State -->
       <div id="ta-empty" class="ta-empty-state">
         <i class="icon-search"></i>
-        <p>Enter a token mint address to analyze</p>
-        <small>Get comprehensive insights on any Solana token</small>
+        <p data-l10n-id="tools-analyzer-empty"></p>
+        <small data-l10n-id="tools-analyzer-empty-hint"></small>
       </div>
     </div>
   `;
 
   actionsContainer.innerHTML = `
     <button class="btn" id="ta-refresh-btn" disabled>
-      <i class="icon-refresh-cw"></i> Refresh
+      <i class="icon-refresh-cw"></i> <span data-l10n-id="common-action-refresh"></span>
     </button>
     <button class="btn" id="ta-copy-btn" disabled>
-      <i class="icon-copy"></i> Copy Report
+      <i class="icon-copy"></i> <span data-l10n-id="tools-analyzer-action-copy-report"></span>
     </button>
   `;
+  I18n.localizeTree(container);
+  I18n.localizeTree(actionsContainer);
 
   // Wire up event handlers
   initTokenAnalyzer();
@@ -429,13 +458,13 @@ function handleTokenAnalyze() {
   const mint = mintInput?.value?.trim();
 
   if (!mint) {
-    Utils.showToast("Please enter a token mint address", "warning");
+    Utils.showToast(I18n.t("tools-validation-mint-required"), "warning");
     return;
   }
 
   // Validate mint format (base58)
   if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(mint)) {
-    Utils.showToast("Invalid token mint address format", "error");
+    Utils.showToast(I18n.t("tools-validation-mint-format"), "error");
     return;
   }
 
@@ -461,7 +490,9 @@ async function analyzeToken(mint) {
   if (loadingEl) loadingEl.style.display = "flex";
   if (analyzeBtn) {
     analyzeBtn.disabled = true;
-    analyzeBtn.innerHTML = '<i class="icon-loader spin"></i> Analyzing...';
+    analyzeBtn.innerHTML =
+      '<i class="icon-loader spin"></i> <span data-l10n-id="tools-analyzer-action-analyzing"></span>';
+    I18n.localizeTree(analyzeBtn);
   }
 
   try {
@@ -469,7 +500,7 @@ async function analyzeToken(mint) {
     const data = await response.json();
 
     if (!response.ok || !data.success) {
-      throw new Error(apiErrorMessage(data, "Failed to analyze token"));
+      throw new Error(apiErrorMessage(data, I18n.t("tools-analyzer-failed")));
     }
 
     // Store data
@@ -502,17 +533,18 @@ async function analyzeToken(mint) {
       errorEl.innerHTML = `
         <i class="icon-circle-alert"></i>
         <p>${escapeHtml(error.message)}</p>
-        <button class="btn btn-sm" onclick="document.getElementById('ta-error').style.display='none'; document.getElementById('ta-empty').style.display='flex';">
-          Dismiss
-        </button>
+        <button class="btn btn-sm" data-l10n-id="common-action-dismiss" onclick="document.getElementById('ta-error').style.display='none'; document.getElementById('ta-empty').style.display='flex';"></button>
       `;
+      I18n.localizeTree(errorEl);
     }
     if (refreshBtn) refreshBtn.disabled = true;
     if (copyBtn) copyBtn.disabled = true;
   } finally {
     if (analyzeBtn) {
       analyzeBtn.disabled = false;
-      analyzeBtn.innerHTML = '<i class="icon-search"></i> Analyze';
+      analyzeBtn.innerHTML =
+        '<i class="icon-search"></i> <span data-l10n-id="tools-analyzer-action-analyze"></span>';
+      I18n.localizeTree(analyzeBtn);
     }
   }
 }
@@ -524,8 +556,8 @@ function renderTaTokenHeader(overview) {
   const headerEl = $("#ta-token-header");
   if (!headerEl || !overview) return;
 
-  const symbol = overview.symbol || "Unknown";
-  const name = overview.name || "Unknown Token";
+  const symbol = overview.symbol || I18n.t("format-unknown");
+  const name = overview.name || I18n.t("tools-analyzer-unknown-token");
   const logoUrl = overview.logo_url || "";
   const priceSol = overview.price_sol;
   const priceUsd = overview.price_usd;
@@ -543,35 +575,50 @@ function renderTaTokenHeader(overview) {
     </div>
     <div class="ta-header-center">
       <div class="ta-header-actions">
-        <button class="btn btn-sm btn-icon action-favorite" data-mint="${escapeHtml(mint)}" data-symbol="${escapeHtml(symbol)}" data-name="${escapeHtml(name)}" data-logo="${escapeHtml(logoUrl)}" title="Add to Favorites">
+        <button class="btn btn-sm btn-icon action-favorite" data-mint="${escapeHtml(mint)}" data-symbol="${escapeHtml(symbol)}" data-name="${escapeHtml(name)}" data-logo="${escapeHtml(logoUrl)}" data-l10n-id="tools-analyzer-favorite-add">
           <i class="icon-star"></i>
         </button>
-        <button class="btn btn-sm btn-icon action-blacklist" data-mint="${escapeHtml(mint)}" data-symbol="${escapeHtml(symbol)}" title="Add to Blacklist">
+        <button class="btn btn-sm btn-icon action-blacklist" data-mint="${escapeHtml(mint)}" data-symbol="${escapeHtml(symbol)}" data-l10n-id="tools-analyzer-blacklist-add">
           <i class="icon-slash"></i>
         </button>
-        <button class="btn btn-sm btn-icon" onclick="navigator.clipboard.writeText('${escapeHtml(mint)}'); Utils.notifyCopied('Mint address');" title="Copy Mint Address">
+        <button class="btn btn-sm btn-icon action-copy-mint" data-mint="${escapeHtml(mint)}" data-l10n-id="links-copy-mint">
           <i class="icon-copy"></i>
         </button>
-        <button class="btn btn-sm btn-icon" onclick="window.open('https://dexscreener.com/solana/${escapeHtml(mint)}', '_blank');" title="View on DexScreener">
+        <button class="btn btn-sm btn-icon action-open-dexscreener" data-mint="${escapeHtml(mint)}" data-l10n-id="links-view-dexscreener">
           <i class="icon-external-link"></i>
         </button>
       </div>
     </div>
     <div class="ta-header-right">
-      ${priceSol ? `<div class="ta-price-sol">${Utils.formatSol(priceSol)} SOL</div>` : ""}
+      ${priceSol ? `<div class="ta-price-sol">${Utils.formatSol(priceSol)}</div>` : ""}
       ${priceUsd ? `<div class="ta-price-usd">${Utils.formatCurrencyUSD(priceUsd)}</div>` : ""}
     </div>
   `;
 
+  I18n.localizeTree(headerEl);
+
   // Attach event handlers for favorite and blacklist buttons
   const favoriteBtn = headerEl.querySelector(".action-favorite");
   const blacklistBtn = headerEl.querySelector(".action-blacklist");
+  const copyMintBtn = headerEl.querySelector(".action-copy-mint");
+  const dexscreenerBtn = headerEl.querySelector(".action-open-dexscreener");
 
   if (favoriteBtn) {
     on(favoriteBtn, "click", handleTaFavoriteClick);
   }
   if (blacklistBtn) {
     on(blacklistBtn, "click", handleTaBlacklistClick);
+  }
+  if (copyMintBtn) {
+    on(copyMintBtn, "click", () => {
+      navigator.clipboard.writeText(mint);
+      Utils.notifyCopied(I18n.t("links-mint-address"));
+    });
+  }
+  if (dexscreenerBtn) {
+    on(dexscreenerBtn, "click", () => {
+      window.open(`https://dexscreener.com/solana/${encodeURIComponent(mint)}`, "_blank");
+    });
   }
 }
 
@@ -603,14 +650,17 @@ async function handleTaFavoriteClick(e) {
     const data = await response.json();
 
     if (response.ok && data.success) {
-      Utils.showToast(`Added ${symbol || mint} to favorites`, "success");
+      Utils.showToast(
+        I18n.t("tools-analyzer-favorite-added", { symbol: symbol || I18n.t("format-unknown") }),
+        "success"
+      );
       btn.classList.add("active");
-      btn.title = "Already in Favorites";
+      btn.title = I18n.t("tools-analyzer-favorite-already");
     } else {
-      throw new Error(apiErrorMessage(data, "Failed to add to favorites"));
+      throw new Error(apiErrorMessage(data, I18n.t("tools-analyzer-favorite-failed")));
     }
   } catch (error) {
-    Utils.showToast(`Error: ${error.message}`, "error");
+    Utils.showToast(I18n.t("common-error-with-message", { message: error.message }), "error");
   } finally {
     btn.disabled = false;
     btn.classList.remove("loading");
@@ -626,9 +676,11 @@ async function handleTaBlacklistClick(e) {
   const symbol = btn.dataset.symbol;
 
   const result = await ConfirmationDialog.show({
-    title: "Blacklist Token",
-    message: `Blacklist ${symbol || mint}? This token will be excluded from trading.`,
-    confirmLabel: "Blacklist",
+    title: I18n.t("tools-analyzer-blacklist-title"),
+    message: I18n.t("tools-analyzer-blacklist-message", {
+      symbol: symbol || I18n.t("format-unknown"),
+    }),
+    confirmLabel: I18n.t("tools-analyzer-blacklist-confirm"),
     variant: "warning",
   });
   if (!result.confirmed) {
@@ -644,6 +696,7 @@ async function handleTaBlacklistClick(e) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         mint,
+        // l10n-ignore: stored blacklist reason sent to the API, not shown text
         reason: "Manual blacklist via Token Analyzer",
       }),
     });
@@ -651,14 +704,17 @@ async function handleTaBlacklistClick(e) {
     const data = await response.json();
 
     if (response.ok && data.success) {
-      Utils.showToast(`Blacklisted ${symbol || mint}`, "success");
+      Utils.showToast(
+        I18n.t("tools-analyzer-blacklist-done", { symbol: symbol || I18n.t("format-unknown") }),
+        "success"
+      );
       btn.classList.add("active");
-      btn.title = "Blacklisted";
+      btn.title = I18n.t("tools-analyzer-blacklisted");
     } else {
-      throw new Error(apiErrorMessage(data, "Failed to blacklist token"));
+      throw new Error(apiErrorMessage(data, I18n.t("tools-analyzer-blacklist-failed")));
     }
   } catch (error) {
-    Utils.showToast(`Error: ${error.message}`, "error");
+    Utils.showToast(I18n.t("common-error-with-message", { message: error.message }), "error");
   } finally {
     btn.disabled = false;
     btn.classList.remove("loading");
@@ -717,24 +773,24 @@ function renderTaOverviewTab() {
       <!-- Quick Stats Card -->
       <div class="ta-card">
         <div class="ta-card-title">
-          <i class="icon-activity"></i> Quick Stats
+          <i class="icon-activity"></i> <span data-l10n-id="tools-analyzer-card-quick-stats"></span>
         </div>
         <div class="ta-stat-grid">
           <div class="ta-stat-item">
-            <span class="ta-stat-label">Holders</span>
+            <span class="ta-stat-label" data-l10n-id="tools-analyzer-stat-holders"></span>
             <span class="ta-stat-value">${overview.total_holders ? Utils.formatCompactNumber(overview.total_holders) : "—"}</span>
           </div>
           <div class="ta-stat-item">
-            <span class="ta-stat-label">Decimals</span>
-            <span class="ta-stat-value">${overview.decimals}</span>
+            <span class="ta-stat-label" data-l10n-id="tools-analyzer-stat-decimals"></span>
+            <span class="ta-stat-value">${formatNumber(overview.decimals, 0)}</span>
           </div>
           <div class="ta-stat-item">
-            <span class="ta-stat-label">Safety Score</span>
-            <span class="ta-stat-value ${security?.normalized_score ? getTaScoreClass(security.normalized_score) : ""}">${security?.normalized_score ?? "—"}</span>
+            <span class="ta-stat-label" data-l10n-id="tools-analyzer-stat-safety-score"></span>
+            <span class="ta-stat-value ${security?.normalized_score ? getTaScoreClass(security.normalized_score) : ""}">${formatNumber(security?.normalized_score, 0)}</span>
           </div>
           <div class="ta-stat-item">
-            <span class="ta-stat-label">Pools</span>
-            <span class="ta-stat-value">${liquidity?.pool_count ?? "—"}</span>
+            <span class="ta-stat-label" data-l10n-id="tools-analyzer-stat-pools"></span>
+            <span class="ta-stat-value">${formatNumber(liquidity?.pool_count, 0)}</span>
           </div>
         </div>
       </div>
@@ -742,23 +798,23 @@ function renderTaOverviewTab() {
       <!-- Market Summary Card -->
       <div class="ta-card">
         <div class="ta-card-title">
-          <i class="icon-trending-up"></i> Market Summary
+          <i class="icon-trending-up"></i> <span data-l10n-id="tools-analyzer-card-market-summary"></span>
         </div>
         <div class="ta-stat-grid">
           <div class="ta-stat-item">
-            <span class="ta-stat-label">24h Volume</span>
+            <span class="ta-stat-label" data-l10n-id="tools-analyzer-stat-volume-24h"></span>
             <span class="ta-stat-value">${market?.volume_h24 ? Utils.formatCurrencyUSD(market.volume_h24) : "—"}</span>
           </div>
           <div class="ta-stat-item">
-            <span class="ta-stat-label">24h Change</span>
+            <span class="ta-stat-label" data-l10n-id="tools-analyzer-stat-change-24h"></span>
             <span class="ta-stat-value ${market?.price_change_h24 ? getTaPriceChangeClass(market.price_change_h24) : ""}">${market?.price_change_h24 ? Utils.formatPercent(market.price_change_h24) : "—"}</span>
           </div>
           <div class="ta-stat-item">
-            <span class="ta-stat-label">Market Cap</span>
+            <span class="ta-stat-label" data-l10n-id="tools-analyzer-stat-market-cap"></span>
             <span class="ta-stat-value">${market?.market_cap ? Utils.formatCurrencyUSD(market.market_cap) : "—"}</span>
           </div>
           <div class="ta-stat-item">
-            <span class="ta-stat-label">Liquidity</span>
+            <span class="ta-stat-label" data-l10n-id="tools-analyzer-stat-liquidity"></span>
             <span class="ta-stat-value">${liquidity?.total_liquidity_sol ? Utils.formatSol(liquidity.total_liquidity_sol) : "—"}</span>
           </div>
         </div>
@@ -767,18 +823,18 @@ function renderTaOverviewTab() {
       <!-- Token Info Card -->
       <div class="ta-card ta-full-width">
         <div class="ta-card-title">
-          <i class="icon-info"></i> Token Information
+          <i class="icon-info"></i> <span data-l10n-id="tools-analyzer-card-token-info"></span>
         </div>
         <div class="ta-info-grid">
           <div class="ta-info-item">
-            <span class="ta-info-label">Mint Address</span>
-            <span class="ta-info-value mono">${escapeHtml(overview.mint)}</span>
+            <span class="ta-info-label" data-l10n-id="tools-analyzer-info-mint"></span>
+            <span class="ta-info-value mono" dir="ltr">${escapeHtml(overview.mint)}</span>
           </div>
           ${
             overview.description
               ? `
           <div class="ta-info-item ta-full-width">
-            <span class="ta-info-label">Description</span>
+            <span class="ta-info-label" data-l10n-id="tools-analyzer-info-description"></span>
             <span class="ta-info-value">${escapeHtml(overview.description)}</span>
           </div>
           `
@@ -788,21 +844,22 @@ function renderTaOverviewTab() {
             overview.supply
               ? `
           <div class="ta-info-item">
-            <span class="ta-info-label">Supply</span>
-            <span class="ta-info-value mono">${escapeHtml(overview.supply)}</span>
+            <span class="ta-info-label" data-l10n-id="tools-analyzer-info-supply"></span>
+            <span class="ta-info-value mono" dir="ltr">${escapeHtml(overview.supply)}</span>
           </div>
           `
               : ""
           }
         </div>
         <div class="ta-links">
-          ${overview.website ? `<a href="${escapeHtml(overview.website)}" target="_blank" rel="noopener" class="ta-link"><i class="icon-globe"></i> Website</a>` : ""}
-          ${overview.twitter ? `<a href="${escapeHtml(overview.twitter)}" target="_blank" rel="noopener" class="ta-link"><i class="icon-twitter"></i> Twitter</a>` : ""}
-          ${overview.telegram ? `<a href="${escapeHtml(overview.telegram)}" target="_blank" rel="noopener" class="ta-link"><i class="icon-message-circle"></i> Telegram</a>` : ""}
+          ${overview.website ? `<a href="${escapeHtml(overview.website)}" target="_blank" rel="noopener" class="ta-link"><i class="icon-globe"></i> <span data-l10n-id="links-social-website"></span></a>` : ""}
+          ${overview.twitter ? `<a href="${escapeHtml(overview.twitter)}" target="_blank" rel="noopener" class="ta-link"><i class="icon-twitter"></i> <span data-l10n-id="links-social-twitter"></span></a>` : ""}
+          ${overview.telegram ? `<a href="${escapeHtml(overview.telegram)}" target="_blank" rel="noopener" class="ta-link"><i class="icon-message-circle"></i> <span data-l10n-id="links-social-telegram"></span></a>` : ""}
         </div>
       </div>
     </div>
   `;
+  I18n.localizeTree(contentEl);
 }
 
 /**
@@ -818,10 +875,11 @@ function renderTaSecurityTab() {
     contentEl.innerHTML = `
       <div class="ta-empty-tab">
         <i class="icon-shield-off"></i>
-        <p>No security data available</p>
-        <small>Security analysis is not available for this token</small>
+        <p data-l10n-id="tools-analyzer-security-empty"></p>
+        <small data-l10n-id="tools-analyzer-security-empty-hint"></small>
       </div>
     `;
+    I18n.localizeTree(contentEl);
     return;
   }
 
@@ -832,38 +890,38 @@ function renderTaSecurityTab() {
       <!-- Security Score Card -->
       <div class="ta-card">
         <div class="ta-card-title">
-          <i class="icon-shield"></i> Safety Score
+          <i class="icon-shield"></i> <span data-l10n-id="tools-analyzer-card-safety-score"></span>
         </div>
         <div class="ta-security-score ${scoreClass}">
-          <span class="ta-score-value">${security.normalized_score ?? "—"}</span>
-          <span class="ta-score-label">${getTaScoreLabel(security.normalized_score)}</span>
+          <span class="ta-score-value">${formatNumber(security.normalized_score, 0)}</span>
+          <span class="ta-score-label">${escapeHtml(getTaScoreLabel(security.normalized_score))}</span>
         </div>
-        ${security.score ? `<div class="ta-raw-score">Raw Risk Score: ${security.score}</div>` : ""}
+        ${security.score ? `<div class="ta-raw-score" data-l10n-id="tools-analyzer-raw-score" data-l10n-args='${escapeHtml(JSON.stringify({ score: formatNumber(security.score, 0) }))}'></div>` : ""}
       </div>
 
       <!-- Authorities Card -->
       <div class="ta-card">
         <div class="ta-card-title">
-          <i class="icon-key"></i> Token Authorities
+          <i class="icon-key"></i> <span data-l10n-id="tools-analyzer-card-authorities"></span>
         </div>
         <div class="ta-authority-list">
           <div class="ta-authority-item ${security.mint_authority ? "warning" : "success"}">
-            <span class="ta-authority-label">Mint Authority</span>
-            <span class="ta-authority-value">${security.mint_authority ? "Active" : "Revoked"}</span>
-            ${security.mint_authority ? `<span class="ta-authority-address mono">${escapeHtml(security.mint_authority)}</span>` : ""}
+            <span class="ta-authority-label" data-l10n-id="tools-analyzer-authority-mint"></span>
+            <span class="ta-authority-value">${escapeHtml(I18n.label(AUTHORITY_STATE_LABELS, security.mint_authority ? "active" : "revoked"))}</span>
+            ${security.mint_authority ? `<span class="ta-authority-address mono" dir="ltr">${escapeHtml(security.mint_authority)}</span>` : ""}
           </div>
           <div class="ta-authority-item ${security.freeze_authority ? "warning" : "success"}">
-            <span class="ta-authority-label">Freeze Authority</span>
-            <span class="ta-authority-value">${security.freeze_authority ? "Active" : "Revoked"}</span>
-            ${security.freeze_authority ? `<span class="ta-authority-address mono">${escapeHtml(security.freeze_authority)}</span>` : ""}
+            <span class="ta-authority-label" data-l10n-id="tools-analyzer-authority-freeze"></span>
+            <span class="ta-authority-value">${escapeHtml(I18n.label(AUTHORITY_STATE_LABELS, security.freeze_authority ? "active" : "revoked"))}</span>
+            ${security.freeze_authority ? `<span class="ta-authority-address mono" dir="ltr">${escapeHtml(security.freeze_authority)}</span>` : ""}
           </div>
           <div class="ta-authority-item ${security.has_transfer_fee ? "warning" : "success"}">
-            <span class="ta-authority-label">Transfer Fee</span>
-            <span class="ta-authority-value">${security.has_transfer_fee ? "Yes" : "No"}</span>
+            <span class="ta-authority-label" data-l10n-id="tools-analyzer-authority-transfer-fee"></span>
+            <span class="ta-authority-value">${escapeHtml(formatBooleanFlag(Boolean(security.has_transfer_fee)))}</span>
           </div>
           <div class="ta-authority-item ${security.is_mutable ? "warning" : "success"}">
-            <span class="ta-authority-label">Mutable</span>
-            <span class="ta-authority-value">${security.is_mutable ? "Yes" : "No"}</span>
+            <span class="ta-authority-label" data-l10n-id="tools-analyzer-authority-mutable"></span>
+            <span class="ta-authority-value">${escapeHtml(formatBooleanFlag(Boolean(security.is_mutable)))}</span>
           </div>
         </div>
       </div>
@@ -874,14 +932,14 @@ function renderTaSecurityTab() {
           ? `
       <div class="ta-card">
         <div class="ta-card-title">
-          <i class="icon-users"></i> Holder Concentration
+          <i class="icon-users"></i> <span data-l10n-id="tools-analyzer-card-holder-concentration"></span>
         </div>
         <div class="ta-holder-concentration">
           <div class="ta-holder-bar">
             <div class="ta-holder-fill" style="width: ${Math.min(security.top_holders_pct, 100)}%"></div>
           </div>
           <span class="ta-holder-pct">${formatPercentValue(security.top_holders_pct, { plus: "" })}</span>
-          <span class="ta-holder-label">held by top 10 holders</span>
+          <span class="ta-holder-label" data-l10n-id="tools-analyzer-top-holders"></span>
         </div>
       </div>
       `
@@ -894,14 +952,14 @@ function renderTaSecurityTab() {
           ? `
       <div class="ta-card ta-full-width">
         <div class="ta-card-title">
-          <i class="icon-triangle-alert"></i> Security Risks (${security.risks.length})
+          <i class="icon-triangle-alert"></i> <span data-l10n-id="tools-analyzer-risks-title" data-l10n-args='${escapeHtml(JSON.stringify({ count: formatNumber(security.risks.length, 0) }))}'></span>
         </div>
         <div class="ta-risk-list">
           ${security.risks
             .map(
               (risk) => `
             <div class="ta-risk-item ${risk.level.toLowerCase()}">
-              <span class="ta-risk-level">${escapeHtml(risk.level)}</span>
+              <span class="ta-risk-level">${escapeHtml(I18n.label(RISK_SEVERITY_LABELS, riskSeverityId(risk.level)))}</span>
               <span class="ta-risk-name">${escapeHtml(risk.name)}</span>
               <span class="ta-risk-desc">${escapeHtml(risk.description)}</span>
             </div>
@@ -914,17 +972,18 @@ function renderTaSecurityTab() {
           : `
       <div class="ta-card ta-full-width">
         <div class="ta-card-title">
-          <i class="icon-circle-check"></i> Security Risks
+          <i class="icon-circle-check"></i> <span data-l10n-id="tools-analyzer-risks-title-none"></span>
         </div>
         <div class="ta-no-risks">
           <i class="icon-shield-check"></i>
-          <p>No security risks detected</p>
+          <p data-l10n-id="tools-analyzer-risks-none"></p>
         </div>
       </div>
       `
       }
     </div>
   `;
+  I18n.localizeTree(contentEl);
 }
 
 /**
@@ -940,10 +999,11 @@ function renderTaMarketTab() {
     contentEl.innerHTML = `
       <div class="ta-empty-tab">
         <i class="icon-trending-up"></i>
-        <p>No market data available</p>
-        <small>Market data is not available for this token</small>
+        <p data-l10n-id="tools-analyzer-market-empty"></p>
+        <small data-l10n-id="tools-analyzer-market-empty-hint"></small>
       </div>
     `;
+    I18n.localizeTree(contentEl);
     return;
   }
 
@@ -952,10 +1012,10 @@ function renderTaMarketTab() {
       <!-- Price Card -->
       <div class="ta-card">
         <div class="ta-card-title">
-          <i class="icon-dollar-sign"></i> Current Price
+          <i class="icon-dollar-sign"></i> <span data-l10n-id="tools-analyzer-card-price"></span>
         </div>
         <div class="ta-price-display">
-          <div class="ta-price-main">${market.price_sol ? Utils.formatSol(market.price_sol) : "—"} SOL</div>
+          <div class="ta-price-main">${market.price_sol ? Utils.formatSol(market.price_sol) : "—"}</div>
           ${market.price_usd ? `<div class="ta-price-sub">${Utils.formatCurrencyUSD(market.price_usd)}</div>` : ""}
         </div>
       </div>
@@ -963,19 +1023,19 @@ function renderTaMarketTab() {
       <!-- Price Changes Card -->
       <div class="ta-card">
         <div class="ta-card-title">
-          <i class="icon-percent"></i> Price Changes
+          <i class="icon-percent"></i> <span data-l10n-id="tools-analyzer-card-price-changes"></span>
         </div>
         <div class="ta-stat-grid">
           <div class="ta-stat-item">
-            <span class="ta-stat-label">1h</span>
+            <span class="ta-stat-label" data-l10n-id="tools-analyzer-stat-window-1h"></span>
             <span class="ta-stat-value ${market.price_change_h1 ? getTaPriceChangeClass(market.price_change_h1) : ""}">${market.price_change_h1 ? Utils.formatPercent(market.price_change_h1) : "—"}</span>
           </div>
           <div class="ta-stat-item">
-            <span class="ta-stat-label">6h</span>
+            <span class="ta-stat-label" data-l10n-id="tools-analyzer-stat-window-6h"></span>
             <span class="ta-stat-value ${market.price_change_h6 ? getTaPriceChangeClass(market.price_change_h6) : ""}">${market.price_change_h6 ? Utils.formatPercent(market.price_change_h6) : "—"}</span>
           </div>
           <div class="ta-stat-item">
-            <span class="ta-stat-label">24h</span>
+            <span class="ta-stat-label" data-l10n-id="tools-analyzer-stat-window-24h"></span>
             <span class="ta-stat-value ${market.price_change_h24 ? getTaPriceChangeClass(market.price_change_h24) : ""}">${market.price_change_h24 ? Utils.formatPercent(market.price_change_h24) : "—"}</span>
           </div>
         </div>
@@ -984,19 +1044,19 @@ function renderTaMarketTab() {
       <!-- Volume Card -->
       <div class="ta-card">
         <div class="ta-card-title">
-          <i class="icon-chart-bar"></i> Trading Volume
+          <i class="icon-chart-bar"></i> <span data-l10n-id="tools-analyzer-card-volume"></span>
         </div>
         <div class="ta-stat-grid">
           <div class="ta-stat-item">
-            <span class="ta-stat-label">1h Volume</span>
+            <span class="ta-stat-label" data-l10n-id="tools-analyzer-stat-volume-1h"></span>
             <span class="ta-stat-value">${market.volume_h1 ? Utils.formatCurrencyUSD(market.volume_h1) : "—"}</span>
           </div>
           <div class="ta-stat-item">
-            <span class="ta-stat-label">6h Volume</span>
+            <span class="ta-stat-label" data-l10n-id="tools-analyzer-stat-volume-6h"></span>
             <span class="ta-stat-value">${market.volume_h6 ? Utils.formatCurrencyUSD(market.volume_h6) : "—"}</span>
           </div>
           <div class="ta-stat-item">
-            <span class="ta-stat-label">24h Volume</span>
+            <span class="ta-stat-label" data-l10n-id="tools-analyzer-stat-volume-24h"></span>
             <span class="ta-stat-value">${market.volume_h24 ? Utils.formatCurrencyUSD(market.volume_h24) : "—"}</span>
           </div>
         </div>
@@ -1005,15 +1065,15 @@ function renderTaMarketTab() {
       <!-- Transactions Card -->
       <div class="ta-card">
         <div class="ta-card-title">
-          <i class="icon-repeat"></i> 24h Transactions
+          <i class="icon-repeat"></i> <span data-l10n-id="tools-analyzer-card-transactions"></span>
         </div>
         <div class="ta-txns-display">
           <div class="ta-txn-item buys">
-            <span class="ta-txn-label">Buys</span>
+            <span class="ta-txn-label" data-l10n-id="tools-analyzer-txn-buys"></span>
             <span class="ta-txn-value">${market.txns_buys_h24 ? Utils.formatCompactNumber(market.txns_buys_h24) : "—"}</span>
           </div>
           <div class="ta-txn-item sells">
-            <span class="ta-txn-label">Sells</span>
+            <span class="ta-txn-label" data-l10n-id="tools-analyzer-txn-sells"></span>
             <span class="ta-txn-value">${market.txns_sells_h24 ? Utils.formatCompactNumber(market.txns_sells_h24) : "—"}</span>
           </div>
         </div>
@@ -1022,21 +1082,22 @@ function renderTaMarketTab() {
       <!-- Valuation Card -->
       <div class="ta-card ta-full-width">
         <div class="ta-card-title">
-          <i class="icon-chart-pie"></i> Valuation
+          <i class="icon-chart-pie"></i> <span data-l10n-id="tools-analyzer-card-valuation"></span>
         </div>
         <div class="ta-stat-grid">
           <div class="ta-stat-item">
-            <span class="ta-stat-label">Market Cap</span>
+            <span class="ta-stat-label" data-l10n-id="tools-analyzer-stat-market-cap"></span>
             <span class="ta-stat-value">${market.market_cap ? Utils.formatCurrencyUSD(market.market_cap) : "—"}</span>
           </div>
           <div class="ta-stat-item">
-            <span class="ta-stat-label">Fully Diluted Value</span>
+            <span class="ta-stat-label" data-l10n-id="tools-analyzer-stat-fdv"></span>
             <span class="ta-stat-value">${market.fdv ? Utils.formatCurrencyUSD(market.fdv) : "—"}</span>
           </div>
         </div>
       </div>
     </div>
   `;
+  I18n.localizeTree(contentEl);
 }
 
 /**
@@ -1052,10 +1113,11 @@ function renderTaLiquidityTab() {
     contentEl.innerHTML = `
       <div class="ta-empty-tab">
         <i class="icon-droplet"></i>
-        <p>No liquidity data available</p>
-        <small>No pools found for this token</small>
+        <p data-l10n-id="tools-analyzer-liquidity-empty"></p>
+        <small data-l10n-id="tools-analyzer-liquidity-empty-hint"></small>
       </div>
     `;
+    I18n.localizeTree(contentEl);
     return;
   }
 
@@ -1064,10 +1126,10 @@ function renderTaLiquidityTab() {
       <!-- Total Liquidity Card -->
       <div class="ta-card">
         <div class="ta-card-title">
-          <i class="icon-droplet"></i> Total Liquidity
+          <i class="icon-droplet"></i> <span data-l10n-id="tools-analyzer-card-total-liquidity"></span>
         </div>
         <div class="ta-liquidity-total">
-          <div class="ta-liquidity-sol">${Utils.formatSol(liquidity.total_liquidity_sol)} SOL</div>
+          <div class="ta-liquidity-sol">${Utils.formatSol(liquidity.total_liquidity_sol)}</div>
           ${liquidity.total_liquidity_usd ? `<div class="ta-liquidity-usd">${Utils.formatCurrencyUSD(liquidity.total_liquidity_usd)}</div>` : ""}
         </div>
       </div>
@@ -1075,27 +1137,27 @@ function renderTaLiquidityTab() {
       <!-- Pool Count Card -->
       <div class="ta-card">
         <div class="ta-card-title">
-          <i class="icon-layers"></i> Pools
+          <i class="icon-layers"></i> <span data-l10n-id="tools-analyzer-card-pools"></span>
         </div>
         <div class="ta-pool-count">
-          <span class="ta-pool-count-value">${liquidity.pool_count}</span>
-          <span class="ta-pool-count-label">Active Pool${liquidity.pool_count !== 1 ? "s" : ""}</span>
+          <span class="ta-pool-count-value">${formatNumber(liquidity.pool_count, 0)}</span>
+          <span class="ta-pool-count-label" data-l10n-id="tools-analyzer-active-pools" data-l10n-args='${escapeHtml(JSON.stringify({ count: liquidity.pool_count }))}'></span>
         </div>
       </div>
 
       <!-- Pools Table Card -->
       <div class="ta-card ta-full-width">
         <div class="ta-card-title">
-          <i class="icon-list"></i> Pool Details
+          <i class="icon-list"></i> <span data-l10n-id="tools-analyzer-card-pool-details"></span>
         </div>
         <div class="ta-pools-table">
           <table>
             <thead>
               <tr>
-                <th>DEX</th>
-                <th>Pool Address</th>
-                <th>Liquidity (SOL)</th>
-                <th>Status</th>
+                <th data-l10n-id="tools-analyzer-pools-column-dex"></th>
+                <th data-l10n-id="tools-analyzer-pools-column-address"></th>
+                <th data-l10n-id="tools-analyzer-pools-column-liquidity"></th>
+                <th data-l10n-id="tools-analyzer-pools-column-status"></th>
               </tr>
             </thead>
             <tbody>
@@ -1104,9 +1166,9 @@ function renderTaLiquidityTab() {
                   (pool) => `
                 <tr class="${pool.is_canonical ? "canonical" : ""}">
                   <td class="dex">${escapeHtml(pool.dex)}</td>
-                  <td class="address mono">${escapeHtml(pool.address.slice(0, 8))}...${escapeHtml(pool.address.slice(-6))}</td>
+                  <td class="address mono" dir="ltr">${escapeHtml(pool.address.slice(0, 8))}...${escapeHtml(pool.address.slice(-6))}</td>
                   <td class="liquidity">${Utils.formatSol(pool.liquidity_sol)}</td>
-                  <td class="status">${pool.is_canonical ? '<span class="canonical-badge">Primary</span>' : ""}</td>
+                  <td class="status">${pool.is_canonical ? '<span class="canonical-badge" data-l10n-id="tools-analyzer-pool-primary"></span>' : ""}</td>
                 </tr>
               `
                 )
@@ -1117,6 +1179,7 @@ function renderTaLiquidityTab() {
       </div>
     </div>
   `;
+  I18n.localizeTree(contentEl);
 }
 
 /**
@@ -1124,52 +1187,105 @@ function renderTaLiquidityTab() {
  */
 function copyAnalysisReport() {
   if (!taAnalysisData || !taCurrentMint) {
-    Utils.showToast("No analysis to copy", "warning");
+    Utils.showToast(I18n.t("tools-analyzer-report-empty"), "warning");
     return;
   }
 
   const { overview, security, market, liquidity } = taAnalysisData;
+  const unknown = I18n.t("format-unknown");
+  const authorityState = (authority) =>
+    I18n.label(AUTHORITY_STATE_LABELS, authority ? "active" : "revoked");
 
-  let report = "Token Analysis Report\n";
-  report += "====================\n\n";
-  report += `Token: ${overview.symbol || "Unknown"} (${overview.name || "Unknown"})\n`;
-  report += `Mint: ${overview.mint}\n`;
-  report += "\n";
+  const lines = [
+    I18n.t("tools-analyzer-report-title"),
+    "====================",
+    "",
+    I18n.t("tools-analyzer-report-token", {
+      symbol: overview.symbol || unknown,
+      name: overview.name || unknown,
+    }),
+    I18n.t("tools-analyzer-report-mint", { mint: overview.mint }),
+    "",
+  ];
 
   if (overview.price_sol) {
-    report += `Price: ${overview.price_sol} SOL`;
-    if (overview.price_usd) report += ` ($${formatFixed(overview.price_usd, { decimals: 6 })})`;
-    report += "\n";
+    const priceSol = withSolUnit(formatFixed(overview.price_sol, { decimals: 12, trim: true }));
+    lines.push(
+      overview.price_usd
+        ? I18n.t("tools-analyzer-report-price-with-usd", {
+            sol: priceSol,
+            usd: formatCurrencyUSD(overview.price_usd),
+          })
+        : I18n.t("tools-analyzer-report-price", { sol: priceSol })
+    );
   }
 
   if (security) {
-    report += "\nSecurity:\n";
-    report += `- Safety Score: ${security.normalized_score ?? "N/A"}/100\n`;
-    report += `- Mint Authority: ${security.mint_authority ? "Active" : "Revoked"}\n`;
-    report += `- Freeze Authority: ${security.freeze_authority ? "Active" : "Revoked"}\n`;
+    lines.push(
+      "",
+      I18n.t("tools-analyzer-report-security"),
+      I18n.t("tools-analyzer-report-safety-score", {
+        score:
+          security.normalized_score === null || security.normalized_score === undefined
+            ? I18n.t("format-not-available")
+            : formatNumber(security.normalized_score, 0),
+      }),
+      I18n.t("tools-analyzer-report-mint-authority", {
+        state: authorityState(security.mint_authority),
+      }),
+      I18n.t("tools-analyzer-report-freeze-authority", {
+        state: authorityState(security.freeze_authority),
+      })
+    );
     if (security.risks && security.risks.length > 0) {
-      report += `- Risks: ${security.risks.length}\n`;
+      lines.push(
+        I18n.t("tools-analyzer-report-risks", { count: formatNumber(security.risks.length, 0) })
+      );
     }
   }
 
   if (market) {
-    report += "\nMarket:\n";
-    if (market.volume_h24) report += `- 24h Volume: $${formatFixed(market.volume_h24)}\n`;
-    if (market.price_change_h24)
-      report += `- 24h Change: ${formatPercentValue(market.price_change_h24, { plus: "" })}\n`;
-    if (market.market_cap) report += `- Market Cap: $${formatFixed(market.market_cap)}\n`;
+    lines.push("", I18n.t("tools-analyzer-report-market"));
+    if (market.volume_h24) {
+      lines.push(
+        I18n.t("tools-analyzer-report-volume", { amount: formatCurrencyUSD(market.volume_h24) })
+      );
+    }
+    if (market.price_change_h24) {
+      lines.push(
+        I18n.t("tools-analyzer-report-change", {
+          amount: formatPercentValue(market.price_change_h24, { plus: "" }),
+        })
+      );
+    }
+    if (market.market_cap) {
+      lines.push(
+        I18n.t("tools-analyzer-report-market-cap", { amount: formatCurrencyUSD(market.market_cap) })
+      );
+    }
   }
 
   if (liquidity) {
-    report += "\nLiquidity:\n";
-    report += `- Total: ${Utils.formatSol(liquidity.total_liquidity_sol)}\n`;
-    report += `- Pools: ${liquidity.pool_count}\n`;
+    lines.push(
+      "",
+      I18n.t("tools-analyzer-report-liquidity"),
+      I18n.t("tools-analyzer-report-liquidity-total", {
+        amount: Utils.formatSol(liquidity.total_liquidity_sol),
+      }),
+      I18n.t("tools-analyzer-report-pools", { count: formatNumber(liquidity.pool_count, 0) })
+    );
   }
 
-  report += `\nGenerated: ${Utils.formatTimestamp(taAnalysisData.fetched_at)}\n`;
+  lines.push(
+    "",
+    I18n.t("tools-analyzer-report-generated", {
+      time: Utils.formatTimestamp(taAnalysisData.fetched_at),
+    })
+  );
 
-  Utils.copyToClipboard(report);
-  Utils.notifyCopied("Analysis report");
+  // The report is copied, so the isolation marks Fluent adds around values must not ride along.
+  Utils.copyToClipboard(lines.join("\n").replace(/[\u2068\u2069]/g, ""));
+  Utils.notifyCopied(I18n.t("tools-analyzer-report-label"));
 }
 
 /**
@@ -1188,11 +1304,28 @@ function getTaScoreClass(score) {
  * NOTE: normalized_score from Rugcheck is 0-100 where LOWER = SAFER, HIGHER = RISKIER
  */
 function getTaScoreLabel(score) {
-  if (!score && score !== 0) return "Unknown";
+  return I18n.label(SCORE_BAND_LABELS, getTaScoreBand(score));
+}
+
+/**
+ * Helper: Get the score band id
+ */
+function getTaScoreBand(score) {
+  if (!score && score !== 0) return "unknown";
   // Lower score = safer
-  if (score <= 30) return "Good";
-  if (score <= 60) return "Moderate";
-  return "Risky";
+  if (score <= 30) return "good";
+  if (score <= 60) return "moderate";
+  return "risky";
+}
+
+/**
+ * Helper: Normalize a RugCheck risk level to a severity id
+ */
+function riskSeverityId(level) {
+  const normalized = String(level ?? "").toLowerCase();
+  if (normalized === "danger") return "danger";
+  if (normalized === "warn" || normalized === "warning") return "warn";
+  return "info";
 }
 
 /**
@@ -1221,8 +1354,4 @@ function escapeHtml(str) {
 // Exports
 // =============================================================================
 
-export {
-  renderCreateTokenTool,
-  renderTokenWatchTool,
-  renderTokenAnalyzerTool,
-};
+export { renderCreateTokenTool, renderTokenWatchTool, renderTokenAnalyzerTool };

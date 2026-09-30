@@ -384,6 +384,7 @@ pub const STRATEGY_TYPE_UI: &str = include_str!("templates/scripts/ui/strategy_t
 pub const POSITION_MANAGEMENT_UI: &str =
     include_str!("templates/scripts/ui/position_management.js");
 pub const POSITION_STATUS_UI: &str = include_str!("templates/scripts/ui/position_status.js");
+pub const RISK_SEVERITY_UI: &str = include_str!("templates/scripts/ui/risk_severity.js");
 pub const LLM_PROVIDER_UI: &str = include_str!("templates/scripts/ui/llm_provider.js");
 pub const AGENT_TOOL_UI: &str = include_str!("templates/scripts/ui/agent_tool.js");
 pub const TOOL_CALL_STATUS_UI: &str = include_str!("templates/scripts/ui/tool_call_status.js");

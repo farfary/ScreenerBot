@@ -22,7 +22,16 @@ common-action-export = Export
 common-action-import = Import
 common-action-edit = Edit
 common-action-duplicate = Duplicate
+common-action-add = Add
 
 # On/off state of a switch or a feature.
 common-state-enabled = Enabled
 common-state-disabled = Disabled
+
+# Severity of a risk or a finding.
+common-severity-critical = Critical
+common-severity-warning = Warning
+common-severity-info = Info
+
+# A failed action, prefixed to the reason. $message is the reason text.
+common-error-with-message = Error: { $message }

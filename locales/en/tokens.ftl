@@ -132,9 +132,6 @@ tokens-security-transfer-none = No transfer fees detected.
 tokens-security-risks-title = Security Risks
 tokens-security-risks-none = No security risks detected.
 tokens-security-risk-fallback-name = Security signal
-tokens-security-severity-critical = Critical
-tokens-security-severity-warning = Warning
-tokens-security-severity-info = Info
 tokens-security-risks-critical = { $count } critical
 tokens-security-risks-warnings =
     { $count ->

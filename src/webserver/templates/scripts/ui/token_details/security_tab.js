@@ -4,6 +4,7 @@
  */
 import * as Utils from "../../core/utils.js";
 import { formatPercentValue } from "../../core/format.js";
+import { RISK_SEVERITY_LABELS } from "../risk_severity.js";
 import { renderTabState } from "./state_handling.js";
 
 const esc = (text) => Utils.escapeHtml(text);
@@ -27,13 +28,6 @@ const CONCENTRATION_LABELS = Object.freeze({
   high: "tokens-security-concentration-high",
   moderate: "tokens-security-concentration-moderate",
   healthy: "tokens-security-concentration-healthy",
-});
-
-// Ids are the normalized RugCheck risk levels handled by severityFor.
-const RISK_SEVERITY_LABELS = Object.freeze({
-  danger: "tokens-security-severity-critical",
-  warn: "tokens-security-severity-warning",
-  info: "tokens-security-severity-info",
 });
 
 /**

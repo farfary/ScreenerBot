@@ -72,24 +72,61 @@ const TOOL_TO_FEATURE_MAP = {
  */
 const STATUS_CONFIG = {
   [FEATURE_STATUS.COMING_SOON]: {
-    label: "Coming Soon",
     cssClass: "coming-soon",
     dataStatus: "coming",
-    tooltip: "Coming soon",
   },
   [FEATURE_STATUS.BETA]: {
-    label: "Beta",
     cssClass: "beta",
     dataStatus: "beta",
-    tooltip: "Beta - may have bugs",
   },
   [FEATURE_STATUS.DISABLED]: {
-    label: "Disabled",
     cssClass: "disabled",
     dataStatus: "disabled",
-    tooltip: "Currently disabled",
   },
 };
+
+// Message key of the status dot tooltip, by nav item `data-status`.
+const STATUS_TOOLTIP_LABELS = Object.freeze({
+  ready: "tools-status-ready",
+  coming: "tools-status-coming",
+  beta: "tools-status-beta",
+  disabled: "tools-status-disabled",
+});
+
+// Message key of the badge of a non-available tool, by `data-status`.
+const STATUS_BADGE_LABELS = Object.freeze({
+  coming: "tools-status-badge-coming",
+  beta: "tools-status-badge-beta",
+  disabled: "common-state-disabled",
+});
+
+// Message key of each tool's title and header description, by tool id.
+const TOOL_TITLE_LABELS = Object.freeze({
+  "wallet-cleanup": "tools-tool-wallet-cleanup-title",
+  "burn-tokens": "tools-tool-burn-tokens-title",
+  "token-analyzer": "tools-tool-token-analyzer-title",
+  "create-token": "tools-tool-create-token-title",
+  "token-watch": "tools-tool-token-watch-title",
+  "trade-watcher": "tools-tool-trade-watcher-title",
+  "buy-multi-wallets": "tools-tool-buy-multi-wallets-title",
+  "sell-multi-wallets": "tools-tool-sell-multi-wallets-title",
+  "wallet-consolidation": "tools-tool-wallet-consolidation-title",
+  "airdrop-checker": "tools-tool-airdrop-checker-title",
+  "wallet-generator": "tools-tool-wallet-generator-title",
+});
+const TOOL_DESCRIPTION_LABELS = Object.freeze({
+  "wallet-cleanup": "tools-tool-wallet-cleanup-description",
+  "burn-tokens": "tools-tool-burn-tokens-description",
+  "token-analyzer": "tools-tool-token-analyzer-description",
+  "create-token": "tools-tool-create-token-description",
+  "token-watch": "tools-tool-token-watch-description",
+  "trade-watcher": "tools-tool-trade-watcher-description",
+  "buy-multi-wallets": "tools-tool-buy-multi-wallets-description",
+  "sell-multi-wallets": "tools-tool-sell-multi-wallets-description",
+  "wallet-consolidation": "tools-tool-wallet-consolidation-description",
+  "airdrop-checker": "tools-tool-airdrop-checker-description",
+  "wallet-generator": "tools-tool-wallet-generator-description",
+});
 
 /**
  * Tool definitions with metadata and content generators
@@ -97,88 +134,66 @@ const STATUS_CONFIG = {
 const TOOL_DEFINITIONS = {
   "wallet-cleanup": {
     id: "wallet-cleanup",
-    title: "Wallet Cleanup",
-    description: "Close empty Associated Token Accounts to reclaim SOL",
     icon: "icon-trash-2",
     category: "wallet",
     render: renderWalletCleanupTool,
   },
   "burn-tokens": {
     id: "burn-tokens",
-    title: "Burn Tokens",
-    description: "Permanently destroy tokens from your wallet",
     icon: "icon-flame",
     category: "wallet",
     render: renderBurnTokensTool,
   },
   "token-analyzer": {
     id: "token-analyzer",
-    title: "Token Analyzer",
-    description: "Deep analysis of any Solana token with multi-dimensional insights",
     icon: "icon-search",
     category: "token",
     render: renderTokenAnalyzerTool,
   },
   "create-token": {
     id: "create-token",
-    title: "Create Token",
-    description: "Deploy a new SPL token on Solana",
     icon: "icon-circle-plus",
     category: "token",
     render: renderCreateTokenTool,
   },
   "token-watch": {
     id: "token-watch",
-    title: "Holder Watch",
-    description: "Track and monitor new token holders in real-time",
     icon: "icon-eye",
     category: "single-token",
     render: renderTokenWatchTool,
   },
   "trade-watcher": {
     id: "trade-watcher",
-    title: "Trade Watcher",
-    description: "Monitor token trades and trigger automatic buy/sell actions",
     icon: "icon-activity",
     category: "single-token",
     render: renderTradeWatcherTool,
   },
   "buy-multi-wallets": {
     id: "buy-multi-wallets",
-    title: "Multi-Buy",
-    description: "Execute coordinated buy orders across multiple wallets with randomized amounts",
     icon: "icon-shopping-cart",
     category: "single-token",
     render: renderBuyMultiWalletsTool,
   },
   "sell-multi-wallets": {
     id: "sell-multi-wallets",
-    title: "Multi-Sell",
-    description: "Execute coordinated sell orders across multiple wallets with SOL consolidation",
     icon: "icon-package",
     category: "single-token",
     render: renderSellMultiWalletsTool,
   },
   "wallet-consolidation": {
     id: "wallet-consolidation",
-    title: "Wallet Consolidation",
-    description: "Consolidate SOL and tokens from sub-wallets back to main wallet",
     icon: "icon-git-merge",
     category: "utilities",
     render: renderWalletConsolidationTool,
   },
   "airdrop-checker": {
     id: "airdrop-checker",
-    title: "Airdrop Checker",
-    description: "Check for pending airdrops and claimable rewards",
     icon: "icon-gift",
     category: "more",
     render: renderAirdropCheckerTool,
   },
   "wallet-generator": {
     id: "wallet-generator",
-    title: "Wallet Generator",
-    description: "Generate new Solana keypairs securely",
     icon: "icon-key",
     category: "more",
     render: renderWalletGeneratorTool,
@@ -230,6 +245,16 @@ function getToolFeatureStatus(toolId) {
 }
 
 /**
+ * Set the status dot tooltip of a navigation item from its `data-status`
+ */
+function applyStatusTooltip(navItem) {
+  const indicator = navItem.querySelector(".nav-item-status");
+  if (indicator) {
+    indicator.dataset.tooltip = I18n.label(STATUS_TOOLTIP_LABELS, navItem.dataset.status);
+  }
+}
+
+/**
  * Apply feature status to all tool navigation items
  */
 function applyFeatureStatusToUI() {
@@ -249,10 +274,7 @@ function applyFeatureStatusToUI() {
     if (status === FEATURE_STATUS.AVAILABLE) {
       navItem.dataset.status = "ready";
       navItem.classList.remove("feature-disabled", "feature-beta", "feature-coming-soon");
-      const statusIndicator = navItem.querySelector(".nav-item-status");
-      if (statusIndicator) {
-        statusIndicator.dataset.tooltip = "Ready to use";
-      }
+      applyStatusTooltip(navItem);
       return;
     }
 
@@ -273,17 +295,13 @@ function applyFeatureStatusToUI() {
       navItem.classList.add("feature-coming-soon");
     }
 
-    // Update status indicator tooltip
-    const statusIndicator = navItem.querySelector(".nav-item-status");
-    if (statusIndicator) {
-      statusIndicator.dataset.tooltip = config.tooltip;
-    }
+    applyStatusTooltip(navItem);
 
     // Add status badge for non-available tools
     if (status !== FEATURE_STATUS.AVAILABLE) {
       const badge = document.createElement("span");
       badge.className = `status-badge ${config.cssClass}`;
-      badge.textContent = config.label;
+      badge.textContent = I18n.label(STATUS_BADGE_LABELS, config.dataStatus);
       navItem.appendChild(badge);
     }
   });
@@ -325,8 +343,8 @@ function selectTool(toolId, { historyMode = "push" } = {}) {
   // The "select a tool" prompt is only true while nothing is selected.
   const hintEl = $(".sidebar-hint");
   if (hintEl) hintEl.hidden = true;
-  if (titleEl) titleEl.textContent = definition.title;
-  if (descEl) descEl.textContent = definition.description;
+  if (titleEl) titleEl.textContent = I18n.label(TOOL_TITLE_LABELS, toolId);
+  if (descEl) descEl.textContent = I18n.label(TOOL_DESCRIPTION_LABELS, toolId);
 
   // Render tool content
   const contentEl = $("#tools-content");
@@ -379,6 +397,8 @@ function createLifecycle() {
         applyFeatureStatusToUI();
       });
 
+      $$(".nav-item[data-tool]").forEach(applyStatusTooltip);
+
       // Set up tool navigation click handler
       toolClickHandler = (event) => {
         const toolItem = event.target.closest(".nav-item, .tool-item");
@@ -388,11 +408,11 @@ function createLifecycle() {
 
           // Handle non-available tools
           if (status === "coming") {
-            Utils.showToast("This tool is coming soon", "info");
+            Utils.showToast(I18n.t("tools-toast-coming-soon"), "info");
             return;
           }
           if (status === "disabled") {
-            Utils.showToast("This tool is currently disabled", "warning");
+            Utils.showToast(I18n.t("tools-toast-disabled"), "warning");
             return;
           }
 
@@ -408,6 +428,7 @@ function createLifecycle() {
       // Set up help button handler
       const helpBtn = $("#tool-help-btn");
       if (helpBtn) {
+        helpBtn.dataset.tooltip = I18n.attr("tools-help-button", "aria-label");
         on(helpBtn, "click", showToolHelp);
       }
 
@@ -482,14 +503,13 @@ function showToolHelp() {
   const hintPath = hintPathMap[currentTool];
   if (!hintPath) {
     // Fallback for tools without hints yet
-    const definition = TOOL_DEFINITIONS[currentTool];
-    Utils.showToast(definition?.description || "Help not available", "info");
+    Utils.showToast(I18n.label(TOOL_DESCRIPTION_LABELS, currentTool), "info");
     return;
   }
 
   const hint = Hints.getHint(hintPath);
   if (!hint) {
-    Utils.showToast("Help not available", "info");
+    Utils.showToast(I18n.t("tools-help-unavailable"), "info");
     return;
   }
 

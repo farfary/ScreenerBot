@@ -23,3 +23,11 @@ links-view-dexscreener =
 links-copy-mint =
     .title = Copy mint address
     .aria-label = Copy mint address
+
+# Name of a copied mint address, shown in the copy confirmation.
+links-mint-address = Mint address
+
+# Project links of a token.
+links-social-website = Website
+links-social-twitter = { -twitter }
+links-social-telegram = { -telegram }

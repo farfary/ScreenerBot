@@ -1,15 +1,11 @@
 {
   "hardcoded": {
     "src/webserver/templates/pages/config.html": 7,
-    "src/webserver/templates/pages/tools.html": 35,
     "src/webserver/templates/scripts/pages/config.js": 55,
     "src/webserver/templates/scripts/pages/config/field_renderers.js": 6,
     "src/webserver/templates/scripts/pages/events.js": 42,
     "src/webserver/templates/scripts/pages/services.js": 45,
-    "src/webserver/templates/scripts/pages/tools.js": 32,
     "src/webserver/templates/scripts/pages/tools/multi_wallet_tools.js": 109,
-    "src/webserver/templates/scripts/pages/tools/token_tools.js": 123,
-    "src/webserver/templates/scripts/pages/tools/trading_tools.js": 48,
     "src/webserver/templates/scripts/pages/tools/wallet_tools.js": 116,
     "src/webserver/templates/scripts/pages/transactions.js": 46,
     "src/webserver/templates/scripts/theme.js": 2,
