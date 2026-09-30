@@ -58,6 +58,45 @@ pub enum DetectedDex {
     Phoenix,
 }
 
+impl DetectedDex {
+    /// Every platform, in declaration order.
+    pub const ALL: [DetectedDex; 12] = [
+        DetectedDex::Jupiter,
+        DetectedDex::Raydium,
+        DetectedDex::RaydiumCLMM,
+        DetectedDex::Orca,
+        DetectedDex::OrcaWhirlpool,
+        DetectedDex::PumpFun,
+        DetectedDex::Meteora,
+        DetectedDex::Lifinity,
+        DetectedDex::Aldrin,
+        DetectedDex::Serum,
+        DetectedDex::OpenBook,
+        DetectedDex::Phoenix,
+    ];
+
+    /// Stable router id stored in a transaction's `router` field. The dashboard
+    /// labels it through `ROUTER_LABELS` (ui/venue.js) and Rust through
+    /// `transactions::router_label`; a new variant fails to compile here until
+    /// it has an id, and fails `every_router_id_has_a_venue_label` until labelled.
+    pub const fn router_id(&self) -> &'static str {
+        match self {
+            DetectedDex::Jupiter => "jupiter",
+            DetectedDex::Raydium => "raydium",
+            DetectedDex::RaydiumCLMM => "raydiumclmm",
+            DetectedDex::Orca => "orca",
+            DetectedDex::OrcaWhirlpool => "orcawhirlpool",
+            DetectedDex::PumpFun => "pumpfun",
+            DetectedDex::Meteora => "meteora",
+            DetectedDex::Lifinity => "lifinity",
+            DetectedDex::Aldrin => "aldrin",
+            DetectedDex::Serum => "serum",
+            DetectedDex::OpenBook => "openbook",
+            DetectedDex::Phoenix => "phoenix",
+        }
+    }
+}
+
 /// Method used for DEX detection
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DetectionMethod {

@@ -10,6 +10,7 @@ import { DialogTabBar, renderDialogTabRow } from "./dialog_tab_bar.js";
 import { typeIcon, typeLabel } from "./transaction_type.js";
 import { directionBadge } from "./transaction_direction.js";
 import { statusBadge } from "./transaction_status.js";
+import { venueLabel } from "./venue.js";
 import {
   getIdentity,
   isSolMint,
@@ -528,7 +529,7 @@ export class TransactionDetailsDialog {
   _buildOverviewStory(tx) {
     const swap = tx.token_swap_info || tx.token_info;
     if (swap) {
-      const router = swap.router ? Utils.escapeHtml(I18n.t("transactions-dialog-router-via", { router: swap.router })) : "";
+      const router = swap.router ? Utils.escapeHtml(I18n.t("transactions-dialog-router-via", { router: venueLabel(swap.router) })) : "";
       return `
         <section class="tx-story-card">
           <div class="tx-story-heading"><span>${Utils.escapeHtml(I18n.t("transactions-dialog-story-title"))}</span>${router ? `<small>${router}</small>` : ""}</div>
@@ -663,7 +664,7 @@ export class TransactionDetailsDialog {
     if (!swap) return "";
     const rows = [];
     if (swap.router)
-      rows.push([I18n.t("transactions-dialog-route-router"), `<span class="tx-router-name">${Utils.escapeHtml(swap.router)}</span>`]);
+      rows.push([I18n.t("transactions-dialog-route-router"), Utils.escapeHtml(venueLabel(swap.router))]);
     rows.push([I18n.t("transactions-dialog-route-input-asset"), this._buildOverviewAsset(swap.input_mint)]);
     rows.push([I18n.t("transactions-dialog-route-output-asset"), this._buildOverviewAsset(swap.output_mint)]);
     if (swap.pool_address)

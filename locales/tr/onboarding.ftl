@@ -54,7 +54,7 @@ onboarding-data-reading-title = Yalnızca okuma
 onboarding-data-reading-description = Hangi tokenları sorguladığınızı görürüz. Anahtarı, bakiyeyi, pozisyonu veya işlemi asla görmeyiz.
 
 onboarding-privacy-title = Anahtarlarınız, verileriniz
-onboarding-privacy-description = Yapılandırmanız, anahtarlarınız ve işlem geçmişiniz bu makinede kalır. Sonraki adımda, kimlik bilgisi olmadan keşif için Keşif Modu'nu seçin veya tam botu etkinleştirmek için bir cüzdan ve RPC bağlayın — { -brand } verisi istiyorsanız orada oturum açın.
+onboarding-privacy-description = Yapılandırmanız, anahtarlarınız ve işlem geçmişiniz bu makinede kalır. Sonraki adımda, kimlik bilgisi olmadan keşif için "Paneli keşfet" seçeneğini seçin veya tam botu etkinleştirmek için bir cüzdan ve RPC bağlayın — { -brand } verisi istiyorsanız orada oturum açın.
 onboarding-privacy-local-title = Önce yerel mimari
 onboarding-privacy-local-description = Yapılandırma, analitik ve veritabanları masaüstünüzde saklanır.
 onboarding-privacy-wallet-title = Şifreli cüzdan

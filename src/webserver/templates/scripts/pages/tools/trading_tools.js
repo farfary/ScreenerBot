@@ -10,6 +10,7 @@ import * as Hints from "../../core/hints.js";
 import { HintTrigger } from "../../ui/hint_popover.js";
 import { enhanceAllSelects } from "../../ui/custom_select.js";
 import { PoolSelector } from "../../ui/pool_selector.js";
+import { venueLabel } from "../../ui/venue.js";
 import { apiErrorMessage } from "../../core/request_manager.js";
 
 // Message key of each watch type, as the badge in the active watches table.
@@ -220,7 +221,7 @@ function handleTwSearchPools() {
         updateTwStartButtonState();
         Utils.showToast(
           I18n.t("tools-trade-watcher-pool-selected", {
-            dex: pool.dex,
+            dex: pool.dex ? venueLabel(pool.dex) : I18n.t("format-unknown"),
             base: pool.base_symbol,
             quote: pool.quote_symbol,
           }),
@@ -246,7 +247,7 @@ function updateTwPoolDisplay() {
     poolRow.style.display = "flex";
     poolCard.innerHTML = `
       <div class="pool-info">
-        <span class="pool-dex">${Utils.escapeHtml(twSelectedPool.dex || I18n.t("format-unknown"))}</span>
+        <span class="pool-dex">${Utils.escapeHtml(twSelectedPool.dex ? venueLabel(twSelectedPool.dex) : I18n.t("format-unknown"))}</span>
         <span class="pool-pair">${Utils.escapeHtml(twSelectedPool.base_symbol || "?")}/${Utils.escapeHtml(twSelectedPool.quote_symbol || "?")}</span>
         <span class="pool-source ${(twSelectedPool.source || "").toLowerCase()}">${Utils.escapeHtml(twSelectedPool.source || "")}</span>
       </div>

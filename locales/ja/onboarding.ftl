@@ -68,7 +68,7 @@ onboarding-data-reading-description = どのトークンを検索したかは把
 ## Slide: privacy
 
 onboarding-privacy-title = あなたの鍵、あなたのデータ
-onboarding-privacy-description = 設定、鍵、取引履歴はこのマシンに残ります。次に、認証情報なしで探索できる Explore モードを選ぶか、ウォレットと RPC をリンクしてフル機能のボットを有効にしてください。{ -brand } データを使いたい場合は、そこでサインインします。
+onboarding-privacy-description = 設定、鍵、取引履歴はこのマシンに残ります。次に、認証情報なしで探索できる「ダッシュボードを見る」を選ぶか、ウォレットと RPC をリンクしてフル機能のボットを有効にしてください。{ -brand } データを使いたい場合は、そこでサインインします。
 onboarding-privacy-local-title = ローカルファーストのアーキテクチャ
 onboarding-privacy-local-description = 設定、分析、データベースはお使いのデスクトップに保存されます。
 onboarding-privacy-wallet-title = 暗号化されたウォレット

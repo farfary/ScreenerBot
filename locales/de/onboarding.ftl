@@ -66,7 +66,7 @@ onboarding-data-reading-description = Wir sehen, welche Token Sie abfragen. Niem
 ## Slide: privacy
 
 onboarding-privacy-title = Ihre Schlüssel, Ihre Daten
-onboarding-privacy-description = Ihre Konfiguration, Schlüssel und Trading-Historie bleiben auf diesem Rechner. Wählen Sie als Nächstes den Explore Mode zum Erkunden ohne Zugangsdaten oder verknüpfen Sie eine Wallet und einen RPC, um den vollen Bot zu aktivieren — und melden Sie sich dort an, wenn Sie { -brand }-Daten nutzen möchten.
+onboarding-privacy-description = Ihre Konfiguration, Schlüssel und Trading-Historie bleiben auf diesem Rechner. Wählen Sie als Nächstes „Dashboard erkunden“ zum Erkunden ohne Zugangsdaten oder verknüpfen Sie eine Wallet und einen RPC, um den vollen Bot zu aktivieren — und melden Sie sich dort an, wenn Sie { -brand }-Daten nutzen möchten.
 onboarding-privacy-local-title = Local-First-Architektur
 onboarding-privacy-local-description = Konfiguration, Analysen und Datenbanken werden auf Ihrem Desktop gespeichert.
 onboarding-privacy-wallet-title = Verschlüsselte Wallet

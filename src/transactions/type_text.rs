@@ -4,7 +4,7 @@
 //! `transactions-type-<kind>` message (underscores written as hyphens).
 
 use super::types::TransactionType;
-use crate::i18n::{ids, UiArg, UiText};
+use crate::i18n::{ids, MessageId, UiArg, UiText};
 
 /// The label of a stored `kind()` value. A value no kind produces reads as
 /// unclassified.
@@ -31,10 +31,47 @@ pub fn kind_text(kind: &str) -> UiText {
     })
 }
 
+/// The label of a stored router id (`DetectedDex::router_id` and
+/// `detect_router_from_program_id`), mirrored by `ROUTER_LABELS` (ui/venue.js).
+/// An id no detector emits has no label and is shown as stored.
+pub(crate) fn router_label(router: &str) -> Option<MessageId> {
+    Some(match router {
+        "jupiter" => ids::COMMON_VENUE_JUPITER,
+        "raptor" => ids::COMMON_VENUE_RAPTOR,
+        "gmgn" => ids::COMMON_VENUE_GMGN,
+        "raydium" => ids::COMMON_VENUE_RAYDIUM,
+        "raydiumclmm" => ids::COMMON_VENUE_RAYDIUM_CLMM,
+        "orca" => ids::COMMON_VENUE_ORCA,
+        "orcawhirlpool" => ids::COMMON_VENUE_ORCA_WHIRLPOOL,
+        "meteora" => ids::COMMON_VENUE_METEORA,
+        "pumpfun" => ids::COMMON_VENUE_PUMPFUN,
+        "moonshot" => ids::COMMON_VENUE_MOONSHOT,
+        "fluxbeam" => ids::COMMON_VENUE_FLUXBEAM,
+        "lifinity" => ids::COMMON_VENUE_LIFINITY,
+        "aldrin" => ids::COMMON_VENUE_ALDRIN,
+        "serum" => ids::COMMON_VENUE_SERUM,
+        "openbook" => ids::COMMON_VENUE_OPENBOOK,
+        "phoenix" => ids::COMMON_VENUE_PHOENIX,
+        "unknown" => ids::FORMAT_UNKNOWN,
+        _ => return None,
+    })
+}
+
 fn with_detail(base: UiText, detail: &str) -> UiText {
+    with_detail_arg(base, UiArg::Text(detail.to_owned()))
+}
+
+fn with_detail_arg(base: UiText, detail: UiArg) -> UiText {
     UiText::new(ids::TRANSACTIONS_TYPE_WITH_DETAIL)
         .arg("label", UiArg::Nested(Box::new(base)))
-        .arg("detail", UiArg::Text(detail.to_owned()))
+        .arg("detail", detail)
+}
+
+fn with_router(base: UiText, router: &str) -> UiText {
+    match router_label(router) {
+        Some(id) => with_detail_arg(base, UiArg::Nested(Box::new(UiText::new(id)))),
+        None => with_detail(base, router),
+    }
 }
 
 impl TransactionType {
@@ -49,7 +86,7 @@ impl TransactionType {
             | Self::LiquidityRemove { router, .. }
                 if !router.is_empty() =>
             {
-                with_detail(base, router)
+                with_router(base, router)
             }
             Self::TokenTransfer { mint, amount, .. } => {
                 UiText::new(ids::TRANSACTIONS_TYPE_TOKEN_TRANSFER_DETAIL)

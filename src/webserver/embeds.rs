@@ -394,6 +394,8 @@ pub const TRANSACTION_DIRECTION_UI: &str =
     include_str!("templates/scripts/ui/transaction_direction.js");
 pub const TRANSACTION_STATUS_UI: &str = include_str!("templates/scripts/ui/transaction_status.js");
 pub const EVENT_LABELS_UI: &str = include_str!("templates/scripts/ui/event_labels.js");
+pub const VENUE_UI: &str = include_str!("templates/scripts/ui/venue.js");
+pub const RUGCHECK_RISK_UI: &str = include_str!("templates/scripts/ui/rugcheck_risk.js");
 pub const TRANSACTION_DETAILS_DIALOG_UI: &str =
     include_str!("templates/scripts/ui/transaction_details_dialog.js");
 pub const POSITION_DETAILS_DIALOG_UI: &str =

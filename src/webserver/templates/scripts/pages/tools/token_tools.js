@@ -16,6 +16,8 @@ import * as Utils from "../../core/utils.js";
 import { ConfirmationDialog } from "../../ui/confirmation_dialog.js";
 import { apiErrorMessage } from "../../core/request_manager.js";
 import { RISK_SEVERITY_LABELS } from "../../ui/risk_severity.js";
+import { venueLabel } from "../../ui/venue.js";
+import { rugcheckRiskDescription, rugcheckRiskName } from "../../ui/rugcheck_risk.js";
 
 // Ids are the bands of getTaScoreBand.
 const SCORE_BAND_LABELS = Object.freeze({
@@ -960,8 +962,8 @@ function renderTaSecurityTab() {
               (risk) => `
             <div class="ta-risk-item ${risk.level.toLowerCase()}">
               <span class="ta-risk-level">${escapeHtml(I18n.label(RISK_SEVERITY_LABELS, riskSeverityId(risk.level)))}</span>
-              <span class="ta-risk-name">${escapeHtml(risk.name)}</span>
-              <span class="ta-risk-desc">${escapeHtml(risk.description)}</span>
+              <span class="ta-risk-name">${escapeHtml(rugcheckRiskName(risk.name))}</span>
+              <span class="ta-risk-desc">${escapeHtml(rugcheckRiskDescription(risk))}</span>
             </div>
           `
             )
@@ -1165,7 +1167,7 @@ function renderTaLiquidityTab() {
                 .map(
                   (pool) => `
                 <tr class="${pool.is_canonical ? "canonical" : ""}">
-                  <td class="dex">${escapeHtml(pool.dex)}</td>
+                  <td class="dex">${escapeHtml(venueLabel(pool.dex))}</td>
                   <td class="address mono" dir="ltr">${escapeHtml(pool.address.slice(0, 8))}...${escapeHtml(pool.address.slice(-6))}</td>
                   <td class="liquidity">${Utils.formatSol(pool.liquidity_sol)}</td>
                   <td class="status">${pool.is_canonical ? '<span class="canonical-badge" data-l10n-id="tools-analyzer-pool-primary"></span>' : ""}</td>

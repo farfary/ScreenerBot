@@ -54,7 +54,7 @@ onboarding-data-reading-title = Chỉ đọc
 onboarding-data-reading-description = Chúng tôi chỉ biết bạn tra cứu token nào. Không bao giờ có khóa, số dư, vị thế hay giao dịch.
 
 onboarding-privacy-title = Khóa của bạn, dữ liệu của bạn
-onboarding-privacy-description = Cấu hình, khóa và lịch sử giao dịch của bạn được giữ trên máy này. Tiếp theo, hãy chọn Chế độ khám phá để khám phá mà không cần thông tin đăng nhập, hoặc liên kết ví và RPC để bật đầy đủ bot - và đăng nhập tại đó nếu bạn muốn dùng dữ liệu { -brand }.
+onboarding-privacy-description = Cấu hình, khóa và lịch sử giao dịch của bạn được giữ trên máy này. Tiếp theo, hãy chọn “Khám phá bảng điều khiển” để khám phá mà không cần thông tin đăng nhập, hoặc liên kết ví và RPC để bật đầy đủ bot - và đăng nhập tại đó nếu bạn muốn dùng dữ liệu { -brand }.
 onboarding-privacy-local-title = Kiến trúc ưu tiên cục bộ
 onboarding-privacy-local-description = Cấu hình, phân tích và cơ sở dữ liệu được lưu trên máy tính của bạn.
 onboarding-privacy-wallet-title = Ví được mã hóa

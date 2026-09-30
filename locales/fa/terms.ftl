@@ -168,3 +168,14 @@
 -codex = Codex
 -openclaw = OpenClaw
 -hermes = Hermes
+-raydium = Raydium
+-orca = Orca
+-meteora = Meteora
+-moonit = Moonit
+-moonshot = Moonshot
+-fluxbeam = FluxBeam
+-lifinity = Lifinity
+-aldrin = Aldrin
+-serum = Serum
+-openbook = OpenBook
+-phoenix = Phoenix

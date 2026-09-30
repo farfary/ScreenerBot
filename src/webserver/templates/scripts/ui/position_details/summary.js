@@ -8,6 +8,7 @@
 import * as Utils from "../../core/utils.js";
 import { formatPercentValue, withAgo, withSolUnit } from "../../core/format.js";
 import { closeReasonText } from "../trade_reason.js";
+import { rugcheckRiskName } from "../rugcheck_risk.js";
 
 // Labels, sub-lines and titles are plain text and escaped here; values are HTML.
 const fact = (label, value, { sub = "", tone = "", title = "" } = {}) => `
@@ -269,7 +270,7 @@ export function applySummaryMixin(PositionDetailsDialog) {
         : "",
     ]);
     const risks = (security.top_risks || [])
-      .map((risk) => `<li>${Utils.escapeHtml(risk)}</li>`)
+      .map((risk) => `<li>${Utils.escapeHtml(rugcheckRiskName(risk))}</li>`)
       .join("");
 
     return section(I18n.t("positions-summary-risk"), rows + (risks ? `<ul class="pdd-risk-list">${risks}</ul>` : ""));

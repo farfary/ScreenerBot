@@ -54,7 +54,7 @@ onboarding-data-reading-title = Lecture seule
 onboarding-data-reading-description = Nous voyons quels tokens vous recherchez. Jamais une clé, un solde, une position ou un trade.
 
 onboarding-privacy-title = Vos clés, vos données
-onboarding-privacy-description = Votre configuration, vos clés et votre historique de trading restent sur cette machine. Ensuite, choisissez le mode Explorer pour découvrir sans identifiants, ou liez un portefeuille et un RPC pour activer le bot complet — et connectez-vous à ce moment-là si vous voulez les données { -brand }.
+onboarding-privacy-description = Votre configuration, vos clés et votre historique de trading restent sur cette machine. Ensuite, choisissez « Explorer le tableau de bord » pour découvrir sans identifiants, ou liez un portefeuille et un RPC pour activer le bot complet — et connectez-vous à ce moment-là si vous voulez les données { -brand }.
 onboarding-privacy-local-title = Architecture locale d'abord
 onboarding-privacy-local-description = Configuration, analyses et bases de données stockées sur votre ordinateur.
 onboarding-privacy-wallet-title = Portefeuille chiffré

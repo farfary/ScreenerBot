@@ -185,6 +185,39 @@ mod tests {
         ProgramKind::FluxbeamAmm,
     ];
 
+    /// Catalog key of each program's label. The match is exhaustive, so a new
+    /// variant fails to compile until it is mapped here and in
+    /// `POOL_PROGRAM_LABELS` (ui/venue.js), keyed by `protocol_slug()`.
+    fn venue_key(kind: ProgramKind) -> &'static str {
+        match kind {
+            ProgramKind::RaydiumCpmm => "common-venue-raydium-cpmm",
+            ProgramKind::RaydiumLegacyAmm => "common-venue-raydium-legacy-amm",
+            ProgramKind::RaydiumClmm => "common-venue-raydium-clmm",
+            ProgramKind::OrcaWhirlpool => "common-venue-orca-whirlpool",
+            ProgramKind::MeteoraDamm => "common-venue-meteora-damm-v2",
+            ProgramKind::MeteoraDlmm => "common-venue-meteora-dlmm",
+            ProgramKind::MeteoraDbc => "common-venue-meteora-dbc",
+            ProgramKind::PumpFunAmm => "common-venue-pumpfun-amm",
+            ProgramKind::PumpFunLegacy => "common-venue-pumpfun",
+            ProgramKind::Moonit => "common-venue-moonit-amm",
+            ProgramKind::FluxbeamAmm => "common-venue-fluxbeam-amm",
+            ProgramKind::Unknown => "format-unknown",
+        }
+    }
+
+    #[test]
+    fn every_program_kind_has_a_venue_label() {
+        for kind in ALL_KNOWN.into_iter().chain([ProgramKind::Unknown]) {
+            let key = venue_key(kind);
+            assert_ne!(
+                crate::i18n::format_en(key, None),
+                key,
+                "{} has no catalog message {key}",
+                kind.protocol_slug()
+            );
+        }
+    }
+
     #[test]
     fn protocol_id_round_trips_through_every_known_program_kind() {
         for kind in ALL_KNOWN {

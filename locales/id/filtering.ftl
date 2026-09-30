@@ -141,7 +141,7 @@ filtering-footer-last-saved = Terakhir disimpan { $time }
 filtering-footer-in-sync = Konfigurasi sinkron
 
 filtering-info-total = Total:
-filtering-info-priced = Berharga:
+filtering-info-priced = Ada harga:
 filtering-info-passed = Lolos:
 filtering-info-positions = Posisi:
 filtering-info-blacklisted = Masuk daftar hitam:

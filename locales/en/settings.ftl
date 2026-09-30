@@ -533,6 +533,16 @@ settings-data-storage-description = Overview of all databases storing your tradi
 settings-data-stats-loading = Loading database statistics...
 settings-data-stats-load-failed = Failed to load database statistics
 settings-data-total-storage = Total Database Storage
+# Name of each database in the storage overview, keyed by the route's database id.
+settings-data-db-tokens = Tokens
+settings-data-db-transactions = Transactions
+settings-data-db-positions = Positions
+settings-data-db-events = Events
+settings-data-db-ohlcv = OHLCV
+settings-data-db-wallet = Wallet
+settings-data-db-pools = Pools
+settings-data-db-strategies = Strategies
+settings-data-db-actions = Actions
 settings-data-directory-label = Data Directory
 settings-data-directory-copied = Data directory
 settings-data-config-path-copied = Config path

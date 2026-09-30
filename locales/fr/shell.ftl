@@ -149,7 +149,7 @@ shell-page-offline-detail = Le noyau est actuellement injoignable. Cette page se
 
 shell-bot-state-explore = EXPLORER
 shell-bot-state-halted = ARRÊTÉ
-shell-bot-state-off = OFF
+shell-bot-state-off = DÉSACTIVÉ
 shell-bot-state-waiting = EN ATTENTE
 shell-bot-state-idle = INACTIF
 shell-bot-state-entry-paused = ENTRÉES SUSPENDUES

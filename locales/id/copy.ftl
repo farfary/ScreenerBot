@@ -139,7 +139,7 @@ copy-count-open-holdings =
     }
 copy-unrealized-partial =
     { $priced ->
-       *[other] { $priced } kepemilikan berharga · { $unpriced } tanpa harga
+       *[other] { $priced } kepemilikan ada harga · { $unpriced } tanpa harga
     }
 copy-unrealized-unpriced =
     { $count ->

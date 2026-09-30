@@ -91,7 +91,7 @@ trader-stats-window-day = 24H
 trader-stats-window-week = 7D
 trader-stats-window-month = 30D
 trader-realized-title = वास्तविक प्रदर्शन
-trader-metric-net-pnl = नेट P&L
+trader-metric-net-pnl = नेट लाभ-हानि
 trader-metric-win-rate = विन रेट
 trader-metric-profit-factor = प्रॉफ़िट फ़ैक्टर
 trader-metric-max-drawdown = मैक्स ड्रॉडाउन
@@ -129,13 +129,13 @@ trader-stats-closed =
 trader-stats-hold-average = औसत { $span }
 trader-stats-excluded =
     { $count ->
-        [one] { $amount } बंद राउंड शामिल नहीं — पूरा कॉस्ट बेसिस नहीं है, इसलिए सटीक P&L संभव नहीं।
-       *[other] { $amount } बंद राउंड शामिल नहीं — पूरा कॉस्ट बेसिस नहीं है, इसलिए सटीक P&L संभव नहीं।
+        [one] { $amount } बंद राउंड शामिल नहीं — पूरा कॉस्ट बेसिस नहीं है, इसलिए सटीक लाभ-हानि संभव नहीं।
+       *[other] { $amount } बंद राउंड शामिल नहीं — पूरा कॉस्ट बेसिस नहीं है, इसलिए सटीक लाभ-हानि संभव नहीं।
     }
 
-trader-daily-title = दैनिक P&L
+trader-daily-title = दैनिक लाभ-हानि
 trader-daily-subtitle = प्रतिदिन वास्तविक { -sol }, कुल योग के साथ
-trader-daily-loading = दैनिक P&L लोड हो रहा है...
+trader-daily-loading = दैनिक लाभ-हानि लोड हो रही है...
 trader-daily-chart = { -sol } में दैनिक वास्तविक लाभ और हानि
 trader-extreme-best = सबसे अच्छा ट्रेड
 trader-extreme-worst = सबसे खराब ट्रेड

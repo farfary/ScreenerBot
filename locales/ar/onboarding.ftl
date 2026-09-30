@@ -29,7 +29,7 @@ onboarding-discover-price-action-description = سبعة أطر زمنية من �
 ## Slide: trade
 
 onboarding-trade-title = تداول بذكاء
-onboarding-trade-description = تداول آلي بنظام أولوية خروج من ست طبقات. نفّذ DCA في المراكز، واضبط أوقافًا متحركة، وابنِ أشجار استراتيجيات، أو تداول يدويًا بنقرة واحدة.
+onboarding-trade-description = تداول آلي بنظام أولوية خروج من ست طبقات. نفّذ DCA في المراكز، واضبط أوامر وقف خسارة متحركة، وابنِ أشجار استراتيجيات، أو تداول يدويًا بنقرة واحدة.
 onboarding-trade-auto-title = التداول الآلي
 onboarding-trade-auto-description = مقيّمات الدخول/الخروج وجولات DCA والخروج الجزئي ووقف الخسارة المتحرك.
 onboarding-trade-strategy-title = محرك الاستراتيجيات
@@ -68,7 +68,7 @@ onboarding-data-reading-description = نرى الرموز التي تبحث عن
 ## Slide: privacy
 
 onboarding-privacy-title = مفاتيحك، بياناتك
-onboarding-privacy-description = تبقى إعداداتك ومفاتيحك وسجل تداولك على هذا الجهاز. بعد ذلك، اختر وضع الاستكشاف للاكتشاف دون بيانات اعتماد، أو اربط محفظة ونقطة اتصال RPC لتفعيل البوت كاملًا، وسجّل الدخول هناك إذا أردت بيانات { -brand }.
+onboarding-privacy-description = تبقى إعداداتك ومفاتيحك وسجل تداولك على هذا الجهاز. بعد ذلك، اختر «استكشاف لوحة التحكم» للاكتشاف دون بيانات اعتماد، أو اربط محفظة ونقطة اتصال RPC لتفعيل البوت كاملًا، وسجّل الدخول هناك إذا أردت بيانات { -brand }.
 onboarding-privacy-local-title = بنية محلية أولًا
 onboarding-privacy-local-description = الإعدادات والتحليلات وقواعد البيانات مخزّنة على حاسوبك.
 onboarding-privacy-wallet-title = محفظة مشفّرة

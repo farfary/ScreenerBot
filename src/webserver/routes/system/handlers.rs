@@ -247,12 +247,12 @@ pub(super) async fn get_data_stats() -> Response {
     let mut total_size: u64 = 0;
 
     // Helper to get file size
-    fn get_file_stats(name: &str, path: std::path::PathBuf) -> DatabaseStats {
+    fn get_file_stats(id: DatabaseId, path: std::path::PathBuf) -> DatabaseStats {
         let (size_bytes, exists) = std::fs::metadata(&path)
             .map(|m| (m.len(), true))
             .unwrap_or((0, false));
         DatabaseStats {
-            name: name.to_string(),
+            id,
             path: path.display().to_string(),
             size_bytes,
             size_mb: size_bytes as f64 / 1_048_576.0,
@@ -262,19 +262,19 @@ pub(super) async fn get_data_stats() -> Response {
 
     // Collect all database stats
     let db_configs = [
-        ("Tokens", paths::get_tokens_db_path()),
-        ("Transactions", paths::get_transactions_db_path()),
-        ("Positions", paths::get_positions_db_path()),
-        ("Events", paths::get_events_db_path()),
-        ("OHLCV", paths::get_ohlcvs_db_path()),
-        ("Wallet", paths::get_wallet_db_path()),
-        ("Pools", paths::get_pools_db_path()),
-        ("Strategies", paths::get_strategies_db_path()),
-        ("Actions", paths::get_actions_db_path()),
+        (DatabaseId::Tokens, paths::get_tokens_db_path()),
+        (DatabaseId::Transactions, paths::get_transactions_db_path()),
+        (DatabaseId::Positions, paths::get_positions_db_path()),
+        (DatabaseId::Events, paths::get_events_db_path()),
+        (DatabaseId::Ohlcv, paths::get_ohlcvs_db_path()),
+        (DatabaseId::Wallet, paths::get_wallet_db_path()),
+        (DatabaseId::Pools, paths::get_pools_db_path()),
+        (DatabaseId::Strategies, paths::get_strategies_db_path()),
+        (DatabaseId::Actions, paths::get_actions_db_path()),
     ];
 
-    for (name, path) in db_configs {
-        let stats = get_file_stats(name, path);
+    for (id, path) in db_configs {
+        let stats = get_file_stats(id, path);
         total_size += stats.size_bytes;
         databases.push(stats);
     }

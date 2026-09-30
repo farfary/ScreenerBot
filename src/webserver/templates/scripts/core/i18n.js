@@ -362,6 +362,11 @@
       return String(value ?? "");
     },
 
+    /** Attribute `name` of the label `map` gives `value` (see `label`), or null when the map does not list it. */
+    labelAttr(map, value, name, args) {
+      return map && Object.hasOwn(map, value) ? I18n.attr(map[value], name, args) : null;
+    },
+
     /** Render a backend UiText: `{ id, args: { name: { type, value } } }`. */
     text(uiText) {
       if (!uiText || typeof uiText.id !== "string") return "";

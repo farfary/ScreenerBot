@@ -8,6 +8,19 @@ import { formatSizeAt } from "../../core/format.js";
 import { ConfirmationDialog } from "../confirmation_dialog.js";
 import { apiErrorMessage } from "../../core/request_manager.js";
 
+/** Database id -> label key, keyed by `DatabaseId` (webserver/routes/system/types.rs). */
+const DATABASE_LABELS = Object.freeze({
+  tokens: "settings-data-db-tokens",
+  transactions: "settings-data-db-transactions",
+  positions: "settings-data-db-positions",
+  events: "settings-data-db-events",
+  ohlcv: "settings-data-db-ohlcv",
+  wallet: "settings-data-db-wallet",
+  pools: "settings-data-db-pools",
+  strategies: "settings-data-db-strategies",
+  actions: "settings-data-db-actions",
+});
+
 /**
  * Build Data tab HTML
  */
@@ -380,7 +393,7 @@ async function loadDataOverview(content) {
             : formatSizeAt(db.size_bytes / 1024, { unit: "kb", decimals: 0 });
         return `
             <div class="data-db-item">
-              <span class="data-db-name">${Utils.escapeHtml(db.name)}</span>
+              <span class="data-db-name">${Utils.escapeHtml(I18n.label(DATABASE_LABELS, db.id))}</span>
               <div class="data-db-bar-container">
                 <div class="data-db-bar" style="width: ${percentage}%"></div>
               </div>

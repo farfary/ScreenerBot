@@ -248,6 +248,8 @@ pub async fn get_ui_script(Path(file): Path<String>) -> Response {
         "transaction_direction.js" => Some(embeds::TRANSACTION_DIRECTION_UI),
         "transaction_status.js" => Some(embeds::TRANSACTION_STATUS_UI),
         "event_labels.js" => Some(embeds::EVENT_LABELS_UI),
+        "venue.js" => Some(embeds::VENUE_UI),
+        "rugcheck_risk.js" => Some(embeds::RUGCHECK_RISK_UI),
         "transaction_details_dialog.js" => Some(embeds::TRANSACTION_DETAILS_DIALOG_UI),
         "position_details_dialog.js" => Some(embeds::POSITION_DETAILS_DIALOG_UI),
         "position_details/header.js" => Some(embeds::POSITION_DETAILS_HEADER_JS),

@@ -109,7 +109,7 @@ trader-stats-window-day = 24 год
 trader-stats-window-week = 7 д
 trader-stats-window-month = 30 д
 trader-realized-title = Реалізована результативність
-trader-metric-net-pnl = Чистий P&L
+trader-metric-net-pnl = Чистий прибуток/збиток
 trader-metric-win-rate = Відсоток виграшних угод
 trader-metric-profit-factor = Профіт-фактор
 trader-metric-max-drawdown = Макс. просадка
@@ -160,17 +160,17 @@ trader-stats-closed =
 trader-stats-hold-average = у середньому { $span }
 trader-stats-excluded =
     { $count ->
-        [one] Виключено закритих раундів: { $amount } — немає повної собівартості, тож немає достовірного P&L.
-        [few] Виключено закритих раундів: { $amount } — немає повної собівартості, тож немає достовірного P&L.
-        [many] Виключено закритих раундів: { $amount } — немає повної собівартості, тож немає достовірного P&L.
-       *[other] Виключено закритих раундів: { $amount } — немає повної собівартості, тож немає достовірного P&L.
+        [one] Виключено закритих раундів: { $amount } — немає повної собівартості, тож немає достовірного прибутку/збитку.
+        [few] Виключено закритих раундів: { $amount } — немає повної собівартості, тож немає достовірного прибутку/збитку.
+        [many] Виключено закритих раундів: { $amount } — немає повної собівартості, тож немає достовірного прибутку/збитку.
+       *[other] Виключено закритих раундів: { $amount } — немає повної собівартості, тож немає достовірного прибутку/збитку.
     }
 
 ## Stats: daily P&L and extremes
 
-trader-daily-title = Щоденний P&L
+trader-daily-title = Щоденний прибуток/збиток
 trader-daily-subtitle = Реалізований { -sol } за день із наростаючим підсумком
-trader-daily-loading = Завантаження щоденного P&L...
+trader-daily-loading = Завантаження щоденного прибутку/збитку...
 trader-daily-chart = Щоденний реалізований прибуток і збиток у { -sol }
 trader-extreme-best = Найкраща угода
 trader-extreme-worst = Найгірша угода

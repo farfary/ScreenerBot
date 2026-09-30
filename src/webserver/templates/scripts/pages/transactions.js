@@ -7,6 +7,7 @@ import { TransactionDetailsDialog } from "../ui/transaction_details_dialog.js";
 import { TYPE_FILTER_OPTIONS, typeLabel, typeVariant } from "../ui/transaction_type.js";
 import { directionBadge, directionLabel } from "../ui/transaction_direction.js";
 import { listStatusBadge, statusLabel } from "../ui/transaction_status.js";
+import { venueLabel } from "../ui/venue.js";
 
 const PAGE_LIMIT = 100;
 const DEFAULT_FILTERS = {
@@ -436,7 +437,7 @@ function createLifecycle() {
           id: "router",
           label: I18n.t("transactions-col-router"),
           minWidth: 140,
-          render: (value) => (value === null || value === undefined ? "—" : Utils.escapeHtml(value)),
+          render: (value) => (value === null || value === undefined ? "—" : Utils.escapeHtml(venueLabel(value))),
         },
         {
           id: "instructions_count",

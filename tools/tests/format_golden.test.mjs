@@ -272,6 +272,11 @@ test("surface formatter options: trimmed fixed text, extra decimals, zero sign a
   assert.equal(fmt.formatUptime(7200, { style: "hm" }), "2h 0m");
 });
 
+test("a month title starts with a capital where the locale writes month names lowercase", () => {
+  assert.equal(load("ru-u-nu-latn").fmt.formatMonthYear(2026, 9), "Сентябрь 2026 г.");
+  assert.equal(load("en-u-nu-latn").fmt.formatMonthYear(2026, 9), "September 2026");
+});
+
 test("the calendar week starts on the locale's first day", () => {
   assert.equal(load("en-u-nu-latn").fmt.firstDayOfWeek(), 0);
   assert.equal(load("de-u-nu-latn").fmt.firstDayOfWeek(), 1);

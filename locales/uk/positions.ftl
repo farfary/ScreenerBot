@@ -39,12 +39,12 @@ positions-column-avg-exit = Сер. вихід ({ -sol })
 positions-column-current-price = Поточна ({ -sol })
 positions-column-total-invested = Усього інвестовано
 positions-column-proceeds = Виручка
-positions-column-pnl = P&L
-positions-column-pnl-percent = P&L %
+positions-column-pnl = Прибуток/збиток
+positions-column-pnl-percent = Прибуток/збиток %
 positions-column-size = Розмір
 positions-column-dca = DCA
 positions-column-exits = Виходи
-positions-column-unrealized-pnl = Нереалізований P&L
+positions-column-unrealized-pnl = Нереалізований прибуток/збиток
 positions-column-unrealized-percent = Нереалізований %
 
 ## Cells
@@ -225,7 +225,7 @@ positions-header-buy-count =
 positions-header-exit-price = Ціна виходу
 # $ago is the elapsed time since the close, for example "3h ago".
 positions-header-closed-ago = закрито { $ago }
-positions-header-realized-pnl = Реалізований P&L
+positions-header-realized-pnl = Реалізований прибуток/збиток
 positions-header-usd-note = USD за сьогоднішнім курсом { -sol }
 positions-header-returned = Повернуто
 # $amount is the formatted SOL amount invested.
@@ -233,8 +233,8 @@ positions-header-of-invested = з інвестованих { $amount }
 positions-header-price = Ціна
 positions-header-last-price = Остання ціна
 positions-header-pool-ago = пул · { $ago }
-positions-header-unrealized-pnl = Нереалізований P&L
-positions-header-pnl-last-price = P&L за останньою ціною
+positions-header-unrealized-pnl = Нереалізований прибуток/збиток
+positions-header-pnl-last-price = Прибуток/збиток за останньою ціною
 positions-header-value = Вартість
 positions-header-last-value = Остання вартість
 positions-header-invested = інвестовано { $amount }
@@ -547,5 +547,5 @@ positions-chart-level = Рівень
 positions-chart-level-above = { $label } { $price } вище цього вікна
 positions-chart-level-below = { $label } { $price } нижче цього вікна
 positions-chart-scale-hint = Потягніть цінову вісь, щоб зменшити масштаб до нього
-positions-chart-pnl-at-bar = P&L на свічці
+positions-chart-pnl-at-bar = Прибуток/збиток на свічці
 positions-chart-click-to-locate = Натисніть, щоб знайти

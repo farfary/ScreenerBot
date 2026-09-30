@@ -68,7 +68,7 @@ onboarding-data-reading-description = We see which tokens you look up. Never a k
 ## Slide: privacy
 
 onboarding-privacy-title = Your Keys, Your Data
-onboarding-privacy-description = Your configuration, keys and trading history stay on this machine. Next, choose Explore Mode for discovery without credentials, or link a wallet and RPC to enable the full bot — and sign in there if you want { -brand } data.
+onboarding-privacy-description = Your configuration, keys and trading history stay on this machine. Next, choose "Explore dashboard" for discovery without credentials, or link a wallet and RPC to enable the full bot — and sign in there if you want { -brand } data.
 onboarding-privacy-local-title = Local-First Architecture
 onboarding-privacy-local-description = Config, analytics, and databases stored on your desktop.
 onboarding-privacy-wallet-title = Encrypted Wallet

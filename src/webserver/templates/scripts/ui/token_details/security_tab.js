@@ -5,6 +5,7 @@
 import * as Utils from "../../core/utils.js";
 import { formatPercentValue } from "../../core/format.js";
 import { RISK_SEVERITY_LABELS } from "../risk_severity.js";
+import { rugcheckRiskDescription, rugcheckRiskName } from "../rugcheck_risk.js";
 import { renderTabState } from "./state_handling.js";
 
 const esc = (text) => Utils.escapeHtml(text);
@@ -491,8 +492,8 @@ function buildRisksSection(risks, options = {}) {
         ${sorted
           .map((risk) => {
             const riskSeverity = severityFor(risk);
-            const name = safe(String(risk.name || I18n.t("tokens-security-risk-fallback-name")));
-            const description = risk.description ? safe(String(risk.description)) : "";
+            const name = safe(risk.name ? rugcheckRiskName(risk.name) : I18n.t("tokens-security-risk-fallback-name"));
+            const description = safe(rugcheckRiskDescription(risk));
 
             return `
           <div class="security-risk-row risk-${riskSeverity.className}">

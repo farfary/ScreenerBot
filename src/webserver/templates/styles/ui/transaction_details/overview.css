@@ -347,11 +347,6 @@
   text-align: start;
 }
 
-/* Router names arrive lowercase from the swap decoder ("jupiter"). */
-.transaction-details-dialog .tx-router-name {
-  text-transform: capitalize;
-}
-
 .transaction-details-dialog .tx-asset-reference {
   display: flex;
   align-items: flex-start;

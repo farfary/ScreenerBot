@@ -326,7 +326,7 @@ fn token_to_token(view: &WalletView, router: &str) -> Option<TransactionType> {
 
 fn router_name(dex: &DexAnalysis, calls: &[Call]) -> String {
     if let Some(detected) = dex.detected_dex.as_ref() {
-        return format!("{detected:?}").to_ascii_lowercase();
+        return detected.router_id().to_owned();
     }
     calls
         .iter()

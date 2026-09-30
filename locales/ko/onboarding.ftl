@@ -68,7 +68,7 @@ onboarding-data-reading-description = 조회한 토큰은 확인할 수 있지�
 ## Slide: privacy
 
 onboarding-privacy-title = 내 키, 내 데이터
-onboarding-privacy-description = 설정, 키, 거래 내역은 이 컴퓨터에만 보관됩니다. 다음 단계에서 인증 정보 없이 둘러보는 탐색 모드를 선택하거나, 지갑과 RPC를 연결해 전체 봇을 활성화하세요. { -brand } 데이터를 사용하려면 그곳에서 로그인하세요.
+onboarding-privacy-description = 설정, 키, 거래 내역은 이 컴퓨터에만 보관됩니다. 다음 단계에서 인증 정보 없이 둘러보려면 "대시보드 둘러보기"를 선택하거나, 지갑과 RPC를 연결해 전체 봇을 활성화하세요. { -brand } 데이터를 사용하려면 그곳에서 로그인하세요.
 onboarding-privacy-local-title = 로컬 우선 아키텍처
 onboarding-privacy-local-description = 설정, 분석, 데이터베이스가 내 데스크톱에 저장됩니다.
 onboarding-privacy-wallet-title = 암호화된 지갑

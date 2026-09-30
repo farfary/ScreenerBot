@@ -8,6 +8,7 @@
 import * as Utils from "../../core/utils.js";
 import { formatAddressCompact } from "../../core/format.js";
 import { renderTabState } from "./state_handling.js";
+import { venueLabel } from "../venue.js";
 
 const esc = (text) => Utils.escapeHtml(text);
 const count = (value) => Utils.formatNumber(value, { decimals: 0 });
@@ -86,7 +87,7 @@ export function renderPoolsTab(token, options = {}) {
           <span><i class="icon-star" aria-hidden="true"></i>${esc(I18n.t("tokens-pools-canonical-title"))}</span>
         </div>
         <div class="pools-summary-rows">
-          ${renderPoolFact(I18n.t("tokens-pools-dex"), escapeHtml(canonicalPool.program || I18n.t("tokens-pools-unknown")))}
+          ${renderPoolFact(I18n.t("tokens-pools-dex"), escapeHtml(canonicalPool.program ? venueLabel(canonicalPool.program) : I18n.t("tokens-pools-unknown")))}
           ${renderPoolFact(I18n.t("tokens-pools-liquidity"), Utils.formatCurrencyUSD(canonicalPool.liquidity_usd))}
           ${renderPoolFact(I18n.t("tokens-pools-volume-24h"), Utils.formatCurrencyUSD(canonicalPool.volume_h24_usd))}
         </div>
@@ -122,7 +123,7 @@ export function renderPoolsTab(token, options = {}) {
             ${Object.entries(programCounts)
               .sort((a, b) => b[1] - a[1])
               .map(([program, total]) =>
-                renderPoolFact(program || I18n.t("tokens-pools-unknown"), count(total))
+                renderPoolFact(program ? venueLabel(program) : I18n.t("tokens-pools-unknown"), count(total))
               )
               .join("")}
           </div>
@@ -157,7 +158,7 @@ function buildPoolDetail(pool, options = {}) {
     <article class="pool-detail">
       <header class="pool-detail-header">
         <div class="pool-detail-identity">
-          <strong>${escapeHtml(pool.program || I18n.t("tokens-pools-unknown-dex"))}</strong>
+          <strong>${escapeHtml(pool.program ? venueLabel(pool.program) : I18n.t("tokens-pools-unknown-dex"))}</strong>
           ${pool.is_canonical ? `<span class="pool-canonical-label"><i class="icon-star" aria-hidden="true"></i>${esc(I18n.t("tokens-pools-canonical"))}</span>` : ""}
         </div>
         <span class="pool-detail-role ${roleClass}">

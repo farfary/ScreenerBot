@@ -68,7 +68,7 @@ onboarding-data-reading-description = Vemos quais tokens você consulta. Nunca u
 ## Slide: privacy
 
 onboarding-privacy-title = Suas chaves, seus dados
-onboarding-privacy-description = Sua configuração, suas chaves e seu histórico de trading ficam nesta máquina. A seguir, escolha o Modo Explorar para descobrir sem credenciais, ou vincule uma carteira e um RPC para ativar o bot completo, e entre na conta lá se quiser os dados do { -brand }.
+onboarding-privacy-description = Sua configuração, suas chaves e seu histórico de trading ficam nesta máquina. A seguir, escolha “Explorar o painel” para descobrir sem credenciais, ou vincule uma carteira e um RPC para ativar o bot completo, e entre na conta lá se quiser os dados do { -brand }.
 onboarding-privacy-local-title = Arquitetura local primeiro
 onboarding-privacy-local-description = Configuração, análises e bancos de dados armazenados no seu desktop.
 onboarding-privacy-wallet-title = Carteira criptografada

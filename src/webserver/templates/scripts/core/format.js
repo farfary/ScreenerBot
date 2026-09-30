@@ -652,7 +652,11 @@ export function formatDatePart(value, { part = "year", fallback } = {}) {
 /** Month name and year of a UTC calendar month (`month` is 1-12), for calendar headings. */
 export function formatMonthYear(year, month) {
   const date = new Date(Date.UTC(year, month - 1, 1));
-  return intl(Intl.DateTimeFormat, { month: "long", year: "numeric", timeZone: "UTC" }).format(date);
+  const text = intl(Intl.DateTimeFormat, { month: "long", year: "numeric", timeZone: "UTC" }).format(date);
+  // Some locales write month names lowercase (ru "сентябрь 2026 г."); this is a title.
+  const [first] = intl(Intl.Segmenter, { granularity: "grapheme" }).segment(text);
+  if (!first) return text;
+  return first.segment.toLocaleUpperCase(I18n.intlLocale) + text.slice(first.segment.length);
 }
 
 let weekStart = null;

@@ -7,6 +7,7 @@ import { create, on, off } from "../core/dom.js";
 import { escapeHtml } from "../core/utils.js";
 import { formatAddressCompact, formatCompactFixed, withUsdSymbol } from "../core/format.js";
 import { apiErrorMessage } from "../core/request_manager.js";
+import { venueLabel } from "./venue.js";
 
 /** Pool liquidity and volume: one decimal in K and M, whole numbers below. */
 const formatCompact = (value) =>
@@ -123,7 +124,7 @@ export class PoolSelector {
             (pool, i) => `
           <div class="pool-item" data-index="${i}" tabindex="0" role="button">
             <div class="pool-item-main">
-              <span class="pool-dex">${escapeHtml(pool.dex || I18n.t("format-unknown"))}</span>
+              <span class="pool-dex">${escapeHtml(pool.dex ? venueLabel(pool.dex) : I18n.t("format-unknown"))}</span>
               <span class="pool-pair">${escapeHtml(pool.base_symbol || "?")}/${escapeHtml(pool.quote_symbol || "?")}</span>
               <span class="pool-source ${(pool.source || "unknown").toLowerCase()}">${escapeHtml(pool.source || I18n.t("format-unknown"))}</span>
             </div>

@@ -68,7 +68,7 @@ onboarding-data-reading-description = 我们只能看到您查询了哪些代币
 ## Slide: privacy
 
 onboarding-privacy-title = 您的密钥，您的数据
-onboarding-privacy-description = 您的配置、密钥和交易历史都保留在这台设备上。接下来，您可以选择探索模式，无需凭据即可发现代币；也可以关联钱包和 RPC 以启用完整的机器人，如需 { -brand } 数据，请在那里登录。
+onboarding-privacy-description = 您的配置、密钥和交易历史都保留在这台设备上。接下来，您可以选择“探索仪表盘”，无需凭据即可发现代币；也可以关联钱包和 RPC 以启用完整的机器人，如需 { -brand } 数据，请在那里登录。
 onboarding-privacy-local-title = 本地优先架构
 onboarding-privacy-local-description = 配置、分析数据和数据库都存储在您的桌面上。
 onboarding-privacy-wallet-title = 加密钱包

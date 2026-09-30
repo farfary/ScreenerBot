@@ -68,7 +68,7 @@ onboarding-data-reading-description = Vemos qué tokens consultas. Nunca una cla
 ## Slide: privacy
 
 onboarding-privacy-title = Tus claves, tus datos
-onboarding-privacy-description = Tu configuración, tus claves y tu historial de trading permanecen en este equipo. A continuación, elige el Modo Explorar para descubrir sin credenciales, o vincula una billetera y un RPC para habilitar el bot completo, e inicia sesión allí si quieres los datos de { -brand }.
+onboarding-privacy-description = Tu configuración, tus claves y tu historial de trading permanecen en este equipo. A continuación, elige «Explorar el panel» para descubrir sin credenciales, o vincula una billetera y un RPC para habilitar el bot completo, e inicia sesión allí si quieres los datos de { -brand }.
 onboarding-privacy-local-title = Arquitectura local primero
 onboarding-privacy-local-description = Configuración, analíticas y bases de datos almacenadas en tu equipo.
 onboarding-privacy-wallet-title = Billetera cifrada

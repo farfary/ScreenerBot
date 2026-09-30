@@ -54,7 +54,7 @@ onboarding-data-reading-title = Hanya Membaca
 onboarding-data-reading-description = Kami melihat token mana yang Anda cari. Tidak pernah key, saldo, posisi, atau trade.
 
 onboarding-privacy-title = Key Anda, Data Anda
-onboarding-privacy-description = Konfigurasi, key, dan riwayat trading Anda tetap di mesin ini. Selanjutnya, pilih Mode Jelajah untuk penemuan tanpa kredensial, atau tautkan dompet dan RPC untuk mengaktifkan bot penuh — dan masuk di sana jika Anda menginginkan data { -brand }.
+onboarding-privacy-description = Konfigurasi, key, dan riwayat trading Anda tetap di mesin ini. Selanjutnya, pilih "Jelajahi dasbor" untuk penemuan tanpa kredensial, atau tautkan dompet dan RPC untuk mengaktifkan bot penuh — dan masuk di sana jika Anda menginginkan data { -brand }.
 onboarding-privacy-local-title = Arsitektur Mengutamakan Lokal
 onboarding-privacy-local-description = Konfigurasi, analitik, dan database disimpan di desktop Anda.
 onboarding-privacy-wallet-title = Dompet Terenkripsi
