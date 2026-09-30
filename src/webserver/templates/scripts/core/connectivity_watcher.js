@@ -38,11 +38,12 @@ function buildOverlay() {
     <div class="conn-overlay-card">
       <span class="conn-overlay-spinner" aria-hidden="true"></span>
       <div class="conn-overlay-text">
-        <span class="conn-overlay-title">Waiting for core…</span>
-        <span class="conn-overlay-sub">The core is unreachable. Trading is paused; this will recover automatically.</span>
+        <span class="conn-overlay-title" data-l10n-id="shell-connection-waiting"></span>
+        <span class="conn-overlay-sub" data-l10n-id="shell-connection-overlay-detail"></span>
       </div>
-      <button type="button" class="conn-overlay-retry">Retry now</button>
+      <button type="button" class="conn-overlay-retry" data-l10n-id="shell-connection-retry-now"></button>
     </div>`;
+  I18n.localizeTree(overlay);
   overlay.querySelector(".conn-overlay-retry").addEventListener("click", () => checkHealth(true));
   return overlay;
 }
@@ -71,7 +72,7 @@ function setOnline(isOnline) {
       window.showToast?.({
         key: "core-connection",
         type: "success",
-        title: "Core connection restored",
+        title: I18n.t("shell-connection-restored"),
       });
     } catch {
       /* toast optional */

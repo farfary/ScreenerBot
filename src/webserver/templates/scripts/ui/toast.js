@@ -31,11 +31,13 @@ export class Toast {
           <p class="toast__message"></p>
         </div>
         <span class="toast__repeat" aria-hidden="true"></span>
-        <button class="toast__close" type="button" aria-label="Dismiss">${CLOSE_ICON}</button>
+        <button class="toast__close" type="button" data-l10n-id="shell-toast-dismiss">${CLOSE_ICON}</button>
       </div>
       <div class="toast__progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" hidden>
         <span class="toast__progress-bar"></span>
       </div>`;
+
+    I18n.localizeTree(this.element);
 
     this.iconEl = this.element.querySelector(".toast__icon");
     this.titleEl = this.element.querySelector(".toast__title");

@@ -126,6 +126,7 @@
 
 import * as AppState from "../core/app_state.js";
 import { $ } from "../core/dom.js";
+import { escapeHtml } from "../core/utils.js";
 import { enhanceAllSelects } from "./custom_select.js";
 import { TableToolbarView } from "./table_toolbar.js";
 import { TableSettingsDialog } from "./table_settings_dialog.js";
@@ -165,8 +166,8 @@ export class DataTable {
       restoreServerState: options.restoreServerState !== false, // NEW: Auto-restore server state
       enableLogging: options.enableLogging || false,
       rowIdField: options.rowIdField || "id",
-      emptyMessage: options.emptyMessage || "No data to display",
-      loadingMessage: options.loadingMessage || "Loading...",
+      emptyMessage: options.emptyMessage || I18n.t("table-empty-message"),
+      loadingMessage: options.loadingMessage || I18n.t("table-loading-message"),
       onRefresh: options.onRefresh || null,
       onRowClick: options.onRowClick || null,
       onSelectionChange: options.onSelectionChange || null,
@@ -564,7 +565,7 @@ export class DataTable {
           </table>
         </div>
         <div class="dt-scroll-loader" aria-hidden="true">
-          <div class="dt-scroll-loader__indicator loading-spinner inline">Loading more…</div>
+          <div class="dt-scroll-loader__indicator loading-spinner inline">${escapeHtml(I18n.t("table-loading-more"))}</div>
         </div>
         ${this._renderClientPaginationBar()}
         ${this._renderServerPaginationBar()}
@@ -942,10 +943,12 @@ export class DataTable {
   _renderEmptyState() {
     const hasFilters = this.state.searchQuery || Object.keys(this.state.filters || {}).length > 0;
     const emptyIcon = hasFilters ? "icon-search" : "icon-inbox";
-    const emptyTitle = hasFilters ? "No results found" : this.options.emptyTitle || "No data";
+    const emptyTitle = hasFilters
+      ? I18n.t("table-empty-filtered-title")
+      : this.options.emptyTitle || I18n.t("table-empty-title");
     const emptyMessage = hasFilters
-      ? "Try adjusting your search or filters"
-      : this.options.emptyMessage || "No data to display";
+      ? I18n.t("table-empty-filtered-message")
+      : this.options.emptyMessage || I18n.t("table-empty-message");
 
     return `
         <tr>
@@ -1119,7 +1122,7 @@ export class DataTable {
         cellContent = col.render(value, row);
       } catch (error) {
         this._log("error", `Render function failed for column ${col.id}`, error);
-        cellContent = `<span class="dt-render-error" title="${error.message}">Error</span>`;
+        cellContent = `<span class="dt-render-error" title="${error.message}">${escapeHtml(I18n.t("table-render-error"))}</span>`;
       }
     } else {
       if (value === null || value === undefined) {
@@ -1365,10 +1368,10 @@ export class DataTable {
       try {
         alt = config.alt(row);
       } catch {
-        alt = "Image";
+        alt = I18n.t("table-image-alt");
       }
     } else {
-      alt = config.alt || "Image";
+      alt = config.alt || I18n.t("table-image-alt");
     }
 
     // Get title/tooltip
@@ -2905,7 +2908,7 @@ export class DataTable {
     // Pin / Unpin (unless the column explicitly opts out via floatable: false)
     if (col.floatable !== false) {
       items.push({
-        label: isFloating ? "Unpin from left" : "Pin to left",
+        label: isFloating ? I18n.t("table-column-unpin") : I18n.t("table-column-pin"),
         icon: isFloating ? "icon-pin-off" : "icon-pin",
         onClick: () => this.toggleColumnFloating(colId),
       });
@@ -2914,7 +2917,7 @@ export class DataTable {
     // Hide column (when permitted)
     if (this._canHideColumn(col)) {
       items.push({
-        label: "Hide column",
+        label: I18n.t("table-column-hide"),
         icon: "icon-eye-off",
         onClick: () => {
           this.applySettings({

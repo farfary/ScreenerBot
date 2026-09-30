@@ -15,6 +15,14 @@
 (function () {
   "use strict";
 
+  // Position management modes offered in the position menu.
+  const POSITION_MANAGEMENT_LABELS = Object.freeze({
+    auto_trader: "menu-management-auto-trader",
+    user_only: "menu-management-user-only",
+    copy_task: "menu-management-copy-task",
+    hybrid: "menu-management-hybrid",
+  });
+
   function applyBuildersMixin(manager) {
     // =========================================================================
     // Token Menu Builder
@@ -37,7 +45,7 @@
       // Token actions
       items.push({
         type: "item",
-        label: "Buy Token",
+        label: I18n.t("menu-token-buy"),
         icon: "shoppingCart",
         className: "success",
         action: () => this._buyToken(context),
@@ -45,7 +53,7 @@
 
       items.push({
         type: "item",
-        label: "Sell Token",
+        label: I18n.t("menu-token-sell"),
         icon: "trendingDown",
         className: "danger",
         action: () => this._sellToken(context),
@@ -55,7 +63,7 @@
 
       items.push({
         type: "item",
-        label: "View Details",
+        label: I18n.t("menu-view-details"),
         icon: "eye",
         shortcut: "Enter",
         action: () => this._viewTokenDetails(context),
@@ -65,7 +73,9 @@
       const isFavorite = this._isFavorite(context.mint);
       items.push({
         type: "item",
-        label: isFavorite ? "Remove from Favorites" : "Add to Favorites",
+        label: isFavorite
+          ? I18n.t("menu-favorite-remove")
+          : I18n.t("menu-favorite-add"),
         icon: "star",
         className: isFavorite ? "favorite-active" : "",
         action: () => this._toggleFavorite(context, isFavorite),
@@ -73,53 +83,53 @@
 
       items.push({
         type: "item",
-        label: "View on Explorer",
+        label: I18n.t("menu-explorer-open"),
         icon: "externalLink",
         submenu: [
-          { type: "header", label: "Trading" },
+          { type: "header", label: I18n.t("menu-explorer-group-trading") },
           {
             type: "item",
-            label: "DexScreener",
+            label: I18n.t("menu-explorer-dexscreener"),
             icon: "chart",
             action: () => this._openExplorer(context.mint, "dexscreener"),
           },
           {
             type: "item",
-            label: "Birdeye",
+            label: I18n.t("menu-explorer-birdeye"),
             icon: "eye",
             action: () => this._openExplorer(context.mint, "birdeye"),
           },
           {
             type: "item",
-            label: "Photon",
+            label: I18n.t("menu-explorer-photon"),
             icon: "zap",
             action: () => this._openExplorer(context.mint, "photon"),
           },
           { type: "separator" },
-          { type: "header", label: "Analysis" },
+          { type: "header", label: I18n.t("menu-explorer-group-analysis") },
           {
             type: "item",
-            label: "RugCheck",
+            label: I18n.t("menu-explorer-rugcheck"),
             icon: "shield",
             action: () => this._openExplorer(context.mint, "rugcheck"),
           },
           {
             type: "item",
-            label: "Bubblemaps",
+            label: I18n.t("menu-explorer-bubblemaps"),
             icon: "globe",
             action: () => this._openExplorer(context.mint, "bubblemaps"),
           },
           { type: "separator" },
-          { type: "header", label: "Explorers" },
+          { type: "header", label: I18n.t("menu-explorer-group-explorers") },
           {
             type: "item",
-            label: "Solscan",
+            label: I18n.t("menu-explorer-solscan"),
             icon: "globe",
             action: () => this._openExplorer(context.mint, "solscan"),
           },
           {
             type: "item",
-            label: "Solana FM",
+            label: I18n.t("menu-explorer-solana-fm"),
             icon: "globe",
             action: () => this._openExplorer(context.mint, "solanafm"),
           },
@@ -130,24 +140,24 @@
 
       items.push({
         type: "item",
-        label: "Copy Address",
+        label: I18n.t("menu-copy-address"),
         icon: "copy",
         shortcut: this._getModKey() + "C",
-        action: () => this._copyToClipboard(context.mint, "Token address"),
+        action: () => this._copyToClipboard(context.mint, I18n.t("menu-copied-token-address")),
       });
 
       items.push({
         type: "item",
-        label: "Copy Symbol",
+        label: I18n.t("menu-copy-symbol"),
         icon: "copy",
-        action: () => this._copyToClipboard(context.symbol, "Symbol"),
+        action: () => this._copyToClipboard(context.symbol, I18n.t("menu-copied-symbol")),
       });
 
       items.push({ type: "separator" });
 
       items.push({
         type: "item",
-        label: "Blacklist Token",
+        label: I18n.t("menu-token-blacklist"),
         icon: "ban",
         className: "danger",
         action: () => this._blacklistToken(context),
@@ -155,7 +165,7 @@
 
       items.push({
         type: "item",
-        label: "Refresh Data",
+        label: I18n.t("menu-token-refresh"),
         icon: "refresh",
         action: () => this._refreshToken(context),
       });
@@ -171,7 +181,7 @@
     manager._buildPositionMenu = function (items, context) {
       items.push({
         type: "item",
-        label: `Sell ${context.symbol}`,
+        label: I18n.t("menu-position-sell", { symbol: context.symbol }),
         icon: "trendingDown",
         className: "danger",
         action: () => this._sellToken(context),
@@ -179,7 +189,7 @@
 
       items.push({
         type: "item",
-        label: "Add to Position",
+        label: I18n.t("menu-position-add"),
         icon: "plus",
         className: "success",
         action: () => this._addToPosition(context),
@@ -189,26 +199,26 @@
 
       items.push({
         type: "item",
-        label: "View Details",
+        label: I18n.t("menu-view-details"),
         icon: "eye",
         action: () => this._viewPositionDetails(context),
       });
 
       const management = context.element?.dataset?.management || "auto_trader";
-      const modes = [
-        ["auto_trader", "Auto Trader"],
-        ["user_only", "User Only"],
-      ];
+      const modes = ["auto_trader", "user_only"];
       if (context.element?.dataset?.originKind === "copy") {
-        modes.push(["copy_task", "Copy Task"], ["hybrid", "Hybrid"]);
+        modes.push("copy_task", "hybrid");
       }
       items.push({
         type: "item",
-        label: "Management",
+        label: I18n.t("menu-position-management"),
         icon: "shield",
-        submenu: modes.map(([value, label]) => ({
+        submenu: modes.map((value) => ({
           type: "item",
-          label: value === management ? `✓ ${label}` : label,
+          label:
+            value === management
+              ? `✓ ${I18n.label(POSITION_MANAGEMENT_LABELS, value)}`
+              : I18n.label(POSITION_MANAGEMENT_LABELS, value),
           action: () => this._setPositionManagement(context, value),
         })),
       });
@@ -217,7 +227,9 @@
       const isFavorite = this._isFavorite(context.mint);
       items.push({
         type: "item",
-        label: isFavorite ? "Remove from Favorites" : "Add to Favorites",
+        label: isFavorite
+          ? I18n.t("menu-favorite-remove")
+          : I18n.t("menu-favorite-add"),
         icon: "star",
         className: isFavorite ? "favorite-active" : "",
         action: () => this._toggleFavorite(context, isFavorite),
@@ -225,53 +237,53 @@
 
       items.push({
         type: "item",
-        label: "View on Explorer",
+        label: I18n.t("menu-explorer-open"),
         icon: "externalLink",
         submenu: [
-          { type: "header", label: "Trading" },
+          { type: "header", label: I18n.t("menu-explorer-group-trading") },
           {
             type: "item",
-            label: "DexScreener",
+            label: I18n.t("menu-explorer-dexscreener"),
             icon: "chart",
             action: () => this._openExplorer(context.mint, "dexscreener"),
           },
           {
             type: "item",
-            label: "Birdeye",
+            label: I18n.t("menu-explorer-birdeye"),
             icon: "eye",
             action: () => this._openExplorer(context.mint, "birdeye"),
           },
           {
             type: "item",
-            label: "Photon",
+            label: I18n.t("menu-explorer-photon"),
             icon: "zap",
             action: () => this._openExplorer(context.mint, "photon"),
           },
           { type: "separator" },
-          { type: "header", label: "Analysis" },
+          { type: "header", label: I18n.t("menu-explorer-group-analysis") },
           {
             type: "item",
-            label: "RugCheck",
+            label: I18n.t("menu-explorer-rugcheck"),
             icon: "shield",
             action: () => this._openExplorer(context.mint, "rugcheck"),
           },
           {
             type: "item",
-            label: "Bubblemaps",
+            label: I18n.t("menu-explorer-bubblemaps"),
             icon: "globe",
             action: () => this._openExplorer(context.mint, "bubblemaps"),
           },
           { type: "separator" },
-          { type: "header", label: "Explorers" },
+          { type: "header", label: I18n.t("menu-explorer-group-explorers") },
           {
             type: "item",
-            label: "Solscan",
+            label: I18n.t("menu-explorer-solscan"),
             icon: "globe",
             action: () => this._openExplorer(context.mint, "solscan"),
           },
           {
             type: "item",
-            label: "Solana FM",
+            label: I18n.t("menu-explorer-solana-fm"),
             icon: "globe",
             action: () => this._openExplorer(context.mint, "solanafm"),
           },
@@ -282,9 +294,9 @@
 
       items.push({
         type: "item",
-        label: "Copy Address",
+        label: I18n.t("menu-copy-address"),
         icon: "copy",
-        action: () => this._copyToClipboard(context.mint, "Token address"),
+        action: () => this._copyToClipboard(context.mint, I18n.t("menu-copied-token-address")),
       });
     };
 
@@ -298,14 +310,14 @@
     manager._buildTransactionMenu = function (items, context) {
       items.push({
         type: "item",
-        label: "View on Solscan",
+        label: I18n.t("menu-view-solscan"),
         icon: "externalLink",
         action: () => window.open(`https://solscan.io/tx/${context.signature}`, "_blank"),
       });
 
       items.push({
         type: "item",
-        label: "View on Solana FM",
+        label: I18n.t("menu-view-solana-fm"),
         icon: "globe",
         action: () => window.open(`https://solana.fm/tx/${context.signature}`, "_blank"),
       });
@@ -314,10 +326,10 @@
 
       items.push({
         type: "item",
-        label: "Copy Signature",
+        label: I18n.t("menu-copy-signature"),
         icon: "copy",
         shortcut: this._getModKey() + "C",
-        action: () => this._copyToClipboard(context.signature, "Transaction signature"),
+        action: () => this._copyToClipboard(context.signature, I18n.t("menu-copied-transaction-signature")),
       });
     };
 
@@ -331,14 +343,14 @@
     manager._buildLinkMenu = function (items, context) {
       items.push({
         type: "item",
-        label: "Open Link",
+        label: I18n.t("menu-link-open"),
         icon: "externalLink",
         action: () => window.open(context.href, "_blank"),
       });
 
       items.push({
         type: "item",
-        label: "Open in New Tab",
+        label: I18n.t("menu-link-open-new-tab"),
         icon: "plus",
         action: () => window.open(context.href, "_blank"),
       });
@@ -347,17 +359,17 @@
 
       items.push({
         type: "item",
-        label: "Copy Link Address",
+        label: I18n.t("menu-copy-link-address"),
         icon: "copy",
         shortcut: this._getModKey() + "C",
-        action: () => this._copyToClipboard(context.href, "Link"),
+        action: () => this._copyToClipboard(context.href, I18n.t("menu-copied-link")),
       });
 
       items.push({
         type: "item",
-        label: "Copy Link Text",
+        label: I18n.t("menu-copy-link-text"),
         icon: "copy",
-        action: () => this._copyToClipboard(context.text, "Link text"),
+        action: () => this._copyToClipboard(context.text, I18n.t("menu-copied-link-text")),
       });
     };
 
@@ -371,16 +383,16 @@
     manager._buildImageMenu = function (items, context) {
       items.push({
         type: "item",
-        label: "Open Image",
+        label: I18n.t("menu-image-open"),
         icon: "externalLink",
         action: () => window.open(context.src, "_blank"),
       });
 
       items.push({
         type: "item",
-        label: "Copy Image Address",
+        label: I18n.t("menu-copy-image-address"),
         icon: "copy",
-        action: () => this._copyToClipboard(context.src, "Image URL"),
+        action: () => this._copyToClipboard(context.src, I18n.t("menu-copied-image-url")),
       });
     };
 
@@ -394,15 +406,15 @@
     manager._buildSelectionMenu = function (items, context) {
       items.push({
         type: "item",
-        label: "Copy",
+        label: I18n.t("common-action-copy"),
         icon: "copy",
         shortcut: this._getModKey() + "C",
-        action: () => this._copyToClipboard(context.text, "Text"),
+        action: () => this._copyToClipboard(context.text, I18n.t("menu-copied-text")),
       });
 
       items.push({
         type: "item",
-        label: "Search on Google",
+        label: I18n.t("menu-search-google"),
         icon: "search",
         action: () =>
           window.open(
@@ -417,7 +429,7 @@
 
         items.push({
           type: "item",
-          label: "View on Solscan",
+          label: I18n.t("menu-view-solscan"),
           icon: "globe",
           action: () => window.open(`https://solscan.io/account/${context.text.trim()}`, "_blank"),
         });
@@ -434,7 +446,7 @@
     manager._buildDefaultMenu = function (items, _context) {
       items.push({
         type: "item",
-        label: "Back",
+        label: I18n.t("common-action-back"),
         icon: "arrowLeft",
         shortcut: this._getModKey() + "[",
         disabled: !window.history.length,
@@ -443,7 +455,7 @@
 
       items.push({
         type: "item",
-        label: "Reload",
+        label: I18n.t("menu-page-reload"),
         icon: "refresh",
         shortcut: this._getModKey() + "R",
         action: () => window.location.reload(),

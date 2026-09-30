@@ -29,8 +29,10 @@ export const DEFER_MS = 12_000;
 /** "expires in 4m" / "expires in 25s" for the dialog body. */
 export function expiryText(expiresAt, nowMs = Date.now()) {
   const secs = Math.max(0, Math.round(Number(expiresAt) - nowMs / 1000));
-  if (secs >= 90) return `expires in ${Math.round(secs / 60)}m`;
-  return `expires in ${secs}s`;
+  if (secs >= 90) {
+    return I18n.t("shell-agent-request-expires-minutes", { minutes: String(Math.round(secs / 60)) });
+  }
+  return I18n.t("shell-agent-request-expires-seconds", { seconds: String(secs) });
 }
 
 /**
@@ -112,17 +114,19 @@ if (isBrowser()) {
               continue;
             }
 
-            const summary =
-              typeof item.args_summary === "string" && item.args_summary.length
-                ? ` Arguments: ${item.args_summary}.`
-                : "";
+            const hasSummary = typeof item.args_summary === "string" && item.args_summary.length;
+            const requestArgs = {
+              client: item.client_label || I18n.t("shell-agent-request-client-fallback"),
+              tool: item.tool,
+              expiry: expiryText(item.expires_at),
+            };
             const { confirmed } = await ConfirmationDialog.show({
-              title: "Agent request",
-              message:
-                `${item.client_label || "A paired agent"} wants to run "${item.tool}" ` +
-                `in ScreenerBot.${summary} This request ${expiryText(item.expires_at)}.`,
-              confirmLabel: "Approve",
-              cancelLabel: "Deny",
+              title: I18n.t("shell-agent-request-title"),
+              message: hasSummary
+                ? I18n.t("shell-agent-request-message-arguments", { ...requestArgs, summary: item.args_summary })
+                : I18n.t("shell-agent-request-message", requestArgs),
+              confirmLabel: I18n.t("shell-agent-request-approve"),
+              cancelLabel: I18n.t("shell-agent-request-deny"),
               variant: "warning",
             });
 
@@ -156,6 +160,7 @@ if (isBrowser()) {
       }
 
       const poller = new Poller(poll, {
+        // l10n-ignore: poller name used in logs, never displayed
         label: "AgentApprovals",
         intervalMs: POLL_INTERVAL_MS,
         pauseWhenHidden: true,

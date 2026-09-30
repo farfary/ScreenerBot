@@ -46,10 +46,10 @@ class ConfirmationDialog {
 
   constructor(config, resolver) {
     this.config = {
-      title: config.title || "Confirm Action",
-      message: config.message || "Are you sure?",
-      confirmLabel: config.confirmLabel || "Confirm",
-      cancelLabel: config.cancelLabel || "Cancel",
+      title: config.title || I18n.t("shell-confirm-title"),
+      message: config.message || I18n.t("shell-confirm-message"),
+      confirmLabel: config.confirmLabel || I18n.t("common-action-confirm"),
+      cancelLabel: config.cancelLabel || I18n.t("common-action-cancel"),
       variant: config.variant || "warning",
       checkbox: config.checkbox || null,
     };

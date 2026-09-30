@@ -129,3 +129,44 @@ setup-dialog-error-validation = Validation failed.
 setup-dialog-error-incomplete = Setup could not be completed.
 setup-dialog-error-restart-helper = Automatic restart helper is unavailable. Reload the dashboard shortly.
 setup-dialog-error-unexpected = Unexpected error.
+
+# Source: templates/pages/setup.html
+
+## Setup wizard
+
+setup-wizard-progress =
+    .aria-label = Setup progress
+setup-wizard-step-credentials = Credentials
+setup-wizard-step-verification = Verification
+setup-wizard-step-complete = Complete
+setup-wizard-credentials-title = Configure credentials
+setup-wizard-credentials-description = Connect a local wallet and reliable Solana mainnet RPC endpoints.
+setup-wizard-wallet-toggle =
+    .title = Show private key
+    .aria-label = Show private key
+setup-wizard-wallet-security-note = Encrypted before it is saved.
+setup-wizard-rpc-title = RPC endpoints
+setup-wizard-rpc-input =
+    .placeholder = One HTTPS URL per line
+setup-wizard-rpc-guidance = Reliable mainnet RPC recommended for continuous polling.
+setup-provider-helius = { -helius }
+setup-provider-quicknode = { -quicknode }
+setup-provider-alchemy = { -alchemy }
+setup-wizard-provider-recommended = recommended
+setup-wizard-gateway-title = Free transaction sending
+setup-wizard-gateway-hint = Available when signed in. Your RPC remains available as fallback.
+setup-wizard-account-title = { -brand } account
+setup-wizard-account-optional = Optional
+setup-wizard-account-loading = Checking account status…
+setup-wizard-verify-title = Verify and save
+setup-wizard-verify-list =
+    .aria-label = Setup verification status
+setup-wizard-verify-wallet = Wallet
+setup-wizard-verify-rpc = Solana RPC
+setup-wizard-verify-save = Secure configuration
+setup-wizard-complete-title = Setup saved
+setup-wizard-reconnect = Retry connection
+setup-wizard-reload = Reload dashboard
+setup-wizard-error-title = Setup needs attention
+setup-wizard-explore = Explore dashboard
+setup-wizard-continue = Continue

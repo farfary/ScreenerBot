@@ -4,6 +4,7 @@
  */
 
 import * as AppState from "../../core/app_state.js";
+import { escapeHtml } from "../../core/utils.js";
 
 export function applyClientPaginationMixin(DataTable) {
   const proto = DataTable.prototype;
@@ -290,7 +291,7 @@ export function applyClientPaginationMixin(DataTable) {
     const pageSizeOptions = allPageSizes
       .map((size) => {
         const value = size === "all" ? "all" : size;
-        const label = size === "all" ? "All" : size;
+        const label = size === "all" ? I18n.t("table-pagination-size-all") : size;
         const selected = String(pageSize) === String(value) ? "selected" : "";
         return `<option value="${value}" ${selected}>${label}</option>`;
       })
@@ -303,7 +304,7 @@ export function applyClientPaginationMixin(DataTable) {
       <div class="dt-client-pagination-bar">
         <div class="dt-client-pagination-info">
           <span class="dt-client-pagination-range">
-            Showing <strong>${startItem}</strong>–<strong>${endItem}</strong> of <strong>${totalItems}</strong>
+            ${escapeHtml(I18n.t("table-pagination-showing"))} <strong>${startItem}</strong>–<strong>${endItem}</strong> ${escapeHtml(I18n.t("table-pagination-of"))} <strong>${totalItems}</strong>
           </span>
         </div>
         
@@ -311,11 +312,11 @@ export function applyClientPaginationMixin(DataTable) {
           <button class="dt-client-pagination-btn dt-client-pagination-first" 
                   data-page="first" 
                   ${currentPage <= 1 ? "disabled" : ""} 
-                  title="First page">«</button>
+                  title="${escapeHtml(I18n.t("table-pagination-first-page"))}">«</button>
           <button class="dt-client-pagination-btn dt-client-pagination-prev" 
                   data-page="prev" 
                   ${currentPage <= 1 ? "disabled" : ""} 
-                  title="Previous page">‹</button>
+                  title="${escapeHtml(I18n.t("table-pagination-previous-page"))}">‹</button>
           
           <div class="dt-client-pagination-pages">
             ${pageButtons}
@@ -324,15 +325,15 @@ export function applyClientPaginationMixin(DataTable) {
           <button class="dt-client-pagination-btn dt-client-pagination-next" 
                   data-page="next" 
                   ${currentPage >= totalPages ? "disabled" : ""} 
-                  title="Next page">›</button>
+                  title="${escapeHtml(I18n.t("table-pagination-next-page"))}">›</button>
           <button class="dt-client-pagination-btn dt-client-pagination-last" 
                   data-page="last" 
                   ${currentPage >= totalPages ? "disabled" : ""} 
-                  title="Last page">»</button>
+                  title="${escapeHtml(I18n.t("table-pagination-last-page"))}">»</button>
         </div>
         
         <div class="dt-client-pagination-size">
-          <label class="dt-client-pagination-size__label">Per page:</label>
+          <label class="dt-client-pagination-size__label">${escapeHtml(I18n.t("table-pagination-per-page"))}</label>
           <select class="dt-client-pagination-size__select" data-pagination-size data-custom-select>
             ${pageSizeOptions}
           </select>

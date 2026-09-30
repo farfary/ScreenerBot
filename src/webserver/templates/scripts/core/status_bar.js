@@ -95,7 +95,9 @@ import { formatLatencyMs, formatMemoryMb, formatPercentValue, formatUptime } fro
       const isEnabled = data.trading_enabled || false;
       const active = isRunning && isEnabled;
 
-      elements.trading.textContent = active ? "Active" : "Inactive";
+      elements.trading.textContent = active
+        ? I18n.t("shell-status-bar-trading-active")
+        : I18n.t("shell-status-bar-trading-inactive");
       elements.trading.setAttribute("data-active", active ? "true" : "false");
     }
 

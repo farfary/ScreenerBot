@@ -178,9 +178,14 @@
           const response = await fetch(`/api/tokens/favorites/${encodeURIComponent(context.mint)}`, {
             method: "DELETE",
           });
-          if (!response.ok) throw new Error("Failed to remove favorite");
+          if (!response.ok) throw new Error(I18n.t("menu-favorite-remove-failed"));
           this._updateFavoriteCache(context.mint, false);
-          window.showToast?.(`${context.symbol || "Token"} removed from favorites`, "success");
+          window.showToast?.(
+            I18n.t("menu-favorite-removed", {
+              symbol: context.symbol || I18n.t("menu-token-fallback"),
+            }),
+            "success"
+          );
         } else {
           const response = await fetch("/api/tokens/favorites", {
             method: "POST",
@@ -192,9 +197,14 @@
               logo_url: context.icon || null,
             }),
           });
-          if (!response.ok) throw new Error("Failed to add favorite");
+          if (!response.ok) throw new Error(I18n.t("menu-favorite-add-failed"));
           this._updateFavoriteCache(context.mint, true);
-          window.showToast?.(`${context.symbol || "Token"} added to favorites`, "success");
+          window.showToast?.(
+            I18n.t("menu-favorite-added", {
+              symbol: context.symbol || I18n.t("menu-token-fallback"),
+            }),
+            "success"
+          );
         }
 
         // Emit event for other UI components
@@ -204,7 +214,7 @@
           })
         );
       } catch (error) {
-        window.showToast?.(error.message || "Failed to update favorites", "error");
+        window.showToast?.(error.message || I18n.t("menu-favorite-update-failed"), "error");
       }
     };
 
@@ -236,10 +246,10 @@
         const { ConfirmationDialog } = await import("../confirmation_dialog.js");
 
         const result = await ConfirmationDialog.show({
-          title: "Blacklist Token",
-          message: `Are you sure you want to blacklist ${context.symbol}? This token will be excluded from trading.`,
-          confirmLabel: "Blacklist",
-          cancelLabel: "Cancel",
+          title: I18n.t("menu-token-blacklist"),
+          message: I18n.t("menu-blacklist-confirm-message", { symbol: context.symbol }),
+          confirmLabel: I18n.t("menu-blacklist-confirm-action"),
+          cancelLabel: I18n.t("common-action-cancel"),
           variant: "danger",
         });
 
@@ -250,10 +260,10 @@
         });
 
         if (!response.ok) {
-          throw new Error("Failed to blacklist token");
+          throw new Error(I18n.t("menu-blacklist-request-failed"));
         }
 
-        this._showToast(`${context.symbol} blacklisted`, "success");
+        this._showToast(I18n.t("menu-blacklist-done", { symbol: context.symbol }), "success");
 
         // Emit event for UI refresh
         window.dispatchEvent(
@@ -262,7 +272,7 @@
           })
         );
       } catch (error) {
-        this._showToast(error.message || "Failed to blacklist", "error");
+        this._showToast(error.message || I18n.t("menu-blacklist-failed"), "error");
       }
     };
 
@@ -276,12 +286,12 @@
         });
 
         if (!response.ok) {
-          throw new Error("Failed to refresh token data");
+          throw new Error(I18n.t("menu-refresh-request-failed"));
         }
 
-        this._showToast("Token data refreshed", "success");
+        this._showToast(I18n.t("menu-refresh-done"), "success");
       } catch (error) {
-        this._showToast(error.message || "Failed to refresh", "error");
+        this._showToast(error.message || I18n.t("menu-refresh-failed"), "error");
       }
     };
 

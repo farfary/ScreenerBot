@@ -334,14 +334,14 @@ import {
 
   /** @param {string} label what was copied, e.g. "Mint address" */
   function notifyCopied(label) {
-    return showToast({ key: CLIPBOARD_TOAST_KEY, type: "success", title: `${label} copied` });
+    return showToast({ key: CLIPBOARD_TOAST_KEY, type: "success", title: I18n.t("shell-toast-copied", { label }) });
   }
 
   function notifyCopyFailed(error) {
     return showToast({
       key: CLIPBOARD_TOAST_KEY,
       type: "error",
-      title: "Copy failed",
+      title: I18n.t("shell-toast-copy-failed"),
       message: error ? String(error) : null,
     });
   }
@@ -809,7 +809,7 @@ import {
           : solscanAccountUrl(raw);
     // base58 addresses contain no quotes/HTML-special chars, so inlining is safe.
     const onclick = `event.preventDefault();event.stopPropagation();Utils.copyAddress('${raw}')`;
-    return `<span class="addr-chip${full ? " addr-chip-full" : ""}"><a class="addr-chip-link mono" href="${url}" target="_blank" rel="noopener noreferrer" title="${safe} — open in Solscan">${display}</a><button type="button" class="addr-chip-copy" title="Copy address" onclick="${onclick}"><i class="icon-copy"></i></button></span>`;
+    return `<span class="addr-chip${full ? " addr-chip-full" : ""}"><a class="addr-chip-link mono" href="${url}" target="_blank" rel="noopener noreferrer" title="${safe} ${escapeHtml(I18n.t("shell-address-open-solscan"))}">${display}</a><button type="button" class="addr-chip-copy" title="${escapeHtml(I18n.t("shell-address-copy"))}" onclick="${onclick}"><i class="icon-copy"></i></button></span>`;
   }
 
   // DOM Helper Functions

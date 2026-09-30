@@ -184,7 +184,7 @@ class ToastManager {
       this.container = document.createElement("div");
       this.container.className = "toast-container";
       this.container.setAttribute("role", "region");
-      this.container.setAttribute("aria-label", "Notifications");
+      this.container.setAttribute("aria-label", I18n.attr("shell-notification-list", "aria-label"));
       document.body.appendChild(this.container);
     }
     return this.container;
@@ -220,7 +220,7 @@ class ToastManager {
           normalize({
             ...entry.config,
             type: "warning",
-            message: "Still running — check the notification center",
+            message: I18n.t("shell-toast-still-running"),
             duration: STALLED_DURATION_MS,
             progress: null,
           })

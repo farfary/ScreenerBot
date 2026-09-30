@@ -1,3 +1,13 @@
 # Terms are never translated. Every locale references them by name.
 -brand = ScreenerBot
 -sol = SOL
+-dexscreener = DexScreener
+-birdeye = Birdeye
+-photon = Photon
+-rugcheck = RugCheck
+-bubblemaps = Bubblemaps
+-solscan = Solscan
+-solanafm = Solana FM
+-helius = Helius
+-quicknode = QuickNode
+-alchemy = Alchemy

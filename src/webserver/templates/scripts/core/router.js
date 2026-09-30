@@ -72,8 +72,8 @@ function activatePageStyles(pageName) {
 function updateDocumentTitle(pageName) {
   const title = PAGE_IDS.includes(pageName)
     ? I18n.t("nav-page-title-" + pageName) // l10n-dynamic: nav-
-    : "Dashboard";
-  document.title = `${title} - ScreenerBot`;
+    : I18n.t("shell-page-title-fallback");
+  document.title = I18n.t("shell-document-title", { page: title });
 }
 
 function waitForPageStylesheet(pageName, link) {
@@ -385,11 +385,12 @@ export async function loadPage(pageName, { historyMode = "push" } = {}) {
 
     loadingEl.innerHTML = `
       <div class="page-load-error">
-        <h2><i class="icon-triangle-alert"></i> Failed to Load Page</h2>
+        <h2><i class="icon-triangle-alert"></i> <span data-l10n-id="shell-page-load-failed"></span></h2>
         <p>${error.message}</p>
-        <button type="button" class="page-load-retry">Retry</button>
+        <button type="button" class="page-load-retry" data-l10n-id="common-action-retry"></button>
       </div>
     `;
+    I18n.localizeTree(loadingEl);
     const retryBtn = loadingEl.querySelector(".page-load-retry");
     if (retryBtn) retryBtn.addEventListener("click", () => loadPage(pageName));
   }
@@ -411,11 +412,12 @@ function renderOfflinePlaceholder(loadingEl, pageName) {
   loadingEl.innerHTML = `
     <div class="page-offline">
       <span class="page-offline-spinner" aria-hidden="true"></span>
-      <h2>Waiting for core…</h2>
-      <p>The core is unreachable right now. This page will load automatically once the connection is back.</p>
-      <button type="button" class="page-load-retry">Retry now</button>
+      <h2 data-l10n-id="shell-connection-waiting"></h2>
+      <p data-l10n-id="shell-page-offline-detail"></p>
+      <button type="button" class="page-load-retry" data-l10n-id="shell-connection-retry-now"></button>
     </div>
   `;
+  I18n.localizeTree(loadingEl);
   const retryBtn = loadingEl.querySelector(".page-load-retry");
   if (retryBtn) {
     retryBtn.addEventListener("click", () => {

@@ -314,7 +314,7 @@ class ContextMenuManager {
       this._addSeparatorIfNeeded(items);
       items.push({
         type: "item",
-        label: "Inspect Element",
+        label: I18n.t("menu-inspect-element"),
         icon: "code",
         shortcut: this._getModKey() + "⌥I",
         action: () => this._inspectElement(context.element),

@@ -12,6 +12,7 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
+import "./fixtures/i18n_en.mjs";
 
 installDomStub();
 

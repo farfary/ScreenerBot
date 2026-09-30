@@ -4,6 +4,7 @@
  */
 
 import * as AppState from "../../core/app_state.js";
+import { escapeHtml } from "../../core/utils.js";
 
 export function applyServerPaginationMixin(DataTable) {
   const proto = DataTable.prototype;
@@ -60,9 +61,9 @@ export function applyServerPaginationMixin(DataTable) {
     if (modes.includes("scroll")) {
       buttons.push(`
         <button type="button" class="dt-pagination-mode-btn ${scrollActive}" 
-                data-mode="scroll" title="Infinite scroll mode">
+                data-mode="scroll" title="${escapeHtml(I18n.t("table-pagination-mode-scroll-title"))}">
           <i class="icon-arrow-down" aria-hidden="true"></i>
-          <span>Scroll</span>
+          <span>${escapeHtml(I18n.t("table-pagination-mode-scroll"))}</span>
         </button>
       `);
     }
@@ -70,15 +71,15 @@ export function applyServerPaginationMixin(DataTable) {
     if (modes.includes("pages")) {
       buttons.push(`
         <button type="button" class="dt-pagination-mode-btn ${pagesActive}" 
-                data-mode="pages" title="Page navigation mode">
+                data-mode="pages" title="${escapeHtml(I18n.t("table-pagination-mode-pages-title"))}">
           <i class="icon-layout-grid" aria-hidden="true"></i>
-          <span>Pages</span>
+          <span>${escapeHtml(I18n.t("table-pagination-mode-pages"))}</span>
         </button>
       `);
     }
 
     return `
-      <div class="dt-pagination-mode-toggle" role="group" aria-label="Pagination mode">
+      <div class="dt-pagination-mode-toggle" role="group" aria-label="${escapeHtml(I18n.t("table-pagination-mode-group"))}">
         ${buttons.join("")}
       </div>
     `;
@@ -387,7 +388,7 @@ export function applyServerPaginationMixin(DataTable) {
       <div class="dt-server-pagination-bar">
         <div class="dt-server-pagination-info">
           <span class="dt-server-pagination-range">
-            Showing <strong>${startItem}</strong>–<strong>${endItem}</strong> of <strong>${totalItems}</strong>
+            ${escapeHtml(I18n.t("table-pagination-showing"))} <strong>${startItem}</strong>–<strong>${endItem}</strong> ${escapeHtml(I18n.t("table-pagination-of"))} <strong>${totalItems}</strong>
           </span>
         </div>
         
@@ -395,11 +396,11 @@ export function applyServerPaginationMixin(DataTable) {
           <button class="dt-server-pagination-btn dt-server-pagination-first" 
                   data-page="first" 
                   ${currentPage <= 1 ? "disabled" : ""} 
-                  title="First page">«</button>
+                  title="${escapeHtml(I18n.t("table-pagination-first-page"))}">«</button>
           <button class="dt-server-pagination-btn dt-server-pagination-prev" 
                   data-page="prev" 
                   ${currentPage <= 1 ? "disabled" : ""} 
-                  title="Previous page">‹</button>
+                  title="${escapeHtml(I18n.t("table-pagination-previous-page"))}">‹</button>
           
           <div class="dt-server-pagination-pages">
             ${pageButtons}
@@ -408,15 +409,15 @@ export function applyServerPaginationMixin(DataTable) {
           <button class="dt-server-pagination-btn dt-server-pagination-next" 
                   data-page="next" 
                   ${currentPage >= totalPages ? "disabled" : ""} 
-                  title="Next page">›</button>
+                  title="${escapeHtml(I18n.t("table-pagination-next-page"))}">›</button>
           <button class="dt-server-pagination-btn dt-server-pagination-last" 
                   data-page="last" 
                   ${currentPage >= totalPages ? "disabled" : ""} 
-                  title="Last page">»</button>
+                  title="${escapeHtml(I18n.t("table-pagination-last-page"))}">»</button>
         </div>
         
         <div class="dt-server-pagination-size">
-          <label class="dt-server-pagination-size__label">Per page:</label>
+          <label class="dt-server-pagination-size__label">${escapeHtml(I18n.t("table-pagination-per-page"))}</label>
           <select class="dt-server-pagination-size__select" data-server-pagination-size data-custom-select>
             ${pageSizeOptions}
           </select>

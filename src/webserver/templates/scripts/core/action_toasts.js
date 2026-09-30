@@ -29,21 +29,50 @@ import { outcomeMessage, stepMessage, symbolOf } from "./action_message.js";
 const resolved = new Set();
 const RESOLVED_LIMIT = 200;
 
-const SUBJECTS = {
-  swap_buy: { live: "Buying", done: "Bought", failed: "Buy failed" },
-  swap_sell: { live: "Selling", done: "Sold", failed: "Sell failed" },
-  position_open: { live: "Opening position", done: "Opened", failed: "Open failed" },
-  position_close: { live: "Closing position", done: "Closed", failed: "Close failed" },
-  position_dca: { live: "Adding to position", done: "Added to", failed: "Add failed" },
-  position_partial_exit: {
-    live: "Partial exit",
-    done: "Partial exit",
-    failed: "Partial exit failed",
-  },
-  manual_order: { live: "Placing order", done: "Order placed", failed: "Order failed" },
-};
+// Toast wording per action type and phase, as message ids.
+const SUBJECT_LABELS = Object.freeze({
+  swap_buy: Object.freeze({
+    live: "shell-action-swap-buy-live",
+    done: "shell-action-swap-buy-done",
+    failed: "shell-action-swap-buy-failed",
+  }),
+  swap_sell: Object.freeze({
+    live: "shell-action-swap-sell-live",
+    done: "shell-action-swap-sell-done",
+    failed: "shell-action-swap-sell-failed",
+  }),
+  position_open: Object.freeze({
+    live: "shell-action-position-open-live",
+    done: "shell-action-position-open-done",
+    failed: "shell-action-position-open-failed",
+  }),
+  position_close: Object.freeze({
+    live: "shell-action-position-close-live",
+    done: "shell-action-position-close-done",
+    failed: "shell-action-position-close-failed",
+  }),
+  position_dca: Object.freeze({
+    live: "shell-action-position-dca-live",
+    done: "shell-action-position-dca-done",
+    failed: "shell-action-position-dca-failed",
+  }),
+  position_partial_exit: Object.freeze({
+    live: "shell-action-partial-exit-live",
+    done: "shell-action-partial-exit-done",
+    failed: "shell-action-partial-exit-failed",
+  }),
+  manual_order: Object.freeze({
+    live: "shell-action-manual-order-live",
+    done: "shell-action-manual-order-done",
+    failed: "shell-action-manual-order-failed",
+  }),
+});
 
-const FALLBACK_SUBJECT = { live: "Trade", done: "Trade done", failed: "Trade failed" };
+const FALLBACK_SUBJECT_LABELS = Object.freeze({
+  live: "shell-action-trade-live",
+  done: "shell-action-trade-done",
+  failed: "shell-action-trade-failed",
+});
 
 /** A trade the user asked for, as opposed to one the auto-trader decided on. */
 function isUserInitiated(action) {
@@ -51,13 +80,13 @@ function isUserInitiated(action) {
 }
 
 function subjectOf(action) {
-  return SUBJECTS[action?.action_type] || FALLBACK_SUBJECT;
+  return SUBJECT_LABELS[action?.action_type] || FALLBACK_SUBJECT_LABELS;
 }
 
 function titleFor(action, phase) {
   const symbol = symbolOf(action);
-  const label = subjectOf(action)[phase];
-  return symbol ? `${label} ${symbol}` : label;
+  const label = I18n.label(subjectOf(action), phase);
+  return symbol ? I18n.t("shell-action-title-symbol", { label, symbol }) : label;
 }
 
 function markResolved(actionId) {
@@ -122,7 +151,7 @@ function showResolved(action, status) {
   toastManager.show({
     key: keyFor(action),
     type: "info",
-    title: `${titleFor(action, "live")} cancelled`,
+    title: I18n.t("shell-action-cancelled", { title: titleFor(action, "live") }),
   });
 }
 

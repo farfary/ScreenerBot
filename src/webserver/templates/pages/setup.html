@@ -5,22 +5,22 @@
   <header class="onboarding-hero setup-header">
     <div class="onboarding-brand-container setup-header-left">
       <img src="/assets/logo.svg" alt="" class="onboarding-logo" />
-      <span class="onboarding-brand">ScreenerBot</span>
+      <span class="onboarding-brand" data-l10n-id="shell-brand-name"></span>
       <span class="onboarding-version" id="setup-version"></span>
     </div>
 
-    <ol class="setup-progress" aria-label="Setup progress">
+    <ol class="setup-progress" data-l10n-id="setup-wizard-progress">
       <li class="setup-step active" data-step="1" aria-current="step">
         <span class="setup-step-number" aria-hidden="true">1</span>
-        <span class="setup-step-label">Credentials</span>
+        <span class="setup-step-label" data-l10n-id="setup-wizard-step-credentials"></span>
       </li>
       <li class="setup-step" data-step="2">
         <span class="setup-step-number" aria-hidden="true">2</span>
-        <span class="setup-step-label">Verification</span>
+        <span class="setup-step-label" data-l10n-id="setup-wizard-step-verification"></span>
       </li>
       <li class="setup-step" data-step="3">
         <span class="setup-step-number" aria-hidden="true">3</span>
-        <span class="setup-step-label">Complete</span>
+        <span class="setup-step-label" data-l10n-id="setup-wizard-step-complete"></span>
       </li>
     </ol>
   </header>
@@ -31,17 +31,19 @@
         <div class="setup-split">
           <div class="setup-split-main">
             <header class="setup-step-header">
-              <h1 class="setup-step-title" id="credentials-title">Configure credentials</h1>
-              <p class="setup-step-description">
-                Connect a local wallet and reliable Solana mainnet RPC endpoints.
-              </p>
+              <h1
+                class="setup-step-title"
+                id="credentials-title"
+                data-l10n-id="setup-wizard-credentials-title"
+              ></h1>
+              <p class="setup-step-description" data-l10n-id="setup-wizard-credentials-description"></p>
             </header>
 
             <div class="setup-credentials-grid">
               <section class="setup-card setup-card-wallet">
                 <label class="setup-card-header" for="wallet-private-key">
                   <i class="setup-card-icon icon-key" aria-hidden="true"></i>
-                  <span class="setup-card-title">Wallet private key</span>
+                  <span class="setup-card-title" data-l10n-id="setup-dialog-wallet-label"></span>
                 </label>
 
                 <div class="setup-field">
@@ -49,7 +51,7 @@
                     <textarea
                       class="setup-input"
                       id="wallet-private-key"
-                      placeholder="Base58 string or JSON array [1,2,3,...]"
+                      data-l10n-id="setup-dialog-wallet-input"
                       spellcheck="false"
                       autocomplete="off"
                       autocapitalize="none"
@@ -62,16 +64,17 @@
                       class="setup-input-toggle"
                       type="button"
                       data-toggle="wallet-private-key"
-                      title="Show private key"
-                      aria-label="Show private key"
+                      data-l10n-id="setup-wizard-wallet-toggle"
                       aria-pressed="false"
                     >
                       <i class="toggle-icon icon-eye" aria-hidden="true"></i>
                     </button>
                   </div>
-                  <p class="setup-security-note" id="wallet-security-note">
-                    Encrypted before it is saved.
-                  </p>
+                  <p
+                    class="setup-security-note"
+                    id="wallet-security-note"
+                    data-l10n-id="setup-wizard-wallet-security-note"
+                  ></p>
                   <div
                     class="setup-validation"
                     id="wallet-validation"
@@ -84,8 +87,7 @@
                     <button
                       type="button"
                       class="wallet-copy-btn"
-                      title="Copy wallet address"
-                      aria-label="Copy wallet address"
+                      data-l10n-id="setup-wallet-copy"
                     >
                       <i class="icon-copy" aria-hidden="true"></i>
                     </button>
@@ -96,7 +98,7 @@
               <section class="setup-card setup-card-rpc">
                 <label class="setup-card-header" for="rpc-urls">
                   <i class="setup-card-icon icon-globe" aria-hidden="true"></i>
-                  <span class="setup-card-title">RPC endpoints</span>
+                  <span class="setup-card-title" data-l10n-id="setup-wizard-rpc-title"></span>
                 </label>
 
                 <div class="setup-field">
@@ -104,7 +106,7 @@
                     <textarea
                       class="setup-input"
                       id="rpc-urls"
-                      placeholder="One HTTPS URL per line"
+                      data-l10n-id="setup-wizard-rpc-input"
                       spellcheck="false"
                       autocomplete="off"
                       autocapitalize="none"
@@ -115,20 +117,27 @@
                     ></textarea>
                   </div>
                   <div class="setup-rpc-guidance" id="rpc-guidance">
-                    <span>Reliable mainnet RPC recommended for continuous polling.</span>
+                    <span data-l10n-id="setup-wizard-rpc-guidance"></span>
                     <span class="setup-provider-links">
                       <a
                         href="https://www.helius.dev/solana-rpc-nodes"
                         target="_blank"
                         rel="noopener noreferrer"
-                        >Helius <strong>recommended</strong></a
+                        ><span data-l10n-id="setup-provider-helius"></span>
+                        <strong data-l10n-id="setup-wizard-provider-recommended"></strong></a
                       >
-                      <a href="https://www.quicknode.com" target="_blank" rel="noopener noreferrer"
-                        >QuickNode</a
-                      >
-                      <a href="https://www.alchemy.com" target="_blank" rel="noopener noreferrer"
-                        >Alchemy</a
-                      >
+                      <a
+                        href="https://www.quicknode.com"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        data-l10n-id="setup-provider-quicknode"
+                      ></a>
+                      <a
+                        href="https://www.alchemy.com"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        data-l10n-id="setup-provider-alchemy"
+                      ></a>
                     </span>
                   </div>
                   <div
@@ -141,10 +150,8 @@
                   <label class="setup-gateway-option is-hidden" id="setup-gateway-option">
                     <input type="checkbox" id="setup-use-gateway" />
                     <span class="setup-gateway-copy">
-                      <span class="setup-gateway-title">Free transaction sending</span>
-                      <span class="setup-gateway-hint">
-                        Available when signed in. Your RPC remains available as fallback.
-                      </span>
+                      <span class="setup-gateway-title" data-l10n-id="setup-wizard-gateway-title"></span>
+                      <span class="setup-gateway-hint" data-l10n-id="setup-wizard-gateway-hint"></span>
                     </span>
                   </label>
                 </div>
@@ -155,11 +162,11 @@
           <aside class="setup-split-aside" aria-labelledby="account-panel-title">
             <div class="account-panel">
               <h2 class="account-panel-title" id="account-panel-title">
-                <span>ScreenerBot account</span>
-                <span class="account-optional">Optional</span>
+                <span data-l10n-id="setup-wizard-account-title"></span>
+                <span class="account-optional" data-l10n-id="setup-wizard-account-optional"></span>
               </h2>
               <div id="setupAccountPanel" aria-live="polite">
-                <p class="account-loading">Checking account status…</p>
+                <p class="account-loading" data-l10n-id="setup-wizard-account-loading"></p>
               </div>
             </div>
           </aside>
@@ -176,19 +183,22 @@
         <header class="verification-header">
           <i class="verification-header-icon icon-shield-check" aria-hidden="true"></i>
           <div>
-            <h1 class="verification-title" id="verification-title">Verify and save</h1>
+            <h1
+              class="verification-title"
+              id="verification-title"
+              data-l10n-id="setup-wizard-verify-title"
+            ></h1>
             <p
               class="verification-subtitle"
               id="verification-summary"
               role="status"
               aria-live="polite"
-            >
-              Checking your wallet and Solana mainnet connections.
-            </p>
+              data-l10n-id="setup-verify-summary-checking"
+            ></p>
           </div>
         </header>
 
-        <div class="setup-verification" role="list" aria-label="Setup verification status">
+        <div class="setup-verification" role="list" data-l10n-id="setup-wizard-verify-list">
           <div
             class="setup-verification-item"
             id="wallet-verification-card"
@@ -197,10 +207,10 @@
           >
             <i class="setup-verification-icon icon-key" aria-hidden="true"></i>
             <div class="setup-verification-content">
-              <h2>Wallet</h2>
+              <h2 data-l10n-id="setup-wizard-verify-wallet"></h2>
               <div class="setup-verification-status" id="wallet-status">
                 <span class="setup-state-icon" aria-hidden="true"></span>
-                <span>Waiting to validate</span>
+                <span data-l10n-id="setup-verify-wallet-waiting"></span>
               </div>
               <div class="setup-verification-details" id="wallet-details"></div>
             </div>
@@ -214,10 +224,10 @@
           >
             <i class="setup-verification-icon icon-server" aria-hidden="true"></i>
             <div class="setup-verification-content">
-              <h2>Solana RPC</h2>
+              <h2 data-l10n-id="setup-wizard-verify-rpc"></h2>
               <div class="setup-verification-status" id="rpc-status">
                 <span class="setup-state-icon" aria-hidden="true"></span>
-                <span>Waiting to test endpoints</span>
+                <span data-l10n-id="setup-verify-rpc-waiting"></span>
               </div>
               <div class="setup-verification-details" id="rpc-details"></div>
             </div>
@@ -231,10 +241,10 @@
           >
             <i class="setup-verification-icon icon-lock-keyhole" aria-hidden="true"></i>
             <div class="setup-verification-content">
-              <h2>Secure configuration</h2>
+              <h2 data-l10n-id="setup-wizard-verify-save"></h2>
               <div class="setup-verification-status" id="save-status">
                 <span class="setup-state-icon" aria-hidden="true"></span>
-                <span>Waiting to save</span>
+                <span data-l10n-id="setup-verify-save-waiting"></span>
               </div>
               <div class="setup-verification-details" id="save-details"></div>
             </div>
@@ -251,23 +261,39 @@
       >
         <div class="setup-complete" id="setup-complete-state" data-state="waiting">
           <i class="setup-complete-icon icon-circle-check" aria-hidden="true"></i>
-          <h1 class="setup-complete-title" id="complete-title">Setup saved</h1>
-          <p class="setup-complete-text" id="setup-complete-text">
-            Restarting ScreenerBot with your verified configuration.
-          </p>
+          <h1
+            class="setup-complete-title"
+            id="complete-title"
+            data-l10n-id="setup-wizard-complete-title"
+          ></h1>
+          <p
+            class="setup-complete-text"
+            id="setup-complete-text"
+            data-l10n-id="setup-complete-restarting"
+          ></p>
           <div class="setup-restart-indicator" id="setup-restart-indicator" aria-hidden="true">
             <span></span>
           </div>
-          <p class="setup-progress-text" id="services-status" role="status" aria-live="polite">
-            Finishing restart…
-          </p>
+          <p
+            class="setup-progress-text"
+            id="services-status"
+            role="status"
+            aria-live="polite"
+            data-l10n-id="setup-complete-finishing"
+          ></p>
           <div class="setup-complete-actions" id="setup-complete-actions" hidden>
-            <button type="button" class="setup-btn setup-btn-secondary" id="setup-reconnect">
-              Retry connection
-            </button>
-            <button type="button" class="setup-btn setup-btn-primary" id="setup-reload">
-              Reload dashboard
-            </button>
+            <button
+              type="button"
+              class="setup-btn setup-btn-secondary"
+              id="setup-reconnect"
+              data-l10n-id="setup-wizard-reconnect"
+            ></button>
+            <button
+              type="button"
+              class="setup-btn setup-btn-primary"
+              id="setup-reload"
+              data-l10n-id="setup-wizard-reload"
+            ></button>
           </div>
         </div>
       </section>
@@ -282,29 +308,39 @@
       >
         <i class="setup-error-icon icon-circle-alert" aria-hidden="true"></i>
         <div class="setup-error-copy">
-          <h2 class="setup-error-title" id="setup-error-title">Setup needs attention</h2>
+          <h2
+            class="setup-error-title"
+            id="setup-error-title"
+            data-l10n-id="setup-wizard-error-title"
+          ></h2>
           <p class="setup-error-messages" id="setup-error-messages"></p>
         </div>
-        <button type="button" class="setup-btn setup-btn-secondary" id="setup-retry">
-          Review credentials
-        </button>
+        <button
+          type="button"
+          class="setup-btn setup-btn-secondary"
+          id="setup-retry"
+          data-l10n-id="setup-action-review-credentials"
+        ></button>
       </div>
     </div>
   </main>
 
   <footer class="setup-footer">
     <button type="button" class="setup-btn setup-btn-secondary" id="setup-back" disabled>
-      <i class="icon-chevron-left" aria-hidden="true"></i> Back
+      <i class="icon-chevron-left" aria-hidden="true"></i>
+      <span data-l10n-id="common-action-back"></span>
     </button>
     <button
       type="button"
       class="setup-btn setup-btn-secondary setup-btn-explore"
       id="setup-explore"
     >
-      <i class="icon-eye" aria-hidden="true"></i> Explore dashboard
+      <i class="icon-eye" aria-hidden="true"></i>
+      <span data-l10n-id="setup-wizard-explore"></span>
     </button>
     <button type="button" class="setup-btn setup-btn-primary" id="setup-next">
-      Continue <i class="icon-chevron-right" aria-hidden="true"></i>
+      <span data-l10n-id="setup-wizard-continue"></span>
+      <i class="icon-chevron-right" aria-hidden="true"></i>
     </button>
   </footer>
 </div>

@@ -9,3 +9,6 @@ common-action-back = Back
 common-action-next = Next
 common-action-cancel = Cancel
 common-action-dismiss = Dismiss
+common-action-confirm = Confirm
+common-action-retry = Retry
+common-action-copy = Copy

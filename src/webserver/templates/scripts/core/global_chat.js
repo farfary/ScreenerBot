@@ -36,8 +36,9 @@ class GlobalChat {
     this._btn = document.createElement("button");
     this._btn.type = "button";
     this._btn.className = "header-action-btn btn-icon global-chat-btn";
-    this._btn.setAttribute("aria-label", "Assistant");
-    this._btn.setAttribute("title", "Assistant");
+    const assistantLabel = I18n.t("shell-assistant-label");
+    this._btn.setAttribute("aria-label", assistantLabel);
+    this._btn.setAttribute("title", assistantLabel);
     this._btn.innerHTML = '<i class="action-icon icon-bot-message-square"></i>';
 
     // Overlay
@@ -46,10 +47,11 @@ class GlobalChat {
     this._overlay.setAttribute("aria-hidden", "true");
     this._overlay.innerHTML = `
       <div class="global-chat-overlay-bg"></div>
-      <div class="global-chat-dialog" role="dialog" aria-modal="true" aria-label="Assistant">
+      <div class="global-chat-dialog" role="dialog" aria-modal="true" data-l10n-id="shell-assistant-dialog">
         <div class="global-chat-body"></div>
       </div>
     `;
+    I18n.localizeTree(this._overlay);
 
     // Insert as first child of the action items group (before search button) so it
     // folds together with the other actions on mid screens. Fall back to the

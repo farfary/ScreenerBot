@@ -74,11 +74,11 @@ function updateConnectionStatus(isConnected) {
   if (isConnected) {
     elements.connectionStatus.classList.add("connected");
     elements.connectionIcon.className = "icon-circle-check";
-    elements.connectionStatus.title = "Core Connected";
+    elements.connectionStatus.title = I18n.t("shell-connection-connected");
   } else {
     elements.connectionStatus.classList.add("disconnected");
     elements.connectionIcon.className = "icon-circle-x";
-    elements.connectionStatus.title = "Waiting for core…";
+    elements.connectionStatus.title = I18n.t("shell-connection-waiting");
   }
 }
 
@@ -180,7 +180,7 @@ async function controlTrader(action) {
     Utils.showToast({
       key: "trader-control",
       type: "error",
-      title: "Trader control failed",
+      title: I18n.t("shell-trader-control-failed"),
       message: err.message || null,
     });
     setAvailability(false);
@@ -202,7 +202,7 @@ function initTraderControls() {
   if (elements.connectionStatus && elements.connectionIcon) {
     elements.connectionStatus.classList.add("connecting");
     elements.connectionIcon.className = "icon-circle-dot";
-    elements.connectionStatus.title = "Waiting for core…";
+    elements.connectionStatus.title = I18n.t("shell-connection-waiting");
   }
 
   // Initialize card click handlers
@@ -592,17 +592,18 @@ function updateNotificationBadge(count) {
   badge.hidden = count <= 0;
   button?.setAttribute(
     "aria-label",
-    count > 0 ? `Actions and notifications, ${count} unread` : "Actions and notifications"
+    count > 0
+      ? I18n.t("shell-notification-button-unread", { count: count.toString() })
+      : I18n.attr("shell-action-notifications", "aria-label")
   );
 }
 
 async function handleRestart() {
   const { confirmed } = await ConfirmationDialog.show({
-    title: "Restart Bot",
-    message:
-      "Are you sure you want to restart the bot?\n\nThis will:\n• Stop all services\n• Restart the process\n• Take ~10-15 seconds\n\nAll active operations will be interrupted.",
-    confirmLabel: "Restart",
-    cancelLabel: "Cancel",
+    title: I18n.t("shell-restart-confirm-title"),
+    message: I18n.t("shell-restart-confirm-message"),
+    confirmLabel: I18n.t("shell-restart-confirm-action"),
+    cancelLabel: I18n.t("common-action-cancel"),
     variant: "warning",
   });
 
@@ -611,7 +612,7 @@ async function handleRestart() {
   try {
     // ONE notice for the whole restart: it is replaced in place if the restart
     // fails, and the page reloads out from under it when it succeeds.
-    Utils.showToast({ key: "system-restart", type: "progress", title: "Restarting bot" });
+    Utils.showToast({ key: "system-restart", type: "progress", title: I18n.t("shell-restart-progress") });
 
     const res = await fetch("/api/system/reboot", {
       method: "POST",
@@ -619,14 +620,14 @@ async function handleRestart() {
     });
 
     if (!res.ok) {
-      throw new Error(`Restart failed: ${res.status}`);
+      throw new Error(I18n.t("shell-restart-failed-status", { status: String(res.status) }));
     }
 
     const result = await res.json();
 
     const waitForRestart = window.waitForScreenerBotRestart;
     if (typeof waitForRestart !== "function") {
-      throw new Error("Automatic restart helper is unavailable. Reload the dashboard shortly.");
+      throw new Error(I18n.t("shell-restart-helper-unavailable"));
     }
     await waitForRestart(result.instance_id, { target: window.location.pathname || "/home" });
   } catch (err) {
@@ -634,7 +635,7 @@ async function handleRestart() {
     Utils.showToast({
       key: "system-restart",
       type: "error",
-      title: "Restart failed",
+      title: I18n.t("shell-restart-failed"),
       message: err.message,
     });
   }

@@ -135,3 +135,141 @@ shell-splash-starting = Starting { -brand }
 shell-splash-waiting = Waiting for the local core to answer.
 shell-splash-failed = { -brand } could not start
 shell-splash-failed-detail = Check the log file, then restart the app.
+
+# Source: scripts/core/header.js, scripts/core/connectivity_watcher.js, scripts/core/router.js
+
+## Connection state
+
+shell-connection-connected = Core Connected
+shell-connection-waiting = Waiting for core…
+shell-connection-retry-now = Retry now
+shell-connection-overlay-detail = The core is unreachable. Trading is paused; this will recover automatically.
+shell-connection-restored = Core connection restored
+
+# Source: scripts/core/header.js
+shell-trader-control-failed = Trader control failed
+shell-notification-button-unread = Actions and notifications, { $count } unread
+shell-restart-confirm-title = Restart Bot
+shell-restart-confirm-message =
+    Are you sure you want to restart the bot?
+
+    This will:
+    • Stop all services
+    • Restart the process
+    • Take ~10-15 seconds
+
+    All active operations will be interrupted.
+shell-restart-confirm-action = Restart
+shell-restart-progress = Restarting bot
+shell-restart-failed = Restart failed
+shell-restart-failed-status = Restart failed: { $status }
+shell-restart-helper-unavailable = Automatic restart helper is unavailable. Reload the dashboard shortly.
+
+# Source: scripts/core/router.js
+shell-page-title-fallback = Dashboard
+shell-page-load-failed = Failed to Load Page
+shell-page-offline-detail = The core is unreachable right now. This page will load automatically once the connection is back.
+
+# Source: scripts/core/header_metrics.js
+
+## Auto Trader card
+
+shell-bot-state-explore = EXPLORE
+shell-bot-state-halted = HALTED
+shell-bot-state-off = OFF
+shell-bot-state-waiting = WAITING
+shell-bot-state-idle = IDLE
+shell-bot-state-entry-paused = ENTRY PAUSED
+shell-bot-state-running = RUNNING
+shell-bot-control-explore = Auto Trader unavailable in Explore Mode. Open wallet and RPC setup.
+shell-bot-control-halted = Emergency stop is active. Open Auto Trader controls.
+shell-bot-control-off = Auto Trader is off. Click to enable it.
+shell-bot-control-waiting = Auto Trader is enabled and waiting for core services. Click to disable it.
+shell-bot-control-idle = Auto Trader is enabled, but both monitors are off. Open Auto Trader controls.
+shell-bot-control-entry-paused = Loss protection paused entries; exits can continue. Open Auto Trader controls.
+shell-bot-control-running = Auto Trader is running. Click to disable it.
+
+## Wallet and copy cards
+
+shell-wallet-card-summary = Wallet worth: { $equity } { -sol } ({ $balance } { -sol } cash, { $tokens } tokens); open Positions
+shell-copy-running-live = { $count } live
+shell-copy-running-paper = { $count } paper
+shell-copy-value-paused = Paused
+shell-copy-value-idle = Idle
+shell-copy-sub-active = { $active } of { $total } active
+
+## Ticker services state
+
+shell-ticker-services-healthy = Healthy
+shell-ticker-services-issues =
+    { $count ->
+        [one] { $count } Issue
+       *[other] { $count } Issues
+    }
+
+# Source: scripts/core/agent_approvals.js
+
+## Agent approval prompt
+
+shell-agent-request-title = Agent request
+shell-agent-request-client-fallback = A paired agent
+shell-agent-request-message = { $client } wants to run "{ $tool }" in { -brand }. This request { $expiry }.
+shell-agent-request-message-arguments = { $client } wants to run "{ $tool }" in { -brand }. Arguments: { $summary }. This request { $expiry }.
+shell-agent-request-expires-minutes = expires in { $minutes }m
+shell-agent-request-expires-seconds = expires in { $seconds }s
+shell-agent-request-approve = Approve
+shell-agent-request-deny = Deny
+
+# Source: scripts/core/utils.js, scripts/core/toast.js, scripts/ui/toast.js, scripts/ui/confirmation_dialog.js
+
+## Toasts, dialogs and shared widgets
+
+shell-toast-copied = { $label } copied
+shell-toast-copy-failed = Copy failed
+shell-toast-still-running = Still running — check the notification center
+shell-toast-dismiss =
+    .aria-label = Dismiss
+shell-confirm-title = Confirm Action
+shell-confirm-message = Are you sure?
+shell-address-open-solscan = — open in Solscan
+shell-address-copy = Copy address
+
+# Source: scripts/core/global_chat.js
+shell-assistant-label = Assistant
+shell-assistant-dialog =
+    .aria-label = Assistant
+
+# Source: scripts/core/status_bar.js
+shell-status-bar-trading-active = Active
+shell-status-bar-trading-inactive = Inactive
+
+# Source: scripts/core/action_toasts.js
+
+## Action toasts
+
+shell-action-title-symbol = { $label } { $symbol }
+shell-action-cancelled = { $title } cancelled
+shell-action-swap-buy-live = Buying
+shell-action-swap-buy-done = Bought
+shell-action-swap-buy-failed = Buy failed
+shell-action-swap-sell-live = Selling
+shell-action-swap-sell-done = Sold
+shell-action-swap-sell-failed = Sell failed
+shell-action-position-open-live = Opening position
+shell-action-position-open-done = Opened
+shell-action-position-open-failed = Open failed
+shell-action-position-close-live = Closing position
+shell-action-position-close-done = Closed
+shell-action-position-close-failed = Close failed
+shell-action-position-dca-live = Adding to position
+shell-action-position-dca-done = Added to
+shell-action-position-dca-failed = Add failed
+shell-action-partial-exit-live = Partial exit
+shell-action-partial-exit-done = Partial exit
+shell-action-partial-exit-failed = Partial exit failed
+shell-action-manual-order-live = Placing order
+shell-action-manual-order-done = Order placed
+shell-action-manual-order-failed = Order failed
+shell-action-trade-live = Trade
+shell-action-trade-done = Trade done
+shell-action-trade-failed = Trade failed

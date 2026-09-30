@@ -10,36 +10,26 @@ const METRICS_POLL_INTERVAL = 5000;
 // reads 1.234 in one place and 1.2345 in the other looks like two different numbers.
 const WALLET_SOL_DECIMALS = 4;
 
-const TRADER_STATES = {
-  explore: {
-    label: "EXPLORE",
-    control: "Auto Trader unavailable in Explore Mode. Open wallet and RPC setup.",
-  },
-  force_stopped: {
-    label: "HALTED",
-    control: "Emergency stop is active. Open Auto Trader controls.",
-  },
-  stopped: {
-    label: "OFF",
-    control: "Auto Trader is off. Click to enable it.",
-  },
-  waiting: {
-    label: "WAITING",
-    control: "Auto Trader is enabled and waiting for core services. Click to disable it.",
-  },
-  idle: {
-    label: "IDLE",
-    control: "Auto Trader is enabled, but both monitors are off. Open Auto Trader controls.",
-  },
-  entry_paused: {
-    label: "ENTRY PAUSED",
-    control: "Loss protection paused entries; exits can continue. Open Auto Trader controls.",
-  },
-  running: {
-    label: "RUNNING",
-    control: "Auto Trader is running. Click to disable it.",
-  },
-};
+// Effective Auto Trader states: badge text and the card's control hint.
+const TRADER_STATE_LABELS = Object.freeze({
+  explore: "shell-bot-state-explore",
+  force_stopped: "shell-bot-state-halted",
+  stopped: "shell-bot-state-off",
+  waiting: "shell-bot-state-waiting",
+  idle: "shell-bot-state-idle",
+  entry_paused: "shell-bot-state-entry-paused",
+  running: "shell-bot-state-running",
+});
+
+const TRADER_STATE_CONTROLS = Object.freeze({
+  explore: "shell-bot-control-explore",
+  force_stopped: "shell-bot-control-halted",
+  stopped: "shell-bot-control-off",
+  waiting: "shell-bot-control-waiting",
+  idle: "shell-bot-control-idle",
+  entry_paused: "shell-bot-control-entry-paused",
+  running: "shell-bot-control-running",
+});
 
 function finiteNumber(value) {
   return typeof value === "number" && Number.isFinite(value) ? value : Number.NaN;
@@ -56,17 +46,17 @@ function updateBotCard(trader, state) {
   const pnl = document.getElementById("botPnL");
   if (!card || !status || !pnl || !trader) return;
 
-  const statusKey = TRADER_STATES[trader.state] ? trader.state : "waiting";
-  const statusConfig = TRADER_STATES[statusKey];
+  const statusKey = Object.hasOwn(TRADER_STATE_LABELS, trader.state) ? trader.state : "waiting";
+  const control = I18n.label(TRADER_STATE_CONTROLS, statusKey);
   state.traderEnabled = Boolean(trader.enabled);
   state.traderStatus = statusKey;
   state.available = true;
 
   card.dataset.status = statusKey;
   card.setAttribute("aria-pressed", state.traderEnabled ? "true" : "false");
-  card.setAttribute("aria-label", statusConfig.control);
-  card.title = statusConfig.control;
-  status.textContent = statusConfig.label;
+  card.setAttribute("aria-label", control);
+  card.title = control;
+  status.textContent = I18n.label(TRADER_STATE_LABELS, statusKey);
 
   if (statusKey === "explore") {
     pnl.textContent = "—";
@@ -133,7 +123,11 @@ function updateWalletCard(wallet, state) {
   if (tokenCount) tokenCount.textContent = formatNumber(wallet.token_count, 0);
   card.setAttribute(
     "aria-label",
-    `Wallet worth: ${formatNumber(equity, WALLET_SOL_DECIMALS)} SOL (${formatNumber(balance, WALLET_SOL_DECIMALS)} SOL cash, ${formatNumber(wallet.token_count, 0)} tokens); open Positions`
+    I18n.t("shell-wallet-card-summary", {
+      equity: formatNumber(equity, WALLET_SOL_DECIMALS),
+      balance: formatNumber(balance, WALLET_SOL_DECIMALS),
+      tokens: formatNumber(wallet.token_count, 0),
+    })
   );
 }
 
@@ -170,13 +164,15 @@ function updateCopyCard(copy) {
   card.hidden = false;
   const active = copy.live_tasks + copy.paper_tasks;
   const running = [
-    copy.live_tasks ? `${copy.live_tasks} live` : "",
-    copy.paper_tasks ? `${copy.paper_tasks} paper` : "",
+    copy.live_tasks ? I18n.t("shell-copy-running-live", { count: copy.live_tasks }) : "",
+    copy.paper_tasks ? I18n.t("shell-copy-running-paper", { count: copy.paper_tasks }) : "",
   ]
     .filter(Boolean)
     .join(" · ");
-  value.textContent = !copy.enabled ? "Paused" : running || "Idle";
-  sub.textContent = `${active} of ${copy.total_tasks} active`;
+  value.textContent = !copy.enabled
+    ? I18n.t("shell-copy-value-paused")
+    : running || I18n.t("shell-copy-value-idle");
+  sub.textContent = I18n.t("shell-copy-sub-active", { active, total: copy.total_tasks });
 }
 
 // Copy notices carry a per-process sequence; the first poll only sets the
@@ -206,6 +202,20 @@ function announceCopyNotices(copy) {
       })
     );
   copyNoticeSeq = newest;
+}
+
+// Status dot, the "Services:" label and the emphasised state, built without
+// parsing localized text as markup.
+function renderServicesStatus(container, dotClass, stateText) {
+  const dot = document.createElement("span");
+  dot.className = dotClass ? `status-dot ${dotClass}` : "status-dot";
+  const strong = document.createElement("strong");
+  strong.textContent = stateText;
+  container.replaceChildren(
+    dot,
+    document.createTextNode(`${I18n.t("shell-ticker-services")} `),
+    strong
+  );
 }
 
 function updateTicker(metrics) {
@@ -240,11 +250,11 @@ function updateTicker(metrics) {
 
   if (servicesText && metrics.system) {
     if (metrics.system.all_services_healthy) {
-      servicesText.innerHTML = '<span class="status-dot"></span>Services: <strong>Healthy</strong>';
+      renderServicesStatus(servicesText, "", I18n.t("shell-ticker-services-healthy"));
     } else {
       const count = metrics.system.unhealthy_services?.length ?? 0;
       const dotClass = metrics.system.critical_degraded ? "error" : "warning";
-      servicesText.innerHTML = `<span class="status-dot ${dotClass}"></span>Services: <strong>${count} ${count === 1 ? "Issue" : "Issues"}</strong>`;
+      renderServicesStatus(servicesText, dotClass, I18n.t("shell-ticker-services-issues", { count }));
     }
   }
 }
@@ -305,6 +315,7 @@ export function createHeaderMetrics({ state, setAvailability }) {
   const startMetricsPolling = () => {
     metricsPoller?.cleanup();
     metricsPoller = new Poller(fetchHeaderMetrics, {
+      // l10n-ignore: poller name used in logs, never displayed
       label: "HeaderMetrics",
       getInterval: () => METRICS_POLL_INTERVAL,
       pauseWhenHidden: true,

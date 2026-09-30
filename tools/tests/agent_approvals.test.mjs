@@ -14,6 +14,7 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
+import "./fixtures/i18n_en.mjs";
 
 const MODULE = "../../src/webserver/templates/scripts/core/agent_approvals.js";
 
@@ -74,7 +75,9 @@ test("selectNewPending tolerates a non-array payload", async () => {
 
 test("expiryText renders minutes then seconds", async () => {
   const { expiryText } = await mod();
-  assert.equal(expiryText(400, 0), "expires in 7m");
-  assert.equal(expiryText(30, 0), "expires in 30s");
-  assert.equal(expiryText(-100, 0), "expires in 0s");
+  // Fluent isolates interpolated values with bidi marks; the wording is what is pinned.
+  const plain = (text) => text.replace(/[\u2068\u2069]/g, "");
+  assert.equal(plain(expiryText(400, 0)), "expires in 7m");
+  assert.equal(plain(expiryText(30, 0)), "expires in 30s");
+  assert.equal(plain(expiryText(-100, 0)), "expires in 0s");
 });
