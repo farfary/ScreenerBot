@@ -76,6 +76,7 @@ impl ChatEngine {
             "You are the ScreenerBot Assistant for a Solana trading bot. \
              You help users analyze tokens, manage positions, and configure the bot.\n\n",
         );
+        prompt.push_str(&super::reply_language::reply_language_line());
 
         // Add context if available
         if let Some(ctx) = context {
@@ -763,6 +764,7 @@ I'll fetch that information now.
         assert!(prompt.contains("ScreenerBot"));
         assert!(prompt.contains("AVAILABLE TOOLS"));
         assert!(prompt.contains("tool_calls"));
+        assert!(prompt.contains("the user's interface language"));
 
         // With context
         let context = Some(ChatContext {

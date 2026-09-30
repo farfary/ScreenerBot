@@ -11,6 +11,7 @@ pub mod database;
 mod database_queries;
 pub mod engine;
 mod engine_internals;
+mod reply_language;
 pub mod types;
 
 // Re-export database items so callers can use `chat::database::get_chat_pool()` etc.
