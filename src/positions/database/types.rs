@@ -492,4 +492,39 @@ mod state_reason_tests {
             "Verified on-chain"
         );
     }
+
+    /// Catalog key of the state-history label for each state. The match is
+    /// exhaustive, so a new variant fails to compile until it is mapped here and
+    /// in `POSITION_STATE_LABELS` (ui/position_details/activity.js).
+    fn state_label_key(state: &PositionState) -> &'static str {
+        match state {
+            PositionState::Open => "positions-state-open",
+            PositionState::Closing => "positions-state-closing",
+            PositionState::Closed => "positions-state-closed",
+            PositionState::ExitPending => "positions-state-exit-pending",
+            PositionState::ExitFailed => "positions-state-exit-failed",
+            PositionState::Phantom => "positions-state-phantom",
+            PositionState::Reconciling => "positions-state-reconciling",
+        }
+    }
+
+    #[test]
+    fn state_history_labels_exist_in_the_catalog() {
+        for state in [
+            PositionState::Open,
+            PositionState::Closing,
+            PositionState::Closed,
+            PositionState::ExitPending,
+            PositionState::ExitFailed,
+            PositionState::Phantom,
+            PositionState::Reconciling,
+        ] {
+            let key = state_label_key(&state);
+            assert_ne!(
+                crate::i18n::format_en(key, None),
+                key,
+                "missing {key} for {state}"
+            );
+        }
+    }
 }

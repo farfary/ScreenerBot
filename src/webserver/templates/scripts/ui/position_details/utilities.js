@@ -89,10 +89,6 @@ export function applyUtilitiesMixin(PositionDetailsDialog) {
     return num > 0 ? "pdd-positive" : "pdd-negative";
   };
 
-  proto._plural = function (count, word) {
-    return `${count} ${word}${count === 1 ? "" : "s"}`;
-  };
-
   proto._lamportsToSol = function (lamports) {
     return lamports ? lamports / LAMPORTS_PER_SOL : 0;
   };

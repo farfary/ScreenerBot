@@ -78,30 +78,25 @@ class PositionRemoveDialog {
     const openWarning = this.config.isOpen
       ? `<div class="position-remove-open-warning" role="note">
            <i class="icon-triangle-alert" aria-hidden="true"></i>
-           <div>
-             <strong>This position is still open.</strong>
-             The bot is holding this token. Removing it frees the trade slot and
-             stops tracking — but it does <strong>not</strong> sell. Sell first if
-             you want your SOL back.
-           </div>
+           <div data-l10n-id="positions-remove-open-warning" data-l10n-markup></div>
          </div>`
       : "";
 
     this.element.innerHTML = `
       <div class="position-remove-header">
-        <h3 class="position-remove-title" id="position-remove-title">Remove position</h3>
+        <h3 class="position-remove-title" id="position-remove-title" data-l10n-id="positions-remove-title"></h3>
         <p class="position-remove-subtitle">${sym} <span class="position-remove-mint">${mintShort}</span></p>
       </div>
 
       ${openWarning}
 
-      <fieldset class="position-remove-choices" aria-label="Removal mode">
+      <fieldset class="position-remove-choices" data-l10n-id="positions-remove-modes">
         <label class="position-remove-choice" data-mode="archive">
           <input type="radio" name="position-remove-mode" value="archive" checked>
           <span class="position-remove-choice-icon"><i class="icon-archive" aria-hidden="true"></i></span>
           <span class="position-remove-choice-body">
-            <span class="position-remove-choice-title">Archive <span class="position-remove-badge">Recommended</span></span>
-            <span class="position-remove-choice-desc">Hide it into the Archived tab. Reversible anytime — nothing is sold and all trades stay on record.</span>
+            <span class="position-remove-choice-title"><span data-l10n-id="positions-remove-archive"></span> <span class="position-remove-badge" data-l10n-id="positions-remove-recommended"></span></span>
+            <span class="position-remove-choice-desc" data-l10n-id="positions-remove-archive-description"></span>
           </span>
         </label>
 
@@ -109,25 +104,26 @@ class PositionRemoveDialog {
           <input type="radio" name="position-remove-mode" value="delete">
           <span class="position-remove-choice-icon"><i class="icon-trash-2" aria-hidden="true"></i></span>
           <span class="position-remove-choice-body">
-            <span class="position-remove-choice-title">Delete permanently</span>
-            <span class="position-remove-choice-desc">Erase this position and its full history from the database.</span>
+            <span class="position-remove-choice-title" data-l10n-id="positions-remove-delete"></span>
+            <span class="position-remove-choice-desc" data-l10n-id="positions-remove-delete-description"></span>
           </span>
         </label>
       </fieldset>
 
       <div class="position-remove-danger" data-visible="false" role="alert">
         <i class="icon-triangle-alert" aria-hidden="true"></i>
-        <span>This permanently removes the position and its history. <strong>This cannot be undone.</strong> Your transactions and token data are not affected.</span>
+        <span data-l10n-id="positions-remove-danger" data-l10n-markup></span>
       </div>
 
       <div class="position-remove-footer">
-        <button type="button" class="position-remove-btn position-remove-btn--cancel" data-action="cancel">Cancel</button>
+        <button type="button" class="position-remove-btn position-remove-btn--cancel" data-action="cancel" data-l10n-id="common-action-cancel"></button>
         <button type="button" class="position-remove-btn position-remove-btn--confirm" data-action="confirm">
-          <span class="position-remove-confirm-label">Archive position</span>
+          <span class="position-remove-confirm-label"></span>
         </button>
       </div>
     `;
 
+    I18n.localizeTree(this.element);
     this._attachEventListeners();
 
     document.body.appendChild(this.backdrop);
@@ -186,7 +182,9 @@ class PositionRemoveDialog {
     if (confirmBtn && label) {
       const isDelete = this.mode === "delete";
       confirmBtn.classList.toggle("is-danger", isDelete);
-      label.textContent = isDelete ? "Delete permanently" : "Archive position";
+      label.textContent = isDelete
+        ? I18n.t("positions-delete-confirm")
+        : I18n.t("positions-remove-confirm-archive");
     }
   }
 

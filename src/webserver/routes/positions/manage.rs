@@ -16,7 +16,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::i18n::{ids, UiArg, UiText};
+use crate::i18n::ids;
 use crate::logger::{self, LogTag};
 use crate::positions;
 use crate::webserver::api_error::{ApiError, ApiErrorCode};
@@ -47,7 +47,6 @@ pub struct ManagementResponse {
     pub success: bool,
     pub position_id: i64,
     pub management: positions::PositionManagement,
-    pub text: UiText,
 }
 
 #[derive(Debug, Serialize)]
@@ -225,10 +224,6 @@ pub(super) async fn set_management(
         success: true,
         position_id,
         management: req.management,
-        text: UiText::new(ids::POSITIONS_RESULT_MANAGEMENT_SET).arg(
-            "management",
-            UiArg::Text(req.management.as_str().to_owned()),
-        ),
     })
 }
 

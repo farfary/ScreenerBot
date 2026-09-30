@@ -7,28 +7,24 @@ import * as Hints from "../../core/hints.js";
 import { notificationManager } from "../../core/notifications.js";
 import { HintTrigger } from "../hint_popover.js";
 import { manualTrade } from "../manual_trade.js";
+import { POSITION_MANAGEMENT_LABELS } from "../position_management.js";
+import { POSITION_STATUS_LABELS } from "../position_status.js";
 
-const STATUS_LABELS = { open: "Open", closed: "Closed", archived: "Archived" };
-
-const MANAGEMENT_LABELS = {
-  auto_trader: "Auto Trader",
-  user_only: "User only",
-  copy_task: "Copy task",
-  hybrid: "Hybrid",
-};
+const esc = (text) => Utils.escapeHtml(text);
 
 // Rugcheck normalised score: lower is safer. The level is the backend's banding of it.
-const RISK_BADGES = {
-  low: ["Low risk", "is-success"],
-  medium: ["Medium risk", "is-warning"],
-  high: ["High risk", "is-danger"],
-};
+const RISK_LEVEL_LABELS = Object.freeze({
+  low: "positions-risk-low",
+  medium: "positions-risk-medium",
+  high: "positions-risk-high",
+});
+const RISK_TONES = Object.freeze({ low: "is-success", medium: "is-warning", high: "is-danger" });
 
-const BUSY_LABELS = {
-  buying: "Buy in progress…",
-  selling: "Sell in progress…",
-  closing: "Close in progress…",
-};
+const BUSY_LABELS = Object.freeze({
+  buying: "positions-busy-buying",
+  selling: "positions-busy-selling",
+  closing: "positions-busy-closing",
+});
 
 export function applyHeaderMixin(PositionDetailsDialog) {
   const proto = PositionDetailsDialog.prototype;
@@ -61,7 +57,7 @@ export function applyHeaderMixin(PositionDetailsDialog) {
         <div class="header-title">
           <span class="title-main" id="pdd-dialog-title" title="${Utils.escapeHtml(name)}">${Utils.escapeHtml(name)}</span>
           ${symbol ? `<span class="title-symbol token-symbol-type">$${Utils.escapeHtml(symbol.toUpperCase())}</span>` : ""}
-          ${status ? `<span class="pdd-badge pdd-status is-${status}">${STATUS_LABELS[status] || Utils.escapeHtml(status)}</span>` : ""}
+          ${status ? `<span class="pdd-badge pdd-status is-${status}">${esc(I18n.label(POSITION_STATUS_LABELS, status))}</span>` : ""}
         </div>
         <div class="header-mint-full">${Utils.escapeHtml(pos.mint)}</div>
       </div>`;
@@ -85,33 +81,45 @@ export function applyHeaderMixin(PositionDetailsDialog) {
    */
   proto._buildHeaderMetrics = function (pos) {
     const metric = (label, value, { sub = "", tone = "", title = "" } = {}) => `
-      <div class="header-metric ${tone}"${title ? ` title="${title}"` : ""}>
-        <span class="header-metric-label">${label}</span>
+      <div class="header-metric ${tone}"${title ? ` title="${esc(title)}"` : ""}>
+        <span class="header-metric-label">${esc(label)}</span>
         <span class="header-metric-value">${value}${value === "—" ? "" : "<small>SOL</small>"}</span>
-        <span class="header-metric-sub">${sub || "&nbsp;"}</span>
+        <span class="header-metric-sub">${sub ? esc(sub) : "&nbsp;"}</span>
       </div>`;
 
     const pnlSub = (pnl, pct) =>
       [pct != null ? this._formatPct(pct) : "", this._formatUsd(pnl)].filter(Boolean).join(" · ");
     const invested = pos.total_size_sol;
     const avgEntry = pos.average_entry_price || pos.entry_price;
-    const entryMetric = metric("Avg entry", avgEntry ? this._formatPrice(avgEntry) : "—", {
-      sub: this._plural(1 + (pos.dca_count || 0), "buy"),
-    });
+    const entryMetric = metric(
+      I18n.t("positions-header-avg-entry"),
+      avgEntry ? this._formatPrice(avgEntry) : "—",
+      { sub: I18n.t("positions-header-buy-count", { count: 1 + (pos.dca_count || 0) }) }
+    );
+    const usdNote = I18n.t("positions-header-usd-note");
 
     if (this._isSettled()) {
       const exitPrice = pos.average_exit_price || pos.exit_price;
       return [
-        metric("Exit price", exitPrice ? this._formatPrice(exitPrice) : "—", {
-          sub: pos.exit_time ? `closed ${Utils.formatTimeAgo(pos.exit_time)}` : "",
+        metric(I18n.t("positions-header-exit-price"), exitPrice ? this._formatPrice(exitPrice) : "—", {
+          sub: pos.exit_time
+            ? I18n.t("positions-header-closed-ago", { ago: Utils.formatTimeAgo(pos.exit_time) })
+            : "",
         }),
-        metric("Realized P&L", this._formatSol(pos.pnl, { sign: true, unit: false }), {
-          sub: pnlSub(pos.pnl, pos.pnl_percent),
-          tone: this._toneClass(pos.pnl),
-          title: "USD at today's SOL price",
-        }),
-        metric("Returned", this._formatSol(pos.sol_received, { unit: false }), {
-          sub: invested != null ? `of ${this._formatSol(invested)} invested` : "",
+        metric(
+          I18n.t("positions-header-realized-pnl"),
+          this._formatSol(pos.pnl, { sign: true, unit: false }),
+          {
+            sub: pnlSub(pos.pnl, pos.pnl_percent),
+            tone: this._toneClass(pos.pnl),
+            title: usdNote,
+          }
+        ),
+        metric(I18n.t("positions-header-returned"), this._formatSol(pos.sol_received, { unit: false }), {
+          sub:
+            invested != null
+              ? I18n.t("positions-header-of-invested", { amount: this._formatSol(invested) })
+              : "",
         }),
         entryMetric,
       ].join("");
@@ -121,43 +129,62 @@ export function applyHeaderMixin(PositionDetailsDialog) {
     // known figures and must not read as live ones.
     const live = this._status() === "open";
     return [
-      metric(live ? "Price" : "Last price", pos.current_price ? this._formatPrice(pos.current_price) : "—", {
-        sub: pos.current_price_updated
-          ? `pool · ${Utils.formatTimeAgo(pos.current_price_updated)}`
-          : "",
-      }),
-      metric(live ? "Unrealized P&L" : "P&L at last price", this._formatSol(pos.unrealized_pnl, { sign: true, unit: false }), {
-        sub: pnlSub(pos.unrealized_pnl, pos.unrealized_pnl_percent),
-        tone: this._toneClass(pos.unrealized_pnl),
-        title: "USD at today's SOL price",
-      }),
-      metric(live ? "Value" : "Last value", this._formatSol(this._calculateCurrentValue(pos), { unit: false }), {
-        sub: invested != null ? `${this._formatSol(invested)} invested` : "",
-      }),
+      metric(
+        live ? I18n.t("positions-header-price") : I18n.t("positions-header-last-price"),
+        pos.current_price ? this._formatPrice(pos.current_price) : "—",
+        {
+          sub: pos.current_price_updated
+            ? I18n.t("positions-header-pool-ago", {
+                ago: Utils.formatTimeAgo(pos.current_price_updated),
+              })
+            : "",
+        }
+      ),
+      metric(
+        live ? I18n.t("positions-header-unrealized-pnl") : I18n.t("positions-header-pnl-last-price"),
+        this._formatSol(pos.unrealized_pnl, { sign: true, unit: false }),
+        {
+          sub: pnlSub(pos.unrealized_pnl, pos.unrealized_pnl_percent),
+          tone: this._toneClass(pos.unrealized_pnl),
+          title: usdNote,
+        }
+      ),
+      metric(
+        live ? I18n.t("positions-header-value") : I18n.t("positions-header-last-value"),
+        this._formatSol(this._calculateCurrentValue(pos), { unit: false }),
+        {
+          sub:
+            invested != null
+              ? I18n.t("positions-header-invested", { amount: this._formatSol(invested) })
+              : "",
+        }
+      ),
       entryMetric,
     ].join("");
   };
 
   proto._buildHeaderBadges = function (pos) {
     const badges = [
-      `<span class="pdd-badge" title="How this position was opened">${this._originLabel(pos.origin)}</span>`,
+      `<span class="pdd-badge" title="${esc(I18n.t("positions-header-origin-hint"))}">${this._originLabel(pos.origin)}</span>`,
     ];
     if (this._status() === "open") badges.push(this._buildManagementControl(pos));
 
     const security = this.fullDetails?.security;
     if (security) {
-      const [label, tone] = RISK_BADGES[String(security.risk_level).toLowerCase()] || [
-        "Risk unknown",
-        "",
-      ];
+      const level = String(security.risk_level).toLowerCase();
+      const known = Object.hasOwn(RISK_LEVEL_LABELS, level);
+      const label = known
+        ? I18n.label(RISK_LEVEL_LABELS, level)
+        : I18n.t("positions-risk-unknown");
+      const tone = known ? RISK_TONES[level] : "";
       const score = security.score_normalized != null ? ` · ${security.score_normalized}/100` : "";
       badges.push(
-        `<span class="pdd-badge ${tone}" title="Rugcheck score — lower is safer">${label}${score}</span>`
+        `<span class="pdd-badge ${tone}" title="${esc(I18n.t("positions-header-risk-hint"))}">${esc(label)}${score}</span>`
       );
     }
     if (pos.holding_state === "frozen") {
       badges.push(
-        '<span class="pdd-badge is-danger" title="The mint authority froze this holding">Frozen</span>'
+        `<span class="pdd-badge is-danger" title="${esc(I18n.attr("positions-header-frozen", "title"))}">${esc(I18n.t("positions-header-frozen"))}</span>`
       );
     }
     return badges.join("");
@@ -166,23 +193,34 @@ export function applyHeaderMixin(PositionDetailsDialog) {
   proto._originLabel = function (origin) {
     const kind = origin?.kind || "auto";
     if (kind === "copy") {
-      const wallet = String(origin.source_wallet || "unknown");
+      const unknown = I18n.t("positions-origin-unknown");
+      const wallet = String(origin.source_wallet || unknown);
       const shortWallet = wallet.length > 14 ? `${wallet.slice(0, 6)}…${wallet.slice(-4)}` : wallet;
-      return `Copied · task ${Utils.escapeHtml(String(origin.task_id ?? "unknown"))} · ${Utils.escapeHtml(shortWallet)}`;
+      // The wallet address stays outside the message: it is a value, not wording.
+      const task = I18n.t("positions-origin-copied-task", {
+        task: String(origin.task_id ?? unknown),
+      });
+      return `${esc(task)} · <span dir="ltr">${esc(shortWallet)}</span>`;
     }
-    if (kind === "manual") return "Manual entry";
-    if (kind === "external") return "Wallet entry";
-    return origin?.strategy_id ? `Auto · ${Utils.escapeHtml(origin.strategy_id)}` : "Auto entry";
+    if (kind === "manual") return esc(I18n.t("positions-origin-manual-entry"));
+    if (kind === "external") return esc(I18n.t("positions-origin-wallet-entry"));
+    return esc(
+      origin?.strategy_id
+        ? I18n.t("positions-origin-auto-strategy", { strategy: origin.strategy_id })
+        : I18n.t("positions-origin-auto-entry")
+    );
   };
 
   /** Who may manage an open position. Copy positions add the copy-specific modes. */
   proto._buildManagementControl = function (pos) {
     const allowed =
-      pos.origin?.kind === "copy" ? Object.keys(MANAGEMENT_LABELS) : ["auto_trader", "user_only"];
+      pos.origin?.kind === "copy"
+        ? Object.keys(POSITION_MANAGEMENT_LABELS)
+        : ["auto_trader", "user_only"];
     const options = allowed
       .map(
         (value) =>
-          `<option value="${value}"${pos.management === value ? " selected" : ""}>${MANAGEMENT_LABELS[value]}</option>`
+          `<option value="${value}"${pos.management === value ? " selected" : ""}>${esc(I18n.label(POSITION_MANAGEMENT_LABELS, value))}</option>`
       )
       .join("");
     const hint = Hints.getHint("positions.positionManagement");
@@ -192,8 +230,8 @@ export function applyHeaderMixin(PositionDetailsDialog) {
 
     return `
       <label class="pdd-management">
-        <span>Managed by</span>
-        <select id="pddManagementSelect" class="cs-sm" aria-label="Position management" data-custom-select>${options}</select>
+        <span>${esc(I18n.t("positions-header-managed-by"))}</span>
+        <select id="pddManagementSelect" class="cs-sm" aria-label="${esc(I18n.attr("positions-header-management-select", "aria-label"))}" data-custom-select>${options}</select>
       </label>${hintHtml}`;
   };
 
@@ -212,9 +250,18 @@ export function applyHeaderMixin(PositionDetailsDialog) {
       .map((swap) => {
         const label =
           swap.kind === "dca"
-            ? `Adding${swap.size_sol != null ? ` ${this._formatSol(swap.size_sol)}` : ""}`
-            : `Selling${swap.exit_percentage != null ? ` ${Utils.formatNumber(swap.exit_percentage, 0)}%` : ""}`;
-        return `<span class="pdd-pending" title="Submitted and waiting for on-chain confirmation. The figures update once it is verified."><i class="icon-loader spin"></i>${Utils.escapeHtml(label)} · confirming</span>`;
+            ? swap.size_sol != null
+              ? I18n.t("positions-pending-adding-amount", { amount: this._formatSol(swap.size_sol) })
+              : I18n.t("positions-pending-adding")
+            : swap.exit_percentage != null
+              ? I18n.t("positions-pending-selling-percent", {
+                  percent: Utils.formatPercentValue(swap.exit_percentage, {
+                    decimals: 0,
+                    includeSign: false,
+                  }),
+                })
+              : I18n.t("positions-pending-selling");
+        return `<span class="pdd-pending" title="${esc(I18n.attr("positions-pending-confirming", "title", { label }))}"><i class="icon-loader spin"></i>${esc(I18n.t("positions-pending-confirming", { label }))}</span>`;
       })
       .join("");
   };
@@ -226,15 +273,15 @@ export function applyHeaderMixin(PositionDetailsDialog) {
 
     // Tone classes stay literal in each button so the button-contract audit can see them set.
     const attrs = (action, title) =>
-      `data-trade-action="${action}" data-idle-title="${title}" title="${title}" aria-label="${title}"`;
+      `data-trade-action="${action}" data-idle-title="${esc(title)}" title="${esc(title)}" aria-label="${esc(title)}"`;
 
     if (status === "open") {
       return `
-        <button type="button" class="pdd-trade-btn is-add" ${attrs("add", "Add to position")}><i class="icon-circle-plus"></i><span>Add</span></button>
-        <button type="button" class="pdd-trade-btn is-sell" ${attrs("sell", "Sell part of the position")}><i class="icon-scissors"></i><span>Sell</span></button>
-        <button type="button" class="pdd-trade-btn is-close" ${attrs("close", "Sell everything and close")}><i class="icon-circle-x"></i><span>Close position</span></button>`;
+        <button type="button" class="pdd-trade-btn is-add" ${attrs("add", I18n.attr("positions-trade-add", "title"))}><i class="icon-circle-plus"></i><span>${esc(I18n.t("positions-trade-add"))}</span></button>
+        <button type="button" class="pdd-trade-btn is-sell" ${attrs("sell", I18n.attr("positions-trade-sell", "title"))}><i class="icon-scissors"></i><span>${esc(I18n.t("positions-trade-sell"))}</span></button>
+        <button type="button" class="pdd-trade-btn is-close" ${attrs("close", I18n.attr("positions-trade-close", "title"))}><i class="icon-circle-x"></i><span>${esc(I18n.t("positions-trade-close"))}</span></button>`;
     }
-    return `<button type="button" class="pdd-trade-btn is-neutral" ${attrs("token", "Open token details")}><i class="icon-coins"></i><span>Token details</span></button>`;
+    return `<button type="button" class="pdd-trade-btn is-neutral" ${attrs("token", I18n.attr("positions-trade-token", "title"))}><i class="icon-coins"></i><span>${esc(I18n.t("positions-trade-token"))}</span></button>`;
   };
 
   /**
@@ -266,7 +313,7 @@ export function applyHeaderMixin(PositionDetailsDialog) {
       ?.querySelectorAll('[data-trade-action]:not([data-trade-action="token"])')
       .forEach((btn) => {
         btn.disabled = busy !== null;
-        btn.title = busy ? BUSY_LABELS[busy] : btn.dataset.idleTitle || "";
+        btn.title = busy ? I18n.label(BUSY_LABELS, busy) : btn.dataset.idleTitle || "";
       });
   };
 
@@ -338,7 +385,9 @@ export function applyHeaderMixin(PositionDetailsDialog) {
   proto._updateFavoriteButton = function (isFavorite) {
     const button = this.dialogEl?.querySelector("#pddFavoriteBtn");
     if (!button) return;
-    const label = isFavorite ? "Remove from favorites" : "Add to favorites";
+    const label = isFavorite
+      ? I18n.attr("positions-details-favorite-remove", "title")
+      : I18n.attr("positions-details-favorite-add", "title");
     button.classList.toggle("active", isFavorite);
     button.title = label;
     button.setAttribute("aria-label", label);
@@ -366,20 +415,27 @@ export function applyHeaderMixin(PositionDetailsDialog) {
             }),
           });
       if (!response.ok) {
-        throw new Error(currentlyFavorite ? "Failed to remove favorite" : "Failed to add favorite");
+        throw new Error(
+          currentlyFavorite
+            ? I18n.t("positions-favorite-remove-failed")
+            : I18n.t("positions-favorite-add-failed")
+        );
       }
 
       const isFavorite = !currentlyFavorite;
       this._updateFavoriteButton(isFavorite);
+      const token = symbol || I18n.t("positions-favorite-token-fallback");
       Utils.showToast(
-        `${symbol || "Token"} ${isFavorite ? "added to" : "removed from"} favorites`,
+        isFavorite
+          ? I18n.t("positions-favorite-added", { symbol: token })
+          : I18n.t("positions-favorite-removed", { symbol: token }),
         "success"
       );
       window.dispatchEvent(
         new CustomEvent("screenerbot:favorites-changed", { detail: { mint, isFavorite } })
       );
     } catch (error) {
-      Utils.showToast(error.message || "Failed to update favorites", "error");
+      Utils.showToast(error.message || I18n.t("positions-favorite-update-failed"), "error");
     } finally {
       button.disabled = false;
     }

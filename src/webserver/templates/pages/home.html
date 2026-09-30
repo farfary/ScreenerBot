@@ -2,7 +2,7 @@
   <section class="portfolio-overview" aria-labelledby="portfolioHeading">
     <div class="portfolio-headline">
       <div class="portfolio-primary">
-        <h1 class="hero-label" id="portfolioHeading">Portfolio value</h1>
+        <h1 class="hero-label" id="portfolioHeading" data-l10n-id="home-portfolio-title"></h1>
         <div class="wallet-identity" id="homeWalletIdentity" hidden>
           <code class="wallet-address" id="homeWalletAddress">—</code>
           <div class="wallet-identity-actions">
@@ -11,8 +11,7 @@
               class="wallet-identity-action"
               id="homeWalletCopy"
               data-copy=""
-              title="Copy wallet address"
-              aria-label="Copy wallet address"
+              data-l10n-id="home-wallet-copy"
             >
               <i class="icon-copy" aria-hidden="true"></i>
             </button>
@@ -20,8 +19,7 @@
               type="button"
               class="wallet-identity-action"
               id="homeWalletQrButton"
-              title="Show wallet QR code"
-              aria-label="Show wallet QR code"
+              data-l10n-id="home-wallet-qr-open"
               aria-haspopup="dialog"
               aria-expanded="false"
             >
@@ -31,30 +29,29 @@
               class="wallet-qr-popover"
               id="homeWalletQrPopover"
               role="dialog"
-              aria-label="Wallet QR code"
+              data-l10n-id="home-wallet-qr-popover"
               hidden
             >
               <div class="wallet-qr-header">
                 <div>
-                  <strong>Receive</strong>
-                  <span>SOL and SPL tokens</span>
+                  <strong data-l10n-id="home-wallet-qr-receive"></strong>
+                  <span data-l10n-id="home-wallet-qr-assets"></span>
                 </div>
                 <button
                   type="button"
                   class="wallet-identity-action"
                   id="homeWalletQrClose"
-                  title="Close"
-                  aria-label="Close wallet QR code"
+                  data-l10n-id="home-wallet-qr-close"
                 >
                   <i class="icon-x" aria-hidden="true"></i>
                 </button>
               </div>
               <div class="wallet-qr-visual">
-                <span id="homeWalletQrStatus">Preparing QR code</span>
+                <span id="homeWalletQrStatus" data-l10n-id="home-wallet-qr-preparing"></span>
                 <img
                   id="homeWalletQrImage"
                   src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="
-                  alt="QR code for the main wallet address"
+                  data-l10n-id="home-wallet-qr-image"
                   hidden
                 />
               </div>
@@ -69,7 +66,7 @@
             <span class="hero-change-value change-value flat">0.0000</span>
             <span class="change-percent flat">(0.00%)</span>
           </span>
-          <span class="hero-change-label">today</span>
+          <span class="hero-change-label" data-l10n-id="home-portfolio-today"></span>
         </div>
       </div>
 
@@ -87,24 +84,24 @@
 
     <div class="portfolio-stats">
       <div class="portfolio-stat">
-        <span class="hero-stat-label">Available SOL</span>
+        <span class="hero-stat-label" data-l10n-id="home-stat-available"></span>
         <span class="hero-stat-value" id="heroCash">0.0000<span class="hero-unit">SOL</span></span>
       </div>
       <div class="portfolio-stat">
-        <span class="hero-stat-label">Token holdings</span>
+        <span class="hero-stat-label" data-l10n-id="home-stat-holdings"></span>
         <span class="hero-stat-value" id="heroHoldings"
           >0.0000<span class="hero-unit">SOL</span></span
         >
         <span class="hero-stat-sub" id="heroHoldingsCount"></span>
       </div>
       <div class="portfolio-stat">
-        <span class="hero-stat-label">Open P&amp;L</span>
+        <span class="hero-stat-label" data-l10n-id="home-stat-open-pnl"></span>
         <span class="hero-stat-value flat" id="heroOpenPnl"
           >0.0000<span class="hero-unit">SOL</span> <span class="hero-stat-sub">0.0%</span></span
         >
       </div>
       <div class="portfolio-stat">
-        <span class="hero-stat-label">Realized today</span>
+        <span class="hero-stat-label" data-l10n-id="home-stat-realized-today"></span>
         <span class="hero-stat-value flat" id="heroRealizedToday"
           >0.0000<span class="hero-unit">SOL</span></span
         >
@@ -115,14 +112,15 @@
   <div class="home-workspace">
     <section class="calendar-workspace" aria-labelledby="calendarHeading">
       <div class="workspace-header calendar-header">
-        <h2 id="calendarHeading"><i class="icon-calendar"></i> Performance calendar</h2>
+        <h2 id="calendarHeading">
+          <i class="icon-calendar"></i> <span data-l10n-id="home-calendar-title"></span>
+        </h2>
         <div class="calendar-nav">
           <button
             type="button"
             class="btn-icon"
             id="calendarPrev"
-            title="Previous month"
-            aria-label="Previous month"
+            data-l10n-id="home-calendar-previous"
           >
             <i class="icon-chevron-left"></i>
           </button>
@@ -131,16 +129,14 @@
             type="button"
             class="btn-icon"
             id="calendarNext"
-            title="Next month"
-            aria-label="Next month"
+            data-l10n-id="home-calendar-next"
           >
             <i class="icon-chevron-right"></i>
           </button>
         </div>
       </div>
       <div class="calendar-weekdays">
-        <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span
-        ><span>Fri</span><span>Sat</span>
+        <span></span><span></span><span></span><span></span><span></span><span></span><span></span>
       </div>
       <div class="calendar-grid" id="portfolioCalendarGrid">
         <div class="calendar-cell skeleton"></div>
@@ -188,41 +184,46 @@
       </div>
       <div class="calendar-summary">
         <div class="calendar-summary-stat">
-          <span class="calendar-summary-label">Month P&amp;L</span>
+          <span class="calendar-summary-label" data-l10n-id="home-calendar-month-pnl"></span>
+          <!-- l10n-ignore: numeric placeholder replaced by the calendar on first render -->
           <span class="calendar-summary-value" id="calendarMonthPnl">0.000 SOL</span>
         </div>
         <div class="calendar-summary-stat">
-          <span class="calendar-summary-label">Trades</span>
+          <span class="calendar-summary-label" data-l10n-id="home-calendar-trades"></span>
           <span class="calendar-summary-value" id="calendarMonthTrades">0</span>
         </div>
       </div>
     </section>
 
-    <aside class="home-operations" aria-label="Portfolio and market status">
+    <aside class="home-operations" data-l10n-id="home-operations">
       <section class="operations-section exposure-section" aria-labelledby="exposureHeading">
         <div class="workspace-header">
-          <h2 id="exposureHeading"><i class="icon-trending-up"></i> Position exposure</h2>
-          <span class="section-count"><span id="positionsCount">0</span> open</span>
+          <h2 id="exposureHeading">
+            <i class="icon-trending-up"></i> <span data-l10n-id="home-exposure-title"></span>
+          </h2>
+          <span class="section-count"
+            ><span id="positionsCount">0</span> <span data-l10n-id="home-exposure-open"></span
+          ></span>
         </div>
         <div class="metric-ledger">
           <div class="metric-row">
-            <span class="position-label">Invested</span>
+            <span class="position-label" data-l10n-id="home-exposure-invested"></span>
             <span class="position-value" id="positionsInvested">0.00</span>
           </div>
           <div class="metric-row">
-            <span class="position-label">Average size</span>
+            <span class="position-label" data-l10n-id="home-exposure-avg-size"></span>
             <span class="position-value" id="positionsAvgSize">0.00</span>
           </div>
           <div class="metric-row">
-            <span class="position-label">Average hold</span>
+            <span class="position-label" data-l10n-id="home-exposure-avg-hold"></span>
             <span class="position-value" id="positionsAvgHold">0m</span>
           </div>
           <div class="metric-row">
-            <span class="position-label">Best</span>
+            <span class="position-label" data-l10n-id="home-exposure-best"></span>
             <span class="position-value profit" id="positionsBest">—</span>
           </div>
           <div class="metric-row">
-            <span class="position-label">Worst</span>
+            <span class="position-label" data-l10n-id="home-exposure-worst"></span>
             <span class="position-value loss" id="positionsWorst">—</span>
           </div>
         </div>
@@ -230,23 +231,25 @@
 
       <section class="operations-section pipeline-section" aria-labelledby="pipelineHeading">
         <div class="workspace-header">
-          <h2 id="pipelineHeading"><i class="icon-funnel"></i> Market pipeline</h2>
+          <h2 id="pipelineHeading">
+            <i class="icon-funnel"></i> <span data-l10n-id="home-pipeline-title"></span>
+          </h2>
         </div>
         <div class="pipeline-grid">
-          <div class="pipeline-metric"><span>Tracked</span><strong id="tokensTotal">0</strong></div>
+          <div class="pipeline-metric"><span data-l10n-id="home-pipeline-tracked"></span><strong id="tokensTotal">0</strong></div>
           <div class="pipeline-metric">
-            <span>Priced</span><strong id="tokensWithPrices">0</strong>
+            <span data-l10n-id="home-pipeline-priced"></span><strong id="tokensWithPrices">0</strong>
           </div>
           <div class="pipeline-metric">
-            <span>Passed filters</span><strong class="success" id="tokensPassed">0</strong>
+            <span data-l10n-id="home-pipeline-passed"></span><strong class="success" id="tokensPassed">0</strong>
           </div>
           <div class="pipeline-metric">
-            <span>Rejected</span><strong class="danger" id="tokensRejected">0</strong>
+            <span data-l10n-id="home-pipeline-rejected"></span><strong class="danger" id="tokensRejected">0</strong>
           </div>
           <div class="pipeline-metric">
-            <span>Blacklisted</span><strong id="tokensBlacklisted">0</strong>
+            <span data-l10n-id="home-pipeline-blacklisted"></span><strong id="tokensBlacklisted">0</strong>
           </div>
-          <div class="pipeline-metric"><span>OHLCV</span><strong id="tokensOhlcv">0</strong></div>
+          <div class="pipeline-metric"><span data-l10n-id="home-pipeline-ohlcv"></span><strong id="tokensOhlcv">0</strong></div>
         </div>
       </section>
     </aside>

@@ -508,6 +508,18 @@ export function formatDatePart(value, { part = "year", fallback } = {}) {
   return intl(Intl.DateTimeFormat, options).format(date);
 }
 
+/** Month name and year of a UTC calendar month (`month` is 1-12), for calendar headings. */
+export function formatMonthYear(year, month) {
+  const date = new Date(Date.UTC(year, month - 1, 1));
+  return intl(Intl.DateTimeFormat, { month: "long", year: "numeric", timeZone: "UTC" }).format(date);
+}
+
+/** Short weekday name for a day index where 0 is Sunday, for calendar column headings. */
+export function formatWeekday(index) {
+  const date = new Date(Date.UTC(2023, 0, 1 + index));
+  return intl(Intl.DateTimeFormat, { weekday: "short", timeZone: "UTC" }).format(date);
+}
+
 /**
  * Elapsed time since a moment. The default style shows the largest whole unit
  * ("3h ago"); `detailed` shows the trimmed two-unit span ("3h 5m ago") and

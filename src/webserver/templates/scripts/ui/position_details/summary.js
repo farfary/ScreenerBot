@@ -9,10 +9,11 @@ import * as Utils from "../../core/utils.js";
 import { formatPercentValue, withAgo } from "../../core/format.js";
 import { closeReasonText } from "../trade_reason.js";
 
+// Labels, sub-lines and titles are plain text and escaped here; values are HTML.
 const fact = (label, value, { sub = "", tone = "", title = "" } = {}) => `
-  <div class="pdd-fact"${title ? ` title="${title}"` : ""}>
-    <dt>${label}</dt>
-    <dd><span class="pdd-fact-value ${tone}">${value}</span>${sub ? `<span class="pdd-fact-sub">${sub}</span>` : ""}</dd>
+  <div class="pdd-fact"${title ? ` title="${Utils.escapeHtml(title)}"` : ""}>
+    <dt>${Utils.escapeHtml(label)}</dt>
+    <dd><span class="pdd-fact-value ${tone}">${value}</span>${sub ? `<span class="pdd-fact-sub">${Utils.escapeHtml(sub)}</span>` : ""}</dd>
   </div>`;
 
 const facts = (rows) => {
@@ -21,7 +22,7 @@ const facts = (rows) => {
 };
 
 const section = (title, body) =>
-  body ? `<section class="pdd-section"><h3 class="pdd-section-title">${title}</h3>${body}</section>` : "";
+  body ? `<section class="pdd-section"><h3 class="pdd-section-title">${Utils.escapeHtml(title)}</h3>${body}</section>` : "";
 
 const closeReasonLabel = (reason) => Utils.escapeHtml(closeReasonText(reason));
 
@@ -50,7 +51,7 @@ export function applySummaryMixin(PositionDetailsDialog) {
   proto._buildPositionSection = function (pos) {
     const exits = this.fullDetails?.exits || [];
     const settled = this._isSettled();
-    const symbol = Utils.escapeHtml(pos.symbol || "tokens");
+    const symbol = Utils.escapeHtml(pos.symbol || I18n.t("positions-fact-tokens-fallback"));
     const remaining = pos.remaining_token_amount || 0;
     const exited = pos.total_exited_amount || 0;
     // Tokens ever acquired = still held + already sold. NOT `token_amount`, which is only the
@@ -60,36 +61,45 @@ export function applySummaryMixin(PositionDetailsDialog) {
     const partials = pos.partial_exit_count || 0;
     const tokens = (raw) => `${Utils.formatCompactNumber(this._toUiAmount(raw))} ${symbol}`;
     const shareOfBought = (raw) =>
-      bought > 0 ? `${Utils.formatNumber((raw / bought) * 100, 1)}% of bought` : "";
+      bought > 0
+        ? I18n.t("positions-fact-share-of-bought", {
+            percent: formatPercentValue((raw / bought) * 100, { decimals: 1, includeSign: false }),
+          })
+        : "";
     const returned = exits.reduce((sum, exit) => sum + (exit.sol_received || 0), 0);
     const when = (ts) => Utils.formatTimestamp(ts, { includeSeconds: false });
     const age = (seconds) => Utils.formatUptime(Math.max(0, seconds), { style: "compact" });
 
     const rows = [
-      fact("Bought", bought ? tokens(bought) : "—", {
-        sub: adds > 0 ? `1 entry + ${this._plural(adds, "add")}` : "1 entry",
+      fact(I18n.t("positions-fact-bought"), bought ? tokens(bought) : "—", {
+        sub: I18n.t("positions-fact-entry-count", { count: adds }),
       }),
     ];
 
     // Until something is sold, Holding would only repeat Bought.
     if (!settled && exited > 0) {
-      rows.push(fact("Holding", tokens(remaining), { sub: shareOfBought(remaining) }));
+      rows.push(
+        fact(I18n.t("positions-fact-holding"), tokens(remaining), { sub: shareOfBought(remaining) })
+      );
     }
     if (exited > 0) {
       rows.push(
-        fact("Sold", tokens(exited), {
+        fact(I18n.t("positions-fact-sold"), tokens(exited), {
           // SOL back is summed from exit records; without them it would print an invented 0.
           sub:
             settled || !exits.length
               ? shareOfBought(exited)
-              : `${this._plural(partials, "partial exit")} · ${this._formatSol(returned)} back`,
+              : I18n.t("positions-fact-partial-exits-back", {
+                  count: partials,
+                  returned: this._formatSol(returned),
+                }),
         })
       );
       // The header already prints the P&L when the booked figure reads the same. Compared as
       // printed: the two are computed separately and differ in the eleventh decimal.
       if (!settled && pos.pnl != null && this._formatSol(pos.pnl) !== this._formatSol(pos.unrealized_pnl)) {
         rows.push(
-          fact("Realized", this._formatSol(pos.pnl, { sign: true }), {
+          fact(I18n.t("positions-fact-realized"), this._formatSol(pos.pnl, { sign: true }), {
             sub: pos.pnl_percent != null ? this._formatPct(pos.pnl_percent) : "",
             tone: this._toneClass(pos.pnl),
           })
@@ -99,24 +109,36 @@ export function applySummaryMixin(PositionDetailsDialog) {
 
     const heldSeconds = Date.now() / 1000 - pos.entry_time;
     rows.push(
-      fact("Opened", when(pos.entry_time), {
+      fact(I18n.t("positions-fact-opened"), when(pos.entry_time), {
         sub: settled ? "" : withAgo(age(heldSeconds), heldSeconds),
       })
     );
     if (settled && pos.exit_time) {
-      rows.push(fact("Closed", when(pos.exit_time), { sub: `held ${age(pos.exit_time - pos.entry_time)}` }));
+      rows.push(
+        fact(I18n.t("positions-fact-closed"), when(pos.exit_time), {
+          sub: I18n.t("positions-fact-held", { age: age(pos.exit_time - pos.entry_time) }),
+        })
+      );
     }
-    if (settled && pos.closed_reason) rows.push(fact("Reason", closeReasonLabel(pos.closed_reason)));
-    if (pos.status === "archived" && pos.archived_at) rows.push(fact("Archived", when(pos.archived_at)));
+    if (settled && pos.closed_reason) {
+      rows.push(fact(I18n.t("positions-fact-reason"), closeReasonLabel(pos.closed_reason)));
+    }
+    if (pos.status === "archived" && pos.archived_at) {
+      rows.push(fact(I18n.t("positions-fact-archived"), when(pos.archived_at)));
+    }
 
     const verified = settled ? pos.transaction_exit_verified : pos.transaction_entry_verified;
     rows.push(
-      fact(settled ? "Exit" : "Entry", verified ? "Verified on chain" : "Confirming", {
-        tone: verified ? "pdd-positive" : "pdd-caution",
-      })
+      fact(
+        settled ? I18n.t("positions-fact-exit") : I18n.t("positions-fact-entry"),
+        Utils.escapeHtml(
+          verified ? I18n.t("positions-fact-verified") : I18n.t("positions-fact-confirming")
+        ),
+        { tone: verified ? "pdd-positive" : "pdd-caution" }
+      )
     );
 
-    return section("Position", facts(rows));
+    return section(I18n.t("positions-summary-position"), facts(rows));
   };
 
   /**
@@ -131,8 +153,10 @@ export function applySummaryMixin(PositionDetailsDialog) {
 
     const settled = this._isSettled();
     const mark = settled ? pos.average_exit_price || pos.exit_price : pos.current_price;
-    const markLabel = settled ? "Exit" : "Now";
-    const vsEntry = (price) => `${this._formatPct(((price - entry) / entry) * 100, 1)} vs entry`;
+    const vsEntry = (price) =>
+      I18n.t("positions-fact-vs-entry", {
+        percent: this._formatPct(((price - entry) / entry) * 100, 1),
+      });
     const fromPeak = mark ? ((mark - peak) / peak) * 100 : null;
 
     const prices = (this.fullDetails?.entries || []).map((e) => e.price).filter((p) => p > 0);
@@ -140,20 +164,30 @@ export function applySummaryMixin(PositionDetailsDialog) {
     const maxEntry = prices.length > 1 ? Math.max(...prices) : null;
 
     const rows = [
-      fact("Peak", `${this._formatPrice(peak)} SOL`, { sub: vsEntry(peak) }),
-      fact("Low", `${this._formatPrice(low)} SOL`, { sub: vsEntry(low) }),
+      fact(I18n.t("positions-range-peak"), `${this._formatPrice(peak)} SOL`, { sub: vsEntry(peak) }),
+      fact(I18n.t("positions-range-low"), `${this._formatPrice(low)} SOL`, { sub: vsEntry(low) }),
       fromPeak !== null
-        ? fact(`${markLabel} vs peak`, this._formatPct(fromPeak, 1), { tone: this._toneClass(fromPeak) })
+        ? fact(
+            settled ? I18n.t("positions-fact-exit-vs-peak") : I18n.t("positions-fact-now-vs-peak"),
+            this._formatPct(fromPeak, 1),
+            { tone: this._toneClass(fromPeak) }
+          )
         : "",
       minEntry !== null && minEntry !== maxEntry
-        ? fact("Entry range", `${this._formatPrice(minEntry)} – ${this._formatPrice(maxEntry)}`)
+        ? fact(
+            I18n.t("positions-fact-entry-range"),
+            `${this._formatPrice(minEntry)} – ${this._formatPrice(maxEntry)}`
+          )
         : "",
     ];
 
-    return section("Price path", this._buildRangeBar({ low, peak, entry, mark, markLabel }) + facts(rows));
+    return section(
+      I18n.t("positions-summary-price-path"),
+      this._buildRangeBar({ low, peak, entry, mark, settled }) + facts(rows)
+    );
   };
 
-  proto._buildRangeBar = function ({ low, peak, entry, mark, markLabel }) {
+  proto._buildRangeBar = function ({ low, peak, entry, mark, settled }) {
     const lo = Math.min(low, entry, mark || entry);
     const hi = Math.max(peak, entry, mark || entry);
     if (!(hi > lo)) return "";
@@ -166,16 +200,16 @@ export function applySummaryMixin(PositionDetailsDialog) {
       : "";
 
     return `
-      <div class="pdd-range" role="img" aria-label="Entry and ${markLabel.toLowerCase()} price between the low and the peak">
+      <div class="pdd-range" role="img" aria-label="${Utils.escapeHtml(settled ? I18n.t("positions-range-label-exit") : I18n.t("positions-range-label-now"))}">
         <div class="pdd-range-track">
           ${span}
           <span class="pdd-range-tick is-entry" style="--at: ${at(entry)}"></span>
           ${mark ? `<span class="pdd-range-tick ${tone}" style="--at: ${at(mark)}"></span>` : ""}
         </div>
         <div class="pdd-range-scale">
-          <span>Low</span>
-          <span class="pdd-range-key"><span class="is-entry">Entry</span>${mark ? `<span class="${tone}">${markLabel}</span>` : ""}</span>
-          <span>Peak</span>
+          <span>${Utils.escapeHtml(I18n.t("positions-range-low"))}</span>
+          <span class="pdd-range-key"><span class="is-entry">${Utils.escapeHtml(I18n.t("positions-fact-entry"))}</span>${mark ? `<span class="${tone}">${Utils.escapeHtml(settled ? I18n.t("positions-fact-exit") : I18n.t("positions-range-now"))}</span>` : ""}</span>
+          <span>${Utils.escapeHtml(I18n.t("positions-range-peak"))}</span>
         </div>
       </div>`;
   };
@@ -192,15 +226,27 @@ export function applySummaryMixin(PositionDetailsDialog) {
     if (!(total > 0)) return "";
 
     const invested = pos.total_size_sol || 0;
-    const share = invested > 0 ? `${Utils.formatNumber((total / invested) * 100, 2)}% of invested` : "";
+    const share =
+      invested > 0
+        ? I18n.t("positions-fact-share-of-invested", {
+            percent: formatPercentValue((total / invested) * 100, {
+              decimals: 2,
+              includeSign: false,
+            }),
+          })
+        : "";
     // A total of one fee only repeats it, so the share moves onto that fee instead.
     const both = entryFees > 0 && exitFees > 0;
     return section(
-      "Network fees",
+      I18n.t("positions-summary-network-fees"),
       facts([
-        entryFees > 0 ? fact("Entry", this._formatSol(entryFees), { sub: both ? "" : share }) : "",
-        exitFees > 0 ? fact("Exit", this._formatSol(exitFees), { sub: both ? "" : share }) : "",
-        both ? fact("Total", this._formatSol(total), { sub: share }) : "",
+        entryFees > 0
+          ? fact(I18n.t("positions-fact-entry"), this._formatSol(entryFees), { sub: both ? "" : share })
+          : "",
+        exitFees > 0
+          ? fact(I18n.t("positions-fact-exit"), this._formatSol(exitFees), { sub: both ? "" : share })
+          : "",
+        both ? fact(I18n.t("positions-fact-total"), this._formatSol(total), { sub: share }) : "",
       ])
     );
   };
@@ -211,16 +257,22 @@ export function applySummaryMixin(PositionDetailsDialog) {
     if (!security) return "";
 
     const rows = facts([
-      security.has_mint_authority ? fact("Mint authority", "Active", { tone: "pdd-negative" }) : "",
+      security.has_mint_authority
+        ? fact(I18n.t("positions-fact-mint-authority"), Utils.escapeHtml(I18n.t("positions-fact-active")), {
+            tone: "pdd-negative",
+          })
+        : "",
       security.has_freeze_authority
-        ? fact("Freeze authority", "Active", { tone: "pdd-negative" })
+        ? fact(I18n.t("positions-fact-freeze-authority"), Utils.escapeHtml(I18n.t("positions-fact-active")), {
+            tone: "pdd-negative",
+          })
         : "",
     ]);
     const risks = (security.top_risks || [])
       .map((risk) => `<li>${Utils.escapeHtml(risk)}</li>`)
       .join("");
 
-    return section("Risk", rows + (risks ? `<ul class="pdd-risk-list">${risks}</ul>` : ""));
+    return section(I18n.t("positions-summary-risk"), rows + (risks ? `<ul class="pdd-risk-list">${risks}</ul>` : ""));
   };
 
   proto._buildMarketSection = function () {
@@ -231,10 +283,12 @@ export function applySummaryMixin(PositionDetailsDialog) {
 
     if (pool?.dex_name || pool?.liquidity_sol != null) {
       rows.push(
-        fact("Pool", Utils.escapeHtml(pool.dex_name || "—"), {
+        fact(I18n.t("positions-fact-pool"), Utils.escapeHtml(pool.dex_name || "—"), {
           sub:
             pool.liquidity_sol != null
-              ? `${Utils.formatCompactNumber(pool.liquidity_sol)} SOL liquidity`
+              ? I18n.t("positions-fact-pool-liquidity", {
+                  amount: Utils.formatCompactNumber(pool.liquidity_sol),
+                })
               : "",
         })
       );
@@ -242,37 +296,46 @@ export function applySummaryMixin(PositionDetailsDialog) {
 
     if (market) {
       rows.push(
-        fact("Market cap", usd(market.market_cap), {
-          sub: market.fdv && market.fdv !== market.market_cap ? `FDV ${usd(market.fdv)}` : "",
+        fact(I18n.t("positions-fact-market-cap"), usd(market.market_cap), {
+          sub:
+            market.fdv && market.fdv !== market.market_cap
+              ? I18n.t("positions-fact-fdv", { value: usd(market.fdv) })
+              : "",
         })
       );
-      rows.push(fact("Liquidity", usd(market.liquidity_usd)));
-      rows.push(fact("Volume 24h", usd(market.volume_24h)));
+      rows.push(fact(I18n.t("positions-fact-liquidity"), usd(market.liquidity_usd)));
+      rows.push(fact(I18n.t("positions-fact-volume-24h"), usd(market.volume_24h)));
 
       const changes = [
-        ["1h", market.price_change_h1],
-        ["24h", market.price_change_h24],
+        [I18n.t("positions-change-period-1h"), market.price_change_h1],
+        [I18n.t("positions-change-period-24h"), market.price_change_h24],
       ].filter(([, value]) => value != null);
       if (changes.length) {
         rows.push(
           fact(
-            "Price change",
+            I18n.t("positions-fact-price-change"),
             changes
               .map(
                 ([period, value]) =>
-                  `<span class="pdd-change">${period} <span class="${this._toneClass(value)}">${this._formatPct(value, 1)}</span></span>`
+                  `<span class="pdd-change">${Utils.escapeHtml(period)} <span class="${this._toneClass(value)}">${this._formatPct(value, 1)}</span></span>`
               )
               .join("")
           )
         );
       }
       rows.push(
-        fact("Holders", market.holder_count ? Utils.formatCompactNumber(market.holder_count) : "—")
+        fact(
+          I18n.t("positions-fact-holders"),
+          market.holder_count ? Utils.formatCompactNumber(market.holder_count) : "—"
+        )
       );
     }
 
     // A finished position is read long after it closed: say these are today's numbers.
-    return section(this._isSettled() ? "Market now" : "Market", facts(rows));
+    return section(
+      this._isSettled() ? I18n.t("positions-summary-market-now") : I18n.t("positions-summary-market"),
+      facts(rows)
+    );
   };
 
   /** Outside references. Solscan already has its own control in the header. */
@@ -280,22 +343,22 @@ export function applySummaryMixin(PositionDetailsDialog) {
     const tokenInfo = this.fullDetails?.token_info;
     const links = this.fullDetails?.external_links || {};
     const items = [
-      ["Website", tokenInfo?.website],
-      ["X", tokenInfo?.twitter],
-      ["Telegram", tokenInfo?.telegram],
-      ["DexScreener", links.dexscreener],
-      ["Birdeye", links.birdeye],
-      ["RugCheck", links.rugcheck],
-      ["Photon", links.photon],
+      [I18n.t("positions-link-website"), tokenInfo?.website],
+      [I18n.t("positions-link-x"), tokenInfo?.twitter],
+      [I18n.t("positions-link-telegram"), tokenInfo?.telegram],
+      [I18n.t("positions-link-dexscreener"), links.dexscreener],
+      [I18n.t("positions-link-birdeye"), links.birdeye],
+      [I18n.t("positions-link-rugcheck"), links.rugcheck],
+      [I18n.t("positions-link-photon"), links.photon],
     ].filter(([, url]) => isWebUrl(url));
     if (!items.length) return "";
 
     return section(
-      "Links",
+      I18n.t("positions-summary-links"),
       `<div class="pdd-links">${items
         .map(
           ([label, url]) =>
-            `<a class="pdd-link" href="${Utils.escapeHtml(url)}" target="_blank" rel="noopener">${label}<i class="icon-arrow-up-right"></i></a>`
+            `<a class="pdd-link" href="${Utils.escapeHtml(url)}" target="_blank" rel="noopener">${Utils.escapeHtml(label)}<i class="icon-arrow-up-right"></i></a>`
         )
         .join("")}</div>`
     );

@@ -393,6 +393,40 @@ pub struct EntryRecord {
 mod tests {
     use super::{PositionManagement, PositionOrigin};
 
+    /// Catalog key of the label for each management mode. The match is
+    /// exhaustive, so a new variant fails to compile until it is mapped here and
+    /// in `POSITION_MANAGEMENT_LABELS` (ui/position_management.js).
+    fn label_key(management: PositionManagement) -> &'static str {
+        match management {
+            PositionManagement::AutoTrader => "positions-management-auto-trader",
+            PositionManagement::UserOnly => "positions-management-user-only",
+            PositionManagement::CopyTask => "positions-management-copy-task",
+            PositionManagement::Hybrid => "positions-management-hybrid",
+        }
+    }
+
+    #[test]
+    fn management_labels_exist_in_the_catalog() {
+        for management in [
+            PositionManagement::AutoTrader,
+            PositionManagement::UserOnly,
+            PositionManagement::CopyTask,
+            PositionManagement::Hybrid,
+        ] {
+            let key = label_key(management);
+            assert_eq!(
+                key,
+                format!(
+                    "positions-management-{}",
+                    management.as_str().replace('_', "-")
+                ),
+                "key does not follow the id {}",
+                management.as_str()
+            );
+            assert_ne!(crate::i18n::format_en(key, None), key, "missing {key}");
+        }
+    }
+
     #[test]
     fn copy_owned_management_requires_copy_provenance() {
         let manual = PositionOrigin::Manual;

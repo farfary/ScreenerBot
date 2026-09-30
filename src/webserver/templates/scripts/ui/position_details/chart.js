@@ -37,11 +37,13 @@ const EMPTY_POLL_MS = 15000;
 const OPEN_POLL_MS = 10000;
 const SETTLED_POLL_MS = 30000;
 
-const CHART_TYPES = [
-  ["candlestick", "Candles"],
-  ["line", "Line"],
-  ["area", "Area"],
-];
+const CHART_TYPE_LABELS = Object.freeze({
+  candlestick: "positions-chart-type-candles",
+  line: "positions-chart-type-line",
+  area: "positions-chart-type-area",
+});
+
+const esc = (text) => Utils.escapeHtml(text);
 
 export function applyChartMixin(PositionDetailsDialog) {
   const proto = PositionDetailsDialog.prototype;
@@ -75,7 +77,7 @@ export function applyChartMixin(PositionDetailsDialog) {
     this._pddChartType = this._pddChartType || "candlestick";
 
     const segment = (attrs, label, active) =>
-      `<button type="button" class="timeframe-btn${active ? " active" : ""}" ${attrs} aria-pressed="${active}">${label}</button>`;
+      `<button type="button" class="timeframe-btn${active ? " active" : ""}" ${attrs} aria-pressed="${active}">${esc(label)}</button>`;
 
     section.innerHTML = `
       <div class="chart-container pdd-chart-container">
@@ -83,30 +85,30 @@ export function applyChartMixin(PositionDetailsDialog) {
           <div class="chart-header-left">
             <div class="chart-data-indicator" id="pddDataIndicator" tabindex="0" role="status">
               <span class="chart-data-dot"></span>
-              <span class="chart-data-label">Data</span>
+              <span class="chart-data-label" data-l10n-id="positions-chart-data"></span>
               <div class="chart-data-tip" id="pddDataTip"></div>
             </div>
             <div class="chart-ohlcv-display" id="pddOhlcv">
-              <span class="ohlcv-item"><span class="ohlcv-label">O</span> <span class="ohlcv-value" id="pddO">—</span></span>
-              <span class="ohlcv-item"><span class="ohlcv-label">H</span> <span class="ohlcv-value" id="pddH">—</span></span>
-              <span class="ohlcv-item"><span class="ohlcv-label">L</span> <span class="ohlcv-value" id="pddL">—</span></span>
-              <span class="ohlcv-item"><span class="ohlcv-label">C</span> <span class="ohlcv-value" id="pddC">—</span></span>
+              <span class="ohlcv-item"><span class="ohlcv-label" data-l10n-id="positions-chart-ohlc-open"></span> <span class="ohlcv-value" id="pddO">—</span></span>
+              <span class="ohlcv-item"><span class="ohlcv-label" data-l10n-id="positions-chart-ohlc-high"></span> <span class="ohlcv-value" id="pddH">—</span></span>
+              <span class="ohlcv-item"><span class="ohlcv-label" data-l10n-id="positions-chart-ohlc-low"></span> <span class="ohlcv-value" id="pddL">—</span></span>
+              <span class="ohlcv-item"><span class="ohlcv-label" data-l10n-id="positions-chart-ohlc-close"></span> <span class="ohlcv-value" id="pddC">—</span></span>
               <span class="ohlcv-change" id="pddChg">—</span>
             </div>
           </div>
           <div class="chart-controls pdd-chart-controls">
-            <div class="timeframe-buttons" id="pddChartType" role="group" aria-label="Chart type">
-              ${CHART_TYPES.map(([id, label]) => segment(`data-ct="${id}"`, label, id === this._pddChartType)).join("")}
+            <div class="timeframe-buttons" id="pddChartType" role="group" data-l10n-id="positions-chart-type-group">
+              ${Object.keys(CHART_TYPE_LABELS).map((id) => segment(`data-ct="${id}"`, I18n.label(CHART_TYPE_LABELS, id), id === this._pddChartType)).join("")}
             </div>
-            <div class="timeframe-buttons" role="group" aria-label="Chart overlays">
-              ${segment('id="pddEmaToggle" title="Exponential moving averages, 9 and 21"', "EMA", Boolean(this._pddEma))}
-              <button type="button" class="timeframe-btn" id="pddFrameBtn" title="Frame this position's lifetime">Fit</button>
+            <div class="timeframe-buttons" role="group" data-l10n-id="positions-chart-overlays-group">
+              <button type="button" class="timeframe-btn${this._pddEma ? " active" : ""}" id="pddEmaToggle" data-l10n-id="positions-chart-ema" aria-pressed="${Boolean(this._pddEma)}"></button>
+              <button type="button" class="timeframe-btn" id="pddFrameBtn" data-l10n-id="positions-chart-fit"></button>
             </div>
-            <div class="timeframe-buttons" id="pddTimeframes" role="group" aria-label="Timeframe">
+            <div class="timeframe-buttons" id="pddTimeframes" role="group" data-l10n-id="positions-chart-timeframes-group">
               ${CHART_TIMEFRAMES.map((tf) => segment(`data-tf="${tf}"`, tf.toUpperCase(), tf === this._chartTimeframe)).join("")}
             </div>
-            <div class="timeframe-buttons pdd-pane-group" role="group" aria-label="Chart pane">
-              <button type="button" class="timeframe-btn pdd-pane-btn" id="pddChartFocusBtn" aria-controls="pddActivity" aria-pressed="false" title="Expand chart" aria-label="Expand chart"><i class="icon-maximize-2"></i></button>
+            <div class="timeframe-buttons pdd-pane-group" role="group" data-l10n-id="positions-chart-pane-group">
+              <button type="button" class="timeframe-btn pdd-pane-btn" id="pddChartFocusBtn" aria-controls="pddActivity" aria-pressed="false" data-l10n-id="positions-pane-expand-chart"><i class="icon-maximize-2"></i></button>
             </div>
           </div>
         </div>
@@ -118,11 +120,12 @@ export function applyChartMixin(PositionDetailsDialog) {
         <div id="pddChartLoading" class="chart-loading-overlay">
           <div class="chart-loading-content">
             <div class="chart-loading-spinner"></div>
-            <div class="chart-loading-text">Loading chart data...</div>
+            <div class="chart-loading-text" data-l10n-id="positions-chart-loading"></div>
           </div>
         </div>
       </div>
     `;
+    I18n.localizeTree(section);
 
     await this._initPositionChart(mint);
   };
@@ -134,7 +137,7 @@ export function applyChartMixin(PositionDetailsDialog) {
 
     if (!window.createAdvancedChart) {
       container.innerHTML =
-        '<div class="pdd-chart-empty"><i class="icon-circle-alert"></i><p>Chart engine unavailable</p></div>';
+        `<div class="pdd-chart-empty"><i class="icon-circle-alert"></i><p>${esc(I18n.t("positions-chart-unavailable"))}</p></div>`;
       return;
     }
 
@@ -337,7 +340,7 @@ export function applyChartMixin(PositionDetailsDialog) {
         const collecting = !status || (status.monitored && !row?.backfill_complete);
         this._showPositionChartOverlay(
           timeframe,
-          collecting ? "Collecting chart data…" : "No chart data for this token yet"
+          collecting ? I18n.t("positions-chart-collecting") : I18n.t("positions-chart-no-data")
         );
         this._setChartEmpty(true);
         return;
@@ -358,7 +361,7 @@ export function applyChartMixin(PositionDetailsDialog) {
       if (isInitial) this._framePosition();
     } catch {
       if (seq !== this._pddLoadSeq) return;
-      this._showPositionChartOverlay(timeframe, "Waiting for chart data...");
+      this._showPositionChartOverlay(timeframe, I18n.t("positions-chart-waiting"));
     }
   };
 
@@ -376,7 +379,7 @@ export function applyChartMixin(PositionDetailsDialog) {
     this._stopPositionChartPoller();
     const intervalMs = this._positionChartPollMs();
     this._pddPoller = new Poller(() => this._refreshPositionChart(mint), {
-      label: "PositionChart",
+      label: "PositionChart", // l10n-ignore: internal poller name
       intervalMs,
     });
     this._pddPoller.start({ silent: true });
@@ -551,7 +554,9 @@ export function applyChartMixin(PositionDetailsDialog) {
         type: isDca ? "dca" : "entry",
         price: e.price,
         timestamp: barTime,
-        label: isDca ? `DCA ${dcaIdx}` : "Entry",
+        label: isDca
+          ? I18n.t("positions-chart-marker-dca", { index: dcaIdx })
+          : I18n.t("positions-fact-entry"),
       });
     });
     exits.forEach((e, i) => {
@@ -562,7 +567,10 @@ export function applyChartMixin(PositionDetailsDialog) {
         type: "exit",
         price: e.price,
         timestamp: barTime,
-        label: exits.length > 1 ? `Exit ${i + 1}` : "Exit",
+        label:
+          exits.length > 1
+            ? I18n.t("positions-chart-marker-exit-numbered", { index: i + 1 })
+            : I18n.t("positions-fact-exit"),
       });
     });
 
@@ -584,7 +592,7 @@ export function applyChartMixin(PositionDetailsDialog) {
             {
               price: avgEntry,
               color: this._pddChart.theme.positionColors.avgEntry,
-              label: "Avg Entry",
+              label: I18n.t("positions-chart-avg-entry"),
               style: 2,
               // Price lines do not extend the price scale on their own, so a deeply red or
               // green position drew its entry off-pane. Only while the view overlaps the
@@ -620,18 +628,22 @@ export function applyChartMixin(PositionDetailsDialog) {
     const parts = [];
     const dropped = this._pddDroppedEvents || 0;
     if (dropped) {
-      parts.push(`${dropped} event${dropped > 1 ? "s" : ""} without a candle on this timeframe`);
+      parts.push(I18n.t("positions-chart-dropped-events", { count: dropped }));
     }
     (this._pddClippedRefs || []).forEach((ref) => {
+      const args = {
+        label: ref.label || I18n.t("positions-chart-level"),
+        price: this._formatPrice(ref.price),
+      };
       parts.push(
-        `${ref.label || "Level"} ${this._formatPrice(ref.price)} is ${ref.above ? "above" : "below"} this view`
+        ref.above
+          ? I18n.t("positions-chart-level-above", args)
+          : I18n.t("positions-chart-level-below", args)
       );
     });
 
     note.textContent = parts.join(" · ");
-    note.title = (this._pddClippedRefs || []).length
-      ? "Drag the price axis to scale out to it"
-      : "";
+    note.title = (this._pddClippedRefs || []).length ? I18n.t("positions-chart-scale-hint") : "";
   };
 
   /**
@@ -646,13 +658,15 @@ export function applyChartMixin(PositionDetailsDialog) {
     const pos = this._position() || {};
     const { entries, exits } = this._positionEvents();
     const legend = [
-      ["Entry", colors.entry, "", entries.some((e) => !e.is_dca)],
-      ["DCA", colors.dca, "", entries.some((e) => e.is_dca)],
-      ["Exit", colors.exit, "", exits.length > 0],
+      [I18n.t("positions-fact-entry"), colors.entry, "", entries.some((e) => !e.is_dca)],
+      [I18n.t("positions-chart-legend-dca"), colors.dca, "", entries.some((e) => e.is_dca)],
+      [I18n.t("positions-fact-exit"), colors.exit, "", exits.length > 0],
       [
         // Named as off-pane rather than dropped: the level is real, the price scale just
         // refuses to stretch to it, and the note under the legend says which way it lies.
-        this._isReferenceClipped("Avg Entry") ? "Avg entry (off scale)" : "Avg entry",
+        this._isReferenceClipped(I18n.t("positions-chart-avg-entry"))
+          ? I18n.t("positions-chart-legend-avg-entry-off-scale")
+          : I18n.t("positions-chart-legend-avg-entry"),
         colors.avgEntry,
         " is-line",
         Boolean(pos.average_entry_price || pos.entry_price),
@@ -663,7 +677,7 @@ export function applyChartMixin(PositionDetailsDialog) {
       .filter(([, , , shown]) => shown)
       .map(
         ([label, color, cls]) =>
-          `<span class="pdd-legend-item${cls}" style="--pdd-legend-color: ${color}">${label}</span>`
+          `<span class="pdd-legend-item${cls}" style="--pdd-legend-color: ${color}">${esc(label)}</span>`
       )
       .join("");
   };
@@ -689,9 +703,9 @@ export function applyChartMixin(PositionDetailsDialog) {
     if (avgEntry && bar?.close) {
       const pnlPct = ((bar.close - avgEntry) / avgEntry) * 100;
       rows.push(
-        { label: "Avg Entry", value: this._formatPrice(avgEntry) },
+        { label: I18n.t("positions-chart-avg-entry"), value: this._formatPrice(avgEntry) },
         {
-          label: "P&L @ Bar",
+          label: I18n.t("positions-chart-pnl-at-bar"),
           value: Utils.formatPercentValue(pnlPct, { decimals: 2, signZero: true }),
           cls: pnlPct >= 0 ? "positive" : "negative",
         }
@@ -699,7 +713,7 @@ export function applyChartMixin(PositionDetailsDialog) {
     }
 
     const marks = bar ? this._pddMarkerBars?.get(bar.time) : null;
-    if (marks) rows.push({ label: marks.join(" · "), value: "Click to locate" });
+    if (marks) rows.push({ label: marks.join(" · "), value: I18n.t("positions-chart-click-to-locate") });
     return rows;
   };
 

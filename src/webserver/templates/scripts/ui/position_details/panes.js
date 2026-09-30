@@ -99,12 +99,16 @@ export function applyPanesMixin(PositionDetailsDialog) {
     if (!this.dialogEl || !mode) return;
     this._pddChart?.setCompact(mode === "activity");
     const chart = this.dialogEl.querySelector("#pddChartSection");
-    if (chart) chart.title = mode === "activity" ? "Show chart" : "";
+    if (chart) chart.title = mode === "activity" ? I18n.t("positions-pane-show-chart") : "";
 
     const toggle = this.dialogEl.querySelector("#pddActivityToggle");
     if (toggle) {
       const label =
-        mode === "activity" ? "Show chart" : mode === "chart" ? "Show activity" : "Expand activity";
+        mode === "activity"
+          ? I18n.t("positions-pane-show-chart")
+          : mode === "chart"
+            ? I18n.t("positions-pane-show-activity")
+            : I18n.attr("positions-details-activity-expand", "title");
       setControl(toggle, label, mode === "activity" ? "icon-chevron-down" : "icon-chevron-up");
       toggle.setAttribute("aria-expanded", String(mode !== "chart"));
     }
@@ -114,7 +118,9 @@ export function applyPanesMixin(PositionDetailsDialog) {
       const full = mode === "chart";
       setControl(
         focus,
-        full ? "Restore activity" : "Expand chart",
+        full
+          ? I18n.t("positions-pane-restore-activity")
+          : I18n.attr("positions-pane-expand-chart", "title"),
         full ? "icon-minimize-2" : "icon-maximize-2"
       );
       focus.classList.toggle("active", full);

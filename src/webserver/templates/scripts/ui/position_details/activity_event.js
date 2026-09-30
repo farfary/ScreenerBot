@@ -6,23 +6,64 @@
  */
 import * as Utils from "../../core/utils.js";
 
-const KIND_META = {
-  entry: { label: "Entry", icon: "icon-circle-arrow-down" },
-  dca: { label: "Add", icon: "icon-circle-arrow-down" },
-  partial_exit: { label: "Partial exit", icon: "icon-circle-arrow-up" },
-  exit: { label: "Exit", icon: "icon-circle-arrow-up" },
-  buy: { label: "Wallet buy", icon: "icon-circle-arrow-down" },
-  sell: { label: "Wallet sell", icon: "icon-circle-arrow-up" },
-  transfer: { label: "Transfer", icon: "icon-arrow-right-left" },
-  ata: { label: "Token account", icon: "icon-wallet" },
-  other: { label: "Transaction", icon: "icon-activity" },
-};
+const KIND_ICONS = Object.freeze({
+  entry: "icon-circle-arrow-down",
+  dca: "icon-circle-arrow-down",
+  partial_exit: "icon-circle-arrow-up",
+  exit: "icon-circle-arrow-up",
+  buy: "icon-circle-arrow-down",
+  sell: "icon-circle-arrow-up",
+  transfer: "icon-arrow-right-left",
+  ata: "icon-wallet",
+  other: "icon-activity",
+});
 
-const STATE_LABELS = {
-  pending: "Pending",
-  failed: "Failed",
-  synthetic: "Synthetic",
-};
+// Kinds are the `ActivityEvent.kind` values of the activity endpoint.
+const EVENT_KIND_LABELS = Object.freeze({
+  entry: "positions-event-kind-entry",
+  dca: "positions-event-kind-dca",
+  partial_exit: "positions-event-kind-partial-exit",
+  exit: "positions-event-kind-exit",
+  buy: "positions-event-kind-buy",
+  sell: "positions-event-kind-sell",
+  transfer: "positions-event-kind-transfer",
+  ata: "positions-event-kind-ata",
+  other: "positions-event-kind-other",
+});
+
+const EVENT_STATE_LABELS = Object.freeze({
+  pending: "positions-event-state-pending",
+  failed: "positions-event-state-failed",
+  synthetic: "positions-event-state-synthetic",
+});
+
+// `TransactionDirection` (src/transactions/types.rs) as sent by the activity endpoint.
+const DIRECTION_LABELS = Object.freeze({
+  Incoming: "positions-direction-incoming",
+  Outgoing: "positions-direction-outgoing",
+  Internal: "positions-direction-internal",
+  Unknown: "positions-direction-unknown",
+});
+
+// Plain chain statuses; a failed status carries the error after "Failed:".
+const CHAIN_STATUS_LABELS = Object.freeze({
+  Pending: "positions-chain-status-pending",
+  Confirmed: "positions-chain-status-confirmed",
+  Finalized: "positions-chain-status-finalized",
+});
+const FAILED_STATUS_PREFIX = "Failed:";
+
+const esc = (text) => Utils.escapeHtml(text);
+
+function chainStatusText(status) {
+  if (Object.hasOwn(CHAIN_STATUS_LABELS, status)) return I18n.label(CHAIN_STATUS_LABELS, status);
+  if (status.startsWith(FAILED_STATUS_PREFIX)) {
+    return I18n.t("positions-chain-status-failed-detail", {
+      error: status.slice(FAILED_STATUS_PREFIX.length).trim(),
+    });
+  }
+  return I18n.t("positions-chain-status-failed");
+}
 
 export function activityEventKey(event) {
   return event.signature || `${event.kind}:${event.side}:${event.position_index}:${event.sequence}`;
@@ -32,49 +73,69 @@ function metric(label, value, tone = "") {
   if (value === null || value === undefined || value === "") return "";
   return `
     <div class="pdd-act-detail-metric">
-      <span>${label}</span>
+      <span>${esc(label)}</span>
       <strong class="${tone}">${value}</strong>
     </div>`;
 }
 
+/** Plain text of what happened; the caller escapes it once. */
 function eventDescription(event, ctx) {
   const amount = event.token_amount;
   const submitted = event.side !== "wallet" && !event.recorded;
   const amountText =
     amount != null && amount !== 0
-      ? `${Utils.formatCompactNumber(amount)} ${Utils.escapeHtml(ctx.symbol)}`
-      : "tokens";
+      ? `${Utils.formatCompactNumber(amount)} ${ctx.symbol}`
+      : I18n.t("positions-event-tokens-fallback");
   const solText = event.sol_amount != null ? ctx.formatSol(event.sol_amount) : null;
+  const args = { amount: amountText, sol: solText };
 
   switch (event.kind) {
     case "entry":
-      if (submitted) return `Submitted buy for ${amountText}`;
-      return solText ? `Bought ${amountText} for ${solText}` : `Bought ${amountText}`;
+      if (submitted) return I18n.t("positions-event-entry-submitted", args);
+      return solText
+        ? I18n.t("positions-event-entry-for", args)
+        : I18n.t("positions-event-entry", args);
     case "dca":
-      if (submitted) return `Submitted add for ${amountText}`;
-      return solText ? `Added ${amountText} for ${solText}` : `Added ${amountText}`;
+      if (submitted) return I18n.t("positions-event-dca-submitted", args);
+      return solText
+        ? I18n.t("positions-event-dca-for", args)
+        : I18n.t("positions-event-dca", args);
     case "partial_exit": {
-      const pct =
-        event.exit_percentage != null ? `${Utils.formatNumber(event.exit_percentage, 0)}%` : "";
-      if (submitted) return `Submitted ${pct ? `${pct} ` : ""}partial exit for ${amountText}`;
-      const share = pct ? ` (${pct})` : "";
-      return solText ? `Sold ${amountText}${share} for ${solText}` : `Sold ${amountText}${share}`;
+      const percent =
+        event.exit_percentage != null
+          ? Utils.formatPercentValue(event.exit_percentage, { decimals: 0, includeSign: false })
+          : null;
+      if (submitted) {
+        return percent
+          ? I18n.t("positions-event-partial-exit-submitted-percent", { ...args, percent })
+          : I18n.t("positions-event-partial-exit-submitted", args);
+      }
+      if (percent) {
+        return solText
+          ? I18n.t("positions-event-sold-percent-for", { ...args, percent })
+          : I18n.t("positions-event-sold-percent", { ...args, percent });
+      }
+      return solText
+        ? I18n.t("positions-event-sold-for", args)
+        : I18n.t("positions-event-sold", args);
     }
     case "exit":
-      if (submitted) return "Submitted full position exit";
-      return solText ? `Closed with ${amountText} sold for ${solText}` : "Closed the position";
+      if (submitted) return I18n.t("positions-event-exit-submitted");
+      return solText
+        ? I18n.t("positions-event-exit-for", args)
+        : I18n.t("positions-event-exit-closed");
     case "buy":
-      return `Wallet bought ${amountText} elsewhere`;
+      return I18n.t("positions-event-wallet-bought", args);
     case "sell":
-      return `Wallet sold ${amountText} elsewhere`;
+      return I18n.t("positions-event-wallet-sold", args);
     case "transfer":
-      if (event.direction === "Incoming") return `Received ${amountText}`;
-      if (event.direction === "Outgoing") return `Sent ${amountText}`;
-      return `Transferred ${amountText}`;
+      if (event.direction === "Incoming") return I18n.t("positions-event-received", args);
+      if (event.direction === "Outgoing") return I18n.t("positions-event-sent", args);
+      return I18n.t("positions-event-transferred", args);
     case "ata":
-      return "Token account activity";
+      return I18n.t("positions-event-ata");
     default:
-      return `Wallet transaction involving ${amountText}`;
+      return I18n.t("positions-event-wallet-transaction", args);
   }
 }
 
@@ -90,11 +151,11 @@ function eventOutcome(event, ctx) {
   }
 
   if (event.price != null) {
-    return `<span class="pdd-act-outcome">${ctx.formatPrice(event.price)} SOL / token</span>`;
+    return `<span class="pdd-act-outcome">${esc(I18n.t("positions-event-price-per-token", { price: ctx.formatPrice(event.price) }))}</span>`;
   }
 
   if (event.side === "wallet" && event.sol_change != null && event.sol_change !== 0) {
-    return `<span class="pdd-act-outcome">${ctx.formatSol(event.sol_change, { sign: true })} wallet change</span>`;
+    return `<span class="pdd-act-outcome">${esc(I18n.t("positions-event-wallet-change", { amount: ctx.formatSol(event.sol_change, { sign: true }) }))}</span>`;
   }
 
   return "";
@@ -106,14 +167,17 @@ function renderPositionAfter(event, ctx) {
 
   return `
     <section class="pdd-act-position-after">
-      <h4>Position after this event</h4>
+      <h4>${esc(I18n.t("positions-event-after-title"))}</h4>
       <div class="pdd-act-detail-grid">
         ${metric(
-          "Holding",
+          I18n.t("positions-fact-holding"),
           `${Utils.formatCompactNumber(event.tokens_after)} ${Utils.escapeHtml(ctx.symbol)}`
         )}
-        ${metric("Capital invested", ctx.formatSol(event.invested_after))}
-        ${metric("Average entry", avgEntry ? `${ctx.formatPrice(avgEntry)} SOL` : null)}
+        ${metric(I18n.t("positions-event-capital-invested"), ctx.formatSol(event.invested_after))}
+        ${metric(
+          I18n.t("positions-event-average-entry"),
+          avgEntry ? `${ctx.formatPrice(avgEntry)} SOL` : null
+        )}
       </div>
     </section>`;
 }
@@ -135,22 +199,22 @@ function renderTransfers(event) {
 
   return `
     <section class="pdd-act-xfers">
-      <h4>Token transfers</h4>
+      <h4>${esc(I18n.t("positions-event-transfers-title"))}</h4>
       <table class="pdd-act-xfer-table">
-        <thead><tr><th>Amount</th><th>Mint</th><th>From</th><th>To</th></tr></thead>
+        <thead><tr><th>${esc(I18n.t("positions-event-transfer-amount"))}</th><th>${esc(I18n.t("positions-event-transfer-mint"))}</th><th>${esc(I18n.t("positions-event-transfer-from"))}</th><th>${esc(I18n.t("positions-event-transfer-to"))}</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </section>`;
 }
 
 function renderSignature(event) {
-  if (!event.signature) return '<span class="pdd-act-sig-na">No on-chain signature</span>';
+  if (!event.signature) return `<span class="pdd-act-sig-na">${esc(I18n.t("positions-event-no-signature"))}</span>`;
   const signature = Utils.escapeHtml(event.signature);
   return `
     <div class="pdd-act-signature">
-      <span class="pdd-act-sig" data-copy="${signature}" title="Click to copy">${Utils.formatSignatureCompact(event.signature, { start: 10, end: 10 })}</span>
-      <button type="button" class="pdd-act-sig-copy" data-copy="${signature}"><i class="icon-copy"></i>Copy</button>
-      <a href="${Utils.solscanTxUrl(event.signature)}" target="_blank" rel="noopener" class="pdd-act-sig-link"><i class="icon-external-link"></i>Solscan</a>
+      <span class="pdd-act-sig" data-copy="${signature}" title="${esc(I18n.t("positions-event-click-to-copy"))}">${Utils.formatSignatureCompact(event.signature, { start: 10, end: 10 })}</span>
+      <button type="button" class="pdd-act-sig-copy" data-copy="${signature}"><i class="icon-copy"></i>${esc(I18n.t("common-action-copy"))}</button>
+      <a href="${Utils.solscanTxUrl(event.signature)}" target="_blank" rel="noopener" class="pdd-act-sig-link"><i class="icon-external-link"></i>${esc(I18n.t("positions-event-solscan"))}</a>
     </div>`;
 }
 
@@ -158,38 +222,44 @@ function renderDetails(event, ctx) {
   const fee = event.fee_sol ?? event.record_fee_sol;
   const details = [
     metric(
-      "Token amount",
+      I18n.t("positions-event-token-amount"),
       event.token_amount != null ? Utils.formatNumber(event.token_amount) : null
     ),
-    metric("Trade price", event.price != null ? `${ctx.formatPrice(event.price)} SOL` : null),
-    metric("SOL amount", event.sol_amount != null ? ctx.formatSol(event.sol_amount) : null),
-    metric("Cost basis", event.cost_basis != null ? ctx.formatSol(event.cost_basis) : null),
+    metric(I18n.t("positions-event-trade-price"), event.price != null ? `${ctx.formatPrice(event.price)} SOL` : null),
+    metric(I18n.t("positions-event-sol-amount"), event.sol_amount != null ? ctx.formatSol(event.sol_amount) : null),
+    metric(I18n.t("positions-event-cost-basis"), event.cost_basis != null ? ctx.formatSol(event.cost_basis) : null),
     metric(
-      "USD value",
+      I18n.t("positions-event-usd-value"),
       event.sol_amount != null && ctx.solPriceUsd
         ? Utils.formatCurrencyUSD(event.sol_amount * ctx.solPriceUsd)
         : null
     ),
-    metric("Network fee", fee != null && fee > 0 ? ctx.formatSol(fee) : null),
-    metric("Router", event.router ? Utils.escapeHtml(event.router) : null),
-    metric("Slot", event.slot != null ? Utils.formatNumber(event.slot, 0) : null),
-    metric("Chain status", event.status ? Utils.escapeHtml(event.status) : null),
+    metric(I18n.t("positions-event-network-fee"), fee != null && fee > 0 ? ctx.formatSol(fee) : null),
+    metric(I18n.t("positions-event-router"), event.router ? Utils.escapeHtml(event.router) : null),
+    metric(I18n.t("positions-event-slot"), event.slot != null ? Utils.formatNumber(event.slot, 0) : null),
     metric(
-      "Transaction type",
+      I18n.t("positions-event-chain-status"),
+      event.status ? esc(chainStatusText(event.status)) : null
+    ),
+    metric(
+      I18n.t("positions-event-transaction-type"),
       event.transaction_type ? Utils.escapeHtml(I18n.text(event.transaction_type)) : null
     ),
-    metric("Direction", event.direction ? Utils.escapeHtml(event.direction) : null),
     metric(
-      "Wallet SOL change",
+      I18n.t("positions-event-direction"),
+      event.direction ? esc(I18n.label(DIRECTION_LABELS, event.direction)) : null
+    ),
+    metric(
+      I18n.t("positions-event-wallet-sol-change"),
       event.sol_change != null ? ctx.formatSol(event.sol_change, { sign: true }) : null
     ),
-    metric("Instructions", event.instructions_count ?? null),
+    metric(I18n.t("positions-event-instructions"), event.instructions_count ?? null),
     metric(
-      "Compute units",
+      I18n.t("positions-event-compute-units"),
       event.compute_units != null ? Utils.formatNumber(event.compute_units, 0) : null
     ),
-    metric("Accounts", event.accounts_count ?? null),
-    metric("Record ID", event.record_id ?? null),
+    metric(I18n.t("positions-event-accounts"), event.accounts_count ?? null),
+    metric(I18n.t("positions-event-record-id"), event.record_id ?? null),
   ]
     .filter(Boolean)
     .join("");
@@ -210,27 +280,32 @@ function renderDetails(event, ctx) {
 
 export function renderActivityCard(event, ctx) {
   const key = Utils.escapeHtml(activityEventKey(event));
-  const meta = KIND_META[event.kind] || KIND_META.other;
-  const stateLabel = STATE_LABELS[event.state];
+  const kind = Object.hasOwn(KIND_ICONS, event.kind) ? event.kind : "other";
+  const kindLabel = I18n.label(EVENT_KIND_LABELS, kind);
+  const stateLabel = Object.hasOwn(EVENT_STATE_LABELS, event.state)
+    ? I18n.label(EVENT_STATE_LABELS, event.state)
+    : "";
   const expanded = ctx.expanded.has(activityEventKey(event));
-  const time = event.timestamp ? Utils.formatTimestamp(event.timestamp) : "Time unavailable";
+  const time = event.timestamp
+    ? Utils.formatTimestamp(event.timestamp)
+    : I18n.t("positions-event-time-unavailable");
   const relative = event.timestamp ? Utils.formatTimeAgo(event.timestamp) : "";
 
   return `
     <article class="pdd-act-card${expanded ? " is-open" : ""}" data-side="${Utils.escapeHtml(event.side)}" data-kind="${Utils.escapeHtml(event.kind)}" data-state="${Utils.escapeHtml(event.state)}" data-key="${key}" data-ts="${Number(event.timestamp) || ""}" data-price="${Number(event.price) || ""}">
-      <i class="pdd-act-glyph ${meta.icon}" aria-hidden="true"></i>
+      <i class="pdd-act-glyph ${KIND_ICONS[kind]}" aria-hidden="true"></i>
       <button type="button" class="pdd-act-expand" data-expand="${key}" aria-expanded="${expanded}">
         <span class="pdd-act-main">
           <span class="pdd-act-event-topline">
-            <strong>${meta.label}</strong>
-            ${stateLabel ? `<span class="pdd-act-state is-${event.state}">${stateLabel}</span>` : ""}
+            <strong>${esc(kindLabel)}</strong>
+            ${stateLabel ? `<span class="pdd-act-state is-${event.state}">${esc(stateLabel)}</span>` : ""}
           </span>
-          <span class="pdd-act-description">${eventDescription(event, ctx)}</span>
-          <span class="pdd-act-event-time" title="${time}">${time}${relative ? ` · ${relative}` : ""}</span>
+          <span class="pdd-act-description">${esc(eventDescription(event, ctx))}</span>
+          <span class="pdd-act-event-time" title="${esc(time)}">${esc(time)}${relative ? ` · ${esc(relative)}` : ""}</span>
         </span>
         <span class="pdd-act-event-side">
           ${eventOutcome(event, ctx)}
-          <span class="pdd-act-details-label">${expanded ? "Hide details" : "Details"}<i class="icon-chevron-down"></i></span>
+          <span class="pdd-act-details-label">${esc(expanded ? I18n.t("positions-event-hide-details") : I18n.t("positions-event-details"))}<i class="icon-chevron-down"></i></span>
         </span>
       </button>
       ${renderDetails(event, ctx)}

@@ -6,12 +6,26 @@
  */
 import * as Utils from "../../core/utils.js";
 import { requestManager } from "../../core/request_manager.js";
+import { POSITION_STATUS_LABELS } from "../position_status.js";
 import { activityEventKey, renderActivityCard } from "./activity_event.js";
 
 // State reasons written by src/positions; other stored reasons render as stored.
 const POSITION_STATE_REASON_LABELS = Object.freeze({
   position_created: "positions-state-reason-position-created",
 });
+
+// `PositionState` (src/positions/database/types.rs) as written to the state history.
+const POSITION_STATE_LABELS = Object.freeze({
+  Open: "positions-state-open",
+  Closing: "positions-state-closing",
+  Closed: "positions-state-closed",
+  ExitPending: "positions-state-exit-pending",
+  ExitFailed: "positions-state-exit-failed",
+  Phantom: "positions-state-phantom",
+  Reconciling: "positions-state-reconciling",
+});
+
+const esc = (text) => Utils.escapeHtml(text);
 
 // The activity endpoint walks every swap and wallet transaction the token ever had, so it is
 // not refetched on the details tick: only when the position's own trades moved, and otherwise
@@ -81,7 +95,7 @@ export function applyActivityMixin(PositionDetailsDialog) {
       this._activityError = null;
     } catch (error) {
       console.error("Error loading token activity:", error);
-      if (seq === this._openSeq) this._activityError = "Activity could not be loaded";
+      if (seq === this._openSeq) this._activityError = I18n.t("positions-activity-load-failed");
     } finally {
       this._activityLoading = false;
     }
@@ -121,7 +135,7 @@ export function applyActivityMixin(PositionDetailsDialog) {
       return parts(
         this._activityError
           ? notice("icon-circle-alert", this._activityError)
-          : '<div class="loading-spinner">Loading activity...</div>'
+          : `<div class="loading-spinner">${esc(I18n.t("positions-activity-loading"))}</div>`
       );
     }
 
@@ -131,12 +145,12 @@ export function applyActivityMixin(PositionDetailsDialog) {
     const stateHistory = this._activity.state_history || [];
 
     if (!events.length && !stateHistory.length) {
-      return parts(notice("icon-activity", "Nothing has happened to this token in this wallet yet"));
+      return parts(notice("icon-activity", I18n.t("positions-activity-empty")));
     }
 
     const currentPositionId = this._position()?.id ?? null;
     const ctx = {
-      symbol: this._activity.symbol || this._position()?.symbol || "tokens",
+      symbol: this._activity.symbol || this._position()?.symbol || I18n.t("positions-event-tokens-fallback"),
       solPriceUsd: this._activity.sol_price_usd || null,
       expanded: this._activityExpanded,
       formatPrice: (price) => this._formatPrice(price),
@@ -166,8 +180,10 @@ export function applyActivityMixin(PositionDetailsDialog) {
   proto._activityMeta = function (totals, events, positions) {
     const timestamps = events.map((event) => event.timestamp).filter(Number.isFinite);
     const parts = [];
-    if (positions.length > 1) parts.push(this._plural(positions.length, "round"));
-    parts.push(this._plural(totals.events || events.length, "event"));
+    if (positions.length > 1) {
+      parts.push(I18n.t("positions-activity-round-count", { count: positions.length }));
+    }
+    parts.push(I18n.t("positions-activity-event-count", { count: totals.events || events.length }));
     if (timestamps.length) {
       const first = dateOnly(Math.min(...timestamps));
       const last = dateOnly(Math.max(...timestamps));
@@ -175,13 +191,17 @@ export function applyActivityMixin(PositionDetailsDialog) {
     }
 
     const alerts = [];
-    if (totals.pending) alerts.push(`${totals.pending} pending`);
-    if (totals.failed) alerts.push(`${totals.failed} failed`);
+    if (totals.pending) {
+      alerts.push(I18n.t("positions-activity-pending-count", { count: totals.pending }));
+    }
+    if (totals.failed) {
+      alerts.push(I18n.t("positions-activity-failed-count", { count: totals.failed }));
+    }
     const alertHtml = alerts.length
-      ? ` · <span class="pdd-activity-alert">${alerts.join(" · ")}</span>`
+      ? ` · <span class="pdd-activity-alert">${esc(alerts.join(" · "))}</span>`
       : "";
 
-    return `${parts.join(" · ")}${alertHtml}`;
+    return `${esc(parts.join(" · "))}${alertHtml}`;
   };
 
   proto._buildActivityFilters = function (totals, events) {
@@ -190,22 +210,22 @@ export function applyActivityMixin(PositionDetailsDialog) {
     ).length;
     // A filter that can only show nothing is not offered.
     const filters = [
-      ["all", "All", totals.events || 0],
-      ["trades", "Trades", (totals.entries || 0) + (totals.exits || 0)],
-      ["entry", "Buys", totals.entries || 0],
-      ["exit", "Sells", totals.exits || 0],
-      ["wallet", "Wallet", totals.wallet_events || 0],
-      ["issues", "Issues", issueCount],
+      ["all", I18n.t("positions-filter-all"), totals.events || 0],
+      ["trades", I18n.t("positions-filter-trades"), (totals.entries || 0) + (totals.exits || 0)],
+      ["entry", I18n.t("positions-filter-buys"), totals.entries || 0],
+      ["exit", I18n.t("positions-filter-sells"), totals.exits || 0],
+      ["wallet", I18n.t("positions-filter-wallet"), totals.wallet_events || 0],
+      ["issues", I18n.t("positions-filter-issues"), issueCount],
     ].filter(([id, , count]) => id === "all" || count > 0);
 
     if (!filters.some(([id]) => id === this._activityFilter)) this._activityFilter = "all";
 
     return `
-      <div class="timeframe-buttons pdd-act-filters" role="group" aria-label="Filter activity">
+      <div class="timeframe-buttons pdd-act-filters" role="group" aria-label="${esc(I18n.attr("positions-activity-filters", "aria-label"))}">
         ${filters
           .map(([id, label, count]) => {
             const active = this._activityFilter === id;
-            return `<button type="button" class="timeframe-btn pdd-act-filter${active ? " active" : ""}" data-filter="${id}" aria-pressed="${active}">${label}<span>${count}</span></button>`;
+            return `<button type="button" class="timeframe-btn pdd-act-filter${active ? " active" : ""}" data-filter="${id}" aria-pressed="${active}">${esc(label)}<span>${count}</span></button>`;
           })
           .join("")}
       </div>`;
@@ -216,14 +236,14 @@ export function applyActivityMixin(PositionDetailsDialog) {
     if (positions.length < 2) return "";
     const realized = totals.realized_pnl || 0;
     const item = (label, value, tone = "") =>
-      `<div class="pdd-act-total"><span>${label}</span><strong class="${tone}">${value}</strong></div>`;
+      `<div class="pdd-act-total"><span>${esc(label)}</span><strong class="${tone}">${value}</strong></div>`;
 
     return `
-      <div class="pdd-act-totals" aria-label="All rounds on this token">
-        ${item("Realized, all rounds", this._formatSol(realized, { sign: true }), this._toneClass(realized))}
-        ${item("Invested", this._formatSol(totals.sol_invested))}
-        ${item("Returned", this._formatSol(totals.sol_returned))}
-        ${item("Network fees", this._formatSol(totals.network_fees_sol))}
+      <div class="pdd-act-totals" aria-label="${esc(I18n.attr("positions-activity-totals", "aria-label"))}">
+        ${item(I18n.t("positions-activity-realized-all"), this._formatSol(realized, { sign: true }), this._toneClass(realized))}
+        ${item(I18n.t("positions-activity-invested"), this._formatSol(totals.sol_invested))}
+        ${item(I18n.t("positions-activity-returned"), this._formatSol(totals.sol_returned))}
+        ${item(I18n.t("positions-summary-network-fees"), this._formatSol(totals.network_fees_sol))}
       </div>`;
   };
 
@@ -284,29 +304,30 @@ export function applyActivityMixin(PositionDetailsDialog) {
     const isCurrent = position.id === ctx.currentPositionId;
     // Archived first: an archived round that never exited still reports `is_open`.
     const status = position.archived ? "archived" : position.is_open ? "open" : "closed";
+    const statusLabel = I18n.label(POSITION_STATUS_LABELS, status);
     const pnl = position.realized_pnl || 0;
     const when = (ts) => Utils.formatTimestamp(ts, { includeSeconds: false });
     const dates = position.closed_at
       ? `${when(position.opened_at)} – ${when(position.closed_at)}`
-      : `Opened ${when(position.opened_at)}`;
+      : I18n.t("positions-activity-opened", { when: when(position.opened_at) });
     const fact = (label, value, tone = "") =>
-      `<span class="pdd-act-round-fact"><small>${label}</small><strong class="${tone}">${value}</strong></span>`;
+      `<span class="pdd-act-round-fact"><small>${esc(label)}</small><strong class="${tone}">${value}</strong></span>`;
 
     return `
       <section class="pdd-act-round${isOpen ? " is-open" : ""}${isCurrent ? " is-current" : ""}" data-round="${key}">
         <button type="button" class="pdd-act-round-toggle" data-round-toggle="${key}" aria-expanded="${isOpen}">
           <span class="pdd-act-round-main">
             <span class="pdd-act-round-title">
-              Position ${position.index}
-              ${isCurrent ? '<span class="pdd-act-tag is-current">This position</span>' : ""}
-              <span class="pdd-act-tag is-${status}">${status}</span>
+              ${esc(I18n.t("positions-activity-round-title", { index: position.index }))}
+              ${isCurrent ? `<span class="pdd-act-tag is-current">${esc(I18n.t("positions-activity-this-position"))}</span>` : ""}
+              <span class="pdd-act-tag is-${status}">${esc(statusLabel)}</span>
             </span>
-            <span class="pdd-act-round-date">${dates} · ${this._plural(position.swaps, "event")}</span>
+            <span class="pdd-act-round-date">${esc(dates)} · ${esc(I18n.t("positions-activity-event-count", { count: position.swaps }))}</span>
           </span>
           <span class="pdd-act-round-facts">
-            ${fact("Invested", this._formatSol(position.sol_invested || 0))}
-            ${fact("Returned", this._formatSol(position.sol_returned || 0))}
-            <span class="pdd-act-round-fact is-pnl"><small>Realized</small><strong class="${this._toneClass(pnl)}">${this._formatSol(pnl, { sign: true })}</strong></span>
+            ${fact(I18n.t("positions-activity-invested"), this._formatSol(position.sol_invested || 0))}
+            ${fact(I18n.t("positions-activity-returned"), this._formatSol(position.sol_returned || 0))}
+            <span class="pdd-act-round-fact is-pnl"><small>${esc(I18n.t("positions-fact-realized"))}</small><strong class="${this._toneClass(pnl)}">${this._formatSol(pnl, { sign: true })}</strong></span>
             <i class="icon-chevron-down"></i>
           </span>
         </button>
@@ -320,14 +341,14 @@ export function applyActivityMixin(PositionDetailsDialog) {
     const timestamps = events.map((event) => event.timestamp).filter(Number.isFinite);
     const range = timestamps.length
       ? `${dateOnly(Math.min(...timestamps))} – ${dateOnly(Math.max(...timestamps))}`
-      : "Dates unavailable";
+      : I18n.t("positions-activity-dates-unavailable");
 
     return `
       <section class="pdd-act-round is-wallet${isOpen ? " is-open" : ""}" data-round="${key}">
         <button type="button" class="pdd-act-round-toggle" data-round-toggle="${key}" aria-expanded="${isOpen}">
           <span class="pdd-act-round-main">
-            <span class="pdd-act-round-title">Wallet transactions</span>
-            <span class="pdd-act-round-date">Outside any position · ${range} · ${this._plural(events.length, "event")}</span>
+            <span class="pdd-act-round-title">${esc(I18n.t("positions-activity-wallet-title"))}</span>
+            <span class="pdd-act-round-date">${esc(I18n.t("positions-activity-outside", { range, count: events.length }))}</span>
           </span>
           <span class="pdd-act-round-facts"><i class="icon-chevron-down"></i></span>
         </button>
@@ -341,7 +362,7 @@ export function applyActivityMixin(PositionDetailsDialog) {
       <div class="pdd-act-milestone" data-side="state" data-state="${Utils.escapeHtml(normalized)}">
         <i class="pdd-act-glyph icon-history" aria-hidden="true"></i>
         <span class="pdd-act-milestone-main">
-          <strong>Position ${Utils.escapeHtml(normalized)}</strong>
+          <strong>${esc(I18n.label(POSITION_STATE_LABELS, state.state))}</strong>
           ${state.reason ? `<span>${Utils.escapeHtml(I18n.label(POSITION_STATE_REASON_LABELS, state.reason))}</span>` : ""}
         </span>
         <time title="${Utils.formatTimestamp(state.changed_at)}">${Utils.formatTimestamp(state.changed_at, { includeSeconds: false })}</time>
@@ -384,7 +405,7 @@ export function applyActivityMixin(PositionDetailsDialog) {
     if (visibleGroups === 0 && !empty) {
       empty = document.createElement("div");
       empty.className = "pdd-act-filter-empty";
-      empty.textContent = "No activity matches this filter";
+      empty.textContent = I18n.t("positions-activity-filter-empty");
       list.appendChild(empty);
     } else if (visibleGroups > 0 && empty) {
       empty.remove();
@@ -402,7 +423,7 @@ export function applyActivityMixin(PositionDetailsDialog) {
         event.preventDefault();
         event.stopPropagation();
         Utils.copyToClipboard(copyEl.dataset.copy);
-        Utils.notifyCopied("Signature");
+        Utils.notifyCopied(I18n.t("positions-details-signature-label"));
         return;
       }
 
@@ -421,7 +442,9 @@ export function applyActivityMixin(PositionDetailsDialog) {
         card.classList.toggle("is-open", open);
         expandBtn.setAttribute("aria-expanded", String(open));
         const label = expandBtn.querySelector(".pdd-act-details-label");
-        if (label) label.firstChild.textContent = open ? "Hide details" : "Details";
+        if (label) label.firstChild.textContent = open
+          ? I18n.t("positions-event-hide-details")
+          : I18n.t("positions-event-details");
         if (open) this._activityExpanded.add(key);
         else this._activityExpanded.delete(key);
         return;

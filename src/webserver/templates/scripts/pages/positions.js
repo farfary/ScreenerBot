@@ -6,6 +6,7 @@ import * as AppState from "../core/app_state.js";
 import { DataTable } from "../ui/data_table.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
 import { stepShortLabel } from "../ui/action_step.js";
+import { POSITION_STATUS_LABELS } from "../ui/position_status.js";
 import { manualTrade } from "../ui/manual_trade.js";
 import { PositionDetailsDialog } from "../ui/position_details_dialog.js";
 import { PositionRemoveDialog } from "../ui/position_remove_dialog.js";
@@ -13,11 +14,34 @@ import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 import { openCopyTask } from "../ui/copy_handoff.js";
 import { notificationManager } from "../core/notifications.js";
 
-const SUB_TABS = [
-  { id: "open", label: '<i class="icon-trending-up"></i> Open' },
-  { id: "closed", label: '<i class="icon-trending-down"></i> Closed' },
-  { id: "archived", label: '<i class="icon-archive"></i> Archived' },
+// Origin kinds that get a chip in the token cell. `external` is derived from this
+// wallet's own on-chain history rather than traded by the bot.
+const ORIGIN_LABELS = Object.freeze({
+  copy: "positions-origin-copy",
+  manual: "positions-origin-manual",
+  external: "positions-origin-wallet",
+});
+const ORIGIN_CLASSES = Object.freeze({ copy: "copy", manual: "manual", external: "wallet" });
+
+const esc = (text) => Utils.escapeHtml(text);
+
+// Sub-tab labels: an icon followed by the view name.
+const subTabs = () => [
+  { id: "open", label: `<i class="icon-trending-up"></i> ${esc(I18n.label(POSITION_STATUS_LABELS, "open"))}` },
+  { id: "closed", label: `<i class="icon-trending-down"></i> ${esc(I18n.label(POSITION_STATUS_LABELS, "closed"))}` },
+  { id: "archived", label: `<i class="icon-archive"></i> ${esc(I18n.label(POSITION_STATUS_LABELS, "archived"))}` },
 ];
+
+// Title and aria-label attributes of an icon-only row action.
+const actionAttrs = (title, ariaLabel) => `title="${esc(title)}" aria-label="${esc(ariaLabel)}"`;
+const addAttrs = () =>
+  actionAttrs(I18n.attr("positions-action-add", "title"), I18n.attr("positions-action-add", "aria-label"));
+const removeAttrs = () =>
+  actionAttrs(I18n.attr("positions-action-remove", "title"), I18n.attr("positions-action-remove", "aria-label"));
+const restoreAttrs = () =>
+  actionAttrs(I18n.attr("positions-action-restore", "title"), I18n.attr("positions-action-restore", "aria-label"));
+const deleteAttrs = () =>
+  actionAttrs(I18n.attr("positions-action-delete", "title"), I18n.attr("positions-action-delete", "aria-label"));
 
 // Live-action wiring: the actions system streams every in-flight buy/sell as an
 // Action (SSE -> notificationManager) long before the on-chain position is
@@ -99,61 +123,63 @@ function createLifecycle() {
   const stateCaption = (row) => {
     const st = row?._state;
     if (!st || st === "open") return "";
-    const step = row?._stepLabel ? Utils.escapeHtml(row._stepLabel) : "";
+    const step = row?._stepLabel ? String(row._stepLabel) : "";
     let label;
     let icon;
     if (st === "buying") {
-      label = step ? `Buying · ${step}` : "Buying";
+      label = step ? I18n.t("positions-caption-buying-step", { step }) : I18n.t("positions-caption-buying");
       icon = '<span class="pos-state-spinner" aria-hidden="true"></span>';
     } else if (st === "selling") {
-      label = step ? `Selling · ${step}` : "Selling";
+      label = step
+        ? I18n.t("positions-caption-selling-step", { step })
+        : I18n.t("positions-caption-selling");
       icon = '<span class="pos-state-spinner" aria-hidden="true"></span>';
     } else if (st === "closing") {
-      label = "Closing";
+      label = I18n.t("positions-caption-closing");
       icon = '<span class="pos-state-spinner" aria-hidden="true"></span>';
     } else if (st === "failed") {
-      label = row?._error ? `Failed · ${Utils.escapeHtml(String(row._error))}` : "Failed";
+      label = row?._error
+        ? I18n.t("positions-caption-failed-detail", { error: String(row._error) })
+        : I18n.t("positions-caption-failed");
       icon = '<i class="icon-triangle-alert" aria-hidden="true"></i>';
     } else {
       return "";
     }
     return `<div class="pos-state-caption pos-state-${Utils.escapeHtml(st)}" title="${Utils.escapeHtml(
       label
-    )}">${icon}<span class="pos-state-text">${label}</span></div>`;
+    )}">${icon}<span class="pos-state-text">${Utils.escapeHtml(label)}</span></div>`;
   };
 
-  const positionOriginLabel = (row) => {
-    if (row?.origin?.kind === "copy") return "Copy";
-    if (row?.origin?.kind === "manual") return "Manual";
-    // Derived from this wallet's own on-chain history rather than traded by the bot.
-    if (row?.origin?.kind === "external") return "Wallet";
-    return "";
+  const positionOriginChip = (row) => {
+    const kind = row?.origin?.kind;
+    return Object.hasOwn(ORIGIN_LABELS, kind)
+      ? { text: I18n.label(ORIGIN_LABELS, kind), cls: ORIGIN_CLASSES[kind] }
+      : null;
   };
 
   // A wallet-derived round can be missing its cost basis (an airdrop, a USD-quoted
   // fill, a token->token swap with no SOL leg) or fail to reconcile with the chain.
   // Those rows show "—" instead of a number: a fabricated basis produces a plausible
   // and permanently wrong P&L, which is worse than admitting we do not know.
-  const BASIS_UNKNOWN_TITLE =
-    "No cost basis in this wallet's history (airdrop, USD-quoted fill, or a swap with no SOL leg)";
-  const HISTORY_UNKNOWN_TITLE = "This round does not reconcile with the on-chain balance";
+  const basisUnknownTitle = () => I18n.t("positions-unknown-basis");
+  const historyUnknownTitle = () => I18n.t("positions-unknown-history");
 
   const basisUnknown = (row) => row?.basis_complete === false;
   const pnlUnknown = (row) => row?.basis_complete === false || row?.history_complete === false;
   const unknownCell = (title) =>
     `<span class="position-unknown" title="${Utils.escapeHtml(title)}">—</span>`;
   const basisCell = (row, render) =>
-    basisUnknown(row) ? unknownCell(BASIS_UNKNOWN_TITLE) : render();
+    basisUnknown(row) ? unknownCell(basisUnknownTitle()) : render();
   const pnlGuardedCell = (row, render) =>
     pnlUnknown(row)
-      ? unknownCell(basisUnknown(row) ? BASIS_UNKNOWN_TITLE : HISTORY_UNKNOWN_TITLE)
+      ? unknownCell(basisUnknown(row) ? basisUnknownTitle() : historyUnknownTitle())
       : render();
 
   const tokenCell = (row, actionsHtml = "", actionCount = 0) => {
     const logo = row.logo_url || row.image_url || "";
     const symbol = row.symbol || "?";
     const name = row.name || "";
-    const originLabel = positionOriginLabel(row);
+    const originChip = positionOriginChip(row);
     const logoHtml = logo
       ? `<img class="token-logo token-logo-artwork" src="${Utils.escapeHtml(logo)}" alt="${Utils.escapeHtml(
           symbol
@@ -165,14 +191,14 @@ function createLifecycle() {
         <div class="position-token-meta">
           <div class="token-symbol">${Utils.escapeHtml(symbol)}</div>
           <div class="token-name"><span>${Utils.escapeHtml(name)}</span>${
-            originLabel
+            originChip
               ? row?.origin?.kind === "copy" && row.origin.task_id != null
-                ? `<button type="button" class="position-origin-label position-origin-copy position-origin-link" data-copy-task="${Utils.escapeHtml(String(row.origin.task_id))}" title="Open the copy task that opened this position">${originLabel}</button>`
-                : `<span class="position-origin-label position-origin-${originLabel.toLowerCase()}">${originLabel}</span>`
+                ? `<button type="button" class="position-origin-label position-origin-copy position-origin-link" data-copy-task="${Utils.escapeHtml(String(row.origin.task_id))}" title="${esc(I18n.attr("positions-origin-copy-link", "title"))}">${esc(originChip.text)}</button>`
+                : `<span class="position-origin-label position-origin-${originChip.cls}">${esc(originChip.text)}</span>`
               : ""
           }${
             row?.holding_state === "frozen"
-              ? '<span class="position-origin-label position-frozen" title="The mint authority froze this token account - the balance cannot be transferred or sold">Frozen</span>'
+              ? `<span class="position-origin-label position-frozen" title="${esc(I18n.attr("positions-holding-frozen", "title"))}">${esc(I18n.t("positions-holding-frozen"))}</span>`
               : ""
           }</div>
           ${stateCaption(row)}
@@ -190,12 +216,12 @@ function createLifecycle() {
 
   const dcaCell = (count) => {
     if (!count || count === 0) return "—";
-    return `<span class="chip">${count} DCA${count > 1 ? "s" : ""}</span>`;
+    return `<span class="chip">${esc(I18n.t("positions-dca-count", { count }))}</span>`;
   };
 
   const partialExitsCell = (count) => {
     if (!count || count === 0) return "—";
-    return `<span class="chip warning">${count} exit${count > 1 ? "s" : ""}</span>`;
+    return `<span class="chip warning">${esc(I18n.t("positions-exit-count", { count }))}</span>`;
   };
 
   // How much of the position is still held.
@@ -222,7 +248,7 @@ function createLifecycle() {
         String(id)
       )}" data-mint="${Utils.escapeHtml(
         row?.mint || ""
-      )}" title="Remove (archive or delete)" aria-label="Remove position"><i class="icon-trash-2"></i></button>
+      )}" ${removeAttrs()}><i class="icon-trash-2"></i></button>
     </div>`;
   };
 
@@ -233,8 +259,8 @@ function createLifecycle() {
     const idAttr = Utils.escapeHtml(String(id));
     const mintAttr = Utils.escapeHtml(row?.mint || "");
     return `<div class="row-actions position-token__actions">
-      <button class="btn row-action" data-action="restore" data-id="${idAttr}" data-mint="${mintAttr}" title="Restore to Open/Closed" aria-label="Restore position"><i class="icon-rotate-ccw"></i></button>
-      <button class="btn row-action row-action--icon row-action--danger" data-action="delete" data-id="${idAttr}" data-mint="${mintAttr}" title="Delete permanently" aria-label="Delete permanently"><i class="icon-trash-2"></i></button>
+      <button class="btn row-action" data-action="restore" data-id="${idAttr}" data-mint="${mintAttr}" ${restoreAttrs()}><i class="icon-rotate-ccw"></i></button>
+      <button class="btn row-action row-action--icon row-action--danger" data-action="delete" data-id="${idAttr}" data-mint="${mintAttr}" ${deleteAttrs()}><i class="icon-trash-2"></i></button>
     </div>`;
   };
 
@@ -244,7 +270,7 @@ function createLifecycle() {
     if (!mint || !isOpen) return "";
 
     if (row?._pending) {
-      return '<div class="position-token__actions"><span class="row-actions-busy">In progress…</span></div>';
+      return `<div class="position-token__actions"><span class="row-actions-busy">${esc(I18n.t("positions-action-in-progress"))}</span></div>`;
     }
 
     const busy = row?._state === "selling" || row?._state === "closing";
@@ -255,17 +281,17 @@ function createLifecycle() {
     const frozen = row?.holding_state === "frozen";
     const sellDis = busy || frozen ? " disabled" : "";
     const sellTitle = frozen
-      ? "Frozen by the mint authority - this holding cannot be sold"
-      : "Sell (full or % partial)";
+      ? I18n.t("positions-action-sell-frozen")
+      : I18n.attr("positions-action-sell", "title");
     const mintAttr = Utils.escapeHtml(mint);
     const idAttr = Utils.escapeHtml(String(row?.id ?? ""));
     return `
       <div class="row-actions position-token__actions">
-        <button class="btn row-action" data-action="add" data-mint="${mintAttr}" title="Add to position (DCA)" aria-label="Add to position"${dis}><i class="icon-circle-plus"></i></button>
+        <button class="btn row-action" data-action="add" data-mint="${mintAttr}" ${addAttrs()}${dis}><i class="icon-circle-plus"></i></button>
         <button class="btn row-action" data-action="sell" data-mint="${mintAttr}" title="${Utils.escapeHtml(
           sellTitle
-        )}" aria-label="Sell position"${sellDis}><i class="icon-trending-down"></i></button>
-        <button class="btn row-action row-action--icon" data-action="remove" data-id="${idAttr}" data-mint="${mintAttr}" title="Remove (archive or delete)" aria-label="Remove position"><i class="icon-trash-2"></i></button>
+        )}" aria-label="${esc(I18n.attr("positions-action-sell", "aria-label"))}"${sellDis}><i class="icon-trending-down"></i></button>
+        <button class="btn row-action row-action--icon" data-action="remove" data-id="${idAttr}" data-mint="${mintAttr}" ${removeAttrs()}><i class="icon-trash-2"></i></button>
       </div>
     `;
   };
@@ -273,7 +299,7 @@ function createLifecycle() {
   const buildArchivedColumns = () => [
     {
       id: "token",
-      label: "Token",
+      label: I18n.t("positions-column-token"),
       sortable: true,
       floating: true,
       minWidth: 260,
@@ -282,49 +308,49 @@ function createLifecycle() {
     },
     {
       id: "archived_at",
-      label: "Archived",
+      label: I18n.t("positions-column-archived-at"),
       sortable: true,
       minWidth: 140,
       render: (v, r) => timeCell(v ?? r.exit_time ?? r.entry_time),
     },
     {
       id: "entry_time",
-      label: "Entry Time",
+      label: I18n.t("positions-column-entry-time"),
       sortable: true,
       minWidth: 140,
       render: (v) => timeCell(v),
     },
     {
       id: "average_entry_price",
-      label: "Avg Entry (SOL)",
+      label: I18n.t("positions-column-avg-entry"),
       sortable: true,
       minWidth: 140,
       render: (v, r) => basisCell(r, () => priceCell(v || r.entry_price)),
     },
     {
       id: "total_size_sol",
-      label: "Total Invested",
+      label: I18n.t("positions-column-total-invested"),
       sortable: true,
       minWidth: 120,
       render: (v, r) => basisCell(r, () => solCell(v)),
     },
     {
       id: "sol_received",
-      label: "Proceeds",
+      label: I18n.t("positions-column-proceeds"),
       sortable: true,
       minWidth: 110,
       render: (v) => (v == null ? "—" : solCell(v)),
     },
     {
       id: "pnl",
-      label: "PnL",
+      label: I18n.t("positions-column-pnl"),
       sortable: true,
       minWidth: 110,
       render: (v, r) => pnlGuardedCell(r, () => pnlCell(v)),
     },
     {
       id: "pnl_percent",
-      label: "PnL %",
+      label: I18n.t("positions-column-pnl-percent"),
       sortable: true,
       minWidth: 100,
       render: (v, r) => pnlGuardedCell(r, () => percentCell(v)),
@@ -340,7 +366,7 @@ function createLifecycle() {
       return [
         {
           id: "token",
-          label: "Token",
+          label: I18n.t("positions-column-token"),
           sortable: true,
           floating: true,
           minWidth: 260,
@@ -349,63 +375,63 @@ function createLifecycle() {
         },
         {
           id: "entry_time",
-          label: "Entry Time",
+          label: I18n.t("positions-column-entry-time"),
           sortable: true,
           minWidth: 140,
           render: (v) => timeCell(v),
         },
         {
           id: "dca_count",
-          label: "DCA",
+          label: I18n.t("positions-column-dca"),
           sortable: true,
           minWidth: 80,
           render: (v) => dcaCell(v),
         },
         {
           id: "average_entry_price",
-          label: "Avg Entry (SOL)",
+          label: I18n.t("positions-column-avg-entry"),
           sortable: true,
           minWidth: 140,
           render: (v, r) => basisCell(r, () => priceCell(v)),
         },
         {
           id: "current_price",
-          label: "Current (SOL)",
+          label: I18n.t("positions-column-current-price"),
           sortable: true,
           minWidth: 140,
           render: (v) => (v == null ? "—" : priceCell(v)),
         },
         {
           id: "total_size_sol",
-          label: "Total Invested",
+          label: I18n.t("positions-column-total-invested"),
           sortable: true,
           minWidth: 120,
           render: (v, r) => basisCell(r, () => solCell(v)),
         },
         {
           id: "current_size",
-          label: "Size",
+          label: I18n.t("positions-column-size"),
           sortable: true,
           minWidth: 80,
           render: (_v, r) => currentSizeCell(r.remaining_token_amount, r.total_exited_amount),
         },
         {
           id: "partial_exit_count",
-          label: "Exits",
+          label: I18n.t("positions-column-exits"),
           sortable: true,
           minWidth: 90,
           render: (v) => partialExitsCell(v),
         },
         {
           id: "unrealized_pnl",
-          label: "Unrealized PnL",
+          label: I18n.t("positions-column-unrealized-pnl"),
           sortable: true,
           minWidth: 130,
           render: (v, r) => pnlGuardedCell(r, () => pnlCell(v)),
         },
         {
           id: "unrealized_pnl_percent",
-          label: "Unrealized %",
+          label: I18n.t("positions-column-unrealized-percent"),
           sortable: true,
           minWidth: 110,
           render: (v, r) => pnlGuardedCell(r, () => percentCell(v)),
@@ -418,7 +444,7 @@ function createLifecycle() {
       return [
         {
           id: "token",
-          label: "Token",
+          label: I18n.t("positions-column-token"),
           sortable: true,
           floating: true,
           minWidth: 260,
@@ -427,63 +453,63 @@ function createLifecycle() {
         },
         {
           id: "exit_time",
-          label: "Exit Time",
+          label: I18n.t("positions-column-exit-time"),
           sortable: true,
           minWidth: 140,
           render: (v) => (v == null ? "—" : timeCell(v)),
         },
         {
           id: "dca_count",
-          label: "DCA",
+          label: I18n.t("positions-column-dca"),
           sortable: true,
           minWidth: 80,
           render: (v) => dcaCell(v),
         },
         {
           id: "average_entry_price",
-          label: "Avg Entry (SOL)",
+          label: I18n.t("positions-column-avg-entry"),
           sortable: true,
           minWidth: 140,
           render: (v, r) => basisCell(r, () => priceCell(v || r.entry_price)),
         },
         {
           id: "average_exit_price",
-          label: "Avg Exit (SOL)",
+          label: I18n.t("positions-column-avg-exit"),
           sortable: true,
           minWidth: 140,
           render: (v, r) => (v == null ? priceCell(r.exit_price) : priceCell(v)),
         },
         {
           id: "total_size_sol",
-          label: "Total Invested",
+          label: I18n.t("positions-column-total-invested"),
           sortable: true,
           minWidth: 120,
           render: (v, r) => basisCell(r, () => solCell(v)),
         },
         {
           id: "partial_exit_count",
-          label: "Exits",
+          label: I18n.t("positions-column-exits"),
           sortable: true,
           minWidth: 90,
           render: (v) => partialExitsCell(v),
         },
         {
           id: "sol_received",
-          label: "Proceeds",
+          label: I18n.t("positions-column-proceeds"),
           sortable: true,
           minWidth: 110,
           render: (v) => (v == null ? "—" : solCell(v)),
         },
         {
           id: "pnl",
-          label: "PnL",
+          label: I18n.t("positions-column-pnl"),
           sortable: true,
           minWidth: 110,
           render: (v, r) => pnlGuardedCell(r, () => pnlCell(v)),
         },
         {
           id: "pnl_percent",
-          label: "PnL %",
+          label: I18n.t("positions-column-pnl-percent"),
           sortable: true,
           minWidth: 100,
           render: (v, r) => pnlGuardedCell(r, () => percentCell(v)),
@@ -495,8 +521,7 @@ function createLifecycle() {
   const updateToolbar = () => {
     if (!table) return;
 
-    const viewLabel =
-      state.view === "open" ? "Open" : state.view === "archived" ? "Archived" : "Closed";
+    const viewLabel = I18n.label(POSITION_STATUS_LABELS, state.view);
     table.updateToolbarSummary([
       {
         id: "positions-total",
@@ -631,7 +656,7 @@ function createLifecycle() {
         // VERIFIED, so without this the row looks untouched and the user assumes the add
         // was lost.
         st = "buying";
-        step = dca.step || "Adding";
+        step = dca.step || I18n.t("positions-step-adding");
       }
       return { ...r, _state: st, _stepLabel: step };
     });
@@ -646,7 +671,7 @@ function createLifecycle() {
         id: `pending:${info.actionId}`,
         mint,
         symbol: info.symbol || mint.slice(0, 4),
-        name: failed ? "Buy failed" : "Buying…",
+        name: failed ? I18n.t("positions-pending-buy-failed") : I18n.t("positions-pending-buying"),
         token: `${info.symbol || mint.slice(0, 4)} (${shortMint})`,
         _pending: true,
         _state: failed ? "failed" : "buying",
@@ -721,7 +746,7 @@ function createLifecycle() {
           Utils.showToast({
             key: "positions-load",
             type: "warning",
-            title: "Could not refresh positions",
+            title: I18n.t("positions-load-failed"),
           });
         }
       }
@@ -732,7 +757,7 @@ function createLifecycle() {
   // Handle remove (archive/delete) / restore / delete actions on a position row.
   const handleLifecycleAction = async (action, row, btn) => {
     if (!row || row.id == null) {
-      Utils.showToast("Position data not found", "error");
+      Utils.showToast(I18n.t("positions-toast-not-found"), "error");
       return;
     }
     const id = row.id;
@@ -750,13 +775,13 @@ function createLifecycle() {
             method: "DELETE",
             priority: "high",
           });
-          Utils.showToast("Position deleted", "success");
+          Utils.showToast(I18n.t("positions-toast-deleted"), "success");
         } else {
           await requestManager.fetch(`/api/positions/${id}/archive`, {
             method: "POST",
             priority: "high",
           });
-          Utils.showToast("Position archived", "success");
+          Utils.showToast(I18n.t("positions-toast-archived"), "success");
         }
       } else if (action === "restore") {
         if (btn) btn.disabled = true;
@@ -764,24 +789,24 @@ function createLifecycle() {
           method: "POST",
           priority: "high",
         });
-        Utils.showToast("Position restored", "success");
+        Utils.showToast(I18n.t("positions-toast-restored"), "success");
       } else if (action === "delete") {
         const confirmed = await ConfirmationDialog.show({
-          title: "Delete position permanently",
-          message: `Permanently delete ${symbol}? This removes the position and its history from the database and cannot be undone. Your transactions and token data are not affected.`,
-          confirmLabel: "Delete permanently",
-          cancelLabel: "Cancel",
+          title: I18n.t("positions-delete-title"),
+          message: I18n.t("positions-delete-message", { symbol }),
+          confirmLabel: I18n.t("positions-delete-confirm"),
+          cancelLabel: I18n.t("common-action-cancel"),
           variant: "danger",
         });
         if (!confirmed?.confirmed) return;
         if (btn) btn.disabled = true;
         await requestManager.fetch(`/api/positions/${id}`, { method: "DELETE", priority: "high" });
-        Utils.showToast("Position deleted", "success");
+        Utils.showToast(I18n.t("positions-toast-deleted"), "success");
       }
       table.refresh({ reason: "manual", preserveScroll: true });
     } catch (err) {
       if (btn) btn.disabled = false;
-      Utils.showToast(err?.message || "Action failed", "error");
+      Utils.showToast(err?.message || I18n.t("positions-action-failed"), "error");
     }
   };
 
@@ -789,13 +814,13 @@ function createLifecycle() {
   const handleDeleteAllArchived = async () => {
     const count = state.total;
     const confirmed = await ConfirmationDialog.show({
-      title: "Delete all archived positions",
+      title: I18n.t("positions-delete-all-title"),
       message:
         count > 0
-          ? `Permanently delete all ${count} archived position(s)? This cannot be undone. Transactions and token data are not affected.`
-          : "Permanently delete all archived positions? This cannot be undone.",
-      confirmLabel: "Delete all",
-      cancelLabel: "Cancel",
+          ? I18n.t("positions-delete-all-message", { count })
+          : I18n.t("positions-delete-all-message-empty"),
+      confirmLabel: I18n.t("positions-delete-all-confirm"),
+      cancelLabel: I18n.t("common-action-cancel"),
       variant: "danger",
     });
     if (!confirmed?.confirmed) return;
@@ -804,10 +829,10 @@ function createLifecycle() {
         method: "DELETE",
         priority: "high",
       });
-      Utils.showToast(`Deleted ${res?.deleted ?? 0} archived position(s)`, "success");
+      Utils.showToast(I18n.t("positions-delete-all-done", { count: res?.deleted ?? 0 }), "success");
       table.refresh({ reason: "manual", preserveScroll: true });
     } catch (err) {
-      Utils.showToast(err?.message || "Failed to delete archived positions", "error");
+      Utils.showToast(err?.message || I18n.t("positions-delete-all-failed"), "error");
     }
   };
 
@@ -856,7 +881,7 @@ function createLifecycle() {
       // Sub-tabs
       tabBar = new TabBar({
         container: "#subTabsContainer",
-        tabs: SUB_TABS,
+        tabs: subTabs(),
         defaultTab: state.view,
         stateKey: "positions.activeTab",
         pageName: "positions",
@@ -872,7 +897,6 @@ function createLifecycle() {
 
       // Build columns based on current view
       const columns = buildColumns();
-      const viewLabel = state.view === "open" ? "Open" : "Closed";
 
       table = new DataTable({
         container: "#positions-root",
@@ -920,22 +944,22 @@ function createLifecycle() {
           onPageLoaded: () => updateToolbar(),
         },
         toolbar: {
-          summary: [{ id: "positions-total", label: "Total", value: "0", variant: "secondary" }],
+          summary: [{ id: "positions-total", label: I18n.t("positions-toolbar-total"), value: "0", variant: "secondary" }],
           search: {
             enabled: true,
             mode: "client",
-            placeholder: "Search by symbol or mint...",
+            placeholder: I18n.t("positions-search-placeholder"),
           },
           filters: [
             {
               id: "origin",
-              label: "Origin",
+              label: I18n.t("positions-filter-origin"),
               options: [
-                { value: "all", label: "All origins" },
-                { value: "auto", label: "Auto Trader" },
-                { value: "copy", label: "Copy Trading" },
-                { value: "manual", label: "Manual" },
-                { value: "external", label: "Wallet" },
+                { value: "all", label: I18n.t("positions-filter-origin-all") },
+                { value: "auto", label: I18n.t("positions-filter-origin-auto") },
+                { value: "copy", label: I18n.t("positions-filter-origin-copy") },
+                { value: "manual", label: I18n.t("positions-origin-manual") },
+                { value: "external", label: I18n.t("positions-origin-wallet") },
               ],
               filterFn: (row, value) => value === "all" || (row?.origin?.kind || "auto") === value,
             },
@@ -943,10 +967,10 @@ function createLifecycle() {
           buttons: [
             {
               id: "delete-all-archived",
-              label: "Delete all",
+              label: I18n.t("positions-toolbar-delete-all"),
               icon: "icon-trash-2",
               variant: "danger",
-              tooltip: "Permanently delete all archived positions",
+              tooltip: I18n.t("positions-delete-all-tooltip"),
               onClick: () => handleDeleteAllArchived(),
             },
           ],
@@ -981,7 +1005,7 @@ function createLifecycle() {
         // Find row data
         const row = table.getData().find((r) => r.mint === mint);
         if (!row) {
-          Utils.showToast("Position data not found", "error");
+          Utils.showToast(I18n.t("positions-toast-not-found"), "error");
           return;
         }
 
@@ -1068,7 +1092,7 @@ function createLifecycle() {
       if (!poller) {
         poller = ctx.managePoller(
           new Poller(() => table?.refresh({ reason: "poll", preserveScroll: true, silent: true }), {
-            label: "Positions",
+            label: "Positions", // l10n-ignore: internal poller name
           })
         );
       }

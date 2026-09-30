@@ -13,6 +13,7 @@ import { requestManager } from "../core/request_manager.js";
 import { notificationManager } from "../core/notifications.js";
 import { pushEscapeHandler } from "../core/escape_stack.js";
 import { HintTrigger } from "./hint_popover.js";
+import { POSITION_MANAGEMENT_LABELS } from "./position_management.js";
 import { applyHeaderMixin } from "./position_details/header.js";
 import { applySummaryMixin } from "./position_details/summary.js";
 import { applyChartMixin } from "./position_details/chart.js";
@@ -125,7 +126,7 @@ export class PositionDetailsDialog {
       // worse than an error, though, so keep counting.
       this._fetchFailures += 1;
       if (seq === this._openSeq && (!this.fullDetails || this._fetchFailures >= 3)) {
-        this._showBodyState("Failed to load position details");
+        this._showBodyState(I18n.t("positions-details-load-failed"));
       }
     } finally {
       this.isLoading = false;
@@ -168,7 +169,7 @@ export class PositionDetailsDialog {
       () => {
         this._fetchDetails();
       },
-      { label: "PositionDetails", intervalMs }
+      { label: "PositionDetails", intervalMs } // l10n-ignore: internal poller name
     );
     this.refreshPoller.start();
 
@@ -287,6 +288,7 @@ export class PositionDetailsDialog {
     this.dialogEl = document.createElement("div");
     this.dialogEl.className = "position-details-dialog";
     this.dialogEl.innerHTML = this._getDialogHTML();
+    I18n.localizeTree(this.dialogEl);
     document.body.appendChild(this.dialogEl);
   }
 
@@ -306,16 +308,16 @@ export class PositionDetailsDialog {
             <div class="header-right">
               <div class="pdd-trade-actions" id="pddTradeActions"></div>
               <div class="dialog-header-actions">
-                <button class="dialog-header-action favorite-btn" id="pddFavoriteBtn" type="button" title="Add to favorites" aria-label="Add to favorites">
+                <button class="dialog-header-action favorite-btn" id="pddFavoriteBtn" type="button" data-l10n-id="positions-details-favorite-add">
                   <i class="icon-star"></i>
                 </button>
-                <button class="dialog-header-action" id="pddCopyMintBtn" type="button" title="Copy mint address" aria-label="Copy mint address">
+                <button class="dialog-header-action" id="pddCopyMintBtn" type="button" data-l10n-id="positions-details-copy-mint">
                   <i class="icon-copy"></i>
                 </button>
-                <a class="dialog-header-action" href="https://solscan.io/token/${mint}" target="_blank" rel="noopener" title="View on Solscan" aria-label="View token on Solscan">
+                <a class="dialog-header-action" href="https://solscan.io/token/${mint}" target="_blank" rel="noopener" data-l10n-id="positions-details-view-solscan">
                   <i class="icon-external-link"></i>
                 </a>
-                <button class="dialog-close" type="button" title="Close (Esc)" aria-label="Close">
+                <button class="dialog-close" type="button" data-l10n-id="positions-details-close">
                   <i class="icon-x"></i>
                 </button>
               </div>
@@ -330,20 +332,20 @@ export class PositionDetailsDialog {
         <div class="dialog-body">
           <div class="pdd-layout">
             <div class="pdd-main" data-split="balanced">
-              <section class="pdd-chart-section" id="pddChartSection" aria-label="Price chart">
-                <div class="loading-spinner">Loading chart...</div>
+              <section class="pdd-chart-section" id="pddChartSection" data-l10n-id="positions-details-chart-section">
+                <div class="loading-spinner" data-l10n-id="positions-details-loading-chart"></div>
               </section>
-              <section class="pdd-activity" id="pddActivity" aria-label="Activity">
+              <section class="pdd-activity" id="pddActivity" data-l10n-id="positions-details-activity-section">
                 <div class="pdd-activity-head" id="pddActivityHead">
-                  <div class="pdd-split-handle" id="pddSplitHandle" role="separator" tabindex="0" aria-orientation="horizontal" aria-controls="pddChartSection" aria-label="Resize chart and activity" aria-valuemin="0" aria-valuemax="100"></div>
+                  <div class="pdd-split-handle" id="pddSplitHandle" role="separator" tabindex="0" aria-orientation="horizontal" aria-controls="pddChartSection" data-l10n-id="positions-details-split-handle" aria-valuemin="0" aria-valuemax="100"></div>
                   <div class="pdd-activity-title">
-                    <h3>Activity</h3>
+                    <h3 data-l10n-id="positions-details-activity-title"></h3>
                     <span class="pdd-activity-meta" id="pddActivityMeta"></span>
                   </div>
                   <div class="pdd-activity-controls">
                     <div class="pdd-act-filter-slot" id="pddActivityFilters"></div>
-                    <div class="timeframe-buttons" role="group" aria-label="Activity pane">
-                      <button type="button" class="timeframe-btn pdd-pane-btn" id="pddActivityToggle" aria-controls="pddActivityBody" aria-expanded="true" title="Expand activity" aria-label="Expand activity"><i class="icon-chevron-up"></i></button>
+                    <div class="timeframe-buttons" role="group" data-l10n-id="positions-details-activity-pane">
+                      <button type="button" class="timeframe-btn pdd-pane-btn" id="pddActivityToggle" aria-controls="pddActivityBody" aria-expanded="true" data-l10n-id="positions-details-activity-expand"><i class="icon-chevron-up"></i></button>
                     </div>
                   </div>
                 </div>
@@ -352,8 +354,8 @@ export class PositionDetailsDialog {
                 </div>
               </section>
             </div>
-            <aside class="pdd-rail" id="pddSummary" aria-label="Position summary">
-              <div class="loading-spinner">Loading position...</div>
+            <aside class="pdd-rail" id="pddSummary" data-l10n-id="positions-details-summary-section">
+              <div class="loading-spinner" data-l10n-id="positions-details-loading"></div>
             </aside>
           </div>
           <div class="pdd-body-state" id="pddBodyState" hidden></div>
@@ -425,7 +427,7 @@ export class PositionDetailsDialog {
       const mint = this._position()?.mint;
       if (mint) {
         Utils.copyToClipboard(mint);
-        Utils.notifyCopied("Mint address");
+        Utils.notifyCopied(I18n.t("positions-details-mint-label"));
       }
       return;
     }
@@ -496,15 +498,20 @@ window.addEventListener("screenerbot:toggle-position-management", async (event) 
       priority: "high",
     });
     if (data && data.success === false) {
-      throw new Error("Request failed");
+      throw new Error(I18n.t("positions-details-management-failed"));
     }
-    Utils.showToast(I18n.text(data.text), "success");
+    Utils.showToast(
+      I18n.t("positions-management-changed", {
+        mode: I18n.label(POSITION_MANAGEMENT_LABELS, management),
+      }),
+      "success"
+    );
     window.dispatchEvent(
       new CustomEvent("screenerbot:position-management-changed", {
         detail: { id, management },
       })
     );
   } catch (err) {
-    Utils.showToast(err?.message || "Failed to update position management", "error");
+    Utils.showToast(err?.message || I18n.t("positions-details-management-failed"), "error");
   }
 });

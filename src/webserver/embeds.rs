@@ -380,6 +380,9 @@ pub const TOKEN_DETAILS_POSITIONS_TAB_UI: &str =
     include_str!("templates/scripts/ui/token_details/positions_tab.js");
 pub const ACTION_STEP_UI: &str = include_str!("templates/scripts/ui/action_step.js");
 pub const TRADE_REASON_UI: &str = include_str!("templates/scripts/ui/trade_reason.js");
+pub const POSITION_MANAGEMENT_UI: &str =
+    include_str!("templates/scripts/ui/position_management.js");
+pub const POSITION_STATUS_UI: &str = include_str!("templates/scripts/ui/position_status.js");
 pub const TRANSACTION_TYPE_UI: &str = include_str!("templates/scripts/ui/transaction_type.js");
 pub const TRANSACTION_DETAILS_DIALOG_UI: &str =
     include_str!("templates/scripts/ui/transaction_details_dialog.js");

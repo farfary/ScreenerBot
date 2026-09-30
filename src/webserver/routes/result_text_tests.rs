@@ -69,13 +69,6 @@ fn token_source_results_render_english() {
 }
 
 #[test]
-fn position_management_result_renders_english() {
-    let text = UiText::new(ids::POSITIONS_RESULT_MANAGEMENT_SET)
-        .arg("management", UiArg::Text("user_only".to_owned()));
-    assert_eq!(render(text), "Position management set to user_only");
-}
-
-#[test]
 fn token_route_errors_render_english() {
     let cases = [
         (

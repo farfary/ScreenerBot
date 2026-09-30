@@ -13,6 +13,7 @@
  */
 
 import { showToast, notifyCopied, notifyCopyFailed } from "../core/utils.js";
+import { POSITION_MANAGEMENT_LABELS } from "./position_management.js";
 
 // Icon mapping to Lucide font classes
 const ICONS = {
@@ -981,7 +982,9 @@ function getContextMenu() {
 
     // Apply menu builder mixins (injected by context_menu/builders.js)
     if (window.ContextMenuBuilders) {
-      window.ContextMenuBuilders.apply(contextMenu);
+      window.ContextMenuBuilders.apply(contextMenu, {
+        positionManagementLabels: POSITION_MANAGEMENT_LABELS,
+      });
     }
   }
   return contextMenu;

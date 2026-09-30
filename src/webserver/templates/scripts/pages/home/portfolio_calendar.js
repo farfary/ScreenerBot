@@ -1,20 +1,6 @@
 // Portfolio calendar — month grid of daily realized P&L + end-of-day portfolio value.
+import { formatMonthYear, formatWeekday } from "../../core/format.js";
 import * as Utils from "../../core/utils.js";
-
-const MONTH_NAMES = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-];
 
 /**
  * Create a portfolio calendar controller bound to the home page DOM.
@@ -62,7 +48,7 @@ export function createCalendar(fetcher) {
     const { firstWeekday, daysInMonth } = monthMeta(year, month);
 
     const labelEl = monthLabel();
-    if (labelEl) labelEl.textContent = `${MONTH_NAMES[month - 1]} ${year}`;
+    if (labelEl) labelEl.textContent = formatMonthYear(year, month);
 
     const todayIso = new Date().toISOString().slice(0, 10);
     const cells = [];
@@ -107,7 +93,7 @@ export function createCalendar(fetcher) {
     const isLight = theme === "light";
 
     const labelEl = monthLabel();
-    if (labelEl) labelEl.textContent = `${MONTH_NAMES[data.month - 1]} ${data.year}`;
+    if (labelEl) labelEl.textContent = formatMonthYear(data.year, data.month);
 
     // Heatmap scale: largest absolute daily P&L in the month.
     let maxAbs = 0;
@@ -227,7 +213,7 @@ export function createCalendar(fetcher) {
 
   function popoverRow(label, value, cls = "") {
     return (
-      `<div class="cal-pop-row"><span class="cal-pop-label">${label}</span>` +
+      `<div class="cal-pop-row"><span class="cal-pop-label">${Utils.escapeHtml(label)}</span>` +
       `<span class="cal-pop-val ${cls}">${value}</span></div>`
     );
   }
@@ -243,14 +229,21 @@ export function createCalendar(fetcher) {
     const winRate = trades > 0 ? Math.round((wins / trades) * 100) : 0;
 
     const rows = [
-      popoverRow("Net P&L", `${pnl >= 0 ? "+" : ""}${fmtSol(pnl)}`, pnlCls),
-      popoverRow("Trades", String(trades)),
-      popoverRow("Win rate", `${winRate}% · ${wins}W / ${losses}L`),
+      popoverRow(I18n.t("home-calendar-pop-net-pnl"), `${pnl >= 0 ? "+" : ""}${fmtSol(pnl)}`, pnlCls),
+      popoverRow(I18n.t("home-calendar-trades"), String(trades)),
+      popoverRow(
+        I18n.t("home-calendar-pop-win-rate"),
+        I18n.t("home-calendar-pop-win-rate-value", {
+          rate: Utils.formatPercent(winRate, { decimals: 0 }),
+          wins,
+          losses,
+        })
+      ),
     ];
-    if (d.profit_sol) rows.push(popoverRow("Gross profit", `+${fmtSol(d.profit_sol)}`, "profit"));
-    if (d.loss_sol) rows.push(popoverRow("Gross loss", `-${fmtSol(d.loss_sol)}`, "loss"));
+    if (d.profit_sol) rows.push(popoverRow(I18n.t("home-calendar-pop-gross-profit"), `+${fmtSol(d.profit_sol)}`, "profit"));
+    if (d.loss_sol) rows.push(popoverRow(I18n.t("home-calendar-pop-gross-loss"), `-${fmtSol(d.loss_sol)}`, "loss"));
     if (d.portfolio_value_sol != null) {
-      rows.push(popoverRow("End balance", fmtSol(d.portfolio_value_sol)));
+      rows.push(popoverRow(I18n.t("home-calendar-pop-end-balance"), fmtSol(d.portfolio_value_sol)));
     }
 
     return (
@@ -332,6 +325,10 @@ export function createCalendar(fetcher) {
       // Re-tint cells when the theme changes (intensity floor differs per theme).
       track(window, "screenerbot:theme", () => {
         if (lastData) render(lastData);
+      });
+
+      document.querySelectorAll(".calendar-weekdays span").forEach((el, index) => {
+        el.textContent = formatWeekday(index);
       });
 
       updateNavState();

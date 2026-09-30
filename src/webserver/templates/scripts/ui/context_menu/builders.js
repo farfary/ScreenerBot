@@ -15,15 +15,7 @@
 (function () {
   "use strict";
 
-  // Position management modes offered in the position menu.
-  const POSITION_MANAGEMENT_LABELS = Object.freeze({
-    auto_trader: "menu-management-auto-trader",
-    user_only: "menu-management-user-only",
-    copy_task: "menu-management-copy-task",
-    hybrid: "menu-management-hybrid",
-  });
-
-  function applyBuildersMixin(manager) {
+  function applyBuildersMixin(manager, { positionManagementLabels }) {
     // =========================================================================
     // Token Menu Builder
     // =========================================================================
@@ -217,8 +209,8 @@
           type: "item",
           label:
             value === management
-              ? `✓ ${I18n.label(POSITION_MANAGEMENT_LABELS, value)}`
-              : I18n.label(POSITION_MANAGEMENT_LABELS, value),
+              ? `✓ ${I18n.label(positionManagementLabels, value)}`
+              : I18n.label(positionManagementLabels, value),
           action: () => this._setPositionManagement(context, value),
         })),
       });

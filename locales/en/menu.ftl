@@ -16,10 +16,6 @@ menu-copy-symbol = Copy Symbol
 menu-position-sell = Sell { $symbol }
 menu-position-add = Add to Position
 menu-position-management = Management
-menu-management-auto-trader = Auto Trader
-menu-management-user-only = User Only
-menu-management-copy-task = Copy Task
-menu-management-hybrid = Hybrid
 
 ## Explorer submenu
 
