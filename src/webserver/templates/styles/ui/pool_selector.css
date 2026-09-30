@@ -218,7 +218,7 @@
 }
 
 .pool-source {
-  margin-left: auto;
+  margin-inline-start: auto;
   font-size: 0.625rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;

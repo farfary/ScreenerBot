@@ -20,6 +20,7 @@
 .input-dialog {
   position: fixed;
   top: 50%;
+  /* rtl-ok: centered with translateX */
   left: 50%;
   z-index: var(--z-confirmation-dialog);
   width: 90%;

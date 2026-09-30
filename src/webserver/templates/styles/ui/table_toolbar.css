@@ -57,7 +57,7 @@
   align-items: center;
   gap: 0.375rem;
   flex: 0 0 auto;
-  margin-left: auto;
+  margin-inline-start: auto;
 }
 
 /* Data-heavy tables use two predictable rows instead of turning search into an
@@ -92,7 +92,7 @@
 }
 
 .data-table-toolbar[data-layout="query-row"] .table-toolbar-select-group {
-  margin-left: auto;
+  margin-inline-start: auto;
 }
 
 /* ===================== Identity ===================== */
@@ -234,8 +234,8 @@
 
 /* Hairline between adjacent stats instead of a glyph separator. */
 .data-table-toolbar[data-has-identity="true"] .table-toolbar-summary {
-  padding-left: 0.625rem;
-  border-left: 1px solid var(--border-color);
+  padding-inline-start: 0.625rem;
+  border-inline-start: 1px solid var(--border-color);
 }
 
 .table-toolbar-chip {
@@ -365,15 +365,15 @@
 
 .table-toolbar-cluster--attached > .table-toolbar-btn:not(:first-child),
 .table-toolbar-cluster--attached > .table-toolbar-field:not(:first-child) .table-toolbar-input {
-  border-top-left-radius: 0;
-  border-bottom-left-radius: 0;
-  margin-left: -1px;
+  border-start-start-radius: 0;
+  border-end-start-radius: 0;
+  margin-inline-start: -1px;
 }
 
 .table-toolbar-cluster--attached > .table-toolbar-btn:not(:last-child),
 .table-toolbar-cluster--attached > .table-toolbar-field:not(:last-child) .table-toolbar-input {
-  border-top-right-radius: 0;
-  border-bottom-right-radius: 0;
+  border-start-end-radius: 0;
+  border-end-end-radius: 0;
 }
 
 .table-toolbar-cluster--attached > .table-toolbar-btn:hover {
@@ -404,7 +404,7 @@
 
 .table-toolbar-select-group
   > .table-toolbar-field:not([hidden]):nth-child(n + 2 of .table-toolbar-field:not([hidden])) {
-  margin-left: -1px;
+  margin-inline-start: -1px;
 }
 
 .table-toolbar-select-group > .table-toolbar-field:not([hidden]) > .custom-select-host {
@@ -436,8 +436,8 @@
 .table-toolbar-select-group
   > .table-toolbar-field:not([hidden]):nth-child(1 of .table-toolbar-field:not([hidden]))
   > .table-toolbar-select {
-  border-top-left-radius: var(--radius-md);
-  border-bottom-left-radius: var(--radius-md);
+  border-start-start-radius: var(--radius-md);
+  border-end-start-radius: var(--radius-md);
 }
 
 .table-toolbar-select-group
@@ -446,8 +446,8 @@
 .table-toolbar-select-group
   > .table-toolbar-field:not([hidden]):nth-last-child(1 of .table-toolbar-field:not([hidden]))
   > .table-toolbar-select {
-  border-top-right-radius: var(--radius-md);
-  border-bottom-right-radius: var(--radius-md);
+  border-start-end-radius: var(--radius-md);
+  border-end-end-radius: var(--radius-md);
 }
 
 .table-toolbar-select-group > .table-toolbar-field:not([hidden]) .cs-trigger {
@@ -510,7 +510,7 @@
   > .custom-select-host
   > .custom-select:is(.open, .closing):not(.dropdown-above)
   .cs-trigger {
-  border-top-left-radius: var(--radius-md);
+  border-start-start-radius: var(--radius-md);
 }
 
 .table-toolbar-select-group
@@ -518,7 +518,7 @@
   > .custom-select-host
   > .custom-select:is(.open, .closing):not(.dropdown-above)
   .cs-trigger {
-  border-top-right-radius: var(--radius-md);
+  border-start-end-radius: var(--radius-md);
 }
 
 .table-toolbar-select-group
@@ -526,7 +526,7 @@
   > .custom-select-host
   > .custom-select:is(.open, .closing).dropdown-above
   .cs-trigger {
-  border-bottom-left-radius: var(--radius-md);
+  border-end-start-radius: var(--radius-md);
 }
 
 .table-toolbar-select-group
@@ -534,7 +534,7 @@
   > .custom-select-host
   > .custom-select:is(.open, .closing).dropdown-above
   .cs-trigger {
-  border-bottom-right-radius: var(--radius-md);
+  border-end-end-radius: var(--radius-md);
 }
 
 .table-toolbar-custom {
@@ -608,7 +608,7 @@
    here (that is what produced duplicate/again-broken arrows historically). */
 .table-toolbar-select,
 .dt-filter {
-  padding-right: 1.75rem;
+  padding-inline-end: 1.75rem;
   min-width: 120px;
   cursor: pointer;
   background-position: right 7px center;
@@ -651,13 +651,12 @@
   width: 100%;
   height: var(--table-toolbar-control-height);
   min-width: 0;
-  padding-left: 1.875rem;
-  padding-right: 1.625rem;
+  padding-inline: 1.875rem 1.625rem;
 }
 
 .table-toolbar-search__icon {
   position: absolute;
-  left: 0.625rem;
+  inset-inline-start: 0.625rem;
   display: flex;
   align-items: center;
   font-size: 0.8rem;
@@ -668,7 +667,7 @@
 .table-toolbar-search__clear,
 .table-toolbar-input__clear {
   position: absolute;
-  right: 0.375rem;
+  inset-inline-end: 0.375rem;
   border: none;
   background: transparent;
   color: var(--text-muted);
@@ -947,12 +946,15 @@
 .table-toolbar-menu {
   position: absolute;
   top: calc(100% - 1px);
-  right: 0;
+  inset-inline-end: 0;
   z-index: var(--z-dropdown);
   min-width: 180px;
   padding: 0;
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-md) 0 var(--radius-md) var(--radius-md);
+  border-start-start-radius: var(--radius-md);
+  border-start-end-radius: 0;
+  border-end-end-radius: var(--radius-md);
+  border-end-start-radius: var(--radius-md);
   background: var(--bg-card);
   font-family: var(--font-mono);
   box-shadow: var(--shadow-floating-md);
@@ -993,7 +995,7 @@
   background: transparent;
   color: var(--text-primary);
   font-size: 0.8125rem;
-  text-align: left;
+  text-align: start;
   cursor: pointer;
   transition: background var(--transition-base);
 }
@@ -1094,8 +1096,8 @@
   }
 
   .data-table-toolbar[data-has-identity="true"] .table-toolbar-summary {
-    padding-left: 0;
-    border-left: none;
+    padding-inline-start: 0;
+    border-inline-start: none;
     width: 100%;
   }
 

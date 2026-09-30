@@ -107,7 +107,7 @@
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  border-left: 1px solid var(--border-color);
+  border-inline-start: 1px solid var(--border-color);
 }
 
 .position-details-dialog .pdd-body-state {
@@ -212,5 +212,5 @@
 .position-details-dialog .pdd-activity-body > .pdd-rail {
   overflow: visible;
   border-bottom: 1px solid var(--border-color);
-  border-left: 0;
+  border-inline-start: 0;
 }

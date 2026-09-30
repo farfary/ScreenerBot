@@ -308,7 +308,7 @@
 @container (min-width: 220px) {
   .row-action-label {
     display: inline;
-    margin-left: 4px;
+    margin-inline-start: 4px;
   }
 }
 
@@ -381,7 +381,7 @@
 .dt-actions-dropdown-menu {
   position: absolute;
   top: calc(100% + 4px);
-  right: 0;
+  inset-inline-end: 0;
   min-width: 160px;
   padding: 0;
   background: var(--bg-secondary);
@@ -407,22 +407,25 @@
 }
 
 .dt-actions-dropdown-menu.menu-left {
-  right: auto;
-  left: 0;
+  inset-inline: 0 auto;
 }
 
 .dt-actions-dropdown-menu.is-portaled {
   position: fixed;
   top: auto;
+  /* rtl-ok: portaled menu positioned by JS in viewport coordinates */
   right: auto;
+  /* rtl-ok: portaled menu positioned by JS in viewport coordinates */
   left: auto;
   z-index: var(--z-dropdown);
   border-top-width: 0;
+  /* rtl-ok: portaled menu positioned by JS in viewport coordinates */
   border-radius: var(--radius-md) 0 var(--radius-md) var(--radius-md);
   transform-origin: top right;
 }
 
 .dt-actions-dropdown-menu.is-portaled.menu-left {
+  /* rtl-ok: portaled menu positioned by JS in viewport coordinates */
   border-radius: 0 var(--radius-md) var(--radius-md) var(--radius-md);
   transform-origin: top left;
 }
@@ -430,12 +433,14 @@
 .dt-actions-dropdown-menu.is-portaled.menu-above {
   border-top-width: 1px;
   border-bottom-width: 0;
+  /* rtl-ok: portaled menu positioned by JS in viewport coordinates */
   border-radius: var(--radius-md) var(--radius-md) 0 var(--radius-md);
   transform: translateY(4px) scaleY(0.985);
   transform-origin: bottom right;
 }
 
 .dt-actions-dropdown-menu.is-portaled.menu-left.menu-above {
+  /* rtl-ok: portaled menu positioned by JS in viewport coordinates */
   border-radius: var(--radius-md) var(--radius-md) var(--radius-md) 0;
   transform-origin: bottom left;
 }
@@ -554,7 +559,7 @@
     "zero" 1;
   font-weight: 500;
   letter-spacing: -0.01em;
-  text-align: right;
+  text-align: end;
 }
 
 /* Positive values (profit, gain) */

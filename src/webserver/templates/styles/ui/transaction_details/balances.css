@@ -31,7 +31,7 @@
   color: var(--text-secondary);
   font-size: 0.7rem;
   font-weight: 600;
-  text-align: left;
+  text-align: start;
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
@@ -51,7 +51,7 @@
   font-feature-settings:
     "tnum" 1,
     "zero" 1;
-  text-align: right;
+  text-align: end;
 }
 
 .transaction-details-dialog .balance-table .positive {

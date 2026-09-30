@@ -315,7 +315,7 @@ select {
   appearance: none;
   height: var(--input-height);
   padding: var(--input-padding-y) var(--input-padding-x);
-  padding-right: 36px;
+  padding-inline-end: 36px;
   font-family: var(--font-data);
   font-size: var(--input-font-size);
   line-height: 1.5;
@@ -362,14 +362,14 @@ select:disabled {
 select.select-sm {
   height: var(--input-height-sm);
   padding: 6px 10px;
-  padding-right: 32px;
+  padding-inline-end: 32px;
   font-size: 0.8125rem;
 }
 
 select.select-lg {
   height: var(--input-height-lg);
   padding: 10px 14px;
-  padding-right: 40px;
+  padding-inline-end: 40px;
   font-size: 1rem;
 }
 
@@ -443,6 +443,7 @@ select.select-lg {
   content: "";
   position: absolute;
   top: var(--toggle-knob-offset);
+  /* rtl-ok: knob travel is a physical translateX */
   left: var(--toggle-knob-offset);
   width: var(--toggle-knob-size);
   height: var(--toggle-knob-size);
@@ -829,7 +830,7 @@ input[type="radio"]:disabled {
 
 .search-wrapper .search-icon {
   position: absolute;
-  left: 12px;
+  inset-inline-start: 12px;
   color: var(--text-muted);
   font-size: 16px;
   line-height: 1;
@@ -838,8 +839,7 @@ input[type="radio"]:disabled {
 }
 
 .search-wrapper input {
-  padding-left: 38px;
-  padding-right: 38px;
+  padding-inline: 38px;
 }
 
 .search-wrapper input:focus + .search-icon,
@@ -849,7 +849,7 @@ input[type="radio"]:disabled {
 
 .search-wrapper .search-clear {
   position: absolute;
-  right: 8px;
+  inset-inline-end: 8px;
   display: none;
   align-items: center;
   justify-content: center;
@@ -1100,15 +1100,21 @@ input[type="number"]::-webkit-inner-spin-button {
 }
 
 .input-group > :first-child {
-  border-radius: var(--input-border-radius) 0 0 var(--input-border-radius);
+  border-start-start-radius: var(--input-border-radius);
+  border-start-end-radius: 0;
+  border-end-end-radius: 0;
+  border-end-start-radius: var(--input-border-radius);
 }
 
 .input-group > :last-child {
-  border-radius: 0 var(--input-border-radius) var(--input-border-radius) 0;
+  border-start-start-radius: 0;
+  border-start-end-radius: var(--input-border-radius);
+  border-end-end-radius: var(--input-border-radius);
+  border-end-start-radius: 0;
 }
 
 .input-group > :not(:first-child) {
-  margin-left: -1px;
+  margin-inline-start: -1px;
 }
 
 .input-group-addon {

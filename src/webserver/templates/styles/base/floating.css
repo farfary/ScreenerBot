@@ -253,7 +253,7 @@
   cursor: pointer;
   transition: all var(--transition-fast);
   user-select: none;
-  text-align: left;
+  text-align: start;
   font-family: inherit;
 }
 
@@ -337,8 +337,8 @@
   flex-shrink: 0;
   font-size: 0.6875rem;
   color: var(--text-muted);
-  margin-left: auto;
-  padding-left: 16px;
+  margin-inline-start: auto;
+  padding-inline-start: 16px;
   font-family: inherit;
 }
 
@@ -417,7 +417,8 @@
    ============================================================================= */
 
 .floating-header {
-  padding: 6px 12px 4px 10px;
+  padding-block: 6px 4px;
+  padding-inline: 10px 12px;
   margin: 0 5px 2px;
   font-size: 0.6875rem;
   font-weight: 600;
@@ -465,7 +466,7 @@
 .floating-item.selected::after {
   content: "";
   position: absolute;
-  right: 14px;
+  inset-inline-end: 14px;
   top: 50%;
   transform: translateY(-50%);
   width: 16px;
@@ -482,7 +483,7 @@
 .floating-submenu-arrow {
   width: 12px;
   height: 12px;
-  margin-left: auto;
+  margin-inline-start: auto;
   color: var(--text-muted);
   transition: color 0.08s ease;
 }

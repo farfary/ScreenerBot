@@ -47,6 +47,7 @@
 .advanced-chart-tooltip {
   position: absolute;
   top: 0;
+  /* rtl-ok: chart tooltip origin; positioned by a JS translate from the physical left edge */
   left: 0;
   z-index: var(--z-tooltip);
   width: max-content;
@@ -146,7 +147,7 @@
 .tooltip-value {
   color: var(--text-primary);
   font-weight: 500;
-  text-align: right;
+  text-align: end;
   white-space: nowrap;
 }
 

@@ -132,7 +132,7 @@
 /* Events outside the loaded candle window are counted here rather than clamped onto an
    edge bar, which would claim they happened in a candle they did not. */
 .position-details-dialog .pdd-legend-note {
-  margin-left: auto;
+  margin-inline-start: auto;
   color: var(--text-muted);
 }
 

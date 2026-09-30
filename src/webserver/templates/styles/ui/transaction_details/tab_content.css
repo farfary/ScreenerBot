@@ -284,7 +284,7 @@
   color: var(--text-muted);
   font-size: 0.65rem;
   min-width: 28px;
-  text-align: right;
+  text-align: end;
   padding-top: 2px;
 }
 
@@ -410,7 +410,7 @@
 
 .transaction-details-dialog .ata-table th {
   padding: 10px 14px;
-  text-align: left;
+  text-align: start;
   font-size: 0.7rem;
   font-weight: 600;
   color: var(--text-secondary);
@@ -432,7 +432,7 @@
 
 .transaction-details-dialog .ata-table .numeric {
   font-family: var(--font-data);
-  text-align: right;
+  text-align: end;
 }
 
 /* =============================================================================

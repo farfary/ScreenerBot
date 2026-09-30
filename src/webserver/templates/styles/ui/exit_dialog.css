@@ -32,6 +32,8 @@
 .exit-dialog {
   position: fixed;
   top: 50%;
+  /* rtl-ok: centered with translateX
+ */
   left: 50%;
   transform: translate(-50%, -50%) scale(0.9);
   width: 90%;
@@ -87,7 +89,7 @@
   height: 200px;
   background: var(--primary-color, #58a6ff);
   top: -80px;
-  right: -60px;
+  inset-inline-end: -60px;
   animation-delay: 0s;
 }
 
@@ -96,7 +98,7 @@
   height: 160px;
   background: var(--solana-purple, #9945ff);
   bottom: -60px;
-  left: -40px;
+  inset-inline-start: -40px;
   animation-delay: 2s;
 }
 
@@ -197,7 +199,7 @@
   border-radius: var(--radius-xl);
   color: var(--text-primary);
   cursor: pointer;
-  text-align: left;
+  text-align: start;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 

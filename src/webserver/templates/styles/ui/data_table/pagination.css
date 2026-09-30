@@ -124,7 +124,8 @@
 }
 
 .dt-client-pagination-size__select {
-  padding: 4px 24px 4px 8px;
+  padding-block: 4px;
+  padding-inline: 8px 24px;
   height: 28px;
   /* background-color (not the `background` shorthand) so the global select arrow survives. */
   background-color: var(--bg-primary);
@@ -181,7 +182,8 @@
 
   .dt-client-pagination-size__select {
     height: 36px;
-    padding: 6px 28px 6px 10px;
+    padding-block: 6px;
+    padding-inline: 10px 28px;
   }
 }
 
@@ -384,7 +386,8 @@
 }
 
 .dt-server-pagination-size__select {
-  padding: 4px 24px 4px 8px;
+  padding-block: 4px;
+  padding-inline: 8px 24px;
   height: 28px;
   /* background-color (not the `background` shorthand) so the global select arrow survives. */
   background-color: var(--bg-primary);
@@ -441,7 +444,8 @@
 
   .dt-server-pagination-size__select {
     height: 36px;
-    padding: 6px 28px 6px 10px;
+    padding-block: 6px;
+    padding-inline: 10px 28px;
   }
 }
 

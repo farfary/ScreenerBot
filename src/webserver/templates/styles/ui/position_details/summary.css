@@ -50,7 +50,7 @@
   gap: 1px;
   min-width: 0;
   margin: 0;
-  text-align: right;
+  text-align: end;
 }
 
 .position-details-dialog :where(.pdd-fact-value) {
@@ -76,7 +76,7 @@
 }
 
 .position-details-dialog .pdd-change + .pdd-change {
-  margin-left: 10px;
+  margin-inline-start: 10px;
 }
 
 /* Price path range ---------------------------------------------------------- */
@@ -94,6 +94,7 @@
 
 .position-details-dialog .pdd-range-span {
   position: absolute;
+  /* rtl-ok: range track positioned by a JS percentage */
   inset: 0 calc(100% - var(--to)) 0 var(--from);
   border-radius: inherit;
   background: currentcolor;
@@ -103,9 +104,11 @@
 .position-details-dialog .pdd-range-tick {
   position: absolute;
   top: -4px;
+  /* rtl-ok: range track positioned by a JS percentage */
   left: var(--at);
   width: 2px;
   height: 14px;
+  /* rtl-ok: range track positioned by a JS percentage */
   margin-left: -1px;
   border-radius: 1px;
   background: currentcolor;
@@ -146,7 +149,7 @@
   display: inline-block;
   width: 2px;
   height: 9px;
-  margin-right: 5px;
+  margin-inline-end: 5px;
   vertical-align: -1px;
   background: currentcolor;
 }
@@ -170,7 +173,7 @@
 
 .position-details-dialog .pdd-risk-list li::before {
   content: "–";
-  margin-right: 6px;
+  margin-inline-end: 6px;
   color: var(--text-muted);
 }
 

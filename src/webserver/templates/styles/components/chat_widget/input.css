@@ -87,7 +87,8 @@
     background: var(--bg-primary);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-2xl);
-    padding: 10px 12px 10px 16px;
+    padding-block: 10px;
+    padding-inline: 16px 12px;
     transition:
       border-color 0.2s ease,
       box-shadow 0.2s ease;

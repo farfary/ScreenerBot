@@ -55,7 +55,7 @@ body.notification-drawer-open {
   height: 100%;
   transform: translateX(100%);
   transition: transform 0.25s cubic-bezier(0.32, 0.72, 0, 1);
-  border-left: 1px solid var(--border-color);
+  border-inline-start: 1px solid var(--border-color);
 }
 
 .notification-drawer[data-state="open"] .notification-drawer__panel {
@@ -224,7 +224,7 @@ body.notification-drawer-open {
 .filter-select {
   flex: 1;
   padding: 6px 10px;
-  padding-right: 24px;
+  padding-inline-end: 24px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
 
@@ -435,7 +435,7 @@ body.notification-drawer-open {
   flex-wrap: wrap;
   gap: 4px;
   margin: 5px 0 0;
-  padding-left: 22px;
+  padding-inline-start: 22px;
 }
 
 .notification-chip {
@@ -457,7 +457,7 @@ body.notification-drawer-open {
 
 .notification-progress {
   margin: 6px 0 0;
-  padding-left: 22px;
+  padding-inline-start: 22px;
 }
 
 .progress-bar-container {
@@ -509,7 +509,7 @@ body.notification-drawer-open {
 
 .notification-error {
   margin: 6px 0 0;
-  margin-left: 22px;
+  margin-inline-start: 22px;
   padding: 6px 8px;
   background: var(--danger-alpha-10);
   border-radius: var(--radius-sm);
@@ -528,7 +528,7 @@ body.notification-drawer-open {
   align-items: center;
   gap: 8px;
   margin-top: 6px;
-  padding-left: 22px;
+  padding-inline-start: 22px;
 }
 
 .notification-time {
@@ -546,7 +546,7 @@ body.notification-drawer-open {
 
 .notification-duration::before {
   content: "·";
-  margin-right: 8px;
+  margin-inline-end: 8px;
 }
 
 /* -----------------------------------------------------------------------------
@@ -597,7 +597,7 @@ body.notification-drawer-open {
 .back-to-top-btn {
   position: absolute;
   bottom: 16px;
-  right: 16px;
+  inset-inline-end: 16px;
   width: 36px;
   height: 36px;
   display: flex;

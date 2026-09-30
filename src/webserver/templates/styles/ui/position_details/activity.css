@@ -109,7 +109,7 @@
 }
 
 .position-details-dialog .pdd-act-filter > span {
-  margin-left: 5px;
+  margin-inline-start: 5px;
   color: var(--text-muted);
   font-family: var(--font-data);
 }
@@ -202,7 +202,7 @@
   border: 0;
   background: transparent;
   color: inherit;
-  text-align: left;
+  text-align: start;
   cursor: pointer;
 }
 
@@ -360,7 +360,7 @@
   border: 0;
   background: transparent;
   color: inherit;
-  text-align: left;
+  text-align: start;
   cursor: pointer;
 }
 

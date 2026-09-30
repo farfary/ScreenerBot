@@ -144,7 +144,7 @@
 .setup-dialog-reveal {
   position: absolute;
   top: 0.5rem;
-  right: 0.5rem;
+  inset-inline-end: 0.5rem;
   background: transparent;
   border: none;
   color: var(--text-secondary, #8b949e);

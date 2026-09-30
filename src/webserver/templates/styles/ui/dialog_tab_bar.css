@@ -78,7 +78,7 @@
 
 .details-tab-badge {
   min-width: 1ch;
-  margin-left: 1px;
+  margin-inline-start: 1px;
   color: var(--text-muted);
   font-family: var(--font-mono);
   font-size: 0.625rem;
@@ -95,7 +95,7 @@
   align-items: center;
   padding: 0 16px;
   background: var(--bg-primary);
-  border-left: 1px solid var(--border-color);
+  border-inline-start: 1px solid var(--border-color);
   flex: 0 0 auto;
 }
 

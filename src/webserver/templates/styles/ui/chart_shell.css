@@ -91,7 +91,7 @@
 .chart-data-tip {
   position: absolute;
   top: calc(100% + 6px);
-  left: 0;
+  inset-inline-start: 0;
   z-index: var(--z-dropdown);
   min-width: 244px;
   padding: 8px;
@@ -173,12 +173,12 @@
 }
 
 .chart-data-tip-count {
-  text-align: right;
+  text-align: end;
   color: var(--text-primary);
 }
 
 .chart-data-tip-fresh {
-  text-align: right;
+  text-align: end;
   color: var(--text-tertiary);
   min-width: 56px;
 }

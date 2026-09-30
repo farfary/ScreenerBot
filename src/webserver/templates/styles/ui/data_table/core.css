@@ -17,8 +17,7 @@
   content: "";
   position: absolute;
   bottom: 0;
-  left: 0;
-  right: 0;
+  inset-inline: 0;
   height: 2px;
   background-color: var(--primary-alpha-15);
   background-image: linear-gradient(
@@ -57,7 +56,7 @@
   display: inline-block;
   width: 10px;
   height: 10px;
-  margin-right: 2px;
+  margin-inline-end: 2px;
   border: 2px solid var(--primary-color);
   border-top-color: transparent;
   border-radius: var(--radius-full);
@@ -174,6 +173,7 @@
    next-page prefetches; pages mode uses the header loading bar instead. */
 .dt-scroll-loader {
   position: absolute;
+  /* rtl-ok: centered with translateX */
   left: 50%;
   bottom: 16px;
   transform: translate(-50%, 8px);
@@ -267,7 +267,7 @@
 
 .data-table th {
   padding: 10px 12px;
-  text-align: left;
+  text-align: start;
   font-weight: 600;
   font-size: 0.75rem;
   text-transform: uppercase;
@@ -374,7 +374,7 @@ body.dt-column-resizing * {
 .dt-resize-handle {
   position: absolute;
   top: 0;
-  right: 0;
+  inset-inline-end: 0;
   width: 6px;
   height: 100%;
   cursor: col-resize;
@@ -387,6 +387,7 @@ body.dt-column-resizing * {
   content: "";
   position: absolute;
   top: 50%;
+  /* rtl-ok: centered with translateX */
   left: 50%;
   transform: translate(-50%, -50%);
   width: 2px;
@@ -562,7 +563,7 @@ body.dt-column-resizing * {
 }
 
 .dt-header-column.is-drag-over {
-  border-left: 2px solid var(--primary-color);
+  border-inline-start: 2px solid var(--primary-color);
   background: var(--bg-card-hover);
 }
 
@@ -755,6 +756,7 @@ body.dt-column-resizing * {
 .data-table th.dt-col-sticky,
 .data-table td.dt-col-sticky {
   position: sticky;
+  /* rtl-ok: sticky pin offsets are written by JS in physical coordinates */
   left: var(--dt-pin-left-0, 0);
   z-index: 3;
 
@@ -768,16 +770,19 @@ body.dt-column-resizing * {
 
 .data-table th.dt-col-sticky[data-sticky-index="1"],
 .data-table td.dt-col-sticky[data-sticky-index="1"] {
+  /* rtl-ok: sticky pin offsets are written by JS in physical coordinates */
   left: var(--dt-pin-left-1, 0);
 }
 
 .data-table th.dt-col-sticky[data-sticky-index="2"],
 .data-table td.dt-col-sticky[data-sticky-index="2"] {
+  /* rtl-ok: sticky pin offsets are written by JS in physical coordinates */
   left: var(--dt-pin-left-2, 0);
 }
 
 .data-table th.dt-col-sticky[data-sticky-index="3"],
 .data-table td.dt-col-sticky[data-sticky-index="3"] {
+  /* rtl-ok: sticky pin offsets are written by JS in physical coordinates */
   left: var(--dt-pin-left-3, 0);
 }
 
@@ -829,6 +834,7 @@ body.dt-column-resizing * {
   content: "";
   position: absolute;
   top: 0;
+  /* rtl-ok: sticky pin shadow follows the physical left pin edge (translateX) */
   right: 0;
   bottom: 0;
   width: 8px;
@@ -918,7 +924,7 @@ body.dt-column-resizing * {
   font-size: 0.8125rem;
   font-weight: 500;
   color: var(--text-primary);
-  text-align: left;
+  text-align: start;
   background: transparent;
   border: none;
   border-radius: var(--radius-md);

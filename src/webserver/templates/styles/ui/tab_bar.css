@@ -324,15 +324,15 @@
 }
 
 .tab-scroll-btn--left {
-  left: 0;
+  inset-inline-start: 0;
   background: linear-gradient(to right, var(--tab-bar-bg-secondary) 50%, transparent);
-  padding-left: 4px;
+  padding-inline-start: 4px;
 }
 
 .tab-scroll-btn--right {
-  right: 0;
+  inset-inline-end: 0;
   background: linear-gradient(to left, var(--tab-bar-bg-secondary) 50%, transparent);
-  padding-right: 4px;
+  padding-inline-end: 4px;
 }
 
 /* Show buttons when there's overflow */
@@ -357,12 +357,12 @@
 }
 
 .tab-scroll-wrapper::before {
-  left: 0;
+  inset-inline-start: 0;
   background: linear-gradient(to right, var(--tab-bar-bg-secondary), transparent);
 }
 
 .tab-scroll-wrapper::after {
-  right: 0;
+  inset-inline-end: 0;
   background: linear-gradient(to left, var(--tab-bar-bg-secondary), transparent);
 }
 

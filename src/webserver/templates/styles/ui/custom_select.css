@@ -148,7 +148,9 @@ select.cs-enhanced-source {
 .cs-dropdown {
   position: absolute;
   top: 100%;
+  /* rtl-ok: positioned by JS in viewport coordinates */
   left: 0;
+  /* rtl-ok: positioned by JS in viewport coordinates */
   right: 0;
   z-index: var(--z-select);
   margin-top: 0;
@@ -255,6 +257,7 @@ select.cs-enhanced-source {
      the exact width of the trigger's chevron column, reserved for the checkmark.
      Both are measured off the live trigger by `_syncMenuMetrics()`, so a surface that
      restyles `.cs-trigger` padding never needs its select widths hand-compensated. */
+  /* rtl-ok: option padding is measured physically from the trigger by JS */
   padding: 0.375rem var(--cs-pad-right, 2.25rem) 0.375rem var(--cs-pad-left, 0.75rem);
   color: var(--text-primary);
   font-size: 0.8125rem;
@@ -292,6 +295,7 @@ select.cs-enhanced-source {
 .cs-option.selected::after {
   content: "";
   position: absolute;
+  /* rtl-ok: option padding is measured physically from the trigger by JS */
   right: var(--cs-check-right, 12px);
   top: 50%;
   transform: translateY(-50%);

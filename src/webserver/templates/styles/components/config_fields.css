@@ -139,7 +139,7 @@
 
 .config-field-meta > * + *::before {
   content: "·";
-  margin-right: 8px;
+  margin-inline-end: 8px;
   color: var(--text-muted);
 }
 
@@ -227,7 +227,7 @@
 
 .config-field-control input[type="number"] {
   width: 100%;
-  text-align: right;
+  text-align: end;
   font-family: var(--font-data);
   font-feature-settings:
     "tnum" 1,
@@ -399,7 +399,7 @@
   border: none;
   background: transparent;
   font-family: inherit;
-  text-align: left;
+  text-align: start;
   cursor: pointer;
 }
 

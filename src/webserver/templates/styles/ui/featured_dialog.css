@@ -31,8 +31,7 @@
   content: "";
   position: absolute;
   top: 0;
-  left: 0;
-  right: 0;
+  inset-inline: 0;
   height: 0;
   background: var(--bg-secondary);
   z-index: 1;
@@ -524,7 +523,7 @@
    lines up with the name and change lines up with the symbol. */
 .feat-card-price,
 .feat-card-change {
-  margin-left: auto;
+  margin-inline-start: auto;
   flex-shrink: 0;
   font-family: var(--font-mono);
   font-feature-settings: "tnum";

@@ -37,12 +37,12 @@
 }
 
 .header-row-2-wrapper::before {
-  left: 0;
+  inset-inline-start: 0;
   background: linear-gradient(to right, var(--bg-secondary), transparent);
 }
 
 .header-row-2-wrapper::after {
-  right: 0;
+  inset-inline-end: 0;
   background: linear-gradient(to left, var(--bg-secondary), transparent);
 }
 
@@ -90,6 +90,7 @@
 .nav-tabs-indicator {
   position: absolute;
   bottom: 0;
+  /* rtl-ok: tab indicator offset is a JS-written physical translateX */
   left: 0;
   width: var(--nav-indicator-w, 0);
   height: 4px;
@@ -246,7 +247,7 @@
   margin: 0;
   padding: 0 14px;
   border: 0;
-  border-right: 1px solid var(--ticker-border);
+  border-inline-end: 1px solid var(--ticker-border);
   border-radius: 0;
   background: transparent;
   color: var(--text-secondary);
@@ -269,7 +270,7 @@ button.ticker-segment:hover {
 }
 
 .ticker-segment:last-child {
-  border-right: 0;
+  border-inline-end: 0;
 }
 
 .ticker-icon {
@@ -317,7 +318,7 @@ button.ticker-segment:hover .ticker-icon {
   width: 6px;
   height: 6px;
   flex-shrink: 0;
-  margin-right: 2px;
+  margin-inline-end: 2px;
   border-radius: var(--radius-full);
   background: var(--semantic-success-text);
 }
@@ -408,8 +409,8 @@ button.ticker-segment:hover .ticker-icon {
 
   .modern-header .header-actions {
     position: relative;
-    margin-left: 0;
-    padding-left: 4px;
+    margin-inline-start: 0;
+    padding-inline-start: 4px;
   }
 
   .modern-header .header-actions-toggle {
@@ -419,7 +420,7 @@ button.ticker-segment:hover .ticker-icon {
   .modern-header .header-actions-items {
     position: absolute;
     top: calc(100% + 8px);
-    right: 0;
+    inset-inline-end: 0;
     z-index: var(--z-popover);
     padding: 8px 10px;
     border: 1px solid var(--header-border);
@@ -486,8 +487,8 @@ button.ticker-segment:hover .ticker-icon {
   .modern-header .header-actions {
     grid-area: actions;
     justify-self: end;
-    margin-left: 0;
-    padding-left: 0;
+    margin-inline-start: 0;
+    padding-inline-start: 0;
   }
 
   .modern-header .header-actions-items {
@@ -574,7 +575,7 @@ button.ticker-segment:hover .ticker-icon {
   .modern-header .header-actions-items {
     position: absolute;
     top: calc(100% + 6px);
-    right: 0;
+    inset-inline-end: 0;
     z-index: var(--z-popover);
     display: grid;
     grid-template-columns: repeat(4, 40px);

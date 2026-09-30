@@ -219,7 +219,7 @@ body.trade-action-dialog-open {
 /* Marks a token the user already holds, so an add/sell reads as acting on an
    existing position rather than opening a new one. */
 .trade-action-position-badge {
-  margin-left: auto;
+  margin-inline-start: auto;
   flex-shrink: 0;
   padding: 2px 8px;
   border-radius: var(--radius-sm, 4px);
@@ -241,12 +241,12 @@ body.trade-action-dialog-open {
   flex-direction: column;
   gap: 4px;
   padding: 14px 16px;
-  border-right: 1px solid var(--border-color, #30363d);
+  border-inline-end: 1px solid var(--border-color, #30363d);
   border-bottom: 1px solid var(--border-color, #30363d);
 }
 
 .trade-action-context-item:last-child {
-  border-right: none;
+  border-inline-end: none;
 }
 
 .trade-action-context-grid:has(.trade-action-context-item:nth-child(2):last-child)
@@ -289,7 +289,7 @@ body.trade-action-dialog-open {
 .trade-action-balance-unit {
   color: var(--text-secondary, #8b949e);
   font-size: 0.8125rem;
-  margin-left: 4px;
+  margin-inline-start: 4px;
 }
 
 .trade-action-context-value.low-balance .trade-action-balance-amount {
@@ -419,7 +419,7 @@ body.trade-action-dialog-open {
 .trade-action-input {
   width: 100%;
   padding: 14px 16px;
-  padding-right: 104px;
+  padding-inline-end: 104px;
   background: rgb(0, 0, 0, 0.3);
   border: 1px solid var(--border-color, #30363d);
   border-radius: var(--radius-md, 6px);
@@ -454,7 +454,7 @@ body.trade-action-dialog-open {
 
 .trade-action-input-suffix {
   position: absolute;
-  right: 62px;
+  inset-inline-end: 62px;
   font-size: 0.8125rem;
   font-weight: 600;
   color: var(--text-secondary, #8b949e);
@@ -772,7 +772,7 @@ body.trade-action-dialog-open {
   flex-direction: column;
   gap: 4px;
   min-width: 0;
-  text-align: left;
+  text-align: start;
 }
 
 /* Title: the friendly reason (e.g. "This token isn't tradable right now"). */
@@ -921,7 +921,7 @@ body.trade-action-dialog-open {
   font-family: var(--font-data, monospace);
   font-size: 0.8125rem;
   font-weight: 700;
-  text-align: right;
+  text-align: end;
   font-variant-numeric: tabular-nums;
   color: var(--text-primary);
   overflow-wrap: anywhere;
@@ -970,7 +970,7 @@ body.trade-action-dialog-open {
   font-size: 0.75rem;
   font-weight: 600;
   line-height: 1.3;
-  text-align: right;
+  text-align: end;
   font-variant-numeric: tabular-nums;
   color: var(--text-primary);
   overflow-wrap: anywhere;
@@ -1239,7 +1239,7 @@ body.trade-action-dialog-open {
 
 .trade-action-input-max {
   position: absolute;
-  right: 10px;
+  inset-inline-end: 10px;
   padding: 5px 10px;
   font-size: 0.68rem;
   font-weight: 700;
@@ -1285,8 +1285,7 @@ body.trade-action-dialog-open {
 /* Tick marks at snap points (inset by the thumb radius so they line up) */
 .trade-action-slider-ticks {
   position: absolute;
-  left: 9px;
-  right: 9px;
+  inset-inline: 9px;
   top: 50%;
   height: 0;
   pointer-events: none;
@@ -1380,7 +1379,7 @@ body.trade-action-dialog-open {
 
 .trade-action-slider-readout {
   min-width: 70px;
-  text-align: right;
+  text-align: end;
   font-size: 0.78rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -1461,6 +1460,7 @@ body.trade-action-dialog-open {
 .trade-action-quote-refresh-bar {
   position: absolute;
   top: 0;
+  /* rtl-ok: progress bar scales from the physical left origin */
   left: 0;
   height: 2px;
   width: 100%;

@@ -52,10 +52,12 @@
 }
 
 .electron-window-controls .header-row-1 {
+  /* rtl-ok: reserves space for the native title-bar controls, placed by the OS, not the document direction */
   padding-right: 160px;
 }
 
 .electron-macos .header-row-1 {
+  /* rtl-ok: undoes the native title-bar reservation above on macOS */
   padding-right: var(--header-inline-padding);
 }
 
@@ -75,7 +77,7 @@
   background: var(--warning-alpha-10);
   color: var(--semantic-warning-text);
   font: inherit;
-  text-align: left;
+  text-align: start;
   cursor: pointer;
   transition:
     background-color var(--transition-fast),
@@ -246,7 +248,7 @@
   color: var(--text-primary);
   font: inherit;
   line-height: 1.15;
-  text-align: left;
+  text-align: start;
   cursor: pointer;
   scroll-snap-align: start;
   transition:
@@ -387,7 +389,7 @@
 }
 
 .modern-header .bot-card .pnl-unit {
-  margin-left: 2px;
+  margin-inline-start: 2px;
   font-size: 0.9em;
   font-weight: 500;
   opacity: 0.82;
@@ -444,8 +446,8 @@
   display: flex;
   align-items: center;
   flex-shrink: 0;
-  margin-left: 4px;
-  padding-left: 8px;
+  margin-inline-start: 4px;
+  padding-inline-start: 8px;
 }
 
 .modern-header .header-actions-items {
@@ -491,7 +493,7 @@
 .modern-header .action-badge {
   position: absolute;
   top: -6px;
-  right: -6px;
+  inset-inline-end: -6px;
   display: flex;
   align-items: center;
   justify-content: center;

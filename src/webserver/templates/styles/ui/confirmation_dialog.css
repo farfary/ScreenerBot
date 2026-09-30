@@ -29,6 +29,8 @@
 .confirmation-dialog {
   position: fixed;
   top: 50%;
+  /* rtl-ok: centered with translateX
+ */
   left: 50%;
   transform: translate(-50%, -50%) scale(0.9);
   width: 90%;

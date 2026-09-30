@@ -151,7 +151,7 @@
 }
 
 .position-details-dialog .header-metric-value small {
-  margin-left: 4px;
+  margin-inline-start: 4px;
   color: var(--text-muted);
   font-size: 0.68rem;
   font-weight: 600;
@@ -199,8 +199,8 @@
 
 /* The position's own controls are divided from the dialog's controls. */
 .position-details-dialog .pdd-trade-actions:not(:empty) + .dialog-header-actions {
-  padding-left: 12px;
-  border-left: 1px solid var(--border-color);
+  padding-inline-start: 12px;
+  border-inline-start: 1px solid var(--border-color);
 }
 
 /* Same box as `.dialog-header-action` — 32px, 1px border, --radius-md — with a label and
@@ -285,7 +285,7 @@
   min-height: 24px;
 
   /* Aligned with the name, past the logo. */
-  padding-left: 56px;
+  padding-inline-start: 56px;
 }
 
 .position-details-dialog .header-badges,
@@ -413,7 +413,7 @@
   }
 
   .position-details-dialog .header-lower-row {
-    padding-left: 0;
+    padding-inline-start: 0;
   }
 }
 

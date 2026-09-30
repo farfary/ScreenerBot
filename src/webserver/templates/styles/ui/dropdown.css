@@ -41,11 +41,11 @@
 }
 
 .dropdown-menu[data-align="left"] {
-  left: 0;
+  inset-inline-start: 0;
 }
 
 .dropdown-menu[data-align="right"] {
-  right: 0;
+  inset-inline-end: 0;
 }
 
 /* Table link actions are portaled to the body. Keep the surface visibly attached
@@ -57,7 +57,10 @@
   background: var(--bg-secondary);
   border-color: var(--border-color);
   border-top-width: 0;
-  border-radius: 0 var(--radius-lg) var(--radius-lg) var(--radius-lg);
+  border-start-start-radius: 0;
+  border-start-end-radius: var(--radius-lg);
+  border-end-end-radius: var(--radius-lg);
+  border-end-start-radius: var(--radius-lg);
   box-shadow: var(--shadow-floating-sm);
   backdrop-filter: none;
   font-family: var(--font-mono);
@@ -69,7 +72,10 @@
 .links-dropdown-menu.menu-above {
   border-top-width: 1px;
   border-bottom-width: 0;
-  border-radius: var(--radius-lg) var(--radius-lg) var(--radius-lg) 0;
+  border-start-start-radius: var(--radius-lg);
+  border-start-end-radius: var(--radius-lg);
+  border-end-end-radius: var(--radius-lg);
+  border-end-start-radius: 0;
   transform: translateY(4px) scaleY(0.985);
   transform-origin: bottom left;
 }
@@ -104,7 +110,7 @@
   position: relative;
   margin: 2px 4px;
   border-radius: var(--floating-item-radius);
-  text-align: left;
+  text-align: start;
   font-family: inherit;
 }
 

@@ -390,7 +390,7 @@ body.table-settings-open {
 .table-settings-pagination-hint {
   font-size: 0.8rem;
   color: var(--text-secondary);
-  padding-left: 28px;
+  padding-inline-start: 28px;
   line-height: 1.4;
 }
 

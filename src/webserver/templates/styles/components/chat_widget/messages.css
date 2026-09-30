@@ -204,7 +204,8 @@
   }
 
   .tool-call-body {
-    padding: var(--spacing-sm) 4px var(--spacing-md) 24px;
+    padding-block: var(--spacing-sm) var(--spacing-md);
+    padding-inline: 24px 4px;
     border-top: 1px solid var(--border-color);
   }
 
@@ -415,13 +416,15 @@
   }
 
   .tool-confirmation p {
-    margin: 4px 0 0 24px;
+    margin-block: 4px 0;
+    margin-inline: 24px 0;
     font-size: 0.875rem;
     color: var(--text-secondary);
   }
 
   .tool-confirmation-details {
-    margin: var(--spacing-sm) 0 0 24px;
+    margin-block: var(--spacing-sm) 0;
+    margin-inline: 24px 0;
     color: var(--text-muted);
     font-size: 0.75rem;
   }

@@ -33,7 +33,7 @@
 }
 
 .account-optional {
-  margin-left: auto;
+  margin-inline-start: auto;
   color: var(--text-muted);
   font-size: 0.76rem;
   font-weight: 650;
@@ -69,7 +69,7 @@
   padding: 10px 12px;
   gap: 10px;
   color: var(--text-primary);
-  text-align: left;
+  text-align: start;
   background: transparent;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
@@ -272,7 +272,7 @@
 
 .account-scope {
   position: relative;
-  padding-left: 10px;
+  padding-inline-start: 10px;
   color: var(--text-secondary);
   font-size: 0.78rem;
   line-height: 1.4;
@@ -282,7 +282,7 @@
   content: "";
   position: absolute;
   top: 0.58em;
-  left: 1px;
+  inset-inline-start: 1px;
   width: 3px;
   height: 3px;
   background: var(--text-muted);

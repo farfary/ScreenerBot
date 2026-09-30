@@ -9,7 +9,7 @@
   align-items: center;
   justify-content: center;
   padding: 0;
-  margin-left: var(--spacing-xs);
+  margin-inline-start: var(--spacing-xs);
   background: var(--primary-alpha-10);
   border: 1px solid var(--primary-alpha-20);
   border-radius: var(--radius-full);
@@ -65,7 +65,7 @@
   width: 32px;
   height: 32px;
   font-size: 1rem;
-  margin-left: 0;
+  margin-inline-start: 0;
   background: var(--success-alpha-10);
   border-color: var(--success-alpha-20);
   color: var(--success-color);
@@ -135,34 +135,44 @@
 
 /* Arrow positions */
 .hint-popover--right .hint-popover__arrow {
+  /* rtl-ok: arrow side and offset are set by JS in physical viewport coordinates */
   left: -7px;
   top: 50%;
   margin-top: -6px;
+  /* rtl-ok: arrow side and offset are set by JS in physical viewport coordinates */
   border-right: none;
   border-top: none;
 }
 
 .hint-popover--left .hint-popover__arrow {
+  /* rtl-ok: arrow side and offset are set by JS in physical viewport coordinates */
   right: -7px;
   top: 50%;
   margin-top: -6px;
+  /* rtl-ok: arrow side and offset are set by JS in physical viewport coordinates */
   border-left: none;
   border-bottom: none;
 }
 
 .hint-popover--bottom .hint-popover__arrow {
   top: -7px;
+  /* rtl-ok: arrow side and offset are set by JS in physical viewport coordinates */
   left: 50%;
+  /* rtl-ok: arrow side and offset are set by JS in physical viewport coordinates */
   margin-left: -6px;
   border-bottom: none;
+  /* rtl-ok: arrow side and offset are set by JS in physical viewport coordinates */
   border-right: none;
 }
 
 .hint-popover--top .hint-popover__arrow {
   bottom: -7px;
+  /* rtl-ok: arrow side and offset are set by JS in physical viewport coordinates */
   left: 50%;
+  /* rtl-ok: arrow side and offset are set by JS in physical viewport coordinates */
   margin-left: -6px;
   border-top: none;
+  /* rtl-ok: arrow side and offset are set by JS in physical viewport coordinates */
   border-left: none;
 }
 
@@ -210,7 +220,8 @@
   width: 24px;
   height: 24px;
   padding: 0;
-  margin: -4px -4px -4px 0;
+  margin-block: -4px;
+  margin-inline: 0 -4px;
   background: transparent;
   border: none;
   border-radius: var(--radius-sm);
@@ -287,7 +298,7 @@
 
 .hint-popover__list-item {
   position: relative;
-  padding-left: 1.25em;
+  padding-inline-start: 1.25em;
   margin-bottom: 0.4em;
 }
 
@@ -298,7 +309,7 @@
 .hint-popover__list-item::before {
   content: "";
   position: absolute;
-  left: 0;
+  inset-inline-start: 0;
   top: 0.55em;
   width: 5px;
   height: 5px;
@@ -440,7 +451,7 @@
 
 /* Hint trigger inside tab labels */
 .tab-bar .hint-trigger {
-  margin-left: 6px;
+  margin-inline-start: 6px;
   opacity: 0.7;
   transition:
     opacity 0.15s ease,
@@ -458,12 +469,13 @@
 .settings-section-title .hint-trigger,
 .card-header .hint-trigger,
 .panel-header .hint-trigger {
-  margin-left: 8px;
+  margin-inline-start: 8px;
 }
 
 /* Hint trigger inline with text */
 .hint-trigger-inline {
   display: inline-flex;
   vertical-align: baseline;
-  margin: 0 0 0 4px;
+  margin-block: 0;
+  margin-inline: 4px 0;
 }

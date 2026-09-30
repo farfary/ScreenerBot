@@ -731,7 +731,7 @@ select,
   content: "";
   position: absolute;
   top: 0;
-  left: -100%;
+  inset-inline-start: -100%;
   width: 100%;
   height: 100%;
   background: linear-gradient(90deg, transparent, rgb(255, 255, 255, 0.08), transparent);
@@ -740,7 +740,7 @@ select,
 
 @keyframes shimmer {
   100% {
-    left: 100%;
+    inset-inline-start: 100%;
   }
 }
 
@@ -790,7 +790,7 @@ select,
 
 .search-wrapper .search-icon {
   position: absolute;
-  left: 12px;
+  inset-inline-start: 12px;
   font-size: 0.875rem;
   color: var(--text-muted);
   pointer-events: none;
@@ -799,12 +799,12 @@ select,
 
 .search-wrapper input:not([type="checkbox"], [type="radio"]) {
   width: 100%;
-  padding-left: 36px;
+  padding-inline-start: 36px;
 }
 
 .search-wrapper .search-clear {
   position: absolute;
-  right: 8px;
+  inset-inline-end: 8px;
   width: 20px;
   height: 20px;
   padding: 0;

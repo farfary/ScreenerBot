@@ -103,7 +103,7 @@
 
 .transaction-details-dialog .tx-flow-received {
   align-items: flex-end;
-  text-align: right;
+  text-align: end;
 }
 
 .transaction-details-dialog .tx-flow-label {
@@ -344,7 +344,7 @@
   font-size: 0.78rem;
   font-weight: 600;
   line-height: 1.35;
-  text-align: left;
+  text-align: start;
 }
 
 /* Router names arrive lowercase from the swap decoder ("jupiter"). */
@@ -429,7 +429,7 @@
 
   .transaction-details-dialog .tx-flow-received {
     align-items: flex-start;
-    text-align: left;
+    text-align: start;
   }
 
   .transaction-details-dialog .tx-flow-arrow {

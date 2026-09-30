@@ -87,7 +87,7 @@
 
 .page-split-sidebar {
   background: var(--bg-secondary);
-  border-right: 1px solid var(--border-color);
+  border-inline-end: 1px solid var(--border-color);
   overflow-y: auto;
   padding: var(--spacing-lg);
 }
@@ -182,6 +182,7 @@
    ====================================================================== */
 .conn-overlay {
   position: fixed;
+  /* rtl-ok: centered with translateX */
   left: 50%;
 
   /* Clear the fixed 26px status bar while preserving the 24px viewport gap. */
