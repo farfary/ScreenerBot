@@ -2,7 +2,7 @@
 
 use super::metadata::{
     catalog_key, category_key, collect_config_metadata, impact_key, ConfigCategory, ConfigImpact,
-    ConfigMetadata, FieldMetadata, SectionMetadata,
+    ConfigMetadata, FieldMetadata, FieldType, SectionMetadata,
 };
 use crate::i18n::{format_message, source_message_ids, LanguageIdentifier};
 use std::collections::BTreeSet;
@@ -150,4 +150,45 @@ fn every_category_and_impact_variant_has_a_message() {
             "`{key}` is missing from locales/en/config.ftl"
         );
     }
+}
+
+/// Exhaustive on purpose: a new field type fails to compile until the dashboard's
+/// array-entry message for it is named here. Only the types an array entry can
+/// fail to parse as have one; the others fall back to the generic value message.
+fn array_item_message(item_type: FieldType) -> Option<&'static str> {
+    match item_type {
+        FieldType::Integer => Some("system-config-array-invalid-integer"),
+        FieldType::Number => Some("system-config-array-invalid-number"),
+        FieldType::Boolean => Some("system-config-array-invalid-boolean"),
+        FieldType::Array | FieldType::String | FieldType::Object => None,
+    }
+}
+
+#[test]
+fn array_item_messages_exist_in_the_catalog() {
+    for item_type in [
+        FieldType::Boolean,
+        FieldType::Number,
+        FieldType::Integer,
+        FieldType::Array,
+        FieldType::String,
+        FieldType::Object,
+    ] {
+        if let Some(key) = array_item_message(item_type) {
+            let code = serde_json::to_value(item_type).unwrap();
+            assert_eq!(
+                key.strip_prefix("system-config-array-invalid-"),
+                code.as_str(),
+                "key does not follow the serialized type {code}"
+            );
+            assert!(
+                format_message(&english(), key, None).is_some(),
+                "`{key}` is missing from locales/en/system.ftl"
+            );
+        }
+    }
+    assert!(
+        format_message(&english(), "system-config-array-invalid-value", None).is_some(),
+        "the generic array-entry message is missing from locales/en/system.ftl"
+    );
 }

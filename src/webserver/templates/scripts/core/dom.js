@@ -66,6 +66,14 @@ export function create(tag, attributes = {}, content = "") {
   return el;
 }
 
+// Replace a button's content with an icon and a text label. The label is set as
+// a text node, so it never passes through markup.
+export function setIconLabel(button, iconClass, label) {
+  const icon = document.createElement("i");
+  icon.className = iconClass;
+  button.replaceChildren(icon, " ", label);
+}
+
 // Show/hide element
 export function show(element) {
   if (!element) return;

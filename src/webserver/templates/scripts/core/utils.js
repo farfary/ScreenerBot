@@ -134,10 +134,12 @@ import {
     return true;
   }
 
+  // Also escapes quotes: the result is interpolated into double- and single-quoted
+  // attribute values as well as element text.
   function escapeHtml(text) {
     const div = document.createElement("div");
     div.textContent = text ?? "";
-    return div.innerHTML;
+    return div.innerHTML.replaceAll('"', "&quot;").replaceAll("'", "&#39;");
   }
 
   function setText(id, value) {

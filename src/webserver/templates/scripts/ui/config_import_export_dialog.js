@@ -9,42 +9,71 @@
  * - Partial config support
  */
 
-import { on, create, show, hide } from "../core/dom.js";
+import { on, create, show, hide, setIconLabel } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
 import { playClick, playSuccess, playError } from "../core/sounds.js";
 import { requestManager } from "../core/request_manager.js";
+import { hasSectionLabel, sectionLabel } from "../pages/config/field_text.js";
 
 // ============================================================================
 // SECTION METADATA
 // ============================================================================
 
-const SECTION_META = {
-  rpc: { label: "RPC", icon: "icon-satellite", hint: "RPC endpoints and connection settings" },
-  trader: { label: "Auto Trader", icon: "icon-briefcase", hint: "Trading rules and automation" },
-  positions: {
-    label: "Positions",
-    icon: "icon-chart-candlestick",
-    hint: "Position management settings",
-  },
-  filtering: {
-    label: "Filtering",
-    icon: "icon-target",
-    hint: "Token filtering rules and thresholds",
-  },
-  swaps: { label: "Swaps", icon: "icon-repeat", hint: "Swap execution settings" },
-  tokens: { label: "Tokens", icon: "icon-coins", hint: "Token discovery and data sources" },
-  sol_price: { label: "SOL Price", icon: "icon-sun", hint: "SOL price service configuration" },
-  events: { label: "Events", icon: "icon-radio", hint: "Event recording settings" },
-  services: { label: "Services", icon: "icon-wrench", hint: "Background service settings" },
-  monitoring: {
-    label: "Monitoring",
-    icon: "icon-trending-up",
-    hint: "System monitoring configuration",
-  },
-  ohlcv: { label: "OHLCV", icon: "icon-clock", hint: "Candlestick data settings" },
-  gui: { label: "GUI", icon: "icon-layout-dashboard", hint: "Dashboard and UI settings" },
-  telegram: { label: "Telegram", icon: "icon-send", hint: "Telegram bot configuration" },
-};
+const SECTION_ICONS = Object.freeze({
+  rpc: "icon-satellite",
+  trader: "icon-briefcase",
+  positions: "icon-chart-candlestick",
+  filtering: "icon-target",
+  swaps: "icon-repeat",
+  tokens: "icon-coins",
+  sol_price: "icon-sun",
+  events: "icon-radio",
+  services: "icon-wrench",
+  monitoring: "icon-trending-up",
+  ohlcv: "icon-clock",
+  gui: "icon-layout-dashboard",
+  telegram: "icon-send",
+});
+
+// Ids are the configuration section names the export and import routes use
+// (src/webserver/routes/config/import_export.rs).
+const SECTION_HINT_LABELS = Object.freeze({
+  rpc: "system-config-section-hint-rpc",
+  trader: "system-config-section-hint-trader",
+  positions: "system-config-section-hint-positions",
+  filtering: "system-config-section-hint-filtering",
+  swaps: "system-config-section-hint-swaps",
+  tokens: "system-config-section-hint-tokens",
+  sol_price: "system-config-section-hint-sol-price",
+  events: "system-config-section-hint-events",
+  services: "system-config-section-hint-services",
+  monitoring: "system-config-section-hint-monitoring",
+  ohlcv: "system-config-section-hint-ohlcv",
+  gui: "system-config-section-hint-gui",
+  telegram: "system-config-section-hint-telegram",
+});
+
+/** The icon of a section; sections without one share the settings glyph. */
+function sectionIcon(sectionId) {
+  return SECTION_ICONS[sectionId] ?? "icon-settings";
+}
+
+/** The one-line description of a section, or an empty string when it has none. */
+function sectionHint(sectionId) {
+  return Object.hasOwn(SECTION_HINT_LABELS, sectionId)
+    ? I18n.label(SECTION_HINT_LABELS, sectionId)
+    : "";
+}
+
+/**
+ * Display name of a section. The catalog owns the names of configuration
+ * sections; `serverLabel` is what the route sent for a section the catalog does
+ * not name.
+ */
+function sectionName(sectionId, serverLabel) {
+  if (sectionId === "gui") return I18n.t("system-config-section-gui");
+  return hasSectionLabel(sectionId) ? sectionLabel(sectionId) : (serverLabel ?? sectionId);
+}
 
 const SECTION_ORDER = [
   "rpc",
@@ -106,23 +135,23 @@ export class ConfigExportDialog {
       <div class="config-dialog-header">
         <div class="config-dialog-title">
           <i class="icon-download"></i>
-          <span>Export Configuration</span>
+          <span data-l10n-id="system-config-export-dialog-title"></span>
         </div>
-        <button type="button" class="config-dialog-close" aria-label="Close">
+        <button type="button" class="config-dialog-close" data-l10n-id="system-config-dialog-close">
           <i class="icon-x"></i>
         </button>
       </div>
       <div class="config-dialog-body">
         <div class="config-dialog-intro">
-          <p>Select which configuration sections to export. The exported file can be imported later to restore or share settings.</p>
+          <p data-l10n-id="system-config-export-intro"></p>
         </div>
         <div class="config-dialog-sections">
           <div class="config-dialog-sections-header">
-            <span class="config-dialog-sections-title">Sections</span>
+            <span class="config-dialog-sections-title" data-l10n-id="system-config-export-sections"></span>
             <div class="config-dialog-sections-actions">
-              <button type="button" class="config-dialog-link-btn" data-action="select-all">Select All</button>
+              <button type="button" class="config-dialog-link-btn" data-action="select-all" data-l10n-id="common-action-select-all"></button>
               <span class="config-dialog-sep">•</span>
-              <button type="button" class="config-dialog-link-btn" data-action="select-none">Select None</button>
+              <button type="button" class="config-dialog-link-btn" data-action="select-none" data-l10n-id="system-config-select-none"></button>
             </div>
           </div>
           <div class="config-dialog-sections-grid" id="exportSectionsGrid"></div>
@@ -130,22 +159,27 @@ export class ConfigExportDialog {
         <div class="config-dialog-options">
           <label class="config-dialog-option">
             <input type="checkbox" id="exportIncludeMetadata" checked />
-            <span>Include export timestamp</span>
+            <span data-l10n-id="system-config-export-timestamp"></span>
           </label>
         </div>
       </div>
       <div class="config-dialog-footer">
         <div class="config-dialog-footer-info">
-          <span id="exportSelectionCount">${this.selectedSections.size} sections selected</span>
+          <span id="exportSelectionCount"></span>
         </div>
         <div class="config-dialog-footer-actions">
-          <button type="button" class="config-dialog-btn secondary" data-action="cancel">Cancel</button>
+          <button type="button" class="config-dialog-btn secondary" data-action="cancel" data-l10n-id="common-action-cancel"></button>
           <button type="button" class="config-dialog-btn primary" data-action="export" id="exportBtn">
-            <i class="icon-download"></i> Export
+            <i class="icon-download"></i> <span data-l10n-id="common-action-export"></span>
           </button>
         </div>
       </div>
     `;
+    I18n.localizeTree(this.element);
+    this.element.querySelector("#exportSelectionCount").textContent = I18n.t(
+      "system-config-sections-selected",
+      { count: this.selectedSections.size }
+    );
 
     this._renderSections();
     this._attachEventListeners();
@@ -164,19 +198,18 @@ export class ConfigExportDialog {
     grid.innerHTML = "";
 
     for (const sectionId of SECTION_ORDER) {
-      const meta = SECTION_META[sectionId] || { label: sectionId, icon: "icon-settings", hint: "" };
       const isSelected = this.selectedSections.has(sectionId);
 
       const item = create("label", {
         className: "config-section-item" + (isSelected ? " selected" : ""),
       });
       item.innerHTML = `
-        <input type="checkbox" value="${sectionId}" ${isSelected ? "checked" : ""} />
+        <input type="checkbox" value="${Utils.escapeHtml(sectionId)}" ${isSelected ? "checked" : ""} />
         <div class="config-section-item-content">
-          <div class="config-section-item-icon"><i class="${meta.icon}"></i></div>
+          <div class="config-section-item-icon"><i class="${sectionIcon(sectionId)}"></i></div>
           <div class="config-section-item-info">
-            <span class="config-section-item-label">${Utils.escapeHtml(meta.label)}</span>
-            <span class="config-section-item-hint">${Utils.escapeHtml(meta.hint)}</span>
+            <span class="config-section-item-label">${Utils.escapeHtml(sectionName(sectionId))}</span>
+            <span class="config-section-item-hint">${Utils.escapeHtml(sectionHint(sectionId))}</span>
           </div>
         </div>
       `;
@@ -202,7 +235,7 @@ export class ConfigExportDialog {
     const exportBtn = this.element.querySelector("#exportBtn");
     const count = this.selectedSections.size;
 
-    countEl.textContent = `${count} section${count === 1 ? "" : "s"} selected`;
+    countEl.textContent = I18n.t("system-config-sections-selected", { count });
     exportBtn.disabled = count === 0 || this.isExporting;
   }
 
@@ -262,7 +295,7 @@ export class ConfigExportDialog {
     this.isExporting = true;
     const exportBtn = this.element.querySelector("#exportBtn");
     exportBtn.disabled = true;
-    exportBtn.innerHTML = '<i class="icon-loader spin"></i> Exporting...';
+    setIconLabel(exportBtn, "icon-loader spin", I18n.t("system-config-exporting"));
 
     try {
       const response = await requestManager.fetch("/api/config/export", {
@@ -277,7 +310,7 @@ export class ConfigExportDialog {
       });
 
       if (!response || !response.config) {
-        throw new Error("Invalid response from server");
+        throw new Error(I18n.t("system-config-export-invalid-response"));
       }
 
       // Download the config
@@ -294,8 +327,8 @@ export class ConfigExportDialog {
       playSuccess();
       Utils.showToast({
         type: "success",
-        title: "Configuration Exported",
-        message: `Exported ${response.sections.length} section(s)`,
+        title: I18n.t("system-config-exported-title"),
+        message: I18n.t("system-config-exported-message", { count: response.sections.length }),
       });
 
       this.destroy();
@@ -304,12 +337,12 @@ export class ConfigExportDialog {
       playError();
       Utils.showToast({
         type: "error",
-        title: "Export Failed",
-        message: error.message || "Failed to export configuration",
+        title: I18n.t("system-config-export-failed-title"),
+        message: error.message || I18n.t("system-config-export-failed"),
       });
       this.isExporting = false;
       exportBtn.disabled = false;
-      exportBtn.innerHTML = '<i class="icon-download"></i> Export';
+      setIconLabel(exportBtn, "icon-download", I18n.t("common-action-export"));
     }
   }
 
@@ -400,21 +433,21 @@ export class ConfigImportDialog {
       <div class="config-dialog-header">
         <div class="config-dialog-title">
           <i class="icon-upload"></i>
-          <span>Import Configuration</span>
+          <span data-l10n-id="system-config-import-dialog-title"></span>
         </div>
-        <button type="button" class="config-dialog-close" aria-label="Close">
+        <button type="button" class="config-dialog-close" data-l10n-id="system-config-dialog-close">
           <i class="icon-x"></i>
         </button>
       </div>
       <div class="config-dialog-body">
         <div class="config-dialog-intro">
-          <p>Upload a previously exported configuration file. You'll be able to preview and select which sections to import.</p>
+          <p data-l10n-id="system-config-import-upload-intro"></p>
         </div>
         <div class="config-import-dropzone" id="importDropzone">
           <div class="config-import-dropzone-content">
             <i class="icon-file-code"></i>
-            <span class="config-import-dropzone-title">Drop config file here</span>
-            <span class="config-import-dropzone-hint">or click to browse</span>
+            <span class="config-import-dropzone-title" data-l10n-id="system-config-import-dropzone-title"></span>
+            <span class="config-import-dropzone-hint" data-l10n-id="system-config-import-dropzone-hint"></span>
           </div>
           <input type="file" id="importFileInput" accept=".json,application/json" hidden />
         </div>
@@ -427,19 +460,20 @@ export class ConfigImportDialog {
         </div>
         <div class="config-import-loading" id="importLoading" hidden>
           <i class="icon-loader spin"></i>
-          <span>Analyzing configuration...</span>
+          <span data-l10n-id="system-config-import-analyzing"></span>
         </div>
       </div>
       <div class="config-dialog-footer">
         <div class="config-dialog-footer-info"></div>
         <div class="config-dialog-footer-actions">
-          <button type="button" class="config-dialog-btn secondary" data-action="cancel">Cancel</button>
+          <button type="button" class="config-dialog-btn secondary" data-action="cancel" data-l10n-id="common-action-cancel"></button>
           <button type="button" class="config-dialog-btn primary" data-action="next" id="nextBtn" disabled>
-            <i class="icon-arrow-right"></i> Preview
+            <i class="icon-arrow-right"></i> <span data-l10n-id="system-config-import-preview"></span>
           </button>
         </div>
       </div>
     `;
+    I18n.localizeTree(this.element);
 
     this._attachUploadListeners();
   }
@@ -457,7 +491,7 @@ export class ConfigImportDialog {
       ? `<div class="config-import-warnings">
           <div class="config-import-warnings-header">
             <i class="icon-triangle-alert"></i>
-            <span>${warnings.length} Warning${warnings.length === 1 ? "" : "s"}</span>
+            <span>${Utils.escapeHtml(I18n.t("system-config-import-warnings", { count: warnings.length }))}</span>
           </div>
           ${warnings.map((w) => `<div class="config-import-warning-item">${Utils.escapeHtml(w)}</div>`).join("")}
         </div>`
@@ -467,24 +501,24 @@ export class ConfigImportDialog {
       <div class="config-dialog-header">
         <div class="config-dialog-title">
           <i class="icon-upload"></i>
-          <span>Import Configuration</span>
+          <span data-l10n-id="system-config-import-dialog-title"></span>
         </div>
-        <button type="button" class="config-dialog-close" aria-label="Close">
+        <button type="button" class="config-dialog-close" data-l10n-id="system-config-dialog-close">
           <i class="icon-x"></i>
         </button>
       </div>
       <div class="config-dialog-body">
         <div class="config-dialog-intro">
-          <p>Review the configuration sections below. Select which sections to import.</p>
+          <p data-l10n-id="system-config-import-preview-intro"></p>
         </div>
         ${warningsHtml}
         <div class="config-dialog-sections">
           <div class="config-dialog-sections-header">
-            <span class="config-dialog-sections-title">Sections in File</span>
+            <span class="config-dialog-sections-title" data-l10n-id="system-config-import-sections"></span>
             <div class="config-dialog-sections-actions">
-              <button type="button" class="config-dialog-link-btn" data-action="select-all-valid">Select All Valid</button>
+              <button type="button" class="config-dialog-link-btn" data-action="select-all-valid" data-l10n-id="system-config-import-select-valid"></button>
               <span class="config-dialog-sep">•</span>
-              <button type="button" class="config-dialog-link-btn" data-action="select-none">Select None</button>
+              <button type="button" class="config-dialog-link-btn" data-action="select-none" data-l10n-id="system-config-select-none"></button>
             </div>
           </div>
           <div class="config-import-sections-list" id="importSectionsList"></div>
@@ -493,33 +527,35 @@ export class ConfigImportDialog {
           <label class="config-dialog-option">
             <input type="checkbox" id="importMergeMode" checked />
             <div class="config-dialog-option-content">
-              <span class="config-dialog-option-label">Merge with existing</span>
-              <span class="config-dialog-option-hint">Only update fields present in the file. Unchecked = replace entire sections.</span>
+              <span class="config-dialog-option-label" data-l10n-id="system-config-import-merge-label"></span>
+              <span class="config-dialog-option-hint" data-l10n-id="system-config-import-merge-hint"></span>
             </div>
           </label>
           <label class="config-dialog-option">
             <input type="checkbox" id="importSaveToDisk" checked />
             <div class="config-dialog-option-content">
-              <span class="config-dialog-option-label">Save to disk</span>
-              <span class="config-dialog-option-hint">Persist changes to config.toml after import</span>
+              <span class="config-dialog-option-label" data-l10n-id="system-config-import-save-label"></span>
+              <span class="config-dialog-option-hint" data-l10n-id="system-config-import-save-hint"></span>
             </div>
           </label>
         </div>
       </div>
       <div class="config-dialog-footer">
         <div class="config-dialog-footer-info">
-          <span id="importSummary">${this.selectedSections.size} sections • ${total_changes} changes</span>
+          <span id="importSummary"></span>
         </div>
         <div class="config-dialog-footer-actions">
           <button type="button" class="config-dialog-btn secondary" data-action="back">
-            <i class="icon-arrow-left"></i> Back
+            <i class="icon-arrow-left"></i> <span data-l10n-id="common-action-back"></span>
           </button>
           <button type="button" class="config-dialog-btn primary" data-action="import" id="importBtn" ${!valid || this.selectedSections.size === 0 ? "disabled" : ""}>
-            <i class="icon-check"></i> Import Selected
+            <i class="icon-check"></i> <span data-l10n-id="system-config-import-selected"></span>
           </button>
         </div>
       </div>
     `;
+    I18n.localizeTree(this.element);
+    this.element.querySelector("#importSummary").textContent = this._summaryText(total_changes);
 
     this._renderPreviewSections();
     this._attachPreviewListeners();
@@ -530,11 +566,6 @@ export class ConfigImportDialog {
     list.innerHTML = "";
 
     for (const section of this.previewData.sections) {
-      const meta = SECTION_META[section.name] || {
-        label: section.label,
-        icon: "icon-settings",
-        hint: "",
-      };
       const isSelected = this.selectedSections.has(section.name);
       const canSelect = section.present && section.valid;
 
@@ -546,48 +577,55 @@ export class ConfigImportDialog {
           (!section.valid ? " invalid" : ""),
       });
 
+      const changeCount = section.changes.length;
+      const changesText = I18n.t("system-config-changes-count", { count: changeCount });
       const statusIcon = !section.present
-        ? '<i class="icon-circle-minus status-icon not-present" title="Not in file"></i>'
+        ? `<i class="icon-circle-minus status-icon not-present" title="${Utils.escapeHtml(I18n.t("system-config-import-status-absent"))}"></i>`
         : !section.valid
-          ? '<i class="icon-circle-alert status-icon invalid" title="Invalid configuration"></i>'
-          : section.changes.length > 0
-            ? `<i class="icon-pencil status-icon changes" title="${section.changes.length} change(s)"></i>`
-            : '<i class="icon-circle-check status-icon no-changes" title="No changes"></i>';
+          ? `<i class="icon-circle-alert status-icon invalid" title="${Utils.escapeHtml(I18n.t("system-config-import-status-invalid"))}"></i>`
+          : changeCount > 0
+            ? `<i class="icon-pencil status-icon changes" title="${Utils.escapeHtml(changesText)}"></i>`
+            : `<i class="icon-circle-check status-icon no-changes" title="${Utils.escapeHtml(I18n.t("system-config-import-status-unchanged"))}"></i>`;
 
       const changesBadge =
-        section.present && section.changes.length > 0
-          ? `<span class="config-import-changes-badge">${section.changes.length} change${section.changes.length === 1 ? "" : "s"}</span>`
+        section.present && changeCount > 0
+          ? `<span class="config-import-changes-badge">${Utils.escapeHtml(changesText)}</span>`
           : "";
 
       const errorMsg = section.error
         ? `<div class="config-import-section-error">${Utils.escapeHtml(section.error)}</div>`
         : "";
 
+      const sectionHintText = section.present
+        ? I18n.t("system-config-fields-count", { count: section.field_count })
+        : I18n.t("system-config-import-not-included");
+
       item.innerHTML = `
         <label class="config-import-section-header">
-          <input type="checkbox" value="${section.name}" ${isSelected ? "checked" : ""} ${!canSelect ? "disabled" : ""} />
+          <input type="checkbox" value="${Utils.escapeHtml(section.name)}" ${isSelected ? "checked" : ""} ${!canSelect ? "disabled" : ""} />
           <div class="config-import-section-content">
-            <div class="config-import-section-icon"><i class="${meta.icon}"></i></div>
+            <div class="config-import-section-icon"><i class="${sectionIcon(section.name)}"></i></div>
             <div class="config-import-section-info">
               <div class="config-import-section-title">
-                <span class="config-import-section-label">${Utils.escapeHtml(section.label)}</span>
+                <span class="config-import-section-label">${Utils.escapeHtml(sectionName(section.name, section.label))}</span>
                 ${statusIcon}
                 ${changesBadge}
               </div>
-              <span class="config-import-section-hint">${section.present ? `${section.field_count} ${section.field_count === 1 ? "field" : "fields"}` : "Not included in file"}</span>
+              <span class="config-import-section-hint">${Utils.escapeHtml(sectionHintText)}</span>
             </div>
           </div>
         </label>
         ${errorMsg}
         ${
-          section.changes.length > 0
-            ? `<button type="button" class="config-import-toggle-changes" data-section="${section.name}">
-          <i class="icon-chevron-down"></i> Show changes
+          changeCount > 0
+            ? `<button type="button" class="config-import-toggle-changes">
+          <i class="icon-chevron-down"></i> <span data-l10n-id="system-config-import-show-changes"></span>
         </button>
-        <div class="config-import-changes-list" id="changes-${section.name}" hidden></div>`
+        <div class="config-import-changes-list" hidden></div>`
             : ""
         }
       `;
+      I18n.localizeTree(item);
 
       // Checkbox handler
       const checkbox = item.querySelector("input");
@@ -608,12 +646,16 @@ export class ConfigImportDialog {
       const toggleBtn = item.querySelector(".config-import-toggle-changes");
       if (toggleBtn) {
         on(toggleBtn, "click", () => {
-          const changesList = item.querySelector(`#changes-${section.name}`);
+          const changesList = item.querySelector(".config-import-changes-list");
           const isExpanded = !changesList.hidden;
           changesList.hidden = isExpanded;
-          toggleBtn.innerHTML = isExpanded
-            ? '<i class="icon-chevron-down"></i> Show changes'
-            : '<i class="icon-chevron-up"></i> Hide changes';
+          setIconLabel(
+            toggleBtn,
+            isExpanded ? "icon-chevron-down" : "icon-chevron-up",
+            isExpanded
+              ? I18n.t("system-config-import-show-changes")
+              : I18n.t("system-config-import-hide-changes")
+          );
 
           if (!isExpanded && changesList.innerHTML === "") {
             this._renderChanges(changesList, section.changes);
@@ -633,9 +675,9 @@ export class ConfigImportDialog {
         <div class="config-import-change-item">
           <span class="config-import-change-field">${Utils.escapeHtml(change.field)}</span>
           <div class="config-import-change-values">
-            <span class="config-import-change-current" title="Current value">${this._formatValue(change.current)}</span>
+            <span class="config-import-change-current" title="${Utils.escapeHtml(I18n.t("system-config-import-value-current"))}">${this._formatValue(change.current)}</span>
             <i class="icon-arrow-right"></i>
-            <span class="config-import-change-imported" title="New value">${this._formatValue(change.imported)}</span>
+            <span class="config-import-change-imported" title="${Utils.escapeHtml(I18n.t("system-config-import-value-new"))}">${this._formatValue(change.imported)}</span>
           </div>
         </div>
       `
@@ -643,22 +685,37 @@ export class ConfigImportDialog {
       .join("");
 
     if (changes.length > 20) {
-      container.innerHTML += `<div class="config-import-change-more">+${changes.length - 20} more changes</div>`;
+      container.innerHTML += `<div class="config-import-change-more">${Utils.escapeHtml(I18n.t("system-config-import-more-changes", { count: changes.length - 20 }))}</div>`;
     }
   }
 
   _formatValue(value) {
+    // l10n-ignore: the JSON literal
     if (value === null) return '<span class="null">null</span>';
     if (typeof value === "boolean")
       return `<span class="${value ? "true" : "false"}">${value}</span>`;
     if (typeof value === "number") return `<span class="number">${value}</span>`;
     if (typeof value === "string") {
-      const escaped = Utils.escapeHtml(value);
-      return escaped.length > 40 ? `"${escaped.substring(0, 40)}…"` : `"${escaped}"`;
+      const shown = value.length > 40 ? `${value.substring(0, 40)}…` : value;
+      return `"${Utils.escapeHtml(shown)}"`;
     }
-    if (Array.isArray(value)) return `[${value.length} items]`;
-    if (typeof value === "object") return `{${Object.keys(value).length} keys}`;
-    return String(value);
+    if (Array.isArray(value)) {
+      return Utils.escapeHtml(I18n.t("system-config-import-value-items", { count: value.length }));
+    }
+    if (typeof value === "object") {
+      return Utils.escapeHtml(
+        I18n.t("system-config-import-value-keys", { count: Object.keys(value).length })
+      );
+    }
+    return Utils.escapeHtml(String(value));
+  }
+
+  /** "N sections • M changes". */
+  _summaryText(changeCount) {
+    return I18n.t("system-config-import-summary", {
+      sections: I18n.t("system-config-sections-count", { count: this.selectedSections.size }),
+      changes: I18n.t("system-config-changes-count", { count: changeCount }),
+    });
   }
 
   _updateImportSummary() {
@@ -669,7 +726,7 @@ export class ConfigImportDialog {
       .filter((s) => this.selectedSections.has(s.name))
       .reduce((sum, s) => sum + s.changes.length, 0);
 
-    summaryEl.textContent = `${count} section${count === 1 ? "" : "s"} • ${totalChanges} change${totalChanges === 1 ? "" : "s"}`;
+    summaryEl.textContent = this._summaryText(totalChanges);
     importBtn.disabled = count === 0 || this.isImporting;
   }
 
@@ -824,8 +881,8 @@ export class ConfigImportDialog {
       playError();
       Utils.showToast({
         type: "error",
-        title: "Invalid File",
-        message: error.message || "Failed to parse configuration file",
+        title: I18n.t("system-config-import-invalid-file-title"),
+        message: error.message || I18n.t("system-config-import-invalid-file"),
       });
     }
   }
@@ -836,7 +893,7 @@ export class ConfigImportDialog {
     this.isImporting = true;
     const importBtn = this.element.querySelector("#importBtn");
     importBtn.disabled = true;
-    importBtn.innerHTML = '<i class="icon-loader spin"></i> Importing...';
+    setIconLabel(importBtn, "icon-loader spin", I18n.t("system-config-importing"));
 
     try {
       const response = await requestManager.fetch("/api/config/import", {
@@ -852,15 +909,16 @@ export class ConfigImportDialog {
       });
 
       if (!response.success) {
-        throw new Error("Import failed");
+        throw new Error(I18n.t("system-config-import-failed"));
       }
 
       playSuccess();
       Utils.showToast({
         type: "success",
-        title: "Configuration Imported",
+        title: I18n.t("system-config-imported-title"),
         message:
-          I18n.text(response.text) || `Imported ${response.imported_sections.length} section(s)`,
+          I18n.text(response.text) ||
+          I18n.t("system-config-imported-message", { count: response.imported_sections.length }),
       });
 
       this.destroy();
@@ -869,12 +927,12 @@ export class ConfigImportDialog {
       playError();
       Utils.showToast({
         type: "error",
-        title: "Import Failed",
-        message: error.message || "Failed to import configuration",
+        title: I18n.t("system-config-import-failed-title"),
+        message: error.message || I18n.t("system-config-import-failed-message"),
       });
       this.isImporting = false;
       importBtn.disabled = false;
-      importBtn.innerHTML = '<i class="icon-check"></i> Import Selected';
+      setIconLabel(importBtn, "icon-check", I18n.t("system-config-import-selected"));
     }
   }
 

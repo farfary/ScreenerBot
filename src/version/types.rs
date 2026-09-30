@@ -366,6 +366,101 @@ mod tests {
         }
     }
 
+    /// Exhaustive on purpose: a new phase fails to compile until the dashboard's
+    /// status messages are named here. The detail is `None` where the dashboard
+    /// describes the update kind instead.
+    fn phase_messages(phase: UpdatePhase) -> (&'static str, Option<&'static str>) {
+        match phase {
+            UpdatePhase::Idle => (
+                "updates-phase-idle-headline",
+                Some("updates-phase-idle-detail"),
+            ),
+            UpdatePhase::Checking => (
+                "updates-phase-checking-headline",
+                Some("updates-phase-checking-detail"),
+            ),
+            UpdatePhase::UpToDate => (
+                "updates-phase-up-to-date-headline",
+                Some("updates-phase-up-to-date-detail"),
+            ),
+            UpdatePhase::Available => ("updates-phase-available-headline", None),
+            UpdatePhase::CheckFailed => (
+                "updates-phase-check-failed-headline",
+                Some("updates-phase-check-failed-detail"),
+            ),
+            UpdatePhase::Downloading => ("updates-phase-downloading-headline", None),
+            UpdatePhase::Verifying => (
+                "updates-phase-verifying-headline",
+                Some("updates-phase-verifying-detail"),
+            ),
+            UpdatePhase::ReadyToApply => (
+                "updates-phase-ready-to-apply-headline",
+                Some("updates-phase-ready-to-apply-detail"),
+            ),
+            UpdatePhase::ReadyToInstall => (
+                "updates-phase-ready-to-install-headline",
+                Some("updates-phase-ready-to-install-detail"),
+            ),
+            UpdatePhase::Applying => (
+                "updates-phase-applying-headline",
+                Some("updates-phase-applying-detail"),
+            ),
+            UpdatePhase::Applied => (
+                "updates-phase-applied-headline",
+                Some("updates-phase-applied-detail"),
+            ),
+            UpdatePhase::Failed => (
+                "updates-phase-failed-headline",
+                Some("updates-phase-failed-detail"),
+            ),
+        }
+    }
+
+    #[test]
+    fn update_phase_messages_exist_in_the_catalog() {
+        for phase in [
+            UpdatePhase::Idle,
+            UpdatePhase::Checking,
+            UpdatePhase::UpToDate,
+            UpdatePhase::Available,
+            UpdatePhase::CheckFailed,
+            UpdatePhase::Downloading,
+            UpdatePhase::Verifying,
+            UpdatePhase::ReadyToApply,
+            UpdatePhase::ReadyToInstall,
+            UpdatePhase::Applying,
+            UpdatePhase::Applied,
+            UpdatePhase::Failed,
+        ] {
+            let code = serde_json::to_value(phase).unwrap();
+            let code = code.as_str().unwrap().replace('_', "-");
+            let (headline, detail) = phase_messages(phase);
+            assert_eq!(headline, format!("updates-phase-{code}-headline"));
+            assert_ne!(format_en(headline, None), headline, "missing {headline}");
+            if let Some(detail) = detail {
+                assert_eq!(detail, format!("updates-phase-{code}-detail"));
+                assert_ne!(format_en(detail, None), detail, "missing {detail}");
+            }
+        }
+    }
+
+    /// Exhaustive on purpose, like `phase_messages`.
+    fn kind_message(kind: UpdateKind) -> &'static str {
+        match kind {
+            UpdateKind::Core => "updates-kind-core",
+            UpdateKind::Full => "updates-kind-full",
+        }
+    }
+
+    #[test]
+    fn update_kind_messages_exist_in_the_catalog() {
+        for kind in [UpdateKind::Core, UpdateKind::Full] {
+            let key = kind_message(kind);
+            assert_eq!(key, format!("updates-kind-{}", kind.as_str()));
+            assert_ne!(format_en(key, None), key, "missing {key}");
+        }
+    }
+
     #[test]
     fn a_check_error_round_trips_as_catalog_text() {
         let state = UpdateState {

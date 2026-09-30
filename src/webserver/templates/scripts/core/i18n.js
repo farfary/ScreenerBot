@@ -353,10 +353,11 @@
      * Label for an enum-like value. `map` is a frozen `{ <id>: <message key> }`
      * table owned by the calling module. A value the map does not list, or whose
      * key the bundle lacks, renders as the raw value so it is never presented
-     * as a wording the catalog did not provide.
+     * as a wording the catalog did not provide. `args` are the message's
+     * arguments, for labels that take a value.
      */
-    label(map, value) {
-      if (map && Object.hasOwn(map, value) && I18n.has(map[value])) return I18n.t(map[value]);
+    label(map, value, args) {
+      if (map && Object.hasOwn(map, value) && I18n.has(map[value])) return I18n.t(map[value], args);
       warnOnce("label:" + String(value), "No label for value " + String(value));
       return String(value ?? "");
     },

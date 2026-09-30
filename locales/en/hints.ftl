@@ -720,3 +720,13 @@ hints-ui-featured-content =
     { "*" }*Disabling the row:**
     Hide it under **Settings → Interface → Show Featured Row**. The header action still opens the
     full Featured view.
+
+## Hint popover chrome (ui/hint_popover.js)
+
+# The help button beside a control. $title is the hint's title.
+hints-trigger =
+    .aria-label = Help: { $title }
+hints-popover-close =
+    .aria-label = Close
+hints-popover-learn-more = Learn more
+hints-popover-dismiss = Don't show again

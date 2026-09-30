@@ -5,19 +5,20 @@
   const GOOGLE_MARK =
     '<img class="account-google-mark" src="/assets/google-g.png" alt="" aria-hidden="true" />';
 
-  const SCOPE_LABELS = {
-    "data:read": "ScreenerBot market data",
-    "rpc:submit": "Free signed-transaction submission",
-    vote: "Token voting",
-    "referral:read": "Referral earnings",
-    "account:read": "Account details",
-  };
+  // Scope ids are issued by the account server; a scope without an entry is not listed.
+  const ACCOUNT_SCOPE_LABELS = Object.freeze({
+    "data:read": "account-scope-data-read",
+    "rpc:submit": "account-scope-rpc-submit",
+    vote: "account-scope-vote",
+    "referral:read": "account-scope-referral-read",
+    "account:read": "account-scope-account-read",
+  });
 
   // What signing in adds BEYOND the data service. The data block above the list
   // already states where market data comes from for this install, so repeating
   // "ScreenerBot market data" here would be the third sentence about the same
   // thing rather than a reason to sign in.
-  const UNLOCKS = [SCOPE_LABELS["rpc:submit"], SCOPE_LABELS.vote, SCOPE_LABELS["referral:read"]];
+  const UNLOCKS = ["rpc:submit", "vote", "referral:read"];
 
   async function request(path, options = {}) {
     const response = await fetch(path, options);
@@ -30,7 +31,7 @@
 
     if (!response.ok) {
       throw new Error(
-        window.RequestManagerErrors.apiErrorMessage(body, "That did not work. Please try again.")
+        window.RequestManagerErrors.apiErrorMessage(body, I18n.t("account-panel-request-failed"))
       );
     }
 
@@ -77,7 +78,7 @@
       } catch (error) {
         if (this.destroyed) return;
         this.loadFailed = true;
-        this.error = error?.message || "Account status is unavailable.";
+        this.error = error?.message || I18n.t("account-panel-status-unavailable");
         this.status = null;
         this.render();
         this.options.onChange?.({
@@ -91,7 +92,8 @@
     renderLoading() {
       if (!this.container) return;
       this.container.innerHTML =
-        '<p class="account-loading" role="status">Checking account status…</p>';
+        '<p class="account-loading" role="status" data-l10n-id="account-panel-checking"></p>';
+      I18n.localizeTree(this.container);
     }
 
     async checkWallet() {
@@ -137,8 +139,7 @@
 
       try {
         await request("/api/account/signin/browser", { method: "POST" });
-        this.notice =
-          "Finish signing in in your browser, then return here. This panel will update.";
+        this.notice = I18n.t("account-panel-browser-notice");
         this.busyAction = null;
         this.render();
         this.startStatusWatch();
@@ -155,7 +156,7 @@
         elapsed += 2000;
         if (elapsed > 5 * 60 * 1000) {
           this.stopStatusWatch();
-          this.notice = "Browser sign-in was not completed. You can start it again.";
+          this.notice = I18n.t("account-panel-browser-timeout");
           this.render();
           return;
         }
@@ -237,6 +238,7 @@
       else if (this.status?.signed_in) this.container.innerHTML = this.renderSignedIn();
       else this.container.innerHTML = this.renderSignedOut();
 
+      I18n.localizeTree(this.container);
       this.container.setAttribute("aria-busy", String(Boolean(this.busyAction)));
       this.bind();
       this.restoreFocus();
@@ -245,21 +247,23 @@
     renderUnavailable() {
       return `
         <div class="account-unavailable">
-          <p class="account-lead">Account features are unavailable right now. Continue setup without signing in.</p>
+          <p class="account-lead" data-l10n-id="account-panel-unavailable"></p>
           ${this.renderError()}
-          <button type="button" class="account-btn account-btn-ghost" data-action="retry-status">
-            Retry account status
-          </button>
+          <button type="button" class="account-btn account-btn-ghost" data-action="retry-status" data-l10n-id="account-panel-retry-status"></button>
         </div>`;
     }
 
     renderSignedIn() {
-      const name = escapeHtml(this.status.name || this.status.email || "Signed in");
+      const name = escapeHtml(
+        this.status.name || this.status.email || I18n.t("account-panel-signed-in-fallback")
+      );
       const email = this.status.email ? escapeHtml(this.status.email) : null;
       const scopes = (this.status.scopes || [])
-        .map((scope) => SCOPE_LABELS[scope])
-        .filter(Boolean)
-        .map((label) => `<li class="account-scope">${escapeHtml(label)}</li>`)
+        .filter((scope) => Object.hasOwn(ACCOUNT_SCOPE_LABELS, scope))
+        .map(
+          (scope) =>
+            `<li class="account-scope">${escapeHtml(I18n.label(ACCOUNT_SCOPE_LABELS, scope))}</li>`
+        )
         .join("");
 
       return `
@@ -270,12 +274,12 @@
               ${email && email !== name ? `<span class="account-identity-email">${email}</span>` : ""}
             </div>
           </div>
-          ${scopes ? `<ul class="account-scopes" aria-label="Account features">${scopes}</ul>` : ""}
+          ${scopes ? `<ul class="account-scopes" data-l10n-id="account-panel-features">${scopes}</ul>` : ""}
           ${this.renderDataAccess()}
           <div class="account-actions">
             <button type="button" class="account-btn account-btn-ghost" data-action="signout"
               ${this.busyAction ? "disabled" : ""}>
-              ${this.busyAction === "signout" ? "Signing out…" : "Sign out"}
+              ${escapeHtml(this.busyAction === "signout" ? I18n.t("account-panel-signing-out") : I18n.t("account-panel-sign-out"))}
             </button>
           </div>
           ${this.renderError()}
@@ -288,7 +292,7 @@
       const disabled = this.busyAction ? "disabled" : "";
       const walletOption = this.walletHasAccount
         ? `<button type="button" class="account-option" data-action="wallet" ${disabled}>
-             <span class="account-option-title">${this.busyAction === "wallet" ? "Signing in…" : "Sign in with wallet"}</span>
+             <span class="account-option-title">${escapeHtml(this.busyAction === "wallet" ? I18n.t("account-panel-signing-in") : I18n.t("account-panel-sign-in-wallet"))}</span>
            </button>`
         : "";
 
@@ -299,18 +303,16 @@
           <div class="account-options">
             <button type="button" class="account-option" data-action="browser" ${disabled}>
               ${GOOGLE_MARK}
-              <span class="account-option-title">${this.busyAction === "browser" ? "Opening browser…" : "Continue in browser"}</span>
+              <span class="account-option-title">${escapeHtml(this.busyAction === "browser" ? I18n.t("account-panel-opening-browser") : I18n.t("account-panel-continue-browser"))}</span>
             </button>
             <button type="button" class="account-option" data-action="email" ${disabled}>
-              <span class="account-option-title">Sign in with email</span>
+              <span class="account-option-title" data-l10n-id="account-panel-sign-in-email"></span>
             </button>
             ${walletOption}
           </div>
           <p class="account-note account-signup-note">
-            <span>New to ScreenerBot?</span>
-            <button type="button" class="account-link" data-action="signup">
-              Create an account
-            </button>
+            <span data-l10n-id="account-panel-new-to"></span>
+            <button type="button" class="account-link" data-action="signup" data-l10n-id="account-panel-create-account"></button>
           </p>
           ${this.renderNotice()}
           ${this.renderError()}
@@ -318,11 +320,14 @@
     }
 
     renderUnlocks() {
-      const items = UNLOCKS.map((label) => `<li class="account-scope">${escapeHtml(label)}</li>`);
+      const items = UNLOCKS.map(
+        (scope) =>
+          `<li class="account-scope">${escapeHtml(I18n.label(ACCOUNT_SCOPE_LABELS, scope))}</li>`
+      );
 
       return `
         <div class="account-unlocks">
-          <p class="account-unlocks-title">Included with an account</p>
+          <p class="account-unlocks-title" data-l10n-id="account-panel-unlocks-title"></p>
           <ul class="account-scopes">${items.join("")}</ul>
         </div>`;
     }
@@ -331,27 +336,23 @@
       const disabled = this.busyAction ? "disabled" : "";
       return `
         <form class="account-email-form" data-action="email-submit">
-          <button type="button" class="account-link account-back" data-action="menu" ${disabled}>
-            Back to sign-in options
-          </button>
+          <button type="button" class="account-link account-back" data-action="menu" data-l10n-id="account-panel-back-to-options" ${disabled}></button>
           <label class="account-field">
-            <span class="account-field-label">Email</span>
+            <span class="account-field-label" data-l10n-id="account-panel-email-label"></span>
             <input type="email" class="account-input" name="email" autocomplete="email"
-              value="${escapeHtml(this.emailValue)}" placeholder="you@example.com" required ${disabled} />
+              value="${escapeHtml(this.emailValue)}" data-l10n-id="account-panel-email-input" required ${disabled} />
           </label>
           <label class="account-field">
-            <span class="account-field-label">Password</span>
+            <span class="account-field-label" data-l10n-id="account-panel-password-label"></span>
             <input type="password" class="account-input" name="password" autocomplete="current-password"
-              placeholder="Your password" required ${disabled} />
+              data-l10n-id="account-panel-password-input" required ${disabled} />
           </label>
           <button type="submit" class="account-btn account-btn-primary" ${disabled}>
-            ${this.busyAction === "password" ? "Signing in…" : "Sign in"}
+            ${escapeHtml(this.busyAction === "password" ? I18n.t("account-panel-signing-in") : I18n.t("account-panel-sign-in"))}
           </button>
           <p class="account-note">
-            Need an account or forgot your password?
-            <button type="button" class="account-link" data-action="signup" ${disabled}>
-              Open screenerbot.io
-            </button>
+            <span data-l10n-id="account-panel-need-account"></span>
+            <button type="button" class="account-link" data-action="signup" data-l10n-id="account-panel-open-website" ${disabled}></button>
           </p>
           ${this.renderError()}
         </form>`;

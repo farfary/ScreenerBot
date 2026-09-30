@@ -200,16 +200,16 @@ export function buildFieldLabelHtml({ label, pathLabel, metadata = {}, defaultVa
   const meta = [`<span class="config-field-key">${Utils.escapeHtml(pathLabel)}</span>`];
   const unit = fieldUnit(metadata.key);
   if (unit) {
-    meta.push(`<span>Unit: ${Utils.escapeHtml(unit)}</span>`);
+    meta.push(`<span>${Utils.escapeHtml(I18n.t("system-config-field-unit", { unit }))}</span>`);
   }
   if (defaultValue !== null && defaultValue !== undefined) {
     const defaultText = Utils.escapeHtml(
-      typeof defaultValue === "object" ? JSON.stringify(defaultValue) : String(defaultValue)
+      I18n.t("system-config-field-default", {
+        value:
+          typeof defaultValue === "object" ? JSON.stringify(defaultValue) : String(defaultValue),
+      })
     );
-    meta.push(
-      `<span class="config-field-default" title="Default: ${defaultText}">` +
-        `Default: ${defaultText}</span>`
-    );
+    meta.push(`<span class="config-field-default" title="${defaultText}">${defaultText}</span>`);
   }
   parts.push(`<div class="config-field-meta">${meta.join("")}</div>`);
 
@@ -226,10 +226,10 @@ export function createResetButton(defaultValue, isAtDefault) {
     type: "button",
     className: "config-field-reset",
     disabled: defaultValue === undefined ? true : isAtDefault,
-    title: "Reset to default",
+    title: I18n.t("system-config-field-reset"),
   });
   button.innerHTML = '<i class="icon-rotate-ccw" aria-hidden="true"></i>';
-  button.setAttribute("aria-label", "Reset to default");
+  button.setAttribute("aria-label", I18n.t("system-config-field-reset"));
   if (defaultValue === undefined) {
     button.hidden = true;
   }
@@ -565,7 +565,7 @@ export const FIELD_RENDERERS = {
         Utils.showToast({
           key: "config-invalid-array",
           type: "error",
-          title: "Invalid array entry",
+          title: I18n.t("system-config-array-invalid-title"),
           message,
         });
         event.target.setAttribute("title", message);
@@ -621,7 +621,7 @@ export const FIELD_RENDERERS = {
         Utils.showToast({
           key: "config-invalid-json",
           type: "error",
-          title: "Invalid JSON",
+          title: I18n.t("system-config-json-invalid-title"),
           message: error.message,
         });
       }

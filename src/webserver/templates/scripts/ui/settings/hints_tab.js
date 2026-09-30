@@ -31,7 +31,6 @@ function hintPreview(content) {
  */
 export function buildHintsTab() {
   const groups = Hints.getAllHintGroups();
-  const total = groups.reduce((n, g) => n + g.hints.length, 0);
 
   const groupsHtml = groups
     .map((group) => {
@@ -39,13 +38,13 @@ export function buildHintsTab() {
         .map((hint) => {
           const preview = Utils.escapeHtml(hintPreview(hint.content));
           return `
-            <div class="settings-field hint-manage-row" data-hint-id="${hint.id}" data-hint-path="${hint.path}">
+            <div class="settings-field hint-manage-row" data-hint-id="${Utils.escapeHtml(hint.id)}" data-hint-path="${Utils.escapeHtml(hint.path)}">
               <div class="settings-field-info">
                 <label>${Utils.escapeHtml(hint.title)}</label>
                 <span class="settings-field-hint">${preview}</span>
               </div>
               <div class="settings-field-control">
-                <label class="toggle" title="Show this hint">
+                <label class="toggle" data-l10n-id="settings-hints-toggle-shown">
                   <input type="checkbox" class="hint-manage-toggle" checked>
                   <span class="toggle-track"></span>
                 </label>
@@ -68,25 +67,19 @@ export function buildHintsTab() {
     <div class="settings-section">
       <h3 class="settings-section-title">
         <i class="icon-lightbulb"></i>
-        Contextual Hints
+        <span data-l10n-id="settings-hints-title"></span>
       </h3>
-      <p class="settings-section-description">
-        Contextual hints are the help icons that explain dashboard features. Review
-        every hint below and restore any you've hidden with "Don't show again" —
-        one at a time or all together.
-      </p>
+      <p class="settings-section-description" data-l10n-id="settings-hints-description"></p>
       <div class="settings-group">
         <div class="settings-field">
           <div class="settings-field-info">
-            <label>Hidden Hints</label>
-            <span class="settings-field-hint">
-              <span id="hintDismissedCount">0</span> of ${total} hints are currently hidden.
-            </span>
+            <label data-l10n-id="settings-hints-hidden-label"></label>
+            <span class="settings-field-hint" id="hintDismissedSummary"></span>
           </div>
           <div class="settings-field-control">
             <button id="resetAllHintsBtn" class="btn btn-warning btn-sm" disabled>
               <i class="icon-rotate-ccw"></i>
-              Restore All Hints
+              <span data-l10n-id="settings-hints-restore-all"></span>
             </button>
           </div>
         </div>
@@ -105,7 +98,10 @@ function renderRowState(row) {
   if (toggle) {
     toggle.checked = !dismissed;
     const label = toggle.closest(".toggle");
-    if (label) label.title = dismissed ? "Hidden — turn on to show" : "Shown";
+    if (label)
+      label.title = dismissed
+        ? I18n.t("settings-hints-toggle-hidden-title")
+        : I18n.t("settings-hints-toggle-shown-title");
   }
   row.classList.toggle("hint-manage-row--hidden", dismissed);
 }
@@ -114,10 +110,15 @@ function renderRowState(row) {
  * Refresh the "N of M hidden" counter and the Restore-All button state.
  */
 function refreshSummary(content) {
-  const countEl = content.querySelector("#hintDismissedCount");
+  const summaryEl = content.querySelector("#hintDismissedSummary");
   const resetBtn = content.querySelector("#resetAllHintsBtn");
   const dismissedCount = Hints.getDismissedHints().length;
-  if (countEl) countEl.textContent = String(dismissedCount);
+  if (summaryEl) {
+    summaryEl.textContent = I18n.t("settings-hints-hidden-summary", {
+      hidden: dismissedCount,
+      total: content.querySelectorAll(".hint-manage-row").length,
+    });
+  }
   if (resetBtn) resetBtn.disabled = dismissedCount === 0;
 }
 
@@ -159,10 +160,10 @@ export async function attachHintsHandlers(dialog, content) {
   if (resetBtn) {
     resetBtn.addEventListener("click", async () => {
       const confirmResult = await ConfirmationDialog.show({
-        title: "Restore All Hints",
-        message: "Show all contextual hints again, including every one you've hidden?",
-        confirmLabel: "Restore All",
-        cancelLabel: "Cancel",
+        title: I18n.t("settings-hints-restore-title"),
+        message: I18n.t("settings-hints-restore-message"),
+        confirmLabel: I18n.t("settings-hints-restore-confirm"),
+        cancelLabel: I18n.t("common-action-cancel"),
         variant: "warning",
       });
       if (!confirmResult.confirmed) return;
@@ -173,7 +174,7 @@ export async function attachHintsHandlers(dialog, content) {
       document.dispatchEvent(
         new CustomEvent("hints:toggle", { detail: { enabled: Hints.isEnabled() } })
       );
-      Utils.showToast("All hints restored", "success");
+      Utils.showToast(I18n.t("settings-hints-restored"), "success");
     });
   }
 }

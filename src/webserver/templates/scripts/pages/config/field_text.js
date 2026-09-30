@@ -48,6 +48,11 @@ export function sectionLabel(sectionId) {
   return I18n.t("config-section-" + sectionId.toLowerCase().replaceAll("_", "-")); // l10n-dynamic: config-
 }
 
+/** Whether a top-level config section has a display name in the catalog. */
+export function hasSectionLabel(sectionId) {
+  return I18n.has("config-section-" + sectionId.toLowerCase().replaceAll("_", "-")); // l10n-dynamic: config-
+}
+
 /** Display name of a category, from its id. */
 export function categoryLabel(id) {
   return I18n.t("config-category-" + id); // l10n-dynamic: config-

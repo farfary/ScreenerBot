@@ -4,195 +4,210 @@
  */
 import * as Utils from "../../core/utils.js";
 
+const LICENSE_CATEGORY_LABELS = Object.freeze({
+  framework: "settings-licenses-category-framework",
+  solana: "settings-licenses-category-solana",
+  data: "settings-licenses-category-data",
+  networking: "settings-licenses-category-networking",
+  cryptography: "settings-licenses-category-cryptography",
+  assets: "settings-licenses-category-assets",
+});
+
+// Keys are the dependency names; the names, license identifiers and URLs are
+// third-party data and render as written.
+const LICENSE_DESCRIPTION_LABELS = Object.freeze({
+  Electron: "settings-licenses-desc-electron",
+  Tokio: "settings-licenses-desc-tokio",
+  Axum: "settings-licenses-desc-axum",
+  Tower: "settings-licenses-desc-tower",
+  Hyper: "settings-licenses-desc-hyper",
+  "solana-sdk": "settings-licenses-desc-solana-sdk",
+  "solana-client": "settings-licenses-desc-solana-client",
+  "solana-program": "settings-licenses-desc-solana-program",
+  "spl-token": "settings-licenses-desc-spl-token",
+  "spl-token-2022": "settings-licenses-desc-spl-token-2022",
+  "spl-associated-token-account": "settings-licenses-desc-spl-associated-token-account",
+  SQLite: "settings-licenses-desc-sqlite",
+  rusqlite: "settings-licenses-desc-rusqlite",
+  r2d2: "settings-licenses-desc-r2d2",
+  Serde: "settings-licenses-desc-serde",
+  TOML: "settings-licenses-desc-toml",
+  reqwest: "settings-licenses-desc-reqwest",
+  "tokio-tungstenite": "settings-licenses-desc-tokio-tungstenite",
+  RustLS: "settings-licenses-desc-rustls",
+  BLAKE3: "settings-licenses-desc-blake3",
+  "SHA-2": "settings-licenses-desc-sha-2",
+  bs58: "settings-licenses-desc-bs58",
+  base64: "settings-licenses-desc-base64",
+  "Lucide Icons": "settings-licenses-desc-lucide-icons",
+  Inter: "settings-licenses-desc-inter",
+  "JetBrains Mono": "settings-licenses-desc-jetbrains-mono",
+  Orbitron: "settings-licenses-desc-orbitron",
+});
+
 /**
  * Build Licenses tab HTML
  */
 export function buildLicensesTab() {
   const licenses = [
     {
-      category: "Application Framework",
+      category: "framework",
       items: [
         {
           name: "Electron",
           license: "MIT",
           url: "https://www.electronjs.org/",
-          desc: "Desktop application framework",
         },
         {
           name: "Tokio",
           license: "MIT",
           url: "https://tokio.rs/",
-          desc: "Async runtime for Rust",
         },
         {
           name: "Axum",
           license: "MIT",
           url: "https://github.com/tokio-rs/axum",
-          desc: "Web server framework",
         },
         {
           name: "Tower",
           license: "MIT",
           url: "https://github.com/tower-rs/tower",
-          desc: "Service abstractions",
         },
-        { name: "Hyper", license: "MIT", url: "https://hyper.rs/", desc: "HTTP implementation" },
+        { name: "Hyper", license: "MIT", url: "https://hyper.rs/" },
       ],
     },
     {
-      category: "Solana Blockchain",
+      category: "solana",
       items: [
         {
           name: "solana-sdk",
           license: "Apache-2.0",
           url: "https://github.com/anza-xyz/agave",
-          desc: "Solana SDK core",
         },
         {
           name: "solana-client",
           license: "Apache-2.0",
           url: "https://github.com/anza-xyz/agave",
-          desc: "RPC client",
         },
         {
           name: "solana-program",
           license: "Apache-2.0",
           url: "https://github.com/anza-xyz/agave",
-          desc: "Program library",
         },
         {
           name: "spl-token",
           license: "Apache-2.0",
           url: "https://github.com/solana-labs/solana-program-library",
-          desc: "SPL Token program",
         },
         {
           name: "spl-token-2022",
           license: "Apache-2.0",
           url: "https://github.com/solana-labs/solana-program-library",
-          desc: "Token-2022 extensions",
         },
         {
           name: "spl-associated-token-account",
           license: "Apache-2.0",
           url: "https://github.com/solana-labs/solana-program-library",
-          desc: "Associated token accounts",
         },
       ],
     },
     {
-      category: "Data & Storage",
+      category: "data",
       items: [
         {
           name: "SQLite",
           license: "Public Domain",
           url: "https://sqlite.org/",
-          desc: "Embedded database engine",
         },
         {
           name: "rusqlite",
           license: "MIT",
           url: "https://github.com/rusqlite/rusqlite",
-          desc: "SQLite Rust bindings",
         },
         {
           name: "r2d2",
           license: "MIT / Apache-2.0",
           url: "https://github.com/sfackler/r2d2",
-          desc: "Database connection pool",
         },
         {
           name: "Serde",
           license: "MIT / Apache-2.0",
           url: "https://serde.rs/",
-          desc: "Serialization framework",
         },
         {
           name: "TOML",
           license: "MIT / Apache-2.0",
           url: "https://github.com/toml-rs/toml",
-          desc: "Configuration parsing",
         },
       ],
     },
     {
-      category: "Networking",
+      category: "networking",
       items: [
         {
           name: "reqwest",
           license: "MIT / Apache-2.0",
           url: "https://github.com/seanmonstar/reqwest",
-          desc: "HTTP client",
         },
         {
           name: "tokio-tungstenite",
           license: "MIT",
           url: "https://github.com/snapview/tokio-tungstenite",
-          desc: "WebSocket client",
         },
         {
           name: "RustLS",
           license: "MIT / Apache-2.0",
           url: "https://github.com/rustls/rustls",
-          desc: "TLS implementation",
         },
       ],
     },
     {
-      category: "Cryptography & Encoding",
+      category: "cryptography",
       items: [
         {
           name: "BLAKE3",
           license: "CC0 / Apache-2.0",
           url: "https://github.com/BLAKE3-team/BLAKE3",
-          desc: "Hash function",
         },
         {
           name: "SHA-2",
           license: "MIT / Apache-2.0",
           url: "https://github.com/RustCrypto/hashes",
-          desc: "SHA-256/512 hashing",
         },
         {
           name: "bs58",
           license: "MIT / Apache-2.0",
           url: "https://github.com/Nullus157/bs58-rs",
-          desc: "Base58 encoding",
         },
         {
           name: "base64",
           license: "MIT / Apache-2.0",
           url: "https://github.com/marshallpierce/rust-base64",
-          desc: "Base64 encoding",
         },
       ],
     },
     {
-      category: "UI Assets",
+      category: "assets",
       items: [
         {
           name: "Lucide Icons",
           license: "ISC",
           url: "https://lucide.dev/",
-          desc: "Icon font library",
         },
         {
           name: "Inter",
           license: "OFL-1.1",
           url: "https://rsms.me/inter/",
-          desc: "Interface font",
         },
         {
           name: "JetBrains Mono",
           license: "OFL-1.1",
           url: "https://www.jetbrains.com/lp/mono/",
-          desc: "Monospace font",
         },
         {
           name: "Orbitron",
           license: "OFL-1.1",
           url: "https://fonts.google.com/specimen/Orbitron",
-          desc: "Display font",
         },
       ],
     },
@@ -202,7 +217,7 @@ export function buildLicensesTab() {
     .map(
       (cat) => `
       <div class="license-category">
-        <h4 class="license-category-title">${Utils.escapeHtml(cat.category)}</h4>
+        <h4 class="license-category-title">${Utils.escapeHtml(I18n.label(LICENSE_CATEGORY_LABELS, cat.category))}</h4>
         <div class="license-items">
           ${cat.items
             .map(
@@ -215,7 +230,7 @@ export function buildLicensesTab() {
                 </button>
                 <span class="license-item-badge">${Utils.escapeHtml(item.license)}</span>
               </div>
-              <p class="license-item-desc">${Utils.escapeHtml(item.desc)}</p>
+              <p class="license-item-desc">${Utils.escapeHtml(I18n.label(LICENSE_DESCRIPTION_LABELS, item.name))}</p>
             </div>
           `
             )
@@ -231,8 +246,8 @@ export function buildLicensesTab() {
       <div class="licenses-header">
         <i class="icon-scale"></i>
         <div>
-          <h3>Open Source Licenses</h3>
-          <p>ScreenerBot is built with the following open source software</p>
+          <h3 data-l10n-id="settings-licenses-title"></h3>
+          <p data-l10n-id="settings-licenses-subtitle"></p>
         </div>
       </div>
       <div class="licenses-content">
@@ -241,7 +256,7 @@ export function buildLicensesTab() {
       <div class="licenses-footer">
         <p>
           <i class="icon-info"></i>
-          Full license texts are available in the project repository and within each dependency's source code.
+          <span data-l10n-id="settings-licenses-footer"></span>
         </p>
       </div>
     </div>

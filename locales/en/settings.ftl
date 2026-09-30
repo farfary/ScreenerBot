@@ -442,3 +442,187 @@ settings-telegram-test-sent = Test message sent
 settings-telegram-test-failed = Test message failed
 settings-telegram-session-revoked = Session revoked
 settings-telegram-session-revoke-failed = Could not revoke session
+
+## licenses_tab.js
+
+settings-licenses-title = Open Source Licenses
+settings-licenses-subtitle = { -brand } is built with the following open source software
+settings-licenses-footer = Full license texts are available in the project repository and within each dependency's source code.
+settings-licenses-category-framework = Application Framework
+settings-licenses-category-solana = Solana Blockchain
+settings-licenses-category-data = Data & Storage
+settings-licenses-category-networking = Networking
+settings-licenses-category-cryptography = Cryptography & Encoding
+settings-licenses-category-assets = UI Assets
+settings-licenses-desc-electron = Desktop application framework
+settings-licenses-desc-tokio = Async runtime for Rust
+settings-licenses-desc-axum = Web server framework
+settings-licenses-desc-tower = Service abstractions
+settings-licenses-desc-hyper = HTTP implementation
+settings-licenses-desc-solana-sdk = Solana SDK core
+settings-licenses-desc-solana-client = RPC client
+settings-licenses-desc-solana-program = Program library
+settings-licenses-desc-spl-token = SPL Token program
+settings-licenses-desc-spl-token-2022 = Token-2022 extensions
+settings-licenses-desc-spl-associated-token-account = Associated token accounts
+settings-licenses-desc-sqlite = Embedded database engine
+settings-licenses-desc-rusqlite = SQLite Rust bindings
+settings-licenses-desc-r2d2 = Database connection pool
+settings-licenses-desc-serde = Serialization framework
+settings-licenses-desc-toml = Configuration parsing
+settings-licenses-desc-reqwest = HTTP client
+settings-licenses-desc-tokio-tungstenite = WebSocket client
+settings-licenses-desc-rustls = TLS implementation
+settings-licenses-desc-blake3 = Hash function
+settings-licenses-desc-sha-2 = SHA-256/512 hashing
+settings-licenses-desc-bs58 = Base58 encoding
+settings-licenses-desc-base64 = Base64 encoding
+settings-licenses-desc-lucide-icons = Icon font library
+settings-licenses-desc-inter = Interface font
+settings-licenses-desc-jetbrains-mono = Monospace font
+settings-licenses-desc-orbitron = Display font
+
+## hints_tab.js
+
+settings-hints-title = Contextual Hints
+settings-hints-description = Contextual hints are the help icons that explain dashboard features. Review every hint below and restore any you've hidden with "Don't show again" — one at a time or all together.
+settings-hints-hidden-label = Hidden Hints
+# $hidden is the number of hidden hints, $total the number of hints.
+settings-hints-hidden-summary = { $hidden } of { $total } hints are currently hidden.
+settings-hints-restore-all = Restore All Hints
+settings-hints-toggle-shown =
+    .title = Show this hint
+settings-hints-toggle-shown-title = Shown
+settings-hints-toggle-hidden-title = Hidden — turn on to show
+settings-hints-restore-title = Restore All Hints
+settings-hints-restore-message = Show all contextual hints again, including every one you've hidden?
+settings-hints-restore-confirm = Restore All
+settings-hints-restored = All hints restored
+
+## account_tab.js
+
+settings-account-title = { -brand } account
+settings-account-description = Free, and optional. { -brand } trades, discovers and charts without an account — it just does it against the public providers. The panel below lists what signing in adds.
+settings-account-data-title = { -brand } data
+settings-account-data-description = We run a shared market-data service at screenerbot.io: pooled candles across seven timeframes, a resolved pool registry, cached security reports and normalised token identity. It exists so every install is not separately rate limited by the public providers, and using it needs an account so that shared cost has a name against it.
+settings-account-data-fallback = When it is unavailable { -brand } falls back to the public providers automatically. Nothing stops; charts fill more slowly and carry less history.
+settings-account-gateway-title = Sending transactions
+settings-account-gateway-description = When you are signed in, { -brand } can broadcast your swaps through screenerbot.io instead of your own RPC. Your bot still builds and signs every transaction on this machine — the server only relays it, and cannot change a signed transaction without invalidating its signature.
+settings-account-gateway-label = Use { -brand } RPC for sending transactions
+settings-account-gateway-hint = Submission only. Price data always comes from your own RPC — pool polling is far too heavy for a shared endpoint, so it is never sent there.
+settings-account-manage-title = Managing your account
+settings-account-manage-description = Your password, email address, connected devices and referral payouts are managed on the website. Revoking a device there signs it out everywhere, including this one.
+settings-account-open-dashboard = Open your dashboard
+
+## navigation_tab.js
+
+settings-navigation-title = Navigation Tabs
+settings-navigation-hint = Drag items to reorder. Toggle visibility with the switch.
+settings-navigation-note = Changes apply after saving. Refresh the page to see updates in the navigation bar.
+settings-navigation-drag-handle =
+    .title = Drag to reorder
+settings-navigation-defaults-failed = Could not load the default navigation
+settings-navigation-reset = Navigation reset to defaults
+
+## data_tab.js
+
+settings-data-storage-title = Database Storage
+settings-data-storage-description = Overview of all databases storing your trading data, positions, and historical information.
+settings-data-stats-loading = Loading database statistics...
+settings-data-stats-load-failed = Failed to load database statistics
+settings-data-total-storage = Total Database Storage
+settings-data-directory-label = Data Directory
+settings-data-directory-copied = Data directory
+settings-data-config-path-copied = Config path
+settings-data-path-unavailable = Unavailable
+settings-data-path-copy-title = Click to copy path
+settings-data-path-copy-failed = Failed to copy path
+
+settings-data-config-title = Configuration Management
+settings-data-config-description = Export, import, and manage your bot configuration. Keep backups before making major changes.
+settings-data-config-export = Export Config
+settings-data-config-import = Import Config
+settings-data-config-reset = Reset to Defaults
+settings-data-config-location-label = Config Location
+settings-data-config-fetch-failed = Failed to fetch config
+settings-data-config-exported = Configuration exported
+# $message is the technical error text.
+settings-data-config-export-failed = Failed to export config: { $message }
+settings-data-config-import-title = Import Configuration
+settings-data-config-import-message = Import this configuration? Current settings will be overwritten. Wallet credentials will be preserved.
+settings-data-config-imported = Configuration imported successfully. Some changes may require restart.
+settings-data-config-import-failed = Failed to import config: { $message }
+settings-data-config-reset-title = Reset Configuration
+settings-data-config-reset-message = Reset all settings to defaults? Your wallet credentials will be preserved, but all other settings will be reset.
+settings-data-config-reset-done = Configuration reset to defaults
+settings-data-config-reset-failed = Failed to reset config: { $message }
+settings-data-unknown-error = Unknown error
+
+settings-data-cleanup-title = Data Cleanup
+settings-data-cleanup-description = Free up disk space by removing old or unused data. These actions cannot be undone.
+settings-data-ohlcv-cleanup-label = OHLCV Data Cleanup
+settings-data-ohlcv-cleanup-hint = Remove candlestick data for tokens that haven't been active for the specified time.
+settings-data-cleanup-hours-unit = hours
+settings-data-cleanup-ohlcv = Cleanup OHLCV
+settings-data-cleanup-running = Cleaning...
+settings-data-cleanup-hours-invalid = Invalid hours value
+settings-data-cleanup-confirm-title = Delete OHLCV Data
+settings-data-cleanup-confirm-message =
+    Delete OHLCV data for tokens inactive for more than { $hours ->
+        [one] { $hours } hour
+       *[other] { $hours } hours
+    }?
+settings-data-cleanup-done =
+    Cleaned up { $count ->
+        [one] { $count } inactive token
+       *[other] { $count } inactive tokens
+    }
+settings-data-cleanup-failed = Cleanup failed
+settings-data-cleanup-failed-detail = Cleanup failed: { $message }
+
+settings-data-cache-clear-label = Clear All OHLCV Cache
+settings-data-cache-clear-hint = Wipe all cached candlestick data and re-fetch every monitored token from scratch. Use if charts look wrong or after a data logic update.
+settings-data-cache-clear = Clear OHLCV Cache
+settings-data-cache-clearing = Clearing...
+settings-data-cache-confirm-title = Clear All OHLCV Cache
+settings-data-cache-confirm-message = Wipe all cached candlestick data for every token? Monitored tokens will re-fetch their history from scratch. This cannot be undone.
+settings-data-candles-count =
+    { $count ->
+        [one] { $count } candle
+       *[other] { $count } candles
+    }
+settings-data-tokens-count =
+    { $count ->
+        [one] { $count } token
+       *[other] { $count } tokens
+    }
+# $candles and $tokens are the counts above, already worded.
+settings-data-cache-cleared = Cleared { $candles } across { $tokens }; re-fetching
+settings-data-cache-clear-failed = Failed to clear OHLCV cache
+settings-data-cache-clear-failed-detail = Failed to clear OHLCV cache: { $message }
+
+settings-data-ui-cache-label = UI State Cache
+settings-data-ui-cache-hint = Clear saved table preferences, filter states, and view settings.
+settings-data-ui-cache-clear = Clear UI Cache
+settings-data-ui-cache-confirm-title = Clear UI State
+settings-data-ui-cache-confirm-message = Clear all saved UI preferences? This will reset table columns, filters, and view settings.
+settings-data-ui-cache-cleared =
+    Cleared { $count ->
+        [one] { $count } cached UI setting
+       *[other] { $count } cached UI settings
+    }
+
+settings-data-folder-label = Open Data Folder
+settings-data-folder-hint = Open the folder containing all { -brand } data in your file manager.
+settings-data-folder-open = Open Folder
+settings-data-folder-open-failed = Could not open the data folder
+
+# Trading presets. Ids are the keys of the preset table in data_tab.js.
+settings-data-preset-conservative = Conservative
+settings-data-preset-moderate = Moderate
+settings-data-preset-aggressive = Aggressive
+settings-data-preset-unknown = Unknown preset
+settings-data-preset-title = Apply Trading Preset
+settings-data-preset-message = Apply { $preset } trading preset? This will update your trader, filtering, and position settings.
+settings-data-preset-applied = { $preset } preset applied
+settings-data-preset-failed = Failed to apply preset: { $message }

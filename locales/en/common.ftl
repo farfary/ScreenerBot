@@ -24,6 +24,11 @@ common-action-edit = Edit
 common-action-duplicate = Duplicate
 common-action-add = Add
 common-action-select-all = Select All
+common-action-clear = Clear
+common-action-expand-all = Expand all
+common-action-collapse-all = Collapse all
+common-action-expand-everything = Expand everything
+common-action-collapse-everything = Collapse everything
 
 # On/off state of a switch or a feature.
 common-state-enabled = Enabled

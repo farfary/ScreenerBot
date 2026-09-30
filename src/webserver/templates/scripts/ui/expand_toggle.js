@@ -12,12 +12,12 @@
 
 import { create, on } from "../core/dom.js";
 
-const DEFAULTS = {
-  expandLabel: "Expand all",
-  collapseLabel: "Collapse all",
-  expandTitle: "Expand everything",
-  collapseTitle: "Collapse everything",
-};
+const defaults = () => ({
+  expandLabel: I18n.t("common-action-expand-all"),
+  collapseLabel: I18n.t("common-action-collapse-all"),
+  expandTitle: I18n.t("common-action-expand-everything"),
+  collapseTitle: I18n.t("common-action-collapse-everything"),
+});
 
 /**
  * @param {object} options
@@ -31,7 +31,7 @@ const DEFAULTS = {
  * @returns {{ element: HTMLButtonElement, setExpanded: (v: boolean) => void, isExpanded: () => boolean }}
  */
 export function createExpandToggle(options = {}) {
-  const config = { ...DEFAULTS, ...options };
+  const config = { ...defaults(), ...options };
   let expanded = Boolean(config.expanded);
 
   const button = create("button", {

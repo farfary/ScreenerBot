@@ -1,33 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import "./fixtures/i18n_en.mjs";
 
 import {
   createUpdatesView,
   parseReleaseNotes,
 } from "../../src/webserver/templates/scripts/ui/settings/updates_view.js";
 
-// Stand-in catalog for the field text that metadata references by key.
-const messages = {
-  "config-updates-auto-check": { value: "Check for Updates", hint: "Look for releases" },
-  "config-updates-check-interval-hours": {
-    value: "Check Interval",
-    hint: "How often to check",
-    unit: "hours",
-  },
-  "config-category-checking": { value: "Checking" },
-  "updates-defer-trading-active": { value: "A trade is active, so the restart is deferred." },
-  "updates-check-failed": { value: "unused" },
-};
-globalThis.I18n = {
-  t: (id) => messages[id]?.value ?? id,
-  attr: (id, name) => messages[id]?.[name] ?? null,
-  text: (uiText) =>
-    uiText
-      ? uiText.id === "updates-check-failed"
-        ? String(uiText.args.cause.value)
-        : (messages[uiText.id]?.value ?? uiText.id)
-      : "",
-};
+// Fluent wraps arguments in bidi isolates; assertions read the visible text.
+const visible = (html) => html.replace(/[\u2068\u2069]/g, "");
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -48,6 +29,9 @@ const view = createUpdatesView({
   },
   formatDate(value, { fallback = "—" } = {}) {
     return value ? "Sep 5, 2026" : fallback;
+  },
+  formatPercentValue(value) {
+    return `${value}%`;
   },
 });
 
@@ -91,7 +75,7 @@ test("release-note rendering escapes supplied content", () => {
     availableVersion: null,
   });
 
-  assert.match(html, /v0\.2\.4/);
+  assert.match(visible(html), /v0\.2\.4/);
   assert.match(html, /<h4>Safety<\/h4>/);
   assert.match(html, /<li>Fixed &lt;script&gt;alert\(1\)&lt;\/script&gt;\.<\/li>/);
   assert.doesNotMatch(html, /<script>/);
@@ -120,7 +104,7 @@ test("the history opens this installation's release and tags only what it must",
   assert.doesNotMatch(entries[3], /updates-release-tag/);
   // Only one entry may start expanded.
   assert.equal(html.match(/ open>/g).length, 1);
-  assert.match(html, /1 change</);
+  assert.match(visible(html), /1 change</);
 });
 
 test("with nothing pending, the running build is the entry that opens", () => {
@@ -144,7 +128,7 @@ test("an unreadable history still shows what the updater knows", () => {
   });
 
   assert.match(html, /updates-history-notice/);
-  assert.match(html, /v0\.2\.5/);
+  assert.match(visible(html), /v0\.2\.5/);
 
   const empty = view.renderReleaseNotes({
     releases: [],
@@ -195,7 +179,7 @@ test("status exposes one phase-appropriate primary action", () => {
     download_progress: {},
   });
 
-  assert.match(available.html, /Version 0\.2\.4 is available/);
+  assert.match(visible(available.html), /Version 0\.2\.4 is available/);
   assert.match(available.html, />Download update</);
   assert.doesNotMatch(available.html, /Restart to update/);
 
@@ -219,7 +203,10 @@ test("blocked reason and check error render from backend text", () => {
     download_progress: {},
     blocked_reason: { id: "updates-defer-trading-active" },
   });
-  assert.match(ready.html, /A trade is active, so the restart is deferred\./);
+  assert.match(
+    ready.html,
+    /A position, trade, or tool operation is active, so the restart is deferred\./
+  );
 
   const failed = view.renderStatus({
     phase: "check_failed",

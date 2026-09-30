@@ -40,12 +40,12 @@ export class HintTrigger {
 
     return `<button
       class="hint-trigger hint-trigger--${size}"
-      data-hint-id="${hint.id}"
-      data-hint-path="${hintPath}"
-      data-hint-position="${position}"
+      data-hint-id="${escapeHtml(hint.id)}"
+      data-hint-path="${escapeHtml(hintPath)}"
+      data-hint-position="${escapeHtml(position)}"
       type="button"
-      aria-label="Help: ${hint.title}"
-      title="${hint.title}"
+      aria-label="${escapeHtml(I18n.attr("hints-trigger", "aria-label", { title: hint.title }))}"
+      title="${escapeHtml(hint.title)}"
     ><i class="icon-circle-question-mark"></i></button>`;
   }
 
@@ -173,7 +173,7 @@ export class HintPopover {
           <i class="icon-info"></i>
         </div>
         <h4 class="hint-popover__title">${escapeHtml(this.hint.title)}</h4>
-        <button class="hint-popover__close" type="button" aria-label="Close">
+        <button class="hint-popover__close" type="button" data-l10n-id="hints-popover-close">
           <i class="icon-x"></i>
         </button>
       </div>
@@ -183,6 +183,7 @@ export class HintPopover {
       ${this._renderFooter()}
     `;
 
+    I18n.localizeTree(this.el);
     document.body.appendChild(this.el);
   }
 
@@ -242,13 +243,13 @@ export class HintPopover {
           hasLearnMore
             ? `<a href="${escapeHtml(this.hint.learnMoreUrl)}" target="_blank" rel="noopener noreferrer" class="hint-popover__learn-more">
             <i class="icon-external-link"></i>
-            Learn more
+            <span data-l10n-id="hints-popover-learn-more"></span>
           </a>`
             : "<span></span>"
         }
         <label class="hint-popover__dismiss">
           <input type="checkbox" class="hint-popover__dismiss-checkbox checkbox-sm">
-          <span>Don't show again</span>
+          <span data-l10n-id="hints-popover-dismiss"></span>
         </label>
       </div>
     `;
@@ -520,13 +521,14 @@ function handleKeyDown(e) {
 }
 
 /**
- * Escape HTML special characters
+ * Escape HTML special characters, quotes included: the result is also used
+ * inside attribute values.
  */
 function escapeHtml(text) {
   if (!text) return "";
   const div = document.createElement("div");
   div.textContent = text;
-  return div.innerHTML;
+  return div.innerHTML.replaceAll('"', "&quot;").replaceAll("'", "&#39;");
 }
 
 function clampArrowOffset(value, length) {

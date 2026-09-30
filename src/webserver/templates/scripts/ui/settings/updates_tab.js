@@ -12,11 +12,15 @@ import { createUpdatesView } from "./updates_view.js";
 import { apiErrorMessage } from "../../core/request_manager.js";
 
 const BUSY_PHASES = new Set(["checking", "downloading", "verifying", "applying"]);
-const UPDATE_TABS = [
-  { id: "status", label: "Status" },
-  { id: "release-notes", label: "Release Notes" },
-  { id: "preferences", label: "Preferences" },
-];
+const UPDATE_TAB_LABELS = Object.freeze({
+  status: "updates-tab-status",
+  "release-notes": "updates-tab-release-notes",
+  preferences: "updates-tab-preferences",
+});
+const UPDATE_TABS = Object.keys(UPDATE_TAB_LABELS).map((id) => ({
+  id,
+  label: I18n.label(UPDATE_TAB_LABELS, id),
+}));
 
 const view = createUpdatesView(Utils);
 let poller = null;
@@ -32,13 +36,13 @@ export function buildUpdatesTab(info) {
         tabs: UPDATE_TABS,
         activeTab: activeUpdatesTab,
         idPrefix: "settings-updates",
-        ariaLabel: "Update sections",
+        ariaLabel: I18n.t("updates-tab-sections"),
       })}
       <div class="updates-announcer sr-only" id="updatesAnnouncement" aria-live="polite"></div>
       <div class="updates-panels">
         <section class="updates-panel" data-tab-content="status">
           <div id="updatesStatus">
-            <div class="updates-loading">Checking this installation...</div>
+            <div class="updates-loading" data-l10n-id="updates-checking-installation"></div>
           </div>
         </section>
         <section class="updates-panel" data-tab-content="release-notes" hidden>
@@ -46,7 +50,7 @@ export function buildUpdatesTab(info) {
         </section>
         <section class="updates-panel" data-tab-content="preferences" hidden>
           <div id="updatesPreferences">
-            <div class="updates-loading">Loading update preferences...</div>
+            <div class="updates-loading" data-l10n-id="common-loading"></div>
           </div>
         </section>
       </div>
@@ -95,11 +99,11 @@ export function attachUpdatesHandlers(content, onAttentionChange) {
     session.refreshing = true;
     try {
       if (recheck) {
-        setButtonBusy(root, "updatesCheck", "Checking...");
+        setButtonBusy(root, "updatesCheck", I18n.t("updates-busy-checking"));
         await request(
           "/api/updates/check",
           { signal: session.controller.signal },
-          "Could not check for updates",
+          I18n.t("updates-check-request-failed"),
           "updates:check"
         );
         if (activeSession !== session) return;
@@ -170,7 +174,7 @@ async function request(url, options = {}, errorTitle, key) {
     const response = await fetch(url, options);
     const body = await response.json().catch(() => ({}));
     if (!response.ok || body.success === false) {
-      throw new Error(apiErrorMessage(body, "Request failed"));
+      throw new Error(apiErrorMessage(body, I18n.t("updates-request-failed")));
     }
     return body;
   } catch (err) {
@@ -206,6 +210,7 @@ function syncPoller(state, refresh, session) {
         if (activeSession !== session) return;
         return refresh();
       },
+      // l10n-ignore: poller diagnostic label
       { label: "UpdateStatus", intervalMs: 1000, pauseWhenHidden: false }
     );
     poller.start();
@@ -320,17 +325,18 @@ function renderLoadError(root, refresh) {
       <div class="updates-status-copy">
         <i class="updates-status-icon icon-circle-alert" aria-hidden="true"></i>
         <div>
-          <h3 class="updates-headline">Update status is unavailable</h3>
-          <p class="updates-detail">The installation status could not be loaded.</p>
+          <h3 class="updates-headline" data-l10n-id="updates-status-unavailable-headline"></h3>
+          <p class="updates-detail" data-l10n-id="updates-status-load-failed-detail"></p>
         </div>
       </div>
       <div class="updates-actions">
         <button class="btn btn-primary" id="updatesStatusRetry" type="button">
-          <i class="icon-refresh-cw" aria-hidden="true"></i><span>Try again</span>
+          <i class="icon-refresh-cw" aria-hidden="true"></i><span data-l10n-id="updates-action-try-again"></span>
         </button>
       </div>
     </section>
   `;
+  I18n.localizeTree(host);
   host.querySelector("#updatesStatusRetry")?.addEventListener("click", () => refresh());
 }
 
@@ -351,7 +357,7 @@ async function renderPreferences(host, session) {
 
   host.innerHTML = view.renderPreferences(model?.values || {}, model?.metadata || {});
   host.querySelector("#updatesPrefsRetry")?.addEventListener("click", () => {
-    host.innerHTML = '<div class="updates-loading">Loading update preferences...</div>';
+    host.innerHTML = `<div class="updates-loading">${Utils.escapeHtml(I18n.t("common-loading"))}</div>`;
     void renderPreferences(host, session);
   });
   if (!model) return;
@@ -393,7 +399,9 @@ async function renderPreferences(host, session) {
           body: JSON.stringify({ [key]: value }),
           signal: session.controller.signal,
         },
-        `Could not save ${(label || "update preference").toLowerCase()}`,
+        I18n.t("updates-preference-save-failed", {
+          preference: label || I18n.t("updates-preference-fallback-name"),
+        }),
         `updates:preference:${key}`
       );
 
@@ -420,7 +428,7 @@ function attachActions(root, state, refresh, session) {
   on("updatesRetry", async () => {
     const update = state.available_update;
     if (!update) return refresh({ recheck: true });
-    setButtonBusy(root, "updatesRetry", "Resuming download...");
+    setButtonBusy(root, "updatesRetry", I18n.t("updates-busy-resuming"));
     await request(
       "/api/updates/download",
       {
@@ -429,7 +437,7 @@ function attachActions(root, state, refresh, session) {
         body: JSON.stringify({ version: update.version }),
         signal: session.controller.signal,
       },
-      "Could not resume update download",
+      I18n.t("updates-resume-failed"),
       "updates:retry"
     );
     if (activeSession === session) void refresh();
@@ -438,7 +446,7 @@ function attachActions(root, state, refresh, session) {
   on("updatesDownload", async () => {
     const update = state.available_update;
     if (!update) return;
-    setButtonBusy(root, "updatesDownload", "Starting download...");
+    setButtonBusy(root, "updatesDownload", I18n.t("updates-busy-starting-download"));
     await request(
       "/api/updates/download",
       {
@@ -447,7 +455,7 @@ function attachActions(root, state, refresh, session) {
         body: JSON.stringify({ version: update.version }),
         signal: session.controller.signal,
       },
-      "Could not start update download",
+      I18n.t("updates-download-failed"),
       "updates:download"
     );
     if (activeSession === session) void refresh();
@@ -455,20 +463,21 @@ function attachActions(root, state, refresh, session) {
 
   on("updatesApply", async () => {
     const confirmation = await ConfirmationDialog.show({
-      title: `Install v${state.available_update?.version}`,
-      message:
-        "ScreenerBot restarts onto the new version. Trading stops for a few seconds and resumes automatically; open positions are untouched.",
-      confirmLabel: "Restart to update",
-      cancelLabel: "Cancel",
+      title: I18n.t("updates-apply-confirm-title", {
+        version: state.available_update?.version ?? "",
+      }),
+      message: I18n.t("updates-apply-confirm-message"),
+      confirmLabel: I18n.t("updates-action-restart"),
+      cancelLabel: I18n.t("common-action-cancel"),
       variant: "warning",
     });
     if (!confirmation.confirmed || activeSession !== session) return;
 
-    setButtonBusy(root, "updatesApply", "Restarting...");
+    setButtonBusy(root, "updatesApply", I18n.t("updates-busy-restarting"));
     await request(
       "/api/updates/apply",
       { method: "POST", signal: session.controller.signal },
-      "Could not install update",
+      I18n.t("updates-apply-failed"),
       "updates:apply"
     );
     if (activeSession === session) void refresh();
@@ -476,20 +485,19 @@ function attachActions(root, state, refresh, session) {
 
   on("updatesInstall", async () => {
     const confirmation = await ConfirmationDialog.show({
-      title: "Run the installer",
-      message:
-        "The verified installer opens and ScreenerBot quits cleanly. Complete the installer, then reopen ScreenerBot.",
-      confirmLabel: "Open installer",
-      cancelLabel: "Cancel",
+      title: I18n.t("updates-install-confirm-title"),
+      message: I18n.t("updates-install-confirm-message"),
+      confirmLabel: I18n.t("updates-action-open-installer"),
+      cancelLabel: I18n.t("common-action-cancel"),
       variant: "warning",
     });
     if (!confirmation.confirmed || activeSession !== session) return;
 
-    setButtonBusy(root, "updatesInstall", "Opening installer...");
+    setButtonBusy(root, "updatesInstall", I18n.t("updates-busy-opening-installer"));
     const result = await request(
       "/api/updates/install",
       { method: "POST", signal: session.controller.signal },
-      "Could not open update installer",
+      I18n.t("updates-install-failed"),
       "updates:install"
     );
     if (!result) {

@@ -28,32 +28,26 @@ function tabLabel(id) {
   return I18n.t("nav-" + id); // l10n-dynamic: nav-
 }
 
-/**
- * Build Navigation tab HTML
- */
-export function buildNavigationTab(settings) {
-  const navigation = settings?.dashboard?.navigation || {};
-  const tabs = navigation.tabs || [];
-
-  // Sort tabs by order for display
+/** Markup of the tab rows, sorted by their configured order. */
+function renderTabItems(tabs) {
   const sortedTabs = [...tabs].sort((a, b) => a.order - b.order);
 
-  const tabItems = sortedTabs
+  return sortedTabs
     .map(
       (tab, index) => `
-      <div class="settings-nav-tab-item" 
-           data-tab-id="${tab.id}" 
-           data-order="${tab.order}"
+      <div class="settings-nav-tab-item"
+           data-tab-id="${Utils.escapeHtml(tab.id)}"
+           data-order="${Utils.escapeHtml(tab.order)}"
            draggable="true">
         <div class="settings-nav-tab-position">${index + 1}</div>
-        <div class="settings-nav-tab-handle" title="Drag to reorder">
+        <div class="settings-nav-tab-handle" data-l10n-id="settings-navigation-drag-handle">
           <i class="icon-grip-vertical"></i>
         </div>
         <div class="settings-nav-tab-icon">
-          <i class="${tab.icon}"></i>
+          <i class="${Utils.escapeHtml(tab.icon)}"></i>
         </div>
         <div class="settings-nav-tab-info">
-          <span class="settings-nav-tab-label">${tabLabel(tab.id)}</span>
+          <span class="settings-nav-tab-label">${Utils.escapeHtml(tabLabel(tab.id))}</span>
         </div>
         <div class="settings-nav-tab-status ${tab.enabled ? "enabled" : "disabled"}">
           ${tab.enabled ? '<i class="icon-eye"></i>' : '<i class="icon-eye-off"></i>'}
@@ -68,6 +62,13 @@ export function buildNavigationTab(settings) {
     `
     )
     .join("");
+}
+
+/**
+ * Build Navigation tab HTML
+ */
+export function buildNavigationTab(settings) {
+  const tabs = settings?.dashboard?.navigation?.tabs || [];
 
   return `
     <div class="settings-section">
@@ -75,21 +76,21 @@ export function buildNavigationTab(settings) {
         <div class="settings-section-header-left">
           <h3 class="settings-section-title">
             <i class="icon-layout-grid"></i>
-            Navigation Tabs
+            <span data-l10n-id="settings-navigation-title"></span>
           </h3>
-          <p class="settings-section-hint">Drag items to reorder. Toggle visibility with the switch.</p>
+          <p class="settings-section-hint" data-l10n-id="settings-navigation-hint"></p>
         </div>
         <button class="btn btn-secondary btn-sm" id="resetNavTabs">
           <i class="icon-rotate-ccw"></i>
-          Reset
+          <span data-l10n-id="common-action-reset"></span>
         </button>
       </div>
       <div class="settings-nav-tabs-list" id="navTabsList">
-        ${tabItems}
+        ${renderTabItems(tabs)}
       </div>
       <div class="settings-nav-tabs-note">
         <i class="icon-info"></i>
-        <span>Changes apply after saving. Refresh the page to see updates in the navigation bar.</span>
+        <span data-l10n-id="settings-navigation-note"></span>
       </div>
     </div>
   `;
@@ -102,41 +103,8 @@ function refreshNavigationList(content, settings) {
   const listContainer = content.querySelector("#navTabsList");
   if (!listContainer) return;
 
-  const tabs = settings?.dashboard?.navigation?.tabs || [];
-  const sortedTabs = [...tabs].sort((a, b) => a.order - b.order);
-
-  const tabItems = sortedTabs
-    .map(
-      (tab, index) => `
-      <div class="settings-nav-tab-item" 
-           data-tab-id="${tab.id}" 
-           data-order="${tab.order}"
-           draggable="true">
-        <div class="settings-nav-tab-position">${index + 1}</div>
-        <div class="settings-nav-tab-handle" title="Drag to reorder">
-          <i class="icon-grip-vertical"></i>
-        </div>
-        <div class="settings-nav-tab-icon">
-          <i class="${tab.icon}"></i>
-        </div>
-        <div class="settings-nav-tab-info">
-          <span class="settings-nav-tab-label">${tabLabel(tab.id)}</span>
-        </div>
-        <div class="settings-nav-tab-status ${tab.enabled ? "enabled" : "disabled"}">
-          ${tab.enabled ? '<i class="icon-eye"></i>' : '<i class="icon-eye-off"></i>'}
-        </div>
-        <div class="settings-nav-tab-toggle">
-          <label class="toggle">
-            <input type="checkbox" ${tab.enabled ? "checked" : ""} ${tab.id === "home" ? "disabled" : ""}>
-            <span class="toggle-track"></span>
-          </label>
-        </div>
-      </div>
-    `
-    )
-    .join("");
-
-  listContainer.innerHTML = tabItems;
+  listContainer.innerHTML = renderTabItems(settings?.dashboard?.navigation?.tabs || []);
+  I18n.localizeTree(listContainer);
 }
 
 /**
@@ -340,7 +308,7 @@ export function attachNavigationHandlers(dialog, content) {
       if (!defaultTabs) {
         Utils.showToast({
           type: "error",
-          title: "Could not load the default navigation",
+          title: I18n.t("settings-navigation-defaults-failed"),
         });
         return;
       }
@@ -349,7 +317,7 @@ export function attachNavigationHandlers(dialog, content) {
       refreshNavigationList(content, dialog.settings);
       Utils.showToast({
         type: "info",
-        title: "Navigation reset to defaults",
+        title: I18n.t("settings-navigation-reset"),
       });
     });
   }

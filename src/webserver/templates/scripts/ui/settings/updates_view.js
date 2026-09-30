@@ -23,6 +23,50 @@ const PREFERENCE_ORDER = [
 
 const CATEGORY_ORDER = ["checking", "installing", "notifications"];
 
+// Ids are the serialized `UpdatePhase` values (src/version/types.rs); the Rust test
+// `update_phase_messages_exist_in_the_catalog` pins the keys.
+const UPDATE_PHASE_HEADLINE_LABELS = Object.freeze({
+  idle: "updates-phase-idle-headline",
+  up_to_date: "updates-phase-up-to-date-headline",
+  checking: "updates-phase-checking-headline",
+  available: "updates-phase-available-headline",
+  downloading: "updates-phase-downloading-headline",
+  verifying: "updates-phase-verifying-headline",
+  ready_to_apply: "updates-phase-ready-to-apply-headline",
+  ready_to_install: "updates-phase-ready-to-install-headline",
+  applying: "updates-phase-applying-headline",
+  applied: "updates-phase-applied-headline",
+  failed: "updates-phase-failed-headline",
+  check_failed: "updates-phase-check-failed-headline",
+});
+
+// The detail line; for the phases that can carry backend text it is the fallback.
+// Available and downloading updates describe their kind instead.
+const UPDATE_PHASE_DETAIL_LABELS = Object.freeze({
+  idle: "updates-phase-idle-detail",
+  up_to_date: "updates-phase-up-to-date-detail",
+  checking: "updates-phase-checking-detail",
+  verifying: "updates-phase-verifying-detail",
+  ready_to_apply: "updates-phase-ready-to-apply-detail",
+  ready_to_install: "updates-phase-ready-to-install-detail",
+  applying: "updates-phase-applying-detail",
+  applied: "updates-phase-applied-detail",
+  failed: "updates-phase-failed-detail",
+  check_failed: "updates-phase-check-failed-detail",
+});
+
+// Ids are the serialized `UpdateKind` values (src/version/types.rs).
+const UPDATE_KIND_LABELS = Object.freeze({
+  core: "updates-kind-core",
+  full: "updates-kind-full",
+});
+
+// What a release is to this installation; a past release carries no tag.
+const RELEASE_STATE_LABELS = Object.freeze({
+  installed: "updates-version-installed",
+  available: "updates-version-available",
+});
+
 function orderBy(items, preferredOrder, valueFor) {
   const ranks = new Map(preferredOrder.map((value, index) => [value, index]));
   return items.sort((left, right) => {
@@ -55,7 +99,7 @@ export function parseReleaseNotes(source) {
 
     if (line.startsWith("- ")) {
       if (!section) {
-        section = { heading: "Highlights", bullets: [], paragraphs: [] };
+        section = { heading: I18n.t("updates-notes-highlights"), bullets: [], paragraphs: [] };
         document.sections.push(section);
       }
       section.bullets.push(line.slice(2).trim());
@@ -83,31 +127,35 @@ export function createUpdatesView(Utils) {
     `;
   }
 
+  const versionText = (version) => I18n.t("updates-version-number", { version });
+
   function updateSize(update) {
     return Utils.formatBytes(
       update?.kind === "core" ? update.core?.size : update?.file_size,
-      "unknown size"
+      I18n.t("updates-size-unknown")
     );
   }
 
   function describeKind(update) {
-    const size = updateSize(update);
-    return update?.kind === "core"
-      ? `Core update · ${size} · short restart`
-      : `Desktop update · ${size} · installer required`;
+    return I18n.label(UPDATE_KIND_LABELS, update?.kind === "core" ? "core" : "full", {
+      size: updateSize(update),
+    });
   }
 
   function progressBar(progress, indeterminate, label) {
     const width = Math.max(0, Math.min(100, Math.round(progress.progress_percent || 0)));
-    const transferred = `${Utils.formatBytes(progress.bytes_downloaded || 0)} of ${Utils.formatBytes(
-      progress.total_bytes || 0
-    )}`;
-    const valueText = indeterminate ? label : `${label}, ${width}%, ${transferred}`;
-
+    const percent = Utils.formatPercentValue(width, { decimals: 0, includeSign: false });
+    const transferred = I18n.t("updates-progress-transferred", {
+      done: Utils.formatBytes(progress.bytes_downloaded || 0),
+      total: Utils.formatBytes(progress.total_bytes || 0),
+    });
+    const valueText = indeterminate
+      ? label
+      : I18n.t("updates-progress-value-text", { label, transferred, percent });
     return `
       <div class="updates-progress-copy">
         <span>${escape(label)}</span>
-        ${indeterminate ? "" : `<span>${escape(transferred)} · ${width}%</span>`}
+        ${indeterminate ? "" : `<span>${escape(I18n.t("updates-progress-summary", { transferred, percent }))}</span>`}
       </div>
       <div class="updates-progress${indeterminate ? " is-indeterminate" : ""}"
         role="progressbar" aria-label="${escape(label)}" aria-valuemin="0" aria-valuemax="100"
@@ -119,24 +167,24 @@ export function createUpdatesView(Utils) {
 
   function detailRows(state, update) {
     const rows = [
-      ["Installed version", `v${state.currentVersion}`],
-      ["System", state.platform || "Unknown"],
+      [I18n.t("updates-detail-installed-version"), versionText(state.currentVersion)],
+      [I18n.t("updates-detail-system"), state.platform || I18n.t("format-unknown")],
       [
-        "Last checked",
+        I18n.t("updates-detail-last-checked"),
         Utils.formatTimestamp(state.last_check || state.last_check_attempt, {
-          fallback: "Never",
+          fallback: I18n.t("updates-detail-never"),
           includeSeconds: false,
         }),
       ],
     ];
 
     if (update) {
-      rows.push(["Available version", `v${update.version}`]);
-      rows.push(["Download size", updateSize(update)]);
+      rows.push([I18n.t("updates-detail-available-version"), versionText(update.version)]);
+      rows.push([I18n.t("updates-detail-download-size"), updateSize(update)]);
     }
 
     return `
-      <dl class="updates-detail-list" aria-label="Installation details">
+      <dl class="updates-detail-list" aria-label="${escape(I18n.t("updates-detail-list-label"))}">
         ${rows
           .map(
             ([label, value]) => `
@@ -155,8 +203,8 @@ export function createUpdatesView(Utils) {
       return `
         <div class="updates-version-flow updates-version-flow--single">
           <div class="updates-version-point">
-            <span>Installed</span>
-            <strong>v${escape(current)}</strong>
+            <span>${escape(I18n.t("updates-version-installed"))}</span>
+            <strong>${escape(versionText(current))}</strong>
           </div>
         </div>
       `;
@@ -165,13 +213,13 @@ export function createUpdatesView(Utils) {
     return `
       <div class="updates-version-flow">
         <div class="updates-version-point">
-          <span>Installed</span>
-          <strong>v${escape(current)}</strong>
+          <span>${escape(I18n.t("updates-version-installed"))}</span>
+          <strong>${escape(versionText(current))}</strong>
         </div>
         <i class="icon-arrow-right" aria-hidden="true"></i>
         <div class="updates-version-point updates-version-point--target">
-          <span>Available</span>
-          <strong>v${escape(update.version)}</strong>
+          <span>${escape(I18n.t("updates-version-available"))}</span>
+          <strong>${escape(versionText(update.version))}</strong>
         </div>
       </div>
     `;
@@ -182,105 +230,95 @@ export function createUpdatesView(Utils) {
     const update = state.available_update;
     const progress = state.download_progress || {};
     const current = state.currentVersion;
-    let headline = "Update status is unavailable";
-    let detail = "The reported update state is not recognized.";
+    const recognized = Object.hasOwn(UPDATE_PHASE_HEADLINE_LABELS, state.phase);
+    // "Updated to vX" names the running build; every other headline names the pending update.
+    const headlineVersion = state.phase === "applied" ? current : update?.version || "";
+    let headline = I18n.t("updates-status-unavailable-headline");
+    let detail = I18n.t("updates-phase-unrecognized-detail");
     let icon = "icon-circle-alert";
     let tone = "warning";
-    let actions = [button("updatesCheck", "Check again", "icon-refresh-cw", "ghost")];
+    let actions = [
+      button("updatesCheck", I18n.t("updates-action-check-again"), "icon-refresh-cw", "ghost"),
+    ];
     let progressHtml = "";
+
+    if (recognized) {
+      headline = I18n.label(UPDATE_PHASE_HEADLINE_LABELS, state.phase, { version: headlineVersion });
+      if (Object.hasOwn(UPDATE_PHASE_DETAIL_LABELS, state.phase)) {
+        detail = I18n.label(UPDATE_PHASE_DETAIL_LABELS, state.phase, { version: current });
+      }
+    }
 
     switch (state.phase) {
       case "idle":
-        headline = "Ready to check for updates";
-        detail = `ScreenerBot v${current} is installed.`;
         icon = "icon-refresh-cw";
         tone = "neutral";
-        actions = [button("updatesCheck", "Check now", "icon-refresh-cw")];
+        actions = [button("updatesCheck", I18n.t("updates-action-check-now"), "icon-refresh-cw")];
         break;
       case "up_to_date":
-        headline = "You are up to date";
-        detail = `ScreenerBot v${current} is the latest version.`;
         icon = "icon-circle-check";
         tone = "success";
-        actions = [button("updatesCheck", "Check again", "icon-refresh-cw", "ghost")];
         break;
       case "checking":
-        headline = "Checking for updates";
-        detail = "Looking for the latest published release.";
         icon = "icon-loader";
         tone = "neutral";
         actions = [];
-        progressHtml = progressBar(progress, true, "Checking for updates");
+        progressHtml = progressBar(progress, true, headline);
         break;
       case "available":
-        headline = `Version ${update?.version || ""} is available`;
         detail = describeKind(update);
         icon = "icon-arrow-down-to-line";
         tone = "primary";
-        actions = [button("updatesDownload", "Download update", "icon-arrow-down-to-line")];
+        actions = [
+          button("updatesDownload", I18n.t("updates-action-download"), "icon-arrow-down-to-line"),
+        ];
         break;
       case "downloading":
-        headline = `Downloading v${update?.version || ""}`;
         detail = describeKind(update);
         icon = "icon-arrow-down-to-line";
         tone = "primary";
         actions = [];
-        progressHtml = progressBar(progress, false, "Downloading update");
+        progressHtml = progressBar(progress, false, I18n.t("updates-progress-downloading"));
         break;
       case "verifying":
-        headline = `Verifying v${update?.version || ""}`;
-        detail = "Checking the download against its published checksum.";
         icon = "icon-shield-check";
         tone = "primary";
         actions = [];
-        progressHtml = progressBar(progress, true, "Verifying update");
+        progressHtml = progressBar(progress, true, I18n.t("updates-progress-verifying"));
         break;
       case "ready_to_apply":
-        headline = `Version ${update?.version || ""} is ready`;
-        detail =
-          I18n.text(state.blocked_reason) ||
-          "The update can be installed now with a short restart, or automatically on the next start.";
+        detail = I18n.text(state.blocked_reason) || detail;
         icon = "icon-circle-check";
         tone = "success";
-        actions = [button("updatesApply", "Restart to update", "icon-refresh-cw")];
+        actions = [button("updatesApply", I18n.t("updates-action-restart"), "icon-refresh-cw")];
         break;
       case "ready_to_install":
-        headline = `Version ${update?.version || ""} is ready`;
-        detail =
-          I18n.text(state.blocked_reason) ||
-          "The desktop installer is ready to finish this update.";
+        detail = I18n.text(state.blocked_reason) || detail;
         icon = "icon-package";
         tone = "primary";
-        actions = [button("updatesInstall", "Open installer", "icon-package")];
+        actions = [button("updatesInstall", I18n.t("updates-action-open-installer"), "icon-package")];
         break;
       case "applying":
-        headline = "Installing update";
-        detail = "ScreenerBot is restarting onto the new version.";
         icon = "icon-loader";
         tone = "primary";
         actions = [];
-        progressHtml = progressBar(progress, true, "Installing update");
+        progressHtml = progressBar(progress, true, headline);
         break;
       case "applied":
-        headline = `Updated to v${current}`;
-        detail = "The update was installed. Nothing else is needed.";
         icon = "icon-circle-check";
         tone = "success";
-        actions = [button("updatesCheck", "Check again", "icon-refresh-cw", "ghost")];
         break;
       case "failed":
-        headline = "The update did not finish";
-        detail = progress.error || "Try the update again.";
+        detail = progress.error || detail;
         icon = "icon-circle-x";
         tone = "error";
-        actions = [button("updatesRetry", "Try again", "icon-refresh-cw")];
+        actions = [button("updatesRetry", I18n.t("updates-action-try-again"), "icon-refresh-cw")];
         break;
       case "check_failed":
-        headline = "Could not check for updates";
-        detail = I18n.text(state.check_error) || "The release service could not be reached.";
+        detail = I18n.text(state.check_error) || detail;
         icon = "icon-circle-alert";
         tone = "error";
-        actions = [button("updatesCheck", "Try again", "icon-refresh-cw")];
+        actions = [button("updatesCheck", I18n.t("updates-action-try-again"), "icon-refresh-cw")];
         break;
     }
 
@@ -328,7 +366,7 @@ export function createUpdatesView(Utils) {
       changeCount: parsed.sections.reduce((total, section) => total + section.bullets.length, 0),
       html:
         intro + sections ||
-        '<p class="updates-release-empty">No changes were listed for this release.</p>',
+        `<p class="updates-release-empty">${escape(I18n.t("updates-release-empty"))}</p>`,
     };
   }
 
@@ -343,16 +381,18 @@ export function createUpdatesView(Utils) {
   function releaseEntryHtml(release, state, expanded) {
     const body = releaseBodyHtml(release);
     const date = Utils.formatDate(release.release_date, { fallback: "" });
-    const tag = { installed: "Installed", available: "Available" }[state];
+    const tag = Object.hasOwn(RELEASE_STATE_LABELS, state)
+      ? I18n.label(RELEASE_STATE_LABELS, state)
+      : "";
     const changes = body.changeCount
-      ? `${body.changeCount} ${body.changeCount === 1 ? "change" : "changes"}`
+      ? I18n.t("updates-release-changes", { count: body.changeCount })
       : "";
 
     return `
       <li class="updates-release-item">
         <details class="updates-release" data-state="${escape(state)}"${expanded ? " open" : ""}>
           <summary class="updates-release-summary">
-            <span class="updates-release-version">v${escape(release.version)}</span>
+            <span class="updates-release-version">${escape(versionText(release.version))}</span>
             ${tag ? `<span class="updates-release-tag">${escape(tag)}</span>` : ""}
             <span class="updates-release-facts">
               ${date ? `<time datetime="${escape(release.release_date)}">${escape(date)}</time>` : ""}
@@ -375,21 +415,17 @@ export function createUpdatesView(Utils) {
    */
   function renderReleaseNotes({ releases, currentVersion, availableVersion, loading, error }) {
     if (loading) {
-      return '<div class="updates-loading">Loading release notes...</div>';
+      return `<div class="updates-loading">${escape(I18n.t("common-loading"))}</div>`;
     }
 
     if (!releases.length) {
       return `
         <div class="updates-empty">
-          <h3>No release notes yet</h3>
+          <h3>${escape(I18n.t("updates-notes-empty-title"))}</h3>
           <p>
-            ${
-              error
-                ? "The release history could not be loaded. Check the connection and try again."
-                : "Release notes will appear here once a release has been published."
-            }
+            ${escape(error ? I18n.t("updates-notes-empty-error") : I18n.t("updates-notes-empty-none"))}
           </p>
-          ${button("updatesNotesRetry", "Try again", "icon-refresh-cw", "ghost")}
+          ${button("updatesNotesRetry", I18n.t("updates-action-try-again"), "icon-refresh-cw", "ghost")}
         </div>
       `;
     }
@@ -414,8 +450,7 @@ export function createUpdatesView(Utils) {
       <div class="updates-history">
         ${
           error
-            ? '<p class="updates-history-notice">Showing what this installation already knows' +
-              " &mdash; the release history could not be loaded.</p>"
+            ? `<p class="updates-history-notice">${escape(I18n.t("updates-notes-history-notice"))}</p>`
             : ""
         }
         <ol class="updates-release-list">
@@ -468,9 +503,9 @@ export function createUpdatesView(Utils) {
     if (!fields.length) {
       return `
         <div class="updates-empty">
-          <h3>Update preferences are unavailable</h3>
-          <p>The update configuration could not be loaded.</p>
-          ${button("updatesPrefsRetry", "Try again", "icon-refresh-cw")}
+          <h3>${escape(I18n.t("updates-preferences-unavailable-title"))}</h3>
+          <p>${escape(I18n.t("updates-preferences-unavailable-detail"))}</p>
+          ${button("updatesPrefsRetry", I18n.t("updates-action-try-again"), "icon-refresh-cw")}
         </div>
       `;
     }

@@ -16,60 +16,41 @@ let instance = null;
 export function buildAccountTab() {
   return `
     <div class="settings-section">
-      <h3 class="settings-section-title">ScreenerBot account</h3>
-      <p class="settings-section-description">
-        Free, and optional. ScreenerBot trades, discovers and charts without an account — it
-        just does it against the public providers. The panel below lists what signing in adds.
-      </p>
+      <h3 class="settings-section-title" data-l10n-id="settings-account-title"></h3>
+      <p class="settings-section-description" data-l10n-id="settings-account-description"></p>
 
       <div class="account-panel" id="settingsAccountPanel"></div>
     </div>
 
     <div class="settings-section">
-      <h3 class="settings-section-title">ScreenerBot data</h3>
-      <p class="settings-section-description">
-        We run a shared market-data service at screenerbot.io: pooled candles across seven
-        timeframes, a resolved pool registry, cached security reports and normalised token
-        identity. It exists so every install is not separately rate limited by the public
-        providers, and using it needs an account so that shared cost has a name against it.
-      </p>
+      <h3 class="settings-section-title" data-l10n-id="settings-account-data-title"></h3>
+      <p class="settings-section-description" data-l10n-id="settings-account-data-description"></p>
       <div class="settings-data-access" id="settingsDataAccess" aria-live="polite"></div>
-      <p class="settings-section-description">
-        When it is unavailable ScreenerBot falls back to the public providers automatically.
-        Nothing stops; charts fill more slowly and carry less history.
-      </p>
+      <p class="settings-section-description" data-l10n-id="settings-account-data-fallback"></p>
     </div>
 
     <div class="settings-section">
-      <h3 class="settings-section-title">Sending transactions</h3>
-      <p class="settings-section-description">
-        When you are signed in, ScreenerBot can broadcast your swaps through screenerbot.io
-        instead of your own RPC. Your bot still builds and signs every transaction on this
-        machine — the server only relays it, and cannot change a signed transaction without
-        invalidating its signature.
-      </p>
+      <h3 class="settings-section-title" data-l10n-id="settings-account-gateway-title"></h3>
+      <p class="settings-section-description" data-l10n-id="settings-account-gateway-description"></p>
 
       <label class="settings-toggle-row">
         <input type="checkbox" id="settingsUseGateway" />
         <span class="settings-toggle-copy">
-          <span class="settings-toggle-title">Use ScreenerBot RPC for sending transactions</span>
-          <span class="settings-toggle-hint">
-            Submission only. Price data always comes from your own RPC — pool polling is far too
-            heavy for a shared endpoint, so it is never sent there.
-          </span>
+          <span class="settings-toggle-title" data-l10n-id="settings-account-gateway-label"></span>
+          <span class="settings-toggle-hint" data-l10n-id="settings-account-gateway-hint"></span>
         </span>
       </label>
     </div>
 
     <div class="settings-section">
-      <h3 class="settings-section-title">Managing your account</h3>
-      <p class="settings-section-description">
-        Your password, email address, connected devices and referral payouts are managed on the
-        website. Revoking a device there signs it out everywhere, including this one.
-      </p>
-      <button type="button" class="account-btn account-btn-ghost" id="settingsOpenDashboard">
-        Open your dashboard
-      </button>
+      <h3 class="settings-section-title" data-l10n-id="settings-account-manage-title"></h3>
+      <p class="settings-section-description" data-l10n-id="settings-account-manage-description"></p>
+      <button
+        type="button"
+        class="account-btn account-btn-ghost"
+        id="settingsOpenDashboard"
+        data-l10n-id="settings-account-open-dashboard"
+      ></button>
     </div>`;
 }
 

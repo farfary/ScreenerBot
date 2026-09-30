@@ -1,5 +1,5 @@
 import { registerPage } from "../core/lifecycle.js";
-import { $, on, off, create, show, hide } from "../core/dom.js";
+import { $, on, off, create, show, hide, setIconLabel } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
 import * as AppState from "../core/app_state.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
@@ -168,26 +168,29 @@ function renderStateMessage() {
 
   if (loading) {
     if (!state.draft) {
-      banner.innerHTML = '<div class="loading-spinner">Loading configuration…</div>';
+      banner.innerHTML = '<div class="loading-spinner" data-l10n-id="system-config-loading"></div>';
       banner.classList.add("initial-loading");
     } else {
-      banner.innerHTML = '<div class="loading-spinner inline">Refreshing configuration…</div>';
+      banner.innerHTML =
+        '<div class="loading-spinner inline" data-l10n-id="system-config-refreshing"></div>';
     }
+    I18n.localizeTree(banner);
     banner.classList.add("loading");
     banner.hidden = false;
     return;
   }
 
   if (saving) {
-    banner.innerHTML = "<strong>Saving changes…</strong><div>Updating configuration</div>";
+    banner.innerHTML =
+      '<strong data-l10n-id="system-config-saving-title"></strong><div data-l10n-id="system-config-saving-detail"></div>';
+    I18n.localizeTree(banner);
     banner.classList.add("loading");
     banner.hidden = false;
     return;
   }
 
   if (errors.size > 0) {
-    banner.innerHTML =
-      "<strong>Validation issues detected.</strong> Please review highlighted fields.";
+    banner.innerHTML = I18n.markup("system-config-validation-issues");
     banner.classList.add("error");
     banner.hidden = false;
     return;
@@ -239,9 +242,13 @@ function renderSidebar() {
 
     labelEl.innerHTML = `<i class="${icon}"></i><span>${Utils.escapeHtml(label)}</span>`;
     const totalFields = summary.total ?? Object.keys(metadata.fields || {}).length;
-    const metaParts = [`<span class="config-section-count">${totalFields}</span>`];
+    const metaParts = [
+      `<span class="config-section-count">${Utils.escapeHtml(totalFields)}</span>`,
+    ];
     if (sectionPending > 0) {
-      metaParts.push(`<span class="config-section-pending">+${sectionPending}</span>`);
+      metaParts.push(
+        `<span class="config-section-pending">+${Utils.escapeHtml(sectionPending)}</span>`
+      );
     }
     metaEl.innerHTML = metaParts.join("");
 
@@ -279,13 +286,15 @@ function renderToolbar(sectionId) {
 
   const sectionChip = create("div", { className: "config-info-chip" });
   sectionChip.innerHTML = sectionPending
-    ? `<strong>${sectionPending}</strong> change${sectionPending === 1 ? "" : "s"} in section`
-    : "No section changes";
+    ? I18n.markup("system-config-toolbar-section-changes", { count: sectionPending })
+    : Utils.escapeHtml(I18n.t("system-config-toolbar-no-changes"));
   toolbar.appendChild(sectionChip);
 
   if (totalPending > sectionPending) {
     const globalChip = create("div", { className: "config-info-chip" });
-    globalChip.innerHTML = `<strong>${totalPending}</strong> total change${totalPending === 1 ? "" : "s"}`;
+    globalChip.innerHTML = I18n.markup("system-config-toolbar-total-changes", {
+      count: totalPending,
+    });
     toolbar.appendChild(globalChip);
   }
 
@@ -295,8 +304,8 @@ function renderToolbar(sectionId) {
   // synced from what is actually on screen by syncExpandToggle(), not from the
   // last bulk action, so it never offers "Collapse all" with nothing expanded.
   expandToggleControl = createExpandToggle({
-    expandTitle: "Expand every section and every nested sub-config",
-    collapseTitle: "Collapse every section and every nested sub-config",
+    expandTitle: I18n.t("system-config-expand-title"),
+    collapseTitle: I18n.t("system-config-collapse-title"),
     onToggle: (expanded) => {
       if (expanded) {
         expandAllCategories();
@@ -348,7 +357,7 @@ function renderHeader(sectionId) {
 
   if (!sectionId) {
     const empty = create("div", { className: "config-section-title" });
-    empty.innerHTML = "Select a configuration section";
+    empty.textContent = I18n.t("system-config-select-section");
     header.appendChild(empty);
     return;
   }
@@ -356,7 +365,7 @@ function renderHeader(sectionId) {
   const metadata = state.metadata?.[sectionId];
   if (!metadata) {
     const missing = create("div", { className: "config-section-title" });
-    missing.innerHTML = `No metadata for <code>${Utils.escapeHtml(sectionId)}</code>`;
+    missing.innerHTML = I18n.markup("system-config-no-metadata", { section: sectionId });
     header.appendChild(missing);
     return;
   }
@@ -381,7 +390,9 @@ function renderHeader(sectionId) {
     className: "config-header-action primary",
     disabled: state.saving || state.pendingChanges.size === 0,
   });
-  saveBtn.textContent = state.saving ? "Saving…" : "Save Changes";
+  saveBtn.textContent = state.saving
+    ? I18n.t("system-config-saving")
+    : I18n.t("system-config-save-changes");
   on(saveBtn, "click", handleSaveAll);
   actions.appendChild(saveBtn);
 
@@ -390,7 +401,7 @@ function renderHeader(sectionId) {
     className: "config-header-action ghost",
     disabled: state.loading,
   });
-  reloadBtn.textContent = "Reload from Disk";
+  reloadBtn.textContent = I18n.t("system-config-reload");
   on(reloadBtn, "click", handleReload);
   actions.appendChild(reloadBtn);
 
@@ -398,7 +409,7 @@ function renderHeader(sectionId) {
     type: "button",
     className: "config-header-action ghost",
   });
-  diffBtn.textContent = "Compare with Disk";
+  diffBtn.textContent = I18n.t("system-config-compare");
   on(diffBtn, "click", handleDiff);
   actions.appendChild(diffBtn);
 
@@ -409,7 +420,7 @@ function renderHeader(sectionId) {
     className: "config-header-action destructive",
     disabled: state.saving || !hasSectionChanges(sectionId),
   });
-  revertBtn.textContent = "Revert Section";
+  revertBtn.textContent = I18n.t("system-config-revert-section");
   on(revertBtn, "click", () => {
     revertSection(sectionId);
   });
@@ -428,23 +439,25 @@ function renderSectionSummary(metadata) {
     }
     if (typeof metadata.summary.critical === "number" && metadata.summary.critical > 0) {
       summaryItems.push(
-        `<span class="config-summary-badge warning">${metadata.summary.critical} critical</span>`
+        `<span class="config-summary-badge warning">${Utils.escapeHtml(I18n.t("system-config-summary-critical", { count: metadata.summary.critical }))}</span>`
       );
     }
     if (typeof metadata.summary.performance === "number" && metadata.summary.performance > 0) {
       summaryItems.push(
-        `<span class="config-summary-badge positive">${metadata.summary.performance} performance</span>`
+        `<span class="config-summary-badge positive">${Utils.escapeHtml(I18n.t("system-config-summary-performance", { count: metadata.summary.performance }))}</span>`
       );
     }
   }
   const pending = countPendingChanges(metadata.id);
   if (pending > 0) {
     summaryItems.push(
-      `<span class="config-summary-badge warning">${pending} pending change${pending === 1 ? "" : "s"}</span>`
+      `<span class="config-summary-badge warning">${Utils.escapeHtml(I18n.t("system-config-summary-pending", { count: pending }))}</span>`
     );
   }
   if (!summaryItems.length) {
-    summaryItems.push('<span class="config-summary-badge">No metadata summary</span>');
+    summaryItems.push(
+      `<span class="config-summary-badge">${Utils.escapeHtml(I18n.t("system-config-summary-none"))}</span>`
+    );
   }
   return summaryItems.join("\n");
 }
@@ -469,9 +482,28 @@ function sortCategoriesByVisibility(categories) {
   });
 }
 
-/** "1 field" / "3 fields". */
 function fieldCountLabel(count) {
-  return `${count} ${count === 1 ? "field" : "fields"}`;
+  return I18n.t("system-config-fields-count", { count });
+}
+
+/**
+ * Text of a category chip: the field count, with the pending edits or with
+ * how many fields the search leaves visible.
+ */
+function categoryChipText(totalCount, pendingCount, visibleCount) {
+  if (typeof visibleCount === "number" && visibleCount !== totalCount) {
+    return I18n.t("system-config-chip-visible", {
+      visible: visibleCount,
+      fields: fieldCountLabel(totalCount),
+    });
+  }
+  if (pendingCount > 0) {
+    return I18n.t("system-config-chip-pending", {
+      fields: fieldCountLabel(totalCount),
+      pending: pendingCount,
+    });
+  }
+  return fieldCountLabel(totalCount);
 }
 
 /**
@@ -493,16 +525,8 @@ function createVisibilitySeparator(label) {
 function updateCategoryChip(categoryEl, totalCount, pendingCount, visibleCount) {
   const chipEl = categoryEl?.querySelector(".config-category-chip");
   if (!chipEl) return;
-  if (pendingCount > 0) {
-    chipEl.classList.add("pending");
-    chipEl.textContent = `${fieldCountLabel(totalCount)} · ${pendingCount} pending`;
-  } else {
-    chipEl.classList.remove("pending");
-    chipEl.textContent = `${fieldCountLabel(totalCount)}`;
-  }
-  if (typeof visibleCount === "number" && visibleCount !== totalCount) {
-    chipEl.textContent = `${visibleCount} of ${fieldCountLabel(totalCount)}`;
-  }
+  chipEl.classList.toggle("pending", pendingCount > 0);
+  chipEl.textContent = categoryChipText(totalCount, pendingCount, visibleCount);
 }
 
 function renderCategories(sectionId) {
@@ -514,7 +538,7 @@ function renderCategories(sectionId) {
 
   if (!sectionId || !state.metadata?.[sectionId]) {
     const empty = create("div", { className: "config-state" });
-    empty.innerHTML = "Select a configuration section to view details.";
+    empty.textContent = I18n.t("system-config-select-section-details");
     container.appendChild(empty);
     return;
   }
@@ -554,7 +578,7 @@ function renderCategories(sectionId) {
 
     // Add separator before technical categories
     if (categoryVisibility === "technical" && lastVisibility !== "technical") {
-      container.appendChild(createVisibilitySeparator("Technical Settings"));
+      container.appendChild(createVisibilitySeparator(I18n.t("system-config-technical-settings")));
     }
     lastVisibility = categoryVisibility;
 
@@ -722,13 +746,8 @@ function renderCategories(sectionId) {
     // Update chip to show pending changes if any
     const chipEl = header.querySelector(".config-category-chip");
     if (chipEl) {
-      if (pendingCount > 0) {
-        chipEl.classList.add("pending");
-        chipEl.textContent = `${fieldCountLabel(fieldsList.length)} · ${pendingCount} pending`;
-      } else {
-        chipEl.classList.remove("pending");
-        chipEl.textContent = `${fieldCountLabel(fieldsList.length)}`;
-      }
+      chipEl.classList.toggle("pending", pendingCount > 0);
+      chipEl.textContent = categoryChipText(fieldsList.length, pendingCount);
     }
 
     // Check if category matches search term directly
@@ -745,7 +764,7 @@ function renderCategories(sectionId) {
     if (searchTerm.length > 0 && visibleFieldCount !== fieldsList.length) {
       const chipEl = header.querySelector(".config-category-chip");
       if (chipEl) {
-        chipEl.textContent = `${visibleFieldCount} of ${fieldCountLabel(fieldsList.length)}`;
+        chipEl.textContent = categoryChipText(fieldsList.length, 0, visibleFieldCount);
       }
     }
 
@@ -788,28 +807,31 @@ async function renderTelegramActions(container) {
   actionsPanel.innerHTML = `
     <div class="config-actions-header">
       <i class="icon-send"></i>
-      <span>Actions</span>
+      <span data-l10n-id="system-config-telegram-actions"></span>
       ${overviewHintHtml}
     </div>
     <div class="config-actions-body">
       <div class="config-action-item">
         <div class="config-action-info">
-          <div class="config-action-title">Test Connection</div>
-          <div class="config-action-desc">Send a test message to verify your Telegram configuration is working</div>
+          <div class="config-action-title" data-l10n-id="system-config-telegram-test-title"></div>
+          <div class="config-action-desc" data-l10n-id="system-config-telegram-test-description"></div>
         </div>
-        <button type="button" class="btn primary" id="telegram-test-btn" disabled title="Loading...">
-          <i class="icon-loader spin"></i> Loading...
-        </button>
+        <button type="button" class="btn primary" id="telegram-test-btn" disabled></button>
       </div>
       <div class="config-action-status" id="telegram-status" role="status" aria-live="polite"></div>
     </div>
   `;
 
+  I18n.localizeTree(actionsPanel);
   container.appendChild(actionsPanel);
 
   // Wire up test button
   const testBtn = actionsPanel.querySelector("#telegram-test-btn");
   const statusEl = actionsPanel.querySelector("#telegram-status");
+  testBtn.title = I18n.t("common-loading");
+  setIconLabel(testBtn, "icon-loader spin", I18n.t("common-loading"));
+  const showSendLabel = () =>
+    setIconLabel(testBtn, "icon-send", I18n.t("system-config-telegram-send-test"));
 
   // Check if Telegram is configured before enabling test button
   try {
@@ -820,23 +842,25 @@ async function renderTelegramActions(container) {
     if (isConfigured) {
       testBtn.disabled = false;
       testBtn.title = "";
-      testBtn.innerHTML = '<i class="icon-send"></i> Send Test Message';
+      showSendLabel();
     } else {
       testBtn.disabled = true;
-      testBtn.title = "Configure bot token first";
-      testBtn.innerHTML = '<i class="icon-send"></i> Send Test Message';
+      testBtn.title = I18n.t("system-config-telegram-configure-token-title");
+      showSendLabel();
       statusEl.className = "config-action-status info";
-      statusEl.innerHTML = '<i class="icon-info"></i> Configure bot token above to enable testing';
+      const icon = document.createElement("i");
+      icon.className = "icon-info";
+      statusEl.replaceChildren(icon, " ", I18n.t("system-config-telegram-configure-token-status"));
     }
   } catch {
     testBtn.disabled = false;
     testBtn.title = "";
-    testBtn.innerHTML = '<i class="icon-send"></i> Send Test Message';
+    showSendLabel();
   }
 
   on(testBtn, "click", async () => {
     testBtn.disabled = true;
-    testBtn.innerHTML = '<i class="icon-loader spin"></i> Sending...';
+    setIconLabel(testBtn, "icon-loader spin", I18n.t("system-config-telegram-sending"));
     statusEl.className = "config-action-status";
     statusEl.textContent = "";
 
@@ -849,11 +873,12 @@ async function renderTelegramActions(container) {
 
       if (response.ok) {
         statusEl.className = "config-action-status success";
-        statusEl.innerHTML =
-          '<i class="icon-circle-check"></i> Test message sent successfully! Check your Telegram.';
-        Utils.showToast("Telegram test message sent", "success");
+        const icon = document.createElement("i");
+        icon.className = "icon-circle-check";
+        statusEl.replaceChildren(icon, " ", I18n.t("system-config-telegram-test-sent-status"));
+        Utils.showToast(I18n.t("system-config-telegram-test-sent"), "success");
       } else {
-        throw new Error(apiErrorMessage(data, "Failed to send test message"));
+        throw new Error(apiErrorMessage(data, I18n.t("system-config-telegram-test-failed")));
       }
     } catch (error) {
       statusEl.className = "config-action-status error";
@@ -861,7 +886,7 @@ async function renderTelegramActions(container) {
       Utils.showToast(error.message, "error");
     } finally {
       testBtn.disabled = false;
-      testBtn.innerHTML = '<i class="icon-send"></i> Send Test Message';
+      showSendLabel();
     }
   });
 
@@ -895,33 +920,35 @@ async function renderTelegramAuthSection(container) {
 
   const statusIcon = totpConfigured ? "icon-circle-check" : "icon-circle-alert";
   const statusClass = totpConfigured ? "status-success" : "status-warning";
-  const statusText = totpConfigured ? "Configured" : "Not Configured";
+  const statusText = totpConfigured
+    ? I18n.t("system-config-telegram-totp-configured")
+    : I18n.t("system-config-telegram-totp-not-configured");
 
   authPanel.innerHTML = `
     <div class="config-actions-header">
       <i class="icon-shield"></i>
-      <span>Bot Authentication</span>
+      <span data-l10n-id="system-config-telegram-auth-title"></span>
     </div>
     <div class="config-actions-body">
       <div class="telegram-auth-subsection">
         <div class="telegram-auth-header">
           <div class="telegram-auth-title">
             <i class="icon-key"></i>
-            <span>Two-Factor Authentication (TOTP)</span>
+            <span data-l10n-id="system-config-telegram-totp-title"></span>
           </div>
           <div class="telegram-auth-status">
-            <span class="${statusClass}"><i class="${statusIcon}"></i> ${statusText}</span>
+            <span class="${statusClass}"><i class="${statusIcon}"></i> ${Utils.escapeHtml(statusText)}</span>
           </div>
         </div>
         <div class="telegram-auth-content">
           <div class="telegram-auth-row">
             <div class="telegram-auth-info">
-              <span>${
+              <span>${Utils.escapeHtml(
                 totpConfigured
-                  ? "Two-factor authentication is active. Expired Telegram sessions require TOTP code from your authenticator app."
-                  : "Enable two-factor authentication in Security settings to protect Telegram commands."
-              }</span>
-              <p class="telegram-auth-note"><i class="icon-info"></i> TOTP is shared with the dashboard lockscreen. Configure it in Security settings.</p>
+                  ? I18n.t("system-config-telegram-totp-active")
+                  : I18n.t("system-config-telegram-totp-inactive")
+              )}</span>
+              <p class="telegram-auth-note"><i class="icon-info"></i> <span data-l10n-id="system-config-telegram-totp-note"></span></p>
             </div>
           </div>
           <div class="telegram-auth-row telegram-auth-actions">
@@ -930,7 +957,7 @@ async function renderTelegramAuthSection(container) {
                 <input type="checkbox" id="telegram-require-2fa-toggle" ${commandsRequire2fa ? "checked" : ""} ${!totpConfigured ? "disabled" : ""}>
                 <span class="toggle-track"></span>
               </label>
-              <span>Require 2FA for commands</span>
+              <span data-l10n-id="system-config-telegram-require-2fa"></span>
             </div>
           </div>
         </div>
@@ -938,6 +965,7 @@ async function renderTelegramAuthSection(container) {
     </div>
   `;
 
+  I18n.localizeTree(authPanel);
   container.appendChild(authPanel);
 
   // Wire up the toggle
@@ -954,14 +982,16 @@ async function renderTelegramAuthSection(container) {
         // rejected save was previously silent TOO, which left the toggle
         // showing a value the backend had refused.
         if (!response.ok) {
-          throw new Error(`Save rejected (${response.status})`);
+          throw new Error(
+            I18n.t("system-config-telegram-save-rejected", { status: response.status })
+          );
         }
       } catch (error) {
         toggle.checked = !toggle.checked; // Revert
         Utils.showToast({
           key: "telegram-setting",
           type: "error",
-          title: "Could not save Telegram setting",
+          title: I18n.t("system-config-telegram-save-failed"),
           message: error?.message || null,
         });
       }
@@ -1032,14 +1062,14 @@ async function handleSaveAll() {
       });
     }
 
-    Utils.showToast({ type: "success", title: "Configuration saved" });
+    Utils.showToast({ type: "success", title: I18n.t("system-config-saved") });
     await loadConfig();
   } catch (error) {
     console.error("[Config] Save failed", error);
     Utils.showToast({
       key: "config-save",
       type: "error",
-      title: "Could not save configuration",
+      title: I18n.t("system-config-save-failed"),
       message: error.message || null,
     });
   } finally {
@@ -1057,14 +1087,14 @@ async function handleReload() {
       method: "POST",
       priority: "high",
     });
-    Utils.showToast({ type: "success", title: "Configuration reloaded from disk" });
+    Utils.showToast({ type: "success", title: I18n.t("system-config-reloaded") });
     await loadConfig();
   } catch (error) {
     console.error("[Config] Reload failed", error);
     Utils.showToast({
       key: "config-save",
       type: "error",
-      title: "Could not reload configuration",
+      title: I18n.t("system-config-reload-failed"),
       message: error.message || null,
     });
   } finally {
@@ -1080,15 +1110,15 @@ async function handleDiff() {
     const message = I18n.text(payload?.text) || apiErrorMessage(payload);
     Utils.showToast({
       type: "info",
-      title: "Configuration diff",
-      message: message || "Written to the browser console",
+      title: I18n.t("system-config-diff-title"),
+      message: message || I18n.t("system-config-diff-console"),
     });
     console.info("Config diff:", payload);
   } catch (error) {
     console.error("[Config] Diff failed", error);
     Utils.showToast({
       type: "error",
-      title: "Could not calculate diff",
+      title: I18n.t("system-config-diff-failed"),
       message: error.message || null,
     });
   }
@@ -1096,11 +1126,10 @@ async function handleDiff() {
 
 async function handleResetToDefaults() {
   const { confirmed } = await ConfirmationDialog.show({
-    title: "Reset Configuration",
-    message:
-      "This will reset the entire configuration to embedded default values. All current settings will be lost.\n\nThis action cannot be undone.",
-    confirmLabel: "Reset to Defaults",
-    cancelLabel: "Cancel",
+    title: I18n.t("system-config-reset-title"),
+    message: I18n.t("system-config-reset-message"),
+    confirmLabel: I18n.t("system-config-reset-defaults"),
+    cancelLabel: I18n.t("common-action-cancel"),
     variant: "danger",
   });
 
@@ -1114,15 +1143,15 @@ async function handleResetToDefaults() {
     });
     Utils.showToast({
       type: "warning",
-      title: "Configuration reset",
-      message: "All settings restored to default values",
+      title: I18n.t("system-config-reset-done-title"),
+      message: I18n.t("system-config-reset-done-message"),
     });
     await loadConfig();
   } catch (error) {
     console.error("[Config] Reset failed", error);
     Utils.showToast({
       type: "error",
-      title: "Could not reset configuration",
+      title: I18n.t("system-config-reset-failed"),
       message: error.message || null,
     });
   }
@@ -1159,7 +1188,7 @@ async function loadConfig() {
     Utils.showToast({
       key: "config-load",
       type: "error",
-      title: "Could not load configuration",
+      title: I18n.t("system-config-load-failed"),
       message: error.message || null,
     });
   } finally {
@@ -1275,7 +1304,7 @@ async function loadInitialConfiguration() {
     Utils.showToast({
       key: "config-load",
       type: "error",
-      title: "Could not load configuration metadata",
+      title: I18n.t("system-config-metadata-failed"),
       message: error.message || null,
     });
   }

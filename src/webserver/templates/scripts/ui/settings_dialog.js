@@ -635,6 +635,7 @@ export class SettingsDialog {
         break;
       case "navigation":
         content.innerHTML = buildNavigationTab(this.settings);
+        I18n.localizeTree(content);
         attachNavigationHandlers(this, content);
         break;
       case "startup":
@@ -645,10 +646,12 @@ export class SettingsDialog {
         break;
       case "hints":
         content.innerHTML = buildHintsTab();
+        I18n.localizeTree(content);
         attachHintsHandlers(this, content);
         break;
       case "data":
         content.innerHTML = buildDataTab();
+        I18n.localizeTree(content);
         attachDataHandlers(this, content, this.pathsInfo);
         break;
       case "security":
@@ -656,6 +659,7 @@ export class SettingsDialog {
         break;
       case "account":
         content.innerHTML = buildAccountTab();
+        I18n.localizeTree(content);
         attachAccountHandlers();
         break;
       case "telegram":
@@ -666,10 +670,12 @@ export class SettingsDialog {
         break;
       case "updates":
         content.innerHTML = buildUpdatesTab(this.versionInfo);
+        I18n.localizeTree(content);
         attachUpdatesHandlers(content, (available) => this._setUpdateBadge(available));
         break;
       case "licenses":
         content.innerHTML = buildLicensesTab();
+        I18n.localizeTree(content);
         attachLicensesHandlers(content);
         break;
       case "about":

@@ -3,9 +3,17 @@
  * Extracted from settings_dialog.js
  */
 import * as Utils from "../../core/utils.js";
+import { setIconLabel } from "../../core/dom.js";
 import { formatSizeAt } from "../../core/format.js";
 import { ConfirmationDialog } from "../confirmation_dialog.js";
 import { apiErrorMessage } from "../../core/request_manager.js";
+
+// Ids are the keys of the preset table in `applyPreset`.
+const TRADING_PRESET_LABELS = Object.freeze({
+  conservative: "settings-data-preset-conservative",
+  moderate: "settings-data-preset-moderate",
+  aggressive: "settings-data-preset-aggressive",
+});
 
 /**
  * Build Data tab HTML
@@ -16,20 +24,18 @@ export function buildDataTab() {
       <div class="settings-section">
         <h3 class="settings-section-title">
           <i class="icon-database"></i>
-          Database Storage
+          <span data-l10n-id="settings-data-storage-title"></span>
         </h3>
-        <p class="settings-section-description">
-          Overview of all databases storing your trading data, positions, and historical information.
-        </p>
-        
+        <p class="settings-section-description" data-l10n-id="settings-data-storage-description"></p>
+
         <div class="data-overview-card" id="dataOverviewCard">
-          <div class="data-stats-loading"><i class="icon-loader"></i> Loading database statistics...</div>
+          <div class="data-stats-loading"><i class="icon-loader"></i> <span data-l10n-id="settings-data-stats-loading"></span></div>
         </div>
 
         <div class="config-info-box">
           <div class="config-info-item">
-            <span class="config-info-label">Data Directory</span>
-            <span class="config-info-value" id="dataPathDisplay">Loading...</span>
+            <span class="config-info-label" data-l10n-id="settings-data-directory-label"></span>
+            <span class="config-info-value" id="dataPathDisplay" data-l10n-id="common-loading"></span>
           </div>
         </div>
       </div>
@@ -38,33 +44,31 @@ export function buildDataTab() {
       <div class="settings-section">
         <h3 class="settings-section-title">
           <i class="icon-settings"></i>
-          Configuration Management
+          <span data-l10n-id="settings-data-config-title"></span>
         </h3>
-        <p class="settings-section-description">
-          Export, import, and manage your bot configuration. Keep backups before making major changes.
-        </p>
-        
+        <p class="settings-section-description" data-l10n-id="settings-data-config-description"></p>
+
         <div class="settings-group">
           <div class="config-actions-row">
             <button id="exportConfigBtn" class="btn btn-primary">
               <i class="icon-download"></i>
-              Export Config
+              <span data-l10n-id="settings-data-config-export"></span>
             </button>
             <button id="importConfigBtn" class="btn btn-secondary">
               <i class="icon-upload"></i>
-              Import Config
+              <span data-l10n-id="settings-data-config-import"></span>
             </button>
             <button id="resetConfigBtn" class="btn btn-warning">
               <i class="icon-refresh-cw"></i>
-              Reset to Defaults
+              <span data-l10n-id="settings-data-config-reset"></span>
             </button>
           </div>
           <input type="file" id="configFileInput" accept=".json,.toml" style="display: none;" />
-          
+
           <div class="config-info-box">
             <div class="config-info-item">
-              <span class="config-info-label">Config Location</span>
-              <span class="config-info-value" id="configPathDisplay">Loading...</span>
+              <span class="config-info-label" data-l10n-id="settings-data-config-location-label"></span>
+              <span class="config-info-value" id="configPathDisplay" data-l10n-id="common-loading"></span>
             </div>
           </div>
         </div>
@@ -74,71 +78,61 @@ export function buildDataTab() {
       <div class="settings-section">
         <h3 class="settings-section-title">
           <i class="icon-trash-2"></i>
-          Data Cleanup
+          <span data-l10n-id="settings-data-cleanup-title"></span>
         </h3>
-        <p class="settings-section-description">
-          Free up disk space by removing old or unused data. These actions cannot be undone.
-        </p>
-        
+        <p class="settings-section-description" data-l10n-id="settings-data-cleanup-description"></p>
+
         <div class="settings-group">
           <div class="settings-field">
             <div class="settings-field-info">
-              <label>OHLCV Data Cleanup</label>
-              <span class="settings-field-hint">
-                Remove candlestick data for tokens that haven't been active for the specified time.
-              </span>
+              <label data-l10n-id="settings-data-ohlcv-cleanup-label"></label>
+              <span class="settings-field-hint" data-l10n-id="settings-data-ohlcv-cleanup-hint"></span>
             </div>
             <div class="settings-field-control data-action-group">
               <input type="number" id="cleanupHours" class="settings-input small" value="24" min="1" max="720" />
-              <span class="input-unit">hours</span>
+              <span class="input-unit" data-l10n-id="settings-data-cleanup-hours-unit"></span>
               <button id="cleanupOhlcvBtn" class="btn btn-warning btn-sm">
                 <i class="icon-trash-2"></i>
-                Cleanup OHLCV
+                <span data-l10n-id="settings-data-cleanup-ohlcv"></span>
               </button>
             </div>
           </div>
-          
+
           <div class="settings-field">
             <div class="settings-field-info">
-              <label>Clear All OHLCV Cache</label>
-              <span class="settings-field-hint">
-                Wipe all cached candlestick data and re-fetch every monitored token from scratch. Use if charts look wrong or after a data logic update.
-              </span>
+              <label data-l10n-id="settings-data-cache-clear-label"></label>
+              <span class="settings-field-hint" data-l10n-id="settings-data-cache-clear-hint"></span>
             </div>
             <div class="settings-field-control">
               <button id="clearOhlcvCacheBtn" class="btn btn-warning btn-sm">
                 <i class="icon-trash-2"></i>
-                Clear OHLCV Cache
+                <span data-l10n-id="settings-data-cache-clear"></span>
               </button>
             </div>
           </div>
 
           <div class="settings-field">
             <div class="settings-field-info">
-              <label>UI State Cache</label>
-              <span class="settings-field-hint">
-                Clear saved table preferences, filter states, and view settings.
-              </span>
+              <label data-l10n-id="settings-data-ui-cache-label"></label>
+              <span class="settings-field-hint" data-l10n-id="settings-data-ui-cache-hint"></span>
             </div>
             <div class="settings-field-control">
               <button id="clearUiStateBtn" class="btn btn-secondary btn-sm">
                 <i class="icon-refresh-cw"></i>
-                Clear UI Cache
+                <span data-l10n-id="settings-data-ui-cache-clear"></span>
               </button>
             </div>
           </div>
 
           <div class="settings-field">
             <div class="settings-field-info">
-              <label>Open Data Folder</label>
-              <span class="settings-field-hint">
-                Open the folder containing all ScreenerBot data in your file manager.
-              </span>
+              <label data-l10n-id="settings-data-folder-label"></label>
+              <span class="settings-field-hint" data-l10n-id="settings-data-folder-hint"></span>
             </div>
             <div class="settings-field-control">
               <button id="openDataFolderBtn" class="btn btn-secondary btn-sm">
                 <i class="icon-folder"></i>
-                Open Folder
+                <span data-l10n-id="settings-data-folder-open"></span>
               </button>
             </div>
           </div>
@@ -156,18 +150,19 @@ function bindPathRow(content, selector, path, label) {
   if (!row) return;
 
   if (!path) {
-    row.textContent = "Unavailable";
+    row.textContent = I18n.t("settings-data-path-unavailable");
     return;
   }
 
   row.textContent = path;
-  row.title = "Click to copy path";
+  row.dir = "ltr";
+  row.title = I18n.t("settings-data-path-copy-title");
   row.addEventListener("click", async () => {
     try {
       await Utils.copyToClipboard(path);
       Utils.notifyCopied(label);
     } catch {
-      Utils.showToast("Failed to copy path", "error");
+      Utils.showToast(I18n.t("settings-data-path-copy-failed"), "error");
     }
   });
 }
@@ -182,8 +177,18 @@ export function attachDataHandlers(dialog, content, pathsInfo) {
   /* Both locations are click-to-copy rows of the same component. This tab is
      their only home: About used to print the data directory a second time,
      with a second #openDataFolderBtn of its own. */
-  bindPathRow(content, "#dataPathDisplay", pathsInfo?.data_directory, "Data directory");
-  bindPathRow(content, "#configPathDisplay", pathsInfo?.config_path, "Config path");
+  bindPathRow(
+    content,
+    "#dataPathDisplay",
+    pathsInfo?.data_directory,
+    I18n.t("settings-data-directory-copied")
+  );
+  bindPathRow(
+    content,
+    "#configPathDisplay",
+    pathsInfo?.config_path,
+    I18n.t("settings-data-config-path-copied")
+  );
 
   // Export config button
   const exportBtn = content.querySelector("#exportConfigBtn");
@@ -231,21 +236,21 @@ export function attachDataHandlers(dialog, content, pathsInfo) {
     cleanupBtn.addEventListener("click", async () => {
       const hours = parseInt(hoursInput.value, 10);
       if (isNaN(hours) || hours < 1) {
-        Utils.showToast("Invalid hours value", "error");
+        Utils.showToast(I18n.t("settings-data-cleanup-hours-invalid"), "error");
         return;
       }
 
       const confirmResult = await ConfirmationDialog.show({
-        title: "Delete OHLCV Data",
-        message: `Delete OHLCV data for tokens inactive for more than ${hours} hours?`,
-        confirmLabel: "Delete",
-        cancelLabel: "Cancel",
+        title: I18n.t("settings-data-cleanup-confirm-title"),
+        message: I18n.t("settings-data-cleanup-confirm-message", { hours }),
+        confirmLabel: I18n.t("common-action-delete"),
+        cancelLabel: I18n.t("common-action-cancel"),
         variant: "danger",
       });
       if (!confirmResult.confirmed) return;
 
       cleanupBtn.disabled = true;
-      cleanupBtn.innerHTML = '<i class="icon-loader spin"></i> Cleaning...';
+      setIconLabel(cleanupBtn, "icon-loader spin", I18n.t("settings-data-cleanup-running"));
 
       try {
         const response = await fetch("/api/ohlcv/cleanup", {
@@ -256,16 +261,22 @@ export function attachDataHandlers(dialog, content, pathsInfo) {
 
         if (response.ok) {
           const data = await response.json();
-          Utils.showToast(`Cleaned up ${data.deleted_count} inactive tokens`, "success");
+          Utils.showToast(
+            I18n.t("settings-data-cleanup-done", { count: data.deleted_count }),
+            "success"
+          );
           loadDataOverview(content);
         } else {
-          Utils.showToast("Cleanup failed", "error");
+          Utils.showToast(I18n.t("settings-data-cleanup-failed"), "error");
         }
       } catch (err) {
-        Utils.showToast("Cleanup failed: " + err.message, "error");
+        Utils.showToast(
+          I18n.t("settings-data-cleanup-failed-detail", { message: err.message }),
+          "error"
+        );
       } finally {
         cleanupBtn.disabled = false;
-        cleanupBtn.innerHTML = '<i class="icon-trash-2"></i> Cleanup OHLCV';
+        setIconLabel(cleanupBtn, "icon-trash-2", I18n.t("settings-data-cleanup-ohlcv"));
       }
     });
   }
@@ -275,35 +286,40 @@ export function attachDataHandlers(dialog, content, pathsInfo) {
   if (clearOhlcvBtn) {
     clearOhlcvBtn.addEventListener("click", async () => {
       const confirmResult = await ConfirmationDialog.show({
-        title: "Clear All OHLCV Cache",
-        message:
-          "Wipe all cached candlestick data for every token? Monitored tokens will re-fetch their history from scratch. This cannot be undone.",
-        confirmLabel: "Clear",
-        cancelLabel: "Cancel",
+        title: I18n.t("settings-data-cache-confirm-title"),
+        message: I18n.t("settings-data-cache-confirm-message"),
+        confirmLabel: I18n.t("common-action-clear"),
+        cancelLabel: I18n.t("common-action-cancel"),
         variant: "danger",
       });
       if (!confirmResult.confirmed) return;
 
       clearOhlcvBtn.disabled = true;
-      clearOhlcvBtn.innerHTML = '<i class="icon-loader spin"></i> Clearing...';
+      setIconLabel(clearOhlcvBtn, "icon-loader spin", I18n.t("settings-data-cache-clearing"));
 
       try {
         const response = await fetch("/api/ohlcv/cache/clear", { method: "POST" });
         if (response.ok) {
           const data = await response.json();
           Utils.showToast(
-            `Cleared ${data.candles_deleted} candles across ${data.tokens_reset} tokens; re-fetching`,
-            "success",
+            I18n.t("settings-data-cache-cleared", {
+              candles: I18n.t("settings-data-candles-count", { count: data.candles_deleted }),
+              tokens: I18n.t("settings-data-tokens-count", { count: data.tokens_reset }),
+            }),
+            "success"
           );
           loadDataOverview(content);
         } else {
-          Utils.showToast("Failed to clear OHLCV cache", "error");
+          Utils.showToast(I18n.t("settings-data-cache-clear-failed"), "error");
         }
       } catch (err) {
-        Utils.showToast("Failed to clear OHLCV cache: " + err.message, "error");
+        Utils.showToast(
+          I18n.t("settings-data-cache-clear-failed-detail", { message: err.message }),
+          "error"
+        );
       } finally {
         clearOhlcvBtn.disabled = false;
-        clearOhlcvBtn.innerHTML = '<i class="icon-trash-2"></i> Clear OHLCV Cache';
+        setIconLabel(clearOhlcvBtn, "icon-trash-2", I18n.t("settings-data-cache-clear"));
       }
     });
   }
@@ -313,11 +329,10 @@ export function attachDataHandlers(dialog, content, pathsInfo) {
   if (clearUiBtn) {
     clearUiBtn.addEventListener("click", async () => {
       const confirmResult = await ConfirmationDialog.show({
-        title: "Clear UI State",
-        message:
-          "Clear all saved UI preferences? This will reset table columns, filters, and view settings.",
-        confirmLabel: "Clear",
-        cancelLabel: "Cancel",
+        title: I18n.t("settings-data-ui-cache-confirm-title"),
+        message: I18n.t("settings-data-ui-cache-confirm-message"),
+        confirmLabel: I18n.t("common-action-clear"),
+        cancelLabel: I18n.t("common-action-cancel"),
         variant: "danger",
       });
       if (!confirmResult.confirmed) return;
@@ -337,7 +352,10 @@ export function attachDataHandlers(dialog, content, pathsInfo) {
       }
 
       keysToRemove.forEach((key) => localStorage.removeItem(key));
-      Utils.showToast(`Cleared ${keysToRemove.length} cached UI settings`, "success");
+      Utils.showToast(
+        I18n.t("settings-data-ui-cache-cleared", { count: keysToRemove.length }),
+        "success"
+      );
     });
   }
 
@@ -350,12 +368,12 @@ export function attachDataHandlers(dialog, content, pathsInfo) {
         // failure needs saying.
         const response = await fetch("/api/system/paths/open-data", { method: "POST" });
         if (!response.ok) {
-          Utils.showToast({ type: "error", title: "Could not open the data folder" });
+          Utils.showToast({ type: "error", title: I18n.t("settings-data-folder-open-failed") });
         }
       } catch (err) {
         Utils.showToast({
           type: "error",
-          title: "Could not open the data folder",
+          title: I18n.t("settings-data-folder-open-failed"),
           message: err.message,
         });
       }
@@ -372,7 +390,7 @@ async function loadDataOverview(content) {
 
   try {
     const response = await fetch("/api/system/data-stats");
-    if (!response.ok) throw new Error("Failed to load stats");
+    if (!response.ok) throw new Error(I18n.t("settings-data-stats-load-failed"));
 
     const data = await response.json();
     const maxSize = Math.max(...data.databases.map((db) => db.size_bytes), 1);
@@ -387,7 +405,7 @@ async function loadDataOverview(content) {
             : formatSizeAt(db.size_bytes / 1024, { unit: "kb", decimals: 0 });
         return `
             <div class="data-db-item">
-              <span class="data-db-name">${db.name}</span>
+              <span class="data-db-name">${Utils.escapeHtml(db.name)}</span>
               <div class="data-db-bar-container">
                 <div class="data-db-bar" style="width: ${percentage}%"></div>
               </div>
@@ -399,7 +417,7 @@ async function loadDataOverview(content) {
 
     card.innerHTML = `
         <div class="data-total-bar">
-          <span class="data-total-label">Total Database Storage</span>
+          <span class="data-total-label">${Utils.escapeHtml(I18n.t("settings-data-total-storage"))}</span>
           <span class="data-total-value">${formatSizeAt(data.total_size_mb, { unit: "mb", decimals: 1 })}</span>
         </div>
         <div class="data-db-list">
@@ -411,10 +429,11 @@ async function loadDataOverview(content) {
     const pathDisplay = content.querySelector("#configPathDisplay");
     if (pathDisplay && data.config_path) {
       pathDisplay.textContent = data.config_path;
+      pathDisplay.dir = "ltr";
       pathDisplay.title = data.config_path;
     }
   } catch {
-    card.innerHTML = '<div class="data-stats-loading">Failed to load database statistics</div>';
+    card.innerHTML = `<div class="data-stats-loading">${Utils.escapeHtml(I18n.t("settings-data-stats-load-failed"))}</div>`;
   }
 }
 
@@ -424,7 +443,7 @@ async function loadDataOverview(content) {
 async function exportConfig() {
   try {
     const response = await fetch("/api/config");
-    if (!response.ok) throw new Error("Failed to fetch config");
+    if (!response.ok) throw new Error(I18n.t("settings-data-config-fetch-failed"));
 
     const config = await response.json();
 
@@ -444,9 +463,12 @@ async function exportConfig() {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 
-    Utils.showToast("Configuration exported", "success");
+    Utils.showToast(I18n.t("settings-data-config-exported"), "success");
   } catch (err) {
-    Utils.showToast("Failed to export config: " + err.message, "error");
+    Utils.showToast(
+      I18n.t("settings-data-config-export-failed", { message: err.message }),
+      "error"
+    );
   }
 }
 
@@ -466,11 +488,10 @@ async function importConfig(event) {
 
     // Confirm import
     const confirmResult = await ConfirmationDialog.show({
-      title: "Import Configuration",
-      message:
-        "Import this configuration? Current settings will be overwritten. Wallet credentials will be preserved.",
-      confirmLabel: "Import",
-      cancelLabel: "Cancel",
+      title: I18n.t("settings-data-config-import-title"),
+      message: I18n.t("settings-data-config-import-message"),
+      confirmLabel: I18n.t("common-action-import"),
+      cancelLabel: I18n.t("common-action-cancel"),
       variant: "warning",
     });
     if (!confirmResult.confirmed) return;
@@ -505,12 +526,12 @@ async function importConfig(event) {
       }
     }
 
-    Utils.showToast(
-      "Configuration imported successfully. Some changes may require restart.",
-      "success",
-    );
+    Utils.showToast(I18n.t("settings-data-config-imported"), "success");
   } catch (err) {
-    Utils.showToast("Failed to import config: " + err.message, "error");
+    Utils.showToast(
+      I18n.t("settings-data-config-import-failed", { message: err.message }),
+      "error"
+    );
   }
 }
 
@@ -519,11 +540,10 @@ async function importConfig(event) {
  */
 async function resetConfig() {
   const confirmResult = await ConfirmationDialog.show({
-    title: "Reset Configuration",
-    message:
-      "Reset all settings to defaults? Your wallet credentials will be preserved, but all other settings will be reset.",
-    confirmLabel: "Reset",
-    cancelLabel: "Cancel",
+    title: I18n.t("settings-data-config-reset-title"),
+    message: I18n.t("settings-data-config-reset-message"),
+    confirmLabel: I18n.t("common-action-reset"),
+    cancelLabel: I18n.t("common-action-cancel"),
     variant: "danger",
   });
   if (!confirmResult.confirmed) return;
@@ -532,13 +552,21 @@ async function resetConfig() {
     const response = await fetch("/api/config/reset", { method: "POST" });
 
     if (response.ok) {
-      Utils.showToast("Configuration reset to defaults", "success");
+      Utils.showToast(I18n.t("settings-data-config-reset-done"), "success");
     } else {
       const data = await response.json();
-      Utils.showToast("Failed to reset config: " + apiErrorMessage(data, "Unknown error"), "error");
+      Utils.showToast(
+        I18n.t("settings-data-config-reset-failed", {
+          message: apiErrorMessage(data, I18n.t("settings-data-unknown-error")),
+        }),
+        "error"
+      );
     }
   } catch (err) {
-    Utils.showToast("Failed to reset config: " + err.message, "error");
+    Utils.showToast(
+      I18n.t("settings-data-config-reset-failed", { message: err.message }),
+      "error"
+    );
   }
 }
 
@@ -590,16 +618,16 @@ async function applyPreset(presetName) {
 
   const preset = presets[presetName];
   if (!preset) {
-    Utils.showToast("Unknown preset", "error");
+    Utils.showToast(I18n.t("settings-data-preset-unknown"), "error");
     return;
   }
 
-  const presetDisplayName = presetName.charAt(0).toUpperCase() + presetName.slice(1);
+  const presetDisplayName = I18n.label(TRADING_PRESET_LABELS, presetName);
   const confirmResult = await ConfirmationDialog.show({
-    title: "Apply Trading Preset",
-    message: `Apply ${presetDisplayName} trading preset? This will update your trader, filtering, and position settings.`,
-    confirmLabel: "Apply",
-    cancelLabel: "Cancel",
+    title: I18n.t("settings-data-preset-title"),
+    message: I18n.t("settings-data-preset-message", { preset: presetDisplayName }),
+    confirmLabel: I18n.t("common-action-apply"),
+    cancelLabel: I18n.t("common-action-cancel"),
     variant: "warning",
   });
   if (!confirmResult.confirmed) return;
@@ -618,8 +646,11 @@ async function applyPreset(presetName) {
       }
     }
 
-    Utils.showToast(`${presetDisplayName} preset applied`, "success");
+    Utils.showToast(I18n.t("settings-data-preset-applied", { preset: presetDisplayName }), "success");
   } catch (err) {
-    Utils.showToast("Failed to apply preset: " + err.message, "error");
+    Utils.showToast(
+      I18n.t("settings-data-preset-failed", { message: err.message }),
+      "error"
+    );
   }
 }

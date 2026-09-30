@@ -92,6 +92,15 @@ export function parseArrayInput(rawText, itemType) {
   return { values: lines, invalid: [] };
 }
 
+// Ids are the serialized `FieldType` values (src/config/metadata.rs) that an array
+// entry can fail to parse as; the Rust test `array_item_messages_exist_in_the_catalog`
+// pins the keys.
+const ARRAY_ITEM_INVALID_LABELS = Object.freeze({
+  integer: "system-config-array-invalid-integer",
+  number: "system-config-array-invalid-number",
+  boolean: "system-config-array-invalid-boolean",
+});
+
 /**
  * Create human-readable error message for invalid array entries.
  * @param {Array<{index: number, value: string}>} invalidEntries - Invalid entries
@@ -102,9 +111,15 @@ export function describeInvalidArrayEntries(invalidEntries, itemType) {
   if (!invalidEntries.length) {
     return "";
   }
-  const lines = invalidEntries.map((entry) => entry.index + 1).join(", ");
-  const typeLabel = itemType === "integer" ? "integer" : itemType || "value";
-  return `Line${invalidEntries.length === 1 ? "" : "s"} ${lines} must be a valid ${typeLabel}.`;
+  const args = {
+    count: invalidEntries.length,
+    lines: invalidEntries
+      .map((entry) => entry.index + 1)
+      .join(I18n.t("system-config-list-separator")),
+  };
+  return Object.hasOwn(ARRAY_ITEM_INVALID_LABELS, itemType)
+    ? I18n.label(ARRAY_ITEM_INVALID_LABELS, itemType, args)
+    : I18n.t("system-config-array-invalid-value", args);
 }
 
 /**
