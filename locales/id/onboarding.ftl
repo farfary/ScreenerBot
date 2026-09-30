@@ -1,0 +1,72 @@
+onboarding-welcome-title = Selamat Datang di { -brand }
+onboarding-welcome-description = Pendamping trading Solana Anda yang mengutamakan lokal — dibangun dengan Rust untuk kecepatan native. Temukan token, analisis pasar, dan kendalikan trading dari mesin Anda sendiri.
+onboarding-welcome-free-title = Gratis & Source-Available
+onboarding-welcome-free-description = Tanpa langganan atau paywall. Periksa kode yang dipublikasikan di { -github }.
+onboarding-welcome-custody-title = Kustodi Mandiri
+onboarding-welcome-custody-description = Private key dienkripsi saat disimpan dan tidak pernah dikirim ke mana pun.
+onboarding-welcome-engine-title = Mesin Selalu Aktif
+onboarding-welcome-engine-description = Layanan terorkestrasi dengan pemeriksaan kesehatan dan kontrol siklus hidup yang mulus.
+onboarding-welcome-realtime-title = Data On-Chain Real-Time
+onboarding-welcome-realtime-description = Perhitungan reserve pool langsung — bukan snapshot API yang tertunda.
+
+onboarding-discover-title = Temukan & Filter
+onboarding-discover-description = Pindai tiga sumber data untuk pair Solana baru, dekode 12+ jenis pool DEX secara on-chain, lalu jalankan setiap token melalui aturan kualitas dan keamanan yang dapat dikonfigurasi.
+onboarding-discover-dex-title = Penemuan Multi-DEX
+onboarding-discover-dex-description = Feed { -dexscreener }, { -geckoterminal }, dan Raydium untuk pair { -sol } terbaru.
+onboarding-discover-scanner-title = Pemindai Token Cerdas
+onboarding-discover-scanner-description = Aturan likuiditas, volume, usia token, distribusi holder, dan { -rugcheck }.
+onboarding-discover-intelligence-title = Intelijen Token
+onboarding-discover-intelligence-description = Data pasar, keamanan, dan daftar hitam dalam satu tampilan.
+onboarding-discover-price-action-title = Pelacakan Pergerakan Harga
+onboarding-discover-price-action-description = Data candle tujuh timeframe dengan deteksi gap dan sinyal momentum.
+
+onboarding-trade-title = Trading Cerdas
+onboarding-trade-description = Trading otomatis dengan sistem prioritas exit enam tingkat. DCA ke posisi, atur trailing stop, susun pohon strategi — atau trading manual dengan satu klik.
+onboarding-trade-auto-title = Auto-Trading
+onboarding-trade-auto-description = Evaluator entry/exit, putaran DCA, exit parsial, dan trailing stop-loss.
+onboarding-trade-strategy-title = Mesin Strategi
+onboarding-trade-strategy-description = Pohon kondisi yang menggabungkan sinyal harga, volume, dan waktu.
+onboarding-trade-routing-title = Routing Harga Terbaik
+onboarding-trade-routing-description = Kuotasi bersamaan dari setiap router yang aktif — rute terbaik menang.
+onboarding-trade-safety-title = Kontrol Keamanan
+onboarding-trade-safety-description = Penghentian darurat, batas kerugian per periode, dan sakelar monitor independen.
+
+onboarding-connect-title = Tetap Terhubung
+onboarding-connect-description = Pantau portofolio Anda dari mana saja. Asisten yang didukung sembilan penyedia LLM, notifikasi { -telegram } dengan trading inline, dan log event yang dapat dicari.
+onboarding-connect-assistant-title = Asisten
+onboarding-connect-assistant-description = Analisis berbasis chat dengan pemanggilan alat untuk trade, konfigurasi, dan portofolio.
+onboarding-connect-telegram-title = Integrasi { -telegram }
+onboarding-connect-telegram-description = Notifikasi, perintah inline, dan sesi terlindungi 2FA dari ponsel Anda.
+onboarding-connect-wallets-title = Pelacakan Multi-Dompet
+onboarding-connect-wallets-description = Semua dompet Solana dan kepemilikan token Anda dalam satu dasbor.
+onboarding-connect-events-title = Aliran Event Langsung
+onboarding-connect-events-description = Setiap trade, swap, dan event sistem dicatat dengan kategori dan tingkat keparahan.
+
+onboarding-data-title = Data { -brand }
+onboarding-data-description = Kami menjalankan layanan data pasar bersama agar setiap instalasi tidak dibatasi laju secara terpisah oleh penyedia publik. Gratis dengan akun { -brand }, dan { -brand } tetap berfungsi tanpa akun.
+onboarding-data-candles-title = Riwayat Candle Gabungan
+onboarding-data-candles-description = Riwayat bersama tujuh timeframe, bertahun-tahun ke belakang, disajikan dari satu cache.
+onboarding-data-pools-title = Pool Terselesaikan & Keamanan
+onboarding-data-pools-description = Registri pool terpusat dan laporan { -rugcheck } yang di-cache, sudah diambil sebelumnya.
+onboarding-data-signin-title = Masuk untuk Menggunakannya
+onboarding-data-signin-description = Tanpa akun, data ini tidak tersedia dan penyedia publik yang digunakan.
+onboarding-data-reading-title = Hanya Membaca
+onboarding-data-reading-description = Kami melihat token mana yang Anda cari. Tidak pernah key, saldo, posisi, atau trade.
+
+onboarding-privacy-title = Key Anda, Data Anda
+onboarding-privacy-description = Konfigurasi, key, dan riwayat trading Anda tetap di mesin ini. Selanjutnya, pilih Mode Jelajah untuk penemuan tanpa kredensial, atau tautkan dompet dan RPC untuk mengaktifkan bot penuh — dan masuk di sana jika Anda menginginkan data { -brand }.
+onboarding-privacy-local-title = Arsitektur Mengutamakan Lokal
+onboarding-privacy-local-description = Konfigurasi, analitik, dan database disimpan di desktop Anda.
+onboarding-privacy-wallet-title = Dompet Terenkripsi
+onboarding-privacy-wallet-description = Private key Anda dienkripsi saat disimpan dan tidak pernah dikirim.
+onboarding-privacy-security-title = Keamanan Dasbor
+onboarding-privacy-security-description = Kunci kata sandi, TOTP dua faktor, dan perlindungan batas waktu sesi.
+onboarding-privacy-config-title = Konfigurasi Fleksibel
+onboarding-privacy-config-description = Sebagian besar pengaturan dapat disesuaikan dari dasbor setelah penyiapan.
+
+onboarding-setup-shortcut =
+    .aria-label = Langsung ke penyiapan dompet dan RPC atau pilih Mode Jelajah
+onboarding-setup-shortcut-label = Ke penyiapan
+onboarding-progress-dot =
+    .aria-label = Ke slide { $number }
+onboarding-action-continue-to-setup = Lanjut ke penyiapan

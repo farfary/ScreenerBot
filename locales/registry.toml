@@ -39,3 +39,8 @@ dir = "ltr"
 code = "tr"
 name = "Türkçe"
 dir = "ltr"
+
+[[locale]]
+code = "id"
+name = "Bahasa Indonesia"
+dir = "ltr"

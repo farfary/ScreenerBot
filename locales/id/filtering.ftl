@@ -1,0 +1,259 @@
+# Filter rejection reasons. Message ids derive from the stored rejection codes
+# (src/filtering/sources/rejection.rs); rows hold codes, never this text.
+
+filtering-reject-no-decimals = Tidak ada desimal di database
+filtering-reject-token-too-new = Token terlalu baru
+filtering-reject-cooldown-filtered = Difilter cooldown
+filtering-reject-dex-data-missing = Data { -dexscreener } tidak ada
+filtering-reject-gecko-data-missing = Data { -geckoterminal } tidak ada
+filtering-reject-rug-data-missing = Data { -rugcheck } tidak ada
+filtering-reject-onchain-numeric-symbol = Simbol hanya angka (scam)
+filtering-reject-onchain-empty-symbol = Simbol kosong (scam)
+filtering-reject-onchain-suspicious-symbol = Simbol mencurigakan (scam)
+filtering-reject-onchain-known-scam-authority = Otoritas scam yang dikenal
+filtering-reject-onchain-immutable-with-freeze = Immutable + otoritas freeze (scam)
+filtering-reject-onchain-high-risk-score = Skor risiko on-chain tinggi
+filtering-reject-dex-empty-name = Nama kosong
+filtering-reject-dex-empty-symbol = Simbol kosong
+filtering-reject-dex-empty-logo = URL logo kosong
+filtering-reject-dex-empty-website = URL situs web kosong
+filtering-reject-dex-txn-5m = Transaksi 5m rendah
+filtering-reject-dex-txn-1h = Transaksi 1h rendah
+filtering-reject-dex-zero-liq = Likuiditas nol
+filtering-reject-dex-liq-low = Likuiditas terlalu rendah
+filtering-reject-dex-liq-high = Likuiditas terlalu tinggi
+filtering-reject-dex-mcap-low = Kapitalisasi pasar terlalu rendah
+filtering-reject-dex-mcap-high = Kapitalisasi pasar terlalu tinggi
+filtering-reject-dex-vol-low = Volume terlalu rendah
+filtering-reject-dex-vol-missing = Volume tidak ada
+filtering-reject-dex-fdv-low = FDV terlalu rendah
+filtering-reject-dex-fdv-high = FDV terlalu tinggi
+filtering-reject-dex-vol5m-low = Volume 5m terlalu rendah
+filtering-reject-dex-vol5m-missing = Volume 5m tidak ada
+filtering-reject-dex-vol1h-low = Volume 1h terlalu rendah
+filtering-reject-dex-vol1h-missing = Volume 1h tidak ada
+filtering-reject-dex-vol6h-low = Volume 6h terlalu rendah
+filtering-reject-dex-vol6h-missing = Volume 6h tidak ada
+filtering-reject-dex-price-change-5m-low = Perubahan harga 5m terlalu rendah
+filtering-reject-dex-price-change-5m-high = Perubahan harga 5m terlalu tinggi
+filtering-reject-dex-price-change-low = Perubahan harga terlalu rendah
+filtering-reject-dex-price-change-high = Perubahan harga terlalu tinggi
+filtering-reject-dex-price-change-6h-low = Perubahan harga 6h terlalu rendah
+filtering-reject-dex-price-change-6h-high = Perubahan harga 6h terlalu tinggi
+filtering-reject-dex-price-change-24h-low = Perubahan harga 24h terlalu rendah
+filtering-reject-dex-price-change-24h-high = Perubahan harga 24h terlalu tinggi
+filtering-reject-gecko-liq-low = Likuiditas terlalu rendah
+filtering-reject-gecko-liq-high = Likuiditas terlalu tinggi
+filtering-reject-gecko-mcap-low = Kapitalisasi pasar terlalu rendah
+filtering-reject-gecko-mcap-high = Kapitalisasi pasar terlalu tinggi
+filtering-reject-gecko-vol5m-low = Volume 5m terlalu rendah
+filtering-reject-gecko-vol5m-missing = Volume 5m tidak ada
+filtering-reject-gecko-vol1h-low = Volume 1h terlalu rendah
+filtering-reject-gecko-vol1h-missing = Volume 1h tidak ada
+filtering-reject-gecko-vol24h-low = Volume 24h terlalu rendah
+filtering-reject-gecko-vol24h-missing = Volume 24h tidak ada
+filtering-reject-gecko-price-change-5m-low = Perubahan harga 5m terlalu rendah
+filtering-reject-gecko-price-change-5m-high = Perubahan harga 5m terlalu tinggi
+filtering-reject-gecko-price-change-1h-low = Perubahan harga 1h terlalu rendah
+filtering-reject-gecko-price-change-1h-high = Perubahan harga 1h terlalu tinggi
+filtering-reject-gecko-price-change-24h-low = Perubahan harga 24h terlalu rendah
+filtering-reject-gecko-price-change-24h-high = Perubahan harga 24h terlalu tinggi
+filtering-reject-gecko-pool-count-low = Jumlah pool terlalu rendah
+filtering-reject-gecko-pool-count-high = Jumlah pool terlalu tinggi
+filtering-reject-gecko-pool-count-missing = Jumlah pool tidak ada
+filtering-reject-gecko-reserve-low = Reserve terlalu rendah
+filtering-reject-gecko-reserve-missing = Reserve tidak ada
+filtering-reject-rug-rugged = Token sudah rug
+filtering-reject-rug-score = Skor risiko terlalu tinggi
+filtering-reject-rug-level-danger = Tingkat risiko bahaya
+filtering-reject-rug-mint-authority = Otoritas mint masih ada
+filtering-reject-rug-freeze-authority = Otoritas freeze masih ada
+filtering-reject-rug-top-holder = % holder teratas terlalu tinggi
+filtering-reject-rug-top3-holders = % 3 holder teratas terlalu tinggi
+filtering-reject-rug-min-holders = Holder tidak cukup
+filtering-reject-rug-insider-count = Terlalu banyak holder insider
+filtering-reject-rug-insider-pct = % insider terlalu tinggi
+filtering-reject-rug-creator-pct = Saldo kreator terlalu tinggi
+filtering-reject-rug-transfer-fee-present = Ada biaya transfer
+filtering-reject-rug-transfer-fee-high = Biaya transfer terlalu tinggi
+filtering-reject-rug-graph-insiders = Insider pada graf terlalu tinggi
+filtering-reject-rug-lp-providers-low = Penyedia LP terlalu sedikit
+filtering-reject-rug-lp-providers-missing = Penyedia LP tidak ada
+filtering-reject-rug-lp-lock-low = Lock LP terlalu rendah
+filtering-reject-rug-lp-lock-missing = Lock LP tidak ada
+filtering-reject-llm-analysis-rejected = Analisis LLM Menolak: { $reason } (keyakinan { $confidence }%, { $provider })
+filtering-reject-llm-analysis-rejected-generic = Analisis LLM Menolak
+filtering-reject-unknown = { $code }
+
+filtering-reject-dex-fdv-missing = FDV tidak ada
+filtering-reject-dex-price-change-5m-missing = Perubahan harga 5m tidak ada
+filtering-reject-dex-price-change-missing = Perubahan harga tidak ada
+filtering-reject-dex-price-change-6h-missing = Perubahan harga 6h tidak ada
+filtering-reject-dex-price-change-24h-missing = Perubahan harga 24h tidak ada
+filtering-reject-gecko-liq-missing = Likuiditas tidak ada
+filtering-reject-gecko-mcap-missing = Kapitalisasi pasar tidak ada
+filtering-reject-gecko-price-change-5m-missing = Perubahan harga 5m tidak ada
+filtering-reject-gecko-price-change-1h-missing = Perubahan harga 1h tidak ada
+filtering-reject-gecko-price-change-24h-missing = Perubahan harga 24h tidak ada
+filtering-reject-rug-transfer-fee-missing = Data biaya transfer tidak ada
+
+filtering-reject-category-security = Masalah Keamanan
+filtering-reject-category-distribution = Distribusi Holder
+filtering-reject-category-liquidity-lock = Masalah Lock LP
+filtering-reject-category-fees = Biaya Transfer
+filtering-reject-category-liquidity = Likuiditas
+filtering-reject-category-volume = Volume Trading
+filtering-reject-category-market-cap = Kapitalisasi Pasar/FDV
+filtering-reject-category-price-action = Pergerakan Harga
+filtering-reject-category-activity = Aktivitas Trading
+filtering-reject-category-data-quality = Data Hilang
+filtering-reject-category-timing = Filter Waktu
+filtering-reject-category-market = Data Pasar
+filtering-reject-category-other = Lainnya
+
+# Filtering page: sub-tabs, sources, status, analytics, explorer and configuration.
+
+filtering-tab-status = Status
+filtering-tab-analytics = Analitik
+filtering-tab-explorer = Explorer
+filtering-source-core = Core
+filtering-source-onchain = On-Chain
+filtering-source-dexscreener = { -dexscreener }
+filtering-source-geckoterminal = { -geckoterminal }
+filtering-source-rugcheck = { -rugcheck }
+filtering-source-llm-analysis = Analisis LLM
+
+filtering-range-1h = 1H
+filtering-range-6h = 6H
+filtering-range-24h = 24H
+filtering-range-7d = 7D
+filtering-range-all = Semua
+filtering-range-all-time = Sepanjang Waktu
+filtering-range-custom = Kustom
+filtering-range-now = Sekarang
+filtering-range-span = { $start } → { $end }
+filtering-range-bounds = { $min } – { $max }
+
+filtering-footer-saving = Menyimpan perubahan...
+filtering-footer-refreshing = Menyegarkan snapshot...
+filtering-footer-unsaved = Ada perubahan yang belum disimpan
+filtering-footer-last-saved = Terakhir disimpan { $time }
+filtering-footer-in-sync = Konfigurasi sinkron
+
+filtering-info-total = Total:
+filtering-info-priced = Berharga:
+filtering-info-passed = Lolos:
+filtering-info-positions = Posisi:
+filtering-info-blacklisted = Masuk daftar hitam:
+filtering-info-cache = Cache:
+filtering-count-share = { $count } ({ $share })
+filtering-refresh-building = Membangun…
+filtering-refresh-never = Belum pernah
+
+filtering-status-loading = Memuat statistik...
+filtering-status-total = Total Token
+filtering-status-total-detail = Di cache pemfilteran
+filtering-status-total-detail-building = Snapshot sedang dibangun — jumlah muncul pada penyegaran berikutnya
+filtering-status-priced = Dengan Harga
+filtering-status-priced-detail = { $share } memiliki harga
+filtering-status-passed = Lolos Filter
+filtering-status-passed-detail = { $share } lolos
+filtering-status-positions = Posisi Terbuka
+filtering-status-positions-detail = Trade aktif
+filtering-status-blacklisted = Daftar Hitam
+filtering-status-blacklisted-detail = Token yang ditandai
+filtering-status-ohlcv = Dengan OHLCV
+filtering-status-ohlcv-detail = Data historis
+filtering-status-refresh = Penyegaran Terakhir
+filtering-status-refresh-building = Snapshot pertama sedang berjalan
+filtering-status-refresh-none = Belum ada penyegaran
+filtering-status-no-rejections = Tidak ada data penolakan
+
+filtering-analytics-loading = Memuat analitik untuk { $range }…
+filtering-analytics-scanned = Total Dipindai
+filtering-analytics-updated = Diperbarui { $time }
+filtering-analytics-passed = Token Lolos
+filtering-analytics-pass-rate = Tingkat lolos <strong>{ $share }</strong>
+filtering-analytics-rejected = Token Ditolak
+filtering-analytics-rejection-rate = Tingkat penolakan <strong>{ $share }</strong>
+filtering-analytics-by-category = Penolakan per Kategori
+filtering-analytics-by-source = Penolakan per Sumber
+filtering-analytics-no-category = Tidak ada data kategori
+filtering-analytics-no-source = Tidak ada data sumber
+filtering-analytics-top-reasons = Alasan Penolakan Teratas
+filtering-analytics-no-data = Tidak ada data
+filtering-analytics-column-reason = Alasan
+filtering-analytics-column-category = Kategori
+filtering-analytics-column-count = Jumlah
+filtering-analytics-column-share = %
+filtering-analytics-column-impact = Dampak
+filtering-tokens-count =
+    { $count ->
+       *[other] { $amount } token
+    }
+
+filtering-explorer-top-reasons = Alasan Teratas
+filtering-explorer-recent = Penolakan Terbaru
+filtering-explorer-none = Tidak ada data
+filtering-explorer-none-recent = Tidak ada yang terbaru
+filtering-explorer-search =
+    .placeholder = Cari alasan...
+filtering-explorer-overview = Ringkasan
+filtering-explorer-no-match = Tidak ada alasan yang cocok
+filtering-explorer-column-token = Token
+filtering-explorer-column-source = Sumber
+filtering-explorer-column-time = Waktu
+filtering-explorer-page = Halaman { $page }
+filtering-explorer-no-results = Tidak ada hasil
+filtering-explorer-empty = Token tidak ditemukan
+filtering-explorer-empty-filtered = Tidak ada token yang cocok dengan filter
+filtering-explorer-load-failed = Gagal memuat token
+
+filtering-config-loading = Memuat konfigurasi…
+filtering-config-no-match = Tidak ada parameter yang cocok dengan “{ $query }”
+filtering-config-no-parameters = Sumber ini tidak memiliki parameter
+filtering-source-off = Pemfilteran { $source } nonaktif — parameter ini tidak dievaluasi.
+filtering-toolbar-filter =
+    .placeholder = Filter parameter
+    .aria-label = Filter parameter
+filtering-toolbar-clear =
+    .aria-label = Hapus filter
+filtering-parameter-count =
+    { $count ->
+       *[other] { $amount } parameter
+    }
+filtering-parameter-count-filtered =
+    { $count ->
+       *[other] { $visible } dari { $total } parameter
+    }
+filtering-group-enable =
+    .aria-label = Aktifkan pemeriksaan { $group }
+filtering-field-min = Min
+filtering-field-max = Maks
+filtering-field-min-aria =
+    .aria-label = { $label } minimum
+filtering-field-max-aria =
+    .aria-label = { $label } maksimum
+filtering-field-reset =
+    .title = Reset ke default ({ $default })
+    .aria-label = Reset { $label } ke default
+
+filtering-toast-saved = Konfigurasi Disimpan
+    .message = Pengaturan pemfilteran disimpan dan snapshot disegarkan
+filtering-toast-save-failed = Gagal Menyimpan
+    .message = Gagal menyimpan konfigurasi pemfilteran
+filtering-toast-reset = Perubahan Direset
+    .message = Konfigurasi dikembalikan ke keadaan tersimpan terakhir
+filtering-toast-refresh-failed = Gagal Menyegarkan
+    .message = Gagal menyegarkan snapshot pemfilteran
+filtering-toast-exported = Konfigurasi Diekspor
+    .message = Pengaturan pemfilteran disimpan ke file
+filtering-toast-imported = Konfigurasi Diimpor
+    .message = Pengaturan pemfilteran dimuat dari file
+filtering-toast-import-failed = Impor Gagal
+    .message = Gagal mengimpor konfigurasi - format file tidak valid
+filtering-toast-load-failed = Gagal Memuat
+    .message = Gagal memuat konfigurasi pemfilteran
+filtering-toast-range-missing = Pilih tanggal mulai dan tanggal akhir
+filtering-toast-range-order = Waktu mulai harus sebelum waktu akhir
+filtering-toast-range-future = Waktu akhir tidak boleh di masa depan
