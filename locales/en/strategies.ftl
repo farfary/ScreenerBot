@@ -271,3 +271,73 @@ strategies-condition-category-technical-indicators = Technical Indicators
 strategies-condition-category-market-context = Market Context
 strategies-condition-category-position-performance = Position & Performance
 strategies-condition-category-volume-analysis = Volume Analysis
+
+## Validation errors
+# Each validation error is a `UiText`; the tokens below name what the message refers to.
+
+strategies-error-missing-parameter = The { $field } parameter is missing
+strategies-error-parameter-type = The { $field } parameter must be { $expected }
+strategies-error-invalid-value = "{ $value }" is not a valid { $field }
+strategies-error-missing-data = { $data } is not available
+strategies-error-no-candle-data = The { $timeframe } timeframe has no candle data
+strategies-error-insufficient-history = Not enough history for { $indicator }: { $available } s available, { $required } s needed
+strategies-error-insufficient-candles = Not enough candles for { $indicator }: have { $available }, need { $required }
+strategies-error-stale-candle-data = The { $timeframe } candle data is stale: its age of { $age } s exceeds { $max } s
+strategies-error-invalid-rule-tree = Invalid rule tree: { $reason }
+strategies-error-evaluation-timeout = Strategy evaluation timed out after { $timeout } ms
+strategies-error-invalid-rules = The rules could not be read: { $reason }
+
+# Parameter names
+
+strategies-error-field-average-volume = average volume
+strategies-error-field-candle-open = candle open
+strategies-error-field-comparison = comparison
+strategies-error-field-condition-type = condition type
+strategies-error-field-confirmation = confirmation
+strategies-error-field-count = count
+strategies-error-field-current-price = current price
+strategies-error-field-direction = direction
+strategies-error-field-distance = distance
+strategies-error-field-hours = hours
+strategies-error-field-lookback = lookback
+strategies-error-field-minimum-change = minimum change
+strategies-error-field-multiplier = multiplier
+strategies-error-field-pattern = pattern
+strategies-error-field-percentage = percentage
+strategies-error-field-period = period
+strategies-error-field-position = position
+strategies-error-field-threshold = threshold
+strategies-error-field-time-unit = time unit
+strategies-error-field-time-value = time value
+strategies-error-field-timeframe = timeframe
+
+# Expected parameter types
+
+strategies-error-expected-boolean = a boolean
+strategies-error-expected-number = a number
+strategies-error-expected-string = a string
+
+# Missing context data
+
+strategies-error-data-current-price = Current price
+strategies-error-data-liquidity-data = Liquidity data
+strategies-error-data-market-data = Market data
+strategies-error-data-ohlcv-data = OHLCV data
+strategies-error-data-position-data = Position data
+
+# Indicators
+
+strategies-error-indicator-consecutive-candles = consecutive candles
+strategies-error-indicator-moving-average = moving average
+strategies-error-indicator-price-breakout = price breakout
+strategies-error-indicator-price-change-lookback = price change lookback
+strategies-error-indicator-volume-spike = volume spike
+
+# Rule tree faults
+
+strategies-error-rule-branch-node-missing-conditions = Branch node missing conditions
+strategies-error-rule-branch-node-missing-operator = Branch node missing operator
+strategies-error-rule-branch-node-must-have-at-least-one-child = Branch node must have at least one child
+strategies-error-rule-invalid-rule-tree-structure = Invalid rule tree structure
+strategies-error-rule-leaf-node-missing-condition = Leaf node missing condition
+strategies-error-rule-not-operator-must-have-exactly-one-child = NOT operator must have exactly one child

@@ -91,28 +91,6 @@ fn has_nested_field(value: &serde_json::Value, path: &str) -> bool {
     false
 }
 
-/// Helper to get section label for display
-fn get_section_label(section: &str) -> String {
-    match section {
-        "rpc" => "RPC".to_owned(),
-        "trader" => "Auto Trader".to_owned(),
-        "copy_trading" => "Wallet Copy".to_owned(),
-        "positions" => "Positions".to_owned(),
-        "filtering" => "Filtering".to_owned(),
-        "swaps" => "Swaps".to_owned(),
-        "tokens" => "Tokens".to_owned(),
-        "sol_price" => "SOL Price".to_owned(),
-        "network" => "Network".to_owned(),
-        "events" => "Events".to_owned(),
-        "services" => "Services".to_owned(),
-        "monitoring" => "Monitoring".to_owned(),
-        "ohlcv" => "OHLCV".to_owned(),
-        "gui" => "GUI".to_owned(),
-        "telegram" => "Telegram".to_owned(),
-        _ => section.to_string(),
-    }
-}
-
 /// Count fields in a JSON value (recursive for objects)
 fn count_fields(value: &serde_json::Value) -> usize {
     match value {
@@ -363,7 +341,10 @@ pub async fn import_config_preview(Json(request): Json<ImportConfigPreviewReques
     // Check for unknown sections
     for key in imported_obj.keys() {
         if key != "timestamp" && !CONFIG_SECTIONS.contains(&key.as_str()) {
-            warnings.push(format!("Unknown section '{key}' will be ignored"));
+            warnings.push(
+                UiText::new(ids::SYSTEM_CONFIG_IMPORT_WARNING_UNKNOWN_SECTION)
+                    .arg("section", UiArg::Text(key.clone())),
+            );
         }
     }
 
@@ -372,10 +353,10 @@ pub async fn import_config_preview(Json(request): Json<ImportConfigPreviewReques
         if let Some(section_val) = imported_obj.get(*section) {
             for field_path in *fields {
                 if has_nested_field(section_val, field_path) {
-                    warnings.push(format!(
-                        "⚠️ Security warning: Importing '{}.{}' may overwrite authentication settings",
-                        section, field_path
-                    ));
+                    warnings.push(
+                        UiText::new(ids::SYSTEM_CONFIG_IMPORT_WARNING_SENSITIVE_FIELD)
+                            .arg("field", UiArg::Text(format!("{section}.{field_path}"))),
+                    );
                 }
             }
         }
@@ -389,7 +370,6 @@ pub async fn import_config_preview(Json(request): Json<ImportConfigPreviewReques
         if !present {
             sections.push(SectionPreview {
                 name: section.to_string(),
-                label: get_section_label(section),
                 present: false,
                 valid: true,
                 field_count: 0,
@@ -512,11 +492,17 @@ pub async fn import_config_preview(Json(request): Json<ImportConfigPreviewReques
 
         sections.push(SectionPreview {
             name: section.to_string(),
-            label: get_section_label(section),
             present: true,
             valid: validation_result.is_ok(),
             field_count,
-            error: validation_result.err().map(|e| e.to_string()),
+            error: validation_result.err().map(|e| {
+                let detail = match e {
+                    Error::InvalidImport { detail } => detail,
+                    other => other.to_string(),
+                };
+                UiText::new(ids::SYSTEM_CONFIG_IMPORT_SECTION_ERROR)
+                    .arg("detail", UiArg::Text(detail))
+            }),
             changes,
         });
     }

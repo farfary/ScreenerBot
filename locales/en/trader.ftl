@@ -237,16 +237,6 @@ trader-trailing-final = +{ $value }% final
 trader-trailing-summary-protected = Protected <strong>{ $value }</strong> profit
 # $value is a formatted percentage.
 trader-trailing-summary-avoided = Avoided <strong>{ $value }</strong> loss from peak
-trader-trailing-activation-quick = Activates quickly - good for volatile tokens
-trader-trailing-activation-balanced = Balanced activation - suitable for most scenarios
-trader-trailing-activation-late = Delayed activation - may miss protection window
-trader-trailing-distance-tight = Tight protection - may exit on minor dips
-trader-trailing-distance-balanced = Balanced protection - good for most situations
-trader-trailing-distance-loose = Loose protection - allows larger pullbacks
-trader-trailing-preview-active = ACTIVE
-trader-trailing-preview-inactive = INACTIVE
-# $price is a formatted price and $profit a formatted percentage.
-trader-trailing-preview-scenario = Exit: { $price } ({ $profit } profit)
 
 ## Take profit
 

@@ -74,7 +74,6 @@ impl ConditionEvaluator for LiquidityLevelCondition {
         json!({
             "type": "LiquidityLevel",
             "category": "Market Context",
-            "tags": ["liquidity", "safety", "sol", "risk"],
             "icon": "icon-droplet",
             "origin": "strategy",
             "parameters": {

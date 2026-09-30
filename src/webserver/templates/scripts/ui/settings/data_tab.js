@@ -8,13 +8,6 @@ import { formatSizeAt } from "../../core/format.js";
 import { ConfirmationDialog } from "../confirmation_dialog.js";
 import { apiErrorMessage } from "../../core/request_manager.js";
 
-// Ids are the keys of the preset table in `applyPreset`.
-const TRADING_PRESET_LABELS = Object.freeze({
-  conservative: "settings-data-preset-conservative",
-  moderate: "settings-data-preset-moderate",
-  aggressive: "settings-data-preset-aggressive",
-});
-
 /**
  * Build Data tab HTML
  */
@@ -209,24 +202,6 @@ export function attachDataHandlers(dialog, content, pathsInfo) {
   if (resetBtn) {
     resetBtn.addEventListener("click", () => resetConfig());
   }
-
-  // Trading preset buttons - handle both card click and button click
-  content.querySelectorAll(".preset-card").forEach((card) => {
-    card.addEventListener("click", (e) => {
-      // Don't trigger if clicking the button (let button handler work)
-      if (e.target.closest(".preset-apply-btn")) return;
-      const preset = card.dataset.preset;
-      applyPreset(preset);
-    });
-  });
-
-  content.querySelectorAll(".preset-apply-btn").forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const preset = btn.dataset.preset;
-      applyPreset(preset);
-    });
-  });
 
   // OHLCV cleanup button
   const cleanupBtn = content.querySelector("#cleanupOhlcvBtn");
@@ -565,91 +540,6 @@ async function resetConfig() {
   } catch (err) {
     Utils.showToast(
       I18n.t("settings-data-config-reset-failed", { message: err.message }),
-      "error"
-    );
-  }
-}
-
-/**
- * Apply trading preset
- */
-async function applyPreset(presetName) {
-  const presets = {
-    conservative: {
-      trader: {
-        max_open_positions: 2,
-        trade_size_sol: 0.005,
-        roi_target_percent: 15,
-      },
-      filtering: {
-        min_liquidity_usd: 10000,
-      },
-      positions: {
-        stop_loss_percent: 25,
-      },
-    },
-    moderate: {
-      trader: {
-        max_open_positions: 5,
-        trade_size_sol: 0.01,
-        roi_target_percent: 20,
-      },
-      filtering: {
-        min_liquidity_usd: 5000,
-      },
-      positions: {
-        stop_loss_percent: 20,
-      },
-    },
-    aggressive: {
-      trader: {
-        max_open_positions: 10,
-        trade_size_sol: 0.02,
-        roi_target_percent: 30,
-      },
-      filtering: {
-        min_liquidity_usd: 1000,
-      },
-      positions: {
-        stop_loss_percent: 15,
-      },
-    },
-  };
-
-  const preset = presets[presetName];
-  if (!preset) {
-    Utils.showToast(I18n.t("settings-data-preset-unknown"), "error");
-    return;
-  }
-
-  const presetDisplayName = I18n.label(TRADING_PRESET_LABELS, presetName);
-  const confirmResult = await ConfirmationDialog.show({
-    title: I18n.t("settings-data-preset-title"),
-    message: I18n.t("settings-data-preset-message", { preset: presetDisplayName }),
-    confirmLabel: I18n.t("common-action-apply"),
-    cancelLabel: I18n.t("common-action-cancel"),
-    variant: "warning",
-  });
-  if (!confirmResult.confirmed) return;
-
-  try {
-    // Apply each section
-    for (const [section, values] of Object.entries(preset)) {
-      const response = await fetch(`/api/config/${section}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(values),
-      });
-
-      if (!response.ok) {
-        console.warn(`Failed to apply ${section} preset`);
-      }
-    }
-
-    Utils.showToast(I18n.t("settings-data-preset-applied", { preset: presetDisplayName }), "success");
-  } catch (err) {
-    Utils.showToast(
-      I18n.t("settings-data-preset-failed", { message: err.message }),
       "error"
     );
   }

@@ -108,7 +108,6 @@ impl ConditionEvaluator for PriceToMaCondition {
         json!({
             "type": "PriceToMA",
             "category": "Technical Indicators",
-            "tags": ["ma", "sma", "trend", "technical"],
             "icon": "icon-chart-line",
             "origin": "strategy",
             "parameters": {

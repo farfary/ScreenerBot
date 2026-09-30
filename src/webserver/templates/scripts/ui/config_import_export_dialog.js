@@ -67,12 +67,11 @@ function sectionHint(sectionId) {
 
 /**
  * Display name of a section. The catalog owns the names of configuration
- * sections; `serverLabel` is what the route sent for a section the catalog does
- * not name.
+ * sections; an id it does not name is shown as sent.
  */
-function sectionName(sectionId, serverLabel) {
+function sectionName(sectionId) {
   if (sectionId === "gui") return I18n.t("system-config-section-gui");
-  return hasSectionLabel(sectionId) ? sectionLabel(sectionId) : (serverLabel ?? sectionId);
+  return hasSectionLabel(sectionId) ? sectionLabel(sectionId) : sectionId;
 }
 
 const SECTION_ORDER = [
@@ -493,7 +492,7 @@ export class ConfigImportDialog {
             <i class="icon-triangle-alert"></i>
             <span>${Utils.escapeHtml(I18n.t("system-config-import-warnings", { count: warnings.length }))}</span>
           </div>
-          ${warnings.map((w) => `<div class="config-import-warning-item">${Utils.escapeHtml(w)}</div>`).join("")}
+          ${warnings.map((w) => `<div class="config-import-warning-item">${Utils.escapeHtml(I18n.text(w))}</div>`).join("")}
         </div>`
       : "";
 
@@ -593,7 +592,7 @@ export class ConfigImportDialog {
           : "";
 
       const errorMsg = section.error
-        ? `<div class="config-import-section-error">${Utils.escapeHtml(section.error)}</div>`
+        ? `<div class="config-import-section-error">${Utils.escapeHtml(I18n.text(section.error))}</div>`
         : "";
 
       const sectionHintText = section.present
@@ -607,7 +606,7 @@ export class ConfigImportDialog {
             <div class="config-import-section-icon"><i class="${sectionIcon(section.name)}"></i></div>
             <div class="config-import-section-info">
               <div class="config-import-section-title">
-                <span class="config-import-section-label">${Utils.escapeHtml(sectionName(section.name, section.label))}</span>
+                <span class="config-import-section-label">${Utils.escapeHtml(sectionName(section.name))}</span>
                 ${statusIcon}
                 ${changesBadge}
               </div>

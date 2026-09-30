@@ -114,7 +114,6 @@ impl ConditionEvaluator for ConsecutiveCandlesCondition {
         json!({
             "type": "ConsecutiveCandles",
             "category": "Candle Patterns",
-            "tags": ["candles", "pattern", "momentum", "streak"],
             "icon": "icon-chart-candlestick",
             "origin": "strategy",
             "parameters": {

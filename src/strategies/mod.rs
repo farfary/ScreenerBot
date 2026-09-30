@@ -1,5 +1,6 @@
 //! Trading strategy engine — rule trees, conditions, and evaluation logic.
 mod error;
+mod error_text;
 
 pub mod conditions;
 pub mod database;

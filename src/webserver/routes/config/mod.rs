@@ -17,6 +17,8 @@ use crate::webserver::state::AppState;
 pub mod getters;
 mod import_export;
 mod operations;
+#[cfg(test)]
+mod section_labels_tests;
 pub mod types;
 
 // Re-export handler functions for use by the router

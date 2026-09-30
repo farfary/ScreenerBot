@@ -277,52 +277,6 @@ export function createExampleUpdaters({ $, Utils: _Utils }) {
         value: formatPercentValue(avoidedLoss, { decimals: 1, plus: "" }),
       });
     }
-
-    // Update impact indicators
-    const activationIndicator = $("#activation-indicator");
-    const distanceIndicator = $("#distance-indicator");
-    const activationImpact = $("#activation-impact-text");
-    const distanceImpact = $("#distance-impact-text");
-
-    if (activationIndicator) {
-      activationIndicator.innerHTML =
-        activation >= 20
-          ? '<i class="icon-triangle-alert"></i>'
-          : '<i class="icon-circle-check"></i>';
-      activationIndicator.style.background =
-        activation >= 20 ? "var(--warning-alpha-10)" : "var(--success-alpha-10)";
-      activationIndicator.style.color = activation >= 20 ? "var(--warning)" : "var(--success)";
-    }
-
-    if (activationImpact) {
-      if (activation < 10) {
-        activationImpact.textContent = I18n.t("trader-trailing-activation-quick");
-      } else if (activation < 20) {
-        activationImpact.textContent = I18n.t("trader-trailing-activation-balanced");
-      } else {
-        activationImpact.textContent = I18n.t("trader-trailing-activation-late");
-      }
-    }
-
-    if (distanceIndicator) {
-      distanceIndicator.innerHTML =
-        distance >= 10
-          ? '<i class="icon-triangle-alert"></i>'
-          : '<i class="icon-circle-check"></i>';
-      distanceIndicator.style.background =
-        distance >= 10 ? "var(--warning-alpha-10)" : "var(--success-alpha-10)";
-      distanceIndicator.style.color = distance >= 10 ? "var(--warning)" : "var(--success)";
-    }
-
-    if (distanceImpact) {
-      if (distance < 5) {
-        distanceImpact.textContent = I18n.t("trader-trailing-distance-tight");
-      } else if (distance < 10) {
-        distanceImpact.textContent = I18n.t("trader-trailing-distance-balanced");
-      } else {
-        distanceImpact.textContent = I18n.t("trader-trailing-distance-loose");
-      }
-    }
   }
 
   // Return public API

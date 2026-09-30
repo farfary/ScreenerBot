@@ -122,7 +122,6 @@ impl ConditionEvaluator for PriceBreakoutCondition {
         json!({
             "type": "PriceBreakout",
             "category": "Price Analysis",
-            "tags": ["breakout", "resistance", "support", "momentum"],
             "icon": "icon-rocket",
             "origin": "strategy",
             "parameters": {

@@ -99,50 +99,6 @@ pub struct ToggleMonitorRequest {
 }
 
 // =============================================================================
-// TRAILING STOP PREVIEW TYPES (Phase 2)
-// =============================================================================
-
-#[derive(Debug, Serialize)]
-pub struct TrailingStopPreviewResponse {
-    // Position state
-    pub position_id: Option<i64>,
-    pub symbol: String,
-    pub entry_price: f64,
-    pub current_price: f64,
-    pub peak_price: f64,
-    pub current_profit_pct: f64,
-    pub unrealized_pnl: f64,
-
-    // Trail state with CURRENT settings
-    pub trail_active: bool,
-    pub trail_activated_at_pct: Option<f64>,
-    pub trail_stop_price: Option<f64>,
-    pub distance_to_exit_pct: Option<f64>,
-    pub estimated_exit_price: f64,
-    pub estimated_exit_profit_pct: f64,
-
-    // What-if scenarios
-    pub what_if_scenarios: Vec<WhatIfScenario>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct WhatIfScenario {
-    pub description: String,
-    pub activation_pct: f64,
-    pub distance_pct: f64,
-    pub trail_active: bool,
-    pub exit_price: f64,
-    pub exit_profit_pct: f64,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct TrailingStopPreviewQuery {
-    pub position_id: Option<i64>,
-    pub activation_pct: Option<f64>,
-    pub distance_pct: Option<f64>,
-}
-
-// =============================================================================
 // QUOTE PREVIEW TYPES
 // =============================================================================
 

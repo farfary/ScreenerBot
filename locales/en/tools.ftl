@@ -429,6 +429,12 @@ tools-burn-toast-failed =
        *[other] { $count } tokens failed to burn
     }
 tools-burn-failed = Burn failed: { $reason }
+tools-burn-failures-title =
+    { $count ->
+        [one] { $count } token could not be burned
+       *[other] { $count } tokens could not be burned
+    }
+tools-burn-failure-unknown = No reason was reported
 
 ## Airdrop checker (scripts/pages/tools/wallet_tools.js)
 

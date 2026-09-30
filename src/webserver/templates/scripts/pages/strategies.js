@@ -911,7 +911,12 @@ export function createLifecycle() {
         Utils.showToast(I18n.t("strategies-toast-valid"), "success");
         return true;
       }
-      Utils.showToast(I18n.t("strategies-toast-invalid"), "error");
+      const reasons = (data.errors || []).map((error) => I18n.text(error));
+      announce(
+        "error",
+        I18n.t("strategies-toast-invalid"),
+        Utils.formatList(reasons, { type: "unit" })
+      );
       return false;
     } catch (error) {
       console.error("Validation failed:", error);

@@ -236,6 +236,11 @@ system-config-import-warnings =
         [one] { $count } Warning
        *[other] { $count } Warnings
     }
+# $section is a section name from the file, $field a dotted setting path, $detail the
+# technical reason a section failed to parse.
+system-config-import-warning-unknown-section = Unknown section "{ $section }" will be ignored
+system-config-import-warning-sensitive-field = Importing { $field } may overwrite authentication settings
+system-config-import-section-error = { $detail }
 # $sections and $changes are the counts above, already worded.
 system-config-import-summary = { $sections } • { $changes }
 system-config-import-status-absent = Not in file

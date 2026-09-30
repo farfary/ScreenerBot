@@ -7,6 +7,7 @@ import { $, $$, on } from "../../core/dom.js";
 import * as Utils from "../../core/utils.js";
 import * as Hints from "../../core/hints.js";
 import { HintTrigger } from "../../ui/hint_popover.js";
+import { renderAddress } from "../../ui/token_identity.js";
 import { apiErrorMessage } from "../../core/request_manager.js";
 
 // Ids are the categories of the burn scan.
@@ -255,6 +256,8 @@ function renderBurnTokensTool(container, actionsContainer) {
               <p data-l10n-id="tools-burn-prompt"></p>
             </div>
           </div>
+
+          <div class="burn-failures" id="burn-failures" hidden></div>
         </div>
       </div>
     </div>
@@ -603,6 +606,7 @@ async function handleBurnSelectedTokens() {
   burnTokensState.isBurning = true;
   burnBtn.disabled = true;
   setButton(burnBtn, "icon-loader spin", I18n.t("tools-burn-action-burning"));
+  renderBurnFailures([]);
 
   try {
     const response = await fetch("/api/tools/burn-tokens/burn", {
@@ -632,6 +636,7 @@ async function handleBurnSelectedTokens() {
     if (data.failed > 0) {
       Utils.showToast(I18n.t("tools-burn-toast-failed", { count: data.failed }), "warning");
     }
+    renderBurnFailures((data.results || []).filter((item) => !item.success));
 
     // Refresh the list
     await handleScanBurnTokens();
@@ -642,6 +647,46 @@ async function handleBurnSelectedTokens() {
     burnTokensState.isBurning = false;
     updateBurnSelectionUI();
   }
+}
+
+/**
+ * List the tokens that failed to burn under the token list. Symbols come from the
+ * scan being replaced by the refresh that follows, so they are read here; the
+ * mint is an LTR address island and the reason is the localized failure text.
+ */
+function renderBurnFailures(failures) {
+  const box = $("#burn-failures");
+  if (!box) return;
+  if (failures.length === 0) {
+    box.hidden = true;
+    box.replaceChildren();
+    return;
+  }
+  const rows = failures
+    .map((failure) => {
+      const token = burnTokensState.tokens.find((t) => t.mint === failure.mint);
+      const symbol = token?.symbol || I18n.t("format-unknown");
+      const reason = failure.error?.text
+        ? I18n.text(failure.error.text)
+        : I18n.t("tools-burn-failure-unknown");
+      const details = failure.error?.details
+        ? ` title="${Utils.escapeHtml(failure.error.details)}"`
+        : "";
+      return `
+        <li class="burn-failure-item">
+          <span class="burn-failure-symbol">${Utils.escapeHtml(symbol)}</span>
+          ${renderAddress(failure.mint)}
+          <span class="burn-failure-reason"${details}>${Utils.escapeHtml(reason)}</span>
+        </li>`;
+    })
+    .join("");
+  box.innerHTML = `
+    <div class="burn-failures-title">
+      <i class="icon-triangle-alert"></i>
+      ${Utils.escapeHtml(I18n.t("tools-burn-failures-title", { count: failures.length }))}
+    </div>
+    <ul class="burn-failure-list">${rows}</ul>`;
+  box.hidden = false;
 }
 
 /**

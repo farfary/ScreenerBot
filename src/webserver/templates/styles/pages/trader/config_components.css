@@ -501,38 +501,3 @@
   gap: 0.5rem;
 }
 
-.quick-stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 1rem;
-}
-
-.quick-stat-card {
-  background: var(--background-secondary);
-  border-radius: var(--radius-lg);
-  padding: 1rem;
-  text-align: center;
-  border: 1px solid var(--border-color);
-  transition: all var(--transition-base);
-}
-
-.quick-stat-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgb(0, 0, 0, 0.08);
-  border-color: var(--primary-alpha-30);
-}
-
-.quick-stat-value {
-  font-size: 1.75rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin-bottom: 0.25rem;
-}
-
-.quick-stat-label {
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  font-weight: 600;
-}

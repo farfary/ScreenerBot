@@ -175,11 +175,10 @@ pub struct ImportConfigPreviewRequest {
 #[derive(Debug, Serialize)]
 pub struct SectionPreview {
     pub name: String,
-    pub label: String,
     pub present: bool,
     pub valid: bool,
     pub field_count: usize,
-    pub error: Option<String>,
+    pub error: Option<UiText>,
     pub changes: Vec<FieldChange>,
 }
 
@@ -194,7 +193,7 @@ pub struct FieldChange {
 pub struct ImportPreviewResponse {
     pub valid: bool,
     pub sections: Vec<SectionPreview>,
-    pub warnings: Vec<String>,
+    pub warnings: Vec<UiText>,
     pub total_changes: usize,
 }
 

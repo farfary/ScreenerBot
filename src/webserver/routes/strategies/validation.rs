@@ -11,8 +11,27 @@ use crate::{
 
 use super::types::StrategyRequest;
 use super::utils::{err, err_cause};
-use crate::i18n::ids;
+use crate::i18n::{ids, UiArg, UiText};
 use crate::webserver::api_error::ApiErrorCode;
+
+/// Validation outcome: `errors` are catalog texts the dashboard renders.
+fn invalid(errors: Vec<UiText>) -> Response {
+    success_response(serde_json::json!({"valid": false, "errors": errors}))
+}
+
+/// Run the engine validation and map its result to the response. A rule
+/// problem is a validation result; any other failure is an API error.
+async fn validation_response(strategy: &Strategy) -> Response {
+    match strategies::validate_strategy(strategy).await {
+        Ok(_) => success_response(serde_json::json!({"valid": true})),
+        Err(crate::Error::Strategies(e)) => invalid(vec![e.ui_text()]),
+        Err(e) => err_cause(
+            ApiErrorCode::ServiceUnavailable,
+            ids::ERRORS_STRATEGIES_VALIDATION_FAILED,
+            &e,
+        ),
+    }
+}
 
 /// POST /api/strategies/:id/validate - Validate a strategy by id
 pub async fn validate_strategy_handler(Path(id): Path<String>) -> Response {
@@ -28,10 +47,7 @@ pub async fn validate_strategy_handler(Path(id): Path<String>) -> Response {
         }
     };
 
-    match strategies::validate_strategy(&strategy).await {
-        Ok(_) => success_response(serde_json::json!({"valid": true})),
-        Err(e) => success_response(serde_json::json!({"valid": false, "errors": [e.to_string()]})),
-    }
+    validation_response(&strategy).await
 }
 
 /// POST /api/strategies/validate - Validate a strategy from JSON body (for unsaved strategies)
@@ -46,10 +62,7 @@ pub async fn validate_strategy_inline_handler(Json(request): Json<StrategyReques
         "ENTRY" => StrategyType::Entry,
         "EXIT" => StrategyType::Exit,
         _ => {
-            return success_response(serde_json::json!({
-                "valid": false,
-                "errors": ["Invalid strategy type. Must be ENTRY or EXIT"]
-            }));
+            return invalid(vec![UiText::new(ids::ERRORS_STRATEGIES_INVALID_TYPE)]);
         }
     };
 
@@ -57,10 +70,8 @@ pub async fn validate_strategy_inline_handler(Json(request): Json<StrategyReques
     let rules: RuleTree = match serde_json::from_value(request.rules) {
         Ok(rules) => rules,
         Err(e) => {
-            return success_response(serde_json::json!({
-                "valid": false,
-                "errors": [format!("Invalid rules JSON: {e}")]
-            }));
+            return invalid(vec![UiText::new(ids::STRATEGIES_ERROR_INVALID_RULES)
+                .arg("reason", UiArg::Text(e.to_string()))]);
         }
     };
 
@@ -81,8 +92,5 @@ pub async fn validate_strategy_inline_handler(Json(request): Json<StrategyReques
         version: 1,
     };
 
-    match strategies::validate_strategy(&strategy).await {
-        Ok(_) => success_response(serde_json::json!({"valid": true})),
-        Err(e) => success_response(serde_json::json!({"valid": false, "errors": [e.to_string()]})),
-    }
+    validation_response(&strategy).await
 }

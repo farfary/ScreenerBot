@@ -618,13 +618,3 @@ settings-data-folder-label = Open Data Folder
 settings-data-folder-hint = Open the folder containing all { -brand } data in your file manager.
 settings-data-folder-open = Open Folder
 settings-data-folder-open-failed = Could not open the data folder
-
-# Trading presets. Ids are the keys of the preset table in data_tab.js.
-settings-data-preset-conservative = Conservative
-settings-data-preset-moderate = Moderate
-settings-data-preset-aggressive = Aggressive
-settings-data-preset-unknown = Unknown preset
-settings-data-preset-title = Apply Trading Preset
-settings-data-preset-message = Apply { $preset } trading preset? This will update your trader, filtering, and position settings.
-settings-data-preset-applied = { $preset } preset applied
-settings-data-preset-failed = Failed to apply preset: { $message }

@@ -179,7 +179,6 @@ impl ConditionEvaluator for PriceChangePercentCondition {
         json!({
             "type": "PriceChangePercent",
             "category": "Price Analysis",
-            "tags": ["price", "percentage", "change", "time"],
             "icon": "icon-percent",
             "origin": "strategy",
             "parameters": {

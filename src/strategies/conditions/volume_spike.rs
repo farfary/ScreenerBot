@@ -100,7 +100,6 @@ impl ConditionEvaluator for VolumeSpikeCondition {
         json!({
             "type": "VolumeSpike",
             "category": "Volume Analysis",
-            "tags": ["volume", "spike", "momentum", "interest"],
             "icon": "icon-chart-bar",
             "origin": "strategy",
             "parameters": {

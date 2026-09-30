@@ -70,7 +70,6 @@ impl ConditionEvaluator for PositionHoldingTimeCondition {
         json!({
             "type": "PositionHoldingTime",
             "category": "Position & Performance",
-            "tags": ["position", "time", "duration", "exit"],
             "icon": "icon-hourglass",
             "origin": "strategy",
             "parameters": {

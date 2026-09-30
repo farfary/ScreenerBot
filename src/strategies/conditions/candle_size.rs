@@ -142,7 +142,6 @@ impl ConditionEvaluator for CandleSizeCondition {
         json!({
             "type": "CandleSize",
             "category": "Candle Patterns",
-            "tags": ["candles", "pattern", "doji", "wick"],
             "icon": "icon-expand",
             "origin": "strategy",
             "parameters": {

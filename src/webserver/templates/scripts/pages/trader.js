@@ -7,7 +7,7 @@ import { TabBar, TabBarManager } from "../ui/tab_bar.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 import { closeReasonText } from "../ui/trade_reason.js";
 import { STRATEGY_TYPE_LABELS } from "../ui/strategy_type.js";
-import { requestManager, apiErrorMessage } from "../core/request_manager.js";
+import { requestManager } from "../core/request_manager.js";
 import { createTraderConfigCards } from "./trader/config_cards.js";
 import { playToggleOn, playToggleOff, playError } from "../core/sounds.js";
 import { createExampleUpdaters } from "./trader/examples.js";
@@ -187,20 +187,6 @@ function createLifecycle() {
   }
 
   /**
-   * Load trailing stop performance stats (placeholder for Phase 2)
-   */
-  async function loadTrailingStopStats() {
-    // This will be implemented in Phase 2 when we add trailing stop tracking
-    const statsCards = $$(".quick-stat-card");
-    statsCards.forEach((card) => {
-      const value = card.querySelector(".quick-stat-value");
-      if (value) {
-        value.textContent = "--";
-      }
-    });
-  }
-
-  /**
    * Switch to a different tab
    */
   function switchTab(tabId, { load = true } = {}) {
@@ -278,8 +264,6 @@ function createLifecycle() {
     // Load preview when switching to trailing stop tab
     if (tabId === "trailing-stop") {
       examples.updateTrailingStopExample();
-      loadTrailingStopStats();
-      loadTrailingStopPreview();
     }
 
     // Update tab-specific data
@@ -782,114 +766,6 @@ function createLifecycle() {
           </div>`;
       })
       .join("");
-  }
-
-  /**
-   * Load trailing stop preview (Phase 2 Feature)
-   */
-  async function loadTrailingStopPreview(positionId = null) {
-    const activation = parseFloat($("#trail-activation")?.value) || 10;
-    const distance = parseFloat($("#trail-distance")?.value) || 5;
-
-    try {
-      const params = new URLSearchParams();
-      if (positionId) params.append("position_id", positionId);
-      params.append("activation_pct", activation);
-      params.append("distance_pct", distance);
-
-      const data = await requestManager.fetch(`/api/trader/preview-trailing-stop?${params}`, {
-        priority: "normal",
-      });
-
-      if (data.success) {
-        updatePreviewPanel(data.data);
-      } else {
-        console.error("[Trader] Preview failed:", apiErrorMessage(data, "Unknown error"));
-      }
-    } catch (error) {
-      console.error("[Trader] Failed to load preview:", error);
-    }
-  }
-
-  /**
-   * Update preview panel with data (Phase 2 Feature)
-   */
-  function updatePreviewPanel(preview) {
-    // Update position state
-    const symbol = $("#preview-symbol");
-    const entryPrice = $("#preview-entry-price");
-    const currentPrice = $("#preview-current-price");
-    const peakPrice = $("#preview-peak-price");
-    const currentProfit = $("#preview-current-profit");
-
-    if (symbol) symbol.textContent = preview.symbol;
-    if (entryPrice) entryPrice.textContent = Utils.formatPrice(preview.entry_price);
-    if (currentPrice) currentPrice.textContent = Utils.formatPrice(preview.current_price);
-    if (peakPrice) peakPrice.textContent = Utils.formatPrice(preview.peak_price);
-    if (currentProfit) {
-      currentProfit.textContent = Utils.formatPercent(preview.current_profit_pct);
-      currentProfit.className = `profit-value ${preview.current_profit_pct >= 0 ? "positive" : "negative"}`;
-    }
-
-    // Update trail status
-    const trailStatus = $("#preview-trail-status");
-    const trailPrice = $("#preview-trail-price");
-    const distanceToExit = $("#preview-distance-to-exit");
-    const estimatedExit = $("#preview-estimated-exit");
-    const estimatedProfit = $("#preview-estimated-profit");
-
-    if (trailStatus) {
-      const statusIcon = preview.trail_active
-        ? '<i class="icon-check"></i>'
-        : '<i class="icon-pause"></i>';
-      const statusText = preview.trail_active
-        ? I18n.t("trader-trailing-preview-active")
-        : I18n.t("trader-trailing-preview-inactive");
-      trailStatus.innerHTML = `${statusIcon} ${Utils.escapeHtml(statusText)}`;
-      trailStatus.className = preview.trail_active ? "status-active" : "status-inactive";
-    }
-    if (trailPrice) {
-      trailPrice.textContent = preview.trail_stop_price
-        ? Utils.formatPrice(preview.trail_stop_price)
-        : "—";
-    }
-    if (distanceToExit) {
-      distanceToExit.textContent = preview.distance_to_exit_pct
-        ? Utils.formatPercent(preview.distance_to_exit_pct)
-        : "—";
-    }
-    if (estimatedExit) {
-      estimatedExit.textContent = Utils.formatPrice(preview.estimated_exit_price);
-    }
-    if (estimatedProfit) {
-      estimatedProfit.textContent = Utils.formatPercent(preview.estimated_exit_profit_pct);
-      estimatedProfit.className = `profit-value ${preview.estimated_exit_profit_pct >= 0 ? "positive" : "negative"}`;
-    }
-
-    // Update what-if scenarios
-    const scenariosContainer = $("#preview-what-if-scenarios");
-    if (scenariosContainer && preview.what_if_scenarios) {
-      scenariosContainer.innerHTML = "";
-      preview.what_if_scenarios.forEach((scenario) => {
-        const scenarioDiv = document.createElement("div");
-        scenarioDiv.className = "what-if-scenario";
-        const statusIcon = scenario.trail_active
-          ? '<i class="icon-check"></i>'
-          : '<i class="icon-pause"></i>';
-        scenarioDiv.innerHTML = `
-          <div class="scenario-description">${scenario.description}</div>
-          <div class="scenario-result">
-            ${statusIcon} ${Utils.escapeHtml(
-              I18n.t("trader-trailing-preview-scenario", {
-                price: Utils.formatPrice(scenario.exit_price),
-                profit: Utils.formatPercent(scenario.exit_profit_pct),
-              })
-            )}
-          </div>
-        `;
-        scenariosContainer.appendChild(scenarioDiv);
-      });
-    }
   }
 
   /**
