@@ -55,15 +55,21 @@ export function createTraderControls({
     const isRunning = status?.running === true;
     const isAvailable = status?.available !== false && status !== undefined && status !== null;
     traderAvailable = isAvailable;
-    // The backend owns the wording for why the trader cannot run; substituting our
-    // own "Setup required" hid the actual blocker.
+    // The status carries a reason only when the backend knows why the trader cannot
+    // run; without one the generic setup message stands in.
     const statusText = !isAvailable
-      ? status?.unavailable_reason || "Setup required"
+      ? status?.unavailable_reason
+        ? I18n.t("trader-status-unavailable")
+        : I18n.t("trader-status-setup-required")
       : isRunning
-        ? "Running"
-        : "Stopped";
+        ? I18n.t("trader-status-running")
+        : I18n.t("trader-status-stopped");
     const statusAttr = isRunning ? "running" : "stopped";
-    const toggleLabel = !isAvailable ? "UNAVAILABLE" : isRunning ? "ON" : "OFF";
+    const toggleLabel = !isAvailable
+      ? I18n.t("trader-toggle-unavailable")
+      : isRunning
+        ? I18n.t("trader-toggle-on")
+        : I18n.t("trader-toggle-off");
 
     // Update stats tab status bar
     const statsBar = $("#trader-status-bar");
@@ -100,7 +106,9 @@ export function createTraderControls({
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to ${shouldStart ? "start" : "stop"} trader`);
+        throw new Error(
+          shouldStart ? I18n.t("trader-toggle-start-failed") : I18n.t("trader-toggle-stop-failed")
+        );
       }
 
       // Play sound feedback
@@ -120,7 +128,7 @@ export function createTraderControls({
       Utils.showToast({
         key: "auto-trader-control",
         type: "error",
-        title: "Auto Trader control failed",
+        title: I18n.t("trader-toast-control-failed"),
         message: error.message || null,
       });
       playError();
@@ -208,7 +216,7 @@ export function createTraderControls({
       banner.style.display = "flex";
       const reasonEl = $("#force-stop-reason");
       if (reasonEl) {
-        reasonEl.textContent = data.reason || "Manual force stop";
+        reasonEl.textContent = data.reason || I18n.t("trader-halt-reason-default");
       }
       btn.style.display = "none";
     } else {
@@ -247,12 +255,12 @@ export function createTraderControls({
       if (!el) return;
       const running = monitor?.running ?? false;
       const text = !available
-        ? "Setup required"
+        ? I18n.t("trader-status-setup-required")
         : running
-          ? "Running"
+          ? I18n.t("trader-status-running")
           : masterOff
-            ? "Auto Trader off"
-            : "Stopped";
+            ? I18n.t("trader-monitor-master-off")
+            : I18n.t("trader-status-stopped");
       el.textContent = text;
       el.className = "control-status " + (running ? "status-running" : "status-stopped");
     };
@@ -280,12 +288,12 @@ export function createTraderControls({
     panel.classList.toggle("loss-limit-panel--off", !enabled);
 
     if (!enabled) {
-      if (value) value.textContent = "Off";
+      if (value) value.textContent = I18n.t("trader-loss-limit-off");
       if (progress) {
         progress.style.width = "0%";
         progress.classList.remove("limit-exceeded", "limit-warning");
       }
-      if (period) period.textContent = "No period loss limit configured";
+      if (period) period.textContent = I18n.t("trader-loss-limit-none");
       if (status) {
         status.textContent = "";
         status.className = "loss-limit-status";
@@ -316,11 +324,14 @@ export function createTraderControls({
       const remainingSecs = data.period_remaining_secs ?? 0;
       const hours = Math.floor(remainingSecs / 3600);
       const mins = Math.floor((remainingSecs % 3600) / 60);
-      period.textContent = `Resets in ${formatTimeSpan(hours, { unit: "hour" })} ${formatTimeSpan(mins, { unit: "minute" })}`;
+      period.textContent = I18n.t("trader-loss-limit-resets-in", {
+        hours: formatTimeSpan(hours, { unit: "hour" }),
+        minutes: formatTimeSpan(mins, { unit: "minute" }),
+      });
     }
 
     if (status) {
-      status.textContent = data.is_limited ? "LIMIT REACHED" : "";
+      status.textContent = data.is_limited ? I18n.t("trader-loss-limit-reached") : "";
       status.className = data.is_limited ? "loss-limit-status status-limited" : "loss-limit-status";
     }
 
@@ -338,9 +349,9 @@ export function createTraderControls({
     if (forceStopBtn) {
       addTrackedListener(forceStopBtn, "click", async () => {
         const result = await ConfirmationDialog.show({
-          title: "Force Stop Trading",
-          message: "This will immediately halt ALL trading operations. Continue?",
-          confirmLabel: "Stop Trading",
+          title: I18n.t("trader-force-stop-confirm"),
+          message: I18n.attr("trader-force-stop-confirm", "message"),
+          confirmLabel: I18n.attr("trader-force-stop-confirm", "confirm"),
           variant: "danger",
         });
         if (!result.confirmed) return;
@@ -355,7 +366,7 @@ export function createTraderControls({
             Utils.showToast({
               key: "trader-force-stop",
               type: "warning",
-              title: "Force stop activated",
+              title: I18n.t("trader-toast-force-stop-on"),
             });
             playToggleOff();
             await loadControlsStatus();
@@ -363,13 +374,13 @@ export function createTraderControls({
             const data = await res.json().catch(() => null);
             Utils.showToast({
               type: "error",
-              title: "Could not activate force stop",
+              title: I18n.t("trader-toast-force-stop-failed"),
               message: apiErrorMessage(data, null),
             });
             playError();
           }
         } catch {
-          Utils.showToast({ type: "error", title: "Could not activate force stop" });
+          Utils.showToast({ type: "error", title: I18n.t("trader-toast-force-stop-failed") });
           playError();
         }
       });
@@ -385,7 +396,7 @@ export function createTraderControls({
             Utils.showToast({
               key: "trader-force-stop",
               type: "success",
-              title: "Force stop cleared",
+              title: I18n.t("trader-toast-force-stop-cleared"),
             });
             playToggleOn();
             await loadControlsStatus();
@@ -393,13 +404,13 @@ export function createTraderControls({
             const data = await res.json().catch(() => null);
             Utils.showToast({
               type: "error",
-              title: "Could not resume trading",
+              title: I18n.t("trader-toast-resume-failed"),
               message: apiErrorMessage(data, null),
             });
             playError();
           }
         } catch {
-          Utils.showToast({ type: "error", title: "Could not resume trading" });
+          Utils.showToast({ type: "error", title: I18n.t("trader-toast-resume-failed") });
           playError();
         }
       });
@@ -432,14 +443,16 @@ export function createTraderControls({
     if (lossLimitResumeBtn) {
       addTrackedListener(lossLimitResumeBtn, "click", async () => {
         const result = await ConfirmationDialog.show({
-          title: "Resume After Loss Limit",
-          message:
-            "The period loss limit stopped new entries. Resuming lets the trader open positions again before the period resets. Continue?",
-          confirmLabel: "Resume trading",
+          title: I18n.t("trader-loss-limit-resume-confirm"),
+          message: I18n.attr("trader-loss-limit-resume-confirm", "message"),
+          confirmLabel: I18n.t("trader-loss-limit-resume"),
           variant: "warning",
         });
         if (!result.confirmed) return;
-        await lossLimitAction("/api/trader/loss-limit/resume", "Could not resume trading");
+        await lossLimitAction(
+          "/api/trader/loss-limit/resume",
+          I18n.t("trader-toast-resume-failed")
+        );
       });
     }
 
@@ -447,14 +460,16 @@ export function createTraderControls({
     if (lossLimitResetBtn) {
       addTrackedListener(lossLimitResetBtn, "click", async () => {
         const result = await ConfirmationDialog.show({
-          title: "Reset Loss Limit Period",
-          message:
-            "This clears the accumulated loss for the current period and starts a new one. Continue?",
-          confirmLabel: "Reset period",
+          title: I18n.t("trader-loss-limit-reset-confirm"),
+          message: I18n.attr("trader-loss-limit-reset-confirm", "message"),
+          confirmLabel: I18n.t("trader-loss-limit-reset"),
           variant: "warning",
         });
         if (!result.confirmed) return;
-        await lossLimitAction("/api/trader/loss-limit/reset", "Could not reset the loss limit");
+        await lossLimitAction(
+          "/api/trader/loss-limit/reset",
+          I18n.t("trader-toast-loss-limit-reset-failed")
+        );
       });
     }
 
@@ -474,7 +489,7 @@ export function createTraderControls({
             Utils.showToast({
               key: "monitor-toggle",
               type: "error",
-              title: "Could not toggle the entry monitor",
+              title: I18n.t("trader-toast-entry-monitor-failed"),
               message: apiErrorMessage(data, null),
             });
             playError();
@@ -486,7 +501,7 @@ export function createTraderControls({
           Utils.showToast({
             key: "monitor-toggle",
             type: "error",
-            title: "Could not toggle the entry monitor",
+            title: I18n.t("trader-toast-entry-monitor-failed"),
           });
           playError();
         }
@@ -509,7 +524,7 @@ export function createTraderControls({
             Utils.showToast({
               key: "monitor-toggle",
               type: "error",
-              title: "Could not toggle the exit monitor",
+              title: I18n.t("trader-toast-exit-monitor-failed"),
               message: apiErrorMessage(data, null),
             });
             playError();
@@ -521,7 +536,7 @@ export function createTraderControls({
           Utils.showToast({
             key: "monitor-toggle",
             type: "error",
-            title: "Could not toggle the exit monitor",
+            title: I18n.t("trader-toast-exit-monitor-failed"),
           });
           playError();
         }

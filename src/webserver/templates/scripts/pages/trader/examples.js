@@ -1,4 +1,4 @@
-import { formatPercentValue, formatSol, formatTimeSpan } from "../../core/format.js";
+import { formatFixed, formatPercentValue, formatSol, formatTimeSpan } from "../../core/format.js";
 
 /**
  * Trader Example Updaters Module
@@ -17,6 +17,26 @@ import { formatPercentValue, formatSol, formatTimeSpan } from "../../core/format
  */
 export function createExampleUpdaters({ $, Utils: _Utils }) {
   /**
+   * A duration in one of the configurable units, worded through the catalog, or
+   * `null` for a unit the page does not offer.
+   */
+  function describeDuration(count, unit) {
+    const args = { count, amount: String(count) };
+    switch (unit) {
+      case "seconds":
+        return I18n.t("trader-duration-seconds", args);
+      case "minutes":
+        return I18n.t("trader-duration-minutes", args);
+      case "hours":
+        return I18n.t("trader-duration-hours", args);
+      case "days":
+        return I18n.t("trader-duration-days", args);
+      default:
+        return null;
+    }
+  }
+
+  /**
    * Convert time duration to human-readable format
    */
   function convertTimeToReadable(duration, unit) {
@@ -34,18 +54,15 @@ export function createExampleUpdaters({ $, Utils: _Utils }) {
 
     // Find the best unit for display
     if (totalSeconds >= 86400 && totalSeconds % 86400 === 0) {
-      const days = totalSeconds / 86400;
-      return `${days} day${days !== 1 ? "s" : ""}`;
+      return describeDuration(totalSeconds / 86400, "days");
     }
     if (totalSeconds >= 3600 && totalSeconds % 3600 === 0) {
-      const hours = totalSeconds / 3600;
-      return `${hours} hour${hours !== 1 ? "s" : ""}`;
+      return describeDuration(totalSeconds / 3600, "hours");
     }
     if (totalSeconds >= 60 && totalSeconds % 60 === 0) {
-      const minutes = totalSeconds / 60;
-      return `${minutes} minute${minutes !== 1 ? "s" : ""}`;
+      return describeDuration(totalSeconds / 60, "minutes");
     }
-    return `${totalSeconds} second${totalSeconds !== 1 ? "s" : ""}`;
+    return describeDuration(totalSeconds, "seconds");
   }
 
   /**
@@ -63,7 +80,10 @@ export function createExampleUpdaters({ $, Utils: _Utils }) {
     const unit = unitSelect.value || "hours";
 
     const readable = convertTimeToReadable(duration, unit);
-    hintText.textContent = `${duration} ${unit} = ${readable}`;
+    hintText.textContent = I18n.t("trader-time-conversion", {
+      duration: describeDuration(duration, unit) ?? `${duration} ${unit}`,
+      readable,
+    });
 
     if (exampleDuration) {
       exampleDuration.textContent = readable;
@@ -86,18 +106,18 @@ export function createExampleUpdaters({ $, Utils: _Utils }) {
 
     // Update impact text
     if (impactText) {
-      impactText.textContent = `Exit at +${value}% profit`;
+      impactText.textContent = I18n.t("trader-roi-impact", { target: String(value) });
     }
 
     // Update visual example
     if (exampleProfit) {
-      exampleProfit.textContent = `+${value}% profit`;
+      exampleProfit.textContent = I18n.t("trader-example-profit", { value: String(value) });
     }
     if (exampleTarget) {
       exampleTarget.textContent = formatSol(0.01 * (1 + value / 100), { decimals: 4 });
     }
     if (exampleSummary) {
-      exampleSummary.textContent = `+${value}%`;
+      exampleSummary.innerHTML = I18n.markup("trader-roi-summary", { target: String(value) });
     }
   }
 
@@ -116,12 +136,12 @@ export function createExampleUpdaters({ $, Utils: _Utils }) {
 
     // Update impact text
     if (impactText) {
-      impactText.textContent = `Exit if down ${absValue}% or more after hold period`;
+      impactText.textContent = I18n.t("trader-time-loss-impact", { value: String(absValue) });
     }
 
     // Update visual example
     if (exampleLoss) {
-      exampleLoss.textContent = `${value}%`;
+      exampleLoss.textContent = I18n.t("trader-value-percent", { value: String(value) });
     }
   }
 
@@ -142,7 +162,7 @@ export function createExampleUpdaters({ $, Utils: _Utils }) {
     // Update impact text
     const impactText = $("#stop-loss-impact");
     if (impactText) {
-      impactText.textContent = `Exit when down ${threshold}% from entry`;
+      impactText.textContent = I18n.t("trader-stop-loss-impact", { threshold: String(threshold) });
     }
 
     // Update example values
@@ -156,28 +176,35 @@ export function createExampleUpdaters({ $, Utils: _Utils }) {
     const exitPrice = entryPrice * (1 - threshold / 100);
 
     if (exampleEntry) exampleEntry.textContent = formatSol(entryPrice, { decimals: 6 });
-    if (exampleTrigger) exampleTrigger.textContent = `-${threshold}%`;
+    const lossPercent = I18n.t("trader-value-percent", { value: `-${threshold}` });
+    if (exampleTrigger) exampleTrigger.textContent = lossPercent;
     if (exampleExit) exampleExit.textContent = formatSol(exitPrice, { decimals: 6 });
-    if (exampleLoss) exampleLoss.textContent = `-${threshold}%`;
+    if (exampleLoss) {
+      exampleLoss.innerHTML = I18n.markup("trader-stop-loss-summary", { loss: lossPercent });
+    }
 
     // Update hold time display
     const holdTimeDisplay = $("#stop-loss-hold-time-display");
     if (holdTimeDisplay) {
       if (minHold === 0) {
-        holdTimeDisplay.textContent = "Immediate";
-      } else if (minHold < 60) {
-        holdTimeDisplay.textContent = `${formatTimeSpan(minHold)} delay`;
-      } else if (minHold < 3600) {
-        holdTimeDisplay.textContent = `${formatTimeSpan(Math.round(minHold / 60), { unit: "minute" })} delay`;
+        holdTimeDisplay.textContent = I18n.t("trader-stop-loss-hold-immediate");
       } else {
-        holdTimeDisplay.textContent = `${formatTimeSpan(minHold / 3600, { unit: "hour", decimals: 1 })} delay`;
+        const span =
+          minHold < 60
+            ? formatTimeSpan(minHold)
+            : minHold < 3600
+              ? formatTimeSpan(Math.round(minHold / 60), { unit: "minute" })
+              : formatTimeSpan(minHold / 3600, { unit: "hour", decimals: 1 });
+        holdTimeDisplay.textContent = I18n.t("trader-stop-loss-hold-delay", { span });
       }
     }
 
     // Update partial exit indicator
     const partialIndicator = $("#stop-loss-partial-indicator");
     if (partialIndicator) {
-      partialIndicator.textContent = allowPartial ? "Partial exits allowed" : "Full position exit";
+      partialIndicator.textContent = allowPartial
+        ? I18n.t("trader-stop-loss-partial")
+        : I18n.t("trader-step-full-exit");
     }
   }
 
@@ -210,32 +237,45 @@ export function createExampleUpdaters({ $, Utils: _Utils }) {
     if (stepActivation) {
       stepActivation.textContent = formatSol(activationPrice, { decimals: 4 });
       const activationDetail = $("#example-activation-pct");
-      if (activationDetail) activationDetail.textContent = `+${activation}% profit`;
+      if (activationDetail) {
+        activationDetail.textContent = I18n.t("trader-example-profit", {
+          value: String(activation),
+        });
+      }
     }
     if (stepPeak) {
       stepPeak.textContent = formatSol(peakPrice, { decimals: 4 });
       const peakDetail = $("#example-peak-pct");
       if (peakDetail) {
         const gainFromEntry = ((peakPrice - entryPrice) / entryPrice) * 100;
-        peakDetail.textContent = `+${formatPercentValue(gainFromEntry, { decimals: 1, plus: "" })} profit`;
+        peakDetail.textContent = I18n.t("trader-example-profit", {
+          value: formatFixed(gainFromEntry, { decimals: 1 }),
+        });
       }
     }
     if (stepExit) {
       stepExit.textContent = formatSol(exitPrice, { decimals: 4 });
       const exitDetail = $("#example-exit-pct");
-      if (exitDetail)
-        exitDetail.textContent = `+${formatPercentValue(protectedProfit, { decimals: 1, plus: "" })} final`;
+      if (exitDetail) {
+        exitDetail.textContent = I18n.t("trader-trailing-final", {
+          value: formatFixed(protectedProfit, { decimals: 1 }),
+        });
+      }
     }
 
     // Update summary
     const summaryProtected = $("#example-protected");
     const summaryAvoided = $("#example-avoided");
     if (summaryProtected) {
-      summaryProtected.textContent = formatPercentValue(protectedProfit, { decimals: 1, plus: "" });
+      summaryProtected.innerHTML = I18n.markup("trader-trailing-summary-protected", {
+        value: formatPercentValue(protectedProfit, { decimals: 1, plus: "" }),
+      });
     }
     if (summaryAvoided) {
       const avoidedLoss = ((peakPrice - exitPrice) / peakPrice) * 100;
-      summaryAvoided.textContent = formatPercentValue(avoidedLoss, { decimals: 1, plus: "" });
+      summaryAvoided.innerHTML = I18n.markup("trader-trailing-summary-avoided", {
+        value: formatPercentValue(avoidedLoss, { decimals: 1, plus: "" }),
+      });
     }
 
     // Update impact indicators
@@ -256,11 +296,11 @@ export function createExampleUpdaters({ $, Utils: _Utils }) {
 
     if (activationImpact) {
       if (activation < 10) {
-        activationImpact.textContent = "Activates quickly - good for volatile tokens";
+        activationImpact.textContent = I18n.t("trader-trailing-activation-quick");
       } else if (activation < 20) {
-        activationImpact.textContent = "Balanced activation - suitable for most scenarios";
+        activationImpact.textContent = I18n.t("trader-trailing-activation-balanced");
       } else {
-        activationImpact.textContent = "Delayed activation - may miss protection window";
+        activationImpact.textContent = I18n.t("trader-trailing-activation-late");
       }
     }
 
@@ -276,11 +316,11 @@ export function createExampleUpdaters({ $, Utils: _Utils }) {
 
     if (distanceImpact) {
       if (distance < 5) {
-        distanceImpact.textContent = "Tight protection - may exit on minor dips";
+        distanceImpact.textContent = I18n.t("trader-trailing-distance-tight");
       } else if (distance < 10) {
-        distanceImpact.textContent = "Balanced protection - good for most situations";
+        distanceImpact.textContent = I18n.t("trader-trailing-distance-balanced");
       } else {
-        distanceImpact.textContent = "Loose protection - allows larger pullbacks";
+        distanceImpact.textContent = I18n.t("trader-trailing-distance-loose");
       }
     }
   }

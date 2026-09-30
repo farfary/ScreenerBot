@@ -14,8 +14,29 @@ import { resolve } from "node:path";
 import { chromium } from "playwright";
 
 import { PAGES_ROOT, STYLES_ROOT } from "../lib/dashboard_ui.mjs";
+import { englishI18n } from "./fixtures/i18n_en.mjs";
 
-const traderHtml = await readFile(resolve(PAGES_ROOT, "trader.html"), "utf8");
+const escapeText = (text) => text.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+
+/**
+ * The server fills empty `data-l10n-id` elements when it serves a page; this does
+ * the same with the source-locale catalog so the markup carries its real labels.
+ */
+function localizeEmptyElements(html) {
+  return html.replace(
+    /<(\w+)((?:[^>]*?)\sdata-l10n-id="([^"]+)"[^>]*)><\/\1>/g,
+    (match, tag, attributes, id) => {
+      const rawArgs = /data-l10n-args='([^']*)'/.exec(attributes)?.[1];
+      const args = rawArgs ? JSON.parse(rawArgs) : undefined;
+      const markup = attributes.includes("data-l10n-markup");
+      const text = markup ? englishI18n.markup(id, args) : englishI18n.t(id, args);
+      if (text === id) return match;
+      return `<${tag}${attributes}>${markup ? text : escapeText(text)}</${tag}>`;
+    }
+  );
+}
+
+const traderHtml = localizeEmptyElements(await readFile(resolve(PAGES_ROOT, "trader.html"), "utf8"));
 const styles = await Promise.all(
   ["foundation.css", "pages/trader/config_components.css"].map((path) =>
     readFile(resolve(STYLES_ROOT, path), "utf8")

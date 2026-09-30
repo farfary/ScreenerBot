@@ -52,7 +52,7 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
       // Remove if already exists
       recent = recent.filter((r) => r.mint !== mint);
       // Add to front
-      recent.unshift({ mint, symbol: symbol || "Unknown", timestamp: Date.now() });
+      recent.unshift({ mint, symbol: symbol || I18n.t("format-unknown"), timestamp: Date.now() });
       // Keep max 10
       recent = recent.slice(0, 10);
       localStorage.setItem("screenerbot_recent_trades", JSON.stringify(recent));
@@ -186,7 +186,7 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
       } else {
         // Carry the localized title, the message's `hint` attribute and the
         // technical detail so the error panel can explain WHY the quote failed.
-        const e = new Error(apiErrorTitle(data, "Couldn't fetch a quote"));
+        const e = new Error(apiErrorTitle(data, I18n.t("trade-quote-error-title")));
         e.detail = [I18n.textAttr(data.error?.text, "hint"), apiErrorDetails(data)] // api-body-ok: envelope hint attribute; no helper exposes it
           .filter(Boolean)
           .join(" ");
@@ -237,9 +237,10 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
     // Name the asset the user actually holds instead of the generic "tokens" — the
     // backend cannot know the symbol the dialog was opened with.
     const symbol = (this._currentSymbol || this.currentContext?.symbol || "").trim();
-    const tokenUnit = symbol || "tokens";
-    const outUnit = isSell ? "SOL" : tokenUnit;
-    const inUnit = isSell ? tokenUnit : "SOL";
+    const tokenUnit = symbol || I18n.t("trade-unit-tokens");
+    // A `null` unit is the SOL leg; the token leg carries its symbol.
+    const outUnit = isSell ? null : tokenUnit;
+    const inUnit = isSell ? tokenUnit : null;
 
     // Pay leg: for a sell this is the only absolute token figure in the dialog —
     // the left pane only offers a percentage of the balance.
@@ -263,7 +264,9 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
     const impactPct = quote.price_impact_pct ?? 0;
     // A real but sub-basis-point impact must not read as a flat 0.00%.
     this.quoteImpactEl.textContent =
-      impactPct > 0 && impactPct < 0.01 ? "<0.01%" : formatPercentValue(impactPct, { decimals: 2, plus: "" });
+      impactPct > 0 && impactPct < 0.01
+        ? I18n.t("trade-quote-impact-tiny")
+        : formatPercentValue(impactPct, { decimals: 2, plus: "" });
     this.quoteImpactEl.className = "quote-value quote-impact";
     if (impactPct > 5) {
       this.quoteImpactEl.classList.add("impact-high");
@@ -293,7 +296,7 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
 
     // One route row: the aggregator that priced it, with the venue path beneath it
     // when the path says something the aggregator name does not.
-    const router = quote.router || "Unknown";
+    const router = quote.router || I18n.t("format-unknown");
     this.quoteRouteEl.textContent = router;
     if (this.quoteRoutePathEl) {
       const path = quote.route || "";
@@ -307,9 +310,10 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
       const exceeds = impactPct > tolerance;
       this.quoteWarningEl.dataset.visible = exceeds ? "true" : "false";
       if (exceeds) {
-        this.quoteWarningTextEl.textContent =
-          `Price impact ${formatPercentValue(impactPct, { decimals: 2, plus: "" })} is above your ${trimPct(tolerance)}% max slippage — ` +
-          "this size moves the pool. A smaller amount fills closer to the market price.";
+        this.quoteWarningTextEl.textContent = I18n.t("trade-quote-impact-warning", {
+          impact: formatPercentValue(impactPct, { decimals: 2, plus: "" }),
+          tolerance: trimPct(tolerance),
+        });
       }
     }
 
@@ -330,10 +334,14 @@ export function applyQuoteManagerMixin(TradeActionDialog) {
     return formatFixed(n, { decimals: 2, trim: true, fallback: "0" });
   }
 
-  /** Compact amount with a unit label, using K/M/B for large token counts. */
+  /**
+   * Compact amount with a unit label, using K/M/B for large token counts. A `null`
+   * unit is SOL; any other unit is the token symbol shown after the number.
+   */
   function formatAmount(n, unit) {
-    if (typeof n !== "number" || !isFinite(n)) return `0 ${unit}`;
-    if (unit === "SOL") return `${trimSol(n)} ${unit}`;
+    const isSol = unit === null;
+    if (typeof n !== "number" || !isFinite(n)) return isSol ? withSolUnit("0") : `0 ${unit}`;
+    if (isSol) return withSolUnit(trimSol(n));
     return `${formatCompactFixed(n, { decimals: 2, belowDecimals: 4, trimBelow: true })} ${unit}`;
   }
 

@@ -37,46 +37,63 @@ const LIVE_SYNC_INTERVAL_MS = 5000;
  * - Loading states and transaction feedback
  */
 
+// Message key of a preset's caption; presets carry the id in `tag`.
+const PRESET_TAG_LABELS = Object.freeze({
+  sol: "trade-unit-sol",
+  partial: "trade-preset-partial",
+  half: "trade-preset-half",
+  most: "trade-preset-most",
+  full: "trade-preset-full",
+});
+
+// `text()` resolves the wording when the dialog renders, so it follows the catalog
+// the page was served with.
 const ACTION_CONFIG = {
   buy: {
-    title: "Buy Token",
-    subtitle: "Enter amount in SOL",
-    confirmLabel: "Execute Buy",
-    inputLabel: "Custom Amount",
-    inputPlaceholder: "Enter SOL amount",
-    inputHint: "Leave empty for config default",
+    text: () => ({
+      title: I18n.t("trade-buy-title"),
+      subtitle: I18n.t("trade-buy-subtitle"),
+      confirmLabel: I18n.t("trade-buy-confirm"),
+      inputLabel: I18n.t("trade-amount-input"),
+      inputPlaceholder: I18n.attr("trade-amount-input", "placeholder"),
+      inputHint: I18n.t("trade-buy-hint"),
+    }),
     colorClass: "action-buy",
     presets: [
-      { label: "0.005", sublabel: "SOL", value: 0.005, type: "amount" },
-      { label: "0.01", sublabel: "SOL", value: 0.01, type: "amount" },
-      { label: "0.02", sublabel: "SOL", value: 0.02, type: "amount" },
-      { label: "0.05", sublabel: "SOL", value: 0.05, type: "amount" },
+      { label: "0.005", tag: "sol", value: 0.005, type: "amount" },
+      { label: "0.01", tag: "sol", value: 0.01, type: "amount" },
+      { label: "0.02", tag: "sol", value: 0.02, type: "amount" },
+      { label: "0.05", tag: "sol", value: 0.05, type: "amount" },
     ],
   },
   sell: {
-    title: "Sell Position",
-    subtitle: "Select sell percentage",
-    confirmLabel: "Execute Sell",
-    inputLabel: "Custom Percentage",
-    inputPlaceholder: "1-100",
-    inputHint: "Enter value between 1-100",
+    text: () => ({
+      title: I18n.t("trade-sell-title"),
+      subtitle: I18n.t("trade-sell-subtitle"),
+      confirmLabel: I18n.t("trade-sell-confirm"),
+      inputLabel: I18n.t("trade-sell-input"),
+      inputPlaceholder: I18n.attr("trade-sell-input", "placeholder"),
+      inputHint: I18n.t("trade-sell-hint"),
+    }),
     colorClass: "action-sell",
     presets: [
-      { label: "25%", sublabel: "Partial", value: 25, type: "percentage" },
-      { label: "50%", sublabel: "Half", value: 50, type: "percentage" },
-      { label: "75%", sublabel: "Most", value: 75, type: "percentage" },
-      { label: "100%", sublabel: "Full Exit", value: 100, type: "percentage", default: true },
+      { label: "25%", tag: "partial", value: 25, type: "percentage" },
+      { label: "50%", tag: "half", value: 50, type: "percentage" },
+      { label: "75%", tag: "most", value: 75, type: "percentage" },
+      { label: "100%", tag: "full", value: 100, type: "percentage", default: true },
     ],
   },
   add: {
-    title: "Add to Position",
-    subtitle: "DCA into existing position",
-    confirmLabel: "Add Position",
-    inputLabel: "Custom Amount",
-    inputPlaceholder: "Enter SOL amount",
-    // The backend's default add is trade_size_sol x dca_size_percentage — NOT "50% of
-    // the original entry", which is what this used to claim.
-    inputHint: "Leave empty for the configured DCA size",
+    text: () => ({
+      title: I18n.t("trade-add-title"),
+      subtitle: I18n.t("trade-add-subtitle"),
+      confirmLabel: I18n.t("trade-add-confirm"),
+      inputLabel: I18n.t("trade-amount-input"),
+      inputPlaceholder: I18n.attr("trade-amount-input", "placeholder"),
+      // The backend's default add is trade_size_sol x dca_size_percentage — NOT "50% of
+      // the original entry", which is what this used to claim.
+      inputHint: I18n.t("trade-add-hint"),
+    }),
     colorClass: "action-add",
     presets: [], // Dynamic, built from context
   },
@@ -193,7 +210,7 @@ export class TradeActionDialog {
               <p class="trade-action-subtitle"></p>
             </div>
           </div>
-          <button type="button" class="trade-action-close" data-action="close" aria-label="Close dialog">
+          <button type="button" class="trade-action-close" data-action="close" data-l10n-id="trade-dialog-close">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M18 6L6 18M6 6l12 12"/>
             </svg>
@@ -210,12 +227,12 @@ export class TradeActionDialog {
               <!-- data-stepper="off": MAX and the percentage slider already own
                    this field's gutter, and an amount is chosen, not incremented. -->
               <input type="number" id="trade-action-input" class="trade-action-input" step="any" min="0" inputmode="decimal" data-stepper="off" />
-              <span class="trade-action-input-suffix">SOL</span>
-              <button type="button" class="trade-action-input-max" data-action="max" aria-label="Use maximum">MAX</button>
+              <span class="trade-action-input-suffix" data-l10n-id="trade-unit-sol"></span>
+              <button type="button" class="trade-action-input-max" data-action="max" data-l10n-id="trade-input-max"></button>
             </div>
             <div class="trade-action-slider-row" data-visible="false">
               <div class="trade-action-slider-wrap">
-                <input type="range" class="trade-action-slider" min="0" max="100" step="1" value="0" aria-label="Amount slider" />
+                <input type="range" class="trade-action-slider" min="0" max="100" step="1" value="0" data-l10n-id="trade-slider" />
                 <div class="trade-action-slider-ticks" aria-hidden="true"></div>
               </div>
               <span class="trade-action-slider-readout"></span>
@@ -236,12 +253,12 @@ export class TradeActionDialog {
           -->
           <div class="trade-action-slippage">
             <div class="trade-action-slippage-head">
-              <span class="trade-action-slippage-label">Slippage</span>
+              <span class="trade-action-slippage-label" data-l10n-id="trade-slippage-label"></span>
               <span class="trade-action-slippage-note"></span>
             </div>
             <div class="trade-action-slippage-options">
-              <div class="trade-action-slippage-presets" role="group" aria-label="Slippage preset">
-                <button type="button" class="trade-action-slippage-btn" data-slippage="auto">Auto</button>
+              <div class="trade-action-slippage-presets" role="group" data-l10n-id="trade-slippage-presets">
+                <button type="button" class="trade-action-slippage-btn" data-slippage="auto" data-l10n-id="trade-slippage-auto"></button>
                 <button type="button" class="trade-action-slippage-btn" data-slippage="1">1%</button>
                 <button type="button" class="trade-action-slippage-btn" data-slippage="5">5%</button>
                 <button type="button" class="trade-action-slippage-btn" data-slippage="15">15%</button>
@@ -249,12 +266,11 @@ export class TradeActionDialog {
               <input
                 type="number"
                 class="trade-action-slippage-input"
-                placeholder="Custom"
+                data-l10n-id="trade-slippage-custom"
                 min="0.1"
                 max="50"
                 step="0.1"
                 inputmode="decimal"
-                aria-label="Custom slippage percent"
               />
             </div>
             <div class="trade-action-slippage-warning" data-visible="false"></div>
@@ -265,10 +281,10 @@ export class TradeActionDialog {
             <input type="checkbox" class="trade-action-manage-checkbox" checked />
             <span class="trade-action-manage-copy">
               <span class="trade-action-manage-title">
-                Manual management
+                <span data-l10n-id="trade-manage-title"></span>
                 <span class="trade-action-manage-hint"></span>
               </span>
-              <span class="trade-action-manage-sub">Auto-trader won't sell or DCA this position. Uncheck to let it manage exits.</span>
+              <span class="trade-action-manage-sub" data-l10n-id="trade-manage-description"></span>
             </span>
           </label>
           </div>
@@ -276,8 +292,8 @@ export class TradeActionDialog {
           <div class="trade-action-quote-section" data-state="idle" data-refreshing="false">
             <div class="trade-action-quote-refresh-bar" data-ambient-motion></div>
             <div class="trade-action-quote-header">
-              <span class="trade-action-quote-title">Swap Preview</span>
-              <button type="button" class="trade-action-quote-refresh" aria-label="Refresh quote" title="Refresh quote">
+              <span class="trade-action-quote-title" data-l10n-id="trade-quote-title"></span>
+              <button type="button" class="trade-action-quote-refresh" data-l10n-id="trade-quote-refresh">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
                 </svg>
@@ -285,11 +301,11 @@ export class TradeActionDialog {
               </button>
             </div>
             <div class="trade-action-quote-idle">
-              <span>Choose an amount to preview your swap</span>
+              <span data-l10n-id="trade-quote-idle"></span>
             </div>
             <div class="trade-action-quote-loading">
               <div class="trade-action-quote-spinner"></div>
-              <span>Finding the best route…</span>
+              <span data-l10n-id="trade-quote-loading"></span>
             </div>
             <div class="trade-action-quote-error">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -299,7 +315,7 @@ export class TradeActionDialog {
               <div class="quote-error-body">
                 <span class="quote-error-text"></span>
                 <span class="quote-error-detail"></span>
-                <button type="button" class="quote-error-retry">Try again</button>
+                <button type="button" class="quote-error-retry" data-l10n-id="trade-quote-retry"></button>
               </div>
             </div>
             <div class="trade-action-quote-content">
@@ -311,7 +327,7 @@ export class TradeActionDialog {
               -->
               <div class="quote-flow">
                 <div class="quote-leg quote-leg-in">
-                  <span class="quote-leg-label">You pay</span>
+                  <span class="quote-leg-label" data-l10n-id="trade-quote-pay"></span>
                   <span class="quote-leg-value quote-you-pay">—</span>
                 </div>
                 <div class="quote-leg quote-leg-out">
@@ -319,7 +335,7 @@ export class TradeActionDialog {
                     <svg class="quote-leg-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
                       <path d="M12 5v13M6 12l6 6 6-6"/>
                     </svg>
-                    You receive (estimated)
+                    <span data-l10n-id="trade-quote-receive"></span>
                   </span>
                   <span class="quote-leg-value quote-output">—</span>
                   <span class="quote-leg-sub quote-unit-price"></span>
@@ -327,28 +343,28 @@ export class TradeActionDialog {
               </div>
               <!-- The estimate above can move; this is the number the chain guarantees. -->
               <div class="quote-floor">
-                <span class="quote-floor-label" title="The least you can receive after max slippage. The swap reverts rather than fill below it.">Guaranteed minimum</span>
+                <span class="quote-floor-label" data-l10n-id="trade-quote-minimum"></span>
                 <span class="quote-floor-value quote-min-received"></span>
               </div>
               <div class="quote-rows">
                 <div class="quote-row">
-                  <span class="quote-label">Price impact</span>
+                  <span class="quote-label" data-l10n-id="trade-quote-impact"></span>
                   <span class="quote-value quote-impact"></span>
                 </div>
                 <div class="quote-row">
-                  <span class="quote-label">Max slippage</span>
+                  <span class="quote-label" data-l10n-id="trade-quote-slippage"></span>
                   <span class="quote-value quote-slippage"></span>
                 </div>
                 <div class="quote-row">
-                  <span class="quote-label quote-label-info" title="0.5% — supports development. Already built into the quote above.">Platform fee</span>
+                  <span class="quote-label quote-label-info" data-l10n-id="trade-quote-platform-fee"></span>
                   <span class="quote-value quote-platform-fee"></span>
                 </div>
                 <div class="quote-row">
-                  <span class="quote-label">Network fee</span>
+                  <span class="quote-label" data-l10n-id="trade-quote-network-fee"></span>
                   <span class="quote-value quote-network-fee"></span>
                 </div>
                 <div class="quote-row quote-row-route">
-                  <span class="quote-label">Route</span>
+                  <span class="quote-label" data-l10n-id="trade-quote-route"></span>
                   <span class="quote-value">
                     <span class="quote-route"></span>
                     <span class="quote-route-path"></span>
@@ -365,21 +381,16 @@ export class TradeActionDialog {
                 </svg>
                 <span class="quote-warning-text"></span>
               </div>
-              <p class="quote-disclaimer">
-                Prices update live from the chain. The swap reverts if it can't fill above your
-                guaranteed minimum, so you never get less than shown.
-              </p>
+              <p class="quote-disclaimer" data-l10n-id="trade-quote-disclaimer"></p>
             </div>
           </div>
           </div>
           </div>
         </div>
         <footer class="trade-action-footer">
-          <button type="button" class="trade-action-btn trade-action-btn-cancel" data-action="cancel">
-            Cancel
-          </button>
+          <button type="button" class="trade-action-btn trade-action-btn-cancel" data-action="cancel" data-l10n-id="common-action-cancel"></button>
           <button type="button" class="trade-action-btn trade-action-btn-confirm" data-action="confirm" disabled>
-            <span class="btn-text">Confirm</span>
+            <span class="btn-text" data-l10n-id="common-action-confirm"></span>
             <span class="btn-loader"></span>
           </button>
         </footer>
@@ -387,10 +398,10 @@ export class TradeActionDialog {
         <!-- Quick Trade Mint Input Step -->
         <div class="quick-trade-mint-step" data-visible="false">
           <div class="quick-trade-mint-content">
-            <label class="quick-trade-mint-label">Enter Token Mint Address</label>
+            <label class="quick-trade-mint-label" data-l10n-id="trade-quick-mint-label"></label>
             <div class="quick-trade-mint-input-wrapper">
-              <input type="text" class="quick-trade-mint-input" placeholder="Enter mint address or search by symbol..." autocomplete="off" spellcheck="false" />
-              <button type="button" class="quick-trade-paste-btn" aria-label="Paste from clipboard">
+              <input type="text" class="quick-trade-mint-input" data-l10n-id="trade-quick-mint-input" autocomplete="off" spellcheck="false" />
+              <button type="button" class="quick-trade-paste-btn" data-l10n-id="trade-quick-paste">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
                   <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
@@ -399,7 +410,7 @@ export class TradeActionDialog {
             </div>
             <div class="quick-trade-search-results" data-visible="false"></div>
             <div class="quick-trade-recent" data-visible="false">
-              <span class="quick-trade-recent-label">Recent:</span>
+              <span class="quick-trade-recent-label" data-l10n-id="trade-quick-recent"></span>
               <div class="quick-trade-recent-list"></div>
             </div>
             <div class="quick-trade-error" data-visible="false">
@@ -412,7 +423,7 @@ export class TradeActionDialog {
             <div class="quick-trade-token-preview" data-visible="false">
               <div class="quick-trade-token-loading">
                 <div class="quick-trade-spinner"></div>
-                <span>Fetching token info...</span>
+                <span data-l10n-id="trade-quick-fetching"></span>
               </div>
               <div class="quick-trade-token-info">
                 <div class="quick-trade-token-symbol token-symbol-type"></div>
@@ -422,11 +433,9 @@ export class TradeActionDialog {
             </div>
           </div>
           <div class="quick-trade-mint-footer">
-            <button type="button" class="trade-action-btn trade-action-btn-cancel quick-trade-cancel-btn">
-              Cancel
-            </button>
+            <button type="button" class="trade-action-btn trade-action-btn-cancel quick-trade-cancel-btn" data-l10n-id="common-action-cancel"></button>
             <button type="button" class="trade-action-btn trade-action-btn-confirm quick-trade-continue-btn" disabled>
-              <span class="btn-text">Continue</span>
+              <span class="btn-text" data-l10n-id="trade-quick-continue"></span>
               <span class="btn-loader"></span>
             </button>
           </div>
@@ -434,8 +443,7 @@ export class TradeActionDialog {
       </div>
     `;
 
-    // Inject quick trade styles
-
+    I18n.localizeTree(overlay);
     document.body.appendChild(overlay);
 
     this.root = overlay;
@@ -759,9 +767,11 @@ export class TradeActionDialog {
     // Set action-specific class on dialog
     this.dialog.className = `trade-action-dialog ${config.colorClass}`;
 
+    const text = config.text();
+
     // Set title and subtitle (header is minimal — no icon)
-    this.titleEl.textContent = config.title;
-    this.subtitleEl.textContent = config.subtitle;
+    this.titleEl.textContent = text.title;
+    this.subtitleEl.textContent = text.subtitle;
 
     // Render context info
     this._renderContext(action, symbol, context);
@@ -774,13 +784,13 @@ export class TradeActionDialog {
     this._configureAmountControls(action, context);
 
     // Set input labels and state
-    this.inputLabelEl.textContent = config.inputLabel;
-    this.inputHintEl.textContent = config.inputHint;
+    this.inputLabelEl.textContent = text.inputLabel;
+    this.inputHintEl.textContent = text.inputHint;
     this.inputField.value = "";
-    this.inputField.placeholder = config.inputPlaceholder;
+    this.inputField.placeholder = text.inputPlaceholder;
 
     // Update input suffix based on action
-    this.inputSuffix.textContent = action === "sell" ? "%" : "SOL";
+    this.inputSuffix.textContent = action === "sell" ? "%" : I18n.t("trade-unit-sol");
     this.inputSuffix.style.display = "block";
 
     // Manual-management choice is only meaningful when opening a position (buy).
@@ -791,7 +801,7 @@ export class TradeActionDialog {
 
     // Set confirm button label and reset loading state
     const btnText = this.confirmBtn.querySelector(".btn-text");
-    if (btnText) btnText.textContent = config.confirmLabel;
+    if (btnText) btnText.textContent = text.confirmLabel;
     this.confirmBtn.disabled = true;
     this.confirmBtn.classList.remove("loading");
 
@@ -885,9 +895,9 @@ export class TradeActionDialog {
       this.slippageNoteEl.textContent =
         active == null
           ? this._configuredSlippage != null
-            ? `Auto (${this._configuredSlippage}% from settings)`
-            : "Auto (from settings)"
-          : `Override: ${active}%`;
+            ? I18n.t("trade-slippage-note-auto-value", { pct: String(this._configuredSlippage) })
+            : I18n.t("trade-slippage-note-auto")
+          : I18n.t("trade-slippage-note-override", { pct: String(active) });
     }
 
     // A large override is a real way to lose money to sandwich bots — say so.
@@ -895,7 +905,9 @@ export class TradeActionDialog {
       const risky = active != null && active >= 10;
       this.slippageWarningEl.setAttribute("data-visible", risky ? "true" : "false");
       if (risky) {
-        this.slippageWarningEl.textContent = `High slippage: you may receive up to ${active}% less than quoted.`;
+        this.slippageWarningEl.textContent = I18n.t("trade-slippage-warning", {
+          pct: String(active),
+        });
       }
     }
   }
@@ -959,7 +971,7 @@ export class TradeActionDialog {
         </div>
         ${
           context.hasPosition
-            ? '<span class="trade-action-position-badge" title="You hold an open position in this token">Held</span>'
+            ? `<span class="trade-action-position-badge" title="${Utils.escapeHtml(I18n.attr("trade-held-badge", "title"))}">${Utils.escapeHtml(I18n.t("trade-held-badge"))}</span>`
             : ""
         }
       </div>
@@ -980,10 +992,10 @@ export class TradeActionDialog {
       const balanceClass = context.balance != null && context.balance < 0.01 ? "low-balance" : "";
       rows.push(`
         <div class="trade-action-context-item">
-          <span class="trade-action-context-label">Available</span>
+          <span class="trade-action-context-label">${Utils.escapeHtml(I18n.t("trade-context-available"))}</span>
           <span class="trade-action-context-value ${balanceClass}">
             <span class="trade-action-balance-amount">${Utils.escapeHtml(balance)}</span>
-            <span class="trade-action-balance-unit">SOL</span>
+            <span class="trade-action-balance-unit">${Utils.escapeHtml(I18n.t("trade-unit-sol"))}</span>
           </span>
         </div>
       `);
@@ -996,10 +1008,10 @@ export class TradeActionDialog {
     if (context.hasPosition && context.currentSize != null) {
       rows.push(`
         <div class="trade-action-context-item">
-          <span class="trade-action-context-label">Position Size</span>
+          <span class="trade-action-context-label">${Utils.escapeHtml(I18n.t("trade-context-position-size"))}</span>
           <span class="trade-action-context-value">
             <span class="trade-action-balance-amount">${formatFixed(context.currentSize, { decimals: 4 })}</span>
-            <span class="trade-action-balance-unit">SOL</span>
+            <span class="trade-action-balance-unit">${Utils.escapeHtml(I18n.t("trade-unit-sol"))}</span>
           </span>
         </div>
       `);
@@ -1008,8 +1020,8 @@ export class TradeActionDialog {
     if (context.hasPosition && context.holdings) {
       rows.push(`
         <div class="trade-action-context-item">
-          <span class="trade-action-context-label">Holdings</span>
-          <span class="trade-action-context-value">${Utils.escapeHtml(this._formatHoldings(context))} tokens</span>
+          <span class="trade-action-context-label">${Utils.escapeHtml(I18n.t("trade-context-holdings"))}</span>
+          <span class="trade-action-context-value">${Utils.escapeHtml(this._formatHoldings(context))} ${Utils.escapeHtml(I18n.t("trade-unit-tokens"))}</span>
         </div>
       `);
     }
@@ -1199,7 +1211,7 @@ export class TradeActionDialog {
     const value = this._getInputValue();
     const error =
       action === "sell" && !context.hasPosition
-        ? "This position is no longer open."
+        ? I18n.t("trade-error-position-closed")
         : value === null || value === ""
           ? null
           : this._validateInput(action, value, context);
@@ -1256,7 +1268,7 @@ export class TradeActionDialog {
         context.entrySizes.forEach((size) => {
           presets.push({
             label: `${size}`,
-            sublabel: "SOL",
+            tag: "sol",
             value: size,
             type: "amount",
             group: "entry",
@@ -1298,31 +1310,34 @@ export class TradeActionDialog {
     const sections = [];
 
     Object.entries(groups).forEach(([groupName, groupPresets]) => {
-      const label =
+      const label = Utils.escapeHtml(
         groupName === "multiplier"
-          ? "Match Entry"
+          ? I18n.t("trade-presets-match-entry")
           : groupName === "entry"
-            ? "Fixed Amount"
+            ? I18n.t("trade-presets-fixed-amount")
             : action === "sell"
-              ? "Quick Sell"
-              : "Quick Amount";
+              ? I18n.t("trade-presets-quick-sell")
+              : I18n.t("trade-presets-quick-amount")
+      );
 
       const buttons = groupPresets
-        .map(
-          (preset) => `
+        .map((preset) => {
+          const caption =
+            preset.sublabel || (preset.tag ? I18n.label(PRESET_TAG_LABELS, preset.tag) : "");
+          return `
         <button 
           type="button" 
           class="trade-action-preset-btn" 
           data-value="${preset.value}"
           data-type="${preset.type}"
           ${preset.default ? 'data-default="true"' : ""}
-          aria-label="Select ${Utils.escapeHtml(preset.label)}"
+          aria-label="${Utils.escapeHtml(I18n.attr("trade-preset-select", "aria-label", { label: preset.label }))}"
         >
           <span class="preset-label">${Utils.escapeHtml(preset.label)}</span>
-          ${preset.sublabel ? `<span class="preset-sublabel">${Utils.escapeHtml(preset.sublabel)}</span>` : ""}
+          ${caption ? `<span class="preset-sublabel">${Utils.escapeHtml(caption)}</span>` : ""}
         </button>
-      `
-        )
+      `;
+        })
         .join("");
 
       sections.push(`
@@ -1450,7 +1465,7 @@ export class TradeActionDialog {
       this.sliderEl.min = "0";
       this.sliderEl.max = String(max);
       this.sliderEl.step = String(this._sliderStep);
-      this.maxBtn.textContent = "MAX";
+      this.maxBtn.textContent = I18n.t("trade-input-max");
       // Only show the slider when we know the balance (otherwise it's misleading).
       this.sliderRow.dataset.visible = spendable != null ? "true" : "false";
     }
@@ -1656,30 +1671,34 @@ export class TradeActionDialog {
     }
 
     if (value === null) {
-      return "Invalid number";
+      return I18n.t("trade-error-invalid-number");
     }
 
     if (action === "sell") {
       // The floor is 1, not 0: the executor clamps the exit percentage to [1, 100], so
       // anything below 1 would be silently rounded UP and sell more than asked.
       if (value < 1 || value > 100) {
-        return "Percentage must be between 1 and 100";
+        return I18n.t("trade-error-percentage-range");
       }
     }
 
     if (action === "buy" || action === "add") {
       if (value <= 0) {
-        return "Amount must be greater than 0";
+        return I18n.t("trade-error-amount-positive");
       }
       if (value < 0.001) {
-        return "Minimum: 0.001 SOL";
+        return I18n.t("trade-error-amount-minimum");
       }
       // Bounded by the SPENDABLE balance, not the raw one: a trade that consumes every
       // lamport cannot pay its own fee, so accepting it here only moves the failure
       // on chain. Same ceiling the slider and MAX use.
       const spendable = this._maxSpendableSol(context);
       if (spendable != null && value > spendable) {
-        return `Insufficient balance (need ${formatSol(value, { decimals: 4 })} plus ${SOL_FEE_RESERVE} for fees, have ${formatFixed(context.balance, { decimals: 4 })})`;
+        return I18n.t("trade-error-insufficient", {
+          needed: formatSol(value, { decimals: 4 }),
+          reserve: String(SOL_FEE_RESERVE),
+          balance: formatFixed(context.balance, { decimals: 4 }),
+        });
       }
     }
 
@@ -1818,15 +1837,14 @@ export class TradeActionDialog {
       overlay.innerHTML = `
         <div class="trade-slippage-warning">
           <div class="slippage-warning-icon"><i class="icon-triangle-alert"></i></div>
-          <div class="slippage-warning-title">High Price Impact Warning</div>
-          <div class="slippage-warning-text">
-            This trade has a price impact of <strong>${formatPercentValue(impactPct, { decimals: 2, plus: "" })}</strong>,
-            which exceeds your slippage tolerance of <strong>${tolerance}%</strong>. You may
-            receive significantly less than expected.
-          </div>
+          <div class="slippage-warning-title">${Utils.escapeHtml(I18n.t("trade-impact-warning-title"))}</div>
+          <div class="slippage-warning-text">${I18n.markup("trade-impact-warning-text", {
+            impact: formatPercentValue(impactPct, { decimals: 2, plus: "" }),
+            tolerance: String(tolerance),
+          })}</div>
           <div class="slippage-warning-buttons">
-            <button class="slippage-warning-btn cancel">Cancel</button>
-            <button class="slippage-warning-btn confirm">Proceed Anyway</button>
+            <button class="slippage-warning-btn cancel">${Utils.escapeHtml(I18n.t("common-action-cancel"))}</button>
+            <button class="slippage-warning-btn confirm">${Utils.escapeHtml(I18n.t("trade-impact-warning-proceed"))}</button>
           </div>
         </div>
       `;
@@ -1854,7 +1872,7 @@ export class TradeActionDialog {
         `/api/positions/${encodeURIComponent(this.currentContext.mint)}/details`
       );
       if (!res.ok) {
-        return { ok: false, error: "Could not verify token balance" };
+        return { ok: false, error: I18n.t("trade-error-verify-failed") };
       }
       // /api/positions/:key/details returns the PositionDetailResponse directly
       // (no {success,data} envelope), and `position` flattens the summary fields
@@ -1862,7 +1880,7 @@ export class TradeActionDialog {
       const data = await res.json();
       const pos = data?.position;
       if (!pos) {
-        return { ok: false, error: "Position not found - it may have been closed" };
+        return { ok: false, error: I18n.t("trade-error-position-missing") };
       }
 
       const currentHoldings = pos.remaining_token_amount ?? pos.token_amount ?? 0;
@@ -1879,13 +1897,16 @@ export class TradeActionDialog {
 
         return {
           ok: false,
-          error: `Token balance changed. Expected ${scale(expectedHoldings)}, now ${scale(currentHoldings)}. Please refresh.`,
+          error: I18n.t("trade-error-balance-changed", {
+            expected: scale(expectedHoldings),
+            current: scale(currentHoldings),
+          }),
         };
       }
 
       return { ok: true };
     } catch {
-      return { ok: false, error: "Network error verifying balance" };
+      return { ok: false, error: I18n.t("trade-error-verify-network") };
     }
   }
 

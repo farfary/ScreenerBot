@@ -12,32 +12,38 @@
                 <i class="icon-bot"></i>
               </div>
               <div class="status-bar-info">
-                <span class="status-bar-title">Auto Trader</span>
-                <span class="status-bar-status" id="trader-status-text">Loading...</span>
+                <span class="status-bar-title" data-l10n-id="trader-status-title"></span>
+                <span class="status-bar-status" id="trader-status-text" data-l10n-id="trader-status-loading"></span>
               </div>
             </div>
             <label class="toggle" data-level="root">
               <input type="checkbox" id="stats-trader-toggle" disabled />
               <span class="toggle-track"></span>
-              <span class="toggle-state" id="stats-toggle-label">OFF</span>
+              <span class="toggle-state" id="stats-toggle-label" data-l10n-id="trader-toggle-off"></span>
             </label>
           </div>
 
           <!-- Trading Controls Section -->
           <div class="stats-section stats-section-controls">
             <div class="section-header">
-              <h3><i class="icon-sliders-horizontal"></i> Trading Controls</h3>
+              <h3>
+                <i class="icon-sliders-horizontal"></i> <span data-l10n-id="trader-controls-title"></span>
+              </h3>
             </div>
 
             <!-- Force Stop Banner (shown only when active) -->
             <div class="force-stop-banner" id="force-stop-banner" style="display: none">
               <div class="force-stop-icon"><i class="icon-octagon-alert"></i></div>
               <div class="force-stop-info">
-                <span class="force-stop-title">TRADING HALTED</span>
-                <span class="force-stop-reason" id="force-stop-reason">Manual force stop</span>
+                <span class="force-stop-title" data-l10n-id="trader-halt-title"></span>
+                <span
+                  class="force-stop-reason"
+                  id="force-stop-reason"
+                  data-l10n-id="trader-halt-reason-default"
+                ></span>
               </div>
               <button type="button" class="btn btn-sm btn-success" id="resume-trading-btn">
-                <i class="icon-play"></i> Resume
+                <i class="icon-play"></i> <span data-l10n-id="trader-halt-resume"></span>
               </button>
             </div>
 
@@ -47,7 +53,7 @@
               <div class="control-card">
                 <div class="control-header">
                   <i class="icon-log-in"></i>
-                  <span>Entry Monitor</span>
+                  <span data-l10n-id="trader-monitor-entry"></span>
                 </div>
                 <div class="control-status" id="entry-monitor-status">—</div>
                 <label class="toggle">
@@ -60,7 +66,7 @@
               <div class="control-card">
                 <div class="control-header">
                   <i class="icon-log-out"></i>
-                  <span>Exit Monitor</span>
+                  <span data-l10n-id="trader-monitor-exit"></span>
                 </div>
                 <div class="control-status" id="exit-monitor-status">—</div>
                 <label class="toggle">
@@ -76,7 +82,7 @@
             <div class="loss-limit-panel" id="loss-limit-panel">
               <div class="loss-limit-header">
                 <span class="loss-limit-label">
-                  <i class="icon-shield"></i> Period Loss Limit
+                  <i class="icon-shield"></i> <span data-l10n-id="trader-loss-limit-title"></span>
                 </span>
                 <span class="loss-limit-value" id="loss-limit-value">—</span>
               </div>
@@ -89,17 +95,17 @@
               </div>
               <div class="loss-limit-actions" id="loss-limit-actions" hidden>
                 <button type="button" class="btn btn-sm btn-success" id="loss-limit-resume-btn">
-                  <i class="icon-play"></i> Resume trading
+                  <i class="icon-play"></i> <span data-l10n-id="trader-loss-limit-resume"></span>
                 </button>
                 <button type="button" class="btn btn-sm btn-secondary" id="loss-limit-reset-btn">
-                  <i class="icon-rotate-ccw"></i> Reset period
+                  <i class="icon-rotate-ccw"></i> <span data-l10n-id="trader-loss-limit-reset"></span>
                 </button>
               </div>
             </div>
 
             <!-- Force Stop Button -->
             <button type="button" class="btn btn-danger btn-force-stop" id="force-stop-btn">
-              <i class="icon-octagon"></i> Force Stop Everything
+              <i class="icon-octagon"></i> <span data-l10n-id="trader-force-stop"></span>
             </button>
           </div>
         </div>
@@ -111,16 +117,34 @@
             <!-- Realized performance over the selected window -->
             <div class="stats-section stats-section-primary">
               <div class="section-header">
-                <h3><i class="icon-chart-column"></i> Realized Performance</h3>
+                <h3>
+                  <i class="icon-chart-column"></i>
+                  <span data-l10n-id="trader-realized-title"></span>
+                </h3>
                 <div
                   class="stats-period-seg"
                   id="stats-period"
                   role="group"
-                  aria-label="Statistics window"
+                  data-l10n-id="trader-stats-window"
                 >
-                  <button type="button" class="stats-period-btn" data-days="1">24H</button>
-                  <button type="button" class="stats-period-btn" data-days="7">7D</button>
-                  <button type="button" class="stats-period-btn active" data-days="30">30D</button>
+                  <button
+                    type="button"
+                    class="stats-period-btn"
+                    data-days="1"
+                    data-l10n-id="trader-stats-window-day"
+                  ></button>
+                  <button
+                    type="button"
+                    class="stats-period-btn"
+                    data-days="7"
+                    data-l10n-id="trader-stats-window-week"
+                  ></button>
+                  <button
+                    type="button"
+                    class="stats-period-btn active"
+                    data-days="30"
+                    data-l10n-id="trader-stats-window-month"
+                  ></button>
                 </div>
               </div>
               <div class="metrics-grid">
@@ -129,7 +153,7 @@
                     <i class="icon-wallet"></i>
                   </div>
                   <div class="metric-content">
-                    <div class="metric-label">Net P&amp;L</div>
+                    <div class="metric-label" data-l10n-id="trader-metric-net-pnl"></div>
                     <div class="metric-value" id="net-pnl">—</div>
                     <div class="metric-detail" id="net-pnl-detail">—</div>
                   </div>
@@ -139,7 +163,7 @@
                     <i class="icon-percent"></i>
                   </div>
                   <div class="metric-content">
-                    <div class="metric-label">Win Rate</div>
+                    <div class="metric-label" data-l10n-id="trader-metric-win-rate"></div>
                     <div class="metric-value" id="win-rate">—</div>
                     <div class="metric-detail" id="win-rate-detail">—</div>
                   </div>
@@ -149,7 +173,7 @@
                     <i class="icon-scale"></i>
                   </div>
                   <div class="metric-content">
-                    <div class="metric-label">Profit Factor</div>
+                    <div class="metric-label" data-l10n-id="trader-metric-profit-factor"></div>
                     <div class="metric-value" id="profit-factor">—</div>
                     <div class="metric-detail" id="profit-factor-detail">—</div>
                   </div>
@@ -159,7 +183,7 @@
                     <i class="icon-trending-down"></i>
                   </div>
                   <div class="metric-content">
-                    <div class="metric-label">Max Drawdown</div>
+                    <div class="metric-label" data-l10n-id="trader-metric-max-drawdown"></div>
                     <div class="metric-value" id="max-drawdown">—</div>
                     <div class="metric-detail" id="max-drawdown-detail">—</div>
                   </div>
@@ -169,7 +193,7 @@
                     <i class="icon-layers"></i>
                   </div>
                   <div class="metric-content">
-                    <div class="metric-label">Capital at Work</div>
+                    <div class="metric-label" data-l10n-id="trader-metric-capital"></div>
                     <div class="metric-value" id="capital-at-work">—</div>
                     <div class="metric-detail" id="capital-at-work-detail">—</div>
                   </div>
@@ -179,7 +203,7 @@
                     <i class="icon-arrow-up-down"></i>
                   </div>
                   <div class="metric-content">
-                    <div class="metric-label">Avg Win / Loss</div>
+                    <div class="metric-label" data-l10n-id="trader-metric-avg-win-loss"></div>
                     <div class="metric-value" id="avg-win-loss">—</div>
                     <div class="metric-detail" id="avg-win-loss-detail">—</div>
                   </div>
@@ -189,7 +213,7 @@
                     <i class="icon-repeat"></i>
                   </div>
                   <div class="metric-content">
-                    <div class="metric-label">Closed Trades</div>
+                    <div class="metric-label" data-l10n-id="trader-metric-closed-trades"></div>
                     <div class="metric-value" id="total-trades">—</div>
                     <div class="metric-detail" id="total-trades-detail">—</div>
                   </div>
@@ -199,7 +223,7 @@
                     <i class="icon-clock"></i>
                   </div>
                   <div class="metric-content">
-                    <div class="metric-label">Median Hold</div>
+                    <div class="metric-label" data-l10n-id="trader-metric-median-hold"></div>
                     <div class="metric-value" id="median-hold">—</div>
                     <div class="metric-detail" id="median-hold-detail">—</div>
                   </div>
@@ -212,27 +236,31 @@
             <div class="stats-section">
               <div class="section-header">
                 <div>
-                  <h3><i class="icon-calendar"></i> Daily P&amp;L</h3>
-                  <p class="section-subtitle">Realized SOL per day, with the running total</p>
+                  <h3>
+                    <i class="icon-calendar"></i> <span data-l10n-id="trader-daily-title"></span>
+                  </h3>
+                  <p class="section-subtitle" data-l10n-id="trader-daily-subtitle"></p>
                 </div>
                 <div class="daily-pnl-total" id="daily-pnl-total">—</div>
               </div>
               <div id="daily-pnl" class="daily-pnl">
                 <div class="loading-state">
                   <i class="icon-loader"></i>
-                  <span>Loading daily P&amp;L...</span>
+                  <span data-l10n-id="trader-daily-loading"></span>
                 </div>
               </div>
               <div class="stats-extremes" id="stats-extremes" hidden>
                 <div class="stats-extreme">
-                  <span class="stats-extreme-label"><i class="icon-arrow-up"></i> Best trade</span>
+                  <span class="stats-extreme-label"
+                    ><i class="icon-arrow-up"></i> <span data-l10n-id="trader-extreme-best"></span
+                  ></span>
                   <span class="stats-extreme-token" id="best-trade-token">—</span>
                   <span class="stats-extreme-value" id="best-trade">—</span>
                 </div>
                 <div class="stats-extreme">
                   <span class="stats-extreme-label"
-                    ><i class="icon-arrow-down"></i> Worst trade</span
-                  >
+                    ><i class="icon-arrow-down"></i> <span data-l10n-id="trader-extreme-worst"></span
+                  ></span>
                   <span class="stats-extreme-token" id="worst-trade-token">—</span>
                   <span class="stats-extreme-value" id="worst-trade">—</span>
                 </div>
@@ -243,16 +271,16 @@
             <div class="stats-section">
               <div class="section-header">
                 <div>
-                  <h3><i class="icon-log-out"></i> Exit Strategy Breakdown</h3>
-                  <p class="section-subtitle">
-                    How positions were closed, and what each exit returned
-                  </p>
+                  <h3>
+                    <i class="icon-log-out"></i> <span data-l10n-id="trader-exit-title"></span>
+                  </h3>
+                  <p class="section-subtitle" data-l10n-id="trader-exit-subtitle"></p>
                 </div>
               </div>
               <div id="exit-breakdown" class="exit-breakdown">
                 <div class="loading-state">
                   <i class="icon-loader"></i>
-                  <span>Loading exit data...</span>
+                  <span data-l10n-id="trader-exit-loading"></span>
                 </div>
               </div>
             </div>
@@ -269,10 +297,10 @@
         <div class="config-card">
           <div class="card-header">
             <div class="card-header-text">
-              <h3><i class="icon-shield-off"></i> Stop Loss</h3>
-              <p class="card-subtitle">
-                Automatically exit a position when its loss exceeds your threshold
-              </p>
+              <h3>
+                <i class="icon-shield-off"></i> <span data-l10n-id="trader-stop-loss-title"></span>
+              </h3>
+              <p class="card-subtitle" data-l10n-id="trader-stop-loss-subtitle"></p>
             </div>
             <label class="toggle">
               <input type="checkbox" id="stop-loss-enabled" />
@@ -285,14 +313,14 @@
             <div class="config-label-row">
               <label for="stop-loss-threshold" class="config-label">
                 <i class="icon-trending-down"></i>
-                <span>Stop Loss Threshold</span>
+                <span data-l10n-id="config-trader-stop-loss-threshold-pct"></span>
               </label>
-              <span class="config-badge config-badge-warning">Loss limit</span>
+              <span
+                class="config-badge config-badge-warning"
+                data-l10n-id="trader-stop-loss-threshold-badge"
+              ></span>
             </div>
-            <p class="config-hint">
-              Immediately sells position when loss exceeds this percentage. Unlike trailing stop,
-              this works from the entry price regardless of any gains.
-            </p>
+            <p class="config-hint"></p>
             <div class="input-group-enhanced">
               <input
                 type="number"
@@ -306,8 +334,13 @@
               <span class="input-unit">%</span>
             </div>
             <div class="config-impact">
-              <span class="impact-label">Impact:</span>
-              <span class="impact-text" id="stop-loss-impact">Exit when down 50% from entry</span>
+              <span class="impact-label" data-l10n-id="trader-impact-label"></span>
+              <span
+                class="impact-text"
+                id="stop-loss-impact"
+                data-l10n-id="trader-stop-loss-impact"
+                data-l10n-args='{"threshold":"50"}'
+              ></span>
             </div>
           </div>
 
@@ -316,17 +349,14 @@
             <div class="config-label-row">
               <label for="stop-loss-allow-partial" class="config-label">
                 <i class="icon-scissors"></i>
-                <span>Allow Partial Exits</span>
+                <span data-l10n-id="config-trader-stop-loss-allow-partial"></span>
               </label>
               <label class="toggle">
                 <input type="checkbox" id="stop-loss-allow-partial" />
                 <span class="toggle-track"></span>
               </label>
             </div>
-            <p class="config-hint">
-              When enabled, stop loss can sell a portion of the position if configured. When
-              disabled, sells the entire position.
-            </p>
+            <p class="config-hint"></p>
           </div>
 
           <!-- Minimum Hold Time -->
@@ -334,14 +364,14 @@
             <div class="config-label-row">
               <label for="stop-loss-min-hold" class="config-label">
                 <i class="icon-clock"></i>
-                <span>Minimum Hold Time</span>
+                <span data-l10n-id="config-trader-stop-loss-min-hold-seconds"></span>
               </label>
-              <span class="config-badge config-badge-info">Optional delay</span>
+              <span
+                class="config-badge config-badge-info"
+                data-l10n-id="trader-stop-loss-hold-badge"
+              ></span>
             </div>
-            <p class="config-hint">
-              Optional delay before stop loss can activate. Use this to avoid selling during initial
-              volatility. 0 means stop loss can trigger immediately.
-            </p>
+            <p class="config-hint"></p>
             <div class="input-group-enhanced">
               <input
                 type="number"
@@ -352,26 +382,37 @@
                 value="0"
                 class="input-large"
               />
-              <span class="input-unit">seconds</span>
+              <span class="input-unit"></span>
             </div>
             <div class="config-impact">
-              <span class="impact-label">Current:</span>
-              <span class="impact-text" id="stop-loss-hold-time-display">Immediate</span>
+              <span class="impact-label" data-l10n-id="trader-current-label"></span>
+              <span
+                class="impact-text"
+                id="stop-loss-hold-time-display"
+                data-l10n-id="trader-stop-loss-hold-immediate"
+              ></span>
             </div>
           </div>
 
           <!-- Visual Example -->
           <div class="visual-example">
-            <h4><i class="icon-chart-bar"></i> How It Works</h4>
+            <h4>
+              <i class="icon-chart-bar"></i> <span data-l10n-id="trader-example-how-it-works"></span>
+            </h4>
             <div class="example-timeline">
               <div class="timeline-step">
                 <div class="step-icon step-icon-entry">
                   <i class="icon-arrow-right"></i>
                 </div>
                 <div class="step-content">
-                  <div class="step-title">Entry</div>
-                  <div class="step-value" id="stop-loss-example-entry">0.010000 SOL</div>
-                  <div class="step-detail">Initial position</div>
+                  <div class="step-title" data-l10n-id="trader-step-entry"></div>
+                  <div
+                    class="step-value"
+                    id="stop-loss-example-entry"
+                    data-l10n-id="format-sol-amount"
+                    data-l10n-args='{"amount":"0.010000"}'
+                  ></div>
+                  <div class="step-detail" data-l10n-id="trader-step-initial-position"></div>
                 </div>
               </div>
               <div class="timeline-arrow"><i class="icon-chevron-right"></i></div>
@@ -380,9 +421,9 @@
                   <i class="icon-trending-down"></i>
                 </div>
                 <div class="step-content">
-                  <div class="step-title">Price Falls</div>
+                  <div class="step-title" data-l10n-id="trader-stop-loss-price-falls"></div>
                   <div class="step-value" id="stop-loss-example-trigger">-50%</div>
-                  <div class="step-detail">Threshold reached</div>
+                  <div class="step-detail" data-l10n-id="trader-stop-loss-threshold-reached"></div>
                 </div>
               </div>
               <div class="timeline-arrow"><i class="icon-chevron-right"></i></div>
@@ -391,23 +432,34 @@
                   <i class="icon-log-out"></i>
                 </div>
                 <div class="step-content">
-                  <div class="step-title">Auto Exit</div>
-                  <div class="step-value" id="stop-loss-example-exit">0.005000 SOL</div>
-                  <div class="step-detail" id="stop-loss-partial-indicator">Full position exit</div>
+                  <div class="step-title" data-l10n-id="trader-step-auto-exit"></div>
+                  <div
+                    class="step-value"
+                    id="stop-loss-example-exit"
+                    data-l10n-id="format-sol-amount"
+                    data-l10n-args='{"amount":"0.005000"}'
+                  ></div>
+                  <div
+                    class="step-detail"
+                    id="stop-loss-partial-indicator"
+                    data-l10n-id="trader-step-full-exit"
+                  ></div>
                 </div>
               </div>
             </div>
             <div class="example-summary">
               <div class="summary-item summary-item-warning">
                 <i class="icon-shield-off"></i>
-                <span>Loss limited to <strong id="stop-loss-example-loss">-50%</strong></span>
+                <span
+                  id="stop-loss-example-loss"
+                  data-l10n-id="trader-stop-loss-summary"
+                  data-l10n-markup
+                  data-l10n-args='{"loss":"-50%"}'
+                ></span>
               </div>
               <div class="summary-item summary-item-info">
                 <i class="icon-info"></i>
-                <span
-                  ><strong>Note:</strong> Stop loss protects against larger losses by exiting
-                  early</span
-                >
+                <span data-l10n-id="trader-stop-loss-note" data-l10n-markup></span>
               </div>
             </div>
           </div>
@@ -422,10 +474,10 @@
         <div class="config-card">
           <div class="card-header">
             <div class="card-header-text">
-              <h3><i class="icon-shield"></i> Trailing Stop</h3>
-              <p class="card-subtitle">
-                Automatically protect profits by trailing the price as it rises
-              </p>
+              <h3>
+                <i class="icon-shield"></i> <span data-l10n-id="trader-trailing-title"></span>
+              </h3>
+              <p class="card-subtitle" data-l10n-id="trader-trailing-subtitle"></p>
             </div>
             <label class="toggle">
               <input type="checkbox" id="trailing-enabled" />
@@ -438,11 +490,14 @@
             <div class="config-label-row">
               <label for="trail-activation" class="config-label">
                 <i class="icon-trending-up"></i>
-                <span>Activation Threshold</span>
+                <span data-l10n-id="config-positions-trailing-stop-activation-pct"></span>
               </label>
-              <span class="config-badge config-badge-info">When to start</span>
+              <span
+                class="config-badge config-badge-info"
+                data-l10n-id="trader-trailing-activation-badge"
+              ></span>
             </div>
-            <p class="config-hint">Begin trailing when position profit reaches this percentage</p>
+            <p class="config-hint"></p>
             <div class="input-group-enhanced">
               <input
                 type="number"
@@ -456,8 +511,13 @@
               <span class="input-unit">%</span>
             </div>
             <div class="config-impact">
-              <span class="impact-label">Impact:</span>
-              <span class="impact-text" id="activation-impact">Starts trailing at +10% profit</span>
+              <span class="impact-label" data-l10n-id="trader-impact-label"></span>
+              <span
+                class="impact-text"
+                id="activation-impact"
+                data-l10n-id="trader-trailing-activation-impact"
+                data-l10n-args='{"value":"10"}'
+              ></span>
             </div>
           </div>
 
@@ -466,11 +526,14 @@
             <div class="config-label-row">
               <label for="trail-distance" class="config-label">
                 <i class="icon-arrow-down"></i>
-                <span>Trail Distance</span>
+                <span data-l10n-id="config-positions-trailing-stop-distance-pct"></span>
               </label>
-              <span class="config-badge config-badge-warning">Safety margin</span>
+              <span
+                class="config-badge config-badge-warning"
+                data-l10n-id="trader-trailing-distance-badge"
+              ></span>
             </div>
-            <p class="config-hint">Exit if price drops this much from highest point reached</p>
+            <p class="config-hint"></p>
             <div class="input-group-enhanced">
               <input
                 type="number"
@@ -484,23 +547,35 @@
               <span class="input-unit">%</span>
             </div>
             <div class="config-impact">
-              <span class="impact-label">Impact:</span>
-              <span class="impact-text" id="distance-impact">Exits at -5% from peak</span>
+              <span class="impact-label" data-l10n-id="trader-impact-label"></span>
+              <span
+                class="impact-text"
+                id="distance-impact"
+                data-l10n-id="trader-trailing-distance-impact"
+                data-l10n-args='{"value":"5"}'
+              ></span>
             </div>
           </div>
 
           <!-- Visual Example -->
           <div class="visual-example">
-            <h4><i class="icon-chart-bar"></i> How It Works</h4>
+            <h4>
+              <i class="icon-chart-bar"></i> <span data-l10n-id="trader-example-how-it-works"></span>
+            </h4>
             <div class="example-timeline">
               <div class="timeline-step">
                 <div class="step-icon step-icon-entry">
                   <i class="icon-arrow-right"></i>
                 </div>
                 <div class="step-content">
-                  <div class="step-title">Entry</div>
-                  <div class="step-value" id="example-entry">0.001000 SOL</div>
-                  <div class="step-detail">Initial position</div>
+                  <div class="step-title" data-l10n-id="trader-step-entry"></div>
+                  <div
+                    class="step-value"
+                    id="example-entry"
+                    data-l10n-id="format-sol-amount"
+                    data-l10n-args='{"amount":"0.001000"}'
+                  ></div>
+                  <div class="step-detail" data-l10n-id="trader-step-initial-position"></div>
                 </div>
               </div>
               <div class="timeline-arrow"><i class="icon-chevron-right"></i></div>
@@ -509,9 +584,19 @@
                   <i class="icon-zap"></i>
                 </div>
                 <div class="step-content">
-                  <div class="step-title">Activation</div>
-                  <div class="step-value" id="example-activation">0.001100 SOL</div>
-                  <div class="step-detail" id="example-activation-pct">+10% profit</div>
+                  <div class="step-title" data-l10n-id="trader-trailing-activation"></div>
+                  <div
+                    class="step-value"
+                    id="example-activation"
+                    data-l10n-id="format-sol-amount"
+                    data-l10n-args='{"amount":"0.001100"}'
+                  ></div>
+                  <div
+                    class="step-detail"
+                    id="example-activation-pct"
+                    data-l10n-id="trader-example-profit"
+                    data-l10n-args='{"value":"10"}'
+                  ></div>
                 </div>
               </div>
               <div class="timeline-arrow"><i class="icon-chevron-right"></i></div>
@@ -520,9 +605,19 @@
                   <i class="icon-trending-up"></i>
                 </div>
                 <div class="step-content">
-                  <div class="step-title">Peak</div>
-                  <div class="step-value" id="example-peak">0.001200 SOL</div>
-                  <div class="step-detail" id="example-peak-pct">+20% profit</div>
+                  <div class="step-title" data-l10n-id="trader-trailing-peak"></div>
+                  <div
+                    class="step-value"
+                    id="example-peak"
+                    data-l10n-id="format-sol-amount"
+                    data-l10n-args='{"amount":"0.001200"}'
+                  ></div>
+                  <div
+                    class="step-detail"
+                    id="example-peak-pct"
+                    data-l10n-id="trader-example-profit"
+                    data-l10n-args='{"value":"20"}'
+                  ></div>
                 </div>
               </div>
               <div class="timeline-arrow"><i class="icon-chevron-right"></i></div>
@@ -531,20 +626,40 @@
                   <i class="icon-log-out"></i>
                 </div>
                 <div class="step-content">
-                  <div class="step-title">Exit</div>
-                  <div class="step-value" id="example-exit">0.001140 SOL</div>
-                  <div class="step-detail" id="example-exit-pct">+14% final</div>
+                  <div class="step-title" data-l10n-id="trader-step-exit"></div>
+                  <div
+                    class="step-value"
+                    id="example-exit"
+                    data-l10n-id="format-sol-amount"
+                    data-l10n-args='{"amount":"0.001140"}'
+                  ></div>
+                  <div
+                    class="step-detail"
+                    id="example-exit-pct"
+                    data-l10n-id="trader-trailing-final"
+                    data-l10n-args='{"value":"14"}'
+                  ></div>
                 </div>
               </div>
             </div>
             <div class="example-summary">
               <div class="summary-item summary-item-success">
                 <i class="icon-circle-check"></i>
-                <span>Protected <strong id="example-protected">14%</strong> profit</span>
+                <span
+                  id="example-protected"
+                  data-l10n-id="trader-trailing-summary-protected"
+                  data-l10n-markup
+                  data-l10n-args='{"value":"14%"}'
+                ></span>
               </div>
               <div class="summary-item summary-item-info">
                 <i class="icon-shield"></i>
-                <span>Avoided <strong id="example-avoided">6%</strong> loss from peak</span>
+                <span
+                  id="example-avoided"
+                  data-l10n-id="trader-trailing-summary-avoided"
+                  data-l10n-markup
+                  data-l10n-args='{"value":"6%"}'
+                ></span>
               </div>
             </div>
           </div>
@@ -559,10 +674,10 @@
         <div class="config-card">
           <div class="card-header">
             <div class="card-header-text">
-              <h3><i class="icon-target"></i> Take Profit</h3>
-              <p class="card-subtitle">
-                Automatically exit the entire position when profit reaches your target
-              </p>
+              <h3>
+                <i class="icon-target"></i> <span data-l10n-id="trader-roi-title"></span>
+              </h3>
+              <p class="card-subtitle" data-l10n-id="trader-roi-subtitle"></p>
             </div>
             <label class="toggle">
               <input type="checkbox" id="roi-enabled" />
@@ -575,13 +690,14 @@
             <div class="config-label-row">
               <label for="roi-target" class="config-label">
                 <i class="icon-trending-up"></i>
-                <span>Target Profit</span>
+                <span data-l10n-id="config-trader-roi-target-percent"></span>
               </label>
-              <span class="config-badge config-badge-info">Single target</span>
+              <span
+                class="config-badge config-badge-info"
+                data-l10n-id="trader-roi-target-badge"
+              ></span>
             </div>
-            <p class="config-hint">
-              Automatically exit when unrealized profit reaches this percentage
-            </p>
+            <p class="config-hint"></p>
             <div class="input-group-enhanced">
               <input
                 type="number"
@@ -595,23 +711,34 @@
               <span class="input-unit">%</span>
             </div>
             <div class="config-impact">
-              <span class="impact-label">Impact:</span>
-              <span class="impact-text" id="roi-impact">Exit at +20% profit</span>
+              <span class="impact-label" data-l10n-id="trader-impact-label"></span>
+              <span
+                class="impact-text"
+                id="roi-impact"
+                data-l10n-id="trader-roi-impact"
+                data-l10n-args='{"target":"20"}'
+              ></span>
             </div>
           </div>
 
           <!-- Visual Example -->
           <div class="visual-example">
-            <h4><i class="icon-chart-bar"></i> Example Scenario</h4>
+            <h4>
+              <i class="icon-chart-bar"></i> <span data-l10n-id="trader-roi-example-title"></span>
+            </h4>
             <div class="example-timeline">
               <div class="timeline-step">
                 <div class="step-icon step-icon-entry">
                   <i class="icon-arrow-right"></i>
                 </div>
                 <div class="step-content">
-                  <div class="step-title">Entry</div>
-                  <div class="step-value">0.01 SOL</div>
-                  <div class="step-detail">Initial buy</div>
+                  <div class="step-title" data-l10n-id="trader-step-entry"></div>
+                  <div
+                    class="step-value"
+                    data-l10n-id="format-sol-amount"
+                    data-l10n-args='{"amount":"0.01"}'
+                  ></div>
+                  <div class="step-detail" data-l10n-id="trader-roi-initial-buy"></div>
                 </div>
               </div>
               <div class="timeline-arrow"><i class="icon-chevron-right"></i></div>
@@ -620,9 +747,19 @@
                   <i class="icon-trending-up"></i>
                 </div>
                 <div class="step-content">
-                  <div class="step-title">Target Hit</div>
-                  <div class="step-value" id="roi-example-target">0.012 SOL</div>
-                  <div class="step-detail" id="roi-example-profit">+20% profit</div>
+                  <div class="step-title" data-l10n-id="trader-roi-target-hit"></div>
+                  <div
+                    class="step-value"
+                    id="roi-example-target"
+                    data-l10n-id="format-sol-amount"
+                    data-l10n-args='{"amount":"0.012"}'
+                  ></div>
+                  <div
+                    class="step-detail"
+                    id="roi-example-profit"
+                    data-l10n-id="trader-example-profit"
+                    data-l10n-args='{"value":"20"}'
+                  ></div>
                 </div>
               </div>
               <div class="timeline-arrow"><i class="icon-chevron-right"></i></div>
@@ -631,16 +768,21 @@
                   <i class="icon-log-out"></i>
                 </div>
                 <div class="step-content">
-                  <div class="step-title">Auto Exit</div>
-                  <div class="step-value">Full Position</div>
-                  <div class="step-detail">100% sold</div>
+                  <div class="step-title" data-l10n-id="trader-step-auto-exit"></div>
+                  <div class="step-value" data-l10n-id="trader-roi-full-position"></div>
+                  <div class="step-detail" data-l10n-id="trader-roi-sold"></div>
                 </div>
               </div>
             </div>
             <div class="example-summary">
               <div class="summary-item summary-item-success">
                 <i class="icon-circle-check"></i>
-                <span>Locked in <strong id="roi-example-summary">+20%</strong> profit</span>
+                <span
+                  id="roi-example-summary"
+                  data-l10n-id="trader-roi-summary"
+                  data-l10n-markup
+                  data-l10n-args='{"target":"20"}'
+                ></span>
               </div>
             </div>
           </div>
@@ -654,10 +796,10 @@
         <div class="config-card">
           <div class="card-header">
             <div class="card-header-text">
-              <h3><i class="icon-clock"></i> Time-Based Exit</h3>
-              <p class="card-subtitle">
-                Automatically exit positions after a maximum hold time if loss exceeds the threshold
-              </p>
+              <h3>
+                <i class="icon-clock"></i> <span data-l10n-id="trader-time-title"></span>
+              </h3>
+              <p class="card-subtitle" data-l10n-id="trader-time-subtitle"></p>
             </div>
             <label class="toggle">
               <input type="checkbox" id="time-override-enabled" />
@@ -670,13 +812,14 @@
             <div class="config-label-row">
               <label for="time-max-hold" class="config-label">
                 <i class="icon-clock"></i>
-                <span>Hold Duration Limit</span>
+                <span data-l10n-id="config-trader-time-override-duration"></span>
               </label>
-              <span class="config-badge config-badge-warning">Time trigger</span>
+              <span
+                class="config-badge config-badge-warning"
+                data-l10n-id="trader-time-hold-badge"
+              ></span>
             </div>
-            <p class="config-hint">
-              Exit positions held longer than this duration (when combined with loss threshold)
-            </p>
+            <p class="config-hint"></p>
             <div class="input-group-enhanced">
               <input
                 type="number"
@@ -688,15 +831,19 @@
                 class="input-large"
               />
               <select id="time-unit" class="unit-select" data-custom-select>
-                <option value="seconds">seconds</option>
-                <option value="minutes">minutes</option>
-                <option value="hours" selected>hours</option>
-                <option value="days">days</option>
+                <option value="seconds" data-l10n-id="trader-time-unit-seconds"></option>
+                <option value="minutes" data-l10n-id="trader-time-unit-minutes"></option>
+                <option value="hours" data-l10n-id="trader-time-unit-hours" selected></option>
+                <option value="days" data-l10n-id="trader-time-unit-days"></option>
               </select>
             </div>
             <div class="config-impact">
-              <span class="impact-label">Readable:</span>
-              <span class="impact-text" id="time-conversion-hint">168 hours = 7 days</span>
+              <span class="impact-label" data-l10n-id="trader-readable-label"></span>
+              <span
+                class="impact-text"
+                id="time-conversion-hint"
+                data-l10n-id="trader-time-conversion-default"
+              ></span>
             </div>
           </div>
 
@@ -705,13 +852,14 @@
             <div class="config-label-row">
               <label for="time-loss-threshold" class="config-label">
                 <i class="icon-trending-down"></i>
-                <span>Loss Threshold</span>
+                <span data-l10n-id="config-trader-time-override-loss-threshold-percent"></span>
               </label>
-              <span class="config-badge config-badge-info">Loss gate</span>
+              <span
+                class="config-badge config-badge-info"
+                data-l10n-id="trader-time-loss-badge"
+              ></span>
             </div>
-            <p class="config-hint">
-              Only exit if position loss exceeds this percentage (negative value)
-            </p>
+            <p class="config-hint"></p>
             <div class="input-group-enhanced">
               <input
                 type="number"
@@ -725,25 +873,34 @@
               <span class="input-unit">%</span>
             </div>
             <div class="config-impact">
-              <span class="impact-label">Impact:</span>
-              <span class="impact-text" id="time-loss-impact"
-                >Exit if down 40% or more after hold period</span
-              >
+              <span class="impact-label" data-l10n-id="trader-impact-label"></span>
+              <span
+                class="impact-text"
+                id="time-loss-impact"
+                data-l10n-id="trader-time-loss-impact"
+                data-l10n-args='{"value":"40"}'
+              ></span>
             </div>
           </div>
 
           <!-- Visual Example -->
           <div class="visual-example">
-            <h4><i class="icon-chart-bar"></i> How It Works</h4>
+            <h4>
+              <i class="icon-chart-bar"></i> <span data-l10n-id="trader-example-how-it-works"></span>
+            </h4>
             <div class="example-timeline">
               <div class="timeline-step">
                 <div class="step-icon step-icon-entry">
                   <i class="icon-arrow-right"></i>
                 </div>
                 <div class="step-content">
-                  <div class="step-title">Entry</div>
-                  <div class="step-value">Day 0</div>
-                  <div class="step-detail">Position opened</div>
+                  <div class="step-title" data-l10n-id="trader-step-entry"></div>
+                  <div
+                    class="step-value"
+                    data-l10n-id="trader-time-day"
+                    data-l10n-args='{"day":"0"}'
+                  ></div>
+                  <div class="step-detail" data-l10n-id="trader-time-position-opened"></div>
                 </div>
               </div>
               <div class="timeline-arrow"><i class="icon-chevron-right"></i></div>
@@ -752,9 +909,14 @@
                   <i class="icon-clock"></i>
                 </div>
                 <div class="step-content">
-                  <div class="step-title">Time Limit</div>
-                  <div class="step-value" id="time-example-duration">Day 7</div>
-                  <div class="step-detail">Hold period reached</div>
+                  <div class="step-title" data-l10n-id="trader-time-limit"></div>
+                  <div
+                    class="step-value"
+                    id="time-example-duration"
+                    data-l10n-id="trader-time-day"
+                    data-l10n-args='{"day":"7"}'
+                  ></div>
+                  <div class="step-detail" data-l10n-id="trader-time-hold-reached"></div>
                 </div>
               </div>
               <div class="timeline-arrow"><i class="icon-chevron-right"></i></div>
@@ -763,19 +925,16 @@
                   <i class="icon-log-out"></i>
                 </div>
                 <div class="step-content">
-                  <div class="step-title">Auto Exit</div>
+                  <div class="step-title" data-l10n-id="trader-step-auto-exit"></div>
                   <div class="step-value" id="time-example-loss">-40%</div>
-                  <div class="step-detail">Loss threshold met</div>
+                  <div class="step-detail" data-l10n-id="trader-time-loss-met"></div>
                 </div>
               </div>
             </div>
             <div class="example-summary">
               <div class="summary-item summary-item-info">
                 <i class="icon-info"></i>
-                <span
-                  ><strong>Note:</strong> Positions at profit or smaller losses will NOT be
-                  exited</span
-                >
+                <span data-l10n-id="trader-time-note" data-l10n-markup></span>
               </div>
             </div>
           </div>
@@ -785,11 +944,11 @@
             <div class="config-label-row">
               <label class="config-label">
                 <i class="icon-list"></i>
-                <span>Current Positions Status</span>
+                <span data-l10n-id="trader-time-positions-title"></span>
               </label>
             </div>
             <div id="time-positions-status" class="status-list">
-              <div class="loading">Loading positions...</div>
+              <div class="loading" data-l10n-id="trader-time-positions-loading"></div>
             </div>
           </div>
         </div>
@@ -804,16 +963,22 @@
           <div class="config-card strategy-lane-card strategy-lane-card-entry">
             <div class="card-header">
               <div class="card-header-text">
-                <h3><i class="icon-target"></i> Entry Strategies</h3>
-                <p class="card-subtitle">Signals that can open a new position.</p>
+                <h3>
+                  <i class="icon-target"></i> <span data-l10n-id="trader-strategy-entry-title"></span>
+                </h3>
+                <p class="card-subtitle" data-l10n-id="trader-strategy-entry-subtitle"></p>
               </div>
-              <span class="strategy-lane-count" id="strategy-entry-enabled-label">-- active</span>
+              <span
+                class="strategy-lane-count"
+                id="strategy-entry-enabled-label"
+                data-l10n-id="trader-strategy-active-unknown"
+              ></span>
             </div>
             <div class="config-group config-group-full">
               <div id="entry-strategies" class="strategies-list">
                 <div class="strategy-list-state">
                   <i class="icon-loader spinning"></i>
-                  <span>Loading strategies...</span>
+                  <span data-l10n-id="trader-strategy-loading"></span>
                 </div>
               </div>
             </div>
@@ -822,16 +987,22 @@
           <div class="config-card strategy-lane-card strategy-lane-card-exit">
             <div class="card-header">
               <div class="card-header-text">
-                <h3><i class="icon-log-out"></i> Exit Strategies</h3>
-                <p class="card-subtitle">Signals that can close or protect an open position.</p>
+                <h3>
+                  <i class="icon-log-out"></i> <span data-l10n-id="trader-strategy-exit-title"></span>
+                </h3>
+                <p class="card-subtitle" data-l10n-id="trader-strategy-exit-subtitle"></p>
               </div>
-              <span class="strategy-lane-count" id="strategy-exit-enabled-label">-- active</span>
+              <span
+                class="strategy-lane-count"
+                id="strategy-exit-enabled-label"
+                data-l10n-id="trader-strategy-active-unknown"
+              ></span>
             </div>
             <div class="config-group config-group-full">
               <div id="exit-strategies" class="strategies-list">
                 <div class="strategy-list-state">
                   <i class="icon-loader spinning"></i>
-                  <span>Loading strategies...</span>
+                  <span data-l10n-id="trader-strategy-loading"></span>
                 </div>
               </div>
             </div>
@@ -854,10 +1025,10 @@
         <div class="config-card">
           <div class="card-header">
             <div class="card-header-text">
-              <h3><i class="icon-dollar-sign"></i> Dollar-Cost Averaging</h3>
-              <p class="card-subtitle">
-                Automatically add to losing positions to lower your average entry price
-              </p>
+              <h3>
+                <i class="icon-dollar-sign"></i> <span data-l10n-id="trader-dca-title"></span>
+              </h3>
+              <p class="card-subtitle" data-l10n-id="trader-dca-subtitle"></p>
             </div>
             <label class="toggle">
               <input type="checkbox" id="dca-enabled" />
@@ -869,11 +1040,14 @@
             <div class="config-label-row">
               <label for="dca-threshold" class="config-label">
                 <i class="icon-trending-down"></i>
-                <span>DCA Threshold</span>
+                <span data-l10n-id="config-trader-dca-threshold-pct"></span>
               </label>
-              <span class="config-badge config-badge-warning">Entry trigger</span>
+              <span
+                class="config-badge config-badge-warning"
+                data-l10n-id="trader-dca-threshold-badge"
+              ></span>
             </div>
-            <p class="config-hint">Enter DCA when position is down by this percentage</p>
+            <p class="config-hint"></p>
             <div class="input-group-enhanced">
               <input
                 type="number"
@@ -892,10 +1066,10 @@
             <div class="config-label-row">
               <label for="dca-max-count" class="config-label">
                 <i class="icon-repeat"></i>
-                <span>Max DCA Count</span>
+                <span data-l10n-id="config-trader-dca-max-count"></span>
               </label>
             </div>
-            <p class="config-hint">Maximum additional entries per position</p>
+            <p class="config-hint"></p>
             <div class="input-group-enhanced">
               <input
                 type="number"
@@ -906,7 +1080,7 @@
                 value="2"
                 class="input-large"
               />
-              <span class="input-unit">entries</span>
+              <span class="input-unit"></span>
             </div>
           </div>
 
@@ -914,10 +1088,10 @@
             <div class="config-label-row">
               <label for="dca-size" class="config-label">
                 <i class="icon-percent"></i>
-                <span>DCA Size</span>
+                <span data-l10n-id="config-trader-dca-size-percentage"></span>
               </label>
             </div>
-            <p class="config-hint">Percentage of initial position size for each DCA entry</p>
+            <p class="config-hint"></p>
             <div class="input-group-enhanced">
               <input
                 type="number"
@@ -936,10 +1110,10 @@
             <div class="config-label-row">
               <label for="dca-cooldown" class="config-label">
                 <i class="icon-clock"></i>
-                <span>DCA Cooldown</span>
+                <span data-l10n-id="config-trader-dca-cooldown-minutes"></span>
               </label>
             </div>
-            <p class="config-hint">Minimum time between DCA entries</p>
+            <p class="config-hint"></p>
             <div class="input-group-enhanced">
               <input
                 type="number"
@@ -950,19 +1124,19 @@
                 value="30"
                 class="input-large"
               />
-              <span class="input-unit">minutes</span>
+              <span class="input-unit"></span>
             </div>
           </div>
 
           <!-- Visual Example -->
           <div class="visual-example">
-            <h4><i class="icon-chart-bar"></i> DCA Example</h4>
+            <h4>
+              <i class="icon-chart-bar"></i> <span data-l10n-id="trader-dca-example-title"></span>
+            </h4>
             <div class="example-summary">
               <div class="summary-item summary-item-info">
                 <i class="icon-info"></i>
-                <span
-                  >0.01 SOL initial → DCA #1: 0.005 SOL @ -10% → DCA #2: 0.005 SOL @ -10% more</span
-                >
+                <span data-l10n-id="trader-dca-example"></span>
               </div>
             </div>
           </div>
@@ -974,27 +1148,29 @@
         <div class="config-card">
           <div class="card-header">
             <div class="card-header-text">
-              <h3><i class="icon-triangle-alert"></i> DCA Strategy Info</h3>
-              <p class="card-subtitle">Important considerations for DCA trading</p>
+              <h3>
+                <i class="icon-triangle-alert"></i> <span data-l10n-id="trader-dca-info-title"></span>
+              </h3>
+              <p class="card-subtitle" data-l10n-id="trader-dca-info-subtitle"></p>
             </div>
           </div>
           <div class="config-group">
             <div class="visual-example">
-              <h4><i class="icon-info"></i> How DCA Works</h4>
+              <h4>
+                <i class="icon-info"></i> <span data-l10n-id="trader-dca-how-title"></span>
+              </h4>
               <div class="example-summary">
                 <div class="summary-item summary-item-info">
                   <i class="icon-trending-down"></i>
-                  <span
-                    ><strong>Trigger:</strong> Position drops below DCA threshold (e.g., -10%)</span
-                  >
+                  <span data-l10n-id="trader-dca-how-trigger" data-l10n-markup></span>
                 </div>
                 <div class="summary-item summary-item-info">
                   <i class="icon-dollar-sign"></i>
-                  <span><strong>Action:</strong> Add more SOL to reduce average cost basis</span>
+                  <span data-l10n-id="trader-dca-how-action" data-l10n-markup></span>
                 </div>
                 <div class="summary-item summary-item-info">
                   <i class="icon-repeat"></i>
-                  <span><strong>Repeat:</strong> Can DCA multiple times based on max count</span>
+                  <span data-l10n-id="trader-dca-how-repeat" data-l10n-markup></span>
                 </div>
               </div>
             </div>
@@ -1002,27 +1178,21 @@
 
           <div class="config-group">
             <div class="visual-example">
-              <h4><i class="icon-circle-alert"></i> Risk Warnings</h4>
+              <h4>
+                <i class="icon-circle-alert"></i> <span data-l10n-id="trader-dca-risk-title"></span>
+              </h4>
               <div class="example-summary">
                 <div class="summary-item summary-item-warning">
                   <i class="icon-triangle-alert"></i>
-                  <span
-                    ><strong>Increased Exposure:</strong> DCA increases total capital at risk per
-                    position</span
-                  >
+                  <span data-l10n-id="trader-dca-risk-exposure" data-l10n-markup></span>
                 </div>
                 <div class="summary-item summary-item-warning">
                   <i class="icon-trending-down"></i>
-                  <span
-                    ><strong>Falling Knife:</strong> DCA won't help if token continues downward
-                    trend</span
-                  >
+                  <span data-l10n-id="trader-dca-risk-knife" data-l10n-markup></span>
                 </div>
                 <div class="summary-item summary-item-warning">
                   <i class="icon-clock"></i>
-                  <span
-                    ><strong>Cooldown:</strong> Use cooldown to avoid rapid-fire DCA entries</span
-                  >
+                  <span data-l10n-id="trader-dca-risk-cooldown" data-l10n-markup></span>
                 </div>
               </div>
             </div>
@@ -1039,21 +1209,24 @@
         <div class="config-card">
           <div class="card-header">
             <div class="card-header-text">
-              <h3><i class="icon-target"></i> Position Sizing</h3>
-              <p class="card-subtitle">Control how much to invest per position</p>
+              <h3>
+                <i class="icon-target"></i> <span data-l10n-id="trader-sizing-title"></span>
+              </h3>
+              <p class="card-subtitle" data-l10n-id="trader-sizing-subtitle"></p>
             </div>
           </div>
           <div class="config-group">
             <div class="config-label-row">
               <label for="max-positions" class="config-label">
                 <i class="icon-layers"></i>
-                <span>Max Open Positions</span>
+                <span data-l10n-id="config-trader-max-open-positions"></span>
               </label>
-              <span class="config-badge config-badge-info">Risk control</span>
+              <span
+                class="config-badge config-badge-info"
+                data-l10n-id="trader-sizing-positions-badge"
+              ></span>
             </div>
-            <p class="config-hint">
-              Maximum number of positions to hold simultaneously (conservative: 2-5)
-            </p>
+            <p class="config-hint"></p>
             <div class="input-group-enhanced">
               <input
                 type="number"
@@ -1064,7 +1237,7 @@
                 value="2"
                 class="input-large"
               />
-              <span class="input-unit">positions</span>
+              <span class="input-unit"></span>
             </div>
           </div>
 
@@ -1072,11 +1245,14 @@
             <div class="config-label-row">
               <label for="trade-size" class="config-label">
                 <i class="icon-dollar-sign"></i>
-                <span>Default Trade Size</span>
+                <span data-l10n-id="config-trader-trade-size-sol"></span>
               </label>
-              <span class="config-badge config-badge-warning">Per position</span>
+              <span
+                class="config-badge config-badge-warning"
+                data-l10n-id="trader-sizing-trade-size-badge"
+              ></span>
             </div>
-            <p class="config-hint">Amount of SOL to invest in each new position</p>
+            <p class="config-hint"></p>
             <div class="input-group-enhanced">
               <input
                 type="number"
@@ -1087,7 +1263,7 @@
                 value="0.005"
                 class="input-large"
               />
-              <span class="input-unit">SOL</span>
+              <span class="input-unit"></span>
             </div>
           </div>
 
@@ -1095,12 +1271,10 @@
             <div class="config-label-row">
               <label for="entry-sizes" class="config-label">
                 <i class="icon-list"></i>
-                <span>Preset Entry Sizes</span>
+                <span data-l10n-id="config-trader-entry-sizes"></span>
               </label>
             </div>
-            <p class="config-hint">
-              Comma-separated SOL amounts for quick selection (e.g., 0.005, 0.01, 0.02)
-            </p>
+            <p class="config-hint"></p>
             <input
               type="text"
               id="entry-sizes"
@@ -1117,18 +1291,20 @@
         <div class="config-card">
           <div class="card-header">
             <div class="card-header-text">
-              <h3><i class="icon-clock"></i> Timing &amp; Cooldowns</h3>
-              <p class="card-subtitle">Control timing between operations</p>
+              <h3>
+                <i class="icon-clock"></i> <span data-l10n-id="trader-timing-title"></span>
+              </h3>
+              <p class="card-subtitle" data-l10n-id="trader-timing-subtitle"></p>
             </div>
           </div>
           <div class="config-group">
             <div class="config-label-row">
               <label for="close-cooldown" class="config-label">
                 <i class="icon-pause"></i>
-                <span>Position Close Cooldown</span>
+                <span data-l10n-id="trader-timing-close-cooldown"></span>
               </label>
             </div>
-            <p class="config-hint">Minutes to wait before reopening the same token</p>
+            <p class="config-hint" data-l10n-id="trader-timing-close-cooldown-hint"></p>
             <div class="input-group-enhanced">
               <input
                 type="number"
@@ -1139,7 +1315,7 @@
                 value="15"
                 class="input-large"
               />
-              <span class="input-unit">minutes</span>
+              <span class="input-unit" data-l10n-id="trader-timing-unit-minutes"></span>
             </div>
           </div>
 
@@ -1147,12 +1323,10 @@
             <div class="config-label-row">
               <label for="entry-concurrency" class="config-label">
                 <i class="icon-zap"></i>
-                <span>Entry Check Concurrency</span>
+                <span data-l10n-id="trader-timing-concurrency"></span>
               </label>
             </div>
-            <p class="config-hint">
-              Number of tokens to check simultaneously (higher = faster but more CPU)
-            </p>
+            <p class="config-hint" data-l10n-id="trader-timing-concurrency-hint"></p>
             <div class="input-group-enhanced">
               <input
                 type="number"
@@ -1163,7 +1337,7 @@
                 value="10"
                 class="input-large"
               />
-              <span class="input-unit">tokens</span>
+              <span class="input-unit" data-l10n-id="trader-timing-unit-tokens"></span>
             </div>
           </div>
 
@@ -1171,15 +1345,18 @@
             <div class="config-label-row">
               <label class="config-label">
                 <i class="icon-info"></i>
-                <span>Monitor Intervals</span>
+                <span data-l10n-id="trader-timing-intervals"></span>
               </label>
-              <span class="config-badge config-badge-info">Read-only</span>
+              <span
+                class="config-badge config-badge-info"
+                data-l10n-id="trader-timing-intervals-badge"
+              ></span>
             </div>
-            <p class="config-hint">Configured in code (not editable via UI)</p>
+            <p class="config-hint" data-l10n-id="trader-timing-intervals-hint"></p>
             <div class="example-summary">
               <div class="summary-item summary-item-info">
                 <i class="icon-activity"></i>
-                <span><strong>Entry Monitor:</strong> 30s | <strong>Exit Monitor:</strong> 5s</span>
+                <span data-l10n-id="trader-timing-intervals-value" data-l10n-markup></span>
               </div>
             </div>
           </div>

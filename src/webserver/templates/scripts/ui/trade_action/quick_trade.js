@@ -8,6 +8,10 @@ import { formatAddressCompact, formatFixed, withSolUnit } from "../../core/forma
 export function applyQuickTradeMixin(TradeActionDialog) {
   const proto = TradeActionDialog.prototype;
 
+  // A failure whose message is already localized for display. Any other error
+  // thrown while fetching a token (network, parsing) shows the generic message.
+  class QuickTradeError extends Error {}
+
   /**
    * Validate if a string is a valid Solana mint address
    * @param {string} value - The string to validate
@@ -22,12 +26,7 @@ export function applyQuickTradeMixin(TradeActionDialog) {
    * @param {string} action - 'buy' or 'sell'
    */
   proto._renderQuickMintStep = function (action) {
-    // Get ACTION_CONFIG from the class
-    const ACTION_CONFIG = this.constructor.ACTION_CONFIG || {
-      buy: { colorClass: "action-buy" },
-      sell: { colorClass: "action-sell" },
-    };
-    const config = ACTION_CONFIG[action];
+    const config = this.constructor.ACTION_CONFIG[action];
 
     // Set action-specific class on dialog
     this.dialog.className = `trade-action-dialog ${config.colorClass} quick-mode`;
@@ -37,9 +36,10 @@ export function applyQuickTradeMixin(TradeActionDialog) {
     // before the step could render at all.
 
     // Set title for quick mode
-    const quickTitle = action === "buy" ? "Quick Buy" : "Quick Sell";
+    const quickTitle =
+      action === "buy" ? I18n.t("trade-quick-buy-title") : I18n.t("trade-quick-sell-title");
     this.titleEl.textContent = quickTitle;
-    this.subtitleEl.textContent = "Enter token mint address";
+    this.subtitleEl.textContent = I18n.t("trade-quick-subtitle");
 
     // Hide trade body/footer, show quick mint step
     this._tradeBodyEl.style.display = "none";
@@ -183,7 +183,7 @@ export function applyQuickTradeMixin(TradeActionDialog) {
         return `
           <div class="search-result-item" data-index="${index}" data-mint="${Utils.escapeHtml(token.mint)}">
             <span class="search-result-symbol token-symbol-type">${Utils.escapeHtml(token.symbol || "???")} </span>
-            <span class="search-result-name token-name-type">${Utils.escapeHtml(token.name || "Unknown")}</span>
+            <span class="search-result-name token-name-type">${Utils.escapeHtml(token.name || I18n.t("format-unknown"))}</span>
             <span class="search-result-mint">${mintShort}</span>
           </div>
         `;
@@ -291,7 +291,11 @@ export function applyQuickTradeMixin(TradeActionDialog) {
       }
 
       if (!response.ok) {
-        throw new Error(response.status === 404 ? "Token not found" : "Failed to fetch token");
+        throw new QuickTradeError(
+          response.status === 404
+            ? I18n.t("trade-quick-token-not-found")
+            : I18n.t("trade-quick-token-failed")
+        );
       }
 
       // /api/tokens/{mint} returns the TokenDetailResponse RAW — success_response is
@@ -301,13 +305,13 @@ export function applyQuickTradeMixin(TradeActionDialog) {
       const token = await response.json();
 
       if (!token?.mint) {
-        throw new Error("Token not found in database");
+        throw new QuickTradeError(I18n.t("trade-quick-token-not-in-database"));
       }
 
       this._fetchedTokenData = token;
 
       // Update preview
-      this._quickTokenSymbolEl.textContent = token.symbol || "Unknown";
+      this._quickTokenSymbolEl.textContent = token.symbol || I18n.t("format-unknown");
       this._quickTokenNameEl.textContent = token.name || mint.slice(0, 8) + "...";
 
       if (token.price_sol != null && token.price_sol > 0) {
@@ -329,7 +333,9 @@ export function applyQuickTradeMixin(TradeActionDialog) {
       if (!this._isOpen) return;
 
       this._quickTokenPreviewEl.setAttribute("data-visible", "false");
-      this._showQuickError(err.message || "Failed to fetch token info");
+      this._showQuickError(
+        err instanceof QuickTradeError ? err.message : I18n.t("trade-quick-token-info-failed")
+      );
       this._fetchedTokenData = null;
     }
   };
@@ -355,7 +361,7 @@ export function applyQuickTradeMixin(TradeActionDialog) {
 
         if (!response.ok || response.status === 404) {
           this._quickContinueBtnEl.classList.remove("loading");
-          this._showQuickError("No position found for this token");
+          this._showQuickError(I18n.t("trade-quick-no-position"));
           return;
         }
 
@@ -366,7 +372,7 @@ export function applyQuickTradeMixin(TradeActionDialog) {
         const pos = data?.position;
         if (!pos) {
           this._quickContinueBtnEl.classList.remove("loading");
-          this._showQuickError("No position found for this token");
+          this._showQuickError(I18n.t("trade-quick-no-position"));
           return;
         }
 
@@ -374,7 +380,7 @@ export function applyQuickTradeMixin(TradeActionDialog) {
 
         if (holdings <= 0) {
           this._quickContinueBtnEl.classList.remove("loading");
-          this._showQuickError("Position has no remaining tokens");
+          this._showQuickError(I18n.t("trade-quick-no-holdings"));
           return;
         }
 
@@ -390,7 +396,7 @@ export function applyQuickTradeMixin(TradeActionDialog) {
       } catch {
         if (!this._isOpen) return;
         this._quickContinueBtnEl.classList.remove("loading");
-        this._showQuickError("Failed to fetch position data");
+        this._showQuickError(I18n.t("trade-quick-position-failed"));
         return;
       }
     } else {
@@ -399,7 +405,7 @@ export function applyQuickTradeMixin(TradeActionDialog) {
     }
 
     // Update symbol
-    this._currentSymbol = token.symbol || "Unknown";
+    this._currentSymbol = token.symbol || I18n.t("format-unknown");
 
     // Identity for the dialog's token strip, so quick mode shows the same
     // logo/name/symbol header as every other entry point.
@@ -418,11 +424,7 @@ export function applyQuickTradeMixin(TradeActionDialog) {
   proto._transitionToTradeStep = function () {
     this._quickStep = "trade";
 
-    // Get ACTION_CONFIG from the class
-    const ACTION_CONFIG = this.constructor.ACTION_CONFIG || {
-      buy: { title: "Buy Token", subtitle: "Enter amount in SOL" },
-      sell: { title: "Sell Position", subtitle: "Select sell percentage" },
-    };
+    const ACTION_CONFIG = this.constructor.ACTION_CONFIG;
 
     // Animate out mint step
     this._quickMintStepEl.classList.add("slide-out");
@@ -442,9 +444,9 @@ export function applyQuickTradeMixin(TradeActionDialog) {
       this._tradeFooterEl.classList.add("slide-in");
 
       // Update title back to normal
-      const config = ACTION_CONFIG[this.currentAction];
-      this.titleEl.textContent = config.title;
-      this.subtitleEl.textContent = config.subtitle;
+      const text = ACTION_CONFIG[this.currentAction].text();
+      this.titleEl.textContent = text.title;
+      this.subtitleEl.textContent = text.subtitle;
 
       setTimeout(() => {
         this._tradeBodyEl.classList.remove("slide-in");

@@ -176,19 +176,17 @@ const TRADE_TIMEOUT_MS = 180000;
 // What a timeout on a trade request ACTUALLY means: the browser stopped waiting, the
 // backend did not stop trading. Aborting a fetch cannot cancel a submitted swap, so the
 // only honest thing to say is that it is still running.
-const PENDING_TITLES = {
-  buy: "Buy still running",
-  add: "Add still running",
-  sell: "Sell still running",
-};
+const PENDING_TITLE_LABELS = Object.freeze({
+  buy: "trade-toast-pending-buy",
+  add: "trade-toast-pending-add",
+  sell: "trade-toast-pending-sell",
+});
 
-const PENDING_MESSAGE = "The browser stopped waiting; watch the position row for the result";
-
-const FAILURE_MESSAGES = {
-  buy: "Buy failed",
-  add: "Add to position failed",
-  sell: "Sell failed",
-};
+const FAILURE_TITLE_LABELS = Object.freeze({
+  buy: "trade-toast-failed-buy",
+  add: "trade-toast-failed-add",
+  sell: "trade-toast-failed-sell",
+});
 
 // One trade, one notice. The backend registers an action for every manual trade and
 // streams it step by step, and `core/action_toasts.js` turns that stream into a single
@@ -246,7 +244,7 @@ function buildBody(action, mint, result) {
  */
 export async function manualTrade({ action, mint, symbol, name, logo, context = {}, btn = null }) {
   if (!action || !mint) {
-    Utils.showToast({ type: "error", title: "No mint address available" });
+    Utils.showToast({ type: "error", title: I18n.t("trade-toast-no-mint") });
     return false;
   }
 
@@ -323,7 +321,7 @@ export async function manualTrade({ action, mint, symbol, name, logo, context = 
     Utils.showToast({
       key: tradeToastKey(mint),
       type: "error",
-      title: "Could not open the trade dialog",
+      title: I18n.t("trade-toast-open-failed"),
       message: error?.message || null,
     });
     return false;
@@ -367,17 +365,16 @@ export async function submitTrade({ action, mint, result, btn = null }) {
       Utils.showToast({
         key: tradeToastKey(mint),
         type: "warning",
-        title: PENDING_TITLES[action],
-        message: PENDING_MESSAGE,
+        title: I18n.label(PENDING_TITLE_LABELS, action),
+        message: I18n.t("trade-toast-pending-message"),
       });
       return false;
     }
-    const reason = await describeError(error, action);
     Utils.showToast({
       key: tradeToastKey(mint),
       type: "error",
-      title: FAILURE_MESSAGES[action],
-      message: reason === FAILURE_MESSAGES[action] ? null : reason,
+      title: I18n.label(FAILURE_TITLE_LABELS, action),
+      message: await describeError(error),
     });
     return false;
   } finally {
@@ -390,7 +387,7 @@ export async function submitTrade({ action, mint, result, btn = null }) {
  * the backend's actual reason ("insufficient balance", "force stop active", ...)
  * would be lost. It attaches the Response, so read the real message back off it.
  */
-async function describeError(error, action) {
+async function describeError(error) {
   try {
     const body = await error?.response?.json();
     const message = apiErrorMessage(body);
@@ -398,5 +395,5 @@ async function describeError(error, action) {
   } catch {
     // no JSON body — fall back below
   }
-  return error?.message || FAILURE_MESSAGES[action];
+  return error?.message || null;
 }

@@ -6,6 +6,7 @@ import * as Utils from "../core/utils.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 import { closeReasonText } from "../ui/trade_reason.js";
+import { STRATEGY_TYPE_LABELS } from "../ui/strategy_type.js";
 import { requestManager, apiErrorMessage } from "../core/request_manager.js";
 import { createTraderConfigCards } from "./trader/config_cards.js";
 import { playToggleOn, playToggleOff, playError } from "../core/sounds.js";
@@ -37,17 +38,23 @@ const EXIT_TYPE_LABELS = Object.freeze({
 
 // Sub-tabs configuration. Strategy Control is second and the embedded Strategies
 // editor is third (Strategies was formerly its own top-level tab).
-const SUB_TABS = [
-  { id: "stats", label: '<i class="icon-chart-bar"></i> Stats' },
-  { id: "strategy-control", label: '<i class="icon-puzzle"></i> Strategy Control' },
-  { id: "strategies", label: '<i class="icon-square-pen"></i> Strategies' },
-  { id: "stop-loss", label: '<i class="icon-shield-off"></i> Stop Loss' },
-  { id: "trailing-stop", label: '<i class="icon-trending-up"></i> Trailing Stop' },
-  { id: "roi", label: '<i class="icon-target"></i> Take Profit' },
-  { id: "time-rules", label: '<i class="icon-timer"></i> Time Rules' },
-  { id: "dca", label: '<i class="icon-dollar-sign"></i> DCA' },
-  { id: "general-settings", label: '<i class="icon-settings"></i> Settings' },
-];
+function buildSubTabs() {
+  const tab = (id, icon, name) => ({
+    id,
+    label: `<i class="${icon}"></i> ${Utils.escapeHtml(name)}`,
+  });
+  return [
+    tab("stats", "icon-chart-bar", I18n.t("trader-tab-stats")),
+    tab("strategy-control", "icon-puzzle", I18n.t("trader-tab-strategy-control")),
+    tab("strategies", "icon-square-pen", I18n.t("trader-tab-strategies")),
+    tab("stop-loss", "icon-shield-off", I18n.t("trader-tab-stop-loss")),
+    tab("trailing-stop", "icon-trending-up", I18n.t("trader-tab-trailing-stop")),
+    tab("roi", "icon-target", I18n.t("trader-tab-roi")),
+    tab("time-rules", "icon-timer", I18n.t("trader-tab-time-rules")),
+    tab("dca", "icon-dollar-sign", I18n.t("trader-tab-dca")),
+    tab("general-settings", "icon-settings", I18n.t("trader-tab-settings")),
+  ];
+}
 
 // Constants
 const DEFAULT_TAB = "stats";
@@ -310,8 +317,8 @@ function createLifecycle() {
       console.error("[Trader] Failed to load config:", error);
       Utils.showToast({
         type: "error",
-        title: "Load Failed",
-        message: "Failed to load trader configuration",
+        title: I18n.t("trader-toast-load-failed"),
+        message: I18n.attr("trader-toast-load-failed", "message"),
       });
     }
   }
@@ -461,8 +468,11 @@ function createLifecycle() {
       setDetail(
         "net-pnl-detail",
         data.total_trades > 0
-          ? `${sol(data.gross_profit_sol)} won · ${sol(data.gross_loss_sol)} lost`
-          : "No closed trades in this window"
+          ? I18n.t("trader-stats-won-lost", {
+              won: sol(data.gross_profit_sol),
+              lost: sol(data.gross_loss_sol),
+            })
+          : I18n.t("trader-stats-empty")
       );
 
       setValue(
@@ -476,7 +486,18 @@ function createLifecycle() {
       );
       setDetail(
         "win-rate-detail",
-        data.total_trades > 0 ? `${data.winners} wins · ${data.losers} losses` : "—"
+        data.total_trades > 0
+          ? I18n.t("trader-stats-record", {
+              wins: I18n.t("trader-stats-wins", {
+                count: data.winners,
+                amount: String(data.winners),
+              }),
+              losses: I18n.t("trader-stats-losses", {
+                count: data.losers,
+                amount: String(data.losers),
+              }),
+            })
+          : "—"
       );
 
       setValue(
@@ -491,8 +512,8 @@ function createLifecycle() {
       setDetail(
         "profit-factor-detail",
         Number.isFinite(data.expectancy_sol)
-          ? `${sol(data.expectancy_sol)} expected per trade`
-          : "Gross won ÷ gross lost"
+          ? I18n.t("trader-stats-expected", { amount: sol(data.expectancy_sol) })
+          : I18n.t("trader-stats-profit-factor-basis")
       );
 
       setValue(
@@ -500,12 +521,16 @@ function createLifecycle() {
         data.total_trades > 0 ? sol(data.max_drawdown_sol) : "—",
         data.max_drawdown_sol > 0 ? "negative" : null
       );
-      setDetail("max-drawdown-detail", "Deepest realized peak-to-trough");
+      setDetail("max-drawdown-detail", I18n.t("trader-stats-drawdown-basis"));
 
       setValue("capital-at-work", sol(data.locked_sol));
       setDetail(
         "capital-at-work-detail",
-        `${data.open_positions_count} of ${data.max_open_positions} position slots used`
+        I18n.t("trader-stats-slots", {
+          count: data.max_open_positions,
+          used: String(data.open_positions_count),
+          max: String(data.max_open_positions),
+        })
       );
 
       const hasWin = Number.isFinite(data.avg_win_pct);
@@ -514,12 +539,15 @@ function createLifecycle() {
         "avg-win-loss",
         hasWin || hasLoss ? `${pct(data.avg_win_pct)} / ${pct(data.avg_loss_pct)}` : "—"
       );
-      setDetail("avg-win-loss-detail", "Average outcome of a winning vs losing trade");
+      setDetail("avg-win-loss-detail", I18n.t("trader-stats-avg-basis"));
 
       setValue("total-trades", data.total_trades > 0 ? String(data.total_trades) : "—");
       setDetail(
         "total-trades-detail",
-        data.total_trades === 1 ? "1 position closed" : `${data.total_trades} positions closed`
+        I18n.t("trader-stats-closed", {
+          count: data.total_trades,
+          amount: String(data.total_trades),
+        })
       );
 
       const holdText = (hours) =>
@@ -528,7 +556,7 @@ function createLifecycle() {
       setDetail(
         "median-hold-detail",
         Number.isFinite(data.avg_hold_time_hours)
-          ? `${holdText(data.avg_hold_time_hours)} average`
+          ? I18n.t("trader-stats-hold-average", { span: holdText(data.avg_hold_time_hours) })
           : "—"
       );
 
@@ -542,7 +570,7 @@ function createLifecycle() {
         excludedEl.textContent =
           n === 0
             ? ""
-            : `${n} closed ${n === 1 ? "round" : "rounds"} excluded — no complete cost basis, so no honest P&L.`;
+            : I18n.t("trader-stats-excluded", { count: n, amount: String(n) });
       }
 
       renderDailyPnl(data.daily_pnl, data.total_pnl_sol);
@@ -604,8 +632,7 @@ function createLifecycle() {
     }
 
     if (!Array.isArray(days) || days.every((d) => (d.trades || 0) === 0)) {
-      container.innerHTML =
-        '<div class="info-state"><i class="icon-inbox"></i><span>No closed trades in this window</span></div>';
+      container.innerHTML = `<div class="info-state"><i class="icon-inbox"></i><span>${Utils.escapeHtml(I18n.t("trader-stats-empty"))}</span></div>`;
       _lastDailyKey = null;
       return;
     }
@@ -649,7 +676,7 @@ function createLifecycle() {
     const last = days[days.length - 1];
     container.innerHTML = `
       <svg class="daily-pnl-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img"
-           aria-label="Daily realized profit and loss in SOL">
+           aria-label="${Utils.escapeHtml(I18n.t("trader-daily-chart"))}">
         <line class="daily-pnl-zero" x1="0" y1="${mid}" x2="${W}" y2="${mid}"></line>
         ${bars}
         <polyline class="daily-pnl-line" points="${points}"></polyline>
@@ -704,8 +731,11 @@ function createLifecycle() {
     if (!container) return;
 
     if (!Array.isArray(breakdown) || breakdown.length === 0) {
-      const label = periodDays === 1 ? "24 hours" : `${periodDays} days`;
-      container.innerHTML = `<div class="info-state"><i class="icon-inbox"></i><span>No closed trades in the last ${Utils.escapeHtml(label)}</span></div>`;
+      const message =
+        periodDays === 1
+          ? I18n.t("trader-exit-empty-day")
+          : I18n.t("trader-exit-empty-days", { count: periodDays, amount: String(periodDays) });
+      container.innerHTML = `<div class="info-state"><i class="icon-inbox"></i><span>${Utils.escapeHtml(message)}</span></div>`;
       _lastExitKey = null;
       return;
     }
@@ -735,8 +765,18 @@ function createLifecycle() {
               <div class="exit-breakdown-fill ${barClass}" style="width: ${share}%"></div>
             </div>
             <div class="exit-breakdown-meta">
-              <span class="exit-breakdown-share">${count} ${count === 1 ? "trade" : "trades"} · ${share}% of exits</span>
-              <span class="exit-breakdown-profit ${avgPct >= 0 ? "positive" : "negative"}">${Utils.formatPercentValue(avgPct, { decimals: 1 })} avg</span>
+              <span class="exit-breakdown-share">${Utils.escapeHtml(
+                I18n.t("trader-exit-share", {
+                  count,
+                  amount: String(count),
+                  share: Utils.formatPercentValue(share, { decimals: 0, includeSign: false }),
+                })
+              )}</span>
+              <span class="exit-breakdown-profit ${avgPct >= 0 ? "positive" : "negative"}">${Utils.escapeHtml(
+                I18n.t("trader-exit-average", {
+                  value: Utils.formatPercentValue(avgPct, { decimals: 1 }),
+                })
+              )}</span>
             </div>
           </div>`;
       })
@@ -801,7 +841,10 @@ function createLifecycle() {
       const statusIcon = preview.trail_active
         ? '<i class="icon-check"></i>'
         : '<i class="icon-pause"></i>';
-      trailStatus.innerHTML = `${statusIcon} ${preview.trail_active ? "ACTIVE" : "INACTIVE"}`;
+      const statusText = preview.trail_active
+        ? I18n.t("trader-trailing-preview-active")
+        : I18n.t("trader-trailing-preview-inactive");
+      trailStatus.innerHTML = `${statusIcon} ${Utils.escapeHtml(statusText)}`;
       trailStatus.className = preview.trail_active ? "status-active" : "status-inactive";
     }
     if (trailPrice) {
@@ -835,8 +878,12 @@ function createLifecycle() {
         scenarioDiv.innerHTML = `
           <div class="scenario-description">${scenario.description}</div>
           <div class="scenario-result">
-            ${statusIcon} Exit: ${Utils.formatPrice(scenario.exit_price)} 
-            (${Utils.formatPercent(scenario.exit_profit_pct)} profit)
+            ${statusIcon} ${Utils.escapeHtml(
+              I18n.t("trader-trailing-preview-scenario", {
+                price: Utils.formatPrice(scenario.exit_price),
+                profit: Utils.formatPercent(scenario.exit_profit_pct),
+              })
+            )}
           </div>
         `;
         scenariosContainer.appendChild(scenarioDiv);
@@ -884,7 +931,7 @@ function createLifecycle() {
       container.innerHTML = `
         <div class="strategy-list-state">
           <i class="icon-loader spinning"></i>
-          <span>Loading strategies...</span>
+          <span>${Utils.escapeHtml(I18n.t("trader-strategy-loading"))}</span>
         </div>
       `;
     });
@@ -906,8 +953,14 @@ function createLifecycle() {
     const exitEnabled = exitStrategies.filter((strategy) => strategy.enabled).length;
 
     const counts = {
-      "#strategy-entry-enabled-label": `${entryEnabled}/${entryStrategies.length} active`,
-      "#strategy-exit-enabled-label": `${exitEnabled}/${exitStrategies.length} active`,
+      "#strategy-entry-enabled-label": I18n.t("trader-strategy-active", {
+        enabled: String(entryEnabled),
+        total: String(entryStrategies.length),
+      }),
+      "#strategy-exit-enabled-label": I18n.t("trader-strategy-active", {
+        enabled: String(exitEnabled),
+        total: String(exitStrategies.length),
+      }),
     };
 
     Object.entries(counts).forEach(([selector, value]) => {
@@ -924,7 +977,7 @@ function createLifecycle() {
       container.innerHTML = `
         <div class="strategy-list-state is-error">
           <i class="icon-circle-alert"></i>
-          <span>Could not load strategies</span>
+          <span>${Utils.escapeHtml(I18n.t("trader-strategy-load-failed"))}</span>
         </div>
       `;
     });
@@ -941,7 +994,7 @@ function createLifecycle() {
       container.innerHTML = `
         <div class="strategy-list-state is-empty">
           <i class="icon-circle"></i>
-          <span>No strategies defined</span>
+          <span>${Utils.escapeHtml(I18n.t("trader-strategy-empty"))}</span>
         </div>
       `;
       return;
@@ -953,18 +1006,29 @@ function createLifecycle() {
         const isEntry = strategyType === "ENTRY";
         const typeClass = isEntry ? "is-entry" : "is-exit";
         const statusClass = strategy.enabled ? "is-enabled" : "is-disabled";
-        const statusLabel = strategy.enabled ? "Enabled" : "Disabled";
-        const description = strategy.description
-          ? Utils.escapeHtml(strategy.description)
-          : "No description provided.";
-        const priority =
-          strategy.priority !== null && strategy.priority !== undefined
-            ? Utils.escapeHtml(String(strategy.priority))
-            : "Auto";
+        const statusLabel = Utils.escapeHtml(
+          strategy.enabled ? I18n.t("common-state-enabled") : I18n.t("common-state-disabled")
+        );
+        const description = Utils.escapeHtml(
+          strategy.description || I18n.t("trader-strategy-no-description")
+        );
+        const priority = Utils.escapeHtml(
+          I18n.t("trader-strategy-priority", {
+            priority:
+              strategy.priority !== null && strategy.priority !== undefined
+                ? String(strategy.priority)
+                : I18n.t("trader-strategy-priority-auto"),
+          })
+        );
         const strategyId = Utils.escapeHtml(String(strategy.id));
-        const strategyName = strategy.name
-          ? Utils.escapeHtml(String(strategy.name))
-          : "Unnamed strategy";
+        const strategyName = Utils.escapeHtml(
+          strategy.name ? String(strategy.name) : I18n.t("trader-strategy-unnamed")
+        );
+        const typeLabel = Utils.escapeHtml(
+          strategyType
+            ? I18n.label(STRATEGY_TYPE_LABELS, strategyType)
+            : I18n.t("trader-strategy-type-unknown")
+        );
 
         return `
         <div class="strategy-control-item ${statusClass}">
@@ -989,11 +1053,11 @@ function createLifecycle() {
           <div class="strategy-control-meta">
             <span class="strategy-control-chip ${typeClass}">
               <i class="${isEntry ? "icon-target" : "icon-log-out"}"></i>
-              ${Utils.escapeHtml(strategyType || "STRATEGY")}
+              ${typeLabel}
             </span>
             <span class="strategy-control-chip">
               <i class="icon-list-ordered"></i>
-              Priority ${priority}
+              ${priority}
             </span>
           </div>
         </div>
@@ -1028,16 +1092,20 @@ function createLifecycle() {
 
       Utils.showToast({
         type: "success",
-        title: enabled ? "Strategy Enabled" : "Strategy Disabled",
-        message: enabled ? "Strategy is active" : "Strategy is inactive",
+        title: enabled
+          ? I18n.t("trader-toast-strategy-enabled")
+          : I18n.t("trader-toast-strategy-disabled"),
+        message: enabled
+          ? I18n.attr("trader-toast-strategy-enabled", "message")
+          : I18n.attr("trader-toast-strategy-disabled", "message"),
       });
       await loadStrategies();
     } catch (error) {
       console.error("[Trader] Failed to update strategy status:", error);
       Utils.showToast({
         type: "error",
-        title: "Update Failed",
-        message: "Failed to update strategy status",
+        title: I18n.t("trader-toast-strategy-failed"),
+        message: I18n.attr("trader-toast-strategy-failed", "message"),
       });
       await loadStrategies(); // Reload to reset checkbox
     }
@@ -1057,7 +1125,7 @@ function createLifecycle() {
       if (!statusList) return;
 
       if (positions.length === 0) {
-        statusList.innerHTML = '<div class="empty-state">No open positions</div>';
+        statusList.innerHTML = `<div class="empty-state">${Utils.escapeHtml(I18n.t("trader-time-positions-empty"))}</div>`;
         return;
       }
 
@@ -1070,15 +1138,15 @@ function createLifecycle() {
           return `
             <div class="time-rule-item">
               <div class="time-rule-token">
-                ${Utils.escapeHtml(position.symbol || "Unknown")}
+                ${Utils.escapeHtml(position.symbol || I18n.t("format-unknown"))}
               </div>
               <div class="time-rule-metrics">
                 <div class="time-rule-metric">
-                  <span class="time-rule-label">Hold Time:</span>
+                  <span class="time-rule-label">${Utils.escapeHtml(I18n.t("trader-time-positions-hold"))}</span>
                   <span class="time-rule-value">${Utils.escapeHtml(holdTime)}</span>
                 </div>
                 <div class="time-rule-metric">
-                  <span class="time-rule-label">ROI:</span>
+                  <span class="time-rule-label">${Utils.escapeHtml(I18n.t("trader-time-positions-roi"))}</span>
                   <span class="time-rule-value ${roi >= 0 ? "value-positive" : "value-negative"}">
                     ${roi >= 0 ? "+" : ""}${formatPercentValue(roi, { plus: "" })}
                   </span>
@@ -1201,8 +1269,8 @@ function createLifecycle() {
   async function saveConfig(updates, options = {}) {
     const {
       reload = true,
-      successTitle = "Configuration Saved",
-      successMessage = "Trader settings applied successfully",
+      successTitle = I18n.t("trader-toast-saved"),
+      successMessage = I18n.attr("trader-toast-saved", "message"),
     } = options;
 
     try {
@@ -1241,8 +1309,8 @@ function createLifecycle() {
       console.error("[Trader] Failed to save config:", error);
       Utils.showToast({
         type: "error",
-        title: "Save Failed",
-        message: "Failed to save trader configuration",
+        title: I18n.t("trader-toast-save-failed"),
+        message: I18n.attr("trader-toast-save-failed", "message"),
       });
       throw error;
     }
@@ -1287,7 +1355,7 @@ function createLifecycle() {
       // Initialize tab bar with beforeChange hook for feature validation
       tabBar = new TabBar({
         container: "#subTabsContainer",
-        tabs: SUB_TABS,
+        tabs: buildSubTabs(),
         defaultTab: DEFAULT_TAB,
         stateKey: "trader.activeTab",
         pageName: "trader",
@@ -1372,7 +1440,7 @@ function createLifecycle() {
               controls.fetchTraderStatus(),
             ]);
           },
-          { label: "Trader Stats", intervalMs: 5000 }
+          { label: "Trader Stats", intervalMs: 5000 } // l10n-ignore: poller label used in logs only
         );
       }
 
@@ -1381,7 +1449,7 @@ function createLifecycle() {
           async () => {
             await loadConfig({ preserveUnsavedEdits: true });
           },
-          { label: "Trader Config", intervalMs: 10000 }
+          { label: "Trader Config", intervalMs: 10000 } // l10n-ignore: poller label used in logs only
         );
       }
 
@@ -1392,7 +1460,7 @@ function createLifecycle() {
               await loadStrategies();
             }
           },
-          { label: "Strategies", intervalMs: 10000 }
+          { label: "Strategies", intervalMs: 10000 } // l10n-ignore: poller label used in logs only
         );
       }
 

@@ -73,6 +73,18 @@ const CARD_SPECS = [
   },
 ];
 
+function buttonIcon(iconClass) {
+  const icon = document.createElement("i");
+  icon.className = iconClass;
+  return icon;
+}
+
+function buttonLabel(text) {
+  const label = document.createElement("span");
+  label.textContent = text;
+  return label;
+}
+
 /** Snapshot string used for dirty comparison (independent of value coercion). */
 function snapValue(el) {
   return el.type === "checkbox" ? String(el.checked) : el.value;
@@ -159,8 +171,10 @@ export function createTraderConfigCards({ saveConfig }) {
     try {
       await saveConfig(payload, {
         reload: false,
-        successTitle: el.checked ? "Feature Enabled" : "Feature Disabled",
-        successMessage: "Auto Trader setting applied",
+        successTitle: el.checked
+          ? I18n.t("trader-toast-feature-enabled")
+          : I18n.t("trader-toast-feature-disabled"),
+        successMessage: I18n.t("trader-toast-feature-applied"),
       });
       card.saved[field.id] = nextSaved;
       evaluate(card);
@@ -201,14 +215,14 @@ export function createTraderConfigCards({ saveConfig }) {
     const resetBtn = document.createElement("button");
     resetBtn.type = "button";
     resetBtn.className = "btn btn-sm btn-ghost config-card-reset";
-    resetBtn.innerHTML = '<i class="icon-rotate-ccw"></i><span>Reset</span>';
+    resetBtn.append(buttonIcon("icon-rotate-ccw"), buttonLabel(I18n.t("common-action-reset")));
     resetBtn.hidden = true;
     resetBtn.addEventListener("click", () => reset(card));
 
     const saveBtn = document.createElement("button");
     saveBtn.type = "button";
     saveBtn.className = "btn btn-sm btn-primary config-card-save";
-    saveBtn.innerHTML = '<i class="icon-save"></i><span>Save</span>';
+    saveBtn.append(buttonIcon("icon-save"), buttonLabel(I18n.t("common-action-save")));
     saveBtn.hidden = true;
     saveBtn.addEventListener("click", () => save(card));
 

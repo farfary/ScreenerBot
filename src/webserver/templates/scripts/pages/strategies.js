@@ -3,16 +3,11 @@ import { $, $$ } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
 import * as AppState from "../core/app_state.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
+import { STRATEGY_TYPE_LABELS } from "../ui/strategy_type.js";
 import { requestManager } from "../core/request_manager.js";
 import { enhanceAllSelects } from "../ui/custom_select.js";
 import { createConditionEditor } from "./strategies/condition_editor.js";
 import { createConditionCatalog } from "./strategies/condition_catalog.js";
-
-// Ids are the `strategy_type` values of the strategies API.
-const STRATEGY_TYPE_LABELS = Object.freeze({
-  ENTRY: "strategies-type-entry",
-  EXIT: "strategies-type-exit",
-});
 
 export function createLifecycle() {
   // State

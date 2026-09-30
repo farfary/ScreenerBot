@@ -34,25 +34,33 @@ export const TAB_TO_FEATURE_MAP = {
  * Status display configuration for badges
  */
 export const STATUS_CONFIG = {
-  [FEATURE_STATUS.COMING_SOON]: {
-    label: "Coming Soon",
-    cssClass: "coming-soon",
-    tooltip: "This feature is coming soon",
-    message: "This feature is coming soon and not yet available.",
-  },
-  [FEATURE_STATUS.BETA]: {
-    label: "Beta",
-    cssClass: "beta",
-    tooltip: "Beta feature - may have bugs",
-    message: null, // Beta features are usable
-  },
-  [FEATURE_STATUS.DISABLED]: {
-    label: "Disabled",
-    cssClass: "disabled",
-    tooltip: "This feature is currently disabled",
-    message: "This feature is currently disabled.",
-  },
+  [FEATURE_STATUS.COMING_SOON]: { cssClass: "coming-soon" },
+  [FEATURE_STATUS.BETA]: { cssClass: "beta" },
+  [FEATURE_STATUS.DISABLED]: { cssClass: "disabled" },
 };
+
+/**
+ * Badge label and the toast message of a restricted status. Beta features are
+ * usable, so they carry no message.
+ */
+function statusText(status) {
+  switch (status) {
+    case FEATURE_STATUS.COMING_SOON:
+      return {
+        label: I18n.t("trader-feature-coming-soon"),
+        message: I18n.attr("trader-feature-coming-soon", "message"),
+      };
+    case FEATURE_STATUS.BETA:
+      return { label: I18n.t("trader-feature-beta"), message: null };
+    case FEATURE_STATUS.DISABLED:
+      return {
+        label: I18n.t("trader-feature-disabled"),
+        message: I18n.attr("trader-feature-disabled", "message"),
+      };
+    default:
+      return null;
+  }
+}
 
 /**
  * Fetch trading feature status from the API
@@ -145,19 +153,11 @@ export function applyFeatureStatusToTabs(tradingFeatures, $$) {
       button.classList.add("tab-feature-coming-soon");
     }
 
-    // Add status badge for non-available/non-beta statuses
-    if (status !== FEATURE_STATUS.BETA) {
-      const badge = document.createElement("span");
-      badge.className = `tab-status-badge ${config.cssClass}`;
-      badge.textContent = config.label;
-      button.appendChild(badge);
-    } else {
-      // Beta gets a small indicator badge
-      const badge = document.createElement("span");
-      badge.className = `tab-status-badge ${config.cssClass}`;
-      badge.textContent = config.label;
-      button.appendChild(badge);
-    }
+    // Every restricted status, beta included, gets a badge.
+    const badge = document.createElement("span");
+    badge.className = `tab-status-badge ${config.cssClass}`;
+    badge.textContent = statusText(status).label;
+    button.appendChild(badge);
   });
 }
 
@@ -177,12 +177,12 @@ export function handleFeatureRestrictedTab(tradingFeatures, tabId, Utils) {
   }
 
   // Show toast for restricted tabs
-  const config = STATUS_CONFIG[status];
-  if (config && config.message) {
+  const text = statusText(status);
+  if (text && text.message) {
     Utils.showToast({
       type: "warning",
-      title: config.label,
-      message: config.message,
+      title: text.label,
+      message: text.message,
     });
   }
 
