@@ -442,6 +442,11 @@ settings-licenses-desc-lucide-icons = Thư viện phông biểu tượng
 settings-licenses-desc-inter = Phông chữ giao diện
 settings-licenses-desc-jetbrains-mono = Phông chữ đơn cách
 settings-licenses-desc-orbitron = Phông chữ tiêu đề
+settings-licenses-desc-vazirmatn = Phông chữ tiếng Ả Rập và tiếng Ba Tư
+settings-licenses-desc-noto-sans-devanagari = Phông chữ Devanagari
+settings-licenses-desc-noto-sans-sc = Phông chữ tiếng Trung giản thể
+settings-licenses-desc-pretendard = Phông chữ tiếng Hàn
+settings-licenses-desc-pretendard-jp = Phông chữ tiếng Nhật
 
 settings-hints-title = Gợi ý theo ngữ cảnh
 settings-hints-description = Gợi ý theo ngữ cảnh là các biểu tượng trợ giúp giải thích tính năng của bảng điều khiển. Xem lại mọi gợi ý bên dưới và khôi phục những gợi ý bạn đã ẩn bằng "Không hiện lại" — từng cái một hoặc tất cả cùng lúc.

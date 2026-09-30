@@ -483,6 +483,11 @@ settings-licenses-desc-lucide-icons = Icon font library
 settings-licenses-desc-inter = Interface font
 settings-licenses-desc-jetbrains-mono = Monospace font
 settings-licenses-desc-orbitron = Display font
+settings-licenses-desc-vazirmatn = Arabic and Persian script font
+settings-licenses-desc-noto-sans-devanagari = Devanagari script font
+settings-licenses-desc-noto-sans-sc = Simplified Chinese font
+settings-licenses-desc-pretendard = Korean font
+settings-licenses-desc-pretendard-jp = Japanese font
 
 ## hints_tab.js
 

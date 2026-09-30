@@ -473,6 +473,11 @@ settings-licenses-desc-lucide-icons = کتابخانه فونت آیکون
 settings-licenses-desc-inter = فونت رابط کاربری
 settings-licenses-desc-jetbrains-mono = فونت تک‌فاصله
 settings-licenses-desc-orbitron = فونت نمایشی
+settings-licenses-desc-vazirmatn = فونت عربی و فارسی
+settings-licenses-desc-noto-sans-devanagari = فونت دوناگری
+settings-licenses-desc-noto-sans-sc = فونت چینی ساده‌شده
+settings-licenses-desc-pretendard = فونت کره‌ای
+settings-licenses-desc-pretendard-jp = فونت ژاپنی
 
 ## hints_tab.js
 

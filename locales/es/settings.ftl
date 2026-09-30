@@ -478,6 +478,11 @@ settings-licenses-desc-lucide-icons = Biblioteca de fuente de iconos
 settings-licenses-desc-inter = Fuente de la interfaz
 settings-licenses-desc-jetbrains-mono = Fuente monoespaciada
 settings-licenses-desc-orbitron = Fuente de títulos
+settings-licenses-desc-vazirmatn = Fuente para árabe y persa
+settings-licenses-desc-noto-sans-devanagari = Fuente para devanagari
+settings-licenses-desc-noto-sans-sc = Fuente para chino simplificado
+settings-licenses-desc-pretendard = Fuente para coreano
+settings-licenses-desc-pretendard-jp = Fuente para japonés
 
 ## hints_tab.js
 

@@ -181,6 +181,10 @@
       // Use chartArea dimensions - it uses flex: 1 to fill available space
       const width = this.chartArea.clientWidth || this.container.clientWidth || 400;
       const height = this.chartArea.clientHeight || this.container.clientHeight || 300;
+      // The canvas cannot read CSS variables, so the data-font token is resolved once here.
+      const fontFamily =
+        getComputedStyle(document.documentElement).getPropertyValue("--font-data").trim() ||
+        "'JetBrains Mono', monospace";
 
       this.chart = window.LightweightCharts.createChart(this.chartArea, {
         width: width,
@@ -189,7 +193,7 @@
         layout: {
           background: { color: this.theme.background },
           textColor: this.theme.textColor,
-          fontFamily: "'JetBrains Mono', monospace",
+          fontFamily,
           fontSize: 11,
         },
         grid: {

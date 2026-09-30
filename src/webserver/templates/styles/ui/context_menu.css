@@ -30,7 +30,7 @@
   transition:
     opacity var(--floating-duration-fast) ease-out,
     transform var(--floating-duration-fast) ease-out;
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+  font-family: var(--font-sans);
   font-size: 13px;
   user-select: none;
 }

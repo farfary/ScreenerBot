@@ -480,6 +480,11 @@ settings-licenses-desc-lucide-icons = Bibliothèque de polices d'icônes
 settings-licenses-desc-inter = Police d'interface
 settings-licenses-desc-jetbrains-mono = Police à chasse fixe
 settings-licenses-desc-orbitron = Police d'affichage
+settings-licenses-desc-vazirmatn = Police pour l'arabe et le persan
+settings-licenses-desc-noto-sans-devanagari = Police pour le devanagari
+settings-licenses-desc-noto-sans-sc = Police pour le chinois simplifié
+settings-licenses-desc-pretendard = Police pour le coréen
+settings-licenses-desc-pretendard-jp = Police pour le japonais
 
 ## hints_tab.js
 

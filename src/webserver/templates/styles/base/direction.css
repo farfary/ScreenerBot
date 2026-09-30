@@ -53,11 +53,3 @@
 [dir="rtl"] :is(input[type="number"], input[inputmode="decimal"], input[inputmode="numeric"], input[type="url"]) {
   direction: ltr;
 }
-
-/* ==================== Arabic-Script Letter Spacing ====================
- * Arabic-script letters join into connected forms; positive letter-spacing breaks the
- * joins and makes words unreadable, so tracking is reset for every element in those locales.
- */
-:is(:lang(ar), :lang(fa)) :where(*) {
-  letter-spacing: normal !important;
-}

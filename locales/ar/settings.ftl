@@ -493,6 +493,11 @@ settings-licenses-desc-lucide-icons = مكتبة خط الأيقونات
 settings-licenses-desc-inter = خط الواجهة
 settings-licenses-desc-jetbrains-mono = خط أحادي المسافة
 settings-licenses-desc-orbitron = خط العرض
+settings-licenses-desc-vazirmatn = خط للعربية والفارسية
+settings-licenses-desc-noto-sans-devanagari = خط للديفاناغارية
+settings-licenses-desc-noto-sans-sc = خط للصينية المبسطة
+settings-licenses-desc-pretendard = خط للكورية
+settings-licenses-desc-pretendard-jp = خط لليابانية
 
 ## hints_tab.js
 

@@ -248,10 +248,13 @@
   --z-lockscreen: 100000; /* Highest - security lockscreen above everything */
   --z-select-portal: 10008;
 
-  /* Typography System */
-  --font-sans: "Inter", -apple-system, blinkmacsystemfont, "Segoe UI", roboto, sans-serif;
-  --font-mono: "JetBrains Mono", "SF Mono", monaco, "Cascadia Code", "Roboto Mono", monospace;
-  --font-data: "JetBrains Mono", "SF Mono", monaco, monospace;
+  /* Typography System. --font-sans/--font-mono/--font-data are composed in the
+     `:root, [lang]` rule below so each element with a language resolves its own script order.
+     Script faces come from base/script_fonts.css, each limited by unicode-range. */
+  --font-script:
+    "Noto Sans SC", "ScreenerBot Sans JP", "ScreenerBot Sans KR", "Vazirmatn",
+    "Noto Sans Devanagari";
+  --line-height-dense: 1.4;
 
   /* Font Families */
   --font-brand: "Orbitron", -apple-system, sans-serif;
@@ -284,27 +287,81 @@
   --to-inline-start: to right;
 }
 
-/* Per-script UI fonts. Inter stays first so Latin runs keep Inter; the remaining families are
-   system fonts that cover the locale's script. No font files are embedded for these scripts. */
-:lang(ar),
-:lang(fa) {
-  --font-sans: "Inter", "SF Arabic", "Geeza Pro", "Noto Sans Arabic", "Segoe UI", tahoma, sans-serif;
+/* Composed on every element that declares a language, so its own --font-script order applies.
+   Latin, Cyrillic, Vietnamese and digits always resolve to Inter or JetBrains Mono; a bundled
+   script face precedes every OS or generic monospace family. */
+:root,
+[lang] {
+  --font-sans:
+    "Inter", var(--font-script), -apple-system, blinkmacsystemfont, "Segoe UI", roboto, sans-serif;
+  --font-mono:
+    "JetBrains Mono", var(--font-script), "SF Mono", monaco, "Cascadia Code", "Roboto Mono",
+    monospace;
+  --font-data: "JetBrains Mono", var(--font-script), "SF Mono", monaco, monospace;
 }
 
-:lang(zh) {
-  --font-sans: "Inter", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+[lang]:lang(ar),
+[lang]:lang(fa) {
+  --font-script:
+    "Vazirmatn", "SF Arabic", "Geeza Pro", "Noto Sans SC", "ScreenerBot Sans JP",
+    "ScreenerBot Sans KR", "Noto Sans Devanagari";
+  --line-height-dense: 1.5;
 }
 
-:lang(ja) {
-  --font-sans: "Inter", "Hiragino Sans", "Yu Gothic UI", "Meiryo", "Noto Sans JP", sans-serif;
+[lang]:lang(hi) {
+  --font-script:
+    "Noto Sans Devanagari", "Kohinoor Devanagari", "Nirmala UI", "Noto Sans SC",
+    "ScreenerBot Sans JP", "ScreenerBot Sans KR", "Vazirmatn";
+  --line-height-dense: 1.5;
 }
 
-:lang(ko) {
-  --font-sans: "Inter", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif;
+[lang]:lang(zh) {
+  --font-script:
+    "Noto Sans SC", "PingFang SC", "Microsoft YaHei", "ScreenerBot Sans JP", "ScreenerBot Sans KR",
+    "Vazirmatn", "Noto Sans Devanagari";
 }
 
-:lang(hi) {
-  --font-sans: "Inter", "Kohinoor Devanagari", "Nirmala UI", "Noto Sans Devanagari", sans-serif;
+[lang]:lang(ja) {
+  --font-script:
+    "ScreenerBot Sans JP", "Hiragino Sans", "Yu Gothic UI", "Meiryo", "Noto Sans SC",
+    "ScreenerBot Sans KR", "Vazirmatn", "Noto Sans Devanagari";
+}
+
+[lang]:lang(ko) {
+  --font-script:
+    "ScreenerBot Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans SC",
+    "ScreenerBot Sans JP", "Vazirmatn", "Noto Sans Devanagari";
+}
+
+/* An element with its own language (a native name in the language picker) re-resolves its family. */
+:where([lang]:not(html)) {
+  font-family: var(--font-sans);
+}
+
+/* Tracking splits Arabic joins and the Devanagari headline; CJK tracking was tuned for Latin
+   capitals. Synthesized bold/italic is wrong for all six scripts. `!important` is required because
+   component selectors outrank the reset; the wordmark classes keep their Latin tracking. */
+[lang]:lang(ar),
+[lang]:lang(fa),
+[lang]:lang(hi),
+[lang]:lang(zh),
+[lang]:lang(ja),
+[lang]:lang(ko) {
+  font-synthesis: none;
+  letter-spacing: 0 !important;
+}
+
+html:is(:lang(ar), :lang(fa), :lang(hi), :lang(zh), :lang(ja), :lang(ko))
+  *:not(
+    .font-brand,
+    .brand-name,
+    .brand-text,
+    .splash-brand,
+    .lockscreen-brand,
+    .onboarding-brand,
+    .login-brand
+  ) {
+  letter-spacing: 0 !important;
 }
 
 [data-theme="dark"] {

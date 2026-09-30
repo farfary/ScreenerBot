@@ -449,6 +449,11 @@ settings-licenses-desc-lucide-icons = आइकन फ़ॉन्ट लाइ�
 settings-licenses-desc-inter = इंटरफ़ेस फ़ॉन्ट
 settings-licenses-desc-jetbrains-mono = मोनोस्पेस फ़ॉन्ट
 settings-licenses-desc-orbitron = डिस्प्ले फ़ॉन्ट
+settings-licenses-desc-vazirmatn = अरबी और फ़ारसी लिपि फ़ॉन्ट
+settings-licenses-desc-noto-sans-devanagari = देवनागरी लिपि फ़ॉन्ट
+settings-licenses-desc-noto-sans-sc = सरलीकृत चीनी फ़ॉन्ट
+settings-licenses-desc-pretendard = कोरियाई फ़ॉन्ट
+settings-licenses-desc-pretendard-jp = जापानी फ़ॉन्ट
 
 settings-hints-title = संदर्भ हिंट
 settings-hints-description = संदर्भ हिंट वे हेल्प आइकन हैं जो डैशबोर्ड की सुविधाएँ समझाते हैं। नीचे हर हिंट देखें और "दोबारा न दिखाएँ" से छिपाए गए हिंट वापस लाएँ — एक-एक करके या सभी एक साथ।

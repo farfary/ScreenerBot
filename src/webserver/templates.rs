@@ -172,9 +172,10 @@ pub fn base_template(active_tab: &str, content: &str, locale: &LanguageIdentifie
 
     let combined_styles = [
         FOUNDATION_STYLES,
-        SCROLLBAR_STYLES, // Global scrollbar system - must be early to set defaults
-        FLOATING_STYLES,  // Global floating UI system (dropdowns, popovers, dialogs)
-        DIRECTION_STYLES, // Mirrors inline-axis icon glyphs under RTL
+        SCRIPT_FONT_STYLES, // Per-script @font-face rules, limited by unicode-range
+        SCROLLBAR_STYLES,   // Global scrollbar system - must be early to set defaults
+        FLOATING_STYLES,    // Global floating UI system (dropdowns, popovers, dialogs)
+        DIRECTION_STYLES,   // Mirrors inline-axis icon glyphs under RTL
         &lucide_css,
         LAYOUT_STYLES,
         HEADER_STYLES,
@@ -419,7 +420,13 @@ pub fn login_template(content: &str, locale: &LanguageIdentifier) -> String {
         .replace("url('lucide.svg", "url('/assets/fonts/lucide.svg");
 
     // Minimal styles for login page
-    let combined_styles = [FOUNDATION_STYLES, &lucide_css, LOGIN_PAGE_STYLES].join("\n");
+    let combined_styles = [
+        FOUNDATION_STYLES,
+        SCRIPT_FONT_STYLES,
+        &lucide_css,
+        LOGIN_PAGE_STYLES,
+    ]
+    .join("\n");
 
     let html = format!(
         r#"<!DOCTYPE html>

@@ -468,6 +468,11 @@ settings-licenses-desc-lucide-icons = Pustaka font ikon
 settings-licenses-desc-inter = Font antarmuka
 settings-licenses-desc-jetbrains-mono = Font monospace
 settings-licenses-desc-orbitron = Font tampilan
+settings-licenses-desc-vazirmatn = Font aksara Arab dan Persia
+settings-licenses-desc-noto-sans-devanagari = Font aksara Dewanagari
+settings-licenses-desc-noto-sans-sc = Font Tionghoa Sederhana
+settings-licenses-desc-pretendard = Font Korea
+settings-licenses-desc-pretendard-jp = Font Jepang
 
 ## hints_tab.js
 

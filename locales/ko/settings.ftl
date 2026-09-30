@@ -468,6 +468,11 @@ settings-licenses-desc-lucide-icons = 아이콘 폰트 라이브러리
 settings-licenses-desc-inter = 인터페이스 폰트
 settings-licenses-desc-jetbrains-mono = 고정폭 폰트
 settings-licenses-desc-orbitron = 디스플레이 폰트
+settings-licenses-desc-vazirmatn = 아랍어 및 페르시아어 폰트
+settings-licenses-desc-noto-sans-devanagari = 데바나가리 문자 폰트
+settings-licenses-desc-noto-sans-sc = 중국어 간체 폰트
+settings-licenses-desc-pretendard = 한국어 폰트
+settings-licenses-desc-pretendard-jp = 일본어 폰트
 
 ## hints_tab.js
 

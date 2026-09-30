@@ -386,7 +386,10 @@ pub async fn get_provider_logo(Path(file): Path<String>) -> Response {
     }
 }
 
-/// Serve fonts (Lucide icons, Inter, JetBrains Mono, Orbitron)
+/// Serve fonts and their licenses: Lucide icons, Inter, JetBrains Mono, Orbitron and the
+/// per-script faces (Vazirmatn, Noto Sans Devanagari, Noto Sans SC, ScreenerBot Sans JP/KR).
+///
+/// File names are not content-hashed, so no long-lived Cache-Control is set here.
 pub async fn get_font(Path(file): Path<String>) -> Response {
     match file.as_str() {
         // Lucide icon font
@@ -457,6 +460,68 @@ pub async fn get_font(Path(file): Path<String>) -> Response {
             StatusCode::OK,
             [(http_header::CONTENT_TYPE, "font/woff2")],
             embeds::ORBITRON_VARIABLE,
+        )
+            .into_response(),
+        // Per-script faces, each limited by unicode-range to its own script blocks
+        "Vazirmatn-NL-Variable.woff2" => (
+            StatusCode::OK,
+            [(http_header::CONTENT_TYPE, "font/woff2")],
+            embeds::VAZIRMATN_NL_VARIABLE,
+        )
+            .into_response(),
+        "NotoSansDevanagari-Variable.woff2" => (
+            StatusCode::OK,
+            [(http_header::CONTENT_TYPE, "font/woff2")],
+            embeds::NOTO_SANS_DEVANAGARI_VARIABLE,
+        )
+            .into_response(),
+        "NotoSansSC-Variable.woff2" => (
+            StatusCode::OK,
+            [(http_header::CONTENT_TYPE, "font/woff2")],
+            embeds::NOTO_SANS_SC_VARIABLE,
+        )
+            .into_response(),
+        "ScreenerBotSansJP-Variable.woff2" => (
+            StatusCode::OK,
+            [(http_header::CONTENT_TYPE, "font/woff2")],
+            embeds::SCREENERBOT_SANS_JP_VARIABLE,
+        )
+            .into_response(),
+        "ScreenerBotSansKR-Variable.woff2" => (
+            StatusCode::OK,
+            [(http_header::CONTENT_TYPE, "font/woff2")],
+            embeds::SCREENERBOT_SANS_KR_VARIABLE,
+        )
+            .into_response(),
+        // Font licenses (SIL OFL 1.1)
+        "Inter-OFL.txt" => (
+            StatusCode::OK,
+            [(http_header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+            embeds::INTER_OFL,
+        )
+            .into_response(),
+        "Vazirmatn-OFL.txt" => (
+            StatusCode::OK,
+            [(http_header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+            embeds::VAZIRMATN_OFL,
+        )
+            .into_response(),
+        "NotoSansDevanagari-OFL.txt" => (
+            StatusCode::OK,
+            [(http_header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+            embeds::NOTO_SANS_DEVANAGARI_OFL,
+        )
+            .into_response(),
+        "NotoSansSC-OFL.txt" => (
+            StatusCode::OK,
+            [(http_header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+            embeds::NOTO_SANS_SC_OFL,
+        )
+            .into_response(),
+        "Pretendard-OFL.txt" => (
+            StatusCode::OK,
+            [(http_header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+            embeds::PRETENDARD_OFL,
         )
             .into_response(),
         _ => (StatusCode::NOT_FOUND, "Font not found").into_response(),

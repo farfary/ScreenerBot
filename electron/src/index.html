@@ -51,6 +51,14 @@
       -webkit-app-region: drag;
     }
 
+    /* No script fonts ship with this page (file:// before the backend is up): a mono-first
+       stack would put these scripts on an OS monospace face, and tracking splits Arabic
+       joins and the Devanagari headline. The version and log path stay mono. */
+    html:is(:lang(ar), :lang(fa), :lang(hi), :lang(zh), :lang(ja), :lang(ko)) body {
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      letter-spacing: 0;
+    }
+
     /* The logo SVG hexagons are white (right on the dark ground, invisible on
        light) — recolor them to the brand navy for the light splash. */
     html[data-theme="light"] .splash-logo g {

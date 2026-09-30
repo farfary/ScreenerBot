@@ -52,3 +52,25 @@ test("every routed dashboard script has a serving arm", () => {
     .sort();
   assert.deepEqual(missing, [], `no serving arm in asset_serving/handlers.rs: ${missing.join(", ")}`);
 });
+
+test("every bundled font and license is embedded and served", () => {
+  const fontsDir = path.join(ROOT, "src/webserver/assets/fonts");
+  const handlers = fs.readFileSync(
+    path.join(ROOT, "src/webserver/routes/asset_serving/handlers.rs"),
+    "utf8"
+  );
+  const files = fs
+    .readdirSync(fontsDir)
+    .filter((file) => file.endsWith(".woff2") || file.endsWith("-OFL.txt"))
+    .sort();
+  assert.ok(files.length > 0, "no fonts found in src/webserver/assets/fonts");
+  const problems = files.flatMap((file) => {
+    const macro = file.endsWith(".woff2") ? "include_bytes!" : "include_str!";
+    const embed = new RegExp(`${macro}\\(\\s*"assets/fonts/${file.replace(/[.]/g, "\\.")}"\\s*\\)`);
+    return [
+      ...(embed.test(EMBEDS) ? [] : [`${file}: no ${macro} in embeds.rs`]),
+      ...(handlers.includes(`"${file}"`) ? [] : [`${file}: no serving arm in handlers.rs`]),
+    ];
+  });
+  assert.deepEqual(problems, []);
+});

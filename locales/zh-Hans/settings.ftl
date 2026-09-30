@@ -468,6 +468,11 @@ settings-licenses-desc-lucide-icons = 图标字体库
 settings-licenses-desc-inter = 界面字体
 settings-licenses-desc-jetbrains-mono = 等宽字体
 settings-licenses-desc-orbitron = 展示字体
+settings-licenses-desc-vazirmatn = 阿拉伯文和波斯文字体
+settings-licenses-desc-noto-sans-devanagari = 天城文字体
+settings-licenses-desc-noto-sans-sc = 简体中文字体
+settings-licenses-desc-pretendard = 韩文字体
+settings-licenses-desc-pretendard-jp = 日文字体
 
 ## hints_tab.js
 

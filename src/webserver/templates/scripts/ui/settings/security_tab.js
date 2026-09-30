@@ -652,7 +652,7 @@ async function showTotpSetupModal(dialog, content) {
         <div id="totpQrContainer" style="text-align: center; margin: 1rem 0;"></div>
         <div class="totp-manual-entry" style="margin: 1rem 0;">
           <label style="font-size: 0.75rem; color: var(--text-secondary);" data-l10n-id="settings-security-2fa-manual-code"></label>
-          <code id="totpSecretCode" dir="ltr" style="display: block; padding: 0.5rem; background: var(--bg-tertiary); border-radius: 4px; margin-top: 0.25rem; word-break: break-all; font-family: monospace;"></code>
+          <code id="totpSecretCode" dir="ltr" style="display: block; padding: 0.5rem; background: var(--bg-tertiary); border-radius: 4px; margin-top: 0.25rem; word-break: break-all; font-family: var(--font-mono);"></code>
         </div>
         <p style="margin: 1rem 0; color: var(--text-secondary);" data-l10n-id="settings-security-2fa-code-prompt"></p>
         <div class="security-form-group">

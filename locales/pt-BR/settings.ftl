@@ -452,6 +452,11 @@ settings-licenses-desc-lucide-icons = Biblioteca de fonte de ícones
 settings-licenses-desc-inter = Fonte da interface
 settings-licenses-desc-jetbrains-mono = Fonte monoespaçada
 settings-licenses-desc-orbitron = Fonte de exibição
+settings-licenses-desc-vazirmatn = Fonte para árabe e persa
+settings-licenses-desc-noto-sans-devanagari = Fonte para devanágari
+settings-licenses-desc-noto-sans-sc = Fonte para chinês simplificado
+settings-licenses-desc-pretendard = Fonte para coreano
+settings-licenses-desc-pretendard-jp = Fonte para japonês
 
 settings-hints-title = Dicas contextuais
 settings-hints-description = As dicas contextuais são os ícones de ajuda que explicam os recursos do painel. Revise todas as dicas abaixo e restaure as que você ocultou com "Não mostrar novamente", uma a uma ou todas de uma vez.

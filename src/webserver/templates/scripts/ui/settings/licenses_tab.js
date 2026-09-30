@@ -43,6 +43,11 @@ const LICENSE_DESCRIPTION_LABELS = Object.freeze({
   Inter: "settings-licenses-desc-inter",
   "JetBrains Mono": "settings-licenses-desc-jetbrains-mono",
   Orbitron: "settings-licenses-desc-orbitron",
+  Vazirmatn: "settings-licenses-desc-vazirmatn",
+  "Noto Sans Devanagari": "settings-licenses-desc-noto-sans-devanagari",
+  "Noto Sans SC": "settings-licenses-desc-noto-sans-sc",
+  Pretendard: "settings-licenses-desc-pretendard",
+  "Pretendard JP": "settings-licenses-desc-pretendard-jp",
 });
 
 /**
@@ -208,6 +213,31 @@ export function buildLicensesTab() {
           name: "Orbitron",
           license: "OFL-1.1",
           url: "https://fonts.google.com/specimen/Orbitron",
+        },
+        {
+          name: "Vazirmatn",
+          license: "OFL-1.1",
+          url: "https://github.com/rastikerdar/vazirmatn",
+        },
+        {
+          name: "Noto Sans Devanagari",
+          license: "OFL-1.1",
+          url: "https://fonts.google.com/noto/specimen/Noto+Sans+Devanagari",
+        },
+        {
+          name: "Noto Sans SC",
+          license: "OFL-1.1",
+          url: "https://fonts.google.com/noto/specimen/Noto+Sans+SC",
+        },
+        {
+          name: "Pretendard",
+          license: "OFL-1.1",
+          url: "https://github.com/orioncactus/pretendard",
+        },
+        {
+          name: "Pretendard JP",
+          license: "OFL-1.1",
+          url: "https://github.com/orioncactus/pretendard",
         },
       ],
     },

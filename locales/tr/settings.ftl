@@ -473,6 +473,11 @@ settings-licenses-desc-lucide-icons = Simge yazı tipi kütüphanesi
 settings-licenses-desc-inter = Arayüz yazı tipi
 settings-licenses-desc-jetbrains-mono = Sabit aralıklı yazı tipi
 settings-licenses-desc-orbitron = Başlık yazı tipi
+settings-licenses-desc-vazirmatn = Arapça ve Farsça yazı tipi
+settings-licenses-desc-noto-sans-devanagari = Devanagari yazı tipi
+settings-licenses-desc-noto-sans-sc = Basitleştirilmiş Çince yazı tipi
+settings-licenses-desc-pretendard = Korece yazı tipi
+settings-licenses-desc-pretendard-jp = Japonca yazı tipi
 
 ## hints_tab.js
 

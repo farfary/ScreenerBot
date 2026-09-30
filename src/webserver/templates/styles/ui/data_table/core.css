@@ -458,7 +458,7 @@ body.dt-column-resizing * {
 /* Uniform row height mode */
 .data-table.uniform-rows tbody tr {
   /* Row height = line-height * lines + vertical padding (approx) */
-  --dt-row-line-height: 1.4;
+  --dt-row-line-height: var(--line-height-dense);
   --dt-row-lines: var(--dt-row-lines, 2);
   --dt-row-padding-y: 16px; /* td padding top + bottom */
   --dt-row-content-height: calc(var(--dt-row-line-height) * 1em * var(--dt-row-lines));

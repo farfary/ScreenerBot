@@ -483,6 +483,11 @@ settings-licenses-desc-lucide-icons = Библиотека иконочного 
 settings-licenses-desc-inter = Шрифт интерфейса
 settings-licenses-desc-jetbrains-mono = Моноширинный шрифт
 settings-licenses-desc-orbitron = Акцидентный шрифт
+settings-licenses-desc-vazirmatn = Шрифт для арабского и персидского
+settings-licenses-desc-noto-sans-devanagari = Шрифт для деванагари
+settings-licenses-desc-noto-sans-sc = Шрифт для упрощённого китайского
+settings-licenses-desc-pretendard = Шрифт для корейского
+settings-licenses-desc-pretendard-jp = Шрифт для японского
 
 ## hints_tab.js
 

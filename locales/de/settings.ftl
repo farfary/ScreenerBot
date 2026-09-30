@@ -473,6 +473,11 @@ settings-licenses-desc-lucide-icons = Icon-Font-Bibliothek
 settings-licenses-desc-inter = Oberflächenschrift
 settings-licenses-desc-jetbrains-mono = Monospace-Schrift
 settings-licenses-desc-orbitron = Display-Schrift
+settings-licenses-desc-vazirmatn = Schrift für Arabisch und Persisch
+settings-licenses-desc-noto-sans-devanagari = Schrift für Devanagari
+settings-licenses-desc-noto-sans-sc = Schrift für vereinfachtes Chinesisch
+settings-licenses-desc-pretendard = Schrift für Koreanisch
+settings-licenses-desc-pretendard-jp = Schrift für Japanisch
 
 ## hints_tab.js
 
