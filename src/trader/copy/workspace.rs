@@ -11,8 +11,8 @@ use super::control::{self, open_database, CopyTaskSummary, TASK_ACTIVITY_WINDOW}
 use super::insights::CurvePoint;
 use super::{
     build_insights, closed_rounds, management_for_exit_mode, notify, ActivityQuery,
-    CopyActivityRow, CopyBook, CopyInsights, CopyMode, CopyRound, CopyTask, InsightRange,
-    PaperPosition, LIVE_ARM_CONFIRMATION,
+    CopyActivityRow, CopyBook, CopyInsights, CopyMode, CopyTask, InsightRange, PaperPosition,
+    LIVE_ARM_CONFIRMATION,
 };
 use crate::config::with_config;
 use crate::positions::{Position, PositionManagement};

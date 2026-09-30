@@ -15,7 +15,7 @@ use serde::Serialize;
 use serde_json::{json, Value};
 use std::borrow::Cow;
 
-use crate::i18n::{self, MessageId, UiArg, UiText};
+use crate::i18n::{MessageId, UiArg, UiText};
 
 /// Machine category of an API error. The category alone determines the HTTP
 /// status, so a client can act on `code` without reading `message`.

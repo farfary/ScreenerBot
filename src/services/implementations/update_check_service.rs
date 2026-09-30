@@ -3,7 +3,6 @@
 //! Periodically checks for application updates from the screenerbot.io API.
 //! Runs in the background and notifies users when updates are available.
 
-use crate::i18n::{ids, UiText};
 use crate::services::{Service, ServiceHealth};
 use async_trait::async_trait;
 use std::sync::Arc;
