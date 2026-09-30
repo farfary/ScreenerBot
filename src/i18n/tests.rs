@@ -72,7 +72,8 @@ fn request_locale_reads_accept_language() {
 
 #[test]
 fn format_falls_back_to_source_then_id() {
-    assert_eq!(format(&langid("pt-BR"), "common-loading", None), "Loading…");
+    // Swahili is not a registered locale, so the source text is used.
+    assert_eq!(format(&langid("sw"), "common-loading", None), "Loading…");
     assert_eq!(format_en("common-language-system", None), "System");
     assert_eq!(format(&langid("en"), "no-such-key", None), "no-such-key");
 }
