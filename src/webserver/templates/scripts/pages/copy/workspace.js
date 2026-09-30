@@ -1,14 +1,7 @@
 // The selected task's workspace: the header (state, why it is paused, actions)
 // and the Overview / Holdings / Activity / Rules / Execution tabs.
 import { renderAddress } from "../../ui/token_identity.js";
-import {
-  MODE_LABELS,
-  STATE_LABELS,
-  plural,
-  rangeQuery,
-  taskName,
-  timeAgo,
-} from "./format.js";
+import { modeLabel, rangeQuery, stateLabel, taskName, timeAgo } from "./format.js";
 import { forget } from "./tokens.js";
 import { panelMessage, renderOverview } from "./overview.js";
 import { renderExecution } from "./execution.js";
@@ -21,23 +14,60 @@ const INSIGHTS_TTL_MS = 15_000;
 const WATCH_STATUS_TTL_MS = 15_000;
 
 const TABS = [
-  { id: "overview", label: "Overview" },
-  { id: "holdings", label: "Holdings" },
-  { id: "activity", label: "Activity" },
-  { id: "rules", label: "Rules" },
-  { id: "execution", label: "Execution" },
+  {
+    id: "overview",
+    get label() {
+      return I18n.t("copy-tab-overview");
+    },
+  },
+  {
+    id: "holdings",
+    get label() {
+      return I18n.t("copy-tab-holdings");
+    },
+  },
+  {
+    id: "activity",
+    get label() {
+      return I18n.t("copy-tab-activity");
+    },
+  },
+  {
+    id: "rules",
+    get label() {
+      return I18n.t("copy-tab-rules");
+    },
+  },
+  {
+    id: "execution",
+    get label() {
+      return I18n.t("copy-tab-execution");
+    },
+  },
 ];
 
-const RUNNING_DETAIL = {
-  paper: "Running in Paper · trades are simulated, nothing is spent",
-  live: "Running live · wallet trades are copied with real swaps",
-  system_paused: "Waiting · copy processing is paused globally, exits still run",
-  entries_blocked: "Entries blocked by the loss limit · exits still run",
-  force_stopped: "Force stopped · nothing is copied",
-};
+// Watch checks per poll the recovery form accepts, in whole 100-signature pages.
+const WATCH_SIGNATURES = Object.freeze({ min: 500, max: 5000, step: 100 });
+
+// Task states with a sentence of their own; `effective_state` in
+// src/trader/copy/control.rs, without the paused state.
+const STATE_DETAIL_LABELS = Object.freeze({
+  paper: "copy-state-detail-paper",
+  live: "copy-state-detail-live",
+  system_paused: "copy-state-detail-system-paused",
+  entries_blocked: "copy-state-detail-entries-blocked",
+  force_stopped: "copy-state-detail-force-stopped",
+});
+
+/** What still closes a paused task's holdings, by who decides its exits. */
+function pausedHoldings(exitMode, count) {
+  if (exitMode === "buy_only") return I18n.t("copy-paused-holdings-rules", { count });
+  if (exitMode === "mirror") return I18n.t("copy-paused-holdings-mirror", { count });
+  return I18n.t("copy-paused-holdings-hybrid", { count });
+}
 
 export function createWorkspace(page) {
-  const { $, Utils, api, requestManager, state, on, paint, toast, confirm } = page;
+  const { $, Utils, api, requestManager, state, on, paint, notify, confirm } = page;
   const esc = Utils.escapeHtml;
   const insights = new Map();
   const insightErrors = new Map();
@@ -147,7 +177,7 @@ export function createWorkspace(page) {
     const task = current() || selectedSummary();
     if (!task) {
       shellFor = null;
-      paint(root, panelMessage("Select a wallet to open its workspace.", esc));
+      paint(root, panelMessage(I18n.t("copy-workspace-select"), esc));
       return;
     }
     if (shellFor !== task.id) buildShell(root, task.id);
@@ -169,7 +199,7 @@ export function createWorkspace(page) {
       <div id="copy-ws-watch-recovery"></div>
       <div class="copy-ws-actions" id="copy-ws-actions"></div>
     </header>
-    <div class="copy-tabs" role="tablist" aria-label="Task views" id="copy-ws-tabs"></div>
+    <div class="copy-tabs" role="tablist" aria-label="${esc(I18n.t("copy-tabs-label"))}" id="copy-ws-tabs"></div>
     <section class="copy-ws-panel" id="copy-ws-panel" role="tabpanel"></section>`;
     activity.reset(id);
     holdings.reset();
@@ -178,28 +208,27 @@ export function createWorkspace(page) {
   function stateHtml(task) {
     if (task.enabled) {
       return esc(
-        RUNNING_DETAIL[task.effective_state] || STATE_LABELS[task.effective_state] || "Unknown"
+        Object.hasOwn(STATE_DETAIL_LABELS, task.effective_state)
+          ? I18n.label(STATE_DETAIL_LABELS, task.effective_state)
+          : stateLabel(task.effective_state)
       );
     }
-    const since = task.paused_at ? ` · ${timeAgo(task.paused_at)}` : "";
+    const reason = I18n.text(task.pause_text);
+    const paused = task.paused_at
+      ? I18n.t("copy-paused-since", { reason, since: timeAgo(task.paused_at) })
+      : reason;
     const kind = task.pause_reason?.kind;
     const resume =
       kind === "latency_kill_switch"
-        ? "Resuming keeps the same limit, so it pauses again while trades still arrive late. Check the RPC stream or raise the arrival limit in Settings."
+        ? I18n.t("copy-paused-resume-latency")
         : kind === "watch_detached"
-          ? "Resuming watches the wallet again."
+          ? I18n.t("copy-paused-resume-detached")
           : "";
     // Pausing stops new copies only; say what still closes the holdings.
     const open = Number(task.stats?.open_positions) || 0;
-    const closer =
-      task.exit_mode === "buy_only"
-        ? "Its exit rules"
-        : task.exit_mode === "mirror"
-          ? "The wallet's sells"
-          : "The wallet's sells and its exit rules";
-    const holdings = open ? `${closer} still close its ${plural(open, "open holding")}.` : "";
+    const holdings = open ? pausedHoldings(task.exit_mode, open) : "";
     const hint = [resume, holdings].filter(Boolean).join(" ");
-    return `${esc(I18n.text(task.pause_text) + since)}${hint ? `<small>${esc(hint)}</small>` : ""}`;
+    return `${esc(paused)}${hint ? `<small>${esc(hint)}</small>` : ""}`;
   }
 
   async function refreshWatchStatus(taskId, address) {
@@ -224,11 +253,13 @@ export function createWorkspace(page) {
     const watch = watchStatuses.get(task.target_address);
     const status = watch?.status;
     if (!status?.target?.enabled || status.mode !== "helius_high_activity") return "";
-    const state = status.catching_up ? "Catching up" : "Watching";
+    const watching = status.catching_up
+      ? I18n.t("copy-watch-state-catching-up")
+      : I18n.t("copy-watch-state-watching");
     const lastCheck = status.last_checked_at
-      ? ` Last check ${timeAgo(status.last_checked_at)}.`
+      ? ` ${I18n.t("copy-watch-last-check", { ago: timeAgo(status.last_checked_at) })}`
       : "";
-    return `<small>Wallet watch: ${state}. Checking through Helius for this wallet.${lastCheck}</small>`;
+    return `<small>${esc(`${watching}${lastCheck}`)}</small>`;
   }
 
   function recoveryHtml(task) {
@@ -242,29 +273,29 @@ export function createWorkspace(page) {
     const helius = watch?.catch_up_options?.find((option) => option.provider === "helius");
     if (watch?.target?.enabled) {
       return `<div class="copy-watch-resume" role="group" aria-labelledby="copy-watch-resume-title">
-        <h3 id="copy-watch-resume-title">${watch.catching_up ? "Wallet watch is catching up" : "Wallet watch active"}</h3>
-        <p>The copy task is still paused. Resume copying when you are ready.</p>
+        <h3 id="copy-watch-resume-title">${esc(watch.catching_up ? I18n.t("copy-watch-recovery-catching-up") : I18n.t("copy-watch-recovery-active"))}</h3>
+        <p>${esc(I18n.t("copy-watch-recovery-still-paused"))}</p>
       </div>`;
     }
     if (reason !== "watch_budget_exceeded") {
       const detail =
         reason === "watch_processing_failed"
-          ? "Wallet activity could not be processed. Saved progress is preserved. Retry after the problem is resolved."
-          : "Helius checks failed. Saved progress is preserved. Retry when the provider is available.";
+          ? I18n.t("copy-watch-recovery-processing-failed")
+          : I18n.t("copy-watch-recovery-provider-failed");
       return `<div class="copy-watch-resume" role="group" aria-labelledby="copy-watch-resume-title">
-        <h3 id="copy-watch-resume-title">Restore wallet watch</h3><p>${detail}</p>
+        <h3 id="copy-watch-resume-title">${esc(I18n.t("copy-watch-recovery-title"))}</h3><p>${esc(detail)}</p>
       </div>`;
     }
     const currentLimit = (Number(task.pause_reason.page_budget) || 5) * 100;
-    const suggestedLimit = Math.min(5000, currentLimit + 500);
+    const suggestedLimit = Math.min(WATCH_SIGNATURES.max, currentLimit + WATCH_SIGNATURES.min);
     return `<div class="copy-watch-resume" role="group" aria-labelledby="copy-watch-resume-title">
-      <h3 id="copy-watch-resume-title">Restore wallet watch</h3>
-      <p>This wallet has more activity than its current watch can check. Choose how to continue.</p>
-      ${helius?.available ? `<button class="btn" type="button" data-ws-action="approve-helius">Try to catch up using Helius</button><small>Continues from saved progress. May use more Helius credits and can still fall behind.</small>` : helius ? `<small>Helius catch-up is unavailable. Configure an enabled Helius RPC endpoint to continue without skipping unchecked activity.</small>` : `<small>No catch-up provider is supported for this watch.</small>`}
-      <label class="copy-watch-budget-field" for="copy-watch-page-budget">Signatures checked per check</label>
-      <input id="copy-watch-page-budget" data-watch-page-budget type="number" min="500" max="5000" step="100" value="${suggestedLimit}" aria-describedby="copy-watch-budget-hint" />
-      <small id="copy-watch-budget-hint">Or skip unchecked activity and resume from now. Choose 500–5,000 signatures per check; a higher limit may use more RPC calls.</small>
-      <label class="checkbox-label copy-watch-ack"><input type="checkbox" data-watch-resume-ack /><span>I understand missed activity will not be copied.</span></label>
+      <h3 id="copy-watch-resume-title">${esc(I18n.t("copy-watch-recovery-title"))}</h3>
+      <p>${esc(I18n.t("copy-watch-recovery-budget-intro"))}</p>
+      ${helius?.available ? `<button class="btn" type="button" data-ws-action="approve-helius">${esc(I18n.t("copy-watch-approve"))}</button><small>${esc(I18n.t("copy-watch-approve-help"))}</small>` : helius ? `<small>${esc(I18n.t("copy-watch-approve-unavailable"))}</small>` : `<small>${esc(I18n.t("copy-watch-no-provider"))}</small>`}
+      <label class="copy-watch-budget-field" for="copy-watch-page-budget">${esc(I18n.t("copy-watch-budget-label"))}</label>
+      <input id="copy-watch-page-budget" data-watch-page-budget type="number" min="${WATCH_SIGNATURES.min}" max="${WATCH_SIGNATURES.max}" step="${WATCH_SIGNATURES.step}" value="${suggestedLimit}" aria-describedby="copy-watch-budget-hint" />
+      <small id="copy-watch-budget-hint">${esc(I18n.t("copy-watch-budget-hint", WATCH_SIGNATURES))}</small>
+      <label class="checkbox-label copy-watch-ack"><input type="checkbox" data-watch-resume-ack /><span>${esc(I18n.t("copy-watch-ack"))}</span></label>
     </div>`;
   }
 
@@ -273,23 +304,38 @@ export function createWorkspace(page) {
       `<button class="btn ${cls} btn-sm" type="button" data-ws-action="${action}"><i class="${icon}" aria-hidden="true"></i> ${esc(label)}</button>`;
     return [
       task.enabled
-        ? button("pause", "btn-outline", "icon-pause", "Pause")
+        ? button("pause", "btn-outline", "icon-pause", I18n.t("copy-action-pause"))
         : ["watch_budget_exceeded", "helius_unavailable", "watch_processing_failed"].includes(
               task.pause_reason?.kind
             ) && watchStatuses.get(task.target_address)?.status?.target?.enabled
-          ? button("resume", "btn-primary", "icon-play", "Resume copy")
+          ? button("resume", "btn-primary", "icon-play", I18n.t("copy-action-resume-copy"))
           : task.pause_reason?.kind === "watch_budget_exceeded"
-            ? button("resume-budget", "btn-primary", "icon-play", "Resume from now")
+            ? button(
+                "resume-budget",
+                "btn-primary",
+                "icon-play",
+                I18n.t("copy-action-resume-from-now")
+              )
             : ["helius_unavailable", "watch_processing_failed"].includes(task.pause_reason?.kind)
-              ? button("retry-watch", "btn-primary", "icon-rotate-cw", "Retry wallet watch")
-              : button("resume", "btn-primary", "icon-play", "Resume"),
+              ? button(
+                  "retry-watch",
+                  "btn-primary",
+                  "icon-rotate-cw",
+                  I18n.t("copy-action-retry-watch")
+                )
+              : button("resume", "btn-primary", "icon-play", I18n.t("copy-action-resume")),
       task.mode === "live"
-        ? button("paper", "btn-outline", "icon-rotate-ccw", "Return to Paper")
+        ? button("paper", "btn-outline", "icon-rotate-ccw", I18n.t("copy-action-return-paper"))
         : "",
-      button("edit", "btn-secondary", "icon-pencil", "Edit rules"),
-      button("clone", "btn-ghost", "icon-copy-plus", "Clone"),
-      button("profile", "btn-ghost", "icon-user-search", "Wallet profile"),
-      button("delete", "btn-ghost copy-danger-action", "icon-trash-2", "Delete"),
+      button("edit", "btn-secondary", "icon-pencil", I18n.t("copy-action-edit-rules")),
+      button("clone", "btn-ghost", "icon-copy-plus", I18n.t("copy-action-clone")),
+      button("profile", "btn-ghost", "icon-user-search", I18n.t("copy-action-profile")),
+      button(
+        "delete",
+        "btn-ghost copy-danger-action",
+        "icon-trash-2",
+        I18n.t("common-action-delete")
+      ),
     ].join("");
   }
 
@@ -298,7 +344,7 @@ export function createWorkspace(page) {
     if (name) name.textContent = taskName(task);
     const mode = $("#copy-ws-mode");
     if (mode) {
-      mode.textContent = MODE_LABELS[task.mode] || task.mode;
+      mode.textContent = modeLabel(task.mode);
       mode.className = `copy-row-mode copy-mode-${task.mode}`;
     }
     paint($("#copy-ws-address"), renderAddress(task.target_address, { explorer: "account" }));
@@ -359,8 +405,8 @@ export function createWorkspace(page) {
       paint(
         panel,
         wsError
-          ? panelMessage(`This task could not be loaded: ${wsError}`, esc, "is-error")
-          : panelMessage("Loading task…", esc)
+          ? panelMessage(I18n.t("copy-workspace-load-failed", { error: wsError }), esc, "is-error")
+          : panelMessage(I18n.t("copy-workspace-loading"), esc)
       );
       return;
     }
@@ -389,10 +435,10 @@ export function createWorkspace(page) {
     button.disabled = true;
     try {
       await work();
-      toast("success", success);
+      notify("success", success);
       await page.reload();
     } catch (error) {
-      toast("error", failure, error.detail);
+      notify("error", failure, error.detail);
     } finally {
       if (button.isConnected) button.disabled = false;
     }
@@ -402,11 +448,11 @@ export function createWorkspace(page) {
     const signatureLimit = Number($("[data-watch-page-budget]")?.value);
     const pageBudget = signatureLimit / 100;
     if (!Number.isInteger(pageBudget) || pageBudget < 5 || pageBudget > 50) {
-      toast("error", "Choose between 500 and 5,000 signatures per poll in 100-signature steps");
+      notify("error", I18n.t("copy-watch-toast-range", WATCH_SIGNATURES));
       return;
     }
     if (!$("[data-watch-resume-ack]")?.checked) {
-      toast("error", "Acknowledge that signatures since the last completed check will be skipped");
+      notify("error", I18n.t("copy-watch-toast-ack"));
       return;
     }
     await run(
@@ -436,8 +482,8 @@ export function createWorkspace(page) {
         }
         watchStatuses.delete(task.target_address);
       },
-      "Wallet watch resumed from now; copy task remains paused",
-      "Wallet watch could not be resumed"
+      I18n.t("copy-watch-resumed"),
+      I18n.t("copy-watch-resume-failed")
     );
   }
 
@@ -457,8 +503,8 @@ export function createWorkspace(page) {
         });
         watchStatuses.delete(task.target_address);
       },
-      "Wallet watch retry started from saved progress; copy task remains paused",
-      "Wallet watch could not be retried"
+      I18n.t("copy-watch-retry-started"),
+      I18n.t("copy-watch-retry-failed")
     );
   }
 
@@ -466,11 +512,10 @@ export function createWorkspace(page) {
     const options = watchStatuses.get(task.target_address)?.status?.catch_up_options;
     if (!options?.some((option) => option.provider === "helius" && option.available)) return;
     const confirmation = await confirm({
-      title: "Allow Helius catch-up for this wallet",
-      message:
-        "Helius can check successful Solana transactions from saved progress without skipping the unchecked interval. It currently charges 10 credits per 100 full transactions returned, rounded up, with a 10 credit minimum per request. A check can make multiple requests; usage and provider pricing may vary. Copying remains paused until you resume it separately.",
-      confirmLabel: "Allow for this wallet",
-      cancelLabel: "Keep paused",
+      title: I18n.t("copy-watch-approve-title"),
+      message: I18n.t("copy-watch-approve-message"),
+      confirmLabel: I18n.t("copy-watch-approve-confirm"),
+      cancelLabel: I18n.t("copy-keep-paused"),
       variant: "warning",
     });
     if (!confirmation.confirmed) return;
@@ -492,8 +537,8 @@ export function createWorkspace(page) {
           throw new Error("The wallet watch has not been restored");
         watchStatuses.delete(task.target_address);
       },
-      "Wallet watch started from saved progress; copy task remains paused",
-      "Wallet watch could not be restored"
+      I18n.t("copy-watch-approved"),
+      I18n.t("copy-watch-restore-failed")
     );
   }
 
@@ -510,10 +555,10 @@ export function createWorkspace(page) {
       const enabled = action === "resume";
       if (enabled && task.mode === "live") {
         const result = await confirm({
-          title: "Resume live copying",
-          message: `“${taskName(task)}” will submit real swaps from your wallet when this wallet trades again.`,
-          confirmLabel: "Resume live",
-          cancelLabel: "Keep paused",
+          title: I18n.t("copy-resume-live-title"),
+          message: I18n.t("copy-resume-live-message", { name: taskName(task) }),
+          confirmLabel: I18n.t("copy-resume-live-confirm"),
+          cancelLabel: I18n.t("copy-keep-paused"),
           variant: "danger",
         });
         if (!result.confirmed) return;
@@ -521,8 +566,8 @@ export function createWorkspace(page) {
       await run(
         button,
         () => api.update(task.id, { enabled }),
-        enabled ? "Task resumed" : "Task paused",
-        "Task state could not be changed"
+        enabled ? I18n.t("copy-task-resumed") : I18n.t("copy-task-paused"),
+        I18n.t("copy-task-state-failed")
       );
     } else if (action === "edit") {
       page.editor.openEdit(task, button.dataset.step);
@@ -534,25 +579,25 @@ export function createWorkspace(page) {
       if (current()) page.arm.open(current());
     } else if (action === "paper") {
       const result = await confirm({
-        title: "Return to Paper",
-        message: `New copies by “${taskName(task)}” will be simulated again, without spending SOL.`,
-        confirmLabel: "Return to Paper",
-        cancelLabel: "Keep live",
+        title: I18n.t("copy-action-return-paper"),
+        message: I18n.t("copy-return-paper-message", { name: taskName(task) }),
+        confirmLabel: I18n.t("copy-action-return-paper"),
+        cancelLabel: I18n.t("copy-return-paper-cancel"),
         variant: "warning",
       });
       if (!result.confirmed) return;
       await run(
         button,
         () => api.setMode(task.id, "paper"),
-        "Task returned to Paper",
-        "Execution mode could not be changed"
+        I18n.t("copy-task-returned-paper"),
+        I18n.t("copy-mode-change-failed")
       );
     } else if (action === "delete") {
       const result = await confirm({
-        title: "Delete copy task",
-        message: `Delete “${taskName(task)}”? Its decisions and paper results are removed and the wallet is no longer watched for this task.`,
-        confirmLabel: "Delete task",
-        cancelLabel: "Keep task",
+        title: I18n.t("copy-delete-title"),
+        message: I18n.t("copy-delete-message", { name: taskName(task) }),
+        confirmLabel: I18n.t("copy-delete-confirm"),
+        cancelLabel: I18n.t("copy-delete-cancel"),
         variant: "danger",
       });
       if (!result.confirmed) return;
@@ -562,8 +607,8 @@ export function createWorkspace(page) {
           await api.remove(task.id);
           state.selectedId = null;
         },
-        "Copy task deleted",
-        "Copy task could not be deleted"
+        I18n.t("copy-task-deleted"),
+        I18n.t("copy-task-delete-failed")
       );
     }
   }

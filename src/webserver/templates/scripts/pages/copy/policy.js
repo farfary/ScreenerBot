@@ -1,89 +1,127 @@
 // The four exit rules as the editor and the Rules tab present them: field specs,
 // the policy a task runs under after its overrides, presets, and validation.
-import { duration, finite, fixed, signedPct } from "./format.js";
+import { duration, finite, pct, signedPct } from "./format.js";
 
-const status = { key: "enabled", label: "Status", bool: true, text: (on) => (on ? "On" : "Off") };
+const status = {
+  key: "enabled",
+  bool: true,
+  get label() {
+    return I18n.t("copy-rule-status");
+  },
+  text: (on) => (on ? I18n.t("copy-rule-on") : I18n.t("copy-rule-off")),
+};
 
 export const RULES = [
   {
     group: "stop_loss",
-    title: "Stop loss",
+    get title() {
+      return I18n.t("copy-exit-stop-loss");
+    },
     fields: [
       status,
       {
         key: "threshold_pct",
-        label: "Sells at a loss of",
+        get label() {
+          return I18n.t("copy-rule-stop-loss-threshold");
+        },
         unit: "%",
-        text: (v) => `−${fixed(v, 1)}%`,
+        text: (v) => signedPct(-Number(v), 1),
       },
       {
         key: "min_hold_seconds",
-        label: "Not before holding",
-        unit: "seconds",
+        get label() {
+          return I18n.t("copy-rule-stop-loss-min-hold");
+        },
+        get unit() {
+          return I18n.t("copy-rule-unit-seconds");
+        },
         integer: true,
-        text: (v) => (Number(v) > 0 ? duration(v) : "No minimum"),
+        text: (v) => (Number(v) > 0 ? duration(v) : I18n.t("copy-rule-no-minimum")),
       },
       {
         key: "allow_partial",
-        label: "Partial exits",
+        get label() {
+          return I18n.t("copy-rule-partial-exits");
+        },
         bool: true,
-        text: (on) => (on ? "Allowed" : "Full exit only"),
+        text: (on) =>
+          on ? I18n.t("copy-rule-partial-allowed") : I18n.t("copy-rule-partial-full-only"),
       },
       {
         key: "partial_exit_default_pct",
-        label: "Partial exit size",
+        get label() {
+          return I18n.t("copy-rule-partial-size");
+        },
         unit: "%",
-        text: (v) => `${fixed(v, 0)}%`,
+        text: (v) => pct(v, 0),
       },
     ],
   },
   {
     group: "trailing",
-    title: "Trailing stop",
+    get title() {
+      return I18n.t("copy-exit-trailing-stop");
+    },
     fields: [
       status,
       {
         key: "activation_pct",
-        label: "Arms at a gain of",
+        get label() {
+          return I18n.t("copy-rule-trailing-activation");
+        },
         unit: "%",
-        text: (v) => `+${fixed(v, 1)}%`,
+        text: (v) => signedPct(v, 1),
       },
       {
         key: "distance_pct",
-        label: "Sells below the peak by",
+        get label() {
+          return I18n.t("copy-rule-trailing-distance");
+        },
         unit: "%",
-        text: (v) => `${fixed(v, 1)}%`,
+        text: (v) => pct(v, 1),
       },
     ],
   },
   {
     group: "roi",
-    title: "Take profit",
+    get title() {
+      return I18n.t("copy-exit-take-profit");
+    },
     fields: [
       status,
       {
         key: "target_profit_pct",
-        label: "Sells at a gain of",
+        get label() {
+          return I18n.t("copy-rule-take-profit-target");
+        },
         unit: "%",
-        text: (v) => `+${fixed(v, 1)}%`,
+        text: (v) => signedPct(v, 1),
       },
     ],
   },
   {
     group: "time",
-    title: "Time rule",
+    get title() {
+      return I18n.t("copy-exit-time-override");
+    },
     fields: [
       status,
       {
         key: "duration_seconds",
-        label: "Checks after holding",
-        unit: "minutes",
+        get label() {
+          return I18n.t("copy-rule-time-duration");
+        },
+        get unit() {
+          return I18n.t("copy-rule-unit-minutes");
+        },
         scale: 60,
         text: (v) => duration(v),
       },
       {
         key: "loss_threshold_pct",
-        label: "Sells while P&L is at or below",
+        get label() {
+          return I18n.t("copy-rule-time-threshold");
+        },
         unit: "%",
         text: (v) => signedPct(v, 1),
       },
@@ -138,7 +176,7 @@ export function fieldText(field, value) {
 /** One line per rule: "Off", or its values joined. */
 export function ruleSummary(rule, policy) {
   const values = policy?.[rule.group];
-  if (!values?.enabled) return "Off";
+  if (!values?.enabled) return I18n.t("copy-rule-off");
   return rule.fields
     .filter((field) => field.key !== "enabled")
     .filter(
@@ -158,10 +196,18 @@ function preset(groups) {
 }
 
 export const PRESETS = [
-  { id: "inherit", label: "Trader defaults", overrides: blankOverrides() },
+  {
+    id: "inherit",
+    get label() {
+      return I18n.t("copy-preset-inherit");
+    },
+    overrides: blankOverrides(),
+  },
   {
     id: "conservative",
-    label: "Conservative",
+    get label() {
+      return I18n.t("copy-preset-conservative");
+    },
     overrides: preset({
       stop_loss: { enabled: true, threshold_pct: 15 },
       trailing: { enabled: true, activation_pct: 15, distance_pct: 8 },
@@ -171,7 +217,9 @@ export const PRESETS = [
   },
   {
     id: "balanced",
-    label: "Balanced",
+    get label() {
+      return I18n.t("copy-preset-balanced");
+    },
     overrides: preset({
       stop_loss: { enabled: true, threshold_pct: 25 },
       trailing: { enabled: true, activation_pct: 30, distance_pct: 12 },
@@ -181,7 +229,9 @@ export const PRESETS = [
   },
   {
     id: "aggressive",
-    label: "Aggressive",
+    get label() {
+      return I18n.t("copy-preset-aggressive");
+    },
     overrides: preset({
       stop_loss: { enabled: true, threshold_pct: 40 },
       trailing: { enabled: true, activation_pct: 60, distance_pct: 20 },
@@ -203,28 +253,26 @@ const inRange = (value, max, exclusive) =>
 /** The server's own override limits, checked before a save. */
 export function validateOverrides(overrides) {
   const { stop_loss: stop, trailing, roi, time } = overrides;
-  if (!inRange(stop.threshold_pct, 100)) return "Stop loss must be above 0% and at most 100%.";
+  if (!inRange(stop.threshold_pct, 100)) return I18n.t("copy-validate-stop-loss");
   if (!inRange(stop.partial_exit_default_pct, 100, true))
-    return "Partial exit size must be between 0% and 100%.";
+    return I18n.t("copy-validate-partial-size");
   if (
     stop.min_hold_seconds !== null &&
     !(Number.isInteger(stop.min_hold_seconds) && stop.min_hold_seconds >= 0)
   ) {
-    return "Minimum hold must be a whole number of seconds.";
+    return I18n.t("copy-validate-min-hold");
   }
-  if (!inRange(trailing.activation_pct, 100))
-    return "Trailing activation must be above 0% and at most 100%.";
-  if (!inRange(trailing.distance_pct, 100))
-    return "Trailing distance must be above 0% and at most 100%.";
+  if (!inRange(trailing.activation_pct, 100)) return I18n.t("copy-validate-trailing-activation");
+  if (!inRange(trailing.distance_pct, 100)) return I18n.t("copy-validate-trailing-distance");
   if (roi.target_profit_pct !== null && !(roi.target_profit_pct > 0))
-    return "Take profit must be above 0%.";
+    return I18n.t("copy-validate-take-profit");
   if (time.duration_seconds !== null && !(time.duration_seconds > 0))
-    return "The time rule needs a duration above zero.";
+    return I18n.t("copy-validate-time-duration");
   if (
     time.loss_threshold_pct !== null &&
     !(Number.isFinite(time.loss_threshold_pct) && time.loss_threshold_pct <= 0)
   ) {
-    return "The time rule threshold is a loss: use 0% or a negative number.";
+    return I18n.t("copy-validate-time-threshold");
   }
   return null;
 }
@@ -237,25 +285,24 @@ export function validateOverrides(overrides) {
 export function exitWarnings(policy, exitMode, { slippagePct = null, feePct = null } = {}) {
   const warnings = [];
   if (exitMode === "mirror") {
-    warnings.push(
-      "Only the wallet's sells close holdings: no stop loss protects them, and a token the wallet never sells stays held."
-    );
+    warnings.push(I18n.t("copy-warning-mirror"));
     return warnings;
   }
   const anyRule = ["stop_loss", "trailing", "roi", "time"].some(
     (group) => policy?.[group]?.enabled
   );
   if (exitMode === "buy_only" && !anyRule) {
-    warnings.push("No exit rule is on and wallet sells are ignored: holdings are never sold.");
+    warnings.push(I18n.t("copy-warning-no-rules"));
   } else if (!policy?.stop_loss?.enabled) {
-    warnings.push(
-      "No stop loss applies: a falling token is held until another rule or the wallet sells."
-    );
+    warnings.push(I18n.t("copy-warning-no-stop-loss"));
   }
   const stop = policy?.stop_loss;
   if (stop?.enabled && Number(stop.min_hold_seconds) > 0) {
     warnings.push(
-      `The stop loss waits ${duration(stop.min_hold_seconds)} after each buy: a token that falls faster closes well past ${signedPct(-Number(stop.threshold_pct), 1)}.`
+      I18n.t("copy-warning-stop-delay", {
+        hold: duration(stop.min_hold_seconds),
+        threshold: signedPct(-Number(stop.threshold_pct), 1),
+      })
     );
   }
   const roi = policy?.roi;
@@ -265,15 +312,17 @@ export function exitWarnings(policy, exitMode, { slippagePct = null, feePct = nu
     const sellCost = slippage + fee;
     if (Number(roi.target_profit_pct) <= sellCost) {
       warnings.push(
-        `Take profit at +${fixed(roi.target_profit_pct, 1)}% does not cover selling (${fixed(slippage, 1)}% slippage and a ${fixed(fee, 1)}% swap fee), so it closes rounds at a loss.`
+        I18n.t("copy-warning-take-profit-cost", {
+          target: signedPct(roi.target_profit_pct, 1),
+          slippage: pct(slippage, 1),
+          fee: pct(fee, 1),
+        })
       );
     }
   }
   const trailing = policy?.trailing;
   if (trailing?.enabled && Number(trailing.distance_pct) >= Number(trailing.activation_pct)) {
-    warnings.push(
-      "The trailing distance is at least its activation gain, so an armed trail can sell below entry."
-    );
+    warnings.push(I18n.t("copy-warning-trailing-distance"));
   }
   return warnings;
 }

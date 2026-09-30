@@ -6,6 +6,8 @@ mod database;
 mod exits;
 mod guards;
 mod insights;
+#[cfg(test)]
+mod label_tests;
 mod live;
 mod matcher;
 mod notify;

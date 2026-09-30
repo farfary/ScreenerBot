@@ -17,7 +17,7 @@ export async function withDetail(error) {
     // The body was not JSON or is already read; the status line is all there is.
   }
   const wrapped = error instanceof Error ? error : new Error(String(error));
-  wrapped.detail = detail || wrapped.message || "Request failed";
+  wrapped.detail = detail || wrapped.message || I18n.t("copy-request-failed");
   return wrapped;
 }
 

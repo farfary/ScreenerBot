@@ -73,7 +73,7 @@ export function pnlCurve(points, { escapeHtml = String } = {}) {
     .map((point) => ({ at: new Date(point.at).getTime(), value: Number(point.cumulative_pnl_sol) }))
     .filter((point) => Number.isFinite(point.at) && Number.isFinite(point.value));
   if (!data.length) {
-    return '<div class="copy-chart-empty">No closed rounds in this range yet.</div>';
+    return `<div class="copy-chart-empty">${escapeHtml(I18n.t("copy-chart-empty-curve"))}</div>`;
   }
   const series =
     data.length === 1
@@ -88,14 +88,16 @@ export function pnlCurve(points, { escapeHtml = String } = {}) {
     max: Math.max(0, ...values),
     start: series[0].at,
     end: series[series.length - 1].at,
-    label: `Cumulative P&L ${signed(last)} SOL`,
+    label: I18n.t("copy-chart-curve-label", { amount: signed(last) }),
     escapeHtml,
   });
 }
 
 /** Horizontal bars: `[{ label, value, display, tone }]`. */
 export function barList(items, escapeHtml) {
-  if (!items?.length) return '<div class="copy-chart-empty">Nothing recorded in this range.</div>';
+  if (!items?.length) {
+    return `<div class="copy-chart-empty">${escapeHtml(I18n.t("copy-chart-empty-bars"))}</div>`;
+  }
   // Bars scale to the largest magnitude whatever its unit, so 0.03 SOL fills its track.
   const max = Math.max(...items.map((item) => Math.abs(item.value) || 0));
   const width = (value) => (max > 0 ? (Math.abs(value) || 0) / max : 0) * 100;
@@ -110,12 +112,14 @@ export function barList(items, escapeHtml) {
 /** Vertical histogram: `[{ label, count, tone }]`. */
 export function histogram(buckets, escapeHtml) {
   const total = (buckets || []).reduce((sum, bucket) => sum + bucket.count, 0);
-  if (!total) return '<div class="copy-chart-empty">No arrival samples in this range.</div>';
+  if (!total) {
+    return `<div class="copy-chart-empty">${escapeHtml(I18n.t("copy-chart-empty-histogram"))}</div>`;
+  }
   const max = Math.max(...buckets.map((bucket) => bucket.count), 1);
   return `<div class="copy-histogram">${buckets
     .map(
       (bucket) =>
-        `<div class="copy-histogram-col" title="${escapeHtml(`${bucket.count} of ${total}`)}"><span class="copy-histogram-count">${bucket.count}</span><span class="copy-histogram-bar"><span class="${bucket.tone || ""}" style="height:${((bucket.count / max) * 100).toFixed(1)}%"></span></span><span class="copy-histogram-label">${escapeHtml(bucket.label)}</span></div>`
+        `<div class="copy-histogram-col" title="${escapeHtml(I18n.t("copy-chart-histogram-title", { count: bucket.count, total }))}"><span class="copy-histogram-count">${bucket.count}</span><span class="copy-histogram-bar"><span class="${bucket.tone || ""}" style="height:${((bucket.count / max) * 100).toFixed(1)}%"></span></span><span class="copy-histogram-label">${escapeHtml(bucket.label)}</span></div>`
     )
     .join("")}</div>`;
 }
@@ -133,8 +137,9 @@ export function comparisonCurves(series, { escapeHtml = String } = {}) {
         .filter((point) => Number.isFinite(point.at) && Number.isFinite(point.value)),
     }))
     .filter((entry) => entry.points.length);
-  if (!lines.length)
-    return '<div class="copy-chart-empty">No closed rounds to compare in this range.</div>';
+  if (!lines.length) {
+    return `<div class="copy-chart-empty">${escapeHtml(I18n.t("copy-chart-empty-compare"))}</div>`;
+  }
   const all = lines.flatMap((entry) => entry.points);
   const times = all.map((point) => point.at);
   const values = [0, ...all.map((point) => point.value)];
@@ -152,7 +157,7 @@ export function comparisonCurves(series, { escapeHtml = String } = {}) {
     max: Math.max(...values),
     start,
     end,
-    label: "Cumulative P&L by task",
+    label: I18n.t("copy-chart-compare-label"),
     escapeHtml,
     tall: true,
   });

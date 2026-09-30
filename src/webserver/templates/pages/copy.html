@@ -1,19 +1,33 @@
 <div class="copy-page" id="copy-page">
   <header class="copy-strip">
     <div class="copy-strip-title">
-      <h1><i class="icon-copy"></i>Copy Trading</h1>
-      <span class="copy-strip-feature" id="copy-feature-label" hidden>Beta</span>
-      <span class="copy-strip-state" id="copy-system-state" aria-live="polite">Loading</span>
+      <h1><i class="icon-copy"></i><span data-l10n-id="copy-page-title"></span></h1>
+      <span
+        class="copy-strip-feature"
+        id="copy-feature-label"
+        data-l10n-id="copy-page-beta"
+        hidden
+      ></span>
+      <span
+        class="copy-strip-state"
+        id="copy-system-state"
+        aria-live="polite"
+        data-l10n-id="copy-strip-loading"
+      ></span>
     </div>
     <div class="copy-strip-actions">
-      <button class="btn btn-outline btn-sm" id="copy-global-action" type="button" disabled>
-        Pause all
-      </button>
+      <button
+        class="btn btn-outline btn-sm"
+        id="copy-global-action"
+        type="button"
+        data-l10n-id="copy-strip-pause-all"
+        disabled
+      ></button>
       <button class="btn btn-ghost btn-sm" id="copy-settings-open" type="button">
-        <i class="icon-settings"></i> Settings
+        <i class="icon-settings"></i> <span data-l10n-id="copy-strip-settings"></span>
       </button>
       <button class="btn btn-primary btn-sm" id="copy-add" type="button">
-        <i class="icon-plus"></i> Add wallet
+        <i class="icon-plus"></i> <span data-l10n-id="copy-strip-add-wallet"></span>
       </button>
     </div>
   </header>
@@ -22,44 +36,51 @@
 
   <section class="copy-onboarding" id="copy-onboarding" hidden>
     <div class="copy-onboarding-copy">
-      <h2>Copy the wallets you trust, prove them in Paper first</h2>
-      <p>
-        Every task starts in Paper: target trades are simulated at the pool price with your slippage
-        and fees, and your exit rules run on the paper book. Arm Live per wallet once its paper
-        results earn it.
-      </p>
+      <h2 data-l10n-id="copy-onboarding-title"></h2>
+      <p data-l10n-id="copy-onboarding-body"></p>
       <button class="btn btn-primary" id="copy-onboarding-add" type="button">
-        <i class="icon-plus"></i> Add your first wallet
+        <i class="icon-plus"></i> <span data-l10n-id="copy-onboarding-add"></span>
       </button>
     </div>
     <ol class="copy-onboarding-steps">
-      <li><strong>Observe</strong><span>Detect the wallet's swaps without spending SOL.</span></li>
       <li>
-        <strong>Evaluate</strong
-        ><span>Read paper P&amp;L, win rate, skips, detection speed and slippage.</span>
+        <strong data-l10n-id="copy-onboarding-observe"></strong>
+        <span data-l10n-id="copy-onboarding-observe-detail"></span>
       </li>
-      <li><strong>Arm</strong><span>Pass the readiness checks, then enable real swaps.</span></li>
+      <li>
+        <strong data-l10n-id="copy-onboarding-evaluate"></strong>
+        <span data-l10n-id="copy-onboarding-evaluate-detail"></span>
+      </li>
+      <li>
+        <strong data-l10n-id="copy-onboarding-arm"></strong>
+        <span data-l10n-id="copy-onboarding-arm-detail"></span>
+      </li>
     </ol>
   </section>
 
   <div class="copy-main" id="copy-main" hidden>
-    <section class="copy-figures" id="copy-figures" aria-label="Copy trading totals"></section>
+    <section class="copy-figures" id="copy-figures" data-l10n-id="copy-figures-label"></section>
     <div class="copy-body">
-      <aside class="copy-list" aria-label="Copied wallets">
+      <aside class="copy-list" data-l10n-id="copy-list-label">
         <div class="copy-list-head">
           <div class="copy-list-title">
-            <h2>Wallets</h2>
+            <h2 data-l10n-id="copy-list-title"></h2>
             <span id="copy-list-count">—</span>
           </div>
           <button class="btn btn-ghost btn-sm" id="copy-compare-open" type="button">
-            <i class="icon-chart-bar"></i> Compare
+            <i class="icon-chart-bar"></i> <span data-l10n-id="copy-list-compare"></span>
           </button>
         </div>
         <div class="copy-list-sort" id="copy-list-sort"></div>
         <div class="copy-list-rows" id="copy-list-rows"></div>
       </aside>
       <main class="copy-workspace" id="copy-workspace"></main>
-      <section class="copy-compare" id="copy-compare" aria-label="Compare wallets" hidden></section>
+      <section
+        class="copy-compare"
+        id="copy-compare"
+        data-l10n-id="copy-compare-label"
+        hidden
+      ></section>
     </div>
   </div>
 
@@ -72,10 +93,15 @@
     >
       <div class="modal-header">
         <div class="copy-dialog-title">
-          <h2 id="copy-editor-title">Add wallet</h2>
-          <span id="copy-editor-sub">New tasks start in Paper</span>
+          <h2 id="copy-editor-title" data-l10n-id="copy-editor-title-add"></h2>
+          <span id="copy-editor-sub" data-l10n-id="copy-editor-sub-add"></span>
         </div>
-        <button class="modal-close" type="button" data-dialog-close aria-label="Close">
+        <button
+          class="modal-close"
+          type="button"
+          data-dialog-close
+          data-l10n-id="copy-dialog-close"
+        >
           <i class="icon-x"></i>
         </button>
       </div>
@@ -83,9 +109,24 @@
       <div class="modal-body copy-editor-body" id="copy-editor-body"></div>
       <div class="copy-dialog-footer">
         <small class="copy-dialog-error" id="copy-editor-error" aria-live="polite"></small>
-        <button class="btn btn-secondary" type="button" id="copy-editor-back">Back</button>
-        <button class="btn btn-secondary" type="button" id="copy-editor-next">Next</button>
-        <button class="btn btn-primary" type="button" id="copy-editor-save">Save task</button>
+        <button
+          class="btn btn-secondary"
+          type="button"
+          id="copy-editor-back"
+          data-l10n-id="common-action-back"
+        ></button>
+        <button
+          class="btn btn-secondary"
+          type="button"
+          id="copy-editor-next"
+          data-l10n-id="common-action-next"
+        ></button>
+        <button
+          class="btn btn-primary"
+          type="button"
+          id="copy-editor-save"
+          data-l10n-id="copy-editor-save-create"
+        ></button>
       </div>
     </div>
   </div>
@@ -99,10 +140,15 @@
     >
       <div class="modal-header">
         <div class="copy-dialog-title">
-          <h2 id="copy-arm-title">Arm live copying</h2>
-          <span id="copy-arm-sub">Real swaps from your wallet</span>
+          <h2 id="copy-arm-title" data-l10n-id="copy-arm-title"></h2>
+          <span id="copy-arm-sub" data-l10n-id="copy-arm-sub"></span>
         </div>
-        <button class="modal-close" type="button" data-dialog-close aria-label="Close">
+        <button
+          class="modal-close"
+          type="button"
+          data-dialog-close
+          data-l10n-id="copy-dialog-close"
+        >
           <i class="icon-x"></i>
         </button>
       </div>
@@ -110,10 +156,19 @@
       <div class="copy-dialog-footer">
         <small class="copy-dialog-error" id="copy-arm-error" aria-live="polite"></small>
         <small class="copy-dialog-hint" id="copy-arm-hint"></small>
-        <button class="btn btn-secondary" type="button" data-dialog-close>Keep Paper</button>
-        <button class="btn btn-danger" type="button" id="copy-arm-confirm" disabled>
-          Arm live
-        </button>
+        <button
+          class="btn btn-secondary"
+          type="button"
+          data-dialog-close
+          data-l10n-id="copy-arm-keep-paper"
+        ></button>
+        <button
+          class="btn btn-danger"
+          type="button"
+          id="copy-arm-confirm"
+          data-l10n-id="copy-arm-confirm"
+          disabled
+        ></button>
       </div>
     </div>
   </div>
@@ -127,10 +182,15 @@
     >
       <div class="modal-header">
         <div class="copy-dialog-title">
-          <h2 id="copy-settings-title">Copy trading settings</h2>
-          <span>Global policy for every task</span>
+          <h2 id="copy-settings-title" data-l10n-id="copy-settings-title"></h2>
+          <span data-l10n-id="copy-settings-subtitle"></span>
         </div>
-        <button class="modal-close" type="button" data-dialog-close aria-label="Close">
+        <button
+          class="modal-close"
+          type="button"
+          data-dialog-close
+          data-l10n-id="copy-dialog-close"
+        >
           <i class="icon-x"></i>
         </button>
       </div>
@@ -138,15 +198,13 @@
         <div class="modal-body">
           <label class="copy-switch-row">
             <span class="copy-field-text">
-              <strong>Require a Filtering pass</strong>
+              <strong data-l10n-id="config-copy-trading-require-filter-pass"></strong>
+              <small data-config-hint="config-copy-trading-require-filter-pass"></small>
               <small
-                >Copy only tokens the Filtering pipeline currently passes. Tasks can override
-                it.</small
-              >
-              <small class="copy-warning" id="copy-settings-filter-warning">
-                With the default Filtering setup this rejects almost every token, so nothing is
-                copied. Leave it off unless your filters pass the tokens your wallets trade.
-              </small>
+                class="copy-warning"
+                id="copy-settings-filter-warning"
+                data-l10n-id="copy-settings-filter-warning"
+              ></small>
             </span>
             <span class="toggle"
               ><input id="copy-settings-filter" type="checkbox" /><span class="toggle-track"></span
@@ -154,8 +212,8 @@
           </label>
           <label class="copy-switch-row">
             <span class="copy-field-text">
-              <strong>Latency kill switch</strong>
-              <small>Pause a task when its recent trades are detected too late to copy well.</small>
+              <strong data-l10n-id="config-copy-trading-latency-kill-switch-enabled"></strong>
+              <small data-config-hint="config-copy-trading-latency-kill-switch-enabled"></small>
             </span>
             <span class="toggle"
               ><input id="copy-settings-latency" type="checkbox" /><span class="toggle-track"></span
@@ -163,7 +221,7 @@
           </label>
           <div class="copy-fields">
             <label class="copy-field">
-              <span>Arrival limit</span>
+              <span data-l10n-id="config-copy-trading-max-arrival-distance-ms"></span>
               <span class="copy-number-row"
                 ><input
                   id="copy-settings-delay"
@@ -171,13 +229,15 @@
                   min="0.25"
                   max="30"
                   step="0.25"
-                  required
-                /><span class="input-unit">seconds</span></span
-              >
-              <small>Average delay from the target's block to detection that pauses a task.</small>
+                  required /><span
+                  class="input-unit"
+                  data-l10n-id="copy-settings-unit-seconds"
+                ></span
+              ></span>
+              <small data-config-hint="config-copy-trading-max-arrival-distance-ms"></small>
             </label>
             <label class="copy-field">
-              <span>Latency sample window</span>
+              <span data-l10n-id="config-copy-trading-latency-window-size"></span>
               <span class="copy-number-row"
                 ><input
                   id="copy-settings-window"
@@ -185,12 +245,14 @@
                   min="3"
                   max="100"
                   step="1"
-                  required
-                /><span class="input-unit">trades</span></span
-              >
+                  required /><span
+                  class="input-unit"
+                  data-l10n-id="copy-settings-unit-trades"
+                ></span
+              ></span>
             </label>
             <label class="copy-field">
-              <span>Default slippage</span>
+              <span data-l10n-id="config-copy-trading-default-slippage-pct"></span>
               <span class="copy-number-row"
                 ><input
                   id="copy-settings-slippage"
@@ -203,7 +265,7 @@
               >
             </label>
             <label class="copy-field">
-              <span>Maximum active tasks</span>
+              <span data-l10n-id="config-copy-trading-max-active-tasks"></span>
               <span class="copy-number-row"
                 ><input
                   id="copy-settings-max-tasks"
@@ -211,13 +273,12 @@
                   min="1"
                   max="50"
                   step="1"
-                  required
-                /><span class="input-unit">tasks</span></span
-              >
-              <small>Paper and live tasks both count: each one watches its wallet.</small>
+                  required /><span class="input-unit" data-l10n-id="copy-settings-unit-tasks"></span
+              ></span>
+              <small data-config-hint="config-copy-trading-max-active-tasks"></small>
             </label>
             <label class="copy-field">
-              <span>Live readiness</span>
+              <span data-l10n-id="config-copy-trading-readiness-min-closed-rounds"></span>
               <span class="copy-number-row"
                 ><input
                   id="copy-settings-readiness"
@@ -225,17 +286,24 @@
                   min="1"
                   max="500"
                   step="1"
-                  required
-                /><span class="input-unit">closed rounds</span></span
-              >
-              <small>Paper rounds a task needs before its readiness check passes.</small>
+                  required /><span
+                  class="input-unit"
+                  data-l10n-id="copy-settings-unit-closed-rounds"
+                ></span
+              ></span>
+              <small data-config-hint="config-copy-trading-readiness-min-closed-rounds"></small>
             </label>
           </div>
         </div>
         <div class="copy-dialog-footer">
           <small class="copy-dialog-error" id="copy-settings-error" aria-live="polite"></small>
-          <button class="btn btn-secondary" type="button" data-dialog-close>Cancel</button>
-          <button class="btn btn-primary" type="submit">Save settings</button>
+          <button
+            class="btn btn-secondary"
+            type="button"
+            data-dialog-close
+            data-l10n-id="common-action-cancel"
+          ></button>
+          <button class="btn btn-primary" type="submit" data-l10n-id="copy-settings-save"></button>
         </div>
       </form>
     </div>
@@ -250,20 +318,33 @@
     >
       <div class="modal-header">
         <div class="copy-dialog-title">
-          <h2 id="copy-profile-title">Wallet profile</h2>
-          <span id="copy-profile-sub">What this bot has seen of the wallet</span>
+          <h2 id="copy-profile-title" data-l10n-id="copy-profile-title"></h2>
+          <span id="copy-profile-sub" data-l10n-id="copy-profile-sub"></span>
         </div>
-        <button class="modal-close" type="button" data-dialog-close aria-label="Close">
+        <button
+          class="modal-close"
+          type="button"
+          data-dialog-close
+          data-l10n-id="copy-dialog-close"
+        >
           <i class="icon-x"></i>
         </button>
       </div>
       <div class="modal-body" id="copy-profile-body"></div>
       <div class="copy-dialog-footer">
         <small class="copy-dialog-error" id="copy-profile-error" aria-live="polite"></small>
-        <button class="btn btn-secondary" type="button" data-dialog-close>Close</button>
-        <button class="btn btn-primary" type="button" id="copy-profile-copy">
-          Copy this wallet
-        </button>
+        <button
+          class="btn btn-secondary"
+          type="button"
+          data-dialog-close
+          data-l10n-id="common-action-close"
+        ></button>
+        <button
+          class="btn btn-primary"
+          type="button"
+          id="copy-profile-copy"
+          data-l10n-id="copy-profile-copy"
+        ></button>
       </div>
     </div>
   </div>

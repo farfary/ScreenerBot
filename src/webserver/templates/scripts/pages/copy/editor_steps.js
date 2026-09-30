@@ -1,8 +1,17 @@
 // The stepped task editor's steps: Wallet, Sizing (with a cost preview), Entry
 // filters, Exits (presets and every rule field, inherited values shown) and a
 // Review of what the task will run under. Pure markup, collection and checks.
+import { escapeHtml } from "../../core/utils.js";
 import { renderAddress } from "../../ui/token_identity.js";
-import { MODE_LABELS, SOLANA_ADDRESS_RE, fixed, segmented, sol, taskName } from "./format.js";
+import {
+  SOLANA_ADDRESS_RE,
+  exitModeLabel,
+  modeLabel,
+  pct,
+  segmented,
+  sol,
+  taskName,
+} from "./format.js";
 import {
   PRESETS,
   RULES,
@@ -16,11 +25,36 @@ import {
 import { rulesHtml } from "./rules.js";
 
 export const STEPS = [
-  { id: "wallet", label: "Wallet" },
-  { id: "sizing", label: "Sizing" },
-  { id: "entry", label: "Entry filters" },
-  { id: "exits", label: "Exits" },
-  { id: "review", label: "Review" },
+  {
+    id: "wallet",
+    get label() {
+      return I18n.t("copy-step-wallet");
+    },
+  },
+  {
+    id: "sizing",
+    get label() {
+      return I18n.t("copy-step-sizing");
+    },
+  },
+  {
+    id: "entry",
+    get label() {
+      return I18n.t("copy-step-entry");
+    },
+  },
+  {
+    id: "exits",
+    get label() {
+      return I18n.t("copy-step-exits");
+    },
+  },
+  {
+    id: "review",
+    get label() {
+      return I18n.t("copy-step-review");
+    },
+  },
 ];
 
 const NUMBER_FIELDS = [
@@ -35,18 +69,30 @@ const NUMBER_FIELDS = [
 const EXIT_MODES = [
   {
     id: "buy_only",
-    label: "My exit rules",
-    help: "Your rules below sell every holding; the wallet's sells are ignored.",
+    get label() {
+      return exitModeLabel("buy_only");
+    },
+    get help() {
+      return I18n.t("copy-editor-exit-help-buy-only");
+    },
   },
   {
     id: "hybrid",
-    label: "Both",
-    help: "Whichever comes first: the wallet sells, or one of your rules fires.",
+    get label() {
+      return I18n.t("copy-editor-exit-both");
+    },
+    get help() {
+      return I18n.t("copy-editor-exit-help-hybrid");
+    },
   },
   {
     id: "mirror",
-    label: "Mirror wallet sells",
-    help: "Holdings are sold only when the wallet sells. Your exit rules do not run.",
+    get label() {
+      return exitModeLabel("mirror");
+    },
+    get help() {
+      return I18n.t("copy-editor-exit-help-mirror");
+    },
   },
 ];
 
@@ -84,29 +130,29 @@ export function duplicateNote({ draft, mode, source, tasks }, esc) {
     ? (tasks || []).filter((task) => task.target_address === address && task.id !== source?.id)
     : [];
   if (!others.length) return "";
-  const names = others
-    .map((task) => `“${taskName(task)}” (${MODE_LABELS[task.mode] || task.mode})`)
+  const tasksText = others
+    .map((task) => I18n.t("copy-task-ref", { name: taskName(task), mode: modeLabel(task.mode) }))
     .join(", ");
-  return `<p class="copy-warning" role="note"><i class="icon-triangle-alert" aria-hidden="true"></i>${esc(`Already copied by ${names}. This task copies the same trades again, with its own rules and budget.`)}</p>`;
+  return `<p class="copy-warning" role="note"><i class="icon-triangle-alert" aria-hidden="true"></i>${esc(I18n.t("copy-editor-duplicate", { tasks: tasksText }))}</p>`;
 }
 
 function walletStep(context, esc) {
   const { draft, mode, source } = context;
   const address =
     mode === "edit"
-      ? `<div class="copy-field"><span>Wallet</span>${renderAddress(source.target_address, { explorer: "account" })}<small>A task's wallet is its identity. To copy another wallet with these rules, clone the task.</small></div>`
-      : `<label class="copy-field"><span>Wallet address</span><input type="text" data-field="target_address" value="${esc(draft.target_address || "")}" placeholder="Solana wallet address" spellcheck="false" autocomplete="off" required /><small>${esc(
+      ? `<div class="copy-field"><span>${esc(I18n.t("copy-editor-wallet"))}</span>${renderAddress(source.target_address, { explorer: "account" })}<small>${esc(I18n.t("copy-editor-wallet-identity"))}</small></div>`
+      : `<label class="copy-field"><span>${esc(I18n.t("copy-editor-address-label"))}</span><input type="text" data-field="target_address" value="${esc(draft.target_address || "")}" placeholder="${esc(I18n.t("copy-editor-address-placeholder"))}" spellcheck="false" autocomplete="off" required /><small>${esc(
           mode === "clone"
-            ? "Same rules with an empty paper book. Keep this wallet to test other rules on it, or enter another wallet."
-            : "The wallet whose buys (and, if you choose, sells) this task copies."
+            ? I18n.t("copy-editor-address-help-clone")
+            : I18n.t("copy-editor-address-help-create")
         )}</small></label><div id="copy-editor-duplicate">${duplicateNote(context, esc)}</div>`;
   const note =
     mode === "edit" && source.mode === "live"
-      ? "This task is live: changes apply to its next real copies."
-      : "Tasks run in Paper until you arm them: trades are simulated at the pool price and nothing is spent.";
+      ? I18n.t("copy-editor-note-live")
+      : I18n.t("copy-editor-note-paper");
   return `${address}
-    <label class="copy-field"><span>Name <em>optional</em></span><input type="text" data-field="label" value="${esc(draft.label || "")}" maxlength="64" placeholder="e.g. Fast rotator" /></label>
-    ${toggleRow(esc, { name: "enabled", title: "Process the wallet's trades", help: "Off keeps the task paused until you resume it.", checked: draft.enabled })}
+    <label class="copy-field"><span>${I18n.markup("copy-editor-name-label")}</span><input type="text" data-field="label" value="${esc(draft.label || "")}" maxlength="64" placeholder="${esc(I18n.t("copy-editor-name-placeholder"))}" /></label>
+    ${toggleRow(esc, { name: "enabled", title: I18n.t("copy-editor-enabled-title"), help: I18n.t("copy-editor-enabled-help"), checked: draft.enabled })}
     <p class="copy-note">${esc(note)}</p>`;
 }
 
@@ -117,46 +163,56 @@ export function costPreview(draft) {
   const perToken = draft.max_sol_per_token;
   const budget = draft.total_budget_sol;
   if (![amount, cap, perToken, budget].every((value) => Number.isFinite(value) && value > 0)) {
-    return "<p>Enter the sizing to see what a copy costs.</p>";
+    return `<p>${escapeHtml(I18n.t("copy-editor-preview-empty"))}</p>`;
   }
   const copyFor = (target) =>
     draft.sizing.kind === "fixed" ? Math.min(amount, cap) : Math.min((target * amount) / 100, cap);
   const examples = [0.1, 1, 5]
     .map(
       (target) =>
-        `<li>The wallet buys ${sol(target, 1)} → you copy <strong>${sol(copyFor(target), 3)}</strong></li>`
+        `<li>${I18n.markup("copy-editor-preview-example", { target: sol(target, 1), copy: sol(copyFor(target), 3) })}</li>`
     )
     .join("");
   const unit = draft.sizing.kind === "fixed" ? Math.min(amount, cap) : cap;
   const perTokenCopies = Math.max(1, Math.floor(perToken / unit));
   const budgetCopies = Math.floor(budget / unit);
   const perTokenText = draft.buy_once_per_token
-    ? `One token takes a single copy of ${sol(unit, 3)}, as each token is bought once`
-    : `One token takes at most ${perTokenCopies} cop${perTokenCopies === 1 ? "y" : "ies"} of ${sol(unit, 3)}`;
-  return `<ul>${examples}</ul><p>${perTokenText}; the budget covers ${draft.sizing.kind === "fixed" ? "about" : "at least"} ${budgetCopies} of them. Network and priority fees come on top.</p>`;
+    ? I18n.t("copy-editor-preview-once", { size: sol(unit, 3) })
+    : I18n.t("copy-editor-preview-token-cap", { count: perTokenCopies, size: sol(unit, 3) });
+  const summary =
+    draft.sizing.kind === "fixed"
+      ? I18n.t("copy-editor-preview-summary-exact", { perToken: perTokenText, count: budgetCopies })
+      : I18n.t("copy-editor-preview-summary-minimum", {
+          perToken: perTokenText,
+          count: budgetCopies,
+        });
+  return `<ul>${examples}</ul><p>${escapeHtml(summary)}</p>`;
 }
 
 function sizingStep({ draft, defaults }, esc) {
   const fixedKind = draft.sizing.kind === "fixed";
   const maxSlippage = defaults?.max_slippage_pct ?? null;
   const minSol = defaults?.min_trade_size_sol ?? 0;
-  return `<div class="copy-field"><span>Copy size</span>${segmented(
+  const solUnit = I18n.t("copy-unit-sol");
+  const copySize = I18n.t("copy-editor-copy-size");
+  return `<div class="copy-field"><span>${esc(copySize)}</span>${segmented(
     "sizing-kind",
     [
-      { id: "fixed", label: "Fixed amount" },
-      { id: "ratio_of_target", label: "Share of the wallet's trade" },
+      { id: "fixed", label: I18n.t("copy-editor-sizing-fixed") },
+      { id: "ratio_of_target", label: I18n.t("copy-editor-sizing-ratio") },
     ],
     draft.sizing.kind,
-    esc
+    esc,
+    copySize
   )}</div>
     <div class="copy-fields">
-      ${numberInput(esc, { attr: "data-field", name: "sizing_amount", label: fixedKind ? "Amount per copy" : "Share of each trade", unit: fixedKind ? "SOL" : "%", value: valueAttr(fixedKind ? draft.sizing.sol : draft.sizing.pct), min: fixedKind ? minSol : 0, required: true, help: fixedKind ? `Spent on each copied buy, at least ${sol(minSol, 3)}.` : "Of the wallet's own buy, up to the per-trade cap." })}
-      ${numberInput(esc, { attr: "data-field", name: "max_sol_per_trade", label: "Per-trade cap", unit: "SOL", value: valueAttr(draft.max_sol_per_trade), min: minSol, required: true, help: "No single copy spends more." })}
-      ${numberInput(esc, { attr: "data-field", name: "max_sol_per_token", label: "Per-token cap", unit: "SOL", value: valueAttr(draft.max_sol_per_token), min: minSol, required: true, help: "Total spent on one token." })}
-      ${numberInput(esc, { attr: "data-field", name: "total_budget_sol", label: "Total budget", unit: "SOL", value: valueAttr(draft.total_budget_sol), min: minSol, required: true, help: "Everything this task may spend over its life; Paper and Live each count their own spend." })}
-      ${numberInput(esc, { attr: "data-field", name: "slippage_pct", label: "Slippage", unit: "%", value: valueAttr(draft.slippage_pct), min: defaults?.min_slippage_pct ?? 0, max: maxSlippage, required: true, placeholder: defaults ? String(defaults.default_slippage_pct) : "" })}
+      ${numberInput(esc, { attr: "data-field", name: "sizing_amount", label: fixedKind ? I18n.t("copy-editor-amount-fixed") : I18n.t("copy-editor-amount-ratio"), unit: fixedKind ? solUnit : "%", value: valueAttr(fixedKind ? draft.sizing.sol : draft.sizing.pct), min: fixedKind ? minSol : 0, required: true, help: fixedKind ? I18n.t("copy-editor-amount-help-fixed", { minimum: sol(minSol, 3) }) : I18n.t("copy-editor-amount-help-ratio") })}
+      ${numberInput(esc, { attr: "data-field", name: "max_sol_per_trade", label: I18n.t("copy-field-per-trade-cap"), unit: solUnit, value: valueAttr(draft.max_sol_per_trade), min: minSol, required: true, help: I18n.t("copy-editor-help-trade-cap") })}
+      ${numberInput(esc, { attr: "data-field", name: "max_sol_per_token", label: I18n.t("copy-field-per-token-cap"), unit: solUnit, value: valueAttr(draft.max_sol_per_token), min: minSol, required: true, help: I18n.t("copy-editor-help-token-cap") })}
+      ${numberInput(esc, { attr: "data-field", name: "total_budget_sol", label: I18n.t("copy-field-total-budget"), unit: solUnit, value: valueAttr(draft.total_budget_sol), min: minSol, required: true, help: I18n.t("copy-editor-help-budget") })}
+      ${numberInput(esc, { attr: "data-field", name: "slippage_pct", label: I18n.t("copy-field-slippage"), unit: "%", value: valueAttr(draft.slippage_pct), min: defaults?.min_slippage_pct ?? 0, max: maxSlippage, required: true, placeholder: defaults ? String(defaults.default_slippage_pct) : "" })}
     </div>
-    <section class="copy-preview" aria-live="polite"><h4>What a copy costs</h4><div id="copy-editor-preview">${costPreview(draft)}</div></section>`;
+    <section class="copy-preview" aria-live="polite"><h4>${esc(I18n.t("copy-editor-preview-title"))}</h4><div id="copy-editor-preview">${costPreview(draft)}</div></section>`;
 }
 
 function entryStep({ draft, defaults }, esc) {
@@ -164,22 +220,30 @@ function entryStep({ draft, defaults }, esc) {
   const filterMode =
     draft.require_filter_pass == null ? "inherit" : draft.require_filter_pass ? "require" : "skip";
   const requires = draft.require_filter_pass ?? global;
+  const solUnit = I18n.t("copy-unit-sol");
+  const filterLabel = I18n.t("copy-rules-filter-pass");
   return `<div class="copy-fields">
-      ${numberInput(esc, { attr: "data-field", name: "min_target_trade_sol", label: "Smallest wallet trade copied", unit: "SOL", value: valueAttr(draft.min_target_trade_sol), min: 0, placeholder: "Any", help: "Ignore the wallet's smaller buys. Leave empty for no minimum." })}
-      ${numberInput(esc, { attr: "data-field", name: "max_target_trade_sol", label: "Largest wallet trade copied", unit: "SOL", value: valueAttr(draft.max_target_trade_sol), min: 0, placeholder: "Any", help: "Ignore the wallet's larger buys. Leave empty for no maximum." })}
+      ${numberInput(esc, { attr: "data-field", name: "min_target_trade_sol", label: I18n.t("copy-editor-target-min"), unit: solUnit, value: valueAttr(draft.min_target_trade_sol), min: 0, placeholder: I18n.t("copy-editor-any"), help: I18n.t("copy-editor-target-min-help") })}
+      ${numberInput(esc, { attr: "data-field", name: "max_target_trade_sol", label: I18n.t("copy-editor-target-max"), unit: solUnit, value: valueAttr(draft.max_target_trade_sol), min: 0, placeholder: I18n.t("copy-editor-any"), help: I18n.t("copy-editor-target-max-help") })}
     </div>
-    ${toggleRow(esc, { name: "buy_once_per_token", title: "Buy each token once", help: "Copy only the wallet's first buy of a token; later buys of it are skipped.", checked: draft.buy_once_per_token })}
-    <div class="copy-field"><span>Filtering pass</span>${segmented(
+    ${toggleRow(esc, { name: "buy_once_per_token", title: I18n.t("copy-editor-buy-once-title"), help: I18n.t("copy-editor-buy-once-help"), checked: draft.buy_once_per_token })}
+    <div class="copy-field"><span>${esc(filterLabel)}</span>${segmented(
       "filter-mode",
       [
-        { id: "inherit", label: `Copy setting (${global ? "required" : "not required"})` },
-        { id: "require", label: "Require" },
-        { id: "skip", label: "Don't require" },
+        {
+          id: "inherit",
+          label: global
+            ? I18n.t("copy-filter-copy-setting-required")
+            : I18n.t("copy-filter-copy-setting-not-required"),
+        },
+        { id: "require", label: I18n.t("copy-editor-filter-require") },
+        { id: "skip", label: I18n.t("copy-editor-filter-skip") },
       ],
       filterMode,
-      esc
-    )}<small>Require a token to pass your Filtering pipeline before it is copied.</small></div>
-    ${requires ? '<p class="copy-warning" role="note"><i class="icon-triangle-alert" aria-hidden="true"></i>With the default Filtering setup almost every token fails, so a task that requires a pass copies nothing. Require it only when your filters pass the tokens this wallet trades.</p>' : ""}`;
+      esc,
+      filterLabel
+    )}<small>${esc(I18n.t("copy-editor-filter-help"))}</small></div>
+    ${requires ? `<p class="copy-warning" role="note"><i class="icon-triangle-alert" aria-hidden="true"></i>${esc(I18n.t("copy-editor-filter-warning"))}</p>` : ""}`;
 }
 
 function ruleCard(rule, { draft, defaults }, esc) {
@@ -187,18 +251,20 @@ function ruleCard(rule, { draft, defaults }, esc) {
   const inherited = defaults?.trader_defaults;
   const state = overrides.enabled === null ? "inherit" : overrides.enabled ? "on" : "off";
   const inheritLabel = inherited
-    ? `Trader default (${inherited[rule.group]?.enabled ? "on" : "off"})`
-    : "Trader default";
+    ? I18n.t("copy-editor-inherit-value", {
+        value: inherited[rule.group]?.enabled ? I18n.t("copy-rule-on") : I18n.t("copy-rule-off"),
+      })
+    : I18n.t("copy-editor-rule-inherit");
   const seg = segmented(
     `rule-${rule.group}`,
     [
       { id: "inherit", label: inheritLabel },
-      { id: "on", label: "On" },
-      { id: "off", label: "Off" },
+      { id: "on", label: I18n.t("copy-rule-on") },
+      { id: "off", label: I18n.t("copy-rule-off") },
     ],
     state,
     esc,
-    `${rule.title} setting`
+    I18n.t("copy-editor-rule-aria", { rule: rule.title })
   );
   let body;
   if (state === "on") {
@@ -209,7 +275,7 @@ function ruleCard(rule, { draft, defaults }, esc) {
         const fallback = inherited?.[rule.group]?.[field.key];
         if (field.bool) {
           const value = overrides[field.key];
-          return `<label class="copy-field"><span>${esc(field.label)}</span><select data-custom-select data-rule-field="${name}"><option value=""${value === null ? " selected" : ""}>${esc(`Trader default (${fieldText(field, fallback)})`)}</option><option value="true"${value === true ? " selected" : ""}>${esc(field.text(true))}</option><option value="false"${value === false ? " selected" : ""}>${esc(field.text(false))}</option></select></label>`;
+          return `<label class="copy-field"><span>${esc(field.label)}</span><select data-custom-select data-rule-field="${name}"><option value=""${value === null ? " selected" : ""}>${esc(I18n.t("copy-editor-inherit-value", { value: fieldText(field, fallback) }))}</option><option value="true"${value === true ? " selected" : ""}>${esc(field.text(true))}</option><option value="false"${value === false ? " selected" : ""}>${esc(field.text(false))}</option></select></label>`;
         }
         return numberInput(esc, {
           attr: "data-rule-field",
@@ -219,14 +285,14 @@ function ruleCard(rule, { draft, defaults }, esc) {
           value: valueAttr(overrides[field.key], field.scale),
           placeholder: valueAttr(fallback, field.scale),
           integer: field.integer,
-          help: `Empty uses the Trader default: ${fieldText(field, fallback)}`,
+          help: I18n.t("copy-editor-rule-empty-uses", { value: fieldText(field, fallback) }),
         });
       })
       .join("")}</div>`;
   } else if (state === "inherit") {
-    body = `<p class="copy-note">${esc(inherited ? `Follows the Trader: ${ruleSummary(rule, inherited)}` : "Follows the Trader's setting.")}</p>`;
+    body = `<p class="copy-note">${esc(inherited ? I18n.t("copy-editor-rule-follows", { summary: ruleSummary(rule, inherited) }) : I18n.t("copy-editor-rule-follows-plain"))}</p>`;
   } else {
-    body = '<p class="copy-note">Off for this task, whatever the Trader uses.</p>';
+    body = `<p class="copy-note">${esc(I18n.t("copy-editor-rule-off-note"))}</p>`;
   }
   return `<section class="copy-rule-card"><div class="copy-rule-head"><h4>${esc(rule.title)}</h4>${seg}</div>${body}</section>`;
 }
@@ -250,12 +316,15 @@ function exitsStep(context, esc) {
   const preset = matchPreset(draft.exit_policy_overrides);
   const presets = [
     ...PRESETS.map(({ id, label }) => ({ id, label })),
-    ...(preset === "custom" ? [{ id: "custom", label: "Custom" }] : []),
+    ...(preset === "custom" ? [{ id: "custom", label: I18n.t("copy-preset-custom") }] : []),
   ];
-  return `<div class="copy-field"><span>Who sells</span>${segmented("exit-mode", EXIT_MODES, draft.exit_mode, esc)}<small>${esc(mode.help)}</small></div>
-    <div class="copy-field"><span>Preset</span>${segmented("preset", presets, preset, esc)}<small>A preset fills every rule below; adjust any of them after.</small></div>
+  const whoSells = I18n.t("copy-editor-who-sells");
+  const presetLabel = I18n.t("copy-editor-preset");
+  const mirrorNote = `<p class="copy-note">${esc(I18n.t("copy-editor-mirror-note", { mine: exitModeLabel("buy_only"), both: I18n.t("copy-editor-exit-both") }))}</p>`;
+  return `<div class="copy-field"><span>${esc(whoSells)}</span>${segmented("exit-mode", EXIT_MODES, draft.exit_mode, esc, whoSells)}<small>${esc(mode.help)}</small></div>
+    <div class="copy-field"><span>${esc(presetLabel)}</span>${segmented("preset", presets, preset, esc, presetLabel)}<small>${esc(I18n.t("copy-editor-preset-help"))}</small></div>
     <div id="copy-editor-warnings">${exitWarningsHtml(context, esc)}</div>
-    ${draft.exit_mode === "mirror" ? '<p class="copy-note">These rules do not run while the wallet\'s sells decide. They apply if you switch to My exit rules or Both.</p>' : ""}
+    ${draft.exit_mode === "mirror" ? mirrorNote : ""}
     <div class="copy-rule-cards${draft.exit_mode === "mirror" ? " is-inactive" : ""}">${RULES.map((rule) => ruleCard(rule, context, esc)).join("")}</div>`;
 }
 
@@ -266,7 +335,13 @@ function reviewStep({ draft, defaults, mode, source }, esc) {
     target_address: mode === "edit" ? source.target_address : draft.target_address,
   };
   const head = `<div class="copy-review-head">${renderAddress(task.target_address, { explorer: "account" })}<p>${esc(
-    `${draft.label || "Unnamed task"} · ${mode === "edit" && source.mode === "live" ? "Live" : "Paper"} · ${draft.enabled ? "processes trades once saved" : "saved paused"}`
+    I18n.t("copy-editor-review-head", {
+      name: draft.label || I18n.t("copy-editor-unnamed"),
+      mode: modeLabel(mode === "edit" && source.mode === "live" ? "live" : "paper"),
+      status: draft.enabled
+        ? I18n.t("copy-editor-review-processes")
+        : I18n.t("copy-editor-review-paused"),
+    })
   )}</p></div>`;
   return (
     head +
@@ -334,7 +409,7 @@ const positive = (value) => Number.isFinite(value) && value > 0;
 export function validate(id, draft, { mode, defaults }) {
   if (id === "wallet") {
     if (mode !== "edit" && !SOLANA_ADDRESS_RE.test(draft.target_address || "")) {
-      return "Enter a valid Solana wallet address.";
+      return I18n.t("copy-editor-error-address");
     }
   } else if (id === "sizing") {
     const amount = draft.sizing.kind === "fixed" ? draft.sizing.sol : draft.sizing.pct;
@@ -343,17 +418,17 @@ export function validate(id, draft, { mode, defaults }) {
         positive
       )
     ) {
-      return "Every sizing value must be above zero.";
+      return I18n.t("copy-editor-error-sizing");
     }
     const minSol = defaults?.min_trade_size_sol ?? 0;
     if (draft.sizing.kind === "fixed" && draft.sizing.sol < minSol)
-      return `A copy must be at least ${sol(minSol, 3)}: raise the amount per copy.`;
+      return I18n.t("copy-editor-error-min-copy", { minimum: sol(minSol, 3) });
     if (draft.max_sol_per_trade < minSol)
-      return `A copy must be at least ${sol(minSol, 3)}: raise the per-trade cap.`;
+      return I18n.t("copy-editor-error-min-cap", { minimum: sol(minSol, 3) });
     if (draft.max_sol_per_trade > draft.max_sol_per_token)
-      return "The per-trade cap cannot exceed the per-token cap.";
+      return I18n.t("copy-editor-error-trade-cap");
     if (draft.max_sol_per_token > draft.total_budget_sol)
-      return "The per-token cap cannot exceed the total budget.";
+      return I18n.t("copy-editor-error-token-cap");
     const minSlippage = defaults?.min_slippage_pct ?? 0;
     const maxSlippage = defaults?.max_slippage_pct ?? Infinity;
     if (
@@ -361,15 +436,17 @@ export function validate(id, draft, { mode, defaults }) {
       draft.slippage_pct < minSlippage ||
       draft.slippage_pct > maxSlippage
     ) {
-      return `Slippage must be between ${fixed(minSlippage, 1)}% and ${fixed(maxSlippage, 0)}%.`;
+      return I18n.t("copy-editor-error-slippage", {
+        min: pct(minSlippage, 1),
+        max: pct(maxSlippage, 0),
+      });
     }
   } else if (id === "entry") {
     const { min_target_trade_sol: min, max_target_trade_sol: max } = draft;
     if ([min, max].some((value) => value !== null && !(Number.isFinite(value) && value >= 0))) {
-      return "Wallet trade limits must be zero or more.";
+      return I18n.t("copy-editor-error-target-limits");
     }
-    if (min !== null && max !== null && min > max)
-      return "The smallest wallet trade cannot exceed the largest.";
+    if (min !== null && max !== null && min > max) return I18n.t("copy-editor-error-target-order");
   } else if (id === "exits") {
     return validateOverrides(draft.exit_policy_overrides);
   }

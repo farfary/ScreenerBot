@@ -10,7 +10,6 @@ import { COPY_HANDOFF_EVENT, takeCopyHandoff } from "../ui/copy_handoff.js";
 import { createApi } from "./copy/api.js";
 import { createDialogs } from "./copy/dialogs.js";
 import { paint } from "./copy/tokens.js";
-import { plural } from "./copy/format.js";
 import { renderFigures, renderStrip } from "./copy/summary.js";
 import { createTaskList } from "./copy/list.js";
 import { createWorkspace } from "./copy/workspace.js";
@@ -49,7 +48,7 @@ function createLifecycle() {
     listeners.push(() => target.removeEventListener(type, handler, options));
   }
 
-  function toast(type, title, message) {
+  function notify(type, title, message) {
     Utils.showToast({ type, title, ...(message ? { message } : {}) });
   }
 
@@ -66,7 +65,7 @@ function createLifecycle() {
         }
         if (state.selectedId === null) state.selectedId = tasks[0]?.id ?? null;
       } catch (error) {
-        state.loadError = error.detail || "Request failed";
+        state.loadError = error.detail || I18n.t("copy-request-failed");
       }
       if (!page) return;
       render();
@@ -103,7 +102,7 @@ function createLifecycle() {
     if (error) {
       error.hidden = !state.loadError;
       error.textContent = state.loadError
-        ? `Copy trading could not be loaded: ${state.loadError}`
+        ? I18n.t("copy-load-failed", { error: state.loadError })
         : "";
     }
     const tasks = state.overview?.tasks || [];
@@ -147,10 +146,10 @@ function createLifecycle() {
     ).length;
     if (enabled && live > 0) {
       const result = await ConfirmationDialog.show({
-        title: "Resume copy processing",
-        message: `${plural(live, "live task")} will submit real swaps when their wallets trade again.`,
-        confirmLabel: "Resume processing",
-        cancelLabel: "Keep paused",
+        title: I18n.t("copy-resume-all-title"),
+        message: I18n.t("copy-resume-all-message", { count: live }),
+        confirmLabel: I18n.t("copy-strip-resume"),
+        cancelLabel: I18n.t("copy-keep-paused"),
         variant: "danger",
       });
       if (!result.confirmed) return;
@@ -159,10 +158,13 @@ function createLifecycle() {
     button.disabled = true;
     try {
       await page.api.patchConfig({ enabled });
-      toast("success", enabled ? "Copy processing resumed" : "All copy processing paused");
+      notify(
+        "success",
+        enabled ? I18n.t("copy-toast-resumed-all") : I18n.t("copy-toast-paused-all")
+      );
       await load();
     } catch (error) {
-      toast("error", "Copy processing could not be changed", error.detail);
+      notify("error", I18n.t("copy-toast-global-failed"), error.detail);
     } finally {
       button.disabled = false;
     }
@@ -185,7 +187,7 @@ function createLifecycle() {
         requestManager,
         state,
         on,
-        toast,
+        notify,
         paint,
         confirm: (config) => ConfirmationDialog.show(config),
         reload: load,
@@ -231,7 +233,10 @@ function createLifecycle() {
       ctxRef = ctx;
       if (!poller) {
         poller = ctx.managePoller(
-          new Poller(() => load(), { label: "CopyTrading", intervalMs: POLL_MS })
+          new Poller(() => load(), {
+            label: "CopyTrading", // l10n-ignore: poller log name
+            intervalMs: POLL_MS,
+          })
         );
       }
       poller.start({ silent: true });

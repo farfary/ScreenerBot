@@ -42,10 +42,20 @@ test("watch recovery keeps the copy task paused until a separate resume", async 
   );
 
   assert.match(workspace, /"helius_unavailable", "watch_processing_failed"/);
-  assert.match(workspace, /Retry wallet watch/);
+  assert.match(englishI18n.t("copy-action-retry-watch"), /Retry wallet watch/);
+  assert.match(workspace, /"copy-action-retry-watch"/);
   assert.match(workspace, /\/api\/wallets\/watch\/\$\{target\.id\}\/enabled/);
+  const wording = [
+    "copy-action-retry-watch",
+    "copy-watch-retry-started",
+    "copy-watch-resumed",
+    "copy-watch-approved",
+  ]
+    .map((id) => englishI18n.t(id))
+    .join("\n");
   assert.doesNotMatch(workspace, /Retry watch and resume|Wallet watch and copy task resumed/);
-  assert.match(workspace, /copy task remains paused/);
+  assert.doesNotMatch(wording, /Retry watch and resume|Wallet watch and copy task resumed/);
+  assert.match(englishI18n.t("copy-watch-retry-started"), /copy task remains paused/);
   assert.match(watched, />Retry watch</);
   assert.match(watched, /processing_failed/);
 });
@@ -62,7 +72,10 @@ test("Helius catch-up is offered only for a capable watch and requires per-walle
 
   assert.match(workspace, /data-ws-action="approve-helius"/);
   assert.match(workspace, /option\.provider === "helius" && option\.available/);
-  assert.match(workspace, /10 credits per 100 full transactions returned/);
+  assert.match(
+    englishI18n.t("copy-watch-approve-message"),
+    /10 credits per 100 full transactions returned/
+  );
   assert.match(workspace, /acknowledge_provider_usage: true/);
   assert.match(workspace, /The wallet watch has not been restored/);
   assert.match(watched, /option\.provider === "helius"/);

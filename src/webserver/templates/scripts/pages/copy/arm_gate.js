@@ -2,18 +2,20 @@
 // real exposure the task carries, and explicit acknowledgements before the
 // confirmation phrase is sent.
 import {
-  EXIT_MODE_LABELS,
-  MODE_LABELS,
   definitionRows,
   duration,
+  exitModeLabel,
   fixed,
-  plural,
+  modeLabel,
+  pct,
+  sol,
   taskName,
 } from "./format.js";
+import { readinessChecks } from "./overview.js";
 import { RULES, ruleSummary } from "./policy.js";
 
 export function createArmGate(page) {
-  const { $, Utils, api, state, on, toast, paint, dialogs } = page;
+  const { $, Utils, api, state, on, notify, paint, dialogs } = page;
   const esc = Utils.escapeHtml;
   let task = null;
 
@@ -34,43 +36,40 @@ export function createArmGate(page) {
     const hint = $("#copy-arm-hint");
     if (hint) {
       hint.textContent =
-        !runtimeBlocked() && pending ? `${plural(pending, "acknowledgement")} left to tick` : "";
+        !runtimeBlocked() && pending ? I18n.t("copy-arm-acks-left", { count: pending }) : "";
     }
   }
 
   function body(ws) {
-    const checks = (ws.readiness?.checks || [])
-      .map(
-        (check) =>
-          `<li class="copy-check ${check.passed ? "is-passed" : "is-failed"}"><i class="${check.passed ? "icon-circle-check" : "icon-circle-x"}" aria-hidden="true"></i><span><strong>${esc(I18n.text(check.text))}</strong><small>${esc(I18n.text(check.detail))}</small></span><span class="sr-only">${check.passed ? "passed" : "not passed"}</span></li>`
-      )
-      .join("");
     const size =
       ws.sizing?.kind === "ratio_of_target"
-        ? `${fixed(ws.sizing.pct, 1)}% of the wallet's trade`
-        : `${fixed(ws.sizing?.sol, 3)} SOL`;
+        ? I18n.t("copy-rules-size-ratio", { pct: pct(ws.sizing.pct, 1) })
+        : sol(ws.sizing?.sol, 3);
     const stop = ws.effective_policy?.stop_loss;
     const stopNote =
       ws.policy_manages_exits && stop?.enabled && Number(stop.min_hold_seconds) > 0
-        ? `Not before a ${duration(stop.min_hold_seconds)} hold: a faster fall closes lower`
+        ? I18n.t("copy-arm-stop-note", { hold: duration(stop.min_hold_seconds) })
         : "";
     const exposure = definitionRows(
       [
-        ["Per copy", size],
-        ["Per-trade cap", `${fixed(ws.max_sol_per_trade, 3)} SOL`],
-        ["Per-token cap", `${fixed(ws.max_sol_per_token, 3)} SOL`],
+        [I18n.t("copy-arm-per-copy"), size],
+        [I18n.t("copy-field-per-trade-cap"), sol(ws.max_sol_per_trade, 3)],
+        [I18n.t("copy-field-per-token-cap"), sol(ws.max_sol_per_token, 3)],
         [
-          "Live budget left",
-          `${fixed(ws.live_remaining_budget_sol, 3)} of ${fixed(ws.total_budget_sol, 3)} SOL`,
-          "Paper spend is counted separately and does not use it",
+          I18n.t("copy-arm-budget-left"),
+          I18n.t("copy-arm-budget-left-value", {
+            left: fixed(ws.live_remaining_budget_sol, 3),
+            total: fixed(ws.total_budget_sol, 3),
+          }),
+          I18n.t("copy-arm-budget-left-note"),
         ],
-        ["Slippage", `${fixed(ws.slippage_pct, 1)}%`],
-        ["Exits", EXIT_MODE_LABELS[ws.exit_mode] || ws.exit_mode],
+        [I18n.t("copy-field-slippage"), pct(ws.slippage_pct, 1)],
+        [I18n.t("copy-arm-exits"), exitModeLabel(ws.exit_mode)],
         [
-          "Stop loss",
+          I18n.t("copy-exit-stop-loss"),
           ws.policy_manages_exits
             ? ruleSummary(RULES[0], ws.effective_policy)
-            : "Wallet sells only",
+            : I18n.t("copy-rules-wallet-sells-only"),
           stopNote,
         ],
       ],
@@ -81,29 +80,32 @@ export function createArmGate(page) {
     );
     const shared = siblings.length
       ? `<p class="copy-warning" role="note"><i class="icon-triangle-alert" aria-hidden="true"></i>${esc(
-          `This wallet is also copied by ${siblings
-            .map((other) => `“${taskName(other)}” (${MODE_LABELS[other.mode] || other.mode})`)
-            .join(", ")}: each task copies its trades on its own budget.`
+          I18n.t("copy-arm-shared", {
+            tasks: siblings
+              .map((other) =>
+                I18n.t("copy-task-ref", { name: taskName(other), mode: modeLabel(other.mode) })
+              )
+              .join(", "),
+          })
         )}</p>`
       : "";
     const ack = (text) =>
       `<label class="copy-ack"><input type="checkbox" data-ack /><span>${esc(text)}</span></label>`;
     const acks = runtimeBlocked()
-      ? '<p class="copy-warning" role="alert"><i class="icon-triangle-alert" aria-hidden="true"></i>Live execution is unavailable right now; see the last check.</p>'
+      ? `<p class="copy-warning" role="alert"><i class="icon-triangle-alert" aria-hidden="true"></i>${esc(I18n.t("copy-arm-unavailable"))}</p>`
       : [
           ack(
-            `Real SOL: this task can spend up to ${fixed(ws.live_remaining_budget_sol, 3)} SOL from your wallet, at most ${fixed(ws.max_sol_per_trade, 3)} SOL per copy.`
+            I18n.t("copy-arm-ack-real-sol", {
+              budget: fixed(ws.live_remaining_budget_sol, 3),
+              trade: fixed(ws.max_sol_per_trade, 3),
+            })
           ),
-          ack(
-            "Live copies pay real network fees and slippage; paper results do not promise live results."
-          ),
-          ws.readiness?.ready
-            ? ""
-            : ack("Some readiness checks have not passed. Arm this task anyway."),
+          ack(I18n.t("copy-arm-ack-fees")),
+          ws.readiness?.ready ? "" : ack(I18n.t("copy-arm-ack-unready")),
         ].join("");
-    return `<p class="copy-arm-lead">${esc(`“${taskName(ws)}” will copy this wallet's trades with real swaps from your wallet.`)}</p>
-      <h4>Readiness from the paper book</h4><ul class="copy-checks">${checks}</ul>
-      <h4>Exposure</h4><dl class="copy-defs">${exposure}</dl>${shared}
+    return `<p class="copy-arm-lead">${esc(I18n.t("copy-arm-lead", { name: taskName(ws) }))}</p>
+      <h4>${esc(I18n.t("copy-arm-readiness-title"))}</h4>${readinessChecks(ws, esc)}
+      <h4>${esc(I18n.t("copy-arm-exposure-title"))}</h4><dl class="copy-defs">${exposure}</dl>${shared}
       <div class="copy-acks">${acks}</div>`;
   }
 
@@ -126,14 +128,14 @@ export function createArmGate(page) {
       const confirmation = state.defaults?.live_confirmation;
       if (!confirmation)
         throw Object.assign(new Error("missing"), {
-          detail: "The live confirmation could not be loaded",
+          detail: I18n.t("copy-arm-confirmation-missing"),
         });
       await api.setMode(task.id, "live", confirmation);
       dialogs.hide("copy-arm");
-      toast("warning", "Live copying armed", taskName(task));
+      notify("warning", I18n.t("copy-arm-armed"), taskName(task));
       await page.reload();
     } catch (failure) {
-      if (error) error.textContent = failure.detail || "Live copying could not be armed";
+      if (error) error.textContent = failure.detail || I18n.t("copy-arm-failed");
       sync();
     }
   }

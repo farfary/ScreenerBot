@@ -2,11 +2,10 @@
 // observed through copy tasks, each task's results) and "Copy this wallet".
 import { renderAddress } from "../../ui/token_identity.js";
 import {
-  MODE_LABELS,
   dateTime,
   definitionRows,
+  modeLabel,
   pct,
-  plural,
   seconds,
   signedSol,
   timeAgo,
@@ -33,21 +32,32 @@ export function createProfile(page) {
     if (!watch) {
       return [
         [
-          "Watched",
-          "No",
-          tasks.length ? "Resuming a task watches it again" : "Adding a task starts watching it",
+          I18n.t("copy-profile-watched"),
+          I18n.t("format-no"),
+          tasks.length
+            ? I18n.t("copy-profile-watch-resume-hint")
+            : I18n.t("copy-profile-watch-add-hint"),
         ],
       ];
     }
     return [
-      ["Watched", watch.enabled ? "Yes" : "Paused", watch.label || ""],
       [
-        "Stream",
-        watch.subscribed ? "Subscribed" : "Not subscribed",
-        plural(watch.sources, "source"),
+        I18n.t("copy-profile-watched"),
+        watch.enabled ? I18n.t("format-yes") : I18n.t("copy-state-paused"),
+        watch.label || "",
       ],
-      ["Last activity", watch.last_activity_at ? timeAgo(watch.last_activity_at) : "—"],
-      watch.last_error ? ["Last error", I18n.text(watch.last_error)] : null,
+      [
+        I18n.t("copy-profile-stream"),
+        watch.subscribed
+          ? I18n.t("copy-profile-subscribed")
+          : I18n.t("copy-profile-not-subscribed"),
+        I18n.t("copy-profile-sources", { count: watch.sources }),
+      ],
+      [
+        I18n.t("copy-profile-last-activity"),
+        watch.last_activity_at ? timeAgo(watch.last_activity_at) : "—",
+      ],
+      watch.last_error ? [I18n.t("copy-profile-last-error"), I18n.text(watch.last_error)] : null,
     ];
   }
 
@@ -57,7 +67,7 @@ export function createProfile(page) {
       .map(
         (task) => `<tr>
           <td><button class="copy-token-link" type="button" data-profile-task="${task.task_id}">${esc(task.name)}</button></td>
-          <td>${esc(MODE_LABELS[task.mode] || task.mode)}${task.enabled ? "" : " · paused"}</td>
+          <td>${esc(task.enabled ? modeLabel(task.mode) : I18n.t("copy-mode-paused", { mode: modeLabel(task.mode) }))}</td>
           <td class="num">${task.rounds}</td>
           <td class="num">${esc(task.rounds ? pct(task.win_rate_pct, 0) : "—")}</td>
           <td class="num ${toneClass(task.realized_pnl_sol)}">${esc(signedSol(task.realized_pnl_sol))}</td>
@@ -65,33 +75,40 @@ export function createProfile(page) {
         </tr>`
       )
       .join("");
-    return `<h4>Your tasks on this wallet</h4><div class="copy-table-wrap"><table class="copy-table"><thead><tr><th scope="col">Task</th><th scope="col">Mode</th><th scope="col" class="num">Rounds</th><th scope="col" class="num">Win rate</th><th scope="col" class="num">Realized</th><th scope="col" class="num">Median arrival</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    return `<h4>${esc(I18n.t("copy-profile-tasks-title"))}</h4><div class="copy-table-wrap"><table class="copy-table"><thead><tr><th scope="col">${esc(I18n.t("copy-table-task"))}</th><th scope="col">${esc(I18n.t("copy-table-mode"))}</th><th scope="col" class="num">${esc(I18n.t("copy-table-rounds"))}</th><th scope="col" class="num">${esc(I18n.t("copy-metric-win-rate"))}</th><th scope="col" class="num">${esc(I18n.t("copy-table-realized"))}</th><th scope="col" class="num">${esc(I18n.t("copy-metric-median-arrival"))}</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   }
 
   function render(profile) {
     const seen = profile.observations || {};
     const own = profile.own_wallet
-      ? '<p class="copy-warning" role="alert"><i class="icon-triangle-alert" aria-hidden="true"></i>This is one of your own wallets; copying it is refused.</p>'
+      ? `<p class="copy-warning" role="alert"><i class="icon-triangle-alert" aria-hidden="true"></i>${esc(I18n.t("copy-profile-own-wallet"))}</p>`
       : "";
     const observed = seen.swaps
       ? definitionRows(
           [
-            ["Swaps seen", String(seen.swaps), "Distinct wallet swaps across your tasks"],
-            ["Buys / sells", `${seen.buys} / ${seen.sells}`],
-            ["Tokens traded", String(seen.tokens)],
-            ["First seen", dateTime(seen.first_seen)],
-            ["Last seen", dateTime(seen.last_seen)],
+            [
+              I18n.t("copy-profile-swaps-seen"),
+              String(seen.swaps),
+              I18n.t("copy-profile-swaps-seen-note"),
+            ],
+            [
+              I18n.t("copy-profile-buys-sells"),
+              I18n.t("copy-profile-buys-sells-value", { buys: seen.buys, sells: seen.sells }),
+            ],
+            [I18n.t("copy-profile-tokens-traded"), String(seen.tokens)],
+            [I18n.t("copy-profile-first-seen"), dateTime(seen.first_seen)],
+            [I18n.t("copy-profile-last-seen"), dateTime(seen.last_seen)],
           ],
           esc
         )
       : "";
     return `<div class="copy-profile-address">${renderAddress(profile.address, { explorer: "account" })}</div>${own}
       <div class="copy-split">
-        <section><h4>Watch</h4><dl class="copy-defs">${definitionRows(watchRows(profile.watch, profile.tasks || []), esc)}</dl></section>
-        <section><h4>Trades observed</h4>${
+        <section><h4>${esc(I18n.t("copy-profile-watch-title"))}</h4><dl class="copy-defs">${definitionRows(watchRows(profile.watch, profile.tasks || []), esc)}</dl></section>
+        <section><h4>${esc(I18n.t("copy-profile-observed-title"))}</h4>${
           observed
             ? `<dl class="copy-defs">${observed}</dl>`
-            : '<p class="copy-note">No trades from this wallet in this bot yet. A Paper task observes it without spending SOL.</p>'
+            : `<p class="copy-note">${esc(I18n.t("copy-profile-observed-none"))}</p>`
         }</section>
       </div>${tasksTable(profile.tasks || [])}`;
   }
@@ -103,7 +120,7 @@ export function createProfile(page) {
     const copy = $("#copy-profile-copy");
     if (copy) copy.disabled = true;
     const body = $("#copy-profile-body");
-    paint(body, panelMessage("Loading wallet profile…", esc));
+    paint(body, panelMessage(I18n.t("copy-profile-loading"), esc));
     dialogs.show("copy-profile");
     try {
       const profile = await api.profile(address);
@@ -112,7 +129,9 @@ export function createProfile(page) {
       paint(body, render(profile));
       if (copy) {
         copy.disabled = profile.own_wallet;
-        copy.textContent = profile.tasks?.length ? "Copy with other rules" : "Copy this wallet";
+        copy.textContent = profile.tasks?.length
+          ? I18n.t("copy-profile-copy-other")
+          : I18n.t("copy-profile-copy");
       }
     } catch (failure) {
       if (current?.address !== address) return;

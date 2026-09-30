@@ -1,7 +1,7 @@
 // The stepped task editor: Wallet → Sizing → Entry filters → Exits → Review.
 // Creating and cloning post a new task; editing patches every field except the
 // wallet, which is a task's identity.
-import { MODE_LABELS, taskName } from "./format.js";
+import { modeLabel, taskName } from "./format.js";
 import { PRESETS, normalizeOverrides } from "./policy.js";
 import {
   STEPS,
@@ -22,7 +22,7 @@ const NEW_TASK = {
 };
 
 export function createEditor(page) {
-  const { $, Utils, api, state, on, toast, confirm, dialogs } = page;
+  const { $, Utils, api, state, on, notify, confirm, dialogs } = page;
   const esc = Utils.escapeHtml;
   let mode = "create";
   let source = null;
@@ -110,13 +110,14 @@ export function createEditor(page) {
     readStep();
     if (!dirty()) return true;
     const result = await confirm({
-      title: mode === "edit" ? "Discard changes" : "Discard this task",
+      title:
+        mode === "edit" ? I18n.t("copy-editor-discard-edit") : I18n.t("copy-editor-discard-create"),
       message:
         mode === "edit"
-          ? `Your changes to “${taskName(source)}” are not saved.`
-          : "The wallet and rules entered so far are not saved.",
-      confirmLabel: "Discard",
-      cancelLabel: "Keep editing",
+          ? I18n.t("copy-editor-discard-edit-message", { name: taskName(source) })
+          : I18n.t("copy-editor-discard-create-message"),
+      confirmLabel: I18n.t("copy-editor-discard-confirm"),
+      cancelLabel: I18n.t("copy-editor-keep-editing"),
       variant: "warning",
     });
     return result.confirmed;
@@ -137,18 +138,18 @@ export function createEditor(page) {
     if (title) {
       title.textContent =
         mode === "edit"
-          ? `Edit ${taskName(source)}`
+          ? I18n.t("copy-editor-title-edit", { name: taskName(source) })
           : mode === "clone"
-            ? `Clone ${taskName(source)}`
-            : "Add wallet";
+            ? I18n.t("copy-editor-title-clone", { name: taskName(source) })
+            : I18n.t("copy-editor-title-add");
     }
     if (sub) {
       sub.textContent =
         mode === "edit"
-          ? `${MODE_LABELS[source.mode] || source.mode} task · changes apply to its next decisions`
+          ? I18n.t("copy-editor-sub-edit", { mode: modeLabel(source.mode) })
           : mode === "clone"
-            ? "Same rules, empty paper book, starts in Paper"
-            : "New tasks start in Paper";
+            ? I18n.t("copy-editor-sub-clone")
+            : I18n.t("copy-editor-sub-add");
     }
     shownStep = null;
     render();
@@ -198,7 +199,12 @@ export function createEditor(page) {
   function openClone(task) {
     mode = "clone";
     source = task;
-    draft = { ...fromTask(task), label: `${taskName(task)} (copy)`, enabled: false, mode: "paper" };
+    draft = {
+      ...fromTask(task),
+      label: `${taskName(task)} ${I18n.t("copy-editor-clone-suffix")}`,
+      enabled: false,
+      mode: "paper",
+    };
     start("wallet");
   }
 
@@ -238,7 +244,11 @@ export function createEditor(page) {
     if (saveButton) {
       saveButton.hidden = !saving;
       saveButton.textContent =
-        mode === "edit" ? "Save changes" : mode === "clone" ? "Create clone" : "Create paper task";
+        mode === "edit"
+          ? I18n.t("copy-editor-save-edit")
+          : mode === "clone"
+            ? I18n.t("copy-editor-save-clone")
+            : I18n.t("copy-editor-save-create");
     }
   }
 
@@ -348,13 +358,15 @@ export function createEditor(page) {
         delete patch.mode;
         await api.update(source.id, patch);
         dialogs.hide("copy-editor");
-        toast("success", "Task updated", taskName(source));
+        notify("success", I18n.t("copy-editor-toast-updated"), taskName(source));
       } else {
         const response = await api.create(input());
         dialogs.hide("copy-editor");
-        toast(
+        notify(
           "success",
-          mode === "clone" ? "Clone created" : "Paper task created",
+          mode === "clone"
+            ? I18n.t("copy-editor-toast-clone")
+            : I18n.t("copy-editor-toast-created"),
           taskName(response.task)
         );
         state.view = "task";

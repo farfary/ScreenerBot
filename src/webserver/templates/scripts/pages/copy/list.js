@@ -2,20 +2,35 @@
 // paused), its execution mode, P&L with a trend, and its budget use.
 import { sparkline } from "./charts.js";
 import {
-  MODE_LABELS,
-  STATE_LABELS,
   fixed,
+  modeLabel,
   pauseReasonShort,
   segmented,
   signedSol,
+  stateLabel,
   taskName,
   toneClass,
 } from "./format.js";
 
 const SORTS = [
-  { id: "pnl", label: "P&L" },
-  { id: "state", label: "State" },
-  { id: "name", label: "Name" },
+  {
+    id: "pnl",
+    get label() {
+      return I18n.t("copy-sort-pnl");
+    },
+  },
+  {
+    id: "state",
+    get label() {
+      return I18n.t("copy-sort-state");
+    },
+  },
+  {
+    id: "name",
+    get label() {
+      return I18n.t("copy-sort-name");
+    },
+  },
 ];
 
 const pnlOf = (task) =>
@@ -42,7 +57,7 @@ export function stateText(task) {
       ? I18n.t("copy-state-paused-reason", { reason: short })
       : I18n.t("copy-state-paused");
   }
-  return STATE_LABELS[task.effective_state] || "Unknown";
+  return stateLabel(task.effective_state);
 }
 
 export function createTaskList(page) {
@@ -73,14 +88,14 @@ export function createTaskList(page) {
     return `<button type="button" class="copy-row${selected ? " is-selected" : ""}" data-task-id="${task.id}" aria-pressed="${selected}">
       <span class="copy-row-line">
         <span class="copy-row-name">${esc(taskName(task))}</span>
-        <span class="copy-row-mode copy-mode-${esc(task.mode)}">${esc(MODE_LABELS[task.mode] || task.mode)}</span>
+        <span class="copy-row-mode copy-mode-${esc(task.mode)}">${esc(modeLabel(task.mode))}</span>
       </span>
       <span class="copy-row-line">
         <span class="copy-row-state ${stateClass}">${esc(stateText(task))}</span>
         <span class="copy-row-pnl ${toneClass(pnl)}">${esc(signedSol(pnl, 3))}</span>
       </span>
       <span class="copy-row-line copy-row-detail">
-        <span class="copy-row-budget"><span class="copy-meter" aria-hidden="true"><span style="width:${budgetPct.toFixed(1)}%"></span></span><span>${esc(`${fixed(spent, 2)} / ${fixed(budget, 2)} SOL`)}</span></span>
+        <span class="copy-row-budget"><span class="copy-meter" aria-hidden="true"><span style="width:${budgetPct.toFixed(1)}%"></span></span><span>${esc(I18n.t("copy-budget-of", { spent: fixed(spent, 2), budget: fixed(budget, 2) }))}</span></span>
         ${sparkline(task.pnl_trend)}
       </span>
     </button>`;
@@ -93,9 +108,10 @@ export function createTaskList(page) {
     lastHash = hash;
     const active = tasks.filter((task) => task.enabled).length;
     const count = $("#copy-list-count");
-    if (count) count.textContent = `${active} active · ${tasks.length} total`;
+    if (count) count.textContent = I18n.t("copy-list-count", { active, total: tasks.length });
     const sort = $("#copy-list-sort");
-    if (sort) sort.innerHTML = segmented("sort", SORTS, state.sort, esc, "Sort wallets");
+    if (sort)
+      sort.innerHTML = segmented("sort", SORTS, state.sort, esc, I18n.t("copy-list-sort-label"));
     const rows = $("#copy-list-rows");
     if (rows) rows.innerHTML = sorted(tasks, state.sort).map(row).join("");
     const compare = $("#copy-compare-open");

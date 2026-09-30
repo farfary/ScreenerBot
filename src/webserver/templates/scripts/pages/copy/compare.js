@@ -2,10 +2,10 @@
 // table. Choosing a wallet opens its workspace.
 import { comparisonCurves } from "./charts.js";
 import {
-  MODE_LABELS,
   RANGES,
   duration,
   fixed,
+  modeLabel,
   pct,
   rangeQuery,
   seconds,
@@ -55,7 +55,7 @@ export function createCompare(page) {
       .map(
         (row) => `<tr>
           <td><button class="copy-token-link" type="button" data-compare-task="${row.task_id}">${esc(row.name)}</button></td>
-          <td><span class="copy-row-mode copy-mode-${esc(row.mode)}">${esc(MODE_LABELS[row.mode] || row.mode)}</span>${row.enabled ? "" : '<small class="copy-muted"> · paused</small>'}</td>
+          <td><span class="copy-row-mode copy-mode-${esc(row.mode)}">${esc(modeLabel(row.mode))}</span>${row.enabled ? "" : `<small class="copy-muted"> ${esc(I18n.t("copy-paused-suffix"))}</small>`}</td>
           <td class="num">${row.rounds}</td>
           <td class="num">${esc(row.rounds ? pct(row.win_rate_pct, 0) : "—")}</td>
           <td class="num ${toneClass(row.realized_pnl_sol)}">${esc(signedSol(row.realized_pnl_sol))}</td>
@@ -68,7 +68,22 @@ export function createCompare(page) {
         </tr>`
       )
       .join("");
-    return `<div class="copy-table-wrap"><table class="copy-table"><thead><tr><th scope="col">Wallet</th><th scope="col">Mode</th><th scope="col" class="num">Rounds</th><th scope="col" class="num">Win rate</th><th scope="col" class="num">Realized</th><th scope="col" class="num">Profit factor</th><th scope="col" class="num">Avg hold</th><th scope="col" class="num">Median arrival</th><th scope="col" class="num">Median slippage</th><th scope="col" class="num">Fills</th><th scope="col" class="num">Skips</th></tr></thead><tbody>${body}</tbody></table></div>`;
+    const head = [
+      ["", I18n.t("copy-table-wallet")],
+      ["", I18n.t("copy-table-mode")],
+      ["num", I18n.t("copy-table-rounds")],
+      ["num", I18n.t("copy-metric-win-rate")],
+      ["num", I18n.t("copy-table-realized")],
+      ["num", I18n.t("copy-table-profit-factor")],
+      ["num", I18n.t("copy-table-average-hold")],
+      ["num", I18n.t("copy-metric-median-arrival")],
+      ["num", I18n.t("copy-table-median-slippage")],
+      ["num", I18n.t("copy-kind-fills")],
+      ["num", I18n.t("copy-kind-skips")],
+    ]
+      .map(([cls, text]) => `<th scope="col"${cls ? ` class="${cls}"` : ""}>${esc(text)}</th>`)
+      .join("");
+    return `<div class="copy-table-wrap"><table class="copy-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
   }
 
   function render() {
@@ -83,15 +98,15 @@ export function createCompare(page) {
     if (workspace) workspace.hidden = true;
     const rows = data.get(state.range);
     const error = errors.get(state.range);
-    const head = `<div class="copy-panel-head"><h2>Compare wallets</h2><div class="copy-panel-tools">${segmented("compare-range", RANGES, state.range, esc, "Date range")}<button class="btn btn-ghost btn-sm" type="button" data-compare-close>Back to wallet</button></div></div>`;
+    const head = `<div class="copy-panel-head"><h2>${esc(I18n.t("copy-compare-title"))}</h2><div class="copy-panel-tools">${segmented("compare-range", RANGES, state.range, esc, I18n.attr("copy-range-label", "aria-label"))}<button class="btn btn-ghost btn-sm" type="button" data-compare-close>${esc(I18n.t("copy-compare-back"))}</button></div></div>`;
     let body;
     if (!rows)
       body = error
-        ? panelMessage(`Comparison could not be loaded: ${error}`, esc, "is-error")
-        : panelMessage("Loading comparison…", esc);
-    else if (!rows.length) body = panelMessage("No tasks to compare.", esc);
+        ? panelMessage(I18n.t("copy-compare-load-failed", { error }), esc, "is-error")
+        : panelMessage(I18n.t("copy-compare-loading"), esc);
+    else if (!rows.length) body = panelMessage(I18n.t("copy-compare-empty"), esc);
     else {
-      body = `<section class="copy-card"><h4>Cumulative realized P&amp;L</h4>${comparisonCurves(
+      body = `<section class="copy-card"><h4>${esc(I18n.t("copy-compare-curve-title"))}</h4>${comparisonCurves(
         rows.map((row) => ({ name: row.name, points: row.pnl_curve })),
         { escapeHtml: esc }
       )}</section>${table(rows)}`;

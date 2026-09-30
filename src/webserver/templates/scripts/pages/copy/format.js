@@ -11,35 +11,55 @@ import {
   formatTimeSpan,
   formatTimestamp,
   formatUptime,
+  withSolUnit,
 } from "../../core/format.js";
+import { closeReasonText } from "../../ui/trade_reason.js";
 
 export const SOLANA_ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
-export const STATE_LABELS = {
-  system_paused: "Paused globally",
-  force_stopped: "Force stopped",
-  paused: "Paused",
-  entries_blocked: "Entries blocked",
-  live: "Running",
-  paper: "Running",
-};
+// Task states computed by `effective_state` (src/trader/copy/control.rs).
+const STATE_LABELS = Object.freeze({
+  system_paused: "copy-state-system-paused",
+  force_stopped: "copy-state-force-stopped",
+  paused: "copy-state-paused",
+  entries_blocked: "copy-state-entries-blocked",
+  live: "copy-state-running-live",
+  paper: "copy-state-running-paper",
+});
 
-export const MODE_LABELS = { paper: "Paper", live: "Live" };
+// Execution modes serialized by `CopyMode` (src/trader/copy/types.rs).
+const MODE_LABELS = Object.freeze({
+  paper: "copy-mode-paper",
+  live: "copy-mode-live",
+});
 
-export const EXIT_MODE_LABELS = {
-  buy_only: "My exit rules",
-  mirror: "Mirror wallet sells",
-  hybrid: "Wallet sells and my rules",
-};
+// Exit modes serialized by `ExitMode` (src/trader/copy/types.rs).
+const EXIT_MODE_LABELS = Object.freeze({
+  buy_only: "copy-exit-mode-buy-only",
+  mirror: "copy-exit-mode-mirror",
+  hybrid: "copy-exit-mode-hybrid",
+});
 
-export const EXIT_LABELS = {
-  target_sell: "Wallet sold",
-  stop_loss: "Stop loss",
-  trailing_stop: "Trailing stop",
-  take_profit: "Take profit",
-  time_override: "Time rule",
-  manual: "Closed by hand",
-};
+// What closed a round: `target_sell` or a `PaperExitRule` (src/trader/copy/insights.rs).
+const EXIT_LABELS = Object.freeze({
+  target_sell: "copy-exit-target-sell",
+  stop_loss: "copy-exit-stop-loss",
+  trailing_stop: "copy-exit-trailing-stop",
+  take_profit: "copy-exit-take-profit",
+  time_override: "copy-exit-time-override",
+  manual: "copy-exit-manual",
+});
+
+export const stateLabel = (state) =>
+  Object.hasOwn(STATE_LABELS, state) ? I18n.label(STATE_LABELS, state) : I18n.t("format-unknown");
+
+export const modeLabel = (mode) => I18n.label(MODE_LABELS, mode);
+
+export const exitModeLabel = (mode) => I18n.label(EXIT_MODE_LABELS, mode);
+
+/** A closed live round carries the trade's close reason instead of a copy exit id. */
+export const exitLabel = (exit) =>
+  Object.hasOwn(EXIT_LABELS, exit) ? I18n.label(EXIT_LABELS, exit) : closeReasonText(exit);
 
 // Skip ids serialized by `CopySkip` (src/trader/copy/types.rs).
 const SKIP_LABELS = Object.freeze({
@@ -120,11 +140,6 @@ export function pauseReasonShort(reason) {
     : "";
 }
 
-/** "1 task", "3 tasks": a count with its noun in agreement. */
-export function plural(count, one, many = `${one}s`) {
-  return `${count} ${Number(count) === 1 ? one : many}`;
-}
-
 export function finite(value) {
   const number = Number(value);
   return value !== null && value !== undefined && value !== "" && Number.isFinite(number)
@@ -172,8 +187,8 @@ export function unrealizedFigure(pnlSol, openHoldings, unpricedHoldings) {
     value: priced > 0 ? pnlSol : null,
     note:
       priced > 0
-        ? `${plural(priced, "priced holding")} · ${unpriced} without a price`
-        : `${plural(unpriced, "holding")} without a price`,
+        ? I18n.t("copy-unrealized-partial", { priced, unpriced })
+        : I18n.t("copy-unrealized-unpriced", { count: unpriced }),
   };
 }
 
@@ -190,6 +205,11 @@ export function price(value) {
   if (number === 0) return "0";
   const decimals = number >= 1 ? 4 : Math.min(12, Math.max(4, Math.ceil(-Math.log10(number)) + 3));
   return formatPriceSol(number, { decimals });
+}
+
+/** A pool price with its SOL unit, for tooltips and messages. */
+export function priceSol(value) {
+  return withSolUnit(price(value));
 }
 
 export function seconds(ms) {
@@ -227,10 +247,34 @@ export function taskName(task) {
 
 /** Range presets for analytics, as `from` timestamps. */
 export const RANGES = [
-  { id: "24h", label: "24h", hours: 24 },
-  { id: "7d", label: "7d", hours: 24 * 7 },
-  { id: "30d", label: "30d", hours: 24 * 30 },
-  { id: "all", label: "All", hours: null },
+  {
+    id: "24h",
+    hours: 24,
+    get label() {
+      return I18n.t("copy-range-24h");
+    },
+  },
+  {
+    id: "7d",
+    hours: 24 * 7,
+    get label() {
+      return I18n.t("copy-range-7d");
+    },
+  },
+  {
+    id: "30d",
+    hours: 24 * 30,
+    get label() {
+      return I18n.t("copy-range-30d");
+    },
+  },
+  {
+    id: "all",
+    hours: null,
+    get label() {
+      return I18n.t("copy-range-all");
+    },
+  },
 ];
 
 export function rangeQuery(rangeId) {
@@ -240,7 +284,7 @@ export function rangeQuery(rangeId) {
 }
 
 /** A `.copy-seg` segmented choice: native radios, one painted segment each. */
-export function segmented(name, options, value, escapeHtml, ariaLabel = name) {
+export function segmented(name, options, value, escapeHtml, ariaLabel) {
   const group = escapeHtml(name);
   return `<div class="copy-seg" role="radiogroup" aria-label="${escapeHtml(ariaLabel)}" data-seg="${group}">${options
     .map((option) => {

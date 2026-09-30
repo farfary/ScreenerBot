@@ -245,7 +245,7 @@ pub async fn task_stats(id: i64) -> Result<CopyTaskStats> {
     task_stats_for(&db, &task, &all_positions().await).await
 }
 
-fn effective_state(status: &CopyTradingStatus, task: &CopyTask) -> &'static str {
+pub(super) fn effective_state(status: &CopyTradingStatus, task: &CopyTask) -> &'static str {
     if !status.enabled {
         "system_paused"
     } else if status.blocked_reason == Some("force_stop") {

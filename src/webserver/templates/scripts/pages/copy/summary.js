@@ -1,5 +1,5 @@
 // The status strip and the totals row above the wallet list.
-import { fixed, plural, pct, seconds, signedSol, toneClass, unrealizedFigure } from "./format.js";
+import { fixed, pct, seconds, signedSol, toneClass, unrealizedFigure } from "./format.js";
 
 export function renderStrip(page) {
   const { $, state } = page;
@@ -8,7 +8,9 @@ export function renderStrip(page) {
   const button = $("#copy-global-action");
   if (!node || !button) return;
   if (!status) {
-    node.textContent = state.loadError ? "Unavailable" : "Loading";
+    node.textContent = state.loadError
+      ? I18n.t("copy-strip-unavailable")
+      : I18n.t("copy-strip-loading");
     node.dataset.state = "unknown";
     button.disabled = true;
     return;
@@ -16,29 +18,33 @@ export function renderStrip(page) {
   let label;
   let tone;
   if (!status.enabled) {
-    label = "Paused globally · no new copies, exits still run";
+    label = I18n.t("copy-strip-paused-globally");
     tone = "paused";
   } else if (status.blocked_reason === "force_stop") {
-    label = "Force stopped · nothing is copied";
+    label = I18n.t("copy-strip-force-stopped");
     tone = "blocked";
   } else if (status.blocked_reason === "loss_limit") {
-    label = "Loss limit · new entries blocked, exits still run";
+    label = I18n.t("copy-strip-loss-limit");
     tone = "blocked";
   } else if (!status.live_tasks && !status.paper_tasks) {
     label = status.total_tasks
-      ? `Idle · ${plural(status.total_tasks, "task")} paused`
-      : "Idle · no tasks yet";
+      ? I18n.t("copy-strip-idle-paused", { count: status.total_tasks })
+      : I18n.t("copy-strip-idle-empty");
     tone = "idle";
   } else {
-    const parts = [];
-    if (status.live_tasks) parts.push(`${status.live_tasks} live`);
-    parts.push(`${status.paper_tasks} paper`);
-    label = `Processing · ${parts.join(" · ")}`;
+    label = status.live_tasks
+      ? I18n.t("copy-strip-processing-live", {
+          live: status.live_tasks,
+          paper: status.paper_tasks,
+        })
+      : I18n.t("copy-strip-processing", { paper: status.paper_tasks });
     tone = "running";
   }
   node.textContent = label;
   node.dataset.state = tone;
-  button.textContent = status.enabled ? "Pause all" : "Resume processing";
+  button.textContent = status.enabled
+    ? I18n.t("copy-strip-pause-all")
+    : I18n.t("copy-strip-resume");
   button.disabled = !status.total_tasks;
 }
 
@@ -64,43 +70,57 @@ export function renderFigures(page) {
   );
   root.innerHTML = [
     figure(
-      "Realized P&L",
+      I18n.t("copy-metric-realized-pnl"),
       signedSol(totals.realized_pnl_sol),
-      { tone: toneClass(totals.realized_pnl_sol), note: plural(rounds, "closed round") },
-      esc
-    ),
-    figure(
-      "Unrealized P&L",
-      signedSol(marked.value),
       {
-        tone: toneClass(marked.value),
-        note: marked.note || "Marked at the pool price",
+        tone: toneClass(totals.realized_pnl_sol),
+        note: I18n.t("copy-count-closed-rounds", { count: rounds }),
       },
       esc
     ),
     figure(
-      "Win rate",
-      rounds ? pct(totals.win_rate_pct, 0) : "—",
-      { note: `${totals.wins} won · ${totals.losses} lost` },
+      I18n.t("copy-metric-unrealized-pnl"),
+      signedSol(marked.value),
+      {
+        tone: toneClass(marked.value),
+        note: marked.note || I18n.t("copy-figure-marked-at-pool"),
+      },
       esc
     ),
-    figure("Open holdings", String(totals.open_holdings), { note: "Across all tasks" }, esc),
     figure(
-      "Budget spent",
-      budget > 0 ? `${fixed(spent, 2)} / ${fixed(budget, 2)} SOL` : "—",
+      I18n.t("copy-metric-win-rate"),
+      rounds ? pct(totals.win_rate_pct, 0) : "—",
+      { note: I18n.t("copy-record-won-lost", { won: totals.wins, lost: totals.losses }) },
+      esc
+    ),
+    figure(
+      I18n.t("copy-metric-open-holdings"),
+      String(totals.open_holdings),
+      { note: I18n.t("copy-figure-across-tasks") },
+      esc
+    ),
+    figure(
+      I18n.t("copy-metric-budget-spent"),
+      budget > 0
+        ? I18n.t("copy-budget-of", { spent: fixed(spent, 2), budget: fixed(budget, 2) })
+        : "—",
       {
-        note: budget > 0 ? "Lifetime spend of enabled tasks" : "No enabled tasks",
+        note:
+          budget > 0 ? I18n.t("copy-figure-budget-lifetime") : I18n.t("copy-figure-budget-none"),
         extra: `<span class="copy-meter" aria-hidden="true"><span style="width:${budgetPct.toFixed(1)}%"></span></span>`,
       },
       esc
     ),
     figure(
-      "Median arrival",
+      I18n.t("copy-metric-median-arrival"),
       seconds(arrival.median_ms),
       {
         note: arrival.samples
-          ? `p95 ${seconds(arrival.p95_ms)} · ${arrival.samples} trades`
-          : "No samples from enabled tasks",
+          ? I18n.t("copy-figure-arrival-samples", {
+              p95: seconds(arrival.p95_ms),
+              count: arrival.samples,
+            })
+          : I18n.t("copy-figure-arrival-none"),
       },
       esc
     ),

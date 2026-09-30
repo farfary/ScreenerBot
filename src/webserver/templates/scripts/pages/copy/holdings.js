@@ -3,10 +3,11 @@
 import { loadPage } from "../../core/router.js";
 import { getIdentity } from "../../ui/token_identity.js";
 import {
-  EXIT_LABELS,
   dateTime,
   duration,
+  exitLabel,
   price,
+  priceSol,
   segmented,
   shortAddress,
   signedPct,
@@ -21,14 +22,31 @@ import { panelMessage } from "./overview.js";
 const relative = (trigger, entry) =>
   trigger != null && entry > 0 ? (Number(trigger) / Number(entry) - 1) * 100 : null;
 
-function untilText(value) {
+/** The time until a rule acts, or an empty string once it can act or has no time. */
+function untilSpan(value) {
   if (!value) return "";
   const seconds = (new Date(value).getTime() - Date.now()) / 1000;
-  return seconds > 0 ? ` in ${duration(seconds)}` : "";
+  return seconds > 0 ? duration(seconds) : "";
+}
+
+/** A stop rule's level, with its wait when it is not armed yet. */
+function stopText(level, armedAt) {
+  const span = untilSpan(armedAt);
+  return span
+    ? I18n.t("copy-holdings-watch-stop-until", { level, span })
+    : I18n.t("copy-holdings-watch-stop", { level });
+}
+
+/** A time rule's level, with its wait when it does not act yet. */
+function timeText(level, from) {
+  const span = untilSpan(from);
+  return span
+    ? I18n.t("copy-holdings-watch-time-until", { level, span })
+    : I18n.t("copy-holdings-watch-time", { level });
 }
 
 export function createHoldings(page, { rerender, showActivityFor }) {
-  const { Utils, api, on, toast, confirm } = page;
+  const { Utils, api, on, notify, confirm } = page;
   const esc = Utils.escapeHtml;
   let view = "open";
   let lastWs = null;
@@ -57,62 +75,72 @@ export function createHoldings(page, { rerender, showActivityFor }) {
   }
 
   function tokenCell(mint, shared) {
-    return `<button class="copy-token-link" type="button" data-holding-action="details" data-mint="${esc(mint)}" title="${esc(`Open token details · ${mint}`)}">${tokenInline(mint, shared)}</button>`;
+    return `<button class="copy-token-link" type="button" data-holding-action="details" data-mint="${esc(mint)}" title="${esc(`${I18n.t("copy-holdings-token-details")} · ${mint}`)}">${tokenInline(mint, shared)}</button>`;
   }
 
   /** A price relative to the entry, with the price itself on hover. */
   function relativeCell(value, entry) {
     if (value == null) return '<td class="num">—</td>';
-    return `<td class="num" title="${esc(`${price(value)} SOL`)}">${esc(signedPct(relative(value, entry)))}</td>`;
+    return `<td class="num" title="${esc(priceSol(value))}">${esc(signedPct(relative(value, entry)))}</td>`;
   }
 
   function exitCell(holding, ws) {
     const watch = holding.exit_watch;
-    if (!watch) return '<span class="copy-muted">Wallet sells only</span>';
+    if (!watch) {
+      return `<span class="copy-muted">${esc(I18n.t("copy-rules-wallet-sells-only"))}</span>`;
+    }
     const entry = holding.entry_price_sol;
     const items = [];
     if (watch.stop_loss_price_sol != null) {
       items.push([
-        `Stop ${signedPct(relative(watch.stop_loss_price_sol, entry))}${untilText(watch.stop_loss_armed_at)}`,
+        stopText(signedPct(relative(watch.stop_loss_price_sol, entry)), watch.stop_loss_armed_at),
         watch.stop_loss_price_sol,
       ]);
     }
     if (watch.take_profit_price_sol != null) {
       items.push([
-        `Take ${signedPct(relative(watch.take_profit_price_sol, entry))}`,
+        I18n.t("copy-holdings-watch-take", {
+          level: signedPct(relative(watch.take_profit_price_sol, entry)),
+        }),
         watch.take_profit_price_sol,
       ]);
     }
     if (watch.trailing_armed && watch.trailing_stop_price_sol != null) {
       items.push([
-        `Trail ${signedPct(relative(watch.trailing_stop_price_sol, entry))}`,
+        I18n.t("copy-holdings-watch-trail", {
+          level: signedPct(relative(watch.trailing_stop_price_sol, entry)),
+        }),
         watch.trailing_stop_price_sol,
       ]);
     } else if (watch.trailing_activation_price_sol != null) {
       items.push([
-        `Trail arms ${signedPct(relative(watch.trailing_activation_price_sol, entry))}`,
+        I18n.t("copy-holdings-watch-trail-arms", {
+          level: signedPct(relative(watch.trailing_activation_price_sol, entry)),
+        }),
         watch.trailing_activation_price_sol,
       ]);
     }
     if (watch.time_rule_price_sol != null) {
       items.push([
-        `Time ≤ ${signedPct(relative(watch.time_rule_price_sol, entry))}${untilText(watch.time_rule_from)}`,
+        timeText(signedPct(relative(watch.time_rule_price_sol, entry)), watch.time_rule_from),
         watch.time_rule_price_sol,
       ]);
     }
-    if (ws.exit_mode === "hybrid") items.push(["Wallet sells", null]);
-    if (!items.length) return '<span class="copy-warning-text">No exit rule</span>';
+    if (ws.exit_mode === "hybrid") items.push([I18n.t("copy-holdings-watch-wallet-sells"), null]);
+    if (!items.length) {
+      return `<span class="copy-warning-text">${esc(I18n.t("copy-holdings-no-exit-rule"))}</span>`;
+    }
     return `<span class="copy-exit-list">${items
       .map(
         ([text, at]) =>
-          `<span${at != null ? ` title="${esc(`${price(at)} SOL`)}"` : ""}>${esc(text)}</span>`
+          `<span${at != null ? ` title="${esc(priceSol(at))}"` : ""}>${esc(text)}</span>`
       )
       .join("")}</span>`;
   }
 
   function openTable(holdings, ws) {
     if (!holdings.length) {
-      return panelMessage("No open paper holdings. Buys copied from the wallet appear here.", esc);
+      return panelMessage(I18n.t("copy-holdings-empty"), esc);
     }
     const shared = sharedSymbols(holdings.map((holding) => holding.mint));
     const rows = holdings
@@ -120,7 +148,7 @@ export function createHoldings(page, { rerender, showActivityFor }) {
         const priced = holding.mark_price_sol != null;
         const pnl = priced
           ? `<span class="${toneClass(holding.unrealized_pnl_sol)}">${esc(signedSol(holding.unrealized_pnl_sol))}</span><small>${esc(signedPct(holding.unrealized_pnl_pct))}</small>`
-          : '<span class="copy-warning-text">No pool price</span>';
+          : `<span class="copy-warning-text">${esc(I18n.t("copy-holdings-no-pool-price"))}</span>`;
         return `<tr>
           <td>${tokenCell(holding.mint, shared)}</td>
           <td class="num">${esc(sol(holding.cost_basis_sol))}</td>
@@ -129,38 +157,38 @@ export function createHoldings(page, { rerender, showActivityFor }) {
           ${relativeCell(holding.peak_price_sol, holding.entry_price_sol)}
           <td class="num copy-cell-stack">${pnl}</td>
           <td>${exitCell(holding, ws)}</td>
-          <td class="num" title="${esc(`Opened ${dateTime(holding.opened_at)}`)}">${esc(duration(holding.held_seconds))}</td>
+          <td class="num" title="${esc(I18n.t("copy-holdings-opened", { time: dateTime(holding.opened_at) }))}">${esc(duration(holding.held_seconds))}</td>
           <td class="copy-row-actions">
-            <button class="btn btn-secondary btn-sm" type="button" data-holding-action="close" data-mint="${esc(holding.mint)}">${priced ? "Close" : "Write off"}</button>
-            <button class="btn btn-ghost btn-sm" type="button" data-holding-action="activity" data-mint="${esc(holding.mint)}">Activity</button>
+            <button class="btn btn-secondary btn-sm" type="button" data-holding-action="close" data-mint="${esc(holding.mint)}">${esc(priced ? I18n.t("copy-holdings-close") : I18n.t("copy-holdings-write-off"))}</button>
+            <button class="btn btn-ghost btn-sm" type="button" data-holding-action="activity" data-mint="${esc(holding.mint)}">${esc(I18n.t("copy-holdings-activity"))}</button>
           </td>
         </tr>`;
       })
       .join("");
-    return `<div class="copy-table-wrap"><table class="copy-table"><thead><tr><th scope="col">Token</th><th scope="col" class="num">Cost</th><th scope="col" class="num">Entry</th><th scope="col" class="num">Mark</th><th scope="col" class="num">Peak</th><th scope="col" class="num">P&amp;L</th><th scope="col">Exit rules</th><th scope="col" class="num">Held</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead><tbody>${rows}</tbody></table></div>
-    ${pausedNote(ws)}<p class="copy-note">Prices are SOL per token. Entry includes the buy's slippage and fees; the peak and the exit levels are relative to it, so a holding opens with its peak below entry. Hover one for its pool price.</p>`;
+    return `<div class="copy-table-wrap"><table class="copy-table"><thead><tr><th scope="col">${esc(I18n.t("copy-holdings-col-token"))}</th><th scope="col" class="num">${esc(I18n.t("copy-holdings-col-cost"))}</th><th scope="col" class="num">${esc(I18n.t("copy-holdings-col-entry"))}</th><th scope="col" class="num">${esc(I18n.t("copy-holdings-col-mark"))}</th><th scope="col" class="num">${esc(I18n.t("copy-holdings-col-peak"))}</th><th scope="col" class="num">${esc(I18n.t("copy-holdings-col-pnl"))}</th><th scope="col">${esc(I18n.t("copy-holdings-col-exit-rules"))}</th><th scope="col" class="num">${esc(I18n.t("copy-holdings-col-held"))}</th><th scope="col"><span class="sr-only">${esc(I18n.t("copy-holdings-col-actions"))}</span></th></tr></thead><tbody>${rows}</tbody></table></div>
+    ${pausedNote(ws)}<p class="copy-note">${esc(I18n.t("copy-holdings-price-note"))}</p>`;
   }
 
   /** A paused task still closes what it holds; say by what. */
   function pausedNote(ws) {
     if (ws.enabled) return "";
-    const closer =
+    const note =
       ws.exit_mode === "buy_only"
-        ? "Your exit rules"
+        ? I18n.t("copy-holdings-paused-rules")
         : ws.exit_mode === "mirror"
-          ? "The wallet's sells"
-          : "The wallet's sells and your exit rules";
-    return `<p class="copy-note">${esc(`Paused: no new copies. ${closer} still close these holdings.`)}</p>`;
+          ? I18n.t("copy-holdings-paused-mirror")
+          : I18n.t("copy-holdings-paused-hybrid");
+    return `<p class="copy-note">${esc(note)}</p>`;
   }
 
   function closedTable(insights, error) {
     if (!insights) {
       return error
-        ? panelMessage(`Closed rounds could not be loaded: ${error}`, esc, "is-error")
-        : panelMessage("Loading closed rounds…", esc);
+        ? panelMessage(I18n.t("copy-holdings-closed-load-failed", { error }), esc, "is-error")
+        : panelMessage(I18n.t("copy-holdings-closed-loading"), esc);
     }
     const rounds = insights.recent_rounds || [];
-    if (!rounds.length) return panelMessage("No closed rounds yet.", esc);
+    if (!rounds.length) return panelMessage(I18n.t("copy-holdings-closed-empty"), esc);
     const shared = sharedSymbols(rounds.map((round) => round.mint));
     const rows = rounds
       .map(
@@ -169,18 +197,18 @@ export function createHoldings(page, { rerender, showActivityFor }) {
           <td class="num">${esc(sol(round.invested_sol))}</td>
           <td class="num">${esc(sol(round.proceeds_sol))}</td>
           <td class="num copy-cell-stack"><span class="${toneClass(round.pnl_sol)}">${esc(signedSol(round.pnl_sol))}</span><small>${esc(signedPct(round.pnl_pct))}</small></td>
-          <td>${esc(EXIT_LABELS[round.exit] || round.exit)}</td>
+          <td>${esc(exitLabel(round.exit))}</td>
           <td class="num">${esc(duration(round.hold_seconds))}</td>
           <td>${esc(dateTime(round.closed_at))}</td>
-          <td class="copy-row-actions"><button class="btn btn-ghost btn-sm" type="button" data-holding-action="activity" data-mint="${esc(round.mint)}">Activity</button></td>
+          <td class="copy-row-actions"><button class="btn btn-ghost btn-sm" type="button" data-holding-action="activity" data-mint="${esc(round.mint)}">${esc(I18n.t("copy-holdings-activity"))}</button></td>
         </tr>`
       )
       .join("");
     const shown =
       rounds.length < insights.rounds
-        ? `<p class="copy-note">Latest ${rounds.length} of ${insights.rounds} rounds.</p>`
+        ? `<p class="copy-note">${esc(I18n.t("copy-holdings-closed-latest", { shown: rounds.length, total: insights.rounds }))}</p>`
         : "";
-    return `<div class="copy-table-wrap"><table class="copy-table"><thead><tr><th scope="col">Token</th><th scope="col" class="num">Invested</th><th scope="col" class="num">Proceeds</th><th scope="col" class="num">P&amp;L</th><th scope="col">Exit</th><th scope="col" class="num">Held</th><th scope="col">Closed</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead><tbody>${rows}</tbody></table></div>${shown}`;
+    return `<div class="copy-table-wrap"><table class="copy-table"><thead><tr><th scope="col">${esc(I18n.t("copy-holdings-col-token"))}</th><th scope="col" class="num">${esc(I18n.t("copy-holdings-col-invested"))}</th><th scope="col" class="num">${esc(I18n.t("copy-holdings-col-proceeds"))}</th><th scope="col" class="num">${esc(I18n.t("copy-holdings-col-pnl"))}</th><th scope="col">${esc(I18n.t("copy-holdings-col-exit"))}</th><th scope="col" class="num">${esc(I18n.t("copy-holdings-col-held"))}</th><th scope="col">${esc(I18n.t("copy-holdings-col-closed"))}</th><th scope="col"><span class="sr-only">${esc(I18n.t("copy-holdings-col-actions"))}</span></th></tr></thead><tbody>${rows}</tbody></table></div>${shown}`;
   }
 
   function html({ ws, insights, error }) {
@@ -192,16 +220,24 @@ export function createHoldings(page, { rerender, showActivityFor }) {
       rerender
     );
     const views = [
-      { id: "open", label: `Open (${live ? (ws.stats?.open_positions ?? 0) : open.length})` },
-      { id: "closed", label: `Closed rounds (${insights ? insights.rounds : "…"})` },
+      {
+        id: "open",
+        label: I18n.t("copy-holdings-view-open", {
+          count: live ? (ws.stats?.open_positions ?? 0) : open.length,
+        }),
+      },
+      {
+        id: "closed",
+        label: I18n.t("copy-holdings-view-closed", { count: insights ? insights.rounds : "…" }),
+      },
     ];
     const reset = live
       ? ""
-      : '<button class="btn btn-ghost btn-sm copy-danger-action" type="button" data-holding-action="reset"><i class="icon-rotate-ccw" aria-hidden="true"></i> Reset paper book</button>';
-    const head = `<div class="copy-panel-head"><h3>Holdings</h3><div class="copy-panel-tools">${segmented("holdings-view", views, view, esc, "Holdings view")}${reset}</div></div>`;
+      : `<button class="btn btn-ghost btn-sm copy-danger-action" type="button" data-holding-action="reset"><i class="icon-rotate-ccw" aria-hidden="true"></i> ${esc(I18n.t("copy-holdings-reset"))}</button>`;
+    const head = `<div class="copy-panel-head"><h3>${esc(I18n.t("copy-holdings-title"))}</h3><div class="copy-panel-tools">${segmented("holdings-view", views, view, esc, I18n.t("copy-holdings-view-label"))}${reset}</div></div>`;
     if (view === "closed") return head + closedTable(insights, error);
     if (live) {
-      return `${head}<div class="copy-panel-message">Live copies are real positions.<button class="btn btn-secondary btn-sm" type="button" data-holding-action="positions">Open Positions</button></div>`;
+      return `${head}<div class="copy-panel-message">${esc(I18n.t("copy-holdings-live-note"))}<button class="btn btn-secondary btn-sm" type="button" data-holding-action="positions">${esc(I18n.t("copy-holdings-open-positions"))}</button></div>`;
     }
     return head + openTable(open, ws);
   }
@@ -214,17 +250,23 @@ export function createHoldings(page, { rerender, showActivityFor }) {
     const result = await confirm(
       priced
         ? {
-            title: "Close paper holding",
-            message: `Sell ${name} in the paper book at the pool price (${price(holding.mark_price_sol)} SOL) with the task's slippage and fees.`,
-            confirmLabel: "Close holding",
-            cancelLabel: "Keep",
+            title: I18n.t("copy-holdings-close-title"),
+            message: I18n.t("copy-holdings-close-message", {
+              token: name,
+              price: priceSol(holding.mark_price_sol),
+            }),
+            confirmLabel: I18n.t("copy-holdings-close-confirm"),
+            cancelLabel: I18n.t("copy-holdings-keep"),
             variant: "warning",
           }
         : {
-            title: "Write off paper holding",
-            message: `${name} has no pool price to sell at. Writing it off closes it at zero and books its ${sol(holding.cost_basis_sol)} cost as a loss.`,
-            confirmLabel: "Write off",
-            cancelLabel: "Keep",
+            title: I18n.t("copy-holdings-write-off-title"),
+            message: I18n.t("copy-holdings-write-off-message", {
+              token: name,
+              cost: sol(holding.cost_basis_sol),
+            }),
+            confirmLabel: I18n.t("copy-holdings-write-off"),
+            cancelLabel: I18n.t("copy-holdings-keep"),
             variant: "danger",
           }
     );
@@ -232,16 +274,22 @@ export function createHoldings(page, { rerender, showActivityFor }) {
     button.disabled = true;
     try {
       const closed = await api.closeHolding(lastWs.id, mint);
-      toast(
+      notify(
         "success",
-        closed.written_off ? `${name} written off` : `${name} closed`,
         closed.written_off
-          ? "Closed at zero proceeds"
-          : `Sold at ${price(closed.mark_price_sol)} SOL`
+          ? I18n.t("copy-holdings-written-off", {
+              token: name,
+            })
+          : I18n.t("copy-holdings-closed", {
+              token: name,
+            }),
+        closed.written_off
+          ? I18n.t("copy-holdings-written-off-detail")
+          : I18n.t("copy-holdings-sold-at", { price: priceSol(closed.mark_price_sol) })
       );
       await page.reload();
     } catch (error) {
-      toast("error", "Holding could not be closed", error.detail);
+      notify("error", I18n.t("copy-holdings-close-failed"), error.detail);
       if (button.isConnected) button.disabled = false;
     }
   }
@@ -249,20 +297,24 @@ export function createHoldings(page, { rerender, showActivityFor }) {
   async function reset(button) {
     if (!lastWs) return;
     const result = await confirm({
-      title: "Reset paper book",
-      message: `Start “${taskName(lastWs)}” over: its paper holdings, spend, fills, exits and skips are removed. The rules and the wallet stay.`,
-      confirmLabel: "Reset paper book",
-      cancelLabel: "Keep history",
+      title: I18n.t("copy-holdings-reset"),
+      message: I18n.t("copy-holdings-reset-message", { name: taskName(lastWs) }),
+      confirmLabel: I18n.t("copy-holdings-reset"),
+      cancelLabel: I18n.t("copy-holdings-reset-cancel"),
       variant: "danger",
     });
     if (!result.confirmed) return;
     button.disabled = true;
     try {
       const outcome = await api.reset(lastWs.id);
-      toast("success", "Paper book reset", `${outcome.removed_decisions} decisions removed`);
+      notify(
+        "success",
+        I18n.t("copy-holdings-reset-done"),
+        I18n.t("copy-holdings-reset-detail", { count: outcome.removed_decisions })
+      );
       await page.reload();
     } catch (error) {
-      toast("error", "Paper book could not be reset", error.detail);
+      notify("error", I18n.t("copy-holdings-reset-failed"), error.detail);
       if (button.isConnected) button.disabled = false;
     }
   }

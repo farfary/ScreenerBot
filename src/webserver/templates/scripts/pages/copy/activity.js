@@ -1,10 +1,10 @@
 // The Activity tab: the task's whole decision history, paged from the server and
 // filtered by kind or token. Consecutive skips for one reason fold into a group.
 import {
-  EXIT_LABELS,
   dateTime,
   duration,
-  fixed,
+  exitLabel,
+  pct,
   price,
   seconds,
   segmented,
@@ -19,22 +19,48 @@ import { panelMessage } from "./overview.js";
 const PAGE = 50;
 const GROUP_MIN = 3;
 const FILTERS = [
-  { id: "all", label: "All" },
-  { id: "fills", label: "Fills" },
-  { id: "exits", label: "Exits" },
-  { id: "skips", label: "Skips" },
-  { id: "errors", label: "Errors" },
+  {
+    id: "all",
+    get label() {
+      return I18n.t("copy-filter-all");
+    },
+  },
+  {
+    id: "fills",
+    get label() {
+      return I18n.t("copy-kind-fills");
+    },
+  },
+  {
+    id: "exits",
+    get label() {
+      return I18n.t("copy-kind-exits");
+    },
+  },
+  {
+    id: "skips",
+    get label() {
+      return I18n.t("copy-kind-skips");
+    },
+  },
+  {
+    id: "errors",
+    get label() {
+      return I18n.t("copy-kind-errors");
+    },
+  },
 ];
-const TITLES = {
-  paper_filled: "Paper buy",
-  live_submitted: "Live buy submitted",
-  live_confirmed: "Live buy confirmed",
-  live_failed: "Live buy failed",
-  paper_sell_observed: "Paper sell · wallet sold",
-  live_sell_submitted: "Live sell submitted",
-  live_sell_failed: "Live sell failed",
-  skipped: "Skipped",
-};
+// Outcome kinds serialized by `CopyOutcome` (src/trader/copy/types.rs).
+const OUTCOME_LABELS = Object.freeze({
+  paper_filled: "copy-outcome-paper-filled",
+  live_submitted: "copy-outcome-live-submitted",
+  live_confirmed: "copy-outcome-live-confirmed",
+  live_failed: "copy-outcome-live-failed",
+  paper_sell_observed: "copy-outcome-paper-sell-observed",
+  live_sell_submitted: "copy-outcome-live-sell-submitted",
+  live_sell_failed: "copy-outcome-live-sell-failed",
+  skipped: "copy-outcome-skipped",
+});
 const TONES = {
   paper_filled: "is-fill",
   live_submitted: "is-fill",
@@ -54,32 +80,54 @@ function arrivalText(telemetry) {
   if (!telemetry?.target_block_time || !telemetry.detected_at) return "";
   const ms = new Date(telemetry.detected_at).getTime() - Number(telemetry.target_block_time) * 1000;
   if (!Number.isFinite(ms) || ms < 0) return "";
-  const text = ms < 60_000 ? seconds(ms) : duration(ms / 1000);
-  return telemetry.backfill ? `Replayed ${text} after the block` : `Seen ${text} after the block`;
+  const span = ms < 60_000 ? seconds(ms) : duration(ms / 1000);
+  return telemetry.backfill
+    ? I18n.t("copy-activity-arrival-replayed", {
+        span,
+      })
+    : I18n.t("copy-activity-arrival-seen", {
+        span,
+      });
 }
 
+/** A skip reason's label followed by the figures that decided it. */
 function skipDetail(reason) {
   const label = skipLabel(skipKey(reason));
+  const withDetail = (detail) => I18n.t("copy-activity-skip-detail", { label, detail });
   switch (reason?.kind) {
     case "target_below_minimum":
-      return `${label} (${sol(reason.minimum_sol, 3)})`;
+      return withDetail(sol(reason.minimum_sol, 3));
     case "target_above_maximum":
-      return `${label} (${sol(reason.maximum_sol, 3)})`;
+      return withDetail(sol(reason.maximum_sol, 3));
     case "below_minimum_size":
-      return `${label} (minimum ${sol(reason.minimum_sol, 4)})`;
+      return withDetail(
+        I18n.t("copy-activity-skip-minimum-size", { amount: sol(reason.minimum_sol, 4) })
+      );
     case "invalid_slippage":
-      return `${label} (maximum ${fixed(reason.maximum_pct, 1)}%)`;
+      return withDetail(
+        I18n.t("copy-activity-skip-maximum", { value: pct(reason.maximum_pct, 1) })
+      );
     case "stale_observation":
-      return `${label} (${seconds(reason.arrival_ms)} late, limit ${seconds(reason.threshold_ms)})`;
+      return withDetail(
+        I18n.t("copy-activity-skip-stale", {
+          arrival: seconds(reason.arrival_ms),
+          limit: seconds(reason.threshold_ms),
+        })
+      );
     case "latency_kill_switch":
-      return `${label} (${seconds(reason.average_ms)} average, limit ${seconds(reason.threshold_ms)})`;
+      return withDetail(
+        I18n.t("copy-activity-skip-latency", {
+          average: seconds(reason.average_ms),
+          limit: seconds(reason.threshold_ms),
+        })
+      );
     default:
       return label;
   }
 }
 
 export function createActivity(page, { rerender }) {
-  const { Utils, api, on, toast } = page;
+  const { Utils, api, on, notify } = page;
   const esc = Utils.escapeHtml;
   let taskId = null;
   let filter = "all";
@@ -196,7 +244,7 @@ export function createActivity(page, { rerender }) {
       rows = rows.concat((response.activity || []).filter((row) => !known.has(row.id)));
       nextBefore = response.next_before ?? null;
     } catch (failure) {
-      toast("error", "Older activity could not be loaded", failure.detail);
+      notify("error", I18n.t("copy-activity-older-failed"), failure.detail);
     } finally {
       loadingOlder = false;
       rerender();
@@ -205,9 +253,11 @@ export function createActivity(page, { rerender }) {
 
   function title(outcome) {
     if (outcome.outcome === "paper_sell_observed" && outcome.exit_rule) {
-      return `Paper exit · ${EXIT_LABELS[outcome.exit_rule] || outcome.exit_rule}`;
+      return I18n.t("copy-activity-paper-exit", { rule: exitLabel(outcome.exit_rule) });
     }
-    return TITLES[outcome.outcome] || "Decision";
+    return Object.hasOwn(OUTCOME_LABELS, outcome.outcome)
+      ? I18n.label(OUTCOME_LABELS, outcome.outcome)
+      : I18n.t("copy-activity-decision");
   }
 
   function detail(outcome) {
@@ -219,34 +269,49 @@ export function createActivity(page, { rerender }) {
           fill.priced_from_pool && target > 0 && fill.fill_price_sol > 0
             ? (fill.fill_price_sol / target - 1) * 100
             : null;
-        const priced = fill.priced_from_pool
-          ? slip === null
-            ? ""
-            : ` · slippage ${signedPct(slip, 2)}`
-          : " · priced at the wallet's trade, no pool price";
-        return `${sol(fill.input_sol)} at ${price(fill.fill_price_sol)} · wallet bought ${sol(outcome.target_size_sol, 3)}${priced}`;
+        const values = {
+          input: sol(fill.input_sol),
+          price: price(fill.fill_price_sol),
+          target: sol(outcome.target_size_sol, 3),
+        };
+        if (!fill.priced_from_pool) return I18n.t("copy-activity-filled-unpriced", values);
+        return slip === null
+          ? I18n.t("copy-activity-filled", values)
+          : I18n.t("copy-activity-filled-slippage", { ...values, slippage: signedPct(slip, 2) });
       }
       case "live_submitted":
       case "live_confirmed":
       case "live_failed":
         return (
           outcome.error ||
-          `${sol(outcome.sized_sol)} · wallet bought ${sol(outcome.target_size_sol, 3)}`
+          I18n.t("copy-activity-live-sized", {
+            sized: sol(outcome.sized_sol),
+            target: sol(outcome.target_size_sol, 3),
+          })
         );
       case "paper_sell_observed": {
         const fill = outcome.paper_fill;
-        if (!fill) return `Wallet sold ${sol(outcome.target_sol_amount, 3)} · nothing held to sell`;
-        if (outcome.exit_rule === "manual" && !fill.fill_price_sol)
-          return "Written off at zero: no pool price";
-        return `${Utils.formatNumber(fill.token_amount)} tokens for ${sol(fill.net_proceeds_sol)} at ${price(fill.fill_price_sol)}`;
+        if (!fill) {
+          return I18n.t("copy-activity-sell-nothing", {
+            amount: sol(outcome.target_sol_amount, 3),
+          });
+        }
+        if (outcome.exit_rule === "manual" && !fill.fill_price_sol) {
+          return I18n.t("copy-activity-written-off");
+        }
+        return I18n.t("copy-activity-sold", {
+          tokens: Utils.formatNumber(fill.token_amount),
+          proceeds: sol(fill.net_proceeds_sol),
+          price: price(fill.fill_price_sol),
+        });
       }
       case "live_sell_submitted":
       case "live_sell_failed":
         return (
           outcome.error ||
           (outcome.exit_percentage == null
-            ? "Full close"
-            : `${fixed(outcome.exit_percentage, 1)}% exit`)
+            ? I18n.t("copy-activity-full-close")
+            : I18n.t("copy-activity-partial-exit", { pct: pct(outcome.exit_percentage, 1) }))
         );
       case "skipped":
         return skipDetail(outcome.reason);
@@ -260,14 +325,17 @@ export function createActivity(page, { rerender }) {
     const own = chainSignature(outcome.transaction_signature);
     const link = (signature, label) =>
       `<a class="copy-link" href="https://solscan.io/tx/${esc(signature)}" target="_blank" rel="noopener">${esc(label)} <i class="icon-external-link" aria-hidden="true"></i></a>`;
-    return [target ? link(target, "Wallet tx") : "", own ? link(own, "Your tx") : ""].join("");
+    return [
+      target ? link(target, I18n.t("copy-activity-link-wallet-tx")) : "",
+      own ? link(own, I18n.t("copy-activity-link-own-tx")) : "",
+    ].join("");
   }
 
   function rowHtml(row) {
     const outcome = row.outcome || {};
     const at = outcome.telemetry?.decided_at || outcome.decided_at || row.created_at;
     const token = outcome.mint
-      ? `<button class="copy-token-link" type="button" data-activity-mint="${esc(outcome.mint)}" title="${esc(`Only this token · ${outcome.mint}`)}">${tokenInline(outcome.mint, shared)}</button>`
+      ? `<button class="copy-token-link" type="button" data-activity-mint="${esc(outcome.mint)}" title="${esc(`${I18n.t("copy-activity-only-token")} · ${outcome.mint}`)}">${tokenInline(outcome.mint, shared)}</button>`
       : "";
     const arrival = arrivalText(outcome.telemetry);
     return `<li class="copy-event ${TONES[outcome.outcome] || ""}">
@@ -291,8 +359,8 @@ export function createActivity(page, { rerender }) {
       <details data-group="${esc(id)}"${openGroups.has(id) ? " open" : ""}>
         <summary>
           <time datetime="${esc(String(at || ""))}">${esc(dateTime(at))}</time>
-          <span class="copy-event-main"><span class="copy-event-line"><strong>Skipped ×${group.rows.length}</strong><span>${esc(skipLabel(group.key))}</span></span>
-          <span class="copy-event-detail">${esc(`${tokens} token${tokens === 1 ? "" : "s"} · since ${dateTime(last.outcome?.decided_at || last.created_at)}`)}</span></span>
+          <span class="copy-event-main"><span class="copy-event-line"><strong>${esc(I18n.t("copy-activity-skipped-group", { count: group.rows.length }))}</strong><span>${esc(skipLabel(group.key))}</span></span>
+          <span class="copy-event-detail">${esc(I18n.t("copy-activity-group-detail", { tokens, since: dateTime(last.outcome?.decided_at || last.created_at) }))}</span></span>
         </summary>
         <ul class="copy-events">${group.rows.map(rowHtml).join("")}</ul>
       </details>
@@ -316,14 +384,14 @@ export function createActivity(page, { rerender }) {
       rows.map((row) => row.outcome?.mint),
       rerender
     );
-    const search = `<form class="copy-activity-search" data-activity-mint-form role="search"><input type="search" name="mint" value="${esc(mint)}" placeholder="Token mint" aria-label="Filter by token mint" spellcheck="false" autocomplete="off" />${mint ? '<button class="btn btn-ghost btn-sm" type="button" data-activity-clear>Clear</button>' : ""}</form>`;
-    const head = `<div class="copy-panel-head"><h3>Activity</h3><div class="copy-panel-tools">${segmented("activity-filter", FILTERS, filter, esc, "Activity filter")}${search}</div></div>`;
+    const search = `<form class="copy-activity-search" data-activity-mint-form role="search"><input type="search" name="mint" value="${esc(mint)}" placeholder="${esc(I18n.attr("copy-activity-mint-filter", "placeholder"))}" aria-label="${esc(I18n.attr("copy-activity-mint-filter", "aria-label"))}" spellcheck="false" autocomplete="off" />${mint ? `<button class="btn btn-ghost btn-sm" type="button" data-activity-clear>${esc(I18n.t("copy-activity-clear"))}</button>` : ""}</form>`;
+    const head = `<div class="copy-panel-head"><h3>${esc(I18n.t("copy-activity-title"))}</h3><div class="copy-panel-tools">${segmented("activity-filter", FILTERS, filter, esc, I18n.t("copy-activity-filter-label"))}${search}</div></div>`;
     if (!loaded) {
       return (
         head +
         (error
-          ? panelMessage(`Activity could not be loaded: ${error}`, esc, "is-error")
-          : panelMessage("Loading activity…", esc))
+          ? panelMessage(I18n.t("copy-activity-load-failed", { error }), esc, "is-error")
+          : panelMessage(I18n.t("copy-activity-loading"), esc))
       );
     }
     if (!rows.length) {
@@ -331,16 +399,16 @@ export function createActivity(page, { rerender }) {
         head +
         panelMessage(
           filter !== "all" || mint
-            ? "Nothing matches this filter."
-            : "No decisions yet. Fills, exits and skips appear here as the wallet trades.",
+            ? I18n.t("copy-activity-no-match")
+            : I18n.t("copy-activity-empty"),
           esc
         )
       );
     }
     shared = sharedSymbols(rows.map((row) => row.outcome?.mint));
     const more = nextBefore
-      ? '<div class="copy-more"><button class="btn btn-secondary btn-sm" type="button" data-activity-older>Load older</button></div>'
-      : '<p class="copy-note copy-end">Start of history</p>';
+      ? `<div class="copy-more"><button class="btn btn-secondary btn-sm" type="button" data-activity-older>${esc(I18n.t("copy-activity-load-older"))}</button></div>`
+      : `<p class="copy-note copy-end">${esc(I18n.t("copy-activity-start"))}</p>`;
     return `${head}<ul class="copy-events">${groups().map(groupHtml).join("")}</ul>${more}`;
   }
 

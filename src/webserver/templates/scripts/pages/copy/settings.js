@@ -1,9 +1,17 @@
 // Global copy-trading settings: the copy_trading config section. The arrival
 // limit is edited in seconds and stored in milliseconds.
+import { fieldHint } from "../config/field_text.js";
+
 export function createSettings(page) {
-  const { $, api, on, toast, dialogs } = page;
+  const { $, api, on, notify, dialogs } = page;
 
   function setup() {
+    // The form's descriptions are the config catalog's own hint text.
+    $("#copy-settings-form")
+      ?.querySelectorAll("[data-config-hint]")
+      .forEach((node) => {
+        node.textContent = fieldHint(node.dataset.configHint) ?? "";
+      });
     on($("#copy-settings-form"), "submit", save);
     on($("#copy-settings-filter"), "change", syncWarning);
     on($("#copy-settings-latency"), "change", syncLatency);
@@ -57,7 +65,7 @@ export function createSettings(page) {
       $("#copy-settings-filter")?.focus();
     } catch (error) {
       dialogs.hide("copy-settings");
-      toast("error", "Copy settings could not be loaded", error.detail);
+      notify("error", I18n.t("copy-settings-load-failed"), error.detail);
     }
   }
 
@@ -80,7 +88,7 @@ export function createSettings(page) {
     try {
       await api.patchConfig(payload);
       dialogs.hide("copy-settings");
-      toast("success", "Copy trading settings saved");
+      notify("success", I18n.t("copy-settings-saved"));
       await Promise.all([page.reload(), page.reloadDefaults()]);
     } catch (error) {
       setError(error.detail);
