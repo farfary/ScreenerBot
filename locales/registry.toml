@@ -29,3 +29,8 @@ dir = "ltr"
 code = "ru"
 name = "Русский"
 dir = "ltr"
+
+[[locale]]
+code = "uk"
+name = "Українська"
+dir = "ltr"
