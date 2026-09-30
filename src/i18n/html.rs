@@ -3,9 +3,11 @@
 //! Elements carrying `data-l10n-id` are rewritten in one streaming pass so the
 //! first paint is already translated. `data-l10n-args` holds an optional JSON
 //! object of message arguments. The message value replaces the element's text
-//! content as escaped text; message attributes are written as element
+//! content as escaped text, or, on elements that also carry the boolean
+//! `data-l10n-markup`, as sanitized markup (see `markup`); message attributes are written as element
 //! attributes when they are on [`L10N_ATTRIBUTES`].
 
+use super::markup;
 use super::{format_message, LocalizedMessage};
 use crate::logger::{self, LogTag};
 use fluent_bundle::{FluentArgs, FluentValue};
@@ -15,6 +17,7 @@ use unic_langid::LanguageIdentifier;
 
 const ID_ATTRIBUTE: &str = "data-l10n-id";
 const ARGS_ATTRIBUTE: &str = "data-l10n-args";
+const MARKUP_ATTRIBUTE: &str = "data-l10n-markup";
 
 /// Message attributes that may be written to an element. Mirrored by
 /// `ATTRIBUTE_ALLOWLIST` in `scripts/core/i18n.js`.
@@ -60,12 +63,29 @@ fn localize_element(el: &mut Element<'_, '_>, lookup: &Lookup<'_>) -> HandlerRes
     let args = el
         .get_attribute(ARGS_ATTRIBUTE)
         .map(|raw| parse_args(&id, &raw));
-    let Some(message) = lookup(&id, args.as_ref()) else {
+    let markup = el.has_attribute(MARKUP_ATTRIBUTE);
+    let escaped = args.as_ref().filter(|_| markup).map(markup::escape_args);
+    let value_args = if markup {
+        escaped.as_ref()
+    } else {
+        args.as_ref()
+    };
+    let Some(mut message) = lookup(&id, value_args) else {
         logger::debug(LogTag::System, &format!("Unknown l10n id {id:?}"));
         return Ok(());
     };
-    if let Some(value) = message.value {
-        el.set_inner_content(&value, ContentType::Text);
+    if let Some(value) = &message.value {
+        if markup {
+            el.set_inner_content(&markup::sanitize(value), ContentType::Html);
+        } else {
+            el.set_inner_content(value, ContentType::Text);
+        }
+    }
+    if markup && args.is_some() && !message.attributes.is_empty() {
+        // Attributes are plain text, so they are formatted with the unescaped arguments.
+        if let Some(plain) = lookup(&id, args.as_ref()) {
+            message.attributes = plain.attributes;
+        }
     }
     for (name, value) in message.attributes {
         if L10N_ATTRIBUTES.contains(&name.as_str()) {

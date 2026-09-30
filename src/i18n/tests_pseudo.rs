@@ -46,6 +46,11 @@ fn fixture_is_verified_independently() {
         .chain(BIDI_LOWER.chars().zip('a'..='z'))
         .collect();
     for case in cases() {
+        // Cases with markup keep their tag names as ASCII; they are pinned by
+        // `fixture_matches_both_transforms` and `tests_markup`.
+        if case.input.contains('<') {
+            continue;
+        }
         // Bidi: dropping the wrappers and inverting the map restores the input.
         let restored: String = case
             .bidi

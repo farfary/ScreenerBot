@@ -388,7 +388,7 @@ export function applyServerPaginationMixin(DataTable) {
       <div class="dt-server-pagination-bar">
         <div class="dt-server-pagination-info">
           <span class="dt-server-pagination-range">
-            ${escapeHtml(I18n.t("table-pagination-showing"))} <strong>${startItem}</strong>–<strong>${endItem}</strong> ${escapeHtml(I18n.t("table-pagination-of"))} <strong>${totalItems}</strong>
+            ${I18n.markup("table-pagination-range", { start: String(startItem), end: String(endItem), total: String(totalItems) })}
           </span>
         </div>
         

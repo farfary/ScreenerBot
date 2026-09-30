@@ -53,6 +53,16 @@ function load(payload) {
     Date,
     JSON,
     fetch: async () => ({ ok: true }),
+    // Records what the markup path builds: the sanitized string handed to an inert template.
+    document: {
+      createElement: (tag) => ({
+        tag,
+        innerHTML: "",
+        get content() {
+          return { template: this.tag, html: this.innerHTML };
+        },
+      }),
+    },
   };
   context.window = context;
   if (payload) context.__SCREENERBOT_L10N__ = payload;
@@ -80,6 +90,10 @@ function fakeElement(attrs) {
     getAttribute: (name) => (name in store ? store[name] : null),
     setAttribute: (name, value) => {
       store[name] = value;
+    },
+    hasAttribute: (name) => name in store,
+    replaceChildren(content) {
+      this.children = content;
     },
     querySelectorAll: () => [],
     store,
@@ -254,3 +268,97 @@ for (const kind of ["accented", "bidi"]) {
 test("pseudo is null for a real locale", () => {
   assert.equal(load(payload).I18n.pseudo, null);
 });
+
+const MARKUP_FIXTURE = JSON.parse(
+  fs.readFileSync(new URL("./fixtures/i18n_markup.json", import.meta.url), "utf8")
+);
+
+function markupRuntime(ftl, extra = {}) {
+  return load({
+    locale: "en",
+    intlLocale: "en-u-nu-latn",
+    dir: "ltr",
+    source: "en",
+    catalogs: [{ locale: "en", ftl }],
+    ...extra,
+  });
+}
+
+// Each sanitizer input is fed through a Fluent string-literal placeable, which
+// formats verbatim and, as the whole pattern, without isolation marks. The
+// Rust test runs the same cases against `sanitize` directly.
+test("markup sanitizer matches the shared fixture", () => {
+  for (const c of MARKUP_FIXTURE.sanitize) {
+    const { I18n } = markupRuntime(`m = { ${JSON.stringify(c.input)} }\n`);
+    assert.equal(I18n.markup("m"), c.expected, c.name);
+  }
+});
+
+test("markup render pipeline matches the shared fixture", () => {
+  for (const c of MARKUP_FIXTURE.render) {
+    const { I18n } = markupRuntime(`${c.ftl}\n`);
+    assert.equal(I18n.markup("m", c.args), c.expected, c.name);
+  }
+});
+
+test("plain t() output of a markup message is not sanitized", () => {
+  const { I18n } = markupRuntime("m = Use <strong>{ $x }</strong>\n");
+  assert.equal(I18n.t("m", { x: "<b>" }), "Use <strong>\u2068<b>\u2069</strong>");
+});
+
+test("markup of a missing id is the escaped id and warns once", () => {
+  const { I18n, logs } = markupRuntime("m = x\n");
+  assert.equal(I18n.markup("<nope>"), "&lt;nope&gt;");
+  assert.equal(I18n.markup("<nope>"), "&lt;nope&gt;");
+  assert.equal(logs.warn.length, 1);
+});
+
+test("markup drops arguments that are neither strings nor numbers", () => {
+  const { I18n } = markupRuntime("m = <b>{ $x }</b>\n");
+  const out = I18n.markup("m", { x: { toString: () => "<script>" } });
+  assert.ok(!out.includes("<script>"), out);
+});
+
+test("localizeTree applies markup only when data-l10n-markup is present", () => {
+  const { I18n } = markupRuntime("m = Total <strong>{ $n }</strong>\n");
+  const args = JSON.stringify({ n: "<i>1</i>" });
+  const withMarkup = fakeElement({
+    "data-l10n-id": "m",
+    "data-l10n-args": args,
+    "data-l10n-markup": "",
+  });
+  I18n.localizeTree(withMarkup);
+  assert.deepEqual(withMarkup.children, {
+    template: "template",
+    html: "Total <strong>\u2068&lt;i&gt;1&lt;/i&gt;\u2069</strong>",
+  });
+  assert.equal(withMarkup.textContent, "old");
+
+  const plain = fakeElement({ "data-l10n-id": "m", "data-l10n-args": args });
+  I18n.localizeTree(plain);
+  assert.equal(plain.textContent, "Total <strong>\u2068<i>1</i>\u2069</strong>");
+  assert.equal(plain.children, undefined);
+});
+
+test("attributes of a markup element are plain text with unescaped arguments", () => {
+  const { I18n } = markupRuntime("m = <b>{ $n }</b>\n    .title = Cost { $n }\n");
+  const el = fakeElement({
+    "data-l10n-id": "m",
+    "data-l10n-args": JSON.stringify({ n: "a & b" }),
+    "data-l10n-markup": "",
+  });
+  I18n.localizeTree(el);
+  assert.equal(el.store.title, "Cost \u2068a & b\u2069");
+  assert.equal(el.children.html, "<b>\u2068a &amp; b\u2069</b>");
+});
+
+for (const kind of ["accented", "bidi"]) {
+  test(`pseudo ${kind} keeps markup tag names intact`, () => {
+    const { I18n } = markupRuntime("m = Save <strong>all</strong><br/> now\n", {
+      pseudo: kind,
+      locale: kind === "bidi" ? "ar-XB" : "en-XA",
+    });
+    const out = I18n.markup("m");
+    assert.ok(out.includes("<strong>") && out.includes("</strong><br>"), out);
+  });
+}

@@ -1,0 +1,222 @@
+{
+  "sanitize": [
+    {
+      "name": "plain text",
+      "input": "Hello",
+      "expected": "Hello"
+    },
+    {
+      "name": "strong passes",
+      "input": "a <strong>b</strong>",
+      "expected": "a <strong>b</strong>"
+    },
+    {
+      "name": "every allowlisted tag passes",
+      "input": "<em>e</em><b>b</b><i>i</i><code>c</code>",
+      "expected": "<em>e</em><b>b</b><i>i</i><code>c</code>"
+    },
+    {
+      "name": "br and self-closing br",
+      "input": "a<br>b<br/>c",
+      "expected": "a<br>b<br>c"
+    },
+    {
+      "name": "script is literal text",
+      "input": "<script>alert(1)</script>",
+      "expected": "&lt;script&gt;alert(1)&lt;/script&gt;"
+    },
+    {
+      "name": "img onerror is literal text",
+      "input": "<img src=x onerror=alert(1)>",
+      "expected": "&lt;img src=x onerror=alert(1)&gt;"
+    },
+    {
+      "name": "attribute on an allowlisted tag is rejected",
+      "input": "<strong onclick=alert(1)>x</strong>",
+      "expected": "&lt;strong onclick=alert(1)&gt;x"
+    },
+    {
+      "name": "anchor with href is literal text",
+      "input": "<a href=\"http://x\">l</a>",
+      "expected": "&lt;a href=&quot;http://x&quot;&gt;l&lt;/a&gt;"
+    },
+    {
+      "name": "closing tag without open is dropped",
+      "input": "a</strong>b",
+      "expected": "ab"
+    },
+    {
+      "name": "nested tags pass",
+      "input": "<strong>a<em>b</em>c</strong>",
+      "expected": "<strong>a<em>b</em>c</strong>"
+    },
+    {
+      "name": "unclosed tags are closed",
+      "input": "<strong>a<em>b",
+      "expected": "<strong>a<em>b</em></strong>"
+    },
+    {
+      "name": "misnested tags are repaired",
+      "input": "<strong><em>a</strong>b</em>",
+      "expected": "<strong><em>a</em></strong>b"
+    },
+    {
+      "name": "tag names are case-insensitive and emitted lowercase",
+      "input": "<STRONG>x</StRoNg>",
+      "expected": "<strong>x</strong>"
+    },
+    {
+      "name": "whitespace inside a tag is rejected",
+      "input": "<strong >x</strong>",
+      "expected": "&lt;strong &gt;x"
+    },
+    {
+      "name": "self-closing non-void tag is rejected",
+      "input": "<strong/>",
+      "expected": "&lt;strong/&gt;"
+    },
+    {
+      "name": "closing br is rejected",
+      "input": "</br>",
+      "expected": "&lt;/br&gt;"
+    },
+    {
+      "name": "br with attribute is rejected",
+      "input": "<br class=\"x\">",
+      "expected": "&lt;br class=&quot;x&quot;&gt;"
+    },
+    {
+      "name": "tag name prefix is not a match",
+      "input": "<strongx>a</strongx>",
+      "expected": "&lt;strongx&gt;a&lt;/strongx&gt;"
+    },
+    {
+      "name": "stray lt inside a tag opener",
+      "input": "<b<i>>",
+      "expected": "&lt;b<i>&gt;</i>"
+    },
+    {
+      "name": "unterminated tag",
+      "input": "<strong",
+      "expected": "&lt;strong"
+    },
+    {
+      "name": "comment is literal text",
+      "input": "<!-- x -->",
+      "expected": "&lt;!-- x --&gt;"
+    },
+    {
+      "name": "lone lt",
+      "input": "a < b",
+      "expected": "a &lt; b"
+    },
+    {
+      "name": "raw gt and quotes",
+      "input": "a > b \"c\" 'd'",
+      "expected": "a &gt; b &quot;c&quot; 'd'"
+    },
+    {
+      "name": "known entities pass through once",
+      "input": "a &lt; b &amp; &quot;c&quot; &#39;d&#39; &gt;",
+      "expected": "a &lt; b &amp; &quot;c&quot; &#39;d&#39; &gt;"
+    },
+    {
+      "name": "other entities are not interpreted",
+      "input": "&nbsp; &copy; & x &#x3C;",
+      "expected": "&amp;nbsp; &amp;copy; &amp; x &amp;#x3C;"
+    },
+    {
+      "name": "non-ASCII text",
+      "input": "\u00dcn\u00ef <b>\u01ff</b>",
+      "expected": "\u00dcn\u00ef <b>\u01ff</b>"
+    },
+    {
+      "name": "empty",
+      "input": "",
+      "expected": ""
+    }
+  ],
+  "render": [
+    {
+      "name": "pagination range with plain numbers",
+      "ftl": "m = Showing <strong>{ $a }</strong> of <strong>{ $b }</strong>",
+      "args": {
+        "a": "1",
+        "b": "20"
+      },
+      "expected": "Showing <strong>\u20681\u2069</strong> of <strong>\u206820\u2069</strong>"
+    },
+    {
+      "name": "lt ampersand and quote in an arg render literally",
+      "ftl": "m = Note: { $x }",
+      "args": {
+        "x": "a < b & \"c\""
+      },
+      "expected": "Note: \u2068a &lt; b &amp; &quot;c&quot;\u2069"
+    },
+    {
+      "name": "apostrophe in an arg",
+      "ftl": "m = Note: { $x }",
+      "args": {
+        "x": "it's"
+      },
+      "expected": "Note: \u2068it&#39;s\u2069"
+    },
+    {
+      "name": "tag in an arg appears literally",
+      "ftl": "m = <em>{ $x }</em>",
+      "args": {
+        "x": "<strong>x</strong>"
+      },
+      "expected": "<em>\u2068&lt;strong&gt;x&lt;/strong&gt;\u2069</em>"
+    },
+    {
+      "name": "closing tag and script in an arg cannot escape the element",
+      "ftl": "m = <strong>{ $x }</strong>",
+      "args": {
+        "x": "</strong><script>alert(1)</script>"
+      },
+      "expected": "<strong>\u2068&lt;/strong&gt;&lt;script&gt;alert(1)&lt;/script&gt;\u2069</strong>"
+    },
+    {
+      "name": "entity-looking arg is escaped, not passed through",
+      "ftl": "m = { $x }",
+      "args": {
+        "x": "&lt;b&gt;"
+      },
+      "expected": "&amp;lt;b&amp;gt;"
+    },
+    {
+      "name": "attribute injection in an arg",
+      "ftl": "m = <b>{ $x }</b>",
+      "args": {
+        "x": "\" onmouseover=\"alert(1)"
+      },
+      "expected": "<b>\u2068&quot; onmouseover=&quot;alert(1)\u2069</b>"
+    },
+    {
+      "name": "number arg",
+      "ftl": "m = <b>{ $n }</b>",
+      "args": {
+        "n": 3
+      },
+      "expected": "<b>\u20683\u2069</b>"
+    },
+    {
+      "name": "message ampersand and unknown tag",
+      "ftl": "m = Q & A <x>{ $v }</x>",
+      "args": {
+        "v": "1"
+      },
+      "expected": "Q &amp; A &lt;x&gt;\u20681\u2069&lt;/x&gt;"
+    },
+    {
+      "name": "uppercase message tag left open",
+      "ftl": "m = <STRONG>{ $v }",
+      "args": {
+        "v": "v"
+      },
+      "expected": "<strong>\u2068v\u2069</strong>"
+    }
+  ]
+}

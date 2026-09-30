@@ -20,8 +20,7 @@ table-column-hide = Hide column
 
 ## Pagination
 
-table-pagination-showing = Showing
-table-pagination-of = of
+table-pagination-range = Showing <strong>{ $start }</strong>–<strong>{ $end }</strong> of <strong>{ $total }</strong>
 table-pagination-per-page = Per page:
 table-pagination-size-all = All
 table-pagination-first-page = First page

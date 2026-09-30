@@ -45,6 +45,53 @@ test("catalog parity flags a missing attribute", () => {
   assert.match(messagesOf(result), /message "tip" is missing attributes \[title\]/);
 });
 
+test("markup outside the allowlist is an error in every locale", () => {
+  const bad = ["<script>x</script>", '<strong class="x">x</strong>', "<a href>x</a>", "a < b", "<strong >x</strong>"];
+  for (const text of bad) {
+    const files = { "common.ftl": `hello = ${text}\n`, "terms.ftl": "-brand = ScreenerBot\n" };
+    const target = catalogErrors("de", files);
+    assert.match(messagesOf(target), /message "hello" uses "<" outside the markup allowlist/, text);
+    const source = checkCatalogs({ catalogs: { en: files }, registered: new Set(["en"]) });
+    assert.match(messagesOf(source), /^en: message "hello" uses "<"/m, text);
+  }
+});
+
+test("allowlisted markup passes and a string literal may carry a bare less-than", () => {
+  const files = {
+    "common.ftl": 'hello = <STRONG>Hallo</STRONG> <em>x</em><br/> { "<" }1\n',
+    "terms.ftl": "-brand = ScreenerBot\n",
+  };
+  const source = { ...EN, "common.ftl": 'hello = <strong>Hello</strong> <em>x</em><br> { "<" }1\n' };
+  const result = checkCatalogs({ catalogs: { en: source, de: files }, registered: new Set(["en"]) });
+  assert.doesNotMatch(messagesOf(result), /markup/);
+});
+
+test("a translation must use the same markup tags as the source", () => {
+  const en = { ...EN, "common.ftl": "hello = Hello <strong>{ $n }</strong> and <em>x</em>\nother = Other\n" };
+  const run = (text) =>
+    checkCatalogs({
+      catalogs: { en, de: { "common.ftl": `hello = ${text}\nother = Anderes\n`, "terms.ftl": "-brand = ScreenerBot\n" } },
+      registered: new Set(["en"]),
+    });
+  assert.match(messagesOf(run("Hallo <strong>{ $n }</strong> und x")), /message "hello" markup tags \[strong \/strong\] differ from the source \[strong \/strong em \/em\]/);
+  assert.match(messagesOf(run("Hallo <strong>{ $n }</strong> <b>x</b> <em>y</em>")), /markup tags \[strong \/strong b \/b em \/em\] differ/);
+  assert.match(messagesOf(run("Hallo <strong>{ $n }</strong> <em>x</em> <em>y</em>")), /differ from the source/);
+  assert.doesNotMatch(messagesOf(run("<em>x</em> und <strong>{ $n }</strong>")), /markup tags/);
+});
+
+test("markup parity of select messages compares distinct tag names", () => {
+  const en = {
+    ...EN,
+    "common.ftl": "items = { $count ->\n    [one] <b>{ $count }</b> item\n   *[other] <b>{ $count }</b> items\n}\n",
+  };
+  const ru = {
+    "common.ftl": "items = { $count ->\n    [one] <b>{ $count }</b> a\n    [few] <b>{ $count }</b> b\n    [many] <b>{ $count }</b> c\n   *[other] <b>{ $count }</b> d\n}\n",
+    "terms.ftl": "-brand = ScreenerBot\n",
+  };
+  const result = checkCatalogs({ catalogs: { en, ru }, registered: new Set(["en"]) });
+  assert.doesNotMatch(messagesOf(result), /markup tags/);
+});
+
 test("catalog parity flags a variable the source does not use", () => {
   const result = catalogErrors("de", {
     "common.ftl": "greeting = Hallo { $name } { $other }\n",

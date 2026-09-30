@@ -7,6 +7,7 @@
 
 mod html;
 mod localizer;
+mod markup;
 mod negotiate;
 mod pseudo;
 mod registry;
@@ -17,6 +18,8 @@ mod tests;
 #[cfg(test)]
 mod tests_html;
 #[cfg(test)]
+mod tests_markup;
+#[cfg(test)]
 mod tests_pseudo;
 
 use serde::{Serialize, Serializer};
@@ -26,6 +29,7 @@ pub use html::{localize_html, L10N_ATTRIBUTES};
 pub use localizer::{
     dashboard_catalog, dashboard_catalog_chain, format, format_en, format_message, LocalizedMessage,
 };
+pub use markup::ALLOWED_TAGS;
 pub use negotiate::{resolve_locale, resolve_request_locale, SYSTEM_SETTING};
 pub use pseudo::{transform_accented, transform_bidi, PseudoLocale, PSEUDO_LOCALES};
 pub use registry::{

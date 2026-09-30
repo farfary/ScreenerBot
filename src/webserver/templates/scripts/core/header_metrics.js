@@ -204,18 +204,16 @@ function announceCopyNotices(copy) {
   copyNoticeSeq = newest;
 }
 
-// Status dot, the "Services:" label and the emphasised state, built without
-// parsing localized text as markup.
-function renderServicesStatus(container, dotClass, stateText) {
-  const dot = document.createElement("span");
+// Status dot and the localized "Services: <state>" line, a single markup message.
+function renderServicesStatus(container, dotClass, id, args) {
+  const dot = container.querySelector(".status-dot");
+  const line = container.querySelector("#tickerServicesLine");
+  if (!dot || !line) return;
   dot.className = dotClass ? `status-dot ${dotClass}` : "status-dot";
-  const strong = document.createElement("strong");
-  strong.textContent = stateText;
-  container.replaceChildren(
-    dot,
-    document.createTextNode(`${I18n.t("shell-ticker-services")} `),
-    strong
-  );
+  line.setAttribute("data-l10n-id", id);
+  if (args) line.setAttribute("data-l10n-args", JSON.stringify(args));
+  else line.removeAttribute("data-l10n-args");
+  I18n.localizeTree(line);
 }
 
 function updateTicker(metrics) {
@@ -250,11 +248,11 @@ function updateTicker(metrics) {
 
   if (servicesText && metrics.system) {
     if (metrics.system.all_services_healthy) {
-      renderServicesStatus(servicesText, "", I18n.t("shell-ticker-services-healthy"));
+      renderServicesStatus(servicesText, "", "shell-ticker-services-healthy");
     } else {
       const count = metrics.system.unhealthy_services?.length ?? 0;
       const dotClass = metrics.system.critical_degraded ? "error" : "warning";
-      renderServicesStatus(servicesText, dotClass, I18n.t("shell-ticker-services-issues", { count }));
+      renderServicesStatus(servicesText, dotClass, "shell-ticker-services-issues", { count });
     }
   }
 }

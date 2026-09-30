@@ -62,6 +62,68 @@ function termRefsOf(node) {
   );
 }
 
+/** Inline tags a message value may use, without attributes. Mirrors ALLOWED_TAGS in src/i18n/markup.rs. */
+export const MARKUP_TAGS = ["strong", "em", "b", "i", "code", "br"];
+const MARKUP_TAG = new RegExp(`^<(?:/?(?:${MARKUP_TAGS.filter((t) => t !== "br").join("|")})|br/?)>`, "i");
+
+/**
+ * Markup used by a message value: `tags` are the allowlisted tags in order
+ * (lowercase, closing tags as `/name`), `invalid` the `<` sequences outside the
+ * allowlist. Attribute text is plain and not inspected.
+ */
+function markupOf(node) {
+  const tags = [];
+  const invalid = [];
+  if (!node.value) return { tags, invalid, hasSelect: false };
+  const texts = [...descendants(node.value)].filter((child) => child.type === "TextElement");
+  for (const text of texts) {
+    let from = text.value.indexOf("<");
+    while (from >= 0) {
+      const match = MARKUP_TAG.exec(text.value.slice(from));
+      if (match) {
+        tags.push(match[0].slice(1, -1).replace(/\/$/, "").toLowerCase());
+        from = text.value.indexOf("<", from + match[0].length);
+      } else {
+        invalid.push(text.value.slice(from, from + 12));
+        from = text.value.indexOf("<", from + 1);
+      }
+    }
+  }
+  const hasSelect = [...descendants(node.value)].some((child) => child.type === "SelectExpression");
+  return { tags, invalid, hasSelect };
+}
+
+function markupAllowlistErrors(id, node, locale, file) {
+  const { invalid } = markupOf(node);
+  if (invalid.length === 0) return [];
+  const list = MARKUP_TAGS.map((tag) => `<${tag}>`).join(", ");
+  return [
+    {
+      file,
+      message: `${locale}: message "${id}" uses "<" outside the markup allowlist (${list}, no attributes): ${invalid.map((text) => JSON.stringify(text)).join(", ")}`,
+    },
+  ];
+}
+
+/**
+ * A translation uses the tags of the source message. Messages with plural or
+ * other selects are compared by distinct tag names, because locales have
+ * different variant counts; every other message by tag multiset.
+ */
+function markupParityErrors(id, source, target, locale, file) {
+  const want = markupOf(source);
+  const have = markupOf(target);
+  const key = (info) =>
+    (want.hasSelect || have.hasSelect ? [...new Set(info.tags)] : [...info.tags]).sort().join(" ");
+  if (key(want) === key(have)) return [];
+  return [
+    {
+      file,
+      message: `${locale}: message "${id}" markup tags [${have.tags.join(" ")}] differ from the source [${want.tags.join(" ")}]`,
+    },
+  ];
+}
+
 function attributeNames(node) {
   return new Set(node.attributes.map((attribute) => attribute.id.name));
 }
@@ -123,6 +185,7 @@ function compareMessage(id, source, target, locale, termIds) {
   const unknownTerms = [...termRefsOf(target.node)].filter((name) => !termIds.has(name));
   if (unknownTerms.length) fail(`references unknown terms [${unknownTerms.map((n) => `-${n}`).join(", ")}]`);
 
+  errors.push(...markupParityErrors(id, source.node, target.node, locale, file));
   errors.push(...pluralErrors(id, target.node, locale, file));
   return errors;
 }
@@ -148,6 +211,9 @@ export function checkCatalogs({ catalogs, registered, source = SOURCE_LOCALE }) 
   const en = parsed.get(source) ?? { messages: new Map(), terms: new Map(), junk: [] };
   const total = en.messages.size + en.terms.size;
   completeness.set(source, 100);
+  for (const [id, entry] of en.messages) {
+    errors.push(...markupAllowlistErrors(id, entry.node, source, `locales/${source}/${entry.file}`));
+  }
   const sourceTerms = [...en.terms].filter(([, entry]) => entry.file === TERMS_FILE);
 
   for (const [code, locale] of parsed) {
@@ -155,6 +221,7 @@ export function checkCatalogs({ catalogs, registered, source = SOURCE_LOCALE }) 
     const where = (entry) => `locales/${code}/${entry.file}`;
 
     for (const [id, entry] of locale.messages) {
+      errors.push(...markupAllowlistErrors(id, entry.node, code, where(entry)));
       const original = en.messages.get(id);
       if (!original) {
         errors.push({ file: where(entry), message: `${code}: message "${id}" does not exist in ${source}` });

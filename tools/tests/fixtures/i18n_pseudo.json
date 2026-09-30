@@ -38,5 +38,15 @@
     "input": "a-b c_d",
     "accented": "ȧȧ-ƀ ƈ_ḓ",
     "bidi": "\u202eɐ\u202c-\u202eq\u202c \u202eɔ\u202c_\u202ep\u202c"
+  },
+  {
+    "input": "Save <strong>all</strong> now",
+    "accented": "Şȧȧṽḗḗ <strong>ȧȧŀŀ</strong> ƞǿǿẇ",
+    "bidi": "\u202eSɐʌǝ\u202c <strong>\u202eɐʅʅ\u202c</strong> \u202euoʍ\u202c"
+  },
+  {
+    "input": "Total <br/><code>x</code> a < b",
+    "accented": "Ŧǿǿŧȧȧŀ <br/><code>ẋ</code> ȧȧ < ƀ",
+    "bidi": "\u202e⊥oʇɐʅ\u202c <br/><code>\u202ex\u202c</code> \u202eɐ\u202c < \u202eq\u202c"
   }
 ]

@@ -107,8 +107,41 @@ fn map_letter(c: char, upper: &str, lower: &str) -> char {
     table.chars().nth(c as usize - base as usize).unwrap_or(c)
 }
 
+/// Apply `f` to the text of `s` outside `<...>` spans, so markup tag names are
+/// never transformed. A `<` with no closing `>` before the next `<` is text.
+fn map_outside_tags<'a>(s: &'a str, f: fn(&str) -> Cow<'_, str>) -> Cow<'a, str> {
+    if !s.contains('<') {
+        return f(s);
+    }
+    let mut out = String::with_capacity(s.len() * 2);
+    let mut text_start = 0;
+    let mut i = 0;
+    while let Some(offset) = s[i..].find('<') {
+        let open = i + offset;
+        let tag_len = s[open + 1..]
+            .find(['<', '>'])
+            .filter(|end| s.as_bytes()[open + 1 + end] == b'>')
+            .map(|end| end + 2);
+        match tag_len {
+            Some(len) => {
+                out.push_str(&f(&s[text_start..open]));
+                out.push_str(&s[open..open + len]);
+                i = open + len;
+                text_start = i;
+            }
+            None => i = open + 1,
+        }
+    }
+    out.push_str(&f(&s[text_start..]));
+    Cow::Owned(out)
+}
+
 /// Double ASCII vowels, then replace ASCII letters with accented forms.
 pub fn transform_accented(s: &str) -> Cow<'_, str> {
+    map_outside_tags(s, accent_text)
+}
+
+fn accent_text(s: &str) -> Cow<'_, str> {
     if !s.bytes().any(|b| b.is_ascii_alphabetic()) {
         return Cow::Borrowed(s);
     }
@@ -129,6 +162,10 @@ pub fn transform_accented(s: &str) -> Cow<'_, str> {
 
 /// Flip ASCII letters and wrap each run of ASCII letters in a right-to-left override.
 pub fn transform_bidi(s: &str) -> Cow<'_, str> {
+    map_outside_tags(s, bidi_text)
+}
+
+fn bidi_text(s: &str) -> Cow<'_, str> {
     if !s.bytes().any(|b| b.is_ascii_alphabetic()) {
         return Cow::Borrowed(s);
     }

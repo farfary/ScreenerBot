@@ -82,8 +82,7 @@ shell-ticker-rpc = RPC:
 shell-ticker-rpc-per-minute = /min
 shell-ticker-services-segment =
     .title = Background services health status
-shell-ticker-services = Services:
-shell-ticker-services-loading = Loading
+shell-ticker-services-loading = Services: <strong>Loading</strong>
 
 ## Notification drawer
 
@@ -200,11 +199,11 @@ shell-copy-sub-active = { $active } of { $total } active
 
 ## Ticker services state
 
-shell-ticker-services-healthy = Healthy
+shell-ticker-services-healthy = Services: <strong>Healthy</strong>
 shell-ticker-services-issues =
     { $count ->
-        [one] { $count } Issue
-       *[other] { $count } Issues
+        [one] Services: <strong>{ $count } Issue</strong>
+       *[other] Services: <strong>{ $count } Issues</strong>
     }
 
 # Source: scripts/core/agent_approvals.js

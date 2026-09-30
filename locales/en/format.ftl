@@ -141,4 +141,4 @@ format-memory-gb =
     }
 
 # Uptime below one minute.
-format-under-minute = <1m
+format-under-minute = { "<1m" }

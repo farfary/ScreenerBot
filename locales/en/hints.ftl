@@ -658,12 +658,12 @@ hints-token-details-activity-content =
     • **Counts:** Exact number of buys/sells and their percentage share.
 
     { "*" }*Summary metrics:**
-    • **24H Buy %:** >50% is bullish (more buyers), <50% is bearish (more sellers).
+    • **24H Buy %:** >50% is bullish (more buyers), { "<" }50% is bearish (more sellers).
     • **Net Flow:** Total buys minus sells. Positive = Accumulation.
     • **5M Spike:** How much faster trading is *right now* vs. the 1H average.
       • **>1.0x:** Accelerating interest.
       • **>3.0x:** Viral breakout or panic event.
-      • **<1.0x:** Cooling down.
+      • **{ "<" }1.0x:** Cooling down.
 
     { "*" }*Strategy Tip:** High "Buy %" with high "Spike Factor" often signals a strong breakout entry.
 hints-token-details-security-title = Security Analysis
