@@ -14,3 +14,8 @@ dir = "ltr"
 code = "fr"
 name = "Français"
 dir = "ltr"
+
+[[locale]]
+code = "es"
+name = "Español"
+dir = "ltr"
