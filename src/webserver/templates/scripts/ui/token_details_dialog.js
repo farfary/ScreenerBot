@@ -649,7 +649,7 @@ export class TokenDetailsDialog {
           loadingText.textContent =
             this._chartEmptyCount >= 6
               ? I18n.t("tokens-dialog-chart-still-checking")
-              : I18n.t("positions-chart-waiting");
+              : I18n.t("chart-waiting");
         }
         if (loadingOverlay) {
           loadingOverlay.classList.remove("hidden");
@@ -687,7 +687,7 @@ export class TokenDetailsDialog {
     } catch {
       // On error when no data yet, keep showing waiting message
       if (!this.chartDataLoaded && loadingText) {
-        loadingText.textContent = I18n.t("positions-chart-waiting");
+        loadingText.textContent = I18n.t("chart-waiting");
       }
       if (!this.chartDataLoaded && loadingOverlay) {
         loadingOverlay.classList.remove("hidden");
@@ -963,10 +963,10 @@ export class TokenDetailsDialog {
                 <button class="dialog-header-action favorite-btn" id="favoriteBtn" title="${esc(I18n.t("menu-favorite-add"))}" aria-label="${esc(I18n.t("menu-favorite-add"))}" type="button">
                   <i class="icon-star"></i>
                 </button>
-                <button class="dialog-header-action" id="copyMintBtn" title="${esc(I18n.attr("tokens-dialog-copy-mint", "title"))}" aria-label="${esc(I18n.attr("tokens-dialog-copy-mint", "aria-label"))}" type="button">
+                <button class="dialog-header-action" id="copyMintBtn" title="${esc(I18n.attr("tokens-copy-mint", "title"))}" aria-label="${esc(I18n.attr("tokens-copy-mint", "aria-label"))}" type="button">
                   <i class="icon-copy"></i>
                 </button>
-                <a href="https://solscan.io/token/${this._escapeHtml(this.tokenData.mint)}" target="_blank" rel="noopener noreferrer" class="dialog-header-action" title="${esc(I18n.t("menu-view-solscan"))}" aria-label="${esc(I18n.t("menu-view-solscan"))}">
+                <a href="https://solscan.io/token/${this._escapeHtml(this.tokenData.mint)}" target="_blank" rel="noopener noreferrer" class="dialog-header-action" title="${esc(I18n.t("links-view-solscan"))}" aria-label="${esc(I18n.t("links-view-solscan"))}">
                   <i class="icon-external-link"></i>
                 </a>
               </div>`

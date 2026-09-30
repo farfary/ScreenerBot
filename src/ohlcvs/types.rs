@@ -702,7 +702,38 @@ pub struct OhlcvStatus {
 
 #[cfg(test)]
 mod tests {
-    use super::PoolConfig;
+    use super::{PoolConfig, Priority};
+
+    /// Catalog key of the label for each monitoring priority. The match is
+    /// exhaustive, so a new variant fails to compile until it is mapped here and
+    /// in `OHLCV_PRIORITY_LABELS` (pages/tokens/ohlcv.js).
+    fn label_key(priority: Priority) -> &'static str {
+        match priority {
+            Priority::Critical => "tokens-ohlcv-priority-critical",
+            Priority::High => "tokens-ohlcv-priority-high",
+            Priority::Medium => "tokens-ohlcv-priority-medium",
+            Priority::Low => "tokens-ohlcv-priority-low",
+        }
+    }
+
+    #[test]
+    fn priority_labels_exist_in_the_catalog() {
+        for priority in [
+            Priority::Critical,
+            Priority::High,
+            Priority::Medium,
+            Priority::Low,
+        ] {
+            let key = label_key(priority);
+            assert_eq!(
+                key,
+                format!("tokens-ohlcv-priority-{}", priority.as_str()),
+                "key does not follow the id {}",
+                priority.as_str()
+            );
+            assert_ne!(crate::i18n::format_en(key, None), key, "missing {key}");
+        }
+    }
 
     fn pool(address: &str, liquidity: f64, is_default: bool, failure_count: u32) -> PoolConfig {
         PoolConfig {

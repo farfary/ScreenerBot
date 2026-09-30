@@ -75,53 +75,53 @@
 
       items.push({
         type: "item",
-        label: I18n.t("menu-explorer-open"),
+        label: I18n.t("links-explorer-open"),
         icon: "externalLink",
         submenu: [
-          { type: "header", label: I18n.t("menu-explorer-group-trading") },
+          { type: "header", label: I18n.t("links-explorer-group-trading") },
           {
             type: "item",
-            label: I18n.t("menu-explorer-dexscreener"),
+            label: I18n.t("links-explorer-dexscreener"),
             icon: "chart",
             action: () => this._openExplorer(context.mint, "dexscreener"),
           },
           {
             type: "item",
-            label: I18n.t("menu-explorer-birdeye"),
+            label: I18n.t("links-explorer-birdeye"),
             icon: "eye",
             action: () => this._openExplorer(context.mint, "birdeye"),
           },
           {
             type: "item",
-            label: I18n.t("menu-explorer-photon"),
+            label: I18n.t("links-explorer-photon"),
             icon: "zap",
             action: () => this._openExplorer(context.mint, "photon"),
           },
           { type: "separator" },
-          { type: "header", label: I18n.t("menu-explorer-group-analysis") },
+          { type: "header", label: I18n.t("links-explorer-group-analysis") },
           {
             type: "item",
-            label: I18n.t("menu-explorer-rugcheck"),
+            label: I18n.t("links-explorer-rugcheck"),
             icon: "shield",
             action: () => this._openExplorer(context.mint, "rugcheck"),
           },
           {
             type: "item",
-            label: I18n.t("menu-explorer-bubblemaps"),
+            label: I18n.t("links-explorer-bubblemaps"),
             icon: "globe",
             action: () => this._openExplorer(context.mint, "bubblemaps"),
           },
           { type: "separator" },
-          { type: "header", label: I18n.t("menu-explorer-group-explorers") },
+          { type: "header", label: I18n.t("links-explorer-group-explorers") },
           {
             type: "item",
-            label: I18n.t("menu-explorer-solscan"),
+            label: I18n.t("links-explorer-solscan"),
             icon: "globe",
             action: () => this._openExplorer(context.mint, "solscan"),
           },
           {
             type: "item",
-            label: I18n.t("menu-explorer-solana-fm"),
+            label: I18n.t("links-explorer-solana-fm"),
             icon: "globe",
             action: () => this._openExplorer(context.mint, "solanafm"),
           },
@@ -229,53 +229,53 @@
 
       items.push({
         type: "item",
-        label: I18n.t("menu-explorer-open"),
+        label: I18n.t("links-explorer-open"),
         icon: "externalLink",
         submenu: [
-          { type: "header", label: I18n.t("menu-explorer-group-trading") },
+          { type: "header", label: I18n.t("links-explorer-group-trading") },
           {
             type: "item",
-            label: I18n.t("menu-explorer-dexscreener"),
+            label: I18n.t("links-explorer-dexscreener"),
             icon: "chart",
             action: () => this._openExplorer(context.mint, "dexscreener"),
           },
           {
             type: "item",
-            label: I18n.t("menu-explorer-birdeye"),
+            label: I18n.t("links-explorer-birdeye"),
             icon: "eye",
             action: () => this._openExplorer(context.mint, "birdeye"),
           },
           {
             type: "item",
-            label: I18n.t("menu-explorer-photon"),
+            label: I18n.t("links-explorer-photon"),
             icon: "zap",
             action: () => this._openExplorer(context.mint, "photon"),
           },
           { type: "separator" },
-          { type: "header", label: I18n.t("menu-explorer-group-analysis") },
+          { type: "header", label: I18n.t("links-explorer-group-analysis") },
           {
             type: "item",
-            label: I18n.t("menu-explorer-rugcheck"),
+            label: I18n.t("links-explorer-rugcheck"),
             icon: "shield",
             action: () => this._openExplorer(context.mint, "rugcheck"),
           },
           {
             type: "item",
-            label: I18n.t("menu-explorer-bubblemaps"),
+            label: I18n.t("links-explorer-bubblemaps"),
             icon: "globe",
             action: () => this._openExplorer(context.mint, "bubblemaps"),
           },
           { type: "separator" },
-          { type: "header", label: I18n.t("menu-explorer-group-explorers") },
+          { type: "header", label: I18n.t("links-explorer-group-explorers") },
           {
             type: "item",
-            label: I18n.t("menu-explorer-solscan"),
+            label: I18n.t("links-explorer-solscan"),
             icon: "globe",
             action: () => this._openExplorer(context.mint, "solscan"),
           },
           {
             type: "item",
-            label: I18n.t("menu-explorer-solana-fm"),
+            label: I18n.t("links-explorer-solana-fm"),
             icon: "globe",
             action: () => this._openExplorer(context.mint, "solanafm"),
           },
@@ -302,14 +302,14 @@
     manager._buildTransactionMenu = function (items, context) {
       items.push({
         type: "item",
-        label: I18n.t("menu-view-solscan"),
+        label: I18n.t("links-view-solscan"),
         icon: "externalLink",
         action: () => window.open(`https://solscan.io/tx/${context.signature}`, "_blank"),
       });
 
       items.push({
         type: "item",
-        label: I18n.t("menu-view-solana-fm"),
+        label: I18n.t("links-view-solana-fm"),
         icon: "globe",
         action: () => window.open(`https://solana.fm/tx/${context.signature}`, "_blank"),
       });
@@ -421,7 +421,7 @@
 
         items.push({
           type: "item",
-          label: I18n.t("menu-view-solscan"),
+          label: I18n.t("links-view-solscan"),
           icon: "globe",
           action: () => window.open(`https://solscan.io/account/${context.text.trim()}`, "_blank"),
         });

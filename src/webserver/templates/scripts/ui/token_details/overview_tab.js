@@ -36,7 +36,7 @@ export function renderOverviewTab(token, options = {}) {
             <div class="chart-header-left">
               <div class="chart-data-indicator" id="chartDataIndicator" tabindex="0" role="status">
                 <span class="chart-data-dot"></span>
-                <span class="chart-data-label">${esc(I18n.t("positions-chart-data"))}</span>
+                <span class="chart-data-label">${esc(I18n.t("chart-data"))}</span>
                 <div class="chart-data-tip" id="chartDataTip" role="tooltip">
                   <div class="chart-data-tip-empty">${esc(I18n.t("tokens-overview-chart-checking"))}</div>
                 </div>
@@ -44,10 +44,10 @@ export function renderOverviewTab(token, options = {}) {
               ${renderHintTrigger("tokenDetails.chart")}
             </div>
             <div class="chart-ohlcv-display" id="chartOhlcvDisplay">
-              <span class="ohlcv-item"><span class="ohlcv-label">${esc(I18n.t("positions-chart-ohlc-open"))}</span> <span class="ohlcv-value" id="ohlcvOpen">—</span></span>
-              <span class="ohlcv-item"><span class="ohlcv-label">${esc(I18n.t("positions-chart-ohlc-high"))}</span> <span class="ohlcv-value" id="ohlcvHigh">—</span></span>
-              <span class="ohlcv-item"><span class="ohlcv-label">${esc(I18n.t("positions-chart-ohlc-low"))}</span> <span class="ohlcv-value" id="ohlcvLow">—</span></span>
-              <span class="ohlcv-item"><span class="ohlcv-label">${esc(I18n.t("positions-chart-ohlc-close"))}</span> <span class="ohlcv-value" id="ohlcvClose">—</span></span>
+              <span class="ohlcv-item"><span class="ohlcv-label">${esc(I18n.t("chart-ohlc-open"))}</span> <span class="ohlcv-value" id="ohlcvOpen">—</span></span>
+              <span class="ohlcv-item"><span class="ohlcv-label">${esc(I18n.t("chart-ohlc-high"))}</span> <span class="ohlcv-value" id="ohlcvHigh">—</span></span>
+              <span class="ohlcv-item"><span class="ohlcv-label">${esc(I18n.t("chart-ohlc-low"))}</span> <span class="ohlcv-value" id="ohlcvLow">—</span></span>
+              <span class="ohlcv-item"><span class="ohlcv-label">${esc(I18n.t("chart-ohlc-close"))}</span> <span class="ohlcv-value" id="ohlcvClose">—</span></span>
               <span class="ohlcv-change" id="ohlcvChange">—</span>
             </div>
             <div class="chart-controls">
@@ -66,7 +66,7 @@ export function renderOverviewTab(token, options = {}) {
             <div id="chartLoadingOverlay" class="chart-loading-overlay">
               <div class="chart-loading-content">
                 <div class="chart-loading-spinner"></div>
-                <div class="chart-loading-text">${esc(I18n.t("positions-chart-loading"))}</div>
+                <div class="chart-loading-text">${esc(I18n.t("chart-loading"))}</div>
               </div>
             </div>
           </div>
@@ -208,8 +208,8 @@ function buildTokenInfoSection(token, options) {
               class="overview-copy-value"
               data-copy="${escapeHtml(token.mint)}"
               dir="ltr"
-              title="${esc(I18n.attr("positions-details-copy-mint", "title"))}"
-              aria-label="${esc(I18n.attr("positions-details-copy-mint", "aria-label"))}"
+              title="${esc(I18n.attr("tokens-copy-mint", "title"))}"
+              aria-label="${esc(I18n.attr("tokens-copy-mint", "aria-label"))}"
             >${formatShortAddress(token.mint)}</button>
           </div>
           <div class="overview-fact">

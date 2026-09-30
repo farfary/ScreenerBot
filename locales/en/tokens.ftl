@@ -1,3 +1,8 @@
+# Copy button for a token mint address, shared by the token and position details dialogs.
+tokens-copy-mint =
+    .title = Copy mint address
+    .aria-label = Copy mint address
+
 # Token data source status. Ids come from build_source_status in
 # src/webserver/routes/tokens/source_status.rs. $label is a provider name and is
 # not translated.
@@ -264,7 +269,6 @@ tokens-links-socials-title = Social media
 tokens-links-explorer-solana-explorer = { -solana-explorer }
 tokens-links-explorer-geckoterminal = { -geckoterminal }
 tokens-links-explorer-dextools = { -dextools }
-tokens-links-explorer-gmgn = { -gmgn }
 tokens-links-explorer-coingecko = { -coingecko }
 tokens-links-explorer-jupiter-swap = { -jupiter } Swap
 tokens-links-social-twitter = { -twitter } / { -x }
@@ -308,9 +312,6 @@ tokens-dialog-buy = Buy
 tokens-dialog-sell = Sell
     .title = Sell position
 tokens-dialog-sell-unavailable = No open position to sell
-tokens-dialog-copy-mint =
-    .title = Copy Mint Address
-    .aria-label = Copy Mint Address
 tokens-dialog-details = Details
 tokens-dialog-sources = Sources
 tokens-dialog-sources-status = Data source status
@@ -351,3 +352,256 @@ tokens-dialog-badge-auth = Auth:
 tokens-dialog-badge-update-authority = Update Authority:
 tokens-dialog-badge-position = Position
 tokens-dialog-badge-blacklisted = Blacklisted
+
+# Tokens page: sub-tabs (scripts/pages/tokens/constants.js)
+# Ids are the view values of /api/tokens/list.
+
+tokens-view-favorites = Favorites
+tokens-view-pool = Pool Service
+tokens-view-no-market = No Market Data
+tokens-view-all = All Tokens
+tokens-view-passed = Passed
+tokens-view-rejected = Rejected
+tokens-view-blacklisted = Blacklisted
+tokens-view-positions = Positions
+tokens-view-recent = Recent
+tokens-view-ohlcv = OHLCV Data
+
+# Tokens page: token cell (scripts/pages/tokens/formatters.js)
+
+tokens-cell-logo-enlarge = Click to enlarge
+# $boosts is the formatted active boost count.
+tokens-boost-title = Boosted { $boosts } on screenerbot.io
+tokens-cell-action-add =
+    .title = Add to position (DCA)
+    .aria-label = Add to position
+tokens-cell-action-sell =
+    .title = Sell (full or % partial)
+    .aria-label = Sell token
+tokens-cell-action-buy =
+    .title = Buy position
+    .aria-label = Buy token
+tokens-cell-external-links =
+    .title = External links
+    .aria-label = External links
+
+# Tokens page: table states shared by the token lists (scripts/pages/tokens/*.js)
+
+tokens-table-loading-title = Loading tokens…
+tokens-table-loading-description = Preparing the selected token view.
+tokens-table-retry-hint = Switch tabs or try again.
+tokens-filter-all = All
+
+# Tokens page: favorites (scripts/pages/tokens/favorites.js)
+
+tokens-favorites-load-failed-title = Favorites could not be loaded
+tokens-favorites-load-failed-toast = Could not load favorites
+tokens-favorites-total = Total Favorites
+tokens-favorites-empty-title = No Favorites Yet
+# $shortcut is the key combination that opens the search dialog.
+tokens-favorites-empty-description = Use the search ({ $shortcut }) to find tokens and add them to your favorites.
+
+# Tokens page: OHLCV data view (scripts/pages/tokens/ohlcv.js)
+# Status ids come from /api/ohlcv/tokens; priority ids are Priority::as_str in src/ohlcvs/types.rs.
+
+tokens-column-token = Token
+tokens-column-status = Status
+tokens-ohlcv-delete =
+    .title = Delete OHLCV data
+    .aria-label = Delete OHLCV data
+tokens-ohlcv-status-active = Active
+tokens-ohlcv-status-inactive = Inactive
+tokens-ohlcv-priority-critical = Critical
+tokens-ohlcv-priority-high = High
+tokens-ohlcv-priority-medium = Medium
+tokens-ohlcv-priority-low = Low
+tokens-ohlcv-column-priority = Priority
+tokens-ohlcv-column-backfill = Backfill
+tokens-ohlcv-column-data-span = Data Span
+tokens-ohlcv-column-gaps = Gaps
+tokens-ohlcv-column-pools = Pools
+tokens-ohlcv-column-last-fetch = Last Fetch
+# $timeframe is a timeframe code such as 1h.
+tokens-ohlcv-timeframe-complete = { $timeframe }: Complete
+tokens-ohlcv-timeframe-pending = { $timeframe }: Pending
+tokens-ohlcv-load-failed-title = OHLCV data could not be loaded
+tokens-ohlcv-load-failed-toast = Could not load OHLCV data
+tokens-ohlcv-total = Total Tokens
+tokens-ohlcv-active = Active
+tokens-ohlcv-db-size = DB Size
+tokens-ohlcv-cleanup = Cleanup Inactive
+tokens-ohlcv-delete-title = Delete OHLCV Data
+# $mint is the first characters of the token mint.
+tokens-ohlcv-delete-message = Delete all OHLCV data for { $mint }...?
+tokens-ohlcv-delete-done =
+    Deleted: { $candles ->
+        [one] { $candles } candle
+       *[other] { $candles } candles
+    }, { $pools ->
+        [one] { $pools } pool
+       *[other] { $pools } pools
+    }
+tokens-ohlcv-delete-failed = Failed to delete OHLCV data
+tokens-ohlcv-cleanup-title = Delete Inactive Tokens
+tokens-ohlcv-cleanup-message = Delete inactive tokens older than specified hours
+tokens-ohlcv-cleanup-placeholder = Hours...
+tokens-ohlcv-cleanup-invalid = Please enter a positive number
+tokens-ohlcv-cleanup-done =
+    Cleaned up { $count ->
+        [one] { $count } inactive token
+       *[other] { $count } inactive tokens
+    }
+tokens-ohlcv-cleanup-failed = Failed to cleanup OHLCV data
+
+# Tokens page: token lists (scripts/pages/tokens.js)
+# The list statuses shown in the Status column come from row flags, not ids.
+
+tokens-summary-total = Total
+tokens-summary-priced = With Price
+tokens-summary-positions = Positions
+tokens-summary-blacklisted = Blacklisted
+tokens-search-placeholder = Search by symbol or mint...
+tokens-table-waiting-title = Still loading tokens...
+tokens-table-waiting-description = Waiting for the backend to respond. We will retry automatically.
+tokens-load-failed-toast = Could not load tokens
+tokens-row-data-missing = Token data not found
+tokens-column-price-sol = Price ({ -sol })
+tokens-column-liquidity = Liquidity
+tokens-column-volume-24h = 24h Vol
+tokens-column-fdv = FDV
+tokens-column-market-cap = Mkt Cap
+tokens-column-change-1h = 1h
+tokens-column-change-24h = 24h
+tokens-column-txns-5m = Txns 5m
+tokens-column-txns-1h = Txns 1h
+tokens-column-txns-6h = Txns 6h
+tokens-column-txns-24h = Txns 24h
+tokens-column-risk-score = Risk Score
+tokens-column-reject-reason = Reject Reason
+tokens-column-blacklist-reason = Blacklist Reason
+tokens-column-updated = Updated
+tokens-column-birth = Birth
+tokens-column-first-seen = First Seen
+tokens-badge-price = Price
+tokens-badge-ohlcv = OHLCV
+tokens-badge-position = Position
+tokens-badge-blacklisted = Blacklisted
+tokens-badge-blacklisted-title = Blacklisted token
+# $reasons is the list of blacklist categories, reasons and details.
+tokens-badge-blacklisted-reasons = Blacklisted: { $reasons }
+tokens-links-menu-copy-mint = Copy Mint
+tokens-links-copy-failed = Failed to copy mint
+tokens-lightbox-token-age = Token Age
+
+# Global search dialog (scripts/ui/search_dialog.js)
+
+tokens-search-placeholder-dialog = Search name, symbol or mint...
+tokens-search-input-label = Search tokens
+tokens-search-results-label = Search results
+tokens-search-hint = Type token name, symbol or paste mint
+tokens-search-no-matches = No matches — try different term
+tokens-search-tip-nav = nav
+tokens-search-tip-open = open
+tokens-search-tip-close = close
+tokens-search-failed = Search failed
+# $message is the failure text.
+tokens-search-error = Error: { $message }
+tokens-search-action-favorite =
+    .title = Add to Favorites
+    .aria-label = Add to Favorites
+tokens-search-action-blacklist =
+    .title = Add to Blacklist
+    .aria-label = Add to Blacklist
+tokens-search-no-mint = Token has no mint address
+tokens-search-open-failed = Failed to open token details
+tokens-search-copy-failed = Failed to copy to clipboard
+# $symbol is the token symbol, or its mint when the symbol is unknown.
+tokens-search-favorite-added = Added { $symbol } to favorites
+tokens-search-favorite-already = Already in Favorites
+tokens-search-favorite-failed = Failed to add to favorites
+tokens-search-blacklist-message = Blacklist { $symbol }? This token will be excluded from trading.
+tokens-search-blacklist-done = Blacklisted { $symbol }
+tokens-search-blacklisted = Blacklisted
+tokens-search-blacklist-failed = Failed to blacklist token
+
+# Featured dialog (scripts/ui/featured_dialog.js)
+# Category and source ids are those of CATEGORIES; provider names are terms.
+
+tokens-featured-category-boosted = Boosted
+tokens-featured-category-jupiter-organic = { -jupiter } Top Organic
+tokens-featured-category-jupiter-traded = { -jupiter } Top Traded
+tokens-featured-category-dexscreener-trending = { -dexscreener } Trending
+tokens-featured-source-jupiter = { -jupiter }
+tokens-featured-source-dexscreener = { -dexscreener }
+tokens-featured-note-boosted = Promoted by their teams
+tokens-featured-security-risky = Risky
+tokens-featured-load-failed = Failed to load featured
+# $message is the failure text.
+tokens-featured-network-error = Network error: { $message }
+tokens-featured-title = Featured
+tokens-featured-subtitle = Boosted tokens first, then trending across Solana
+tokens-featured-boost = Boost a Token
+tokens-featured-close =
+    .title = Close (ESC)
+tokens-featured-loading = Loading featured & trending...
+tokens-featured-error-hint = Check connection or try again
+tokens-featured-empty = No tokens available right now
+tokens-featured-count =
+    { $count ->
+        [one] { $count } token
+       *[other] { $count } tokens
+    }
+tokens-featured-stat-market-cap = Market Cap
+tokens-featured-stat-liquidity = Liquidity
+tokens-featured-stat-volume = Vol 24H
+tokens-featured-stat-holders = Holders
+tokens-featured-stat-txns = Txns 24H
+# $symbol is the token symbol.
+tokens-featured-buy = Buy
+    .title = Buy { $symbol }
+# $score is the normalized security score out of 100, where higher is safer.
+tokens-featured-security-score = Security score: { $score }/100
+tokens-featured-social-website = Website
+tokens-featured-social-twitter = { -twitter }
+
+# Featured row (scripts/ui/featured_row.js)
+
+tokens-featured-row-view-all = All
+    .title = Open the full Featured view
+tokens-featured-row-scroll-left =
+    .aria-label = Scroll left
+tokens-featured-row-scroll-right =
+    .aria-label = Scroll right
+tokens-featured-row-empty = No featured tokens
+# $name and $symbol identify the token; $boosts is the formatted active boost count.
+tokens-featured-row-title = { $name } ({ $symbol })
+tokens-featured-row-boosted-title = { $name } ({ $symbol }) — boosted { $boosts }
+
+# Pool selector dialog (scripts/ui/pool_selector.js)
+
+tokens-pool-selector-title = Select Pool
+tokens-pool-selector-loading = Loading pools...
+tokens-pool-selector-empty = No pools found for this token
+# $message is the failure text.
+tokens-pool-selector-load-failed = Failed to load pools: { $message }
+tokens-pool-selector-count =
+    { $count ->
+        [one] { $count } pool found
+       *[other] { $count } pools found
+    }
+# $amount is the formatted pool liquidity in USD.
+tokens-pool-selector-liquidity = { $amount } liq
+    .title = Liquidity
+# $amount is the formatted 24 hour pool volume in USD.
+tokens-pool-selector-volume = { $amount } 24h
+    .title = 24h Volume
+
+# Token identity chips and address rows (scripts/ui/token_identity.js)
+
+tokens-identity-unknown-asset = Unknown asset
+tokens-identity-copy-address =
+    .title = Copy address
+    .aria-label = Copy address
+tokens-identity-copy-signature =
+    .title = Copy signature
+    .aria-label = Copy signature

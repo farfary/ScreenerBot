@@ -17,24 +17,8 @@ menu-position-sell = Sell { $symbol }
 menu-position-add = Add to Position
 menu-position-management = Management
 
-## Explorer submenu
-
-menu-explorer-open = View on Explorer
-menu-explorer-group-trading = Trading
-menu-explorer-group-analysis = Analysis
-menu-explorer-group-explorers = Explorers
-menu-explorer-dexscreener = { -dexscreener }
-menu-explorer-birdeye = { -birdeye }
-menu-explorer-photon = { -photon }
-menu-explorer-rugcheck = { -rugcheck }
-menu-explorer-bubblemaps = { -bubblemaps }
-menu-explorer-solscan = { -solscan }
-menu-explorer-solana-fm = { -solanafm }
-
 ## Transaction, link, image, selection and page items
 
-menu-view-solscan = View on { -solscan }
-menu-view-solana-fm = View on { -solanafm }
 menu-copy-signature = Copy Signature
 menu-link-open = Open Link
 menu-link-open-new-tab = Open in New Tab

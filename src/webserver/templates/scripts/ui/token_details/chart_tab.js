@@ -184,7 +184,7 @@ export function applyChartTabMixin(DialogClass) {
         label:
           idx === 0
             ? I18n.t("tokens-chart-marker-entry")
-            : I18n.t("positions-chart-marker-dca", { index: idx }),
+            : I18n.t("chart-marker-dca", { index: idx }),
       });
     });
 
@@ -195,7 +195,7 @@ export function applyChartTabMixin(DialogClass) {
         type: "exit",
         price: exit.price_sol,
         timestamp: Math.floor(new Date(exit.timestamp).getTime() / 1000),
-        label: I18n.t("positions-chart-marker-exit-numbered", { index: idx + 1 }),
+        label: I18n.t("chart-marker-exit-numbered", { index: idx + 1 }),
       });
     });
 
@@ -269,7 +269,7 @@ export function applyChartTabMixin(DialogClass) {
         }
         // No data yet - show waiting message
         if (loadingText) {
-          loadingText.textContent = I18n.t("positions-chart-waiting");
+          loadingText.textContent = I18n.t("chart-waiting");
         }
         if (loadingOverlay) {
           loadingOverlay.classList.remove("hidden");
@@ -314,7 +314,7 @@ export function applyChartTabMixin(DialogClass) {
     } catch {
       // On error, show waiting message
       if (loadingText) {
-        loadingText.textContent = I18n.t("positions-chart-waiting");
+        loadingText.textContent = I18n.t("chart-waiting");
       }
       if (loadingOverlay) {
         loadingOverlay.classList.remove("hidden");

@@ -3,40 +3,55 @@
  * Lines extracted from tokens.js (16-116, 185-271)
  */
 
+import { escapeHtml } from "../../core/utils.js";
+
+// Ids are the `view` query values of /api/tokens/list.
+const TOKEN_VIEW_LABELS = Object.freeze({
+  favorites: "tokens-view-favorites",
+  pool: "tokens-view-pool",
+  no_market: "tokens-view-no-market",
+  all: "tokens-view-all",
+  passed: "tokens-view-passed",
+  rejected: "tokens-view-rejected",
+  blacklisted: "tokens-view-blacklisted",
+  positions: "tokens-view-positions",
+  recent: "tokens-view-recent",
+  ohlcv: "tokens-view-ohlcv",
+});
+
+const viewLabel = (id, icon) =>
+  `<i class="${icon}"></i> ${escapeHtml(I18n.label(TOKEN_VIEW_LABELS, id))}`;
+
 // Sub-tabs (views) configuration with hint references
 export const TOKEN_VIEWS = [
-  {
-    id: "favorites",
-    label: '<i class="icon-star"></i> Favorites',
-    hintKey: "tokens.favorites",
-  },
-  { id: "pool", label: '<i class="icon-droplet"></i> Pool Service', hintKey: "tokens.poolService" },
+  { id: "favorites", label: viewLabel("favorites", "icon-star"), hintKey: "tokens.favorites" },
+  { id: "pool", label: viewLabel("pool", "icon-droplet"), hintKey: "tokens.poolService" },
   {
     id: "no_market",
-    label: '<i class="icon-trending-down"></i> No Market Data',
+    label: viewLabel("no_market", "icon-trending-down"),
     hintKey: "tokens.noMarketData",
   },
-  { id: "all", label: '<i class="icon-list"></i> All Tokens', hintKey: "tokens.allTokens" },
-  { id: "passed", label: '<i class="icon-check"></i> Passed', hintKey: "tokens.passedTokens" },
+  { id: "all", label: viewLabel("all", "icon-list"), hintKey: "tokens.allTokens" },
+  { id: "passed", label: viewLabel("passed", "icon-check"), hintKey: "tokens.passedTokens" },
   {
     id: "rejected",
-    label: '<i class="icon-circle-x"></i> Rejected',
+    label: viewLabel("rejected", "icon-circle-x"),
     hintKey: "tokens.rejectedTokens",
   },
   {
     id: "blacklisted",
-    label: '<i class="icon-ban"></i> Blacklisted',
+    label: viewLabel("blacklisted", "icon-ban"),
     hintKey: "tokens.blacklistedTokens",
   },
   {
     id: "positions",
-    label: '<i class="icon-chart-bar"></i> Positions',
+    label: viewLabel("positions", "icon-chart-bar"),
     hintKey: "tokens.positionsTokens",
   },
-  { id: "recent", label: '<i class="icon-clock"></i> Recent', hintKey: "tokens.recentTokens" },
+  { id: "recent", label: viewLabel("recent", "icon-clock"), hintKey: "tokens.recentTokens" },
   {
     id: "ohlcv",
-    label: '<i class="icon-chart-candlestick"></i> OHLCV Data',
+    label: viewLabel("ohlcv", "icon-chart-candlestick"),
     hintKey: "tokens.ohlcvData",
   },
 ];

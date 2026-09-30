@@ -15,7 +15,7 @@
  */
 
 import { $ } from "../core/dom.js";
-import { resolveTokenLogoUrl } from "../core/utils.js";
+import { escapeHtml, resolveTokenLogoUrl } from "../core/utils.js";
 import { formatFixed, formatPercentValue } from "../core/format.js";
 import { openFeaturedDialog } from "./featured_dialog.js";
 import { boostTier, formatBoostCount } from "../core/boosts.js";
@@ -167,18 +167,18 @@ class FeaturedRow {
     container.innerHTML = `
       <div class="featured-row-inner">
         <div class="featured-row-header">
-          <span class="featured-row-label">Featured</span>
-          <button class="featured-row-view-all" title="Open the full Featured view">
-            <span>All</span>
+          <span class="featured-row-label">${escapeHtml(I18n.t("tokens-featured-title"))}</span>
+          <button class="featured-row-view-all" title="${escapeHtml(I18n.attr("tokens-featured-row-view-all", "title"))}">
+            <span>${escapeHtml(I18n.t("tokens-featured-row-view-all"))}</span>
             <i class="icon-chevron-right"></i>
           </button>
         </div>
         <div class="featured-row-scroll">
-          <button class="featured-row-arrow featured-row-arrow-left" aria-label="Scroll left">
+          <button class="featured-row-arrow featured-row-arrow-left" aria-label="${escapeHtml(I18n.attr("tokens-featured-row-scroll-left", "aria-label"))}">
             <i class="icon-chevron-left"></i>
           </button>
           <div class="featured-row-tokens" id="featured-row-tokens"></div>
-          <button class="featured-row-arrow featured-row-arrow-right" aria-label="Scroll right">
+          <button class="featured-row-arrow featured-row-arrow-right" aria-label="${escapeHtml(I18n.attr("tokens-featured-row-scroll-right", "aria-label"))}">
             <i class="icon-chevron-right"></i>
           </button>
         </div>
@@ -343,7 +343,7 @@ class FeaturedRow {
       container.innerHTML = `
         <div class="featured-row-empty">
           <div class="featured-row-empty-cards">${placeholder.repeat(3)}</div>
-          <span class="featured-row-empty-text">No featured tokens</span>
+          <span class="featured-row-empty-text">${escapeHtml(I18n.t("tokens-featured-row-empty"))}</span>
         </div>
       `;
     }
@@ -411,8 +411,8 @@ class FeaturedRow {
     const display = truncateForDisplay(name, symbol);
     const boostCount = formatBoostCount(token.boosts);
     const fullTitle = tier
-      ? `${name} (${symbol}) — boosted ${boostCount}`
-      : `${name} (${symbol})`;
+      ? I18n.t("tokens-featured-row-boosted-title", { name, symbol, boosts: boostCount })
+      : I18n.t("tokens-featured-row-title", { name, symbol });
 
     // A boosted card prints its boost count instead of a market metric: the count
     // is the reason the card is at the front, and one number per card is the

@@ -94,8 +94,8 @@ export function getRejectionDisplayLabel(reasonCode) {
 export function tokenCell(row) {
   const src = row.logo_url || row.image_url;
   const logo = src
-    ? `<img class="token-logo token-logo-artwork clickable-logo" alt="" src="${Utils.escapeHtml(src)}" data-logo-url="${Utils.escapeHtml(src)}" data-token-symbol="${Utils.escapeHtml(row.symbol || "")}" data-token-name="${Utils.escapeHtml(row.name || "")}" data-token-mint="${Utils.escapeHtml(row.mint || "")}" title="Click to enlarge" />`
-    : '<span class="token-logo">N/A</span>';
+    ? `<img class="token-logo token-logo-artwork clickable-logo" alt="" src="${Utils.escapeHtml(src)}" data-logo-url="${Utils.escapeHtml(src)}" data-token-symbol="${Utils.escapeHtml(row.symbol || "")}" data-token-name="${Utils.escapeHtml(row.name || "")}" data-token-mint="${Utils.escapeHtml(row.mint || "")}" title="${Utils.escapeHtml(I18n.t("tokens-cell-logo-enlarge"))}" />`
+    : `<span class="token-logo">${Utils.escapeHtml(I18n.t("format-not-available"))}</span>`;
   const sym = Utils.escapeHtml(row.symbol || "—");
   const name = row.name ? `<div class="token-name">${Utils.escapeHtml(row.name)}</div>` : "";
   // A boosted token's owner paid for visibility, so the mark rides beside the
@@ -104,15 +104,17 @@ export function tokenCell(row) {
   const tier = boostTierForMint(row.mint);
   const boostCount = formatBoostCount(boostCountForMint(row.mint));
   const boostMark = tier
-    ? `<span class="boost-mark${tier === "golden" ? " golden" : ""}" title="Boosted ${boostCount} on screenerbot.io"><i class="icon-zap" aria-hidden="true"></i><span class="boost-mark-count">${boostCount}</span></span>`
+    ? `<span class="boost-mark${tier === "golden" ? " golden" : ""}" title="${Utils.escapeHtml(I18n.t("tokens-boost-title", { boosts: boostCount }))}"><i class="icon-zap" aria-hidden="true"></i><span class="boost-mark-count">${boostCount}</span></span>`
     : "";
   const mint = Utils.escapeHtml(row.mint || "");
   const disabledAttr = row.blacklisted ? ' disabled aria-disabled="true"' : "";
+  const actionAttrs = (title, label) =>
+    `title="${Utils.escapeHtml(title)}" aria-label="${Utils.escapeHtml(label)}"`;
   const tradeActions = row.has_open_position
     ? `
-      <button class="btn row-action" data-action="add" data-mint="${mint}" title="Add to position (DCA)" aria-label="Add to position"${disabledAttr}><i class="icon-circle-plus"></i></button>
-      <button class="btn row-action" data-action="sell" data-mint="${mint}" title="Sell (full or % partial)" aria-label="Sell token"${disabledAttr}><i class="icon-trending-down"></i></button>`
-    : `<button class="btn row-action" data-action="buy" data-mint="${mint}" title="Buy position" aria-label="Buy token"${disabledAttr}><i class="icon-shopping-cart"></i></button>`;
+      <button class="btn row-action" data-action="add" data-mint="${mint}" ${actionAttrs(I18n.attr("tokens-cell-action-add", "title"), I18n.attr("tokens-cell-action-add", "aria-label"))}${disabledAttr}><i class="icon-circle-plus"></i></button>
+      <button class="btn row-action" data-action="sell" data-mint="${mint}" ${actionAttrs(I18n.attr("tokens-cell-action-sell", "title"), I18n.attr("tokens-cell-action-sell", "aria-label"))}${disabledAttr}><i class="icon-trending-down"></i></button>`
+    : `<button class="btn row-action" data-action="buy" data-mint="${mint}" ${actionAttrs(I18n.attr("tokens-cell-action-buy", "title"), I18n.attr("tokens-cell-action-buy", "aria-label"))}${disabledAttr}><i class="icon-shopping-cart"></i></button>`;
   const actionCount = row.has_open_position ? 3 : 2;
 
   return `<div class="token-cell token-cell--actions-${actionCount}">
@@ -122,7 +124,7 @@ export function tokenCell(row) {
     </div>
     <div class="row-actions token-cell__actions">
       ${tradeActions}
-      <button class="btn links-dropdown-trigger" data-mint="${mint}" title="External links" aria-label="External links" type="button"><i class="icon-external-link"></i></button>
+      <button class="btn links-dropdown-trigger" data-mint="${mint}" ${actionAttrs(I18n.attr("tokens-cell-external-links", "title"), I18n.attr("tokens-cell-external-links", "aria-label"))} type="button"><i class="icon-external-link"></i></button>
     </div>
   </div>`;
 }

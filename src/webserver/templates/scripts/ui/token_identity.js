@@ -175,7 +175,7 @@ export function renderTokenChip(mintOrIdentity, options = {}) {
     typeof mintOrIdentity === "string" ? getIdentity(mintOrIdentity) : mintOrIdentity;
   const { size = "sm", showName = true, showMint = false } = options;
 
-  const symbol = identity.symbol || "Unknown asset";
+  const symbol = identity.symbol || I18n.t("tokens-identity-unknown-asset");
   const name = showName && identity.name && identity.name !== identity.symbol ? identity.name : "";
 
   return `
@@ -203,11 +203,21 @@ export function renderAddress(address, options = {}) {
   if (!address) return "—";
   const explorer = EXPLORER_PATHS[options.explorer] || EXPLORER_PATHS.token;
   const safe = Utils.escapeHtml(address);
-  const label = options.explorer === "tx" ? "signature" : "address";
+  const isSignature = options.explorer === "tx";
+  const copyTitle = Utils.escapeHtml(
+    isSignature
+      ? I18n.attr("tokens-identity-copy-signature", "title")
+      : I18n.attr("tokens-identity-copy-address", "title")
+  );
+  const copyLabel = Utils.escapeHtml(
+    isSignature
+      ? I18n.attr("tokens-identity-copy-signature", "aria-label")
+      : I18n.attr("tokens-identity-copy-address", "aria-label")
+  );
   return `
     <span class="ti-address">
-      <a href="https://solscan.io/${explorer}/${safe}" target="_blank" rel="noopener" class="ti-address-value" title="View on Solscan">${safe}</a>
-      <button type="button" class="ti-address-copy" data-copy="${safe}" title="Copy ${label}" aria-label="Copy ${label}">
+      <a href="https://solscan.io/${explorer}/${safe}" target="_blank" rel="noopener" class="ti-address-value" title="${Utils.escapeHtml(I18n.t("links-view-solscan"))}">${safe}</a>
+      <button type="button" class="ti-address-copy" data-copy="${safe}" title="${copyTitle}" aria-label="${copyLabel}">
         <i class="icon-copy"></i>
       </button>
     </span>
@@ -222,7 +232,7 @@ export function renderAssetInline(mintOrIdentity, options = {}) {
   return `
     <span class="ti-inline">
       ${renderTokenLogo(identity, { size })}
-      <span class="ti-inline-symbol token-symbol-type">${Utils.escapeHtml(identity.symbol || "Unknown")}</span>
+      <span class="ti-inline-symbol token-symbol-type">${Utils.escapeHtml(identity.symbol || I18n.t("format-unknown"))}</span>
     </span>
   `;
 }

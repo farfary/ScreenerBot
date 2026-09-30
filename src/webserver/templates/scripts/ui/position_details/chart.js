@@ -85,14 +85,14 @@ export function applyChartMixin(PositionDetailsDialog) {
           <div class="chart-header-left">
             <div class="chart-data-indicator" id="pddDataIndicator" tabindex="0" role="status">
               <span class="chart-data-dot"></span>
-              <span class="chart-data-label" data-l10n-id="positions-chart-data"></span>
+              <span class="chart-data-label" data-l10n-id="chart-data"></span>
               <div class="chart-data-tip" id="pddDataTip"></div>
             </div>
             <div class="chart-ohlcv-display" id="pddOhlcv">
-              <span class="ohlcv-item"><span class="ohlcv-label" data-l10n-id="positions-chart-ohlc-open"></span> <span class="ohlcv-value" id="pddO">—</span></span>
-              <span class="ohlcv-item"><span class="ohlcv-label" data-l10n-id="positions-chart-ohlc-high"></span> <span class="ohlcv-value" id="pddH">—</span></span>
-              <span class="ohlcv-item"><span class="ohlcv-label" data-l10n-id="positions-chart-ohlc-low"></span> <span class="ohlcv-value" id="pddL">—</span></span>
-              <span class="ohlcv-item"><span class="ohlcv-label" data-l10n-id="positions-chart-ohlc-close"></span> <span class="ohlcv-value" id="pddC">—</span></span>
+              <span class="ohlcv-item"><span class="ohlcv-label" data-l10n-id="chart-ohlc-open"></span> <span class="ohlcv-value" id="pddO">—</span></span>
+              <span class="ohlcv-item"><span class="ohlcv-label" data-l10n-id="chart-ohlc-high"></span> <span class="ohlcv-value" id="pddH">—</span></span>
+              <span class="ohlcv-item"><span class="ohlcv-label" data-l10n-id="chart-ohlc-low"></span> <span class="ohlcv-value" id="pddL">—</span></span>
+              <span class="ohlcv-item"><span class="ohlcv-label" data-l10n-id="chart-ohlc-close"></span> <span class="ohlcv-value" id="pddC">—</span></span>
               <span class="ohlcv-change" id="pddChg">—</span>
             </div>
           </div>
@@ -120,7 +120,7 @@ export function applyChartMixin(PositionDetailsDialog) {
         <div id="pddChartLoading" class="chart-loading-overlay">
           <div class="chart-loading-content">
             <div class="chart-loading-spinner"></div>
-            <div class="chart-loading-text" data-l10n-id="positions-chart-loading"></div>
+            <div class="chart-loading-text" data-l10n-id="chart-loading"></div>
           </div>
         </div>
       </div>
@@ -361,7 +361,7 @@ export function applyChartMixin(PositionDetailsDialog) {
       if (isInitial) this._framePosition();
     } catch {
       if (seq !== this._pddLoadSeq) return;
-      this._showPositionChartOverlay(timeframe, I18n.t("positions-chart-waiting"));
+      this._showPositionChartOverlay(timeframe, I18n.t("chart-waiting"));
     }
   };
 
@@ -555,7 +555,7 @@ export function applyChartMixin(PositionDetailsDialog) {
         price: e.price,
         timestamp: barTime,
         label: isDca
-          ? I18n.t("positions-chart-marker-dca", { index: dcaIdx })
+          ? I18n.t("chart-marker-dca", { index: dcaIdx })
           : I18n.t("positions-fact-entry"),
       });
     });
@@ -569,7 +569,7 @@ export function applyChartMixin(PositionDetailsDialog) {
         timestamp: barTime,
         label:
           exits.length > 1
-            ? I18n.t("positions-chart-marker-exit-numbered", { index: i + 1 })
+            ? I18n.t("chart-marker-exit-numbered", { index: i + 1 })
             : I18n.t("positions-fact-exit"),
       });
     });

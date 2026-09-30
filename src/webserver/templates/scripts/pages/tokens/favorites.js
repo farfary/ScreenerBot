@@ -24,8 +24,8 @@ export function createFavoritesModule(deps) {
     if (!favoritesState.hasLoadedOnce) {
       table?.showBlockingState?.({
         variant: "loading",
-        title: "Loading tokens…",
-        description: "Preparing the selected token view.",
+        title: I18n.t("tokens-table-loading-title"),
+        description: I18n.t("tokens-table-loading-description"),
       });
     }
     try {
@@ -40,14 +40,14 @@ export function createFavoritesModule(deps) {
       if (!favoritesState.hasLoadedOnce) {
         table?.showBlockingState?.({
           variant: "error",
-          title: "Favorites could not be loaded",
-          description: "Switch tabs or try again.",
+          title: I18n.t("tokens-favorites-load-failed-title"),
+          description: I18n.t("tokens-table-retry-hint"),
         });
       } else {
         Utils.showToast({
           key: "favorites-load",
           type: "error",
-          title: "Could not load favorites",
+          title: I18n.t("tokens-favorites-load-failed-toast"),
         });
       }
     } finally {
@@ -77,7 +77,7 @@ export function createFavoritesModule(deps) {
     deps.favoritesTable.updateToolbarSummary([
       {
         id: "favorites-total",
-        label: "Total Favorites",
+        label: I18n.t("tokens-favorites-total"),
         value: Utils.formatNumber(count, 0),
         variant: count > 0 ? "info" : "secondary",
       },
@@ -110,11 +110,19 @@ export function createFavoritesModule(deps) {
       emptyState.id = "favorites-empty-state";
       emptyState.className = "empty-state";
       emptyState.style.display = "none";
+      // The shortcut sits in its own <kbd>; the sentence keeps its own word order.
+      const shortcutMark = "\u0001";
+      const [beforeShortcut, afterShortcut = ""] = I18n.t("tokens-favorites-empty-description", {
+        shortcut: shortcutMark,
+      })
+        .replace(/[\u2068\u2069]/g, "")
+        .split(shortcutMark);
+      // l10n-ignore: keyboard key label, identical in every locale
       emptyState.innerHTML = `
         <div class="empty-state-icon"><i class="icon-star"></i></div>
-        <h3 class="empty-state-title">No Favorites Yet</h3>
+        <h3 class="empty-state-title">${Utils.escapeHtml(I18n.t("tokens-favorites-empty-title"))}</h3>
         <p class="empty-state-description">
-          Use the search (<kbd>⌘K</kbd>) to find tokens and add them to your favorites.
+          ${Utils.escapeHtml(beforeShortcut)}<kbd>⌘K</kbd>${Utils.escapeHtml(afterShortcut)}
         </p>
       `;
       favoritesContainer.appendChild(emptyState);
@@ -149,7 +157,12 @@ export function createFavoritesModule(deps) {
       uniformRowHeight: 2,
       toolbar: {
         summary: [
-          { id: "favorites-total", label: "Total Favorites", value: "0", variant: "secondary" },
+          {
+            id: "favorites-total",
+            label: I18n.t("tokens-favorites-total"),
+            value: "0",
+            variant: "secondary",
+          },
         ],
       },
     });
@@ -181,8 +194,8 @@ export function createFavoritesModule(deps) {
     } else {
       deps.favoritesTable?.showBlockingState?.({
         variant: "loading",
-        title: "Loading tokens…",
-        description: "Preparing the selected token view.",
+        title: I18n.t("tokens-table-loading-title"),
+        description: I18n.t("tokens-table-loading-description"),
       });
     }
     if (!load || favoritesState.isLoading) return;

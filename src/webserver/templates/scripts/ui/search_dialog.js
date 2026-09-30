@@ -83,6 +83,15 @@ function escapeHTML(str) {
   return div.innerHTML;
 }
 
+/** Idle-state hint shown before a query of the minimum length is typed. */
+function searchHintHtml() {
+  return `
+    <div class="search-empty">
+      <p class="search-hint">${escapeHTML(I18n.t("tokens-search-hint"))}</p>
+    </div>
+  `;
+}
+
 /**
  * Debounce function execution
  */
@@ -104,6 +113,7 @@ function createDialog() {
   if (dialogEl) return dialogEl;
 
   dialogEl = create("div", { class: "search-dialog-overlay", id: "search-dialog" });
+  // l10n-ignore: keyboard key labels, identical in every locale
   dialogEl.innerHTML = `
     <div class="search-dialog" role="dialog" aria-modal="true">
       <div class="search-dialog-header">
@@ -113,22 +123,20 @@ function createDialog() {
             type="text" 
             id="search-input" 
             class="search-input"
-            placeholder="Search name, symbol or mint..." 
+            placeholder="${escapeHTML(I18n.t("tokens-search-placeholder-dialog"))}" 
             autocomplete="off"
             spellcheck="false"
-            aria-label="Search tokens"
+            aria-label="${escapeHTML(I18n.t("tokens-search-input-label"))}"
           >
         </div>
       </div>
       <div class="search-dialog-body">
-        <div id="search-results" class="search-results" role="listbox" aria-label="Search results">
-          <div class="search-empty">
-            <p class="search-hint">Type token name, symbol or paste mint</p>
-          </div>
+        <div id="search-results" class="search-results" role="listbox" aria-label="${escapeHTML(I18n.t("tokens-search-results-label"))}">
+          ${searchHintHtml()}
         </div>
       </div>
       <div class="search-dialog-footer">
-        <span class="search-tip"><kbd>↑</kbd><kbd>↓</kbd> nav &nbsp; <kbd>↵</kbd> open &nbsp; <kbd>esc</kbd> close</span>
+        <span class="search-tip"><kbd>↑</kbd><kbd>↓</kbd> ${escapeHTML(I18n.t("tokens-search-tip-nav"))} &nbsp; <kbd>↵</kbd> ${escapeHTML(I18n.t("tokens-search-tip-open"))} &nbsp; <kbd>esc</kbd> ${escapeHTML(I18n.t("tokens-search-tip-close"))}</span>
       </div>
     </div>
   `;
@@ -157,11 +165,7 @@ async function handleSearch(e) {
   const resultsEl = $("#search-results", dialogEl);
 
   if (query.length < MIN_QUERY_LENGTH) {
-    resultsEl.innerHTML = `
-      <div class="search-empty">
-        <p class="search-hint">Type token name, symbol or paste mint</p>
-      </div>
-    `;
+    resultsEl.innerHTML = searchHintHtml();
     currentResults = [];
     return;
   }
@@ -178,7 +182,7 @@ async function handleSearch(e) {
     const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(apiErrorMessage(data, "Search failed"));
+      throw new Error(apiErrorMessage(data, I18n.t("tokens-search-failed")));
     }
 
     currentResults = data.results || [];
@@ -188,7 +192,7 @@ async function handleSearch(e) {
     resultsEl.innerHTML = `
       <div class="search-error">
         <i class="icon-circle-alert"></i>
-        <span>Error: ${escapeHTML(error.message)}</span>
+        <span>${escapeHTML(I18n.t("tokens-search-error", { message: error.message }))}</span>
       </div>
     `;
   }
@@ -203,7 +207,7 @@ function renderResults() {
   if (currentResults.length === 0) {
     resultsEl.innerHTML = `
       <div class="search-empty">
-        <p class="search-hint">No matches — try different term</p>
+        <p class="search-hint">${escapeHTML(I18n.t("tokens-search-no-matches"))}</p>
       </div>
     `;
     return;
@@ -228,7 +232,7 @@ function renderResults() {
           <i class="icon-coins"></i>
         </div>
         <div class="search-result-info">
-          <div class="search-result-name token-name-type">${escapeHTML(token.name || "Unknown")}</div>
+          <div class="search-result-name token-name-type">${escapeHTML(token.name || I18n.t("format-unknown"))}</div>
           <div class="search-result-symbol token-symbol-type">${escapeHTML(token.symbol || "???")}</div>
         </div>
       </div>
@@ -237,16 +241,16 @@ function renderResults() {
         <div class="search-result-mcap">${formatMarketCap(token.market_cap)}</div>
       </div>
       <div class="search-result-actions">
-        <button class="btn-icon btn-icon-sm search-action-btn action-favorite" data-action="favorite" title="Add to Favorites" aria-label="Add to Favorites">
+        <button class="btn-icon btn-icon-sm search-action-btn action-favorite" data-action="favorite" title="${escapeHTML(I18n.attr("tokens-search-action-favorite", "title"))}" aria-label="${escapeHTML(I18n.attr("tokens-search-action-favorite", "aria-label"))}">
           <i class="icon-star"></i>
         </button>
-        <button class="btn-icon btn-icon-sm search-action-btn action-blacklist" data-action="blacklist" title="Add to Blacklist" aria-label="Add to Blacklist">
+        <button class="btn-icon btn-icon-sm search-action-btn action-blacklist" data-action="blacklist" title="${escapeHTML(I18n.attr("tokens-search-action-blacklist", "title"))}" aria-label="${escapeHTML(I18n.attr("tokens-search-action-blacklist", "aria-label"))}">
           <i class="icon-slash"></i>
         </button>
-        <button class="btn-icon btn-icon-sm search-action-btn" data-action="copy" title="Copy Mint Address" aria-label="Copy mint address">
+        <button class="btn-icon btn-icon-sm search-action-btn" data-action="copy" title="${escapeHTML(I18n.attr("tokens-copy-mint", "title"))}" aria-label="${escapeHTML(I18n.attr("tokens-copy-mint", "aria-label"))}">
           <i class="icon-copy"></i>
         </button>
-        <button class="btn-icon btn-icon-sm search-action-btn" data-action="view" title="View on DexScreener" aria-label="View on DexScreener">
+        <button class="btn-icon btn-icon-sm search-action-btn" data-action="view" title="${escapeHTML(I18n.attr("links-view-dexscreener", "title"))}" aria-label="${escapeHTML(I18n.attr("links-view-dexscreener", "aria-label"))}">
           <i class="icon-external-link"></i>
         </button>
       </div>
@@ -334,7 +338,7 @@ function handleResultClick(e) {
  */
 async function openTokenDetails(token) {
   if (!token?.mint) {
-    showToast("Token has no mint address", "warning");
+    showToast(I18n.t("tokens-search-no-mint"), "warning");
     return;
   }
   closeDialog();
@@ -345,7 +349,7 @@ async function openTokenDetails(token) {
   try {
     await import("./token_details_dialog.js");
   } catch {
-    showToast("Failed to open token details", "error");
+    showToast(I18n.t("tokens-search-open-failed"), "error");
     return;
   }
   window.dispatchEvent(
@@ -366,9 +370,9 @@ async function openTokenDetails(token) {
 async function copyMint(token) {
   try {
     await navigator.clipboard.writeText(token.mint);
-    notifyCopied(token.symbol || "Mint address");
+    notifyCopied(token.symbol || I18n.t("positions-details-mint-label"));
   } catch {
-    showToast("Failed to copy to clipboard", "error");
+    showToast(I18n.t("tokens-search-copy-failed"), "error");
   }
 }
 
@@ -403,16 +407,19 @@ async function addToFavorites(token, btn) {
     const data = await response.json();
 
     if (response.ok && data.success) {
-      showToast(`Added ${token.symbol || token.mint} to favorites`, "success");
+      showToast(
+        I18n.t("tokens-search-favorite-added", { symbol: token.symbol || token.mint }),
+        "success"
+      );
       if (btn) {
         btn.classList.add("active");
-        btn.title = "Already in Favorites";
+        btn.title = I18n.t("tokens-search-favorite-already");
       }
     } else {
-      throw new Error(apiErrorMessage(data, "Failed to add to favorites"));
+      throw new Error(apiErrorMessage(data, I18n.t("tokens-search-favorite-failed")));
     }
   } catch (error) {
-    showToast(`Error: ${error.message}`, "error");
+    showToast(I18n.t("tokens-search-error", { message: error.message }), "error");
   } finally {
     if (btn) {
       btn.disabled = false;
@@ -427,9 +434,10 @@ async function addToFavorites(token, btn) {
 async function addToBlacklist(token, btn) {
   // Confirm before blacklisting
   const result = await ConfirmationDialog.show({
-    title: "Blacklist Token",
-    message: `Blacklist ${token.symbol || token.mint}? This token will be excluded from trading.`,
-    confirmLabel: "Blacklist",
+    title: I18n.t("menu-token-blacklist"),
+    message: I18n.t("tokens-search-blacklist-message", { symbol: token.symbol || token.mint }),
+    confirmLabel: I18n.t("menu-blacklist-confirm-action"),
+    cancelLabel: I18n.t("common-action-cancel"),
     variant: "warning",
   });
   if (!result.confirmed) {
@@ -454,16 +462,19 @@ async function addToBlacklist(token, btn) {
     const data = await response.json();
 
     if (response.ok && data.success) {
-      showToast(`Blacklisted ${token.symbol || token.mint}`, "success");
+      showToast(
+        I18n.t("tokens-search-blacklist-done", { symbol: token.symbol || token.mint }),
+        "success"
+      );
       if (btn) {
         btn.classList.add("active");
-        btn.title = "Blacklisted";
+        btn.title = I18n.t("tokens-search-blacklisted");
       }
     } else {
-      throw new Error(apiErrorMessage(data, "Failed to blacklist token"));
+      throw new Error(apiErrorMessage(data, I18n.t("tokens-search-blacklist-failed")));
     }
   } catch (error) {
-    showToast(`Error: ${error.message}`, "error");
+    showToast(I18n.t("tokens-search-error", { message: error.message }), "error");
   } finally {
     if (btn) {
       btn.disabled = false;
@@ -568,11 +579,7 @@ export function openDialog() {
   currentResults = [];
   selectedIndex = 0;
 
-  $("#search-results", dialogEl).innerHTML = `
-    <div class="search-empty">
-      <p class="search-hint">Type token name, symbol or paste mint</p>
-    </div>
-  `;
+  $("#search-results", dialogEl).innerHTML = searchHintHtml();
 
   // Prevent body scroll
   document.body.style.overflow = "hidden";

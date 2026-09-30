@@ -12,3 +12,5 @@ common-action-dismiss = Dismiss
 common-action-confirm = Confirm
 common-action-retry = Retry
 common-action-copy = Copy
+common-action-delete = Delete
+common-action-close = Close

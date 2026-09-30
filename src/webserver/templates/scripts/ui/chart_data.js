@@ -10,6 +10,22 @@
 import { requestManager } from "../core/request_manager.js";
 import { formatNumber } from "../core/format.js";
 
+// core/utils.js needs `document` at import time and this module is loaded by the node
+// helper tests, so the tooltip escapes catalog text with a browser-only call.
+const escapeHtml = (text) => {
+  const div = document.createElement("div");
+  div.textContent = text;
+  return div.innerHTML;
+};
+
+// Ids are the states computed in renderOhlcvStatus.
+const OHLCV_STATE_LABELS = Object.freeze({
+  none: "chart-status-none",
+  ready: "chart-status-ready",
+  partial: "chart-status-partial",
+  collecting: "chart-status-collecting",
+});
+
 /**
  * Candle count requested for a chart. 0 = the FULL stored history for the
  * selected timeframe (no cap) — the chart shows every candle we have, like a
@@ -215,19 +231,16 @@ export function renderOhlcvStatus(refs, status, formatTimeAgo) {
   if (!indicator || !status) return;
 
   let state = "none";
-  let summary = "No chart data yet";
   if (status.has_data && status.backfill_complete) {
     state = "ready";
-    summary = "Data ready";
   } else if (status.has_data) {
     state = "partial";
-    summary = "Collecting history…";
   } else if (status.monitored) {
     state = "collecting";
-    summary = "Fetching data…";
   }
+  const summary = I18n.label(OHLCV_STATE_LABELS, state);
   indicator.dataset.state = state;
-  indicator.setAttribute("aria-label", `Chart data: ${summary}`);
+  indicator.setAttribute("aria-label", I18n.t("chart-status-aria", { summary }));
 
   if (!tip) return;
 
@@ -243,35 +256,37 @@ export function renderOhlcvStatus(refs, status, formatTimeAgo) {
           <span class="chart-data-tip-dot" data-state="${dot}"></span>
           <span class="chart-data-tip-tf">${tf.timeframe.toUpperCase()}</span>
           <span class="chart-data-tip-count">${count}</span>
-          <span class="chart-data-tip-fresh" title="Last new candle">${fresh}</span>
+          <span class="chart-data-tip-fresh" title="${escapeHtml(I18n.t("chart-status-last-candle"))}">${fresh}</span>
         </div>`;
     })
     .join("");
   const checked = status.last_checked_at
-    ? `checked ${ago(status.last_checked_at)}`
+    ? I18n.t("chart-status-checked", { ago: ago(status.last_checked_at) })
     : status.monitored
-      ? "checking…"
-      : "not checked";
+      ? I18n.t("chart-status-checking")
+      : I18n.t("chart-status-not-checked");
   const updated = status.last_new_data_at
-    ? `updated ${ago(status.last_new_data_at)}`
-    : "no candles yet";
+    ? I18n.t("chart-status-updated", { ago: ago(status.last_new_data_at) })
+    : I18n.t("chart-status-no-candles");
 
   tip.innerHTML = `
     <div class="chart-data-tip-head">
-      <span class="chart-data-tip-title">${summary}</span>
-      <span class="chart-data-tip-checked">${checked}</span>
+      <span class="chart-data-tip-title">${escapeHtml(summary)}</span>
+      <span class="chart-data-tip-checked">${escapeHtml(checked)}</span>
     </div>
     <div class="chart-data-tip-cols">
       <span></span>
-      <span>TF</span>
-      <span class="chart-data-tip-count">Candles</span>
-      <span class="chart-data-tip-fresh">New</span>
+      <span>${escapeHtml(I18n.t("chart-status-column-timeframe"))}</span>
+      <span class="chart-data-tip-count">${escapeHtml(I18n.t("chart-candles"))}</span>
+      <span class="chart-data-tip-fresh">${escapeHtml(I18n.t("chart-status-column-new"))}</span>
     </div>
     <div class="chart-data-tip-list">${rows}</div>
     <div class="chart-data-tip-foot">
-      <span>${formatNumber(status.total_candles || 0, 0)} candles · ${
-        status.monitored ? "monitoring" : "idle"
-      }</span>
-      <span class="chart-data-tip-foot-time">${updated}</span>
+      <span>${escapeHtml(
+        status.monitored
+          ? I18n.t("chart-status-total-monitoring", { count: status.total_candles || 0 })
+          : I18n.t("chart-status-total-idle", { count: status.total_candles || 0 })
+      )}</span>
+      <span class="chart-data-tip-foot-time">${escapeHtml(updated)}</span>
     </div>`;
 }

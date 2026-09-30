@@ -7,6 +7,20 @@
 import { formatTimeSpan } from "../../core/format.js";
 import { timeAgoCell } from "./formatters.js";
 
+// Ids are the `status` values of /api/ohlcv/tokens.
+const OHLCV_STATUS_LABELS = Object.freeze({
+  active: "tokens-ohlcv-status-active",
+  inactive: "tokens-ohlcv-status-inactive",
+});
+
+// Ids are the monitoring priorities of the OHLCV service (`Priority::as_str`).
+const OHLCV_PRIORITY_LABELS = Object.freeze({
+  critical: "tokens-ohlcv-priority-critical",
+  high: "tokens-ohlcv-priority-high",
+  medium: "tokens-ohlcv-priority-medium",
+  low: "tokens-ohlcv-priority-low",
+});
+
 /**
  * Create OHLCV module with access to page state and dependencies
  * @param {Object} deps - Dependencies and state
@@ -20,7 +34,7 @@ export function createOhlcvModule(deps) {
     return [
       {
         id: "mint",
-        label: "Token",
+        label: I18n.t("tokens-column-token"),
         sortable: true,
         minWidth: 180,
         maxWidth: 200,
@@ -30,7 +44,7 @@ export function createOhlcvModule(deps) {
           return `<span class="ohlcv-token-cell">
             <span class="mint-cell" title="${Utils.escapeHtml(value)}">${short}</span>
             <span class="ohlcv-token-actions">
-              <button class="btn btn-sm btn-danger ohlcv-delete-btn" data-mint="${Utils.escapeHtml(row.mint)}" title="Delete OHLCV data" aria-label="Delete OHLCV data">
+              <button class="btn btn-sm btn-danger ohlcv-delete-btn" data-mint="${Utils.escapeHtml(row.mint)}" title="${Utils.escapeHtml(I18n.attr("tokens-ohlcv-delete", "title"))}" aria-label="${Utils.escapeHtml(I18n.attr("tokens-ohlcv-delete", "aria-label"))}">
                 <i class="icon-trash-2"></i>
               </button>
             </span>
@@ -39,7 +53,7 @@ export function createOhlcvModule(deps) {
       },
       {
         id: "status",
-        label: "Status",
+        label: I18n.t("tokens-column-status"),
         sortable: true,
         minWidth: 90,
         wrap: false,
@@ -47,12 +61,12 @@ export function createOhlcvModule(deps) {
           const isActive = value === "active";
           const cls = isActive ? "status-active" : "status-inactive";
           const icon = isActive ? "icon-activity" : "icon-pause";
-          return `<span class="status-badge ${cls}"><i class="${icon}"></i> ${value}</span>`;
+          return `<span class="status-badge ${cls}"><i class="${icon}"></i> ${Utils.escapeHtml(I18n.label(OHLCV_STATUS_LABELS, value))}</span>`;
         },
       },
       {
         id: "priority",
-        label: "Priority",
+        label: I18n.t("tokens-ohlcv-column-priority"),
         sortable: true,
         minWidth: 80,
         wrap: false,
@@ -64,12 +78,12 @@ export function createOhlcvModule(deps) {
               medium: "priority-medium",
               low: "priority-low",
             }[value?.toLowerCase()] || "priority-medium";
-          return `<span class="priority-badge ${priorityClass}">${value || "—"}</span>`;
+          return `<span class="priority-badge ${priorityClass}">${value ? Utils.escapeHtml(I18n.label(OHLCV_PRIORITY_LABELS, value)) : "—"}</span>`;
         },
       },
       {
         id: "candle_count",
-        label: "Candles",
+        label: I18n.t("chart-candles"),
         sortable: true,
         minWidth: 90,
         wrap: false,
@@ -78,7 +92,7 @@ export function createOhlcvModule(deps) {
       },
       {
         id: "backfill_progress",
-        label: "Backfill",
+        label: I18n.t("tokens-ohlcv-column-backfill"),
         sortable: false,
         minWidth: 120,
         wrap: false,
@@ -101,20 +115,20 @@ export function createOhlcvModule(deps) {
           ]
             .map((tf) => {
               const cls = tf.done ? "tf-done" : "tf-pending";
-              return `<span class="tf-indicator ${cls}" title="${tf.label}: ${tf.done ? "Complete" : "Pending"}">${tf.label.charAt(0)}</span>`;
+              return `<span class="tf-indicator ${cls}" title="${Utils.escapeHtml(tf.done ? I18n.t("tokens-ohlcv-timeframe-complete", { timeframe: tf.label }) : I18n.t("tokens-ohlcv-timeframe-pending", { timeframe: tf.label }))}">${tf.label.charAt(0)}</span>`;
             })
             .join("");
 
           return `<div class="backfill-cell">
             <div class="backfill-bar ${progressCls}" style="--progress: ${pct}%"></div>
-            <span class="backfill-text">${completed}/${total}</span>
+            <span class="backfill-text">${Utils.formatNumber(completed, 0)}/${Utils.formatNumber(total, 0)}</span>
             <div class="tf-indicators">${tfIcons}</div>
           </div>`;
         },
       },
       {
         id: "data_span_hours",
-        label: "Data Span",
+        label: I18n.t("tokens-ohlcv-column-data-span"),
         sortable: true,
         minWidth: 90,
         wrap: false,
@@ -127,19 +141,19 @@ export function createOhlcvModule(deps) {
       },
       {
         id: "open_gaps",
-        label: "Gaps",
+        label: I18n.t("tokens-ohlcv-column-gaps"),
         sortable: true,
         minWidth: 70,
         wrap: false,
         align: "right",
         render: (value) => {
           if (!value || value === 0) return '<span class="value-positive">0</span>';
-          return `<span class="value-warning">${value}</span>`;
+          return `<span class="value-warning">${Utils.formatNumber(value, 0)}</span>`;
         },
       },
       {
         id: "pool_count",
-        label: "Pools",
+        label: I18n.t("tokens-ohlcv-column-pools"),
         sortable: true,
         minWidth: 70,
         wrap: false,
@@ -148,7 +162,7 @@ export function createOhlcvModule(deps) {
       },
       {
         id: "last_fetch",
-        label: "Last Fetch",
+        label: I18n.t("tokens-ohlcv-column-last-fetch"),
         sortable: true,
         minWidth: 100,
         wrap: false,
@@ -168,8 +182,8 @@ export function createOhlcvModule(deps) {
     if (!ohlcvState.hasLoadedOnce) {
       table?.showBlockingState?.({
         variant: "loading",
-        title: "Loading tokens…",
-        description: "Preparing the selected token view.",
+        title: I18n.t("tokens-table-loading-title"),
+        description: I18n.t("tokens-table-loading-description"),
       });
     }
     try {
@@ -185,11 +199,11 @@ export function createOhlcvModule(deps) {
       if (!ohlcvState.hasLoadedOnce) {
         table?.showBlockingState?.({
           variant: "error",
-          title: "OHLCV data could not be loaded",
-          description: "Switch tabs or try again.",
+          title: I18n.t("tokens-ohlcv-load-failed-title"),
+          description: I18n.t("tokens-table-retry-hint"),
         });
       } else {
-        Utils.showToast({ key: "ohlcv-load", type: "error", title: "Could not load OHLCV data" });
+        Utils.showToast({ key: "ohlcv-load", type: "error", title: I18n.t("tokens-ohlcv-load-failed-toast") });
       }
     } finally {
       ohlcvState.isLoading = false;
@@ -209,24 +223,24 @@ export function createOhlcvModule(deps) {
     deps.ohlcvTable.updateToolbarSummary([
       {
         id: "ohlcv-total",
-        label: "Total Tokens",
+        label: I18n.t("tokens-ohlcv-total"),
         value: Utils.formatNumber(stats.total_tokens ?? 0, 0),
       },
       {
         id: "ohlcv-active",
-        label: "Active",
+        label: I18n.t("tokens-ohlcv-active"),
         value: Utils.formatNumber(stats.active_tokens ?? 0, 0),
         variant: "success",
       },
       {
         id: "ohlcv-candles",
-        label: "Candles",
+        label: I18n.t("chart-candles"),
         value: Utils.formatCompactNumber(stats.total_candles ?? 0),
         variant: "info",
       },
       {
         id: "ohlcv-size",
-        label: "DB Size",
+        label: I18n.t("tokens-ohlcv-db-size"),
         value: Utils.formatBytes((stats.database_size_mb ?? 0) * 1_048_576),
         variant: "secondary",
       },
@@ -235,9 +249,10 @@ export function createOhlcvModule(deps) {
 
   const handleOhlcvDelete = async (mint) => {
     const result = await ConfirmationDialog.show({
-      title: "Delete OHLCV Data",
-      message: `Delete all OHLCV data for ${mint.slice(0, 8)}...?`,
-      confirmLabel: "Delete",
+      title: I18n.t("tokens-ohlcv-delete-title"),
+      message: I18n.t("tokens-ohlcv-delete-message", { mint: mint.slice(0, 8) }),
+      confirmLabel: I18n.t("common-action-delete"),
+      cancelLabel: I18n.t("common-action-cancel"),
       variant: "danger",
     });
     if (!result.confirmed) return;
@@ -250,7 +265,10 @@ export function createOhlcvModule(deps) {
 
       if (response) {
         Utils.showToast(
-          `Deleted: ${response.candles_deleted} candles, ${response.pools_deleted} pools`,
+          I18n.t("tokens-ohlcv-delete-done", {
+            candles: response.candles_deleted,
+            pools: response.pools_deleted,
+          }),
           "success"
         );
         await fetchOhlcvData();
@@ -258,21 +276,22 @@ export function createOhlcvModule(deps) {
       }
     } catch (err) {
       console.error("Failed to delete OHLCV data:", err);
-      Utils.showToast("Failed to delete OHLCV data", "error");
+      Utils.showToast(I18n.t("tokens-ohlcv-delete-failed"), "error");
     }
   };
 
   const handleOhlcvCleanup = async () => {
     const result = await InputDialog.show({
-      title: "Delete Inactive Tokens",
-      message: "Delete inactive tokens older than specified hours",
-      placeholder: "Hours...",
+      title: I18n.t("tokens-ohlcv-cleanup-title"),
+      message: I18n.t("tokens-ohlcv-cleanup-message"),
+      placeholder: I18n.t("tokens-ohlcv-cleanup-placeholder"),
       defaultValue: "24",
-      confirmLabel: "Delete",
+      confirmLabel: I18n.t("common-action-delete"),
+      cancelLabel: I18n.t("common-action-cancel"),
       type: "number",
       validate: (value) => {
         const num = parseInt(value, 10);
-        if (isNaN(num) || num < 1) return "Please enter a positive number";
+        if (isNaN(num) || num < 1) return I18n.t("tokens-ohlcv-cleanup-invalid");
         return null;
       },
     });
@@ -289,13 +308,16 @@ export function createOhlcvModule(deps) {
       });
 
       if (response) {
-        Utils.showToast(`Cleaned up ${response.deleted_count} inactive tokens`, "success");
+        Utils.showToast(
+          I18n.t("tokens-ohlcv-cleanup-done", { count: response.deleted_count }),
+          "success"
+        );
         await fetchOhlcvData();
         updateOhlcvTable();
       }
     } catch (err) {
       console.error("Failed to cleanup OHLCV data:", err);
-      Utils.showToast("Failed to cleanup OHLCV data", "error");
+      Utils.showToast(I18n.t("tokens-ohlcv-cleanup-failed"), "error");
     }
   };
 
@@ -343,15 +365,30 @@ export function createOhlcvModule(deps) {
       uniformRowHeight: 2,
       toolbar: {
         summary: [
-          { id: "ohlcv-total", label: "Total Tokens", value: "0" },
-          { id: "ohlcv-active", label: "Active", value: "0", variant: "success" },
-          { id: "ohlcv-candles", label: "Candles", value: "0", variant: "info" },
-          { id: "ohlcv-size", label: "DB Size", value: "0 MB", variant: "secondary" },
+          { id: "ohlcv-total", label: I18n.t("tokens-ohlcv-total"), value: "0" },
+          {
+            id: "ohlcv-active",
+            label: I18n.t("tokens-ohlcv-active"),
+            value: "0",
+            variant: "success",
+          },
+          {
+            id: "ohlcv-candles",
+            label: I18n.t("chart-candles"),
+            value: "0",
+            variant: "info",
+          },
+          {
+            id: "ohlcv-size",
+            label: I18n.t("tokens-ohlcv-db-size"),
+            value: Utils.formatBytes(0),
+            variant: "secondary",
+          },
         ],
         actions: [
           {
             id: "cleanup",
-            label: "Cleanup Inactive",
+            label: I18n.t("tokens-ohlcv-cleanup"),
             icon: "icon-trash-2",
             variant: "warning",
             onClick: handleOhlcvCleanup,
@@ -387,8 +424,8 @@ export function createOhlcvModule(deps) {
     } else {
       deps.ohlcvTable?.showBlockingState?.({
         variant: "loading",
-        title: "Loading tokens…",
-        description: "Preparing the selected token view.",
+        title: I18n.t("tokens-table-loading-title"),
+        description: I18n.t("tokens-table-loading-description"),
       });
     }
     if (!load) return;

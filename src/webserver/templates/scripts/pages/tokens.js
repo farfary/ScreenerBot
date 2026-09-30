@@ -254,7 +254,7 @@ function createLifecycle() {
     // Keep the native select authoritative. CustomSelect observes its option tree
     // and bridges its value property, so page code never reaches into enhancer internals.
     const optionMarkup = [
-      '<option value="all">All</option>',
+      `<option value="all">${Utils.escapeHtml(I18n.t("tokens-filter-all"))}</option>`,
       ...reasons.map((reason) => {
         const escaped = Utils.escapeHtml(reason);
         const label = Utils.escapeHtml(getRejectionDisplayLabel(reason) || reason);
@@ -322,24 +322,24 @@ function createLifecycle() {
     table.updateToolbarSummary([
       {
         id: "tokens-total",
-        label: "Total",
+        label: I18n.t("tokens-summary-total"),
         value: Utils.formatNumber(totalGlobal, 0),
       },
       {
         id: "tokens-priced",
-        label: "With Price",
+        label: I18n.t("tokens-summary-priced"),
         value: Utils.formatNumber(summaryPriced, 0),
         variant: "info",
       },
       {
         id: "tokens-positions",
-        label: "Positions",
+        label: I18n.t("tokens-summary-positions"),
         value: Utils.formatNumber(summaryPositions, 0),
         variant: summaryPositions > 0 ? "success" : "secondary",
       },
       {
         id: "tokens-blacklisted",
-        label: "Blacklisted",
+        label: I18n.t("tokens-summary-blacklisted"),
         value: Utils.formatNumber(summaryBlacklisted, 0),
         variant: summaryBlacklisted > 0 ? "warning" : "success",
       },
@@ -675,11 +675,15 @@ function createLifecycle() {
       if (!state.hasLoadedOnce) {
         table?.showBlockingState?.({
           variant: "error",
-          title: "Still loading tokens...",
-          description: "Waiting for the backend to respond. We will retry automatically.",
+          title: I18n.t("tokens-table-waiting-title"),
+          description: I18n.t("tokens-table-waiting-description"),
         });
       } else if (reason !== "poll") {
-        Utils.showToast({ key: "tokens-load", type: "warning", title: "Could not load tokens" });
+        Utils.showToast({
+          key: "tokens-load",
+          type: "warning",
+          title: I18n.t("tokens-load-failed-toast"),
+        });
       }
       throw error;
     }
@@ -815,11 +819,15 @@ function createLifecycle() {
       if (!state.hasLoadedOnce) {
         table?.showBlockingState?.({
           variant: "error",
-          title: "Still loading tokens...",
-          description: "Waiting for the backend to respond. We will retry automatically.",
+          title: I18n.t("tokens-table-waiting-title"),
+          description: I18n.t("tokens-table-waiting-description"),
         });
       } else if (reason !== "poll") {
-        Utils.showToast({ key: "tokens-load", type: "warning", title: "Could not load tokens" });
+        Utils.showToast({
+          key: "tokens-load",
+          type: "warning",
+          title: I18n.t("tokens-load-failed-toast"),
+        });
       }
       throw error;
     }
@@ -878,7 +886,7 @@ function createLifecycle() {
     return [
       {
         id: "token",
-        label: "Token",
+        label: I18n.t("tokens-column-token"),
         sortable: true,
         floating: true,
         minWidth: 260,
@@ -887,7 +895,7 @@ function createLifecycle() {
       },
       {
         id: "price_sol",
-        label: "Price (SOL)",
+        label: I18n.t("tokens-column-price-sol"),
         sortable: true,
         minWidth: 120,
         wrap: false,
@@ -895,7 +903,7 @@ function createLifecycle() {
       },
       {
         id: "liquidity_usd",
-        label: "Liquidity",
+        label: I18n.t("tokens-column-liquidity"),
         sortable: true,
         minWidth: 110,
         wrap: false,
@@ -903,7 +911,7 @@ function createLifecycle() {
       },
       {
         id: "volume_24h",
-        label: "24h Vol",
+        label: I18n.t("tokens-column-volume-24h"),
         sortable: true,
         minWidth: 110,
         wrap: false,
@@ -911,7 +919,7 @@ function createLifecycle() {
       },
       {
         id: "fdv",
-        label: "FDV",
+        label: I18n.t("tokens-column-fdv"),
         sortable: true,
         minWidth: 110,
         wrap: false,
@@ -919,7 +927,7 @@ function createLifecycle() {
       },
       {
         id: "market_cap",
-        label: "Mkt Cap",
+        label: I18n.t("tokens-column-market-cap"),
         sortable: true,
         minWidth: 110,
         wrap: false,
@@ -927,7 +935,7 @@ function createLifecycle() {
       },
       {
         id: "price_change_h1",
-        label: "1h",
+        label: I18n.t("tokens-column-change-1h"),
         sortable: true,
         minWidth: 90,
         wrap: false,
@@ -935,7 +943,7 @@ function createLifecycle() {
       },
       {
         id: "price_change_h24",
-        label: "24h",
+        label: I18n.t("tokens-column-change-24h"),
         sortable: true,
         minWidth: 90,
         wrap: false,
@@ -943,7 +951,7 @@ function createLifecycle() {
       },
       {
         id: "txns_5m",
-        label: "Txns 5m",
+        label: I18n.t("tokens-column-txns-5m"),
         sortable: true,
         minWidth: 80,
         wrap: false,
@@ -956,7 +964,7 @@ function createLifecycle() {
       },
       {
         id: "txns_1h",
-        label: "Txns 1h",
+        label: I18n.t("tokens-column-txns-1h"),
         sortable: true,
         minWidth: 80,
         wrap: false,
@@ -969,7 +977,7 @@ function createLifecycle() {
       },
       {
         id: "txns_6h",
-        label: "Txns 6h",
+        label: I18n.t("tokens-column-txns-6h"),
         sortable: true,
         minWidth: 80,
         wrap: false,
@@ -982,7 +990,7 @@ function createLifecycle() {
       },
       {
         id: "txns_24h",
-        label: "Txns 24h",
+        label: I18n.t("tokens-column-txns-24h"),
         sortable: true,
         minWidth: 90,
         wrap: false,
@@ -995,7 +1003,7 @@ function createLifecycle() {
       },
       {
         id: "risk_score",
-        label: "Risk Score",
+        label: I18n.t("tokens-column-risk-score"),
         sortable: true,
         minWidth: 90,
         wrap: false,
@@ -1013,7 +1021,7 @@ function createLifecycle() {
         ? [
             {
               id: "reject_reason",
-              label: "Reject Reason",
+              label: I18n.t("tokens-column-reject-reason"),
               sortable: false,
               minWidth: 220,
               wrap: true,
@@ -1033,7 +1041,7 @@ function createLifecycle() {
         ? [
             {
               id: "blacklist_reason",
-              label: "Blacklist Reason",
+              label: I18n.t("tokens-column-blacklist-reason"),
               sortable: false,
               minWidth: 250,
               wrap: true,
@@ -1049,20 +1057,26 @@ function createLifecycle() {
         : []),
       {
         id: "status",
-        label: "Status",
+        label: I18n.t("tokens-column-status"),
         sortable: false,
         minWidth: 140,
         wrap: false,
         render: (_v, row) => {
           const flags = [];
-          if (row.has_pool_price) flags.push('<span class="badge info">Price</span>');
-          if (row.has_ohlcv) flags.push('<span class="badge">OHLCV</span>');
-          if (row.has_open_position) flags.push('<span class="badge success">Position</span>');
+          const badge = (cls, text) =>
+            `<span class="${cls}">${Utils.escapeHtml(text)}</span>`;
+          if (row.has_pool_price) flags.push(badge("badge info", I18n.t("tokens-badge-price")));
+          if (row.has_ohlcv) flags.push(badge("badge", I18n.t("tokens-badge-ohlcv")));
+          if (row.has_open_position) {
+            flags.push(badge("badge success", I18n.t("tokens-badge-position")));
+          }
           if (row.blacklisted) {
             const summary = summarizeBlacklistReasons(row.blacklist_reasons);
-            const tooltip = summary ? `Blacklisted: ${summary}` : "Blacklisted token";
+            const tooltip = summary
+              ? I18n.t("tokens-badge-blacklisted-reasons", { reasons: summary })
+              : I18n.t("tokens-badge-blacklisted-title");
             flags.push(
-              `<span class="badge warning" title="${Utils.escapeHtml(tooltip)}">Blacklisted</span>`
+              `<span class="badge warning" title="${Utils.escapeHtml(tooltip)}">${Utils.escapeHtml(I18n.t("tokens-badge-blacklisted"))}</span>`
             );
           }
           return flags.join(" ") || "—";
@@ -1070,7 +1084,7 @@ function createLifecycle() {
       },
       {
         id: "updated_at",
-        label: "Updated",
+        label: I18n.t("tokens-column-updated"),
         sortable: true,
         minWidth: 100,
         wrap: false,
@@ -1104,7 +1118,7 @@ function createLifecycle() {
       },
       {
         id: "token_birth_at",
-        label: "Birth",
+        label: I18n.t("tokens-column-birth"),
         sortable: true,
         minWidth: 110,
         wrap: false,
@@ -1123,7 +1137,7 @@ function createLifecycle() {
       },
       {
         id: "first_seen_at",
-        label: "First Seen",
+        label: I18n.t("tokens-column-first-seen"),
         sortable: true,
         minWidth: 110,
         wrap: false,
@@ -1149,8 +1163,8 @@ function createLifecycle() {
   const showTokensLoadingState = () => {
     table?.showBlockingState?.({
       variant: "loading",
-      title: "Loading tokens…",
-      description: "Preparing the selected token view.",
+      title: I18n.t("tokens-table-loading-title"),
+      description: I18n.t("tokens-table-loading-description"),
     });
   };
 
@@ -1261,11 +1275,11 @@ function createLifecycle() {
       navigator.clipboard
         .writeText(mint)
         .then(() => {
-          Utils.notifyCopied("Mint address");
+          Utils.notifyCopied(I18n.t("positions-details-mint-label"));
         })
         .catch((err) => {
           console.error("Failed to copy mint:", err);
-          Utils.showToast("Failed to copy mint", "warning");
+          Utils.showToast(I18n.t("tokens-links-copy-failed"), "warning");
         });
     } else if (urlMap[actionId]) {
       Utils.openExternal(urlMap[actionId]);
@@ -1310,32 +1324,32 @@ function createLifecycle() {
       menu.innerHTML = `
         <button class="dropdown-item" data-action="dexscreener" type="button" role="menuitem">
           <i class="icon-chart-bar"></i>
-          <span class="label">DexScreener</span>
+          <span class="label">${Utils.escapeHtml(I18n.t("links-explorer-dexscreener"))}</span>
         </button>
         <button class="dropdown-item" data-action="gmgn" type="button" role="menuitem">
           <i class="icon-trending-up"></i>
-          <span class="label">GMGN</span>
+          <span class="label">${Utils.escapeHtml(I18n.t("links-explorer-gmgn"))}</span>
         </button>
         <button class="dropdown-item" data-action="solscan" type="button" role="menuitem">
           <i class="icon-search"></i>
-          <span class="label">Solscan</span>
+          <span class="label">${Utils.escapeHtml(I18n.t("links-explorer-solscan"))}</span>
         </button>
         <button class="dropdown-item" data-action="birdeye" type="button" role="menuitem">
           <span class="icon"><i class="icon-chart-bar"></i></span>
-          <span class="label">Birdeye</span>
+          <span class="label">${Utils.escapeHtml(I18n.t("links-explorer-birdeye"))}</span>
         </button>
         <button class="dropdown-item" data-action="rugcheck" type="button" role="menuitem">
           <span class="icon"><i class="icon-shield"></i></span>
-          <span class="label">RugCheck</span>
+          <span class="label">${Utils.escapeHtml(I18n.t("links-explorer-rugcheck"))}</span>
         </button>
         <button class="dropdown-item" data-action="pumpfun" type="button" role="menuitem">
           <span class="icon"><i class="icon-rocket"></i></span>
-          <span class="label">Pump.fun</span>
+          <span class="label">${Utils.escapeHtml(I18n.t("links-explorer-pumpfun"))}</span>
         </button>
         <div class="dropdown-divider"></div>
         <button class="dropdown-item" data-action="copy" type="button" role="menuitem">
           <span class="icon"><i class="icon-copy"></i></span>
-          <span class="label">Copy Mint</span>
+          <span class="label">${Utils.escapeHtml(I18n.t("tokens-links-menu-copy-mint"))}</span>
         </button>
       `;
 
@@ -1464,7 +1478,7 @@ function createLifecycle() {
       if (!imageUrl) return;
 
       // Look up age from current table data instead of stale data attribute
-      let ageText = "Unknown";
+      let ageText = I18n.t("format-unknown");
       if (mint && tbl) {
         const tableData = tbl.getData();
         const rowData = tableData.find((row) => row.mint === mint);
@@ -1475,7 +1489,7 @@ function createLifecycle() {
               typeof timestamp === "string"
                 ? Math.floor(new Date(timestamp).getTime() / 1000)
                 : timestamp;
-            ageText = Utils.formatTimeAgo(ageSeconds, { fallback: "Unknown" });
+            ageText = Utils.formatTimeAgo(ageSeconds, { fallback: I18n.t("format-unknown") });
           }
         }
       }
@@ -1484,7 +1498,7 @@ function createLifecycle() {
         imageUrl,
         symbol,
         name,
-        stats: [{ label: "Token Age", value: ageText }],
+        stats: [{ label: I18n.t("tokens-lightbox-token-age"), value: ageText }],
       });
     };
 
@@ -1556,7 +1570,7 @@ function createLifecycle() {
       if (!action || !mint) return;
       const row = tbl.getData().find((r) => r.mint === mint);
       if (!row) {
-        Utils.showToast("Token data not found", "error");
+        Utils.showToast(I18n.t("tokens-row-data-missing"), "error");
         return;
       }
       await performManualTrade({ action, mint, row, btn, onReload });
@@ -1685,15 +1699,30 @@ function createLifecycle() {
         },
         toolbar: {
           summary: [
-            { id: "tokens-total", label: "Total", value: "0" },
-            { id: "tokens-priced", label: "With Price", value: "0", variant: "info" },
-            { id: "tokens-positions", label: "Positions", value: "0", variant: "secondary" },
-            { id: "tokens-blacklisted", label: "Blacklisted", value: "0", variant: "warning" },
+            { id: "tokens-total", label: I18n.t("tokens-summary-total"), value: "0" },
+            {
+              id: "tokens-priced",
+              label: I18n.t("tokens-summary-priced"),
+              value: "0",
+              variant: "info",
+            },
+            {
+              id: "tokens-positions",
+              label: I18n.t("tokens-summary-positions"),
+              value: "0",
+              variant: "secondary",
+            },
+            {
+              id: "tokens-blacklisted",
+              label: I18n.t("tokens-summary-blacklisted"),
+              value: "0",
+              variant: "warning",
+            },
           ],
           search: {
             enabled: true,
             mode: "server",
-            placeholder: "Search by symbol or mint...",
+            placeholder: I18n.t("tokens-search-placeholder"),
             onChange: (value) => {
               state.search = (value || "").trim();
               // onChange just updates state, onSubmit triggers reload
@@ -1711,11 +1740,11 @@ function createLifecycle() {
           filters: [
             {
               id: "rejection_reason",
-              label: "Reject Reason",
+              label: I18n.t("tokens-column-reject-reason"),
               mode: "server",
               autoApply: true,
               defaultValue: DEFAULT_FILTERS.rejection_reason,
-              options: [{ value: "all", label: "All" }],
+              options: [{ value: "all", label: I18n.t("tokens-filter-all") }],
               onChange: (value, _el, options) => {
                 state.filters.rejection_reason = value || "all";
                 if (options?.restored) {
@@ -1751,7 +1780,7 @@ function createLifecycle() {
         // Find row data
         const row = table.getData().find((r) => r.mint === mint);
         if (!row) {
-          Utils.showToast("Token data not found", "error");
+          Utils.showToast(I18n.t("tokens-row-data-missing"), "error");
           return;
         }
 
@@ -1866,6 +1895,7 @@ function createLifecycle() {
       if (!poller) {
         poller = deps.poller = ctx.managePoller(
           new Poller(() => requestReload("poll", { silent: true, preserveScroll: true }), {
+            // l10n-ignore: poller name for diagnostics
             label: "Tokens",
             // The tokens/list query scans the full token DB (300k+ rows, COALESCE
             // sort) and takes ~2-4s. Polling faster than that just queues reloads

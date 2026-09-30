@@ -32,34 +32,55 @@ import { apiErrorMessage } from "../core/request_manager.js";
 
 const DIALOG_ID = "featured-dialog";
 
+// Ids are the `id` values of CATEGORIES below.
+const CATEGORY_LABELS = Object.freeze({
+  boosted: "tokens-featured-category-boosted",
+  "jupiter-organic": "tokens-featured-category-jupiter-organic",
+  "jupiter-traded": "tokens-featured-category-jupiter-traded",
+  "dexscreener-trending": "tokens-featured-category-dexscreener-trending",
+});
+
+// Ids are the `source` values of CATEGORIES below. Names are terms.
+const SOURCE_LABELS = Object.freeze({
+  jupiter: "tokens-featured-source-jupiter",
+  dexscreener: "tokens-featured-source-dexscreener",
+});
+
+// Only the boosted category carries a note.
+const CATEGORY_NOTE_LABELS = Object.freeze({
+  boosted: "tokens-featured-note-boosted",
+});
+
+// Ids are the bands of _renderSecurity.
+const SECURITY_LEVEL_LABELS = Object.freeze({
+  good: "tokens-security-grade-safe",
+  mid: "tokens-security-grade-caution",
+  bad: "tokens-featured-security-risky",
+});
+
 // Category definitions with metadata
 const CATEGORIES = [
   {
     id: "boosted",
-    title: "Boosted",
     icon: "icon-zap",
     key: "boosted",
     // The one paid category. Its own note explains what a boost buys, so a user
     // never has to guess why these tokens are at the top.
-    note: "Promoted by their teams",
   },
   {
     id: "jupiter-organic",
-    title: "Jupiter Top Organic",
     icon: "icon-trending-up",
     key: "jupiter_organic",
     source: "jupiter",
   },
   {
     id: "jupiter-traded",
-    title: "Jupiter Top Traded",
     icon: "icon-activity",
     key: "jupiter_traded",
     source: "jupiter",
   },
   {
     id: "dexscreener-trending",
-    title: "DexScreener Trending",
     icon: "icon-zap",
     key: "dexscreener_trending",
     source: "dexscreener",
@@ -88,10 +109,10 @@ class FeaturedDialog {
         this.data = data;
         this._renderCategories();
       } else {
-        this._showError(apiErrorMessage(data, "Failed to load featured"));
+        this._showError(apiErrorMessage(data, I18n.t("tokens-featured-load-failed")));
       }
     } catch (e) {
-      this._showError("Network error: " + e.message);
+      this._showError(I18n.t("tokens-featured-network-error", { message: e.message }));
     }
   }
 
@@ -125,14 +146,14 @@ class FeaturedDialog {
       <div class="featured-container">
         <div class="featured-header">
           <div class="featured-title-group">
-            <h1 class="featured-title">Featured</h1>
-            <p class="featured-subtitle">Boosted tokens first, then trending across Solana</p>
+            <h1 class="featured-title">${this._escapeHtml(I18n.t("tokens-featured-title"))}</h1>
+            <p class="featured-subtitle">${this._escapeHtml(I18n.t("tokens-featured-subtitle"))}</p>
           </div>
           <div class="featured-actions">
             <button type="button" class="featured-boost-btn" data-external-url="https://screenerbot.io/boost">
-              Boost a Token
+              ${this._escapeHtml(I18n.t("tokens-featured-boost"))}
             </button>
-            <button class="dialog-close" type="button" title="Close (ESC)">
+            <button class="dialog-close" type="button" title="${this._escapeHtml(I18n.attr("tokens-featured-close", "title"))}">
               <i class="icon-x"></i>
             </button>
           </div>
@@ -177,7 +198,7 @@ class FeaturedDialog {
       container.innerHTML = `
         <div class="featured-state featured-loading">
           <i class="icon-loader spin"></i>
-          <span>Loading featured &amp; trending...</span>
+          <span>${this._escapeHtml(I18n.t("tokens-featured-loading"))}</span>
         </div>
       `;
     }
@@ -190,7 +211,7 @@ class FeaturedDialog {
         <div class="featured-state featured-error">
           <i class="icon-circle-alert"></i>
           <span>${this._escapeHtml(message)}</span>
-          <span style="font-size:0.75rem;opacity:0.6">Check connection or try again</span>
+          <span style="font-size:0.75rem;opacity:0.6">${this._escapeHtml(I18n.t("tokens-featured-error-hint"))}</span>
         </div>
       `;
     }
@@ -206,7 +227,7 @@ class FeaturedDialog {
       container.innerHTML = `
         <div class="featured-state featured-empty">
           <i class="icon-inbox"></i>
-          <span>No tokens available right now</span>
+          <span>${this._escapeHtml(I18n.t("tokens-featured-empty"))}</span>
         </div>
       `;
       return;
@@ -293,10 +314,10 @@ class FeaturedDialog {
     const tokenCards = tokens.map((token) => this._renderTokenCard(token)).join("");
 
     const sourceTag = category.source
-      ? `<span class="featured-cat-source">${category.source}</span>`
+      ? `<span class="featured-cat-source">${this._escapeHtml(I18n.label(SOURCE_LABELS, category.source))}</span>`
       : "";
-    const note = category.note
-      ? `<span class="featured-cat-note">${category.note}</span>`
+    const note = Object.hasOwn(CATEGORY_NOTE_LABELS, category.id)
+      ? `<span class="featured-cat-note">${this._escapeHtml(I18n.label(CATEGORY_NOTE_LABELS, category.id))}</span>`
       : "";
 
     return `
@@ -304,11 +325,11 @@ class FeaturedDialog {
         <div class="featured-cat-header">
           <div class="featured-cat-title">
             <i class="${category.icon}"></i>
-            <span>${category.title}</span>
+            <span>${this._escapeHtml(I18n.label(CATEGORY_LABELS, category.id))}</span>
             ${sourceTag}
             ${note}
           </div>
-          <span class="featured-cat-count">${tokens.length} tokens</span>
+          <span class="featured-cat-count">${this._escapeHtml(I18n.t("tokens-featured-count", { count: tokens.length }))}</span>
         </div>
         <div class="featured-cat-grid" id="featured-cat-${category.id}">
           ${tokenCards}
@@ -329,7 +350,7 @@ class FeaturedDialog {
     const boostCount = formatBoostCount(token.boosts);
     const logoUrl = resolveTokenLogoUrl(token);
     const bannerUrl = resolveTokenBannerUrl(token);
-    const name = token.name || "Unknown";
+    const name = token.name || I18n.t("format-unknown");
     const symbol = (token.symbol || "???").toUpperCase();
     const mint = token.mint || "";
 
@@ -371,17 +392,17 @@ class FeaturedDialog {
         : null;
 
     const stats = [
-      ["Market Cap", token.market_cap, "compact"],
-      ["Liquidity", token.liquidity_usd, "compact"],
-      ["Vol 24H", token.volume_24h, "compact"],
-      ["Holders", token.holders, "count"],
-      ["Txns 24H", txns, "count"],
+      [I18n.t("tokens-featured-stat-market-cap"), token.market_cap, "compact"],
+      [I18n.t("tokens-featured-stat-liquidity"), token.liquidity_usd, "compact"],
+      [I18n.t("tokens-featured-stat-volume"), token.volume_24h, "compact"],
+      [I18n.t("tokens-featured-stat-holders"), token.holders, "count"],
+      [I18n.t("tokens-featured-stat-txns"), txns, "count"],
     ]
       .filter(([, value]) => value != null)
       .map(
         ([label, value, kind]) => `
           <div class="feat-card-stat">
-            <span class="feat-card-stat-label">${label}</span>
+            <span class="feat-card-stat-label">${this._escapeHtml(label)}</span>
             <span class="feat-card-stat-value">${
               kind === "compact"
                 ? Utils.formatCompactNumber(value, { prefix: "$" })
@@ -411,7 +432,7 @@ class FeaturedDialog {
             <span class="feat-card-name">${this._escapeHtml(name)}</span>
             ${
               tier
-                ? `<span class="boost-mark${tier === "golden" ? " golden" : ""}" title="Boosted ${this._escapeHtml(boostCount)} on screenerbot.io"><i class="icon-zap" aria-hidden="true"></i><span class="boost-mark-count">${this._escapeHtml(boostCount)}</span></span>`
+                ? `<span class="boost-mark${tier === "golden" ? " golden" : ""}" title="${this._escapeHtml(I18n.t("tokens-boost-title", { boosts: boostCount }))}"><i class="icon-zap" aria-hidden="true"></i><span class="boost-mark-count">${this._escapeHtml(boostCount)}</span></span>`
                 : ""
             }
             ${priceHtml}
@@ -430,9 +451,9 @@ class FeaturedDialog {
             ${this._buildSocialIcons(token)}
             ${this._buildShortcuts(mint)}
           </div>
-          <button class="feat-card-buy" data-action="buy" title="Buy ${this._escapeHtml(symbol)}">
+          <button class="feat-card-buy" data-action="buy" title="${this._escapeHtml(I18n.attr("tokens-featured-buy", "title", { symbol }))}">
             <i class="icon-zap"></i>
-            <span>Buy</span>
+            <span>${this._escapeHtml(I18n.t("tokens-featured-buy"))}</span>
           </button>
         </div>
       </article>
@@ -446,16 +467,16 @@ class FeaturedDialog {
   _buildShortcuts(mint) {
     const safeMint = this._escapeHtml(mint);
     return `
-      <button class="feat-card-link" data-action="dexscreener" data-mint="${safeMint}" title="DexScreener">
+      <button class="feat-card-link" data-action="dexscreener" data-mint="${safeMint}" title="${this._escapeHtml(I18n.t("links-explorer-dexscreener"))}">
         <i class="icon-chart-candlestick"></i>
       </button>
-      <button class="feat-card-link" data-action="gmgn" data-mint="${safeMint}" title="GMGN">
+      <button class="feat-card-link" data-action="gmgn" data-mint="${safeMint}" title="${this._escapeHtml(I18n.t("links-explorer-gmgn"))}">
         <i class="icon-trending-up"></i>
       </button>
-      <button class="feat-card-link" data-action="solscan" data-mint="${safeMint}" title="Solscan">
+      <button class="feat-card-link" data-action="solscan" data-mint="${safeMint}" title="${this._escapeHtml(I18n.t("links-explorer-solscan"))}">
         <i class="icon-search"></i>
       </button>
-      <button class="feat-card-link" data-action="copy" data-mint="${safeMint}" title="Copy mint">
+      <button class="feat-card-link" data-action="copy" data-mint="${safeMint}" title="${this._escapeHtml(I18n.attr("tokens-copy-mint", "title"))}">
         <i class="icon-copy"></i>
       </button>
     `;
@@ -468,9 +489,9 @@ class FeaturedDialog {
     if (score == null) return "";
 
     const level = score >= 70 ? "good" : score >= 40 ? "mid" : "bad";
-    const label = score >= 70 ? "Safe" : score >= 40 ? "Caution" : "Risky";
+    const label = I18n.label(SECURITY_LEVEL_LABELS, level);
 
-    return `<span class="feat-card-security ${level}" title="Security score: ${score}/100">${label}</span>`;
+    return `<span class="feat-card-security ${level}" title="${this._escapeHtml(I18n.t("tokens-featured-security-score", { score }))}">${this._escapeHtml(label)}</span>`;
   }
 
   /**
@@ -491,22 +512,22 @@ class FeaturedDialog {
     const icons = [];
     if (token.website) {
       icons.push(
-        `<a href="${this._escapeHtml(token.website)}" target="_blank" rel="noopener noreferrer" class="feat-card-social" title="Website"><i class="icon-globe"></i></a>`
+        `<a href="${this._escapeHtml(token.website)}" target="_blank" rel="noopener noreferrer" class="feat-card-social" title="${this._escapeHtml(I18n.t("tokens-featured-social-website"))}"><i class="icon-globe"></i></a>`
       );
     }
     if (token.twitter) {
       icons.push(
-        `<a href="${this._escapeHtml(token.twitter)}" target="_blank" rel="noopener noreferrer" class="feat-card-social" title="Twitter"><i class="icon-twitter"></i></a>`
+        `<a href="${this._escapeHtml(token.twitter)}" target="_blank" rel="noopener noreferrer" class="feat-card-social" title="${this._escapeHtml(I18n.t("tokens-featured-social-twitter"))}"><i class="icon-twitter"></i></a>`
       );
     }
     if (token.telegram) {
       icons.push(
-        `<a href="${this._escapeHtml(token.telegram)}" target="_blank" rel="noopener noreferrer" class="feat-card-social" title="Telegram"><i class="icon-send"></i></a>`
+        `<a href="${this._escapeHtml(token.telegram)}" target="_blank" rel="noopener noreferrer" class="feat-card-social" title="${this._escapeHtml(I18n.t("tokens-links-social-telegram"))}"><i class="icon-send"></i></a>`
       );
     }
     if (token.discord) {
       icons.push(
-        `<a href="${this._escapeHtml(token.discord)}" target="_blank" rel="noopener noreferrer" class="feat-card-social" title="Discord"><i class="icon-message-circle"></i></a>`
+        `<a href="${this._escapeHtml(token.discord)}" target="_blank" rel="noopener noreferrer" class="feat-card-social" title="${this._escapeHtml(I18n.t("tokens-links-social-discord"))}"><i class="icon-message-circle"></i></a>`
       );
     }
     return icons.join("");

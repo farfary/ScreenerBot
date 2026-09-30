@@ -15,6 +15,7 @@
 -geckoterminal = GeckoTerminal
 -dextools = DexTools
 -gmgn = GMGN
+-pumpfun = Pump.fun
 -coingecko = CoinGecko
 -jupiter = Jupiter
 -twitter = Twitter

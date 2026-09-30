@@ -39,7 +39,7 @@ export class PoolSelector {
       }
 
       if (!data.success || !data.pools || data.pools.length === 0) {
-        this.renderError("No pools found for this token");
+        this.renderError(I18n.t("tokens-pool-selector-empty"));
         return;
       }
 
@@ -48,7 +48,7 @@ export class PoolSelector {
       // Render pool list
       this.renderPools(data.pools, tokenMint);
     } catch (error) {
-      this.renderError(`Failed to load pools: ${error.message}`);
+      this.renderError(I18n.t("tokens-pool-selector-load-failed", { message: error.message }));
     }
   }
 
@@ -70,8 +70,8 @@ export class PoolSelector {
     this.dialog.innerHTML = `
       <div class="pool-selector-dialog" role="dialog" aria-modal="true" aria-labelledby="pool-selector-title">
         <div class="pool-selector-header">
-          <h3 id="pool-selector-title">Select Pool</h3>
-          <button class="pool-selector-close" type="button" aria-label="Close">
+          <h3 id="pool-selector-title">${escapeHtml(I18n.t("tokens-pool-selector-title"))}</h3>
+          <button class="pool-selector-close" type="button" aria-label="${escapeHtml(I18n.t("common-action-close"))}">
             <i class="icon-x"></i>
           </button>
         </div>
@@ -103,7 +103,7 @@ export class PoolSelector {
     content.innerHTML = `
       <div class="pool-selector-loading">
         <i class="icon-loader spin"></i>
-        <p>Loading pools...</p>
+        <p>${escapeHtml(I18n.t("tokens-pool-selector-loading"))}</p>
       </div>
     `;
   }
@@ -114,7 +114,7 @@ export class PoolSelector {
 
     content.innerHTML = `
       <div class="pool-selector-info">
-        <span class="pool-count">${pools.length} pool${pools.length !== 1 ? "s" : ""} found</span>
+        <span class="pool-count">${escapeHtml(I18n.t("tokens-pool-selector-count", { count: pools.length }))}</span>
         <span class="pool-mint">${formatAddressCompact(tokenMint, { start: 8, end: 6, ellipsis: "..." })}</span>
       </div>
       <div class="pool-list">
@@ -123,13 +123,13 @@ export class PoolSelector {
             (pool, i) => `
           <div class="pool-item" data-index="${i}" tabindex="0" role="button">
             <div class="pool-item-main">
-              <span class="pool-dex">${escapeHtml(pool.dex || "Unknown")}</span>
+              <span class="pool-dex">${escapeHtml(pool.dex || I18n.t("format-unknown"))}</span>
               <span class="pool-pair">${escapeHtml(pool.base_symbol || "?")}/${escapeHtml(pool.quote_symbol || "?")}</span>
-              <span class="pool-source ${(pool.source || "unknown").toLowerCase()}">${escapeHtml(pool.source || "Unknown")}</span>
+              <span class="pool-source ${(pool.source || "unknown").toLowerCase()}">${escapeHtml(pool.source || I18n.t("format-unknown"))}</span>
             </div>
             <div class="pool-item-stats">
-              <span class="pool-liquidity" title="Liquidity">$${formatCompact(pool.liquidity_usd)} liq</span>
-              <span class="pool-volume" title="24h Volume">$${formatCompact(pool.volume_24h)} 24h</span>
+              <span class="pool-liquidity" title="${escapeHtml(I18n.attr("tokens-pool-selector-liquidity", "title"))}">${escapeHtml(I18n.t("tokens-pool-selector-liquidity", { amount: `$${formatCompact(pool.liquidity_usd)}` }))}</span>
+              <span class="pool-volume" title="${escapeHtml(I18n.attr("tokens-pool-selector-volume", "title"))}">${escapeHtml(I18n.t("tokens-pool-selector-volume", { amount: `$${formatCompact(pool.volume_24h)}` }))}</span>
             </div>
             <div class="pool-address">${formatAddressCompact(pool.address, { start: 8, end: 6, ellipsis: "..." })}</div>
           </div>
@@ -175,7 +175,7 @@ export class PoolSelector {
       <div class="pool-selector-error">
         <i class="icon-circle-alert"></i>
         <p>${escapeHtml(message)}</p>
-        <button class="btn btn-sm" type="button">Dismiss</button>
+        <button class="btn btn-sm" type="button">${escapeHtml(I18n.t("common-action-dismiss"))}</button>
       </div>
     `;
 

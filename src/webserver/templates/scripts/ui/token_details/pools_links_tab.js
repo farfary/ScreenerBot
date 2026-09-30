@@ -37,16 +37,16 @@ const SOCIAL_LABELS = Object.freeze({
 
 // Ids name the explorer and analytics providers of buildExplorerSection. Names are terms.
 const EXPLORER_LABELS = Object.freeze({
-  solscan: "menu-explorer-solscan",
+  solscan: "links-explorer-solscan",
   solana_explorer: "tokens-links-explorer-solana-explorer",
-  birdeye: "menu-explorer-birdeye",
-  dexscreener: "menu-explorer-dexscreener",
+  birdeye: "links-explorer-birdeye",
+  dexscreener: "links-explorer-dexscreener",
   geckoterminal: "tokens-links-explorer-geckoterminal",
   dextools: "tokens-links-explorer-dextools",
-  gmgn: "tokens-links-explorer-gmgn",
-  photon: "menu-explorer-photon",
-  rugcheck: "menu-explorer-rugcheck",
-  bubblemaps: "menu-explorer-bubblemaps",
+  gmgn: "links-explorer-gmgn",
+  photon: "links-explorer-photon",
+  rugcheck: "links-explorer-rugcheck",
+  bubblemaps: "links-explorer-bubblemaps",
   coingecko: "tokens-links-explorer-coingecko",
   jupiter_swap: "tokens-links-explorer-jupiter-swap",
 });
@@ -296,7 +296,7 @@ function buildTokenReferenceSection(token, mint, options = {}) {
           <span>${esc(I18n.t("tokens-links-mint-address"))}</span>
           <div class="links-info-value">
             <code dir="ltr" title="${safeMint}">${formatShortAddress(mint)}</code>
-            <button class="copy-btn-mini" type="button" data-copy="${safeMint}" title="${esc(I18n.attr("positions-details-copy-mint", "title"))}">
+            <button class="copy-btn-mini" type="button" data-copy="${safeMint}" title="${esc(I18n.attr("tokens-copy-mint", "title"))}">
               <i class="icon-copy" aria-hidden="true"></i>
             </button>
           </div>
