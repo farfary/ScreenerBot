@@ -1,0 +1,72 @@
+onboarding-welcome-title = Добро пожаловать в { -brand }
+onboarding-welcome-description = Ваш локальный торговый помощник для Solana — написан на Rust для нативной скорости. Находите токены, анализируйте рынки и управляйте торговлей со своего компьютера.
+onboarding-welcome-free-title = Бесплатно и с открытым исходным кодом
+onboarding-welcome-free-description = Никаких подписок и платных ограничений. Изучайте код, опубликованный на GitHub.
+onboarding-welcome-custody-title = Самостоятельное хранение
+onboarding-welcome-custody-description = Приватные ключи хранятся в зашифрованном виде и никуда не передаются.
+onboarding-welcome-engine-title = Движок, работающий постоянно
+onboarding-welcome-engine-description = Согласованные сервисы с проверками работоспособности и корректным управлением жизненным циклом.
+onboarding-welcome-realtime-title = Ончейн-данные в реальном времени
+onboarding-welcome-realtime-description = Прямой расчёт по резервам пулов — а не запаздывающие снимки API.
+
+onboarding-discover-title = Поиск и фильтрация
+onboarding-discover-description = Сканируйте три источника данных в поисках новых пар Solana, декодируйте более 12 типов пулов DEX прямо в блокчейне и пропускайте каждый токен через настраиваемые правила качества и безопасности.
+onboarding-discover-dex-title = Поиск по нескольким DEX
+onboarding-discover-dex-description = Данные { -dexscreener }, { -geckoterminal } и Raydium для свежих пар с { -sol }.
+onboarding-discover-scanner-title = Умный сканер токенов
+onboarding-discover-scanner-description = Правила по ликвидности, объёму, возрасту токена, распределению холдеров и { -rugcheck }.
+onboarding-discover-intelligence-title = Аналитика токенов
+onboarding-discover-intelligence-description = Рыночные данные, данные безопасности и чёрного списка в одном представлении.
+onboarding-discover-price-action-title = Отслеживание движения цены
+onboarding-discover-price-action-description = Семь таймфреймов свечей с обнаружением пропусков и сигналами импульса.
+
+onboarding-trade-title = Умная торговля
+onboarding-trade-description = Автоматическая торговля с шестиуровневой системой приоритетов выхода. Докупайте позиции по DCA, задавайте трейлинг-стопы, стройте деревья стратегий — или торгуйте вручную в один клик.
+onboarding-trade-auto-title = Автоторговля
+onboarding-trade-auto-description = Оценка входов и выходов, раунды DCA, частичные выходы и трейлинг-стоп-лосс.
+onboarding-trade-strategy-title = Движок стратегий
+onboarding-trade-strategy-description = Деревья условий, объединяющие сигналы по цене, объёму и времени.
+onboarding-trade-routing-title = Маршрутизация по лучшей цене
+onboarding-trade-routing-description = Одновременные котировки от каждого включённого роутера — побеждает лучший маршрут.
+onboarding-trade-safety-title = Средства защиты
+onboarding-trade-safety-description = Экстренная остановка, лимиты убытков за период и независимые переключатели мониторов.
+
+onboarding-connect-title = Всегда на связи
+onboarding-connect-description = Следите за портфелем откуда угодно. Ассистент на базе девяти LLM-провайдеров, уведомления { -telegram } с торговлей прямо в чате и журнал событий с поиском.
+onboarding-connect-assistant-title = Ассистент
+onboarding-connect-assistant-description = Анализ в формате чата с вызовом инструментов для сделок, конфигурации и портфеля.
+onboarding-connect-telegram-title = Интеграция с { -telegram }
+onboarding-connect-telegram-description = Уведомления, встроенные команды и сессии с защитой 2FA прямо с телефона.
+onboarding-connect-wallets-title = Отслеживание нескольких кошельков
+onboarding-connect-wallets-description = Все ваши кошельки Solana и токены на одном дашборде.
+onboarding-connect-events-title = Живой поток событий
+onboarding-connect-events-description = Каждая сделка, своп и системное событие записываются с категорией и уровнем серьёзности.
+
+onboarding-data-title = Данные { -brand }
+onboarding-data-description = Мы запускаем общий сервис рыночных данных, чтобы каждая установка не упиралась в отдельные лимиты публичных провайдеров. Он бесплатен с аккаунтом { -brand }, а { -brand } работает и без него.
+onboarding-data-candles-title = Общая история свечей
+onboarding-data-candles-description = Семь таймфреймов общей истории глубиной в годы, из единого кэша.
+onboarding-data-pools-title = Найденные пулы и безопасность
+onboarding-data-pools-description = Центральный реестр пулов и кэшированные отчёты { -rugcheck }, уже загруженные.
+onboarding-data-signin-title = Войдите, чтобы пользоваться
+onboarding-data-signin-description = Без аккаунта эти данные недоступны, и используются публичные провайдеры.
+onboarding-data-reading-title = Только чтение
+onboarding-data-reading-description = Мы видим, какие токены вы ищете. Но никогда — ключ, баланс, позицию или сделку.
+
+onboarding-privacy-title = Ваши ключи, ваши данные
+onboarding-privacy-description = Ваша конфигурация, ключи и история торговли остаются на этом компьютере. Далее выберите режим обзора, чтобы искать токены без учётных данных, или подключите кошелёк и RPC, чтобы включить полноценного бота — и войдите там в аккаунт, если хотите данные { -brand }.
+onboarding-privacy-local-title = Архитектура «сначала локально»
+onboarding-privacy-local-description = Конфигурация, аналитика и базы данных хранятся на вашем компьютере.
+onboarding-privacy-wallet-title = Зашифрованный кошелёк
+onboarding-privacy-wallet-description = Ваш приватный ключ хранится в зашифрованном виде и никуда не передаётся.
+onboarding-privacy-security-title = Безопасность дашборда
+onboarding-privacy-security-description = Блокировка паролем, двухфакторная защита TOTP и защита по тайм-ауту сессии.
+onboarding-privacy-config-title = Гибкая конфигурация
+onboarding-privacy-config-description = Большинство настроек можно изменить в дашборде после первоначальной настройки.
+
+onboarding-setup-shortcut =
+    .aria-label = Перейти сразу к настройке кошелька и RPC или выбрать режим обзора
+onboarding-setup-shortcut-label = К настройке
+onboarding-progress-dot =
+    .aria-label = Перейти к слайду { $number }
+onboarding-action-continue-to-setup = Перейти к настройке
