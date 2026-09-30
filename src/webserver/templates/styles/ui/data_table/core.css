@@ -21,7 +21,7 @@
   height: 2px;
   background-color: var(--primary-alpha-15);
   background-image: linear-gradient(
-    90deg,
+    var(--to-inline-end),
     transparent 0%,
     var(--primary-color) 30%,
     var(--primary-color) 70%,
@@ -834,15 +834,10 @@ body.dt-column-resizing * {
   bottom: 0;
   width: 8px;
   transform: translateX(calc(var(--dir-sign) * 100%));
-  background: linear-gradient(to right, rgb(0, 0, 0, 0.18), rgb(0, 0, 0, 0));
+  background: linear-gradient(var(--to-inline-end), rgb(0, 0, 0, 0.18), rgb(0, 0, 0, 0));
   opacity: 0;
   pointer-events: none;
   transition: opacity var(--transition-base);
-}
-
-[dir="rtl"] .data-table th.dt-col-sticky-last::after,
-[dir="rtl"] .data-table td.dt-col-sticky-last::after {
-  background: linear-gradient(to left, rgb(0, 0, 0, 0.18), rgb(0, 0, 0, 0));
 }
 
 .data-table-wrapper.is-pinned-scrolled .data-table th.dt-col-sticky-last::after,
@@ -871,7 +866,7 @@ body.dt-column-resizing * {
 /* Dark theme — deeper right-edge shadow for the pinned group. */
 [data-theme="dark"] .data-table td.dt-col-sticky-last::after,
 [data-theme="dark"] .data-table th.dt-col-sticky-last::after {
-  background: linear-gradient(to right, rgb(0, 0, 0, 0.4), rgb(0, 0, 0, 0));
+  background: linear-gradient(var(--to-inline-end), rgb(0, 0, 0, 0.4), rgb(0, 0, 0, 0));
 }
 
 @media (prefers-reduced-motion: reduce) {

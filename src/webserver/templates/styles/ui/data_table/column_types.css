@@ -126,7 +126,7 @@
 
 .dt-image[loading="lazy"] {
   background: linear-gradient(
-    90deg,
+    var(--to-inline-end),
     var(--bg-secondary) 0%,
     var(--bg-hover) 50%,
     var(--bg-secondary) 100%
@@ -393,7 +393,7 @@
   opacity: 0;
   pointer-events: none;
   transform: translateY(-4px) scaleY(0.985);
-  transform-origin: top right;
+  transform-origin: calc(50% + var(--dir-sign) * 50%) top;
   transition:
     opacity 0.12s ease,
     transform 0.12s ease;

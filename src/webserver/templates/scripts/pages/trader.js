@@ -674,6 +674,7 @@ function createLifecycle() {
 
     const first = days[0];
     const last = days[days.length - 1];
+    container.dir = "ltr";
     container.innerHTML = `
       <svg class="daily-pnl-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img"
            aria-label="${Utils.escapeHtml(I18n.t("trader-daily-chart"))}">

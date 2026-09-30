@@ -79,7 +79,7 @@
 
 .mw-progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, var(--primary-color), var(--success-color));
+  background: linear-gradient(var(--to-inline-end), var(--primary-color), var(--success-color));
   border-radius: var(--radius-md);
   transition: width var(--transition-normal);
 }

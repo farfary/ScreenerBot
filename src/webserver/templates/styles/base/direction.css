@@ -32,3 +32,25 @@
   display: inline-block;
   transform: scaleX(-1);
 }
+
+/* ==================== LTR Islands ====================
+ * Code-like content and numeric or URL entry keep left-to-right order inside an RTL
+ * page. `unicode-bidi: isolate` stops neighbouring RTL text from reordering the run.
+ * Addresses, signatures, and chart roots carry the HTML `dir="ltr"` attribute.
+ */
+:is(pre, code, kbd, samp) {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+[dir="rtl"] :is(input[type="number"], input[inputmode="decimal"], input[inputmode="numeric"], input[type="url"]) {
+  direction: ltr;
+}
+
+/* ==================== Arabic-Script Letter Spacing ====================
+ * Arabic-script letters join into connected forms; positive letter-spacing breaks the
+ * joins and makes words unreadable, so tracking is reset for every element in those locales.
+ */
+:is(:lang(ar), :lang(fa)) :where(*) {
+  letter-spacing: normal !important;
+}

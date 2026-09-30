@@ -38,12 +38,12 @@
 
 .header-row-2-wrapper::before {
   inset-inline-start: 0;
-  background: linear-gradient(to right, var(--bg-secondary), transparent);
+  background: linear-gradient(var(--to-inline-end), var(--bg-secondary), transparent);
 }
 
 .header-row-2-wrapper::after {
   inset-inline-end: 0;
-  background: linear-gradient(to left, var(--bg-secondary), transparent);
+  background: linear-gradient(var(--to-inline-start), var(--bg-secondary), transparent);
 }
 
 .header-row-2-wrapper.can-scroll-start::before,
@@ -95,7 +95,7 @@
   width: var(--nav-indicator-w, 0);
   height: 4px;
   background: linear-gradient(to top, var(--primary-alpha-20), transparent);
-  mask: linear-gradient(90deg, transparent, #000 20%, #000 80%, transparent);
+  mask: linear-gradient(var(--to-inline-end), transparent, #000 20%, #000 80%, transparent);
   opacity: 0;
   /* rtl-ok: indicator offset is measured from the physical left edge by JS */
   transform: translateX(var(--nav-indicator-x, 0));
@@ -170,7 +170,7 @@
   background: linear-gradient(to top, var(--primary-alpha-20), transparent);
 
   /* The ends fade out so the glow has no vertical edge where the tab stops. */
-  mask: linear-gradient(90deg, transparent, #000 20%, #000 80%, transparent);
+  mask: linear-gradient(var(--to-inline-end), transparent, #000 20%, #000 80%, transparent);
   opacity: 0;
   filter: blur(1px);
   pointer-events: none;
@@ -432,7 +432,7 @@ button.ticker-segment:hover .ticker-icon {
     visibility: hidden;
     pointer-events: none;
     transform: translateY(-6px) scale(0.98);
-    transform-origin: top right;
+    transform-origin: calc(50% + var(--dir-sign) * 50%) top;
     transition:
       opacity var(--transition-base),
       transform var(--transition-base),
@@ -590,7 +590,7 @@ button.ticker-segment:hover .ticker-icon {
     visibility: hidden;
     pointer-events: none;
     transform: translateY(-6px) scale(0.98);
-    transform-origin: top right;
+    transform-origin: calc(50% + var(--dir-sign) * 50%) top;
     transition:
       opacity var(--transition-base),
       transform var(--transition-base),

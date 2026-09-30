@@ -812,7 +812,7 @@ import {
           : solscanAccountUrl(raw);
     // base58 addresses contain no quotes/HTML-special chars, so inlining is safe.
     const onclick = `event.preventDefault();event.stopPropagation();Utils.copyAddress('${raw}')`;
-    return `<span class="addr-chip${full ? " addr-chip-full" : ""}"><a class="addr-chip-link mono" href="${url}" target="_blank" rel="noopener noreferrer" title="${safe} ${escapeHtml(I18n.t("shell-address-open-solscan"))}">${display}</a><button type="button" class="addr-chip-copy" title="${escapeHtml(I18n.t("shell-address-copy"))}" onclick="${onclick}"><i class="icon-copy"></i></button></span>`;
+    return `<span class="addr-chip${full ? " addr-chip-full" : ""}"><a class="addr-chip-link mono" dir="ltr" href="${url}" target="_blank" rel="noopener noreferrer" title="${safe} ${escapeHtml(I18n.t("shell-address-open-solscan"))}">${display}</a><button type="button" class="addr-chip-copy" title="${escapeHtml(I18n.t("shell-address-copy"))}" onclick="${onclick}"><i class="icon-copy"></i></button></span>`;
   }
 
   // DOM Helper Functions

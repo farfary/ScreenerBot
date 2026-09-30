@@ -180,9 +180,9 @@ function renderTransfers(event) {
       (transfer) => `
       <tr>
         <td class="pdd-act-xfer-amount">${Utils.formatCompactNumber(transfer.amount)}</td>
-        <td>${Utils.formatAddressCompact(transfer.mint)}</td>
-        <td>${Utils.formatAddressCompact(transfer.from)}</td>
-        <td>${Utils.formatAddressCompact(transfer.to)}</td>
+        <td dir="ltr">${Utils.formatAddressCompact(transfer.mint)}</td>
+        <td dir="ltr">${Utils.formatAddressCompact(transfer.from)}</td>
+        <td dir="ltr">${Utils.formatAddressCompact(transfer.to)}</td>
       </tr>`
     )
     .join("");
@@ -202,7 +202,7 @@ function renderSignature(event) {
   const signature = Utils.escapeHtml(event.signature);
   return `
     <div class="pdd-act-signature">
-      <span class="pdd-act-sig" data-copy="${signature}" title="${esc(I18n.t("positions-event-click-to-copy"))}">${Utils.formatSignatureCompact(event.signature, { start: 10, end: 10 })}</span>
+      <span class="pdd-act-sig" dir="ltr" data-copy="${signature}" title="${esc(I18n.t("positions-event-click-to-copy"))}">${Utils.formatSignatureCompact(event.signature, { start: 10, end: 10 })}</span>
       <button type="button" class="pdd-act-sig-copy" data-copy="${signature}"><i class="icon-copy"></i>${esc(I18n.t("common-action-copy"))}</button>
       <a href="${Utils.solscanTxUrl(event.signature)}" target="_blank" rel="noopener" class="pdd-act-sig-link"><i class="icon-external-link"></i>${esc(I18n.t("positions-event-solscan"))}</a>
     </div>`;

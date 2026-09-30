@@ -42,7 +42,7 @@ export function createOhlcvModule(deps) {
         render: (value, row) => {
           const short = value ? `${value.slice(0, 6)}...${value.slice(-4)}` : "—";
           return `<span class="ohlcv-token-cell">
-            <span class="mint-cell" title="${Utils.escapeHtml(value)}">${short}</span>
+            <span class="mint-cell" dir="ltr" title="${Utils.escapeHtml(value)}">${short}</span>
             <span class="ohlcv-token-actions">
               <button class="btn btn-sm btn-danger ohlcv-delete-btn" data-mint="${Utils.escapeHtml(row.mint)}" title="${Utils.escapeHtml(I18n.attr("tokens-ohlcv-delete", "title"))}" aria-label="${Utils.escapeHtml(I18n.attr("tokens-ohlcv-delete", "aria-label"))}">
                 <i class="icon-trash-2"></i>

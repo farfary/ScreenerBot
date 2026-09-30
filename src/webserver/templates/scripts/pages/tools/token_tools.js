@@ -341,7 +341,7 @@ function renderTokenAnalyzerTool(container, actionsContainer) {
         </div>
         <div class="section-content">
           <div class="ta-input-group">
-            <input type="text" id="ta-mint-input" data-l10n-id="tools-analyzer-mint-input" />
+            <input dir="ltr" type="text" id="ta-mint-input" data-l10n-id="tools-analyzer-mint-input" />
             <button class="btn primary" id="ta-analyze-btn">
               <i class="icon-search"></i> <span data-l10n-id="tools-analyzer-action-analyze"></span>
             </button>

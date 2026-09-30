@@ -96,7 +96,7 @@ export function applyTransactionsTabMixin(DialogClass) {
             <div><span>${esc(I18n.t("tokens-transactions-metric-buys"))}</span><strong class="positive">${Utils.formatNumber(stats.buys, { decimals: 0 })}</strong></div>
             <div><span>${esc(I18n.t("tokens-transactions-metric-sells"))}</span><strong class="negative">${Utils.formatNumber(stats.sells, { decimals: 0 })}</strong></div>
           </div>
-          <div id="txns-chart" class="transactions-chart"></div>
+          <div id="txns-chart" class="transactions-chart" dir="ltr"></div>
         </section>
 
         <section class="transactions-list-section">

@@ -69,7 +69,7 @@ class SetupDialog {
             <span data-l10n-id="setup-dialog-wallet-label"></span> <span class="req">*</span>
           </span>
           <div class="setup-dialog-input-wrap">
-            <textarea id="setup-dialog-wallet" class="setup-dialog-input" rows="2"
+            <textarea dir="ltr" id="setup-dialog-wallet" class="setup-dialog-input" rows="2"
               data-l10n-id="setup-dialog-wallet-input" spellcheck="false"
               autocomplete="off"></textarea>
             <button type="button" class="setup-dialog-reveal" data-action="reveal"
@@ -84,7 +84,7 @@ class SetupDialog {
           <span class="setup-dialog-label">
             <span data-l10n-id="setup-dialog-rpc-label"></span> <span class="req">*</span>
           </span>
-          <textarea id="setup-dialog-rpc" class="setup-dialog-input" rows="2"
+          <textarea dir="ltr" id="setup-dialog-rpc" class="setup-dialog-input" rows="2"
             data-l10n-id="setup-dialog-rpc-input" spellcheck="false"></textarea>
           <span class="setup-dialog-hint" data-l10n-id="setup-dialog-rpc-hint"></span>
         </label>

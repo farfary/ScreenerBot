@@ -511,11 +511,11 @@
    Transform Origins
    ============================================================================= */
 
-.origin-top-left { transform-origin: top left; }
-.origin-top-right { transform-origin: top right; }
+.origin-top-left { transform-origin: top left; /* rtl-ok: physical corner chosen by JS placement */ }
+.origin-top-right { transform-origin: top right; /* rtl-ok: physical corner chosen by JS placement */ }
 .origin-top-center { transform-origin: top center; }
-.origin-bottom-left { transform-origin: bottom left; }
-.origin-bottom-right { transform-origin: bottom right; }
+.origin-bottom-left { transform-origin: bottom left; /* rtl-ok: physical corner chosen by JS placement */ }
+.origin-bottom-right { transform-origin: bottom right; /* rtl-ok: physical corner chosen by JS placement */ }
 .origin-bottom-center { transform-origin: bottom center; }
 
 /* =============================================================================

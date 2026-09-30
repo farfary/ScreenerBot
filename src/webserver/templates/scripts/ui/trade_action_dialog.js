@@ -400,7 +400,7 @@ export class TradeActionDialog {
           <div class="quick-trade-mint-content">
             <label class="quick-trade-mint-label" data-l10n-id="trade-quick-mint-label"></label>
             <div class="quick-trade-mint-input-wrapper">
-              <input type="text" class="quick-trade-mint-input" data-l10n-id="trade-quick-mint-input" autocomplete="off" spellcheck="false" />
+              <input dir="ltr" type="text" class="quick-trade-mint-input" data-l10n-id="trade-quick-mint-input" autocomplete="off" spellcheck="false" />
               <button type="button" class="quick-trade-paste-btn" data-l10n-id="trade-quick-paste">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>

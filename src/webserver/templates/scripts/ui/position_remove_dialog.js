@@ -85,7 +85,7 @@ class PositionRemoveDialog {
     this.element.innerHTML = `
       <div class="position-remove-header">
         <h3 class="position-remove-title" id="position-remove-title" data-l10n-id="positions-remove-title"></h3>
-        <p class="position-remove-subtitle">${sym} <span class="position-remove-mint">${mintShort}</span></p>
+        <p class="position-remove-subtitle">${sym} <span class="position-remove-mint" dir="ltr">${mintShort}</span></p>
       </div>
 
       ${openWarning}

@@ -261,6 +261,24 @@ test("css flags a horizontal translation unless it uses --dir-sign, is -50% or i
   assert.equal(count(".a {\n  /* rtl-ok: JS writes physical offset */\n  transform: translateX(4px);\n}"), 0);
 });
 
+test("css flags physical gradient axes and left or right origins unless computed from the inline axis", () => {
+  const count = (css) => scanCss({ source: css, path: "a.css" }).items.length;
+  assert.equal(count(".a { background: linear-gradient(to right, red, blue); }"), 1);
+  assert.equal(count(".a { background: linear-gradient(90deg, red, blue); }"), 1);
+  assert.equal(count(".a { mask: repeating-linear-gradient(270deg, red, blue 4px); }"), 1);
+  assert.equal(count(".a { background: url(x.png), linear-gradient(to left, red, blue); }"), 1);
+  assert.equal(count(".a { background: linear-gradient(var(--to-inline-end), red, blue); }"), 0);
+  assert.equal(count(".a { background: linear-gradient(135deg, red, blue); }"), 0);
+  assert.equal(count(".a { background: linear-gradient(to bottom, red, blue); }"), 0);
+  assert.equal(count(".a { background: linear-gradient(0deg, red 10%, blue); }"), 0);
+  assert.equal(count(".a { transform-origin: top left; }"), 1);
+  assert.equal(count(".a { transform-origin: right center; }"), 1);
+  assert.equal(count(".a { background-position: right 12px center; }"), 1);
+  assert.equal(count(".a { transform-origin: calc(50% + var(--dir-sign) * 50%) top; }"), 0);
+  assert.equal(count(".a { transform-origin: center bottom; background-position: 100% 0; }"), 0);
+  assert.equal(count(".a { transform-origin: top left; /* rtl-ok: JS picks the corner */ }"), 0);
+});
+
 test("css honours rtl-ok and rejects an empty reason", () => {
   const same = scanCss({ source: ".a { left: 0; /* rtl-ok: chart axis */ }", path: "a.css" });
   assert.equal(same.items.length, 0);

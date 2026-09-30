@@ -18,7 +18,7 @@ const DEFAULT_FILTERS = {
 function formatSignatureLink(signature) {
   if (!signature) return "—";
   const safe = Utils.escapeHtml(signature);
-  return `<a class="mono-text" href="https://solscan.io/tx/${safe}" target="_blank" rel="noopener">${safe}</a>`;
+  return `<a class="mono-text" dir="ltr" href="https://solscan.io/tx/${safe}" target="_blank" rel="noopener">${safe}</a>`;
 }
 
 function formatTypeBadge(value) {

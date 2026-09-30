@@ -524,7 +524,7 @@
   position: absolute;
   inset: 0;
   background: linear-gradient(
-    90deg,
+    var(--to-inline-end),
     transparent,
     color-mix(in srgb, var(--text-primary) 3%, transparent),
     transparent

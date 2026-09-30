@@ -168,6 +168,7 @@
       // Chart area
       this.chartArea = document.createElement("div");
       this.chartArea.className = "advanced-chart-area";
+      this.chartArea.dir = "ltr";
       this.wrapper.appendChild(this.chartArea);
     }
 

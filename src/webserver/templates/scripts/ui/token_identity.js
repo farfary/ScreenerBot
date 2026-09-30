@@ -216,7 +216,7 @@ export function renderAddress(address, options = {}) {
   );
   return `
     <span class="ti-address">
-      <a href="https://solscan.io/${explorer}/${safe}" target="_blank" rel="noopener" class="ti-address-value" title="${Utils.escapeHtml(I18n.t("links-view-solscan"))}">${safe}</a>
+      <a href="https://solscan.io/${explorer}/${safe}" target="_blank" rel="noopener" class="ti-address-value" dir="ltr" title="${Utils.escapeHtml(I18n.t("links-view-solscan"))}">${safe}</a>
       <button type="button" class="ti-address-copy" data-copy="${safe}" title="${copyTitle}" aria-label="${copyLabel}">
         <i class="icon-copy"></i>
       </button>

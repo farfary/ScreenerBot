@@ -384,7 +384,7 @@ export function createActivity(page, { rerender }) {
       rows.map((row) => row.outcome?.mint),
       rerender
     );
-    const search = `<form class="copy-activity-search" data-activity-mint-form role="search"><input type="search" name="mint" value="${esc(mint)}" placeholder="${esc(I18n.attr("copy-activity-mint-filter", "placeholder"))}" aria-label="${esc(I18n.attr("copy-activity-mint-filter", "aria-label"))}" spellcheck="false" autocomplete="off" />${mint ? `<button class="btn btn-ghost btn-sm" type="button" data-activity-clear>${esc(I18n.t("copy-activity-clear"))}</button>` : ""}</form>`;
+    const search = `<form class="copy-activity-search" data-activity-mint-form role="search"><input dir="ltr" type="search" name="mint" value="${esc(mint)}" placeholder="${esc(I18n.attr("copy-activity-mint-filter", "placeholder"))}" aria-label="${esc(I18n.attr("copy-activity-mint-filter", "aria-label"))}" spellcheck="false" autocomplete="off" />${mint ? `<button class="btn btn-ghost btn-sm" type="button" data-activity-clear>${esc(I18n.t("copy-activity-clear"))}</button>` : ""}</form>`;
     const head = `<div class="copy-panel-head"><h3>${esc(I18n.t("copy-activity-title"))}</h3><div class="copy-panel-tools">${segmented("activity-filter", FILTERS, filter, esc, I18n.t("copy-activity-filter-label"))}${search}</div></div>`;
     if (!loaded) {
       return (

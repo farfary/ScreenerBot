@@ -303,7 +303,7 @@
   align-items: center;
   justify-content: center;
   background: linear-gradient(
-    to right,
+    var(--to-inline-end),
     var(--tab-bar-bg-secondary),
     var(--tab-bar-bg-secondary) 60%,
     transparent
@@ -325,13 +325,13 @@
 
 .tab-scroll-btn--start {
   inset-inline-start: 0;
-  background: linear-gradient(to right, var(--tab-bar-bg-secondary) 50%, transparent);
+  background: linear-gradient(var(--to-inline-end), var(--tab-bar-bg-secondary) 50%, transparent);
   padding-inline-start: 4px;
 }
 
 .tab-scroll-btn--end {
   inset-inline-end: 0;
-  background: linear-gradient(to left, var(--tab-bar-bg-secondary) 50%, transparent);
+  background: linear-gradient(var(--to-inline-start), var(--tab-bar-bg-secondary) 50%, transparent);
   padding-inline-end: 4px;
 }
 
@@ -358,12 +358,12 @@
 
 .tab-scroll-wrapper::before {
   inset-inline-start: 0;
-  background: linear-gradient(to right, var(--tab-bar-bg-secondary), transparent);
+  background: linear-gradient(var(--to-inline-end), var(--tab-bar-bg-secondary), transparent);
 }
 
 .tab-scroll-wrapper::after {
   inset-inline-end: 0;
-  background: linear-gradient(to left, var(--tab-bar-bg-secondary), transparent);
+  background: linear-gradient(var(--to-inline-start), var(--tab-bar-bg-secondary), transparent);
 }
 
 .tab-scroll-wrapper.can-scroll-start::before {

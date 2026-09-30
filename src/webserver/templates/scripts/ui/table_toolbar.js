@@ -599,7 +599,7 @@ function renderIdentity(identity) {
       : "";
     addressMarkup = `
       <span class="table-toolbar-identity__address-group">
-        <code class="table-toolbar-identity__address">${escapeHtml(address.value)}</code>
+        <code class="table-toolbar-identity__address" dir="ltr">${escapeHtml(address.value)}</code>
         ${copyBtn}
         ${linkBtn}
       </span>

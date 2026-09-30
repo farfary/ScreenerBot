@@ -98,7 +98,7 @@ function renderBuyMultiWalletsTool(container, actionsContainer) {
         <div class="section-content">
           <div class="form-group">
             <label for="mb-token-mint"><span data-l10n-id="tools-multi-mint-label"></span> <span class="required">*</span></label>
-            <input type="text" id="mb-token-mint" data-l10n-id="tools-multi-mint-input" />
+            <input dir="ltr" type="text" id="mb-token-mint" data-l10n-id="tools-multi-mint-input" />
             <small data-l10n-id="tools-multi-buy-mint-hint"></small>
           </div>
         </div>
@@ -616,7 +616,7 @@ function renderSellMultiWalletsTool(container, actionsContainer) {
           <div class="form-group">
             <label for="ms-token-mint"><span data-l10n-id="tools-multi-mint-label"></span> <span class="required">*</span></label>
             <div class="input-group">
-              <input type="text" id="ms-token-mint" data-l10n-id="tools-multi-mint-input" />
+              <input dir="ltr" type="text" id="ms-token-mint" data-l10n-id="tools-multi-mint-input" />
               <button class="btn" id="ms-scan-btn" type="button">
                 <i class="icon-search"></i> <span data-l10n-id="tools-multi-sell-action-scan"></span>
               </button>

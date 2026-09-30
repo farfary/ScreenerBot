@@ -1466,6 +1466,7 @@ body.trade-action-dialog-open {
   width: 100%;
   background: var(--action-color, #10b981);
   transform: scaleX(0);
+  /* rtl-ok: quote progress bar sweeps along the physical left-to-right axis */
   transform-origin: left center;
   opacity: 0;
   pointer-events: none;
@@ -1501,20 +1502,24 @@ body.trade-action-dialog-open {
 @keyframes trade-quote-bar {
   0% {
     transform: scaleX(0);
+    /* rtl-ok: quote progress bar sweeps along the physical left-to-right axis */
     transform-origin: left center;
   }
 
   50% {
     transform: scaleX(1);
+    /* rtl-ok: quote progress bar sweeps along the physical left-to-right axis */
     transform-origin: left center;
   }
 
   51% {
+    /* rtl-ok: quote progress bar sweeps along the physical left-to-right axis */
     transform-origin: right center;
   }
 
   100% {
     transform: scaleX(0);
+    /* rtl-ok: quote progress bar sweeps along the physical left-to-right axis */
     transform-origin: right center;
   }
 }

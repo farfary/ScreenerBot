@@ -11,7 +11,8 @@
  *   decimals (1.005 -> 1.01) where `toFixed` rounds the exact binary value
  *   (1.005 -> 1.00), so Intl is used for rounding only where it always was.
  * - Words and unit names come from the `format-*` catalog messages. Symbols
- *   (`%`, `+`, `$`, `K`/`M`/`B`, the fallback dashes) are code constants.
+ *   (`%`, `$`, `K`/`M`/`B`, the fallback dashes) are code constants. The plus and
+ *   minus signs come from Intl (`signPrefix`) so a locale's direction marks are kept.
  *
  * Loaded after `core/i18n.js`, which provides the `I18n` global.
  */
@@ -49,6 +50,31 @@ function decimalSeparator() {
     decimalMark = parts.find((part) => part.type === "decimal")?.value ?? ".";
   }
   return decimalMark;
+}
+
+const signPrefixes = new Map();
+
+/**
+ * The active locale's plus or minus sign, including any direction marks the locale
+ * places around it, so a sign concatenated before a number stays bidi-safe.
+ * Digits are never produced here; rounding stays with the caller.
+ */
+function signPrefix(negative) {
+  const key = negative ? "-" : "+";
+  let prefix = signPrefixes.get(key);
+  if (prefix === undefined) {
+    const parts = intl(Intl.NumberFormat, {
+      signDisplay: "always",
+      useGrouping: false,
+    }).formatToParts(negative ? -1 : 1);
+    const integerAt = parts.findIndex((part) => part.type === "integer");
+    prefix = parts
+      .slice(0, integerAt)
+      .map((part) => part.value)
+      .join("");
+    signPrefixes.set(key, prefix);
+  }
+  return prefix;
 }
 
 /** Swap the ASCII decimal point of a digit string for the locale's separator. */
@@ -243,7 +269,7 @@ export function formatPriceSubscript(price, { fallback = DASH, precision = 5 } =
   if (num === 0) return "0";
 
   const absPrice = Math.abs(num);
-  const sign = num < 0 ? "-" : "";
+  const sign = num < 0 ? signPrefix(true) : "";
 
   // Normal-sized numbers (>= 0.0001) get the SAME significant-digit budget as
   // the subscript branch below: decimals are derived from the magnitude, never
@@ -316,8 +342,10 @@ export function formatPercentValue(
     return `${magnitude}%`;
   }
 
-  if (num > 0 || (signZero && num === 0)) return `${plus}${magnitude}%`;
-  if (num < 0) return `-${magnitude}%`;
+  if (num > 0 || (signZero && num === 0)) {
+    return `${plus === "+" ? signPrefix(false) : plus}${magnitude}%`;
+  }
+  if (num < 0) return `${signPrefix(true)}${magnitude}%`;
   return `${magnitude}%`;
 }
 
@@ -332,22 +360,22 @@ export function formatPercent(value, { style = "plain", decimals = 2, fallback =
 
   if (style === "token") {
     const color = num > 0 ? "#16a34a" : num < 0 ? "#ef4444" : "inherit";
-    const sign = num > 0 ? "+" : "";
+    const sign = num > 0 ? signPrefix(false) : "";
     return `<span style="color:${color};">${sign}${localizeDecimal(num.toFixed(decimals))}%</span>`;
   }
 
   if (style === "pnl") {
     const magnitude = localizeDecimal(Math.abs(num).toFixed(decimals));
     if (num > 0) {
-      return `<span class="pnl-positive">+${magnitude}%</span>`;
+      return `<span class="pnl-positive">${signPrefix(false)}${magnitude}%</span>`;
     }
     if (num < 0) {
-      return `<span class="pnl-negative">-${magnitude}%</span>`;
+      return `<span class="pnl-negative">${signPrefix(true)}${magnitude}%</span>`;
     }
     return `<span class="pnl-neutral">${magnitude}%</span>`;
   }
 
-  const sign = num > 0 ? "+" : num < 0 ? "-" : "";
+  const sign = num > 0 ? signPrefix(false) : num < 0 ? signPrefix(true) : "";
   return `${sign}${localizeDecimal(Math.abs(num).toFixed(decimals))}%`;
 }
 
@@ -388,10 +416,10 @@ export function formatPnL(value, { decimals = 4, fallback = HYPHEN } = {}) {
   }
 
   if (num > 0) {
-    return `<span class="pnl-positive">+${formatted}</span>`;
+    return `<span class="pnl-positive">${signPrefix(false)}${formatted}</span>`;
   }
   if (num < 0) {
-    return `<span class="pnl-negative">-${formatted}</span>`;
+    return `<span class="pnl-negative">${signPrefix(true)}${formatted}</span>`;
   }
   return `<span class="pnl-neutral">${formatted}</span>`;
 }

@@ -272,10 +272,39 @@
 
   /* Sign of the inline direction: scales horizontal offsets that must mirror in RTL. */
   --dir-sign: 1;
+
+  /* Gradient directions along the inline axis; swapped under RTL. */
+  --to-inline-end: to right;
+  --to-inline-start: to left;
 }
 
 [dir="rtl"] {
   --dir-sign: -1;
+  --to-inline-end: to left;
+  --to-inline-start: to right;
+}
+
+/* Per-script UI fonts. Inter stays first so Latin runs keep Inter; the remaining families are
+   system fonts that cover the locale's script. No font files are embedded for these scripts. */
+:lang(ar),
+:lang(fa) {
+  --font-sans: "Inter", "SF Arabic", "Geeza Pro", "Noto Sans Arabic", "Segoe UI", tahoma, sans-serif;
+}
+
+:lang(zh) {
+  --font-sans: "Inter", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+}
+
+:lang(ja) {
+  --font-sans: "Inter", "Hiragino Sans", "Yu Gothic UI", "Meiryo", "Noto Sans JP", sans-serif;
+}
+
+:lang(ko) {
+  --font-sans: "Inter", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif;
+}
+
+:lang(hi) {
+  --font-sans: "Inter", "Kohinoor Devanagari", "Nirmala UI", "Noto Sans Devanagari", sans-serif;
 }
 
 [data-theme="dark"] {
@@ -741,7 +770,7 @@ select,
   inset-inline-start: -100%;
   width: 100%;
   height: 100%;
-  background: linear-gradient(90deg, transparent, rgb(255, 255, 255, 0.08), transparent);
+  background: linear-gradient(var(--to-inline-end), transparent, rgb(255, 255, 255, 0.08), transparent);
   animation: shimmer 2s infinite;
 }
 

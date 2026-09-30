@@ -239,7 +239,7 @@ export function createProvidersTab({ state, _eventCleanups, loadConfig }) {
               ${hasApiKey ? '<span class="key-status key-saved"><i class="icon-circle-check"></i> <span data-l10n-id="assistant-providers-key-saved"></span></span>' : '<span class="key-status key-missing"><i class="icon-circle-alert"></i> <span data-l10n-id="assistant-providers-key-missing"></span></span>'}
             </label>
             <div class="api-key-input-wrapper">
-              <input type="password" id="modal-api-key" class="form-control" 
+              <input dir="ltr" type="password" id="modal-api-key" class="form-control" 
                      data-l10n-id="assistant-providers-api-key-enter" 
                      value="">
               <button type="button" class="api-key-toggle" id="toggle-api-key" data-l10n-id="assistant-providers-key-toggle">

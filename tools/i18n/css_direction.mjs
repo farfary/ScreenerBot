@@ -5,6 +5,10 @@
  * unless it is scaled by `--dir-sign` (foundation.css: 1 in LTR, -1 in RTL), or is `-50%`
  * (centering against `left: 50%`) or zero. `@keyframes` bodies are scanned like any rule.
  *
+ * A linear gradient whose first argument is `to left|right` or `90deg|270deg` is physical: use
+ * `var(--to-inline-end|start)`. A `transform-origin` or `background-position` with a `left` or
+ * `right` keyword is physical unless it is computed from `--dir-sign`.
+ *
  * `/* rtl-ok: <reason> *\/` on the same line or the line above skips a declaration.
  */
 
@@ -102,6 +106,24 @@ function translationOffsets(name, value) {
   return offsets;
 }
 
+/** A physical axis in the first argument of any linear gradient in a value, or null. */
+function gradientReason(text) {
+  const pattern = /(?:repeating-)?linear-gradient\(/g;
+  let match;
+  while ((match = pattern.exec(text))) {
+    let depth = 1;
+    let end = pattern.lastIndex;
+    while (end < text.length && depth > 0) {
+      if (text[end] === "(") depth += 1;
+      else if (text[end] === ")") depth -= 1;
+      end += 1;
+    }
+    const first = splitArguments(text.slice(pattern.lastIndex, end - 1))[0];
+    if (/^(?:to\s+(?:left|right)|(?:90|270)deg)$/.test(first)) return "linear-gradient with a physical direction";
+  }
+  return null;
+}
+
 /** Why a declaration is physical, or null. */
 export function physicalReason(property, value) {
   const name = property.toLowerCase();
@@ -112,6 +134,11 @@ export function physicalReason(property, value) {
   if (PHYSICAL_PROPERTIES.has(name) || /^border-(left|right)(-|$)/.test(name)) return name;
   if (SIDE_KEYWORD_PROPERTIES.has(name) && (text === "left" || text === "right")) return `${name}: ${text}`;
   if (FOUR_VALUE_SHORTHANDS.has(name) && asymmetricShorthand(name, value)) return `${name} with different left and right`;
+  const gradient = gradientReason(text);
+  if (gradient) return gradient;
+  if ((name === "transform-origin" || name === "background-position") && !text.includes("var(") && /\b(left|right)\b/.test(text)) {
+    return `${name} with a left or right keyword`;
+  }
   return null;
 }
 

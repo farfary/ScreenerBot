@@ -532,7 +532,7 @@
   box-shadow: var(--shadow-floating-md);
   opacity: 0;
   transform: translateY(-4px) scaleY(0.985);
-  transform-origin: top left;
+  transform-origin: calc(50% - var(--dir-sign) * 50%) top;
   transition:
     opacity var(--floating-duration) var(--floating-easing),
     transform var(--floating-duration) var(--floating-easing);

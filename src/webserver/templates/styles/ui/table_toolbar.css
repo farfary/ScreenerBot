@@ -611,7 +611,14 @@
   padding-inline-end: 1.75rem;
   min-width: 120px;
   cursor: pointer;
+  /* rtl-ok: mirrored by the [dir="rtl"] rule below */
   background-position: right 7px center;
+}
+
+[dir="rtl"] .table-toolbar-select,
+[dir="rtl"] .dt-filter {
+  /* rtl-ok: inline-end arrow position in RTL */
+  background-position: left 7px center;
 }
 
 .table-toolbar-input:hover,
@@ -961,7 +968,7 @@
   opacity: 0;
   pointer-events: none;
   transform: translateY(-4px) scaleY(0.985);
-  transform-origin: top right;
+  transform-origin: calc(50% + var(--dir-sign) * 50%) top;
   transition:
     opacity var(--floating-duration) var(--floating-easing),
     transform var(--floating-duration) var(--floating-easing);

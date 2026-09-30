@@ -209,6 +209,7 @@
   visibility: hidden;
   pointer-events: none;
   transform: translateY(-4px) scaleY(0.985);
+  /* rtl-ok: origin follows the physical corner that JS floating placement selects */
   transform-origin: top right;
   transition:
     opacity var(--floating-duration) var(--floating-easing),
@@ -229,6 +230,7 @@
   /* rtl-ok: menu corner follows the physical viewport position that core/menu_manager.js writes */
   border-radius: var(--radius-lg) var(--radius-lg) 0 var(--radius-lg);
   transform: translateY(4px) scaleY(0.985);
+  /* rtl-ok: origin follows the physical corner that JS floating placement selects */
   transform-origin: bottom right;
 }
 

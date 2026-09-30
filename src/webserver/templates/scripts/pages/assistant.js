@@ -720,7 +720,7 @@ function createLifecycle() {
       <tr class="decision-row ${allowed ? "pass" : "reject"}">
         <td>
           <span class="token-symbol">${Utils.escapeHtml(item.symbol || I18n.t("format-unknown"))}</span>
-          <span class="token-mint">${Utils.formatAddressCompact(item.mint)}</span>
+          <span class="token-mint" dir="ltr">${Utils.formatAddressCompact(item.mint)}</span>
         </td>
         <td><span class="badge ${allowed ? "success" : "error"}">${Utils.escapeHtml(analysisLabel(ANALYSIS_DECISION_LABELS, item.decision))}</span></td>
         <td>${percentText(item.confidence, "—")}</td>

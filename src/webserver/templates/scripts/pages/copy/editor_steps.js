@@ -142,7 +142,7 @@ function walletStep(context, esc) {
   const address =
     mode === "edit"
       ? `<div class="copy-field"><span>${esc(I18n.t("copy-editor-wallet"))}</span>${renderAddress(source.target_address, { explorer: "account" })}<small>${esc(I18n.t("copy-editor-wallet-identity"))}</small></div>`
-      : `<label class="copy-field"><span>${esc(I18n.t("copy-editor-address-label"))}</span><input type="text" data-field="target_address" value="${esc(draft.target_address || "")}" placeholder="${esc(I18n.t("copy-editor-address-placeholder"))}" spellcheck="false" autocomplete="off" required /><small>${esc(
+      : `<label class="copy-field"><span>${esc(I18n.t("copy-editor-address-label"))}</span><input dir="ltr" type="text" data-field="target_address" value="${esc(draft.target_address || "")}" placeholder="${esc(I18n.t("copy-editor-address-placeholder"))}" spellcheck="false" autocomplete="off" required /><small>${esc(
           mode === "clone"
             ? I18n.t("copy-editor-address-help-clone")
             : I18n.t("copy-editor-address-help-create")

@@ -25,6 +25,7 @@
   backdrop-filter: var(--floating-blur-lg);
   opacity: 0;
   transform: scale(0.96);
+  /* rtl-ok: origin follows the physical corner that JS floating placement selects */
   transform-origin: top left;
   transition:
     opacity var(--floating-duration-fast) ease-out,
@@ -40,14 +41,17 @@
 }
 
 .context-menu.origin-top-right {
+  /* rtl-ok: origin follows the physical corner that JS floating placement selects */
   transform-origin: top right;
 }
 
 .context-menu.origin-bottom-left {
+  /* rtl-ok: origin follows the physical corner that JS floating placement selects */
   transform-origin: bottom left;
 }
 
 .context-menu.origin-bottom-right {
+  /* rtl-ok: origin follows the physical corner that JS floating placement selects */
   transform-origin: bottom right;
 }
 

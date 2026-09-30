@@ -115,7 +115,7 @@ export class PoolSelector {
     content.innerHTML = `
       <div class="pool-selector-info">
         <span class="pool-count">${escapeHtml(I18n.t("tokens-pool-selector-count", { count: pools.length }))}</span>
-        <span class="pool-mint">${formatAddressCompact(tokenMint, { start: 8, end: 6, ellipsis: "..." })}</span>
+        <span class="pool-mint" dir="ltr">${formatAddressCompact(tokenMint, { start: 8, end: 6, ellipsis: "..." })}</span>
       </div>
       <div class="pool-list">
         ${pools
@@ -131,7 +131,7 @@ export class PoolSelector {
               <span class="pool-liquidity" title="${escapeHtml(I18n.attr("tokens-pool-selector-liquidity", "title"))}">${escapeHtml(I18n.t("tokens-pool-selector-liquidity", { amount: `$${formatCompact(pool.liquidity_usd)}` }))}</span>
               <span class="pool-volume" title="${escapeHtml(I18n.attr("tokens-pool-selector-volume", "title"))}">${escapeHtml(I18n.t("tokens-pool-selector-volume", { amount: `$${formatCompact(pool.volume_24h)}` }))}</span>
             </div>
-            <div class="pool-address">${formatAddressCompact(pool.address, { start: 8, end: 6, ellipsis: "..." })}</div>
+            <div class="pool-address" dir="ltr">${formatAddressCompact(pool.address, { start: 8, end: 6, ellipsis: "..." })}</div>
           </div>
         `
           )

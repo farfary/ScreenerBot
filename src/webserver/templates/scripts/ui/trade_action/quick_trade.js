@@ -184,7 +184,7 @@ export function applyQuickTradeMixin(TradeActionDialog) {
           <div class="search-result-item" data-index="${index}" data-mint="${Utils.escapeHtml(token.mint)}">
             <span class="search-result-symbol token-symbol-type">${Utils.escapeHtml(token.symbol || "???")} </span>
             <span class="search-result-name token-name-type">${Utils.escapeHtml(token.name || I18n.t("format-unknown"))}</span>
-            <span class="search-result-mint">${mintShort}</span>
+            <span class="search-result-mint" dir="ltr">${mintShort}</span>
           </div>
         `;
       })

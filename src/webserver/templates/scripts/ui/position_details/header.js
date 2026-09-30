@@ -59,7 +59,7 @@ export function applyHeaderMixin(PositionDetailsDialog) {
           ${symbol ? `<span class="title-symbol token-symbol-type">$${Utils.escapeHtml(symbol.toUpperCase())}</span>` : ""}
           ${status ? `<span class="pdd-badge pdd-status is-${status}">${esc(I18n.label(POSITION_STATUS_LABELS, status))}</span>` : ""}
         </div>
-        <div class="header-mint-full">${Utils.escapeHtml(pos.mint)}</div>
+        <div class="header-mint-full" dir="ltr">${Utils.escapeHtml(pos.mint)}</div>
       </div>`;
 
     this._paintRegion("#pddIdentity", html, (el) => {

@@ -60,7 +60,7 @@ function frame({ lines, min, max, start, end, label, escapeHtml, tall = false })
   const x = scale(start, end, 0, VIEW);
   const zero = y(0).toFixed(2);
   const tick = (value) => `<span style="top:${y(value).toFixed(2)}%">${signed(value)}</span>`;
-  return `<figure class="copy-chart${tall ? " copy-chart--tall" : ""}" role="img" aria-label="${escapeHtml(label)}">
+  return `<figure class="copy-chart${tall ? " copy-chart--tall" : ""}" dir="ltr" role="img" aria-label="${escapeHtml(label)}">
     <div class="copy-chart-y" aria-hidden="true">${tick(max)}${min < max ? tick(min) : ""}</div>
     <svg class="copy-chart-plot" viewBox="0 0 ${VIEW} ${VIEW}" preserveAspectRatio="none" aria-hidden="true"><line class="copy-chart-zero" x1="0" x2="${VIEW}" y1="${zero}" y2="${zero}"/>${lines(x, y)}</svg>
     <div class="copy-chart-x" aria-hidden="true"><span>${escapeHtml(timeLabel(start, end - start))}</span><span>${escapeHtml(timeLabel(end, end - start))}</span></div>

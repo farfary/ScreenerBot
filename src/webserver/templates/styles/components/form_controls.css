@@ -323,6 +323,7 @@ select {
   background-color: var(--input-bg);
   background-image: var(--select-arrow);
   background-repeat: no-repeat;
+  /* rtl-ok: mirrored by the [dir="rtl"] select rule below */
   background-position: right 12px center;
   background-size: 12px;
   border: var(--input-border-width) solid var(--input-border-default);
@@ -332,6 +333,11 @@ select {
   transition:
     border-color 0.15s ease,
     box-shadow 0.15s ease;
+}
+
+[dir="rtl"] select {
+  /* rtl-ok: inline-end arrow position in RTL */
+  background-position: left 12px center;
 }
 
 select:hover:not(:disabled) {

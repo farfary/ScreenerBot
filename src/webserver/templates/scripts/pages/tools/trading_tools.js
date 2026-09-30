@@ -48,7 +48,7 @@ function renderTradeWatcherTool(container, actionsContainer) {
               <div class="form-group flex-2">
                 <label for="tw-mint" data-l10n-id="tools-trade-watcher-mint-label"></label>
                 <div class="input-with-action">
-                  <input type="text" id="tw-mint" data-l10n-id="tools-trade-watcher-mint-input" />
+                  <input dir="ltr" type="text" id="tw-mint" data-l10n-id="tools-trade-watcher-mint-input" />
                   <button type="button" class="btn btn-sm" id="tw-search-pools-btn">
                     <i class="icon-search"></i> <span data-l10n-id="tools-trade-watcher-action-search-pools"></span>
                   </button>

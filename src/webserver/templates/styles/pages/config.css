@@ -177,7 +177,7 @@
   gap: 10px;
   padding: 10px 18px;
   border-bottom: 1px solid var(--border-color);
-  background: linear-gradient(to right, var(--bg-secondary), var(--bg-card-hover));
+  background: linear-gradient(var(--to-inline-end), var(--bg-secondary), var(--bg-card-hover));
 }
 
 /* The bulk expand/collapse control acts on the whole section, so it sits at
@@ -293,7 +293,7 @@
   flex: 1;
   height: 1px;
   background: linear-gradient(
-    to right,
+    var(--to-inline-end),
     transparent,
     var(--border-color) 20%,
     var(--border-color) 80%,
@@ -348,7 +348,7 @@
   gap: 12px;
   padding: 12px 16px;
   border: none;
-  background: linear-gradient(to right, var(--bg-card-hover), transparent);
+  background: linear-gradient(var(--to-inline-end), var(--bg-card-hover), transparent);
   color: var(--text-primary);
   font-size: 0.925rem;
   font-weight: 600;
