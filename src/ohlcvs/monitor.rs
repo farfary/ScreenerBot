@@ -41,13 +41,36 @@ const MIN_REFRESH_CANDLES: usize = 3;
 /// request is in flight is still covered.
 pub(super) const CATCH_UP_MARGIN: usize = 2;
 
-/// Minimum spacing of two native fetches that count toward the no-newer rule,
-/// and the delay of a re-fetch after the Data Server reports it is refreshing.
+/// Minimum spacing of two native fetches that count toward the no-newer rule.
 const NATIVE_RETRY_DELAY_SECS: i64 = 15;
 
+/// Delay of the first re-fetch after the Data Server reports it is refreshing
+/// a series. Each further re-fetch doubles the delay up to
+/// `REFRESHING_REFETCH_MAX_DELAY_SECS`.
+const REFRESHING_REFETCH_BASE_DELAY_SECS: i64 = 15;
+
+/// Longest delay between two re-fetches of a refreshing series.
+const REFRESHING_REFETCH_MAX_DELAY_SECS: i64 = 300;
+
 /// Re-fetches of one timeframe scheduled while the Data Server keeps reporting
-/// that it is refreshing the series.
-const MAX_REFRESHING_REFETCHES: u32 = 3;
+/// that it is refreshing the series (about 33 minutes in total). The server's
+/// upstream read can land tens of minutes after its first answer when its
+/// egress is rate-limited, so a short window would keep a partial closed
+/// bucket in place.
+const MAX_REFRESHING_REFETCHES: u32 = 10;
+
+/// Delay of the next re-fetch of a series the Data Server reports as
+/// refreshing, after `refetches_so_far` re-fetches have been scheduled:
+/// 15, 30, 60, 120, 240 s, then 300 s. `None` once the budget is spent.
+fn refreshing_refetch_delay_secs(refetches_so_far: u32) -> Option<i64> {
+    if refetches_so_far >= MAX_REFRESHING_REFETCHES {
+        return None;
+    }
+    let delay = REFRESHING_REFETCH_BASE_DELAY_SECS
+        .checked_shl(refetches_so_far)
+        .unwrap_or(REFRESHING_REFETCH_MAX_DELAY_SECS);
+    Some(delay.min(REFRESHING_REFETCH_MAX_DELAY_SECS))
+}
 
 /// Delay before a timeframe whose stored native values came from a fallback
 /// provider is fetched again while the Data Server is usable. A fallback answer
@@ -107,6 +130,24 @@ fn settle_point(bucket: i64, timeframe: Timeframe) -> i64 {
 fn settle_target(now: i64, timeframe: Timeframe) -> i64 {
     OhlcvDatabase::bucket_start(now - settle_delay_secs(timeframe), timeframe)
         - timeframe.to_seconds()
+}
+
+/// Pair each candle aggregated from `minute_candles` (sorted ascending) into
+/// `timeframe` with the start of the newest 1m candle inside its bucket.
+fn with_newest_minute(
+    minute_candles: &[Candle],
+    aggregated: Vec<Candle>,
+    timeframe: Timeframe,
+) -> Vec<(Candle, i64)> {
+    let bucket = timeframe.to_seconds();
+    aggregated
+        .into_iter()
+        .filter_map(|candle| {
+            let end = minute_candles.partition_point(|m| m.timestamp < candle.timestamp + bucket);
+            let newest = minute_candles[..end].last()?.timestamp;
+            (newest >= candle.timestamp).then_some((candle, newest))
+        })
+        .collect()
 }
 
 /// In-memory coverage state of one native (mint, timeframe) series.
@@ -179,9 +220,9 @@ impl NativeSeriesState {
         if !server_refreshing {
             self.refetches = 0;
             self.refetch_at = None;
-        } else if self.refetches < MAX_REFRESHING_REFETCHES {
+        } else if let Some(delay) = refreshing_refetch_delay_secs(self.refetches) {
             self.refetches += 1;
-            self.refetch_at = Some(now + NATIVE_RETRY_DELAY_SECS);
+            self.refetch_at = Some(now + delay);
         } else {
             self.refetch_at = None;
         }
@@ -1649,8 +1690,10 @@ impl OhlcvMonitor {
     }
 
     /// Recompute every aggregated bucket overlapping `[from_ts, to_ts]` from the
-    /// stored 1m rows. Written as `monitor_aggregate`, so closed native buckets
-    /// keep their source values.
+    /// stored 1m rows. Written as `monitor_aggregate` with the start of the
+    /// newest 1m row of each bucket, so closed native buckets keep their source
+    /// values and a forming native bucket changes only when newer 1m data
+    /// exists (see `OhlcvDatabase::upsert_aggregate_candles`).
     fn refresh_derived_timeframes_between(
         &self,
         mint: &str,
@@ -1687,12 +1730,13 @@ impl OhlcvMonitor {
                 continue;
             }
 
-            let inserted = self.db.insert_candles_batch(
+            let with_newest_minute = with_newest_minute(&minute_candles, aggregated, timeframe);
+            let inserted = self.db.upsert_aggregate_candles(
                 mint,
                 pool_address,
                 timeframe,
-                &aggregated,
-                OhlcvDatabase::AGGREGATE_SOURCE,
+                &with_newest_minute,
+                now,
             )?;
 
             inserted_total += inserted;
@@ -3017,28 +3061,86 @@ mod tests {
     }
 
     #[test]
-    fn refreshing_pages_schedule_at_most_three_refetches() {
+    fn aggregated_candles_carry_the_newest_minute_of_their_bucket() {
+        let minute = |ts: i64| Candle::new(ts, 1.0, 1.0, 1.0, 1.0, 1.0);
+        let base = 1_700_000_000 - 1_700_000_000 % 3_600;
+        let minutes = vec![
+            minute(base),
+            minute(base + 60),
+            minute(base + 1_740),
+            minute(base + 3_600),
+            minute(base + 3_660),
+        ];
+        let aggregated =
+            OhlcvAggregator::aggregate(&minutes, Timeframe::Minute1, Timeframe::Hour1).unwrap();
+        let paired: Vec<(i64, i64)> = with_newest_minute(&minutes, aggregated, Timeframe::Hour1)
+            .into_iter()
+            .map(|(candle, newest)| (candle.timestamp, newest))
+            .collect();
+        assert_eq!(
+            paired,
+            vec![(base, base + 1_740), (base + 3_600, base + 3_660)]
+        );
+    }
+
+    #[test]
+    fn refreshing_refetch_delays_back_off_to_five_minutes_then_stop() {
+        let delays: Vec<Option<i64>> = (0..12).map(refreshing_refetch_delay_secs).collect();
+        assert_eq!(
+            delays,
+            vec![
+                Some(15),
+                Some(30),
+                Some(60),
+                Some(120),
+                Some(240),
+                Some(300),
+                Some(300),
+                Some(300),
+                Some(300),
+                Some(300),
+                None,
+                None,
+            ]
+        );
+        let total: i64 = delays.iter().flatten().sum();
+        assert_eq!(total, 1_965);
+        assert_eq!(refreshing_refetch_delay_secs(u32::MAX), None);
+    }
+
+    #[test]
+    fn refreshing_pages_schedule_backed_off_refetches_until_the_budget_is_spent() {
         let recent = Some(CURRENT);
         let mut state = NativeSeriesState::default();
-        for attempt in 0..MAX_REFRESHING_REFETCHES as i64 {
-            let at = NOW + attempt * NATIVE_RETRY_DELAY_SECS;
+        let mut at = NOW;
+        for attempt in 0..MAX_REFRESHING_REFETCHES {
             state.record_page(at, recent, recent, true);
-            assert_eq!(state.refetch_at, Some(at + NATIVE_RETRY_DELAY_SECS));
+            let delay = refreshing_refetch_delay_secs(attempt).unwrap();
+            assert_eq!(state.refetch_at, Some(at + delay));
+            assert_eq!(state.refetches, attempt + 1);
+            at += delay;
         }
-        state.record_page(NOW + 100, recent, recent, true);
+        state.record_page(at, recent, recent, true);
         assert_eq!(state.refetch_at, None);
         assert_eq!(state.refetches, MAX_REFRESHING_REFETCHES);
 
         // A ready page clears the schedule and the budget.
-        state.record_page(NOW + 200, recent, recent, false);
+        let ready_at = at + 100;
+        state.record_page(ready_at, recent, recent, false);
         assert_eq!(state.refetch_at, None);
         assert_eq!(state.refetches, 0);
-        assert!(state.is_caught_up(recent, NOW + 200, Timeframe::Hour1));
+        assert!(state.is_caught_up(recent, ready_at, Timeframe::Hour1));
+
+        // A refreshing page after a ready one starts the schedule over.
+        let mut restarted = state.clone();
+        restarted.record_page(ready_at + 10, recent, recent, true);
+        assert_eq!(restarted.refetch_at, Some(ready_at + 10 + 15));
+        assert_eq!(restarted.refetches, 1);
 
         // A failed fetch only moves the attempt clock.
         let before = state.clone();
-        state.record_failure(NOW + 300);
-        assert_eq!(state.last_fetch_at, Some(NOW + 300));
+        state.record_failure(ready_at + 100);
+        assert_eq!(state.last_fetch_at, Some(ready_at + 100));
         assert_eq!(
             NativeSeriesState {
                 last_fetch_at: before.last_fetch_at,

@@ -98,7 +98,8 @@ impl OhlcvDatabase {
     /// native candle is the provider's final answer, while a local 1m aggregate
     /// is only as complete as the 1m rows stored when it was computed. An
     /// identical row is left untouched, so the count and `fetched_at` reflect
-    /// real data changes only.
+    /// real data changes only. Locally derived aggregates are written through
+    /// [`Self::upsert_aggregate_candles`], which also guards forming buckets.
     fn insert_candles_batch_at(
         &self,
         mint: &str,
@@ -108,46 +109,9 @@ impl OhlcvDatabase {
         source: &str,
         now: i64,
     ) -> OhlcvResult<usize> {
-        if candles.is_empty() {
-            return Ok(0);
-        }
-
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
-
-        let tx = conn
-            .unchecked_transaction()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Transaction failed: {e}")))?;
-
-        let timeframe_str = timeframe.as_str();
-        // Snap every timestamp to the canonical UTC-anchored bucket for this
-        // timeframe (floor to the interval), matching OhlcvAggregator's
-        // `(ts / bucket) * bucket` convention. Different OHLCV providers anchor
-        // some timeframes on different grids — notably 12h: GeckoTerminal returns
-        // 12h candles phased at +10h (ts % 43200 == 36000) while SolanaTracker,
-        // the derived-from-1m aggregator, and every other timeframe use the
-        // midnight grid (offset 0). Storing both raw phases in the same
-        // (mint,pool,timeframe) series interleaves candles ~2h apart and renders
-        // a corrupted chart with impossible price jumps. Normalizing here forces
-        // a single grid for all sources, so the chart matches TradingView /
-        // DexScreener (which also anchor at 00:00/12:00 UTC).
         let bucket = timeframe.to_seconds();
-        let mut changed = 0;
-
-        for candle in candles {
-            // Never record an empty no-trade candle. Candles are SOL-denominated,
-            // so a real trade always carries volume > 0; volume == 0 means no
-            // swaps happened in that period and the provider merely carried the
-            // price forward. Storing those paints fake price action on the chart,
-            // so we drop them (the series shows an honest gap instead, like
-            // TradingView/DexScreener on an illiquid pair).
-            if !Self::is_storable(candle) {
-                continue;
-            }
-            let aligned_ts = Self::bucket_start(candle.timestamp, timeframe);
-            let result = tx.execute(
+        self.upsert_storable_candles(timeframe, candles, |candle| candle, |tx, candle, aligned_ts| {
+            tx.execute(
                 "INSERT INTO ohlcv_candles
                  (chain_id, mint, pool_address, timeframe, timestamp, open, high, low, close, volume, source)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
@@ -173,7 +137,7 @@ impl OhlcvDatabase {
                 params![
                     self.chain_id(), mint,
                     pool_address,
-                    timeframe_str,
+                    timeframe.as_str(),
                     aligned_ts,
                     candle.open,
                     candle.high,
@@ -185,9 +149,140 @@ impl OhlcvDatabase {
                     bucket,
                     now,
                 ],
-            );
+            )
+        })
+    }
 
-            if let Ok(rows) = result {
+    /// Upsert candles derived locally from stored 1m rows as
+    /// [`Self::AGGREGATE_SOURCE`] and return how many rows were inserted or
+    /// changed. Each candle is paired with the start (unix secs) of the newest
+    /// 1m candle it was built from.
+    ///
+    /// A forming bucket (`timestamp + bucket > now`) only widens: the stored
+    /// open is kept, high and low widen to cover both, close comes from the
+    /// aggregate and volume is the larger of the two. A closed aggregate row is
+    /// replaced. Over a native row:
+    /// - a closed bucket is never touched;
+    /// - a forming bucket is written only when the aggregate holds a 1m candle
+    ///   that started at or after the native row's `fetched_at`, i.e. it saw
+    ///   trades the native read could not have. An older aggregate leaves the
+    ///   native row as it is.
+    ///
+    /// Together these keep the forming bucket from alternating between the
+    /// native read and the 1m aggregate: once merged, the next aggregate cycle
+    /// widens the row instead of discarding the native open, high and low.
+    ///
+    /// An identical row is left untouched, as in [`Self::insert_candles_batch_at`].
+    pub fn upsert_aggregate_candles(
+        &self,
+        mint: &str,
+        pool_address: &str,
+        timeframe: Timeframe,
+        candles: &[(Candle, i64)],
+        now: i64,
+    ) -> OhlcvResult<usize> {
+        let bucket = timeframe.to_seconds();
+        self.upsert_storable_candles(
+            timeframe,
+            candles,
+            |(candle, _)| candle,
+            |tx, (candle, newest_minute), aligned_ts| {
+                tx.execute(
+                    "INSERT INTO ohlcv_candles
+                     (chain_id, mint, pool_address, timeframe, timestamp, open, high, low, close, volume, source)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+                     ON CONFLICT(chain_id, mint, pool_address, timeframe, timestamp) DO UPDATE SET
+                        open = CASE WHEN ohlcv_candles.timestamp + ?12 > ?13
+                            THEN ohlcv_candles.open ELSE excluded.open END,
+                        high = CASE WHEN ohlcv_candles.timestamp + ?12 > ?13
+                            THEN MAX(ohlcv_candles.high, excluded.high) ELSE excluded.high END,
+                        low = CASE WHEN ohlcv_candles.timestamp + ?12 > ?13
+                            THEN MIN(ohlcv_candles.low, excluded.low) ELSE excluded.low END,
+                        close = excluded.close,
+                        volume = CASE WHEN ohlcv_candles.timestamp + ?12 > ?13
+                            THEN MAX(ohlcv_candles.volume, excluded.volume) ELSE excluded.volume END,
+                        source = excluded.source,
+                        fetched_at = CURRENT_TIMESTAMP
+                     WHERE (ohlcv_candles.source = ?11
+                            OR (ohlcv_candles.timestamp + ?12 > ?13
+                                AND ?14 >= CAST(strftime('%s', ohlcv_candles.fetched_at) AS INTEGER)))
+                        AND (ohlcv_candles.open != excluded.open
+                            OR ohlcv_candles.high != excluded.high
+                            OR ohlcv_candles.low != excluded.low
+                            OR ohlcv_candles.close != excluded.close
+                            OR ohlcv_candles.volume != excluded.volume
+                            OR ohlcv_candles.source != excluded.source)",
+                    params![
+                        self.chain_id(),
+                        mint,
+                        pool_address,
+                        timeframe.as_str(),
+                        aligned_ts,
+                        candle.open,
+                        candle.high,
+                        candle.low,
+                        candle.close,
+                        candle.volume,
+                        Self::AGGREGATE_SOURCE,
+                        bucket,
+                        now,
+                        newest_minute,
+                    ],
+                )
+            },
+        )
+    }
+
+    /// Shared body of the candle upserts: drops candles that are not storable,
+    /// snaps each timestamp to its canonical bucket and runs `write` for every
+    /// remaining item inside one transaction. Returns the summed row count of
+    /// the writes that succeeded.
+    fn upsert_storable_candles<T>(
+        &self,
+        timeframe: Timeframe,
+        items: &[T],
+        candle_of: impl Fn(&T) -> &Candle,
+        mut write: impl FnMut(&rusqlite::Transaction<'_>, &T, i64) -> rusqlite::Result<usize>,
+    ) -> OhlcvResult<usize> {
+        if items.is_empty() {
+            return Ok(0);
+        }
+
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+
+        let tx = conn
+            .unchecked_transaction()
+            .map_err(|e| OhlcvError::DatabaseError(format!("Transaction failed: {e}")))?;
+
+        // Snap every timestamp to the canonical UTC-anchored bucket for this
+        // timeframe (floor to the interval), matching OhlcvAggregator's
+        // `(ts / bucket) * bucket` convention. Different OHLCV providers anchor
+        // some timeframes on different grids — notably 12h: GeckoTerminal returns
+        // 12h candles phased at +10h (ts % 43200 == 36000) while SolanaTracker,
+        // the derived-from-1m aggregator, and every other timeframe use the
+        // midnight grid (offset 0). Storing both raw phases in the same
+        // (mint,pool,timeframe) series interleaves candles ~2h apart and renders
+        // a corrupted chart with impossible price jumps. Normalizing here forces
+        // a single grid for all sources, so the chart matches TradingView /
+        // DexScreener (which also anchor at 00:00/12:00 UTC).
+        let mut changed = 0;
+
+        for item in items {
+            let candle = candle_of(item);
+            // Never record an empty no-trade candle. Candles are SOL-denominated,
+            // so a real trade always carries volume > 0; volume == 0 means no
+            // swaps happened in that period and the provider merely carried the
+            // price forward. Storing those paints fake price action on the chart,
+            // so we drop them (the series shows an honest gap instead, like
+            // TradingView/DexScreener on an illiquid pair).
+            if !Self::is_storable(candle) {
+                continue;
+            }
+            let aligned_ts = Self::bucket_start(candle.timestamp, timeframe);
+            if let Ok(rows) = write(&tx, item, aligned_ts) {
                 changed += rows;
             }
         }
@@ -648,6 +743,33 @@ mod tests {
             .unwrap()
     }
 
+    fn aggregate(db: &OhlcvDatabase, candles: &[Candle], newest_minute: i64) -> usize {
+        let paired: Vec<(Candle, i64)> =
+            candles.iter().map(|c| (c.clone(), newest_minute)).collect();
+        db.upsert_aggregate_candles("mint", "pool", Timeframe::Hour1, &paired, NOW)
+            .unwrap()
+    }
+
+    /// Pin a row's write time, which the database stamps from the wall clock.
+    fn set_fetched_at(db: &OhlcvDatabase, ts: i64, fetched_at: i64) {
+        let conn = db.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE ohlcv_candles SET fetched_at = datetime(?2, 'unixepoch') WHERE mint = 'mint' AND pool_address = 'pool' AND timeframe = '1h' AND timestamp = ?1",
+            params![ts, fetched_at],
+        )
+        .unwrap();
+    }
+
+    fn stored_row(db: &OhlcvDatabase, ts: i64) -> (f64, f64, f64, f64, f64, String) {
+        let conn = db.conn.lock().unwrap();
+        conn.query_row(
+            "SELECT open, high, low, close, volume, source FROM ohlcv_candles WHERE mint = 'mint' AND pool_address = 'pool' AND timeframe = '1h' AND timestamp = ?1",
+            params![ts],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?)),
+        )
+        .unwrap()
+    }
+
     fn stored(db: &OhlcvDatabase, ts: i64) -> (f64, String) {
         let conn = db.conn.lock().unwrap();
         conn.query_row(
@@ -662,11 +784,7 @@ mod tests {
     fn stored_bucket_reports_native_rows_and_their_write_time() {
         let (db, path) = open_db("stored_bucket");
         upsert(&db, &[candle(CLOSED, 2.0)], OhlcvDatabase::NATIVE_SOURCE);
-        upsert(
-            &db,
-            &[candle(FORMING, 2.0)],
-            OhlcvDatabase::AGGREGATE_SOURCE,
-        );
+        aggregate(&db, &[candle(FORMING, 2.0)], FORMING);
 
         let bucket = |ts| {
             db.get_stored_bucket("mint", "pool", Timeframe::Hour1, ts)
@@ -695,17 +813,34 @@ mod tests {
     #[test]
     fn aggregate_over_aggregate_updates_a_closed_bucket() {
         let (db, path) = open_db("upsert-aggregate-aggregate");
-        assert_eq!(
-            upsert(&db, &[candle(CLOSED, 2.0)], OhlcvDatabase::AGGREGATE_SOURCE),
-            1
-        );
-        assert_eq!(
-            upsert(&db, &[candle(CLOSED, 3.0)], OhlcvDatabase::AGGREGATE_SOURCE),
-            1
-        );
+        assert_eq!(aggregate(&db, &[candle(CLOSED, 2.0)], CLOSED), 1);
+        assert_eq!(aggregate(&db, &[candle(CLOSED, 3.0)], CLOSED), 1);
         assert_eq!(
             stored(&db, CLOSED),
             (3.0, OhlcvDatabase::AGGREGATE_SOURCE.to_string())
+        );
+        close_db(db, path);
+    }
+
+    #[test]
+    fn aggregate_over_aggregate_widens_a_forming_bucket() {
+        let (db, path) = open_db("upsert-aggregate-aggregate-forming");
+        let first = Candle::new(FORMING, 1.0, 4.0, 0.5, 2.0, 20.0);
+        let second = Candle::new(FORMING, 1.5, 3.0, 0.8, 2.5, 10.0);
+        assert_eq!(aggregate(&db, &[first], FORMING + 60), 1);
+        // Older than the row's write time: an aggregate row is still written,
+        // keeping its open and widening high, low and volume.
+        assert_eq!(aggregate(&db, &[second], FORMING), 1);
+        assert_eq!(
+            stored_row(&db, FORMING),
+            (
+                1.0,
+                4.0,
+                0.5,
+                2.5,
+                20.0,
+                OhlcvDatabase::AGGREGATE_SOURCE.to_string()
+            )
         );
         close_db(db, path);
     }
@@ -717,21 +852,16 @@ mod tests {
             upsert(&db, &[candle(CLOSED, 2.0)], OhlcvDatabase::NATIVE_SOURCE),
             1
         );
-        assert_eq!(
-            upsert(&db, &[candle(CLOSED, 3.0)], OhlcvDatabase::AGGREGATE_SOURCE),
-            0
-        );
+        // Even with 1m data newer than the native read, a closed bucket is kept.
+        set_fetched_at(&db, CLOSED, CLOSED);
+        assert_eq!(aggregate(&db, &[candle(CLOSED, 3.0)], CLOSED + 3_540), 0);
         assert_eq!(
             stored(&db, CLOSED),
             (2.0, OhlcvDatabase::NATIVE_SOURCE.to_string())
         );
         // A native rewrite of an aggregate row is always taken.
         assert_eq!(
-            upsert(
-                &db,
-                &[candle(CLOSED - HOUR, 4.0)],
-                OhlcvDatabase::AGGREGATE_SOURCE
-            ),
+            aggregate(&db, &[candle(CLOSED - HOUR, 4.0)], CLOSED - 60),
             1
         );
         assert_eq!(
@@ -761,14 +891,9 @@ mod tests {
             ),
             1
         );
-        assert_eq!(
-            upsert(
-                &db,
-                &[candle(FORMING, 3.0)],
-                OhlcvDatabase::AGGREGATE_SOURCE
-            ),
-            1
-        );
+        set_fetched_at(&db, FORMING, FORMING + 120);
+        // The aggregate holds a 1m candle that started after the native read.
+        assert_eq!(aggregate(&db, &[candle(FORMING, 3.0)], FORMING + 180), 1);
         assert_eq!(
             stored(&db, FORMING),
             (3.0, OhlcvDatabase::AGGREGATE_SOURCE.to_string())
@@ -778,6 +903,113 @@ mod tests {
             db.get_latest_native_timestamp("mint", "pool", Timeframe::Hour1)
                 .unwrap(),
             None
+        );
+        close_db(db, path);
+    }
+
+    #[test]
+    fn aggregate_older_than_the_native_read_keeps_the_forming_native_bucket() {
+        let (db, path) = open_db("upsert-aggregate-older-forming-native");
+        let native = Candle::new(FORMING, 1.0, 2.0, 0.5, 1.8, 10.0);
+        assert_eq!(upsert(&db, &[native], OhlcvDatabase::NATIVE_SOURCE), 1);
+        set_fetched_at(&db, FORMING, FORMING + 600);
+        let older = Candle::new(FORMING, 1.1, 2.5, 0.4, 2.2, 12.0);
+        assert_eq!(aggregate(&db, &[older.clone()], FORMING + 540), 0);
+        assert_eq!(
+            stored_row(&db, FORMING),
+            (
+                1.0,
+                2.0,
+                0.5,
+                1.8,
+                10.0,
+                OhlcvDatabase::NATIVE_SOURCE.to_string()
+            )
+        );
+        assert_eq!(
+            db.get_stored_bucket("mint", "pool", Timeframe::Hour1, FORMING)
+                .unwrap()
+                .unwrap()
+                .fetched_at,
+            Some(FORMING + 600)
+        );
+        close_db(db, path);
+    }
+
+    #[test]
+    fn newer_aggregate_merges_into_the_forming_native_bucket_until_a_native_write() {
+        let (db, path) = open_db("upsert-aggregate-newer-forming-native");
+        let native = Candle::new(FORMING, 1.0, 2.0, 0.5, 1.8, 10.0);
+        assert_eq!(upsert(&db, &[native], OhlcvDatabase::NATIVE_SOURCE), 1);
+        set_fetched_at(&db, FORMING, FORMING + 600);
+
+        // Higher high, higher low, smaller volume than the native read.
+        let newer = Candle::new(FORMING, 1.2, 2.5, 0.7, 2.2, 8.0);
+        assert_eq!(aggregate(&db, &[newer], FORMING + 600), 1);
+        assert_eq!(
+            stored_row(&db, FORMING),
+            (
+                1.0,
+                2.5,
+                0.5,
+                2.2,
+                10.0,
+                OhlcvDatabase::AGGREGATE_SOURCE.to_string()
+            )
+        );
+
+        // The next aggregate cycle, built from 1m alone, keeps the merged open,
+        // high, low and volume and moves only the close.
+        let next_cycle = Candle::new(FORMING, 1.2, 2.3, 0.7, 2.0, 9.0);
+        assert_eq!(aggregate(&db, &[next_cycle], FORMING + 660), 1);
+        assert_eq!(
+            stored_row(&db, FORMING),
+            (
+                1.0,
+                2.5,
+                0.5,
+                2.0,
+                10.0,
+                OhlcvDatabase::AGGREGATE_SOURCE.to_string()
+            )
+        );
+
+        // A native write over the merged row is last-write-wins.
+        let fresh = Candle::new(FORMING, 1.05, 2.1, 0.6, 1.9, 9.0);
+        assert_eq!(upsert(&db, &[fresh], OhlcvDatabase::NATIVE_SOURCE), 1);
+        assert_eq!(
+            stored_row(&db, FORMING),
+            (
+                1.05,
+                2.1,
+                0.6,
+                1.9,
+                9.0,
+                OhlcvDatabase::NATIVE_SOURCE.to_string()
+            )
+        );
+        close_db(db, path);
+    }
+
+    #[test]
+    fn newer_aggregate_merge_takes_the_lower_low_and_larger_volume() {
+        let (db, path) = open_db("upsert-aggregate-merge-low-volume");
+        let native = Candle::new(FORMING, 1.0, 2.0, 0.5, 1.8, 10.0);
+        assert_eq!(upsert(&db, &[native], OhlcvDatabase::NATIVE_SOURCE), 1);
+        set_fetched_at(&db, FORMING, FORMING + 600);
+
+        let newer = Candle::new(FORMING, 0.9, 1.9, 0.3, 0.4, 14.0);
+        assert_eq!(aggregate(&db, &[newer], FORMING + 660), 1);
+        assert_eq!(
+            stored_row(&db, FORMING),
+            (
+                1.0,
+                2.0,
+                0.3,
+                0.4,
+                14.0,
+                OhlcvDatabase::AGGREGATE_SOURCE.to_string()
+            )
         );
         close_db(db, path);
     }
