@@ -21,7 +21,6 @@ pub use methods::{
 
 use crate::rpc::manager::RpcManager;
 use crate::rpc::stats::{RpcStatsResponse, StatsManager};
-use crate::rpc::types::mask_url;
 use crate::rpc::types::CircuitState;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -61,7 +60,7 @@ impl RpcClient {
     /// Get primary provider URL (masked for security)
     pub async fn primary_url_masked(&self) -> String {
         match self.manager.primary_url().await {
-            Some(url) => mask_url(&url),
+            Some(url) => crate::logger::redact_url(&url),
             None => "(no providers)".to_owned(),
         }
     }

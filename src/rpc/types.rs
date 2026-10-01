@@ -308,7 +308,7 @@ impl ProviderState {
         let rate_limit = kind.default_rate_limit();
         Self {
             id,
-            url_masked: mask_url(url),
+            url_masked: crate::logger::redact_url(url),
             kind,
             priority,
             enabled: true,
@@ -397,62 +397,4 @@ impl fmt::Display for SelectionStrategy {
             Self::Adaptive => write!(f, "adaptive"),
         }
     }
-}
-
-/// Mask API keys in URLs for safe logging
-pub fn mask_url(url: &str) -> String {
-    // Common patterns for API keys in URLs
-    let patterns = [
-        ("api-key=", '&'),
-        ("api_key=", '&'),
-        ("apikey=", '&'),
-        ("x-api-key=", '&'),
-        ("token=", '&'),
-        ("access_token=", '&'),
-    ];
-
-    let mut masked = url.to_string();
-    let lower = url.to_lowercase();
-
-    for (pattern, delimiter) in patterns {
-        if let Some(start) = lower.find(pattern) {
-            let key_start = start + pattern.len();
-            let key_end = url[key_start..]
-                .find(delimiter)
-                .map(|i| key_start + i)
-                .unwrap_or(url.len());
-
-            if key_end > key_start {
-                let key_len = key_end - key_start;
-                let mask = if key_len > 8 {
-                    format!(
-                        "{}...{}",
-                        &url[key_start..key_start + 4],
-                        &url[key_end - 4..key_end]
-                    )
-                } else {
-                    "***".to_owned()
-                };
-                masked = format!("{}{}{}", &url[..key_start], mask, &url[key_end..]);
-            }
-        }
-    }
-
-    // Also mask common subdomain patterns (e.g., quiknode URLs)
-    // https://xxx-yyy-zzz.solana-mainnet.quiknode.pro/API_KEY/
-    if masked.contains("quiknode.pro/") || masked.contains("quicknode.pro/") {
-        if let Some(idx) = masked.rfind('/') {
-            let after_slash = &masked[idx + 1..];
-            if !after_slash.is_empty() && !after_slash.starts_with('?') {
-                let end = after_slash.find('/').unwrap_or(after_slash.len());
-                if end > 8 {
-                    let key = &after_slash[..end];
-                    let mask = format!("{}...{}", &key[..4], &key[key.len() - 4..]);
-                    masked = format!("{}/{}", &masked[..idx], mask);
-                }
-            }
-        }
-    }
-
-    masked
 }

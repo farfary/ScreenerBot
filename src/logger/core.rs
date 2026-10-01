@@ -63,8 +63,12 @@ pub fn log_internal(tag: LogTag, level: LogLevel, message: &str) {
         return;
     }
 
+    // Last-resort guard: a credential inside a URL that reached a message
+    // unredacted never lands in the console or the log file.
+    let message = super::redact::redact_urls_in(message);
+
     // Delegate to format module for formatting and writing
-    super::format::format_and_log(tag, level.as_str(), message);
+    super::format::format_and_log(tag, level.as_str(), &message);
 }
 
 #[cfg(test)]

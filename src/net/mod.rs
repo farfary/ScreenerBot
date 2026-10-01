@@ -55,7 +55,10 @@ pub fn apply_proxy(builder: reqwest::ClientBuilder) -> reqwest::ClientBuilder {
             Err(e) => {
                 logger::warning(
                     LogTag::System,
-                    &format!("Invalid detected proxy '{url}': {e} — using direct connection"),
+                    &format!(
+                        "Invalid detected proxy '{}': {e} — using direct connection",
+                        logger::redact_url(url)
+                    ),
                 );
                 builder
             }
@@ -104,7 +107,10 @@ pub fn client() -> reqwest::Client {
 /// Log the detected proxy once at startup (call from boot).
 pub fn log_detected_proxy() {
     match proxy_url() {
-        Some(url) => logger::info(LogTag::System, &format!("Network proxy detected: {url}")),
+        Some(url) => logger::info(
+            LogTag::System,
+            &format!("Network proxy detected: {}", logger::redact_url(url)),
+        ),
         None => logger::info(
             LogTag::System,
             "No network proxy detected (direct connections)",
@@ -127,14 +133,17 @@ pub async fn connect_ws(
         // Non-HTTP proxy (e.g. SOCKS): not tunnelled here; attempt direct.
         logger::warning(
             LogTag::Websocket,
-            &format!("Proxy '{proxy}' is not an HTTP proxy — attempting direct WebSocket connect"),
+            &format!(
+                "Proxy '{}' is not an HTTP proxy — attempting direct WebSocket connect",
+                logger::redact_url(proxy)
+            ),
         );
     }
     let (stream, _) =
         connect_async(ws_url)
             .await
             .map_err(|e| crate::errors::NetworkError::RequestFailed {
-                endpoint: ws_url.to_owned(),
+                endpoint: logger::redact_url(ws_url),
                 detail: format!("Failed to connect to WebSocket: {e}"),
             })?;
     Ok(stream)
@@ -157,13 +166,13 @@ async fn connect_ws_via_http_proxy(
 ) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>, crate::errors::NetworkError> {
     // Target host/port from the ws(s) URL.
     let url = url::Url::parse(ws_url).map_err(|e| crate::errors::NetworkError::RequestFailed {
-        endpoint: ws_url.to_owned(),
+        endpoint: logger::redact_url(ws_url),
         detail: format!("Invalid ws url: {e}"),
     })?;
     let target_host = url
         .host_str()
         .ok_or_else(|| crate::errors::NetworkError::RequestFailed {
-            endpoint: ws_url.to_owned(),
+            endpoint: logger::redact_url(ws_url),
             detail: "ws url has no host".to_owned(),
         })?
         .to_owned();
@@ -239,7 +248,7 @@ async fn connect_ws_via_http_proxy(
     let (stream, _) = client_async_tls_with_config(ws_url, tcp, config, None)
         .await
         .map_err(|e| crate::errors::NetworkError::RequestFailed {
-            endpoint: ws_url.to_owned(),
+            endpoint: logger::redact_url(ws_url),
             detail: format!("WebSocket handshake over proxy failed: {e}"),
         })?;
     Ok(stream)

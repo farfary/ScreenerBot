@@ -109,6 +109,5 @@ pub use stats::{
 // ============================================================================
 
 pub use types::{
-    mask_url, CircuitState, ProviderKind, ProviderState, RpcCallResult, RpcMethod,
-    SelectionStrategy,
+    CircuitState, ProviderKind, ProviderState, RpcCallResult, RpcMethod, SelectionStrategy,
 };

@@ -229,7 +229,7 @@ async fn run_actor(mut commands: mpsc::UnboundedReceiver<Command>) {
                     LogTag::Websocket,
                     &format!(
                         "WebSocket provider {} failed: {e} (next provider in {delay}s)",
-                        crate::rpc::mask_url(&url)
+                        crate::logger::redact_url(&url)
                     ),
                 );
                 set_state(if attempt >= 4 {
@@ -249,7 +249,7 @@ async fn run_actor(mut commands: mpsc::UnboundedReceiver<Command>) {
         };
         logger::info(
             LogTag::Websocket,
-            &format!("WebSocket connected ({})", crate::rpc::mask_url(&url)),
+            &format!("WebSocket connected ({})", crate::logger::redact_url(&url)),
         );
         attempt = 0;
         set_state(ConnectionState::Connected);

@@ -37,6 +37,7 @@ mod core;
 mod file;
 mod format;
 mod levels;
+mod redact;
 mod special;
 mod tags;
 
@@ -46,6 +47,7 @@ pub use config::{
 };
 pub use format::route_console_to_stderr;
 pub use levels::LogLevel;
+pub use redact::{redact_url, redact_urls_in};
 pub use special::log_price_change;
 pub use tags::LogTag;
 

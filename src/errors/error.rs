@@ -158,15 +158,17 @@ pub type Result<T> = std::result::Result<T, Error>;
 // Conversions from standard library and external types
 // =============================================================================
 
+/// The endpoint is kept in redacted form and the detail is rendered without the
+/// URL, which reqwest's `Display` would otherwise append including credentials.
 impl From<reqwest::Error> for Error {
     fn from(err: reqwest::Error) -> Self {
         let endpoint = err
             .url()
-            .map(|u| u.as_str().to_owned())
+            .map(|u| crate::logger::redact_url(u.as_str()))
             .unwrap_or_else(|| "unknown".to_owned());
         Error::Network(NetworkError::RequestFailed {
             endpoint,
-            detail: err.to_string(),
+            detail: err.without_url().to_string(),
         })
     }
 }

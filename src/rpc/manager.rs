@@ -156,7 +156,7 @@ impl RpcManager {
         for config in &providers {
             stats.register_provider(
                 &config.id,
-                &mask_url(&config.url),
+                &crate::logger::redact_url(&config.url),
                 config.kind,
                 config.priority,
             );

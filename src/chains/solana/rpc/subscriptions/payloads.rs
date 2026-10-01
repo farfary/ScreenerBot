@@ -42,7 +42,10 @@ pub fn websocket_url_for_attempt(urls: &[String], attempt: u32) -> Option<&str> 
 pub fn get_websocket_url_from_http(http_url: &str) -> Result<String> {
     derive_websocket_url(http_url).ok_or_else(|| {
         Error::Configuration(crate::errors::ConfigurationError::Generic {
-            message: format!("Failed to convert HTTP URL to WebSocket: {http_url}"),
+            message: format!(
+                "Failed to convert HTTP URL to WebSocket: {}",
+                crate::logger::redact_url(http_url)
+            ),
         })
     })
 }

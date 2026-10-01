@@ -58,7 +58,7 @@ pub(crate) fn send_crash_notification(bot_token: &str, chat_id: &str, message: &
             }
         }
         Err(e) => {
-            eprintln!("Failed to send crash notification: {e}");
+            eprintln!("Failed to send crash notification: {}", e.without_url());
             eprintln!("Crash message: {message}");
         }
     }

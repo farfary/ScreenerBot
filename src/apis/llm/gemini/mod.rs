@@ -227,7 +227,7 @@ impl GeminiClient {
             } else {
                 LlmError::NetworkError {
                     provider: "gemini".to_owned(),
-                    message: format!("Request failed: {e}"),
+                    message: format!("Request failed: {}", e.without_url()),
                 }
             }
         })?;
@@ -270,7 +270,7 @@ impl GeminiClient {
                 .await
                 .map_err(|e| LlmError::ParseError {
                     provider: "gemini".to_owned(),
-                    message: format!("Failed to parse response: {e}"),
+                    message: format!("Failed to parse response: {}", e.without_url()),
                 })?;
 
         Ok((gemini_response, elapsed))

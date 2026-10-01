@@ -245,9 +245,13 @@ impl From<std::io::Error> for RpcError {
     }
 }
 
-/// Convert from reqwest error
+/// Convert from reqwest error.
+///
+/// The URL is stripped first: reqwest's `Display` appends the full request URL,
+/// and provider endpoints carry their API key in it.
 impl From<reqwest::Error> for RpcError {
     fn from(err: reqwest::Error) -> Self {
+        let err = err.without_url();
         if err.is_timeout() {
             Self::Network {
                 message: err.to_string(),
@@ -350,5 +354,36 @@ mod tests {
         };
         assert!(!simulation_failed.is_retryable());
         assert!(!simulation_failed.is_provider_health_failure());
+    }
+
+    /// A transport failure against a credential-bearing endpoint, produced
+    /// locally: the port is bound, released, then dialled, so the connect is
+    /// refused without leaving the machine.
+    async fn refused_request_error(url_path: &str) -> reqwest::Error {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        drop(listener);
+        let client = reqwest::Client::builder().no_proxy().build().unwrap();
+        client
+            .post(format!("http://127.0.0.1:{port}{url_path}"))
+            .send()
+            .await
+            .expect_err("request to a released port must fail")
+    }
+
+    #[tokio::test]
+    async fn reqwest_errors_never_carry_the_endpoint_api_key() {
+        let raw = refused_request_error("/?api-key=secret").await;
+        assert!(raw.to_string().contains("secret"));
+
+        let rpc_error = RpcError::from(refused_request_error("/?api-key=secret").await);
+        assert!(!rpc_error.to_string().contains("secret"), "{rpc_error}");
+        assert!(!format!("{rpc_error:?}").contains("secret"));
+
+        let error = crate::Error::from(refused_request_error("/?api-key=secret").await);
+        let rendered = error.to_string();
+        assert!(!rendered.contains("secret"), "{rendered}");
+        assert!(rendered.contains("api-key=***"), "{rendered}");
+        assert!(!format!("{error:?}").contains("secret"));
     }
 }
