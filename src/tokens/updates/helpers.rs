@@ -1,11 +1,12 @@
 //! Token update helpers — utility functions for token data enrichment and merging.
 
+use super::blocking::blocking_db;
 use crate::chains::ChainId;
 use crate::logger::{self, LogTag};
 use crate::tokens::database::TokenDatabase;
 use std::collections::HashSet;
-use std::sync::LazyLock;
 use std::sync::Mutex as StdMutex;
+use std::sync::{Arc, LazyLock};
 
 /// Number of consecutive failures before marking a token as permanently failed for market data
 /// "Token not listed" errors are considered permanent after this many attempts
@@ -54,16 +55,29 @@ pub(super) fn classify_market_error(failures: &[String]) -> &'static str {
 
 /// Record a market error and potentially mark as permanent failure
 /// Returns true if the token was marked as permanently failed
-pub(super) fn handle_market_failure(db: &TokenDatabase, mint: &str, failures: &[String]) -> bool {
+pub(super) async fn handle_market_failure(
+    db: &Arc<TokenDatabase>,
+    mint: &str,
+    failures: &[String],
+) -> bool {
     let error_type = classify_market_error(failures);
     let message = failures.join(" | ");
 
-    match db.record_market_error(mint, &message, error_type) {
+    let record_mint = mint.to_string();
+    let recorded = blocking_db(db, move |db| {
+        db.record_market_error(&record_mint, &message, error_type)
+    })
+    .await;
+
+    match recorded {
         Ok(error_count) => {
             // Mark as permanent if it's a "not listed" error and we've hit the threshold
             if error_type == "not_listed" && error_count >= PERMANENT_FAILURE_THRESHOLD {
                 // Update to permanent status (without incrementing count again)
-                if let Err(e) = db.mark_market_permanent(mint) {
+                let permanent_mint = mint.to_string();
+                if let Err(e) =
+                    blocking_db(db, move |db| db.mark_market_permanent(&permanent_mint)).await
+                {
                     logger::error(
                         LogTag::Tokens,
                         &format!("Failed to mark {mint} as permanent failure: {e}"),

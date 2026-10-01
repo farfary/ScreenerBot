@@ -1,5 +1,6 @@
 //! Token update core — main update loop that refreshes token data from multiple sources.
 
+use super::blocking::blocking_db;
 use super::helpers::{clear_in_flight, try_mark_in_flight};
 use super::rate_limiter::RateLimitCoordinator;
 use crate::chains::ChainId;
@@ -13,6 +14,7 @@ use crate::tokens::security::rugcheck;
 use crate::tokens::types::TokenResult;
 use crate::tokens::Error;
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 
@@ -38,22 +40,24 @@ impl PoolPriorityManager {
         }
     }
 
-    pub(super) async fn sync(&self, db: &TokenDatabase) {
+    pub(super) async fn sync(&self, db: &Arc<TokenDatabase>) {
         let now = Instant::now();
         let chain = db.chain();
         let pool_tokens = pools::get_available_tokens();
         let pool_set: HashSet<String> = pool_tokens.iter().cloned().collect();
 
-        let priorities = match db.get_priorities_for_tokens(&pool_tokens) {
-            Ok(map) => map,
-            Err(e) => {
-                logger::error(
-                    LogTag::Tokens,
-                    &format!("Failed to load priorities for pool tokens: {e}"),
-                );
-                return;
-            }
-        };
+        let lookup = pool_tokens.clone();
+        let priorities =
+            match blocking_db(db, move |db| db.get_priorities_for_tokens(&lookup)).await {
+                Ok(map) => map,
+                Err(e) => {
+                    logger::error(
+                        LogTag::Tokens,
+                        &format!("Failed to load priorities for pool tokens: {e}"),
+                    );
+                    return;
+                }
+            };
 
         let mut promotions: Vec<String> = Vec::new();
         let mut demotion_candidates: Vec<(String, i32)> = Vec::new();
@@ -101,21 +105,32 @@ impl PoolPriorityManager {
         }
 
         if !promotions.is_empty() {
-            let mut promoted = Vec::new();
-            for mint in promotions {
-                if let Err(e) = db.update_priority(&mint, Priority::PoolTracked.to_value()) {
-                    logger::error(
-                        LogTag::Tokens,
-                        &format!("Failed to promote {mint} to PoolTracked priority: {e}"),
-                    );
-                } else {
-                    let previous_priority = priorities
-                        .get(&mint)
-                        .copied()
-                        .unwrap_or(Priority::Standard.to_value());
-                    promoted.push((mint, previous_priority));
+            let promoted = blocking_db(db, move |db| {
+                let mut promoted = Vec::new();
+                for mint in promotions {
+                    if let Err(e) = db.update_priority(&mint, Priority::PoolTracked.to_value()) {
+                        logger::error(
+                            LogTag::Tokens,
+                            &format!("Failed to promote {mint} to PoolTracked priority: {e}"),
+                        );
+                    } else {
+                        let previous_priority = priorities
+                            .get(&mint)
+                            .copied()
+                            .unwrap_or(Priority::Standard.to_value());
+                        promoted.push((mint, previous_priority));
+                    }
                 }
-            }
+                Ok(promoted)
+            })
+            .await
+            .unwrap_or_else(|e| {
+                logger::error(
+                    LogTag::Tokens,
+                    &format!("Failed to promote pool tokens to PoolTracked priority: {e}"),
+                );
+                Vec::new()
+            });
 
             if !promoted.is_empty() {
                 let count = promoted.len();
@@ -145,43 +160,55 @@ impl PoolPriorityManager {
             .map(|(mint, _)| mint.clone())
             .collect();
 
-        let current_priorities = match db.get_priorities_for_tokens(&demotion_mints) {
-            Ok(map) => map,
-            Err(e) => {
-                logger::error(
-                    LogTag::Tokens,
-                    &format!("Failed to load priorities for demotion candidates: {e}"),
-                );
-                return;
+        let current_priorities =
+            match blocking_db(db, move |db| db.get_priorities_for_tokens(&demotion_mints)).await {
+                Ok(map) => map,
+                Err(e) => {
+                    logger::error(
+                        LogTag::Tokens,
+                        &format!("Failed to load priorities for demotion candidates: {e}"),
+                    );
+                    return;
+                }
+            };
+
+        let demoted = blocking_db(db, move |db| {
+            let mut demoted = Vec::new();
+
+            for (mint, previous_priority) in demotion_candidates {
+                let current_priority = current_priorities
+                    .get(&mint)
+                    .copied()
+                    .unwrap_or(Priority::Standard.to_value());
+
+                if current_priority != Priority::PoolTracked.to_value() {
+                    continue;
+                }
+
+                let mut target_priority = previous_priority;
+                if target_priority == Priority::PoolTracked.to_value() {
+                    target_priority = Priority::Standard.to_value();
+                }
+
+                if let Err(e) = db.update_priority(&mint, target_priority) {
+                    logger::error(
+                        LogTag::Tokens,
+                        &format!("Failed to demote {mint} from PoolTracked priority: {e}"),
+                    );
+                } else {
+                    demoted.push((mint.clone(), target_priority));
+                }
             }
-        };
-
-        let mut demoted = Vec::new();
-
-        for (mint, previous_priority) in demotion_candidates {
-            let current_priority = current_priorities
-                .get(&mint)
-                .copied()
-                .unwrap_or(Priority::Standard.to_value());
-
-            if current_priority != Priority::PoolTracked.to_value() {
-                continue;
-            }
-
-            let mut target_priority = previous_priority;
-            if target_priority == Priority::PoolTracked.to_value() {
-                target_priority = Priority::Standard.to_value();
-            }
-
-            if let Err(e) = db.update_priority(&mint, target_priority) {
-                logger::error(
-                    LogTag::Tokens,
-                    &format!("Failed to demote {mint} from PoolTracked priority: {e}"),
-                );
-            } else {
-                demoted.push((mint.clone(), target_priority));
-            }
-        }
+            Ok(demoted)
+        })
+        .await
+        .unwrap_or_else(|e| {
+            logger::error(
+                LogTag::Tokens,
+                &format!("Failed to demote pool tokens from PoolTracked priority: {e}"),
+            );
+            Vec::new()
+        });
 
         // NOW remove successfully demoted tokens from state (after DB writes succeed)
         if !demoted.is_empty() {
@@ -224,7 +251,7 @@ impl PoolPriorityManager {
 /// Returns overall success if at least one source succeeds.
 pub async fn update_token(
     mint: &str,
-    db: &TokenDatabase,
+    db: &Arc<TokenDatabase>,
     coordinator: &RateLimitCoordinator,
 ) -> TokenResult<UpdateResult> {
     // Skip the network update while the internet is confirmed offline — the
@@ -259,7 +286,8 @@ pub async fn update_token(
     let market_data_updated = !successes.is_empty();
 
     if market_data_updated {
-        let _ = db.mark_market_data_updated(mint);
+        let updated_mint = mint.to_string();
+        let _ = blocking_db(db, move |db| db.mark_market_data_updated(&updated_mint)).await;
 
         // Record market data update event (sampled - every 50th token to avoid spam)
         let hash = mint.chars().fold(0u32, |acc, c| acc.wrapping_add(c as u32));
@@ -348,7 +376,7 @@ impl UpdateResult {
 /// Vec<UpdateResult> - One result per token
 pub async fn update_tokens_batch(
     mints: &[String],
-    db: &TokenDatabase,
+    db: &Arc<TokenDatabase>,
     coordinator: &RateLimitCoordinator,
 ) -> TokenResult<Vec<UpdateResult>> {
     if mints.is_empty() {
@@ -373,6 +401,7 @@ pub async fn update_tokens_batch(
     }
 
     let mut results = Vec::new();
+    let mut updated_mints = Vec::new();
 
     // Acquire rate limit permit for DexScreener batch endpoint (market data)
     let dex_permit = coordinator.acquire_dexscreener_batch().await;
@@ -430,7 +459,7 @@ pub async fn update_tokens_batch(
         let market_data_updated = !successes.is_empty();
 
         if market_data_updated {
-            let _ = db.mark_market_data_updated(mint);
+            updated_mints.push(mint.clone());
         }
 
         results.push(UpdateResult {
@@ -438,6 +467,16 @@ pub async fn update_tokens_batch(
             successes,
             failures,
         });
+    }
+
+    if !updated_mints.is_empty() {
+        let _ = blocking_db(db, move |db| {
+            for mint in &updated_mints {
+                let _ = db.mark_market_data_updated(mint);
+            }
+            Ok(())
+        })
+        .await;
     }
 
     // Clear in-flight markers for all tokens
@@ -456,7 +495,10 @@ pub async fn update_tokens_batch(
 ///
 /// Security data is static/rarely changing - fetch once and cache.
 /// Processes ONE token per cycle for better performance with large backlogs.
-pub(super) async fn update_security_data(db: &TokenDatabase, coordinator: &RateLimitCoordinator) {
+pub(super) async fn update_security_data(
+    db: &Arc<TokenDatabase>,
+    coordinator: &RateLimitCoordinator,
+) {
     // Skip the Rugcheck fetch while the internet is confirmed offline — it would
     // only time out and log errors. Resumes automatically on reconnect.
     if crate::connectivity::is_network_offline() {
@@ -471,16 +513,17 @@ pub(super) async fn update_security_data(db: &TokenDatabase, coordinator: &RateL
     /// have) so the direct per-IP budget is never bursted.
     const MAX_DIRECT_PER_CYCLE: usize = 3;
 
-    let tokens = match db.get_tokens_without_security_data(SECURITY_BATCH) {
-        Ok(tokens) => tokens,
-        Err(e) => {
-            logger::error(
-                LogTag::Tokens,
-                &format!("Failed to load tokens without security data: {e}"),
-            );
-            return;
-        }
-    };
+    let tokens =
+        match blocking_db(db, |db| db.get_tokens_without_security_data(SECURITY_BATCH)).await {
+            Ok(tokens) => tokens,
+            Err(e) => {
+                logger::error(
+                    LogTag::Tokens,
+                    &format!("Failed to load tokens without security data: {e}"),
+                );
+                return;
+            }
+        };
 
     if tokens.is_empty() {
         return;
@@ -490,8 +533,15 @@ pub(super) async fn update_security_data(db: &TokenDatabase, coordinator: &RateL
     //    Rugcheck rate-limit permit consumed). Tokens the server had cached are
     //    persisted here and drop out of the backlog immediately.
     let warmed = rugcheck::warm_security_from_server(&tokens, db).await;
-    for mint in &warmed {
-        let _ = db.clear_security_error(mint);
+    if !warmed.is_empty() {
+        let cleared = warmed.clone();
+        let _ = blocking_db(db, move |db| {
+            for mint in &cleared {
+                let _ = db.clear_security_error(mint);
+            }
+            Ok(())
+        })
+        .await;
     }
     if !warmed.is_empty() {
         logger::debug(
@@ -521,15 +571,20 @@ pub(super) async fn update_security_data(db: &TokenDatabase, coordinator: &RateL
                 Ok(Some(_)) => {
                     permit.forget();
                     logger::debug(LogTag::Tokens, &format!("Security data fetched for {mint}"));
-                    let _ = db.clear_security_error(mint);
+                    let cleared = mint.clone();
+                    let _ = blocking_db(db, move |db| db.clear_security_error(&cleared)).await;
                 }
                 Ok(None) => {
                     // Token not analyzed by Rugcheck - this is PERMANENT (404/400).
-                    let _ = db.record_security_error(
-                        mint,
-                        "Token not analyzed by Rugcheck (404/400)",
-                        "permanent",
-                    );
+                    let errored = mint.clone();
+                    let _ = blocking_db(db, move |db| {
+                        db.record_security_error(
+                            &errored,
+                            "Token not analyzed by Rugcheck (404/400)",
+                            "permanent",
+                        )
+                    })
+                    .await;
                 }
                 Err(e) => {
                     let err_str = format!("{:?}", e);
@@ -545,7 +600,12 @@ pub(super) async fn update_security_data(db: &TokenDatabase, coordinator: &RateL
                         LogTag::Tokens,
                         &format!("Rugcheck error ({error_type}) for {mint}: {e}"),
                     );
-                    let _ = db.record_security_error(mint, &e.to_string(), error_type);
+                    let errored = mint.clone();
+                    let message = e.to_string();
+                    let _ = blocking_db(db, move |db| {
+                        db.record_security_error(&errored, &message, error_type)
+                    })
+                    .await;
                 }
             },
             Err(e) => {
@@ -729,7 +789,8 @@ pub async fn force_update_token(
         .iter()
         .any(|s| s == "DexScreener" || s == "GeckoTerminal");
     if market_data_updated {
-        let _ = db.mark_market_data_updated(mint);
+        let updated_mint = mint.to_string();
+        let _ = blocking_db(&db, move |db| db.mark_market_data_updated(&updated_mint)).await;
     }
 
     // Log result summary

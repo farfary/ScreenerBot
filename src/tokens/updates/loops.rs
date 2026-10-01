@@ -15,16 +15,14 @@
 //! Security data (Rugcheck) is fetched in a separate loop, one token per interval (configurable, default 60s),
 //! and only for tokens that don't have security data yet.
 
+use super::blocking::blocking_db;
 use super::core::{update_security_data, update_tokens_batch, PoolPriorityManager};
 use super::helpers::{filter_dashboard_active_token, handle_market_failure, should_skip_for_tools};
 use super::rate_limiter::RateLimitCoordinator;
 use crate::config::with_config;
-use crate::errors::InternalError;
 use crate::logger::{self, LogTag};
 use crate::tokens::database::TokenDatabase;
 use crate::tokens::priorities::Priority;
-use crate::tokens::types::TokenResult;
-use crate::tokens::Error;
 use crate::utils::{check_shutdown_or_delay, run_or_shutdown};
 use futures::future::join_all;
 use std::sync::Arc;
@@ -128,12 +126,9 @@ pub fn start_update_loop(
         if check_shutdown_or_delay(&shutdown_pool_sync, Duration::from_secs(4)).await {
             return;
         }
-        if run_or_shutdown(
-            &shutdown_pool_sync,
-            manager_sync.sync(db_pool_state.as_ref()),
-        )
-        .await
-        .is_none()
+        if run_or_shutdown(&shutdown_pool_sync, manager_sync.sync(&db_pool_state))
+            .await
+            .is_none()
         {
             return;
         }
@@ -141,12 +136,9 @@ pub fn start_update_loop(
             if check_shutdown_or_delay(&shutdown_pool_sync, Duration::from_secs(5)).await {
                 break;
             }
-            if run_or_shutdown(
-                &shutdown_pool_sync,
-                manager_sync.sync(db_pool_state.as_ref()),
-            )
-            .await
-            .is_none()
+            if run_or_shutdown(&shutdown_pool_sync, manager_sync.sync(&db_pool_state))
+                .await
+                .is_none()
             {
                 break;
             }
@@ -293,22 +285,6 @@ pub fn start_update_loop(
     handles
 }
 
-/// Runs a synchronous token-database call on tokio's blocking pool.
-///
-/// The selection queries in these loops take the pooled SQLite connection and can
-/// run for seconds on a large database; issued directly inside the async loop they
-/// park a runtime worker for that whole time and stall every task scheduled on it.
-async fn blocking_db<T, F>(db: &Arc<TokenDatabase>, call: F) -> TokenResult<T>
-where
-    T: Send + 'static,
-    F: FnOnce(&TokenDatabase) -> TokenResult<T> + Send + 'static,
-{
-    let db = Arc::clone(db);
-    tokio::task::spawn_blocking(move || call(&db))
-        .await
-        .map_err(|e| Error::Internal(InternalError::from(e)))?
-}
-
 /// Seed market data for tokens that have never been updated
 async fn update_uninitialized_tokens(db: &Arc<TokenDatabase>, coordinator: &RateLimitCoordinator) {
     if should_skip_for_tools() {
@@ -369,7 +345,7 @@ async fn update_uninitialized_tokens(db: &Arc<TokenDatabase>, coordinator: &Rate
             Ok(results) => {
                 for result in results {
                     if result.is_total_failure() {
-                        handle_market_failure(db, &result.mint, &result.failures);
+                        handle_market_failure(db, &result.mint, &result.failures).await;
                     } else if result.is_partial_failure() {
                         logger::warning(
                             LogTag::Tokens,
@@ -447,7 +423,7 @@ async fn update_open_position_tokens(db: &Arc<TokenDatabase>, coordinator: &Rate
                             LogTag::Tokens,
                             &format!("Total failure for {}: {:?}", result.mint, result.failures),
                         );
-                        handle_market_failure(db, &result.mint, &result.failures);
+                        handle_market_failure(db, &result.mint, &result.failures).await;
                     } else if result.is_partial_failure() {
                         logger::warning(
                             LogTag::Tokens,
@@ -527,7 +503,7 @@ async fn update_pool_tracked_tokens(db: &Arc<TokenDatabase>, coordinator: &RateL
             Ok(results) => {
                 for result in results {
                     if result.is_total_failure() {
-                        handle_market_failure(db, &result.mint, &result.failures);
+                        handle_market_failure(db, &result.mint, &result.failures).await;
                     } else if result.is_partial_failure() {
                         logger::warning(
                             LogTag::Tokens,
@@ -634,7 +610,7 @@ async fn update_filter_passed_tokens(db: &Arc<TokenDatabase>, coordinator: &Rate
             Ok(results) => {
                 for result in results {
                     if result.is_total_failure() {
-                        handle_market_failure(db, &result.mint, &result.failures);
+                        handle_market_failure(db, &result.mint, &result.failures).await;
                     } else if result.is_partial_failure() {
                         logger::warning(
                             LogTag::Tokens,
@@ -697,7 +673,7 @@ async fn update_background_tokens(db: &Arc<TokenDatabase>, coordinator: &RateLim
         Ok(results) => {
             for result in results {
                 if result.is_total_failure() {
-                    handle_market_failure(db, &result.mint, &result.failures);
+                    handle_market_failure(db, &result.mint, &result.failures).await;
                 } else if result.is_partial_failure() {
                     logger::warning(
                         LogTag::Tokens,

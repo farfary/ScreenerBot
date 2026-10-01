@@ -274,64 +274,100 @@ impl TokenDatabase {
         }
     }
 
-    /// Fetch token mints that have no security assessment
+    /// Fetch token mints that have no security assessment.
+    ///
+    /// Eligible: no `security_rugcheck` row, not blacklisted, and the security error state
+    /// allows a retry — never tried, a temporary error past its exponential backoff
+    /// (`120 * 2^min(error_count - 1, 10)` seconds), or a permanent error older than 7 days. Ordered by retry class, then `first_discovered_at ASC`; ties come back in
+    /// no defined order:
+    /// 1. never tried, discovered in the last 24h
+    /// 2. never tried, older
+    /// 3. temporary errors
+    /// 4. permanent errors
+    ///
+    /// A single `tokens` join ordered on the class expression read every token and sorted
+    /// it in a temp b-tree (3.4s at 555k tokens), so each class is read in order and the
+    /// read stops at the remaining limit:
+    /// - Classes 1 and 2 walk `idx_tokens_discovery_mint` from the 24h cutoff and from
+    ///   the start respectively. "Never tried" means no `update_tracking` row or one with
+    ///   a NULL `security_error_type`.
+    /// - Classes 3 and 4 enter through `idx_tracking_security_error`, which holds only
+    ///   the rows that carry a security error.
     pub fn get_tokens_without_security_data(&self, limit: usize) -> TokenResult<Vec<String>> {
-        let conn = self.conn()?;
-
-        let now = Utc::now().timestamp();
-
-        // Base backoff interval: 2 minutes (120 seconds)
-        // Max backoff: 24 hours (86400 seconds)
-        // Formula: min(120 * 2^(error_count - 1), 86400)
-        let mut stmt = conn
-            .prepare(
-                "SELECT t.mint FROM tokens t
-             LEFT JOIN security_rugcheck sr ON t.chain_id = sr.chain_id AND t.mint = sr.mint
-             LEFT JOIN blacklist b ON t.chain_id = b.chain_id AND t.mint = b.mint
-             LEFT JOIN update_tracking ut ON t.chain_id = ut.chain_id AND t.mint = ut.mint
-             WHERE t.chain_id = ?1 AND sr.mint IS NULL
-             AND b.mint IS NULL
+        const UNTRIED_RECENT: &str = "SELECT t.mint FROM tokens t
+             WHERE t.chain_id = ?1 AND t.first_discovered_at > ?2 - 86400
+             AND NOT EXISTS (SELECT 1 FROM security_rugcheck sr
+                             WHERE sr.chain_id = t.chain_id AND sr.mint = t.mint)
+             AND NOT EXISTS (SELECT 1 FROM blacklist b
+                             WHERE b.chain_id = t.chain_id AND b.mint = t.mint)
+             AND NOT EXISTS (SELECT 1 FROM update_tracking ut
+                             WHERE ut.chain_id = t.chain_id AND ut.mint = t.mint
+                             AND ut.security_error_type IS NOT NULL)
+             ORDER BY t.first_discovered_at ASC
+             LIMIT ?3";
+        const UNTRIED_OLDER: &str = "SELECT t.mint FROM tokens t
+             WHERE t.chain_id = ?1 AND t.first_discovered_at <= ?2 - 86400
+             AND NOT EXISTS (SELECT 1 FROM security_rugcheck sr
+                             WHERE sr.chain_id = t.chain_id AND sr.mint = t.mint)
+             AND NOT EXISTS (SELECT 1 FROM blacklist b
+                             WHERE b.chain_id = t.chain_id AND b.mint = t.mint)
+             AND NOT EXISTS (SELECT 1 FROM update_tracking ut
+                             WHERE ut.chain_id = t.chain_id AND ut.mint = t.mint
+                             AND ut.security_error_type IS NOT NULL)
+             ORDER BY t.first_discovered_at ASC
+             LIMIT ?3";
+        const RETRY_DUE: &str = "SELECT t.mint FROM update_tracking ut
+             JOIN tokens t ON t.chain_id = ut.chain_id AND t.mint = ut.mint
+             WHERE ut.chain_id = ?1 AND ut.security_error_type IS NOT NULL
              AND (
-                 -- Never tried
-                 ut.security_error_type IS NULL
-                 -- Temporary errors with exponential backoff
-                 OR (ut.security_error_type = 'temporary' 
-                     AND ut.last_security_error_at < ?2 - (120 * (1 << MIN(ut.security_error_count - 1, 10))))
-                 -- Permanent errors retry after 7 days
-                 OR (ut.security_error_type = 'permanent' 
+                 (ut.security_error_type = 'temporary'
+                  AND ut.last_security_error_at < ?2 - (120 * (1 << MIN(ut.security_error_count - 1, 10))))
+                 OR (ut.security_error_type = 'permanent'
                      AND ut.last_security_error_at < ?2 - 604800)
              )
-             ORDER BY 
-                 CASE 
-                     -- Priority 1: New tokens (discovered in last 24h, no errors)
-                     WHEN ut.security_error_type IS NULL AND t.first_discovered_at > ?2 - 86400 THEN 1
-                     -- Priority 2: Tokens without errors
-                     WHEN ut.security_error_type IS NULL THEN 2
-                     -- Priority 3: Temporary errors (with backoff)
-                     WHEN ut.security_error_type = 'temporary' THEN 3
-                     -- Priority 4: Permanent errors (very rare retry)
-                     ELSE 4
-                 END,
-                 t.first_discovered_at ASC
-             LIMIT ?3",
-            )
-            .map_err(|e| Error::Database(DatabaseError::Query { operation: "Failed to prepare".to_owned(), message: e.to_string() }))?;
+             AND NOT EXISTS (SELECT 1 FROM security_rugcheck sr
+                             WHERE sr.chain_id = ut.chain_id AND sr.mint = ut.mint)
+             AND NOT EXISTS (SELECT 1 FROM blacklist b
+                             WHERE b.chain_id = ut.chain_id AND b.mint = ut.mint)
+             ORDER BY CASE WHEN ut.security_error_type = 'temporary' THEN 3 ELSE 4 END,
+                      t.first_discovered_at ASC
+             LIMIT ?3";
 
-        let mints = stmt
-            .query_map(params![self.chain_id(), now, limit], |row| row.get(0))
-            .map_err(|e| {
-                Error::Database(DatabaseError::Query {
-                    operation: "Query failed".to_owned(),
-                    message: e.to_string(),
-                })
-            })?;
+        if limit == 0 {
+            return Ok(Vec::new());
+        }
 
-        mints.collect::<Result<Vec<_>, _>>().map_err(|e| {
+        let conn = self.conn()?;
+        let now = Utc::now().timestamp();
+        let query_error = |operation: &str, e: rusqlite::Error| {
             Error::Database(DatabaseError::Query {
-                operation: "Failed to collect".to_owned(),
+                operation: operation.to_owned(),
                 message: e.to_string(),
             })
-        })
+        };
+
+        let mut mints: Vec<String> = Vec::with_capacity(limit);
+        for (sql, class) in [
+            (UNTRIED_RECENT, "recent untried tokens"),
+            (UNTRIED_OLDER, "older untried tokens"),
+            (RETRY_DUE, "security retries"),
+        ] {
+            let remaining = limit - mints.len();
+            if remaining == 0 {
+                break;
+            }
+            let mut stmt = conn
+                .prepare(sql)
+                .map_err(|e| query_error(&format!("Failed to prepare {class}"), e))?;
+            let rows = stmt
+                .query_map(params![self.chain_id(), now, remaining], |row| row.get(0))
+                .map_err(|e| query_error(&format!("{class} query failed"), e))?;
+            for row in rows {
+                mints.push(row.map_err(|e| query_error(&format!("Failed to collect {class}"), e))?);
+            }
+        }
+
+        Ok(mints)
     }
 
     /// Record a failed market update attempt with error type tracking
@@ -391,5 +427,281 @@ impl TokenDatabase {
         })?;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::chains::ChainId;
+    use std::collections::HashSet;
+
+    /// The single-join selection `get_tokens_without_security_data` replaced, kept as the
+    /// oracle.
+    const SINGLE_JOIN_ORACLE: &str = "SELECT t.mint FROM tokens t
+             LEFT JOIN security_rugcheck sr ON t.chain_id = sr.chain_id AND t.mint = sr.mint
+             LEFT JOIN blacklist b ON t.chain_id = b.chain_id AND t.mint = b.mint
+             LEFT JOIN update_tracking ut ON t.chain_id = ut.chain_id AND t.mint = ut.mint
+             WHERE t.chain_id = ?1 AND sr.mint IS NULL
+             AND b.mint IS NULL
+             AND (
+                 ut.security_error_type IS NULL
+                 OR (ut.security_error_type = 'temporary'
+                     AND ut.last_security_error_at < ?2 - (120 * (1 << MIN(ut.security_error_count - 1, 10))))
+                 OR (ut.security_error_type = 'permanent'
+                     AND ut.last_security_error_at < ?2 - 604800)
+             )
+             ORDER BY
+                 CASE
+                     WHEN ut.security_error_type IS NULL AND t.first_discovered_at > ?2 - 86400 THEN 1
+                     WHEN ut.security_error_type IS NULL THEN 2
+                     WHEN ut.security_error_type = 'temporary' THEN 3
+                     ELSE 4
+                 END,
+                 t.first_discovered_at ASC
+             LIMIT ?3";
+
+    const HOUR: i64 = 3_600;
+    const DAY: i64 = 86_400;
+
+    fn insert_token(conn: &rusqlite::Connection, chain: &str, mint: &str, discovered_at: i64) {
+        conn.execute(
+            "INSERT INTO tokens (chain_id, mint, first_discovered_at, metadata_last_fetched_at, decimals_last_fetched_at)
+             VALUES (?1, ?2, ?3, 1, 1)",
+            params![chain, mint, discovered_at],
+        )
+        .expect("insert token");
+    }
+
+    fn insert_tracking(
+        conn: &rusqlite::Connection,
+        chain: &str,
+        mint: &str,
+        error: Option<(&str, i64, i64)>,
+    ) {
+        let (error_type, error_count, error_at) = match error {
+            Some((kind, count, at)) => (Some(kind), count, Some(at)),
+            None => (None, 0, None),
+        };
+        conn.execute(
+            "INSERT INTO update_tracking (chain_id, mint, security_error_type, security_error_count, last_security_error_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![chain, mint, error_type, error_count, error_at],
+        )
+        .expect("insert tracking");
+    }
+
+    fn insert_rugcheck(conn: &rusqlite::Connection, mint: &str) {
+        conn.execute(
+            "INSERT INTO security_rugcheck (chain_id, mint, security_data_last_fetched_at, security_data_first_fetched_at)
+             VALUES ('solana', ?1, 1, 1)",
+            params![mint],
+        )
+        .expect("insert rugcheck");
+    }
+
+    fn insert_blacklist(conn: &rusqlite::Connection, mint: &str) {
+        conn.execute(
+            "INSERT INTO blacklist (chain_id, mint, reason, source, added_at) VALUES ('solana', ?1, 'test', 'test', 1)",
+            params![mint],
+        )
+        .expect("insert blacklist");
+    }
+
+    /// (retry class, first_discovered_at) as the oracle orders it.
+    fn sort_key(conn: &rusqlite::Connection, mint: &str, now: i64) -> (i64, i64) {
+        conn.query_row(
+            "SELECT CASE
+                        WHEN ut.security_error_type IS NULL AND t.first_discovered_at > ?2 - 86400 THEN 1
+                        WHEN ut.security_error_type IS NULL THEN 2
+                        WHEN ut.security_error_type = 'temporary' THEN 3
+                        ELSE 4
+                    END,
+                    t.first_discovered_at
+             FROM tokens t
+             LEFT JOIN update_tracking ut ON t.chain_id = ut.chain_id AND t.mint = ut.mint
+             WHERE t.chain_id = 'solana' AND t.mint = ?1",
+            params![mint, now],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("read sort key")
+    }
+
+    fn oracle(conn: &rusqlite::Connection, now: i64, limit: usize) -> Vec<String> {
+        let mut stmt = conn.prepare(SINGLE_JOIN_ORACLE).expect("prepare oracle");
+        let rows = stmt
+            .query_map(params!["solana", now, limit], |row| row.get(0))
+            .expect("run oracle");
+        rows.collect::<Result<Vec<String>, _>>()
+            .expect("collect oracle")
+    }
+
+    /// For every limit, the result must be the oracle's result up to the order of rows that
+    /// share a sort key: the same sort-key sequence, only eligible mints, no duplicates, and
+    /// exactly the oracle's set once the limit covers every eligible token.
+    fn assert_matches_oracle(db: &TokenDatabase, conn: &rusqlite::Connection, now: i64) {
+        let eligible: HashSet<String> = oracle(conn, now, usize::MAX >> 1).into_iter().collect();
+        for limit in 0..=eligible.len() + 2 {
+            let expected = oracle(conn, now, limit);
+            let actual = db
+                .get_tokens_without_security_data(limit)
+                .expect("get_tokens_without_security_data");
+
+            let expected_keys: Vec<(i64, i64)> =
+                expected.iter().map(|m| sort_key(conn, m, now)).collect();
+            let actual_keys: Vec<(i64, i64)> =
+                actual.iter().map(|m| sort_key(conn, m, now)).collect();
+            assert_eq!(
+                actual_keys, expected_keys,
+                "sort keys differ at limit {limit}"
+            );
+
+            let unique: HashSet<&String> = actual.iter().collect();
+            assert_eq!(
+                unique.len(),
+                actual.len(),
+                "duplicate mint at limit {limit}"
+            );
+            assert!(
+                actual.iter().all(|m| eligible.contains(m)),
+                "ineligible mint at limit {limit}: {actual:?}"
+            );
+            if limit >= eligible.len() {
+                let actual_set: HashSet<String> = actual.into_iter().collect();
+                assert_eq!(actual_set, eligible, "full result differs at limit {limit}");
+            }
+        }
+    }
+
+    #[test]
+    fn tokens_without_security_data_match_single_join_oracle() {
+        let dir = tempfile::tempdir().expect("create temp dir");
+        let path = dir.path().join("tokens.db");
+        let db = TokenDatabase::new(&path.to_string_lossy(), ChainId::Solana)
+            .expect("open tokens database");
+        let conn = db.conn().expect("pooled connection");
+
+        // Timestamps sit hours away from every cutoff, so the second between the oracle's
+        // `now` and the method's own cannot move a row across one.
+        let now = Utc::now().timestamp();
+
+        // Class 1: never tried, discovered in the last 24h; untracked or tracked without
+        // an error, including a tie.
+        for (mint, discovered, tracked) in [
+            ("recent-untracked", now - 2 * HOUR, false),
+            ("recent-tracked", now - 5 * HOUR, true),
+            ("recent-tie-a", now - 3 * HOUR, true),
+            ("recent-tie-b", now - 3 * HOUR, false),
+        ] {
+            insert_token(&conn, "solana", mint, discovered);
+            if tracked {
+                insert_tracking(&conn, "solana", mint, None);
+            }
+        }
+        // Class 2: never tried, older than 24h.
+        for (mint, discovered, tracked) in [
+            ("older-untracked", now - 3 * DAY, false),
+            ("older-tracked", now - 10 * DAY, true),
+            ("older-tie-a", now - 5 * DAY, true),
+            ("older-tie-b", now - 5 * DAY, true),
+        ] {
+            insert_token(&conn, "solana", mint, discovered);
+            if tracked {
+                insert_tracking(&conn, "solana", mint, None);
+            }
+        }
+        // Classes 3 and 4: errors past and within their retry delay. Backoff is
+        // 120 * 2^min(count - 1, 10) seconds; 7 days for permanent errors.
+        for (mint, discovered, error) in [
+            ("temp-due", now - 2 * HOUR, ("temporary", 1, now - HOUR)),
+            ("temp-due-old", now - 20 * DAY, ("temporary", 3, now - HOUR)),
+            (
+                "temp-zero-count",
+                now - 4 * DAY,
+                ("temporary", 0, now - HOUR),
+            ),
+            (
+                "temp-capped-due",
+                now - 6 * DAY,
+                ("temporary", 40, now - 2 * DAY),
+            ),
+            (
+                "temp-capped-waiting",
+                now - 6 * DAY,
+                ("temporary", 40, now - HOUR),
+            ),
+            ("temp-waiting", now - 3 * DAY, ("temporary", 8, now - HOUR)),
+            ("perm-due", now - 30 * DAY, ("permanent", 1, now - 8 * DAY)),
+            (
+                "perm-due-recent",
+                now - 2 * HOUR,
+                ("permanent", 2, now - 9 * DAY),
+            ),
+            (
+                "perm-waiting",
+                now - 30 * DAY,
+                ("permanent", 1, now - 6 * DAY),
+            ),
+            ("unknown-type", now - 2 * DAY, ("other", 1, now - 30 * DAY)),
+        ] {
+            insert_token(&conn, "solana", mint, discovered);
+            insert_tracking(&conn, "solana", mint, Some(error));
+        }
+        // Assessed or blacklisted: never selected, whatever their tracking state.
+        for (mint, discovered, error) in [
+            ("assessed-recent", now - HOUR, None),
+            ("assessed-older", now - 40 * DAY, None),
+            (
+                "assessed-temp",
+                now - 2 * DAY,
+                Some(("temporary", 1, now - DAY)),
+            ),
+            ("blacklisted-recent", now - HOUR, None),
+            ("blacklisted-older", now - 40 * DAY, None),
+            (
+                "blacklisted-perm",
+                now - 40 * DAY,
+                Some(("permanent", 1, now - 9 * DAY)),
+            ),
+        ] {
+            insert_token(&conn, "solana", mint, discovered);
+            insert_tracking(&conn, "solana", mint, error);
+        }
+        for mint in ["assessed-recent", "assessed-older", "assessed-temp"] {
+            insert_rugcheck(&conn, mint);
+        }
+        for mint in [
+            "blacklisted-recent",
+            "blacklisted-older",
+            "blacklisted-perm",
+        ] {
+            insert_blacklist(&conn, mint);
+        }
+        // Another chain's rows must never surface.
+        insert_token(&conn, "ethereum", "foreign-recent", now - HOUR);
+        insert_token(&conn, "ethereum", "foreign-temp", now - 2 * DAY);
+        insert_tracking(
+            &conn,
+            "ethereum",
+            "foreign-temp",
+            Some(("temporary", 1, now - DAY)),
+        );
+
+        assert_matches_oracle(&db, &conn, now);
+
+        // Every never-tried token assessed: only the retry classes remain.
+        for mint in [
+            "recent-untracked",
+            "recent-tracked",
+            "recent-tie-a",
+            "recent-tie-b",
+            "older-untracked",
+            "older-tracked",
+            "older-tie-a",
+            "older-tie-b",
+        ] {
+            insert_rugcheck(&conn, mint);
+        }
+        assert_matches_oracle(&db, &conn, now);
     }
 }

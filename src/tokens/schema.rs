@@ -335,6 +335,11 @@ pub const CREATE_INDEXES: &[&str] = &[
     //     `get_tokens_without_market_data` (207ms -> 15ms).
     "CREATE INDEX IF NOT EXISTS idx_tracking_market_age_active ON update_tracking(chain_id, COALESCE(market_data_last_updated_at, 0)) WHERE market_error_type IS NULL OR market_error_type != 'permanent'",
     "CREATE INDEX IF NOT EXISTS idx_tracking_priority_market_active ON update_tracking(chain_id, priority, market_data_last_updated_at) WHERE market_error_type IS NULL OR market_error_type != 'permanent'",
+    // Security retry index for `get_tokens_without_security_data`. Its retry classes read only
+    // rows with a security error (5.4k of 555k), so the index is PARTIAL on that predicate;
+    // without it the read walked every tracking row (330ms -> 55ms, the remainder being the
+    // temp sort of those few thousand rows).
+    "CREATE INDEX IF NOT EXISTS idx_tracking_security_error ON update_tracking(chain_id, security_error_type) WHERE security_error_type IS NOT NULL",
 
     // Rejection indexes — every filtering-tab surface reads `update_tracking` through the
     // rejection columns, and without these each read is a full scan plus a temp b-tree sort

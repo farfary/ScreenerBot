@@ -1,6 +1,7 @@
 //! Updates orchestrator - State-based priority updates
 //!
 //! Split into focused submodules:
+//! - blocking.rs: Blocking-pool dispatch for synchronous database calls
 //! - helpers.rs: Constants, statics, and utility functions
 //! - rate_limiter.rs: RateLimitCoordinator for API rate limiting
 //! - core.rs: Core update functions (update_token, update_tokens_batch, UpdateResult)
@@ -12,6 +13,7 @@
 //! - Rate limiting with separate semaphores per API endpoint
 //! - Priority-based scheduling for different token states
 
+mod blocking;
 mod core;
 mod helpers;
 mod loops;
