@@ -451,6 +451,24 @@
     font-style: italic;
   }
 
+  .chat-md-paragraph,
+  .chat-md-heading {
+    margin: 0;
+  }
+
+  .chat-md-heading {
+    font-weight: 600;
+  }
+
+  .chat-md-list {
+    margin: 0;
+    padding-inline-start: 1.25em;
+  }
+
+  .message-bubble > * + * {
+    margin-top: var(--spacing-sm);
+  }
+
   .chat-code-block {
     background: var(--bg-primary);
     border: 1px solid var(--border-color);

@@ -930,12 +930,66 @@ export class ChatWidget {
       return `\x00INLINE${idx}\x00`;
     });
 
-    // Bold
-    html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
-    // Italic (single *, not preceded/followed by space to avoid list markers)
-    html = html.replace(/(?<!\w)\*(?!\s)(.+?)(?<!\s)\*(?!\w)/g, "<em>$1</em>");
-    // Newlines to <br> (but not before/after code block placeholders)
-    html = html.replace(/\n/g, "<br>");
+    const inline = (line) =>
+      line
+        .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+        .replace(/(?<!\w)\*(?!\s)(.+?)(?<!\s)\*(?!\w)/g, "<em>$1</em>");
+
+    // Block structure, line by line: headings, bullet and numbered lists, and
+    // paragraphs separated by blank lines. A code block keeps its own line.
+    const blocks = [];
+    let paragraph = [];
+    let list = null;
+    const flushParagraph = () => {
+      if (paragraph.length)
+        blocks.push(`<p class="chat-md-paragraph">${paragraph.join("<br>")}</p>`);
+      paragraph = [];
+    };
+    const flushList = () => {
+      if (list) {
+        const items = list.items.map((item) => `<li>${item}</li>`).join("");
+        blocks.push(`<${list.tag} class="chat-md-list">${items}</${list.tag}>`);
+      }
+      list = null;
+    };
+
+    for (const rawLine of html.split("\n")) {
+      const line = rawLine.trimEnd();
+      if (!line.trim()) {
+        flushParagraph();
+        flushList();
+        continue;
+      }
+      const trimmed = line.trim();
+      if (trimmed.startsWith("\x00CODEBLOCK") && trimmed.endsWith("\x00")) {
+        flushParagraph();
+        flushList();
+        blocks.push(trimmed);
+        continue;
+      }
+      const heading = /^#{1,6}\s+(.+)$/.exec(line);
+      if (heading) {
+        flushParagraph();
+        flushList();
+        blocks.push(`<p class="chat-md-heading">${inline(heading[1])}</p>`);
+        continue;
+      }
+      const bullet = /^\s*[-*+]\s+(.+)$/.exec(line);
+      const numbered = bullet ? null : /^\s*\d+[.)]\s+(.+)$/.exec(line);
+      if (bullet || numbered) {
+        flushParagraph();
+        const tag = bullet ? "ul" : "ol";
+        if (list && list.tag !== tag) flushList();
+        list ??= { tag, items: [] };
+        list.items.push(inline((bullet || numbered)[1]));
+        continue;
+      }
+      flushList();
+      paragraph.push(inline(line));
+    }
+    flushParagraph();
+    flushList();
+    html = blocks.join("");
 
     // Restore inline codes
     inlineCodes.forEach((code, idx) => {
