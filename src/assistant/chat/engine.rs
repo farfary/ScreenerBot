@@ -14,10 +14,8 @@ use crate::apis::llm::ChatMessage as LlmChatMessage;
 use crate::assistant::error::{Error, Result};
 use crate::logger::{self, LogTag};
 use async_trait::async_trait;
-use regex::Regex;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::LazyLock;
 use std::time::Duration;
 use tokio::sync::{OnceCell, RwLock};
 
@@ -26,21 +24,6 @@ use tokio::sync::{OnceCell, RwLock};
 // =============================================================================
 
 const MAX_TOOL_ITERATIONS: usize = 5;
-
-// =============================================================================
-// REGEX PATTERNS (Compiled once at startup)
-// =============================================================================
-
-/// Regex for JSON code blocks in LLM responses
-pub(super) static JSON_CODE_BLOCK_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?s)```json\s*(\{.+?\})\s*```").expect("Invalid JSON pattern regex")
-});
-
-/// Regex for loose JSON tool calls without code blocks
-pub(super) static LOOSE_JSON_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"(?s)\{[^{}]*"tool_calls"[^{}]*\[.+?\]\s*\}"#)
-        .expect("Invalid loose JSON pattern regex")
-});
 
 // =============================================================================
 // GLOBAL INSTANCE
@@ -275,7 +258,8 @@ impl ChatEngine {
         );
 
         // Build messages for LLM (system + history)
-        let mut messages = self.build_messages(&history, &request.context)?;
+        let native_tools = self.native_tools_supported();
+        let mut messages = self.build_messages(&history, &request.context, native_tools)?;
 
         // Execute tool calling loop
         let mut tool_calls_info = Vec::new();
@@ -331,8 +315,22 @@ impl ChatEngine {
             };
 
             if tool_calls.is_empty() {
-                // No more tool calls, we're done
-                break content.to_string();
+                if !mentions_tool_calls(content) {
+                    break content.to_string();
+                }
+                // The model wrote a tool-call envelope that names no executable call.
+                // Showing it would present raw JSON as the answer, so the model is
+                // asked to correct it; the retry counts toward MAX_TOOL_ITERATIONS.
+                logger::warning(
+                    LogTag::Api,
+                    &format!("Unparseable tool call in model reply: {content}"),
+                );
+                messages.push(LlmChatMessage::assistant(content));
+                messages.push(LlmChatMessage::user(unparsed_tool_call_correction(
+                    native_tools,
+                )));
+                iteration += 1;
+                continue;
             }
 
             logger::debug(
@@ -602,6 +600,26 @@ impl ChatEngine {
     }
 }
 
+/// Whether a model reply contains a text tool-call envelope.
+pub(super) fn mentions_tool_calls(content: &str) -> bool {
+    content.contains("\"tool_calls\"")
+}
+
+/// Instruction sent back to the model after it wrote a tool call the parser could
+/// not execute.
+fn unparsed_tool_call_correction(native_tools: bool) -> String {
+    if native_tools {
+        "Your previous reply wrote a tool call as text, which is not executed. Call the tool \
+         through the function-calling interface, or answer in plain language."
+            .to_owned()
+    } else {
+        "Your previous reply contained a tool call that could not be read. Reply with only the \
+         JSON block {\"tool_calls\": [{\"name\": \"<tool name>\", \"arguments\": {...}}]}, \
+         or answer in plain language."
+            .to_owned()
+    }
+}
+
 impl Default for ChatEngine {
     fn default() -> Self {
         Self::new()
@@ -660,6 +678,45 @@ mod tests {
         async fn execute(&self, _params: serde_json::Value) -> ToolResult {
             ToolResult::success(serde_json::json!({"sol_balance": 2.5}))
         }
+    }
+
+    #[tokio::test]
+    async fn unreadable_text_tool_call_is_retried_instead_of_shown() {
+        let pool = database::test_pool();
+        let session_id = database::create_session(&pool, "Text tool call").expect("session");
+        let mut registry = ToolRegistry::new();
+        registry.register(Arc::new(TestBalanceTool));
+        let reply = |content: &str| {
+            crate::apis::llm::ChatResponse::new(content, Usage::default(), "stop", "mock", 1.0)
+        };
+        let completion = Arc::new(MockCompletion {
+            responses: Mutex::new(VecDeque::from([
+                reply(r#"{"tool_calls": [{"tool": "test_balance"}]}"#),
+                reply(r#"{"tool_calls": [{"name": "test_balance", "parameters": {}}]}"#),
+                reply("Your wallet balance is 2.5 SOL."),
+            ])),
+        });
+        let engine = ChatEngine::with_test_dependencies(registry, completion);
+
+        let response = engine
+            .process_message_with_pool(
+                ChatRequest {
+                    session_id,
+                    message: "What is my balance?".to_owned(),
+                    regenerate_message_id: None,
+                    context: None,
+                    headless: false,
+                    tool_mode: ToolMode::ReadOnly,
+                },
+                &pool,
+                None,
+            )
+            .await
+            .expect("complete agent turn");
+
+        assert_eq!(response.content, "Your wallet balance is 2.5 SOL.");
+        assert_eq!(response.tool_calls.len(), 1);
+        assert_eq!(response.tool_calls[0].tool_name, "test_balance");
     }
 
     #[tokio::test]

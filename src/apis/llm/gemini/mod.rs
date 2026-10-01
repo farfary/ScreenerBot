@@ -287,6 +287,10 @@ impl LlmClient for GeminiClient {
         self.enabled
     }
 
+    fn supports_native_tools(&self) -> bool {
+        false
+    }
+
     async fn call(&self, request: ChatRequest) -> Result<ChatResponse, LlmError> {
         // Use the model from request, or fallback to client's default
         let model = if request.model.is_empty() {

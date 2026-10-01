@@ -4,11 +4,11 @@
 //! Separated from chat_engine.rs for maintainability.
 
 use super::database;
-use super::engine::{ChatEngine, JSON_CODE_BLOCK_PATTERN, LOOSE_JSON_PATTERN};
+use super::engine::ChatEngine;
 use super::types::{
     ChatContext, PendingConfirmation, ToolCall, ToolCallInfo, ToolCallStatus, ToolMode,
 };
-use crate::agent_control::tools::ToolResult;
+use crate::agent_control::tools::{ToolDefinition, ToolResult};
 use crate::apis::llm::{
     get_llm_manager, ChatMessage as LlmChatMessage, ChatRequest as LlmChatRequest, MessageRole,
     Provider,
@@ -18,6 +18,105 @@ use crate::logger::{self, LogTag};
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use std::time::Duration;
+
+/// Few-shot tool calls shown in the system prompt: (user request, tool, arguments
+/// JSON). Rendered in the protocol the active provider uses.
+const TOOL_CALL_EXAMPLES: [(&str, &str, &str); 5] = [
+    ("What is my balance?", "get_balance", "{}"),
+    (
+        "Analyze token 7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU",
+        "analyze_token",
+        r#"{"mint_address": "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU"}"#,
+    ),
+    (
+        "Use the analyze_token tool to analyze this token: DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263",
+        "analyze_token",
+        r#"{"mint_address": "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263"}"#,
+    ),
+    ("Show position 5", "get_position", r#"{"position_id": 5}"#),
+    ("Check my open positions", "get_positions", "{}"),
+];
+
+/// Full tool reference for the text protocol: names, confirmation gates and
+/// parameter schemas the model cannot otherwise see.
+fn push_tool_reference(prompt: &mut String, definitions: &[ToolDefinition]) {
+    prompt.push_str("## AVAILABLE TOOLS\n\n");
+    for def in definitions {
+        let confirmation_note = if def.requires_confirmation {
+            " [REQUIRES USER CONFIRMATION]"
+        } else {
+            ""
+        };
+
+        prompt.push_str(&format!("### {}{}\n", def.name, confirmation_note));
+        prompt.push_str(&format!("{}\n\n", def.description));
+
+        // Add parameter schema
+        if let Some(properties) = def.parameters.get("properties") {
+            if let Some(obj) = properties.as_object() {
+                if !obj.is_empty() {
+                    prompt.push_str("**Parameters:**\n");
+
+                    let required = def
+                        .parameters
+                        .get("required")
+                        .and_then(|r| r.as_array())
+                        .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>())
+                        .unwrap_or_default();
+
+                    for (param_name, param_schema) in obj {
+                        let param_type = param_schema
+                            .get("type")
+                            .and_then(|t| t.as_str())
+                            .unwrap_or("any");
+                        let param_desc = param_schema
+                            .get("description")
+                            .and_then(|d| d.as_str())
+                            .unwrap_or_default();
+                        let is_required = required.contains(&param_name.as_str());
+                        let required_marker = if is_required {
+                            " (required)"
+                        } else {
+                            " (optional)"
+                        };
+
+                        prompt.push_str(&format!(
+                            "- `{}`: {} - {}{}\n",
+                            param_name, param_type, param_desc, required_marker
+                        ));
+                    }
+                    prompt.push_str("\n");
+                } else {
+                    prompt.push_str("**Parameters:** None\n\n");
+                }
+            }
+        } else {
+            prompt.push_str("**Parameters:** None\n\n");
+        }
+    }
+}
+
+/// One text-protocol tool call, or `None` when it names no tool or carries
+/// arguments that are not a JSON object.
+fn tool_call_from_value(call: &serde_json::Value) -> Option<ToolCall> {
+    let call = call.get("function").unwrap_or(call);
+    let name = call.get("name")?.as_str()?.trim();
+    if name.is_empty() {
+        return None;
+    }
+    let arguments = match call.get("arguments").or_else(|| call.get("parameters")) {
+        None | Some(serde_json::Value::Null) => serde_json::json!({}),
+        Some(serde_json::Value::String(encoded)) if encoded.trim().is_empty() => {
+            serde_json::json!({})
+        }
+        Some(serde_json::Value::String(encoded)) => serde_json::from_str(encoded).ok()?,
+        Some(value) => value.clone(),
+    };
+    arguments.is_object().then(|| ToolCall {
+        name: name.to_owned(),
+        arguments,
+    })
+}
 
 impl ChatEngine {
     // =========================================================================
@@ -29,11 +128,12 @@ impl ChatEngine {
         &self,
         history: &[database::ChatMessage],
         context: &Option<ChatContext>,
+        native_tools: bool,
     ) -> Result<Vec<LlmChatMessage>> {
         let mut messages = Vec::new();
 
         // Add system prompt
-        let system_prompt = self.build_system_prompt(context);
+        let system_prompt = self.build_system_prompt(context, native_tools);
         messages.push(LlmChatMessage::system(system_prompt));
 
         // Add conversation history (skip the last user message - it's the current request)
@@ -69,8 +169,26 @@ impl ChatEngine {
         Ok(messages)
     }
 
-    /// Build system prompt with tool definitions
-    pub(super) fn build_system_prompt(&self, context: &Option<ChatContext>) -> String {
+    /// Whether the model behind this engine receives tool definitions natively.
+    /// Decides which tool-call protocol the system prompt teaches.
+    pub(super) fn native_tools_supported(&self) -> bool {
+        if self.completion.is_some() {
+            return true;
+        }
+        let provider_name = crate::config::with_config(|cfg| cfg.llm.default_provider.clone());
+        Provider::from_str(&provider_name)
+            .and_then(|provider| get_llm_manager().get_client(provider))
+            .is_some_and(|client| client.supports_native_tools())
+    }
+
+    /// Build the system prompt. With `native_tools` the model is told to call tools
+    /// only through function calling, because their definitions travel in the
+    /// request; otherwise it is taught the JSON text protocol `parse_tool_calls` reads.
+    pub(super) fn build_system_prompt(
+        &self,
+        context: &Option<ChatContext>,
+        native_tools: bool,
+    ) -> String {
         let mut prompt = String::with_capacity(8192);
         prompt.push_str(
             "You are the ScreenerBot Assistant for a Solana trading bot. \
@@ -106,46 +224,27 @@ impl ChatEngine {
         prompt.push_str("- Abstract questions: 'how does trading work?', 'what is Solana?'\n");
         prompt.push_str("- Requests for help/clarification that don't involve specific data\n\n");
 
-        prompt.push_str("Use the provider's function-calling interface whenever it is available. Do not narrate your plan or expose private reasoning. If native function calling is unavailable, use this JSON fallback and output nothing else with it:\n\n");
-        prompt.push_str("Format:\n");
-        prompt.push_str("```json\n");
-        prompt.push_str("{\n");
-        prompt.push_str("  \"tool_calls\": [\n");
-        prompt.push_str("    {\n");
-        prompt.push_str("      \"name\": \"tool_name\",\n");
-        prompt.push_str("      \"arguments\": {\n");
-        prompt.push_str("        \"param1\": \"value1\",\n");
-        prompt.push_str("        \"param2\": 123\n");
-        prompt.push_str("      }\n");
-        prompt.push_str("    }\n");
-        prompt.push_str("  ]\n");
-        prompt.push_str("}\n");
-        prompt.push_str("```\n\n");
+        if native_tools {
+            prompt.push_str("Call tools only through the function-calling interface. Never write a tool call, a tool name or JSON in your reply text. Do not narrate your plan or expose private reasoning.\n\n");
+        } else {
+            prompt.push_str("Call a tool by replying with only this JSON block and nothing else. Do not narrate your plan or expose private reasoning.\n\n");
+            prompt.push_str("Format:\n");
+            prompt.push_str("```json\n{\"tool_calls\": [{\"name\": \"tool_name\", \"arguments\": {\"param1\": \"value1\", \"param2\": 123}}]}\n```\n\n");
+        }
 
         prompt.push_str("### Examples (FOLLOW THESE EXACTLY):\n\n");
-
-        prompt.push_str("**User:** \"What is my balance?\"\n");
-        prompt.push_str("**Assistant:**\n");
-        prompt.push_str(
-            "```json\n{\"tool_calls\": [{\"name\": \"get_balance\", \"arguments\": {}}]}\n```\n\n",
-        );
-
-        prompt
-            .push_str("**User:** \"Analyze token 7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU\"\n");
-        prompt.push_str("**Assistant:**\n");
-        prompt.push_str("```json\n{\"tool_calls\": [{\"name\": \"analyze_token\", \"arguments\": {\"mint_address\": \"7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU\"}}]}\n```\n\n");
-
-        prompt.push_str("**User:** \"Use the analyze_token tool to analyze this token: DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263\"\n");
-        prompt.push_str("**Assistant:**\n");
-        prompt.push_str("```json\n{\"tool_calls\": [{\"name\": \"analyze_token\", \"arguments\": {\"mint_address\": \"DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263\"}}]}\n```\n\n");
-
-        prompt.push_str("**User:** \"Show position 5\"\n");
-        prompt.push_str("**Assistant:**\n");
-        prompt.push_str("```json\n{\"tool_calls\": [{\"name\": \"get_position\", \"arguments\": {\"position_id\": 5}}]}\n```\n\n");
-
-        prompt.push_str("**User:** \"Check my open positions\"\n");
-        prompt.push_str("**Assistant:**\n");
-        prompt.push_str("```json\n{\"tool_calls\": [{\"name\": \"get_positions\", \"arguments\": {}}]}\n```\n\n");
+        for (request, tool, arguments) in TOOL_CALL_EXAMPLES {
+            prompt.push_str(&format!("**User:** \"{request}\"\n"));
+            if native_tools {
+                prompt.push_str(&format!(
+                    "**Assistant:** function call `{tool}` with arguments `{arguments}`\n\n"
+                ));
+            } else {
+                prompt.push_str(&format!(
+                    "**Assistant:**\n```json\n{{\"tool_calls\": [{{\"name\": \"{tool}\", \"arguments\": {arguments}}}]}}\n```\n\n"
+                ));
+            }
+        }
 
         prompt.push_str("**User:** \"How does the bot work?\"\n");
         prompt.push_str("**Assistant:** ScreenerBot is a Solana trading bot that monitors tokens and executes trades based on your configured strategies. It can automatically buy and sell tokens based on market conditions.\n\n");
@@ -153,76 +252,45 @@ impl ChatEngine {
         prompt.push_str("**User:** \"Hello!\"\n");
         prompt.push_str("**Assistant:** Hello! I'm your ScreenerBot assistant. I can help you analyze tokens, check positions, manage trades, and configure settings. What would you like to do?\n\n");
 
-        // List all tools with full parameter schemas
-        prompt.push_str("## AVAILABLE TOOLS\n\n");
         let definitions = self.tool_registry.list_definitions();
-        for def in definitions {
-            let confirmation_note = if def.requires_confirmation {
-                " [REQUIRES USER CONFIRMATION]"
-            } else {
-                ""
-            };
-
-            prompt.push_str(&format!("### {}{}\n", def.name, confirmation_note));
-            prompt.push_str(&format!("{}\n\n", def.description));
-
-            // Add parameter schema
-            if let Some(properties) = def.parameters.get("properties") {
-                if let Some(obj) = properties.as_object() {
-                    if !obj.is_empty() {
-                        prompt.push_str("**Parameters:**\n");
-
-                        let required = def
-                            .parameters
-                            .get("required")
-                            .and_then(|r| r.as_array())
-                            .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>())
-                            .unwrap_or_default();
-
-                        for (param_name, param_schema) in obj {
-                            let param_type = param_schema
-                                .get("type")
-                                .and_then(|t| t.as_str())
-                                .unwrap_or("any");
-                            let param_desc = param_schema
-                                .get("description")
-                                .and_then(|d| d.as_str())
-                                .unwrap_or_default();
-                            let is_required = required.contains(&param_name.as_str());
-                            let required_marker = if is_required {
-                                " (required)"
-                            } else {
-                                " (optional)"
-                            };
-
-                            prompt.push_str(&format!(
-                                "- `{}`: {} - {}{}\n",
-                                param_name, param_type, param_desc, required_marker
-                            ));
-                        }
-                        prompt.push_str("\n");
-                    } else {
-                        prompt.push_str("**Parameters:** None\n\n");
-                    }
-                }
-            } else {
-                prompt.push_str("**Parameters:** None\n\n");
+        if native_tools {
+            // Names, descriptions and schemas already travel in the request.
+            let confirmed: Vec<String> = definitions
+                .iter()
+                .filter(|def| def.requires_confirmation)
+                .map(|def| format!("`{}`", def.name))
+                .collect();
+            if !confirmed.is_empty() {
+                prompt.push_str(&format!(
+                    "## Tools that require user confirmation\n{}\n\n",
+                    confirmed.join(", ")
+                ));
             }
+        } else {
+            push_tool_reference(&mut prompt, &definitions);
         }
 
         prompt.push_str("\n## Rules\n");
         prompt.push_str("1. DEFAULT ACTION: When in doubt, CALL A TOOL. Tool calling is preferred over natural responses.\n");
-        prompt.push_str(
-            "2. NEVER add explanatory text with tool calls - ONLY output the JSON code block\n",
-        );
+        if native_tools {
+            prompt.push_str("2. NEVER write tool calls as text - use function calling only\n");
+        } else {
+            prompt.push_str(
+                "2. NEVER add explanatory text with tool calls - ONLY output the JSON code block\n",
+            );
+        }
         prompt.push_str(
             "3. NEVER refuse a tool call - if user mentions ANY data or action, call the tool\n",
         );
         prompt.push_str("4. ALWAYS extract token addresses, position IDs, and other parameters from user messages\n");
         prompt.push_str("5. For confirmation-required tools: Call them anyway - the system handles confirmations\n");
-        prompt.push_str(
-            "6. Multiple tools: Add multiple objects to tool_calls array in a single JSON block\n",
-        );
+        if native_tools {
+            prompt.push_str("6. Multiple tools: Make several function calls in one reply\n");
+        } else {
+            prompt.push_str(
+                "6. Multiple tools: Add multiple objects to tool_calls array in a single JSON block\n",
+            );
+        }
         prompt.push_str("7. Parameter types: Match exactly (string, integer, boolean) as shown in tool schemas\n");
         prompt.push_str("8. Natural responses: Only for greetings, abstract questions, or when NO tool is relevant\n");
 
@@ -312,107 +380,39 @@ impl ChatEngine {
         })
     }
 
-    /// Parse tool calls from LLM response
+    /// Parse text-protocol tool calls from a model reply.
+    ///
+    /// Every `{"tool_calls": [...]}` object in the reply is read with a streaming JSON
+    /// parser, so code fences, surrounding prose and nested argument objects do not
+    /// matter. Each call accepts the arguments under `arguments` or `parameters`, as an
+    /// object or a JSON-encoded string, optionally wrapped in an OpenAI-style
+    /// `function` object.
     pub(super) fn parse_tool_calls(&self, response: &str) -> Vec<ToolCall> {
         let mut tool_calls = Vec::new();
 
-        // Strategy 1: Look for JSON code blocks with pre-compiled regex
-        for cap in JSON_CODE_BLOCK_PATTERN.captures_iter(response) {
-            if let Some(json_str) = cap.get(1) {
-                logger::debug(
-                    LogTag::Api,
-                    &format!("Found JSON code block: {}", json_str.as_str()),
-                );
-
-                // Try to parse the JSON
-                match serde_json::from_str::<serde_json::Value>(json_str.as_str()) {
-                    Ok(json_value) => {
-                        // Extract tool_calls array
-                        if let Some(calls) = json_value.get("tool_calls").and_then(|v| v.as_array())
-                        {
-                            for call in calls {
-                                if let (Some(name), Some(args)) = (
-                                    call.get("name").and_then(|v| v.as_str()),
-                                    call.get("arguments"),
-                                ) {
-                                    logger::debug(
-                                        LogTag::Api,
-                                        &format!(
-                                            "Parsed tool call: {} with args: {:?}",
-                                            name, args
-                                        ),
-                                    );
-                                    tool_calls.push(ToolCall {
-                                        name: name.to_string(),
-                                        arguments: args.clone(),
-                                    });
-                                }
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        logger::warning(
-                            LogTag::Api,
-                            &format!("Failed to parse JSON from code block: {e}"),
-                        );
-                    }
-                }
-            }
-        }
-
-        // Strategy 2: Try parsing the entire response as JSON (for models that output raw JSON)
-        if tool_calls.is_empty() {
-            if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(response) {
-                logger::debug(LogTag::Api, "Parsing entire response as JSON");
-
-                if let Some(calls) = json_value.get("tool_calls").and_then(|v| v.as_array()) {
-                    for call in calls {
-                        if let (Some(name), Some(args)) = (
-                            call.get("name").and_then(|v| v.as_str()),
-                            call.get("arguments"),
-                        ) {
-                            tool_calls.push(ToolCall {
-                                name: name.to_string(),
-                                arguments: args.clone(),
-                            });
-                        }
-                    }
-                }
-            }
-        }
-
-        // Strategy 3: Look for any JSON-like structure with tool_calls using pre-compiled regex
-        if tool_calls.is_empty() {
-            if let Some(cap) = LOOSE_JSON_PATTERN.find(response) {
-                let potential_json = cap.as_str();
-                logger::debug(
-                    LogTag::Api,
-                    &format!(
-                        "Found potential JSON without code block: {}",
-                        potential_json
-                    ),
-                );
-
-                if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(potential_json) {
-                    if let Some(calls) = json_value.get("tool_calls").and_then(|v| v.as_array()) {
-                        for call in calls {
-                            if let (Some(name), Some(args)) = (
-                                call.get("name").and_then(|v| v.as_str()),
-                                call.get("arguments"),
-                            ) {
-                                tool_calls.push(ToolCall {
-                                    name: name.to_string(),
-                                    arguments: args.clone(),
-                                });
-                            }
-                        }
-                    }
-                }
-            }
+        for (key_offset, _) in response.match_indices("\"tool_calls\"") {
+            let Some(start) = response[..key_offset].rfind('{') else {
+                continue;
+            };
+            let Some(Ok(envelope)) = serde_json::Deserializer::from_str(&response[start..])
+                .into_iter::<serde_json::Value>()
+                .next()
+            else {
+                continue;
+            };
+            let Some(calls) = envelope.get("tool_calls").and_then(|v| v.as_array()) else {
+                continue;
+            };
+            tool_calls.extend(calls.iter().filter_map(tool_call_from_value));
         }
 
         if tool_calls.is_empty() {
             logger::debug(LogTag::Api, "No tool calls found in response");
+        } else {
+            logger::debug(
+                LogTag::Api,
+                &format!("Parsed {} text tool calls", tool_calls.len()),
+            );
         }
 
         tool_calls
@@ -760,7 +760,7 @@ I'll fetch that information now.
     fn test_system_prompt_generation() {
         let engine = ChatEngine::new();
 
-        let prompt = engine.build_system_prompt(&None);
+        let prompt = engine.build_system_prompt(&None, false);
         assert!(prompt.contains("ScreenerBot"));
         assert!(prompt.contains("AVAILABLE TOOLS"));
         assert!(prompt.contains("tool_calls"));
@@ -772,9 +772,69 @@ I'll fetch that information now.
             current_position: Some(42),
         });
 
-        let prompt_with_context = engine.build_system_prompt(&context);
+        let prompt_with_context = engine.build_system_prompt(&context, false);
         assert!(prompt_with_context.contains("So11111111111111111111111111111111111111112"));
         assert!(prompt_with_context.contains("42"));
+    }
+
+    #[test]
+    fn native_prompt_never_teaches_the_text_protocol() {
+        let engine = ChatEngine::new();
+
+        let prompt = engine.build_system_prompt(&None, true);
+        assert!(!prompt.contains("tool_calls"));
+        assert!(!prompt.contains("```json"));
+        assert!(!prompt.contains("AVAILABLE TOOLS"));
+        assert!(prompt.contains("function-calling interface"));
+        assert!(prompt.contains("function call `get_positions`"));
+    }
+
+    #[test]
+    fn test_parse_parameters_key_without_code_block() {
+        let engine = ChatEngine::new();
+
+        let response = r#"{"tool_calls": [{"name": "get_positions", "parameters": {}}]}"#;
+
+        let calls = engine.parse_tool_calls(response);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].name, "get_positions");
+        assert_eq!(calls[0].arguments, serde_json::json!({}));
+    }
+
+    #[test]
+    fn test_parse_function_wrapper_with_encoded_arguments() {
+        let engine = ChatEngine::new();
+
+        let response = r#"Checking now.
+{"tool_calls": [{"type": "function", "function": {"name": "get_position", "arguments": "{\"position_id\": 5}"}}]} done"#;
+
+        let calls = engine.parse_tool_calls(response);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].name, "get_position");
+        assert_eq!(calls[0].arguments, serde_json::json!({"position_id": 5}));
+    }
+
+    #[test]
+    fn test_parse_nested_arguments_in_prose() {
+        let engine = ChatEngine::new();
+
+        let response = r#"Sure: {"tool_calls": [{"name": "update_config", "arguments": {"values": [1, 2], "nested": {"a": [3]}}}]} and that is all."#;
+
+        let calls = engine.parse_tool_calls(response);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(
+            calls[0].arguments,
+            serde_json::json!({"values": [1, 2], "nested": {"a": [3]}})
+        );
+    }
+
+    #[test]
+    fn test_parse_rejects_calls_without_a_usable_name_or_object_arguments() {
+        let engine = ChatEngine::new();
+
+        let response = r#"{"tool_calls": [{"tool": "get_balance"}, {"name": "get_position", "arguments": "not json"}, {"name": "get_balance", "arguments": [1]}]}"#;
+
+        assert!(engine.parse_tool_calls(response).is_empty());
     }
 
     #[test]

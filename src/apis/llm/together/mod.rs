@@ -208,6 +208,10 @@ impl LlmClient for TogetherClient {
         self.enabled
     }
 
+    fn supports_native_tools(&self) -> bool {
+        true
+    }
+
     async fn call(&self, mut request: ChatRequest) -> Result<ChatResponse, LlmError> {
         // Use the model from request, or fallback to client's default
         if request.model.is_empty() {

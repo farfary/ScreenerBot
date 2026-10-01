@@ -8,6 +8,33 @@ use super::{Tool, ToolCategory, ToolDefinition, ToolResult};
 use crate::chains::adapter;
 use crate::chains::solana::assets::ata::get_sol_balance;
 use crate::positions;
+use crate::positions::Position;
+
+/// Remaining holding of an open position in token units and its value at the
+/// current pool price. Position amounts are stored in raw base units and pool
+/// prices are SOL per whole token, so both values stay `None` when the mint's
+/// decimals are unknown rather than reporting an unscaled amount.
+struct Holding {
+    token_amount: Option<f64>,
+    current_value_sol: Option<f64>,
+}
+
+async fn position_holding(position: &Position) -> Holding {
+    let raw_amount = position
+        .remaining_token_amount
+        .or(position.token_amount)
+        .unwrap_or_default();
+    let token_amount = crate::tokens::get_decimals(crate::chains::active_chain(), &position.mint)
+        .await
+        .map(|decimals| raw_amount as f64 / 10_f64.powi(i32::from(decimals)));
+    let current_value_sol = token_amount
+        .zip(position.current_price)
+        .map(|(amount, price)| amount * price);
+    Holding {
+        token_amount,
+        current_value_sol,
+    }
+}
 
 // ============================================================================
 // GetPositionsTool - List all open positions
@@ -21,9 +48,9 @@ struct PositionSummary {
     mint: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     symbol: Option<String>,
-    entry_price_usd: f64,
-    current_price_usd: Option<f64>,
-    amount: f64,
+    entry_price_sol: f64,
+    current_price_sol: Option<f64>,
+    token_amount: Option<f64>,
     cost_sol: f64,
     current_value_sol: Option<f64>,
     unrealized_pnl_sol: Option<f64>,
@@ -36,7 +63,7 @@ impl Tool for GetPositionsTool {
     fn definition(&self) -> ToolDefinition {
         ToolDefinition {
             name: "get_positions".to_owned(),
-            description: "Get all current open trading positions with entry prices, current values, and unrealized P&L.".to_owned(),
+            description: "Get all current open trading positions with entry and current prices (SOL per token), remaining token amount, cost and current value in SOL, and unrealized P&L.".to_owned(),
             category: ToolCategory::Portfolio,
             parameters: json!({
                 "type": "object",
@@ -54,24 +81,17 @@ impl Tool for GetPositionsTool {
         let mut summaries = Vec::new();
         for pos in positions {
             let pnl = positions::calculate_position_pnl_safe(&pos, pos.current_price).await;
+            let holding = position_holding(&pos).await;
 
             summaries.push(PositionSummary {
                 position_id: pos.id.unwrap_or_default(),
                 mint: pos.mint.clone(),
                 symbol: Some(pos.symbol.clone()),
-                entry_price_usd: pos.average_entry_price,
-                current_price_usd: pos.current_price,
-                amount: pos
-                    .remaining_token_amount
-                    .unwrap_or(pos.token_amount.unwrap_or_default()) as f64,
+                entry_price_sol: pos.average_entry_price,
+                current_price_sol: pos.current_price,
+                token_amount: holding.token_amount,
                 cost_sol: pos.total_size_sol,
-                current_value_sol: pos.current_price.map(|cp| {
-                    let remaining = pos
-                        .remaining_token_amount
-                        .unwrap_or(pos.token_amount.unwrap_or_default())
-                        as f64;
-                    remaining * cp
-                }),
+                current_value_sol: holding.current_value_sol,
                 unrealized_pnl_sol: pnl.as_ref().map(|p| p.0),
                 unrealized_pnl_percent: pnl.as_ref().map(|p| p.1),
                 opened_at: pos.entry_time.to_rfc3339(),
@@ -102,9 +122,9 @@ struct PositionDetails {
     mint: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     symbol: Option<String>,
-    entry_price_usd: f64,
-    current_price_usd: Option<f64>,
-    amount: f64,
+    entry_price_sol: f64,
+    current_price_sol: Option<f64>,
+    token_amount: Option<f64>,
     cost_sol: f64,
     current_value_sol: Option<f64>,
     unrealized_pnl_sol: Option<f64>,
@@ -152,6 +172,7 @@ impl Tool for GetPositionTool {
         };
 
         let pnl = positions::calculate_position_pnl_safe(&position, position.current_price).await;
+        let holding = position_holding(&position).await;
         let total_fees = adapter().raw_to_native(
             position.entry_fee_lamports.unwrap_or_default()
                 + position.exit_fee_lamports.unwrap_or_default(),
@@ -161,19 +182,11 @@ impl Tool for GetPositionTool {
             position_id: position.id.unwrap_or_default(),
             mint: position.mint.clone(),
             symbol: Some(position.symbol.clone()),
-            entry_price_usd: position.average_entry_price,
-            current_price_usd: position.current_price,
-            amount: position
-                .remaining_token_amount
-                .unwrap_or(position.token_amount.unwrap_or_default()) as f64,
+            entry_price_sol: position.average_entry_price,
+            current_price_sol: position.current_price,
+            token_amount: holding.token_amount,
             cost_sol: position.total_size_sol,
-            current_value_sol: position.current_price.map(|cp| {
-                let remaining = position
-                    .remaining_token_amount
-                    .unwrap_or(position.token_amount.unwrap_or_default())
-                    as f64;
-                remaining * cp
-            }),
+            current_value_sol: holding.current_value_sol,
             unrealized_pnl_sol: pnl.as_ref().map(|p| p.0),
             unrealized_pnl_percent: pnl.as_ref().map(|p| p.1),
             opened_at: position.entry_time.to_rfc3339(),

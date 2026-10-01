@@ -121,6 +121,12 @@ pub trait LlmClient: Send + Sync {
     /// Check if client is enabled
     fn is_enabled(&self) -> bool;
 
+    /// Whether this client sends `ChatRequest::tools` to the provider and returns the
+    /// provider's structured tool calls in `ChatResponse::tool_calls`. Callers that
+    /// offer tools must fall back to a text tool-call protocol when this is false,
+    /// because the request's tool definitions are dropped.
+    fn supports_native_tools(&self) -> bool;
+
     /// Make a chat completion request
     async fn call(&self, request: ChatRequest) -> Result<ChatResponse, LlmError>;
 
