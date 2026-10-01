@@ -1,5 +1,20 @@
 //! OHLCV database types — row structs for SQLite serialization.
 
+use crate::ohlcvs::types::Timeframe;
+
+/// An unfilled gap row of one pool, with its retry bookkeeping.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GapRecord {
+    pub timeframe: Timeframe,
+    /// First missing bucket (unix secs).
+    pub start_timestamp: i64,
+    /// Last missing bucket (unix secs, inclusive).
+    pub end_timestamp: i64,
+    pub attempts: u32,
+    /// Unix secs of the last fill attempt.
+    pub last_attempt: Option<i64>,
+}
+
 /// Stored candles of one timeframe on one pool.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TimeframeSummary {

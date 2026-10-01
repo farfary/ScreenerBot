@@ -7,8 +7,8 @@ use crate::logger::{self, LogTag};
 use crate::ohlcvs::aggregator::OhlcvAggregator;
 use crate::ohlcvs::cache::OhlcvCache;
 use crate::ohlcvs::database::OhlcvDatabase;
-use crate::ohlcvs::fetcher::OhlcvFetcher;
-use crate::ohlcvs::gaps::GapManager;
+use crate::ohlcvs::fetcher::{OhlcvFetcher, MAX_CANDLES_PER_REQUEST};
+use crate::ohlcvs::gaps::{GapManager, GAP_FILL_REQUESTS_PER_CYCLE};
 use crate::ohlcvs::manager::PoolManager;
 use crate::ohlcvs::priorities::{ActivityType, PriorityManager};
 use crate::ohlcvs::types::{
@@ -33,6 +33,210 @@ const AGGREGATED_TIMEFRAMES: [Timeframe; 6] = [
 ];
 
 const GAP_SUMMARY_LIMIT: usize = 5;
+
+/// Smallest native refresh request: the forming bucket, the one before it and a margin.
+const MIN_REFRESH_CANDLES: usize = 3;
+
+/// Buckets requested beyond the measured lag, so a bucket that closes while the
+/// request is in flight is still covered.
+pub(super) const CATCH_UP_MARGIN: usize = 2;
+
+/// Minimum spacing of two native fetches that count toward the no-newer rule,
+/// and the delay of a re-fetch after the Data Server reports it is refreshing.
+const NATIVE_RETRY_DELAY_SECS: i64 = 15;
+
+/// Re-fetches of one timeframe scheduled while the Data Server keeps reporting
+/// that it is refreshing the series.
+const MAX_REFRESHING_REFETCHES: u32 = 3;
+
+/// In-memory coverage state of one native (mint, timeframe) series.
+#[derive(Debug, Default, Clone, PartialEq)]
+struct NativeSeriesState {
+    /// Unix secs of the last native fetch attempt, successful or not.
+    last_fetch_at: Option<i64>,
+    /// The last page came from a Data Server refreshing behind its answer.
+    last_page_refreshing: bool,
+    /// Stored native newest when the current no-newer streak began, and when.
+    no_newer_since: Option<(Option<i64>, i64)>,
+    /// A later no-newer fetch, at least the retry delay after the first,
+    /// confirmed the streak.
+    no_newer_confirmed: bool,
+    /// When the scheduled re-fetch after a `refreshing` page is due.
+    refetch_at: Option<i64>,
+    /// Re-fetches scheduled since the last page that was not refreshing.
+    refetches: u32,
+}
+
+impl NativeSeriesState {
+    fn record_failure(&mut self, now: i64) {
+        self.last_fetch_at = Some(now);
+    }
+
+    /// Record a native page. `stored_newest` is the native newest before the page
+    /// was written; `fetched_newest` is the newest storable bucket in the page.
+    fn record_page(
+        &mut self,
+        now: i64,
+        stored_newest: Option<i64>,
+        fetched_newest: Option<i64>,
+        server_refreshing: bool,
+    ) {
+        self.last_fetch_at = Some(now);
+        self.last_page_refreshing = server_refreshing;
+
+        let newer = match (fetched_newest, stored_newest) {
+            (Some(fetched), Some(stored)) => fetched > stored,
+            (Some(_), None) => true,
+            (None, _) => false,
+        };
+        if newer {
+            self.no_newer_since = None;
+            self.no_newer_confirmed = false;
+        } else {
+            match self.no_newer_since {
+                Some((anchor, since)) if anchor == stored_newest => {
+                    if now - since >= NATIVE_RETRY_DELAY_SECS {
+                        self.no_newer_confirmed = true;
+                    }
+                }
+                _ => {
+                    self.no_newer_since = Some((stored_newest, now));
+                    self.no_newer_confirmed = false;
+                }
+            }
+        }
+
+        if !server_refreshing {
+            self.refetches = 0;
+            self.refetch_at = None;
+        } else if self.refetches < MAX_REFRESHING_REFETCHES {
+            self.refetches += 1;
+            self.refetch_at = Some(now + NATIVE_RETRY_DELAY_SECS);
+        } else {
+            self.refetch_at = None;
+        }
+    }
+
+    /// The no-newer rule holds for the series as it is stored now.
+    fn no_newer_holds(&self, newest: Option<i64>) -> bool {
+        self.no_newer_confirmed
+            && self
+                .no_newer_since
+                .is_some_and(|(anchor, _)| anchor == newest)
+    }
+
+    fn is_caught_up(&self, newest: Option<i64>, now: i64, timeframe: Timeframe) -> bool {
+        series_caught_up(
+            newest,
+            now,
+            timeframe,
+            self.last_page_refreshing,
+            self.no_newer_holds(newest),
+        )
+    }
+}
+
+/// Buckets between the bucket holding `newest` and the current bucket.
+fn buckets_behind(newest: i64, now: i64, timeframe: Timeframe) -> i64 {
+    let current = OhlcvDatabase::bucket_start(now, timeframe);
+    let stored = OhlcvDatabase::bucket_start(newest, timeframe);
+    ((current - stored) / timeframe.to_seconds()).max(0)
+}
+
+/// Coverage rule of a native series. It is caught up when its newest stored
+/// bucket is at most one bucket behind the current one (and the page that says
+/// so was not a stale Data Server answer), or when the no-newer rule confirmed
+/// that the source has nothing newer (an illiquid token with no trades).
+fn series_caught_up(
+    newest: Option<i64>,
+    now: i64,
+    timeframe: Timeframe,
+    last_page_refreshing: bool,
+    no_newer_confirmed: bool,
+) -> bool {
+    let recent = newest.is_some_and(|ts| buckets_behind(ts, now, timeframe) <= 1);
+    (recent && !last_page_refreshing) || no_newer_confirmed
+}
+
+/// Candles to request for a newest-N native fetch: the lag since the newest
+/// stored bucket plus a margin, clamped to `[MIN_REFRESH_CANDLES,
+/// MAX_CANDLES_PER_REQUEST]`. An empty series asks for the backfill size.
+fn catch_up_limit(newest: Option<i64>, now: i64, timeframe: Timeframe) -> usize {
+    let Some(newest) = newest else {
+        return timeframe
+            .max_backfill_candles()
+            .min(MAX_CANDLES_PER_REQUEST);
+    };
+    let behind = usize::try_from(buckets_behind(newest, now, timeframe)).unwrap_or(usize::MAX);
+    behind
+        .saturating_add(CATCH_UP_MARGIN)
+        .clamp(MIN_REFRESH_CANDLES, MAX_CANDLES_PER_REQUEST)
+}
+
+/// Native refresh interval of a timeframe, scaled by priority the way
+/// `Priority::base_interval` scales the 1m cadence, relative to `High` (the
+/// priority of a viewed chart) and never below the base.
+fn native_refresh_interval_secs(timeframe: Timeframe, priority: Priority) -> i64 {
+    let base = match timeframe {
+        Timeframe::Minute1 => timeframe.to_seconds(),
+        Timeframe::Minute5 => 300,
+        Timeframe::Minute15 => 900,
+        Timeframe::Hour1 => 1_800,
+        Timeframe::Hour4 | Timeframe::Hour12 | Timeframe::Day1 => 3_600,
+    };
+    let scale = (priority.base_interval().as_secs() / Priority::High.base_interval().as_secs())
+        .max(1) as i64;
+    base * scale
+}
+
+/// Whether a coarse timeframe's native refresh is due: it was never fetched
+/// since start, a scheduled re-fetch after a `refreshing` page came due, its
+/// priority-scaled interval elapsed, or it is behind (not caught up) and the
+/// last attempt is at least the retry delay old.
+///
+/// The coverage state is in memory only, so the first cycle after start
+/// refreshes every timeframe once: a stored newest bucket that was written
+/// while still forming looks caught up (one bucket behind) but holds a partial
+/// candle until the source is read again.
+fn native_refresh_due(
+    state: &NativeSeriesState,
+    newest: Option<i64>,
+    now: i64,
+    timeframe: Timeframe,
+    priority: Priority,
+) -> bool {
+    if state.refetch_at.is_some_and(|at| now >= at) {
+        return true;
+    }
+    let Some(last) = state.last_fetch_at else {
+        return true;
+    };
+    let behind = !state.is_caught_up(newest, now, timeframe);
+    let elapsed = now - last;
+    elapsed >= native_refresh_interval_secs(timeframe, priority)
+        || (behind && elapsed >= NATIVE_RETRY_DELAY_SECS)
+}
+
+/// Newest canonical bucket in a page among the candles that are stored.
+fn newest_storable_bucket(candles: &[Candle], timeframe: Timeframe) -> Option<i64> {
+    candles
+        .iter()
+        .filter(|candle| OhlcvDatabase::is_storable(candle))
+        .map(|candle| OhlcvDatabase::bucket_start(candle.timestamp, timeframe))
+        .max()
+}
+
+/// Pause between two sequential native fetches of one token. Keeps
+/// GeckoTerminal, the fallback when the Data Server misses, under its burst
+/// limit.
+fn inter_fetch_delay(priority: Priority) -> Duration {
+    Duration::from_millis(match priority {
+        Priority::Critical => 100,
+        Priority::High => 200,
+        Priority::Medium => 400,
+        Priority::Low => 800,
+    })
+}
 
 #[derive(Debug, Default, Clone)]
 struct MonitorTelemetry {
@@ -95,6 +299,7 @@ pub struct OhlcvMonitor {
     shutdown_signal: Arc<RwLock<bool>>,
     backfill_in_progress: Arc<Mutex<HashSet<String>>>,
     discovery_in_progress: Arc<Mutex<HashSet<String>>>,
+    native_series: Arc<Mutex<HashMap<(String, Timeframe), NativeSeriesState>>>,
     telemetry: Arc<RwLock<MonitorTelemetry>>,
 }
 
@@ -116,6 +321,7 @@ impl OhlcvMonitor {
             shutdown_signal: Arc::new(RwLock::new(false)),
             backfill_in_progress: Arc::new(Mutex::new(HashSet::new())),
             discovery_in_progress: Arc::new(Mutex::new(HashSet::new())),
+            native_series: Arc::new(Mutex::new(HashMap::new())),
             telemetry: Arc::new(RwLock::new(MonitorTelemetry::default())),
         }
     }
@@ -267,6 +473,10 @@ impl OhlcvMonitor {
 
         if let Some(config) = removed_config {
             self.db.upsert_monitor_config(&config)?;
+        }
+
+        if let Ok(mut series) = self.native_series.lock() {
+            series.retain(|(series_mint, _), _| series_mint != mint);
         }
 
         Ok(())
@@ -735,15 +945,12 @@ impl OhlcvMonitor {
             )));
         }
 
-        let (priority, batch_size) = {
+        let priority = {
             let active = self.active_tokens.read().await;
-            let config = active
+            active
                 .get(mint)
-                .ok_or_else(|| OhlcvError::NotFound(mint.to_string()))?;
-            (
-                config.priority,
-                PriorityManager::calculate_batch_size(config.priority),
-            )
+                .ok_or_else(|| OhlcvError::NotFound(mint.to_string()))?
+                .priority
         };
 
         // Resolve the pool from the stored pool rows — the same source and rule the chart and
@@ -755,14 +962,39 @@ impl OhlcvMonitor {
             .ok_or_else(|| OhlcvError::PoolNotFound(mint.to_string()))?;
         let (pool_address, pool_is_sol) = (pool.address, pool.is_sol_pair);
 
-        // Fetch 1-minute data (base timeframe) with multi-source fallback
+        // Fetch 1-minute data (base timeframe) with multi-source fallback, sized to
+        // reach back to the newest stored 1m candle.
+        let minute_newest =
+            self.db
+                .get_latest_native_timestamp(mint, &pool_address, Timeframe::Minute1)?;
+        let batch_size = catch_up_limit(minute_newest, Utc::now().timestamp(), Timeframe::Minute1);
         let data = self
             .fetcher
-            .fetch_multi_source(mint, &pool_address, "minute", 1, batch_size, pool_is_sol)
+            .fetch_multi_source(
+                mint,
+                &pool_address,
+                "minute",
+                1,
+                batch_size,
+                pool_is_sol,
+                None,
+            )
             .await;
+        let fetch_succeeded = data.is_ok();
 
         match data {
-            Ok(data_points) => {
+            Ok(response) => {
+                let fetched_newest = newest_storable_bucket(&response.candles, Timeframe::Minute1);
+                let now = Utc::now().timestamp();
+                self.update_native_series(mint, Timeframe::Minute1, |state| {
+                    state.record_page(
+                        now,
+                        minute_newest,
+                        fetched_newest,
+                        response.server_refreshing,
+                    )
+                });
+                let data_points = response.candles;
                 if data_points.is_empty() {
                     // Mark empty fetch
                     let updated_config = {
@@ -923,6 +1155,10 @@ impl OhlcvMonitor {
                 }
             }
             Err(e) => {
+                let now = Utc::now().timestamp();
+                self.update_native_series(mint, Timeframe::Minute1, |state| {
+                    state.record_failure(now)
+                });
                 if !matches!(e, OhlcvError::RateLimitExceeded) {
                     // Only penalize pool health for non-rate-limit failures
                     self.pool_manager.mark_failure(mint, &pool_address).await?;
@@ -974,6 +1210,11 @@ impl OhlcvMonitor {
                     );
                 }
             }
+        }
+
+        if fetch_succeeded {
+            self.refresh_native_timeframes(mint, &pool_address, priority)
+                .await;
         }
 
         Ok(())
@@ -1174,19 +1415,43 @@ impl OhlcvMonitor {
         Ok(data_points)
     }
 
+    /// Recompute the aggregated timeframes of the last two days from stored 1m.
     fn refresh_derived_timeframes_from_1m(
         &self,
         mint: &str,
         pool_address: &str,
     ) -> OhlcvResult<usize> {
         let now = Utc::now().timestamp();
-        let from_ts = now - (2 * Timeframe::Day1.to_seconds());
+        self.refresh_derived_timeframes_between(
+            mint,
+            pool_address,
+            now - 2 * Timeframe::Day1.to_seconds(),
+            now,
+        )
+    }
+
+    /// Recompute every aggregated bucket overlapping `[from_ts, to_ts]` from the
+    /// stored 1m rows. Written as `monitor_aggregate`, so closed native buckets
+    /// keep their source values.
+    fn refresh_derived_timeframes_between(
+        &self,
+        mint: &str,
+        pool_address: &str,
+        from_ts: i64,
+        to_ts: i64,
+    ) -> OhlcvResult<usize> {
+        let now = Utc::now().timestamp();
+        let day = Timeframe::Day1.to_seconds();
+        // Whole days: every aggregated timeframe divides a day, so each bucket is
+        // recomputed from all of its stored 1m rows, never a slice of them.
+        let from_ts = OhlcvDatabase::bucket_start(from_ts, Timeframe::Day1);
+        let to_ts = (OhlcvDatabase::bucket_start(to_ts, Timeframe::Day1) + day - 1).min(now);
         let minute_candles = self.db.get_candles(
             mint,
             Some(pool_address),
             Timeframe::Minute1,
             Some(from_ts),
-            Some(now),
+            Some(to_ts),
             None,
         )?;
 
@@ -1209,11 +1474,11 @@ impl OhlcvMonitor {
                 pool_address,
                 timeframe,
                 &aggregated,
-                "monitor_aggregate",
+                OhlcvDatabase::AGGREGATE_SOURCE,
             )?;
 
             inserted_total += inserted;
-            // Only the last 2 days were aggregated here; the DB retains the full
+            // Only this window was aggregated here; the DB retains the full
             // series for this timeframe. Invalidate so the chart re-reads the
             // complete history instead of this short window (see persist_chunk).
             self.cache
@@ -1412,8 +1677,11 @@ impl OhlcvMonitor {
         }
     }
 
+    /// Every five minutes, fill due gap spans of the active tokens within the
+    /// retention window: sequential, throttled, and capped at
+    /// `GAP_FILL_REQUESTS_PER_CYCLE` requests per scan.
     async fn gap_fill_loop(self: Arc<Self>) {
-        let mut tick = interval(Duration::from_secs(300)); // Check every 5 minutes
+        let mut tick = interval(Duration::from_secs(300));
 
         loop {
             tick.tick().await;
@@ -1422,42 +1690,131 @@ impl OhlcvMonitor {
                 break;
             }
 
-            // Process gap filling for active tokens
-            let tokens: Vec<String> = {
+            let tokens: Vec<(String, Priority)> = {
                 let active = self.active_tokens.read().await;
-                active.keys().cloned().collect()
+                active
+                    .iter()
+                    .map(|(mint, config)| (mint.clone(), config.priority))
+                    .collect()
             };
 
-            let processed_count = tokens.len();
             let cycle_start = Instant::now();
-            self.record_gap_cycle_start(processed_count).await;
+            self.record_gap_cycle_start(tokens.len()).await;
 
-            for mint in tokens {
-                // Auto-fill recent gaps (last 24h)
-                if let Err(e) = self.gap_manager.auto_fill_recent_gaps(&mint).await {
-                    logger::error(LogTag::Ohlcv, &format!("Gap fill error for {mint}: {e}"));
-                    record_ohlcv_event(
-                        "gap_fill_failed",
-                        Severity::Error,
-                        Some(mint.as_str()),
-                        None,
-                        crate::events::with_text(
-                            json!({
-                              "error": e.to_string(),
-                            }),
-                            &UiText::new(ids::EVENTS_OHLCV_GAP_FILL_FAILED)
-                                .arg("mint", UiArg::Text(mint.to_string())),
-                        ),
-                    )
-                    .await;
+            let mut budget = GAP_FILL_REQUESTS_PER_CYCLE;
+            let mut processed = 0;
+            for (mint, priority) in tokens {
+                if budget == 0 {
+                    break;
                 }
-
-                sleep(Duration::from_secs(1)).await;
+                processed += 1;
+                match self.fill_token_gaps(&mint, priority, &mut budget).await {
+                    Ok(()) => {}
+                    Err(e) => {
+                        logger::error(LogTag::Ohlcv, &format!("Gap fill error for {mint}: {e}"));
+                        record_ohlcv_event(
+                            "gap_fill_failed",
+                            Severity::Error,
+                            Some(mint.as_str()),
+                            None,
+                            crate::events::with_text(
+                                json!({
+                                  "error": e.to_string(),
+                                }),
+                                &UiText::new(ids::EVENTS_OHLCV_GAP_FILL_FAILED)
+                                    .arg("mint", UiArg::Text(mint.to_string())),
+                            ),
+                        )
+                        .await;
+                        if matches!(e, OhlcvError::RateLimitExceeded) {
+                            self.record_rate_limit_event().await;
+                            break;
+                        }
+                    }
+                }
             }
 
-            self.record_gap_cycle_end(cycle_start, processed_count)
-                .await;
+            self.record_gap_cycle_end(cycle_start, processed).await;
         }
+    }
+
+    /// Fill the due gap spans of a token's series pool, spending one unit of
+    /// `budget` per request. Holds the token's backfill slot so gap filling and
+    /// backfill never fetch the same token concurrently. Aggregated buckets
+    /// over the 1m rows it wrote are recomputed afterwards.
+    async fn fill_token_gaps(
+        &self,
+        mint: &str,
+        priority: Priority,
+        budget: &mut usize,
+    ) -> OhlcvResult<()> {
+        let Some(pool) = self.pool_manager.series_pool(mint).await? else {
+            return Ok(());
+        };
+        let spans =
+            self.gap_manager
+                .due_spans(mint, &pool.address, Utc::now().timestamp(), *budget)?;
+        if spans.is_empty() || !self.try_start_backfill(mint) {
+            return Ok(());
+        }
+
+        let mut minute_range: Option<(i64, i64)> = None;
+        let mut result = Ok(());
+        for span in spans {
+            if *budget == 0 {
+                break;
+            }
+            *budget -= 1;
+            sleep(inter_fetch_delay(priority)).await;
+            match self
+                .gap_manager
+                .fill_span(mint, &pool.address, pool.is_sol_pair, &span)
+                .await
+            {
+                Ok(fill) => {
+                    if span.timeframe == Timeframe::Minute1 {
+                        if let Some((lo, hi)) = fill.written_range {
+                            minute_range = Some(match minute_range {
+                                Some((from, to)) => (from.min(lo), to.max(hi)),
+                                None => (lo, hi),
+                            });
+                        }
+                    }
+                }
+                Err(OhlcvError::RateLimitExceeded) => {
+                    result = Err(OhlcvError::RateLimitExceeded);
+                    break;
+                }
+                Err(e) => {
+                    logger::warning(
+                        LogTag::Ohlcv,
+                        &format!(
+                            "Gap span fill failed for mint={} timeframe={} span={}..{}: {}",
+                            mint,
+                            span.timeframe.as_str(),
+                            span.start,
+                            span.end,
+                            e
+                        ),
+                    );
+                }
+            }
+        }
+        self.finish_backfill(mint);
+
+        if let Some((from, to)) = minute_range {
+            if let Err(e) = self.refresh_derived_timeframes_between(mint, &pool.address, from, to) {
+                logger::warning(
+                    LogTag::Ohlcv,
+                    &format!(
+                        "Higher-timeframe derivation after gap fill failed for {} via {}: {}",
+                        mint, pool.address, e
+                    ),
+                );
+            }
+        }
+
+        result
     }
 
     async fn sync_pool_service_tokens(self: Arc<Self>) {
@@ -1723,16 +2080,37 @@ impl OhlcvMonitor {
                 continue;
             }
 
-            // Fetch this timeframe
-            match self.backfill_timeframe(mint, pool_address, timeframe).await {
+            // The first native page of any series is full size (`catch_up_limit`
+            // of an empty series is the backfill size), so stored native candles
+            // mean the depth is fetched and only coverage decides completion.
+            let (newest, caught_up) = self.native_coverage(mint, pool_address, timeframe)?;
+            if newest.is_some() && caught_up {
+                self.db.mark_backfill_complete(mint, timeframe)?;
+                continue;
+            }
+
+            // An incomplete timeframe is re-requested at most once per retry delay,
+            // which is also the spacing the no-newer rule needs.
+            let last_fetch_at = self.native_series_state(mint, timeframe).last_fetch_at;
+            if last_fetch_at.is_some_and(|at| Utc::now().timestamp() - at < NATIVE_RETRY_DELAY_SECS)
+            {
+                continue;
+            }
+
+            match self
+                .fetch_native_timeframe(
+                    mint,
+                    pool_address,
+                    timeframe,
+                    timeframe.max_backfill_candles(),
+                )
+                .await
+            {
                 Ok(count) => {
                     total_fetched += count;
-                    if count > 0
-                        || self
-                            .db
-                            .get_time_bounds(mint, pool_address, timeframe)?
-                            .is_some()
-                    {
+                    let (newest, caught_up) =
+                        self.native_coverage(mint, pool_address, timeframe)?;
+                    if newest.is_some() && caught_up {
                         self.db.mark_backfill_complete(mint, timeframe)?;
                         logger::debug(
                             LogTag::Ohlcv,
@@ -1743,7 +2121,7 @@ impl OhlcvMonitor {
                                 count
                             ),
                         );
-                    } else {
+                    } else if newest.is_none() {
                         self.db.mark_backfill_incomplete(mint, timeframe)?;
                         logger::warning(
                             LogTag::Ohlcv,
@@ -1751,6 +2129,16 @@ impl OhlcvMonitor {
                                 "Backfill produced no candles for mint={} timeframe={}; leaving incomplete",
                                 mint,
                                 timeframe.as_str()
+                            ),
+                        );
+                    } else {
+                        logger::debug(
+                            LogTag::Ohlcv,
+                            &format!(
+                                "Backfill page for mint={} timeframe={} is not caught up (newest={:?}); leaving incomplete",
+                                mint,
+                                timeframe.as_str(),
+                                newest
                             ),
                         );
                     }
@@ -1772,13 +2160,7 @@ impl OhlcvMonitor {
 
             // Rate limiting based on priority (prevents Gecko 429 on the fallback
             // path when the shared server misses).
-            let delay_ms = match priority {
-                Priority::Critical => 100,
-                Priority::High => 200,
-                Priority::Medium => 400,
-                Priority::Low => 800,
-            };
-            sleep(Duration::from_millis(delay_ms)).await;
+            sleep(inter_fetch_delay(priority)).await;
         }
 
         if self.are_all_timeframes_backfill_ready(mint, pool_address)? {
@@ -1796,32 +2178,177 @@ impl OhlcvMonitor {
         Ok(total_fetched)
     }
 
-    /// Backfill a specific timeframe for a token
-    async fn backfill_timeframe(
+    /// Refresh each coarse timeframe natively when it is due (see
+    /// `native_refresh_due`), sized by `catch_up_limit`. Sequential and throttled
+    /// like backfill, and it holds the token's backfill slot so the two never
+    /// fetch the same token concurrently. The local 1m aggregation only fills the
+    /// live edge; this is what makes closed coarse buckets match the source and
+    /// heals a series the app missed while it was not running.
+    async fn refresh_native_timeframes(&self, mint: &str, pool_address: &str, priority: Priority) {
+        if !self.try_start_backfill(mint) {
+            return;
+        }
+
+        for timeframe in AGGREGATED_TIMEFRAMES {
+            let now = Utc::now().timestamp();
+            let newest = match self
+                .db
+                .get_latest_native_timestamp(mint, pool_address, timeframe)
+            {
+                Ok(newest) => newest,
+                Err(e) => {
+                    logger::warning(
+                        LogTag::Ohlcv,
+                        &format!(
+                            "Native refresh skipped for mint={} timeframe={}: {}",
+                            mint,
+                            timeframe.as_str(),
+                            e
+                        ),
+                    );
+                    continue;
+                }
+            };
+            let state = self.native_series_state(mint, timeframe);
+            if !native_refresh_due(&state, newest, now, timeframe, priority) {
+                continue;
+            }
+
+            let limit = catch_up_limit(newest, now, timeframe);
+            sleep(inter_fetch_delay(priority)).await;
+            match self
+                .fetch_native_timeframe(mint, pool_address, timeframe, limit)
+                .await
+            {
+                Ok(changed) => {
+                    logger::debug(
+                        LogTag::Ohlcv,
+                        &format!(
+                            "Native refresh mint={} timeframe={} limit={} changed={}",
+                            mint,
+                            timeframe.as_str(),
+                            limit,
+                            changed
+                        ),
+                    );
+                }
+                Err(OhlcvError::RateLimitExceeded) => {
+                    logger::warning(
+                        LogTag::Ohlcv,
+                        &format!(
+                            "Native refresh for mint={} stopped at timeframe={}: rate limit exceeded",
+                            mint,
+                            timeframe.as_str()
+                        ),
+                    );
+                    break;
+                }
+                Err(e) => {
+                    logger::warning(
+                        LogTag::Ohlcv,
+                        &format!(
+                            "Native refresh failed for mint={} timeframe={}: {}",
+                            mint,
+                            timeframe.as_str(),
+                            e
+                        ),
+                    );
+                }
+            }
+        }
+
+        self.finish_backfill(mint);
+    }
+
+    /// Fetch the newest `limit` native candles of one timeframe, store them under
+    /// `OhlcvDatabase::NATIVE_SOURCE`, drop the timeframe's hot-cache entry and
+    /// record the page in the series coverage state. Returns rows inserted or
+    /// changed.
+    async fn fetch_native_timeframe(
         &self,
         mint: &str,
         pool_address: &str,
         timeframe: Timeframe,
+        limit: usize,
     ) -> OhlcvResult<usize> {
         let (api_endpoint, aggregate) = timeframe.to_api_params();
-        let max_candles = timeframe.max_backfill_candles();
 
         logger::debug(
             LogTag::Ohlcv,
             &format!(
-                "Fetching timeframe={} mint={} endpoint={} aggregate={} expected_candles={}",
+                "Fetching timeframe={} mint={} endpoint={} aggregate={} limit={}",
                 timeframe.as_str(),
                 mint,
                 api_endpoint,
                 aggregate,
-                max_candles
+                limit
             ),
         );
 
-        // Look up the pool's denomination so a USD-quoted pool skips GeckoTerminal
-        // (see fetch_multi_source). Unknown/missing rows default to SOL.
-        let pool_is_sol = self
+        let pool_is_sol = self.pool_is_sol(mint, pool_address);
+
+        let stored_newest = self
             .db
+            .get_latest_native_timestamp(mint, pool_address, timeframe)?;
+
+        // Fetch using multi-source fallback
+        let response = match self
+            .fetcher
+            .fetch_multi_source(
+                mint,
+                pool_address,
+                api_endpoint,
+                aggregate,
+                limit,
+                pool_is_sol,
+                None,
+            )
+            .await
+        {
+            Ok(response) => response,
+            Err(e) => {
+                let now = Utc::now().timestamp();
+                self.update_native_series(mint, timeframe, |state| state.record_failure(now));
+                return Err(e);
+            }
+        };
+
+        let changed = if response.candles.is_empty() {
+            0
+        } else {
+            let changed = self.db.insert_candles_batch(
+                mint,
+                pool_address,
+                timeframe,
+                &response.candles,
+                OhlcvDatabase::NATIVE_SOURCE,
+            )?;
+            // A fetch returns only one window; the DB now holds the merged full
+            // series. Invalidate so the chart reads the complete history rather
+            // than this single page (see persist_chunk).
+            self.cache
+                .invalidate(mint, Some(pool_address), Some(timeframe))?;
+            changed
+        };
+
+        let fetched_newest = newest_storable_bucket(&response.candles, timeframe);
+        let now = Utc::now().timestamp();
+        self.update_native_series(mint, timeframe, |state| {
+            state.record_page(
+                now,
+                stored_newest,
+                fetched_newest,
+                response.server_refreshing,
+            )
+        });
+
+        Ok(changed)
+    }
+
+    /// The pool's denomination, so a USD-quoted pool skips GeckoTerminal (see
+    /// `fetch_multi_source`). Unknown/missing rows default to SOL.
+    fn pool_is_sol(&self, mint: &str, pool_address: &str) -> bool {
+        self.db
             .get_pools(mint)
             .ok()
             .and_then(|pools| {
@@ -1830,37 +2357,44 @@ impl OhlcvMonitor {
                     .find(|p| p.address == pool_address)
                     .map(|p| p.is_sol_pair)
             })
-            .unwrap_or(true);
+            .unwrap_or(true)
+    }
 
-        // Fetch using multi-source fallback
-        let candles = self
-            .fetcher
-            .fetch_multi_source(
-                mint,
-                pool_address,
-                api_endpoint,
-                aggregate,
-                max_candles,
-                pool_is_sol,
-            )
-            .await?;
+    /// Newest stored native bucket of a series and whether it is caught up.
+    fn native_coverage(
+        &self,
+        mint: &str,
+        pool_address: &str,
+        timeframe: Timeframe,
+    ) -> OhlcvResult<(Option<i64>, bool)> {
+        let newest = self
+            .db
+            .get_latest_native_timestamp(mint, pool_address, timeframe)?;
+        let caught_up = self.native_series_state(mint, timeframe).is_caught_up(
+            newest,
+            Utc::now().timestamp(),
+            timeframe,
+        );
+        Ok((newest, caught_up))
+    }
 
-        if candles.is_empty() {
-            return Ok(0);
+    fn native_series_state(&self, mint: &str, timeframe: Timeframe) -> NativeSeriesState {
+        self.native_series
+            .lock()
+            .ok()
+            .and_then(|series| series.get(&(mint.to_string(), timeframe)).cloned())
+            .unwrap_or_default()
+    }
+
+    fn update_native_series(
+        &self,
+        mint: &str,
+        timeframe: Timeframe,
+        update: impl FnOnce(&mut NativeSeriesState),
+    ) {
+        if let Ok(mut series) = self.native_series.lock() {
+            update(series.entry((mint.to_string(), timeframe)).or_default());
         }
-
-        // Store in database
-        let inserted =
-            self.db
-                .insert_candles_batch(mint, pool_address, timeframe, &candles, "backfill")?;
-
-        // A backfill / deep-paging fetch returns only one window; the DB now
-        // holds the merged full series. Invalidate so the chart reads the
-        // complete history rather than this single page (see persist_chunk).
-        self.cache
-            .invalidate(mint, Some(pool_address), Some(timeframe))?;
-
-        Ok(inserted)
     }
 
     async fn cleanup_loop(self: Arc<Self>) {
@@ -1956,6 +2490,7 @@ impl Clone for OhlcvMonitor {
             shutdown_signal: Arc::clone(&self.shutdown_signal),
             backfill_in_progress: Arc::clone(&self.backfill_in_progress),
             discovery_in_progress: Arc::clone(&self.discovery_in_progress),
+            native_series: Arc::clone(&self.native_series),
             telemetry: Arc::clone(&self.telemetry),
         }
     }
@@ -1980,4 +2515,279 @@ fn count_by_priority(configs: &HashMap<String, TokenOhlcvConfig>) -> HashMap<Pri
         *counts.entry(config.priority).or_default() += 1;
     }
     counts
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const HOUR: i64 = 3_600;
+    /// 30 minutes into an hour bucket.
+    const NOW: i64 = 1_700_000_000 - 1_700_000_000 % HOUR + 1_800;
+    const CURRENT: i64 = NOW - NOW % HOUR;
+
+    fn candle(ts: i64, volume: f64) -> Candle {
+        Candle::new(ts, 1.0, 1.0, 1.0, 1.0, volume)
+    }
+
+    #[test]
+    fn catch_up_limit_covers_the_lag_plus_margin_within_bounds() {
+        // Empty series: the backfill size.
+        assert_eq!(catch_up_limit(None, NOW, Timeframe::Hour1), 1000);
+        // Newest is the forming bucket or the one before it: the minimum.
+        assert_eq!(catch_up_limit(Some(CURRENT), NOW, Timeframe::Hour1), 3);
+        assert_eq!(
+            catch_up_limit(Some(CURRENT - HOUR), NOW, Timeframe::Hour1),
+            3
+        );
+        // A 21-bucket hole: 21 + 2.
+        assert_eq!(
+            catch_up_limit(Some(CURRENT - 21 * HOUR), NOW, Timeframe::Hour1),
+            23
+        );
+        // A mid-bucket stored timestamp counts from its bucket start.
+        assert_eq!(
+            catch_up_limit(Some(CURRENT - 10 * HOUR + 59), NOW, Timeframe::Hour1),
+            12
+        );
+        // Longer than one request can carry: the request cap.
+        assert_eq!(
+            catch_up_limit(Some(CURRENT - 5_000 * 60), NOW, Timeframe::Minute1),
+            MAX_CANDLES_PER_REQUEST
+        );
+        // A clock behind the stored newest never asks for fewer than the minimum.
+        assert_eq!(catch_up_limit(Some(NOW + HOUR), NOW, Timeframe::Hour1), 3);
+    }
+
+    #[test]
+    fn refresh_interval_scales_by_priority_and_never_drops_below_base() {
+        assert_eq!(
+            native_refresh_interval_secs(Timeframe::Minute5, Priority::Critical),
+            300
+        );
+        assert_eq!(
+            native_refresh_interval_secs(Timeframe::Minute5, Priority::High),
+            300
+        );
+        assert_eq!(
+            native_refresh_interval_secs(Timeframe::Minute15, Priority::High),
+            900
+        );
+        assert_eq!(
+            native_refresh_interval_secs(Timeframe::Hour1, Priority::High),
+            1_800
+        );
+        for tf in [Timeframe::Hour4, Timeframe::Hour12, Timeframe::Day1] {
+            assert_eq!(native_refresh_interval_secs(tf, Priority::High), 3_600);
+        }
+        assert_eq!(
+            native_refresh_interval_secs(Timeframe::Hour1, Priority::Medium),
+            5 * 1_800
+        );
+        assert_eq!(
+            native_refresh_interval_secs(Timeframe::Hour1, Priority::Low),
+            15 * 1_800
+        );
+    }
+
+    #[test]
+    fn refresh_is_due_on_interval_catch_up_or_scheduled_refetch() {
+        let tf = Timeframe::Hour1;
+        let caught_up = Some(CURRENT - HOUR);
+        let behind = Some(CURRENT - 3 * HOUR);
+
+        // Never fetched since start: always due, even when the stored newest
+        // looks caught up, because that bucket may have been stored while forming.
+        let fresh = NativeSeriesState::default();
+        for priority in [Priority::Critical, Priority::Low] {
+            assert!(native_refresh_due(&fresh, caught_up, NOW, tf, priority));
+            assert!(native_refresh_due(&fresh, Some(CURRENT), NOW, tf, priority));
+            assert!(native_refresh_due(&fresh, behind, NOW, tf, priority));
+            assert!(native_refresh_due(&fresh, None, NOW, tf, priority));
+        }
+
+        let fetched = |ago: i64| NativeSeriesState {
+            last_fetch_at: Some(NOW - ago),
+            ..NativeSeriesState::default()
+        };
+        // Caught up: only the priority-scaled interval makes it due.
+        assert!(!native_refresh_due(
+            &fetched(1_799),
+            caught_up,
+            NOW,
+            tf,
+            Priority::High
+        ));
+        assert!(native_refresh_due(
+            &fetched(1_800),
+            caught_up,
+            NOW,
+            tf,
+            Priority::High
+        ));
+        assert!(!native_refresh_due(
+            &fetched(1_800),
+            caught_up,
+            NOW,
+            tf,
+            Priority::Low
+        ));
+        // Behind: due once the retry delay has passed since the last attempt.
+        assert!(!native_refresh_due(
+            &fetched(10),
+            behind,
+            NOW,
+            tf,
+            Priority::Low
+        ));
+        assert!(native_refresh_due(
+            &fetched(15),
+            behind,
+            NOW,
+            tf,
+            Priority::Low
+        ));
+
+        // A scheduled re-fetch after a refreshing page is due on time, not before.
+        let mut refreshing = NativeSeriesState::default();
+        refreshing.record_page(NOW, caught_up, caught_up, true);
+        assert!(!native_refresh_due(
+            &refreshing,
+            caught_up,
+            NOW + 14,
+            tf,
+            Priority::Low
+        ));
+        assert!(native_refresh_due(
+            &refreshing,
+            caught_up,
+            NOW + 15,
+            tf,
+            Priority::Low
+        ));
+
+        // Behind but confirmed by the no-newer rule: not a catch-up.
+        let mut illiquid = NativeSeriesState::default();
+        illiquid.record_page(NOW - 40, behind, behind, false);
+        illiquid.record_page(NOW - 20, behind, behind, false);
+        assert!(!native_refresh_due(
+            &illiquid,
+            behind,
+            NOW,
+            tf,
+            Priority::High
+        ));
+    }
+
+    #[test]
+    fn caught_up_by_recency_unless_the_page_was_a_stale_server_answer() {
+        let tf = Timeframe::Hour1;
+        assert!(series_caught_up(Some(CURRENT), NOW, tf, false, false));
+        assert!(series_caught_up(
+            Some(CURRENT - HOUR),
+            NOW,
+            tf,
+            false,
+            false
+        ));
+        assert!(!series_caught_up(
+            Some(CURRENT - 2 * HOUR),
+            NOW,
+            tf,
+            false,
+            false
+        ));
+        assert!(!series_caught_up(None, NOW, tf, false, false));
+        // A refreshing page that looks recent is not enough on its own.
+        assert!(!series_caught_up(Some(CURRENT), NOW, tf, true, false));
+        // The no-newer rule accepts an old series.
+        assert!(series_caught_up(
+            Some(CURRENT - 50 * HOUR),
+            NOW,
+            tf,
+            true,
+            true
+        ));
+    }
+
+    #[test]
+    fn no_newer_rule_needs_two_fetches_the_retry_delay_apart() {
+        let tf = Timeframe::Hour1;
+        let old = Some(CURRENT - 50 * HOUR);
+        let mut state = NativeSeriesState::default();
+
+        state.record_page(NOW, old, old, false);
+        assert!(!state.is_caught_up(old, NOW, tf));
+        // Too soon: does not confirm, and does not restart the streak.
+        state.record_page(NOW + 5, old, old, false);
+        assert!(!state.is_caught_up(old, NOW + 5, tf));
+        state.record_page(NOW + NATIVE_RETRY_DELAY_SECS, old, old, false);
+        assert!(state.is_caught_up(old, NOW + NATIVE_RETRY_DELAY_SECS, tf));
+
+        // Confirmation belongs to the newest it was measured against.
+        let newer = Some(CURRENT - 40 * HOUR);
+        assert!(!state.is_caught_up(newer, NOW + 20, tf));
+
+        // A page with a newer candle resets the streak.
+        state.record_page(NOW + 30, old, newer, false);
+        assert!(!state.is_caught_up(newer, NOW + 30, tf));
+        state.record_page(NOW + 40, newer, newer, false);
+        state.record_page(NOW + 60, newer, newer, false);
+        assert!(state.is_caught_up(newer, NOW + 60, tf));
+
+        // A source with nothing at all is confirmed empty too.
+        let mut empty = NativeSeriesState::default();
+        empty.record_page(NOW, None, None, false);
+        empty.record_page(NOW + NATIVE_RETRY_DELAY_SECS, None, None, false);
+        assert!(empty.no_newer_holds(None));
+    }
+
+    #[test]
+    fn refreshing_pages_schedule_at_most_three_refetches() {
+        let recent = Some(CURRENT);
+        let mut state = NativeSeriesState::default();
+        for attempt in 0..MAX_REFRESHING_REFETCHES as i64 {
+            let at = NOW + attempt * NATIVE_RETRY_DELAY_SECS;
+            state.record_page(at, recent, recent, true);
+            assert_eq!(state.refetch_at, Some(at + NATIVE_RETRY_DELAY_SECS));
+        }
+        state.record_page(NOW + 100, recent, recent, true);
+        assert_eq!(state.refetch_at, None);
+        assert_eq!(state.refetches, MAX_REFRESHING_REFETCHES);
+
+        // A ready page clears the schedule and the budget.
+        state.record_page(NOW + 200, recent, recent, false);
+        assert_eq!(state.refetch_at, None);
+        assert_eq!(state.refetches, 0);
+        assert!(state.is_caught_up(recent, NOW + 200, Timeframe::Hour1));
+
+        // A failed fetch only moves the attempt clock.
+        let before = state.clone();
+        state.record_failure(NOW + 300);
+        assert_eq!(state.last_fetch_at, Some(NOW + 300));
+        assert_eq!(
+            NativeSeriesState {
+                last_fetch_at: before.last_fetch_at,
+                ..state
+            },
+            before
+        );
+    }
+
+    #[test]
+    fn newest_storable_bucket_ignores_empty_candles_and_snaps_to_the_bucket() {
+        let tf = Timeframe::Hour1;
+        assert_eq!(newest_storable_bucket(&[], tf), None);
+        assert_eq!(
+            newest_storable_bucket(
+                &[candle(CURRENT, 0.0), candle(CURRENT - HOUR + 90, 2.0)],
+                tf
+            ),
+            Some(CURRENT - HOUR)
+        );
+        assert_eq!(
+            newest_storable_bucket(&[candle(CURRENT, f64::NAN)], tf),
+            None
+        );
+    }
 }

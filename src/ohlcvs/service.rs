@@ -54,7 +54,11 @@ impl OhlcvServiceImpl {
         let fetcher = Arc::new(OhlcvFetcher::new());
         let cache = Arc::new(OhlcvCache::new(active_chain()));
         let pool_manager = Arc::new(PoolManager::new(Arc::clone(&db)));
-        let gap_manager = Arc::new(GapManager::new(Arc::clone(&db), Arc::clone(&fetcher)));
+        let gap_manager = Arc::new(GapManager::new(
+            Arc::clone(&db),
+            Arc::clone(&fetcher),
+            Arc::clone(&cache),
+        ));
         let monitor = Arc::new(OhlcvMonitor::new(
             Arc::clone(&db),
             Arc::clone(&fetcher),

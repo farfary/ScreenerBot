@@ -8,7 +8,9 @@ mod maintenance;
 mod migrations;
 pub mod types;
 
-pub use types::{ClearAllResult, DatabaseStats, DeleteResult, OhlcvTokenStatus, TimeframeSummary};
+pub use types::{
+    ClearAllResult, DatabaseStats, DeleteResult, GapRecord, OhlcvTokenStatus, TimeframeSummary,
+};
 
 use crate::ohlcvs::types::{OhlcvError, OhlcvResult, PoolConfig};
 use crate::{chains::ChainId, database};

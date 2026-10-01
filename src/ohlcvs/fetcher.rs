@@ -9,14 +9,38 @@ use crate::apis::{get_api_manager, ApiManager, Error as ApiError};
 use crate::errors::NetworkError;
 use crate::events::{record_ohlcv_event, Severity};
 use crate::ohlcvs::types::{Candle, OhlcvError, OhlcvResult, Priority, Timeframe};
+use serde::Deserialize;
 use serde_json::json;
 use std::collections::{BinaryHeap, VecDeque};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use tokio::time::sleep;
 
 const RATE_LIMIT_WINDOW: Duration = Duration::from_secs(60);
-const MAX_CANDLES_PER_REQUEST: usize = 1000;
+pub(crate) const MAX_CANDLES_PER_REQUEST: usize = 1000;
+
+/// Candles returned by [`OhlcvFetcher::fetch_multi_source`].
+#[derive(Debug, Clone, Default)]
+pub struct FetchResponse {
+    pub candles: Vec<Candle>,
+    /// The Data Server answered from a cached series it is refreshing behind the
+    /// response (`refreshing` or `pending`), so a newer page is expected shortly.
+    /// Always false for provider answers.
+    pub server_refreshing: bool,
+}
+
+/// `GET /v1/ohlcv?stateful=true` body.
+#[derive(Debug, Deserialize)]
+struct StatefulOhlcv {
+    candles: Vec<Candle>,
+    #[serde(default)]
+    state: String,
+}
+
+/// Whether a Data Server OHLCV state announces a refresh in progress. Unknown
+/// states read as `ready`.
+fn server_state_is_refreshing(state: &str) -> bool {
+    matches!(state, "refreshing" | "pending")
+}
 
 #[derive(Clone, Debug)]
 struct FetchRequest {
@@ -334,8 +358,6 @@ impl OhlcvFetcher {
         }
     }
 
-    /// Fetch OHLCV with multi-source fallback: SolanaTracker → GeckoTerminal
-    /// `mint` is needed for SolanaTracker, `pool_address` for GeckoTerminal
     /// Map the GeckoTerminal (endpoint, aggregate) pair back to the canonical
     /// timeframe string the ScreenerBot server expects.
     fn server_timeframe(api_endpoint: &str, aggregate: u32) -> Option<&'static str> {
@@ -354,6 +376,8 @@ impl OhlcvFetcher {
     /// Try the ScreenerBot data service. `None` on anything at all — switched
     /// off, signed out, refused, missed or timed out — so the caller falls back
     /// to the providers. The reason is published once by `data_server::access`.
+    /// `before` (unix secs, exclusive) asks for the newest `limit` stored candles
+    /// strictly older than it instead of the newest candles ending now.
     async fn fetch_from_screenerbot_server(
         &self,
         mint: &str,
@@ -361,22 +385,39 @@ impl OhlcvFetcher {
         api_endpoint: &str,
         aggregate: u32,
         limit: usize,
-    ) -> Option<Vec<Candle>> {
+        before: Option<i64>,
+    ) -> Option<FetchResponse> {
         let tf = Self::server_timeframe(api_endpoint, aggregate)?;
-        // The server returns a JSON array of candles with identical field names.
-        crate::data_server::get_json::<Vec<Candle>>(
+        // `stateful=true` wraps the candle array (identical field names) with the
+        // series state, which says whether the server is refreshing behind a stale
+        // cached answer.
+        let mut query = vec![
+            ("mint", mint.to_string()),
+            ("pool", pool_address.to_string()),
+            ("timeframe", tf.to_string()),
+            ("limit", limit.min(MAX_CANDLES_PER_REQUEST).to_string()),
+            ("stateful", "true".to_string()),
+        ];
+        if let Some(before) = before {
+            query.push(("before", before.to_string()));
+        }
+        let body = crate::data_server::get_json::<StatefulOhlcv>(
             crate::data_server::Surface::Ohlcv,
             "/v1/ohlcv",
-            &[
-                ("mint", mint.to_string()),
-                ("pool", pool_address.to_string()),
-                ("timeframe", tf.to_string()),
-                ("limit", limit.min(MAX_CANDLES_PER_REQUEST).to_string()),
-            ],
+            &query,
         )
-        .await
+        .await?;
+        Some(FetchResponse {
+            server_refreshing: server_state_is_refreshing(&body.state),
+            candles: body.candles,
+        })
     }
 
+    /// Fetch one timeframe with multi-source fallback: the Data Server, then
+    /// SolanaTracker, then GeckoTerminal (SOL-quoted pools only). Returns the
+    /// newest `limit` candles ending now, or with `before` (unix secs, exclusive)
+    /// the newest `limit` candles strictly older than it. SolanaTracker serves
+    /// only the newest candles, so a `before` request skips it.
     pub async fn fetch_multi_source(
         &self,
         mint: &str,
@@ -385,25 +426,38 @@ impl OhlcvFetcher {
         aggregate: u32,
         limit: usize,
         pool_is_sol: bool,
-    ) -> OhlcvResult<Vec<Candle>> {
+        before: Option<i64>,
+    ) -> OhlcvResult<FetchResponse> {
         // Try the self-hosted ScreenerBot OHLCV server first: it serves a shared
         // cache fast and warms itself, sparing the external providers' budgets. On
         // any miss/timeout/error we fall straight through to the providers below,
         // so this is purely an accelerator — never a hard dependency.
-        if let Some(candles) = self
-            .fetch_from_screenerbot_server(mint, pool_address, api_endpoint, aggregate, limit)
+        if let Some(response) = self
+            .fetch_from_screenerbot_server(
+                mint,
+                pool_address,
+                api_endpoint,
+                aggregate,
+                limit,
+                before,
+            )
             .await
         {
-            if !candles.is_empty() {
-                return Ok(candles);
+            if !response.candles.is_empty() {
+                return Ok(response);
             }
         }
 
         // Try SolanaTracker first (uses token address, better data)
-        if self.api_manager.solana_tracker.is_enabled() {
+        if before.is_none() && self.api_manager.solana_tracker.is_enabled() {
             if let Some(interval) = Self::gt_to_st_interval(api_endpoint, aggregate) {
                 match self.fetch_from_solana_tracker(mint, interval, limit).await {
-                    Ok(candles) if !candles.is_empty() => return Ok(candles),
+                    Ok(candles) if !candles.is_empty() => {
+                        return Ok(FetchResponse {
+                            candles,
+                            server_refreshing: false,
+                        })
+                    }
                     Ok(_) => {
                         // Empty result, fall through to GeckoTerminal
                     }
@@ -442,11 +496,19 @@ impl OhlcvFetcher {
                 }),
             )
             .await;
-            return Ok(Vec::new());
+            return Ok(FetchResponse::default());
         }
 
-        self.fetch_with_aggregate(pool_address, api_endpoint, aggregate, None, limit)
-            .await
+        // GeckoTerminal's `before_timestamp` may include a candle stamped exactly
+        // at the bound; one second earlier keeps the bound exclusive.
+        let gecko_before = before.map(|ts| ts.saturating_sub(1));
+        let candles = self
+            .fetch_with_aggregate(pool_address, api_endpoint, aggregate, gecko_before, limit)
+            .await?;
+        Ok(FetchResponse {
+            candles,
+            server_refreshing: false,
+        })
     }
 
     /// Fetch OHLCV data immediately (bypasses queue, use for critical requests only)
@@ -568,110 +630,6 @@ impl OhlcvFetcher {
                 }
             }
         }
-    }
-
-    /// Fetch multiple pages of data backwards
-    pub async fn fetch_historical(
-        &self,
-        pool_address: &str,
-        timeframe: Timeframe,
-        from_timestamp: i64,
-        to_timestamp: i64,
-    ) -> OhlcvResult<Vec<Candle>> {
-        if from_timestamp >= to_timestamp {
-            return Ok(Vec::new());
-        }
-
-        // DEBUG: Record historical fetch start
-        record_ohlcv_event(
-            "historical_fetch_start",
-            Severity::Debug,
-            None,
-            Some(pool_address),
-            json!({
-                "pool_address": pool_address,
-                "timeframe": timeframe.to_string(),
-                "from_timestamp": from_timestamp,
-                "to_timestamp": to_timestamp,
-            }),
-        )
-        .await;
-
-        let mut all_data = Vec::new();
-        let timeframe_seconds = timeframe.to_seconds();
-        let mut before = Some(to_timestamp);
-        let mut last_oldest = None;
-        let mut attempts = 0u32;
-        const MAX_ATTEMPTS: u32 = 500;
-
-        while attempts < MAX_ATTEMPTS {
-            attempts += 1;
-
-            let mut data = self
-                .fetch_immediate(pool_address, timeframe, before, MAX_CANDLES_PER_REQUEST)
-                .await?;
-
-            if data.is_empty() {
-                break;
-            }
-
-            data.retain(|point| {
-                point.timestamp >= from_timestamp && point.timestamp <= to_timestamp
-            });
-
-            if data.is_empty() {
-                break;
-            }
-
-            let oldest_timestamp = data
-                .iter()
-                .map(|d| d.timestamp)
-                .min()
-                .ok_or_else(|| OhlcvError::ApiError("No timestamps in data".to_owned()))?;
-
-            if let Some(prev_oldest) = last_oldest {
-                if prev_oldest <= oldest_timestamp {
-                    break;
-                }
-            }
-            last_oldest = Some(oldest_timestamp);
-
-            all_data.extend(data);
-
-            if oldest_timestamp <= from_timestamp {
-                break;
-            }
-
-            before = Some(oldest_timestamp.saturating_sub(timeframe_seconds));
-
-            if before == Some(to_timestamp) {
-                break;
-            }
-
-            sleep(Duration::from_millis(500)).await;
-        }
-
-        all_data.sort_by_key(|d| d.timestamp);
-        all_data.dedup_by_key(|d| d.timestamp);
-
-        // INFO: Record historical fetch completion
-        record_ohlcv_event(
-            "historical_fetch_complete",
-            Severity::Info,
-            None,
-            Some(pool_address),
-            json!({
-                "pool_address": pool_address,
-                "timeframe": timeframe.to_string(),
-                "from_timestamp": from_timestamp,
-                "to_timestamp": to_timestamp,
-                "data_points": all_data.len(),
-                "attempts": attempts,
-            }),
-        )
-        .await;
-
-        Ok(all_data)
     }
 
     /// Get average latency in milliseconds
@@ -798,5 +756,27 @@ impl OhlcvFetcher {
 impl Default for OhlcvFetcher {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stateful_body_parses_and_only_refresh_states_mark_refreshing() {
+        let body: StatefulOhlcv = serde_json::from_str(
+            r#"{"candles":[{"timestamp":60,"open":1.0,"high":2.0,"low":0.5,"close":1.5,"volume":3.0}],"state":"refreshing"}"#,
+        )
+        .unwrap();
+        assert_eq!(body.candles.len(), 1);
+        assert_eq!(body.candles[0].timestamp, 60);
+        assert!(server_state_is_refreshing(&body.state));
+        assert!(server_state_is_refreshing("pending"));
+        for state in ["ready", "empty", "unavailable", "", "something_new"] {
+            assert!(!server_state_is_refreshing(state), "{state}");
+        }
+        let without_state: StatefulOhlcv = serde_json::from_str(r#"{"candles":[]}"#).unwrap();
+        assert!(!server_state_is_refreshing(&without_state.state));
     }
 }

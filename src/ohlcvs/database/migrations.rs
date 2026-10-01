@@ -155,6 +155,7 @@ pub(super) fn test_path(label: &str) -> std::path::PathBuf {
 mod tests {
     use super::*;
     use crate::chains::ChainId;
+    use crate::ohlcvs::database::data_version::OHLCV_DATA_VERSION;
     use crate::ohlcvs::database::OhlcvDatabase;
     use crate::ohlcvs::types::Timeframe;
 
@@ -206,7 +207,9 @@ mod tests {
         legacy.execute("INSERT INTO ohlcv_candles (mint, pool_address, timeframe, timestamp, open, high, low, close, volume) VALUES ('mint', 'pool', '1m', 60, 1, 1, 1, 1, 1)", []).unwrap();
         legacy.execute("INSERT INTO ohlcv_gaps (mint, pool_address, timeframe, start_timestamp, end_timestamp) VALUES ('mint', 'pool', '1m', 120, 180)", []).unwrap();
         legacy.execute("INSERT INTO ohlcv_monitor_config (mint, priority, last_activity) VALUES ('mint', 'high', CURRENT_TIMESTAMP)", []).unwrap();
-        legacy.pragma_update(None, "user_version", 4).unwrap();
+        legacy
+            .pragma_update(None, "user_version", OHLCV_DATA_VERSION)
+            .unwrap();
         drop(legacy);
 
         let db = OhlcvDatabase::new(&path, ChainId::Solana).unwrap();
@@ -235,7 +238,7 @@ mod tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(user_version, 4);
+        assert_eq!(user_version, OHLCV_DATA_VERSION);
         assert_eq!(migrated_rows, 1);
         drop(conn);
         drop(db);

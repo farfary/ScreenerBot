@@ -1,11 +1,35 @@
 //! Candle storage and retrieval — time bounds, batch inserts, and backfill tracking.
 
 use crate::ohlcvs::types::{Candle, OhlcvError, OhlcvResult, Timeframe};
+use chrono::Utc;
 use rusqlite::{params, OptionalExtension};
 
 use super::{OhlcvDatabase, TimeframeSummary};
 
 impl OhlcvDatabase {
+    /// Source label of candles the monitor derives locally from stored 1m rows.
+    /// Every other label is a native series from a provider or the Data Server.
+    pub const AGGREGATE_SOURCE: &'static str = "monitor_aggregate";
+
+    /// Source label of native candles fetched per timeframe (backfill and the
+    /// monitor's native refresh).
+    pub const NATIVE_SOURCE: &'static str = "backfill";
+
+    /// Whether a candle carries a real trade and is kept at ingest.
+    pub fn is_storable(candle: &Candle) -> bool {
+        candle.volume.is_finite() && candle.volume > 0.0
+    }
+
+    /// Canonical UTC bucket start of `timestamp` for `timeframe`.
+    pub fn bucket_start(timestamp: i64, timeframe: Timeframe) -> i64 {
+        let bucket = timeframe.to_seconds();
+        if bucket > 0 {
+            (timestamp / bucket) * bucket
+        } else {
+            timestamp
+        }
+    }
+
     // ==================== Time Bounds ====================
 
     pub fn get_time_bounds(
@@ -45,7 +69,8 @@ impl OhlcvDatabase {
 
     // ==================== Unified Candles Storage ====================
 
-    /// Insert batch of candles for specific timeframe
+    /// Upsert a batch of candles for one timeframe and return how many rows were
+    /// inserted or changed. See [`Self::insert_candles_batch_at`] for the rules.
     pub fn insert_candles_batch(
         &self,
         mint: &str,
@@ -53,6 +78,35 @@ impl OhlcvDatabase {
         timeframe: Timeframe,
         candles: &[Candle],
         source: &str,
+    ) -> OhlcvResult<usize> {
+        self.insert_candles_batch_at(
+            mint,
+            pool_address,
+            timeframe,
+            candles,
+            source,
+            Utc::now().timestamp(),
+        )
+    }
+
+    /// Upsert a batch of candles for one timeframe, judging bucket closure
+    /// against `now` (unix secs).
+    ///
+    /// A stored bucket is last-write-wins, with one exception: a
+    /// [`Self::AGGREGATE_SOURCE`] write never replaces a native row (any other
+    /// source) whose bucket has closed (`timestamp + bucket <= now`). A closed
+    /// native candle is the provider's final answer, while a local 1m aggregate
+    /// is only as complete as the 1m rows stored when it was computed. An
+    /// identical row is left untouched, so the count and `fetched_at` reflect
+    /// real data changes only.
+    fn insert_candles_batch_at(
+        &self,
+        mint: &str,
+        pool_address: &str,
+        timeframe: Timeframe,
+        candles: &[Candle],
+        source: &str,
+        now: i64,
     ) -> OhlcvResult<usize> {
         if candles.is_empty() {
             return Ok(0);
@@ -80,7 +134,7 @@ impl OhlcvDatabase {
         // a single grid for all sources, so the chart matches TradingView /
         // DexScreener (which also anchor at 00:00/12:00 UTC).
         let bucket = timeframe.to_seconds();
-        let mut inserted = 0;
+        let mut changed = 0;
 
         for candle in candles {
             // Never record an empty no-trade candle. Candles are SOL-denominated,
@@ -89,19 +143,33 @@ impl OhlcvDatabase {
             // price forward. Storing those paints fake price action on the chart,
             // so we drop them (the series shows an honest gap instead, like
             // TradingView/DexScreener on an illiquid pair).
-            if !candle.volume.is_finite() || candle.volume <= 0.0 {
+            if !Self::is_storable(candle) {
                 continue;
             }
-            let aligned_ts = if bucket > 0 {
-                (candle.timestamp / bucket) * bucket
-            } else {
-                candle.timestamp
-            };
+            let aligned_ts = Self::bucket_start(candle.timestamp, timeframe);
             let result = tx.execute(
                 "INSERT INTO ohlcv_candles
                  (chain_id, mint, pool_address, timeframe, timestamp, open, high, low, close, volume, source)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
-                 ON CONFLICT(chain_id, mint, pool_address, timeframe, timestamp) DO NOTHING",
+                 ON CONFLICT(chain_id, mint, pool_address, timeframe, timestamp) DO UPDATE SET
+                    open = excluded.open,
+                    high = excluded.high,
+                    low = excluded.low,
+                    close = excluded.close,
+                    volume = excluded.volume,
+                    source = excluded.source,
+                    fetched_at = CURRENT_TIMESTAMP
+                 WHERE NOT (
+                        excluded.source = ?12
+                        AND ohlcv_candles.source != ?12
+                        AND ohlcv_candles.timestamp + ?13 <= ?14
+                    )
+                    AND (ohlcv_candles.open != excluded.open
+                        OR ohlcv_candles.high != excluded.high
+                        OR ohlcv_candles.low != excluded.low
+                        OR ohlcv_candles.close != excluded.close
+                        OR ohlcv_candles.volume != excluded.volume
+                        OR ohlcv_candles.source != excluded.source)",
                 params![
                     self.chain_id(), mint,
                     pool_address,
@@ -113,18 +181,54 @@ impl OhlcvDatabase {
                     candle.close,
                     candle.volume,
                     source,
+                    Self::AGGREGATE_SOURCE,
+                    bucket,
+                    now,
                 ],
             );
 
             if let Ok(rows) = result {
-                inserted += rows;
+                changed += rows;
             }
         }
 
         tx.commit()
             .map_err(|e| OhlcvError::DatabaseError(format!("Commit failed: {e}")))?;
 
-        Ok(inserted)
+        Ok(changed)
+    }
+
+    /// Newest stored bucket for one pool and timeframe that came from a native
+    /// source, i.e. excluding [`Self::AGGREGATE_SOURCE`] rows. Coverage and
+    /// catch-up sizing are measured against this, because local aggregates fill
+    /// the live edge and would otherwise hide a hole in the native series.
+    pub fn get_latest_native_timestamp(
+        &self,
+        mint: &str,
+        pool_address: &str,
+        timeframe: Timeframe,
+    ) -> OhlcvResult<Option<i64>> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+
+        conn.query_row(
+            "SELECT timestamp FROM ohlcv_candles
+             WHERE chain_id = ?1 AND mint = ?2 AND pool_address = ?3 AND timeframe = ?4
+               AND source != ?5
+             ORDER BY timestamp DESC LIMIT 1",
+            params![
+                self.chain_id(),
+                mint,
+                pool_address,
+                timeframe.as_str(),
+                Self::AGGREGATE_SOURCE
+            ],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {e}")))
     }
 
     /// Get candles for specific timeframe
@@ -425,7 +529,8 @@ impl OhlcvDatabase {
         Ok(())
     }
 
-    /// Mark backfill as incomplete for timeframe
+    /// Mark backfill as incomplete for timeframe. The token is no longer fully
+    /// backfilled, so `backfill_completed_at` is cleared with it.
     pub fn mark_backfill_incomplete(&self, mint: &str, timeframe: Timeframe) -> OhlcvResult<()> {
         let conn = self
             .conn
@@ -435,7 +540,7 @@ impl OhlcvDatabase {
         let column = format!("backfill_{}_complete", timeframe.as_str().replace('-', ""));
 
         let query = format!(
-            "UPDATE ohlcv_monitor_config SET {} = 0, updated_at = CURRENT_TIMESTAMP WHERE chain_id = ?1 AND mint = ?2",
+            "UPDATE ohlcv_monitor_config SET {} = 0, backfill_completed_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE chain_id = ?1 AND mint = ?2",
             column
         );
 
@@ -445,7 +550,9 @@ impl OhlcvDatabase {
         Ok(())
     }
 
-    /// Mark all backfills as complete
+    /// Mark all backfills as complete. `backfill_completed_at` records the
+    /// transition to complete, so a token that is already complete is left
+    /// untouched.
     pub fn mark_all_backfills_complete(&self, mint: &str) -> OhlcvResult<()> {
         let conn = self
             .conn
@@ -463,11 +570,232 @@ impl OhlcvDatabase {
              backfill_1d_complete = 1,
              backfill_completed_at = CURRENT_TIMESTAMP,
              updated_at = CURRENT_TIMESTAMP
-             WHERE chain_id = ?1 AND mint = ?2",
+             WHERE chain_id = ?1 AND mint = ?2 AND backfill_completed_at IS NULL",
             params![self.chain_id(), mint],
         )
         .map_err(|e| OhlcvError::DatabaseError(format!("Update failed: {e}")))?;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::migrations::test_path;
+    use super::*;
+    use crate::chains::ChainId;
+    use crate::ohlcvs::types::{Priority, TokenOhlcvConfig};
+
+    const HOUR: i64 = 3_600;
+    const NOW: i64 = 1_700_000_000 - 1_700_000_000 % HOUR + 1_800;
+    const FORMING: i64 = NOW - NOW % HOUR;
+    const CLOSED: i64 = FORMING - HOUR;
+
+    fn open_db(label: &str) -> (OhlcvDatabase, std::path::PathBuf) {
+        let path = test_path(label);
+        let _ = std::fs::remove_file(&path);
+        (OhlcvDatabase::new(&path, ChainId::Solana).unwrap(), path)
+    }
+
+    fn close_db(db: OhlcvDatabase, path: std::path::PathBuf) {
+        drop(db);
+        let _ = std::fs::remove_file(path);
+    }
+
+    fn candle(ts: i64, close: f64) -> Candle {
+        Candle::new(ts, 1.0, close.max(1.0), 0.5, close, 10.0)
+    }
+
+    fn upsert(db: &OhlcvDatabase, candles: &[Candle], source: &str) -> usize {
+        db.insert_candles_batch_at("mint", "pool", Timeframe::Hour1, candles, source, NOW)
+            .unwrap()
+    }
+
+    fn stored(db: &OhlcvDatabase, ts: i64) -> (f64, String) {
+        let conn = db.conn.lock().unwrap();
+        conn.query_row(
+            "SELECT close, source FROM ohlcv_candles WHERE mint = 'mint' AND pool_address = 'pool' AND timeframe = '1h' AND timestamp = ?1",
+            params![ts],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn native_over_native_updates_a_closed_bucket() {
+        let (db, path) = open_db("upsert-native-native");
+        assert_eq!(
+            upsert(&db, &[candle(CLOSED, 2.0)], OhlcvDatabase::NATIVE_SOURCE),
+            1
+        );
+        assert_eq!(upsert(&db, &[candle(CLOSED, 3.0)], "monitor"), 1);
+        assert_eq!(stored(&db, CLOSED), (3.0, "monitor".to_string()));
+        close_db(db, path);
+    }
+
+    #[test]
+    fn aggregate_over_aggregate_updates_a_closed_bucket() {
+        let (db, path) = open_db("upsert-aggregate-aggregate");
+        assert_eq!(
+            upsert(&db, &[candle(CLOSED, 2.0)], OhlcvDatabase::AGGREGATE_SOURCE),
+            1
+        );
+        assert_eq!(
+            upsert(&db, &[candle(CLOSED, 3.0)], OhlcvDatabase::AGGREGATE_SOURCE),
+            1
+        );
+        assert_eq!(
+            stored(&db, CLOSED),
+            (3.0, OhlcvDatabase::AGGREGATE_SOURCE.to_string())
+        );
+        close_db(db, path);
+    }
+
+    #[test]
+    fn aggregate_never_overwrites_a_closed_native_bucket() {
+        let (db, path) = open_db("upsert-aggregate-closed-native");
+        assert_eq!(
+            upsert(&db, &[candle(CLOSED, 2.0)], OhlcvDatabase::NATIVE_SOURCE),
+            1
+        );
+        assert_eq!(
+            upsert(&db, &[candle(CLOSED, 3.0)], OhlcvDatabase::AGGREGATE_SOURCE),
+            0
+        );
+        assert_eq!(
+            stored(&db, CLOSED),
+            (2.0, OhlcvDatabase::NATIVE_SOURCE.to_string())
+        );
+        // A native rewrite of an aggregate row is always taken.
+        assert_eq!(
+            upsert(
+                &db,
+                &[candle(CLOSED - HOUR, 4.0)],
+                OhlcvDatabase::AGGREGATE_SOURCE
+            ),
+            1
+        );
+        assert_eq!(
+            upsert(
+                &db,
+                &[candle(CLOSED - HOUR, 5.0)],
+                OhlcvDatabase::NATIVE_SOURCE
+            ),
+            1
+        );
+        assert_eq!(
+            stored(&db, CLOSED - HOUR),
+            (5.0, OhlcvDatabase::NATIVE_SOURCE.to_string())
+        );
+        close_db(db, path);
+    }
+
+    #[test]
+    fn aggregate_updates_a_forming_native_bucket() {
+        let (db, path) = open_db("upsert-aggregate-forming-native");
+        // A mid-bucket provider timestamp is snapped onto the forming bucket.
+        assert_eq!(
+            upsert(
+                &db,
+                &[candle(FORMING + 60, 2.0)],
+                OhlcvDatabase::NATIVE_SOURCE
+            ),
+            1
+        );
+        assert_eq!(
+            upsert(
+                &db,
+                &[candle(FORMING, 3.0)],
+                OhlcvDatabase::AGGREGATE_SOURCE
+            ),
+            1
+        );
+        assert_eq!(
+            stored(&db, FORMING),
+            (3.0, OhlcvDatabase::AGGREGATE_SOURCE.to_string())
+        );
+        // The native newest ignores the aggregate that now holds the forming bucket.
+        assert_eq!(
+            db.get_latest_native_timestamp("mint", "pool", Timeframe::Hour1)
+                .unwrap(),
+            None
+        );
+        close_db(db, path);
+    }
+
+    #[test]
+    fn identical_rows_and_empty_candles_change_nothing() {
+        let (db, path) = open_db("upsert-identical-empty");
+        assert_eq!(
+            upsert(&db, &[candle(CLOSED, 2.0)], OhlcvDatabase::NATIVE_SOURCE),
+            1
+        );
+        assert_eq!(
+            upsert(&db, &[candle(CLOSED, 2.0)], OhlcvDatabase::NATIVE_SOURCE),
+            0
+        );
+        let mut empty = candle(CLOSED, 9.0);
+        empty.volume = 0.0;
+        let mut negative = candle(FORMING, 9.0);
+        negative.volume = -1.0;
+        let mut non_finite = candle(FORMING, 9.0);
+        non_finite.volume = f64::NAN;
+        assert_eq!(
+            upsert(
+                &db,
+                &[empty, negative, non_finite],
+                OhlcvDatabase::NATIVE_SOURCE
+            ),
+            0
+        );
+        assert_eq!(
+            stored(&db, CLOSED),
+            (2.0, OhlcvDatabase::NATIVE_SOURCE.to_string())
+        );
+        assert_eq!(
+            db.get_latest_native_timestamp("mint", "pool", Timeframe::Hour1)
+                .unwrap(),
+            Some(CLOSED)
+        );
+        close_db(db, path);
+    }
+
+    #[test]
+    fn backfill_completed_at_is_written_only_on_the_transition_to_complete() {
+        let (db, path) = open_db("backfill-completed-at");
+        db.upsert_monitor_config(&TokenOhlcvConfig::new("mint".to_string(), Priority::High))
+            .unwrap();
+        let completed_at = |db: &OhlcvDatabase| -> Option<String> {
+            let conn = db.conn.lock().unwrap();
+            conn.query_row(
+                "SELECT backfill_completed_at FROM ohlcv_monitor_config WHERE mint = 'mint'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap()
+        };
+        let set_completed_at = |db: &OhlcvDatabase, value: &str| {
+            let conn = db.conn.lock().unwrap();
+            conn.execute(
+                "UPDATE ohlcv_monitor_config SET backfill_completed_at = ?1 WHERE mint = 'mint'",
+                params![value],
+            )
+            .unwrap();
+        };
+
+        db.mark_all_backfills_complete("mint").unwrap();
+        assert!(completed_at(&db).is_some());
+        set_completed_at(&db, "2000-01-01 00:00:00");
+        db.mark_all_backfills_complete("mint").unwrap();
+        assert_eq!(completed_at(&db).as_deref(), Some("2000-01-01 00:00:00"));
+
+        db.mark_backfill_incomplete("mint", Timeframe::Hour4)
+            .unwrap();
+        assert_eq!(completed_at(&db), None);
+        assert!(!db.is_backfill_complete("mint", Timeframe::Hour4).unwrap());
+        db.mark_all_backfills_complete("mint").unwrap();
+        assert!(completed_at(&db).is_some());
+        assert!(db.is_backfill_complete("mint", Timeframe::Hour4).unwrap());
+        close_db(db, path);
     }
 }

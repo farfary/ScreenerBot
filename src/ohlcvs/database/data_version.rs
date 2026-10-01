@@ -38,7 +38,12 @@ use rusqlite::{params, Connection, OptionalExtension};
 ///       and reads/status are scoped to the single resolved pool (no cross-pool
 ///       combining). Wipe so existing zero-volume rows and any stale other-pool
 ///       candles are cleared and re-pulled clean.
-pub(super) const OHLCV_DATA_VERSION: i64 = 4;
+///   5 — 2026-10: candle writes are an upsert (a local 1m aggregate never
+///       replaces a closed native bucket), coarse timeframes are refreshed
+///       natively with catch-up sizing, and backfill completion requires
+///       coverage. Wipe so buckets frozen at their first partial write and
+///       holes left by stale backfill pages are re-pulled.
+pub(super) const OHLCV_DATA_VERSION: i64 = 5;
 
 const CREATE_CHAIN_VERSIONS: &str = "CREATE TABLE IF NOT EXISTS ohlcv_data_versions (
     chain_id TEXT PRIMARY KEY,
