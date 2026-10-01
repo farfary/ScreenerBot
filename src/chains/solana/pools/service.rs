@@ -9,6 +9,7 @@ use crate::chains::solana::pools::analyzer::PoolAnalyzer;
 use crate::chains::solana::pools::calculator::PriceCalculator;
 use crate::chains::solana::pools::discovery::PoolDiscovery;
 use crate::chains::solana::pools::fetcher::AccountFetcher;
+use crate::chains::solana::pools::selection::new_selected_pools;
 use crate::chains::solana::pools::types::ProgramKind;
 use crate::chains::solana::rpc::get_rpc_client;
 use crate::logger::{self, LogTag};
@@ -47,7 +48,7 @@ pub fn get_pool_analyzer() -> Option<Arc<PoolAnalyzer>> {
 }
 
 /// Get pools associated with a token from the analyzer's in-memory directory.
-/// Returns a single canonical pool first (if present) followed by other pools.
+/// The token's selected pricing pool comes first (if present).
 ///
 /// Requires the pool runtime to be running (checked by the caller via
 /// `crate::pools::service::is_pool_service_running`); returns an empty list
@@ -104,11 +105,16 @@ pub async fn initialize_components() -> crate::chains::solana::Result<u32> {
 
     // Pool directory shared between analyzer/fetcher/calculator
     let pool_directory = Arc::new(RwLock::new(HashMap::new()));
+    // Pool each token is priced from: written by the analyzer, read by the calculator
+    let selected_pools = new_selected_pools();
 
     let pool_discovery = Arc::new(PoolDiscovery::new());
-    let pool_analyzer = Arc::new(PoolAnalyzer::new(pool_directory.clone()));
+    let pool_analyzer = Arc::new(PoolAnalyzer::new(
+        pool_directory.clone(),
+        selected_pools.clone(),
+    ));
     let account_fetcher = Arc::new(AccountFetcher::new(pool_directory.clone()));
-    let price_calculator = Arc::new(PriceCalculator::new(pool_directory.clone()));
+    let price_calculator = Arc::new(PriceCalculator::new(pool_directory.clone(), selected_pools));
 
     if let Ok(mut discovery) = POOL_DISCOVERY.write() {
         *discovery = Some(pool_discovery);

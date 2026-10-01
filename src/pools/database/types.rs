@@ -161,3 +161,12 @@ pub struct BlacklistedPoolRecord {
     pub last_failed_at: i64,
     pub added_at: i64,
 }
+
+/// Result of recording pool failures
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PoolFailureOutcome {
+    /// Failures counted in the current episode
+    pub error_count: i64,
+    /// Unix time the pool leaves the blacklist; `None` while below the threshold
+    pub blacklisted_until: Option<i64>,
+}

@@ -13,7 +13,9 @@ mod types;
 mod writer;
 
 // Re-export public types
-pub use types::{BlacklistedAccountRecord, BlacklistedPoolRecord, DbPriceResult};
+pub use types::{
+    BlacklistedAccountRecord, BlacklistedPoolRecord, DbPriceResult, PoolFailureOutcome,
+};
 
 // Re-export public functions from global module
 pub use global::{

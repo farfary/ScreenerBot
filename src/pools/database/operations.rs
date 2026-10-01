@@ -1,6 +1,8 @@
 //! Core PoolsDatabase struct and operations
 
-use super::super::types::{PriceResult, PRICE_HISTORY_MAX_ENTRIES};
+use super::super::types::{
+    PoolBlacklistPolicy, PoolFailureRecord, PriceResult, PRICE_HISTORY_MAX_ENTRIES,
+};
 use super::types::DbPriceResult;
 use super::writer::run_database_writer;
 use crate::logger::{self, LogTag};
@@ -10,7 +12,7 @@ use crate::database;
 use crate::errors::{DatabaseError, InternalError};
 use crate::pools::Error;
 use rusqlite::{params, Connection};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::sync::Mutex; // Changed to std::sync::Mutex for spawn_blocking compatibility
 use std::sync::RwLock;
@@ -37,7 +39,8 @@ pub struct PoolsDatabase {
     pub(super) write_queue: Option<mpsc::UnboundedSender<PriceResult>>,
     // In-memory blacklists (source of truth for runtime checks)
     pub(super) blacklisted_accounts: Arc<RwLock<HashSet<String>>>,
-    pub(super) blacklisted_pools: Arc<RwLock<HashSet<String>>>,
+    /// Actively blacklisted pools -> unix time each leaves the blacklist
+    pub(super) blacklisted_pools: Arc<RwLock<HashMap<String, i64>>>,
 }
 
 impl Clone for PoolsDatabase {
@@ -64,7 +67,7 @@ impl PoolsDatabase {
             connection: Arc::new(Mutex::new(None)),
             write_queue: None,
             blacklisted_accounts: Arc::new(RwLock::new(HashSet::new())),
-            blacklisted_pools: Arc::new(RwLock::new(HashSet::new())),
+            blacklisted_pools: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -114,9 +117,13 @@ impl PoolsDatabase {
             &format!("Pools database initialized: {}", self.db_path),
         );
 
-        // Load blacklists into memory (priority for runtime checks)
+        // Load blacklists into memory (priority for runtime checks). Pool rows
+        // count only under the current blacklist policy: rows below the failure
+        // threshold or older than the TTL stay in the table but do not exclude
+        // their pool.
+        let pool_policy = PoolBlacklistPolicy::from_config();
 
-        let (account_keys, pool_keys) = {
+        let (account_keys, pool_rows) = {
             let connection_guard = self.connection.lock().unwrap();
             if let Some(ref conn) = *connection_guard {
                 // Accounts
@@ -150,32 +157,42 @@ impl PoolsDatabase {
                 };
 
                 // Pools
-                let pool_keys =
-                    match conn.prepare("SELECT pool_id FROM blacklist_pools WHERE chain_id = ?") {
-                        Ok(mut stmt) => {
-                            let rows = stmt
-                                .query_map([self.chain_id.as_str()], |row| row.get::<_, String>(0));
-                            match rows {
-                                Ok(iter) => iter.filter_map(|r| r.ok()).collect::<Vec<_>>(),
-                                Err(e) => {
-                                    logger::warning(
-                                        LogTag::PoolService,
-                                        &format!("Failed to load blacklist_pools into memory: {e}"),
-                                    );
-                                    Vec::new()
-                                }
+                let pool_rows = match conn.prepare(
+                    "SELECT pool_id, error_count, first_failed_at, last_failed_at \
+                     FROM blacklist_pools WHERE chain_id = ?",
+                ) {
+                    Ok(mut stmt) => {
+                        let rows = stmt.query_map([self.chain_id.as_str()], |row| {
+                            Ok((
+                                row.get::<_, String>(0)?,
+                                PoolFailureRecord {
+                                    error_count: row.get::<_, Option<i64>>(1)?.unwrap_or(1),
+                                    first_failed_at: row.get(2)?,
+                                    last_failed_at: row.get(3)?,
+                                },
+                            ))
+                        });
+                        match rows {
+                            Ok(iter) => iter.filter_map(|r| r.ok()).collect::<Vec<_>>(),
+                            Err(e) => {
+                                logger::warning(
+                                    LogTag::PoolService,
+                                    &format!("Failed to load blacklist_pools into memory: {e}"),
+                                );
+                                Vec::new()
                             }
                         }
-                        Err(e) => {
-                            logger::warning(
-                                LogTag::PoolService,
-                                &format!("Failed to prepare load for blacklist_pools: {e}"),
-                            );
-                            Vec::new()
-                        }
-                    };
+                    }
+                    Err(e) => {
+                        logger::warning(
+                            LogTag::PoolService,
+                            &format!("Failed to prepare load for blacklist_pools: {e}"),
+                        );
+                        Vec::new()
+                    }
+                };
 
-                (account_keys, pool_keys)
+                (account_keys, pool_rows)
             } else {
                 (Vec::new(), Vec::new())
             }
@@ -189,12 +206,27 @@ impl PoolsDatabase {
             }
         }
 
-        {
+        let pool_rows_total = pool_rows.len();
+        let now = chrono::Utc::now().timestamp();
+        let active_pools = {
             let mut pools = self.blacklisted_pools.write().unwrap();
-            for key in pool_keys {
-                pools.insert(key);
+            for (pool_id, record) in pool_rows {
+                if let Some(expires_at) = pool_policy.blacklist_expiry(&record) {
+                    if now < expires_at {
+                        pools.insert(pool_id, expires_at);
+                    }
+                }
             }
-        }
+            pools.len()
+        };
+
+        logger::info(
+            LogTag::PoolService,
+            &format!(
+                "Loaded pool blacklist: {} active of {} recorded (threshold {}, ttl {}s)",
+                active_pools, pool_rows_total, pool_policy.threshold, pool_policy.ttl_secs
+            ),
+        );
 
         Ok(())
     }
@@ -580,7 +612,7 @@ mod tests {
             connection: Arc::new(Mutex::new(Some(conn))),
             write_queue: None,
             blacklisted_accounts: Arc::new(RwLock::new(HashSet::new())),
-            blacklisted_pools: Arc::new(RwLock::new(HashSet::new())),
+            blacklisted_pools: Arc::new(RwLock::new(HashMap::new())),
         };
         let history = db
             .get_price_history("mint", None, None)
@@ -589,7 +621,13 @@ mod tests {
         assert_eq!(history.len(), 1);
         assert_eq!(history[0].price_sol, 2.0);
         let pools = db
-            .list_blacklisted_pools(None)
+            .list_blacklisted_pools(
+                None,
+                PoolBlacklistPolicy {
+                    threshold: 1,
+                    ttl_secs: i64::MAX,
+                },
+            )
             .await
             .expect("read solana blacklist");
         assert_eq!(pools.len(), 1);

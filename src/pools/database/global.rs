@@ -1,9 +1,9 @@
 //! Global pool database singleton — provides shared access to the pool data store.
 
-use super::super::types::{PriceResult, PRICE_HISTORY_MAX_ENTRIES};
+use super::super::types::{PoolBlacklistPolicy, PriceResult, PRICE_HISTORY_MAX_ENTRIES};
 /// Global database instance and convenience functions
 use super::operations::PoolsDatabase;
-use super::types::{BlacklistedAccountRecord, BlacklistedPoolRecord};
+use super::types::{BlacklistedAccountRecord, BlacklistedPoolRecord, PoolFailureOutcome};
 use crate::chains::ChainId;
 use crate::errors::InternalError;
 use crate::pools::Error;
@@ -204,14 +204,16 @@ pub async fn is_account_blacklisted(
     db_ref.is_account_blacklisted(account_pubkey).await
 }
 
-/// Add pool to blacklist (global helper)
+/// Record `observed_failures` failures of a pool under the configured pool
+/// blacklist policy (global helper). See `PoolsDatabase::add_pool_to_blacklist`.
 pub async fn add_pool_to_blacklist(
     chain_id: ChainId,
     pool_id: &str,
     reason: &str,
     token_mint: Option<&str>,
     program_id: Option<&str>,
-) -> Result<(), Error> {
+    observed_failures: u32,
+) -> Result<PoolFailureOutcome, Error> {
     let db_ref = match GLOBAL_POOLS_DB.read() {
         Ok(guard) => match guard.as_ref() {
             Some(db) => db.clone_for_async(),
@@ -231,7 +233,14 @@ pub async fn add_pool_to_blacklist(
         });
     }
     db_ref
-        .add_pool_to_blacklist(pool_id, reason, token_mint, program_id)
+        .add_pool_to_blacklist(
+            pool_id,
+            reason,
+            token_mint,
+            program_id,
+            observed_failures,
+            PoolBlacklistPolicy::from_config(),
+        )
         .await
 }
 
@@ -288,7 +297,7 @@ pub async fn list_blacklisted_accounts(
     db_ref.list_blacklisted_accounts(limit).await
 }
 
-/// List blacklisted pools with an optional limit.
+/// List pools currently blacklisted under the configured policy, with an optional limit.
 pub async fn list_blacklisted_pools(
     chain_id: ChainId,
     limit: Option<usize>,
@@ -303,5 +312,7 @@ pub async fn list_blacklisted_pools(
     if db_ref.chain_id != chain_id {
         return Ok(Vec::new());
     }
-    db_ref.list_blacklisted_pools(limit).await
+    db_ref
+        .list_blacklisted_pools(limit, PoolBlacklistPolicy::from_config())
+        .await
 }

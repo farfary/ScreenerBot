@@ -35,6 +35,7 @@ fn shared_data_dir() -> &'static tempfile::TempDir {
 mod pools_store {
     use super::*;
     use screenerbot::pools::database::PoolsDatabase;
+    use screenerbot::pools::types::PoolBlacklistPolicy;
 
     /// A real blacklist row written through the public API must be the only one
     /// `list_blacklisted_pools` ever returns, even when a raw row for the SAME
@@ -46,7 +47,13 @@ mod pools_store {
         let mut db = PoolsDatabase::new(ChainId::Solana);
         db.initialize().await.expect("initialize pools database");
 
-        db.add_pool_to_blacklist("PoolReal", "reason-real", Some("MintReal"), None)
+        // Every recorded row counts under this policy, so only the chain filter
+        // can keep the foreign row out of the listing.
+        let policy = PoolBlacklistPolicy {
+            threshold: 1,
+            ttl_secs: i64::MAX,
+        };
+        db.add_pool_to_blacklist("PoolReal", "reason-real", Some("MintReal"), None, 1, policy)
             .await
             .expect("add real pool to blacklist");
 
@@ -61,7 +68,7 @@ mod pools_store {
         .expect("insert conceptual foreign-chain blacklist row");
 
         let pools = db
-            .list_blacklisted_pools(None)
+            .list_blacklisted_pools(None, policy)
             .await
             .expect("list solana-scoped blacklist");
         assert_eq!(

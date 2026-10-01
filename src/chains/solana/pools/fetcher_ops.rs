@@ -512,6 +512,9 @@ impl AccountFetcher {
                     let program_kind = ProgramKind::from_protocol_id(&descriptor.program_kind);
                     let program_id = program_kind.program_id();
 
+                    // This tracker already applied the threshold within its
+                    // failure window, so it reports every counted hit at once and
+                    // the stored policy does not require the threshold again.
                     match crate::pools::db::add_pool_to_blacklist(
                         crate::chains::ChainId::Solana,
                         &pool_id.to_string(),
@@ -522,16 +525,22 @@ impl AccountFetcher {
                         } else {
                             Some(program_id)
                         },
+                        pool_state.failures,
                     )
                     .await
                     {
-                        Ok(()) => {
+                        Ok(outcome) => {
                             pool_state.blacklisted = true;
                             logger::warning(
                                 LogTag::PoolFetcher,
                                 &format!(
-                                    "Blacklisted pool {} (token {}) after {} missing-account hits",
-                                    pool_id, token_mint, pool_state.failures
+                                    "Blacklisted pool {} (token {}) after {} missing-account hits, until unix {}",
+                                    pool_id,
+                                    token_mint,
+                                    pool_state.failures,
+                                    outcome
+                                        .blacklisted_until
+                                        .map_or_else(|| "n/a".to_owned(), |until| until.to_string())
                                 ),
                             );
                             record_safe(Event::warn(

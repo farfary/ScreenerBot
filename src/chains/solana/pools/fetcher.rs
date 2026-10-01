@@ -231,6 +231,11 @@ impl AccountFetcher {
         bundles.get(pool_id).cloned()
     }
 
+    /// Release the fetched account bundle of a pool that left the directory
+    pub fn remove_pool_bundle(&self, pool_id: &Pubkey) {
+        self.account_bundles.write().unwrap().remove(pool_id);
+    }
+
     /// Get all account bundles
     pub fn get_all_bundles(&self) -> Vec<PoolAccountBundle> {
         let bundles = self.account_bundles.read().unwrap();

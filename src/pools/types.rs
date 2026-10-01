@@ -367,6 +367,83 @@ pub fn pool_blacklist_threshold() -> u32 {
     crate::config::with_config(|cfg| cfg.pools.pool_blacklist_threshold)
 }
 
+/// How long a blacklisted pool stays excluded after its latest failure, from configuration
+pub fn pool_blacklist_ttl_secs() -> u64 {
+    crate::config::with_config(|cfg| cfg.pools.pool_blacklist_ttl_secs)
+}
+
+/// Failure counters of one pool, as stored in `blacklist_pools` (unix seconds)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PoolFailureRecord {
+    pub error_count: i64,
+    pub first_failed_at: i64,
+    pub last_failed_at: i64,
+}
+
+/// The rule deciding when recorded failures exclude a pool.
+///
+/// A pool is blacklisted only while its failure count is at least `threshold`
+/// AND its latest failure is younger than `ttl_secs`. A failure recorded after
+/// the TTL has passed starts a new count, so stale failures never accumulate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PoolBlacklistPolicy {
+    pub threshold: u32,
+    pub ttl_secs: i64,
+}
+
+impl PoolBlacklistPolicy {
+    /// The policy currently configured in the `pools` section
+    pub fn from_config() -> Self {
+        Self {
+            threshold: pool_blacklist_threshold(),
+            ttl_secs: i64::try_from(pool_blacklist_ttl_secs()).unwrap_or(i64::MAX),
+        }
+    }
+
+    /// Whether a failure recorded at `last_failed_at` no longer counts at `now`
+    pub fn is_stale(&self, last_failed_at: i64, now: i64) -> bool {
+        now.saturating_sub(last_failed_at) >= self.ttl_secs
+    }
+
+    /// Counters after `observed_failures` new failures at `now`.
+    ///
+    /// `observed_failures` is the number of failures the caller witnessed; a
+    /// caller that already applies its own consecutive-failure threshold passes
+    /// its count so the threshold is not required a second time.
+    pub fn record_failure(
+        &self,
+        previous: Option<PoolFailureRecord>,
+        observed_failures: u32,
+        now: i64,
+    ) -> PoolFailureRecord {
+        let observed = i64::from(observed_failures.max(1));
+        match previous {
+            Some(previous) if !self.is_stale(previous.last_failed_at, now) => PoolFailureRecord {
+                error_count: previous.error_count.saturating_add(observed),
+                first_failed_at: previous.first_failed_at,
+                last_failed_at: now,
+            },
+            _ => PoolFailureRecord {
+                error_count: observed,
+                first_failed_at: now,
+                last_failed_at: now,
+            },
+        }
+    }
+
+    /// Unix time the pool leaves the blacklist, when its count reaches the threshold
+    pub fn blacklist_expiry(&self, record: &PoolFailureRecord) -> Option<i64> {
+        (record.error_count >= i64::from(self.threshold.max(1)))
+            .then(|| record.last_failed_at.saturating_add(self.ttl_secs))
+    }
+
+    /// Whether `record` blacklists its pool at `now`
+    pub fn is_blacklisted(&self, record: &PoolFailureRecord, now: i64) -> bool {
+        self.blacklist_expiry(record)
+            .is_some_and(|expires_at| now < expires_at)
+    }
+}
+
 /// Failure window in seconds from configuration
 pub fn failure_window_secs() -> u64 {
     crate::config::with_config(|cfg| cfg.pools.failure_window_secs)
@@ -475,5 +552,67 @@ mod tests {
         let json = serde_json::to_value(&descriptor.pool_id).unwrap();
         let restored: PoolId = serde_json::from_value(json).unwrap();
         assert_eq!(restored, descriptor.pool_id);
+    }
+
+    const POLICY: PoolBlacklistPolicy = PoolBlacklistPolicy {
+        threshold: 2,
+        ttl_secs: 86_400,
+    };
+
+    #[test]
+    fn a_failure_below_the_threshold_does_not_blacklist() {
+        let record = POLICY.record_failure(None, 1, 1_000);
+        assert_eq!(record.error_count, 1);
+        assert_eq!(POLICY.blacklist_expiry(&record), None);
+        assert!(!POLICY.is_blacklisted(&record, 1_000));
+    }
+
+    #[test]
+    fn reaching_the_threshold_blacklists_until_the_ttl_passes() {
+        let first = POLICY.record_failure(None, 1, 1_000);
+        let second = POLICY.record_failure(Some(first), 1, 1_005);
+        assert_eq!(second.error_count, 2);
+        assert_eq!(second.first_failed_at, 1_000);
+        assert_eq!(POLICY.blacklist_expiry(&second), Some(1_005 + 86_400));
+        assert!(POLICY.is_blacklisted(&second, 1_005));
+        assert!(POLICY.is_blacklisted(&second, 1_005 + 86_399));
+        assert!(!POLICY.is_blacklisted(&second, 1_005 + 86_400));
+    }
+
+    #[test]
+    fn a_failure_after_the_ttl_restarts_the_count() {
+        let old = PoolFailureRecord {
+            error_count: 7,
+            first_failed_at: 10,
+            last_failed_at: 20,
+        };
+        assert!(!POLICY.is_blacklisted(&old, 20 + 86_400));
+
+        let fresh = POLICY.record_failure(Some(old), 1, 20 + 86_400);
+        assert_eq!(fresh.error_count, 1);
+        assert_eq!(fresh.first_failed_at, 20 + 86_400);
+        assert!(!POLICY.is_blacklisted(&fresh, 20 + 86_400));
+    }
+
+    #[test]
+    fn a_caller_counted_threshold_is_not_required_twice() {
+        let record = POLICY.record_failure(None, 2, 500);
+        assert_eq!(record.error_count, 2);
+        assert!(POLICY.is_blacklisted(&record, 500));
+    }
+
+    #[test]
+    fn a_zero_threshold_still_needs_one_failure() {
+        let policy = PoolBlacklistPolicy {
+            threshold: 0,
+            ttl_secs: 60,
+        };
+        let none = PoolFailureRecord {
+            error_count: 0,
+            first_failed_at: 0,
+            last_failed_at: 0,
+        };
+        assert!(!policy.is_blacklisted(&none, 0));
+        assert!(policy.is_blacklisted(&policy.record_failure(None, 0, 0), 0));
     }
 }

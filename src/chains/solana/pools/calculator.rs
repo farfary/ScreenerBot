@@ -15,6 +15,7 @@
 use super::decoders;
 use super::fetcher::{AccountData, PoolAccountBundle};
 use super::reserve_accounts::reserve_pubkeys;
+use super::selection::{self, SelectedPools};
 use super::types::ProgramKind;
 use crate::pools::cache;
 use crate::pools::types::{PoolDescriptor, PriceResult};
@@ -55,6 +56,8 @@ pub struct PoolCalculationResult {
 pub struct PriceCalculator {
     /// Pool directory for metadata
     pool_directory: Arc<RwLock<HashMap<Pubkey, PoolDescriptor>>>,
+    /// Pool each token is priced from; only those pools publish prices
+    selected_pools: SelectedPools,
     /// Channel for receiving calculation requests
     calculator_rx: Arc<RwLock<Option<mpsc::UnboundedReceiver<CalculatorMessage>>>>,
     /// Channel sender for sending calculation requests
@@ -69,11 +72,15 @@ pub struct PriceCalculator {
 
 impl PriceCalculator {
     /// Create new price calculator
-    pub fn new(pool_directory: Arc<RwLock<HashMap<Pubkey, PoolDescriptor>>>) -> Self {
+    pub fn new(
+        pool_directory: Arc<RwLock<HashMap<Pubkey, PoolDescriptor>>>,
+        selected_pools: SelectedPools,
+    ) -> Self {
         let (calculator_tx, calculator_rx) = mpsc::unbounded_channel();
 
         Self {
             pool_directory,
+            selected_pools,
             calculator_rx: Arc::new(RwLock::new(Some(calculator_rx))),
             calculator_tx,
             sol_reference_price: Arc::new(RwLock::new(100.0)),
@@ -102,7 +109,7 @@ impl PriceCalculator {
     pub async fn start_calculator_task(&self, shutdown: Arc<Notify>) {
         logger::info(LogTag::PoolCalculator, "Starting price calculator task");
 
-        let _pool_directory = self.pool_directory.clone();
+        let selected_pools = self.selected_pools.clone();
         let sol_reference_price = self.sol_reference_price.clone();
 
         // Clone metrics for tracking in background task
@@ -140,6 +147,16 @@ impl PriceCalculator {
                                     pool_descriptor.quote_mint.address().to_owned()
                                 };
 
+                                // A token has one price source: its selected pool. A pool
+                                // superseded while this request was queued is not priced.
+                                if !Self::publishes_price(&selected_pools, &token_mint, &pool_id) {
+                                    logger::debug(
+                                        LogTag::PoolCalculator,
+                                        &format!("Skipping calculation for pool {pool_id}: not the selected pool of token {token_mint}"),
+                                    );
+                                    continue;
+                                }
+
                                 record_safe(Event::info(
                                     EventCategory::Pool,
                                     Some("price_calculation_started".to_owned()),
@@ -163,6 +180,16 @@ impl PriceCalculator {
                                 let calculation_duration = calculation_start.elapsed();
 
                                 if let Some(price_result) = result.price_result {
+                                    // The selection can change while the calculation runs;
+                                    // publish only while this pool is still the token's source.
+                                    if !Self::publishes_price(&selected_pools, &token_mint, &pool_id) {
+                                        logger::debug(
+                                            LogTag::PoolCalculator,
+                                            &format!("Discarding price from pool {pool_id}: no longer the selected pool of token {token_mint}"),
+                                        );
+                                        continue;
+                                    }
+
                                     // Track metrics
                                     operations.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                                     prices_calculated.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -250,23 +277,36 @@ impl PriceCalculator {
                                         ),
                                     );
 
-                                    // Blacklist the pool so canonical selection skips it next cycle
+                                    // Record the failure; once the pool blacklist threshold is
+                                    // reached, discovery selects another pool for the token
                                     // (e.g. migrated PumpFunLegacy bonding curves with zero reserves)
                                     let pool_id_str = pool_id.to_string();
                                     let token_mint_clone = token_mint.clone();
                                     let program_kind_str = pool_descriptor.program_kind.as_str().to_owned();
                                     tokio::spawn(async move {
-                                        if let Err(e) = crate::pools::database::add_pool_to_blacklist(
+                                        match crate::pools::database::add_pool_to_blacklist(
                                             crate::chains::ChainId::Solana,
                                             &pool_id_str,
                                             "decoder_failed",
                                             Some(&token_mint_clone),
                                             Some(&program_kind_str),
+                                            1,
                                         ).await {
-                                            crate::logger::warning(
-                                                crate::logger::LogTag::PoolCalculator,
-                                                &format!("Failed to blacklist pool {}: {}", pool_id_str, e),
-                                            );
+                                            Ok(outcome) => {
+                                                if let Some(until) = outcome.blacklisted_until {
+                                                    logger::warning(
+                                                        LogTag::PoolCalculator,
+                                                        &format!(
+                                                            "Pool {} (token {}) blacklisted until unix {} after {} price calculation failures",
+                                                            pool_id_str, token_mint_clone, until, outcome.error_count
+                                                        ),
+                                                    );
+                                                }
+                                            }
+                                            Err(e) => logger::warning(
+                                                LogTag::PoolCalculator,
+                                                &format!("Failed to record calculation failure of pool {}: {}", pool_id_str, e),
+                                            ),
                                         }
                                     });
                                 }
@@ -493,33 +533,16 @@ impl PriceCalculator {
         Ok(())
     }
 
-    /// Get the canonical pool used for pricing a given token mint (highest-quality pool)
+    /// Whether a price computed from `pool_id` may be written as `token_mint`'s price
+    fn publishes_price(selected_pools: &SelectedPools, token_mint: &str, pool_id: &Pubkey) -> bool {
+        selected_pools
+            .read()
+            .is_ok_and(|selected| selection::is_selected_pool(&selected, token_mint, pool_id))
+    }
+
+    /// Get the pool used for pricing a given token mint: the discovery selection
     pub fn get_canonical_pool(&self, mint: &str) -> Option<PoolDescriptor> {
-        if mint == SOL_MINT {
-            return None;
-        }
-
-        let candidates: Vec<PoolDescriptor> = {
-            let directory = self.pool_directory.read().ok()?;
-            directory
-                .values()
-                .filter(|pool| {
-                    pool.base_mint.address() == mint || pool.quote_mint.address() == mint
-                })
-                .cloned()
-                .collect()
-        };
-
-        if candidates.is_empty() {
-            return None;
-        }
-
-        // Select highest liquidity pool for this mint
-        candidates.into_iter().max_by(|a, b| {
-            a.liquidity_usd
-                .partial_cmp(&b.liquidity_usd)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        })
+        selection::selected_descriptor(&self.selected_pools, &self.pool_directory, mint)
     }
 }
 
@@ -546,29 +569,67 @@ mod tests {
     }
 
     #[test]
-    fn get_canonical_pool_picks_highest_liquidity_by_string_mint() {
+    fn get_canonical_pool_is_the_selected_pool_not_the_highest_liquidity() {
         let directory = Arc::new(RwLock::new(HashMap::new()));
-        let calculator = PriceCalculator::new(directory.clone());
+        let selected = selection::new_selected_pools();
+        let calculator = PriceCalculator::new(directory.clone(), selected.clone());
 
-        let low = descriptor("TokenA", SOL_MINT, 100.0);
-        let high = descriptor("TokenA", SOL_MINT, 500.0);
+        let selected_id = Pubkey::new_unique();
+        let deeper_id = Pubkey::new_unique();
+        let chosen = descriptor("TokenA", SOL_MINT, 100.0);
         {
             let mut guard = directory.write().unwrap();
-            guard.insert(Pubkey::new_unique(), low);
-            guard.insert(Pubkey::new_unique(), high.clone());
+            guard.insert(selected_id, chosen.clone());
+            guard.insert(deeper_id, descriptor("TokenA", SOL_MINT, 500.0));
         }
+        assert!(calculator.get_canonical_pool("TokenA").is_none());
 
+        selected
+            .write()
+            .unwrap()
+            .insert("TokenA".to_owned(), selected_id);
         let canonical = calculator
             .get_canonical_pool("TokenA")
             .expect("canonical pool");
-        assert_eq!(canonical.pool_id, high.pool_id);
+        assert_eq!(canonical.liquidity_usd, chosen.liquidity_usd);
     }
 
     #[test]
     fn get_canonical_pool_rejects_the_sol_mint_itself() {
         let directory = Arc::new(RwLock::new(HashMap::new()));
-        let calculator = PriceCalculator::new(directory);
+        let calculator = PriceCalculator::new(directory, selection::new_selected_pools());
         assert!(calculator.get_canonical_pool(SOL_MINT).is_none());
+    }
+
+    #[test]
+    fn only_the_selected_pool_publishes_a_price() {
+        let selected = selection::new_selected_pools();
+        let chosen = Pubkey::new_unique();
+        let superseded = Pubkey::new_unique();
+        assert!(!PriceCalculator::publishes_price(
+            &selected, "TokenA", &chosen
+        ));
+
+        selected
+            .write()
+            .unwrap()
+            .insert("TokenA".to_owned(), chosen);
+        assert!(PriceCalculator::publishes_price(
+            &selected, "TokenA", &chosen
+        ));
+        assert!(!PriceCalculator::publishes_price(
+            &selected,
+            "TokenA",
+            &superseded
+        ));
+
+        selected
+            .write()
+            .unwrap()
+            .insert("TokenA".to_owned(), superseded);
+        assert!(!PriceCalculator::publishes_price(
+            &selected, "TokenA", &chosen
+        ));
     }
 
     #[tokio::test]

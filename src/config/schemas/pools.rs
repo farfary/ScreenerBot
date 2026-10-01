@@ -68,6 +68,14 @@ config_struct! {
         })]
         pool_blacklist_threshold: u32 = 2,
         #[metadata(field_metadata! {
+            min: 3600,
+            max: 2592000,
+            step: 3600,
+            impact: ConfigImpact::Medium,
+            category: ConfigCategory::Fetcher,
+        })]
+        pool_blacklist_ttl_secs: u64 = 86_400,
+        #[metadata(field_metadata! {
             min: 60,
             max: 600,
             step: 30,
