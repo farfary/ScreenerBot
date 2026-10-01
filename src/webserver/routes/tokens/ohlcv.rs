@@ -1,5 +1,8 @@
 //! OHLCV data, focus management, and external data handlers
 
+use std::collections::HashSet;
+use std::sync::{LazyLock, Mutex};
+
 use axum::{
     extract::{Path, Query},
     http::StatusCode,
@@ -211,54 +214,114 @@ pub async fn get_token_ohlcv_status(
     }
 }
 
+/// Mints whose `POST /ohlcv/refresh` task is still running. A repeated request for the same
+/// mint joins the running refresh instead of queuing another provider fetch.
+static REFRESH_IN_FLIGHT: LazyLock<Mutex<HashSet<String>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
+
+/// Holds a mint's slot in `REFRESH_IN_FLIGHT` for the lifetime of its refresh task and frees it
+/// on completion, error or panic.
+struct RefreshSlot(String);
+
+impl RefreshSlot {
+    /// Claims the slot for `mint`; `None` when a refresh for it is already running.
+    fn claim(mint: &str) -> Option<Self> {
+        let mut in_flight = REFRESH_IN_FLIGHT
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        in_flight
+            .insert(mint.to_string())
+            .then(|| Self(mint.to_string()))
+    }
+}
+
+impl Drop for RefreshSlot {
+    fn drop(&mut self) {
+        REFRESH_IN_FLIGHT
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .remove(&self.0);
+    }
+}
+
 /// POST /api/tokens/:mint/ohlcv/refresh
 ///
-/// Force refresh OHLCV data (immediate fetch outside scheduled monitoring)
+/// Starts an immediate fetch outside scheduled monitoring and returns 202 Accepted without
+/// waiting for it: a refresh walks every timeframe against rate-limited providers and can run
+/// far longer than a dashboard request timeout. The chart picks the new candles up on its own
+/// poll. `already_running` is true when a refresh for this mint was in flight and none was
+/// started.
 pub async fn refresh_token_ohlcv(
     Path(mint): Path<String>,
-) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+) -> (StatusCode, Json<serde_json::Value>) {
+    let Some(slot) = RefreshSlot::claim(&mint) else {
+        logger::debug(
+            LogTag::Webserver,
+            &format!("mint={mint} ohlcv_refresh_already_running"),
+        );
+        return (
+            StatusCode::ACCEPTED,
+            Json(serde_json::json!({
+              "success": true,
+              "mint": mint,
+              "already_running": true,
+            })),
+        );
+    };
+
     logger::debug(
         LogTag::Webserver,
-        &format!("OHLCV refresh requested for mint={mint}"),
+        &format!("mint={mint} ohlcv_refresh_accepted"),
     );
 
-    // First, ensure token is being monitored (add if not already)
-    let is_open_position = positions::is_open_position(&mint).await;
-    let priority = if is_open_position {
+    let task_mint = mint.clone();
+    tokio::spawn(async move {
+        let _slot = slot;
+        run_ohlcv_refresh(&task_mint).await;
+    });
+
+    (
+        StatusCode::ACCEPTED,
+        Json(serde_json::json!({
+          "success": true,
+          "mint": mint,
+          "already_running": false,
+        })),
+    )
+}
+
+/// Ensures the token is monitored at chart-view priority, then fetches it now.
+async fn run_ohlcv_refresh(mint: &str) {
+    let priority = if positions::is_open_position(mint).await {
         crate::ohlcvs::Priority::Critical
     } else {
         crate::ohlcvs::Priority::High
     };
 
-    // Add to monitoring (idempotent - no-op if already monitored)
-    let _ = crate::ohlcvs::add_token_monitoring(&mint, priority).await;
+    // Idempotent: a token that is already monitored keeps its state.
+    if let Err(e) = crate::ohlcvs::add_token_monitoring(mint, priority).await {
+        logger::warning(
+            LogTag::Webserver,
+            &format!("mint={mint} priority={priority:?} ohlcv_refresh_monitoring_failed error={e}"),
+        );
+        return;
+    }
 
-    // Record activity
-    let _ = crate::ohlcvs::record_activity(&mint, crate::ohlcvs::ActivityType::DataRequested).await;
-
-    // Try to refresh - but don't fail if no pools available yet
-    match crate::ohlcvs::request_refresh(&mint).await {
-        Ok(_) => {
+    // `request_refresh` records the data-requested activity itself.
+    match crate::ohlcvs::request_refresh(mint).await {
+        Ok(()) => {
             logger::info(
                 LogTag::Webserver,
                 &format!("mint={mint} ohlcv_refresh_success"),
             );
-            Ok(Json(serde_json::json!({
-              "success": true,
-              "mint": mint,
-            })))
         }
         Err(e) => {
-            // Log as debug, not warning - this is normal for new tokens without pools
+            // A token without a discovered pool cannot fetch yet; monitoring stays active and
+            // collects it once a pool is known.
             logger::debug(
                 LogTag::Webserver,
                 &format!("mint={mint} ohlcv_refresh_deferred error={e}"),
             );
-            // Return success anyway - monitoring is active, data will come when pools are available
-            Ok(Json(serde_json::json!({
-              "success": true,
-              "mint": mint,
-            })))
         }
     }
 }

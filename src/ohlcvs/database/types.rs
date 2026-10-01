@@ -15,6 +15,15 @@ pub struct GapRecord {
     pub last_attempt: Option<i64>,
 }
 
+/// The stored row of one bucket of a series.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StoredBucket {
+    /// Written by a native source, not derived locally from 1m rows.
+    pub native: bool,
+    /// When the row's values last changed (unix secs).
+    pub fetched_at: Option<i64>,
+}
+
 /// Stored candles of one timeframe on one pool.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TimeframeSummary {

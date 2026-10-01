@@ -18,6 +18,21 @@ use std::time::{Duration, Instant};
 const RATE_LIMIT_WINDOW: Duration = Duration::from_secs(60);
 pub(crate) const MAX_CANDLES_PER_REQUEST: usize = 1000;
 
+/// Upstream that answered a [`OhlcvFetcher::fetch_multi_source`] request.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CandleSource {
+    DataServer,
+    SolanaTracker,
+    GeckoTerminal,
+}
+
+impl CandleSource {
+    /// A provider the fetch fell back to after the Data Server returned nothing.
+    pub fn is_fallback(self) -> bool {
+        !matches!(self, CandleSource::DataServer)
+    }
+}
+
 /// Candles returned by [`OhlcvFetcher::fetch_multi_source`].
 #[derive(Debug, Clone, Default)]
 pub struct FetchResponse {
@@ -26,6 +41,8 @@ pub struct FetchResponse {
     /// response (`refreshing` or `pending`), so a newer page is expected shortly.
     /// Always false for provider answers.
     pub server_refreshing: bool,
+    /// The upstream that served `candles`; `None` when no source was asked.
+    pub source: Option<CandleSource>,
 }
 
 /// `GET /v1/ohlcv?stateful=true` body.
@@ -410,6 +427,7 @@ impl OhlcvFetcher {
         Some(FetchResponse {
             server_refreshing: server_state_is_refreshing(&body.state),
             candles: body.candles,
+            source: Some(CandleSource::DataServer),
         })
     }
 
@@ -456,6 +474,7 @@ impl OhlcvFetcher {
                         return Ok(FetchResponse {
                             candles,
                             server_refreshing: false,
+                            source: Some(CandleSource::SolanaTracker),
                         })
                     }
                     Ok(_) => {
@@ -508,6 +527,7 @@ impl OhlcvFetcher {
         Ok(FetchResponse {
             candles,
             server_refreshing: false,
+            source: Some(CandleSource::GeckoTerminal),
         })
     }
 

@@ -4,7 +4,7 @@ use crate::ohlcvs::types::{Candle, OhlcvError, OhlcvResult, Timeframe};
 use chrono::Utc;
 use rusqlite::{params, OptionalExtension};
 
-use super::{OhlcvDatabase, TimeframeSummary};
+use super::{OhlcvDatabase, StoredBucket, TimeframeSummary};
 
 impl OhlcvDatabase {
     /// Source label of candles the monitor derives locally from stored 1m rows.
@@ -226,6 +226,43 @@ impl OhlcvDatabase {
                 Self::AGGREGATE_SOURCE
             ],
             |row| row.get(0),
+        )
+        .optional()
+        .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {e}")))
+    }
+
+    /// The stored row of the bucket starting at `timestamp` for one pool and
+    /// timeframe, or `None` when the bucket has no row.
+    pub fn get_stored_bucket(
+        &self,
+        mint: &str,
+        pool_address: &str,
+        timeframe: Timeframe,
+        timestamp: i64,
+    ) -> OhlcvResult<Option<StoredBucket>> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+
+        conn.query_row(
+            "SELECT source != ?6, CAST(strftime('%s', fetched_at) AS INTEGER) FROM ohlcv_candles
+             WHERE chain_id = ?1 AND mint = ?2 AND pool_address = ?3 AND timeframe = ?4
+               AND timestamp = ?5",
+            params![
+                self.chain_id(),
+                mint,
+                pool_address,
+                timeframe.as_str(),
+                timestamp,
+                Self::AGGREGATE_SOURCE
+            ],
+            |row| {
+                Ok(StoredBucket {
+                    native: row.get(0)?,
+                    fetched_at: row.get(1)?,
+                })
+            },
         )
         .optional()
         .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {e}")))
@@ -619,6 +656,28 @@ mod tests {
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .unwrap()
+    }
+
+    #[test]
+    fn stored_bucket_reports_native_rows_and_their_write_time() {
+        let (db, path) = open_db("stored_bucket");
+        upsert(&db, &[candle(CLOSED, 2.0)], OhlcvDatabase::NATIVE_SOURCE);
+        upsert(
+            &db,
+            &[candle(FORMING, 2.0)],
+            OhlcvDatabase::AGGREGATE_SOURCE,
+        );
+
+        let bucket = |ts| {
+            db.get_stored_bucket("mint", "pool", Timeframe::Hour1, ts)
+                .unwrap()
+        };
+        let closed = bucket(CLOSED).unwrap();
+        assert!(closed.native);
+        assert!(closed.fetched_at.is_some());
+        assert!(!bucket(FORMING).unwrap().native);
+        assert_eq!(bucket(CLOSED - HOUR), None);
+        close_db(db, path);
     }
 
     #[test]

@@ -6,8 +6,8 @@ use crate::i18n::{ids, UiArg, UiText};
 use crate::logger::{self, LogTag};
 use crate::ohlcvs::aggregator::OhlcvAggregator;
 use crate::ohlcvs::cache::OhlcvCache;
-use crate::ohlcvs::database::OhlcvDatabase;
-use crate::ohlcvs::fetcher::{OhlcvFetcher, MAX_CANDLES_PER_REQUEST};
+use crate::ohlcvs::database::{OhlcvDatabase, StoredBucket};
+use crate::ohlcvs::fetcher::{CandleSource, OhlcvFetcher, MAX_CANDLES_PER_REQUEST};
 use crate::ohlcvs::gaps::{GapManager, GAP_FILL_REQUESTS_PER_CYCLE};
 use crate::ohlcvs::manager::PoolManager;
 use crate::ohlcvs::priorities::{ActivityType, PriorityManager};
@@ -49,6 +49,61 @@ const NATIVE_RETRY_DELAY_SECS: i64 = 15;
 /// that it is refreshing the series.
 const MAX_REFRESHING_REFETCHES: u32 = 3;
 
+/// Delay before a timeframe whose stored native values came from a fallback
+/// provider is fetched again while the Data Server is usable. A fallback answer
+/// differs from the Data Server's series, and waiting the full interval (hours
+/// at low priority) would keep those values in the chart and the strategies.
+const FALLBACK_RETRY_DELAY_SECS: i64 = 300;
+
+/// Margin past the Data Server's freshness window before a closed bucket is
+/// re-read, so the read lands after the server's own re-fetch of that bucket.
+const SETTLE_MARGIN_SECS: i64 = 60;
+
+/// Bounds of a settle delay. The upper bound keeps a closed coarse bucket from
+/// carrying a provisional value for hours on any priority.
+const MIN_SETTLE_SECS: i64 = 60;
+const MAX_SETTLE_SECS: i64 = 1_200;
+
+/// Settle delay of a closed bucket: how long after a bucket closes its native
+/// row is read once more, so it carries the source's final value rather than
+/// the provisional one a fetch right after the close can return.
+///
+/// Derived from the Data Server, which re-reads a requested series from its
+/// upstream once the newest stored candle is older than a per-timeframe
+/// freshness window (1m 90 s, 5m 4 min, 15m 12 min, 1h 45 min, 4h 3 h,
+/// 12h 9 h, 1d 18 h). The delay is that window plus `SETTLE_MARGIN_SECS`,
+/// clamped to `[MIN_SETTLE_SECS, MAX_SETTLE_SECS]`: 5m 300 s, 15m 780 s, 1h and
+/// coarser 1200 s. For 1h and coarser the clamp is shorter than the server's
+/// window, so the settle read returns a final value only when the server's
+/// first read after the close ran after its upstream finalized the bucket.
+/// SolanaTracker and GeckoTerminal finalize within these delays, so the same
+/// rule holds when they are the source. Independent of priority.
+fn settle_delay_secs(timeframe: Timeframe) -> i64 {
+    let server_freshness_window = match timeframe {
+        Timeframe::Minute1 => 90,
+        Timeframe::Minute5 => 240,
+        Timeframe::Minute15 => 720,
+        Timeframe::Hour1 => 2_700,
+        Timeframe::Hour4 => 10_800,
+        Timeframe::Hour12 => 32_400,
+        Timeframe::Day1 => 64_800,
+    };
+    (server_freshness_window + SETTLE_MARGIN_SECS).clamp(MIN_SETTLE_SECS, MAX_SETTLE_SECS)
+}
+
+/// Unix secs at which the bucket starting at `bucket` is settled.
+fn settle_point(bucket: i64, timeframe: Timeframe) -> i64 {
+    bucket + timeframe.to_seconds() + settle_delay_secs(timeframe)
+}
+
+/// Start of the newest closed bucket whose settle point has passed at `now`.
+/// Once the settle delay of the bucket that closed last has elapsed this is
+/// that bucket; before then it is the one before it.
+fn settle_target(now: i64, timeframe: Timeframe) -> i64 {
+    OhlcvDatabase::bucket_start(now - settle_delay_secs(timeframe), timeframe)
+        - timeframe.to_seconds()
+}
+
 /// In-memory coverage state of one native (mint, timeframe) series.
 #[derive(Debug, Default, Clone, PartialEq)]
 struct NativeSeriesState {
@@ -65,6 +120,13 @@ struct NativeSeriesState {
     refetch_at: Option<i64>,
     /// Re-fetches scheduled since the last page that was not refreshing.
     refetches: u32,
+    /// The last page that carried storable candles was served by a fallback
+    /// provider, so the stored native values may differ from the Data Server's.
+    fallback_values: bool,
+    /// Newest bucket a completed fetch read at or after its settle point. A
+    /// fetch that returns identical values leaves the row's `fetched_at`
+    /// untouched, so this is what stops the settle rule from firing again.
+    settled_bucket: Option<i64>,
 }
 
 impl NativeSeriesState {
@@ -115,6 +177,30 @@ impl NativeSeriesState {
         } else {
             self.refetch_at = None;
         }
+    }
+
+    /// Record which upstream served a page. A Data Server page replaces any
+    /// fallback values (native rows are last-write-wins); a fallback page counts
+    /// only when it carried storable candles, since an empty one wrote nothing.
+    fn record_source(&mut self, source: Option<CandleSource>, carried_candles: bool) {
+        match source {
+            Some(CandleSource::DataServer) => self.fallback_values = false,
+            Some(source) if source.is_fallback() && carried_candles => {
+                self.fallback_values = true;
+            }
+            _ => {}
+        }
+    }
+
+    /// Record that a completed fetch at `now` read every bucket whose settle point
+    /// has passed. A Data Server page that announced a refresh still pending
+    /// does not count while a scheduled re-fetch remains.
+    fn record_settled(&mut self, now: i64, timeframe: Timeframe) {
+        if self.refetch_at.is_some() {
+            return;
+        }
+        let target = settle_target(now, timeframe);
+        self.settled_bucket = Some(self.settled_bucket.map_or(target, |b| b.max(target)));
     }
 
     /// The no-newer rule holds for the series as it is stored now.
@@ -215,6 +301,113 @@ fn native_refresh_due(
     let elapsed = now - last;
     elapsed >= native_refresh_interval_secs(timeframe, priority)
         || (behind && elapsed >= NATIVE_RETRY_DELAY_SECS)
+}
+
+/// Whether a timeframe holding fallback values is due for another attempt at the
+/// Data Server: the Data Server is usable and the last fetch is at least
+/// `FALLBACK_RETRY_DELAY_SECS` old. When the Data Server is disabled or
+/// unavailable the fallback is the primary source and only the ordinary rules
+/// apply.
+fn fallback_refresh_due(state: &NativeSeriesState, now: i64, data_server_usable: bool) -> bool {
+    data_server_usable
+        && state.fallback_values
+        && state
+            .last_fetch_at
+            .is_some_and(|last| now - last >= FALLBACK_RETRY_DELAY_SECS)
+}
+
+/// The bucket a settle refresh would read: the settle target, unless the series
+/// is empty (the ordinary rules fetch it), the last attempt is younger than the
+/// retry delay, or a fetch already read the target at or after its settle point.
+fn settle_candidate(
+    state: &NativeSeriesState,
+    newest: Option<i64>,
+    now: i64,
+    timeframe: Timeframe,
+) -> Option<i64> {
+    newest?;
+    if state
+        .last_fetch_at
+        .is_some_and(|last| now - last < NATIVE_RETRY_DELAY_SECS)
+    {
+        return None;
+    }
+    let target = settle_target(now, timeframe);
+    if state
+        .settled_bucket
+        .is_some_and(|settled| settled >= target)
+    {
+        return None;
+    }
+    Some(target)
+}
+
+/// Whether a coarse timeframe is due to settle its newest closed bucket (see
+/// `settle_delay_secs`). Due once the bucket's settle point has passed while
+/// its stored row is unsettled: a native row whose values were last written
+/// before the settle point, or a local aggregate only. A missing row in a
+/// series with native rows is unsettled unless the no-newer rule already
+/// confirmed the source has nothing newer. After one fetch at or past the
+/// settle point the bucket is settled whatever that fetch returned, so a bucket
+/// without trades is never re-read for settling.
+fn settle_refresh_due(
+    state: &NativeSeriesState,
+    newest: Option<i64>,
+    row: Option<StoredBucket>,
+    now: i64,
+    timeframe: Timeframe,
+) -> bool {
+    let Some(target) = settle_candidate(state, newest, now, timeframe) else {
+        return false;
+    };
+    match row {
+        Some(StoredBucket {
+            native: true,
+            fetched_at,
+        }) => fetched_at.is_none_or(|at| at < settle_point(target, timeframe)),
+        Some(StoredBucket { native: false, .. }) => true,
+        None => !state.no_newer_holds(newest),
+    }
+}
+
+/// A coarse timeframe selected for this refresh pass.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct DueTimeframe {
+    timeframe: Timeframe,
+    newest: Option<i64>,
+    last_fetch_at: Option<i64>,
+}
+
+/// Fetch order of a pass: most overdue first, measured as the time since the
+/// last fetch relative to the timeframe's refresh interval, with a timeframe
+/// never fetched since start ahead of all others. Ties keep the incoming
+/// (fine-first) order. A pass stops at the first rate limit, so a timeframe it
+/// did not reach leads the next pass instead of starving behind finer ones.
+fn order_by_overdue(due: &mut [DueTimeframe], now: i64, priority: Priority) {
+    due.sort_by(|a, b| match (a.last_fetch_at, b.last_fetch_at) {
+        (None, None) => std::cmp::Ordering::Equal,
+        (None, Some(_)) => std::cmp::Ordering::Less,
+        (Some(_), None) => std::cmp::Ordering::Greater,
+        (Some(last_a), Some(last_b)) => {
+            // elapsed_a / interval_a vs elapsed_b / interval_b, descending,
+            // cross-multiplied to stay in integers.
+            let overdue_a = i128::from((now - last_a).max(0))
+                * i128::from(native_refresh_interval_secs(b.timeframe, priority));
+            let overdue_b = i128::from((now - last_b).max(0))
+                * i128::from(native_refresh_interval_secs(a.timeframe, priority));
+            overdue_b.cmp(&overdue_a)
+        }
+    });
+}
+
+/// The Data Server can answer OHLCV requests now: configured, online, signed
+/// in, not refused, and not in a transport outage.
+fn data_server_usable() -> bool {
+    crate::data_server::is_usable(crate::data_server::Surface::Ohlcv)
+        && !matches!(
+            crate::data_server::access::current(),
+            crate::data_server::DataAccess::Unreachable
+        )
 }
 
 /// Newest canonical bucket in a page among the candles that are stored.
@@ -2179,9 +2372,11 @@ impl OhlcvMonitor {
     }
 
     /// Refresh each coarse timeframe natively when it is due (see
-    /// `native_refresh_due`), sized by `catch_up_limit`. Sequential and throttled
-    /// like backfill, and it holds the token's backfill slot so the two never
-    /// fetch the same token concurrently. The local 1m aggregation only fills the
+    /// `native_refresh_due`, `fallback_refresh_due` and `settle_refresh_due`),
+    /// most overdue first (`order_by_overdue`) and sized by `catch_up_limit`.
+    /// Sequential and throttled like backfill, it stops at the first rate limit,
+    /// and it holds the token's backfill slot so the two never fetch the same
+    /// token concurrently. The local 1m aggregation only fills the
     /// live edge; this is what makes closed coarse buckets match the source and
     /// heals a series the app missed while it was not running.
     async fn refresh_native_timeframes(&self, mint: &str, pool_address: &str, priority: Priority) {
@@ -2189,8 +2384,10 @@ impl OhlcvMonitor {
             return;
         }
 
+        let data_server_usable = data_server_usable();
+        let now = Utc::now().timestamp();
+        let mut due = Vec::with_capacity(AGGREGATED_TIMEFRAMES.len());
         for timeframe in AGGREGATED_TIMEFRAMES {
-            let now = Utc::now().timestamp();
             let newest = match self
                 .db
                 .get_latest_native_timestamp(mint, pool_address, timeframe)
@@ -2210,10 +2407,24 @@ impl OhlcvMonitor {
                 }
             };
             let state = self.native_series_state(mint, timeframe);
-            if !native_refresh_due(&state, newest, now, timeframe, priority) {
-                continue;
+            if native_refresh_due(&state, newest, now, timeframe, priority)
+                || fallback_refresh_due(&state, now, data_server_usable)
+                || self.settle_due(mint, pool_address, timeframe, &state, newest, now)
+            {
+                due.push(DueTimeframe {
+                    timeframe,
+                    newest,
+                    last_fetch_at: state.last_fetch_at,
+                });
             }
+        }
+        order_by_overdue(&mut due, now, priority);
 
+        for DueTimeframe {
+            timeframe, newest, ..
+        } in due
+        {
+            let now = Utc::now().timestamp();
             let limit = catch_up_limit(newest, now, timeframe);
             sleep(inter_fetch_delay(priority)).await;
             match self
@@ -2339,10 +2550,48 @@ impl OhlcvMonitor {
                 stored_newest,
                 fetched_newest,
                 response.server_refreshing,
-            )
+            );
+            state.record_source(response.source, fetched_newest.is_some());
+            state.record_settled(now, timeframe);
         });
 
         Ok(changed)
+    }
+
+    /// Whether a timeframe is due to settle its newest closed bucket (see
+    /// `settle_refresh_due`). Reads the bucket's row only when the in-memory state
+    /// leaves a settle refresh possible.
+    fn settle_due(
+        &self,
+        mint: &str,
+        pool_address: &str,
+        timeframe: Timeframe,
+        state: &NativeSeriesState,
+        newest: Option<i64>,
+        now: i64,
+    ) -> bool {
+        let Some(target) = settle_candidate(state, newest, now, timeframe) else {
+            return false;
+        };
+        match self
+            .db
+            .get_stored_bucket(mint, pool_address, timeframe, target)
+        {
+            Ok(row) => settle_refresh_due(state, newest, row, now, timeframe),
+            Err(e) => {
+                logger::warning(
+                    LogTag::Ohlcv,
+                    &format!(
+                        "Settle check skipped for mint={} timeframe={} bucket={}: {}",
+                        mint,
+                        timeframe.as_str(),
+                        target,
+                        e
+                    ),
+                );
+                false
+            }
+        }
     }
 
     /// The pool's denomination, so a USD-quoted pool skips GeckoTerminal (see
@@ -2772,6 +3021,263 @@ mod tests {
             },
             before
         );
+    }
+
+    #[test]
+    fn fallback_values_are_retried_soon_only_while_the_data_server_is_usable() {
+        let mut state = NativeSeriesState {
+            last_fetch_at: Some(NOW),
+            ..NativeSeriesState::default()
+        };
+        // An empty fallback answer wrote nothing.
+        state.record_source(Some(CandleSource::GeckoTerminal), false);
+        assert!(!fallback_refresh_due(
+            &state,
+            NOW + FALLBACK_RETRY_DELAY_SECS,
+            true
+        ));
+
+        state.record_source(Some(CandleSource::GeckoTerminal), true);
+        assert!(!fallback_refresh_due(
+            &state,
+            NOW + FALLBACK_RETRY_DELAY_SECS - 1,
+            true
+        ));
+        assert!(fallback_refresh_due(
+            &state,
+            NOW + FALLBACK_RETRY_DELAY_SECS,
+            true
+        ));
+        // Data Server disabled or unavailable: the fallback is primary.
+        assert!(!fallback_refresh_due(
+            &state,
+            NOW + FALLBACK_RETRY_DELAY_SECS,
+            false
+        ));
+        // An empty answer does not clear values an earlier page stored.
+        state.record_source(None, false);
+        assert!(state.fallback_values);
+
+        state.record_source(Some(CandleSource::SolanaTracker), true);
+        assert!(state.fallback_values);
+        // A Data Server page replaces the fallback values.
+        state.record_source(Some(CandleSource::DataServer), true);
+        assert!(!fallback_refresh_due(
+            &state,
+            NOW + FALLBACK_RETRY_DELAY_SECS,
+            true
+        ));
+    }
+
+    #[test]
+    fn a_pass_fetches_the_most_overdue_timeframe_first() {
+        let due = |timeframe, ago: Option<i64>| DueTimeframe {
+            timeframe,
+            newest: None,
+            last_fetch_at: ago.map(|ago| NOW - ago),
+        };
+        // High priority intervals: 5m 300 s, 15m 900 s, 1h 1800 s, 4h+ 3600 s.
+        let mut pass = vec![
+            due(Timeframe::Minute5, Some(10)),
+            due(Timeframe::Minute15, Some(450)),
+            due(Timeframe::Hour1, Some(1_800)),
+            due(Timeframe::Hour4, Some(3_600)),
+            due(Timeframe::Hour12, None),
+            due(Timeframe::Day1, Some(7_200)),
+        ];
+        order_by_overdue(&mut pass, NOW, Priority::High);
+        let order: Vec<Timeframe> = pass.iter().map(|d| d.timeframe).collect();
+        assert_eq!(
+            order,
+            vec![
+                // Never fetched since start.
+                Timeframe::Hour12,
+                // Two intervals overdue.
+                Timeframe::Day1,
+                // One interval each: fine first.
+                Timeframe::Hour1,
+                Timeframe::Hour4,
+                Timeframe::Minute15,
+                // Rate limited a moment ago.
+                Timeframe::Minute5,
+            ]
+        );
+
+        // Several never fetched: fine first.
+        let mut fresh = vec![
+            due(Timeframe::Minute5, None),
+            due(Timeframe::Hour1, None),
+            due(Timeframe::Minute15, Some(5_000)),
+        ];
+        order_by_overdue(&mut fresh, NOW, Priority::Low);
+        let order: Vec<Timeframe> = fresh.iter().map(|d| d.timeframe).collect();
+        assert_eq!(
+            order,
+            vec![Timeframe::Minute5, Timeframe::Hour1, Timeframe::Minute15]
+        );
+    }
+
+    #[test]
+    fn settle_delay_follows_the_data_server_window_within_bounds() {
+        assert_eq!(settle_delay_secs(Timeframe::Minute5), 300);
+        assert_eq!(settle_delay_secs(Timeframe::Minute15), 780);
+        for tf in [
+            Timeframe::Hour1,
+            Timeframe::Hour4,
+            Timeframe::Hour12,
+            Timeframe::Day1,
+        ] {
+            assert_eq!(settle_delay_secs(tf), MAX_SETTLE_SECS);
+        }
+        for tf in AGGREGATED_TIMEFRAMES {
+            let delay = settle_delay_secs(tf);
+            assert!((MIN_SETTLE_SECS..=MAX_SETTLE_SECS).contains(&delay));
+        }
+        // The target is the bucket that closed last once its delay has passed,
+        // the one before it until then.
+        let tf = Timeframe::Hour1;
+        let delay = settle_delay_secs(tf);
+        assert_eq!(settle_target(CURRENT + delay, tf), CURRENT - HOUR);
+        assert_eq!(settle_target(CURRENT + delay - 1, tf), CURRENT - 2 * HOUR);
+        assert_eq!(settle_point(CURRENT - HOUR, tf), CURRENT + delay);
+        // A delay as long as the bucket still targets a closed bucket.
+        let five = Timeframe::Minute5;
+        let start = CURRENT + 5 * 300;
+        assert_eq!(settle_target(start, five), start - 2 * 300);
+        assert_eq!(settle_point(start - 2 * 300, five), start);
+    }
+
+    #[test]
+    fn a_closed_bucket_is_settled_once_after_its_settle_point() {
+        let tf = Timeframe::Hour1;
+        let delay = settle_delay_secs(tf);
+        let previous = CURRENT - HOUR;
+        let settle_at = CURRENT + delay;
+        let newest = Some(previous);
+        let fetched = |at: i64| NativeSeriesState {
+            last_fetch_at: Some(at),
+            settled_bucket: Some(previous - HOUR),
+            ..NativeSeriesState::default()
+        };
+        let native = |at: i64| {
+            Some(StoredBucket {
+                native: true,
+                fetched_at: Some(at),
+            })
+        };
+
+        // Written just after the close: unsettled, due at the settle point and
+        // not before.
+        let state = fetched(CURRENT + 30);
+        let row = native(CURRENT + 30);
+        assert!(!settle_refresh_due(&state, newest, row, settle_at - 1, tf));
+        assert!(settle_refresh_due(&state, newest, row, settle_at, tf));
+        // Still due later in the bucket until a fetch settles it.
+        assert!(settle_refresh_due(
+            &state,
+            newest,
+            row,
+            CURRENT + HOUR - 1,
+            tf
+        ));
+
+        // Written at or after the settle point: settled.
+        assert!(!settle_refresh_due(
+            &fetched(settle_at),
+            newest,
+            native(settle_at),
+            settle_at + 60,
+            tf
+        ));
+
+        // A local aggregate only: unsettled.
+        let aggregate = Some(StoredBucket {
+            native: false,
+            fetched_at: Some(settle_at + 10),
+        });
+        assert!(settle_refresh_due(
+            &state,
+            newest,
+            aggregate,
+            settle_at + 60,
+            tf
+        ));
+
+        // One fetch past the settle point settles the bucket even when it
+        // returned identical values and the row's write time did not move.
+        let mut after = state.clone();
+        after.record_page(settle_at + 5, newest, newest, false);
+        after.record_settled(settle_at + 5, tf);
+        assert_eq!(after.settled_bucket, Some(previous));
+        assert!(!settle_refresh_due(&after, newest, row, settle_at + 60, tf));
+        assert!(!settle_refresh_due(
+            &after,
+            newest,
+            row,
+            CURRENT + HOUR + delay - 1,
+            tf
+        ));
+        // The next bucket settles on its own schedule.
+        assert!(settle_refresh_due(
+            &after,
+            Some(CURRENT),
+            native(CURRENT + HOUR + 5),
+            CURRENT + HOUR + delay,
+            tf
+        ));
+
+        // A refreshing Data Server page with a re-fetch scheduled does not settle.
+        let mut refreshing = state.clone();
+        refreshing.record_page(settle_at + 5, newest, newest, true);
+        refreshing.record_settled(settle_at + 5, tf);
+        assert_eq!(refreshing.settled_bucket, Some(previous - HOUR));
+
+        // Retry spacing and an empty series.
+        assert!(!settle_refresh_due(
+            &fetched(settle_at - 5),
+            newest,
+            row,
+            settle_at,
+            tf
+        ));
+        assert!(!settle_refresh_due(
+            &NativeSeriesState::default(),
+            None,
+            None,
+            settle_at,
+            tf
+        ));
+    }
+
+    #[test]
+    fn a_bucket_without_trades_is_not_refetched_for_settling() {
+        let tf = Timeframe::Hour1;
+        let delay = settle_delay_secs(tf);
+        let settle_at = CURRENT + delay;
+        let newest = Some(CURRENT - 2 * HOUR);
+
+        // Missing in a series with native rows: one settle fetch.
+        let mut state = NativeSeriesState {
+            last_fetch_at: Some(CURRENT + 30),
+            settled_bucket: Some(CURRENT - 2 * HOUR),
+            ..NativeSeriesState::default()
+        };
+        assert!(settle_refresh_due(&state, newest, None, settle_at, tf));
+
+        // The source returned nothing for it: never due again for that bucket.
+        state.record_page(settle_at, newest, newest, false);
+        state.record_settled(settle_at, tf);
+        for later in [settle_at + 15, settle_at + 600, CURRENT + HOUR + delay - 1] {
+            assert!(!settle_refresh_due(&state, newest, None, later, tf));
+        }
+
+        // Confirmed by the no-newer rule: a missing bucket is not a settle
+        // candidate at all.
+        let mut idle = NativeSeriesState::default();
+        idle.record_page(CURRENT + 20, newest, newest, false);
+        idle.record_page(CURRENT + 40, newest, newest, false);
+        assert!(idle.no_newer_holds(newest));
+        assert!(!settle_refresh_due(&idle, newest, None, settle_at, tf));
     }
 
     #[test]
