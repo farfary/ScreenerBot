@@ -136,11 +136,28 @@ export function applyChartTabMixin(DialogClass) {
           .forEach((b) => b.classList.remove("active"));
         btn.classList.add("active");
 
+        const changed = btn.dataset.tf !== this.currentTimeframe;
         this.currentTimeframe = btn.dataset.tf;
         // Remember the choice for the next time any token dialog is opened.
         AppState.save(TIMEFRAME_STATE_KEY, this.currentTimeframe);
-        await this._triggerOhlcvRefresh();
-        await new Promise((resolve) => setTimeout(resolve, 500));
+
+        // Cover the previous timeframe's candles until the new series renders;
+        // _loadChartData hides the overlay or switches it to the waiting text.
+        if (changed) {
+          const loadingOverlay = this.dialogEl?.querySelector("#chartLoadingOverlay");
+          const loadingText = loadingOverlay?.querySelector(".chart-loading-text");
+          if (loadingText) {
+            loadingText.textContent = I18n.t("chart-loading");
+          }
+          loadingOverlay?.classList.remove("hidden");
+        }
+
+        // The backend refresh runs in the background; the chart poll picks up
+        // whatever it stores. The stored series renders now, and _loadChartData
+        // drops the response if another timeframe was selected meanwhile.
+        this._triggerOhlcvRefresh().catch(() => {
+          // Silent - expected for new tokens without OHLCV
+        });
         await this._loadChartData(mint, this.currentTimeframe, true); // Timeframe change - reset view
       });
     }
@@ -312,6 +329,11 @@ export function applyChartTabMixin(DialogClass) {
         this.advancedChart.anchorLatest();
       }
     } catch {
+      // A failed load for a token or timeframe no longer shown must not cover
+      // the chart that replaced it.
+      if (this.tokenData?.mint !== mint || this.currentTimeframe !== timeframe) {
+        return;
+      }
       // On error, show waiting message
       if (loadingText) {
         loadingText.textContent = I18n.t("chart-waiting");
