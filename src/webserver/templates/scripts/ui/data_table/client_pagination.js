@@ -334,7 +334,7 @@ export function applyClientPaginationMixin(DataTable) {
         
         <div class="dt-client-pagination-size">
           <label class="dt-client-pagination-size__label">${escapeHtml(I18n.t("table-pagination-per-page"))}</label>
-          <select class="dt-client-pagination-size__select" data-pagination-size data-custom-select>
+          <select class="dt-client-pagination-size__select" data-pagination-size data-custom-select data-cs-fit-options>
             ${pageSizeOptions}
           </select>
         </div>

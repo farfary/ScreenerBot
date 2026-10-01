@@ -16,31 +16,22 @@ import { dirSign } from "../core/dom.js";
 const MAX_DROPDOWN_HEIGHT = 280;
 const VIEWPORT_MARGIN = 8;
 const CLOSE_ANIMATION_MS = 220;
+const DETACHED_MENU_GAP = 4;
+const DETACH_TOLERANCE_PX = 2;
 let customSelectId = 0;
-let measureContext = null;
-
-/** Shared 2D context for text measurement (`fitOptions`). */
-function getMeasureContext() {
-  if (!measureContext && typeof document !== "undefined") {
-    measureContext = document.createElement("canvas").getContext("2d");
-  }
-  return measureContext;
-}
 
 /**
  * Write a label, carrying the option's own `lang` and `dir` so a native language
- * name renders in its own script and direction. The direction applies to an
- * isolated inner `<bdi>`, so the label still aligns with the page direction.
+ * name renders in its own script and direction. The text sits in an isolated inner
+ * `<bdi>` (its declared direction, else resolved from its own first strong
+ * character), so a Latin wallet name keeps its word order in an RTL menu while the
+ * label still aligns with the page direction.
  */
 function setLabelText(el, text, opt) {
   if (opt?.lang) el.lang = opt.lang;
   else el.removeAttribute("lang");
-  if (!opt?.dir) {
-    el.textContent = text;
-    return;
-  }
   const isolate = document.createElement("bdi");
-  isolate.dir = opt.dir;
+  if (opt?.dir) isolate.dir = opt.dir;
   isolate.textContent = text;
   el.replaceChildren(isolate);
 }
@@ -56,7 +47,8 @@ export class CustomSelect {
    * @param {string} [options.name] Name for the hidden input (form submission)
    * @param {boolean} [options.disabled=false] Whether the select is disabled
    * @param {string} [options.className] Additional CSS class for the wrapper
-   * @param {boolean} [options.fitOptions=false] Floor the trigger width at the widest option label
+   * @param {boolean} [options.fitOptions=false] Size the trigger to its widest option label, so the
+   *   control keeps one stable width whichever option is selected
    */
   constructor(options = {}) {
     this.container = options.container;
@@ -87,6 +79,7 @@ export class CustomSelect {
     // DOM elements
     this.el = null;
     this.triggerEl = null;
+    this.labelEl = null;
     this.valueEl = null;
     this.dropdownEl = null;
     this.optionsContainerEl = null;
@@ -129,7 +122,6 @@ export class CustomSelect {
 
     this._render();
     this._attachEvents();
-    this._fitTriggerToOptions();
   }
 
   /**
@@ -200,9 +192,7 @@ export class CustomSelect {
     const resolvedAriaLabel =
       selectElement.getAttribute("aria-label") ||
       labelledByElements.map((label) => label.textContent?.trim()).find(Boolean) ||
-      Array.from(associatedLabels)
-        .map(getLabelText)
-        .find(Boolean) ||
+      Array.from(associatedLabels).map(getLabelText).find(Boolean) ||
       "";
 
     const customSelect = new CustomSelect({
@@ -344,7 +334,9 @@ export class CustomSelect {
 
     // Create wrapper
     this.el = document.createElement("div");
-    this.el.className = `custom-select${this.className ? ` ${this.className}` : ""}`;
+    this.el.className = `custom-select${this.fitOptions ? " cs-fit" : ""}${
+      this.className ? ` ${this.className}` : ""
+    }`;
     this.el.tabIndex = this.disabled ? -1 : 0;
     this.el.setAttribute("role", "combobox");
     this.el.setAttribute("aria-haspopup", "listbox");
@@ -365,9 +357,14 @@ export class CustomSelect {
     this.triggerEl = document.createElement("div");
     this.triggerEl.className = "cs-trigger";
 
-    // Create value display
+    // Create value display. The label box stacks the visible value over the
+    // `fitOptions` sizers in one grid cell, so its intrinsic width is the widest
+    // option as the browser actually shapes it in the loaded font and locale.
+    this.labelEl = document.createElement("span");
+    this.labelEl.className = "cs-label";
     this.valueEl = document.createElement("span");
     this.valueEl.className = "cs-value";
+    this.labelEl.appendChild(this.valueEl);
     this._updateDisplayValue();
 
     // Create arrow with SVG chevron
@@ -376,7 +373,7 @@ export class CustomSelect {
     this.arrowEl.innerHTML =
       '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
 
-    this.triggerEl.appendChild(this.valueEl);
+    this.triggerEl.appendChild(this.labelEl);
     this.triggerEl.appendChild(this.arrowEl);
 
     // Create dropdown (will be appended to body when opened - portal pattern)
@@ -413,6 +410,7 @@ export class CustomSelect {
     this.dropdownEl.appendChild(this.noResultsEl);
 
     this._renderOptions();
+    this._renderSizers();
 
     // Create hidden input for form submission
     this.hiddenInput = document.createElement("input");
@@ -453,7 +451,12 @@ export class CustomSelect {
       optionEl.id = `${this.optionsContainerEl.id}-option-${index}`;
       optionEl.dataset.value = opt.value;
       optionEl.dataset.index = index;
-      setLabelText(optionEl, opt.label, opt);
+      // The label is its own flex item: text directly inside the flex row cannot
+      // ellipsize, it is hard-clipped at the menu edge.
+      const labelEl = document.createElement("span");
+      labelEl.className = "cs-option-label";
+      setLabelText(labelEl, opt.label, opt);
+      optionEl.appendChild(labelEl);
       optionEl.title = opt.label; // full text on hover when a long label is ellipsized
       optionEl.setAttribute("role", "option");
       optionEl.setAttribute("aria-selected", "false");
@@ -469,6 +472,26 @@ export class CustomSelect {
       }
 
       this.optionsContainerEl.appendChild(optionEl);
+    });
+  }
+
+  /**
+   * With `fitOptions`, mirror every option label as an invisible sizer in the
+   * trigger's label cell. Layout then floors the trigger at the widest label with
+   * real text shaping, web fonts and locale, so the selected value and every menu
+   * row (which share the trigger's label box) render in full.
+   */
+  _renderSizers() {
+    if (!this.fitOptions) return;
+    this.labelEl.querySelectorAll(".cs-sizer").forEach((sizer) => sizer.remove());
+    const labels = this.options.map((opt) => ({ text: opt.label || "", opt }));
+    labels.push({ text: this.placeholder, opt: null });
+    labels.forEach(({ text, opt }) => {
+      const sizer = document.createElement("span");
+      sizer.className = "cs-sizer";
+      sizer.setAttribute("aria-hidden", "true");
+      setLabelText(sizer, text, opt);
+      this.labelEl.appendChild(sizer);
     });
   }
 
@@ -753,6 +776,7 @@ export class CustomSelect {
 
     // Position dropdown with fixed positioning
     this._syncMenuMetrics();
+    this._menuContentWidth = null;
     this._positionDropdown();
     this._startPositionTracking();
 
@@ -832,29 +856,52 @@ export class CustomSelect {
   /**
    * Copy the trigger's real label box onto the portaled menu.
    *
-   * The menu is hard-clamped to the trigger width, so any surface that restyles
-   * `.cs-trigger` padding/gap (the table toolbar does) used to leave the options
-   * with the component default and truncate labels the trigger showed in full --
-   * which is why widths kept being hand-bumped per surface. Deriving the option
-   * padding from the computed trigger instead keeps the two label boxes identical
-   * everywhere, with no per-surface compensation.
+   * Any surface that restyles `.cs-trigger` padding/gap (the table toolbar does)
+   * would otherwise leave the options with the component default and truncate
+   * labels the trigger showed in full. Deriving the option padding from the
+   * computed trigger keeps the two label boxes identical everywhere, in logical
+   * terms so the checkmark sits in the chevron column in both directions.
    */
   _syncMenuMetrics() {
     if (!this.triggerEl?.isConnected || !this.dropdownEl) return;
 
     const triggerStyle = window.getComputedStyle(this.triggerEl);
-    const paddingLeft = parseFloat(triggerStyle.paddingLeft) || 0;
-    const paddingRight = parseFloat(triggerStyle.paddingRight) || 0;
+    const paddingStart = parseFloat(triggerStyle.paddingInlineStart) || 0;
+    const paddingEnd = parseFloat(triggerStyle.paddingInlineEnd) || 0;
     const gap = parseFloat(triggerStyle.columnGap) || 0;
     const arrowWidth = this.arrowEl?.getBoundingClientRect().width || 0;
 
     const style = this.dropdownEl.style;
-    style.setProperty("--cs-pad-left", `${paddingLeft}px`);
+    style.setProperty("--cs-pad-start", `${paddingStart}px`);
     // The arrow column is reserved for the selected checkmark, so an option label
     // starts and ends exactly where the trigger's value does.
-    style.setProperty("--cs-pad-right", `${paddingRight + gap + arrowWidth}px`);
-    style.setProperty("--cs-check-right", `${paddingRight}px`);
+    style.setProperty("--cs-pad-end", `${paddingEnd + gap + arrowWidth}px`);
+    style.setProperty("--cs-check-end", `${paddingEnd}px`);
     style.setProperty("--cs-check-size", `${arrowWidth || 16}px`);
+    this._menuPaddingInline = paddingStart + paddingEnd + gap + arrowWidth;
+  }
+
+  /**
+   * Width the menu needs to show its widest option in full: the label's own
+   * scroll width (unaffected by the menu clamp) plus the option padding, the menu
+   * border and any vertical scrollbar. Measured once per open, while no search
+   * filter hides rows.
+   */
+  _measureMenuContentWidth() {
+    let widestLabel = 0;
+    this.optionsContainerEl.querySelectorAll(".cs-option-label").forEach((label) => {
+      widestLabel = Math.max(widestLabel, label.scrollWidth);
+    });
+    if (!widestLabel) return 0;
+    const menuStyle = window.getComputedStyle(this.dropdownEl);
+    const border =
+      (parseFloat(menuStyle.borderInlineStartWidth) || 0) +
+      (parseFloat(menuStyle.borderInlineEndWidth) || 0);
+    const scrollbar = Math.max(
+      0,
+      this.dropdownEl.offsetWidth - this.dropdownEl.clientWidth - border
+    );
+    return Math.ceil(widestLabel + (this._menuPaddingInline || 0) + border + scrollbar);
   }
 
   _positionDropdown(triggerRect = this.triggerEl?.getBoundingClientRect()) {
@@ -866,16 +913,24 @@ export class CustomSelect {
     style.position = "fixed";
     style.right = "auto"; // JS owns horizontal placement; clear the base `right: 0`
 
-    // The menu is the lower/upper half of the control, so it must keep the
-    // trigger's exact width instead of presenting as an independent floating card.
-    const dropdownWidth = Math.max(
-      0,
-      Math.min(triggerRect.width, viewportWidth - VIEWPORT_MARGIN * 2)
-    );
-    style.minWidth = `${dropdownWidth}px`;
-    style.maxWidth = `${dropdownWidth}px`;
-    style.width = `${dropdownWidth}px`;
+    // The menu is the lower/upper half of the control and keeps the trigger's
+    // exact width -- unless an option is wider than the trigger. An option label
+    // is never clipped to keep the joined look: the menu then widens to its widest
+    // option and detaches into a floating panel below/above the trigger.
+    const maxWidth = Math.max(0, viewportWidth - VIEWPORT_MARGIN * 2);
     style.setProperty("--cs-control-height", `${triggerRect.height}px`);
+    if (this._menuContentWidth == null) {
+      this._applyDropdownWidth(triggerRect.width);
+      this._menuContentWidth = this._measureMenuContentWidth();
+    }
+    // `scrollWidth` rounds to whole pixels, so a label the trigger already fits can
+    // read up to ~2px wider; that is not a reason to break the joined control.
+    const detached = this._menuContentWidth > triggerRect.width + DETACH_TOLERANCE_PX;
+    const dropdownWidth = Math.min(detached ? this._menuContentWidth : triggerRect.width, maxWidth);
+    this._applyDropdownWidth(dropdownWidth);
+    this.el.classList.toggle("dropdown-detached", detached);
+    this.dropdownEl.classList.toggle("cs-dropdown--detached", detached);
+    const offset = detached ? DETACHED_MENU_GAP : -1;
 
     // Measure the resolved size after the width constraints are applied.
     const dropdownRect = this.dropdownEl.getBoundingClientRect();
@@ -907,23 +962,33 @@ export class CustomSelect {
     style.left = `${left}px`;
 
     // --- VERTICAL: open below by default, flip above when there is more room. ---
-    const spaceBelow = Math.max(0, viewportHeight - triggerRect.bottom - VIEWPORT_MARGIN);
-    const spaceAbove = Math.max(0, triggerRect.top - VIEWPORT_MARGIN);
+    const spaceBelow = Math.max(
+      0,
+      viewportHeight - triggerRect.bottom - VIEWPORT_MARGIN - Math.max(0, offset)
+    );
+    const spaceAbove = Math.max(0, triggerRect.top - VIEWPORT_MARGIN - Math.max(0, offset));
     const openAbove = spaceBelow < dropdownHeight && spaceAbove > spaceBelow;
     const availableHeight = openAbove ? spaceAbove : spaceBelow;
     style.maxHeight = `${Math.max(0, Math.min(MAX_DROPDOWN_HEIGHT, availableHeight))}px`;
 
     if (openAbove) {
       style.top = "auto";
-      style.bottom = `${viewportHeight - triggerRect.top - 1}px`;
+      style.bottom = `${viewportHeight - triggerRect.top + offset}px`;
       this.el.classList.add("dropdown-above");
       this.dropdownEl.classList.add("cs-dropdown--above");
     } else {
-      style.top = `${triggerRect.bottom - 1}px`;
+      style.top = `${triggerRect.bottom + offset}px`;
       style.bottom = "auto";
       this.el.classList.remove("dropdown-above");
       this.dropdownEl.classList.remove("cs-dropdown--above");
     }
+  }
+
+  _applyDropdownWidth(width) {
+    const style = this.dropdownEl.style;
+    style.minWidth = `${width}px`;
+    style.maxWidth = `${width}px`;
+    style.width = `${width}px`;
   }
 
   _appendDropdownToBody() {
@@ -935,7 +1000,7 @@ export class CustomSelect {
 
   _removeDropdownFromBody() {
     if (this.dropdownEl && this.dropdownEl.parentNode === document.body) {
-      this.dropdownEl.classList.remove("is-open", "cs-dropdown--above");
+      this.dropdownEl.classList.remove("is-open", "cs-dropdown--above", "cs-dropdown--detached");
       this.dropdownEl.classList.remove("cs-portal");
       document.body.removeChild(this.dropdownEl);
     }
@@ -993,7 +1058,7 @@ export class CustomSelect {
   _finishClose() {
     this._cancelCloseAnimation();
     this._isClosing = false;
-    this.el?.classList.remove("closing", "dropdown-above");
+    this.el?.classList.remove("closing", "dropdown-above", "dropdown-detached");
     this._stopPositionTracking();
     this._removeDropdownFromBody();
   }
@@ -1050,43 +1115,12 @@ export class CustomSelect {
     }
 
     this._renderOptions();
+    this._renderSizers();
     this._updateDisplayValue();
-    this._fitTriggerToOptions();
     if (this.isOpen) {
+      this._menuContentWidth = null;
       this._lastPositionSignature = "";
     }
-  }
-
-  /**
-   * With `fitOptions`, floor the trigger at the widest option label plus the
-   * trigger's own padding, border, gap and chevron, so no option is clipped. The
-   * menu keeps the trigger's width, so it widens with it. Measured with canvas
-   * text metrics from the computed font, which needs no layout and so also works
-   * while the control sits in a hidden tab.
-   */
-  _fitTriggerToOptions() {
-    if (!this.fitOptions || !this.triggerEl?.isConnected) return;
-    const context = getMeasureContext();
-    if (!context) return;
-
-    const valueStyle = window.getComputedStyle(this.valueEl);
-    context.font = valueStyle.font;
-    const widest = this.options.reduce(
-      (max, opt) => Math.max(max, context.measureText(opt.label || "").width),
-      0
-    );
-
-    const triggerStyle = window.getComputedStyle(this.triggerEl);
-    const chrome = [
-      triggerStyle.paddingInlineStart,
-      triggerStyle.paddingInlineEnd,
-      triggerStyle.borderInlineStartWidth,
-      triggerStyle.borderInlineEndWidth,
-      triggerStyle.columnGap,
-      window.getComputedStyle(this.arrowEl).width,
-    ].reduce((sum, value) => sum + (parseFloat(value) || 0), 0);
-
-    this.triggerEl.style.minInlineSize = `${Math.ceil(widest + chrome) + 1}px`;
   }
 
   /**
@@ -1137,7 +1171,9 @@ export class CustomSelect {
       this._optionObserver = null;
     }
 
-    this._labelListeners.forEach(({ label, handler }) => label.removeEventListener("click", handler));
+    this._labelListeners.forEach(({ label, handler }) =>
+      label.removeEventListener("click", handler)
+    );
     this._labelListeners = [];
 
     // Ensure dropdown is removed from body if still attached
@@ -1165,6 +1201,7 @@ export class CustomSelect {
     // Clear references
     this.el = null;
     this.triggerEl = null;
+    this.labelEl = null;
     this.valueEl = null;
     this.dropdownEl = null;
     this.hiddenInput = null;

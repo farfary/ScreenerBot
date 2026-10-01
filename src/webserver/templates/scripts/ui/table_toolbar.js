@@ -315,9 +315,7 @@ function renderSearch(item, state = {}) {
     : escapeHtml(I18n.t("table-toolbar-search-default"));
   const value = state.searchQuery ? escapeHtml(state.searchQuery) : "";
   const grow = item.grow === false ? ' data-grow="false"' : "";
-  const ariaLabel = item.ariaLabel
-    ? ` aria-label="${escapeHtml(item.ariaLabel)}"`
-    : "";
+  const ariaLabel = item.ariaLabel ? ` aria-label="${escapeHtml(item.ariaLabel)}"` : "";
   const widthStyle = item.minWidth
     ? ` style="--table-toolbar-search-min-width:${escapeHtml(item.minWidth)};"`
     : "";
@@ -339,15 +337,6 @@ function renderSearch(item, state = {}) {
       </button>
     </div>
   `;
-}
-
-function selectLabelWidth(options = []) {
-  const longest = options.reduce((max, option) => {
-    const label = option?.label ?? option?.value ?? "";
-    return Math.max(max, Array.from(String(label)).length);
-  }, 0);
-  const characters = Math.max(7, Math.min(longest || 7, 16));
-  return `${characters * 0.5}rem`;
 }
 
 function renderSwitch(item, stateFilters = {}) {
@@ -399,13 +388,9 @@ function renderSelect(item, stateFilters = {}) {
       )}</label>`
     : "";
 
-  const widthTokens = [
-    `--table-toolbar-select-label-width:${selectLabelWidth(item.options)}`,
-  ];
-  if (item.minWidth) {
-    widthTokens.push(`--table-toolbar-field-min-width:${escapeHtml(item.minWidth)}`);
-  }
-  const widthStyle = ` style="${widthTokens.join(";")};"`;
+  const widthStyle = item.minWidth
+    ? ` style="--table-toolbar-field-min-width:${escapeHtml(item.minWidth)};"`
+    : "";
   const dataAttrs = [`data-filter-id="${escapeHtml(item.id)}"`];
   if (item.autoApply === false) {
     dataAttrs.push('data-auto-apply="false"');
@@ -419,7 +404,7 @@ function renderSelect(item, stateFilters = {}) {
       ${label}
       <select class="dt-filter table-toolbar-select" id="tt-filter-${escapeHtml(
         item.id
-      )}" data-custom-select ${dataAttrs.join(" ")}>
+      )}" data-custom-select data-cs-fit-options ${dataAttrs.join(" ")}>
         ${optionsMarkup}
       </select>
     </div>
@@ -813,9 +798,7 @@ export class TableToolbarView {
     return `
       <div class="data-table-toolbar table-toolbar" data-density="${escapeHtml(
         density
-      )}" data-layout="${escapeHtml(layout)}"${
-        identity ? ' data-has-identity="true"' : ""
-      }>
+      )}" data-layout="${escapeHtml(layout)}"${identity ? ' data-has-identity="true"' : ""}>
         ${leadZone}
         ${controlsZone}
         ${actionsZone}
@@ -1038,9 +1021,6 @@ export class TableToolbarView {
       })
       .join("");
     select.value = value ?? "";
-    select
-      .closest(".table-toolbar-field")
-      ?.style.setProperty("--table-toolbar-select-label-width", selectLabelWidth(options));
   }
 
   static setCustomControlValue(root, controlId, value) {

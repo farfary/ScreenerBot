@@ -394,12 +394,13 @@
   display: none;
 }
 
+/* Each segment's track is its widest option as rendered (`CustomSelect`
+   `fitOptions` sizers), so it is stable across selections, never clips a label in
+   any locale, and the menu (trigger-wide) shows every option in full. The floor
+   keeps short facets from collapsing into a sliver. */
 .table-toolbar-select-group > .table-toolbar-field:not([hidden]) {
-  /* Label + trigger chevron + menu checkmark column. The old 2rem allowance
-     forced common labels to collide with the selected icon or ellipsize. */
-  flex: 0 0 clamp(8rem, calc(var(--table-toolbar-select-label-width, 5rem) + 3.5rem), 12rem);
-  width: clamp(8rem, calc(var(--table-toolbar-select-label-width, 5rem) + 3.5rem), 12rem);
-  min-width: 0;
+  flex: 0 0 auto;
+  min-width: 8rem;
 }
 
 .table-toolbar-select-group
@@ -484,15 +485,24 @@
   > .custom-select:is(.open, .closing)
   .cs-trigger {
   border-color: var(--primary-color);
-  border-radius: 0;
   background: var(--bg-card-hover);
   box-shadow: none;
+}
+
+/* A joined menu continues the trigger, so the trigger's menu-side corners square
+   off; a detached (wider-than-trigger) menu leaves the segment's rest corners. */
+.table-toolbar-select-group
+  > .table-toolbar-field:not([hidden])
+  > .custom-select-host
+  > .custom-select:is(.open, .closing):not(.dropdown-detached)
+  .cs-trigger {
+  border-radius: 0;
 }
 
 .table-toolbar-select-group
   > .table-toolbar-field:not([hidden])
   > .custom-select-host
-  > .custom-select:is(.open, .closing):not(.dropdown-above)
+  > .custom-select:is(.open, .closing):not(.dropdown-above, .dropdown-detached)
   .cs-trigger {
   border-bottom-color: transparent;
 }
@@ -500,7 +510,7 @@
 .table-toolbar-select-group
   > .table-toolbar-field:not([hidden])
   > .custom-select-host
-  > .custom-select:is(.open, .closing).dropdown-above
+  > .custom-select:is(.open, .closing).dropdown-above:not(.dropdown-detached)
   .cs-trigger {
   border-top-color: transparent;
 }
@@ -508,7 +518,7 @@
 .table-toolbar-select-group
   > .table-toolbar-field:not([hidden]):nth-child(1 of .table-toolbar-field:not([hidden]))
   > .custom-select-host
-  > .custom-select:is(.open, .closing):not(.dropdown-above)
+  > .custom-select:is(.open, .closing):not(.dropdown-above, .dropdown-detached)
   .cs-trigger {
   border-start-start-radius: var(--radius-md);
 }
@@ -516,7 +526,7 @@
 .table-toolbar-select-group
   > .table-toolbar-field:not([hidden]):nth-last-child(1 of .table-toolbar-field:not([hidden]))
   > .custom-select-host
-  > .custom-select:is(.open, .closing):not(.dropdown-above)
+  > .custom-select:is(.open, .closing):not(.dropdown-above, .dropdown-detached)
   .cs-trigger {
   border-start-end-radius: var(--radius-md);
 }
@@ -524,7 +534,7 @@
 .table-toolbar-select-group
   > .table-toolbar-field:not([hidden]):nth-child(1 of .table-toolbar-field:not([hidden]))
   > .custom-select-host
-  > .custom-select:is(.open, .closing).dropdown-above
+  > .custom-select:is(.open, .closing).dropdown-above:not(.dropdown-detached)
   .cs-trigger {
   border-end-start-radius: var(--radius-md);
 }
@@ -532,7 +542,7 @@
 .table-toolbar-select-group
   > .table-toolbar-field:not([hidden]):nth-last-child(1 of .table-toolbar-field:not([hidden]))
   > .custom-select-host
-  > .custom-select:is(.open, .closing).dropdown-above
+  > .custom-select:is(.open, .closing).dropdown-above:not(.dropdown-detached)
   .cs-trigger {
   border-end-end-radius: var(--radius-md);
 }
@@ -554,6 +564,11 @@
   align-items: center;
   min-width: var(--table-toolbar-field-min-width, 0);
   flex: 0 1 auto;
+}
+
+/* A select keeps its widest-option width; the search field absorbs row pressure. */
+.table-toolbar-field:has(> .custom-select-host > .cs-fit) {
+  flex-shrink: 0;
 }
 
 .table-toolbar-field > .custom-select-host {

@@ -64,12 +64,11 @@ test("stores a requested standalone width without hard-wiring grouped field geom
     controls: [{ ...select("wallet"), minWidth: "170px" }],
   }).render();
 
-  assert.match(html, /--table-toolbar-select-label-width:3.5rem/);
   assert.match(html, /--table-toolbar-field-min-width:170px/);
   assert.doesNotMatch(html, /style="min-width:170px;"/);
 });
 
-test("sizes grouped dropdowns from their longest option instead of one equal track", () => {
+test("sizes every toolbar dropdown from its rendered options, not a character estimate", () => {
   const html = new TableToolbarView({
     settings: false,
     controls: [
@@ -81,11 +80,8 @@ test("sizes grouped dropdowns from their longest option instead of one equal tra
     ],
   }).render();
 
-  assert.match(html, /--table-toolbar-select-label-width:4.5rem[^>]*data-filter-id="type"/);
-  assert.match(
-    html,
-    /--table-toolbar-select-label-width:7rem[^>]*data-filter-id="direction"/
-  );
+  assert.equal(html.match(/data-custom-select data-cs-fit-options/g)?.length, 2);
+  assert.doesNotMatch(html, /--table-toolbar-select-label-width/);
 });
 
 test("keeps typed search controls addressable in the flat toolbar index", () => {
