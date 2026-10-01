@@ -15,8 +15,9 @@ use super::types::{
     TokenEntry, TokenSortKey,
 };
 
-// Snapshot is considered stale after FILTER_CACHE_STALE_SECS (180s = 3 min)
-const FILTER_CACHE_STALE_SECS: u64 = 180;
+// Snapshot is considered stale after FILTER_CACHE_STALE_SECS (180s = 3 min). Until
+// then a refresh request returns the existing snapshot instead of rebuilding it.
+pub(super) const FILTER_CACHE_STALE_SECS: u64 = 180;
 
 pub(super) fn collect_entries<'a>(
     snapshot: &'a FilteringSnapshot,

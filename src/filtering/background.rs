@@ -30,9 +30,13 @@ pub fn refresh_interval_secs() -> u64 {
     FILTER_CACHE_TTL_SECS
 }
 
-/// Get the snapshot staleness threshold (4x refresh interval)
+/// Age past which the service reports its snapshot as stale.
+///
+/// The loop wakes every refresh interval, but the store rebuilds only a snapshot
+/// older than its stale window, so a healthy snapshot is up to window + interval
+/// old. Twice that tolerates one slow or failed rebuild without reporting it.
 pub fn snapshot_stale_limit_secs() -> u64 {
-    refresh_interval_secs() * 4
+    (super::store_helpers::FILTER_CACHE_STALE_SECS + refresh_interval_secs()) * 2
 }
 
 /// Main filtering refresh loop - periodically refreshes filter snapshots and detects new tokens.
