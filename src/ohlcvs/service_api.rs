@@ -60,13 +60,14 @@ pub async fn get_data_gaps(mint: &str, timeframe: Timeframe) -> OhlcvResult<Vec<
 pub async fn request_refresh(mint: &str) -> OhlcvResult<()> {
     let service = get_or_init_service().await?;
 
-    // Record activity
+    // Priority bump only: `force_refresh` performs the single fetch this
+    // request causes (and re-resolves the pools), so the activity's own
+    // immediate fetch is skipped here.
     service
         .monitor
-        .record_activity(mint, ActivityType::DataRequested)
+        .mark_activity(mint, ActivityType::DataRequested)
         .await?;
 
-    // Force refresh
     service.monitor.force_refresh(mint).await
 }
 

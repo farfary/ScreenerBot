@@ -55,6 +55,11 @@ const MAX_REFRESHING_REFETCHES: u32 = 3;
 /// at low priority) would keep those values in the chart and the strategies.
 const FALLBACK_RETRY_DELAY_SECS: i64 = 300;
 
+/// Consecutive fallback-served pages after which the short fallback retry stops
+/// (about 30 minutes at `FALLBACK_RETRY_DELAY_SECS`). Past it the timeframe
+/// follows its ordinary interval until a Data Server page replaces the values.
+const MAX_FALLBACK_RETRIES: u32 = 6;
+
 /// Margin past the Data Server's freshness window before a closed bucket is
 /// re-read, so the read lands after the server's own re-fetch of that bucket.
 const SETTLE_MARGIN_SECS: i64 = 60;
@@ -123,6 +128,9 @@ struct NativeSeriesState {
     /// The last page that carried storable candles was served by a fallback
     /// provider, so the stored native values may differ from the Data Server's.
     fallback_values: bool,
+    /// Consecutive pages with candles served by a fallback provider since the
+    /// last Data Server page.
+    fallback_pages: u32,
     /// Newest bucket a completed fetch read at or after its settle point. A
     /// fetch that returns identical values leaves the row's `fetched_at`
     /// untouched, so this is what stops the settle rule from firing again.
@@ -184,9 +192,13 @@ impl NativeSeriesState {
     /// only when it carried storable candles, since an empty one wrote nothing.
     fn record_source(&mut self, source: Option<CandleSource>, carried_candles: bool) {
         match source {
-            Some(CandleSource::DataServer) => self.fallback_values = false,
+            Some(CandleSource::DataServer) => {
+                self.fallback_values = false;
+                self.fallback_pages = 0;
+            }
             Some(source) if source.is_fallback() && carried_candles => {
                 self.fallback_values = true;
+                self.fallback_pages = self.fallback_pages.saturating_add(1);
             }
             _ => {}
         }
@@ -304,13 +316,15 @@ fn native_refresh_due(
 }
 
 /// Whether a timeframe holding fallback values is due for another attempt at the
-/// Data Server: the Data Server is usable and the last fetch is at least
-/// `FALLBACK_RETRY_DELAY_SECS` old. When the Data Server is disabled or
+/// Data Server: the Data Server is usable, fewer than `MAX_FALLBACK_RETRIES`
+/// re-fetches have been answered by a fallback in a row, and the last fetch is at
+/// least `FALLBACK_RETRY_DELAY_SECS` old. When the Data Server is disabled or
 /// unavailable the fallback is the primary source and only the ordinary rules
 /// apply.
 fn fallback_refresh_due(state: &NativeSeriesState, now: i64, data_server_usable: bool) -> bool {
     data_server_usable
         && state.fallback_values
+        && state.fallback_pages <= MAX_FALLBACK_RETRIES
         && state
             .last_fetch_at
             .is_some_and(|last| now - last >= FALLBACK_RETRY_DELAY_SECS)
@@ -693,12 +707,27 @@ impl OhlcvMonitor {
         Ok(())
     }
 
-    /// Record activity for a token
+    /// Record activity for a token. Activities that need data now
+    /// (`PositionOpened`, `DataRequested`) fetch the token immediately.
     pub async fn record_activity(
         &self,
         mint: &str,
         activity_type: ActivityType,
     ) -> OhlcvResult<()> {
+        if self.mark_activity(mint, activity_type).await? {
+            self.fetch_token_data(mint).await?;
+        }
+        Ok(())
+    }
+
+    /// Apply an activity's priority update to a monitored token and persist it,
+    /// without fetching. Returns whether the activity calls for an immediate
+    /// fetch; it is always false for a token outside the monitored set.
+    pub async fn mark_activity(
+        &self,
+        mint: &str,
+        activity_type: ActivityType,
+    ) -> OhlcvResult<bool> {
         let (updated_config, should_trigger_fetch) = {
             let mut active = self.active_tokens.write().await;
             active.get_mut(mint).map_or((None, false), |config| {
@@ -719,15 +748,11 @@ impl OhlcvMonitor {
             })
         };
 
-        if let Some(config) = updated_config {
-            self.db.upsert_monitor_config(&config)?;
-
-            if should_trigger_fetch {
-                self.fetch_token_data(mint).await?;
-            }
-        }
-
-        Ok(())
+        let Some(config) = updated_config else {
+            return Ok(false);
+        };
+        self.db.upsert_monitor_config(&config)?;
+        Ok(should_trigger_fetch)
     }
 
     /// Force refresh for a token. An explicit refresh also re-resolves the token's pools in the
@@ -3067,6 +3092,38 @@ mod tests {
             NOW + FALLBACK_RETRY_DELAY_SECS,
             true
         ));
+    }
+
+    #[test]
+    fn fallback_retries_stop_after_the_cap_until_a_data_server_page() {
+        let mut state = NativeSeriesState {
+            last_fetch_at: Some(NOW),
+            ..NativeSeriesState::default()
+        };
+        let due = |state: &NativeSeriesState| {
+            fallback_refresh_due(state, NOW + FALLBACK_RETRY_DELAY_SECS, true)
+        };
+
+        // The first fallback page, then one short retry per further fallback page.
+        state.record_source(Some(CandleSource::GeckoTerminal), true);
+        for _ in 0..MAX_FALLBACK_RETRIES {
+            assert!(due(&state));
+            state.record_source(Some(CandleSource::GeckoTerminal), true);
+        }
+        assert_eq!(state.fallback_pages, MAX_FALLBACK_RETRIES + 1);
+        assert!(state.fallback_values);
+        assert!(!due(&state));
+
+        // Empty answers neither extend nor reset the streak.
+        state.record_source(Some(CandleSource::GeckoTerminal), false);
+        state.record_source(None, false);
+        assert!(!due(&state));
+
+        // A Data Server page clears the streak; a later fallback page retries again.
+        state.record_source(Some(CandleSource::DataServer), true);
+        assert_eq!(state.fallback_pages, 0);
+        state.record_source(Some(CandleSource::SolanaTracker), true);
+        assert!(due(&state));
     }
 
     #[test]
