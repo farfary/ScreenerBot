@@ -212,11 +212,12 @@ async fn collect_wallet_snapshot() -> Result<WalletSnapshot, Error> {
     // Value the holdings at the prices in force right now, so the persisted row is a
     // point-in-time worth. Historical rows can never be re-valued honestly later (we
     // would be pricing yesterday's holdings at today's price), so it has to happen here.
+    // The live-worth pricing rule applies: pool price first, token market price when
+    // the pool cache has none, so a missed pool tick does not drop the holding to 0.
     let tokens_worth_sol: f64 = token_balances
         .iter()
         .filter_map(|balance| {
-            crate::pools::get_pool_price(&balance.mint)
-                .map(|price| balance.balance_ui * price.price_sol)
+            super::worth::price_token_sol(&balance.mint).map(|price| balance.balance_ui * price)
         })
         .sum();
 

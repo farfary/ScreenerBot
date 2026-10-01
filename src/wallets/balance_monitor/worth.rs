@@ -103,8 +103,9 @@ pub fn get_held_mints() -> Vec<String> {
 
 /// Price one held token in SOL: live pool price first, token-database market price
 /// second. `None` when neither knows it — the caller must count it as unpriced, never
-/// as zero-value-but-priced.
-fn price_token_sol(mint: &str) -> Option<f64> {
+/// as zero-value-but-priced. Persisted snapshots value holdings with this same rule,
+/// so the trend line plots the quantity the headline shows.
+pub(super) fn price_token_sol(mint: &str) -> Option<f64> {
     if let Some(price) = crate::pools::get_pool_price(mint) {
         if price.price_sol.is_finite() && price.price_sol > 0.0 {
             return Some(price.price_sol);
