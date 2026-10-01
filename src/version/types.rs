@@ -305,6 +305,9 @@ pub struct UpdateState {
     pub deferred: Option<DeferReason>,
     /// Version this process is running after activating a staged core update.
     pub applied_version: Option<String>,
+    /// Whether the dashboard has acknowledged `applied_version`; until then Home
+    /// names the update that just landed.
+    pub applied_acknowledged: bool,
     /// The most recently applied release, retained for Settings > Release Notes.
     pub last_release: Option<ReleaseSummary>,
 }

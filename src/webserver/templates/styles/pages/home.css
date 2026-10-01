@@ -6,7 +6,7 @@
   --row-padding: 0.5rem 0;
 
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   width: 100%;
   height: 100%;
   min-width: 0;
@@ -16,7 +16,106 @@
 }
 
 /* Portfolio overview */
+/* Update notice: its own row above the overview. Rows are placed explicitly so
+   the hidden notice leaves an empty auto row instead of shifting the others. */
+.home-update-notice {
+  display: grid;
+  grid-row: 1;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+  padding: 0.5rem 1.25rem;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--primary-alpha-5);
+}
+
+.home-update-notice[hidden],
+.home-update-progress[hidden],
+.home-update-dismiss[hidden] {
+  display: none;
+}
+
+.home-update-icon {
+  color: var(--primary-color);
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.home-update-notice[data-tone="success"] .home-update-icon {
+  color: var(--semantic-success-text);
+}
+
+.home-update-notice[data-tone="error"] .home-update-icon {
+  color: var(--semantic-error-text);
+}
+
+.home-update-copy {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.home-update-headline {
+  flex: none;
+  color: var(--text-primary);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.home-update-detail {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-update-progress {
+  width: min(12rem, 18vw);
+  height: 4px;
+  overflow: hidden;
+  background: var(--border-color);
+  border-radius: 2px;
+}
+
+.home-update-progress-fill {
+  width: 0;
+  height: 100%;
+  background: var(--primary-color);
+  border-radius: inherit;
+  transition: width 0.3s ease;
+}
+
+.home-update-actions {
+  display: flex;
+  grid-column: 4;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* A bare glyph, sized and coloured only. */
+.home-update-dismiss {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  color: var(--text-muted);
+  background: transparent;
+  font-size: 0.875rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: color var(--transition-fast);
+}
+
+.home-update-dismiss:hover {
+  color: var(--text-primary);
+}
+
 .portfolio-overview {
+  grid-row: 2;
   display: grid;
   grid-template-columns: minmax(18rem, 0.9fr) minmax(0, 1.7fr);
   min-width: 0;
@@ -359,6 +458,7 @@
 
 /* Fixed workspace */
 .home-workspace {
+  grid-row: 3;
   display: grid;
   grid-template-columns: minmax(0, 1.85fr) minmax(19rem, 1fr);
   min-width: 0;

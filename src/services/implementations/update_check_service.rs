@@ -28,10 +28,11 @@ impl Service for UpdateCheckService {
     }
 
     fn is_enabled(&self) -> bool {
-        // Updates belong to the desktop shell, not the wallet runtime. Setup
-        // and Explore Mode must keep checking too; otherwise one persisted
-        // frontend check prevents those installations from ever checking again.
-        crate::global::is_gui_mode()
+        // Every installation checks, whatever its initialization state: Setup and
+        // Explore Mode included, or one persisted frontend check stops them
+        // checking forever. A headless process only learns and reports a release;
+        // the update policy never downloads what it cannot install.
+        true
     }
 
     async fn initialize(&mut self) -> crate::Result<()> {

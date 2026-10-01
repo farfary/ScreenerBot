@@ -107,3 +107,13 @@ updates-install-confirm-title = Lancer le programme d'installation
 updates-install-confirm-message = Le programme d'installation vérifié s'ouvre et { -brand } se ferme proprement. Terminez l'installation, puis rouvrez { -brand }.
 
 updates-version-number = v{ $version }
+
+# The Home update notice, shown while a release is in play.
+updates-notice-region =
+    .aria-label = État de la mise à jour
+updates-notice-view = Voir la mise à jour
+updates-notice-whats-new = Nouveautés
+updates-notice-available-detail = Consultez les changements et installez-la depuis les Paramètres.
+updates-notice-updated-detail = Découvrez ce qui a changé dans cette version.
+# A headless installation cannot download or install a release itself.
+updates-headless-install-detail = Les installations sans interface se mettent à jour en dehors du tableau de bord. Sous Linux, exécutez { "screenerbot-manager update" }.

@@ -108,3 +108,13 @@ updates-install-confirm-title = Jalankan installer
 updates-install-confirm-message = Installer terverifikasi dibuka dan { -brand } keluar dengan bersih. Selesaikan installer, lalu buka kembali { -brand }.
 
 updates-version-number = v{ $version }
+
+# The Home update notice, shown while a release is in play.
+updates-notice-region =
+    .aria-label = Status pembaruan
+updates-notice-view = Lihat pembaruan
+updates-notice-whats-new = Yang baru
+updates-notice-available-detail = Lihat perubahannya dan instal dari Pengaturan.
+updates-notice-updated-detail = Lihat perubahan di versi ini.
+# A headless installation cannot download or install a release itself.
+updates-headless-install-detail = Instalasi headless diperbarui di luar dasbor. Di Linux, jalankan { "screenerbot-manager update" }.

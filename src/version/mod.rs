@@ -35,7 +35,7 @@ pub mod types;
 
 pub use checker::check_for_update;
 pub use core_install::{read_staged_core, staged_core_version};
-pub use download::start_download;
+pub use download::{self_install_supported, start_download};
 pub use error::{Error, Result};
 pub use history::release_history;
 pub use installer::prepare_install;
@@ -98,6 +98,7 @@ fn normalize_loaded_state(state: &mut UpdateState, staged_version: Option<&str>)
         state.last_release = state.available_update.as_ref().map(ReleaseSummary::from);
         state.phase = UpdatePhase::Applied;
         state.applied_version = Some(VERSION.to_owned());
+        state.applied_acknowledged = false;
         state.available_update = None;
         state.deferred = None;
         state.download_progress = DownloadProgress::default();
@@ -202,6 +203,11 @@ async fn persist_state(snapshot: UpdateState) {
         crate::logger::LogTag::System,
         &format!("Could not persist update state: {error}"),
     );
+}
+
+/// Record that the dashboard has shown the update this process is running.
+pub async fn acknowledge_applied() {
+    mutate_state(|state| state.applied_acknowledged = true).await;
 }
 
 async fn mutate_state<F>(mutator: F) -> UpdateState
@@ -394,11 +400,14 @@ mod tests {
         let mut state = UpdateState {
             phase: UpdatePhase::Applying,
             available_update: Some(update(VERSION)),
+            applied_acknowledged: true,
             ..UpdateState::default()
         };
         normalize_loaded_state(&mut state, Some(VERSION));
         assert_eq!(state.phase, UpdatePhase::Applied);
         assert_eq!(state.applied_version.as_deref(), Some(VERSION));
+        // A newly landed version is announced again, whatever was acknowledged before.
+        assert!(!state.applied_acknowledged);
         assert!(state.available_update.is_none());
         assert_eq!(
             state

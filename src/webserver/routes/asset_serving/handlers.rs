@@ -127,6 +127,7 @@ pub async fn get_page_script(Path(file): Path<String>) -> Response {
     let content = match file {
         "home.js" => Some(embeds::HOME_PAGE_SCRIPT),
         "home/portfolio_calendar.js" => Some(embeds::HOME_CALENDAR_JS),
+        "home/update_notice.js" => Some(embeds::HOME_UPDATE_NOTICE_JS),
         "services.js" => Some(embeds::SERVICES_PAGE_SCRIPT),
         "transactions.js" => Some(embeds::TRANSACTIONS_PAGE_SCRIPT),
         "events.js" => Some(embeds::EVENTS_PAGE_SCRIPT),
@@ -275,6 +276,7 @@ pub async fn get_ui_script(Path(file): Path<String>) -> Response {
         "settings/data_tab.js" => Some(embeds::SETTINGS_DATA_TAB_UI),
         "settings/updates_tab.js" => Some(embeds::SETTINGS_UPDATES_TAB_UI),
         "settings/updates_view.js" => Some(embeds::SETTINGS_UPDATES_VIEW_UI),
+        "settings/update_status.js" => Some(embeds::SETTINGS_UPDATE_STATUS_UI),
         "settings/interface_tab.js" => Some(embeds::SETTINGS_INTERFACE_TAB_UI),
         "settings/hints_tab.js" => Some(embeds::SETTINGS_HINTS_TAB_UI),
         "settings/agent_connections_tab.js" => Some(embeds::SETTINGS_AGENT_CONNECTIONS_TAB_UI),

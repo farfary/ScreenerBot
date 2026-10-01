@@ -8,6 +8,7 @@ import { showFeaturedRow, hideFeaturedRow } from "../ui/featured_row.js";
 import { notifyClientReady } from "../core/client_ready.js";
 import { closeMenu, openMenu } from "../core/menu_manager.js";
 import { createCalendar } from "./home/portfolio_calendar.js";
+import { createUpdateNotice } from "./home/update_notice.js";
 
 function createLifecycle() {
   let poller = null;
@@ -22,6 +23,7 @@ function createLifecycle() {
   // Guards against overlapping dashboard fetches (see fetchData).
   let isFetching = false;
   let calendar = null;
+  let updateNotice = null;
   let walletAddress = "";
   let walletQrOpen = false;
   let walletIdentityCleanup = null;
@@ -506,6 +508,7 @@ function createLifecycle() {
       // Portfolio calendar.
       calendar = createCalendar(calendarFetch);
       calendar.mount();
+      updateNotice = createUpdateNotice(Utils);
       mountWalletIdentity();
     },
 
@@ -523,6 +526,9 @@ function createLifecycle() {
         calendar = createCalendar(calendarFetch);
         calendar.mount();
       }
+      if (!updateNotice) {
+        updateNotice = createUpdateNotice(Utils);
+      }
       if (!walletIdentityCleanup) {
         mountWalletIdentity();
       }
@@ -539,6 +545,7 @@ function createLifecycle() {
           () => {
             fetchData();
             calendar?.refresh();
+            updateNotice?.refresh();
           },
           {
             label: "HomeDashboard", // l10n-ignore: internal poller name
@@ -550,6 +557,7 @@ function createLifecycle() {
       ctx.managePoller(poller);
       poller.start({ silent: true });
       fetchData();
+      updateNotice.refresh();
 
       // Show featured promotional row
       showFeaturedRow();
@@ -571,6 +579,8 @@ function createLifecycle() {
 
       calendar?.dispose();
       calendar = null;
+      updateNotice?.dispose();
+      updateNotice = null;
       walletIdentityCleanup?.();
       walletIdentityCleanup = null;
       walletAddress = "";

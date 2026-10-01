@@ -106,3 +106,13 @@ updates-install-confirm-title = Yükleyiciyi çalıştır
 updates-install-confirm-message = Doğrulanmış yükleyici açılır ve { -brand } düzgün şekilde kapanır. Yükleyiciyi tamamlayın, ardından { -brand } uygulamasını yeniden açın.
 
 updates-version-number = v{ $version }
+
+# The Home update notice, shown while a release is in play.
+updates-notice-region =
+    .aria-label = Güncelleme durumu
+updates-notice-view = Güncellemeyi görüntüle
+updates-notice-whats-new = Yenilikler
+updates-notice-available-detail = Nelerin değiştiğine bakın ve Ayarlar'dan yükleyin.
+updates-notice-updated-detail = Bu sürümde nelerin değiştiğine bakın.
+# A headless installation cannot download or install a release itself.
+updates-headless-install-detail = Arayüzsüz kurulumlar panelin dışında güncellenir. Linux'ta { "screenerbot-manager update" } komutunu çalıştırın.

@@ -108,3 +108,13 @@ updates-install-confirm-title = Запустить установщик
 updates-install-confirm-message = Откроется проверенный установщик, а { -brand } корректно завершит работу. Завершите установку и снова откройте { -brand }.
 
 updates-version-number = v{ $version }
+
+# The Home update notice, shown while a release is in play.
+updates-notice-region =
+    .aria-label = Статус обновления
+updates-notice-view = Открыть обновление
+updates-notice-whats-new = Что нового
+updates-notice-available-detail = Посмотрите изменения и установите обновление в настройках.
+updates-notice-updated-detail = Посмотрите, что изменилось в этой версии.
+# A headless installation cannot download or install a release itself.
+updates-headless-install-detail = Установки без интерфейса обновляются вне панели. В Linux выполните { "screenerbot-manager update" }.

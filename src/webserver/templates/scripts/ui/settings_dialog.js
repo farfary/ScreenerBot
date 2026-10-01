@@ -16,8 +16,10 @@ import {
   buildUpdatesTab,
   attachUpdatesHandlers,
   requestUpdateCheck,
+  selectUpdatesView,
   teardownUpdatesTab,
 } from "./settings/updates_tab.js";
+import { readUpdateStatus } from "./settings/update_status.js";
 import { buildInterfaceTab, attachInterfaceHandlers } from "./settings/interface_tab.js";
 import { buildHintsTab, attachHintsHandlers } from "./settings/hints_tab.js";
 import {
@@ -97,15 +99,8 @@ export class SettingsDialog {
 
   /** Read whether an update needs attention for the nav indicator. */
   async _syncUpdateStatus() {
-    try {
-      const response = await fetch("/api/updates/status");
-      if (!response.ok) return;
-      const body = await response.json();
-      const payload = body.data || body;
-      this._setUpdateBadge(Boolean(payload.requires_user_action));
-    } catch (err) {
-      console.warn("Failed to read update status:", err);
-    }
+    const state = await readUpdateStatus();
+    if (state) this._setUpdateBadge(state.requires_user_action);
   }
 
   /**
@@ -914,6 +909,7 @@ export async function showSettingsDialog(options = {}) {
 
   // show() creates the complete dialog DOM before it resolves. Switch directly
   // so callers can safely invoke tab-owned actions after awaiting this function.
+  if (options.updatesView) selectUpdatesView(options.updatesView);
   if (options.tab) {
     settingsDialogInstance.switchToTab(options.tab);
   }
@@ -943,32 +939,10 @@ export async function checkAndShowUpdateDialog() {
   }
 
   try {
-    // First check current status
-    const response = await fetch("/api/updates/status");
-    if (!response.ok) return;
-
-    const body = await response.json();
-    const payload = body.data || body;
-    let state = payload.state || payload;
-    state.blocked_reason = payload.blocked_reason || null;
-    state.requires_user_action = Boolean(payload.requires_user_action);
-
-    // If no check has even been attempted yet, trigger the startup check. A
-    // failed attempt is retried by the backend policy; the observer must not add
-    // another manual request every minute while the network remains unavailable.
-    if (!state.last_check_attempt && !state.available_update) {
-      const checkResponse = await fetch("/api/updates/check");
-      if (checkResponse.ok) {
-        const refreshed = await fetch("/api/updates/status");
-        if (refreshed.ok) {
-          const refreshedBody = await refreshed.json();
-          const refreshedPayload = refreshedBody.data || refreshedBody;
-          state = refreshedPayload.state || refreshedPayload;
-          state.blocked_reason = refreshedPayload.blocked_reason || null;
-          state.requires_user_action = Boolean(refreshedPayload.requires_user_action);
-        }
-      }
-    }
+    // The backend checks once at every launch and then on its interval; this
+    // observer only reads the state it leaves.
+    const state = await readUpdateStatus();
+    if (!state) return;
 
     // Only surface the panel for an update that still needs a decision. A core
     // update that installs itself must not steal the screen on every launch.
@@ -978,7 +952,7 @@ export async function checkAndShowUpdateDialog() {
       : null;
     if (attentionKey && attentionKey !== lastSurfacedUpdateKey) {
       lastSurfacedUpdateKey = attentionKey;
-      await showSettingsDialog({ tab: "updates" });
+      await showSettingsDialog({ tab: "updates", updatesView: "status" });
     }
   } catch (err) {
     console.warn("[SettingsDialog] Failed to check for updates on startup:", err);

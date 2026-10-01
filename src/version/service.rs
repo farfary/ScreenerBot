@@ -37,9 +37,13 @@ pub fn start_update_check_service(
         }
 
         let mut announced: Option<(String, UpdateStage)> = None;
+        // A launch always asks the server once, whatever the interval says: the
+        // persisted last check can predate a release by up to the full interval,
+        // and a freshly opened app must not report itself current in the meantime.
+        let mut launch_check_pending = true;
         loop {
             if !crate::connectivity::is_network_offline() {
-                run_cycle(&mut announced).await;
+                run_cycle(&mut announced, &mut launch_check_pending).await;
             }
             tokio::select! {
                 _ = tokio::time::sleep(Duration::from_secs(TICK_SECS)) => {}
@@ -51,7 +55,7 @@ pub fn start_update_check_service(
 
 /// One pass of the update state machine. Every step is a no-op unless the
 /// previous one left something to do, so a tick costs nothing while idle.
-async fn run_cycle(announced: &mut Option<(String, UpdateStage)>) {
+async fn run_cycle(announced: &mut Option<(String, UpdateStage)>, launch_check_pending: &mut bool) {
     let policy = UpdatePolicy::load();
     if !policy.auto_check {
         return;
@@ -62,10 +66,12 @@ async fn run_cycle(announced: &mut Option<(String, UpdateStage)>) {
         return;
     }
 
-    let due = state
-        .last_check
-        .is_none_or(|last| (Utc::now() - last).num_seconds() as u64 >= policy.check_interval_secs);
+    let due = *launch_check_pending
+        || state.last_check.is_none_or(|last| {
+            (Utc::now() - last).num_seconds() as u64 >= policy.check_interval_secs
+        });
     let state = if due {
+        *launch_check_pending = false;
         if let Err(error) = super::check_for_update().await {
             logger::warning(LogTag::System, &format!("Update check failed: {error}"));
             return;
@@ -87,7 +93,10 @@ async fn run_cycle(announced: &mut Option<(String, UpdateStage)>) {
             policy.notify_telegram,
         )
         .await;
-        if policy.auto_download && state.phase == UpdatePhase::Available {
+        if policy.auto_download
+            && state.phase == UpdatePhase::Available
+            && super::self_install_supported(update.kind)
+        {
             if let Err(error) = super::start_download(update.clone()).await {
                 logger::warning(
                     LogTag::System,

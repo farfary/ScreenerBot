@@ -124,3 +124,13 @@ updates-install-confirm-message = 검증된 설치 프로그램이 열리고 { -
 
 # A release version as displayed.
 updates-version-number = v{ $version }
+
+# The Home update notice, shown while a release is in play.
+updates-notice-region =
+    .aria-label = 업데이트 상태
+updates-notice-view = 업데이트 보기
+updates-notice-whats-new = 새로운 기능
+updates-notice-available-detail = 변경 사항을 확인하고 설정에서 설치하세요.
+updates-notice-updated-detail = 이 버전에서 바뀐 내용을 확인하세요.
+# A headless installation cannot download or install a release itself.
+updates-headless-install-detail = 헤드리스 설치는 대시보드 밖에서 업데이트됩니다. Linux에서는 { "screenerbot-manager update" }을(를) 실행하세요.

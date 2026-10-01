@@ -106,3 +106,13 @@ updates-install-confirm-title = इंस्टॉलर चलाएं
 updates-install-confirm-message = सत्यापित इंस्टॉलर खुलता है और { -brand } सुरक्षित रूप से बंद हो जाता है। इंस्टॉलर पूरा करें, फिर { -brand } दोबारा खोलें।
 
 updates-version-number = v{ $version }
+
+# The Home update notice, shown while a release is in play.
+updates-notice-region =
+    .aria-label = अपडेट की स्थिति
+updates-notice-view = अपडेट देखें
+updates-notice-whats-new = नया क्या है
+updates-notice-available-detail = बदलाव देखें और सेटिंग्स से इसे इंस्टॉल करें।
+updates-notice-updated-detail = देखें कि इस संस्करण में क्या बदला है।
+# A headless installation cannot download or install a release itself.
+updates-headless-install-detail = हेडलेस इंस्टॉलेशन डैशबोर्ड के बाहर अपडेट होते हैं। Linux पर { "screenerbot-manager update" } चलाएँ।

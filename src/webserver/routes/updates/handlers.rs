@@ -135,10 +135,15 @@ pub(super) async fn get_status() -> Response {
     };
 
     let blocked_reason = readiness.or(state.deferred).map(|reason| reason.ui_text());
-    let auto_download = config::with_config(|cfg| cfg.updates.auto_download);
+    let self_install = version::self_install_supported(kind);
+    // An update this process cannot install never downloads by itself, so it
+    // always waits on the operator.
+    let auto_download = self_install && config::with_config(|cfg| cfg.updates.auto_download);
     let requires_user_action = needs_user_action(&state, blocked_reason.is_some(), auto_download);
 
     success_response(UpdateStatusResponse {
+        self_install,
+        current_version: version::VERSION,
         staged_core: version::read_staged_core(),
         blocked_reason,
         requires_user_action,
@@ -157,6 +162,14 @@ fn needs_user_action(state: &version::UpdateState, blocked: bool, auto_download:
         version::UpdatePhase::ReadyToInstall | version::UpdatePhase::Failed => true,
         _ => false,
     }
+}
+
+/// POST /api/updates/acknowledge
+/// Records that the operator has seen the update this process is running, so
+/// Home stops naming it.
+pub(super) async fn acknowledge_applied() -> Response {
+    version::acknowledge_applied().await;
+    success_response(AcknowledgeResponse { acknowledged: true })
 }
 
 /// POST /api/updates/apply

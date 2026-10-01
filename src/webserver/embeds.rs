@@ -459,6 +459,8 @@ pub const SETTINGS_UPDATES_TAB_UI: &str =
     include_str!("templates/scripts/ui/settings/updates_tab.js");
 pub const SETTINGS_UPDATES_VIEW_UI: &str =
     include_str!("templates/scripts/ui/settings/updates_view.js");
+pub const SETTINGS_UPDATE_STATUS_UI: &str =
+    include_str!("templates/scripts/ui/settings/update_status.js");
 pub const SETTINGS_INTERFACE_TAB_UI: &str =
     include_str!("templates/scripts/ui/settings/interface_tab.js");
 pub const SETTINGS_HINTS_TAB_UI: &str = include_str!("templates/scripts/ui/settings/hints_tab.js");
@@ -562,6 +564,8 @@ pub const ASSISTANT_AUTOMATION_TAB: &str =
 pub const HOME_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/home.js");
 pub const HOME_CALENDAR_JS: &str =
     include_str!("templates/scripts/pages/home/portfolio_calendar.js");
+pub const HOME_UPDATE_NOTICE_JS: &str =
+    include_str!("templates/scripts/pages/home/update_notice.js");
 pub const LOGIN_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/login.js");
 
 // HTML Page Templates

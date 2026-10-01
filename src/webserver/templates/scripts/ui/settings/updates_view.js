@@ -11,6 +11,7 @@ import {
   fieldLabel,
   fieldUnit,
 } from "../../pages/config/field_text.js";
+import { UPDATE_PHASE_DETAIL_LABELS, UPDATE_PHASE_HEADLINE_LABELS } from "./update_status.js";
 
 const PREFERENCE_ORDER = [
   "auto_check",
@@ -22,38 +23,6 @@ const PREFERENCE_ORDER = [
 ];
 
 const CATEGORY_ORDER = ["checking", "installing", "notifications"];
-
-// Ids are the serialized `UpdatePhase` values (src/version/types.rs); the Rust test
-// `update_phase_messages_exist_in_the_catalog` pins the keys.
-const UPDATE_PHASE_HEADLINE_LABELS = Object.freeze({
-  idle: "updates-phase-idle-headline",
-  up_to_date: "updates-phase-up-to-date-headline",
-  checking: "updates-phase-checking-headline",
-  available: "updates-phase-available-headline",
-  downloading: "updates-phase-downloading-headline",
-  verifying: "updates-phase-verifying-headline",
-  ready_to_apply: "updates-phase-ready-to-apply-headline",
-  ready_to_install: "updates-phase-ready-to-install-headline",
-  applying: "updates-phase-applying-headline",
-  applied: "updates-phase-applied-headline",
-  failed: "updates-phase-failed-headline",
-  check_failed: "updates-phase-check-failed-headline",
-});
-
-// The detail line; for the phases that can carry backend text it is the fallback.
-// Available and downloading updates describe their kind instead.
-const UPDATE_PHASE_DETAIL_LABELS = Object.freeze({
-  idle: "updates-phase-idle-detail",
-  up_to_date: "updates-phase-up-to-date-detail",
-  checking: "updates-phase-checking-detail",
-  verifying: "updates-phase-verifying-detail",
-  ready_to_apply: "updates-phase-ready-to-apply-detail",
-  ready_to_install: "updates-phase-ready-to-install-detail",
-  applying: "updates-phase-applying-detail",
-  applied: "updates-phase-applied-detail",
-  failed: "updates-phase-failed-detail",
-  check_failed: "updates-phase-check-failed-detail",
-});
 
 // Ids are the serialized `UpdateKind` values (src/version/types.rs).
 const UPDATE_KIND_LABELS = Object.freeze({
@@ -266,12 +235,18 @@ export function createUpdatesView(Utils) {
         progressHtml = progressBar(progress, true, headline);
         break;
       case "available":
-        detail = describeKind(update);
         icon = "icon-arrow-down-to-line";
         tone = "primary";
-        actions = [
-          button("updatesDownload", I18n.t("updates-action-download"), "icon-arrow-down-to-line"),
-        ];
+        if (state.self_install === false) {
+          // A headless installation is updated by its package manager.
+          detail = I18n.t("updates-headless-install-detail");
+          actions = [];
+        } else {
+          detail = describeKind(update);
+          actions = [
+            button("updatesDownload", I18n.t("updates-action-download"), "icon-arrow-down-to-line"),
+          ];
+        }
         break;
       case "downloading":
         detail = describeKind(update);

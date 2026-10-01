@@ -124,3 +124,13 @@ updates-install-confirm-message = 検証済みのインストーラーが開き�
 
 # A release version as displayed.
 updates-version-number = v{ $version }
+
+# The Home update notice, shown while a release is in play.
+updates-notice-region =
+    .aria-label = アップデートの状態
+updates-notice-view = アップデートを表示
+updates-notice-whats-new = 新機能
+updates-notice-available-detail = 変更内容を確認し、設定からインストールしてください。
+updates-notice-updated-detail = このバージョンの変更内容を確認できます。
+# A headless installation cannot download or install a release itself.
+updates-headless-install-detail = ヘッドレス環境はダッシュボードの外で更新されます。Linux では { "screenerbot-manager update" } を実行してください。

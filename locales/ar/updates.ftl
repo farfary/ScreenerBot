@@ -129,3 +129,13 @@ updates-install-confirm-message = يُفتح المثبّت الذي تم الت
 
 # A release version as displayed.
 updates-version-number = v{ $version }
+
+# The Home update notice, shown while a release is in play.
+updates-notice-region =
+    .aria-label = حالة التحديث
+updates-notice-view = عرض التحديث
+updates-notice-whats-new = ما الجديد
+updates-notice-available-detail = اطّلع على التغييرات وثبّت التحديث من الإعدادات.
+updates-notice-updated-detail = اطّلع على ما تغيّر في هذا الإصدار.
+# A headless installation cannot download or install a release itself.
+updates-headless-install-detail = تُحدَّث التثبيتات بدون واجهة خارج لوحة التحكم. على Linux، شغّل { "screenerbot-manager update" }.

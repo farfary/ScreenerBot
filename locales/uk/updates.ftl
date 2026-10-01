@@ -127,3 +127,13 @@ updates-install-confirm-message = Відкриється перевірений 
 
 # A release version as displayed.
 updates-version-number = v{ $version }
+
+# The Home update notice, shown while a release is in play.
+updates-notice-region =
+    .aria-label = Стан оновлення
+updates-notice-view = Переглянути оновлення
+updates-notice-whats-new = Що нового
+updates-notice-available-detail = Перегляньте зміни та встановіть оновлення в налаштуваннях.
+updates-notice-updated-detail = Перегляньте, що змінилося в цій версії.
+# A headless installation cannot download or install a release itself.
+updates-headless-install-detail = Установлення без інтерфейсу оновлюються поза панеллю. У Linux виконайте { "screenerbot-manager update" }.

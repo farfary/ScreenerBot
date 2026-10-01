@@ -105,3 +105,13 @@ updates-install-confirm-title = Chạy trình cài đặt
 updates-install-confirm-message = Trình cài đặt đã xác minh sẽ mở và { -brand } sẽ thoát an toàn. Hãy hoàn tất trình cài đặt rồi mở lại { -brand }.
 
 updates-version-number = v{ $version }
+
+# The Home update notice, shown while a release is in play.
+updates-notice-region =
+    .aria-label = Trạng thái cập nhật
+updates-notice-view = Xem bản cập nhật
+updates-notice-whats-new = Có gì mới
+updates-notice-available-detail = Xem các thay đổi và cài đặt từ phần Cài đặt.
+updates-notice-updated-detail = Xem những thay đổi trong phiên bản này.
+# A headless installation cannot download or install a release itself.
+updates-headless-install-detail = Bản cài đặt không giao diện được cập nhật bên ngoài bảng điều khiển. Trên Linux, hãy chạy { "screenerbot-manager update" }.

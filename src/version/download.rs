@@ -36,12 +36,20 @@ impl Default for TransferPolicy {
     }
 }
 
+/// Whether this process can fetch and install an update of `kind` itself.
+///
+/// Headless installations have no desktop to run an installer; they are updated
+/// by their package manager (`screenerbot-manager update` on Linux).
+pub fn self_install_supported(kind: UpdateKind) -> bool {
+    kind != UpdateKind::Full || crate::arguments::is_gui_enabled()
+}
+
 /// Start fetching the advertised update in the background.
 ///
 /// The claim on the state is taken synchronously so two callers (the settings
 /// dialog and the automatic service, say) cannot both start a download.
 pub async fn start_download(update: UpdateInfo) -> Result<()> {
-    if update.kind == UpdateKind::Full && !crate::arguments::is_gui_enabled() {
+    if !self_install_supported(update.kind) {
         return Err(Error::UnsupportedInstall {
             detail: "headless updates must be installed with screenerbot-manager update".to_owned(),
         });

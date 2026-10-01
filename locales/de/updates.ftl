@@ -116,3 +116,13 @@ updates-install-confirm-title = Installationsprogramm ausführen
 updates-install-confirm-message = Das verifizierte Installationsprogramm wird geöffnet und { -brand } wird sauber beendet. Schließen Sie die Installation ab und öffnen Sie { -brand } danach erneut.
 
 updates-version-number = v{ $version }
+
+# The Home update notice, shown while a release is in play.
+updates-notice-region =
+    .aria-label = Update-Status
+updates-notice-view = Update ansehen
+updates-notice-whats-new = Neuigkeiten
+updates-notice-available-detail = Sieh dir die Änderungen an und installiere das Update in den Einstellungen.
+updates-notice-updated-detail = Sieh dir an, was sich in dieser Version geändert hat.
+# A headless installation cannot download or install a release itself.
+updates-headless-install-detail = Headless-Installationen werden außerhalb des Dashboards aktualisiert. Unter Linux führe { "screenerbot-manager update" } aus.

@@ -38,7 +38,8 @@ test("background update discovery is observed and surfaced once per state", asyn
   const source = await fs.readFile(settingsDialogPath, "utf8");
 
   assert.match(source, /setInterval\(checkAndShowUpdateDialog, 60_000\)/);
-  assert.match(source, /!state\.last_check_attempt && !state\.available_update/);
+  // The backend checks at every launch; the observer only reads its state.
+  assert.doesNotMatch(source, /\/api\/updates\/check/);
   assert.match(source, /attentionKey !== lastSurfacedUpdateKey/);
   assert.match(source, /lastSurfacedUpdateKey = attentionKey/);
 });

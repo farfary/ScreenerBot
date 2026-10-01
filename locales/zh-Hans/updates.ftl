@@ -124,3 +124,13 @@ updates-install-confirm-message = 经过验证的安装程序将打开，且 { -
 
 # A release version as displayed.
 updates-version-number = v{ $version }
+
+# The Home update notice, shown while a release is in play.
+updates-notice-region =
+    .aria-label = 更新状态
+updates-notice-view = 查看更新
+updates-notice-whats-new = 新功能
+updates-notice-available-detail = 查看更新内容，并在设置中安装。
+updates-notice-updated-detail = 查看此版本的更改内容。
+# A headless installation cannot download or install a release itself.
+updates-headless-install-detail = 无界面安装需在控制台之外更新。在 Linux 上，请运行 { "screenerbot-manager update" }。

@@ -9,6 +9,7 @@ import { Poller } from "../../core/poller.js";
 import { DialogTabBar, renderDialogTabRow } from "../dialog_tab_bar.js";
 import { ConfirmationDialog } from "../confirmation_dialog.js";
 import { createUpdatesView } from "./updates_view.js";
+import { readUpdateStatus } from "./update_status.js";
 import { apiErrorMessage } from "../../core/request_manager.js";
 
 const BUSY_PHASES = new Set(["checking", "downloading", "verifying", "applying"]);
@@ -113,7 +114,7 @@ export function attachUpdatesHandlers(content, onAttentionChange) {
         if (activeUpdatesTab === "release-notes") void loadHistory(session);
       }
 
-      const state = await readStatus(session.controller.signal);
+      const state = await readUpdateStatus(session.controller.signal);
       if (activeSession !== session) return;
       if (!state) {
         renderLoadError(root, refresh);
@@ -150,23 +151,15 @@ export function teardownUpdatesTab() {
   }
 }
 
-export function requestUpdateCheck() {
-  return activeSession?.refresh?.({ recheck: true });
+/** Show one Updates sub-tab now if the tab is open, and the next time it opens. */
+export function selectUpdatesView(tabId) {
+  if (!Object.hasOwn(UPDATE_TAB_LABELS, tabId)) return;
+  activeUpdatesTab = tabId;
+  activeSession?.tabBar?.setActive(tabId);
 }
 
-async function readStatus(signal) {
-  try {
-    const response = await fetch("/api/updates/status", { signal });
-    const body = await response.json();
-    if (!response.ok || body.success === false) return null;
-    const payload = body.data || body;
-    const state = payload.state || payload;
-    state.blocked_reason = payload.blocked_reason || null;
-    state.requires_user_action = Boolean(payload.requires_user_action);
-    return state;
-  } catch {
-    return null;
-  }
+export function requestUpdateCheck() {
+  return activeSession?.refresh?.({ recheck: true });
 }
 
 async function request(url, options = {}, errorTitle, key) {

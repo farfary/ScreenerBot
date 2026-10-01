@@ -19,6 +19,11 @@ pub struct VersionResponse {
 }
 
 #[derive(Debug, Serialize)]
+pub struct AcknowledgeResponse {
+    pub acknowledged: bool,
+}
+
+#[derive(Debug, Serialize)]
 pub struct UpdateCheckResponse {
     pub update_available: bool,
     pub current_version: String,
@@ -38,6 +43,11 @@ pub struct UpdateStatusResponse {
     pub blocked_reason: Option<UiText>,
     /// Whether the current phase needs an explicit choice from the operator.
     pub requires_user_action: bool,
+    /// Whether this process can download and install the advertised update
+    /// itself; false for a desktop release seen by a headless installation.
+    pub self_install: bool,
+    /// The version this process is running.
+    pub current_version: &'static str,
 }
 
 #[derive(Debug, Serialize)]
