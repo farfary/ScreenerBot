@@ -323,10 +323,22 @@ pub const CREATE_INDEXES: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_tracking_priority_market ON update_tracking(chain_id, priority DESC, market_data_last_updated_at ASC)",
     "CREATE INDEX IF NOT EXISTS idx_tracking_priority_calc ON update_tracking(priority DESC, pool_price_last_calculated_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_tracking_market_error_type ON update_tracking(market_error_type)",
+    // Active-row indexes for the market-update selection queries. Almost every tracked row
+    // ends up `market_error_type = 'permanent'` (538k of 553k rows on a long-running install), and
+    // the selection queries exclude those with exactly this predicate, so walking the full
+    // indexes skipped hundreds of thousands of rows per call. Both are PARTIAL on that
+    // predicate and only index the rows the queries can return.
+    //   * `_market_age_active` serves `get_oldest_non_blacklisted` in its
+    //     COALESCE(market_data_last_updated_at, 0) order; the walk takes 2ms where
+    //     the single tokens/update_tracking join took 2.2s.
+    //   * `_priority_market_active` serves `get_tokens_by_priority` (244ms -> <1ms) and
+    //     `get_tokens_without_market_data` (207ms -> 15ms).
+    "CREATE INDEX IF NOT EXISTS idx_tracking_market_age_active ON update_tracking(chain_id, COALESCE(market_data_last_updated_at, 0)) WHERE market_error_type IS NULL OR market_error_type != 'permanent'",
+    "CREATE INDEX IF NOT EXISTS idx_tracking_priority_market_active ON update_tracking(chain_id, priority, market_data_last_updated_at) WHERE market_error_type IS NULL OR market_error_type != 'permanent'",
 
     // Rejection indexes — every filtering-tab surface reads `update_tracking` through the
     // rejection columns, and without these each read is a full scan plus a temp b-tree sort
-    // of the whole table (453k rows on the owner's database). All three are PARTIAL on
+    // of the whole table (453k rows on a long-running install). All three are PARTIAL on
     // `last_rejection_reason IS NOT NULL`, which is the predicate every one of those queries
     // already carries, so they never index the passing tokens.
     //   * `_reason` covers the stats GROUP BY (Status tab, polled every 5s): 366ms -> 42ms.

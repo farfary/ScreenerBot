@@ -19,9 +19,12 @@ use super::core::{update_security_data, update_tokens_batch, PoolPriorityManager
 use super::helpers::{filter_dashboard_active_token, handle_market_failure, should_skip_for_tools};
 use super::rate_limiter::RateLimitCoordinator;
 use crate::config::with_config;
+use crate::errors::InternalError;
 use crate::logger::{self, LogTag};
 use crate::tokens::database::TokenDatabase;
 use crate::tokens::priorities::Priority;
+use crate::tokens::types::TokenResult;
+use crate::tokens::Error;
 use crate::utils::{check_shutdown_or_delay, run_or_shutdown};
 use futures::future::join_all;
 use std::sync::Arc;
@@ -290,8 +293,24 @@ pub fn start_update_loop(
     handles
 }
 
+/// Runs a synchronous token-database call on tokio's blocking pool.
+///
+/// The selection queries in these loops take the pooled SQLite connection and can
+/// run for seconds on a large database; issued directly inside the async loop they
+/// park a runtime worker for that whole time and stall every task scheduled on it.
+async fn blocking_db<T, F>(db: &Arc<TokenDatabase>, call: F) -> TokenResult<T>
+where
+    T: Send + 'static,
+    F: FnOnce(&TokenDatabase) -> TokenResult<T> + Send + 'static,
+{
+    let db = Arc::clone(db);
+    tokio::task::spawn_blocking(move || call(&db))
+        .await
+        .map_err(|e| Error::Internal(InternalError::from(e)))?
+}
+
 /// Seed market data for tokens that have never been updated
-async fn update_uninitialized_tokens(db: &TokenDatabase, coordinator: &RateLimitCoordinator) {
+async fn update_uninitialized_tokens(db: &Arc<TokenDatabase>, coordinator: &RateLimitCoordinator) {
     if should_skip_for_tools() {
         logger::debug(
             LogTag::Tokens,
@@ -302,7 +321,11 @@ async fn update_uninitialized_tokens(db: &TokenDatabase, coordinator: &RateLimit
 
     const MAX_INITIAL_BATCH: usize = 30;
 
-    let tokens = match db.get_tokens_without_market_data(MAX_INITIAL_BATCH) {
+    let tokens = match blocking_db(db, |db| {
+        db.get_tokens_without_market_data(MAX_INITIAL_BATCH)
+    })
+    .await
+    {
         Ok(tokens) => tokens,
         Err(e) => {
             logger::error(
@@ -366,7 +389,7 @@ async fn update_uninitialized_tokens(db: &TokenDatabase, coordinator: &RateLimit
 }
 
 /// Update open position tokens (tokens with active trading positions)
-async fn update_open_position_tokens(db: &TokenDatabase, coordinator: &RateLimitCoordinator) {
+async fn update_open_position_tokens(db: &Arc<TokenDatabase>, coordinator: &RateLimitCoordinator) {
     if should_skip_for_tools() {
         logger::debug(
             LogTag::Tokens,
@@ -375,7 +398,11 @@ async fn update_open_position_tokens(db: &TokenDatabase, coordinator: &RateLimit
         return;
     }
 
-    let tokens = match db.get_tokens_by_priority(Priority::OpenPosition.to_value(), 200) {
+    let tokens = match blocking_db(db, |db| {
+        db.get_tokens_by_priority(Priority::OpenPosition.to_value(), 200)
+    })
+    .await
+    {
         Ok(tokens) => tokens,
         Err(e) => {
             logger::error(
@@ -445,7 +472,7 @@ async fn update_open_position_tokens(db: &TokenDatabase, coordinator: &RateLimit
 }
 
 /// Update pool-tracked tokens (Pool Service tracked tokens)
-async fn update_pool_tracked_tokens(db: &TokenDatabase, coordinator: &RateLimitCoordinator) {
+async fn update_pool_tracked_tokens(db: &Arc<TokenDatabase>, coordinator: &RateLimitCoordinator) {
     if should_skip_for_tools() {
         logger::debug(
             LogTag::Tokens,
@@ -454,7 +481,11 @@ async fn update_pool_tracked_tokens(db: &TokenDatabase, coordinator: &RateLimitC
         return;
     }
 
-    let tokens = match db.get_tokens_by_priority(Priority::PoolTracked.to_value(), 200) {
+    let tokens = match blocking_db(db, |db| {
+        db.get_tokens_by_priority(Priority::PoolTracked.to_value(), 200)
+    })
+    .await
+    {
         Ok(tokens) => tokens,
         Err(e) => {
             logger::error(
@@ -511,24 +542,28 @@ async fn update_pool_tracked_tokens(db: &TokenDatabase, coordinator: &RateLimitC
                         // Success: Check if token should keep PoolTracked priority
                         // Bug #23 fix: Don't demote if current priority is PoolTracked
                         // This prevents priority churn for tokens actively tracked by pool service
-                        let current_priority =
-                            db.get_priority(&result.mint).unwrap_or(Priority::Standard);
-                        if current_priority != Priority::PoolTracked {
-                            // Demote from higher priorities to Stale (40) after fresh update
-                            // Token returns to normal priority rotation
-                            if let Err(e) =
-                                db.update_priority(&result.mint, Priority::Stale.to_value())
-                            {
-                                logger::warning(
-                                    LogTag::Tokens,
-                                    &format!(
-                                        "Failed to demote {} to Stale priority: {}",
-                                        result.mint, e
-                                    ),
-                                );
+                        let mint = result.mint.clone();
+                        let demotion = blocking_db(db, move |db| {
+                            let current_priority =
+                                db.get_priority(&mint).unwrap_or(Priority::Standard);
+                            if current_priority != Priority::PoolTracked {
+                                // Demote from higher priorities to Stale (40) after fresh update
+                                // Token returns to normal priority rotation
+                                db.update_priority(&mint, Priority::Stale.to_value())?;
                             }
+                            // If PoolTracked, keep it - pool service maintains this priority
+                            Ok(())
+                        })
+                        .await;
+                        if let Err(e) = demotion {
+                            logger::warning(
+                                LogTag::Tokens,
+                                &format!(
+                                    "Failed to demote {} to Stale priority: {}",
+                                    result.mint, e
+                                ),
+                            );
                         }
-                        // If PoolTracked, keep it - pool service maintains this priority
                     }
                 }
             }
@@ -543,7 +578,7 @@ async fn update_pool_tracked_tokens(db: &TokenDatabase, coordinator: &RateLimitC
 }
 
 /// Update filter-passed tokens (tokens that passed filtering criteria)
-async fn update_filter_passed_tokens(db: &TokenDatabase, coordinator: &RateLimitCoordinator) {
+async fn update_filter_passed_tokens(db: &Arc<TokenDatabase>, coordinator: &RateLimitCoordinator) {
     if should_skip_for_tools() {
         logger::debug(
             LogTag::Tokens,
@@ -552,7 +587,11 @@ async fn update_filter_passed_tokens(db: &TokenDatabase, coordinator: &RateLimit
         return;
     }
 
-    let tokens = match db.get_tokens_by_priority(Priority::FilterPassed.to_value(), 200) {
+    let tokens = match blocking_db(db, |db| {
+        db.get_tokens_by_priority(Priority::FilterPassed.to_value(), 200)
+    })
+    .await
+    {
         Ok(tokens) => tokens,
         Err(e) => {
             logger::error(
@@ -620,7 +659,7 @@ async fn update_filter_passed_tokens(db: &TokenDatabase, coordinator: &RateLimit
 }
 
 /// Update background tokens (oldest non-blacklisted tokens)
-async fn update_background_tokens(db: &TokenDatabase, coordinator: &RateLimitCoordinator) {
+async fn update_background_tokens(db: &Arc<TokenDatabase>, coordinator: &RateLimitCoordinator) {
     if should_skip_for_tools() {
         logger::debug(
             LogTag::Tokens,
@@ -630,7 +669,7 @@ async fn update_background_tokens(db: &TokenDatabase, coordinator: &RateLimitCoo
     }
 
     // Get oldest 30 non-blacklisted tokens (batch size)
-    let tokens = match db.get_oldest_non_blacklisted(30) {
+    let tokens = match blocking_db(db, |db| db.get_oldest_non_blacklisted(30)).await {
         Ok(tokens) => tokens,
         Err(e) => {
             logger::error(
