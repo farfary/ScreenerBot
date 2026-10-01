@@ -164,9 +164,12 @@ impl OhlcvDatabase {
     /// replaced. Over a native row:
     /// - a closed bucket is never touched;
     /// - a forming bucket is written only when the aggregate holds a 1m candle
-    ///   that started at or after the native row's `fetched_at`, i.e. it saw
-    ///   trades the native read could not have. An older aggregate leaves the
-    ///   native row as it is.
+    ///   that ends after the native row's `fetched_at`, i.e. the minute that
+    ///   was still open at the native read or a later one, so it may carry
+    ///   trades the native read did not. An older aggregate leaves the native
+    ///   row as it is. A native read can itself be minutes stale (the Data
+    ///   Server serves its cached forming bucket), and requiring a minute that
+    ///   STARTED after the read left such a row in place until the next trade.
     ///
     /// Together these keep the forming bucket from alternating between the
     /// native read and the 1m aggregate: once merged, the next aggregate cycle
@@ -205,7 +208,7 @@ impl OhlcvDatabase {
                         fetched_at = CURRENT_TIMESTAMP
                      WHERE (ohlcv_candles.source = ?11
                             OR (ohlcv_candles.timestamp + ?12 > ?13
-                                AND ?14 >= CAST(strftime('%s', ohlcv_candles.fetched_at) AS INTEGER)))
+                                AND ?14 > CAST(strftime('%s', ohlcv_candles.fetched_at) AS INTEGER)))
                         AND (ohlcv_candles.open != excluded.open
                             OR ohlcv_candles.high != excluded.high
                             OR ohlcv_candles.low != excluded.low
@@ -226,7 +229,7 @@ impl OhlcvDatabase {
                         Self::AGGREGATE_SOURCE,
                         bucket,
                         now,
-                        newest_minute,
+                        newest_minute + Timeframe::Minute1.to_seconds(),
                     ],
                 )
             },
@@ -932,6 +935,30 @@ mod tests {
                 .unwrap()
                 .fetched_at,
             Some(FORMING + 600)
+        );
+        close_db(db, path);
+    }
+
+    #[test]
+    fn aggregate_with_the_minute_open_at_the_native_read_merges() {
+        let (db, path) = open_db("upsert-aggregate-open-minute-forming-native");
+        let native = Candle::new(FORMING, 1.0, 2.0, 0.5, 1.8, 10.0);
+        assert_eq!(upsert(&db, &[native], OhlcvDatabase::NATIVE_SOURCE), 1);
+        // The native read landed mid-minute; that minute's 1m candle can hold
+        // trades the (possibly stale) native value lacks.
+        set_fetched_at(&db, FORMING, FORMING + 601);
+        let current = Candle::new(FORMING, 1.1, 2.4, 0.6, 2.3, 30.0);
+        assert_eq!(aggregate(&db, &[current], FORMING + 600), 1);
+        assert_eq!(
+            stored_row(&db, FORMING),
+            (
+                1.0,
+                2.4,
+                0.5,
+                2.3,
+                30.0,
+                OhlcvDatabase::AGGREGATE_SOURCE.to_string()
+            )
         );
         close_db(db, path);
     }
