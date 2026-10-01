@@ -387,7 +387,7 @@ tokens-ohlcv-cleanup-done =
 tokens-ohlcv-cleanup-failed = OHLCV डेटा साफ़ करने में विफल
 
 tokens-summary-total = कुल
-tokens-summary-priced = कीमत वाले
+tokens-summary-pool-priced = पूल कीमत वाले
 tokens-summary-positions = पोज़िशन
 tokens-summary-blacklisted = ब्लैकलिस्टेड
 tokens-search-placeholder = सिंबल या मिंट से खोजें...

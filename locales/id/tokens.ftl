@@ -386,7 +386,7 @@ tokens-ohlcv-cleanup-done =
 tokens-ohlcv-cleanup-failed = Gagal membersihkan data OHLCV
 
 tokens-summary-total = Total
-tokens-summary-priced = Dengan Harga
+tokens-summary-pool-priced = Dengan Harga Pool
 tokens-summary-positions = Posisi
 tokens-summary-blacklisted = Daftar Hitam
 tokens-search-placeholder = Cari berdasarkan simbol atau mint...

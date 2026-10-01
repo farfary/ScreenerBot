@@ -386,7 +386,7 @@ tokens-ohlcv-cleanup-done =
 tokens-ohlcv-cleanup-failed = OHLCV データをクリーンアップできませんでした
 
 tokens-summary-total = 合計
-tokens-summary-priced = 価格あり
+tokens-summary-pool-priced = プール価格あり
 tokens-summary-positions = ポジション
 tokens-summary-blacklisted = ブラックリスト
 tokens-search-placeholder = シンボルまたはミントで検索...

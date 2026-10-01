@@ -423,7 +423,7 @@ tokens-ohlcv-cleanup-failed = 清理 OHLCV 数据失败
 # The list statuses shown in the Status column come from row flags, not ids.
 
 tokens-summary-total = 总计
-tokens-summary-priced = 有价格
+tokens-summary-pool-priced = 有流动性池价格
 tokens-summary-positions = 仓位
 tokens-summary-blacklisted = 黑名单
 tokens-search-placeholder = 按符号或铸造地址搜索…

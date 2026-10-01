@@ -449,7 +449,7 @@ tokens-ohlcv-cleanup-failed = پاکسازی داده OHLCV ناموفق بود
 # The list statuses shown in the Status column come from row flags, not ids.
 
 tokens-summary-total = مجموع
-tokens-summary-priced = دارای قیمت
+tokens-summary-pool-priced = دارای قیمت استخر
 tokens-summary-positions = پوزیشن‌ها
 tokens-summary-blacklisted = فهرست سیاه
 tokens-search-placeholder = جست‌وجو با نماد یا مینت...

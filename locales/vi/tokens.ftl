@@ -382,7 +382,7 @@ tokens-ohlcv-cleanup-done =
 tokens-ohlcv-cleanup-failed = Không dọn dẹp được dữ liệu OHLCV
 
 tokens-summary-total = Tổng
-tokens-summary-priced = Có giá
+tokens-summary-pool-priced = Có giá pool
 tokens-summary-positions = Vị thế
 tokens-summary-blacklisted = Trong danh sách đen
 tokens-search-placeholder = Tìm theo ký hiệu hoặc mint...

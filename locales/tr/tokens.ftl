@@ -424,7 +424,7 @@ tokens-ohlcv-cleanup-failed = OHLCV verileri temizlenemedi
 # The list statuses shown in the Status column come from row flags, not ids.
 
 tokens-summary-total = Toplam
-tokens-summary-priced = Fiyatlı
+tokens-summary-pool-priced = Havuz Fiyatı Olan
 tokens-summary-positions = Pozisyonlar
 tokens-summary-blacklisted = Kara listede
 tokens-search-placeholder = Sembol veya mint ile ara...

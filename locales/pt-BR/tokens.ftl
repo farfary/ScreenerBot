@@ -433,7 +433,7 @@ tokens-ohlcv-cleanup-failed = Falha ao limpar os dados OHLCV
 # The list statuses shown in the Status column come from row flags, not ids.
 
 tokens-summary-total = Total
-tokens-summary-priced = Com preço
+tokens-summary-pool-priced = Com preço do pool
 tokens-summary-positions = Posições
 tokens-summary-blacklisted = Na lista negra
 tokens-search-placeholder = Buscar por símbolo ou mint...

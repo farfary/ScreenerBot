@@ -418,7 +418,7 @@ tokens-ohlcv-cleanup-failed = OHLCV 데이터를 정리하지 못했습니다
 # The list statuses shown in the Status column come from row flags, not ids.
 
 tokens-summary-total = 전체
-tokens-summary-priced = 가격 있음
+tokens-summary-pool-priced = 풀 가격 있음
 tokens-summary-positions = 포지션
 tokens-summary-blacklisted = 블랙리스트
 tokens-search-placeholder = 심볼 또는 민트로 검색...

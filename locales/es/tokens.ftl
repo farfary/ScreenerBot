@@ -392,7 +392,7 @@ tokens-ohlcv-cleanup-done =
 tokens-ohlcv-cleanup-failed = Error al limpiar los datos OHLCV
 
 tokens-summary-total = Total
-tokens-summary-priced = Con precio
+tokens-summary-pool-priced = Con precio de pool
 tokens-summary-positions = Posiciones
 tokens-summary-blacklisted = En lista negra
 tokens-search-placeholder = Buscar por símbolo o mint...

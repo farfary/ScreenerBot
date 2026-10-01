@@ -327,7 +327,7 @@ function createLifecycle() {
       },
       {
         id: "tokens-priced",
-        label: I18n.t("tokens-summary-priced"),
+        label: I18n.t("tokens-summary-pool-priced"),
         value: Utils.formatNumber(summaryPriced, 0),
         variant: "info",
       },
@@ -1714,7 +1714,7 @@ function createLifecycle() {
             { id: "tokens-total", label: I18n.t("tokens-summary-total"), value: "0" },
             {
               id: "tokens-priced",
-              label: I18n.t("tokens-summary-priced"),
+              label: I18n.t("tokens-summary-pool-priced"),
               value: "0",
               variant: "info",
             },

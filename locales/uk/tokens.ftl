@@ -397,7 +397,7 @@ tokens-ohlcv-cleanup-done =
 tokens-ohlcv-cleanup-failed = Не вдалося очистити дані OHLCV
 
 tokens-summary-total = Усього
-tokens-summary-priced = З ціною
+tokens-summary-pool-priced = З ціною пулу
 tokens-summary-positions = Позиції
 tokens-summary-blacklisted = У чорному списку
 tokens-search-placeholder = Пошук за символом або мінтом...

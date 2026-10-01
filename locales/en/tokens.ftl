@@ -449,7 +449,7 @@ tokens-ohlcv-cleanup-failed = Failed to cleanup OHLCV data
 # The list statuses shown in the Status column come from row flags, not ids.
 
 tokens-summary-total = Total
-tokens-summary-priced = With Price
+tokens-summary-pool-priced = With Pool Price
 tokens-summary-positions = Positions
 tokens-summary-blacklisted = Blacklisted
 tokens-search-placeholder = Search by symbol or mint...
