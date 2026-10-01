@@ -188,10 +188,12 @@ pub struct WalletAnalytics {
     pub unpriced_token_count: usize,
     /// Wallet WORTH at 00:00 UTC today — the change baseline (same quantity as the
     /// headline; using cash here reported a phantom gain the size of the holdings).
-    pub start_of_day_balance_sol: f64,
-    /// total_equity_sol - start_of_day_balance_sol.
-    pub change_sol: f64,
-    pub change_percent: f64,
+    /// None until a snapshot from today exists, as in the header.
+    pub start_of_day_balance_sol: Option<f64>,
+    /// total_equity_sol - start_of_day_balance_sol; None without a baseline.
+    pub change_sol: Option<f64>,
+    /// None without a positive baseline.
+    pub change_percent: Option<f64>,
     /// Current SOL/USD price so the client can render an approximate USD value.
     pub sol_price_usd: f64,
     /// Recent wallet WORTH samples, OLDEST first, for a trend sparkline.

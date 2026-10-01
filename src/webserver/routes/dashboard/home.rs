@@ -135,17 +135,13 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
     let worth = crate::wallet::get_wallet_worth();
     let recent_snapshots = recent_snapshots_result.unwrap_or_default();
 
-    let start_of_day_balance_sol = start_of_day_balance_result
-        .ok()
-        .flatten()
-        .unwrap_or(worth.total_equity_sol);
-
-    let change_sol = worth.total_equity_sol - start_of_day_balance_sol;
-    let change_percent = if start_of_day_balance_sol > 0.0 {
-        (change_sol / start_of_day_balance_sol) * 100.0
-    } else {
-        0.0
-    };
+    // No baseline means the change is unknown, not zero: falling back to the
+    // current worth reported a flat day the header shows as unknown.
+    let start_of_day_balance_sol = start_of_day_balance_result.ok().flatten();
+    let change_sol = start_of_day_balance_sol.map(|start| worth.total_equity_sol - start);
+    let change_percent = start_of_day_balance_sol
+        .filter(|start| *start > 0.0)
+        .map(|start| (worth.total_equity_sol - start) / start * 100.0);
 
     // Oldest-first worth trend for the sparkline (reverse of newest-first). It plots the
     // same quantity as the headline above it — it used to plot cash while the headline
@@ -214,11 +210,14 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
             };
 
             if let Some(current) = p.current_price {
-                let pnl_pct = if entry > 0.0 {
+                // Rank on the same fee-aware P&L the Open P&L figure sums, so a
+                // position cannot read as a gain here and a loss beside it. The
+                // raw price move stands in only until the first price tick.
+                let pnl_pct = p.unrealized_pnl_percent.unwrap_or(if entry > 0.0 {
                     ((current - entry) / entry) * 100.0
                 } else {
                     0.0
-                };
+                });
 
                 // Track best/worst performers
                 match &best_performer {

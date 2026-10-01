@@ -131,11 +131,13 @@
   padding: 1rem 1.25rem;
 }
 
+/* The balance keeps its width; the sparkline beside it gives way first, so a
+   narrow overview never draws the trend over the figures. */
 .portfolio-primary {
   display: flex;
+  flex: 0 0 auto;
   flex-direction: column;
   align-items: flex-start;
-  min-width: 0;
   gap: 0.25rem;
 }
 
@@ -318,6 +320,14 @@
   font-feature-settings: "tnum" 1;
 }
 
+/* The day's change and its "today" label wrap as one unit, never apart. */
+.hero-change-group {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  white-space: nowrap;
+}
+
 .hero-change {
   font-weight: 700;
 }
@@ -346,8 +356,9 @@
 
 .hero-spark {
   width: 8.25rem;
+  min-width: 0;
   height: 2.75rem;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   overflow: visible;
 }
 

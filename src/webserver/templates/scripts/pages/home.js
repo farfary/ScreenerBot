@@ -310,15 +310,20 @@ function createLifecycle() {
     // Today change (equity vs start-of-day baseline).
     const changeEl = document.getElementById("homeWalletChange");
     if (changeEl) {
-      const cls = pnlClass(wallet.change_sol, 4);
+      // Without a start-of-day baseline the change is unknown: a dash, as in the header.
+      const known = Number.isFinite(wallet.change_sol);
+      const cls = known ? pnlClass(wallet.change_sol, 4) : "flat";
       changeEl.className = `hero-change ${cls}`;
+      const percent = Number.isFinite(wallet.change_percent)
+        ? `<span class="change-percent ${cls}">(${Utils.formatPercent(wallet.change_percent, {
+            decimals: 2,
+          })})</span>`
+        : "";
       changeEl.innerHTML = `
-        <span class="hero-change-value change-value ${cls}">${Utils.formatSignedSol(
-          wallet.change_sol || 0
-        )}</span>
-        <span class="change-percent ${cls}">(${Utils.formatPercent(wallet.change_percent, {
-          decimals: 2,
-        })})</span>
+        <span class="hero-change-value change-value ${cls}">${
+          known ? Utils.formatSignedSol(wallet.change_sol) : "—"
+        }</span>
+        ${percent}
       `;
     }
 

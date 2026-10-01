@@ -54,9 +54,9 @@ pub fn get_promo_home_dashboard() -> HomeDashboardResponse {
         tokens_worth_sol: open.current_value_sol,
         total_equity_sol: promo_equity,
         unpriced_token_count: 0,
-        start_of_day_balance_sol: PROMO_START_BALANCE,
-        change_sol: promo_equity - PROMO_START_BALANCE,
-        change_percent: (promo_equity - PROMO_START_BALANCE) / PROMO_START_BALANCE * 100.0,
+        start_of_day_balance_sol: Some(PROMO_START_BALANCE),
+        change_sol: Some(promo_equity - PROMO_START_BALANCE),
+        change_percent: Some((promo_equity - PROMO_START_BALANCE) / PROMO_START_BALANCE * 100.0),
         sol_price_usd: 180.0,
         balance_history: vec![
             PROMO_START_BALANCE,
