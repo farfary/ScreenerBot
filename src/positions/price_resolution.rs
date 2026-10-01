@@ -256,15 +256,25 @@ async fn force_fetch_fresh_price(token_mint: &str) -> Option<crate::tokens::Toke
 /// The bias factor is clamped to [0.90, 1.25] to prevent runaway corrections
 /// if the entry prices are anomalous.
 ///
+/// Only a pool price is corrected: the factor measures the gap between the pool
+/// computation and the executed swap, so it does not apply to an API price,
+/// which is not derived from the pool's reserves.
+///
 /// Returns the original price unchanged if:
+/// - the price did not come from the pool
 /// - effective_entry_price is not set (TX not verified yet)
 /// - entry_price is zero or negative
 /// - bias factor is outside sane bounds
 pub fn apply_pool_bias_correction(
     pool_price: f64,
+    source: PriceSource,
     entry_pool_price: f64,
     effective_entry_price: Option<f64>,
 ) -> f64 {
+    if source != PriceSource::Pool {
+        return pool_price;
+    }
+
     let effective = match effective_entry_price {
         Some(e) if e > 0.0 && e.is_finite() => e,
         _ => return pool_price, // No effective price — can't correct
@@ -292,5 +302,24 @@ pub fn apply_pool_bias_correction(
         corrected
     } else {
         pool_price
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pool_bias_correction_scales_a_pool_price() {
+        let corrected = apply_pool_bias_correction(1.0, PriceSource::Pool, 1.0, Some(1.05));
+        assert!((corrected - 1.05).abs() < 1e-12);
+    }
+
+    #[test]
+    fn pool_bias_correction_leaves_an_api_price_unchanged() {
+        assert_eq!(
+            apply_pool_bias_correction(1.0, PriceSource::Api, 1.0, Some(1.05)),
+            1.0
+        );
     }
 }

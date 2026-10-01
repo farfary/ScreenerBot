@@ -9,7 +9,7 @@ use crate::chains::solana::solana_sdk::{account::Account, pubkey::Pubkey};
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::LazyLock;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 /// Parsed once and reused across the ~500ms fetch/completeness hot loop —
 /// re-parsing these fixed strings per account/bundle check showed up in
@@ -76,6 +76,48 @@ impl AccountData {
     pub fn is_stale(&self, max_age_seconds: u64) -> bool {
         self.fetched_at.elapsed().as_secs() > max_age_seconds
     }
+
+    /// Whether the on-chain content differs from `previous`: data bytes, lamports
+    /// (native-SOL reserves) or owner. The fetch slot and instant are excluded
+    /// because they change on every fetch even when the account did not.
+    pub fn content_differs(&self, previous: &AccountData) -> bool {
+        self.data != previous.data
+            || self.lamports != previous.lamports
+            || self.owner != previous.owner
+    }
+}
+
+/// Why a complete pool bundle is (re)priced after a fetch.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CalculationTrigger {
+    /// The bundle has never been submitted for calculation.
+    Initial,
+    /// At least one re-fetched reserve account changed content.
+    ReservesChanged,
+    /// Reserves are unchanged, but the token's cached price is missing or at
+    /// least `heartbeat` old; repricing keeps it inside the cache TTL.
+    Heartbeat,
+}
+
+/// Decide whether a complete bundle that just received re-fetched accounts must
+/// be repriced. `cached_price_age` is the age of the token's cached pool price
+/// regardless of TTL (`None` when absent); `heartbeat` is half the cache TTL, so
+/// a token whose pool is quiet is repriced before its price can expire.
+pub(crate) fn calculation_trigger(
+    calculated_before: bool,
+    reserves_changed: bool,
+    cached_price_age: Option<Duration>,
+    heartbeat: Duration,
+) -> Option<CalculationTrigger> {
+    if !calculated_before {
+        Some(CalculationTrigger::Initial)
+    } else if reserves_changed {
+        Some(CalculationTrigger::ReservesChanged)
+    } else if cached_price_age.is_none_or(|age| age >= heartbeat) {
+        Some(CalculationTrigger::Heartbeat)
+    } else {
+        None
+    }
 }
 
 /// Pool account bundle - all accounts for a specific pool
@@ -120,11 +162,6 @@ impl PoolAccountBundle {
             .all(|key| self.accounts.contains_key(key))
     }
 
-    /// Check if bundle is complete and calculation not yet requested
-    pub fn is_complete_and_needs_calculation(&self, required_accounts: &[Pubkey]) -> bool {
-        self.is_complete(required_accounts) && !self.calculation_requested
-    }
-
     /// Mark that calculation has been requested for this bundle
     pub fn mark_calculation_requested(&mut self) {
         self.calculation_requested = true;
@@ -142,4 +179,68 @@ pub struct FetchStats {
     pub total_bundles: usize,
     pub total_accounts_tracked: usize,
     pub bundles_with_data: usize,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const HEARTBEAT: Duration = Duration::from_secs(15);
+
+    fn account(data: &[u8], lamports: u64) -> AccountData {
+        AccountData {
+            pubkey: *SOL_MINT_PUBKEY,
+            data: data.to_vec(),
+            slot: 1,
+            fetched_at: Instant::now(),
+            lamports,
+            owner: *SYSTEM_PROGRAM_PUBKEY,
+        }
+    }
+
+    #[test]
+    fn never_calculated_bundle_is_calculated() {
+        assert_eq!(
+            calculation_trigger(false, false, Some(Duration::from_secs(1)), HEARTBEAT),
+            Some(CalculationTrigger::Initial)
+        );
+    }
+
+    #[test]
+    fn changed_reserves_are_calculated_even_with_a_young_price() {
+        assert_eq!(
+            calculation_trigger(true, true, Some(Duration::from_secs(1)), HEARTBEAT),
+            Some(CalculationTrigger::ReservesChanged)
+        );
+    }
+
+    #[test]
+    fn unchanged_reserves_with_a_young_price_are_not_calculated() {
+        assert_eq!(
+            calculation_trigger(true, false, Some(Duration::from_secs(14)), HEARTBEAT),
+            None
+        );
+    }
+
+    #[test]
+    fn unchanged_reserves_older_than_the_heartbeat_are_calculated() {
+        assert_eq!(
+            calculation_trigger(true, false, Some(HEARTBEAT), HEARTBEAT),
+            Some(CalculationTrigger::Heartbeat)
+        );
+        assert_eq!(
+            calculation_trigger(true, false, None, HEARTBEAT),
+            Some(CalculationTrigger::Heartbeat)
+        );
+    }
+
+    #[test]
+    fn content_change_ignores_slot_and_fetch_instant() {
+        let previous = account(&[1, 2, 3], 10);
+        let mut refetched = account(&[1, 2, 3], 10);
+        refetched.slot = 99;
+        assert!(!refetched.content_differs(&previous));
+        assert!(account(&[1, 2, 4], 10).content_differs(&previous));
+        assert!(account(&[1, 2, 3], 11).content_differs(&previous));
+    }
 }

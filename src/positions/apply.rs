@@ -1191,6 +1191,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 let now = Utc::now();
                 pos.current_price = Some(current_price);
                 pos.current_price_updated = Some(now);
+                pos.current_price_source = None;
                 if let Some(high) = highest {
                     pos.price_highest = high;
                 }

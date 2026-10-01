@@ -7,6 +7,7 @@
 use super::db;
 use super::types::{
     price_cache_ttl_seconds, CacheStats, PriceHistory, PriceResult, PRICE_HISTORY_MAX_ENTRIES,
+    PRICE_HISTORY_RECORD_INTERVAL_SECS,
 };
 
 use crate::logger::{self, LogTag};
@@ -62,13 +63,19 @@ pub fn get_fresh_price(mint: &str) -> Option<PriceResult> {
     })
 }
 
-/// Check if a token has a fresh (non-expired) price in cache
-pub fn is_price_fresh(mint: &str) -> bool {
-    let ttl = price_cache_ttl_seconds();
+/// Age of the token's cached price regardless of TTL; `None` when no price is cached.
+pub fn cached_price_age(mint: &str) -> Option<Duration> {
     PRICE_CACHE
         .get(mint)
-        .map(|entry| entry.value().timestamp.elapsed().as_secs() < ttl)
-        .unwrap_or(false)
+        .map(|entry| entry.value().timestamp.elapsed())
+}
+
+/// Whether a new price is recorded in history (memory and database) given the
+/// age of the token's latest recorded entry. The cache always takes the new
+/// price; history keeps at most one entry per `PRICE_HISTORY_RECORD_INTERVAL_SECS`.
+fn should_record_history(last_recorded_age: Option<Duration>) -> bool {
+    last_recorded_age
+        .is_none_or(|age| age >= Duration::from_secs(PRICE_HISTORY_RECORD_INTERVAL_SECS))
 }
 
 /// Update price for a token
@@ -79,6 +86,15 @@ pub fn update_price(price: PriceResult) {
     // Race condition: PRICE_CACHE and PRICE_HISTORY can briefly be out of sync, but this is
     // acceptable because cache is for latest-price queries while history is for trends.
     PRICE_CACHE.insert(mint.clone(), price.clone());
+
+    let last_recorded_age = PRICE_HISTORY.get(&mint).and_then(|history| {
+        history
+            .get_latest()
+            .map(|latest| latest.timestamp.elapsed())
+    });
+    if !should_record_history(last_recorded_age) {
+        return;
+    }
 
     // Queue for database storage (async, non-blocking)
     let price_for_db = price.clone();
@@ -402,4 +418,20 @@ pub async fn cleanup_all_memory_gaps() -> (usize, usize) {
     }
 
     (total_removed, tokens_cleaned)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn history_records_the_first_price_and_then_at_most_once_per_interval() {
+        let interval = Duration::from_secs(PRICE_HISTORY_RECORD_INTERVAL_SECS);
+        assert!(should_record_history(None));
+        assert!(!should_record_history(Some(Duration::from_secs(5))));
+        assert!(!should_record_history(Some(
+            interval - Duration::from_millis(1)
+        )));
+        assert!(should_record_history(Some(interval)));
+    }
 }

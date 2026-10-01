@@ -1,7 +1,7 @@
 //! Position route types — data structures for position API responses.
 
 use crate::positions::state::is_position_open;
-use crate::positions::{Position, PositionManagement, PositionOrigin};
+use crate::positions::{Position, PositionManagement, PositionOrigin, PriceSource};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize)]
@@ -68,6 +68,8 @@ pub struct PositionResponse {
     pub exit_fee_lamports: Option<u64>,
     pub current_price: Option<f64>,
     pub current_price_updated: Option<i64>,
+    /// Price system that produced `current_price`: "pool" or "api"; absent when unknown.
+    pub current_price_source: Option<PriceSource>,
     pub phantom_confirmations: u32,
     pub synthetic_exit: bool,
     pub closed_reason: Option<String>,

@@ -81,6 +81,7 @@ pub async fn update_position_tracking(mint: &str, current_price: f64) -> bool {
         // Always update current price
         pos.current_price = Some(current_price);
         pos.current_price_updated = Some(chrono::Utc::now());
+        pos.current_price_source = None;
         needs_update = true;
     })
     .await;

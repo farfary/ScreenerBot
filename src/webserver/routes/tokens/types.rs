@@ -160,7 +160,7 @@ pub struct TokenDetailResponse {
     pub price_confidence: Option<String>,
     /// Which price system produced `price_sol`/`price_usd`: "pool" (real-time
     /// on-chain, preferred) or "api" (cached external market data fallback).
-    pub price_source: Option<String>,
+    pub price_source: Option<crate::positions::PriceSource>,
     pub price_change_h1: Option<f64>,
     pub price_change_h24: Option<f64>,
     pub price_change_periods: PeriodStats<f64>,

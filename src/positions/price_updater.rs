@@ -81,7 +81,14 @@ async fn update_all_position_prices() {
                 // Use position ID to target the correct position (avoids updating
                 // a closed position when multiple positions share the same mint)
                 let position_id = position.id.unwrap_or(-1);
-                match update_position_price_and_pnl(position_id, &position.mint, price).await {
+                match update_position_price_and_pnl(
+                    position_id,
+                    &position.mint,
+                    price,
+                    source.system(),
+                )
+                .await
+                {
                     Ok(_) => {
                         updated_count += 1;
                         match source {
@@ -140,6 +147,7 @@ async fn update_position_price_and_pnl(
     position_id: i64,
     token_mint: &str,
     current_price: f64,
+    source: crate::positions::PriceSource,
 ) -> Result<()> {
     if !current_price.is_finite() || current_price <= 0.0 {
         return Err(Error::InvalidPrice {
@@ -151,12 +159,14 @@ async fn update_position_price_and_pnl(
     let _lock = crate::positions::acquire_position_lock(token_mint).await;
 
     // Apply pool price bias correction (BUG-31: DAMM pools underestimate by ~5-6%)
-    // Uses the ratio of actual swap price to pool price at entry time to correct ongoing bias
+    // Uses the ratio of actual swap price to pool price at entry time to correct ongoing
+    // bias; an API price is passed through unchanged.
     let corrected_price = {
         let pos_opt = crate::positions::state::get_position_by_id(position_id).await;
         if let Some(ref pos) = pos_opt {
             crate::positions::price_resolution::apply_pool_bias_correction(
                 current_price,
+                source,
                 pos.entry_price,
                 pos.effective_entry_price,
             )
@@ -171,6 +181,7 @@ async fn update_position_price_and_pnl(
     let updated = crate::positions::state::update_position_state_by_id(position_id, |pos| {
         pos.current_price = Some(corrected_price);
         pos.current_price_updated = Some(now);
+        pos.current_price_source = Some(source);
 
         if corrected_price > pos.price_highest {
             pos.price_highest = corrected_price;
@@ -238,11 +249,21 @@ async fn update_position_price_and_pnl(
 
 /// Local classification of where a resolved price came from, used only for the
 /// per-cycle pool/api/fresh logging counters.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 enum PriceSource {
     Pool,
     Api,
     ApiFresh,
+}
+
+impl PriceSource {
+    /// The price system behind this classification.
+    fn system(self) -> crate::positions::PriceSource {
+        match self {
+            Self::Pool => crate::positions::PriceSource::Pool,
+            Self::Api | Self::ApiFresh => crate::positions::PriceSource::Api,
+        }
+    }
 }
 
 /// Resolve the current price via the canonical resolver shared with the trading
@@ -270,4 +291,25 @@ async fn get_current_price(mint: &str) -> Option<(f64, PriceSource)> {
     };
 
     Some((price_result.price_sol, classified))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn api_classifications_map_to_the_api_price_system() {
+        assert_eq!(
+            PriceSource::Pool.system(),
+            crate::positions::PriceSource::Pool
+        );
+        assert_eq!(
+            PriceSource::Api.system(),
+            crate::positions::PriceSource::Api
+        );
+        assert_eq!(
+            PriceSource::ApiFresh.system(),
+            crate::positions::PriceSource::Api
+        );
+    }
 }

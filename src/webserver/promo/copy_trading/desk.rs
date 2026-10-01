@@ -12,7 +12,7 @@ use std::collections::HashSet;
 use chrono::{DateTime, Duration, Utc};
 
 use crate::chains::active_chain;
-use crate::positions::{Position, PositionManagement, PositionOrigin};
+use crate::positions::{Position, PositionManagement, PositionOrigin, PriceSource};
 use crate::trader::copy::{
     management_for_exit_mode, simulate_fill, simulate_sell, CopyActivityRow, CopyMode, CopyOutcome,
     CopySellDecision, CopySkip, CopyTask, CopyTelemetry, ExitMode, LiveDecision, PaperCosts,
@@ -356,6 +356,7 @@ fn live_position(task: &CopyTask, round: &LiveRound, now: DateTime<Utc>) -> Posi
         exit_fee_lamports: exit_time.map(|_| 5000),
         current_price: round.current,
         current_price_updated: round.current.map(|_| now),
+        current_price_source: round.current.map(|_| PriceSource::Pool),
         phantom_remove: false,
         phantom_confirmations: 0,
         phantom_first_seen: None,

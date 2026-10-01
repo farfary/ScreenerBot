@@ -243,6 +243,7 @@ positions-header-of-invested = من أصل { $amount } مستثمرة
 positions-header-price = السعر
 positions-header-last-price = آخر سعر
 positions-header-pool-ago = مجمع سيولة · { $ago }
+positions-header-api-ago = API · { $ago }
 positions-header-unrealized-pnl = الأرباح والخسائر غير المحققة
 positions-header-pnl-last-price = الأرباح والخسائر عند آخر سعر
 positions-header-value = القيمة

@@ -910,7 +910,8 @@ impl PositionsDatabase {
                 .map(|f| f as u64),
             current_price: row.get("current_price")?,
             current_price_updated,
-            phantom_remove: false, // This is not persisted
+            current_price_source: None, // Not persisted
+            phantom_remove: false,      // This is not persisted
             phantom_confirmations: row.get::<_, i64>("phantom_confirmations")? as u32,
             phantom_first_seen,
             synthetic_exit: row.get("synthetic_exit")?,

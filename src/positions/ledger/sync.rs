@@ -349,6 +349,7 @@ fn build_position(
         exit_fee_lamports: None,
         current_price: existing.and_then(|p| p.current_price),
         current_price_updated: existing.and_then(|p| p.current_price_updated),
+        current_price_source: existing.and_then(|p| p.current_price_source),
         phantom_remove: false,
         phantom_confirmations: 0,
         phantom_first_seen: None,

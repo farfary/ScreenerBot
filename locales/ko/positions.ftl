@@ -218,6 +218,7 @@ positions-header-of-invested = 투자금 { $amount } 대비
 positions-header-price = 가격
 positions-header-last-price = 최종 가격
 positions-header-pool-ago = 풀 · { $ago }
+positions-header-api-ago = API · { $ago }
 positions-header-unrealized-pnl = 미실현 손익
 positions-header-pnl-last-price = 최종 가격 기준 손익
 positions-header-value = 가치

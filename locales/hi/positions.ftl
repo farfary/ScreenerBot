@@ -181,6 +181,7 @@ positions-header-of-invested = { $amount } निवेश में से
 positions-header-price = प्राइस
 positions-header-last-price = अंतिम प्राइस
 positions-header-pool-ago = पूल · { $ago }
+positions-header-api-ago = API · { $ago }
 positions-header-unrealized-pnl = अवास्तविक लाभ-हानि
 positions-header-pnl-last-price = अंतिम प्राइस पर लाभ-हानि
 positions-header-value = वैल्यू

@@ -163,8 +163,10 @@ impl PositionManagement {
     }
 }
 
-/// Price source for logging and tracking
-#[derive(Debug, Clone, Copy)]
+/// Price system a resolved price came from: the live pool price, or the
+/// market-data API fallback. Serialized as `"pool"` / `"api"`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum PriceSource {
     Pool,
     Api,
@@ -261,6 +263,10 @@ pub struct Position {
     // Price tracking
     pub current_price: Option<f64>, // Current market price (updated by monitoring system)
     pub current_price_updated: Option<DateTime<Utc>>, // When current_price was last updated
+    /// Price system that produced `current_price`. Not persisted: `None` until the
+    /// price updater next marks the position, and whenever the source is unknown.
+    #[serde(default)]
+    pub current_price_source: Option<PriceSource>,
     // Phantom position handling
     pub phantom_remove: bool,
     pub phantom_confirmations: u32, // How many times we confirmed zero wallet balance while still open

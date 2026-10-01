@@ -294,6 +294,7 @@ pub fn test_position(entry_price: f64, size_sol: f64) -> Position {
         exit_fee_lamports: None,
         current_price: Some(entry_price),
         current_price_updated: Some(Utc::now()),
+        current_price_source: None,
         phantom_remove: false,
         phantom_confirmations: 0,
         phantom_first_seen: None,

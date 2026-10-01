@@ -8,8 +8,8 @@ use super::fetcher::{
     OPEN_POSITION_ACCOUNT_STALE_THRESHOLD_SECONDS,
 };
 use super::fetcher_types::{
-    AccountData, MissingAccountState, MissingPoolState, PoolAccountBundle, SOL_MINT_PUBKEY,
-    SYSTEM_PROGRAM_PUBKEY,
+    calculation_trigger, AccountData, CalculationTrigger, MissingAccountState, MissingPoolState,
+    PoolAccountBundle, SOL_MINT_PUBKEY, SYSTEM_PROGRAM_PUBKEY,
 };
 use super::reserve_accounts::reserve_pubkeys;
 use super::types::ProgramKind;
@@ -27,6 +27,25 @@ use futures::future::join_all;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
+
+/// A pool bundle being rebuilt from one fetch batch.
+struct BundleUpdate {
+    bundle: PoolAccountBundle,
+    descriptor: PoolDescriptor,
+    /// Some re-fetched reserve account differs from the copy held before this batch.
+    reserves_changed: bool,
+    /// Set when the complete bundle must be repriced.
+    trigger: Option<CalculationTrigger>,
+}
+
+/// The non-SOL token a pool prices.
+fn target_token_mint(descriptor: &PoolDescriptor) -> &str {
+    if is_sol_mint(descriptor.base_mint.address()) {
+        descriptor.quote_mint.address()
+    } else {
+        descriptor.base_mint.address()
+    }
+}
 
 impl AccountFetcher {
     /// Add stale accounts from pools to pending fetch list
@@ -741,9 +760,7 @@ impl AccountFetcher {
         }
 
         // Phase 2: Build local updates without holding any locks
-        // Maps pool_id -> (bundle, pool_descriptor, needs_calculation)
-        let mut local_updates: HashMap<Pubkey, (PoolAccountBundle, PoolDescriptor, bool)> =
-            HashMap::new();
+        let mut local_updates: HashMap<Pubkey, BundleUpdate> = HashMap::new();
 
         // Get existing bundles to merge with (brief read lock)
         let existing_bundles: HashMap<Pubkey, PoolAccountBundle> = {
@@ -759,13 +776,28 @@ impl AccountFetcher {
                     .map(Vec::as_slice)
                     .unwrap_or(&[]);
                 if reserves.contains(&account_data.pubkey) {
-                    let entry = local_updates.entry(*pool_id).or_insert_with(|| {
-                        let bundle = existing_bundles
-                            .get(pool_id)
-                            .cloned()
-                            .unwrap_or_else(|| PoolAccountBundle::new(*pool_id));
-                        (bundle, pool_descriptor.clone(), false)
-                    });
+                    let entry = local_updates
+                        .entry(*pool_id)
+                        .or_insert_with(|| BundleUpdate {
+                            bundle: existing_bundles
+                                .get(pool_id)
+                                .cloned()
+                                .unwrap_or_else(|| PoolAccountBundle::new(*pool_id)),
+                            descriptor: pool_descriptor.clone(),
+                            reserves_changed: false,
+                            trigger: None,
+                        });
+
+                    // Compare against the account held since the previous fetch;
+                    // slot and fetch time change on every fetch and are ignored.
+                    if entry
+                        .bundle
+                        .accounts
+                        .get(&account_data.pubkey)
+                        .is_none_or(|previous| account_data.content_differs(previous))
+                    {
+                        entry.reserves_changed = true;
+                    }
 
                     // Create isolated account data for each pool to prevent race conditions
                     let isolated_account_data = AccountData {
@@ -776,68 +808,65 @@ impl AccountFetcher {
                         lamports: account_data.lamports,
                         owner: account_data.owner,
                     };
-                    entry.0.add_account(isolated_account_data);
+                    entry.bundle.add_account(isolated_account_data);
 
                     logger::debug(
                         LogTag::PoolFetcher,
                         &format!(
                             "Added account {} to bundle for token {} in pool {}",
                             account_data.pubkey,
-                            if is_sol_mint(pool_descriptor.base_mint.address()) {
-                                pool_descriptor.quote_mint.address()
-                            } else {
-                                pool_descriptor.base_mint.address()
-                            },
+                            target_token_mint(pool_descriptor),
                             pool_id
                         ),
                     );
-
-                    // Check if bundle is now complete and needs (re)calculation.
-                    // First check handles initial calculation (never calculated before).
-                    // Second check handles price refresh: when a bundle was already calculated
-                    // but its price has expired from the cache (TTL-based), reset the flag
-                    // so the price gets recalculated from the re-fetched accounts.
-                    if entry.0.is_complete_and_needs_calculation(reserves) {
-                        entry.0.mark_calculation_requested();
-                        entry.2 = true; // Mark needs calculation
-                    } else if entry.0.calculation_requested && entry.0.is_complete(reserves) {
-                        // Price was calculated before but may have expired from cache.
-                        // Check if the target token still has a valid cached price.
-                        let target_mint = if is_sol_mint(pool_descriptor.base_mint.address()) {
-                            pool_descriptor.quote_mint.address()
-                        } else {
-                            pool_descriptor.base_mint.address()
-                        };
-                        if !crate::pools::cache::is_price_fresh(target_mint) {
-                            // Price expired — reset flag and re-trigger calculation
-                            entry.0.calculation_requested = false;
-                            entry.0.mark_calculation_requested();
-                            entry.2 = true;
-                        }
-                    }
                 }
+            }
+        }
+
+        // Decide repricing once per pool, after every re-fetched account is merged:
+        // reprice on fresh reserve data, or on the heartbeat so a quiet pool's
+        // price never outlives the cache TTL.
+        let heartbeat = crate::pools::types::price_refresh_heartbeat();
+        for (pool_id, update) in local_updates.iter_mut() {
+            let reserves = pool_reserve_pubkeys
+                .get(pool_id)
+                .map(Vec::as_slice)
+                .unwrap_or(&[]);
+            if !update.bundle.is_complete(reserves) {
+                continue;
+            }
+            update.trigger = calculation_trigger(
+                update.bundle.calculation_requested,
+                update.reserves_changed,
+                crate::pools::cache::cached_price_age(target_token_mint(&update.descriptor)),
+                heartbeat,
+            );
+            if update.trigger.is_some() {
+                update.bundle.mark_calculation_requested();
             }
         }
 
         // Phase 3: Apply updates (brief write lock)
         {
             let mut bundles = account_bundles.write().unwrap();
-            for (pool_id, (bundle, _, _)) in &local_updates {
-                bundles.insert(*pool_id, bundle.clone());
+            for (pool_id, update) in &local_updates {
+                bundles.insert(*pool_id, update.bundle.clone());
             }
         }
 
         // Phase 4: Trigger calculations (no locks held)
-        for (pool_id, (bundle, pool_descriptor, needs_calculation)) in local_updates {
-            if needs_calculation {
+        for (pool_id, update) in local_updates {
+            let BundleUpdate {
+                bundle,
+                descriptor: pool_descriptor,
+                trigger,
+                ..
+            } = update;
+            if let Some(trigger) = trigger {
                 if let Some(calculator) =
                     crate::chains::solana::pools::service::get_price_calculator()
                 {
-                    let target_token = if is_sol_mint(pool_descriptor.base_mint.address()) {
-                        pool_descriptor.quote_mint.address().to_owned()
-                    } else {
-                        pool_descriptor.base_mint.address().to_owned()
-                    };
+                    let target_token = target_token_mint(&pool_descriptor).to_owned();
 
                     if let Err(e) = calculator.request_calculation(pool_id, pool_descriptor, bundle)
                     {
@@ -852,7 +881,7 @@ impl AccountFetcher {
                         logger::debug(
                             LogTag::PoolFetcher,
                             &format!(
-                                "Requested calculation for complete bundle - token {} in pool {}",
+                                "Requested calculation ({trigger:?}) for complete bundle - token {} in pool {}",
                                 target_token, pool_id
                             ),
                         );

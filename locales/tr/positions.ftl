@@ -180,6 +180,7 @@ positions-header-of-invested = Yatırılan: { $amount }
 positions-header-price = Fiyat
 positions-header-last-price = Son fiyat
 positions-header-pool-ago = havuz · { $ago }
+positions-header-api-ago = API · { $ago }
 positions-header-unrealized-pnl = Gerçekleşmemiş K/Z
 positions-header-pnl-last-price = Son fiyattaki K/Z
 positions-header-value = Değer

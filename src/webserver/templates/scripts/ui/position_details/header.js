@@ -20,6 +20,13 @@ const RISK_LEVEL_LABELS = Object.freeze({
 });
 const RISK_TONES = Object.freeze({ low: "is-success", medium: "is-warning", high: "is-danger" });
 
+// Price system behind `current_price`, as reported by the positions API. An unknown source
+// shows the age alone rather than claiming one.
+const PRICE_SOURCE_AGE_LABELS = Object.freeze({
+  pool: "positions-header-pool-ago",
+  api: "positions-header-api-ago",
+});
+
 const BUSY_LABELS = Object.freeze({
   buying: "positions-busy-buying",
   selling: "positions-busy-selling",
@@ -134,11 +141,7 @@ export function applyHeaderMixin(PositionDetailsDialog) {
         live ? I18n.t("positions-header-price") : I18n.t("positions-header-last-price"),
         pos.current_price ? this._formatPrice(pos.current_price) : "—",
         {
-          sub: pos.current_price_updated
-            ? I18n.t("positions-header-pool-ago", {
-                ago: Utils.formatTimeAgo(pos.current_price_updated),
-              })
-            : "",
+          sub: pos.current_price_updated ? this._priceAgeLabel(pos) : "",
         }
       ),
       metric(
@@ -162,6 +165,13 @@ export function applyHeaderMixin(PositionDetailsDialog) {
       ),
       entryMetric,
     ].join("");
+  };
+
+  proto._priceAgeLabel = function (pos) {
+    const ago = Utils.formatTimeAgo(pos.current_price_updated);
+    return Object.hasOwn(PRICE_SOURCE_AGE_LABELS, pos.current_price_source)
+      ? I18n.label(PRICE_SOURCE_AGE_LABELS, pos.current_price_source, { ago })
+      : ago;
   };
 
   proto._buildHeaderBadges = function (pos) {

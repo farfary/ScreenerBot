@@ -218,6 +218,7 @@ positions-header-of-invested = 投資額 { $amount } のうち
 positions-header-price = 価格
 positions-header-last-price = 直近価格
 positions-header-pool-ago = プール · { $ago }
+positions-header-api-ago = API · { $ago }
 positions-header-unrealized-pnl = 含み損益
 positions-header-pnl-last-price = 直近価格での損益
 positions-header-value = 評価額

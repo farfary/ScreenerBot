@@ -218,6 +218,7 @@ positions-header-of-invested = 占已投入 { $amount }
 positions-header-price = 价格
 positions-header-last-price = 最新价格
 positions-header-pool-ago = 流动性池 · { $ago }
+positions-header-api-ago = API · { $ago }
 positions-header-unrealized-pnl = 未实现盈亏
 positions-header-pnl-last-price = 按最新价格计算的盈亏
 positions-header-value = 价值

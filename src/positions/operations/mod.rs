@@ -150,6 +150,7 @@ pub async fn update_position_price(token_mint: &str, current_price: f64) -> Resu
     let updated = crate::positions::state::update_position_state(token_mint, |pos| {
         pos.current_price = Some(current_price);
         pos.current_price_updated = Some(now);
+        pos.current_price_source = None;
 
         if current_price > pos.price_highest {
             pos.price_highest = current_price;

@@ -7,7 +7,7 @@ use crate::chains::{AccountId, AssetId, PoolId};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::fmt;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 /// Chain-neutral protocol identity for a pool's DEX/AMM implementation.
 ///
@@ -357,6 +357,12 @@ pub fn price_cache_ttl_seconds() -> u64 {
     crate::config::with_config(|cfg| cfg.pools.price_cache_ttl_secs)
 }
 
+/// Repricing heartbeat for a pool whose reserves have not changed: half the
+/// cache TTL, so a quiet pool's price is refreshed before it can expire.
+pub fn price_refresh_heartbeat() -> Duration {
+    Duration::from_millis(price_cache_ttl_seconds().saturating_mul(1000) / 2)
+}
+
 /// Account blacklist threshold from configuration
 pub fn account_blacklist_threshold() -> u32 {
     crate::config::with_config(|cfg| cfg.pools.account_blacklist_threshold)
@@ -457,6 +463,13 @@ pub fn max_watched_tokens() -> usize {
 /// Maximum allowable gap between consecutive price updates (1 minute)
 /// If gap is larger, older data becomes invalid and should be removed
 pub const MAX_PRICE_GAP_SECONDS: u64 = 60;
+
+/// Minimum spacing between two recorded price-history entries for one token.
+/// A pool is repriced whenever its reserves change (every fetch, ~5 s, for an
+/// open position); history keeps at most one entry per interval. It must stay
+/// below `MAX_PRICE_GAP_SECONDS`, or a steady price would read as a gap.
+pub const PRICE_HISTORY_RECORD_INTERVAL_SECS: u64 = 15;
+const _: () = assert!(PRICE_HISTORY_RECORD_INTERVAL_SECS < MAX_PRICE_GAP_SECONDS);
 
 // ============================================================================
 // POOL DATA TYPES

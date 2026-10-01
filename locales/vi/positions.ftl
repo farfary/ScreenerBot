@@ -175,6 +175,7 @@ positions-header-of-invested = trên { $amount } đã đầu tư
 positions-header-price = Giá
 positions-header-last-price = Giá gần nhất
 positions-header-pool-ago = pool · { $ago }
+positions-header-api-ago = API · { $ago }
 positions-header-unrealized-pnl = P&L chưa chốt
 positions-header-pnl-last-price = P&L theo giá gần nhất
 positions-header-value = Giá trị

@@ -228,6 +228,7 @@ positions-header-of-invested = de { $amount } investidos
 positions-header-price = Preço
 positions-header-last-price = Último preço
 positions-header-pool-ago = pool · { $ago }
+positions-header-api-ago = API · { $ago }
 positions-header-unrealized-pnl = P&L não realizado
 positions-header-pnl-last-price = P&L no último preço
 positions-header-value = Valor

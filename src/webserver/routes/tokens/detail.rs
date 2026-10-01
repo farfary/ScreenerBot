@@ -487,8 +487,8 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
     // we still hold a valid API quote. `price_source` tells the UI which system won.
     let sol_price_usd = crate::sol_price::get_sol_price();
     let (effective_price_sol, price_source) = match price_sol {
-        Some(p) if p > 0.0 => (Some(p), Some("pool".to_string())),
-        _ if token.price_sol > 0.0 => (Some(token.price_sol), Some("api".to_string())),
+        Some(p) if p > 0.0 => (Some(p), Some(positions::PriceSource::Pool)),
+        _ if token.price_sol > 0.0 => (Some(token.price_sol), Some(positions::PriceSource::Api)),
         _ => (None, None),
     };
     let price_usd = if let Some(sol_p) = effective_price_sol {

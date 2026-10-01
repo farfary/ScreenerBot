@@ -2,6 +2,7 @@
 
 use chrono::{Duration, Utc};
 
+use crate::positions::PriceSource;
 use crate::webserver::routes::positions::types::{
     PositionResponse, PositionStatus, PositionsStatsResponse,
 };
@@ -61,6 +62,7 @@ pub fn get_promo_positions(status: Option<&str>) -> Vec<PositionResponse> {
                 exit_fee_lamports: None,
                 current_price: Some(*current),
                 current_price_updated: Some(now.timestamp()),
+                current_price_source: Some(PriceSource::Pool),
                 phantom_confirmations: 0,
                 synthetic_exit: false,
                 closed_reason: None,
@@ -132,6 +134,7 @@ pub fn get_promo_positions(status: Option<&str>) -> Vec<PositionResponse> {
                 exit_fee_lamports: Some(5000),
                 current_price: None,
                 current_price_updated: None,
+                current_price_source: None,
                 phantom_confirmations: 0,
                 synthetic_exit: false,
                 closed_reason: Some(reason.to_string()),
@@ -203,6 +206,7 @@ pub fn get_promo_positions(status: Option<&str>) -> Vec<PositionResponse> {
                 exit_fee_lamports: Some(5000),
                 current_price: None,
                 current_price_updated: None,
+                current_price_source: None,
                 phantom_confirmations: 0,
                 synthetic_exit: false,
                 closed_reason: Some(reason.to_string()),

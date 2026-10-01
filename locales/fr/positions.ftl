@@ -185,6 +185,7 @@ positions-header-of-invested = sur { $amount } investis
 positions-header-price = Prix
 positions-header-last-price = Dernier prix
 positions-header-pool-ago = pool · { $ago }
+positions-header-api-ago = API · { $ago }
 positions-header-unrealized-pnl = P&L latent
 positions-header-pnl-last-price = P&L au dernier prix
 positions-header-value = Valeur

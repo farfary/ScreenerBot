@@ -190,6 +190,7 @@ positions-header-of-invested = из { $amount } вложенных
 positions-header-price = Цена
 positions-header-last-price = Последняя цена
 positions-header-pool-ago = пул · { $ago }
+positions-header-api-ago = API · { $ago }
 positions-header-unrealized-pnl = Нереализованный P&L
 positions-header-pnl-last-price = P&L по последней цене
 positions-header-value = Стоимость

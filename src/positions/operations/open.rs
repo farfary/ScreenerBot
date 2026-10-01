@@ -334,6 +334,7 @@ async fn open_position_impl(
         exit_fee_lamports: None,
         current_price: Some(entry_price),
         current_price_updated: Some(Utc::now()),
+        current_price_source: None,
         phantom_remove: false,
         phantom_confirmations: 0,
         phantom_first_seen: None,

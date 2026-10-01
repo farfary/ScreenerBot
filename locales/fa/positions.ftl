@@ -223,6 +223,7 @@ positions-header-of-invested = از { $amount } سرمایه‌گذاری
 positions-header-price = قیمت
 positions-header-last-price = آخرین قیمت
 positions-header-pool-ago = استخر · { $ago }
+positions-header-api-ago = API · { $ago }
 positions-header-unrealized-pnl = سود و زیان تحقق‌نیافته
 positions-header-pnl-last-price = سود و زیان به آخرین قیمت
 positions-header-value = ارزش

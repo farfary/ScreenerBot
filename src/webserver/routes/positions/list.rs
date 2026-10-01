@@ -120,6 +120,7 @@ fn map_position_to_response_with_logo(
         exit_fee_lamports: p.exit_fee_lamports,
         current_price: p.current_price,
         current_price_updated: current_price_updated_ts,
+        current_price_source: p.current_price_source,
         phantom_confirmations: p.phantom_confirmations,
         synthetic_exit: p.synthetic_exit,
         closed_reason: p.closed_reason.clone(),

@@ -177,6 +177,7 @@ positions-header-of-invested = dari { $amount } yang diinvestasikan
 positions-header-price = Harga
 positions-header-last-price = Harga terakhir
 positions-header-pool-ago = pool · { $ago }
+positions-header-api-ago = API · { $ago }
 positions-header-unrealized-pnl = P&L Belum Terealisasi
 positions-header-pnl-last-price = P&L pada harga terakhir
 positions-header-value = Nilai
