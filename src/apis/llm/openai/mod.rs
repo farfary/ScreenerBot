@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! OpenAI API client (raw HTTP via reqwest)
 //!
 //! API Documentation: https://platform.openai.com/docs/api-reference/chat

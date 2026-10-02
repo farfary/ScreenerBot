@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Router Registry - Manages all available swap routers
 //! Provides router discovery, fallback chains, and global access
 //!

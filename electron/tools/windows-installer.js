@@ -1,4 +1,9 @@
 #!/usr/bin/env node
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+// Windows installer identity and WiX template customization - stable per-architecture upgrade codes, perMachine scope and release verification of the rendered installer source.
+
 
 const fs = require('fs');
 const { APP_ID } = require('../src/app_identity');

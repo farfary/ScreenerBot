@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+// Tests for the data table's server pagination mixin - cursor and has-more preservation across metadata updates.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 import "./fixtures/i18n_en.mjs";

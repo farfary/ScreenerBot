@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Transaction service configuration — runtime settings for connection management and retries.
 //
 // Service configuration, constants, and deferred retry queue

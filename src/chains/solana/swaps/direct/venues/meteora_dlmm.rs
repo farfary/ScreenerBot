@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Meteora DLMM (`LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo`) — a discretised
 //! range AMM. Liquidity sits in fixed-width BINS, not on a continuous curve:
 //! bin `id`'s price is `(1 + bin_step/10000)^id` in Q64.64, and a swap walks

@@ -1,4 +1,7 @@
-//! Type definitions for Tools API routes
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Type definitions for Tools API routes.
 
 use serde::{Deserialize, Serialize};
 

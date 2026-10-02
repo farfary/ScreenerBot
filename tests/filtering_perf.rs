@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Filtering timing and throughput — how the pipeline behaves at scale, and which parts
 //! of it cost more than they should.
 //!

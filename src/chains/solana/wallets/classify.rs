@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Pure classification: a decoded transaction -> one `ActivityKind`, subject-relative.
 //!
 //! The single most expensive decode bug available here is treating a token transfer

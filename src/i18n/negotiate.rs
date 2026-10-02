@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Locale resolution from the stored setting, the request and the operating system.
 
 use super::pseudo::PseudoLocale;

@@ -1,4 +1,7 @@
-//! Token listing, stats, filtering, and search handlers
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Token listing, stats, filtering, and search handlers.
 
 use crate::{
     i18n::ids,

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! AES-256-GCM encryption for private keys with machine-derived keys.
 
 use aes_gcm::{

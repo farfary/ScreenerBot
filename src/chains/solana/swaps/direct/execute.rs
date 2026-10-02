@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Turning a [`SwapPlan`] into a landed, verified transaction.
 //!
 //! The step order is the money-safety contract of the engine:

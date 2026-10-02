@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Metadata filter source — validates token name, symbol, age, and description fields.
 
 use chrono::Utc;

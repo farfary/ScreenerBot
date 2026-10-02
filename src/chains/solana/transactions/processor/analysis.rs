@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Transaction processor analysis — high-level analysis pipeline for processed transactions.
 //
 // Transaction processing pipeline - Transaction analysis methods

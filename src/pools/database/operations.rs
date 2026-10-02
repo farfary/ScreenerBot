@@ -1,4 +1,7 @@
-//! Core PoolsDatabase struct and operations
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Core PoolsDatabase struct and operations.
 
 use super::super::types::{
     PoolBlacklistPolicy, PoolFailureRecord, PriceResult, PRICE_HISTORY_MAX_ENTRIES,

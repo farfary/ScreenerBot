@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
 // The four exit rules as the editor and the Rules tab present them: field specs,
 // the policy a task runs under after its overrides, presets, and validation.
 import { duration, finite, pct, signedPct } from "./format.js";

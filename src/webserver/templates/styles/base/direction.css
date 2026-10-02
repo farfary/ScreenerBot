@@ -1,3 +1,6 @@
+/* Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+ * SPDX-License-Identifier: BUSL-1.1 */
+
 /* ==================== Directional Icons ====================
  * Lucide glyphs that point along the inline axis are mirrored under RTL. The
  * glyph pseudo-element is flipped, not the element, so element-level rotation

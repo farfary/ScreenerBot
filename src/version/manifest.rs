@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! The GitHub release record: asset digests and the per-release update manifest.
 //!
 //! screenerbot.io decides *which* version is offered; this module reads what

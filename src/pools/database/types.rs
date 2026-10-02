@@ -1,4 +1,7 @@
-//! Database structures and conversion utilities
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Database structures and conversion utilities.
 
 use super::super::types::PriceResult;
 use crate::chains::ChainId;

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Recorders for transactions, swaps, pools and positions.
 
 use super::super::maintenance::is_category_enabled;

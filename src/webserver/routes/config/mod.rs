@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Configuration API Routes
 //!
 //! Provides REST API endpoints for viewing and managing bot configuration.

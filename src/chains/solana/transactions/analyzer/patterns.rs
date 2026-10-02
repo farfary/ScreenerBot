@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Transaction pattern detection — recognizes common on-chain patterns like MEV and arbitrage.
 //
 // Pattern detection module - Suspicious activity and anomaly detection

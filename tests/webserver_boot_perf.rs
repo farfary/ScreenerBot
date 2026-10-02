@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Boot performance of the webserver and the dashboard's first paint.
 //!
 //! Scope is deliberately narrow: the path between "the window appeared" and "the home

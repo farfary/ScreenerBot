@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! The contract every direct-swap venue implements.
 //!
 //! A venue is one DEX program. It is split deliberately into two halves:

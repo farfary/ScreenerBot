@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Token metadata for dashboard — resolves token names and symbols for display.
 
 use futures::stream::{self, StreamExt};

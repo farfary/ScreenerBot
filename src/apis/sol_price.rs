@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! SOL Price Service
 //!
 //! Provides real-time SOL/USD price for USD conversions and trading calculations.

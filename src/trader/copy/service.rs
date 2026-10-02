@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Runtime paper/live consumer of the shared wallet-observation broadcast.
 
 use std::collections::HashMap;

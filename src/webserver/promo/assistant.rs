@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Promo generators for the Assistant page's tabs other than Overview
 //! (`llm_analysis.rs` owns `/api/llm-analysis/status`).
 //!

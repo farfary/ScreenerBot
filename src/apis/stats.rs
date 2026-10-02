@@ -1,4 +1,7 @@
-//! API statistics tracking
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! API statistics tracking.
 
 use crate::events::{record_api_event, Severity};
 use chrono::{DateTime, Utc};

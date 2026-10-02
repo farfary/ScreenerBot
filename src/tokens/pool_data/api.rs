@@ -1,4 +1,7 @@
-//! API fetching functions - retrieve pool data from external sources
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! API fetching functions - retrieve pool data from external sources.
 
 use crate::apis::manager::get_api_manager;
 use crate::events::{record_token_event, Severity};

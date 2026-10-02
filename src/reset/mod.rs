@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Reset utility — clears bot state, databases, and cached data for fresh start.
 //!
 //! This module provides functionality to reset various parts of the bot's state,

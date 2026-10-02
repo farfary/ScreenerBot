@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! The chain-adapter seam: chain-specific behaviour behind one trait.
 //!
 //! Neutral modules that need a chain fact (native-unit conversion, address

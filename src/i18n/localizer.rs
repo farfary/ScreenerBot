@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Fluent bundles built from the embedded catalogs, with per-key fallback.
 
 use super::pseudo::PseudoLocale;

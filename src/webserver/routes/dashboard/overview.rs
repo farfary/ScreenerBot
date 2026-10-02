@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Dashboard overview — aggregates key metrics for the dashboard home view.
 
 use axum::{extract::State, response::Json};

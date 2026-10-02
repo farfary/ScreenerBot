@@ -1,3 +1,7 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+
 /**
  * Multi-Wallet Tools Module
  * Contains multi-wallet trading utilities: multi-buy and multi-sell

@@ -1,4 +1,7 @@
-//! Types for ATA cleanup operations
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Types for ATA cleanup operations.
 
 use serde::{Deserialize, Serialize};
 

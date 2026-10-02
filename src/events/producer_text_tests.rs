@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Catalog coverage for event producers: every producer id renders its
 //! source-locale sentence for a sample argument set.
 

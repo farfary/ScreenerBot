@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Events maintenance, config helpers, and MCP integration.
 //!
 //! Maintenance tasks and configuration checks for the events system.

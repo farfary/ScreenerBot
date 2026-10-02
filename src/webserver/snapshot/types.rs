@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Snapshot types — data structures for system state snapshots sent via SSE.
 
 use chrono::{DateTime, Utc};

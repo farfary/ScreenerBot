@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! PKCE (RFC 7636) and the loopback callback's one-time state.
 //!
 //! ============================================================================

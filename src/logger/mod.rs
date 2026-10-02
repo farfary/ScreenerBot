@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Modern structured logging system for ScreenerBot
 //!
 //! This module provides a clean, ergonomic logging API with:

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Shared agent-control handlers (`/api/agent-control`): the tool list and the
 //! per-category permission policy that the dashboard assistant, scheduled
 //! automation and the MCP adapter all read.

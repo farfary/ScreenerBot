@@ -1,4 +1,7 @@
-//! LLM-analysis instructions, templates, and history handlers
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! LLM-analysis instructions, templates, and history handlers.
 
 use axum::{
     extract::{Path, Query, State},

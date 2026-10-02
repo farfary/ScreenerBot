@@ -1,4 +1,7 @@
-//! Action tracking for automated trading operations (auto open, close, DCA)
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Action tracking for automated trading operations (auto open, close, DCA).
 
 use crate::actions::{
     complete_action_failed, complete_action_success, register_action, update_step, Action,

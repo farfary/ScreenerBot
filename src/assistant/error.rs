@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Errors produced by the in-app assistant: dashboard conversation, its
 //! SQLite session/message persistence, and scheduled-conversation automation
 //! (schedule parsing, task lookup, run-record bookkeeping).

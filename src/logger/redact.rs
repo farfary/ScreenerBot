@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Redaction of credential-bearing URL parts.
 //!
 //! RPC and API providers authenticate with secrets embedded in the endpoint URL:

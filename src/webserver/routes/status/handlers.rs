@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Status API handlers - health check, system and service status snapshots, and cached system metrics.
+
 use axum::response::Response;
 use chrono::Utc;
 

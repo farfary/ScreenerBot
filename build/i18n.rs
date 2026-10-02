@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Locale catalog validation and code generation.
 //!
 //! Every registered locale directory under `locales/` is parsed with the Fluent

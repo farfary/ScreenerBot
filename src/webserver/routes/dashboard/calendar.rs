@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Portfolio calendar route — per-day realized P&L and end-of-day portfolio value.
 
 use axum::{extract::Query, response::Json};

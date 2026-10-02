@@ -1,4 +1,7 @@
-//! Tools API routes for wallet utilities, token operations, and trading tools
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Tools API routes for wallet utilities, token operations, and trading tools.
 
 use axum::{
     routing::{delete, get, patch, post},

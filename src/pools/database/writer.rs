@@ -1,4 +1,7 @@
-//! Background writer task for async database writes
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Background writer task for async database writes.
 
 use super::super::types::PriceResult;
 use super::types::DbPriceResult;

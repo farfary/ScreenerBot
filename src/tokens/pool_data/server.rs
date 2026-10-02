@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Token pools via the self-hosted ScreenerBot data server.
 //!
 //! The server is the central pool registry: it resolves and caches every token's

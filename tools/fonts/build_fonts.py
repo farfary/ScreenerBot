@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+# SPDX-License-Identifier: BUSL-1.1
+
 """Per-script dashboard fonts: download, subset, rename and describe.
 
 Input is `tools/fonts/fonts.json` (hand-maintained). Outputs:

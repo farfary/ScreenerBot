@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Deterministic paper fills using the decision-time pool price.
 
 use super::types::{CopySkip, PaperFill, PaperSellFill};

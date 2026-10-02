@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Solana chain adapter: vendor dependency boundary plus Solana RPC.
 //!
 //! Application code imports Solana SDK crates through this façade so the

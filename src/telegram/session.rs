@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Telegram session manager for tracking connected users
 //!
 //! Provides session tracking, authentication, and chat discovery for Telegram bot users.

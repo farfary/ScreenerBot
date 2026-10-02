@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Canonical config access for every agent-facing surface.
 //!
 //! An agent is allowed to read and change *all* of ScreenerBot's configuration

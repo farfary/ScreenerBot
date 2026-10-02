@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+// Assistant page lifecycle that switches between the chat, stats, providers, instructions, automation, history, testing and settings tabs, polls the /api/llm-analysis and /api/llm data for the active tab, and exposes tab actions on window.assistantPage for inline handlers.
+
 import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
 import { $, $$ } from "../core/dom.js";

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Core Swap Operations - High-level swap functions
 //! Provides get_best_quote() and execute_swap_with_fallback()
 

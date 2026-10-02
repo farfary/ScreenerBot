@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Token security data storage — persists rugcheck scores and safety analysis.
 
 use crate::errors::DatabaseError;

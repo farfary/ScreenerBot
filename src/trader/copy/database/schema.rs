@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Schema and migrations for the copy-trading database - copy_tasks, copy_spend and copy_paper_positions tables plus the mode-scoped spend rebuild.
+
 use rusqlite::{Connection, OptionalExtension};
 
 use crate::trader::copy::types::CopyOutcome;

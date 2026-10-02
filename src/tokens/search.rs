@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Token search functionality using DexScreener and GeckoTerminal APIs
 //!
 //! Provides unified search across multiple data sources with deduplication.

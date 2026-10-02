@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! The wallet's live worth — the single source of truth for "what is my wallet worth".
 //!
 //! Everything the user sees as a wallet figure (header card, home hero, dashboard

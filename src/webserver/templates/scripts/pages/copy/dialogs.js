@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
 // The page's modal overlays: one Escape entry per open dialog, the backdrop and
 // every [data-dialog-close] button close it, and focus returns to the opener. A
 // dialog holding unsaved work passes `beforeClose`, which can keep it open.

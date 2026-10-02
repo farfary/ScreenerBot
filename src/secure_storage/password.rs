@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! BLAKE3 password hashing for lockscreen authentication.
 
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};

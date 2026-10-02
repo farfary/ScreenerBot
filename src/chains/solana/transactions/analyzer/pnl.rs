@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! PnL analysis — calculates profit and loss from swap transaction data.
 //
 // P&L calculation module - Profit/loss analysis with fee adjustments

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Notification and position message screens.
 //!
 //! Each screen is assembled from catalog messages rendered for the Telegram

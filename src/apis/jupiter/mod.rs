@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Jupiter API client for token discovery
 //!
 //! API Documentation: https://station.jup.ag/docs/apis/general-api

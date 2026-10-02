@@ -1,3 +1,7 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+
 /**
  * Renderers Module for Wallets
  * Handles all rendering and display logic for wallet panels and data

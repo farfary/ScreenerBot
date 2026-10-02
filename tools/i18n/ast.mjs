@@ -1,3 +1,7 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+
 /**
  * JavaScript parsing and traversal shared by the localization audit modules.
  * Parsing uses espree; traversal follows eslint-visitor-keys so it stays in

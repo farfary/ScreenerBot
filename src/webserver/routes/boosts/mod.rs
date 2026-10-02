@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Token boosts — the paid promotion standing published by screenerbot.io.
 //!
 //! A boost is bought on the website (`screenerbot.io/boost`): a confirmed payment

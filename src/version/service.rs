@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! The background update service: check, fetch, and — when it is safe — apply.
 
 use super::policy::UpdatePolicy;

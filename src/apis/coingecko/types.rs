@@ -1,4 +1,7 @@
-//! CoinGecko API response types
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! CoinGecko API response types.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

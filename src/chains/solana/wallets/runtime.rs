@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! The Solana implementation of `crate::wallets::watch::runtime::WalletWatchRuntime`.
 //!
 //! Owns every Solana-specific mechanic the shared wallet-watch funnel needs:

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Assistant chat database query operations.
 //!
 //! CRUD operations for chat sessions, messages, and tool executions.

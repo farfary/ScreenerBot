@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Domain values for paper and confirmation-gated live copy trading.
 
 use chrono::{DateTime, Utc};

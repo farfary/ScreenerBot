@@ -1,3 +1,10 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Serialization types for the blacklist routes, defining
+//! BlacklistStatsResponse, the PoolBlacklistEntry and AccountBlacklistEntry
+//! entries, and BlacklistDetailsResponse.
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

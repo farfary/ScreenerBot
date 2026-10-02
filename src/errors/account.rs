@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! ScreenerBot account errors — signing in to screenerbot.io from the app.
 //!
 //! Distinct from `NetworkError` on purpose. "The server refused your password"

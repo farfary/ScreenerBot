@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
 // The Execution tab: how late the target's trades are detected and how far the
 // copies fill from the target's own price.
 import { histogram } from "./charts.js";

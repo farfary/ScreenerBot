@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Internal helper functions for ATA operations.
 
 use crate::chains::solana::constants::TOKEN_2022_PROGRAM_ID;

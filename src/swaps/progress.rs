@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Progress a swap reports while it runs, for callers that display it.
 //!
 //! A trade is quoted and executed deep inside the position operations, several

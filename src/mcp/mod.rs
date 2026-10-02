@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! MCP protocol adapter (stdio transport only).
 //!
 //! This process is a thin bridge client. It contains NO trading/domain logic

@@ -1,3 +1,6 @@
+/* Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+ * SPDX-License-Identifier: BUSL-1.1 */
+
 /* ============================================================================
    STATUS BAR - Fixed bottom bar with system metrics
    Must stay on top of all dialogs (dialogs use z-index: 10000)

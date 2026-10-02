@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Model-scored analysis status, stats, configuration, cache and testing handlers (`/api/llm-analysis`).
 
 use axum::{extract::State, response::Response, Json};

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! OHLCV chart data. Pure timeframe/candle math today; live candle fetch is the
 //! documented next addition (a `#[ignore]` test through the bot's real fetch path,
 //! asserting SOL-denominated candles with volume > 0 and canonical-bucket timestamps).

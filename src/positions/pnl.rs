@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Position profit & loss calculations — P&L for open, closed, and partially exited positions.
 
 use crate::chains::adapter;

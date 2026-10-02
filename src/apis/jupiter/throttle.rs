@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Centralized throttle for Jupiter `lite-api.jup.ag` calls.
 //!
 //! Jupiter's free tier rate-limits per IP across ALL endpoints, so background

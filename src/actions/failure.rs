@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! The reason an action or one of its steps failed.
 //!
 //! A failure is catalog text plus optional technical details. `text` names the

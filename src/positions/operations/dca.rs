@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! DCA (Dollar Cost Averaging) operations — add to an existing position.
 
 use crate::chains::adapter;

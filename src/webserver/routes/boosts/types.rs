@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Boost feed types — one boosted mint, and the website envelope carrying them.
 
 use serde::{Deserialize, Serialize};

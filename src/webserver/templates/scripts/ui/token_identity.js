@@ -1,3 +1,7 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+
 /**
  * Token identity — the ONE way the dashboard turns a mint into something a human
  * can read: logo, symbol, name and the FULL mint address.

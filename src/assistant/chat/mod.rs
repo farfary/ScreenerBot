@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Assistant chat submodule.
 //!
 //! Groups all interactive dashboard-assistant conversation functionality:

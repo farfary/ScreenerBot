@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Pool analyzer extractor methods.
 //!
 //! Per-DEX reserve account extraction logic for each supported program type.

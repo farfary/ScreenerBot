@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Action query and retrieval operations.
 //!
 //! Read-only database operations: single action lookup, filtered listing,

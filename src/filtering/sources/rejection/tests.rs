@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Tests filter rejection reason localization - catalog message coverage for every variant, stored-code round trips, and legacy code resolution.
+
 use super::*;
 use crate::i18n::source_message_ids;
 

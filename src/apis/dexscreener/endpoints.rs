@@ -1,4 +1,7 @@
-//! DexScreener API endpoint methods
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! DexScreener API endpoint methods.
 
 use super::types::{
     ChainInfo, DexScreenerPairRaw, DexScreenerPool, PairResponse, PairsResponse, TokenBoostLatest,

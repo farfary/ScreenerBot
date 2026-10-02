@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
 // The stepped task editor: Wallet → Sizing → Entry filters → Exits → Review.
 // Creating and cloning post a new task; editing patches every field except the
 // wallet, which is a task's identity.

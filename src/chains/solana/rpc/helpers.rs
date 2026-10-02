@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Small Solana-typed helpers used by RPC stats/debug surfaces.
 
 /// Parse pubkey helper (delegate to `chains::solana::accounts`)

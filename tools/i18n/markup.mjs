@@ -1,3 +1,7 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+
 /**
  * A small HTML tokenizer for the localization audit. It reads page templates
  * and the markup inside JS string and template literals with one code path.

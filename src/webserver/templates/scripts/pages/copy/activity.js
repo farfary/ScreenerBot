@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
 // The Activity tab: the task's whole decision history, paged from the server and
 // filtered by kind or token. Consecutive skips for one reason fold into a group.
 import {

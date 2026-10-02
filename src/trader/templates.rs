@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Preset exit templates for the auto trader: named bundles of trailing-stop,
 //! ROI and time-override settings applied to config in one step.
 

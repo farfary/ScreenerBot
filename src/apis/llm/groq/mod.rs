@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Groq API client (raw HTTP via reqwest)
 //!
 //! API Documentation: https://console.groq.com/docs/api-reference

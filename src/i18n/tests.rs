@@ -1,3 +1,9 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Unit tests for the i18n module, covering locale registry and resolution,
+//! Fluent catalog building, and UiText serialization, rendering and fallback.
+
 use super::*;
 use axum::http::{header::ACCEPT_LANGUAGE, HeaderMap, HeaderValue};
 use fluent_bundle::concurrent::FluentBundle;

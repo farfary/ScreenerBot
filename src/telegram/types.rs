@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Core types for the Telegram module
 //!
 //! Contains notification types, session types, and discovery types.

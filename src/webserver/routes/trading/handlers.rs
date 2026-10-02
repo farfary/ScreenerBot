@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Dashboard handler serving the summarized trading configuration - trade size limits, risk management and profit targets.
+
 use axum::response::Response;
 
 use crate::{config::with_config, webserver::utils::success_response};

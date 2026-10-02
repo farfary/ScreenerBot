@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+// TradeActionDialog modal for buy, add and sell actions - presets, amount slider, slippage override and quote preview.
+
 import { on, off } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
 import { createFocusTrap } from "../core/utils.js";

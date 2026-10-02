@@ -1,3 +1,8 @@
+/* Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+ * SPDX-License-Identifier: BUSL-1.1
+ *
+ * Transaction details dialog tab content - instruction cards, searchable log entries and the raw JSON view. */
+
 .transaction-details-dialog .section-header {
   padding: 0.5rem 0.75rem;
   margin-bottom: 0;

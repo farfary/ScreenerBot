@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Numeric bound checks shared by the market-data filter sources.
 //!
 //! Every market rule is one of exactly two shapes, and the two answer a missing reading

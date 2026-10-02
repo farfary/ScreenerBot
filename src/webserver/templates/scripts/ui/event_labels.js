@@ -1,3 +1,7 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+
 /**
  * Presentation for an event's category, subtype and severity, shared by the
  * Events page and the event details dialog.

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
 // Header controls for global dashboard interactions (trader toggle + metrics)
 import { loadPage } from "./router.js";
 import * as Utils from "./utils.js";

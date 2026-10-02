@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Solana program IDs, protocol addresses and native-unit constants.
 //!
 //! Single source of truth for everything Solana-address-shaped: on-chain

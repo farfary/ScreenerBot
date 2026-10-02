@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
 // Portfolio calendar — month grid of daily realized P&L + end-of-day portfolio value.
 import { firstDayOfWeek, formatMonthYear, formatWeekday } from "../../core/format.js";
 import * as Utils from "../../core/utils.js";

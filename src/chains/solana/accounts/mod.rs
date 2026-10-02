@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Solana account primitives: keypair generation, parsing and signing.
 //!
 //! Owns every place that touches a raw `Keypair`/`Pubkey` outside of

@@ -1,3 +1,10 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+// Electron preload script exposing the electronAPI context bridge for window,
+// zoom, fullscreen, theme, language and boot-event controls to the renderer,
+// plus the owner-only promoAPI capture channel.
+
 const { contextBridge, ipcRenderer } = require('electron');
 
 /**

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Router trait — defines the unified interface for all DEX swap routers.
 
 use crate::chains::ChainId;

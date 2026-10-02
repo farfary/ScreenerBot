@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Transaction service bootstrap — initialization and startup of the transaction monitoring service.
 //
 // Startup bootstrap logic - initial transaction history loading

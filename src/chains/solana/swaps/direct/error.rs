@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Typed failures of the direct pool-swap engine.
 //!
 //! Every consumer decides from the VARIANT, never from the message. The two

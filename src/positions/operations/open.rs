@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Open position operations — new position entry with swap execution and verification.
 
 use crate::chains::adapter;

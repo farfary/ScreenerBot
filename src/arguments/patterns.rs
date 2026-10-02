@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Common argument parsing patterns used across binaries.
 
 use super::{get_arg_value, has_arg};

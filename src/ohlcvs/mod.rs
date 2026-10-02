@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! OHLCV candlestick data — fetching, caching, and gap filling for price charts.
 mod aggregator;
 mod cache;

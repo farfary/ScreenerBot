@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Collecting a token's activity from every source that holds a piece of it.
 //!
 //! Four sources, and each knows something the others do not:

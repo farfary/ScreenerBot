@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! OHLCV fetch priorities — scoring and scheduling for token candle updates.
 
 use crate::ohlcvs::types::{Priority, TokenOhlcvConfig};

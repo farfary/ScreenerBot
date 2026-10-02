@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! SOL/USD reference chart (bot side).
 //!
 //! Mirrors the data server's full SOL/USD series into an in-memory cache so the

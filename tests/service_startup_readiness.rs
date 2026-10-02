@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Boots the real service layer offline and proves it still comes up.
 //!
 //! Sixteen recent commits reorganized service registration, process-global

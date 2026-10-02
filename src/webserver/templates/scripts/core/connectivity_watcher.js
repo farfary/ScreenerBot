@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
 // Connectivity watcher — detects when the ScreenerBot backend becomes
 // unreachable (process crash, mid-session network loss, restart) and shows a
 // single non-blocking "Waiting for core…" overlay instead of letting individual

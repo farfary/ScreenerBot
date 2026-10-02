@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! The task's own exit policy applied to its paper book. A live copy position in
 //! `buy_only`/`hybrid` mode is managed by the exit monitor (stop loss, trailing
 //! stop, ROI, time override); paper holdings get the same rules here, evaluated by

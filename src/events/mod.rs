@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Events Module - Persistent Event Recording System
 //!
 //! This module provides a comprehensive event recording system that captures all bot activities

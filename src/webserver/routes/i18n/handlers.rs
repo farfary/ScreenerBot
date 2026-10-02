@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Axum handlers for the i18n routes - the registered locale list and the per-locale dashboard catalog script installed as window.__SCREENERBOT_L10N__.
+
 use crate::i18n::ids;
 use crate::webserver::api_error::{ApiError, ApiErrorCode};
 use axum::{

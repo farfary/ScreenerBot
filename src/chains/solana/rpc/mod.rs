@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Solana-specific RPC mechanisms.
 //!
 //! Owns everything that is Solana-typed: the SDK-facing client, the global

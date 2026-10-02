@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Moonit (formerly Moonshot, `MoonCVVNZFSYkqNXP6bxHLPL6QQJiMagDL3qcqUQTrG`) —
 //! a bonding-curve launchpad settling in NATIVE SOL, the same shape as
 //! `pumpfun_legacy.rs`. Only `ConstantProductV1` curves over SOL collateral

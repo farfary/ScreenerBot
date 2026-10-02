@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Global API manager singleton - ensures single instance of all API clients across the bot
 //! This provides centralized rate limiting and stats tracking per API
 

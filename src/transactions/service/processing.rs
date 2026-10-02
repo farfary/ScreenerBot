@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Transaction service processing — own-wallet consumer of the shared wallet watch
 //! service, plus periodic housekeeping.
 //!

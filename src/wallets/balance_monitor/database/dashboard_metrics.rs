@@ -1,4 +1,7 @@
-//! Wallet balance monitor: dashboard metrics cache operations
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Wallet balance monitor: dashboard metrics cache operations.
 
 use chrono::{DateTime, Utc};
 use rusqlite::{params, OptionalExtension};

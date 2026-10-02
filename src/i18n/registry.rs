@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Locale registry parsed from the embedded `locales/registry.toml`.
 
 use super::pseudo::PseudoLocale;

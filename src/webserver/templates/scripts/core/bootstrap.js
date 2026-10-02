@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
 // Bootstrap Manager - coordinates backend readiness before heavy dashboard work
 
 // Terminal outcomes. The loader must always reach one of these: it used to poll

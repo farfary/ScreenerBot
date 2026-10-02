@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Filtering data types — filter results, rejection reasons, and passed token structs.
 
 use std::collections::HashMap;

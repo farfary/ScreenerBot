@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Token update core — main update loop that refreshes token data from multiple sources.
 
 use super::blocking::blocking_db;

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Server-side localization of static HTML.
 //!
 //! Elements carrying `data-l10n-id` are rewritten in one streaming pass so the

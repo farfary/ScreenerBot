@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Connectivity route — reports RPC and WebSocket connection status to the dashboard.
 
 mod handlers;

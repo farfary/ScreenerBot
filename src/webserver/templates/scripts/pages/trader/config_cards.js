@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
 //! Per-card Save / Reset controls for the Auto Trader configuration tabs.
 //!
 //! Each editable config card gets a Save and a Reset button injected into its

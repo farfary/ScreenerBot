@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Wallet validation — input validation for addresses, keypairs, and wallet names.
 
 use crate::errors::DatabaseError;

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Pseudo-locales for visual QA of untranslated text, truncation and
 //! right-to-left layout. They are derived from the source catalog by a Fluent
 //! bundle transform and are never registered, offered or negotiated.

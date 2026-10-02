@@ -1,4 +1,7 @@
-//! Trader module constants
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Trader module constants.
 
 // Monitor intervals
 pub const ENTRY_MONITOR_INTERVAL_SECS: u64 = 3;

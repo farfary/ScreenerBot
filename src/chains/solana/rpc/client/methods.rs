@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! RPC client method types and trait definition
 //!
 //! Type definitions and trait signatures for RPC client methods.

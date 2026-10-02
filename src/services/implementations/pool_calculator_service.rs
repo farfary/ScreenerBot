@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Pool calculator service — computes token prices from pool reserves.
 
 use crate::errors::ServiceError;

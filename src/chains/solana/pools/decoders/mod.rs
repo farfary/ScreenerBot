@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Pool decoders module
 //!
 //! This module contains program-specific decoders for different DEX pool types.

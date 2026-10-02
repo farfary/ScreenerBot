@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Token update helpers — utility functions for token data enrichment and merging.
 
 use super::blocking::blocking_db;

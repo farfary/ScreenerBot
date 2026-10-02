@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Wallet balance operations — fetch and refresh on-chain token balances via RPC.
 
 use std::collections::HashMap;

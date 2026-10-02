@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Direct pool swaps, decoded and quoted from REAL captured mainnet accounts —
 //! with no network, no wallet and no keys.
 //!

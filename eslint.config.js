@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+// ESLint flat config for the dashboard scripts - browser globals, lint rules and a module-scope override for the advanced chart framing helper.
+
 import js from "@eslint/js";
 
 export default [

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Web API route registration, static asset serving, and top-level request handlers.
 use crate::webserver::{state::AppState, templates};
 use axum::{extract::Path as AxumPath, http::HeaderMap, response::Html, routing::get, Router};

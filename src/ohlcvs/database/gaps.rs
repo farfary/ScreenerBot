@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Gap tracking — insert, query, and record fill attempts and resolutions.
 //!
 //! A resolved row (`filled = 1`) means the source answered for every bucket of

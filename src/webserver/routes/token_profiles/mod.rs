@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Published token-profile content owned by screenerbot.io.
 //!
 //! The website owns SOL payment, moderation, revisions and publication. The local

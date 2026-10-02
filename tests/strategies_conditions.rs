@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Pure: the eight strategy condition evaluators — the leaves every user strategy is
 //! built from. No network, no DB.
 //!

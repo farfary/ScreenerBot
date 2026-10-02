@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Localization keys of the condition schemas served to the strategy editor.
 //!
 //! A schema carries structure only. Every name, description and option label is a

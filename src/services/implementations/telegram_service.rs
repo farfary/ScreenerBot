@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Telegram service — manages Telegram bot lifecycle, notifications, and command polling.
 
 use crate::config::with_config;

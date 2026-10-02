@@ -1,4 +1,7 @@
-//! Risk management utilities
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Risk management utilities.
 
 use crate::positions::Position;
 use crate::trader::constants::EMERGENCY_LOSS_THRESHOLD_PCT;

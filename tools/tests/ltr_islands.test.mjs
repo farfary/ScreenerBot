@@ -1,3 +1,7 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+
 /**
  * Guard: shared helpers that emit an address, mint or signature as an element mark it
  * `dir="ltr"`, so the value keeps its left-to-right order and isolates from

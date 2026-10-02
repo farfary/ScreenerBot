@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+// Tokens page - tabbed token tables fed by /api/tokens/list with sorting, filters, price-change highlighting and manual trade entry.
+
 import { registerPage } from "../core/lifecycle.js";
 import { openMenu, closeMenu, trackAnchoredMenu } from "../core/menu_manager.js";
 import { Poller, getInterval as getGlobalPollInterval } from "../core/poller.js";

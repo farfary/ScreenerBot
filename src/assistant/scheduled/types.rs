@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Assistant scheduled-task type definitions.
 //!
 //! Contains all type definitions for scheduled assistant tasks:

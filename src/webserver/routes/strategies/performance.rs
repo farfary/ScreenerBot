@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Strategies performance route — serves strategy PnL and win/loss statistics.
 
 use axum::{extract::Path, response::Response};

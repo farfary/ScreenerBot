@@ -1,3 +1,7 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+
 /**
  * Tests for the desktop shell's core resolver (`electron/src/core_resolver.js`)
  * and the data paths it shares with the Rust core (`electron/src/paths.js`).

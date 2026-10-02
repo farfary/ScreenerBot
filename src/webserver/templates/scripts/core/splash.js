@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
 // Splash Screen Controller
 // Shows on every browser app start, handles the initialization check and routing.
 //

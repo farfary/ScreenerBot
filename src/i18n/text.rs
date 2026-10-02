@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Wire type for backend-authored display text.
 //!
 //! A `UiText` carries a catalog id and typed arguments; the presentation layer

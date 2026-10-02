@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! The shared Solana RPC WebSocket subscription transport.
 //!
 //! One connection is multiplexed across every subscribed address. The transport

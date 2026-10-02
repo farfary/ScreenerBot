@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
 // Page Lifecycle Registry - centralized init/activate/deactivate/dispose flows
 import { closeAllMenus } from "./menu_manager.js";
 

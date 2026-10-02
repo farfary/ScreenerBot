@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Recorders whose payload is caller-supplied metadata plus catalog display
 //! text: OHLCV, filtering, trader, RPC, API and scheduled-task events.
 

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Rejection categories: grouping of stored reason codes for the analytics views.
 
 use crate::i18n::{ids, UiText};

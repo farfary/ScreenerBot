@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! LLM-powered trading analysis
 //!
 //! Uses the model-backed analysis engine for entry/exit decisions.

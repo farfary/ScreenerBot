@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Export handlers for wallet data
 //!
 //! CSV export endpoints - basic (no keys) and full (with private keys).

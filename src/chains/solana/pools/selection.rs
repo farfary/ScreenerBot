@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! The single pool each token is priced from.
 //!
 //! Discovery ranks a token's pools (`crate::tokens::calculate_pool_metric`) and

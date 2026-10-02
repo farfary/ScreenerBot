@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+// Providers tab of the assistant page that renders the LLM provider list, sets the default provider via /api/llm/config, and opens the per-provider modal that saves and tests API key, model and enablement against /api/llm/providers.
+
 import { $ } from "../../core/dom.js";
 import * as Utils from "../../core/utils.js";
 import { playSuccess, playError } from "../../core/sounds.js";

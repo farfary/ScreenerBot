@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Initialization, services readiness, GUI mode, webserver config, tools, and dashboard state.
 
 use std::sync::atomic::{AtomicBool, AtomicU16, AtomicU32};

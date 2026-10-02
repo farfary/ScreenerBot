@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
 // Filesystem locations shared with the Rust core.
 //
 // The backend resolves its own base directory in src/paths/mod.rs. Electron has

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Dashboard route types — data structures for dashboard API responses.
 
 use serde::{Deserialize, Serialize};

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
 // The Rules tab and the editor's review: every field with the value that applies
 // and where it comes from (a task override or the inherited Trader default).
 import { definitionRows, exitModeLabel, fixed, modeLabel, pct, sol } from "./format.js";

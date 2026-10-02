@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Public manual trading API
 //!
 //! Normal manual trading operations with standard safety checks and logging.

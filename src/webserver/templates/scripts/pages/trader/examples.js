@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+// Trader example panels - live calculation previews for stop loss, trailing stop and ROI settings.
+
 import { formatFixed, formatPercentValue, formatSol, formatTimeSpan } from "../../core/format.js";
 
 /**

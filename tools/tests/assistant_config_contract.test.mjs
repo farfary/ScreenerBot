@@ -1,3 +1,7 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+
 /**
  * Contract tests for the Assistant "Settings" tab wire mapping
  * (`pages/assistant/config_contract.js`).

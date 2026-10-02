@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Dashboard first-paint cost, measured against the OWNER'S REAL DATABASE.
 //!
 //! The launch symptom this tier exists to catch: the app window opens, the loading screen

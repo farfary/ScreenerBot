@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Config API Getters
 //!
 //! GET endpoints for viewing config sections, plus generic PATCH handler.

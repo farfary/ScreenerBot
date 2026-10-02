@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+// Strategies page - strategy list and condition editor with create, validate and delete flows over the /api/strategies endpoints.
+
 import { Poller } from "../core/poller.js";
 import { $, $$ } from "../core/dom.js";
 import * as Utils from "../core/utils.js";

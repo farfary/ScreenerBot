@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
 // The Overview tab: results over a date range, the P&L curve, how rounds ended
 // and why trades were skipped, the all-time book, and readiness for live.
 import { barList, pnlCurve } from "./charts.js";

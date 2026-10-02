@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! One module per DEX program the direct engine can swap in.
 //!
 //! Each venue owns the exact byte layout of its program's accounts, the exact

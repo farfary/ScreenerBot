@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Transaction service lifecycle — manages service start, stop, and graceful shutdown.
 //
 // Service lifecycle management - start/stop/status and global state

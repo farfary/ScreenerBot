@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Groq API request/response types
 //!
 //! Groq uses OpenAI-compatible format, so we reuse the OpenAI types.

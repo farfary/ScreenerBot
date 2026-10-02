@@ -1,3 +1,7 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+
 /**
  * Presentation for Rugcheck risks. The provider sends each risk as English
  * `name` and `description` strings with no stable id, so its risk name is the

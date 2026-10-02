@@ -1,3 +1,7 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+
 /**
  * Custom Select Component
  * Drop-in replacement for native <select> elements with enhanced styling and keyboard support.

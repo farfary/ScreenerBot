@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Every id the dashboard renders through a frozen label map has catalog text
 //! named after it. The maps are `STATE_LABELS`, `MODE_LABELS`, `EXIT_MODE_LABELS`
 //! and `EXIT_LABELS` (pages/copy/format.js), `STATE_DETAIL_LABELS`

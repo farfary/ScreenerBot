@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! The rules that decide when an update may act on its own.
 //!
 //! Downloading in the background is cheap and always safe. *Applying* an update

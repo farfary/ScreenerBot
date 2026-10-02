@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Pump.fun AMM (`pAMMBay6…`), the constant-product programme pump calls
 //! "pump-swap". Every pump.fun token that graduates off its bonding curve lands
 //! in one of these pools.

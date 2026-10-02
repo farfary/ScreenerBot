@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Transactions route — serves recent transaction history and details.
 //!
 //! Provides endpoints for listing, filtering, and viewing transaction details

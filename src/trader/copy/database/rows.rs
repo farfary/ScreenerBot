@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! SQLite row decoding shared by copy-task and activity queries.
 
 use chrono::Utc;

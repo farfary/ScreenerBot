@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Outbound LLM provider configuration.
 //!
 //! This section owns provider credentials, model selection and per-provider

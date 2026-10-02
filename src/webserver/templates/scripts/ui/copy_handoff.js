@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
 // Cross-page handoff into the Copy Trading page: open a task, or start a new task
 // for a wallet. The request rides in sessionStorage so it survives the router's
 // page swap; the page takes it once on activation (or at once when it is already

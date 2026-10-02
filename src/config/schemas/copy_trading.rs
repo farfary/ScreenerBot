@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Global copy-trading policy. Per-target limits and mode live in copy_trading.db.
 
 use crate::config::metadata::{ConfigCategory, ConfigImpact};

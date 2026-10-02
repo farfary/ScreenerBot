@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! OHLCV database types — row structs for SQLite serialization.
 
 use crate::ohlcvs::types::Timeframe;

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Tick arrays for a Raydium CLMM swap.
 //!
 //! A concentrated-liquidity swap walks a price range, and the programme needs

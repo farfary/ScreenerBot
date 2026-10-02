@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! What a paired agent may do to configuration, and what it may never touch.
 //!
 //! The contract these tests pin down:

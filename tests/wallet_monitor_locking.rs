@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Regression coverage for the wallet sync/async signing bridge
 //! (`crate::chains::solana::accounts::signing`) and the wallet-monitor
 //! read paths that must stay key-free.

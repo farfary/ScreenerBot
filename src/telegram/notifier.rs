@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Telegram notifier for sending messages and notifications
 //!
 //! Provides the core message sending functionality.

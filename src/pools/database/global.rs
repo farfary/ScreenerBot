@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Global pool database singleton — provides shared access to the pool data store.
 
 use super::super::types::{PoolBlacklistPolicy, PriceResult, PRICE_HISTORY_MAX_ENTRIES};

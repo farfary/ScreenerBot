@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Shared capability boundary for every agent-facing control surface.
 //!
 //! This module owns the canonical tool registry (`tools`), the tool permission

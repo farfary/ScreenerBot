@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Tests the pseudo locales - accented and bidi transform tables, fixture verification, and locale resolution that keeps pseudo locales out of negotiation.
+
 use super::*;
 use axum::http::{header::ACCEPT_LANGUAGE, HeaderMap, HeaderValue};
 use serde::Deserialize;

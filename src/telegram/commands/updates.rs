@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! `/update` — see what is waiting, and approve it from the phone.
 //!
 //! The dashboard is the primary surface for updates; this exists so a staged

@@ -1,4 +1,7 @@
-//! Tokens API routes for token listing, details, favorites, blacklist, and OHLCV data
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Tokens API routes for token listing, details, favorites, blacklist, and OHLCV data.
 
 use axum::{
     routing::{delete, get, patch, post},

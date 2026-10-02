@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Wallet-credential resolution and the one cache that may ever hold a
 //! decrypted Solana keypair in memory.
 //!

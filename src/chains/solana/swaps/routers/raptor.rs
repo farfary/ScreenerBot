@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Raptor Router Implementation
 //!
 //! Raptor is Solana Tracker's aggregator: 20+ DEXes, up to four hops, no API key

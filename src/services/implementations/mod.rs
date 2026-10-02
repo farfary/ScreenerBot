@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Concrete background service implementations for each bot subsystem.
 pub mod account_service;
 pub mod assistant_scheduled_tasks_service;

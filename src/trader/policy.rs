@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! The knobs that decide what happens to an open position, resolved once instead of read
 //! from global config inside each evaluator.
 //!

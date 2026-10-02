@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Promo overlay for `GET /api/status`, the source of the dashboard status bar.
 //!
 //! The live snapshot is still gathered, so the version and every service block

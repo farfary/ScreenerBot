@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Configuration helper utilities — validation, default values, and config access functions.
 
 use super::schemas::Config;

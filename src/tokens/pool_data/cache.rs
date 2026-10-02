@@ -1,4 +1,7 @@
-//! Caching layer for pool snapshots with TTL and stale fallback
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Caching layer for pool snapshots with TTL and stale fallback.
 
 use crate::chains::ChainId;
 use crate::events::{record_token_event, Severity};

@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+// Electron backend launch tests - staged-core rollback decisions, readiness line decoding and main.js startup ordering.
+
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";

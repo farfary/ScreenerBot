@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Strategy evaluation engine — evaluates condition trees against live market data.
 
 use crate::logger::{self, LogTag};

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Filter decision schema — structured model output for token filtering recommendations.
 
 use serde::{Deserialize, Serialize};

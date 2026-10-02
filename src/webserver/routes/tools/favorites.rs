@@ -1,4 +1,7 @@
-//! Tool favorites handlers
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Tool favorites handlers.
 
 use axum::{extract::Path, extract::Query, response::Response, Json};
 use std::collections::HashMap;

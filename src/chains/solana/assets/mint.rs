@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! SPL/Token-2022 mint account mechanics: on-chain reads, decimals,
 //! token-program detection and mint/freeze authority extraction.
 //!

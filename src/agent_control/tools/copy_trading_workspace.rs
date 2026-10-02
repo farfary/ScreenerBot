@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Agent-facing copy-trading analysis and paper-book tools: task analytics and
 //! comparison, the wallet profile, clone, paper reset and closing a paper
 //! holding. Transports over `trader::copy::workspace`, the same owner the

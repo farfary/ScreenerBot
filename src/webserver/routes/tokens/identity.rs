@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Batch token identity lookup — the ONE cheap way the dashboard resolves a mint
 //! to its symbol, name, logo and decimals.
 //!

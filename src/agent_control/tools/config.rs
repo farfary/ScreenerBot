@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Agent-facing config tools — read, describe and change any bot setting.
 //!
 //! These tools are deliberately schema-driven rather than key-by-key: they

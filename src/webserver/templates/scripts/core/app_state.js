@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
 // State Manager - Server-Side Storage Only
 //
 // All state is stored on the backend in data/ui_state.json

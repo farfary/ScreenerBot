@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Snapshot collectors — gathers system state snapshots for SSE broadcast.
 
 use chrono::Utc;

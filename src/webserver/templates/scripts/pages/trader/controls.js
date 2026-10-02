@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+// Trader controls - auto-trader toggle, force stop banner and loss limit panel actions.
+
 import { formatTimeSpan } from "../../core/format.js";
 import { apiErrorMessage } from "../../core/request_manager.js";
 

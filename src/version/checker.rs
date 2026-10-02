@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Update checking against the strict production release contract, and the
 //! decision of which components a release actually has to replace.
 

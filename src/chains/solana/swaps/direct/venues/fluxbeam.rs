@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! FluxBeam AMM (`FLUXubRmkEi2q6K3Y9kBPg9248ggaZVsoSFhtJHSrm1X`) — the ONLY venue
 //! in this engine with no on-chain Anchor IDL, because it is not Anchor: it is a
 //! fork of the well-known open-source `spl-token-swap` reference programme,

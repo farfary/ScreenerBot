@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Per-target workers and target-set reconciliation for wallet watch.
 
 use std::collections::{HashMap, HashSet};

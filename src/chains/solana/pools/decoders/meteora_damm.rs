@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Meteora DAMM (Dual AMM) pool decoder
 //!
 //! Handles decoding Meteora DAMM pools. Extracts pool data and calculates token prices

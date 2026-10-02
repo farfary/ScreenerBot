@@ -1,3 +1,6 @@
+/* Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+ * SPDX-License-Identifier: BUSL-1.1 */
+
 /* Splash Screen Styles - Full viewport loading screen.
    Electron hides this outright (`.electron-mode #splashScreen`) because the
    shell paints its own launch window; what remains here is the browser launch. */

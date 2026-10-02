@@ -1,3 +1,7 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+
 /**
  * Presentation for a transaction's wallet-relative direction, shared by the
  * transaction list, the details dialog and the position activity feed.

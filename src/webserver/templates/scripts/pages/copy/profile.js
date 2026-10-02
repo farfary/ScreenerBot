@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
 // Wallet profile: what this bot has seen of a wallet (watch status, trades
 // observed through copy tasks, each task's results) and "Copy this wallet".
 import { renderAddress } from "../../ui/token_identity.js";

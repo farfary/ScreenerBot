@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Raydium AMM v4 (`675kPX9M…`) — the original "Standard" constant-product pool.
 //!
 //! # Layout, verified against mainnet

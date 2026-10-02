@@ -1,3 +1,7 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+
 /**
  * Activity section of the Position Details dialog: the token's whole history in this wallet,
  * set under the chart. Several positions on one token are grouped into trading rounds; a token

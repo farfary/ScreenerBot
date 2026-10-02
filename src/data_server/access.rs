@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Whether ScreenerBot data is available to this install, and what to say if not.
 //!
 //! ============================================================================

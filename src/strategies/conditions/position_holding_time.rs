@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Position holding time condition — triggers based on how long a position has been held.
 
 use crate::strategies::conditions::{get_param_f64, get_param_string, ConditionEvaluator};

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Observation-loop state other modules read: per-target subscription liveness
 //! and the short WS retry schedule for signatures the RPC has not
 //! indexed yet.

@@ -1,4 +1,7 @@
-//! ATA cleanup and wallet generator handlers
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! ATA cleanup and wallet generator handlers.
 
 use axum::{response::Response, Json};
 

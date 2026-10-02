@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Transaction processor helpers — transfer detection and MEV tip scanning.
 //
 // Functions for finding system transfers and MEV/Jito tips in parsed transactions.

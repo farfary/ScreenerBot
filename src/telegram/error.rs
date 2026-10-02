@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Errors produced by the telegram module: bot lifecycle, notifications,
 //! sessions, chat discovery, and command/callback handling.
 

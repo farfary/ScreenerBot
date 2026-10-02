@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! New modular pool system for real-time price calculations
 //!
 //! This module provides a centralized pool service that watches up to 100+ tokens

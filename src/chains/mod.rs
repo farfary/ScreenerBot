@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Chain-neutral identities, metadata, and the active-chain seam.
 //!
 //! `ChainId` and the identity/metadata types live here. Solana-specific

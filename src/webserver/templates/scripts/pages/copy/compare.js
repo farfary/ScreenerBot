@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
 // Compare view: every task's closed rounds over one date range, as curves and a
 // table. Choosing a wallet opens its workspace.
 import { comparisonCurves } from "./charts.js";

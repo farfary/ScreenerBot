@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
 // The selected task's workspace: the header (state, why it is paused, actions)
 // and the Overview / Holdings / Activity / Rules / Execution tabs.
 import { renderAddress } from "../../ui/token_identity.js";

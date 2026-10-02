@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Service lifecycle management — orchestrates all bot subsystems.
 mod global;
 mod health;

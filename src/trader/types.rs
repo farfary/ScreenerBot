@@ -1,4 +1,7 @@
-//! Core trader types and structures
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Core trader types and structures.
 
 use crate::i18n::{ids, MessageId, UiArg, UiText};
 use crate::positions::FORCE_CLOSED_PREFIX;

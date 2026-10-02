@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! ATA closing operations for reclaiming rent from empty token accounts.
 
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};

@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Request and response types for the lockscreen API, including LockscreenStatusResponse, SetPasswordRequest and UpdateSettingsRequest.
+
 use serde::{Deserialize, Serialize};
 
 // =============================================================================

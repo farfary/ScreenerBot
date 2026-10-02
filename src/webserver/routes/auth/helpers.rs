@@ -1,4 +1,7 @@
-//! Authentication helper utilities
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Authentication helper utilities.
 
 use axum::{extract::Request, http::header, http::HeaderMap};
 

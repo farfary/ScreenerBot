@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Multi-wallet session management
 //!
 //! Provides global session state tracking and management utilities for multi-wallet operations.

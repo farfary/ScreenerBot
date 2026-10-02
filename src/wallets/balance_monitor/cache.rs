@@ -1,4 +1,7 @@
-//! Caching infrastructure for wallet dashboard metrics
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Caching infrastructure for wallet dashboard metrics.
 
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};

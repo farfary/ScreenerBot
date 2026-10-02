@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Pools parent service — initializes pool components and runs helper background tasks.
 
 use crate::i18n::{ids, UiText};

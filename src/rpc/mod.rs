@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! RPC Module - Chain-neutral RPC infrastructure
 //!
 //! This module provides the reusable, chain-agnostic machinery that any chain

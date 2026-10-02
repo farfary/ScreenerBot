@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! OpenRouter API request/response types
 //!
 //! OpenRouter uses OpenAI-compatible format, so we re-export OpenAI types.

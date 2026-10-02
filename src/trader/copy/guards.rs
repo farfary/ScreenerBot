@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! The guards that stand a copy task down or refuse an observation: a target
 //! that is no longer watched, a pipeline that fell behind, a replay too old to
 //! copy. A pause stores its reason on the task and is announced.

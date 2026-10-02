@@ -1,4 +1,7 @@
-//! Statistics types for RPC module
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Statistics types for RPC module.
 
 use std::collections::HashMap;
 

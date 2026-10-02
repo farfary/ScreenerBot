@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
 // Global copy-trading settings: the copy_trading config section. The arrival
 // limit is edited in seconds and stored in milliseconds.
 import { fieldHint } from "../config/field_text.js";

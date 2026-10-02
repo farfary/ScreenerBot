@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Agent-facing system tools — system status, uptime and bot health queries.
 
 use async_trait::async_trait;

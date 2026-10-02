@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Source-independent entry admission.
 //!
 //! Everything that decides whether *any* new entry may happen right now, regardless of

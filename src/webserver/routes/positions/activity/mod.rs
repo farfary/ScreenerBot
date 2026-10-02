@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Token activity — everything that ever happened to a token in this wallet.
 //!
 //! `GET /api/positions/{key}/activity`. The key resolves a position (the dialog was opened

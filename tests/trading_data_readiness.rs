@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Pure: what the trading system does when the DATA behind a decision is missing, stale
 //! or degenerate. No network, no DB, no clock.
 //!

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Close position operations — full position exit with swap execution and verification.
 
 use crate::chains::solana::assets::ata::{get_token_balance, get_total_token_balance};

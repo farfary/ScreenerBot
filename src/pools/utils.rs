@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Pool utilities for consistent SOL detection and vault pairing across analyzer and decoders
 //!
 //! This module provides centralized logic for:

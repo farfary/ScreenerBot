@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Materialise reduced wallet-history rounds as `positions` rows.
 //!
 //! [`reduce_rounds`](super::reduce_rounds) answers "what rounds does this wallet's

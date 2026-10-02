@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Assistant scheduled-conversation automation worker.
 //!
 //! Core business logic for executing the assistant scheduled tasks. The scheduler worker

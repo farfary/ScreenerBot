@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Tests for CopyDatabase - idempotent spend and live-activity claims, target inventory tracking, and schema migrations ending in the mode-scoped spend rebuild.
+
 use chrono::Utc;
 
 use super::*;

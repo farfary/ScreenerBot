@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Fatal startup errors — structured, user-actionable failures that prevent boot.
 //!
 //! A `StartupError` is raised when the application cannot start the dashboard at

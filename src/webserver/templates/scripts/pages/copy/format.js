@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
 // Copy Trading labels and formatters shared by every panel. The formatters
 // compose the functions of core/format.js with this feature's precision.
 

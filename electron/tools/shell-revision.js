@@ -1,4 +1,9 @@
 #!/usr/bin/env node
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+// Computes the deterministic revision hash of the Electron shell sources so the updater can install core-only updates when the shell is unchanged.
+
 // Identity of the Electron shell, so the updater can tell whether a release
 // actually changes it.
 //

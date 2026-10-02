@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Pure: WebSocket URL derivation for the shared subscription transport.
 //!
 //! The transport must never invent a URL. It derives one from the configured RPC

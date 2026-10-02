@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Position database queries — read-only methods for fetching positions.
 
 use chrono::{DateTime, Utc};

@@ -1,3 +1,10 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Serialization types for the trading-config route, defining
+//! TradingConfigResponse with its TradingLimits, RiskManagement and
+//! ProfitTargets sections.
+
 use serde::Serialize;
 
 #[derive(Debug, Serialize)]

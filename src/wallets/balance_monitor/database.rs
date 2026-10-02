@@ -1,4 +1,7 @@
-//! SQLite database operations for wallet balance monitoring
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! SQLite database operations for wallet balance monitoring.
 
 use chrono::{DateTime, Utc};
 use r2d2::{Pool, PooledConnection};

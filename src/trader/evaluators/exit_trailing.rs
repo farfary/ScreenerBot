@@ -1,4 +1,7 @@
-//! Trailing stop loss implementation
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Trailing stop loss implementation.
 
 use crate::positions::Position;
 use crate::trader::policy::TrailingPolicy;

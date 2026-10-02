@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Dashboard-authenticated approval review and the audit read API
 //! (`/api/agent-control/approvals`, `/api/agent-control/audit`).
 //!

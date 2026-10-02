@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Assistant scheduled-task database module.
 //!
 //! Manages scheduled assistant task definitions and execution history.

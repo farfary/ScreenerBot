@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! SQLite persistence and caching layer for transaction history and statistics.
 // Database operations and persistence for the transactions module
 //

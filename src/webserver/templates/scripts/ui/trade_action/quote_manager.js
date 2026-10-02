@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+// Quote manager mixin for the TradeActionDialog - recent-trades chips, /api/trader/quote fetching and rendering, and the 15-second auto-refresh countdown.
+
 import * as Utils from "../../core/utils.js";
 import {
   apiErrorDetails,

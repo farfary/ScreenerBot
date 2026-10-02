@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Service metrics collection — poll rates, durations, and performance tracking.
 
 use serde::{Deserialize, Serialize};

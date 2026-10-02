@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Consolidation Operation
 //!
 //! Manage and cleanup sub-wallets by consolidating funds back to main wallet.

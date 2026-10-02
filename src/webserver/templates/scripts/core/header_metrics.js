@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
 // Live metrics and effective Auto Trader state for the global dashboard header.
 import { Poller } from "./poller.js";
 import { requestManager } from "./request_manager.js";

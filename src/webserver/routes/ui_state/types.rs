@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Request and response types for the UI state store - save, load, remove and batch persistence of dashboard key-value entries.
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

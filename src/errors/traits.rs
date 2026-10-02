@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! The behavioural consumers of structured errors: how loudly to report a
 //! failure and whether/when a caller should retry it.
 

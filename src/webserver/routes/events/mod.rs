@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Events route — Server-Sent Events (SSE) endpoint for real-time UI updates.
 
 mod handlers;

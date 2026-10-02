@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+// Instructions tab of the assistant page that loads, creates, edits, toggles, duplicates and deletes instructions through the /api/llm-analysis/instructions routes, reorders them by drag-and-drop, and previews or customizes the built-in templates.
+
 import { $, $$ } from "../../core/dom.js";
 import { closeMenu, openMenu, trackAnchoredMenu } from "../../core/menu_manager.js";
 import * as Utils from "../../core/utils.js";

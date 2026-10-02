@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! The wallet observation service.
 //!
 //! Watching a wallet is a feature of the wallet system, and a general one: observe

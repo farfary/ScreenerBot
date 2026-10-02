@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Global state — shutdown signals, status tracking, and shared runtime state.
 //!
 //! Provides initialization flags, service readiness tracking, GUI mode security,

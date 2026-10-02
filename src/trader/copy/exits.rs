@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Task-scoped copy-sell planning and execution through the shared exit pipeline.
 
 use std::future::Future;

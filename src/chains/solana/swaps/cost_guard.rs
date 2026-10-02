@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! What a built swap would spend BEYOND the trade, and the refusal when that
 //! cost is out of proportion to it.
 //!

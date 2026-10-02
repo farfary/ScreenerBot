@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Embedded static assets for the webserver
 //!
 //! All HTML templates, CSS, JavaScript, fonts, and images are embedded at compile time

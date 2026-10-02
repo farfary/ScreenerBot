@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Action tracking for manual and automated trading operations
 //!
 //! Provides helper functions to create and manage actions for buy/sell/add operations.

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Offline-capable paper pipeline from observed activity to typed outcomes.
 
 use std::collections::HashMap;

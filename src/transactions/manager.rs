@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Transaction manager — coordinates the full transaction processing pipeline.
 //
 // TransactionsManager - Core manager struct for transaction monitoring and coordination

@@ -1,3 +1,6 @@
+/* Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+ * SPDX-License-Identifier: BUSL-1.1 */
+
 /* Global dashboard header: shell, brand, metrics, and actions. */
 
 /* Electron title-bar drag layer. It must stay transparent: the header paints the

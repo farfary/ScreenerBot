@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Preflight gates shared by every manual trade entry point (dashboard routes and
 //! agent tools): emergency stop, core-service readiness, address shape,
 //! blacklist, and the per-trade slippage bound. A refused trade is also recorded

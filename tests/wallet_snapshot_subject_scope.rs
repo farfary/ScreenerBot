@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! The wallet-monitor database must scope every snapshot/metrics read and
 //! mutation to its stable `subject` (`WalletDatabase::subject` in
 //! `src/wallets/balance_monitor/database.rs`), never merely to

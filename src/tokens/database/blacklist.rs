@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Token blacklist database — persists permanently blocked token addresses.
 
 use crate::errors::DatabaseError;

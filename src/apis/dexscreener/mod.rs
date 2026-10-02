@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Complete DexScreener API client with ALL available endpoints
 //!
 //! API Documentation: https://docs.dexscreener.com/api/reference

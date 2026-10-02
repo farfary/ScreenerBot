@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Promo generator for the events monitor.
 //!
 //! The events table is the one monitoring surface with nothing behind it in a

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! The reduction itself: `subject_asset_deltas` rows in, [`LedgerRound`]s out.
 //!
 //! Pure and total. No I/O, no clock, no global state, no panics — a malformed row

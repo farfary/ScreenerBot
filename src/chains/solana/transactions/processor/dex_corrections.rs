@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! DEX-specific correction functions for transaction amount analysis.
 //
 // This module contains methods that apply exchange-specific adjustments

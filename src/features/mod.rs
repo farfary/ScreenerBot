@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Feature flags for ScreenerBot tools and trading features.
 //!
 //! Provides compile-time feature flags that control which tools and trading

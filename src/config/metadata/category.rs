@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! UI category a config field is grouped under, and how prominently the
 //! dashboard shows it. Serialized as the id its catalog key is built from
 //! (`config-category-<id>`).

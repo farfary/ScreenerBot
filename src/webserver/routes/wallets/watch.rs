@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Wallet watch API routes — list / add / remove / enable / status for watch
 //! targets, mounted under the `wallets` router (`/api/wallets/watch/*`) rather than
 //! a copy-trading router: observation is a wallet-system feature and alert-only

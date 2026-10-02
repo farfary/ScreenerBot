@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Subject-relative balance deltas — pure extraction from a decoded Solana transaction.
 //!
 //! Mirrors the parsing prologue in `chains::solana::wallets::classify` (account keys, pre/post

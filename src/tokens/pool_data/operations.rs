@@ -1,4 +1,7 @@
-//! Pool operations - merging, deduplication, canonical selection
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Pool operations - merging, deduplication, canonical selection.
 
 use crate::tokens::types::{TokenPoolInfo, TokenPoolSources};
 use std::cmp::Ordering;

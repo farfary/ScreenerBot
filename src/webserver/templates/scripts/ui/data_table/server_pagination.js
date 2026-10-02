@@ -1,3 +1,7 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+
 /**
  * Server Pagination Mixin for DataTable
  * Handles server-side pagination with scroll loading and page navigation modes

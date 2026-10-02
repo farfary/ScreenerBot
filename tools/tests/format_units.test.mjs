@@ -1,3 +1,7 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+
 /**
  * Guard: `core/format.js` is the only place that attaches a unit or symbol to a
  * number in dashboard scripts. A hand-built "<n> SOL", "$<n>", "≈ <n>" or "<n>%"

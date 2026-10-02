@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
 // Full-screen setup controller.
 //
 // The credentials page performs only quick local checks. The verification page

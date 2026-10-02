@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Impact level of a config field. Serialized as the id its catalog key is
 //! built from (`config-impact-<id>`).
 

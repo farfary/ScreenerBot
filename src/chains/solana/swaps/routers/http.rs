@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Shared HTTP transport for the aggregator routers.
 //!
 //! Jupiter and Raptor are both "ask a hosted API for a quote, then ask it to

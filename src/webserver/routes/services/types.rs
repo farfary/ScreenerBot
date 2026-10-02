@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Response types for the services API - ServiceDetailResponse, ServicesOverviewResponse and ServicesSummary.
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 

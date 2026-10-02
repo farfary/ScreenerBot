@@ -1,4 +1,7 @@
-//! Holder Watch tool configuration for tracking token holder changes
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Holder Watch tool configuration for tracking token holder changes.
 
 use crate::config::metadata::ConfigCategory;
 use crate::config_struct;

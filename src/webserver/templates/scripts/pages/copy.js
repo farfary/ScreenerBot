@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
 // Copy Trading page: the status strip, totals, the wallet list and the selected
 // task's workspace, plus the dialogs that create, arm, configure and vet tasks.
 import { registerPage } from "../core/lifecycle.js";

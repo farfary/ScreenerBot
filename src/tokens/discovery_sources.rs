@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Discovery source fetch functions.
 //!
 //! Each function queries a single external API and returns a list of

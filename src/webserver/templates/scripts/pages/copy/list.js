@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
 // The sortable wallet list: one row per task with its state (and why it is
 // paused), its execution mode, P&L with a trend, and its budget use.
 import { sparkline } from "./charts.js";

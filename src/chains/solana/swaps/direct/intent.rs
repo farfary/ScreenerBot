@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! What the caller asked for: an amount of one mint, swapped for another, in a
 //! specific pool.
 //!

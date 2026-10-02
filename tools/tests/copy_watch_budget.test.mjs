@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+// Copy page watch-budget tests - pause wording, retry-watch flow and Helius catch-up confirmation.
+
 import { englishI18n } from "./fixtures/i18n_en.mjs";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";

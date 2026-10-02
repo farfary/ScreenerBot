@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Value formatters and Telegram screen helpers.
 //!
 //! Numbers keep their fixed precision here; the words and units around them

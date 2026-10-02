@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Token rejection storage — records why tokens were filtered out with timestamps.
 
 use crate::errors::DatabaseError;

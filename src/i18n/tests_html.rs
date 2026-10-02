@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Tests the dashboard HTML localization rewrite - escaped text substitution, attribute allowlisting, and localization of the base and login page templates.
+
 use super::html::rewrite_with;
 use super::*;
 use fluent_bundle::concurrent::FluentBundle;

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
 // Arming live is its own step: the readiness evidence from the paper book, what
 // real exposure the task carries, and explicit acknowledgements before the
 // confirmation phrase is sent.

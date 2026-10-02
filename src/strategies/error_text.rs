@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Catalog text for strategy validation and evaluation errors.
 //!
 //! `Display` on [`Error`] stays English for logs. The dashboard receives the

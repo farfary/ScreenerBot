@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Types for Trade Watcher module
 //!
 //! Defines types for monitoring external wallet trades and triggering actions.

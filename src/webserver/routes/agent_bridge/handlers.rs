@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Bridge handlers. Every one authenticates a pairing credential before it
 //! does anything else; the path exemption only removes the GUI token / session
 //! cookie, never the pairing check.

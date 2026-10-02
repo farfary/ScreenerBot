@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+// Tests for the dashboard update controller wiring - requestUpdateCheck flow, retry resume and background update surfacing.
+
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";

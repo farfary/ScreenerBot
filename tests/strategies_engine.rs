@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Pure: the strategy engine's rule-tree evaluation, validation and result cache.
 //!
 //! The engine is what turns a user's saved condition tree into a buy or a sell. Two

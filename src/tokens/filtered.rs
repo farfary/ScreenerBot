@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Centralized storage for filtered token lists
 //!
 //! This module stores the results from the filtering system for consumption by other services.

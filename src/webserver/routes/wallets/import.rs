@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Bulk import handlers for wallet CSV/Excel uploads
 //!
 //! Handles file parsing, preview generation, and batch wallet imports.

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Wallet cache — in-memory main-wallet record for fast access without a
 //! database query. Holds only the chain-neutral `Wallet` record; the
 //! decrypted keypair cache lives in `crate::chains::solana::accounts::signing`

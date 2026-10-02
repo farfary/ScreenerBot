@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Errors produced by the shared agent-control boundary: tool-argument
 //! validation, tool-policy persistence, the durable pairing/approval/audit
 //! store and the live-app bridge.

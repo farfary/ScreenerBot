@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+// Quick trade mixin for the TradeActionDialog - mint input with token search, token info preview and the transition to the trade step.
+
 import * as Utils from "../../core/utils.js";
 import { formatAddressCompact, formatFixed, withSolUnit } from "../../core/format.js";
 

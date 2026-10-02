@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Pure: SOL <-> lamports conversions — the core money primitive. No I/O.
 //!
 //! A regression here is a silent correctness bug in every trade size and P&L figure.

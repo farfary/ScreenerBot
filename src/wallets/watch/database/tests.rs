@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Tests for WatchDatabase - the pre-chain-identity rebuild, target and cursor round trips, and the budget and provider pause and resume lifecycle.
+
 use super::*;
 
 /// The pre-chain-identity shape a real `wallets.db` still has on disk.

@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+// Localization for the Electron shell that parses locales/registry.toml, negotiates a registered locale, and builds Fluent bundles from desktop.ftl and terms.ftl with English fallback through createLocalizer().
+
 'use strict';
 
 // Localized text for the Electron shell (tray, menus, native dialogs, splash).

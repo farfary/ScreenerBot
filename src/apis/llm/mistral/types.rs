@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Mistral AI API request/response types
 //!
 //! Mistral AI uses OpenAI-compatible API format, so we can reuse OpenAI types directly.

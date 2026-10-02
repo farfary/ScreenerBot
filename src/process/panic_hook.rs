@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Panic hook — sends a Telegram crash notification when the bot panics.
 
 use crate::config::with_config;

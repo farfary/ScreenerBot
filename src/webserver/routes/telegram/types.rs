@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Telegram route types — request/response structs for Telegram session management.
 
 use serde::{Deserialize, Serialize};

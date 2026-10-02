@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! External service health monitoring — tracks API availability and latency.
 pub mod checker;
 pub mod monitor;

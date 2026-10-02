@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Tests the Fluent markup pipeline - fixture-driven sanitize and render cases, argument escaping, and the data-l10n-markup attribute.
+
 use super::html::rewrite_with;
 use super::markup::{escape_args, escape_text, sanitize};
 use super::pseudo::{transform_accented, transform_bidi};

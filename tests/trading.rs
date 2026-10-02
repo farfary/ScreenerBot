@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Trading end-to-end. Contains the MAINNET swap lifecycle — it spends real SOL.
 //!
 //! `#[ignore]` AND gated by [`common::require_mainnet`], which returns `None` (clean

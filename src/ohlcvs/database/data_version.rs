@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Chain-qualified OHLCV candle-data version ownership.
 //!
 //! Cached candles are only trustworthy for the chain whose ingest rules produced

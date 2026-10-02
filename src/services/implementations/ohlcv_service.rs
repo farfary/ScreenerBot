@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! OHLCV service — manages candlestick data collection, caching, and gap-filling for monitored tokens.
 
 use crate::logger::{self, LogTag};

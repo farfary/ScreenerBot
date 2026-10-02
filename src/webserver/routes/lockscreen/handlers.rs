@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Lockscreen API handlers covering status, password set/verify/clear and settings updates, with PIN and text-password format validation.
+
 use crate::i18n::ids;
 use crate::webserver::api_error::{ApiError, ApiErrorCode};
 use axum::response::IntoResponse as _;

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Wallet access helpers — record lookup and encrypted-credential resolution.
 //!
 //! Never decrypts. Returns ciphertext/nonce (chain-neutral) so only

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Token decimals — on-chain decimal resolution for SPL and Token-2022 mints.
 
 // tokens/decimals.rs

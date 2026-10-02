@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Token tracking database — stores discovery timestamps and processing state.
 
 use crate::errors::DatabaseError;

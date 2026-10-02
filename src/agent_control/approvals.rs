@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! The external-agent approval queue and its state machine.
 //!
 //! An MCP tool call that resolves to `RequireApproval` creates a durable,

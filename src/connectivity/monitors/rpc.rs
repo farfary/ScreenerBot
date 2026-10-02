@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Solana RPC health monitor — checks blockchain node responsiveness and slot freshness.
 
 use crate::chains::solana::rpc::get_rpc_client;

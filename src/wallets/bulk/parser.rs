@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! File parsers for bulk import
 //!
 //! Handles CSV and Excel file parsing with column detection.

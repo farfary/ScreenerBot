@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Token filtering service — delegates to background workers for refresh and cleanup.
 //!
 //! This service acts as a thin wrapper that:

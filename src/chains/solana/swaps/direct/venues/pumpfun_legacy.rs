@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Pump.fun legacy (`6EF8rrec…`), the bonding curve every pump.fun token trades
 //! on before it graduates to pump-swap (`pumpfun_amm.rs`). The hardest venue in
 //! this engine to get right, because the fee mechanism looked instruction-

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Wallet-history ledger — deterministic position rounds from observed balance deltas.
 //!
 //! The truth this module reduces over is the LOCAL, fully-processed transaction store:

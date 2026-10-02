@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! SQLite persistence layer for token metadata, market data, and blacklists.
 mod assembly;
 mod async_api;

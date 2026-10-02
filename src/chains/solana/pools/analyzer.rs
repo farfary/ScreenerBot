@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Pool analyzer module.
 //!
 //! Analyzes discovered pools to classify pool types by program ID, extract pool

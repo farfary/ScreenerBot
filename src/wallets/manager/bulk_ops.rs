@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Wallet bulk operations — batch import, export, and multi-wallet management.
 
 use std::collections::HashSet;

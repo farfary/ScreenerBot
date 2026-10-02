@@ -1,3 +1,7 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+
 /**
  * Bundled per-script fonts: the committed binaries, their @font-face rules and the font tokens
  * must together render every catalog character of the non-Latin locales with bundled faces only.

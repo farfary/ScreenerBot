@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Pure: the period loss limit — the circuit breaker that pauses new entries once
 //! realized losses over a rolling window exceed a SOL budget.
 //!

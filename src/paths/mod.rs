@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Centralized path resolution for ScreenerBot.
 //!
 //! All file and directory paths are resolved through this module to ensure consistent

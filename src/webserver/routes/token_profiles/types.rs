@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Deserialized types for the token-profile feed - PublishedTokenProfile and the website feed response wrapper.
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

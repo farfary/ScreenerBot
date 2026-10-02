@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Raydium Legacy AMM decoder
 //!
 //! Parses and decodes Raydium Legacy AMM pool accounts. Uses fixed offsets to locate mints and vaults.

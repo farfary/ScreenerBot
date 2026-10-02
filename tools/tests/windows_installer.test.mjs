@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+// Node test suite for the Windows installer - per-architecture identities, the customized WiX MSI template, and release verification guards.
+
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";

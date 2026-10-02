@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Solana pool runtime supervisor — owns the concrete discovery/analyzer/fetcher/
 //! calculator components and their lifecycle. Chain-neutral orchestration (the
 //! running flag, shutdown protocol, event recording, db/cache init) stays in

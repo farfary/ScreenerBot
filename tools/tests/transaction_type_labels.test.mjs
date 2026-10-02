@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+// Tests for transaction type labels - catalog coverage, rich-variant resolution and type filter option order.
+
 import "./fixtures/i18n_en.mjs";
 import assert from "node:assert/strict";
 import { test } from "node:test";

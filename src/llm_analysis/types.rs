@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! LLM analysis data types — decisions, factors, evaluation context and instruction records.
 
 use crate::i18n::MessageId;

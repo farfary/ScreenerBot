@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Dashboard assistant API (`/api/assistant`).
 //!
 //! Owns interactive chat (sessions, messages, streaming, titles, summaries,

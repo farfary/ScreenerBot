@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
 // Small inline SVG charts for Copy Trading: sparkline, P&L curve, bar list,
 // histogram and a multi-series comparison. Colours come from CSS classes so the
 // theme owns them; nothing here draws a glow or background.

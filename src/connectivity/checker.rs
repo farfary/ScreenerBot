@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Connectivity health checking — monitors external endpoint availability.
 
 use crate::config::get_config_clone;

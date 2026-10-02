@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! One-time migration of the legacy `[ai]` and `[agents]` TOML sections into
 //! the canonical `[llm]`, `[llm_analysis]`, `[assistant]` and `[agent_control]`
 //! sections.

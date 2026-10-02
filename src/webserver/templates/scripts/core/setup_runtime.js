@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
 // Stateless setup validation, requests, and restart polling shared by the
 // full-screen controller and the Explore Mode setup dialog.
 (function () {

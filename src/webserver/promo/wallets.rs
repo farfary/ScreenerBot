@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Promo generator for the **Wallets page's wallet records** (`/api/wallets`) and
 //! its watch targets (`/api/wallets/watch/*`).
 //!

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! LLM-assisted token and trading analysis.
 //!
 //! Model-scored filtering, entry and exit decisions built on the outbound LLM

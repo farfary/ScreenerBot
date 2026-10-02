@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Wallet watch service tests - cursor durability, baseline establishment and target reload isolation.
+
 use super::*;
 use crate::wallets::watch::runtime::test_support::FakeRuntime;
 use crate::wallets::watch::WatchDisableReason;

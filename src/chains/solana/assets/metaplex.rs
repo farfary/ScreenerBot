@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Metaplex Token Metadata fetching and parsing
 //!
 //! Derives the metadata PDA, fetches the account data, and deserializes it.

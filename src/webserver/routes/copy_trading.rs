@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Copy-trading task, guarded mode-transition, and activity API. A transport over
 //! `trader::copy::control`, which owns every rule these endpoints enforce.
 

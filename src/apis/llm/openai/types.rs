@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! OpenAI API request/response types
 //!
 //! These types match the OpenAI Chat Completions API format exactly.

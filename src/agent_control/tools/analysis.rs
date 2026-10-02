@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Agent-facing analysis tools — token analysis, market data and chart generation.
 
 use async_trait::async_trait;

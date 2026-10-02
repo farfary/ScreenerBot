@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Guard: an event payload's `message` is derived from its catalog `text`
 //! (`crate::events::with_text`). A literal `message` key in Rust source is only
 //! accepted in the files listed here, none of which produce event rows.

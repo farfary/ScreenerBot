@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Pending swap state — tracks in-flight partial exits and DCA swaps with persistence.
 
 use super::db;

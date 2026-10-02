@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Pure: position profit & loss — the single most consequential arithmetic in the bot.
 //!
 //! Every downstream decision reads this number. The emergency risk limit force-sells at

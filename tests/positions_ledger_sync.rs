@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Pure: how reduced wallet-history rounds become `positions` rows.
 //!
 //! The reducer decides what a round IS; this planner decides what the database and the

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Agent-facing manual trading tools: buy, add to (DCA), partial sell and close.
 //! Every tool passes the same `trader::manual::guard` preflight as the dashboard
 //! trade dialog, then calls the canonical `trader::manual` API.

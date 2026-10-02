@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Trader service — orchestrates automated trading strategies and position management.
 
 use crate::events::{record_trader_event, Severity};

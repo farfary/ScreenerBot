@@ -1,4 +1,7 @@
-//! Trader controller for starting/stopping trading
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Trader controller for starting/stopping trading.
 
 use crate::config::update_config_section;
 use crate::logger::{self, LogTag};

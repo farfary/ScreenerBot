@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Referral attribution — an OPT-IN way to credit whoever introduced you.
 //!
 //! ============================================================================

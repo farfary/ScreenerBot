@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Realized auto-trader performance over a window, plus live exposure. One
 //! aggregation over one row set, shared by the dashboard Stats tab and the agent
 //! tools, so no surface can show a figure the other never computed.

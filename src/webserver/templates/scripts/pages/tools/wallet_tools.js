@@ -1,3 +1,7 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+
 /**
  * Wallet Tools Module
  * Contains wallet-related utilities: cleanup, burn tokens, consolidation, and generator

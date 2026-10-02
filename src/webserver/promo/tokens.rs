@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Promo generator for the Tokens page — the token universe behind
 //! `/api/tokens/list`, `/api/tokens/stats` and `/api/tokens/favorites`.
 //!

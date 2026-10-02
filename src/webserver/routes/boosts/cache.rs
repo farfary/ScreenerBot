@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Boost feed cache — one stale-while-revalidate read of the website's boost feed.
 
 use super::types::{rank_boosts, retain_active, BoostStanding, WebsiteBoostResponse};

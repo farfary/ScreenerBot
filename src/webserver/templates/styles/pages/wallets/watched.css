@@ -1,3 +1,6 @@
+/* Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+ * SPDX-License-Identifier: BUSL-1.1 */
+
 /* Wallet observation tab. The panel is a bare DataTable mount (see wallets.html),
    so only the row-level cell styling lives here. */
 

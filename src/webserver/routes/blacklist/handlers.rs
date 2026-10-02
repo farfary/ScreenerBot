@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Blacklist API handlers - blacklist statistics and the detailed blacklisted pool and account listings.
+
 use axum::response::Json;
 use std::collections::HashMap;
 

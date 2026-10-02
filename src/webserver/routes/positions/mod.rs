@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Position management routes (list, detail, debug views, force-close, archive/delete).
 use axum::{
     routing::{delete, get, post},

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Match observed activity to the copy tasks watching its subject.
 
 use crate::wallets::watch::{WalletActivity, WatchSource};

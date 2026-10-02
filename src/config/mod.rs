@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Configuration module - organized config system with zero repetition
 //!
 //! This module provides a clean, type-safe configuration system for ScreenerBot.

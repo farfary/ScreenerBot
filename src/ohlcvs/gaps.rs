@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! OHLCV gap detection and filling — tracks missing candle ranges and fills
 //! them from the sources, recording every attempt.
 

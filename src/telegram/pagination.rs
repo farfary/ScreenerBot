@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Telegram message pagination — manages multi-page token lists in chat messages.
 
 use crate::filtering::types::PassedToken;

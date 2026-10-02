@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Price breakout condition — detects price breaking above/below recent highs/lows.
 
 use crate::strategies::conditions::{

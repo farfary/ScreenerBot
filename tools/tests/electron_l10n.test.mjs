@@ -1,3 +1,7 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+
 /**
  * Guards for the Electron shell's localization (`electron/src/l10n.js`,
  * `locales/en/desktop.ftl`).

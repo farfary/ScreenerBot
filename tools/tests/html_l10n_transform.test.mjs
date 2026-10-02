@@ -1,3 +1,7 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+
 /**
  * Tests for the html-validate transformer that renders templates in English
  * (`tools/html/l10n_transform.mjs`), mirroring `localize_html` in src/i18n/html.rs.

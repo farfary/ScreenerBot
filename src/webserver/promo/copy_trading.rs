@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Promo generator for Copy Trading: every read the Copy Trading page, the
 //! header's copy card and the wallet profile make, answered from one promo desk
 //! (`desk.rs`). The answers come from the product's own stats, rounds, insights

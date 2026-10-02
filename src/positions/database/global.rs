@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Global position database singleton — shared access to the positions data store.
 
 use std::sync::{Arc, LazyLock};

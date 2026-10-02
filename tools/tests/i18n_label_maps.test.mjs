@@ -1,3 +1,7 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+
 /**
  * Every frozen `<NAME>_LABELS` map in the dashboard scripts (`I18n.label`
  * tables) must point at message ids that exist in the source catalog.

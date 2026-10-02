@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! The direct pool-swap engine: build a DEX swap instruction ourselves and
 //! execute it against the pool, with no aggregator in the path.
 //!

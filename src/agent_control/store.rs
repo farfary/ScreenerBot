@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Durable storage for the agent-control boundary: client pairings, the
 //! external-agent approval queue and the audit log.
 //!

@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Response types for the header metrics endpoint - HeaderMetricsResponse, TraderHeaderState and the per-card info structs.
+
 use serde::Serialize;
 
 use crate::filtering::SnapshotState;

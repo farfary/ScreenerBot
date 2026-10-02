@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! `watch_targets` and `watch_cursors` tables, in `wallets.db`.
 //!
 //! A row here is a wallet the user pasted in for observation (alert-only in this

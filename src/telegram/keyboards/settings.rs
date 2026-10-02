@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Settings keyboards: quick settings, notification toggles and trading controls.
 
 use super::Labels;

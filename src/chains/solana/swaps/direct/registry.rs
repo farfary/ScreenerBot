@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! The single place a direct-swap venue is registered.
 //!
 //! Dispatch is by the pool account's OWNER, because that is the one fact about a

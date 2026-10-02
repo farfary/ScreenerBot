@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Derived promo aggregates — every promo total (P&L, win rate, invested, trade
 //! counts, wallet worth, period buckets) is computed here from the two token
 //! arrays in `data.rs`, so the home / overview / positions / trader / header /

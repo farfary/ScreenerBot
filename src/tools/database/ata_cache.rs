@@ -1,4 +1,7 @@
-//! ATA failed cache database operations
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! ATA failed cache database operations.
 
 use chrono::Utc;
 use rusqlite::params;

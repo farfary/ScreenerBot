@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! ApiError unit tests - error-code ordering, serde and HTTP status mapping, and the error envelope shape.
+
 use super::*;
 use crate::i18n::{format_en, ids};
 use fluent_bundle::FluentArgs;

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Wallet address resolution — the one chain-neutral entry point shared
 //! code may use for "what is the configured trading wallet".
 //!

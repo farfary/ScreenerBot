@@ -1,3 +1,7 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+
 /**
  * Dashboard scripts must read an API error response through the envelope
  * helpers in `core/request_manager.js` (`apiErrorMessage`, `apiErrorTitle`,

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Handoff to the operating-system installer for the rare release that also
 //! replaces the Electron shell.
 //!

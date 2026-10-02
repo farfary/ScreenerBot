@@ -1,4 +1,7 @@
-//! Sell operation execution
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Sell operation execution.
 
 use crate::config::with_config;
 use crate::logger::{self, LogTag};

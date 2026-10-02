@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Wallets DB schema (tables + indexes)
 //!
 //! Kept in a dedicated module to keep `database.rs` focused on behavior.

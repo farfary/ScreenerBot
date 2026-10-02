@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Dashboard label maps for service ids and health tags must resolve in the `en` catalog.
 
 use super::health::ServiceHealth;

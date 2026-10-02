@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Meteora Dynamic Bonding Curve (DBC) decoder
 //!
 //! Program ID: METEORA_DBC_PROGRAM_ID (dbcij3LW...)

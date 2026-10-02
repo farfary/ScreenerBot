@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
 // `I18n` global backed by the real runtime and the source-locale catalogs, for
 // tests that assert on rendered wording. Importing this file installs it.
 import fs from "node:fs";

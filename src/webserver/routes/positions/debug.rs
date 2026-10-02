@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Positions debug route — exposes detailed position internals for troubleshooting.
 
 use axum::{extract::Path, Json};

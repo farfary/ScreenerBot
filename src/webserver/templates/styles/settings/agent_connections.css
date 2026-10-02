@@ -1,3 +1,6 @@
+/* Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+ * SPDX-License-Identifier: BUSL-1.1 */
+
 /* Agent Connections settings tab.
    Scoped beneath .agent-connections; reuses the .settings-* row primitives and
    adds only the permission grid, the one-time-secret panel and the pairing

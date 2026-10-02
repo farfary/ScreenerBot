@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
 // Token identities for the Copy Trading panels: each mint is looked up once, and
 // the panel repaints when names and logos arrive.
 import { escapeHtml } from "../../core/utils.js";

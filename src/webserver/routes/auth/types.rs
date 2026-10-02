@@ -1,4 +1,7 @@
-//! Authentication request/response types
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Authentication request/response types.
 
 use serde::{Deserialize, Serialize};
 

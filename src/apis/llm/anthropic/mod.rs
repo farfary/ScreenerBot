@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Anthropic API client (raw HTTP via reqwest)
 //!
 //! API Documentation: https://docs.anthropic.com/en/api/messages

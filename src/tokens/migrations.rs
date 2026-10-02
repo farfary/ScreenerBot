@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Tokens schema upgrade mechanics — ordered steps run by
 //! `schema::initialize_schema` separately from fresh `CREATE TABLE IF NOT EXISTS`.
 //!

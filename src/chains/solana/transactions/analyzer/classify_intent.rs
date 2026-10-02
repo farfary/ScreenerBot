@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Deterministic, wallet-relative classification.
 //!
 //! The graph classifier in `classify.rs` answers "was this a swap, and which way".

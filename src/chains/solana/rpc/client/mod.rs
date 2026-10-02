@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! RPC Client wrapper with Solana SDK integration
 //!
 //! Provides high-level methods that wrap the RpcManager's raw JSON-RPC calls

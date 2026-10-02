@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Re-entry cooldown management
 //!
 //! Prevents immediate re-entry after exiting a position.

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Durable client pairings: the credential that lets an external agent reach
 //! the live-app bridge, and the per-connection policy that credential carries.
 //!

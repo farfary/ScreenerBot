@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Positions list route — serves paginated position listings with sort and filter.
 
 use axum::{extract::Query, Json};

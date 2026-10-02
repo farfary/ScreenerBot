@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Types for the events API - EventResponse, EventsListResponse and the head, since and before query structs.
+
 use crate::events::Event;
 use crate::i18n::UiText;
 use serde::{Deserialize, Serialize};

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Wallet-side token accounts for a direct swap.
 //!
 //! Two rules here were each a real failure mode of the previous builder:

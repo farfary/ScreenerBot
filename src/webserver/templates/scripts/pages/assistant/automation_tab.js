@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+// Automation tab of the assistant page that lists, creates, edits, toggles, runs and deletes scheduled tasks through the /api/assistant/automation routes, renders run history and the run-detail dialog, and manages the per-task context menu.
+
 import { $ } from "../../core/dom.js";
 import { closeMenu, openMenu, trackAnchoredMenu } from "../../core/menu_manager.js";
 import { formatNumber, formatPercentValue, formatTimeSpan, formatWeekday } from "../../core/format.js";

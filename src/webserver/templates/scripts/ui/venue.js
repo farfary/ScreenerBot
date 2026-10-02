@@ -1,3 +1,7 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+
 /**
  * Presentation for the venue ids the API sends: a pool's DEX program and a
  * transaction's swap router. Both are stable machine ids ("meteora_dlmm",

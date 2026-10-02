@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Live-readiness evidence from the paper book. Every check carries catalog
 //! text for its title and its detail; the figures are arguments.
 

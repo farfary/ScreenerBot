@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Swap router, slippage, and DEX aggregator configuration.
 
 use crate::config::metadata::{ConfigCategory, ConfigImpact};

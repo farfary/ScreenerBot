@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Trade Watcher Tool
 //!
 //! Monitor token trades from external wallets and trigger automatic actions:

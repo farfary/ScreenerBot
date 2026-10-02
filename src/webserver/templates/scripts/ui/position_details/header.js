@@ -1,3 +1,7 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+
 /**
  * Header mixin for the Position Details dialog: identity, the four headline figures, the
  * status strip and the controls that act on the position.

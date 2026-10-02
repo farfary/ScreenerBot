@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Program IDs for transaction analysis and router detection
 //!
 //! This module contains all program IDs needed for analyzing transactions

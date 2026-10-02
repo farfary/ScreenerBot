@@ -1,4 +1,7 @@
-//! Core types for the unified token data system
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Core types for the unified token data system.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

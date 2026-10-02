@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Catalog text carried by success responses: every id renders its English wording.
 
 use crate::i18n::{ids, LanguageIdentifier, UiArg, UiText};

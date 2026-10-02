@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! OHLCV service — public API functions for querying candle data.
 
 use super::database::{ClearAllResult, DatabaseStats, DeleteResult, OhlcvTokenStatus};

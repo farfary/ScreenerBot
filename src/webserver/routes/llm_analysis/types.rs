@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Request/response types for the model-scored analysis API (`/api/llm-analysis`).
 
 use crate::i18n::UiText;

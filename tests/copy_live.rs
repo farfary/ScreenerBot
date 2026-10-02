@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Offline contracts for arming and orchestrating live copy entries.
 
 use std::sync::atomic::{AtomicUsize, Ordering};

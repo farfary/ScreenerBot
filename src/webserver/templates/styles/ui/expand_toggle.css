@@ -1,3 +1,6 @@
+/* Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+ * SPDX-License-Identifier: BUSL-1.1 */
+
 /* Shared expand/collapse-all control — see scripts/ui/expand_toggle.js.
    One button, two cross-faded states. Sized to match the standard 0.8rem
    toolbar/header action buttons so it lines up in any toolbar row. */

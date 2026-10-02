@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! The single shared WebSocket connection and its reconnect loop.
 
 use futures_util::{SinkExt, StreamExt};

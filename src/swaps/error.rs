@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Why a swap could not be quoted.
 //!
 //! Quoting is the one place where an external router's opinion becomes an

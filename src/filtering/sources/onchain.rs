@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! On-chain filter source — validates token accounts, authorities, and program ownership.
 
 use crate::config::schemas::OnChainFilters;

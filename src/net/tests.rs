@@ -1,3 +1,9 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Unit tests for the net module, verifying that TLS crypto provider
+//! installation is idempotent and yields a usable rustls client config.
+
 use super::*;
 
 #[test]

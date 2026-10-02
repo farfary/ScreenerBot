@@ -1,4 +1,7 @@
-//! TOTP two-factor authentication handlers
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! TOTP two-factor authentication handlers.
 
 use crate::i18n::ids;
 use crate::webserver::api_error::{ApiError, ApiErrorCode};

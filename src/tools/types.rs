@@ -1,4 +1,7 @@
-//! Common types for tools module
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Common types for tools module.
 
 use serde::{Deserialize, Serialize};
 

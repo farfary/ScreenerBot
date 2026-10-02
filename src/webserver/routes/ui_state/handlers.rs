@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Handlers for the dashboard UI-state persistence API - load, save and clear operations over the on-disk JSON store.
+
 use crate::i18n::ids;
 use crate::webserver::api_error::{ApiError, ApiErrorCode};
 use axum::response::IntoResponse as _;

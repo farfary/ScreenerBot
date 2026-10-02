@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Agent-control configuration: whether the shared capability boundary is
 //! available at all, and the per-category tool permission policy the dashboard
 //! assistant and scheduled automation run under. A paired MCP connection is not

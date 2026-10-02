@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Flow metrics computation helpers for wallet balance monitor dashboard.
 
 use chrono::{DateTime, Duration as ChronoDuration, NaiveDate, Utc};

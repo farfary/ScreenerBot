@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! The promo copy desk: three copied wallets and everything the product records
 //! for them -- decisions, the paper ledger and the real positions the live tasks
 //! opened. It is built per request, so every Copy Trading endpoint, the Positions

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Jupiter API health monitor — checks swap endpoint availability.
 
 use crate::config::get_config_clone;

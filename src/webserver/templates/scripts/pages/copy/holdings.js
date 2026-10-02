@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
 // The Holdings tab: open paper holdings marked at the pool price with where each
 // exit rule acts, closed rounds with their result, and the paper-book actions.
 import { loadPage } from "../../core/router.js";

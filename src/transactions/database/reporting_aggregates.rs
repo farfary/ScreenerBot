@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Aggregate and export queries for SOL flow reporting.
 //
 // Split from reporting.rs — contains aggregate_sol_flows_since,

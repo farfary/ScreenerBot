@@ -1,4 +1,7 @@
-//! Special logging functions for specific use cases
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Special logging functions for specific use cases.
 
 use super::tags::LogTag;
 use crate::logger;

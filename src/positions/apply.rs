@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Position transition effects.
 //!
 //! Applies verified or failed position transitions (entry, exit, DCA, partial-exit)

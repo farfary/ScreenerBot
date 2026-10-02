@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! The live-app bridge (`/api/agent-bridge/*`).
 //!
 //! This is the ONLY agent-control surface reachable without the GUI security

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Actions whose last step waits for on-chain verification.
 //!
 //! A manual trade used to mark its "Verifying" step complete the moment the swap

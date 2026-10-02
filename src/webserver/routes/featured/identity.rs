@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Featured card identity — normalize provider images and backfill what is missing.
 //!
 //! Featured cards arrive from three independent sources and each ships a different

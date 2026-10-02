@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Token filter store — manages filtered token results with pagination and querying.
 
 use std::collections::{HashMap, HashSet};

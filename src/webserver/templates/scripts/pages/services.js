@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+// Services page - polling table of service health, status badges and poll-activity metrics from /api/services/overview.
+
 import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
 import { formatFixed } from "../core/format.js";

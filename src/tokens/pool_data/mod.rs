@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Token pools submodule - centralized pool management
 //!
 //! This submodule owns ALL token pool operations across the system.

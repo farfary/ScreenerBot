@@ -1,4 +1,7 @@
-//! Adaptive rate limiting strategies
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Adaptive rate limiting strategies.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};

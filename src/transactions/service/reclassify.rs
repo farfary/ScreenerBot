@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Offline reclassification of processed rows written by an older analyzer.
 //!
 //! `analysis_version` was written on every row and never read, so a classifier fix

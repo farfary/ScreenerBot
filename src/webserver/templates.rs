@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! HTML template rendering for the webserver dashboard
 //!
 //! This module provides functions to render HTML pages by combining templates with dynamic data.

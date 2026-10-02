@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Label maps of the transaction enums must resolve in the `en` catalog.
 
 use super::type_text::router_label;

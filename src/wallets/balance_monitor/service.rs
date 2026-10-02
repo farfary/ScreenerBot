@@ -1,4 +1,7 @@
-//! Wallet monitoring service and public API functions
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Wallet monitoring service and public API functions.
 
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use std::sync::Arc;

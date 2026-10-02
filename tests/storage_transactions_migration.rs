@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! The §7.1 primary-key migration: `raw_transactions`, `processed_transactions`,
 //! `known_signatures`, `pending_transactions` and `deferred_retries` move from
 //! `signature TEXT PRIMARY KEY` to a composite `(signature, wallet_address)` key.

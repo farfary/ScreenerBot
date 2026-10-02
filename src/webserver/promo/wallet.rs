@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Promo generators for the wallet current snapshot and token holdings.
 //!
 //! Holdings mirror the open positions (those ARE the tokens the wallet holds), so

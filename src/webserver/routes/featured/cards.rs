@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Featured card assembly — turn each source's tokens into enriched cards.
 //!
 //! Every category goes through [`build_cards`], which normalizes the source token

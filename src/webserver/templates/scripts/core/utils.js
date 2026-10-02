@@ -1,3 +1,9 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+// Shared dashboard utilities - formatting helpers, clipboard and common glue
+// used across every page.
+
 import {
   formatNumber,
   formatCompactNumber,

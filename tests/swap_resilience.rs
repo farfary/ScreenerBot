@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Swap and action resilience — the guards that keep a trade from getting STUCK.
 //!
 //! Every test here exists because of a real stuck sell: a manual "sell all" that

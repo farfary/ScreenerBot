@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Session management for dashboard authentication
 //!
 //! Provides in-memory session token storage with expiration handling.

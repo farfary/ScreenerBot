@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Assembling the instruction list for a direct swap.
 //!
 //! The ORDER below is the whole safety story of a direct swap, so it is written

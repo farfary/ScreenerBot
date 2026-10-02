@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! LLM analysis engine — orchestrates provider calls, prompt building, schema validation and decision caching for filter/entry/exit scoring.
 
 use crate::apis::llm::{get_llm_manager, ChatMessage, ChatRequest, LlmError, Provider};

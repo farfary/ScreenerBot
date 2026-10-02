@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Native SOL and SPL/Token-2022 transfer construction and submission, plus
 //! the explicit-keypair ATA close used by multi-wallet tooling.
 //!

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
 // The stepped task editor's steps: Wallet, Sizing (with a cost preview), Entry
 // filters, Exits (presets and every rule field, inherited values shown) and a
 // Review of what the task will run under. Pure markup, collection and checks.

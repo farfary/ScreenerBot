@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
 // Splash + boot-error screen logic for the Electron loading window.
 //
 // Loaded as an external script so it complies with the page CSP

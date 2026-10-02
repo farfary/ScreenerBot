@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Typed API error envelope.
 //!
 //! `{"error":{"code","message","text","details","timestamp"}}` where `code` is a

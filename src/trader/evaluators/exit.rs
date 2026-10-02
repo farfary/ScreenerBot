@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Exit evaluation coordinator with priority-based checks and LLM analysis
 //!
 //! Evaluates whether an exit should be made for a position by checking in priority order,

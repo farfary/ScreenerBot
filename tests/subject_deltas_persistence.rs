@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! `subject_asset_deltas`: the rows every wallet-derived position is built from, and
 //! the two paths that must both write them.
 //!

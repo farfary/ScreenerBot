@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Filtering stats route — computes and returns token filtering pass/fail rates.
 
 use axum::response::{IntoResponse as _, Response};

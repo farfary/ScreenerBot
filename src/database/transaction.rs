@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! The write-transaction entry point every SQLite writer in the bot must use.
 //!
 //! `Connection::transaction()` opens a DEFERRED transaction: SQLite takes no

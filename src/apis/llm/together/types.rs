@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Together AI API types
 //!
 //! Together AI uses OpenAI-compatible format, so we can re-export OpenAI types.

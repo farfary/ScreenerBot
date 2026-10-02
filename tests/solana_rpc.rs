@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Live (read-only): Solana RPC connectivity through the app's global client.
 //! Validates `get_rpc_client()` + RpcManager end to end against mainnet.
 //!

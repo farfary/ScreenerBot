@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Pure task-level gates that run before sizing or paper execution.
 
 use crate::trader::constants::MAX_MANUAL_SLIPPAGE_PCT;

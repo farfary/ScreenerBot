@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Transaction debug helper functions — validations, formatting, database debug, and profiling.
 //
 // Split from `debug.rs` to keep that module focused on core structs and main debug entry points.

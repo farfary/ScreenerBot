@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Pure: config serialize -> toml file -> parse round-trip. No network/wallet.
 //!
 //! Config is macro-driven (`config_struct!`, 20 sections), so a serde regression is

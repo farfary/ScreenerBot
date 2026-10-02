@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! The transaction as the subject wallet experienced it.
 //!
 //! Every other analyzer in this module is account-agnostic: it builds a graph over

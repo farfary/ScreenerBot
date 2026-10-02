@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Transaction database queries — pending transactions and transaction data CRUD.
 //
 // Pending transaction management and transaction storage/retrieval operations.

@@ -1,4 +1,7 @@
-//! GeckoTerminal API response types
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! GeckoTerminal API response types.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

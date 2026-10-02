@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Partial close operations — sell a percentage of remaining tokens without closing the position.
 
 use crate::chains::adapter;

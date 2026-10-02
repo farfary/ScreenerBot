@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Pool service supervisor - chain-neutral lifecycle for the pool runtime
 //!
 //! Owns the running flag, shutdown protocol, event recording and the shared

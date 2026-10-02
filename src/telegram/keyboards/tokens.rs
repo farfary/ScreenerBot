@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Keyboards for message pagination and the token explorer.
 
 use super::{btn, mint_short, url_btn, Labels};

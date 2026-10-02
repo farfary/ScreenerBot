@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+// Helpers for launching the ScreenerBot backend from Electron - createLineDecoder() reassembles chunked stdout/stderr output into complete lines and shouldRollbackStagedCore() gates rollback of a staged core on first activation.
+
 'use strict';
 
 const { StringDecoder } = require('string_decoder');

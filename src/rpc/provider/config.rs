@@ -1,4 +1,7 @@
-//! Provider configuration
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Provider configuration.
 
 use crate::rpc::provider::detection::{detect_provider_kind, generate_provider_id};
 use crate::rpc::types::ProviderKind;

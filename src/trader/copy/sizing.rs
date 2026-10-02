@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Pure copy sizing with every hard cap applied in one place.
 
 use crate::trader::constants::{MAX_TRADE_SIZE_MULTIPLIER, MIN_TRADE_SIZE_SOL};

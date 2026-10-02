@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Solana asset mechanics: SPL/Token-2022 mint reads, ATA lifecycle, transfers.
 //!
 //! Owns everything that reads or moves a token on Solana: mint account

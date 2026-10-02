@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Transaction classification — categorizes transactions by type (swap, transfer, etc.).
 //
 // Transaction classification module - Graph-based flow analysis

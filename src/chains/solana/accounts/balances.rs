@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Solana wallet balance reads: Pubkey parsing, RPC SOL/token-account fetches,
 //! and mapping the raw RPC wire shape into the chain-neutral `TokenBalance`.
 //! Callers in `crate::wallets` own persistence, filtering and aggregation

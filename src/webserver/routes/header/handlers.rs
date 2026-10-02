@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Handler for the header metrics endpoint - today's trading P&L, wallet equity and system health aggregation.
+
 use axum::response::Json;
 
 use crate::config::with_config;

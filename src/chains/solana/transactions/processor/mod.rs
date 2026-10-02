@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Transaction processing pipeline: extraction, analysis, and classification of on-chain data.
 // Transaction processing pipeline for the transactions module
 //

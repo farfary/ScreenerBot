@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! The platform fee on a direct pool swap.
 //!
 //! A pool program has no fee hook — unlike Jupiter, nothing in the swap

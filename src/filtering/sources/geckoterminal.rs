@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! GeckoTerminal filter source — validates market data from GeckoTerminal API.
 
 use crate::config::schemas::GeckoTerminalFilters;

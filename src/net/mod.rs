@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Centralized network/proxy helpers.
 //!
 //! Detects an available proxy once (cached) and exposes it for HTTP (reqwest),

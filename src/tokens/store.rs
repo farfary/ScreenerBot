@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Token store — central in-memory store for all discovered tokens with thread-safe access.
 
 use crate::chains::ChainId;

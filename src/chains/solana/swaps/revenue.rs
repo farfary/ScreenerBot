@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Platform revenue: the swap fee rate and the accounts that receive it.
 //!
 //! HARDCODED, INTENTIONAL REVENUE. These values are not user-configurable and

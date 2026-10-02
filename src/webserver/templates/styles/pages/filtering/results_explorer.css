@@ -1,3 +1,8 @@
+/* Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+ * SPDX-License-Identifier: BUSL-1.1
+ *
+ * Results explorer styles - sidebar tree with search, overview lists and token table, plus pagination and time-range filter controls. */
+
 .pagination-controls span {
   font-variant-numeric: tabular-nums;
   color: var(--text-secondary);

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Network errors — HTTP request failures, timeouts, and connection issues.
 //!
 //! `endpoint` is always rendered through `redact_url`: provider endpoints carry

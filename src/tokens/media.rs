@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Token logos and banners, resolved the same way everywhere in the ecosystem.
 //!
 //! The ScreenerBot data service owns the resolution order:

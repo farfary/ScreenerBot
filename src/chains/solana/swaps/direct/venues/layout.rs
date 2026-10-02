@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Fixed-offset reads over raw account data.
 //!
 //! Every venue decodes a program's account layout by absolute offset, and every

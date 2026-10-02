@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Database module for persistent price history storage
 //!
 //! This module provides SQLite-based storage for price history data,

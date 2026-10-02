@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Regression coverage for the SQLite stores opened during desktop startup.
 
 use std::collections::BTreeSet;

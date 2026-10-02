@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Agent-facing copy-trading tools: inspect tasks, their paper/live books and
 //! decisions; create, tune, pause, delete and arm tasks. Transports over
 //! `trader::copy::control`, the same owner the dashboard Copy Trading tab uses.

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Entry submission: per-cycle token reservation and the pipeline that turns a
 //! `TradeDecision` into an executed (or failed) trade.
 //!

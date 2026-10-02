@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Solana-specific transaction ingestion and interpretation.
 //!
 //! Everything here decodes Solana wire types (`chains::solana::rpc::TransactionDetails`,

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Falsifies chain-scoping (and, for the wallet monitor, wallet-scoping) across the
 //! SQLite stores that gained a `chain_id` column in the multi-chain-preparation
 //! refactor. `ChainId` has exactly one variant (`Solana`), so no Rust-level

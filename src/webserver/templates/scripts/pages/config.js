@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+// Dashboard configuration page that renders config metadata into a section sidebar and category-grouped field editors with search, pending-change tracking and persisted expand/collapse state, and wires save, reload, diff, reset, import/export and the Telegram test-connection and TOTP controls.
+
 import { registerPage } from "../core/lifecycle.js";
 import { $, on, off, create, show, hide, setIconLabel } from "../core/dom.js";
 import * as Utils from "../core/utils.js";

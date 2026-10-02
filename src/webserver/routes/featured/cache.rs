@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Discovery-source caching — cached fetchers for the Jupiter and DexScreener
 //! boards the featured surfaces show alongside our own boosted tokens.
 //!

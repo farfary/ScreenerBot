@@ -1,4 +1,7 @@
-//! Telegram bot configuration for notifications and bot commands
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Telegram bot configuration for notifications and bot commands.
 
 use crate::config::metadata::ConfigCategory;
 use crate::config_struct;

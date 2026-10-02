@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Agent-control durable store: pairing credentials, the approval state
 //! machine, crash recovery and audit bounds — exercised against a real
 //! throwaway SQLite database.

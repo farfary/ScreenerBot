@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Filtering route types — data structures for filtering API responses.
 
 use serde::{Deserialize, Serialize};

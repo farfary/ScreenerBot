@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! SPL/Token-2022 burn construction and submission for the configured
 //! trading wallet, used by the dashboard's "burn selected tokens" tool.
 

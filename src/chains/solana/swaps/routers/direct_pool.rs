@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! `crate::swaps::SwapRouter` over the direct pool-swap engine.
 //!
 //! One router covers EVERY venue the engine supports, rather than one router per

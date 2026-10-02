@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Keeps the ScreenerBot account session alive.
 //!
 //! Two jobs, both background: renew the access token before it expires, and —

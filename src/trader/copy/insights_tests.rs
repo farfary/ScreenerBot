@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Tests copy-trading insight aggregation - paper round replay with partial exits, range filtering, slippage sampling, and latency histogram bucket edges.
+
 use chrono::{Duration, Utc};
 
 use super::*;

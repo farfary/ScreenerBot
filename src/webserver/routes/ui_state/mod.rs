@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! UI state route — persists and retrieves user interface state (collapsed panels, etc.).
 
 mod handlers;

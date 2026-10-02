@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
 // Apply the product typeface to the ScreenerBot name wherever visible copy is rendered.
 (function () {
   "use strict";

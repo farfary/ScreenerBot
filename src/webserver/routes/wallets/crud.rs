@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! CRUD handlers for wallet management
 //!
 //! Basic wallet operations: list, create, import, get, update, delete, archive, restore.

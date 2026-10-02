@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Dashboard home route — renders the main dashboard page with summary statistics.
 
 use axum::{extract::State, response::Json};

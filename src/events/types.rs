@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Event Types and Data Structures
 //!
 //! Defines the core types used by the events system for categorizing

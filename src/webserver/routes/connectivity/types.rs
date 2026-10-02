@@ -1,3 +1,10 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Serialization types for the connectivity status route, defining
+//! ConnectivityStatusResponse and EndpointHealthResponse with its conversion
+//! from EndpointHealth.
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

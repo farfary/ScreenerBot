@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Chain-neutral RPC infrastructure types: providers, methods, circuit state.
 
 use chrono::{DateTime, Utc};

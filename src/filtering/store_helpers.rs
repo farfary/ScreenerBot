@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Free helper functions for the filtering store — entry collection, filtering,
 //! sorting, pool-price overlay, stats building, and staleness checks.
 

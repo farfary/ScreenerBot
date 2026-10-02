@@ -1,3 +1,6 @@
+/* Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+ * SPDX-License-Identifier: BUSL-1.1 */
+
 /* Source tag on a rejected-token row (Explorer table).
    A tinted text chip, never a left accent bar — those are banned on rows and
    cards alike, and the same source colours are already spoken as tints by

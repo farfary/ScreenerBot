@@ -1,4 +1,7 @@
-//! Return on Investment (ROI) based exit strategy
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Return on Investment (ROI) based exit strategy.
 
 use crate::positions::Position;
 use crate::trader::policy::RoiPolicy;

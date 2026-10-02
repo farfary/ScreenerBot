@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Pure: DCA (averaging down) decision logic — `DcaEvaluation::evaluate`.
 //!
 //! DCA is the only auto-trader path that SPENDS MORE SOL on a position that is already

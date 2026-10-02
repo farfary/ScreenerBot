@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Agent-facing auto-trader tools: state, performance, start/stop, monitors,
 //! loss limit and exit templates. Transports over `trader::controller`,
 //! `trader::stats` and `trader::templates` -- the same owners the dashboard uses.

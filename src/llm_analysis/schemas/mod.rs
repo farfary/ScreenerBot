@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Typed response schemas for structured model decisions (filter, trade, exit).
 mod exit_suggestion;
 mod filter_decision;

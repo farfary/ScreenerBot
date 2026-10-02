@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Log level definitions for structured logging
 //!
 //! Levels are ordered by severity (Error < Warning < Info < Debug < Verbose)

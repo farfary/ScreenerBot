@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! TTL cache for the published token-profile feed served by screenerbot.io, with stale-while-revalidate refresh, one-shot lookup and startup prewarm.
+
 use super::types::{PublishedTokenProfile, WebsiteProfileResponse};
 use crate::connectivity;
 use crate::logger::{self, LogTag};

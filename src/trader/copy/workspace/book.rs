@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Paper-book maintenance behind the workspace: clone a task, reset its paper
 //! book, and close (or write off) one paper holding by hand.
 

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Transaction processor core — main processing loop that decodes and analyzes transactions.
 //
 // Transaction processing pipeline - Core processor struct and main pipeline

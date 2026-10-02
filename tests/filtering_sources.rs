@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Per-source filtering logic — every rule of every filter source, its boundaries, its
 //! disabled path, and what it does with missing or corrupted values.
 //!

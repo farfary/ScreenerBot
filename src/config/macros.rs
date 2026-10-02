@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Configuration macros for zero-repetition config definitions
 //!
 //! This module provides the `config_struct!` macro that allows defining

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Chain-aware swap routing regression suite.
 //!
 //! Own test binary (own process) because `crate::swaps::registry::ROUTER_FACTORY`

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Token-2022 transfer fees, which a pool quote cannot ignore.
 //!
 //! A transfer-fee mint takes a cut of every transfer, including the two the swap

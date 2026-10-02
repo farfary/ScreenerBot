@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Asset-serving handlers for the embedded dashboard - versioned JavaScript modules, per-page stylesheets and static assets such as fonts and logos.
+
 use crate::webserver::{embeds, templates, utils::no_store_response};
 use axum::{
     extract::Path,

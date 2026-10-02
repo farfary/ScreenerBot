@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Position state management — in-memory tracking of active positions, locking, and lifecycle.
 
 pub use super::state_pending::*;

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! TOTP (Time-based One-Time Password) utilities for 2FA authentication
 //!
 //! Provides functions for generating and verifying TOTP codes using the standard

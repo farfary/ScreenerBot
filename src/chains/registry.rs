@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Read-only registry of metadata for chains supported by this build.
 //!
 //! The registry is the owner of which chains this build supports. Active-chain

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Persistence for subject-relative balance deltas (`subject_asset_deltas`).
 //!
 //! Sibling module to `operations.rs` / `operations_queries.rs`, extending

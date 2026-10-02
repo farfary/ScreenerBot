@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+// Trader page - sub-tab shell with the stats dashboard, strategy control list and embedded strategies editor.
+
 import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
 import { $, $$ } from "../core/dom.js";

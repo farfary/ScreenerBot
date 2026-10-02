@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Agent-facing function-calling tool registry: analysis, portfolio, config, system and trading tools.
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};

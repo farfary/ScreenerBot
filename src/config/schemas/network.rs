@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Network proxy configuration for routing all external HTTP, RPC, and
 //! WebSocket traffic through a proxy. Essential for users behind national
 //! firewalls or corporate proxies where direct connections are blocked.

@@ -1,4 +1,7 @@
-//! Burn tokens handlers
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Burn tokens handlers.
 
 use axum::{response::Response, Json};
 use std::collections::HashMap;

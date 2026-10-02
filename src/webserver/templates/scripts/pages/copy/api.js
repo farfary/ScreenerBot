@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
 // Copy Trading API client. Every failure carries the server's own explanation
 // (`error.detail`) so the page can say why a request was refused instead of a
 // generic "could not be saved".

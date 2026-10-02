@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Transaction database reporting — list, filter, and aggregate queries for UI.
 //
 // Reporting, querying, and export operations

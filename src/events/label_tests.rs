@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Dashboard label maps for event categories and severities must resolve in the `en` catalog.
 
 use super::types::{EventCategory, Severity};

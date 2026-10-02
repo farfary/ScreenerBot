@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Response types for the status and health-check API routes.
+
 use serde::Serialize;
 
 /// Simple health check response

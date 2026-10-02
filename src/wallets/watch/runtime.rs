@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! The injected chain runtime wallet-watch execution depends on.
 //!
 //! Chain-neutral: this module holds a trait object registered by the application

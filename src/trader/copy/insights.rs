@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Pure performance analytics for one task. Closed rounds are replayed from the
 //! recorded paper decisions -- the same arithmetic the paper ledger books -- or
 //! read from the real positions a live task opened; every breakdown is built on

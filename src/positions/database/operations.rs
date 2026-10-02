@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Position database operations — init, schema, write operations, and row-mapping helpers.
 
 use chrono::{DateTime, NaiveDateTime, Utc};

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Section ids the import preview emits and the dialog's frozen label map.
 
 use super::types::CONFIG_SECTIONS;

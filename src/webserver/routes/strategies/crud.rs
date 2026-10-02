@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Strategies CRUD route — create, read, update, delete strategy configurations.
 
 use axum::{

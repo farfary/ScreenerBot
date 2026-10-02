@@ -1,4 +1,7 @@
-//! Wallet monitoring and caching configuration
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Wallet monitoring and caching configuration.
 
 use crate::config::metadata::{ConfigCategory, ConfigImpact};
 use crate::config_struct;

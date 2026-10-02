@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+// Events page that presents the server-paginated event log in a DataTable backed by the /api/events/head, /api/events/since and /api/events/before routes, with category and severity filters, server-side search, an EventDetailsDialog and a silent poller.
+
 import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
 import * as Utils from "../core/utils.js";

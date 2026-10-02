@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Announcements for copy decisions worth attention -- a copied fill, an exit, a
 //! failed live trade, an auto-pause. Each lands in the event log, in the in-app
 //! notice feed the dashboard header polls, and on Telegram when enabled. Skips

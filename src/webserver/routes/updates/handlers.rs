@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Axum handlers for the update lifecycle - version info, update check and download, and applying or installing staged releases.
+
 use crate::{
     config,
     errors::ErrorClass,

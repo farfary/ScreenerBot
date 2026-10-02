@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Loss detection — identifies positions hitting stop-loss or trailing-stop thresholds.
 
 use super::{

@@ -1,3 +1,7 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+
 /**
  * Dashboard value formatters: the single owner of number, money, percent, date,
  * relative time, size and duration display.

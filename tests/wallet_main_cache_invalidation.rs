@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! The main-wallet keypair cache (`crate::chains::solana::accounts::signing`)
 //! must track whichever wallet the wallets database currently calls "main" —
 //! never keep signing with a stale key after `create_wallet` (set_as_main),

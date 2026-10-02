@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Services API handlers that build the overview snapshot from the ServiceManager and serve the list, single-service detail and overview routes.
+
 use axum::{
     extract::{Path, State},
     response::{IntoResponse, Response},

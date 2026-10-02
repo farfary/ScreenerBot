@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Reclaims the wallet's wrapped-SOL account after a swap leaves it empty.
 //!
 //! Routers wrap SOL into the wallet's associated WSOL account to trade. Some

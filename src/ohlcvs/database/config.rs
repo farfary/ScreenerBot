@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Monitor configuration — upsert, query, and list token monitoring configs.
 
 use crate::ohlcvs::types::{OhlcvError, OhlcvResult, Priority, TokenOhlcvConfig};

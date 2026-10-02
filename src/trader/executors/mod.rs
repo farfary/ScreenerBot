@@ -1,4 +1,7 @@
-//! Trade execution system
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Trade execution system.
 
 mod buy;
 mod sell;

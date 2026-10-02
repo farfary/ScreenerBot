@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+// Tests for the updates view - release-note parsing and escaping, history expansion and status rendering.
+
 import test from "node:test";
 import assert from "node:assert/strict";
 import "./fixtures/i18n_en.mjs";

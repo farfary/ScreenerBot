@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Swap routing, quoting and fallback orchestration — chain-neutral. The concrete
 //! DEX adapters implementing `SwapRouter` (Jupiter, Raydium) live under
 //! `crate::chains::solana::swaps::routers`; this module owns only the

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Position database types — row structs and state enums for SQLite persistence.
 
 use chrono::{DateTime, Utc};

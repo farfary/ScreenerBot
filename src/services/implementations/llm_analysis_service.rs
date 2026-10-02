@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! LLM Analysis Service - thin wrapper for the model-scored background check worker
 //!
 //! Manages the lifecycle of the background check worker that periodically

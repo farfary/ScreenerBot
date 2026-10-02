@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Feature flag API handlers - the full feature list, tool availability checks and trading feature checks.
+
 use axum::extract::Path;
 use axum::response::Response;
 

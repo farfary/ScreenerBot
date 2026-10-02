@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Pure: position lifecycle mechanics — partial-exit sizing, transition classification,
 //! and the global position-slot accounting that enforces `max_open_positions`.
 //!

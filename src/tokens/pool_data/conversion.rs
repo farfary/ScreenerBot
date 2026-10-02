@@ -1,4 +1,7 @@
-//! API conversion functions - transform external API types to TokenPoolInfo
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! API conversion functions - transform external API types to TokenPoolInfo.
 
 use crate::apis::dexscreener::types::DexScreenerPool;
 use crate::apis::geckoterminal::types::GeckoTerminalPool;

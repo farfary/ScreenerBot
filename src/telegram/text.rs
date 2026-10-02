@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Localized text for Telegram messages and buttons.
 //!
 //! Messages are sent with `ParseMode::Html`. [`tg`] renders a [`UiText`] for

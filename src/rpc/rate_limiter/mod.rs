@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Rate limiting for RPC providers
 //!
 //! Uses Governor (GCRA algorithm) for efficient, fair rate limiting.

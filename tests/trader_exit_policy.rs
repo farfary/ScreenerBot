@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Pure: `ExitPolicy::from_config` — the single place that resolves the config values every
 //! exit rule used to read for itself.
 //!

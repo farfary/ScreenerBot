@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Pure wallet-watch pagination and cadence contracts.
 
 use screenerbot::wallets::watch::{cadence_secs, needs_gap_fill, CatchUpState};

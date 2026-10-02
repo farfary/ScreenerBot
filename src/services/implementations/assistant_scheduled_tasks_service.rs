@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Assistant Scheduled Tasks Service
 //!
 //! Thin Service trait wrapper for the assistant's scheduled conversation

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Period-based loss limit protection
 //!
 //! Tracks cumulative realized losses over configurable time periods (1h, 6h, 24h).

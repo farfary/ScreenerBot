@@ -1,4 +1,7 @@
-//! Wallet balance monitor service metrics
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Wallet balance monitor service metrics.
 
 static WALLET_METRICS_OPERATIONS: std::sync::atomic::AtomicU64 =
     std::sync::atomic::AtomicU64::new(0);

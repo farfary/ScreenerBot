@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! The system-prompt line that sets the assistant's reply language.
 //!
 //! The model answers in the dashboard interface language unless the user writes

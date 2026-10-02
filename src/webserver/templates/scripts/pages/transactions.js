@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+//
+// Transactions page - infinite-scroll DataTable over /api/transactions with server filters, a wallet selector and a TransactionDetailsDialog row dialog.
+
 import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
 import * as Utils from "../core/utils.js";

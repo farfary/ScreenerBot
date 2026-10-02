@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Pool Selector for Trade Watcher
 //!
 //! Searches for all pools of a token from both GeckoTerminal and DexScreener APIs.

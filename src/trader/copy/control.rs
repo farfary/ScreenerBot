@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Copy-task lifecycle: the one owner of create/update/delete/mode transitions,
 //! the overview and the per-task books. The webserver routes and the agent tools
 //! are both transports over these functions, so a guard added here (task limit,

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Jupiter Router Implementation
 //!
 //! Referral fees (0.5%) are the project's revenue and work WITHOUT an API key:

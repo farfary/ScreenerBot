@@ -1,3 +1,8 @@
+/* Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+ * SPDX-License-Identifier: BUSL-1.1
+ *
+ * Table settings dialog - overlay and column list with drag-and-drop and pin controls, pagination toggle and search field. */
+
 .table-settings-overlay {
   position: fixed;
   inset: 0;

@@ -1,4 +1,7 @@
-//! Utility functions for wallet route handlers
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Utility functions for wallet route handlers.
 
 use super::types::{IMPORT_SESSIONS, MAX_IMPORT_SESSIONS, SESSION_EXPIRY_SECS};
 

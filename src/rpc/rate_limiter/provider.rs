@@ -1,4 +1,7 @@
-//! Per-provider rate limiter using Governor (GCRA algorithm)
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Per-provider rate limiter using Governor (GCRA algorithm).
 
 use governor::{
     clock::DefaultClock,

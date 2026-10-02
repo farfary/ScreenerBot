@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Health monitors for external API endpoints (DEX, RPC, Jupiter, etc.).
 pub mod dexscreener;
 pub mod geckoterminal;

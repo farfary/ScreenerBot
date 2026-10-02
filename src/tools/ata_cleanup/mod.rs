@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! ATA Cleanup module
 //!
 //! Provides functionality for scanning and closing empty Associated Token Accounts

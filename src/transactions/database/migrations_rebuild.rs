@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Composite (signature, wallet_address) primary-key rebuilds for the v5
 //! schema migration — the five per-table rebuild steps invoked by
 //! `migrations::TransactionDatabase::migrate_signature_wallet_tables`.

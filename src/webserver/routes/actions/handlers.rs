@@ -1,3 +1,8 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Actions API handlers - the SSE update stream, active and history listings, and read and dismiss mutations.
+
 use axum::{
     extract::{Path, Query, State},
     response::{

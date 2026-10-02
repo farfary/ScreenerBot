@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Raydium CLMM (`CAMMCzo5…`) — concentrated liquidity.
 //!
 //! # What was wrong before

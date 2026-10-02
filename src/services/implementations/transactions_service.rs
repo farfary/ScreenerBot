@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Transactions service — monitors on-chain transactions for the configured wallet.
 
 use crate::services::{Service, ServiceHealth, ServiceMetrics};

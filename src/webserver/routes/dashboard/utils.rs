@@ -1,4 +1,7 @@
-//! Format uptime duration into human-readable string
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Format uptime duration into human-readable string.
 
 pub fn format_uptime(seconds: u64) -> String {
     let days = seconds / 86400;

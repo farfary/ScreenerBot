@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! The per-task workspace behind the Copy Trading page: detail with a marked
 //! paper book and the rules each holding is under, paged activity, analytics,
 //! readiness for live, the wallet profile, and paper-book maintenance (close a

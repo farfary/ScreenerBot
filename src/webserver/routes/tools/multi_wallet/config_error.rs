@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Maps a rejected multi-wallet tool configuration onto an API error.
 
 use crate::i18n::ids;

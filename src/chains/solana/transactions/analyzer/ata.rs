@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! ATA analysis — detects associated token account creation and closure in transactions.
 //
 // ATA operations analysis module - Associated Token Account lifecycle tracking

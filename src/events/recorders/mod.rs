@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Event recording functions for each category.
 //!
 //! Specialized recording entry points that build typed `Event` structs and

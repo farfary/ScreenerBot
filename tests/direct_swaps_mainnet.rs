@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Direct pool swaps against real mainnet state.
 //!
 //! Two tiers live here, and they are deliberately different in what they risk:

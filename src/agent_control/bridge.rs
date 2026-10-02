@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! The live-app bridge: the transport-free logic that the stdio MCP adapter
 //! reaches through a narrowly-scoped internal HTTP route.
 //!

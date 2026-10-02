@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Money-path swap tests — offline, deterministic, no network, no keys, no RPC.
 //!
 //! Scope: the swap build/execute path spends real money, and almost none of it had

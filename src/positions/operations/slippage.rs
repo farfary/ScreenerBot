@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Slippage resolution for position operations.
 //!
 //! Every swap gets its slippage from the config (`swaps.slippage.*`). A MANUAL trade

@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Position verification queue — tracks pending transaction verifications with retry logic.
 
 use super::types::{GiveUpReason, VerificationKind};

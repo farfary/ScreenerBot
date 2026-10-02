@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Position price updater — refreshes current prices for all active positions.
 
 use crate::logger::{self, LogTag};

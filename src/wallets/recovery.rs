@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Wallet-data recovery — safe backup-then-clean of the wallet-scoped databases.
 //!
 //! When the configured wallet no longer matches the wallet recorded in local

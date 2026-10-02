@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Pure: the config API surface must cover every section the dashboard renders.
 //!
 //! The config page is data-driven: it renders one section per entry of

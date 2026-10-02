@@ -1,4 +1,7 @@
-//! Manual trade tracking and history
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
+//! Manual trade tracking and history.
 
 use crate::logger::{self, LogTag};
 use crate::trader::constants::MANUAL_TRADE_HISTORY_LIMIT;

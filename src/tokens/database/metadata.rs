@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Token metadata storage — persists name, symbol, decimals, and URI information.
 
 use crate::errors::DatabaseError;

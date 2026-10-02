@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
+// SPDX-License-Identifier: BUSL-1.1
+
 //! Wallet watch service — the observation layer `TransactionsService` and the
 //! Telegram alert consumer both depend on: WebSocket + poll fallback + gap-fill
 //! detection for the own wallet and every watched target, feeding one shared
