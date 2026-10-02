@@ -30,6 +30,7 @@
 
 mod database;
 mod dedupe;
+mod error;
 mod migrations;
 mod poller;
 mod recorder;
@@ -40,12 +41,13 @@ mod service_targets;
 mod source_registry;
 mod types;
 
+pub use error::WatchRuntimeError;
 pub use poller::{cadence_secs, needs_gap_fill, CatchUpState, CompletedCatchUp, PAGE_SIZE};
 pub use service::subscribe_activity;
 pub use types::{
     ActivityKind, SignaturePageItem, SuccessfulTransactionPageItem, SuccessfulTransactionsPage,
     SwapSide, TransferDirection, WalletActivity, WatchDisableReason, WatchMode, WatchNotification,
-    WatchRuntimeError, WatchSource, WatchStatus, WatchTarget,
+    WatchSource, WatchStatus, WatchTarget,
 };
 
 use std::sync::{Arc, OnceLock};

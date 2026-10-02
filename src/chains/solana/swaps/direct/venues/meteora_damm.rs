@@ -82,7 +82,7 @@ const POOL_AUTHORITY: &str = "HLnpSz9h2S4hiLQ43rnSD9XkcUThA7B8hQMKmDaiTLcC";
 const EVENT_AUTHORITY_SEED: &[u8] = b"__event_authority";
 
 /// Denominator every cp-amm fee numerator is expressed over.
-const FEE_DENOMINATOR: u64 = 1_000_000_000;
+const FEE_DENOMINATOR: u64 = 10_u64.pow(9);
 
 /// Highest fee numerator the programme will charge, i.e. 50%.
 const MAX_FEE_NUMERATOR: u64 = 500_000_000;

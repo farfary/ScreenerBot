@@ -13,6 +13,7 @@ pub use jupiter::JupiterRouter;
 pub use raptor::RaptorRouter;
 
 pub(crate) use jupiter::venue_label_for_program;
+pub(crate) use raptor::health_probe_url;
 
 /// Build the Solana swap router set for `crate::swaps::registry::RouterRegistry`.
 /// This is the factory the application composition root registers via

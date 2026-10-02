@@ -16,7 +16,10 @@
 //! `Transfer`. `Unknown` survives only when the transaction could not be decoded
 //! at all.
 
-use crate::chains::solana::constants::SOL_MINT;
+use crate::chains::solana::constants::{
+    ASSOCIATED_TOKEN_PROGRAM_ID, MEMO_PROGRAM_ID, SOL_MINT, SPL_TOKEN_PROGRAM_ID,
+    SYSTEM_PROGRAM_ID, TOKEN_2022_PROGRAM_ID,
+};
 use crate::chains::solana::rpc::TransactionDetails;
 use crate::chains::solana::transactions::program_ids::detect_router_from_program_id;
 use crate::transactions::types::{TransactionType, DUST_LAMPORTS};
@@ -25,12 +28,7 @@ use super::classify::ClassifiedType;
 use super::dex::DexAnalysis;
 use super::wallet_view::WalletView;
 
-const SYSTEM_PROGRAM: &str = "11111111111111111111111111111111";
 const COMPUTE_BUDGET_PROGRAM: &str = "ComputeBudget111111111111111111111111111111";
-const TOKEN_PROGRAM: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
-const TOKEN_2022_PROGRAM: &str = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
-const ATA_PROGRAM: &str = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL";
-const MEMO_PROGRAM: &str = "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr";
 const MEMO_V1_PROGRAM: &str = "Memo1UhkJRfHyvLMcVucJwxXeuD728EqVDDwQDxFMNo";
 
 /// Programs whose presence makes a transaction an NFT operation rather than a
@@ -60,7 +58,7 @@ impl Call {
     /// Instructions that only shape execution and never move value.
     fn is_overhead(&self) -> bool {
         self.program_id == COMPUTE_BUDGET_PROGRAM
-            || self.program_id == MEMO_PROGRAM
+            || self.program_id == MEMO_PROGRAM_ID
             || self.program_id == MEMO_V1_PROGRAM
     }
 }
@@ -154,27 +152,28 @@ fn classify_from_calls(
     let closes: Vec<&&Call> = effective
         .iter()
         .filter(|call| {
-            call.is(TOKEN_PROGRAM, "closeAccount") || call.is(TOKEN_2022_PROGRAM, "closeAccount")
+            call.is(SPL_TOKEN_PROGRAM_ID, "closeAccount")
+                || call.is(TOKEN_2022_PROGRAM_ID, "closeAccount")
         })
         .collect();
     let creates: Vec<&&Call> = effective
         .iter()
         .filter(|call| {
-            call.program_id == ATA_PROGRAM
-                || call.is(TOKEN_PROGRAM, "initializeAccount")
-                || call.is(TOKEN_PROGRAM, "initializeAccount3")
+            call.program_id == ASSOCIATED_TOKEN_PROGRAM_ID
+                || call.is(SPL_TOKEN_PROGRAM_ID, "initializeAccount")
+                || call.is(SPL_TOKEN_PROGRAM_ID, "initializeAccount3")
         })
         .collect();
     let token_moves = effective.iter().filter(|call| {
         matches!(
             call.parsed_type.as_deref(),
             Some("transfer" | "transferChecked")
-        ) && (call.program_id == TOKEN_PROGRAM || call.program_id == TOKEN_2022_PROGRAM)
+        ) && (call.program_id == SPL_TOKEN_PROGRAM_ID || call.program_id == TOKEN_2022_PROGRAM_ID)
     });
     let token_move_count = token_moves.count();
     let sol_moves = effective
         .iter()
-        .filter(|call| call.is(SYSTEM_PROGRAM, "transfer"))
+        .filter(|call| call.is(SYSTEM_PROGRAM_ID, "transfer"))
         .count();
 
     let accounted = closes.len() + creates.len() + token_move_count + sol_moves;
@@ -460,11 +459,11 @@ mod tests {
                     "accountKeys": [
                         { "pubkey": WALLET, "signer": true, "writable": true },
                         { "pubkey": "TokenAccountUnderTest111111111111111111111", "signer": false, "writable": true },
-                        { "pubkey": TOKEN_PROGRAM, "signer": false, "writable": false }
+                        { "pubkey": SPL_TOKEN_PROGRAM_ID, "signer": false, "writable": false }
                     ],
                     "instructions": [{
                         "program": "spl-token",
-                        "programId": TOKEN_PROGRAM,
+                        "programId": SPL_TOKEN_PROGRAM_ID,
                         "parsed": { "type": "closeAccount", "info": {
                             "account": "TokenAccountUnderTest111111111111111111111",
                             "destination": WALLET,
@@ -500,7 +499,7 @@ mod tests {
                     ],
                     "instructions": [{
                         "program": "system",
-                        "programId": SYSTEM_PROGRAM,
+                        "programId": SYSTEM_PROGRAM_ID,
                         "parsed": { "type": "transfer", "info": {
                             "source": "DustBlaster11111111111111111111111111111111",
                             "destination": WALLET,

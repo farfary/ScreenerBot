@@ -27,15 +27,17 @@ pub fn trailing_stop_triggered(
     peak_price: f64,
     current_price: f64,
     policy: &TrailingPolicy,
-) -> Result<bool, String> {
+) -> crate::trader::Result<bool> {
     if peak_price <= 0.0 || !policy.enabled {
         return Ok(false);
     }
     if policy.distance_pct >= policy.activation_pct {
-        return Err(format!(
+        return Err(crate::trader::Error::InvalidExitPolicy {
+            detail: format!(
             "invalid trailing stop config: distance_pct ({:.1}%) must be less than activation_pct ({:.1}%)",
             policy.distance_pct, policy.activation_pct
-        ));
+        ),
+        });
     }
     if entry_price <= 0.0 || !entry_price.is_finite() {
         return Ok(false);
@@ -68,9 +70,14 @@ pub async fn check_trailing_stop(
         current_price,
         policy,
     )
-    .map_err(|detail| crate::trader::Error::StrategyEvaluation {
-        mint: position.mint.clone(),
-        detail,
+    .map_err(|e| match e {
+        crate::trader::Error::InvalidExitPolicy { detail } => {
+            crate::trader::Error::StrategyEvaluation {
+                mint: position.mint.clone(),
+                detail,
+            }
+        }
+        other => other,
     })?;
     if !triggered {
         return Ok(None);

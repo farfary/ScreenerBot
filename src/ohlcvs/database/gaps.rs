@@ -7,6 +7,7 @@
 //! its range: missing buckets inside it are source-confirmed no-trade buckets.
 //! Detection never re-opens a range contained in a resolved row.
 
+use crate::database::WriteTransaction;
 use crate::ohlcvs::types::{MintGapAggregate, OhlcvError, OhlcvResult, Timeframe};
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, Result as SqliteResult};
@@ -180,7 +181,7 @@ impl OhlcvDatabase {
             .lock()
             .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
         let tx = conn
-            .transaction()
+            .write_tx()
             .map_err(|e| OhlcvError::DatabaseError(format!("Failed to begin: {e}")))?;
         let key = GapKey {
             chain_id: self.chain_id(),
@@ -223,7 +224,7 @@ impl OhlcvDatabase {
             .lock()
             .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
         let tx = conn
-            .transaction()
+            .write_tx()
             .map_err(|e| OhlcvError::DatabaseError(format!("Failed to begin: {e}")))?;
         let key = GapKey {
             chain_id: self.chain_id(),

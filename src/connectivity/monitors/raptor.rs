@@ -20,8 +20,6 @@ impl RaptorMonitor {
     pub fn new() -> Self {
         Self
     }
-
-    const BASE_URL: &'static str = "https://raptor-beta.solanatracker.io";
 }
 
 #[async_trait]
@@ -69,12 +67,7 @@ impl EndpointMonitor for RaptorMonitor {
 
         // A tiny SOL->USDC quote: the cheapest call that proves routing works
         // rather than merely that the host answers. No key, no side effect.
-        let url = format!(
-            "{}/quote?inputMint={}&outputMint={}&amount=1000000&slippageBps=50",
-            Self::BASE_URL,
-            crate::chains::solana::constants::SOL_MINT,
-            crate::chains::solana::constants::USDC_MINT,
-        );
+        let url = crate::chains::solana::swaps::routers::health_probe_url();
         let start = Instant::now();
 
         match client.get(&url).send().await {

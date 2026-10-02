@@ -17,7 +17,9 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::chains::solana::constants::lamports_to_sol;
+use crate::chains::solana::constants::{
+    lamports_to_sol, ASSOCIATED_TOKEN_PROGRAM_ID, SPL_TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID,
+};
 use crate::logger::{self, LogTag};
 use crate::transactions::types::*;
 
@@ -129,10 +131,6 @@ const STANDARD_RENTS: &[(u64, &str)] = &[
     (1002240, "Multisig Account"), // Multisig account
     (5616720, "Metadata Account"), // NFT metadata account
 ];
-
-const ATA_PROGRAM_ID: &str = "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL";
-const TOKEN_PROGRAM_ID: &str = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
-const TOKEN_2022_PROGRAM_ID: &str = "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
 
 /// Maximum expected rent for validation (10 SOL)
 const MAX_EXPECTED_RENT: u64 = 10_000_000_000;
@@ -352,11 +350,11 @@ async fn analyze_instruction_for_ata(
 
     // ATA-program creations are read from balance changes instead: the rent amount
     // and the funded account are exact there, and matching both would double-count.
-    if program_id == ATA_PROGRAM_ID {
+    if program_id == ASSOCIATED_TOKEN_PROGRAM_ID {
         return Ok(None);
     }
 
-    if program_id == TOKEN_PROGRAM_ID || program_id == TOKEN_2022_PROGRAM_ID {
+    if program_id == SPL_TOKEN_PROGRAM_ID || program_id == TOKEN_2022_PROGRAM_ID {
         return Ok(parse_token_instruction(instruction));
     }
 

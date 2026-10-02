@@ -86,34 +86,6 @@ impl WatchDisableReason {
     }
 }
 
-/// The last problem the observation loop hit for a target, shown in its status.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum WatchRuntimeError {
-    ProviderUnavailable,
-    ProviderRepeatedFailure,
-    ProcessingRepeatedFailure,
-    PositionUnreadable,
-    ProviderCheckFailed,
-    DecodeFailed,
-    ProcessingFailed,
-    PositionSaveFailed,
-}
-
-impl WatchRuntimeError {
-    pub fn ui_text(self) -> UiText {
-        UiText::new(match self {
-            Self::ProviderUnavailable => ids::WALLETS_WATCH_ERROR_PROVIDER_UNAVAILABLE,
-            Self::ProviderRepeatedFailure => ids::WALLETS_WATCH_ERROR_PROVIDER_REPEATED_FAILURE,
-            Self::ProcessingRepeatedFailure => ids::WALLETS_WATCH_ERROR_PROCESSING_REPEATED_FAILURE,
-            Self::PositionUnreadable => ids::WALLETS_WATCH_ERROR_POSITION_UNREADABLE,
-            Self::ProviderCheckFailed => ids::WALLETS_WATCH_ERROR_PROVIDER_CHECK_FAILED,
-            Self::DecodeFailed => ids::WALLETS_WATCH_ERROR_DECODE_FAILED,
-            Self::ProcessingFailed => ids::WALLETS_WATCH_ERROR_PROCESSING_FAILED,
-            Self::PositionSaveFailed => ids::WALLETS_WATCH_ERROR_POSITION_SAVE_FAILED,
-        })
-    }
-}
-
 /// Side of a detected swap, subject-relative (did the subject's holding of `mint`
 /// grow or shrink).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -250,6 +222,7 @@ pub struct WatchCatchUpOption {
 mod tests {
     use super::*;
     use crate::i18n::{format_en, LanguageIdentifier};
+    use crate::wallets::watch::error::WatchRuntimeError;
 
     /// Every variant, listed through an exhaustive match so a new one fails to
     /// compile until it is added here and to the catalog.

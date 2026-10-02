@@ -23,14 +23,14 @@ use super::{
 
 /// Which rule, if any, closes this holding at `mark_price_sol`, checked in the
 /// live monitor's order. The inner percentage is a partial exit; `None` sells all.
-/// `Err` carries the detail of an impossible policy configuration.
+/// `Err` carries [`crate::trader::Error::InvalidExitPolicy`].
 pub fn evaluate_paper_exit(
     position: &PaperPosition,
     mark_price_sol: f64,
     peak_price_sol: f64,
     policy: &ExitPolicy,
     now: DateTime<Utc>,
-) -> Result<Option<(PaperExitRule, Option<f64>)>, String> {
+) -> crate::trader::Result<Option<(PaperExitRule, Option<f64>)>> {
     if !position.is_open() || !mark_price_sol.is_finite() || mark_price_sol <= 0.0 {
         return Ok(None);
     }
@@ -187,10 +187,10 @@ pub async fn sweep(database: &CopyDatabase, costs: PaperCosts) -> crate::trader:
                 match evaluate_paper_exit(position, mark, peak, policy, now) {
                     Ok(Some(triggered)) => triggered,
                     Ok(None) => continue,
-                    Err(detail) => {
+                    Err(e) => {
                         logger::warning(
                             LogTag::Trader,
-                            &format!("Copy task {} paper exit skipped: {detail}", task.id),
+                            &format!("Copy task {} paper exit skipped: {e}", task.id),
                         );
                         continue;
                     }

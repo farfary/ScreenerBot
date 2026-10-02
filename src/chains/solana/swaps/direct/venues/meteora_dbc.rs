@@ -257,7 +257,7 @@ const POOL_CONFIG_DISCRIMINATOR: [u8; 8] = [26, 108, 14, 123, 116, 230, 129, 43]
 
 /// Denominator every DBC fee numerator is expressed over. Identical to
 /// `meteora_damm.rs`'s own `FEE_DENOMINATOR`, both Meteora products.
-const FEE_DENOMINATOR: u64 = 1_000_000_000;
+const FEE_DENOMINATOR: u64 = 10_u64.pow(9);
 
 /// `collect_fee_mode` values, confirmed against two real pools carrying each.
 const COLLECT_FEE_QUOTE_TOKEN: u8 = 0;
@@ -919,12 +919,6 @@ impl PoolMarket for DbcMarket {
 // `math::shl128_div_*` (an exact divide-by-2^128, taken straight off the high
 // limb of a 256-bit product) instead of `clmm_ticks`'s `mul_div_*`.
 
-fn quote_math_overflow() -> DirectSwapError {
-    DirectSwapError::QuoteMath {
-        detail: "the DBC curve step overflowed 256 bits".to_owned(),
-    }
-}
-
 /// The output produced by moving the price at constant `liquidity` from
 /// `sqrt_from` to `sqrt_to`, rounded DOWN.
 fn output_for_move(
@@ -940,7 +934,11 @@ fn output_for_move(
     } else {
         // Output is base: Δx = liquidity·Δ√P/(√P_to·√P_from).
         let spread = sqrt_to.saturating_sub(sqrt_from);
-        let step1 = mul_div_floor(liquidity, spread, sqrt_to).ok_or_else(quote_math_overflow)?;
+        let step1 = mul_div_floor(liquidity, spread, sqrt_to).ok_or_else(|| {
+            DirectSwapError::QuoteMath {
+                detail: "the DBC curve step overflowed 256 bits".to_owned(),
+            }
+        })?;
         step1 / sqrt_from.max(1)
     };
     Ok(out.min(u64::MAX as u128) as u64)
@@ -961,7 +959,11 @@ fn input_for_move(
             return Ok(0);
         }
         let spread = sqrt_from - sqrt_to;
-        let step1 = mul_div_ceil(liquidity, spread, sqrt_from).ok_or_else(quote_math_overflow)?;
+        let step1 = mul_div_ceil(liquidity, spread, sqrt_from).ok_or_else(|| {
+            DirectSwapError::QuoteMath {
+                detail: "the DBC curve step overflowed 256 bits".to_owned(),
+            }
+        })?;
         Ok(step1.div_ceil(sqrt_to.max(1)))
     } else {
         // Quote in, price rising: sqrt_to (high) > sqrt_from (low).
@@ -989,19 +991,32 @@ fn next_sqrt_price_from_input(
         // exceed a `u128` for an adversarial size against a near-max-price
         // segment; refused rather than wrapped, the same way every other
         // overflow in this walk is refused rather than guessed at.
-        let product = amount_in
-            .checked_mul(sqrt_price)
-            .ok_or_else(quote_math_overflow)?;
-        let denominator = liquidity
-            .checked_add(product)
-            .ok_or_else(quote_math_overflow)?;
-        mul_div_ceil(liquidity, sqrt_price, denominator).ok_or_else(quote_math_overflow)
+        let product =
+            amount_in
+                .checked_mul(sqrt_price)
+                .ok_or_else(|| DirectSwapError::QuoteMath {
+                    detail: "the DBC curve step overflowed 256 bits".to_owned(),
+                })?;
+        let denominator =
+            liquidity
+                .checked_add(product)
+                .ok_or_else(|| DirectSwapError::QuoteMath {
+                    detail: "the DBC curve step overflowed 256 bits".to_owned(),
+                })?;
+        mul_div_ceil(liquidity, sqrt_price, denominator).ok_or_else(|| DirectSwapError::QuoteMath {
+            detail: "the DBC curve step overflowed 256 bits".to_owned(),
+        })
     } else {
         // Quote in: ΔsqrtP = amount·2^128/liquidity, floor.
-        let delta = shl128_div_floor(amount_in, liquidity).ok_or_else(quote_math_overflow)?;
+        let delta =
+            shl128_div_floor(amount_in, liquidity).ok_or_else(|| DirectSwapError::QuoteMath {
+                detail: "the DBC curve step overflowed 256 bits".to_owned(),
+            })?;
         sqrt_price
             .checked_add(delta)
-            .ok_or_else(quote_math_overflow)
+            .ok_or_else(|| DirectSwapError::QuoteMath {
+                detail: "the DBC curve step overflowed 256 bits".to_owned(),
+            })
     }
 }
 

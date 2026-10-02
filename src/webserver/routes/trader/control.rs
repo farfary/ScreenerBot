@@ -85,6 +85,13 @@ pub(super) fn trader_failure(error: &trader::Error) -> Response {
             ApiError::new(code, ids::ERRORS_TRADE_MANAGEMENT_INVALID)
                 .text_arg("management", management.clone())
         }
+        // The evaluators re-wrap `InvalidExitPolicy` into `StrategyEvaluation` before it can reach
+        // the API and the paper copy book logs and skips it, so this arm exists for exhaustiveness
+        // and maps to the nearest existing catalog entry.
+        Error::InvalidExitPolicy { detail } => {
+            ApiError::new(code, ids::ERRORS_TRADE_MANAGEMENT_INVALID)
+                .text_arg("management", detail.clone())
+        }
         Error::StrategyEvaluation { mint, .. } => {
             ApiError::new(code, ids::ERRORS_TRADE_STRATEGY_EVALUATION_FAILED)
                 .text_arg("mint", mint.clone())

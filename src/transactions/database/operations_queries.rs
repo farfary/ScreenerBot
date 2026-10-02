@@ -11,6 +11,7 @@ use chrono::{DateTime, Utc};
 use rusqlite::{params, OptionalExtension};
 use std::collections::HashMap;
 
+use crate::database::WriteTransaction;
 use crate::transactions::error::Error;
 use crate::transactions::types::*;
 
@@ -315,7 +316,7 @@ impl TransactionDatabase {
             TransactionStatus::Failed(_) => "Failed",
         };
         let tx = conn
-            .transaction()
+            .write_tx()
             .map_err(crate::errors::DatabaseError::from)?;
         tx.execute(
             "INSERT INTO raw_transactions \

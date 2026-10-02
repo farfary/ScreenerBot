@@ -34,10 +34,11 @@ use crate::transactions::utils::{
 
 use super::database::WatchDatabase;
 use super::dedupe;
+use super::error::WatchRuntimeError;
 use super::poller;
 use super::recorder;
 use super::runtime::WalletWatchRuntime;
-use super::types::{WalletActivity, WatchMode, WatchRuntimeError, WatchSource, WatchTarget};
+use super::types::{WalletActivity, WatchMode, WatchSource, WatchTarget};
 
 /// Bound generous enough that a burst across every watched target cannot fill the
 /// channel before the slowest consumer (a Telegram send) catches up. Bounded so a

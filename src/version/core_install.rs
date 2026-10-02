@@ -122,14 +122,15 @@ fn stage_core_blocking(version: &str, core: &CoreArtifact, archive: &Path) -> Re
     }
 
     let root = core_dir();
-    std::fs::create_dir_all(&root).map_err(io)?;
+    std::fs::create_dir_all(&root).map_err(|e| Error::Io(crate::errors::IoError::from(e)))?;
     restrict_permissions(&root)?;
 
     let staging = root.join(format!(".staging-{version}"));
     if staging.exists() {
-        std::fs::remove_dir_all(&staging).map_err(io)?;
+        std::fs::remove_dir_all(&staging)
+            .map_err(|e| Error::Io(crate::errors::IoError::from(e)))?;
     }
-    std::fs::create_dir_all(&staging).map_err(io)?;
+    std::fs::create_dir_all(&staging).map_err(|e| Error::Io(crate::errors::IoError::from(e)))?;
 
     let binary_path = staging.join(core_binary_name());
     let written = decompress_gzip(archive, &binary_path, core.binary_size)?;
@@ -155,9 +156,11 @@ fn stage_core_blocking(version: &str, core: &CoreArtifact, archive: &Path) -> Re
 
     let destination = root.join(version);
     if destination.exists() {
-        std::fs::remove_dir_all(&destination).map_err(io)?;
+        std::fs::remove_dir_all(&destination)
+            .map_err(|e| Error::Io(crate::errors::IoError::from(e)))?;
     }
-    std::fs::rename(&staging, &destination).map_err(io)?;
+    std::fs::rename(&staging, &destination)
+        .map_err(|e| Error::Io(crate::errors::IoError::from(e)))?;
 
     let staged = StagedCore {
         version: version.to_owned(),
@@ -181,8 +184,8 @@ fn write_pointer(staged: &StagedCore) -> Result<()> {
             error: error.to_string(),
         })
     })?;
-    std::fs::write(&temporary, bytes).map_err(io)?;
-    std::fs::rename(&temporary, &path).map_err(io)?;
+    std::fs::write(&temporary, bytes).map_err(|e| Error::Io(crate::errors::IoError::from(e)))?;
+    std::fs::rename(&temporary, &path).map_err(|e| Error::Io(crate::errors::IoError::from(e)))?;
     Ok(())
 }
 
@@ -215,14 +218,18 @@ pub(super) fn prune_other_versions(root: &Path, keep: &str) {
 fn decompress_gzip(archive: &Path, destination: &Path, expected_size: u64) -> Result<u64> {
     use std::io::{Read, Write};
 
-    let source = std::fs::File::open(archive).map_err(io)?;
+    let source =
+        std::fs::File::open(archive).map_err(|e| Error::Io(crate::errors::IoError::from(e)))?;
     let mut decoder = flate2::read::GzDecoder::new(std::io::BufReader::new(source));
-    let mut file = std::fs::File::create(destination).map_err(io)?;
+    let mut file = std::fs::File::create(destination)
+        .map_err(|e| Error::Io(crate::errors::IoError::from(e)))?;
     let mut buffer = vec![0_u8; 256 * 1024];
     let mut written = 0_u64;
 
     loop {
-        let read = decoder.read(&mut buffer).map_err(io)?;
+        let read = decoder
+            .read(&mut buffer)
+            .map_err(|e| Error::Io(crate::errors::IoError::from(e)))?;
         if read == 0 {
             break;
         }
@@ -233,9 +240,11 @@ fn decompress_gzip(archive: &Path, destination: &Path, expected_size: u64) -> Re
                 actual: written,
             });
         }
-        file.write_all(&buffer[..read]).map_err(io)?;
+        file.write_all(&buffer[..read])
+            .map_err(|e| Error::Io(crate::errors::IoError::from(e)))?;
     }
-    file.sync_all().map_err(io)?;
+    file.sync_all()
+        .map_err(|e| Error::Io(crate::errors::IoError::from(e)))?;
     Ok(written)
 }
 
@@ -243,7 +252,8 @@ fn make_executable(path: &Path) -> Result<()> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)).map_err(io)?;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700))
+            .map_err(|e| Error::Io(crate::errors::IoError::from(e)))?;
     }
     #[cfg(not(unix))]
     let _ = path;
@@ -254,15 +264,12 @@ fn restrict_permissions(path: &Path) -> Result<()> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)).map_err(io)?;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700))
+            .map_err(|e| Error::Io(crate::errors::IoError::from(e)))?;
     }
     #[cfg(not(unix))]
     let _ = path;
     Ok(())
-}
-
-fn io(error: std::io::Error) -> Error {
-    Error::Io(crate::errors::IoError::from(error))
 }
 
 /// A version is only ever used as a single path component, so it must contain

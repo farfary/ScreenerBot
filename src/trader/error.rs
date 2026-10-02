@@ -97,6 +97,13 @@ pub enum Error {
     InvalidManagement { management: String, reason: String },
     #[error("strategy evaluation for token {mint} failed: {detail}")]
     StrategyEvaluation { mint: String, detail: String },
+    /// An exit evaluator rejected an impossible policy configuration: a
+    /// trailing distance at least as wide as its activation, or a time override
+    /// whose duration or loss threshold cannot represent a loss. The live
+    /// evaluators re-wrap it as [`Error::StrategyEvaluation`]; the paper copy
+    /// book logs it and skips the sweep.
+    #[error("{detail}")]
+    InvalidExitPolicy { detail: String },
     #[error("token data unavailable for {mint}")]
     TokenDataMissing { mint: String },
     #[error("no healthy endpoints available: {detail}")]
@@ -144,6 +151,7 @@ impl ErrorClass for Error {
             Error::NoOpenPosition { .. } => false,
             Error::InvalidSolAmount { .. } => false,
             Error::InvalidManagement { .. } => false,
+            Error::InvalidExitPolicy { .. } => false,
             Error::StrategyEvaluation { .. } => false,
             Error::TokenDataMissing { .. } => true,
             Error::UnhealthyEndpoints { .. } => true,
@@ -197,6 +205,7 @@ impl ErrorClass for Error {
             Error::NoOpenPosition { .. } => Severity::Warning,
             Error::InvalidSolAmount { .. } => Severity::Warning,
             Error::InvalidManagement { .. } => Severity::Warning,
+            Error::InvalidExitPolicy { .. } => Severity::Warning,
             Error::StrategyEvaluation { .. } => Severity::Warning,
             Error::TokenDataMissing { .. } => Severity::Warning,
             Error::UnhealthyEndpoints { .. } => Severity::Error,
@@ -233,6 +242,7 @@ impl ErrorClass for Error {
             Error::NoOpenPosition { .. } => 404,
             Error::InvalidSolAmount { .. } => 400,
             Error::InvalidManagement { .. } => 400,
+            Error::InvalidExitPolicy { .. } => 400,
             Error::StrategyEvaluation { .. } => 500,
             Error::TokenDataMissing { .. } => 503,
             Error::UnhealthyEndpoints { .. } => 503,

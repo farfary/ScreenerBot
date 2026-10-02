@@ -237,7 +237,7 @@ use std::str::FromStr;
 const SWAP2: [u8; 8] = [0x41, 0x4b, 0x3f, 0x4c, 0xeb, 0x5b, 0x5b, 0x88];
 
 /// Denominator the pool's total fee rate is expressed over.
-const FEE_PRECISION: u128 = 1_000_000_000;
+const FEE_PRECISION: u128 = 10_u128.pow(9);
 
 /// 10% -- the programme's own ceiling on `base_fee + variable_fee`.
 const MAX_FEE_RATE: u128 = 100_000_000;
@@ -759,7 +759,11 @@ impl DlmmMarket {
         let mut trading_fee: u64 = 0;
         let mut excluded_fee_amount_in = amount_in;
         if fee_on_input {
-            let fee = Self::fee_from_amount(rate, amount_in).ok_or(quote_math_error())?;
+            let fee = Self::fee_from_amount(rate, amount_in).ok_or_else(|| {
+                DirectSwapError::QuoteMath {
+                    detail: "DLMM bin/fee arithmetic overflowed".to_owned(),
+                }
+            })?;
             trading_fee = fee;
             excluded_fee_amount_in = amount_in.saturating_sub(fee);
         }
@@ -768,7 +772,9 @@ impl DlmmMarket {
             (0, excluded_fee_amount_in, 0)
         } else {
             let max_amount_in = get_amount_in(mm_amount_out_cap, price, swap_for_y, Rounding::Up)
-                .ok_or(quote_math_error())?;
+                .ok_or_else(|| DirectSwapError::QuoteMath {
+                detail: "DLMM bin/fee arithmetic overflowed".to_owned(),
+            })?;
             if excluded_fee_amount_in >= max_amount_in {
                 (
                     max_amount_in,
@@ -777,7 +783,9 @@ impl DlmmMarket {
                 )
             } else {
                 let out = get_amount_out(excluded_fee_amount_in, price, swap_for_y, Rounding::Down)
-                    .ok_or(quote_math_error())?;
+                    .ok_or_else(|| DirectSwapError::QuoteMath {
+                        detail: "DLMM bin/fee arithmetic overflowed".to_owned(),
+                    })?;
                 (excluded_fee_amount_in, 0, out)
             }
         };
@@ -788,8 +796,11 @@ impl DlmmMarket {
             // `amount_in_mm` of the excluded-fee amount was actually used, so
             // the fee must be recomputed on that exact figure.
             if fee_on_input {
-                let fee =
-                    Self::fee_from_excluded_amount(rate, amount_in_mm).ok_or(quote_math_error())?;
+                let fee = Self::fee_from_excluded_amount(rate, amount_in_mm).ok_or_else(|| {
+                    DirectSwapError::QuoteMath {
+                        detail: "DLMM bin/fee arithmetic overflowed".to_owned(),
+                    }
+                })?;
                 trading_fee = fee;
                 included_fee_amount_in = amount_in_mm.saturating_add(fee);
             } else {
@@ -799,7 +810,11 @@ impl DlmmMarket {
 
         let mut excluded_fee_amount_out = out_amount;
         if !fee_on_input {
-            let fee = Self::fee_from_amount(rate, out_amount).ok_or(quote_math_error())?;
+            let fee = Self::fee_from_amount(rate, out_amount).ok_or_else(|| {
+                DirectSwapError::QuoteMath {
+                    detail: "DLMM bin/fee arithmetic overflowed".to_owned(),
+                }
+            })?;
             trading_fee = fee;
             excluded_fee_amount_out = out_amount.saturating_sub(fee);
         }
@@ -847,8 +862,11 @@ impl DlmmMarket {
                 .min(self.state.parameters.max_volatility_accumulator as u64)
                     as u32;
                 let rate = self.total_fee_rate(volatility_accumulator);
-                let price =
-                    get_price_from_id(active_id, self.state.bin_step).ok_or(quote_math_error())?;
+                let price = get_price_from_id(active_id, self.state.bin_step).ok_or_else(|| {
+                    DirectSwapError::QuoteMath {
+                        detail: "DLMM bin/fee arithmetic overflowed".to_owned(),
+                    }
+                })?;
 
                 let (consumed, out, fee) =
                     self.quote_bin(bin, price, amount_left, swap_for_y, fee_on_input, rate)?;
@@ -865,18 +883,14 @@ impl DlmmMarket {
                 } else {
                     active_id.checked_add(1)
                 }
-                .ok_or(quote_math_error())?;
+                .ok_or_else(|| DirectSwapError::QuoteMath {
+                    detail: "DLMM bin/fee arithmetic overflowed".to_owned(),
+                })?;
                 active_id = next_id;
             }
         }
 
         Ok((total_out, total_fee, fee_on_input))
-    }
-}
-
-fn quote_math_error() -> DirectSwapError {
-    DirectSwapError::QuoteMath {
-        detail: "DLMM bin/fee arithmetic overflowed".to_owned(),
     }
 }
 

@@ -16,7 +16,8 @@ use std::time::Duration;
 use chrono::{DateTime, Utc};
 use tokio::sync::mpsc;
 
-use super::types::{WatchMode, WatchRuntimeError};
+use super::error::WatchRuntimeError;
+use super::types::WatchMode;
 
 /// A WS notification whose transaction was not decodable yet.
 #[derive(Debug, Clone)]

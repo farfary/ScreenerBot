@@ -32,7 +32,7 @@
 //! Docs: https://docs.solanatracker.io/raptor/overview
 
 use super::http::{send_with_retry, RouterHttpFailure};
-use crate::chains::solana::constants::SOL_MINT;
+use crate::chains::solana::constants::{SOL_MINT, USDC_MINT};
 use crate::chains::solana::rpc::RpcClientMethods;
 use crate::chains::solana::swaps::revenue::{
     fee_reference_for_mint, fee_reference_for_pair, platform_fee_amount, PLATFORM_FEE_BPS,
@@ -75,6 +75,17 @@ const RAPTOR_HTTP_TIMEOUT: Duration = Duration::from_secs(10);
 /// quote's advisory estimate, which the trade dialog shows before a route is
 /// chosen; nothing is charged against it.
 const RAPTOR_ESTIMATED_COMPUTE_UNITS: u64 = 300_000;
+
+/// URL of the minimal SOL->USDC quote the connectivity monitor probes: the
+/// cheapest call that proves routing works end to end. Lives here, beside the
+/// endpoint it exercises, because the mints are chain facts the neutral
+/// monitor must not import.
+pub(crate) fn health_probe_url() -> String {
+    format!(
+        "{RAPTOR_API_BASE}/quote?inputMint={}&outputMint={}&amount=1000000&slippageBps=50",
+        SOL_MINT, USDC_MINT
+    )
+}
 
 // ============================================================================
 // API TYPES
@@ -299,7 +310,21 @@ impl RaptorRouter {
                 .timeout(RAPTOR_HTTP_TIMEOUT)
         })
         .await
-        .map_err(raptor_error)?;
+        .map_err(|failure| match failure.status {
+            Some(429) => Error::Network(NetworkError::RateLimited {
+                endpoint: format!("raptor/{}", failure.label),
+                retry_after_ms: failure.retry_after.map(|d| d.as_millis() as u64),
+            }),
+            Some(status) => Error::Network(NetworkError::HttpStatus {
+                endpoint: format!("raptor/{}", failure.label),
+                status,
+                body: Some(failure.body),
+            }),
+            None => Error::Network(NetworkError::RequestFailed {
+                endpoint: format!("raptor/{}", failure.label),
+                detail: failure.body,
+            }),
+        })?;
 
         let swap_response: RaptorSwapResponse = serde_json::from_str(&response_text)
             .map_err(|e| Error::parse_error(format!("Raptor swap response parse failed: {e}")))?;
@@ -563,25 +588,6 @@ impl SwapRouter for RaptorRouter {
             execution_time_ms: start.elapsed().as_millis() as u64,
             effective_price_sol: None,
         })
-    }
-}
-
-/// Fold a failed Raptor call into the crate error channel.
-fn raptor_error(failure: RouterHttpFailure) -> Error {
-    match failure.status {
-        Some(429) => Error::Network(NetworkError::RateLimited {
-            endpoint: format!("raptor/{}", failure.label),
-            retry_after_ms: failure.retry_after.map(|d| d.as_millis() as u64),
-        }),
-        Some(status) => Error::Network(NetworkError::HttpStatus {
-            endpoint: format!("raptor/{}", failure.label),
-            status,
-            body: Some(failure.body),
-        }),
-        None => Error::Network(NetworkError::RequestFailed {
-            endpoint: format!("raptor/{}", failure.label),
-            detail: failure.body,
-        }),
     }
 }
 

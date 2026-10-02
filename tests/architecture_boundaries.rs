@@ -1742,17 +1742,33 @@ fn no_catch_all_error_variants() {
 ///
 /// - `select_quote_failure` picks among per-router errors already built at
 ///   their own failure sites.
-/// - `into_error` / `into_quote_error` convert a captured Jupiter HTTP failure
-///   (status + body) into the crate and quote channels. Keeping the status and
+/// - `into_quote_error` converts a captured Jupiter HTTP failure
+///   (status + body) into the quote channel. Keeping the status and
 ///   the raw body structured until this point is the whole reason a quote
 ///   failure can still be classified by type; rendering a message at the
 ///   failure site is what the migration is removing.
+/// - `raptor_quote_error` maps a captured Raptor HTTP failure (status + body)
+///   onto the quote channel — `into_quote_error`'s pattern for another router.
+/// - `provider_failure` / `apis_failure` / `assistant_failure` /
+///   `analysis_failure` map a provider's own typed error onto the API error
+///   envelope, carrying the message id; each already holds the failure it is
+///   translating.
+/// - `invalid_config` maps a config-walk `Error` onto the API error envelope.
+/// - `unknown_path` renders the walk's dead-end context (the available child
+///   keys at the point the walk stopped) into the typed `InvalidParameters`
+///   variant; that context exists only where the walk stopped.
 const ERROR_MAPPING_FUNCTIONS: &[&str] = &[
     "map_llm_error",
     "select_quote_failure",
-    "into_error",
     "into_quote_error",
     "json_error",
+    "raptor_quote_error",
+    "provider_failure",
+    "apis_failure",
+    "assistant_failure",
+    "analysis_failure",
+    "invalid_config",
+    "unknown_path",
 ];
 
 /// A function whose whole job is to return an error is a variant wearing a

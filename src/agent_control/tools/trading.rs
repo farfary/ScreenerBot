@@ -62,16 +62,23 @@ fn finish(
 
 /// Agent trades are capped at the configured trade size: an agent can size down,
 /// never past what the owner set the auto trader to risk per trade.
-fn checked_size(size_sol: Option<f64>, default_sol: f64) -> Result<f64, String> {
+fn checked_size(
+    size_sol: Option<f64>,
+    default_sol: f64,
+) -> Result<f64, crate::agent_control::Error> {
     let cap = with_config(|cfg| cfg.trader.trade_size_sol);
     let size = size_sol.unwrap_or(default_sol);
     if !size.is_finite() || size <= 0.0 {
-        return Err("Amount must be greater than 0".to_owned());
+        return Err(crate::agent_control::Error::InvalidParameters {
+            detail: "Amount must be greater than 0".to_owned(),
+        });
     }
     if size > cap {
-        return Err(format!(
-            "Amount {size} SOL exceeds the configured trade size of {cap} SOL (trader.trade_size_sol)"
-        ));
+        return Err(crate::agent_control::Error::InvalidParameters {
+            detail: format!(
+                "Amount {size} SOL exceeds the configured trade size of {cap} SOL (trader.trade_size_sol)"
+            ),
+        });
     }
     Ok(size)
 }
@@ -136,7 +143,10 @@ impl Tool for BuyTokenTool {
             with_config(|cfg| cfg.trader.trade_size_sol),
         ) {
             Ok(size) => size,
-            Err(message) => return ToolResult::error(message),
+            Err(crate::agent_control::Error::InvalidParameters { detail }) => {
+                return ToolResult::error(detail)
+            }
+            Err(other) => return ToolResult::error(other.to_string()),
         };
         let slippage = match guard::validate_slippage(params.slippage_pct) {
             Ok(v) => v,
@@ -212,7 +222,10 @@ impl Tool for AddToPositionTool {
             with_config(|cfg| cfg.trader.trade_size_sol * (cfg.trader.dca_size_percentage / 100.0));
         let size = match checked_size(params.amount_sol, dca_default) {
             Ok(size) => size,
-            Err(message) => return ToolResult::error(message),
+            Err(crate::agent_control::Error::InvalidParameters { detail }) => {
+                return ToolResult::error(detail)
+            }
+            Err(other) => return ToolResult::error(other.to_string()),
         };
         let slippage = match guard::validate_slippage(params.slippage_pct) {
             Ok(v) => v,

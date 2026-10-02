@@ -212,89 +212,6 @@ const JUPITER_MAX_ATTEMPTS: u32 = 4;
 /// already stale. Without it a stalled socket parked the whole sell indefinitely.
 const JUPITER_HTTP_TIMEOUT: Duration = Duration::from_secs(15);
 
-/// Fold a failed Jupiter call into the crate error channel, preserving rate
-/// limiting as `NetworkError::RateLimited` so `ErrorClass::is_rate_limited()`
-/// still answers correctly downstream (the exit monitor backs off on it).
-fn jupiter_error(failure: RouterHttpFailure) -> Error {
-    match failure.status {
-        Some(429) => Error::Network(NetworkError::RateLimited {
-            endpoint: format!("jupiter/{}", failure.label),
-            retry_after_ms: failure.retry_after.map(|d| d.as_millis() as u64),
-        }),
-        Some(status) => Error::Network(NetworkError::HttpStatus {
-            endpoint: format!("jupiter/{}", failure.label),
-            status,
-            body: Some(failure.body),
-        }),
-        None => Error::Network(NetworkError::RequestFailed {
-            endpoint: format!("jupiter/{}", failure.label),
-            detail: failure.body,
-        }),
-    }
-}
-
-/// Classify a failed Jupiter call into the quote vocabulary.
-///
-/// Reading the provider's own body is correct HERE and nowhere else: this is
-/// the boundary where Jupiter's wire format is translated into our vocabulary,
-/// so a Jupiter rewording breaks one function that exists to track it rather
-/// than a trading decision three modules away.
-fn jupiter_quote_error(failure: RouterHttpFailure, router: &str) -> QuoteError {
-    let router = router.to_owned();
-    match failure.status {
-        Some(429) => QuoteError::RateLimited {
-            router,
-            retry_after: failure.retry_after,
-        },
-        Some(status) if (400..500).contains(&status) => {
-            // Jupiter reports the reason as a stable machine `errorCode`;
-            // fall back to the raw body only when the shape is unexpected.
-            let code = serde_json::from_str::<serde_json::Value>(&failure.body)
-                .ok()
-                .and_then(|v| {
-                    v.get("errorCode")
-                        .and_then(|c| c.as_str())
-                        .map(str::to_owned)
-                })
-                .unwrap_or_default()
-                .to_ascii_uppercase();
-            let body_lower = failure.body.to_lowercase();
-
-            if code == "TOKEN_NOT_TRADABLE" || body_lower.contains("not tradable") {
-                QuoteError::NotTradable {
-                    router,
-                    detail: failure.body,
-                }
-            } else if code == "COULD_NOT_FIND_ANY_ROUTE"
-                || body_lower.contains("could not find any route")
-                || body_lower.contains("no route")
-                || body_lower.contains("no routes")
-            {
-                QuoteError::NoRoute {
-                    router,
-                    detail: failure.body,
-                }
-            } else {
-                // A 4xx we do not recognise is a request WE got wrong, not
-                // a verdict on the token — it must never retire one.
-                QuoteError::Unavailable {
-                    router,
-                    detail: format!("HTTP {status}: {}", failure.body),
-                }
-            }
-        }
-        Some(status) => QuoteError::Unavailable {
-            router,
-            detail: format!("HTTP {status}: {}", failure.body),
-        },
-        None if failure.timed_out => QuoteError::Timeout { router },
-        None => QuoteError::Unavailable {
-            router,
-            detail: failure.body,
-        },
-    }
-}
-
 /// Send a Jupiter HTTP request over the shared router transport.
 async fn jupiter_send_with_retry<F>(
     label: &str,
@@ -439,7 +356,21 @@ pub(crate) async fn execute_with_keypair(
             .timeout(JUPITER_HTTP_TIMEOUT)
     })
     .await
-    .map_err(jupiter_error)?;
+    .map_err(|failure| match failure.status {
+        Some(429) => Error::Network(NetworkError::RateLimited {
+            endpoint: format!("jupiter/{}", failure.label),
+            retry_after_ms: failure.retry_after.map(|d| d.as_millis() as u64),
+        }),
+        Some(status) => Error::Network(NetworkError::HttpStatus {
+            endpoint: format!("jupiter/{}", failure.label),
+            status,
+            body: Some(failure.body),
+        }),
+        None => Error::Network(NetworkError::RequestFailed {
+            endpoint: format!("jupiter/{}", failure.label),
+            detail: failure.body,
+        }),
+    })?;
 
     let swap_response: JupiterSwapResponse = serde_json::from_str(&response_text)
         .map_err(|e| Error::parse_error(format!("Jupiter swap response parse failed: {e}")))?;
@@ -595,7 +526,61 @@ impl SwapRouter for JupiterRouter {
             req.query(&quote_req).timeout(JUPITER_HTTP_TIMEOUT)
         })
         .await
-        .map_err(|f| jupiter_quote_error(f, self.name()))?;
+        .map_err(|failure| {
+            let router = self.name().to_owned();
+            match failure.status {
+                Some(429) => QuoteError::RateLimited {
+                    router,
+                    retry_after: failure.retry_after,
+                },
+                Some(status) if (400..500).contains(&status) => {
+                    // Jupiter reports the reason as a stable machine `errorCode`;
+                    // fall back to the raw body only when the shape is unexpected.
+                    let code = serde_json::from_str::<serde_json::Value>(&failure.body)
+                        .ok()
+                        .and_then(|v| {
+                            v.get("errorCode")
+                                .and_then(|c| c.as_str())
+                                .map(str::to_owned)
+                        })
+                        .unwrap_or_default()
+                        .to_ascii_uppercase();
+                    let body_lower = failure.body.to_lowercase();
+
+                    if code == "TOKEN_NOT_TRADABLE" || body_lower.contains("not tradable") {
+                        QuoteError::NotTradable {
+                            router,
+                            detail: failure.body,
+                        }
+                    } else if code == "COULD_NOT_FIND_ANY_ROUTE"
+                        || body_lower.contains("could not find any route")
+                        || body_lower.contains("no route")
+                        || body_lower.contains("no routes")
+                    {
+                        QuoteError::NoRoute {
+                            router,
+                            detail: failure.body,
+                        }
+                    } else {
+                        // A 4xx we do not recognise is a request WE got wrong, not
+                        // a verdict on the token — it must never retire one.
+                        QuoteError::Unavailable {
+                            router,
+                            detail: format!("HTTP {status}: {}", failure.body),
+                        }
+                    }
+                }
+                Some(status) => QuoteError::Unavailable {
+                    router,
+                    detail: format!("HTTP {status}: {}", failure.body),
+                },
+                None if failure.timed_out => QuoteError::Timeout { router },
+                None => QuoteError::Unavailable {
+                    router,
+                    detail: failure.body,
+                },
+            }
+        })?;
 
         // Parse into our limited struct just to extract key values
         let quote_response: JupiterQuoteResponse =
@@ -733,7 +718,21 @@ impl SwapRouter for JupiterRouter {
                 .timeout(JUPITER_HTTP_TIMEOUT)
         })
         .await
-        .map_err(jupiter_error)?;
+        .map_err(|failure| match failure.status {
+            Some(429) => Error::Network(NetworkError::RateLimited {
+                endpoint: format!("jupiter/{}", failure.label),
+                retry_after_ms: failure.retry_after.map(|d| d.as_millis() as u64),
+            }),
+            Some(status) => Error::Network(NetworkError::HttpStatus {
+                endpoint: format!("jupiter/{}", failure.label),
+                status,
+                body: Some(failure.body),
+            }),
+            None => Error::Network(NetworkError::RequestFailed {
+                endpoint: format!("jupiter/{}", failure.label),
+                detail: failure.body,
+            }),
+        })?;
 
         let swap_response: JupiterSwapResponse = serde_json::from_str(&response_text)
             .map_err(|e| Error::parse_error(format!("Jupiter swap response parse failed: {e}")))?;

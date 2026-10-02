@@ -139,7 +139,7 @@ impl Service for WebserverService {
             );
 
             if let Err(e) = crate::webserver::start_server(port_override, host_override).await {
-                crate::webserver::report_startup(Err(e.to_string()));
+                crate::webserver::report_startup(Err(e.clone()));
                 logger::error(
                     LogTag::System,
                     &format!("[WEBSERVER] ❌ start_server() FAILED: {e}"),
@@ -163,10 +163,10 @@ impl Service for WebserverService {
                 message: "Timed out waiting for the HTTP listener to bind".to_owned(),
             })
         })?
-        .map_err(|message| {
+        .map_err(|e| {
             crate::Error::Service(crate::errors::ServiceError::Start {
                 service: "webserver".to_owned(),
-                message,
+                message: e.to_string(),
             })
         })?;
 

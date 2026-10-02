@@ -41,7 +41,7 @@ static SHUTDOWN_SIGNAL: std::sync::LazyLock<(watch::Sender<bool>, watch::Receive
     std::sync::LazyLock::new(|| watch::channel(false));
 
 struct StartupSignal {
-    result: Mutex<Option<std::result::Result<(), String>>>,
+    result: Mutex<Option<Result<()>>>,
     notify: Notify,
 }
 
@@ -59,7 +59,7 @@ pub(crate) fn prepare_startup_signal() {
         .expect("webserver startup signal") = None;
 }
 
-pub(crate) fn report_startup(result: std::result::Result<(), String>) {
+pub(crate) fn report_startup(result: Result<()>) {
     let mut current = STARTUP_SIGNAL
         .result
         .lock()
@@ -70,7 +70,7 @@ pub(crate) fn report_startup(result: std::result::Result<(), String>) {
     }
 }
 
-pub(crate) async fn wait_for_startup() -> std::result::Result<(), String> {
+pub(crate) async fn wait_for_startup() -> Result<()> {
     loop {
         let notified = STARTUP_SIGNAL.notify.notified();
         if let Some(result) = STARTUP_SIGNAL

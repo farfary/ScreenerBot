@@ -368,10 +368,12 @@ where
     if requested_offset > 0 {
         request = request.header(reqwest::header::RANGE, format!("bytes={requested_offset}-"));
     }
-    let response = request
-        .send()
-        .await
-        .map_err(|error| request_failed(&endpoint, error))?;
+    let response = request.send().await.map_err(|error| {
+        Error::Network(crate::errors::NetworkError::RequestFailed {
+            endpoint: endpoint.clone(),
+            detail: error.to_string(),
+        })
+    })?;
 
     if response.status() == reqwest::StatusCode::RANGE_NOT_SATISFIABLE && requested_offset > 0 {
         reset_partial(destination).await?;
@@ -447,7 +449,12 @@ where
                 })
             })?;
         let Some(chunk) = next else { break };
-        let chunk = chunk.map_err(|error| request_failed(&endpoint, error))?;
+        let chunk = chunk.map_err(|error| {
+            Error::Network(crate::errors::NetworkError::RequestFailed {
+                endpoint: endpoint.clone(),
+                detail: error.to_string(),
+            })
+        })?;
         received = checked_download_size(received, chunk.len() as u64, response_size)?;
         downloaded = checked_download_size(downloaded, chunk.len() as u64, expected_size)?;
         file.write_all(&chunk)
@@ -478,13 +485,6 @@ where
     }
     on_progress(downloaded).await;
     Ok(())
-}
-
-fn request_failed(endpoint: &str, error: reqwest::Error) -> Error {
-    Error::Network(crate::errors::NetworkError::RequestFailed {
-        endpoint: endpoint.to_owned(),
-        detail: error.to_string(),
-    })
 }
 
 fn checked_download_size(current: u64, added: u64, limit: u64) -> Result<u64> {
@@ -529,41 +529,28 @@ fn validate_content_range(
     expected_start: u64,
     expected_total: u64,
 ) -> Result<u64> {
+    let invalid = |received: &str| {
+        Error::Data(crate::errors::DataError::InvalidFormat {
+            expected: "Content-Range matching the requested offset and authenticated asset size"
+                .to_owned(),
+            received: received.to_owned(),
+        })
+    };
     let value = response
         .headers()
         .get(reqwest::header::CONTENT_RANGE)
         .and_then(|value| value.to_str().ok())
-        .ok_or_else(|| invalid_content_range("missing Content-Range header"))?;
-    let remainder = value
-        .strip_prefix("bytes ")
-        .ok_or_else(|| invalid_content_range(value))?;
-    let (bounds, total) = remainder
-        .split_once('/')
-        .ok_or_else(|| invalid_content_range(value))?;
-    let (start, end) = bounds
-        .split_once('-')
-        .ok_or_else(|| invalid_content_range(value))?;
-    let start = start
-        .parse::<u64>()
-        .map_err(|_| invalid_content_range(value))?;
-    let end = end
-        .parse::<u64>()
-        .map_err(|_| invalid_content_range(value))?;
-    let total = total
-        .parse::<u64>()
-        .map_err(|_| invalid_content_range(value))?;
+        .ok_or_else(|| invalid("missing Content-Range header"))?;
+    let remainder = value.strip_prefix("bytes ").ok_or_else(|| invalid(value))?;
+    let (bounds, total) = remainder.split_once('/').ok_or_else(|| invalid(value))?;
+    let (start, end) = bounds.split_once('-').ok_or_else(|| invalid(value))?;
+    let start = start.parse::<u64>().map_err(|_| invalid(value))?;
+    let end = end.parse::<u64>().map_err(|_| invalid(value))?;
+    let total = total.parse::<u64>().map_err(|_| invalid(value))?;
     if start != expected_start || end < start || end >= expected_total || total != expected_total {
-        return Err(invalid_content_range(value));
+        return Err(invalid(value));
     }
     Ok(end - start + 1)
-}
-
-fn invalid_content_range(received: &str) -> Error {
-    Error::Data(crate::errors::DataError::InvalidFormat {
-        expected: "Content-Range matching the requested offset and authenticated asset size"
-            .to_owned(),
-        received: received.to_owned(),
-    })
 }
 
 fn transfer_retry_delay(base: Duration, failed_attempt: u32) -> Duration {
@@ -622,7 +609,12 @@ pub(super) async fn read_limited_body(
         Vec::with_capacity(response.content_length().unwrap_or_default().min(limit) as usize);
     let mut stream = response.bytes_stream();
     while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|error| request_failed(endpoint, error))?;
+        let chunk = chunk.map_err(|error| {
+            Error::Network(crate::errors::NetworkError::RequestFailed {
+                endpoint: endpoint.to_owned(),
+                detail: error.to_string(),
+            })
+        })?;
         let next_len =
             body.len()
                 .checked_add(chunk.len())
