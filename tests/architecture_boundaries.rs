@@ -572,11 +572,17 @@ fn is_composition_root(relative: &Path) -> bool {
     relative.starts_with("run")
 }
 
+/// Test-support files are exempt from the production-code guards. A file
+/// named `tests.rs`, or one whose name ends with `_tests.rs`, is gated out
+/// of the build by a file-level `#[cfg(test)] mod ...;` declaration in its
+/// parent module — gating `production_text` cannot see, because it only
+/// strips `#[cfg(test)]` blocks declared inside the same file. `_tests.rs`
+/// is the repo's test-support suffix.
 fn is_test_support_file(relative: &Path) -> bool {
     relative
         .file_name()
         .and_then(|name| name.to_str())
-        .is_some_and(|name| name == "tests.rs")
+        .is_some_and(|name| name == "tests.rs" || name.ends_with("_tests.rs"))
 }
 
 /// Schema-evolution / backfill owners may name Solana as a historical data
@@ -648,6 +654,481 @@ fn operational_shared_code_uses_active_chain_seam() {
         "shared operational code must select the process chain through \
          crate::chains::active_chain(), not by naming ChainId::Solana:\n{}",
         violations.join("\n")
+    );
+}
+
+/// Removes comment text from production-filtered source, string-aware: a
+/// `//` or `/*` inside a string literal is code, not a comment. Line
+/// comments drop everything to end-of-line; block comments drop the whole
+/// (nestable) `/* .. */` span. Newlines are preserved so reported line
+/// numbers still point at the real source.
+///
+/// The per-line `starts_with("//")` skip only removes lines that START with
+/// a comment, so a trailing `// chains::solana` after real code would
+/// otherwise freeze comment text into the ratchet as if it were a call
+/// site. The three ratchet guards below run this over their
+/// [`production_text`] output before trigger matching; `production_text`
+/// itself is shared with the other guards and stays unchanged.
+fn strip_comment_text(source: &str) -> String {
+    let mut out = String::with_capacity(source.len());
+    let mut chars = source.chars().peekable();
+    let mut in_str = false;
+    let mut escaped = false;
+    let mut in_line_comment = false;
+    let mut block_depth = 0usize;
+    while let Some(c) = chars.next() {
+        if in_str {
+            if escaped {
+                escaped = false;
+            } else if c == '\\' {
+                escaped = true;
+            } else if c == '"' {
+                in_str = false;
+            }
+            out.push(c);
+        } else if in_line_comment {
+            if c == '\n' {
+                in_line_comment = false;
+                out.push(c);
+            }
+        } else if block_depth > 0 {
+            if c == '/' && chars.peek() == Some(&'*') {
+                chars.next();
+                block_depth += 1;
+            } else if c == '*' && chars.peek() == Some(&'/') {
+                chars.next();
+                block_depth -= 1;
+            }
+            if c == '\n' {
+                out.push('\n');
+            }
+        } else if c == '"' {
+            in_str = true;
+            out.push(c);
+        } else if c == '/' && chars.peek() == Some(&'/') {
+            chars.next();
+            in_line_comment = true;
+            out.pop();
+        } else if c == '/' && chars.peek() == Some(&'*') {
+            chars.next();
+            block_depth = 1;
+            out.pop();
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+/// Files outside `src/chains/` whose production code still names
+/// `chains::solana` directly. Each entry is coupling that must move behind
+/// the chain runtime; the list freezes the exact current set, so a file that
+/// names the concrete chain without an entry here is a new bypass and an
+/// entry whose file no longer names it must be removed — the list only ever
+/// shrinks.
+const NEUTRAL_FILES_NAMING_CHAINS_SOLANA: &[&str] = &[
+    "account/mod.rs",
+    "agent_control/tools/portfolio.rs",
+    "config/error.rs",
+    "config/wallet.rs",
+    "connectivity/monitors/raptor.rs",
+    "connectivity/monitors/rpc.rs",
+    "errors/error.rs",
+    "positions/ledger/sync.rs",
+    "positions/operations/close.rs",
+    "positions/operations/dca.rs",
+    "positions/operations/open.rs",
+    "positions/operations/partial_close.rs",
+    "positions/verifier.rs",
+    "positions/worker.rs",
+    "run/services.rs",
+    "services/implementations/pool_analyzer_service.rs",
+    "services/implementations/pool_calculator_service.rs",
+    "services/implementations/pool_discovery_service.rs",
+    "services/implementations/pool_fetcher_service.rs",
+    "services/implementations/pools_service.rs",
+    "services/implementations/referral_service.rs",
+    "swaps/operations.rs",
+    "telegram/commands/status.rs",
+    "tokens/decimals.rs",
+    "tokens/error.rs",
+    "tools/ata_cleanup/operations.rs",
+    "tools/ata_cleanup/types.rs",
+    "tools/multi_wallet/buy.rs",
+    "tools/multi_wallet/consolidate.rs",
+    "tools/multi_wallet/sell.rs",
+    "tools/multi_wallet/transfer.rs",
+    "trader/copy/service.rs",
+    "transactions/database/deltas.rs",
+    "transactions/debug.rs",
+    "transactions/debug_helpers.rs",
+    "transactions/service/bootstrap.rs",
+    "transactions/service/lifecycle.rs",
+    "transactions/service/reclassify.rs",
+    "transactions/verifier.rs",
+    "wallets/balance_monitor/database.rs",
+    "wallets/balance_monitor/service.rs",
+    "wallets/bulk/validator.rs",
+    "wallets/manager/balance_ops.rs",
+    "wallets/manager/balance_queries.rs",
+    "wallets/manager/bulk_ops.rs",
+    "wallets/manager/crud.rs",
+    "wallets/manager/migration.rs",
+    "webserver/routes/initialization/handlers.rs",
+    "webserver/routes/initialization/types.rs",
+    "webserver/routes/positions/detail.rs",
+    "webserver/routes/tokens/detail.rs",
+    "webserver/routes/tools/ata_cleanup.rs",
+    "webserver/routes/tools/burn_tokens.rs",
+    "webserver/routes/tools/multi_wallet/multi_buy.rs",
+    "webserver/routes/tools/multi_wallet/multi_sell.rs",
+    "webserver/routes/tools/multi_wallet/wallet_ops.rs",
+    "webserver/routes/trader/manual.rs",
+    "webserver/routes/transactions/handlers.rs",
+    "webserver/snapshot/collectors.rs",
+];
+
+/// Neutral code — everything outside `src/chains/` — must reach chains only
+/// through the chain runtime. A direct `chains::solana` name in production
+/// code binds the file to one concrete chain implementation.
+#[test]
+fn neutral_code_reaches_chains_only_through_runtime() {
+    let mut hits: Vec<String> = Vec::new();
+    let mut new_violations = Vec::new();
+    for (relative, contents) in walk_src() {
+        if is_chain_module(&relative) || is_test_support_file(&relative) {
+            continue;
+        }
+        let path = relative.to_string_lossy().into_owned();
+        // Comment text is not code: a trailing `// chains::solana` must not
+        // freeze a comment into the ratchet as a production reference.
+        let production = strip_comment_text(&production_text(&contents));
+        for (idx, line) in production.lines().enumerate() {
+            if line.trim_start().starts_with("//") {
+                continue;
+            }
+            if line.contains("chains::solana") {
+                hits.push(path.clone());
+                if !NEUTRAL_FILES_NAMING_CHAINS_SOLANA.contains(&path.as_str()) {
+                    new_violations.push(format!("src/{path}:{}: {}", idx + 1, line.trim()));
+                }
+            }
+        }
+    }
+    let stale: Vec<&str> = NEUTRAL_FILES_NAMING_CHAINS_SOLANA
+        .iter()
+        .copied()
+        .filter(|entry| !hits.iter().any(|hit| hit.as_str() == *entry))
+        .collect();
+    assert!(
+        new_violations.is_empty() && stale.is_empty(),
+        "neutral code must reach chains only through the chain runtime — route this through \
+         the chain runtime (new files naming chains::solana outside src/chains):\n{}\n\
+         remove it from the allowlist (entries that no longer name chains::solana):\n{}",
+        new_violations.join("\n"),
+        stale.join("\n")
+    );
+}
+
+/// Files outside `src/chains/` whose production code selects the process
+/// chain through `active_chain()` or takes facts straight from
+/// `chains::adapter()` — fully qualified, or the bare `adapter()` reached
+/// through a `use crate::chains::adapter` import. The allowlist freezes the
+/// exact current caller set; it shrinks as callers move behind the injected
+/// chain runtime and grows only for a genuinely new direct caller, which is
+/// the violation the guard exists to catch.
+const PROCESS_CHAIN_SEAM_CALLER_FILES: &[&str] = &[
+    "agent_control/tools/analysis.rs",
+    "agent_control/tools/portfolio.rs",
+    "apis/coingecko/mod.rs",
+    "apis/defillama/mod.rs",
+    "apis/dexscreener/mod.rs",
+    "apis/geckoterminal/mod.rs",
+    "apis/sol_price.rs",
+    "connectivity/monitors/dexscreener.rs",
+    "events/recorders/lifecycle.rs",
+    "filtering/engine.rs",
+    "filtering/sources/meta.rs",
+    "filtering/sources/onchain.rs",
+    "ohlcvs/cache.rs",
+    "ohlcvs/fetcher.rs",
+    "ohlcvs/manager.rs",
+    "ohlcvs/service.rs",
+    "pools/cache.rs",
+    "pools/service.rs",
+    "pools/utils.rs",
+    "positions/apply.rs",
+    "positions/database/global.rs",
+    "positions/ledger/reducer.rs",
+    "positions/operations/close.rs",
+    "positions/operations/dca.rs",
+    "positions/operations/open.rs",
+    "positions/operations/partial_close.rs",
+    "positions/pnl.rs",
+    "positions/verifier.rs",
+    "services/implementations/copy_trading_service.rs",
+    "swaps/operations.rs",
+    "swaps/registry.rs",
+    "telegram/wallet_alerts.rs",
+    "tokens/decimals.rs",
+    "tokens/discovery.rs",
+    "tokens/discovery_sources.rs",
+    "tokens/market/dexscreener.rs",
+    "tokens/market/geckoterminal.rs",
+    "tokens/mod.rs",
+    "tokens/search.rs",
+    "tokens/service.rs",
+    "tools/ata_cleanup/operations.rs",
+    "tools/multi_wallet/buy.rs",
+    "tools/multi_wallet/consolidate.rs",
+    "tools/multi_wallet/sell.rs",
+    "tools/multi_wallet/transfer.rs",
+    "tools/swap_executor.rs",
+    "tools/trade_watcher/monitor.rs",
+    "trader/copy/control.rs",
+    "trader/copy/service.rs",
+    "trader/copy/workspace/profile.rs",
+    "trader/manual/guard.rs",
+    "trader/policy.rs",
+    "trader/safety/blacklist.rs",
+    "transactions/database/global.rs",
+    "transactions/debug.rs",
+    "transactions/debug_helpers.rs",
+    "transactions/subject.rs",
+    "transactions/utils.rs",
+    "wallets/balance_monitor/service.rs",
+    "wallets/balance_monitor/worth.rs",
+    "wallets/manager.rs",
+    "wallets/manager/balance_queries.rs",
+    "wallets/watch/mod.rs",
+    "webserver/promo/copy_trading.rs",
+    "webserver/promo/copy_trading/desk.rs",
+    "webserver/routes/blacklist/handlers.rs",
+    "webserver/routes/dashboard/overview.rs",
+    "webserver/routes/featured/cache.rs",
+    "webserver/routes/featured/identity.rs",
+    "webserver/routes/positions/activity/drafts.rs",
+    "webserver/routes/positions/activity/merge.rs",
+    "webserver/routes/positions/activity/mod.rs",
+    "webserver/routes/positions/debug.rs",
+    "webserver/routes/positions/detail.rs",
+    "webserver/routes/positions/types.rs",
+    "webserver/routes/tokens/detail.rs",
+    "webserver/routes/tokens/ohlcv.rs",
+    "webserver/routes/tokens/types.rs",
+    "webserver/routes/tools/ata_cleanup.rs",
+    "webserver/routes/tools/burn_tokens.rs",
+    "webserver/routes/tools/multi_wallet/multi_buy.rs",
+    "webserver/routes/tools/multi_wallet/multi_sell.rs",
+    "webserver/routes/trader/manual.rs",
+];
+
+/// True when `line` calls `adapter(...)` unqualified — the chains adapter
+/// reached through an imported `use crate::chains::adapter`. A method call
+/// (`.adapter(`) or a longer identifier (`http_adapter(`) is not a hit, and
+/// neither is a definition: `fn ` right before the name marks a fn or
+/// method declaration (`pub fn adapter(&self)`), the same special case the
+/// template guard applies to the Solana identity constructor's signature.
+fn is_bare_adapter_call(line: &str) -> bool {
+    let mut search_from = 0;
+    while let Some(found) = line[search_from..].find("adapter(") {
+        let at = search_from + found;
+        let boundary = match line[..at].chars().next_back() {
+            None => true,
+            Some(prev) => !(prev.is_alphanumeric() || prev == '_' || prev == '.'),
+        };
+        let is_definition = line[..at].ends_with("fn ");
+        if boundary && !is_definition {
+            return true;
+        }
+        search_from = at + 1;
+    }
+    false
+}
+
+/// True when `line` calls `active_chain()` bare or path-qualified
+/// (`chains::active_chain(`) — the same identifier/dot boundary as
+/// [`is_bare_adapter_call`]. A method call on some other receiver
+/// (`reader.active_chain(`) is not a seam call.
+fn is_active_chain_call(line: &str) -> bool {
+    let mut search_from = 0;
+    while let Some(found) = line[search_from..].find("active_chain(") {
+        let at = search_from + found;
+        let boundary = match line[..at].chars().next_back() {
+            None => true,
+            Some(':') => true,
+            Some(prev) => !(prev.is_alphanumeric() || prev == '_' || prev == '.'),
+        };
+        if boundary {
+            return true;
+        }
+        search_from = at + 1;
+    }
+    false
+}
+
+/// The process chain and the adapter facts flow to neutral code only through
+/// the chain runtime. Every direct call below is a seam call site that a
+/// later step must lift behind the injected runtime; the caller file set is
+/// ratcheted so it can only shrink.
+#[test]
+fn process_chain_seam_shrinks() {
+    let mut hits: Vec<String> = Vec::new();
+    let mut new_violations = Vec::new();
+    for (relative, contents) in walk_src() {
+        if is_chain_module(&relative) {
+            continue;
+        }
+        let path = relative.to_string_lossy().into_owned();
+        // Comment text is not code: a trailing `// adapter(...)` must not
+        // freeze a comment into the ratchet as a seam call site.
+        let production = strip_comment_text(&production_text(&contents));
+        for (idx, line) in production.lines().enumerate() {
+            if line.trim_start().starts_with("//") {
+                continue;
+            }
+            let calls_seam = is_active_chain_call(line)
+                || line.contains("chains::adapter")
+                || is_bare_adapter_call(line);
+            if calls_seam {
+                hits.push(path.clone());
+                if !PROCESS_CHAIN_SEAM_CALLER_FILES.contains(&path.as_str()) {
+                    new_violations.push(format!("src/{path}:{}: {}", idx + 1, line.trim()));
+                }
+            }
+        }
+    }
+    let stale: Vec<&str> = PROCESS_CHAIN_SEAM_CALLER_FILES
+        .iter()
+        .copied()
+        .filter(|entry| !hits.iter().any(|hit| hit.as_str() == *entry))
+        .collect();
+    assert!(
+        new_violations.is_empty() && stale.is_empty(),
+        "the process chain and adapter facts must come through the chain runtime — route \
+         this through the chain runtime (new callers of active_chain()/adapter() outside \
+         src/chains):\n{}\nremove it from the allowlist (entries that no longer call the \
+         seam):\n{}",
+        new_violations.join("\n"),
+        stale.join("\n")
+    );
+}
+
+/// Statics in the trading domains whose map is keyed by a bare `String` —
+/// an address, a signature, a mint — carry no chain scope, so a second chain
+/// would silently share (or collide with) every entry. Entries are
+/// `file::STATIC` and freeze today's set; each shrinks away as its map is
+/// keyed through the chain runtime with an explicit chain-scoped key.
+const BARE_STRING_KEYED_STATICS: &[&str] = &[
+    "pools/cache.rs::PRICE_CACHE",
+    "pools/cache.rs::PRICE_HISTORY",
+    "positions/price_resolution.rs::FORCE_FETCH_COOLDOWN",
+    "positions/state.rs::MINT_TO_POSITION_INDEX",
+    "positions/state.rs::PENDING_OPEN_SWAPS",
+    "positions/state.rs::POSITION_LOCKS",
+    "positions/state.rs::SIG_TO_MINT_INDEX",
+    "positions/state_pending.rs::PENDING_DCA_SWAPS",
+    "positions/state_pending.rs::PENDING_PARTIAL_EXITS",
+    "positions/state_pending.rs::PENDING_PARTIAL_EXIT_DETAILS",
+    "positions/verifier.rs::LAST_TOKEN_ACCOUNTS_CHECK",
+    "swaps/operations.rs::NO_ROUTE_STRIKES",
+    "trader/entry.rs::ENTRY_CYCLE_RESERVATIONS",
+    "transactions/utils.rs::GLOBAL_KNOWN_SIGNATURES",
+    "transactions/utils.rs::GLOBAL_PENDING_TRANSACTIONS",
+];
+
+/// Top-level trading domains in scope for [`no_bare_string_keyed_statics`].
+const BARE_STRING_KEYED_STATIC_DIRS: &[&str] =
+    &["pools", "positions", "transactions", "trader", "swaps"];
+
+/// The name of the static declared on `line`, if the line starts a `static`
+/// item declaration (any visibility).
+fn static_declaration_name(line: &str) -> Option<&str> {
+    let trimmed = line.trim_start();
+    let after_visibility = trimmed
+        .strip_prefix("pub(crate) ")
+        .or_else(|| trimmed.strip_prefix("pub(super) "))
+        .or_else(|| trimmed.strip_prefix("pub "))
+        .unwrap_or(trimmed);
+    let after_static = after_visibility.strip_prefix("static ")?;
+    let rest = after_static.strip_prefix("mut ").unwrap_or(after_static);
+    let name_end = rest.find(|c: char| !(c.is_alphanumeric() || c == '_'))?;
+    (name_end > 0).then_some(&rest[..name_end])
+}
+
+/// A trading-domain static must not key its map by a bare `String`. The
+/// declaration header (everything from `static NAME` up to the `=`) is
+/// scanned for the `<String,` map-key pattern; the allowlist ratchets the
+/// current set in both directions.
+///
+/// Convention for a conforming chain-scoped static: key the map by the
+/// tuple `(ChainId, String)`, which does not match the pattern, so it needs
+/// no entry. A nested per-chain map
+/// (`LazyLock<HashMap<ChainId, HashMap<String, T>>>`) DOES match and would
+/// false-fail; such a static must follow the tuple-key convention instead.
+///
+/// Known latent gaps: [`static_declaration_name`] does not recognize
+/// `pub(in path)` visibility (none exist today), and String-keyed SETS
+/// (`HashSet<String>`, e.g. `OPEN_MINTS_SNAPSHOT` in src/pools/cache.rs)
+/// carry no `<String,` map-key pattern and are not covered.
+#[test]
+fn no_bare_string_keyed_statics() {
+    let mut hits: Vec<String> = Vec::new();
+    let mut new_violations = Vec::new();
+    for (relative, contents) in walk_src() {
+        let path = relative.to_string_lossy().into_owned();
+        let top_level = path.split('/').next().unwrap_or("");
+        if !BARE_STRING_KEYED_STATIC_DIRS.contains(&top_level) {
+            continue;
+        }
+        // Comment text is not code: a `// ... <String,` comment must not
+        // freeze a declaration into the ratchet.
+        let production = strip_comment_text(&production_text(&contents));
+        // A multi-line declaration header accumulates here until its `=`.
+        let mut pending: Option<(String, String)> = None;
+        for (idx, line) in production.lines().enumerate() {
+            if line.trim_start().starts_with("//") {
+                continue;
+            }
+            let (name, mut header) = match pending.take() {
+                Some((name, header)) => (name, header),
+                None => match static_declaration_name(line) {
+                    Some(name) => (name.to_owned(), String::new()),
+                    None => continue,
+                },
+            };
+            header.push_str(line);
+            header.push('\n');
+            if !header.contains('=') {
+                pending = Some((name, header));
+                continue;
+            }
+            let declared_type = header.split('=').next().unwrap_or("");
+            if !declared_type.contains("<String,") {
+                continue;
+            }
+            let key = format!("{path}::{name}");
+            hits.push(key.clone());
+            if !BARE_STRING_KEYED_STATICS.contains(&key.as_str()) {
+                new_violations.push(format!(
+                    "src/{path}:{}: static {name} is keyed by a bare String",
+                    idx + 1
+                ));
+            }
+        }
+    }
+    let stale: Vec<&str> = BARE_STRING_KEYED_STATICS
+        .iter()
+        .copied()
+        .filter(|entry| !hits.iter().any(|hit| hit.as_str() == *entry))
+        .collect();
+    assert!(
+        new_violations.is_empty() && stale.is_empty(),
+        "trading-domain statics must not key their maps by a bare String — route this \
+         through the chain runtime (new bare-String-keyed statics):\n{}\nremove it from \
+         the allowlist (entries that no longer declare a bare-String key):\n{}",
+        new_violations.join("\n"),
+        stale.join("\n")
     );
 }
 
