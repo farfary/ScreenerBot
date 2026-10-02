@@ -24,7 +24,7 @@ const RATE_LIMIT_WINDOW: Duration = Duration::from_secs(60);
 pub(crate) const MAX_CANDLES_PER_REQUEST: usize = 1000;
 
 /// The SolanaTracker OHLCV fallback, registered by the composition root
-/// (A-02). Deleted by A-12c when OHLCV sources become per-chain.
+/// . Deleted when OHLCV sources become per-chain.
 type SolanaTrackerEnabledFn = fn() -> bool;
 type SolanaTrackerFetchFn =
     fn(

@@ -3,10 +3,10 @@
 
 //! Neutral-facing feeds over the Solana-only Jupiter client.
 //!
-//! A-02 moved this provider under the Solana adapter; the neutral consumers
+//! This provider moved under the Solana adapter; the neutral consumers
 //! (tokens discovery, featured boards, the SOL-price fallback) reach it through
 //! fn seams installed by `crate::run::services::register_all_services`.
-//! A-12a/A-12c delete the discovery and OHLCV sides when those domains thread
+//! The discovery and OHLCV sides are deleted when those domains thread
 //! the chain through.
 
 use std::future::Future;

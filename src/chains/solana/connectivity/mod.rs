@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Solana-only endpoint health monitors (moved out of `src/connectivity` in A-02).
+//! Solana-only endpoint health monitors (moved out of `src/connectivity`).
 
 pub mod jupiter;
 pub mod raptor;

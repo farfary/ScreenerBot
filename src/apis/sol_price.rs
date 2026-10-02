@@ -129,8 +129,8 @@ static SERVICE_RUNNING: LazyLock<Arc<std::sync::atomic::AtomicBool>> =
 type JupiterFallbackFn = fn() -> Pin<Box<dyn Future<Output = Result<f64, Error>> + Send>>;
 static JUPITER_FALLBACK: std::sync::OnceLock<JupiterFallbackFn> = std::sync::OnceLock::new();
 
-/// Install the chain-owned Jupiter price fallback (A-02; the native-price
-/// service becomes per-chain later — A-09 rename, then A-12).
+/// Install the chain-owned Jupiter price fallback (the native-price
+/// service becomes per-chain later, after its rename and threading.)
 pub fn install_jupiter_fallback(fetch: JupiterFallbackFn) {
     let _ = JUPITER_FALLBACK.set(fetch);
 }

@@ -3,9 +3,9 @@
 
 //! Neutral-facing OHLCV fallback over the Solana-only SolanaTracker client.
 //!
-//! A-02 moved this provider under the Solana adapter; the neutral OHLCV
+//! This provider moved under the Solana adapter; the neutral OHLCV
 //! fetcher reaches it through fn seams installed by
-//! `crate::run::services::register_all_services`. A-12c deletes this file
+//! `crate::run::services::register_all_services`. This file is deleted
 //! when OHLCV sources become per-chain.
 
 use std::future::Future;

@@ -355,8 +355,8 @@ pub(super) async fn fetch_rugcheck_verified_tokens(
 
 // ── Jupiter ──────────────────────────────────────────────────────────────────
 
-/// The Jupiter discovery feeds, registered by the composition root (A-02).
-/// Deleted by A-12a when discovery spawns per chain.
+/// The Jupiter discovery feeds, registered by the composition root.
+/// Deleted when discovery spawns per chain.
 type JupiterFeedFn =
     fn() -> Pin<Box<dyn Future<Output = crate::tokens::Result<Vec<DiscoveryRecord>>> + Send>>;
 

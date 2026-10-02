@@ -20,7 +20,7 @@ use tokio::sync::Notify;
 use tokio::time::Duration;
 
 /// Chain-owned monitors appended to the neutral set, registered by the
-/// composition root (A-02); the neutral checker cannot construct them.
+/// composition root; the neutral checker cannot construct them.
 type ChainMonitorsFn = fn() -> Vec<Box<dyn EndpointMonitor>>;
 static CHAIN_MONITORS: OnceLock<ChainMonitorsFn> = OnceLock::new();
 

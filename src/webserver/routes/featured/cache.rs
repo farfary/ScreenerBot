@@ -16,8 +16,8 @@ use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 
-/// The Jupiter featured boards, registered by the composition root (A-02);
-/// A-12f re-points the featured surfaces at chain-aware sources.
+/// The Jupiter featured boards, registered by the composition root;
+/// The featured surfaces are re-pointed at chain-aware sources later.
 type JupiterBoardFn = fn() -> Pin<Box<dyn Future<Output = Result<Vec<ExternalToken>>> + Send>>;
 
 static JUPITER_BOARDS: std::sync::OnceLock<JupiterBoards> = std::sync::OnceLock::new();
