@@ -9,6 +9,8 @@
 use crate::apis::ApiManager;
 use crate::tokens::updates::RateLimitCoordinator;
 use crate::tokens::Error;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 
 use super::discovery::DiscoveryRecord;
@@ -353,96 +355,81 @@ pub(super) async fn fetch_rugcheck_verified_tokens(
 
 // ── Jupiter ──────────────────────────────────────────────────────────────────
 
-pub(super) async fn fetch_jupiter_recent(
-    api: &Arc<ApiManager>,
-) -> crate::tokens::Result<Vec<DiscoveryRecord>> {
-    let tokens = api
-        .jupiter
-        .fetch_recent_tokens()
-        .await
-        .map_err(|e| Error::Api {
-            provider: "Jupiter".to_owned(),
-            message: e.to_string(),
-        })?;
+/// The Jupiter discovery feeds, registered by the composition root (A-02).
+/// Deleted by A-12a when discovery spawns per chain.
+type JupiterFeedFn =
+    fn() -> Pin<Box<dyn Future<Output = crate::tokens::Result<Vec<DiscoveryRecord>>> + Send>>;
 
-    Ok(tokens
-        .into_iter()
-        .map(|token| DiscoveryRecord {
-            mint: token.id,
-            symbol: Some(token.symbol),
-            name: Some(token.name),
-            decimals: Some(token.decimals),
-        })
-        .collect())
+static JUPITER_SOURCES: std::sync::OnceLock<JupiterFeeds> = std::sync::OnceLock::new();
+
+struct JupiterFeeds {
+    recent: JupiterFeedFn,
+    top_organic: JupiterFeedFn,
+    top_traded: JupiterFeedFn,
+    top_trending: JupiterFeedFn,
+}
+
+/// Install the chain-owned Jupiter discovery feeds (composition root only).
+pub fn install_jupiter_sources(
+    recent: JupiterFeedFn,
+    top_organic: JupiterFeedFn,
+    top_traded: JupiterFeedFn,
+    top_trending: JupiterFeedFn,
+) {
+    let _ = JUPITER_SOURCES.set(JupiterFeeds {
+        recent,
+        top_organic,
+        top_traded,
+        top_trending,
+    });
+}
+
+pub(super) async fn fetch_jupiter_recent(
+    _api: &Arc<ApiManager>,
+) -> crate::tokens::Result<Vec<DiscoveryRecord>> {
+    let Some(feeds) = JUPITER_SOURCES.get() else {
+        return Err(Error::Api {
+            provider: "Jupiter".to_owned(),
+            message: "jupiter discovery feeds not installed".to_owned(),
+        });
+    };
+    (feeds.recent)().await
 }
 
 pub(super) async fn fetch_jupiter_top_organic(
-    api: &Arc<ApiManager>,
+    _api: &Arc<ApiManager>,
 ) -> crate::tokens::Result<Vec<DiscoveryRecord>> {
-    let tokens = api
-        .jupiter
-        .fetch_top_organic_score("1h", None)
-        .await
-        .map_err(|e| Error::Api {
+    let Some(feeds) = JUPITER_SOURCES.get() else {
+        return Err(Error::Api {
             provider: "Jupiter".to_owned(),
-            message: e.to_string(),
-        })?;
-
-    Ok(tokens
-        .into_iter()
-        .map(|token| DiscoveryRecord {
-            mint: token.id,
-            symbol: Some(token.symbol),
-            name: Some(token.name),
-            decimals: Some(token.decimals),
-        })
-        .collect())
+            message: "jupiter discovery feeds not installed".to_owned(),
+        });
+    };
+    (feeds.top_organic)().await
 }
 
 pub(super) async fn fetch_jupiter_top_traded(
-    api: &Arc<ApiManager>,
+    _api: &Arc<ApiManager>,
 ) -> crate::tokens::Result<Vec<DiscoveryRecord>> {
-    let tokens = api
-        .jupiter
-        .fetch_top_traded("1h", None)
-        .await
-        .map_err(|e| Error::Api {
+    let Some(feeds) = JUPITER_SOURCES.get() else {
+        return Err(Error::Api {
             provider: "Jupiter".to_owned(),
-            message: e.to_string(),
-        })?;
-
-    Ok(tokens
-        .into_iter()
-        .map(|token| DiscoveryRecord {
-            mint: token.id,
-            symbol: Some(token.symbol),
-            name: Some(token.name),
-            decimals: Some(token.decimals),
-        })
-        .collect())
+            message: "jupiter discovery feeds not installed".to_owned(),
+        });
+    };
+    (feeds.top_traded)().await
 }
 
 pub(super) async fn fetch_jupiter_top_trending(
-    api: &Arc<ApiManager>,
+    _api: &Arc<ApiManager>,
 ) -> crate::tokens::Result<Vec<DiscoveryRecord>> {
-    let tokens = api
-        .jupiter
-        .fetch_top_trending("1h", None)
-        .await
-        .map_err(|e| Error::Api {
+    let Some(feeds) = JUPITER_SOURCES.get() else {
+        return Err(Error::Api {
             provider: "Jupiter".to_owned(),
-            message: e.to_string(),
-        })?;
-
-    Ok(tokens
-        .into_iter()
-        .map(|token| DiscoveryRecord {
-            mint: token.id,
-            symbol: Some(token.symbol),
-            name: Some(token.name),
-            decimals: Some(token.decimals),
-        })
-        .collect())
+            message: "jupiter discovery feeds not installed".to_owned(),
+        });
+    };
+    (feeds.top_trending)().await
 }
 
 // ── CoinGecko ────────────────────────────────────────────────────────────────

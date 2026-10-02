@@ -25,6 +25,7 @@ use crate::webserver::state::AppState;
 use axum::{routing::get, Router};
 use std::sync::Arc;
 
+pub(crate) use cache::install_jupiter_boards;
 pub use types::{ExternalToken, FeaturedCard};
 
 /// Featured routes

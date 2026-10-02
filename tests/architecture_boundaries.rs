@@ -731,7 +731,6 @@ const NEUTRAL_FILES_NAMING_CHAINS_SOLANA: &[&str] = &[
     "agent_control/tools/portfolio.rs",
     "config/error.rs",
     "config/wallet.rs",
-    "connectivity/monitors/raptor.rs",
     "connectivity/monitors/rpc.rs",
     "errors/error.rs",
     "positions/ledger/sync.rs",
@@ -1129,6 +1128,50 @@ fn no_bare_string_keyed_statics() {
          the allowlist (entries that no longer declare a bare-String key):\n{}",
         new_violations.join("\n"),
         stale.join("\n")
+    );
+}
+
+/// `src/apis/` hosts only multi-chain providers plus its neutral plumbing.
+/// Solana-only providers live under `src/chains/solana/apis/`. Any new entry
+/// in the directory is a single-chain provider coming back (or unexpected
+/// plumbing) and fails here.
+const APIS_NEUTRAL_ENTRIES: &[&str] = &[
+    "coingecko",
+    "defillama",
+    "dexscreener",
+    "geckoterminal",
+    "llm",
+    "rugcheck",
+    "client.rs",
+    "error.rs",
+    "manager.rs",
+    "mod.rs",
+    "sol_price.rs",
+    "stats.rs",
+];
+
+#[test]
+fn apis_hosts_only_multi_chain_providers() {
+    let apis_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/apis");
+    let mut violations = Vec::new();
+    for entry in fs::read_dir(&apis_dir).expect("read_dir(src/apis) must succeed") {
+        let entry = entry.expect("dir entry must be readable");
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let is_dir = entry.path().is_dir();
+        if !is_dir && !name.ends_with(".rs") {
+            continue; // README.md and other non-source entries
+        }
+        if !APIS_NEUTRAL_ENTRIES.contains(&name.as_str()) {
+            violations.push(format!(
+                "src/apis/{name}: not a multi-chain provider — Solana-only providers \
+                 belong under src/chains/solana/apis"
+            ));
+        }
+    }
+    assert!(
+        violations.is_empty(),
+        "src/apis may host only multi-chain providers (A-02 ratchet):\n{}",
+        violations.join("\n")
     );
 }
 

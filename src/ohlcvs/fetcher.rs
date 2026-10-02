@@ -15,11 +15,40 @@ use crate::ohlcvs::types::{Candle, OhlcvError, OhlcvResult, Priority, Timeframe}
 use serde::Deserialize;
 use serde_json::json;
 use std::collections::{BinaryHeap, VecDeque};
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 const RATE_LIMIT_WINDOW: Duration = Duration::from_secs(60);
 pub(crate) const MAX_CANDLES_PER_REQUEST: usize = 1000;
+
+/// The SolanaTracker OHLCV fallback, registered by the composition root
+/// (A-02). Deleted by A-12c when OHLCV sources become per-chain.
+type SolanaTrackerEnabledFn = fn() -> bool;
+type SolanaTrackerFetchFn =
+    fn(
+        String,
+        String,
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<Candle>, crate::apis::Error>> + Send>>;
+
+static SOLANA_TRACKER: std::sync::OnceLock<SolanaTrackerSources> = std::sync::OnceLock::new();
+
+struct SolanaTrackerSources {
+    enabled: SolanaTrackerEnabledFn,
+    fetch_candles: SolanaTrackerFetchFn,
+}
+
+/// Install the chain-owned SolanaTracker source (composition root only).
+pub fn install_solana_tracker_sources(
+    enabled: SolanaTrackerEnabledFn,
+    fetch_candles: SolanaTrackerFetchFn,
+) {
+    let _ = SOLANA_TRACKER.set(SolanaTrackerSources {
+        enabled,
+        fetch_candles,
+    });
+}
 
 /// Upstream that answered a [`OhlcvFetcher::fetch_multi_source`] request.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -118,7 +147,10 @@ impl OhlcvFetcher {
 
     /// Check if SolanaTracker source is available (enabled with API key)
     pub fn has_solana_tracker(&self) -> bool {
-        self.api_manager.solana_tracker.is_enabled()
+        SOLANA_TRACKER
+            .get()
+            .map(|sources| (sources.enabled)())
+            .unwrap_or(false)
     }
 
     /// Fetch OHLCV data for a pool with priority
@@ -288,7 +320,7 @@ impl OhlcvFetcher {
         interval: &str,
         limit: usize,
     ) -> OhlcvResult<Vec<Candle>> {
-        if !self.api_manager.solana_tracker.is_enabled() {
+        if !self.has_solana_tracker() {
             return Err(OhlcvError::ApiError("SolanaTracker not enabled".to_owned()));
         }
 
@@ -307,30 +339,14 @@ impl OhlcvFetcher {
         )
         .await;
 
-        let response = self
-            .api_manager
-            .solana_tracker
-            .fetch_ohlcv(mint, interval, "sol", None, None)
-            .await;
-
+        let response = match SOLANA_TRACKER.get() {
+            Some(sources) => (sources.fetch_candles)(mint.to_owned(), interval.to_owned()).await,
+            None => {
+                return Err(OhlcvError::ApiError("SolanaTracker not enabled".to_owned()));
+            }
+        };
         match response {
-            Ok(ohlcv) => {
-                let mut data_points: Vec<Candle> = ohlcv
-                    .candles
-                    .into_iter()
-                    .map(|c| Candle {
-                        timestamp: c.time,
-                        open: c.open,
-                        high: c.high,
-                        low: c.low,
-                        close: c.close,
-                        volume: c.volume,
-                    })
-                    .collect();
-
-                // SolanaTracker returns newest first, sort by timestamp ascending
-                data_points.sort_by_key(|c| c.timestamp);
-
+            Ok(mut data_points) => {
                 // Limit results
                 if data_points.len() > limit {
                     let skip = data_points.len() - limit;
@@ -470,7 +486,7 @@ impl OhlcvFetcher {
         }
 
         // Try SolanaTracker first (uses token address, better data)
-        if before.is_none() && self.api_manager.solana_tracker.is_enabled() {
+        if before.is_none() && self.has_solana_tracker() {
             if let Some(interval) = Self::gt_to_st_interval(api_endpoint, aggregate) {
                 match self.fetch_from_solana_tracker(mint, interval, limit).await {
                     Ok(candles) if !candles.is_empty() => {

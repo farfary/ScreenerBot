@@ -143,5 +143,5 @@ async fn wait_for_idle() -> bool {
 fn trading_is_busy() -> bool {
     crate::global::are_trades_active()
         || crate::global::are_tools_active()
-        || crate::apis::jupiter::throttle::swap_in_flight()
+        || crate::chains::solana::apis::jupiter::throttle::swap_in_flight()
 }

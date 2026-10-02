@@ -10,9 +10,27 @@
 use super::types::ExternalToken;
 use crate::apis::get_api_manager;
 use crate::webserver::{Error, Result};
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
+
+/// The Jupiter featured boards, registered by the composition root (A-02);
+/// A-12f re-points the featured surfaces at chain-aware sources.
+type JupiterBoardFn = fn() -> Pin<Box<dyn Future<Output = Result<Vec<ExternalToken>>> + Send>>;
+
+static JUPITER_BOARDS: std::sync::OnceLock<JupiterBoards> = std::sync::OnceLock::new();
+
+struct JupiterBoards {
+    organic: JupiterBoardFn,
+    traded: JupiterBoardFn,
+}
+
+/// Install the chain-owned Jupiter boards (composition root only).
+pub fn install_jupiter_boards(organic: JupiterBoardFn, traded: JupiterBoardFn) {
+    let _ = JUPITER_BOARDS.set(JupiterBoards { organic, traded });
+}
 
 /// Cached external tokens
 struct ExternalTokensCache {
@@ -36,82 +54,18 @@ const EXTERNAL_FETCH_TIMEOUT: Duration = Duration::from_secs(3);
 
 /// Fetch Jupiter top organic score tokens
 async fn fetch_jupiter_organic() -> Result<Vec<ExternalToken>> {
-    let api = get_api_manager();
-
-    if !api.jupiter.is_enabled() {
-        return Ok(vec![]);
-    }
-
-    let tokens = api
-        .jupiter
-        .fetch_top_organic_score("24h", Some(20))
-        .await
-        .map_err(|source| Error::Api {
-            operation: "Jupiter organic fetch",
-            source,
-        })?;
-
-    Ok(tokens
-        .into_iter()
-        .map(|t| ExternalToken {
-            mint: t.id,
-            name: t.name,
-            symbol: t.symbol,
-            logo: t.icon,
-            website: None,
-            twitter: None,
-            telegram: None,
-            discord: None,
-            price_usd: t.usd_price,
-            volume_24h: t.stats24h.as_ref().map(|s| {
-                let buy = s.buy_volume.unwrap_or_default();
-                let sell = s.sell_volume.unwrap_or_default();
-                buy + sell
-            }),
-            liquidity: t.liquidity,
-            organic_score: t.organic_score,
-        })
-        .collect())
+    let Some(boards) = JUPITER_BOARDS.get() else {
+        return Ok(vec![]); // unset reads as "board disabled", today's empty path
+    };
+    (boards.organic)().await
 }
 
 /// Fetch Jupiter top traded tokens
 async fn fetch_jupiter_traded() -> Result<Vec<ExternalToken>> {
-    let api = get_api_manager();
-
-    if !api.jupiter.is_enabled() {
-        return Ok(vec![]);
-    }
-
-    let tokens = api
-        .jupiter
-        .fetch_top_traded("24h", Some(20))
-        .await
-        .map_err(|source| Error::Api {
-            operation: "Jupiter traded fetch",
-            source,
-        })?;
-
-    Ok(tokens
-        .into_iter()
-        .map(|t| ExternalToken {
-            mint: t.id,
-            name: t.name,
-            symbol: t.symbol,
-            logo: t.icon,
-            website: None,
-            twitter: None,
-            telegram: None,
-            discord: None,
-            price_usd: t.usd_price,
-            volume_24h: t.stats24h.as_ref().map(|s| {
-                let buy = s.buy_volume.unwrap_or_default();
-                let sell = s.sell_volume.unwrap_or_default();
-                buy + sell
-            }),
-            liquidity: t.liquidity,
-            organic_score: t.organic_score,
-        })
-        .collect())
+    let Some(boards) = JUPITER_BOARDS.get() else {
+        return Ok(vec![]); // unset reads as "board disabled", today's empty path
+    };
+    (boards.traded)().await
 }
 
 /// Fetch DexScreener trending (top boosted) tokens.

@@ -340,7 +340,7 @@ pub(crate) async fn execute_with_keypair(
     };
 
     // Mark a swap in flight so background Jupiter pollers defer to it.
-    let _swap_guard = crate::apis::jupiter::throttle::swap_guard();
+    let _swap_guard = crate::chains::solana::apis::jupiter::throttle::swap_guard();
 
     let api_base = get_api_base();
     let url = format!("{api_base}/swap/v1/swap");
@@ -481,7 +481,7 @@ impl SwapRouter for JupiterRouter {
             })?;
         // Mark a swap as in flight so background Jupiter pollers (price, token
         // discovery, health) defer and don't steal the shared rate budget.
-        let _swap_guard = crate::apis::jupiter::throttle::swap_guard();
+        let _swap_guard = crate::chains::solana::apis::jupiter::throttle::swap_guard();
 
         let slippage_bps = ((request.slippage_pct * 100.0).round() as u16).max(1);
 
@@ -668,7 +668,7 @@ impl SwapRouter for JupiterRouter {
         self.accept_own_quote(quote)?;
         // Keep background Jupiter pollers deferred while the swap transaction is
         // being built (see throttle module).
-        let _swap_guard = crate::apis::jupiter::throttle::swap_guard();
+        let _swap_guard = crate::chains::solana::apis::jupiter::throttle::swap_guard();
 
         let start = Instant::now();
 

@@ -66,7 +66,7 @@ impl EndpointMonitor for JupiterMonitor {
         let start = Instant::now();
 
         // Defer to in-flight swaps so health pings don't compete for the rate budget.
-        crate::apis::jupiter::throttle::acquire_background().await;
+        crate::chains::solana::apis::jupiter::throttle::acquire_background().await;
 
         match client.get(&url).send().await {
             Ok(response) => {

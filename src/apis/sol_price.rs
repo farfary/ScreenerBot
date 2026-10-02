@@ -25,7 +25,8 @@
 use crate::apis::Error;
 use crate::errors::{DataError, InternalError, NetworkError};
 use crate::logger::{self, LogTag};
-use serde::{Deserialize, Serialize};
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::LazyLock;
 use std::sync::RwLock as StdRwLock;
@@ -55,14 +56,6 @@ fn geckoterminal_sol_url() -> String {
     )
 }
 
-/// Jupiter price endpoint — LAST-RESORT fallback (shares the swap rate budget).
-fn jupiter_price_api() -> String {
-    format!(
-        "https://lite-api.jup.ag/price/v3?ids={}",
-        crate::chains::adapter().native_asset_address()
-    )
-}
-
 /// Price refresh interval in seconds
 const PRICE_REFRESH_INTERVAL_SECS: u64 = 30;
 
@@ -81,22 +74,6 @@ const MAX_CONSECUTIVE_ERRORS: u32 = 10;
 // =============================================================================
 // DATA STRUCTURES
 // =============================================================================
-
-/// Jupiter API price response structure — keyed by mint address. Serde cannot
-/// compute a `rename` at runtime, so the native asset is looked up by key at
-/// the call site instead of being a named field.
-pub type JupiterPriceResponse = std::collections::HashMap<String, JupiterTokenPrice>;
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct JupiterTokenPrice {
-    #[serde(rename = "usdPrice")]
-    pub usd_price: f64,
-    #[serde(rename = "blockId")]
-    pub block_id: u64,
-    pub decimals: u8,
-    #[serde(rename = "priceChange24h")]
-    pub price_change_24h: f64,
-}
 
 /// Cached SOL price data with metadata
 #[derive(Debug, Clone)]
@@ -145,6 +122,27 @@ static SOL_PRICE_CACHE: LazyLock<Arc<StdRwLock<SolPriceData>>> =
 /// Service status tracking
 static SERVICE_RUNNING: LazyLock<Arc<std::sync::atomic::AtomicBool>> =
     LazyLock::new(|| Arc::new(std::sync::atomic::AtomicBool::new(false)));
+
+/// The Jupiter last-resort fallback, registered by the composition root.
+/// Unset (pre-boot / library callers) reads as a disabled provider — the
+/// same typed error the disabled client path produces today.
+type JupiterFallbackFn = fn() -> Pin<Box<dyn Future<Output = Result<f64, Error>> + Send>>;
+static JUPITER_FALLBACK: std::sync::OnceLock<JupiterFallbackFn> = std::sync::OnceLock::new();
+
+/// Install the chain-owned Jupiter price fallback (A-02; the native-price
+/// service becomes per-chain later — A-09 rename, then A-12).
+pub fn install_jupiter_fallback(fetch: JupiterFallbackFn) {
+    let _ = JUPITER_FALLBACK.set(fetch);
+}
+
+async fn fetch_jupiter_fallback() -> Result<f64, Error> {
+    match JUPITER_FALLBACK.get() {
+        Some(fetch) => fetch().await,
+        None => Err(Error::Disabled {
+            provider: "Jupiter".to_owned(),
+        }),
+    }
+}
 
 // =============================================================================
 // PUBLIC API
@@ -398,7 +396,7 @@ async fn fetch_sol_price() -> Result<(f64, &'static str), Error> {
         }
     }
 
-    match fetch_sol_price_from_jupiter().await {
+    match fetch_jupiter_fallback().await {
         Ok(price) => {
             logger::warning(
                 LogTag::SolPrice,
@@ -538,62 +536,6 @@ async fn fetch_from_geckoterminal() -> Result<f64, Error> {
         Err(DataError::ValidationError {
             field: "price".to_owned(),
             value: price.to_string(),
-            reason: "not a positive finite value".to_owned(),
-        }
-        .into())
-    }
-}
-
-/// LAST-RESORT: fetch SOL price from Jupiter API
-async fn fetch_sol_price_from_jupiter() -> Result<f64, Error> {
-    // Yield to in-flight swaps and space against other background Jupiter calls
-    // so price polling never starves the swap rate budget (lite-api is per-IP).
-    crate::apis::jupiter::throttle::acquire_background().await;
-
-    let client = crate::net::client();
-
-    let response = client
-        .get(jupiter_price_api())
-        .timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS))
-        .send()
-        .await
-        .map_err(|e| NetworkError::RequestFailed {
-            endpoint: "jupiter sol price".to_owned(),
-            detail: e.to_string(),
-        })?;
-
-    if !response.status().is_success() {
-        return Err(NetworkError::HttpStatus {
-            endpoint: "jupiter sol price".to_owned(),
-            status: response.status().as_u16(),
-            body: None,
-        }
-        .into());
-    }
-
-    let price_response: JupiterPriceResponse =
-        response.json().await.map_err(|e| DataError::ParseError {
-            data_type: "jupiter sol price".to_owned(),
-            error: e.to_string(),
-        })?;
-
-    // Extract the native asset's price from the response, keyed by mint. A
-    // missing key gets the same error-propagation treatment as any other parse
-    // failure on this path — no unwrap/panic and no silent zero substitution.
-    let sol_price = price_response
-        .get(crate::chains::adapter().native_asset_address())
-        .ok_or_else(|| DataError::InvalidFormat {
-            expected: "native asset price".to_owned(),
-            received: "missing from Jupiter response".to_owned(),
-        })?
-        .usd_price;
-
-    if sol_price > 0.0 && sol_price.is_finite() {
-        Ok(sol_price)
-    } else {
-        Err(DataError::ValidationError {
-            field: "sol_price".to_owned(),
-            value: sol_price.to_string(),
             reason: "not a positive finite value".to_owned(),
         }
         .into())

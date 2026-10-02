@@ -11,6 +11,7 @@
 //! 3. /credits - Check remaining API credits
 //! 4. /search - Search tokens
 
+pub mod sources;
 pub mod types;
 
 use crate::apis::client::RateLimiter;

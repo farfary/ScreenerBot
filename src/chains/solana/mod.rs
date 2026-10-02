@@ -18,7 +18,9 @@ pub use spl_token_2022;
 
 pub mod accounts;
 pub mod adapter;
+pub mod apis;
 pub mod assets;
+pub mod connectivity;
 pub mod constants;
 mod error;
 pub mod pools;

@@ -23,6 +23,7 @@ pub mod database;
 pub mod decimals;
 pub mod discovery;
 mod discovery_sources;
+pub(crate) use discovery_sources::install_jupiter_sources;
 mod error;
 pub mod events;
 pub mod favorites;

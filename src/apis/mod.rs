@@ -29,11 +29,9 @@ pub mod coingecko;
 pub mod defillama;
 pub mod dexscreener;
 pub mod geckoterminal;
-pub mod jupiter;
 pub mod llm;
 pub mod rugcheck;
 pub mod sol_price;
-pub mod solana_tracker;
 
 // Re-exports for convenience
 pub use client::{HttpClient, RateLimiter};
@@ -45,6 +43,4 @@ pub use coingecko::CoinGeckoClient;
 pub use defillama::DefiLlamaClient;
 pub use dexscreener::DexScreenerClient;
 pub use geckoterminal::GeckoTerminalClient;
-pub use jupiter::JupiterClient;
 pub use rugcheck::RugcheckClient;
-pub use solana_tracker::SolanaTrackerClient;

@@ -6,6 +6,7 @@ mod aggregator;
 mod cache;
 mod database;
 mod fetcher;
+pub(crate) use fetcher::install_solana_tracker_sources;
 mod gaps;
 mod manager;
 mod monitor;

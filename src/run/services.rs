@@ -25,6 +25,28 @@ pub fn register_all_services(manager: &mut ServiceManager) {
         crate::chains::solana::wallets::runtime::build_runtime,
     );
 
+    // A-02: the Solana-only providers live under chains/solana/apis; the
+    // neutral consumers reach them through these registered seams until
+    // their owning units thread the chain through (A-12a, A-12c, A-12f).
+    crate::tokens::install_jupiter_sources(
+        crate::chains::solana::apis::jupiter::sources::recent,
+        crate::chains::solana::apis::jupiter::sources::top_organic,
+        crate::chains::solana::apis::jupiter::sources::top_traded,
+        crate::chains::solana::apis::jupiter::sources::top_trending,
+    );
+    crate::webserver::routes::featured::install_jupiter_boards(
+        crate::chains::solana::apis::jupiter::sources::featured_organic,
+        crate::chains::solana::apis::jupiter::sources::featured_traded,
+    );
+    crate::ohlcvs::install_solana_tracker_sources(
+        crate::chains::solana::apis::solana_tracker::sources::enabled,
+        crate::chains::solana::apis::solana_tracker::sources::fetch_candles,
+    );
+    crate::apis::sol_price::install_jupiter_fallback(
+        crate::chains::solana::apis::jupiter::sources::price_fallback,
+    );
+    crate::connectivity::checker::set_chain_monitors(crate::chains::solana::connectivity::monitors);
+
     // Core infrastructure services
     manager.register(Box::new(ConnectivityService::new()));
     manager.register(Box::new(EventsService));

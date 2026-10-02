@@ -6,8 +6,7 @@
 use crate::config::get_config_clone;
 use crate::connectivity::monitor::EndpointMonitor;
 use crate::connectivity::monitors::{
-    DexScreenerMonitor, GeckoTerminalMonitor, InternetMonitor, JupiterMonitor, RaptorMonitor,
-    RpcMonitor, RugcheckMonitor,
+    DexScreenerMonitor, GeckoTerminalMonitor, InternetMonitor, RpcMonitor, RugcheckMonitor,
 };
 use crate::connectivity::state;
 use crate::events::{record_connectivity_event, Severity};
@@ -15,9 +14,20 @@ use crate::i18n::{ids, UiArg, UiText};
 use crate::logger::{self, LogTag};
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::OnceLock;
 use std::time::Instant;
 use tokio::sync::Notify;
 use tokio::time::Duration;
+
+/// Chain-owned monitors appended to the neutral set, registered by the
+/// composition root (A-02); the neutral checker cannot construct them.
+type ChainMonitorsFn = fn() -> Vec<Box<dyn EndpointMonitor>>;
+static CHAIN_MONITORS: OnceLock<ChainMonitorsFn> = OnceLock::new();
+
+/// Register the chain-contributed endpoint monitors (composition root only).
+pub fn set_chain_monitors(factory: ChainMonitorsFn) {
+    let _ = CHAIN_MONITORS.set(factory);
+}
 
 /// ConnectivityChecker - business logic for monitoring health of all external endpoints
 ///
@@ -37,16 +47,16 @@ impl ConnectivityChecker {
     /// Initialize all endpoint monitors for connectivity checking
     pub fn new() -> Self {
         // Initialize all monitors
-        let monitors: Vec<Box<dyn EndpointMonitor>> = vec![
+        let mut monitors: Vec<Box<dyn EndpointMonitor>> = vec![
             Box::new(InternetMonitor::new()),
             Box::new(RpcMonitor::new()),
             Box::new(DexScreenerMonitor::new()),
             Box::new(GeckoTerminalMonitor::new()),
             Box::new(RugcheckMonitor::new()),
-            Box::new(JupiterMonitor::new()),
-            Box::new(RaptorMonitor::new()),
         ];
-
+        if let Some(chain_monitors) = CHAIN_MONITORS.get() {
+            monitors.extend(chain_monitors());
+        }
         Self { monitors }
     }
 

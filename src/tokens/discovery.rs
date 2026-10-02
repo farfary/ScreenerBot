@@ -506,11 +506,11 @@ pub async fn run_discovery_once(
 type DiscoveryFetchOutcome = (String, crate::tokens::Result<Vec<DiscoveryRecord>>);
 
 #[derive(Debug, Clone)]
-pub(super) struct DiscoveryRecord {
-    pub(super) mint: String,
-    pub(super) symbol: Option<String>,
-    pub(super) name: Option<String>,
-    pub(super) decimals: Option<u8>,
+pub struct DiscoveryRecord {
+    pub mint: String,
+    pub symbol: Option<String>,
+    pub name: Option<String>,
+    pub decimals: Option<u8>,
 }
 
 #[derive(Debug, Default)]
