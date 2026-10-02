@@ -49,6 +49,14 @@ config-assistant-max-session-messages = الحد الأقصى لرسائل ال�
 config-assistant-scheduled-tasks-enabled = المهام المجدولة
     .hint = تفعيل مهام المساعد الآلية التي تعمل وفق جدول
 
+## chains
+
+config-chains-show-preview = سلاسل المعاينة
+    .hint = اعرض السلاسل غير المتاحة للجميع بعد. يسري بعد إعادة التشغيل.
+config-chains-solana = Solana
+config-chains-solana-enabled = مُفعَّل
+    .hint = شغِّل Solana في هذه العملية. يسري بعد إعادة التشغيل.
+
 ## copy_trading
 
 config-copy-trading-default-slippage-pct = الانزلاق السعري الافتراضي
@@ -1231,6 +1239,7 @@ config-webserver-port = المنفذ
 config-section-account = حساب { -brand }
 config-section-agent-control = التحكم بالوكلاء
 config-section-assistant = المساعد
+config-section-chains = السلاسل
 config-section-copy-trading = نسخ التداول
 config-section-events = الأحداث
 config-section-filtering = الترشيح

@@ -133,6 +133,7 @@ export const SECTION_ICONS = {
   // Verified against assets/lucide-font/lucide.css — a name the font does not
   // carry renders as a silent blank box.
   account: "icon-circle-user",
+  chains: "icon-blocks",
 };
 
 /**

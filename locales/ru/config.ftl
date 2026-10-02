@@ -49,6 +49,14 @@ config-assistant-max-session-messages = Максимум сообщений в �
 config-assistant-scheduled-tasks-enabled = Запланированные задачи
     .hint = Включить автоматические задачи ассистента, выполняемые по расписанию
 
+## chains
+
+config-chains-show-preview = Блокчейны в предпросмотре
+    .hint = Показывать блокчейны, которые ещё не общедоступны. Вступает в силу после перезапуска.
+config-chains-solana = Solana
+config-chains-solana-enabled = Включено
+    .hint = Запускать Solana в этом процессе. Вступает в силу после перезапуска.
+
 ## copy_trading
 
 config-copy-trading-default-slippage-pct = Проскальзывание по умолчанию
@@ -1240,6 +1248,7 @@ config-webserver-port = Порт
 config-section-account = Аккаунт { -brand }
 config-section-agent-control = Управление агентами
 config-section-assistant = Ассистент
+config-section-chains = Блокчейны
 config-section-copy-trading = Копитрейдинг
 config-section-events = События
 config-section-filtering = Фильтрация

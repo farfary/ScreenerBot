@@ -49,6 +49,14 @@ config-assistant-max-session-messages = بیشینه پیام‌های نشست
 config-assistant-scheduled-tasks-enabled = وظایف زمان‌بندی‌شده
     .hint = وظایف خودکار دستیار را که طبق زمان‌بندی اجرا می‌شوند فعال می‌کند
 
+## chains
+
+config-chains-show-preview = زنجیره‌های پیش‌نمایش
+    .hint = زنجیره‌هایی را نشان بده که هنوز به‌طور عمومی در دسترس نیستند. پس از راه‌اندازی مجدد اعمال می‌شود.
+config-chains-solana = Solana
+config-chains-solana-enabled = فعال
+    .hint = Solana را در این فرآیند اجرا کن. پس از راه‌اندازی مجدد اعمال می‌شود.
+
 ## copy_trading
 
 config-copy-trading-default-slippage-pct = اسلیپیج پیش‌فرض
@@ -1240,6 +1248,7 @@ config-webserver-port = پورت
 config-section-account = حساب { -brand }
 config-section-agent-control = کنترل عامل
 config-section-assistant = دستیار
+config-section-chains = زنجیره‌ها
 config-section-copy-trading = کپی‌تریدینگ
 config-section-events = رویدادها
 config-section-filtering = فیلترینگ

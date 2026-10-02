@@ -26,15 +26,15 @@ pub mod types;
 
 // Re-export handler functions for use by the router
 use getters::{
-    get_account_config, get_agent_control_config, get_assistant_config, get_config_metadata,
-    get_copy_trading_config, get_events_config, get_filtering_config, get_full_config,
-    get_gui_config, get_gui_defaults, get_holder_watch_config, get_llm_analysis_config,
-    get_llm_config, get_maintenance_config, get_monitoring_config, get_network_config,
-    get_ohlcv_config, get_performance_config, get_pools_config, get_positions_config,
-    get_referral_config, get_rpc_config, get_services_config, get_sol_price_config,
-    get_strategies_config, get_summary_config, get_swaps_config, get_telegram_config,
-    get_tokens_config, get_trader_config, get_updates_config, get_wallet_config,
-    get_webserver_config, patch_any_config,
+    get_account_config, get_agent_control_config, get_assistant_config, get_chains_config,
+    get_config_metadata, get_copy_trading_config, get_events_config, get_filtering_config,
+    get_full_config, get_gui_config, get_gui_defaults, get_holder_watch_config,
+    get_llm_analysis_config, get_llm_config, get_maintenance_config, get_monitoring_config,
+    get_network_config, get_ohlcv_config, get_performance_config, get_pools_config,
+    get_positions_config, get_referral_config, get_rpc_config, get_services_config,
+    get_sol_price_config, get_strategies_config, get_summary_config, get_swaps_config,
+    get_telegram_config, get_tokens_config, get_trader_config, get_updates_config,
+    get_wallet_config, get_webserver_config, patch_any_config,
 };
 use import_export::{export_config, import_config, import_config_preview};
 use operations::{get_config_diff, reload_config_from_disk, reset_config_to_defaults};
@@ -81,6 +81,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/config/network", get(get_network_config))
         .route("/config/referral", get(get_referral_config))
         .route("/config/account", get(get_account_config))
+        .route("/config/chains", get(get_chains_config))
         .route("/config/metadata", get(get_config_metadata))
         // PATCH endpoints - Partial updates (use JSON with only fields to update)
         .route(
@@ -189,6 +190,10 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route(
             "/config/account",
             patch(patch_any_config::<config::AccountConfig>),
+        )
+        .route(
+            "/config/chains",
+            patch(patch_any_config::<config::ChainsConfig>),
         )
         // Import/Export endpoints
         .route("/config/export", post(export_config))

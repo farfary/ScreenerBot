@@ -52,6 +52,14 @@ config-assistant-max-session-messages = Messages max. par session
 config-assistant-scheduled-tasks-enabled = Tâches planifiées
     .hint = Active les tâches automatisées de l'assistant exécutées selon un calendrier
 
+## chains
+
+config-chains-show-preview = Chaînes en aperçu
+    .hint = Afficher les chaînes qui ne sont pas encore disponibles en général. Prend effet après un redémarrage.
+config-chains-solana = Solana
+config-chains-solana-enabled = Activé
+    .hint = Exécuter Solana dans ce processus. Prend effet après un redémarrage.
+
 ## copy_trading
 
 config-copy-trading-default-slippage-pct = Slippage par défaut
@@ -1244,6 +1252,7 @@ config-webserver-port = Port
 config-section-account = Compte { -brand }
 config-section-agent-control = Contrôle par agent
 config-section-assistant = Assistant
+config-section-chains = Chaînes
 config-section-copy-trading = Copy trading
 config-section-events = Événements
 config-section-filtering = Filtrage

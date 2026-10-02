@@ -7,6 +7,10 @@
 //! selection is derived from that set: with one registered chain, that chain
 //! is active.
 
+use std::collections::HashMap;
+use std::sync::{Arc, OnceLock};
+
+use crate::chains::runtime::ChainRuntime;
 use crate::chains::{solana, ChainId, ChainMetadata};
 
 /// A fixed registry of supported blockchain metadata.
@@ -22,14 +26,6 @@ impl Default for ChainRegistry {
 }
 
 impl ChainRegistry {
-    /// The chain this build operates on.
-    ///
-    /// Shared operational code must call [`crate::chains::active_chain`] (or
-    /// this method) instead of naming a `ChainId` variant at the call site.
-    pub const fn active_chain() -> ChainId {
-        ChainId::Solana
-    }
-
     /// Creates the registry with every chain supported by this build.
     pub fn new() -> Self {
         Self {
@@ -52,10 +48,60 @@ impl ChainRegistry {
     pub fn iter(&self) -> impl ExactSizeIterator<Item = &ChainMetadata> {
         self.chains.iter()
     }
+
+    /// The chain this process operates on — the single enabled chain (see
+    /// [`crate::chains::active_chain`]).
+    pub fn active_chain() -> ChainId {
+        crate::chains::active_chain()
+    }
 }
+
+/// The chains enabled in `[chains]` config, frozen at first read. Enable and
+/// disable are restart-gated settings: the frozen set changes only with a
+/// process restart. A config that was never loaded (unit tests) reads as its
+/// default, which enables every supported chain.
+pub fn enabled_chains() -> &'static [ChainId] {
+    ENABLED_CHAINS
+        .get_or_init(|| {
+            let chains =
+                crate::config::try_with_config(|cfg| cfg.chains.clone()).unwrap_or_default();
+            let mut enabled = Vec::new();
+            if chains.solana.enabled {
+                enabled.push(ChainId::Solana);
+            }
+            enabled
+        })
+        .as_slice()
+}
+
+/// Install the runtime of every enabled chain, once per boot, from the
+/// composition root (`crate::run::services`). A disabled chain gets no
+/// runtime, no process seams and no services.
+pub fn install_enabled_runtimes() {
+    let mut runtimes: HashMap<ChainId, Arc<dyn ChainRuntime>> = HashMap::new();
+    for &chain in enabled_chains() {
+        match chain {
+            ChainId::Solana => {
+                runtimes.insert(chain, solana::runtime::runtime());
+                solana::runtime::install_process_seams();
+            }
+        }
+    }
+    let _ = RUNTIMES.set(runtimes);
+}
+
+/// The installed runtime for `chain`; `None` for a chain that is not enabled
+/// or before the composition root has run.
+pub fn runtime_for(chain: ChainId) -> Option<Arc<dyn ChainRuntime>> {
+    RUNTIMES.get()?.get(&chain).cloned()
+}
+
+static ENABLED_CHAINS: OnceLock<Vec<ChainId>> = OnceLock::new();
+static RUNTIMES: OnceLock<HashMap<ChainId, Arc<dyn ChainRuntime>>> = OnceLock::new();
 
 #[cfg(test)]
 mod tests {
+    use super::{enabled_chains, install_enabled_runtimes, runtime_for};
     use crate::chains::{solana, solana::constants::SOL_MINT, ChainId, ChainRegistry};
 
     #[test]
@@ -69,5 +115,23 @@ mod tests {
         assert_eq!(registry.active().id, ChainId::Solana);
         assert_eq!(solana_meta.native_asset, solana::NATIVE_ASSET);
         assert_eq!(solana_meta.native_asset.address, SOL_MINT);
+    }
+
+    #[test]
+    fn enabled_chains_default_to_solana_without_config() {
+        // Test binaries never load config; the default ChainsConfig enables
+        // every supported chain.
+        assert_eq!(enabled_chains(), [ChainId::Solana]);
+    }
+
+    #[test]
+    fn every_enabled_chain_has_an_installed_runtime() {
+        install_enabled_runtimes();
+        for &chain in enabled_chains() {
+            let runtime = runtime_for(chain)
+                .unwrap_or_else(|| panic!("no runtime for the enabled chain {chain:?}"));
+            assert_eq!(runtime.id(), chain);
+            assert!(!runtime.swap_routers().is_empty());
+        }
     }
 }

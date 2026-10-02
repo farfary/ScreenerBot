@@ -15,37 +15,11 @@ pub fn register_all_services(manager: &mut ServiceManager) {
 
     logger::info(LogTag::System, "Registering services...");
 
-    // Select the Solana swap router set before any service can trigger a swap.
-    crate::swaps::registry::set_router_factory(
-        crate::chains::solana::swaps::routers::build_routers,
-    );
-
-    // Select the Solana wallet-watch runtime before WalletWatchService can start.
-    crate::wallets::watch::runtime::set_runtime_factory(
-        crate::chains::solana::wallets::runtime::build_runtime,
-    );
-
-    // A-02: the Solana-only providers live under chains/solana/apis; the
-    // neutral consumers reach them through these registered seams until
-    // their owning units thread the chain through (A-12a, A-12c, A-12f).
-    crate::tokens::install_jupiter_sources(
-        crate::chains::solana::apis::jupiter::sources::recent,
-        crate::chains::solana::apis::jupiter::sources::top_organic,
-        crate::chains::solana::apis::jupiter::sources::top_traded,
-        crate::chains::solana::apis::jupiter::sources::top_trending,
-    );
-    crate::webserver::routes::featured::install_jupiter_boards(
-        crate::chains::solana::apis::jupiter::sources::featured_organic,
-        crate::chains::solana::apis::jupiter::sources::featured_traded,
-    );
-    crate::ohlcvs::install_solana_tracker_sources(
-        crate::chains::solana::apis::solana_tracker::sources::enabled,
-        crate::chains::solana::apis::solana_tracker::sources::fetch_candles,
-    );
-    crate::apis::sol_price::install_jupiter_fallback(
-        crate::chains::solana::apis::jupiter::sources::price_fallback,
-    );
-    crate::connectivity::checker::set_chain_monitors(crate::chains::solana::connectivity::monitors);
+    // Install the runtime of every enabled chain: the chain registry
+    // owns the concrete runtimes and the process seams they install. The
+    // enabled set is `[chains]` config, read once here — applying an
+    // enable/disable change takes a process restart.
+    crate::chains::install_enabled_runtimes();
 
     // Core infrastructure services
     manager.register(Box::new(ConnectivityService::new()));

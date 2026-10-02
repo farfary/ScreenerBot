@@ -75,9 +75,15 @@ pub trait ChainAdapter: Send + Sync + 'static {
     fn analytics_token_url(&self, address: &str) -> String;
 }
 
-/// The adapter for the chain this process operates on.
-pub fn adapter() -> &'static dyn ChainAdapter {
-    match active_chain() {
+/// The adapter for `chain` — the facts of the subject's chain.
+pub fn adapter_for(chain: ChainId) -> &'static dyn ChainAdapter {
+    match chain {
         ChainId::Solana => crate::chains::solana::adapter::ADAPTER,
     }
+}
+
+/// The adapter for the chain this process operates on (transitional;
+/// resolve `adapter_for` with the subject's chain instead).
+pub fn adapter() -> &'static dyn ChainAdapter {
+    adapter_for(active_chain())
 }

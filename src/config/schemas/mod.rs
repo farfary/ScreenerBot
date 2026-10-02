@@ -9,6 +9,7 @@ use crate::config_struct;
 mod account;
 mod agent_control;
 mod assistant;
+mod chains;
 mod connectivity;
 mod copy_trading;
 mod events;
@@ -40,6 +41,7 @@ mod webserver;
 pub use account::*;
 pub use agent_control::*;
 pub use assistant::*;
+pub use chains::*;
 pub use connectivity::*;
 pub use copy_trading::*;
 pub use events::*;
@@ -80,6 +82,10 @@ config_struct! {
 
         /// Nonce for wallet encryption (base64-encoded 12-byte nonce)
         wallet_nonce: String = String::new(),
+
+        /// Per-chain enablement, read once at boot (Solana is the only chain
+        /// this build supports)
+        chains: ChainsConfig = ChainsConfig::default(),
 
         /// RPC configuration
         rpc: RpcConfig = RpcConfig::default(),

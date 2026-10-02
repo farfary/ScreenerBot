@@ -25,6 +25,7 @@ pub mod constants;
 mod error;
 pub mod pools;
 pub mod rpc;
+pub mod runtime;
 pub mod swaps;
 pub mod transactions;
 pub mod wallets;

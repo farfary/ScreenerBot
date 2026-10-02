@@ -49,6 +49,14 @@ config-assistant-max-session-messages = セッションの最大メッセージ�
 config-assistant-scheduled-tasks-enabled = スケジュールタスク
     .hint = スケジュールに従って実行されるアシスタントの自動タスクを有効にします
 
+## chains
+
+config-chains-show-preview = プレビューチェーン
+    .hint = まだ一般提供されていないチェーンを表示します。再起動後に適用されます。
+config-chains-solana = Solana
+config-chains-solana-enabled = 有効
+    .hint = このプロセスで Solana を実行します。再起動後に適用されます。
+
 ## copy_trading
 
 config-copy-trading-default-slippage-pct = デフォルトのスリッページ
@@ -1240,6 +1248,7 @@ config-webserver-port = ポート
 config-section-account = { -brand } アカウント
 config-section-agent-control = エージェント制御
 config-section-assistant = アシスタント
+config-section-chains = チェーン
 config-section-copy-trading = コピートレード
 config-section-events = イベント
 config-section-filtering = フィルタリング

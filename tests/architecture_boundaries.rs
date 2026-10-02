@@ -740,7 +740,6 @@ const NEUTRAL_FILES_NAMING_CHAINS_SOLANA: &[&str] = &[
     "positions/operations/partial_close.rs",
     "positions/verifier.rs",
     "positions/worker.rs",
-    "run/services.rs",
     "services/implementations/pool_analyzer_service.rs",
     "services/implementations/pool_calculator_service.rs",
     "services/implementations/pool_discovery_service.rs",
@@ -1170,7 +1169,7 @@ fn apis_hosts_only_multi_chain_providers() {
     }
     assert!(
         violations.is_empty(),
-        "src/apis may host only multi-chain providers (A-02 ratchet):\n{}",
+        "src/apis may host only multi-chain providers:\n{}",
         violations.join("\n")
     );
 }

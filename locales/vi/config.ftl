@@ -62,6 +62,12 @@ config-copy-trading-readiness-min-closed-rounds = Số vòng sẵn sàng cho liv
 config-copy-trading-require-filter-pass = Yêu cầu đạt bộ lọc
     .hint = Chỉ copy các token được quy trình lọc chấp nhận
 
+config-chains-show-preview = Chuỗi xem trước
+    .hint = Hiển thị các chuỗi chưa phổ biến. Có hiệu lực sau khi khởi động lại.
+config-chains-solana = Solana
+config-chains-solana-enabled = Đã bật
+    .hint = Chạy Solana trong tiến trình này. Có hiệu lực sau khi khởi động lại.
+
 config-events-enabled = Bật hệ thống sự kiện
     .hint = CẢNH BÁO: Sự kiện có thể tạo ra hơn 5 GB mỗi ngày. Chỉ bật khi gỡ lỗi/phát triển.
 config-events-record-api = Ghi sự kiện API
@@ -1180,6 +1186,7 @@ config-webserver-port = Port
 config-section-account = Tài khoản { -brand }
 config-section-agent-control = Agent Control
 config-section-assistant = Trợ lý
+config-section-chains = Chuỗi
 config-section-copy-trading = Copy trading
 config-section-events = Sự kiện
 config-section-filtering = Lọc

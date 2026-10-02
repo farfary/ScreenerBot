@@ -64,6 +64,12 @@ config-copy-trading-readiness-min-closed-rounds = लाइव रेडीन�
 config-copy-trading-require-filter-pass = फ़िल्टर पास ज़रूरी करें
     .hint = केवल वही टोकन कॉपी करें जिन्हें फ़िल्टरिंग पाइपलाइन ने स्वीकार किया हो
 
+config-chains-show-preview = प्रीव्यू ब्लॉकचेन
+    .hint = अभी सामान्य रूप से उपलब्ध न होने वाले ब्लॉकचेन दिखाएँ। पुनः आरंभ होने पर लागू होता है।
+config-chains-solana = Solana
+config-chains-solana-enabled = सक्षम
+    .hint = Solana को इस प्रोसेस में चलाएँ। पुनः आरंभ होने पर लागू होता है।
+
 config-events-enabled = इवेंट सिस्टम चालू करें
     .hint = चेतावनी: इवेंट रोज़ 5+ GB डेटा बना सकते हैं। केवल डीबगिंग/डेवलपमेंट के लिए चालू करें।
 config-events-record-api = API इवेंट रिकॉर्ड करें
@@ -1181,6 +1187,7 @@ config-webserver-port = पोर्ट
 config-section-account = { -brand } अकाउंट
 config-section-agent-control = एजेंट कंट्रोल
 config-section-assistant = असिस्टेंट
+config-section-chains = ब्लॉकचेन
 config-section-copy-trading = कॉपी ट्रेडिंग
 config-section-events = इवेंट्स
 config-section-filtering = फ़िल्टरिंग

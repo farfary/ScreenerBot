@@ -30,6 +30,7 @@ use super::types::*;
 pub async fn get_full_config() -> Response {
     let data = config::with_config(|cfg| FullConfigResponse {
         rpc: cfg.rpc.clone(),
+        chains: cfg.chains.clone(),
         trader: cfg.trader.clone(),
         copy_trading: cfg.copy_trading.clone(),
         positions: cfg.positions.clone(),
@@ -209,6 +210,16 @@ pub async fn get_referral_config() -> Response {
 pub async fn get_account_config() -> Response {
     let data = config::with_config(|cfg| ConfigResponse {
         data: cfg.account.clone(),
+        timestamp: chrono::Utc::now().to_rfc3339(),
+    });
+
+    success_response(data)
+}
+
+/// GET /api/config/chains - Get per-chain enablement configuration
+pub async fn get_chains_config() -> Response {
+    let data = config::with_config(|cfg| ConfigResponse {
+        data: cfg.chains.clone(),
         timestamp: chrono::Utc::now().to_rfc3339(),
     });
 
@@ -441,6 +452,7 @@ where
             "NetworkConfig" => serde_json::to_value(&cfg.network).ok(),
             "ReferralConfig" => serde_json::to_value(&cfg.referral).ok(),
             "AccountConfig" => serde_json::to_value(&cfg.account).ok(),
+            "ChainsConfig" => serde_json::to_value(&cfg.chains).ok(),
             _ => None,
         });
 
@@ -803,6 +815,23 @@ where
                 config::update_config_section(
                     |cfg| {
                         cfg.account = new_config;
+                    },
+                    true,
+                )?;
+            }
+            "ChainsConfig" => {
+                let new_config: config::ChainsConfig = serde_json::from_value(section_json)
+                    .map_err(|e| Error::InvalidImport {
+                        detail: format!("Invalid ChainsConfig: {e}"),
+                    })?;
+                if !new_config.has_enabled_chain() {
+                    return Err(Error::InvalidImport {
+                        detail: "chains: at least one supported chain must be enabled".to_owned(),
+                    });
+                }
+                config::update_config_section(
+                    |cfg| {
+                        cfg.chains = new_config;
                     },
                     true,
                 )?;

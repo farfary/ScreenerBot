@@ -269,3 +269,23 @@ fn patch_handler_knows_every_metadata_section_type() {
          saving them fails at runtime with no compile error"
     );
 }
+
+/// A config that enables no chain cannot boot — the process chain would not
+/// exist — so the loader refuses it before the global config is replaced.
+/// (A failed load never touches the global `CONFIG`, so this is order-safe
+/// beside the tests above.)
+#[test]
+fn a_config_that_enables_no_chain_is_refused_at_load() {
+    init_config();
+    let dir = tempfile::tempdir().expect("temp dir");
+    let path = dir.path().join("no-chain.toml");
+    std::fs::write(&path, "[chains.solana]\nenabled = false\n").expect("write fixture");
+
+    let error = load_config_from_path(path.to_str().expect("utf-8 path"))
+        .expect_err("a zero-enabled config must be refused at load");
+
+    assert!(
+        error.to_string().contains("at least one supported chain"),
+        "unexpected refusal message: {error}"
+    );
+}

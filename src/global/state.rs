@@ -142,6 +142,14 @@ pub fn are_core_services_ready() -> bool {
         && TRANSACTIONS_SYSTEM_READY.load(std::sync::atomic::Ordering::SeqCst)
 }
 
+/// Per-chain core-services readiness. The five process-wide flags
+/// above are the single enabled chain's storage; a real per-chain map replaces
+/// them together with the collectors that read the flags directly.
+/// A chain that is not enabled is never ready.
+pub fn are_core_services_ready_for(chain: crate::chains::ChainId) -> bool {
+    crate::chains::enabled_chains().contains(&chain) && are_core_services_ready()
+}
+
 /// Get list of services that are not yet ready (for debugging).
 pub fn get_pending_services() -> Vec<&'static str> {
     let mut pending = Vec::new();
@@ -337,6 +345,22 @@ mod update_restart_tests {
         drop(trade);
         assert!(!are_tools_active());
         assert!(!are_trades_active());
+    }
+}
+
+#[cfg(test)]
+mod chain_readiness_tests {
+    use super::are_core_services_ready_for;
+    use crate::chains::ChainId;
+
+    #[test]
+    fn per_chain_readiness_mirrors_the_enabled_chain() {
+        // The five process flags are the single enabled chain's storage
+        // and a chain that is not enabled is never ready.
+        assert_eq!(
+            are_core_services_ready_for(ChainId::Solana),
+            super::are_core_services_ready()
+        );
     }
 }
 

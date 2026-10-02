@@ -49,6 +49,14 @@ config-assistant-max-session-messages = Maks Pesan per Sesi
 config-assistant-scheduled-tasks-enabled = Tugas Terjadwal
     .hint = Aktifkan tugas asisten otomatis yang berjalan sesuai jadwal
 
+## chains
+
+config-chains-show-preview = Blockchain pratinjau
+    .hint = Tampilkan blockchain yang belum tersedia secara umum. Berlaku setelah dimulai ulang.
+config-chains-solana = Solana
+config-chains-solana-enabled = Diaktifkan
+    .hint = Jalankan Solana dalam proses ini. Berlaku setelah dimulai ulang.
+
 ## copy_trading
 
 config-copy-trading-default-slippage-pct = Slippage Default
@@ -1240,6 +1248,7 @@ config-webserver-port = Port
 config-section-account = Akun { -brand }
 config-section-agent-control = Kontrol Agen
 config-section-assistant = Asisten
+config-section-chains = Blockchain
 config-section-copy-trading = Copy Trading
 config-section-events = Peristiwa
 config-section-filtering = Pemfilteran

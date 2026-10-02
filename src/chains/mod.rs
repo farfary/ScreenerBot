@@ -12,20 +12,24 @@ mod adapter;
 mod error;
 mod execution;
 mod registry;
+mod runtime;
 pub mod solana;
 mod types;
 
-pub use adapter::{adapter, ChainAdapter};
+pub use adapter::{adapter, adapter_for, ChainAdapter};
 pub use error::{Error, Result};
 pub use execution::ExecutionFailure;
-pub use registry::ChainRegistry;
+pub use registry::{enabled_chains, install_enabled_runtimes, runtime_for, ChainRegistry};
+pub use runtime::ChainRuntime;
 pub use types::{AccountId, AssetId, ChainId, ChainMetadata, NativeAsset, PoolId, TransactionId};
 
-/// The chain this process operates on.
-///
-/// This is the single operational selection seam. With one supported chain
-/// it returns Solana; call sites outside `src/chains` and the composition
-/// root must not hardcode that choice.
-pub const fn active_chain() -> ChainId {
-    ChainRegistry::active_chain()
+/// The chain this process operates on: the single enabled chain, frozen from
+/// `[chains]` config at first read. With one supported chain and
+/// default config that is Solana. This is the single operational selection
+/// seam, deleted when every caller passes its subject's chain.
+pub fn active_chain() -> ChainId {
+    registry::enabled_chains()
+        .first()
+        .copied()
+        .expect("config load refuses a config with no enabled chain")
 }

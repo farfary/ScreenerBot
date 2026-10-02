@@ -96,6 +96,17 @@ pub fn load_config_from_path(path: &str) -> Result<()> {
         );
     }
 
+    // The initial load does not run validate_config; gate the one condition
+    // whose absence would panic later (the process chain must exist) instead
+    // of making every other field's validation retroactively fatal here.
+    if !config.chains.has_enabled_chain() {
+        return Err(ConfigurationError::Generic {
+            message: "chains: at least one supported chain must be enabled (supported: solana)"
+                .to_owned(),
+        }
+        .into());
+    }
+
     CONFIG
         .set(RwLock::new(config))
         .map_err(|_| ConfigurationError::Generic {
@@ -328,6 +339,13 @@ pub fn reload_config() -> Result<()> {
 /// - `Ok(())` - Configuration is valid
 /// - `Err(String)` - Validation error message
 pub fn validate_config(config: &Config) -> Result<()> {
+    if !config.chains.has_enabled_chain() {
+        return Err(ConfigurationError::Generic {
+            message: "chains: at least one supported chain must be enabled (supported: solana)"
+                .to_owned(),
+        }
+        .into());
+    }
     config.copy_trading.validate()?;
 
     // Trader validation

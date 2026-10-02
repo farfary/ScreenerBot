@@ -49,6 +49,14 @@ config-assistant-max-session-messages = 会话最大消息数
 config-assistant-scheduled-tasks-enabled = 计划任务
     .hint = 启用按计划运行的助手自动化任务
 
+## chains
+
+config-chains-show-preview = 预览区块链
+    .hint = 显示尚未正式上线的区块链。重启后生效。
+config-chains-solana = Solana
+config-chains-solana-enabled = 已启用
+    .hint = 在本进程中运行 Solana。重启后生效。
+
 ## copy_trading
 
 config-copy-trading-default-slippage-pct = 默认滑点
@@ -1240,6 +1248,7 @@ config-webserver-port = 端口
 config-section-account = { -brand } 账户
 config-section-agent-control = 智能体控制
 config-section-assistant = 助手
+config-section-chains = 区块链
 config-section-copy-trading = 跟单交易
 config-section-events = 事件
 config-section-filtering = 过滤

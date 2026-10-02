@@ -4,10 +4,11 @@
 //! Router Registry - Manages all available swap routers
 //! Provides router discovery, fallback chains, and global access
 //!
-//! Chain-neutral: this registry holds `Arc<dyn SwapRouter>` injected by the
-//! application composition root (`src/run/services.rs`, via
-//! `set_router_factory`) — it never imports `crate::chains::solana`. The
-//! concrete Solana router set lives in
+//! Chain-neutral: this registry holds `Arc<dyn SwapRouter>` resolved from the
+//! chain runtimes the composition root installs
+//! (`crate::chains::install_enabled_runtimes`) — it never imports
+//! `crate::chains::solana`. Tests may instead register a factory directly
+//! (`set_router_factory`). The concrete Solana router set lives in
 //! `crate::chains::solana::swaps::routers::build_routers`.
 
 use crate::chains::{active_chain, ChainId};
@@ -110,22 +111,42 @@ static REGISTRY: OnceLock<RouterRegistry> = OnceLock::new();
 /// application composition root before any swap activity can occur.
 static ROUTER_FACTORY: OnceLock<fn() -> Vec<Arc<dyn SwapRouter>>> = OnceLock::new();
 
-/// Register the chain-owned router factory. Must be called once during boot
-/// (see `crate::run::services::register_all_services`) before `get_registry()`
-/// is ever called.
+/// Register a router-set factory. Test and library injection only: the
+/// composition root installs chain runtimes instead
+/// (`crate::chains::install_enabled_runtimes`) and production resolves the
+/// router set through them.
 pub fn set_router_factory(factory: fn() -> Vec<Arc<dyn SwapRouter>>) {
     let _ = ROUTER_FACTORY.set(factory);
 }
 
-/// Fallible global registry access. Returns `None` when the composition root
-/// has not registered a router factory — integration tests, library callers,
-/// and startup paths that quote before boot. Never panics.
+/// Fallible global registry access. Returns `None` when neither a factory is
+/// registered nor a chain runtime is installed — integration tests, library
+/// callers, and startup paths that quote before boot. Never panics.
 pub fn try_get_registry() -> Option<&'static RouterRegistry> {
     if let Some(registry) = REGISTRY.get() {
         return Some(registry);
     }
-    let factory = ROUTER_FACTORY.get()?;
-    let _ = REGISTRY.set(RouterRegistry::new(factory()));
+    // A registered factory (tests) keeps priority; production registers none
+    // and resolves the router set from the installed chain runtimes —
+    // one contribution per enabled chain.
+    let routers = match ROUTER_FACTORY.get() {
+        Some(factory) => factory(),
+        None => {
+            let mut routers = Vec::new();
+            let mut installed = false;
+            for &chain in crate::chains::enabled_chains() {
+                if let Some(runtime) = crate::chains::runtime_for(chain) {
+                    routers.extend(runtime.swap_routers());
+                    installed = true;
+                }
+            }
+            if !installed {
+                return None;
+            }
+            routers
+        }
+    };
+    let _ = REGISTRY.set(RouterRegistry::new(routers));
     REGISTRY.get()
 }
 

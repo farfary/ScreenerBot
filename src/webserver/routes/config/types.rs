@@ -24,6 +24,7 @@ pub struct ConfigResponse<T> {
 #[derive(Debug, Serialize)]
 pub struct FullConfigResponse {
     pub rpc: config::RpcConfig,
+    pub chains: config::ChainsConfig,
     pub trader: config::TraderConfig,
     pub copy_trading: config::CopyTradingConfig,
     pub positions: config::PositionsConfig,

@@ -107,13 +107,14 @@ pub use metadata::{
 };
 
 pub use schemas::{
-    AccountConfig, AgentControlConfig, AssistantConfig, Config, CopyTradingConfig, DashboardConfig,
-    EventsConfig, FilteringConfig, GuiConfig, HolderWatchConfig, InterfaceConfig,
-    LlmAnalysisConfig, LlmConfig, LlmProviderConfig, LlmProvidersConfig, LockscreenConfig,
-    MaintenanceConfig, MonitoringConfig, NetworkConfig, OhlcvConfig, OllamaConfig,
-    PerformanceConfig, PoolsConfig, PositionsConfig, ReferralConfig, RpcConfig, ServicesConfig,
-    SolPriceConfig, StartupConfig, StrategiesConfig, SwapsConfig, TelegramConfig, TimeUnit,
-    TokensConfig, TraderConfig, UpdatesConfig, WalletConfig, WebserverConfig,
+    AccountConfig, AgentControlConfig, AssistantConfig, ChainToggleConfig, ChainsConfig, Config,
+    CopyTradingConfig, DashboardConfig, EventsConfig, FilteringConfig, GuiConfig,
+    HolderWatchConfig, InterfaceConfig, LlmAnalysisConfig, LlmConfig, LlmProviderConfig,
+    LlmProvidersConfig, LockscreenConfig, MaintenanceConfig, MonitoringConfig, NetworkConfig,
+    OhlcvConfig, OllamaConfig, PerformanceConfig, PoolsConfig, PositionsConfig, ReferralConfig,
+    RpcConfig, ServicesConfig, SolPriceConfig, StartupConfig, StrategiesConfig, SwapsConfig,
+    TelegramConfig, TimeUnit, TokensConfig, TraderConfig, UpdatesConfig, WalletConfig,
+    WebserverConfig,
 };
 
 pub use utils::{

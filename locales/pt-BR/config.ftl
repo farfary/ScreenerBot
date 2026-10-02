@@ -62,6 +62,12 @@ config-copy-trading-readiness-min-closed-rounds = Rodadas para prontidão do mod
 config-copy-trading-require-filter-pass = Exigir aprovação nos filtros
     .hint = Copia apenas tokens aceitos pelo pipeline de filtragem
 
+config-chains-show-preview = Redes em prévia
+    .hint = Mostrar redes que ainda não estão amplamente disponíveis. Surte efeito após uma reinicialização.
+config-chains-solana = Solana
+config-chains-solana-enabled = Ativado
+    .hint = Executar a Solana neste processo. Surte efeito após uma reinicialização.
+
 config-events-enabled = Ativar sistema de eventos
     .hint = AVISO: os eventos podem gerar mais de 5 GB por dia. Ative apenas para depuração/desenvolvimento.
 config-events-record-api = Registrar eventos de API
@@ -1179,6 +1185,7 @@ config-webserver-port = Porta
 config-section-account = Conta { -brand }
 config-section-agent-control = Controle por agentes
 config-section-assistant = Assistente
+config-section-chains = Redes
 config-section-copy-trading = Copy Trading
 config-section-events = Eventos
 config-section-filtering = Filtragem

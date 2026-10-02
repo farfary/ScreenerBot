@@ -65,6 +65,10 @@ pub struct FieldMetadata {
     pub children: Option<SectionMetadata>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hidden: Option<bool>,
+    /// True when applying a change needs a process restart (boot-read
+    /// settings). `None` serializes as absent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub restart_required: Option<bool>,
 }
 
 impl FieldMetadata {
@@ -88,6 +92,7 @@ impl FieldMetadata {
             default,
             children: None,
             hidden: extras.hidden.then_some(true),
+            restart_required: extras.restart_required.then_some(true),
         }
     }
 }
@@ -101,6 +106,7 @@ pub struct FieldMetadataExtras {
     pub max: Option<f64>,
     pub step: Option<f64>,
     pub hidden: bool,
+    pub restart_required: bool,
 }
 
 /// Trait implemented for every supported config field type to expose rendering hints.
@@ -313,6 +319,7 @@ pub fn collect_config_metadata() -> ConfigMetadata {
     map.insert("network", super::NetworkConfig::field_metadata());
     map.insert("referral", super::ReferralConfig::field_metadata());
     map.insert("account", super::AccountConfig::field_metadata());
+    map.insert("chains", super::ChainsConfig::field_metadata());
 
     for (section_id, section) in map.iter_mut() {
         assign_keys(&catalog_key(&["config", section_id]), section);
@@ -388,6 +395,10 @@ macro_rules! field_metadata {
     }};
     (@assign $meta:ident, hidden: $value:expr $(, $($rest:tt)*)?) => {{
         $meta.hidden = $value;
+        $crate::field_metadata!(@assign $meta $(, $($rest)*)?);
+    }};
+    (@assign $meta:ident, restart_required: $value:expr $(, $($rest:tt)*)?) => {{
+        $meta.restart_required = $value;
         $crate::field_metadata!(@assign $meta $(, $($rest)*)?);
     }};
     (@assign $meta:ident, $unexpected:ident : $_value:expr $(, $($rest:tt)*)?) => {{
@@ -495,6 +506,47 @@ mod tests {
             round_tripped.auto_wallet_signin,
             config.account.auto_wallet_signin
         );
+    }
+
+    /// The chains section is subject to the same seven-step trap as referral
+    /// and account above, so it is guarded the same way — plus its boot-time
+    /// gate: a config enabling no chain cannot boot.
+    #[test]
+    fn chains_section_is_registered_and_gates_the_enabled_set() {
+        let metadata = collect_config_metadata();
+        let chains = metadata
+            .get("chains")
+            .expect("chains is missing from collect_config_metadata()");
+        for field in ["show_preview", "solana"] {
+            assert!(
+                chains.contains_key(field),
+                "chains.{field} is absent from config metadata"
+            );
+        }
+        assert_eq!(
+            chains
+                .get("solana")
+                .and_then(|field| field.restart_required),
+            Some(true),
+            "chains.solana must carry the restart-required flag"
+        );
+
+        let config = crate::config::schemas::Config::default();
+        assert!(!config.chains.show_preview);
+        assert!(config.chains.solana.enabled);
+        assert!(config.chains.has_enabled_chain());
+
+        let value = serde_json::to_value(&config.chains).expect("chains must serialize");
+        let round_tripped: crate::config::ChainsConfig =
+            serde_json::from_value(value).expect("chains must deserialize");
+        assert_eq!(round_tripped.solana.enabled, config.chains.solana.enabled);
+        assert_eq!(round_tripped.show_preview, config.chains.show_preview);
+
+        let all_disabled = crate::config::ChainsConfig {
+            solana: crate::config::ChainToggleConfig { enabled: false },
+            ..config.chains.clone()
+        };
+        assert!(!all_disabled.has_enabled_chain());
     }
 
     /// The `[ai]` section was split into four canonical owners. Each must be

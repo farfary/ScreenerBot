@@ -49,6 +49,14 @@ config-assistant-max-session-messages = Maks. Oturum Mesajı
 config-assistant-scheduled-tasks-enabled = Zamanlanmış Görevler
     .hint = Zamanlanmış olarak çalışan otomatik asistan görevlerini etkinleştirin
 
+## chains
+
+config-chains-show-preview = Önizleme zincirleri
+    .hint = Henüz genel kullanıma sunulmamış zincirleri göster. Yeniden başlatma sonrasında etkili olur.
+config-chains-solana = Solana
+config-chains-solana-enabled = Etkin
+    .hint = Solana'yı bu süreçte çalıştır. Yeniden başlatma sonrasında etkili olur.
+
 ## copy_trading
 
 config-copy-trading-default-slippage-pct = Varsayılan Kayma
@@ -1240,6 +1248,7 @@ config-webserver-port = Bağlantı Noktası
 config-section-account = { -brand } Hesabı
 config-section-agent-control = Ajan Kontrolü
 config-section-assistant = Asistan
+config-section-chains = Zincirler
 config-section-copy-trading = Kopya İşlem
 config-section-events = Olaylar
 config-section-filtering = Filtreleme

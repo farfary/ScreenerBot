@@ -36,6 +36,7 @@ export const SECTION_DISPLAY_ORDER = [
   "network",
   "referral",
   "account",
+  "chains",
   "ohlcv",
   "summary",
 ];

@@ -49,6 +49,14 @@ config-assistant-max-session-messages = 세션 최대 메시지 수
 config-assistant-scheduled-tasks-enabled = 예약 작업
     .hint = 일정에 따라 실행되는 어시스턴트 자동 작업을 사용합니다
 
+## chains
+
+config-chains-show-preview = 미리 보기 체인
+    .hint = 아직 일반 공급되지 않은 체인을 표시합니다. 다시 시작한 후 적용됩니다.
+config-chains-solana = Solana
+config-chains-solana-enabled = 활성화됨
+    .hint = 이 프로세스에서 Solana를 실행합니다. 다시 시작한 후 적용됩니다.
+
 ## copy_trading
 
 config-copy-trading-default-slippage-pct = 기본 슬리피지
@@ -1240,6 +1248,7 @@ config-webserver-port = 포트
 config-section-account = { -brand } 계정
 config-section-agent-control = 에이전트 제어
 config-section-assistant = 어시스턴트
+config-section-chains = 체인
 config-section-copy-trading = 카피 트레이딩
 config-section-events = 이벤트
 config-section-filtering = 필터링

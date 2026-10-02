@@ -3,11 +3,10 @@
 
 //! The injected chain runtime wallet-watch execution depends on.
 //!
-//! Chain-neutral: this module holds a trait object registered by the application
-//! composition root (`src/run/services.rs`, via `set_runtime_factory`) — it never
-//! imports `crate::chains::solana`. The concrete Solana runtime lives in
-//! `crate::chains::solana::wallets::runtime::build_runtime`, mirroring the
-//! `swaps::registry` / `set_router_factory` seam.
+//! Chain-neutral: this module resolves the runtime from the chain registry
+//! the composition root installs (`crate::chains::install_enabled_runtimes`)
+//! — it never imports `crate::chains::solana`. The concrete Solana runtime
+//! lives in `crate::chains::solana::wallets::runtime::build_runtime`.
 
 use std::sync::{Arc, OnceLock};
 
@@ -115,27 +114,23 @@ pub trait WalletWatchRuntime: Send + Sync {
 /// Global runtime instance (lazily built from the registered factory).
 static RUNTIME: OnceLock<Arc<dyn WalletWatchRuntime>> = OnceLock::new();
 
-/// Factory that builds the concrete runtime, registered once by the
-/// application composition root before `WalletWatchService` can initialize.
-static RUNTIME_FACTORY: OnceLock<fn() -> Arc<dyn WalletWatchRuntime>> = OnceLock::new();
-
-/// Register the chain-owned runtime factory. Must be called once during boot
-/// (see `crate::run::services::register_all_services`) before any watch
-/// activity can occur.
-pub fn set_runtime_factory(factory: fn() -> Arc<dyn WalletWatchRuntime>) {
-    let _ = RUNTIME_FACTORY.set(factory);
-}
-
-/// Fallible global runtime access. Returns `None` when the composition root
-/// has not registered a factory — integration tests and library callers that
-/// reach watch APIs before boot. Never panics.
+/// Fallible global runtime access. Returns `None` when no chain runtime is
+/// installed — integration tests and library callers that reach watch APIs
+/// before boot, or a build with no enabled chain. Never panics.
+///
+/// Single-chain resolution: the one enabled chain's runtime. Watch
+/// state keys by chain later; until then, more than one enabled chain has
+/// no unambiguous runtime and resolves to `None`.
 pub fn try_get_runtime() -> Option<Arc<dyn WalletWatchRuntime>> {
     if let Some(runtime) = RUNTIME.get() {
         return Some(Arc::clone(runtime));
     }
-    let factory = RUNTIME_FACTORY.get()?;
-    let _ = RUNTIME.set(factory());
-    RUNTIME.get().map(Arc::clone)
+    let [chain] = crate::chains::enabled_chains() else {
+        return None;
+    };
+    let runtime = crate::chains::runtime_for(*chain)?.wallet_watch_runtime();
+    let _ = RUNTIME.set(Arc::clone(&runtime));
+    Some(runtime)
 }
 
 /// Get the global runtime, initializing it from the registered factory on
