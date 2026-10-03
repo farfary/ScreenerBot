@@ -54,6 +54,16 @@ pub fn get_rpc_stats_db_path() -> PathBuf {
     chain_db_path(DbKind::RpcStats, ChainId::Solana)
 }
 
+/// Legacy chain stamped into new rows of the shared-file stores whose domain
+/// has not threaded its subject's chain through yet (events, actions, RPC
+/// stats, strategy performance, the tools session tables, AI decision
+/// history): the single enabled chain. It lives on the chain seam because
+/// only the seam may name the chain, and it is deleted when its last caller
+/// passes the chain explicitly.
+pub fn legacy_row_chain() -> ChainId {
+    active_chain()
+}
+
 /// The chain this process operates on: the single enabled chain, frozen from
 /// `[chains]` config at first read. With one supported chain and
 /// default config that is Solana. This is the single operational selection

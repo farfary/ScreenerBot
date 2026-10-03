@@ -26,8 +26,8 @@ pub fn create_mw_session(config: &MwSessionConfig) -> Result<String, Error> {
             session_id, session_type, token_mint,
             total_wallets, target_amount_sol, min_amount_sol, max_amount_sol,
             delay_ms, delay_max_ms, concurrency, sol_buffer,
-            status
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 'pending')
+            status, chain_id
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 'pending', ?12)
         "#,
         params![
             session_id,
@@ -41,6 +41,7 @@ pub fn create_mw_session(config: &MwSessionConfig) -> Result<String, Error> {
             config.delay_max_ms,
             config.concurrency,
             config.sol_buffer,
+            crate::chains::legacy_row_chain().as_str(),
         ],
     )
     .map_err(DatabaseError::from)?;

@@ -161,7 +161,10 @@ CREATE TABLE IF NOT EXISTS mw_sessions (
     
     -- Timestamps
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+
+    -- Chain scope
+    chain_id TEXT NOT NULL DEFAULT 'solana'
 );
 
 CREATE INDEX IF NOT EXISTS idx_mw_sessions_session_id ON mw_sessions(session_id);
@@ -261,7 +264,10 @@ CREATE TABLE IF NOT EXISTS watched_tokens (
     actions_triggered INTEGER DEFAULT 0,
     
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+
+    -- Chain scope
+    chain_id TEXT NOT NULL DEFAULT 'solana'
 );
 
 CREATE INDEX IF NOT EXISTS idx_watched_tokens_mint ON watched_tokens(mint);
@@ -367,6 +373,23 @@ pub fn init_tools_db() -> Result<(), Error> {
                 TOOLS_SCHEMA_VERSION
             ),
         );
+    }
+
+    // Chain scope: `mw_sessions` and `watched_tokens` gain a chain column.
+    // The check is deliberately OUTSIDE the version-stamp branch above — a
+    // v0.2.13 database already records version 1, and a stamp must never
+    // decide whether a structural migration runs. Historical rows are
+    // Solana's by construction, so the migration backfills 'solana'.
+    for table in ["mw_sessions", "watched_tokens"] {
+        let has_chain = database::schema::table_has_column(&conn, table, "chain_id")
+            .map_err(|e| migration_step("inspect chain column", e))?;
+        if !has_chain {
+            conn.execute(
+                &format!("ALTER TABLE {table} ADD COLUMN chain_id TEXT NOT NULL DEFAULT 'solana'"),
+                [],
+            )
+            .map_err(|e| migration_step("add chain column", e))?;
+        }
     }
 
     TOOLS_DB_INITIALIZED.store(true, Ordering::SeqCst);

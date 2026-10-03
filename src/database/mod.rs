@@ -8,6 +8,7 @@
 
 pub mod configure;
 pub mod maintenance;
+pub mod schema;
 pub mod transaction;
 
 pub use configure::*;

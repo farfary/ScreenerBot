@@ -23,8 +23,8 @@ pub fn add_watched_token(config: &WatchedTokenConfig) -> Result<i64, Error> {
         r#"
         INSERT INTO watched_tokens (
             mint, symbol, pool_address, pool_source, pool_dex, pool_pair, pool_liquidity,
-            watch_type, trigger_amount_sol, action_amount_sol, slippage_bps, is_active
-        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 1)
+            watch_type, trigger_amount_sol, action_amount_sol, slippage_bps, is_active, chain_id
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 1, ?12)
         "#,
         params![
             config.mint,
@@ -38,6 +38,7 @@ pub fn add_watched_token(config: &WatchedTokenConfig) -> Result<i64, Error> {
             config.trigger_amount_sol,
             config.action_amount_sol,
             config.slippage_bps.unwrap_or(500),
+            crate::chains::legacy_row_chain().as_str(),
         ],
     )
     .map_err(DatabaseError::from)?;

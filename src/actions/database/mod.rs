@@ -127,7 +127,8 @@ impl ActionsDatabase {
                 dismissed_at TEXT,
                 metadata TEXT NOT NULL,
                 created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
+                updated_at TEXT NOT NULL,
+                chain_id TEXT NOT NULL DEFAULT 'solana'
             )
             "#,
             [],
@@ -138,6 +139,29 @@ impl ActionsDatabase {
                 message: e.to_string(),
             })
         })?;
+
+        // Chain scope: the shared file gains a chain column. Historical rows
+        // are Solana's by construction, so the migration backfills 'solana';
+        // gated on the live schema, never a version stamp.
+        let has_chain_id = database::schema::table_has_column(&conn, "actions", "chain_id")
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "inspect actions schema for chain_id".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
+        if !has_chain_id {
+            conn.execute(
+                "ALTER TABLE actions ADD COLUMN chain_id TEXT NOT NULL DEFAULT 'solana'",
+                [],
+            )
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "add actions chain_id column".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
+        }
 
         // Create action steps table
         conn.execute(
@@ -375,6 +399,7 @@ impl ActionsDatabase {
             })
         })?;
         let now = Utc::now().to_rfc3339();
+        let chain_id = crate::chains::legacy_row_chain().as_str();
 
         // Use transaction to ensure atomicity of action + steps insertion
         let tx = conn.write_tx().map_err(|e| {
@@ -389,8 +414,8 @@ impl ActionsDatabase {
             INSERT INTO actions (
                 id, action_type, entity_id, wallet_address, state, state_data,
                 started_at, completed_at, duration_ms, read_at, dismissed_at,
-                metadata, created_at, updated_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, NULL, NULL, ?10, ?11, ?12)
+                metadata, created_at, updated_at, chain_id
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, NULL, NULL, ?10, ?11, ?12, ?13)
             "#,
             params![
                 action.id,
@@ -407,6 +432,7 @@ impl ActionsDatabase {
                 metadata,
                 now,
                 now,
+                chain_id,
             ],
         )
         .map_err(|e| {

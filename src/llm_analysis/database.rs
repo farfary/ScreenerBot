@@ -124,7 +124,8 @@ fn initialize_schema(conn: &Connection) -> Result<()> {
             tokens_used INTEGER NOT NULL DEFAULT 0,
             latency_ms REAL NOT NULL DEFAULT 0,
             cached INTEGER NOT NULL DEFAULT 0,
-            created_at TEXT NOT NULL
+            created_at TEXT NOT NULL,
+            chain_id TEXT NOT NULL DEFAULT 'solana'
         )",
         [],
     )
@@ -134,6 +135,30 @@ fn initialize_schema(conn: &Connection) -> Result<()> {
             message: e.to_string(),
         })
     })?;
+
+    // Chain scope: the shared file gains a chain column. Historical rows are
+    // Solana's by construction, so the migration backfills 'solana'; gated on
+    // the live schema, never a version stamp.
+    let has_chain_id =
+        crate::database::schema::table_has_column(conn, "ai_decision_history", "chain_id")
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "inspect ai_decision_history schema for chain_id".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
+    if !has_chain_id {
+        conn.execute(
+            "ALTER TABLE ai_decision_history ADD COLUMN chain_id TEXT NOT NULL DEFAULT 'solana'",
+            [],
+        )
+        .map_err(|e| {
+            Error::Database(DatabaseError::Query {
+                operation: "add ai_decision_history chain_id column".to_owned(),
+                message: e.to_string(),
+            })
+        })?;
+    }
 
     // Indexes for decision history
     conn.execute(
@@ -401,8 +426,8 @@ pub fn record_decision(db: &Connection, record: &DecisionRecord) -> Result<i64> 
     db.execute(
         "INSERT INTO ai_decision_history
          (mint, symbol, decision, confidence, reasoning, risk_level, provider, model,
-          tokens_used, latency_ms, cached, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+          tokens_used, latency_ms, cached, created_at, chain_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
         params![
             &record.mint,
             &record.symbol,
@@ -416,6 +441,7 @@ pub fn record_decision(db: &Connection, record: &DecisionRecord) -> Result<i64> 
             record.latency_ms,
             if record.cached { 1 } else { 0 },
             &now,
+            crate::chains::legacy_row_chain().as_str(),
         ],
     )
     .map_err(|e| {

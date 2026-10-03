@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS strategy_performance (
     token_mint TEXT,
     execution_timestamp TEXT NOT NULL,
     trade_id TEXT,
+    chain_id TEXT NOT NULL DEFAULT 'solana',
     FOREIGN KEY (strategy_id) REFERENCES strategies(id) ON DELETE CASCADE
 );
 
@@ -186,6 +187,18 @@ pub fn init_strategies_db() -> crate::Result<()> {
                 STRATEGIES_SCHEMA_VERSION
             ),
         );
+    }
+
+    // Chain scope: `strategy_performance` gains a chain column. The check is
+    // deliberately OUTSIDE the version-stamp branch above — a v0.2.13 database
+    // already records version 1, and a stamp must never decide whether a
+    // structural migration runs. Historical rows are Solana's by
+    // construction, so the migration backfills 'solana'.
+    if !database::schema::table_has_column(&conn, "strategy_performance", "chain_id")? {
+        conn.execute(
+            "ALTER TABLE strategy_performance ADD COLUMN chain_id TEXT NOT NULL DEFAULT 'solana'",
+            [],
+        )?;
     }
 
     STRATEGIES_DB_INITIALIZED.store(true, Ordering::Relaxed);
@@ -574,8 +587,8 @@ pub fn record_evaluation(result: &EvaluationResult, token_mint: &str) -> crate::
     let details_json = serde_json::to_string(&result.details)?;
 
     conn.execute(
-        "INSERT INTO strategy_performance (strategy_id, execution_time_ms, result, confidence, details_json, token_mint, execution_timestamp)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        "INSERT INTO strategy_performance (strategy_id, execution_time_ms, result, confidence, details_json, token_mint, execution_timestamp, chain_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
         params![
             result.strategy_id,
             result.execution_time_ms,
@@ -584,6 +597,7 @@ pub fn record_evaluation(result: &EvaluationResult, token_mint: &str) -> crate::
             details_json,
             token_mint,
             Utc::now().to_rfc3339(),
+            crate::chains::legacy_row_chain().as_str(),
         ],
     )?;
 

@@ -119,7 +119,8 @@ impl EventsDatabase {
                 reference_id    TEXT,
                 message_short   TEXT,
                 json_payload    TEXT    NOT NULL,
-                created_at      TEXT    NOT NULL DEFAULT (datetime('now'))
+                created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+                chain_id        TEXT    NOT NULL DEFAULT 'solana'
             )",
             [],
         )
@@ -129,6 +130,29 @@ impl EventsDatabase {
                 message: e.to_string(),
             })
         })?;
+
+        // Chain scope: the shared file gains a chain column. Historical rows
+        // are Solana's by construction, so the migration backfills 'solana';
+        // gated on the live schema, never a version stamp.
+        let has_chain_id = database::schema::table_has_column(&conn, "events", "chain_id")
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "inspect events schema for chain_id".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
+        if !has_chain_id {
+            conn.execute(
+                "ALTER TABLE events ADD COLUMN chain_id TEXT NOT NULL DEFAULT 'solana'",
+                [],
+            )
+            .map_err(|e| {
+                Error::Database(DatabaseError::Query {
+                    operation: "add events chain_id column".to_owned(),
+                    message: e.to_string(),
+                })
+            })?;
+        }
 
         // Create optimized indexes
         conn.execute(
@@ -256,6 +280,7 @@ impl EventsDatabase {
         let event_time_str = event.event_time.to_rfc3339();
         let category_str = event.category.to_string();
         let severity_str = event.severity.to_string();
+        let chain_id = crate::chains::legacy_row_chain().as_str();
         let payload_str = serde_json::to_string(&event.payload).map_err(|e| {
             Error::Data(DataError::ParseError {
                 data_type: "event payload".to_owned(),
@@ -282,9 +307,9 @@ impl EventsDatabase {
         let _id = conn
             .execute(
                 "INSERT INTO events (
-                    event_time, category, subtype, severity, 
-                    mint, reference_id, message_short, json_payload
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                    event_time, category, subtype, severity,
+                    mint, reference_id, message_short, json_payload, chain_id
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
                 params![
                     event_time_str,
                     category_str,
@@ -293,7 +318,8 @@ impl EventsDatabase {
                     event.mint,
                     event.reference_id,
                     message_short,
-                    payload_str
+                    payload_str,
+                    chain_id
                 ],
             )
             .map_err(|e| {
@@ -314,6 +340,8 @@ impl EventsDatabase {
 
         let conn = self.get_write_connection()?;
 
+        let chain_id = crate::chains::legacy_row_chain().as_str();
+
         let tx = conn.unchecked_transaction().map_err(|e| {
             Error::Database(DatabaseError::Query {
                 operation: "start events insert transaction".to_owned(),
@@ -325,9 +353,9 @@ impl EventsDatabase {
             let mut stmt = tx
                 .prepare(
                     "INSERT INTO events (
-                        event_time, category, subtype, severity, 
-                        mint, reference_id, message_short, json_payload
-                    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                        event_time, category, subtype, severity,
+                        mint, reference_id, message_short, json_payload, chain_id
+                    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
                 )
                 .map_err(|e| {
                     Error::Database(DatabaseError::Query {
@@ -370,7 +398,8 @@ impl EventsDatabase {
                     event.mint.clone(),
                     event.reference_id.clone(),
                     message_short,
-                    payload_str
+                    payload_str,
+                    chain_id
                 ])
                 .map_err(|e| {
                     Error::Database(DatabaseError::Query {

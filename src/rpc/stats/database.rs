@@ -64,7 +64,8 @@ impl RpcStatsDatabase {
                 ended_at TEXT,
                 total_calls INTEGER DEFAULT 0,
                 total_errors INTEGER DEFAULT 0,
-                is_current INTEGER DEFAULT 0
+                is_current INTEGER DEFAULT 0,
+                chain_id TEXT NOT NULL DEFAULT 'solana'
             );
             CREATE INDEX IF NOT EXISTS idx_sessions_current ON sessions(is_current);
             CREATE INDEX IF NOT EXISTS idx_sessions_started ON sessions(started_at DESC);
@@ -77,7 +78,8 @@ impl RpcStatsDatabase {
                 priority INTEGER DEFAULT 100,
                 enabled INTEGER DEFAULT 1,
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
-                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+                updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                chain_id TEXT NOT NULL DEFAULT 'solana'
             );
             CREATE INDEX IF NOT EXISTS idx_providers_kind ON providers(kind);
 
@@ -95,6 +97,7 @@ impl RpcStatsDatabase {
                 retry_count INTEGER DEFAULT 0,
                 was_rate_limited INTEGER DEFAULT 0,
                 timestamp TEXT NOT NULL,
+                chain_id TEXT NOT NULL DEFAULT 'solana',
                 FOREIGN KEY (session_id) REFERENCES sessions(id)
             );
             CREATE INDEX IF NOT EXISTS idx_calls_session_time ON calls(session_id, timestamp DESC);
@@ -115,6 +118,7 @@ impl RpcStatsDatabase {
                 latency_sum_ms INTEGER DEFAULT 0,
                 latency_min_ms INTEGER,
                 latency_max_ms INTEGER,
+                chain_id TEXT NOT NULL DEFAULT 'solana',
                 FOREIGN KEY (session_id) REFERENCES sessions(id),
                 UNIQUE (session_id, provider_id, minute_start)
             );
@@ -133,10 +137,31 @@ impl RpcStatsDatabase {
                 current_rate_limit INTEGER,
                 base_rate_limit INTEGER,
                 updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+                chain_id TEXT NOT NULL DEFAULT 'solana',
                 FOREIGN KEY (provider_id) REFERENCES providers(id)
             );
             "#,
         )?;
+
+        // Chain scope: the shared file gains a chain column on every table.
+        // Historical rows are Solana's by construction, so the migration
+        // backfills 'solana'; gated on the live schema, never a version stamp.
+        for table in [
+            "sessions",
+            "providers",
+            "calls",
+            "minute_buckets",
+            "provider_health",
+        ] {
+            if !database::schema::table_has_column(&conn, table, "chain_id")? {
+                conn.execute(
+                    &format!(
+                        "ALTER TABLE {table} ADD COLUMN chain_id TEXT NOT NULL DEFAULT 'solana'"
+                    ),
+                    [],
+                )?;
+            }
+        }
 
         Ok(())
     }
@@ -150,8 +175,12 @@ impl RpcStatsDatabase {
 
         // Insert new session
         conn.execute(
-            "INSERT INTO sessions (id, started_at, is_current) VALUES (?1, ?2, 1)",
-            params![session_id, Utc::now().to_rfc3339()],
+            "INSERT INTO sessions (id, started_at, is_current, chain_id) VALUES (?1, ?2, 1, ?3)",
+            params![
+                session_id,
+                Utc::now().to_rfc3339(),
+                crate::chains::legacy_row_chain().as_str()
+            ],
         )?;
 
         Ok(())
@@ -194,15 +223,21 @@ impl RpcStatsDatabase {
 
         conn.execute(
             r#"
-            INSERT INTO providers (id, url_masked, kind, priority, enabled, updated_at)
-            VALUES (?1, ?2, ?3, ?4, 1, datetime('now'))
+            INSERT INTO providers (id, url_masked, kind, priority, enabled, updated_at, chain_id)
+            VALUES (?1, ?2, ?3, ?4, 1, datetime('now'), ?5)
             ON CONFLICT(id) DO UPDATE SET
                 url_masked = excluded.url_masked,
                 kind = excluded.kind,
                 priority = excluded.priority,
                 updated_at = datetime('now')
             "#,
-            params![id, url_masked, kind.to_string(), priority as i64],
+            params![
+                id,
+                url_masked,
+                kind.to_string(),
+                priority as i64,
+                crate::chains::legacy_row_chain().as_str(),
+            ],
         )?;
 
         Ok(())
@@ -211,14 +246,15 @@ impl RpcStatsDatabase {
     /// Record RPC call
     pub fn record_call(&self, session_id: &str, record: &RpcCallRecord) -> crate::Result<()> {
         let conn = self.conn()?;
+        let chain_id = crate::chains::legacy_row_chain().as_str();
 
         conn.execute(
             r#"
             INSERT INTO calls (
                 session_id, provider_id, method, success, latency_ms,
                 error_code, error_message, was_retried, retry_count,
-                was_rate_limited, timestamp
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+                was_rate_limited, timestamp, chain_id
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
             "#,
             params![
                 session_id,
@@ -232,6 +268,7 @@ impl RpcStatsDatabase {
                 record.retry_count as i32,
                 record.was_rate_limited as i32,
                 record.timestamp.to_rfc3339(),
+                chain_id,
             ],
         )?;
 
@@ -260,6 +297,7 @@ impl RpcStatsDatabase {
         }
 
         let mut conn = self.conn()?;
+        let chain_id = crate::chains::legacy_row_chain().as_str();
         let tx = conn.write_tx()?;
 
         {
@@ -268,8 +306,8 @@ impl RpcStatsDatabase {
                 INSERT INTO calls (
                     session_id, provider_id, method, success, latency_ms,
                     error_code, error_message, was_retried, retry_count,
-                    was_rate_limited, timestamp
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+                    was_rate_limited, timestamp, chain_id
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
                 "#,
             )?;
 
@@ -286,6 +324,7 @@ impl RpcStatsDatabase {
                     record.retry_count as i32,
                     record.was_rate_limited as i32,
                     record.timestamp.to_rfc3339(),
+                    chain_id,
                 ])?;
             }
         }
@@ -323,8 +362,8 @@ impl RpcStatsDatabase {
             r#"
             INSERT INTO provider_health (
                 provider_id, circuit_state, consecutive_failures, consecutive_successes,
-                avg_latency_ms, current_rate_limit, base_rate_limit, last_error, updated_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, datetime('now'))
+                avg_latency_ms, current_rate_limit, base_rate_limit, last_error, updated_at, chain_id
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, datetime('now'), ?9)
             ON CONFLICT(provider_id) DO UPDATE SET
                 circuit_state = excluded.circuit_state,
                 consecutive_failures = excluded.consecutive_failures,
@@ -344,6 +383,7 @@ impl RpcStatsDatabase {
                 current_rate_limit as i64,
                 base_rate_limit as i64,
                 last_error,
+                crate::chains::legacy_row_chain().as_str(),
             ],
         )?;
 
