@@ -168,8 +168,7 @@ mod tests {
         let _ = std::fs::remove_file(&path);
         let db = OhlcvDatabase::new(&path, ChainId::Solana).unwrap();
         let count: i64 = db
-            .conn
-            .lock()
+            .conn()
             .unwrap()
             .query_row(
                 "SELECT COUNT(*) FROM schema_migrations WHERE migration_id = ?1",
@@ -181,8 +180,7 @@ mod tests {
         drop(db);
         let reopened = OhlcvDatabase::new(&path, ChainId::Solana).unwrap();
         let count: i64 = reopened
-            .conn
-            .lock()
+            .conn()
             .unwrap()
             .query_row(
                 "SELECT COUNT(*) FROM schema_migrations WHERE migration_id = ?1",
@@ -230,7 +228,7 @@ mod tests {
             1
         );
         assert!(db.get_monitor_config("mint").unwrap().is_some());
-        let conn = db.conn.lock().unwrap();
+        let conn = db.conn().unwrap();
         let user_version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .unwrap();

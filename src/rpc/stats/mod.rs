@@ -15,7 +15,7 @@ pub mod helpers;
 pub mod types;
 
 pub use collector::{StatsCollector, StatsMessage};
-pub use database::{get_rpc_stats_db_path, RpcStatsDatabase};
+pub use database::RpcStatsDatabase;
 pub use helpers::{
     get_global_rpc_stats, start_rpc_stats_auto_save_service, RpcMinuteBucket, RpcSessionSnapshot,
     RpcStats,

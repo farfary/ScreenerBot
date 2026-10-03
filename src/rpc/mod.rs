@@ -101,8 +101,8 @@ pub use selector::{create_selector, ProviderSelector};
 // ============================================================================
 
 pub use stats::{
-    get_global_rpc_stats, get_rpc_stats_db_path, start_rpc_stats_auto_save_service, MethodStats,
-    ProviderStats, RpcCallRecord, RpcMinuteBucket, RpcSessionSnapshot, RpcStats, RpcStatsDatabase,
+    get_global_rpc_stats, start_rpc_stats_auto_save_service, MethodStats, ProviderStats,
+    RpcCallRecord, RpcMinuteBucket, RpcSessionSnapshot, RpcStats, RpcStatsDatabase,
     RpcStatsResponse, SessionStats, StatsCollector, StatsManager, StatsMessage, StatsSnapshot,
     TimeBucketStats,
 };

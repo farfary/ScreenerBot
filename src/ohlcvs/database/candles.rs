@@ -41,10 +41,7 @@ impl OhlcvDatabase {
         pool_address: &str,
         timeframe: Timeframe,
     ) -> OhlcvResult<Option<(i64, i64)>> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+        let conn = self.conn()?;
 
         let mut stmt = conn
             .prepare(
@@ -254,10 +251,7 @@ impl OhlcvDatabase {
             return Ok(0);
         }
 
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+        let conn = self.conn()?;
 
         let tx = conn
             .unchecked_transaction()
@@ -309,10 +303,7 @@ impl OhlcvDatabase {
         pool_address: &str,
         timeframe: Timeframe,
     ) -> OhlcvResult<Option<i64>> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+        let conn = self.conn()?;
 
         conn.query_row(
             "SELECT timestamp FROM ohlcv_candles
@@ -341,10 +332,7 @@ impl OhlcvDatabase {
         timeframe: Timeframe,
         timestamp: i64,
     ) -> OhlcvResult<Option<StoredBucket>> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+        let conn = self.conn()?;
 
         conn.query_row(
             "SELECT source != ?6, CAST(strftime('%s', fetched_at) AS INTEGER) FROM ohlcv_candles
@@ -379,10 +367,7 @@ impl OhlcvDatabase {
         to_ts: Option<i64>,
         limit: Option<usize>,
     ) -> OhlcvResult<Vec<Candle>> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+        let conn = self.conn()?;
 
         let timeframe_str = timeframe.as_str();
 
@@ -471,10 +456,7 @@ impl OhlcvDatabase {
         mint: &str,
         pool_address: &str,
     ) -> OhlcvResult<Vec<TimeframeSummary>> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+        let conn = self.conn()?;
 
         let mut stmt = conn
             .prepare(
@@ -511,10 +493,7 @@ impl OhlcvDatabase {
         from: i64,
         to: i64,
     ) -> OhlcvResult<Vec<(String, i64)>> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+        let conn = self.conn()?;
 
         let mut stmt = conn
             .prepare(
@@ -550,10 +529,7 @@ impl OhlcvDatabase {
     /// stale pool's price series can never resurface or be combined with the
     /// current pool's candles. Returns the number of rows removed.
     pub fn delete_candles_for_pool(&self, mint: &str, pool_address: &str) -> OhlcvResult<usize> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+        let conn = self.conn()?;
 
         let removed = conn
             .execute(
@@ -573,10 +549,7 @@ impl OhlcvDatabase {
         mint: &str,
         pool_address: &str,
     ) -> OhlcvResult<Vec<(String, i64)>> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+        let conn = self.conn()?;
 
         let mut stmt = conn
             .prepare(
@@ -607,10 +580,7 @@ impl OhlcvDatabase {
     /// When this token's OHLCV was last checked (any fetch attempt), from the
     /// monitor config's `last_fetch` (TEXT) as unix secs.
     pub fn get_last_checked_at(&self, mint: &str) -> OhlcvResult<Option<i64>> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+        let conn = self.conn()?;
 
         let res: Option<i64> = conn
             .query_row(
@@ -626,10 +596,7 @@ impl OhlcvDatabase {
 
     /// Check if backfill is complete for timeframe
     pub fn is_backfill_complete(&self, mint: &str, timeframe: Timeframe) -> OhlcvResult<bool> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+        let conn = self.conn()?;
 
         let column = format!("backfill_{}_complete", timeframe.as_str().replace('-', ""));
 
@@ -649,10 +616,7 @@ impl OhlcvDatabase {
 
     /// Mark backfill as complete for timeframe
     pub fn mark_backfill_complete(&self, mint: &str, timeframe: Timeframe) -> OhlcvResult<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+        let conn = self.conn()?;
 
         let column = format!("backfill_{}_complete", timeframe.as_str().replace('-', ""));
 
@@ -670,10 +634,7 @@ impl OhlcvDatabase {
     /// Mark backfill as incomplete for timeframe. The token is no longer fully
     /// backfilled, so `backfill_completed_at` is cleared with it.
     pub fn mark_backfill_incomplete(&self, mint: &str, timeframe: Timeframe) -> OhlcvResult<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+        let conn = self.conn()?;
 
         let column = format!("backfill_{}_complete", timeframe.as_str().replace('-', ""));
 
@@ -692,10 +653,7 @@ impl OhlcvDatabase {
     /// transition to complete, so a token that is already complete is left
     /// untouched.
     pub fn mark_all_backfills_complete(&self, mint: &str) -> OhlcvResult<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+        let conn = self.conn()?;
 
         conn.execute(
             "UPDATE ohlcv_monitor_config SET 
@@ -758,7 +716,7 @@ mod tests {
 
     /// Pin a row's write time, which the database stamps from the wall clock.
     fn set_fetched_at(db: &OhlcvDatabase, ts: i64, fetched_at: i64) {
-        let conn = db.conn.lock().unwrap();
+        let conn = db.conn().unwrap();
         conn.execute(
             "UPDATE ohlcv_candles SET fetched_at = datetime(?2, 'unixepoch') WHERE mint = 'mint' AND pool_address = 'pool' AND timeframe = '1h' AND timestamp = ?1",
             params![ts, fetched_at],
@@ -767,7 +725,7 @@ mod tests {
     }
 
     fn stored_row(db: &OhlcvDatabase, ts: i64) -> (f64, f64, f64, f64, f64, String) {
-        let conn = db.conn.lock().unwrap();
+        let conn = db.conn().unwrap();
         conn.query_row(
             "SELECT open, high, low, close, volume, source FROM ohlcv_candles WHERE mint = 'mint' AND pool_address = 'pool' AND timeframe = '1h' AND timestamp = ?1",
             params![ts],
@@ -777,7 +735,7 @@ mod tests {
     }
 
     fn stored(db: &OhlcvDatabase, ts: i64) -> (f64, String) {
-        let conn = db.conn.lock().unwrap();
+        let conn = db.conn().unwrap();
         conn.query_row(
             "SELECT close, source FROM ohlcv_candles WHERE mint = 'mint' AND pool_address = 'pool' AND timeframe = '1h' AND timestamp = ?1",
             params![ts],
@@ -1087,7 +1045,7 @@ mod tests {
         db.upsert_monitor_config(&TokenOhlcvConfig::new("mint".to_string(), Priority::High))
             .unwrap();
         let completed_at = |db: &OhlcvDatabase| -> Option<String> {
-            let conn = db.conn.lock().unwrap();
+            let conn = db.conn().unwrap();
             conn.query_row(
                 "SELECT backfill_completed_at FROM ohlcv_monitor_config WHERE mint = 'mint'",
                 [],
@@ -1096,7 +1054,7 @@ mod tests {
             .unwrap()
         };
         let set_completed_at = |db: &OhlcvDatabase, value: &str| {
-            let conn = db.conn.lock().unwrap();
+            let conn = db.conn().unwrap();
             conn.execute(
                 "UPDATE ohlcv_monitor_config SET backfill_completed_at = ?1 WHERE mint = 'mint'",
                 params![value],

@@ -23,6 +23,37 @@ pub use registry::{enabled_chains, install_enabled_runtimes, runtime_for, ChainR
 pub use runtime::ChainRuntime;
 pub use types::{AccountId, AssetId, ChainId, ChainMetadata, NativeAsset, PoolId, TransactionId};
 
+use crate::paths::{chain_db_path, DbKind};
+use std::path::PathBuf;
+
+/// Legacy tokens-database path (`tokens.db`); it lives on the chain seam
+/// because only the seam may name the chain, and it is deleted when its last
+/// caller passes the chain explicitly.
+pub fn get_tokens_db_path() -> PathBuf {
+    chain_db_path(DbKind::Tokens, ChainId::Solana)
+}
+
+/// Legacy pools-database path (`pools.db`); it lives on the chain seam
+/// because only the seam may name the chain, and it is deleted when its last
+/// caller passes the chain explicitly.
+pub fn get_pools_db_path() -> PathBuf {
+    chain_db_path(DbKind::Pools, ChainId::Solana)
+}
+
+/// Legacy OHLCV-database path (`ohlcvs.db`); it lives on the chain seam
+/// because only the seam may name the chain, and it is deleted when its last
+/// caller passes the chain explicitly.
+pub fn get_ohlcvs_db_path() -> PathBuf {
+    chain_db_path(DbKind::Ohlcvs, ChainId::Solana)
+}
+
+/// Legacy RPC-stats-database path (`rpc_stats.db`); it lives on the chain
+/// seam because only the seam may name the chain, and it is deleted when its
+/// last caller passes the chain explicitly.
+pub fn get_rpc_stats_db_path() -> PathBuf {
+    chain_db_path(DbKind::RpcStats, ChainId::Solana)
+}
+
 /// The chain this process operates on: the single enabled chain, frozen from
 /// `[chains]` config at first read. With one supported chain and
 /// default config that is Solana. This is the single operational selection

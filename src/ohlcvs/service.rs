@@ -622,7 +622,7 @@ pub(super) async fn get_or_init_service() -> OhlcvResult<Arc<OhlcvServiceImpl>> 
                 &"INIT: Initializing OHLCV runtime".to_owned(),
             );
 
-            let db_path = crate::paths::get_ohlcvs_db_path();
+            let db_path = crate::chains::get_ohlcvs_db_path();
             let service_impl = OhlcvServiceImpl::new(db_path)?;
 
             logger::info(LogTag::Ohlcv, &"SUCCESS: OHLCV runtime ready".to_owned());

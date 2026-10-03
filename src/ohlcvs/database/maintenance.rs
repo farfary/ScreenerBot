@@ -38,10 +38,7 @@ impl OhlcvDatabase {
     ///
     /// Note: This only affects gap tracking records, NOT actual candle data.
     pub fn cleanup_filled_gaps(&self, retention_days: i64) -> OhlcvResult<usize> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+        let conn = self.conn()?;
 
         let cutoff = (Utc::now() - Duration::days(retention_days)).to_rfc3339();
 
@@ -58,10 +55,7 @@ impl OhlcvDatabase {
     // ==================== Metrics ====================
 
     pub fn get_data_point_count(&self) -> OhlcvResult<usize> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+        let conn = self.conn()?;
 
         let count: i64 = conn
             .query_row(
@@ -75,10 +69,7 @@ impl OhlcvDatabase {
     }
 
     pub fn has_data_for_mint(&self, mint: &str) -> OhlcvResult<bool> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+        let conn = self.conn()?;
 
         let exists: i64 = conn
             .query_row(
@@ -96,10 +87,7 @@ impl OhlcvDatabase {
             return Ok(HashSet::new());
         }
 
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+        let conn = self.conn()?;
 
         const CHUNK_SIZE: usize = 512;
         let mut result = HashSet::with_capacity(mints.len());
@@ -138,10 +126,7 @@ impl OhlcvDatabase {
     }
 
     pub fn get_pool_count(&self) -> OhlcvResult<usize> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+        let conn = self.conn()?;
 
         let count: i64 = conn
             .query_row(
@@ -155,10 +140,7 @@ impl OhlcvDatabase {
     }
 
     pub fn get_token_count(&self) -> OhlcvResult<usize> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+        let conn = self.conn()?;
 
         let count: i64 = conn
             .query_row(
@@ -172,10 +154,7 @@ impl OhlcvDatabase {
     }
 
     pub fn get_gap_count(&self, filled: bool) -> OhlcvResult<usize> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+        let conn = self.conn()?;
 
         let count: i64 = conn
             .query_row(
@@ -190,10 +169,7 @@ impl OhlcvDatabase {
 
     /// Get comprehensive OHLCV token listing with status information
     pub fn get_all_tokens_with_status(&self) -> OhlcvResult<Vec<OhlcvTokenStatus>> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+        let conn = self.conn()?;
 
         // Query combines monitor config with candle counts and gap info
         let mut stmt = conn
@@ -283,10 +259,7 @@ impl OhlcvDatabase {
 
     /// Delete all OHLCV data for a specific token
     pub fn delete_token_data(&self, mint: &str) -> OhlcvResult<DeleteResult> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+        let conn = self.conn()?;
 
         let candles_deleted: usize = conn
             .execute(
@@ -326,10 +299,7 @@ impl OhlcvDatabase {
 
     /// Delete OHLCV data for tokens that have been inactive for a specified duration
     pub fn delete_inactive_tokens(&self, inactive_hours: i64) -> OhlcvResult<Vec<String>> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+        let conn = self.conn()?;
 
         let cutoff = Utc::now() - Duration::hours(inactive_hours);
         let cutoff_str = cutoff.to_rfc3339();
@@ -379,10 +349,7 @@ impl OhlcvDatabase {
 
     /// Get database size info
     pub fn get_database_stats(&self) -> OhlcvResult<DatabaseStats> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+        let conn = self.conn()?;
 
         let total_candles: i64 = conn
             .query_row(

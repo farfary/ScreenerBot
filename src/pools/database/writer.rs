@@ -8,9 +8,9 @@ use super::types::DbPriceResult;
 use crate::chains::ChainId;
 use crate::logger::{self, LogTag};
 
-use rusqlite::{params, Connection};
-use std::sync::Arc;
-use std::sync::Mutex;
+use r2d2::Pool;
+use r2d2_sqlite::SqliteConnectionManager;
+use rusqlite::params;
 use tokio::sync::mpsc;
 
 /// Batch size for database operations
@@ -26,7 +26,7 @@ const DB_WRITE_INTERVAL_SECONDS: u64 = 10;
 /// Background task for batched database writes
 pub(super) async fn run_database_writer(
     mut rx: mpsc::UnboundedReceiver<PriceResult>,
-    db_connection: Arc<Mutex<Option<Connection>>>,
+    db_pool: Pool<SqliteConnectionManager>,
     chain_id: ChainId,
 ) {
     let mut write_buffer = Vec::with_capacity(DB_BATCH_SIZE);
@@ -43,12 +43,12 @@ pub(super) async fn run_database_writer(
 
                 // Flush if buffer is full
                 if write_buffer.len() >= DB_BATCH_SIZE {
-                  flush_write_buffer(&mut write_buffer, &db_connection, chain_id).await;
+                  flush_write_buffer(&mut write_buffer, &db_pool, chain_id).await;
                 }
               }
               None => {
                 // Channel closed, flush remaining and exit
-                flush_write_buffer(&mut write_buffer, &db_connection, chain_id).await;
+                flush_write_buffer(&mut write_buffer, &db_pool, chain_id).await;
                 break;
               }
             }
@@ -57,7 +57,7 @@ pub(super) async fn run_database_writer(
           // Periodic flush
           _ = interval.tick() => {
             if !write_buffer.is_empty() {
-              flush_write_buffer(&mut write_buffer, &db_connection, chain_id).await;
+              flush_write_buffer(&mut write_buffer, &db_pool, chain_id).await;
             }
           }
         }
@@ -67,7 +67,7 @@ pub(super) async fn run_database_writer(
 /// Flush the write buffer to database
 async fn flush_write_buffer(
     buffer: &mut Vec<PriceResult>,
-    db_connection: &Arc<Mutex<Option<Connection>>>,
+    db_pool: &Pool<SqliteConnectionManager>,
     chain_id: ChainId,
 ) {
     if buffer.is_empty() {
@@ -76,17 +76,12 @@ async fn flush_write_buffer(
 
     let entries: Vec<PriceResult> = buffer.drain(..).collect();
     let entries_for_task = entries.clone();
-    let conn_arc = db_connection.clone();
+    let pool = db_pool.clone();
 
     match tokio::task::spawn_blocking(move || {
-        let connection_guard = conn_arc
-            .lock()
-            .map_err(|e| format!("Failed to lock connection: {e}"))?;
-
-        let conn = match connection_guard.as_ref() {
-            Some(conn) => conn,
-            None => return Ok::<usize, String>(0),
-        };
+        let conn = pool
+            .get()
+            .map_err(|e| format!("Failed to get pooled connection: {e}"))?;
 
         let tx = conn
             .unchecked_transaction()

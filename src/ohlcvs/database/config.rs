@@ -13,10 +13,7 @@ impl OhlcvDatabase {
     // ==================== Monitor Configuration ====================
 
     pub fn upsert_monitor_config(&self, config: &TokenOhlcvConfig) -> OhlcvResult<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+        let conn = self.conn()?;
 
         let last_fetch = config.last_fetch.as_ref().map(|dt| dt.to_rfc3339());
 
@@ -51,10 +48,7 @@ impl OhlcvDatabase {
     }
 
     pub fn get_monitor_config(&self, mint: &str) -> OhlcvResult<Option<TokenOhlcvConfig>> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+        let conn = self.conn()?;
 
         let config: Option<TokenOhlcvConfig> = conn
             .query_row(
@@ -99,10 +93,7 @@ impl OhlcvDatabase {
     }
 
     pub fn get_all_active_configs(&self) -> OhlcvResult<Vec<TokenOhlcvConfig>> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+        let conn = self.conn()?;
 
         let mut stmt = conn
             .prepare(

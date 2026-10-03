@@ -61,7 +61,7 @@ mod pools_store {
             .expect("add real pool to blacklist");
 
         // Conceptually-foreign row: same pool_id, different chain.
-        let path = screenerbot::paths::get_pools_db_path();
+        let path = screenerbot::chains::get_pools_db_path();
         let conn = Connection::open(&path).expect("open pools db directly");
         conn.execute(
             "INSERT INTO blacklist_pools (chain_id, pool_id, reason, token_mint, error_count, first_failed_at, last_failed_at, added_at)

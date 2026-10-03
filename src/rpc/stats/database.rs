@@ -7,17 +7,12 @@ use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{params, OptionalExtension};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use super::types::*;
 use crate::database;
 use crate::database::WriteTransaction;
 use crate::rpc::types::{CircuitState, ProviderKind};
-
-/// Database path for RPC stats
-pub fn get_rpc_stats_db_path() -> PathBuf {
-    crate::paths::get_data_directory().join("rpc_stats.db")
-}
 
 /// RPC statistics database
 pub struct RpcStatsDatabase {
@@ -27,7 +22,7 @@ pub struct RpcStatsDatabase {
 impl RpcStatsDatabase {
     /// Create/open database
     pub fn new() -> crate::Result<Self> {
-        let db_path = get_rpc_stats_db_path();
+        let db_path = crate::chains::get_rpc_stats_db_path();
         Self::open(&db_path)
     }
 
@@ -597,7 +592,7 @@ impl RpcStatsDatabase {
 impl std::fmt::Debug for RpcStatsDatabase {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("RpcStatsDatabase")
-            .field("path", &get_rpc_stats_db_path())
+            .field("path", &crate::chains::get_rpc_stats_db_path())
             .finish()
     }
 }

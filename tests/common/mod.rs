@@ -687,7 +687,7 @@ fn copy_db(source: &Path, target: &Path, name: &str) -> u64 {
 pub fn init_real_token_db() -> std::sync::Arc<screenerbot::tokens::TokenDatabase> {
     use screenerbot::tokens::{cache_decimals, init_global_database, TokenDatabase};
 
-    let path = screenerbot::paths::get_tokens_db_path();
+    let path = screenerbot::chains::get_tokens_db_path();
     let db = std::sync::Arc::new(
         TokenDatabase::new(
             &path.to_string_lossy(),

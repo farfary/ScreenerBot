@@ -38,10 +38,7 @@ impl OhlcvDatabase {
         start_timestamp: i64,
         end_timestamp: i64,
     ) -> OhlcvResult<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+        let conn = self.conn()?;
 
         conn.execute(
             "INSERT OR IGNORE INTO ohlcv_gaps
@@ -75,10 +72,7 @@ impl OhlcvDatabase {
         since: i64,
         max_attempts: u32,
     ) -> OhlcvResult<Vec<GapRecord>> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+        let conn = self.conn()?;
 
         let mut stmt = conn
             .prepare(
@@ -140,10 +134,7 @@ impl OhlcvDatabase {
         attempted_at: i64,
         error: &str,
     ) -> OhlcvResult<usize> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+        let conn = self.conn()?;
 
         conn.execute(
             "UPDATE ohlcv_gaps
@@ -176,10 +167,7 @@ impl OhlcvDatabase {
         end_timestamp: i64,
         attempted_at: i64,
     ) -> OhlcvResult<()> {
-        let mut conn = self
-            .conn
-            .lock()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+        let mut conn = self.conn()?;
         let tx = conn
             .write_tx()
             .map_err(|e| OhlcvError::DatabaseError(format!("Failed to begin: {e}")))?;
@@ -219,10 +207,7 @@ impl OhlcvDatabase {
         attempts: u32,
         attempted_at: i64,
     ) -> OhlcvResult<()> {
-        let mut conn = self
-            .conn
-            .lock()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+        let mut conn = self.conn()?;
         let tx = conn
             .write_tx()
             .map_err(|e| OhlcvError::DatabaseError(format!("Failed to begin: {e}")))?;
@@ -260,10 +245,7 @@ impl OhlcvDatabase {
         mint: &str,
         timeframe: Timeframe,
     ) -> OhlcvResult<Vec<(String, i64, i64)>> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+        let conn = self.conn()?;
 
         let mut stmt = conn
             .prepare(
@@ -290,10 +272,7 @@ impl OhlcvDatabase {
     }
 
     pub fn get_gap_aggregate(&self) -> OhlcvResult<(usize, usize)> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+        let conn = self.conn()?;
 
         let (gap_count, token_count): (i64, i64) = conn
             .query_row(
@@ -312,10 +291,7 @@ impl OhlcvDatabase {
             return Ok(Vec::new());
         }
 
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+        let conn = self.conn()?;
 
         let mut stmt = conn
             .prepare(
@@ -466,7 +442,7 @@ mod tests {
     }
 
     fn row(db: &OhlcvDatabase, start: i64, end: i64) -> (i64, i64, Option<String>, Option<String>) {
-        let conn = db.conn.lock().unwrap();
+        let conn = db.conn().unwrap();
         conn.query_row(
             "SELECT filled, attempts, last_attempt, error_message FROM ohlcv_gaps
              WHERE mint = 'mint' AND pool_address = 'pool' AND timeframe = '1m'

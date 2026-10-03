@@ -8,6 +8,7 @@ use std::process::Command;
 
 use rusqlite::Connection;
 use screenerbot::chains::ChainId;
+use screenerbot::paths::{chain_db_path, DbKind};
 
 const CHILD_ENV: &str = "SCREENERBOT_STORAGE_STARTUP_CHILD";
 const DATABASE_FILES: &[&str] = &[
@@ -35,6 +36,35 @@ fn database_filename_inventory_matches_production_paths() {
     production.extend(database_filenames(include_str!(
         "../src/rpc/stats/database.rs"
     )));
+
+    // The four chain-scoped stores resolve through `paths::chain_db_path`,
+    // which carries no literal `join("...")` filename: fold their Solana
+    // file names in from the resolver itself, and pin that (a) Solana keeps
+    // the historical un-suffixed names and (b) the `<stem>-<chain>.db`
+    // pattern a later chain variant takes builds on the same stems.
+    for (kind, solana_name) in [
+        (DbKind::Tokens, "tokens.db"),
+        (DbKind::Pools, "pools.db"),
+        (DbKind::Ohlcvs, "ohlcvs.db"),
+        (DbKind::RpcStats, "rpc_stats.db"),
+    ] {
+        let path = chain_db_path(kind, ChainId::Solana);
+        let name = path
+            .file_name()
+            .expect("chain-scoped store file name")
+            .to_string_lossy()
+            .into_owned();
+        assert_eq!(
+            name, solana_name,
+            "Solana keeps its historical file name for {kind:?}"
+        );
+        assert_eq!(
+            solana_name,
+            format!("{}.db", kind.file_stem()),
+            "the <stem>-<chain>.db pattern must build on the legacy stems"
+        );
+        production.insert(name);
+    }
 
     let expected = DATABASE_FILES
         .iter()
@@ -163,7 +193,7 @@ fn initialize_startup_stores() {
         .expect("initialize strategies database");
     });
 
-    let token_path = screenerbot::paths::get_tokens_db_path();
+    let token_path = screenerbot::chains::get_tokens_db_path();
     screenerbot::tokens::database::TokenDatabase::new(
         &token_path.to_string_lossy(),
         ChainId::Solana,

@@ -14,10 +14,11 @@ use crate::chains::ChainId;
 use crate::database;
 use crate::errors::{DatabaseError, InternalError};
 use crate::pools::Error;
-use rusqlite::{params, Connection};
+use r2d2::Pool;
+use r2d2_sqlite::SqliteConnectionManager;
+use rusqlite::params;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use std::sync::Mutex; // Changed to std::sync::Mutex for spawn_blocking compatibility
 use std::sync::RwLock;
 use tokio::sync::mpsc;
 
@@ -38,7 +39,10 @@ use super::migrations::migrate_schema;
 pub struct PoolsDatabase {
     pub(super) chain_id: ChainId,
     pub(super) db_path: String,
-    pub(super) connection: Arc<Mutex<Option<Connection>>>,
+    /// Connection pool, built by `initialize`; `None` until then, which is
+    /// exactly the uninitialized-store condition `Error::NotInitialized`
+    /// describes.
+    pub(super) pool: Option<Pool<SqliteConnectionManager>>,
     pub(super) write_queue: Option<mpsc::UnboundedSender<PriceResult>>,
     // In-memory blacklists (source of truth for runtime checks)
     pub(super) blacklisted_accounts: Arc<RwLock<HashSet<String>>>,
@@ -51,7 +55,7 @@ impl Clone for PoolsDatabase {
         Self {
             chain_id: self.chain_id,
             db_path: self.db_path.clone(),
-            connection: Arc::clone(&self.connection),
+            pool: self.pool.clone(),
             write_queue: self.write_queue.clone(),
             blacklisted_accounts: Arc::clone(&self.blacklisted_accounts),
             blacklisted_pools: Arc::clone(&self.blacklisted_pools),
@@ -64,10 +68,10 @@ impl PoolsDatabase {
     pub fn new(chain_id: ChainId) -> Self {
         Self {
             chain_id,
-            db_path: crate::paths::get_pools_db_path()
+            db_path: crate::paths::chain_db_path(crate::paths::DbKind::Pools, chain_id)
                 .to_string_lossy()
                 .to_string(),
-            connection: Arc::new(Mutex::new(None)),
+            pool: None,
             write_queue: None,
             blacklisted_accounts: Arc::new(RwLock::new(HashSet::new())),
             blacklisted_pools: Arc::new(RwLock::new(HashMap::new())),
@@ -80,40 +84,51 @@ impl PoolsDatabase {
         self.clone()
     }
 
+    /// The shared connection pool for `spawn_blocking` bodies — `Pool` is a
+    /// cheap handle, so move a clone into the closure and check a connection
+    /// out inside it. Fails with the uninitialized-store error until
+    /// `initialize` has built the pool. Never hold one checkout while
+    /// acquiring another (shared-store rule).
+    pub(super) fn shared_pool(&self) -> Result<Pool<SqliteConnectionManager>, Error> {
+        self.pool.clone().ok_or_else(|| Error::NotInitialized)
+    }
+
     /// Initialize database and create tables
     pub async fn initialize(&mut self) -> Result<(), Error> {
-        // Create database connection
-        let mut conn = Connection::open(&self.db_path).map_err(|e| DatabaseError::Query {
-            operation: "open pools database".to_owned(),
-            message: e.to_string(),
-        })?;
+        // Create the connection pool: every checkout applies the shared
+        // SQLite configuration through the manager's init hook.
+        let manager = SqliteConnectionManager::file(self.db_path.as_str())
+            .with_init(|conn| database::configure_connection(conn, database::POOLS_DB));
 
-        // Apply shared SQLite configuration
-        database::configure_connection(&conn, database::POOLS_DB).map_err(|e| {
-            DatabaseError::Query {
-                operation: "configure pools database".to_owned(),
+        let pool = Pool::builder()
+            .max_size(4)
+            .idle_timeout(None)
+            .max_lifetime(None)
+            .build(manager)
+            .map_err(|e| DatabaseError::Query {
+                operation: "open pools database".to_owned(),
                 message: e.to_string(),
-            }
-        })?;
+            })?;
 
-        migrate_schema(&mut conn)?;
-
-        // Store connection
+        // Migrate the schema on one checkout before the writer task or any
+        // other reader exists.
         {
-            let mut connection_guard = self.connection.lock().unwrap();
-            *connection_guard = Some(conn);
+            let mut conn = pool.get().map_err(|e| DatabaseError::Query {
+                operation: "open pools database".to_owned(),
+                message: e.to_string(),
+            })?;
+            migrate_schema(&mut conn)?;
         }
+
+        self.pool = Some(pool.clone());
 
         // Setup write queue for batched operations
         let (tx, rx) = mpsc::unbounded_channel();
         self.write_queue = Some(tx);
 
         // Start background writer task
-        let db_connection = self.connection.clone();
         let chain_id = self.chain_id;
-        tokio::spawn(async move {
-            run_database_writer(rx, db_connection, chain_id).await;
-        });
+        tokio::spawn(run_database_writer(rx, pool.clone(), chain_id));
 
         logger::info(
             LogTag::PoolService,
@@ -126,78 +141,70 @@ impl PoolsDatabase {
         // their pool.
         let pool_policy = PoolBlacklistPolicy::from_config();
 
-        let (account_keys, pool_rows) = {
-            let connection_guard = self.connection.lock().unwrap();
-            if let Some(ref conn) = *connection_guard {
-                // Accounts
-                let account_keys = match conn
-                    .prepare("SELECT account_pubkey FROM blacklist_accounts WHERE chain_id = ?")
-                {
-                    Ok(mut stmt) => {
-                        let rows =
-                            stmt.query_map([self.chain_id.as_str()], |row| row.get::<_, String>(0));
-                        match rows {
-                            Ok(iter) => iter.filter_map(|r| r.ok()).collect::<Vec<_>>(),
-                            Err(e) => {
-                                logger::warning(
-                                    LogTag::PoolService,
-                                    &format!(
-                                        "Failed to load blacklist_accounts into memory: {}",
-                                        e
-                                    ),
-                                );
-                                Vec::new()
-                            }
-                        }
-                    }
+        let conn = pool.get().map_err(|e| DatabaseError::Query {
+            operation: "load pool blacklist".to_owned(),
+            message: e.to_string(),
+        })?;
+
+        // Accounts
+        let account_keys = match conn
+            .prepare("SELECT account_pubkey FROM blacklist_accounts WHERE chain_id = ?")
+        {
+            Ok(mut stmt) => {
+                let rows = stmt.query_map([self.chain_id.as_str()], |row| row.get::<_, String>(0));
+                match rows {
+                    Ok(iter) => iter.filter_map(|r| r.ok()).collect::<Vec<_>>(),
                     Err(e) => {
                         logger::warning(
                             LogTag::PoolService,
-                            &format!("Failed to prepare load for blacklist_accounts: {e}"),
+                            &format!("Failed to load blacklist_accounts into memory: {}", e),
                         );
                         Vec::new()
                     }
-                };
+                }
+            }
+            Err(e) => {
+                logger::warning(
+                    LogTag::PoolService,
+                    &format!("Failed to prepare load for blacklist_accounts: {e}"),
+                );
+                Vec::new()
+            }
+        };
 
-                // Pools
-                let pool_rows = match conn.prepare(
-                    "SELECT pool_id, error_count, first_failed_at, last_failed_at \
-                     FROM blacklist_pools WHERE chain_id = ?",
-                ) {
-                    Ok(mut stmt) => {
-                        let rows = stmt.query_map([self.chain_id.as_str()], |row| {
-                            Ok((
-                                row.get::<_, String>(0)?,
-                                PoolFailureRecord {
-                                    error_count: row.get::<_, Option<i64>>(1)?.unwrap_or(1),
-                                    first_failed_at: row.get(2)?,
-                                    last_failed_at: row.get(3)?,
-                                },
-                            ))
-                        });
-                        match rows {
-                            Ok(iter) => iter.filter_map(|r| r.ok()).collect::<Vec<_>>(),
-                            Err(e) => {
-                                logger::warning(
-                                    LogTag::PoolService,
-                                    &format!("Failed to load blacklist_pools into memory: {e}"),
-                                );
-                                Vec::new()
-                            }
-                        }
-                    }
+        // Pools
+        let pool_rows = match conn.prepare(
+            "SELECT pool_id, error_count, first_failed_at, last_failed_at \
+             FROM blacklist_pools WHERE chain_id = ?",
+        ) {
+            Ok(mut stmt) => {
+                let rows = stmt.query_map([self.chain_id.as_str()], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        PoolFailureRecord {
+                            error_count: row.get::<_, Option<i64>>(1)?.unwrap_or(1),
+                            first_failed_at: row.get(2)?,
+                            last_failed_at: row.get(3)?,
+                        },
+                    ))
+                });
+                match rows {
+                    Ok(iter) => iter.filter_map(|r| r.ok()).collect::<Vec<_>>(),
                     Err(e) => {
                         logger::warning(
                             LogTag::PoolService,
-                            &format!("Failed to prepare load for blacklist_pools: {e}"),
+                            &format!("Failed to load blacklist_pools into memory: {e}"),
                         );
                         Vec::new()
                     }
-                };
-
-                (account_keys, pool_rows)
-            } else {
-                (Vec::new(), Vec::new())
+                }
+            }
+            Err(e) => {
+                logger::warning(
+                    LogTag::PoolService,
+                    &format!("Failed to prepare load for blacklist_pools: {e}"),
+                );
+                Vec::new()
             }
         };
 
@@ -255,17 +262,14 @@ impl PoolsDatabase {
         limit: usize,
     ) -> Result<Vec<PriceResult>, Error> {
         let mint_str = mint.to_string();
-        let conn_arc = self.connection.clone();
+        let pool = self.shared_pool()?;
         let chain_id = self.chain_id.as_str().to_owned();
 
         tokio::task::spawn_blocking(move || {
-            let connection_guard = conn_arc
-                .lock()
-                .map_err(|e| DatabaseError::Query { operation: "lock connection".to_owned(), message: e.to_string() })?;
-
-            let conn = connection_guard
-                .as_ref()
-                .ok_or_else(|| Error::NotInitialized)?;
+            let conn = pool.get().map_err(|e| DatabaseError::Query {
+                operation: "get pooled connection".to_owned(),
+                message: e.to_string(),
+            })?;
 
             let mut stmt = conn
                 .prepare(
@@ -305,18 +309,15 @@ impl PoolsDatabase {
         since_timestamp: Option<i64>,
     ) -> Result<Vec<PriceResult>, Error> {
         let mint_str = mint.to_string();
-        let conn_arc = self.connection.clone();
+        let pool = self.shared_pool()?;
         let chain_id = self.chain_id.as_str().to_owned();
         let limit = limit.unwrap_or(PRICE_HISTORY_MAX_ENTRIES);
 
         tokio::task::spawn_blocking(move || {
-            let connection_guard = conn_arc
-                .lock()
-                .map_err(|e| DatabaseError::Query { operation: "lock connection".to_owned(), message: e.to_string() })?;
-
-            let conn = connection_guard
-                .as_ref()
-                .ok_or_else(|| Error::NotInitialized)?;
+            let conn = pool.get().map_err(|e| DatabaseError::Query {
+                operation: "get pooled connection".to_owned(),
+                message: e.to_string(),
+            })?;
 
             let mut results = Vec::new();
 
@@ -377,18 +378,14 @@ impl PoolsDatabase {
 
     /// Cleanup old database entries beyond retention period
     pub async fn cleanup_old_entries(&self) -> Result<usize, Error> {
-        let conn_arc = self.connection.clone();
+        let pool = self.shared_pool()?;
         let chain_id = self.chain_id.as_str().to_owned();
 
         tokio::task::spawn_blocking(move || {
-            let connection_guard = conn_arc.lock().map_err(|e| DatabaseError::Query {
-                operation: "lock connection".to_owned(),
+            let conn = pool.get().map_err(|e| DatabaseError::Query {
+                operation: "get pooled connection".to_owned(),
                 message: e.to_string(),
             })?;
-
-            let conn = connection_guard
-                .as_ref()
-                .ok_or_else(|| Error::NotInitialized)?;
 
             // Calculate cutoff date
             let cutoff_date =
@@ -422,17 +419,14 @@ impl PoolsDatabase {
 
         // Delete everything older than the cutoff
         let mint_str = mint.to_string();
-        let conn_arc = self.connection.clone();
+        let pool = self.shared_pool()?;
         let chain_id = self.chain_id.as_str().to_owned();
 
         tokio::task::spawn_blocking(move || {
-            let connection_guard = conn_arc
-                .lock()
-                .map_err(|e| DatabaseError::Query { operation: "lock connection".to_owned(), message: e.to_string() })?;
-
-            let conn = connection_guard
-                .as_ref()
-                .ok_or_else(|| Error::NotInitialized)?;
+            let conn = pool.get().map_err(|e| DatabaseError::Query {
+                operation: "get pooled connection".to_owned(),
+                message: e.to_string(),
+            })?;
 
             let deleted = conn
                 .execute(
@@ -451,18 +445,14 @@ impl PoolsDatabase {
     /// Returns the timestamp of the older entry at the gap point
     async fn find_first_price_gap(&self, mint: &str) -> Result<Option<i64>, Error> {
         let mint_str = mint.to_string();
-        let conn_arc = self.connection.clone();
+        let pool = self.shared_pool()?;
         let chain_id = self.chain_id.as_str().to_owned();
 
         let timestamps = tokio::task::spawn_blocking(move || {
-            let connection_guard = conn_arc.lock().map_err(|e| DatabaseError::Query {
-                operation: "lock connection".to_owned(),
+            let conn = pool.get().map_err(|e| DatabaseError::Query {
+                operation: "get pooled connection".to_owned(),
                 message: e.to_string(),
             })?;
-
-            let conn = connection_guard
-                .as_ref()
-                .ok_or_else(|| Error::NotInitialized)?;
 
             let mut stmt = conn
                 .prepare(
@@ -518,19 +508,15 @@ impl PoolsDatabase {
 
     /// Cleanup gapped data for all tokens
     pub async fn cleanup_all_gapped_data(&self) -> Result<usize, Error> {
-        let conn_arc = self.connection.clone();
+        let pool = self.shared_pool()?;
         let chain_id = self.chain_id.as_str().to_owned();
 
         // Get all unique tokens in the database
         let tokens = tokio::task::spawn_blocking(move || {
-            let connection_guard = conn_arc.lock().map_err(|e| DatabaseError::Query {
-                operation: "lock connection".to_owned(),
+            let conn = pool.get().map_err(|e| DatabaseError::Query {
+                operation: "get pooled connection".to_owned(),
                 message: e.to_string(),
             })?;
-
-            let conn = connection_guard
-                .as_ref()
-                .ok_or_else(|| Error::NotInitialized)?;
 
             let mut stmt = conn
                 .prepare("SELECT DISTINCT mint FROM price_history WHERE chain_id = ?")
@@ -589,34 +575,66 @@ impl PoolsDatabase {
     }
 }
 
+/// Test-only: a pooled temp-file store pre-migrated from the legacy
+/// single-chain schema fixture (the same seed `migrations::legacy_connection`
+/// builds). Pooled checkouts do not share a `:memory:` database, so tests
+/// that read back what earlier awaits wrote need a real file.
+#[cfg(test)]
+pub(super) fn pooled_legacy_database(label: &str) -> PoolsDatabase {
+    let path = std::env::temp_dir().join(format!(
+        "screenerbot-pools-{label}-{}.db",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_file(&path);
+    let manager = SqliteConnectionManager::file(&path)
+        .with_init(|conn| database::configure_connection(conn, database::POOLS_DB));
+    let pool = Pool::builder()
+        .max_size(4)
+        .idle_timeout(None)
+        .max_lifetime(None)
+        .build(manager)
+        .expect("build pooled test database");
+    {
+        let mut conn = pool.get().expect("checkout test connection");
+        super::migrations::seed_legacy_schema(&conn);
+        migrate_schema(&mut conn).expect("migrate test database");
+    }
+    PoolsDatabase {
+        chain_id: ChainId::Solana,
+        db_path: path.to_string_lossy().to_string(),
+        pool: Some(pool),
+        write_queue: None,
+        blacklisted_accounts: Arc::new(RwLock::new(HashSet::new())),
+        blacklisted_pools: Arc::new(RwLock::new(HashMap::new())),
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::super::migrations::legacy_connection;
     use super::*;
 
     #[tokio::test]
     async fn solana_repository_ignores_raw_rows_from_another_chain() {
-        let mut conn = legacy_connection();
-        migrate_schema(&mut conn).expect("migrate test database");
-        conn.execute(
-            "INSERT INTO price_history (chain_id, mint, pool_address, price_usd, price_sol, confidence, slot, timestamp_unix, sol_reserves, token_reserves, created_at)
-             VALUES ('ethereum', 'mint', 'pool', 1.0, 9.0, 1.0, 8, 20, 3.0, 4.0, '2026-01-01T00:00:20Z')",
-            [],
-        ).expect("insert conceptual foreign-chain row");
-        conn.execute(
-            "INSERT INTO blacklist_pools (chain_id, pool_id, reason, token_mint, error_count, first_failed_at, last_failed_at, added_at)
-             VALUES ('ethereum', 'pool', 'foreign', 'mint', 1, 1, 1, 1)",
-            [],
-        ).expect("insert conceptual foreign-chain blacklist");
-
-        let db = PoolsDatabase {
-            chain_id: ChainId::Solana,
-            db_path: ":memory:".to_owned(),
-            connection: Arc::new(Mutex::new(Some(conn))),
-            write_queue: None,
-            blacklisted_accounts: Arc::new(RwLock::new(HashSet::new())),
-            blacklisted_pools: Arc::new(RwLock::new(HashMap::new())),
-        };
+        let db = pooled_legacy_database("foreign-chain");
+        {
+            let conn = db
+                .shared_pool()
+                .expect("test pool")
+                .get()
+                .expect("checkout test connection");
+            conn.execute(
+                "INSERT INTO price_history (chain_id, mint, pool_address, price_usd, price_sol, confidence, slot, timestamp_unix, sol_reserves, token_reserves, created_at)
+                 VALUES ('ethereum', 'mint', 'pool', 1.0, 9.0, 1.0, 8, 20, 3.0, 4.0, '2026-01-01T00:00:20Z')",
+                [],
+            )
+            .expect("insert conceptual foreign-chain row");
+            conn.execute(
+                "INSERT INTO blacklist_pools (chain_id, pool_id, reason, token_mint, error_count, first_failed_at, last_failed_at, added_at)
+                 VALUES ('ethereum', 'pool', 'foreign', 'mint', 1, 1, 1, 1)",
+                [],
+            )
+            .expect("insert conceptual foreign-chain blacklist");
+        }
         let history = db
             .get_price_history("mint", None, None)
             .await

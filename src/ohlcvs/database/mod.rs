@@ -19,32 +19,37 @@ pub use types::{
 use crate::ohlcvs::types::{OhlcvError, OhlcvResult, PoolConfig};
 use crate::{chains::ChainId, database};
 use chrono::{DateTime, Utc};
+use r2d2::{Pool, PooledConnection};
+use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{params, Connection, Result as SqliteResult};
 use std::path::Path;
-use std::sync::{Arc, Mutex};
 
 use migrations::{create_chain_indexes, migrate_chain_scope};
 
+/// OHLCV store: an r2d2 pool over the chain-scoped SQLite file, matching
+/// every other database in the bot (the shared-store rule). The database is
+/// in WAL mode (see `database::configure_connection`), so candle readers,
+/// the gap scanner and the monitor run concurrently instead of queueing on
+/// one process-wide connection.
 pub struct OhlcvDatabase {
-    pub(crate) conn: Arc<Mutex<Connection>>,
+    pool: Pool<SqliteConnectionManager>,
     pub(crate) chain: ChainId,
 }
 
 impl OhlcvDatabase {
     /// Initialize the database and create tables
     pub fn new<P: AsRef<Path>>(path: P, chain: ChainId) -> OhlcvResult<Self> {
-        let conn = Connection::open(path)
+        let manager = SqliteConnectionManager::file(path)
+            .with_init(|conn| database::configure_connection(conn, database::OHLCVS_DB));
+
+        let pool = Pool::builder()
+            .max_size(4)
+            .idle_timeout(None)
+            .max_lifetime(None)
+            .build(manager)
             .map_err(|e| OhlcvError::DatabaseError(format!("Failed to open database: {e}")))?;
 
-        // Apply centralized PRAGMA configuration
-        database::configure_connection(&conn, database::OHLCVS_DB).map_err(|e| {
-            OhlcvError::DatabaseError(format!("Failed to configure connection: {e}"))
-        })?;
-
-        let db = Self {
-            conn: Arc::new(Mutex::new(conn)),
-            chain,
-        };
+        let db = Self { pool, chain };
 
         db.create_tables()?;
         Ok(db)
@@ -58,11 +63,16 @@ impl OhlcvDatabase {
         self.chain.as_str()
     }
 
+    /// Check out a pooled connection. Never hold one while calling another
+    /// method of this store that checks out its own (shared-store rule).
+    pub(crate) fn conn(&self) -> OhlcvResult<PooledConnection<SqliteConnectionManager>> {
+        self.pool
+            .get()
+            .map_err(|e| OhlcvError::DatabaseError(format!("Failed to get connection: {e}")))
+    }
+
     fn create_tables(&self) -> OhlcvResult<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+        let conn = self.conn()?;
 
         conn.execute_batch(
             r#"
@@ -173,10 +183,7 @@ impl OhlcvDatabase {
     /// monitoring list are preserved. Backs both the manual "Clear OHLCV Cache"
     /// action and the automatic data-version wipe.
     pub fn clear_all_ohlcv_data(&self) -> OhlcvResult<ClearAllResult> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+        let conn = self.conn()?;
         wipe_candle_data(&conn, self.chain_id())
             .map_err(|e| OhlcvError::DatabaseError(format!("Failed to clear OHLCV data: {e}")))
     }
@@ -184,10 +191,7 @@ impl OhlcvDatabase {
     // ==================== Pool Management ====================
 
     pub fn upsert_pool(&self, mint: &str, pool: &PoolConfig) -> OhlcvResult<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+        let conn = self.conn()?;
 
         let last_success = pool.last_successful_fetch.map(|dt| dt.to_rfc3339());
 
@@ -218,10 +222,7 @@ impl OhlcvDatabase {
     }
 
     pub fn delete_pool(&self, mint: &str, pool_address: &str) -> OhlcvResult<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+        let conn = self.conn()?;
 
         conn.execute(
             "DELETE FROM ohlcv_pools WHERE chain_id = ?1 AND mint = ?2 AND pool_address = ?3",
@@ -233,10 +234,7 @@ impl OhlcvDatabase {
     }
 
     pub fn get_pools(&self, mint: &str) -> OhlcvResult<Vec<PoolConfig>> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+        let conn = self.conn()?;
 
         let mut stmt = conn
             .prepare(
@@ -274,10 +272,7 @@ impl OhlcvDatabase {
     }
 
     pub fn mark_pool_failure(&self, mint: &str, pool_address: &str) -> OhlcvResult<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+        let conn = self.conn()?;
 
         conn
             .execute(
@@ -290,10 +285,7 @@ impl OhlcvDatabase {
     }
 
     pub fn mark_pool_success(&self, mint: &str, pool_address: &str) -> OhlcvResult<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {e}")))?;
+        let conn = self.conn()?;
 
         conn
             .execute(
@@ -434,7 +426,7 @@ mod tests {
             "test",
         )
         .unwrap();
-        let conn = db.conn.lock().unwrap();
+        let conn = db.conn().unwrap();
         conn.execute("INSERT INTO ohlcv_candles (chain_id, mint, pool_address, timeframe, timestamp, open, high, low, close, volume, source) VALUES ('foreign', 'mint', 'pool', '1m', 120, 2, 2, 2, 2, 1, 'test')", []).unwrap();
         let user_version: i64 = conn
             .query_row("PRAGMA user_version", [], |row| row.get(0))

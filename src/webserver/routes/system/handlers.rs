@@ -265,13 +265,13 @@ pub(super) async fn get_data_stats() -> Response {
 
     // Collect all database stats
     let db_configs = [
-        (DatabaseId::Tokens, paths::get_tokens_db_path()),
+        (DatabaseId::Tokens, crate::chains::get_tokens_db_path()),
         (DatabaseId::Transactions, paths::get_transactions_db_path()),
         (DatabaseId::Positions, paths::get_positions_db_path()),
         (DatabaseId::Events, paths::get_events_db_path()),
-        (DatabaseId::Ohlcv, paths::get_ohlcvs_db_path()),
+        (DatabaseId::Ohlcv, crate::chains::get_ohlcvs_db_path()),
         (DatabaseId::Wallet, paths::get_wallet_db_path()),
-        (DatabaseId::Pools, paths::get_pools_db_path()),
+        (DatabaseId::Pools, crate::chains::get_pools_db_path()),
         (DatabaseId::Strategies, paths::get_strategies_db_path()),
         (DatabaseId::Actions, paths::get_actions_db_path()),
     ];

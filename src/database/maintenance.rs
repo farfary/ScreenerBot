@@ -41,14 +41,14 @@ use crate::paths;
 /// on active databases.
 pub fn get_all_db_paths() -> Vec<(String, PathBuf)> {
     let candidates = vec![
-        ("tokens.db", paths::get_tokens_db_path()),
+        ("tokens.db", crate::chains::get_tokens_db_path()),
         ("transactions.db", paths::get_transactions_db_path()),
         ("positions.db", paths::get_positions_db_path()),
         ("wallet.db", paths::get_wallet_db_path()),
         ("events.db", paths::get_events_db_path()),
-        ("pools.db", paths::get_pools_db_path()),
+        ("pools.db", crate::chains::get_pools_db_path()),
         ("strategies.db", paths::get_strategies_db_path()),
-        ("ohlcvs.db", paths::get_ohlcvs_db_path()),
+        ("ohlcvs.db", crate::chains::get_ohlcvs_db_path()),
         ("actions.db", paths::get_actions_db_path()),
         ("tools.db", paths::get_tools_db_path()),
         ("ai.db", paths::get_ai_db_path()),

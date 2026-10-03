@@ -241,7 +241,7 @@ mod tests {
         )
         .unwrap();
         {
-            let conn = db.conn.lock().unwrap();
+            let conn = db.conn().unwrap();
             replace_with_global_version(&conn, OHLCV_DATA_VERSION);
             assert!(
                 !table_has_column(&conn, "ohlcv_data_versions", "chain_id").unwrap(),
@@ -252,7 +252,7 @@ mod tests {
 
         let db = OhlcvDatabase::new(&path, ChainId::Solana).unwrap();
         {
-            let conn = db.conn.lock().unwrap();
+            let conn = db.conn().unwrap();
             assert_eq!(
                 version_rows(&conn),
                 vec![("solana".to_owned(), OHLCV_DATA_VERSION)]
@@ -264,7 +264,7 @@ mod tests {
 
         let reopened = OhlcvDatabase::new(&path, ChainId::Solana).unwrap();
         {
-            let conn = reopened.conn.lock().unwrap();
+            let conn = reopened.conn().unwrap();
             assert_eq!(
                 version_rows(&conn),
                 vec![("solana".to_owned(), OHLCV_DATA_VERSION)]
@@ -290,7 +290,7 @@ mod tests {
         )
         .unwrap();
         {
-            let conn = db.conn.lock().unwrap();
+            let conn = db.conn().unwrap();
             insert_raw_candle(&conn, "foreign", 120);
             conn.execute(
                 "UPDATE ohlcv_data_versions SET version = 1 WHERE chain_id = 'solana'",
@@ -304,7 +304,7 @@ mod tests {
 
         let db = OhlcvDatabase::new(&path, ChainId::Solana).unwrap();
         {
-            let conn = db.conn.lock().unwrap();
+            let conn = db.conn().unwrap();
             assert_eq!(candle_count(&conn, "solana"), 0);
             assert_eq!(candle_count(&conn, "foreign"), 1);
             assert_eq!(
@@ -334,7 +334,7 @@ mod tests {
 
         let reopened = OhlcvDatabase::new(&path, ChainId::Solana).unwrap();
         {
-            let conn = reopened.conn.lock().unwrap();
+            let conn = reopened.conn().unwrap();
             assert_eq!(candle_count(&conn, "solana"), 1);
             assert_eq!(
                 version_rows(&conn),
@@ -360,7 +360,7 @@ mod tests {
         )
         .unwrap();
         {
-            let conn = db.conn.lock().unwrap();
+            let conn = db.conn().unwrap();
             insert_raw_candle(&conn, "foreign", 120);
             replace_with_global_version(&conn, 1);
         }
@@ -368,7 +368,7 @@ mod tests {
 
         let db = OhlcvDatabase::new(&path, ChainId::Solana).unwrap();
         {
-            let conn = db.conn.lock().unwrap();
+            let conn = db.conn().unwrap();
             assert_eq!(candle_count(&conn, "solana"), 0);
             assert_eq!(candle_count(&conn, "foreign"), 1);
             assert_eq!(

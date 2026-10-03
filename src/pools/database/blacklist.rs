@@ -45,13 +45,13 @@ impl PoolsDatabase {
             set.insert(account_key.clone());
         }
 
-        let conn_arc = self.connection.clone();
+        let pool = self.shared_pool()?;
         tokio::task::spawn_blocking(move || {
-      let conn_guard = conn_arc
-        .lock()
-        .map_err(|e| DatabaseError::Query { operation: "lock connection".to_owned(), message: e.to_string() })?;
+            let conn = pool.get().map_err(|e| DatabaseError::Query {
+                operation: "get pooled connection".to_owned(),
+                message: e.to_string(),
+            })?;
 
-      if let Some(ref conn) = *conn_guard {
         let now = SystemTime::now()
           .duration_since(UNIX_EPOCH)
           .unwrap()
@@ -87,9 +87,6 @@ impl PoolsDatabase {
         }
 
         Ok(())
-      } else {
-        Err(Error::NotInitialized)
-      }
     })
     .await
     .map_err(InternalError::from)?
@@ -124,13 +121,13 @@ impl PoolsDatabase {
         let program_id_str = program_id.map(|s| s.to_string());
         let chain_id = self.chain_id.as_str().to_owned();
 
-        let conn_arc = self.connection.clone();
+        let pool = self.shared_pool()?;
         let record = tokio::task::spawn_blocking(move || {
-      let conn_guard = conn_arc
-        .lock()
-        .map_err(|e| DatabaseError::Query { operation: "lock connection".to_owned(), message: e.to_string() })?;
+            let conn = pool.get().map_err(|e| DatabaseError::Query {
+                operation: "get pooled connection".to_owned(),
+                message: e.to_string(),
+            })?;
 
-      if let Some(ref conn) = *conn_guard {
         let now = unix_now();
 
         let previous = conn
@@ -182,10 +179,7 @@ impl PoolsDatabase {
           }
         }
 
-        Ok(record)
-      } else {
-        Err(Error::NotInitialized)
-      }
+        Ok::<_, Error>(record)
     })
     .await
     .map_err(InternalError::from)??;
@@ -229,26 +223,22 @@ impl PoolsDatabase {
         }
         // Persist
         let account_key = account_pubkey.to_string();
-        let conn_arc = self.connection.clone();
+        let pool = self.shared_pool()?;
         let chain_id = self.chain_id;
         tokio::task::spawn_blocking(move || {
-            let conn_guard = conn_arc.lock().map_err(|e| DatabaseError::Query {
-                operation: "lock connection".to_owned(),
+            let conn = pool.get().map_err(|e| DatabaseError::Query {
+                operation: "get pooled connection".to_owned(),
                 message: e.to_string(),
             })?;
-            if let Some(ref conn) = *conn_guard {
-                conn.execute(
-                    "DELETE FROM blacklist_accounts WHERE chain_id = ?1 AND account_pubkey = ?2",
-                    params![chain_id.as_str(), &account_key],
-                )
-                .map_err(|e| DatabaseError::Query {
-                    operation: "remove from blacklist_accounts".to_owned(),
-                    message: e.to_string(),
-                })?;
-                Ok(())
-            } else {
-                Err(Error::NotInitialized)
-            }
+            conn.execute(
+                "DELETE FROM blacklist_accounts WHERE chain_id = ?1 AND account_pubkey = ?2",
+                params![chain_id.as_str(), &account_key],
+            )
+            .map_err(|e| DatabaseError::Query {
+                operation: "remove from blacklist_accounts".to_owned(),
+                message: e.to_string(),
+            })?;
+            Ok(())
         })
         .await
         .map_err(InternalError::from)?
@@ -263,26 +253,22 @@ impl PoolsDatabase {
         }
         // Persist
         let pool_key = pool_id.to_string();
-        let conn_arc = self.connection.clone();
+        let pool = self.shared_pool()?;
         let chain_id = self.chain_id;
         tokio::task::spawn_blocking(move || {
-            let conn_guard = conn_arc.lock().map_err(|e| DatabaseError::Query {
-                operation: "lock connection".to_owned(),
+            let conn = pool.get().map_err(|e| DatabaseError::Query {
+                operation: "get pooled connection".to_owned(),
                 message: e.to_string(),
             })?;
-            if let Some(ref conn) = *conn_guard {
-                conn.execute(
-                    "DELETE FROM blacklist_pools WHERE chain_id = ?1 AND pool_id = ?2",
-                    params![chain_id.as_str(), &pool_key],
-                )
-                .map_err(|e| DatabaseError::Query {
-                    operation: "remove from blacklist_pools".to_owned(),
-                    message: e.to_string(),
-                })?;
-                Ok(())
-            } else {
-                Err(Error::NotInitialized)
-            }
+            conn.execute(
+                "DELETE FROM blacklist_pools WHERE chain_id = ?1 AND pool_id = ?2",
+                params![chain_id.as_str(), &pool_key],
+            )
+            .map_err(|e| DatabaseError::Query {
+                operation: "remove from blacklist_pools".to_owned(),
+                message: e.to_string(),
+            })?;
+            Ok(())
         })
         .await
         .map_err(InternalError::from)?
@@ -307,16 +293,13 @@ impl PoolsDatabase {
         &self,
         limit: Option<usize>,
     ) -> Result<Vec<BlacklistedAccountRecord>, Error> {
-        let conn_arc = self.connection.clone();
+        let pool = self.shared_pool()?;
         let chain_id = self.chain_id;
         tokio::task::spawn_blocking(move || {
-      let connection_guard = conn_arc
-        .lock()
-        .map_err(|e| DatabaseError::Query { operation: "lock connection".to_owned(), message: e.to_string() })?;
-
-      let conn = connection_guard
-        .as_ref()
-        .ok_or_else(|| Error::NotInitialized)?;
+            let conn = pool.get().map_err(|e| DatabaseError::Query {
+                operation: "get pooled connection".to_owned(),
+                message: e.to_string(),
+            })?;
 
       let mut records = Vec::new();
 
@@ -396,18 +379,15 @@ impl PoolsDatabase {
         limit: Option<usize>,
         policy: PoolBlacklistPolicy,
     ) -> Result<Vec<BlacklistedPoolRecord>, Error> {
-        let conn_arc = self.connection.clone();
+        let pool = self.shared_pool()?;
         let chain_id = self.chain_id;
         let min_error_count = i64::from(policy.threshold.max(1));
         let failed_after = unix_now().saturating_sub(policy.ttl_secs);
         tokio::task::spawn_blocking(move || {
-      let connection_guard = conn_arc
-        .lock()
-        .map_err(|e| DatabaseError::Query { operation: "lock connection".to_owned(), message: e.to_string() })?;
-
-      let conn = connection_guard
-        .as_ref()
-        .ok_or_else(|| Error::NotInitialized)?;
+            let conn = pool.get().map_err(|e| DatabaseError::Query {
+                operation: "get pooled connection".to_owned(),
+                message: e.to_string(),
+            })?;
 
       let mut records = Vec::new();
 
@@ -479,46 +459,31 @@ impl PoolsDatabase {
 
 #[cfg(test)]
 mod tests {
-    use super::super::migrations::{legacy_connection, migrate_schema};
+    use super::super::operations::pooled_legacy_database;
     use super::*;
-    use crate::chains::ChainId;
-    use std::collections::{HashMap, HashSet};
-    use std::sync::{Arc, Mutex, RwLock};
 
     const POLICY: PoolBlacklistPolicy = PoolBlacklistPolicy {
         threshold: 2,
         ttl_secs: 86_400,
     };
 
-    fn database() -> PoolsDatabase {
-        let mut conn = legacy_connection();
-        migrate_schema(&mut conn).expect("migrate test database");
-        PoolsDatabase {
-            chain_id: ChainId::Solana,
-            db_path: ":memory:".to_owned(),
-            connection: Arc::new(Mutex::new(Some(conn))),
-            write_queue: None,
-            blacklisted_accounts: Arc::new(RwLock::new(HashSet::new())),
-            blacklisted_pools: Arc::new(RwLock::new(HashMap::new())),
-        }
-    }
-
     fn stored_count(db: &PoolsDatabase, pool_id: &str) -> i64 {
-        let guard = db.connection.lock().unwrap();
-        guard
-            .as_ref()
-            .unwrap()
-            .query_row(
-                "SELECT error_count FROM blacklist_pools WHERE chain_id = 'solana' AND pool_id = ?1",
-                [pool_id],
-                |row| row.get(0),
-            )
-            .expect("blacklist row")
+        let conn = db
+            .shared_pool()
+            .expect("test pool")
+            .get()
+            .expect("checkout test connection");
+        conn.query_row(
+            "SELECT error_count FROM blacklist_pools WHERE chain_id = 'solana' AND pool_id = ?1",
+            [pool_id],
+            |row| row.get(0),
+        )
+        .expect("blacklist row")
     }
 
     #[tokio::test]
     async fn a_pool_is_blacklisted_only_once_the_threshold_is_reached() {
-        let db = database();
+        let db = pooled_legacy_database("blacklist-threshold");
 
         let first = db
             .add_pool_to_blacklist("PoolA", "analysis_failed", Some("MintA"), None, 1, POLICY)
@@ -548,19 +513,20 @@ mod tests {
 
     #[tokio::test]
     async fn an_expired_entry_stops_blacklisting_and_its_count_restarts() {
-        let db = database();
+        let db = pooled_legacy_database("blacklist-expiry");
         let stale = unix_now() - POLICY.ttl_secs - 1;
         {
-            let guard = db.connection.lock().unwrap();
-            guard
-                .as_ref()
-                .unwrap()
-                .execute(
-                    "INSERT INTO blacklist_pools (chain_id, pool_id, reason, token_mint, error_count, first_failed_at, last_failed_at, added_at)
-                     VALUES ('solana', 'PoolB', 'analysis_failed', 'MintB', 9, ?1, ?1, ?1)",
-                    [stale],
-                )
-                .expect("insert stale row");
+            let conn = db
+                .shared_pool()
+                .expect("test pool")
+                .get()
+                .expect("checkout test connection");
+            conn.execute(
+                "INSERT INTO blacklist_pools (chain_id, pool_id, reason, token_mint, error_count, first_failed_at, last_failed_at, added_at)
+                 VALUES ('solana', 'PoolB', 'analysis_failed', 'MintB', 9, ?1, ?1, ?1)",
+                [stale],
+            )
+            .expect("insert stale row");
         }
         // An entry whose expiry has passed no longer blacklists, without a restart
         db.blacklisted_pools
@@ -587,7 +553,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_caller_counted_threshold_blacklists_on_its_first_report() {
-        let db = database();
+        let db = pooled_legacy_database("blacklist-counted");
         let outcome = db
             .add_pool_to_blacklist("PoolC", "missing_accounts", Some("MintC"), None, 2, POLICY)
             .await

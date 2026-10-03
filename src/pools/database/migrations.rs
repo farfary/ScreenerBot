@@ -243,6 +243,15 @@ pub(super) fn migrate_schema(conn: &mut Connection) -> Result<(), Error> {
 #[cfg(test)]
 pub(super) fn legacy_connection() -> Connection {
     let conn = Connection::open_in_memory().expect("open test database");
+    seed_legacy_schema(&conn);
+    conn
+}
+
+/// Seed the pre-migration single-chain schema plus one row per table. The
+/// fixture the pools migration tests migrate from; pooled test databases
+/// seed the same rows through this helper onto a file-backed checkout.
+#[cfg(test)]
+pub(super) fn seed_legacy_schema(conn: &Connection) {
     conn.execute_batch(
         "CREATE TABLE price_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT, mint TEXT NOT NULL, pool_address TEXT NOT NULL,
@@ -263,7 +272,6 @@ pub(super) fn legacy_connection() -> Connection {
         INSERT INTO blacklist_pools VALUES ('pool', 'reason', 'mint', NULL, 1, 1, 1, 1);",
     )
     .expect("seed legacy schema");
-    conn
 }
 
 #[cfg(test)]

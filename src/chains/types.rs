@@ -24,6 +24,16 @@ impl ChainId {
             Self::Solana => "solana",
         }
     }
+
+    /// Whether this chain's chain-scoped SQLite stores keep the historical
+    /// un-suffixed file names installed profiles already hold on disk. A
+    /// chain added later resolves its store files as `<stem>-<slug>.db`
+    /// instead, and the exhaustive match forces this arm to be decided.
+    pub const fn keeps_legacy_db_file_names(self) -> bool {
+        match self {
+            Self::Solana => true,
+        }
+    }
 }
 
 impl fmt::Display for ChainId {

@@ -201,14 +201,14 @@ mod tests {
     fn test_database_paths_in_data_dir() {
         let data = get_data_directory();
 
-        assert!(get_tokens_db_path().starts_with(&data));
+        assert!(crate::chains::get_tokens_db_path().starts_with(&data));
         assert!(get_transactions_db_path().starts_with(&data));
         assert!(get_positions_db_path().starts_with(&data));
         assert!(get_wallet_db_path().starts_with(&data));
         assert!(get_events_db_path().starts_with(&data));
-        assert!(get_pools_db_path().starts_with(&data));
+        assert!(crate::chains::get_pools_db_path().starts_with(&data));
         assert!(get_strategies_db_path().starts_with(&data));
-        assert!(get_ohlcvs_db_path().starts_with(&data));
+        assert!(crate::chains::get_ohlcvs_db_path().starts_with(&data));
     }
 
     #[test]
