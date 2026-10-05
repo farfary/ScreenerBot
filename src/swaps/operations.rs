@@ -4,6 +4,7 @@
 //! Core Swap Operations - High-level swap functions
 //! Provides get_best_quote() and execute_swap_with_fallback()
 
+use crate::chains::RawAmount;
 use crate::logger::{self, LogTag};
 use crate::swaps::error::{QuoteError, QuoteResult};
 use crate::swaps::registry::{get_registry, try_get_registry, RouterRegistry};
@@ -91,7 +92,7 @@ pub(crate) async fn best_quote_on(
                                 quote.price_impact_pct
                             ),
                         );
-                        validate_quote(r.as_ref(), &req, quote)
+                        validate_quote_with_net(r.as_ref(), &req, quote)
                     }
                     Err(e) => {
                         logger::warning(LogTag::Swap, &format!("{} quote failed: {e}", r.name()));
@@ -108,17 +109,17 @@ pub(crate) async fn best_quote_on(
     // Partition into successful quotes and per-router failures. Keeping the
     // failures lets us report the ACTUAL reason (e.g. token not tradable) to the
     // trade dialog instead of a generic "all routers failed" that hides it.
-    let mut quotes: Vec<(u8, Quote)> = Vec::new();
+    let mut quotes: Vec<(u8, Quote, RawAmount)> = Vec::new();
     let mut errors: Vec<QuoteError> = Vec::new();
     for res in results {
         match res {
-            Ok(q) => {
+            Ok((q, net)) => {
                 let priority = enabled
                     .iter()
                     .find(|router| router.id() == q.router_id)
                     .map(|router| router.priority())
                     .unwrap_or(u8::MAX);
-                quotes.push((priority, q));
+                quotes.push((priority, q, net));
             }
             Err(e) => errors.push(e),
         }
@@ -131,14 +132,16 @@ pub(crate) async fn best_quote_on(
     // Select best quote: the most output the wallet keeps after network fees.
     let best = quotes
         .into_iter()
-        .max_by(|(left_priority, left), (right_priority, right)| {
-            output_after_network_fee(left)
-                .cmp(&output_after_network_fee(right))
-                // `max_by` wins a greater ordering; reverse priority so the
-                // lower configured priority deterministically wins a tie.
-                .then_with(|| right_priority.cmp(left_priority))
-        })
-        .map(|(_, quote)| quote)
+        .max_by(
+            |(left_priority, _, left_net), (right_priority, _, right_net)| {
+                left_net
+                    .cmp(right_net)
+                    // `max_by` wins a greater ordering; reverse priority so the
+                    // lower configured priority deterministically wins a tie.
+                    .then_with(|| right_priority.cmp(left_priority))
+            },
+        )
+        .map(|(_, quote, _)| quote)
         .expect("quotes is non-empty, guaranteed by check above");
 
     logger::info(
@@ -162,21 +165,38 @@ pub(crate) async fn best_quote_on(
 /// it is subtracted directly; when it is the input it is converted into output
 /// units at the quote's own rate. A pair with no native leg, or a quote with no
 /// estimate, compares on its raw output.
-fn output_after_network_fee(quote: &Quote) -> u64 {
+fn output_after_network_fee(quote: &Quote, router: &dyn SwapRouter) -> QuoteResult<RawAmount> {
+    let output = RawAmount::from(quote.output_amount);
     let Some(fee) = quote.estimated_network_fee_lamports else {
-        return quote.output_amount;
+        return Ok(output);
+    };
+    let fee = RawAmount::from(fee);
+    let rejected = |detail: &str| QuoteError::RouterRejected {
+        router: router.name().to_owned(),
+        detail: detail.to_owned(),
     };
     let adapter = crate::chains::adapter();
     if adapter.is_native_asset(&quote.output_mint) {
-        quote.output_amount.saturating_sub(fee)
-    } else if adapter.is_native_asset(&quote.input_mint) && quote.input_amount > 0 {
-        let fee_in_output =
-            u128::from(quote.output_amount) * u128::from(fee) / u128::from(quote.input_amount);
-        quote
-            .output_amount
-            .saturating_sub(u64::try_from(fee_in_output).unwrap_or(u64::MAX))
+        if fee >= output {
+            return Err(rejected("network fee consumes the native output"));
+        }
+        output
+            .checked_sub(fee)
+            .ok_or_else(|| rejected("network fee exceeds output"))
+    } else if adapter.is_native_asset(&quote.input_mint) {
+        let input = RawAmount::from(quote.input_amount);
+        if input == RawAmount::ZERO || fee >= input {
+            return Err(rejected("network fee consumes the native input"));
+        }
+        let fee_in_output = output
+            .checked_mul_div(fee, input)
+            .ok_or_else(|| rejected("network fee conversion failed"))?;
+        output
+            .checked_sub(fee_in_output)
+            .filter(|net| *net > RawAmount::ZERO)
+            .ok_or_else(|| rejected("network fee consumes the quoted output"))
     } else {
-        quote.output_amount
+        Ok(output)
     }
 }
 
@@ -268,6 +288,14 @@ pub(crate) fn validate_quote(
     request: &QuoteRequest,
     quote: Quote,
 ) -> QuoteResult<Quote> {
+    validate_quote_with_net(router, request, quote).map(|(quote, _)| quote)
+}
+
+fn validate_quote_with_net(
+    router: &dyn SwapRouter,
+    request: &QuoteRequest,
+    quote: Quote,
+) -> QuoteResult<(Quote, RawAmount)> {
     let reject = |detail: String| {
         Err(QuoteError::RouterRejected {
             router: router.name().to_owned(),
@@ -303,6 +331,9 @@ pub(crate) fn validate_quote(
             quote.input_amount, request.input_amount
         ));
     }
+    if quote.input_amount == 0 {
+        return reject("zero-input quote".to_owned());
+    }
     if quote.swap_mode != request.swap_mode {
         return reject(format!(
             "quoted {:?} but {:?} was requested",
@@ -332,7 +363,8 @@ pub(crate) fn validate_quote(
         return reject(format!("unusable price impact {}", quote.price_impact_pct));
     }
 
-    Ok(quote)
+    let net = output_after_network_fee(&quote, router)?;
+    Ok((quote, net))
 }
 
 // ============================================================================
@@ -1235,5 +1267,149 @@ mod tests {
                 "{case} must be refused before it can be built"
             );
         }
+    }
+
+    #[test]
+    fn network_fee_requires_positive_wallet_output() {
+        let request = request();
+        let mut quote = quote_for(&request);
+        quote.input_mint = "TokenMint111111111111111111111111111111111".to_owned();
+        quote.output_mint = request.input_mint.clone();
+        quote.output_amount = 1_000;
+        quote.estimated_network_fee_lamports = Some(999);
+        assert_eq!(
+            output_after_network_fee(&quote, &StubRouter).unwrap(),
+            RawAmount::from(1u64)
+        );
+        for fee in [1_000, 1_001, u64::MAX] {
+            quote.estimated_network_fee_lamports = Some(fee);
+            assert!(matches!(
+                output_after_network_fee(&quote, &StubRouter),
+                Err(QuoteError::RouterRejected { .. })
+            ));
+        }
+        quote.input_mint = request.input_mint;
+        quote.output_mint = request.output_mint;
+        quote.input_amount = 1_000;
+        quote.output_amount = u64::MAX;
+        quote.estimated_network_fee_lamports = Some(1);
+        assert_eq!(
+            output_after_network_fee(&quote, &StubRouter).unwrap(),
+            RawAmount::from(u64::MAX - u64::MAX / 1_000)
+        );
+        quote.output_amount = 1_000;
+        quote.estimated_network_fee_lamports = Some(1);
+        assert_eq!(
+            output_after_network_fee(&quote, &StubRouter).unwrap(),
+            RawAmount::from(999u64)
+        );
+        quote.estimated_network_fee_lamports = Some(0);
+        assert_eq!(
+            output_after_network_fee(&quote, &StubRouter).unwrap(),
+            RawAmount::from(1_000u64)
+        );
+        quote.estimated_network_fee_lamports = Some(1_000);
+        assert!(matches!(
+            output_after_network_fee(&quote, &StubRouter),
+            Err(QuoteError::RouterRejected { .. })
+        ));
+        quote.estimated_network_fee_lamports = Some(1_001);
+        assert!(matches!(
+            output_after_network_fee(&quote, &StubRouter),
+            Err(QuoteError::RouterRejected { .. })
+        ));
+        quote.estimated_network_fee_lamports = Some(1);
+        quote.output_amount = 1;
+        assert_eq!(
+            output_after_network_fee(&quote, &StubRouter).unwrap(),
+            RawAmount::from(1u64)
+        );
+        quote.input_amount = 0;
+        assert!(matches!(
+            output_after_network_fee(&quote, &StubRouter),
+            Err(QuoteError::RouterRejected { .. })
+        ));
+        quote.estimated_network_fee_lamports = None;
+        assert_eq!(
+            output_after_network_fee(&quote, &StubRouter).unwrap(),
+            RawAmount::from(1u64)
+        );
+        quote.input_mint = "OtherMint".to_owned();
+        quote.estimated_network_fee_lamports = Some(u64::MAX);
+        assert_eq!(
+            output_after_network_fee(&quote, &StubRouter).unwrap(),
+            RawAmount::from(1u64)
+        );
+    }
+
+    #[test]
+    fn zero_input_is_rejected_even_without_fee_estimate() {
+        let mut request = request();
+        request.input_amount = RawAmount::ZERO;
+        let quote = quote_for(&request);
+        assert!(matches!(
+            validate_quote(&StubRouter, &request, quote),
+            Err(QuoteError::RouterRejected { .. })
+        ));
+    }
+
+    struct FeeRouter {
+        id: &'static str,
+        output: u64,
+        fee: u64,
+    }
+
+    #[async_trait]
+    impl SwapRouter for FeeRouter {
+        fn id(&self) -> &'static str {
+            self.id
+        }
+        fn name(&self) -> &'static str {
+            self.id
+        }
+        fn is_enabled(&self) -> bool {
+            true
+        }
+        fn priority(&self) -> u8 {
+            1
+        }
+        fn chain(&self) -> ChainId {
+            ChainId::Solana
+        }
+        async fn get_quote(&self, request: &QuoteRequest) -> QuoteResult<Quote> {
+            let mut quote = quote_for(request);
+            quote.router_id = self.id.to_owned();
+            quote.router_name = self.id.to_owned();
+            quote.output_amount = self.output;
+            quote.estimated_network_fee_lamports = Some(self.fee);
+            Ok(quote)
+        }
+        async fn execute_swap(&self, _token: &Token, _quote: &Quote) -> crate::Result<SwapResult> {
+            Err(crate::Error::internal_error("stub"))
+        }
+    }
+
+    #[tokio::test]
+    async fn auto_skips_invalid_fee_quote_and_specific_validation_refuses_it() {
+        use std::sync::Arc;
+        let request = request();
+        let invalid = Arc::new(FeeRouter {
+            id: "invalid",
+            output: 2_000,
+            fee: 1_000_000,
+        });
+        let valid = Arc::new(FeeRouter {
+            id: "valid",
+            output: 1_000,
+            fee: 1,
+        });
+        let registry = RouterRegistry::new(vec![invalid.clone(), valid]);
+        let selected = best_quote_on(&registry, request.clone()).await.unwrap();
+        assert_eq!(selected.router_id, "valid");
+        let invalid_quote = invalid.get_quote(&request).await.unwrap();
+        assert!(matches!(
+            validate_quote(invalid.as_ref(), &request, invalid_quote),
+            Err(QuoteError::RouterRejected { .. })
+        ));
     }
 }
