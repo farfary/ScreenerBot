@@ -118,7 +118,7 @@ mod tests {
             chain: crate::chains::active_chain(),
             input_mint: "So11111111111111111111111111111111111111112".to_owned(),
             output_mint: "TokenMint111111111111111111111111111111111".to_owned(),
-            input_amount: 1_000_000,
+            input_amount: 1_000_000u64.into(),
             wallet_address: "Wallet1111111111111111111111111111111111111".to_owned(),
             slippage_pct: 1.0,
             swap_mode: SwapMode::ExactIn,
@@ -152,7 +152,8 @@ mod tests {
                 router_name: self.id.to_owned(),
                 input_mint: request.input_mint.clone(),
                 output_mint: request.output_mint.clone(),
-                input_amount: request.input_amount,
+                input_amount: u64::try_from(request.input_amount)
+                    .expect("test request fits Solana"),
                 output_amount: self.output_amount,
                 minimum_output_amount: self.output_amount,
                 price_impact_pct: 0.1,
@@ -481,7 +482,8 @@ mod tests {
                     router_name: self.name().to_owned(),
                     input_mint: request.input_mint.clone(),
                     output_mint: request.output_mint.clone(),
-                    input_amount: request.input_amount,
+                    input_amount: u64::try_from(request.input_amount)
+                        .expect("test request fits Solana"),
                     output_amount: 1,
                     minimum_output_amount: 1,
                     price_impact_pct: 0.0,

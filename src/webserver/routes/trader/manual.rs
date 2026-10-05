@@ -277,7 +277,7 @@ pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Re
         chain: crate::chains::active_chain(),
         input_mint,
         output_mint,
-        input_amount,
+        input_amount: input_amount.into(),
         wallet_address,
         // Price the preview at the slippage the trade will actually use, so the quote
         // the user confirms is the quote they get.

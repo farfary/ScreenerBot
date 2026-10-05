@@ -57,7 +57,7 @@ pub async fn execute_tool_swap(
         chain: crate::chains::active_chain(),
         input_mint: input_mint.to_string(),
         output_mint: output_mint.to_string(),
-        input_amount,
+        input_amount: input_amount.into(),
         wallet_address: wallet_address.clone(),
         slippage_pct: slippage,
         swap_mode: SwapMode::ExactIn,

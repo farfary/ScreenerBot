@@ -251,7 +251,7 @@ async fn open_position_impl(
         chain: crate::chains::active_chain(),
         input_mint: adapter().native_asset_address().to_string(),
         output_mint: api_token.mint.clone(),
-        input_amount: adapter().native_to_raw(trade_size_sol),
+        input_amount: adapter().native_to_raw(trade_size_sol).into(),
         wallet_address: wallet_address.clone(),
         slippage_pct: slippage_quote_default,
         swap_mode: SwapMode::ExactIn,

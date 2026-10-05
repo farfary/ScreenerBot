@@ -169,7 +169,7 @@ pub async fn partial_close_position(
             chain: crate::chains::active_chain(),
             input_mint: token_mint.to_string(),
             output_mint: adapter().native_asset_address().to_string(),
-            input_amount: exit_amount,
+            input_amount: exit_amount.into(),
             wallet_address: wallet_address.clone(),
             slippage_pct: *slippage,
             swap_mode: SwapMode::ExactIn,

@@ -128,7 +128,7 @@ pub async fn add_to_position(
         chain: crate::chains::active_chain(),
         input_mint: adapter().native_asset_address().to_string(),
         output_mint: token_mint.to_string(),
-        input_amount: adapter().native_to_raw(dca_amount_sol),
+        input_amount: adapter().native_to_raw(dca_amount_sol).into(),
         wallet_address: wallet_address.clone(),
         slippage_pct: slippage,
         swap_mode: SwapMode::ExactIn,

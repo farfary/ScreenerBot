@@ -374,6 +374,11 @@ impl SwapRouter for RaptorRouter {
     }
 
     async fn get_quote(&self, request: &QuoteRequest) -> QuoteResult<Quote> {
+        let input_amount =
+            u64::try_from(request.input_amount).map_err(|_| QuoteError::RouterRejected {
+                router: self.name().to_owned(),
+                detail: "input amount exceeds the Solana u64 limit".to_owned(),
+            })?;
         self.accept_own_chain(request)
             .map_err(|e| QuoteError::RouterRejected {
                 router: self.name().to_owned(),
@@ -418,7 +423,7 @@ impl SwapRouter for RaptorRouter {
         let mut query: Vec<(&str, String)> = vec![
             ("inputMint", request.input_mint.clone()),
             ("outputMint", request.output_mint.clone()),
-            ("amount", request.input_amount.to_string()),
+            ("amount", input_amount.to_string()),
             ("slippageBps", slippage_bps.to_string()),
             ("maxHops", max_hops.to_string()),
             ("feeBps", placement.bps.to_string()),
@@ -493,12 +498,12 @@ impl SwapRouter for RaptorRouter {
             router_name: self.name().to_string(),
             input_mint: request.input_mint.clone(),
             output_mint: request.output_mint.clone(),
-            input_amount: request.input_amount,
+            input_amount: input_amount,
             output_amount,
             minimum_output_amount,
             price_impact_pct: price_impact,
             platform_fee_lamports: Self::platform_fee_lamports(
-                request.input_amount,
+                input_amount,
                 amount_out,
                 &request.input_mint,
                 &request.output_mint,
@@ -642,6 +647,24 @@ fn raptor_quote_error(failure: RouterHttpFailure, router: &str) -> QuoteError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn oversized_input_is_rejected_before_router_io() {
+        let request = QuoteRequest {
+            chain: crate::chains::ChainId::Solana,
+            input_mint: crate::chains::solana::constants::SOL_MINT.to_owned(),
+            output_mint: crate::chains::solana::constants::USDC_MINT.to_owned(),
+            input_amount: crate::chains::RawAmount::new(u128::from(u64::MAX) + 1),
+            wallet_address: String::new(),
+            slippage_pct: 1.0,
+            swap_mode: SwapMode::ExactIn,
+            exclude_dexes: None,
+        };
+        let error = RaptorRouter::new().get_quote(&request).await.unwrap_err();
+        assert!(matches!(error, QuoteError::RouterRejected { .. }));
+        assert!(error.to_string().contains("Solana u64 limit"));
+    }
+
     use crate::chains::solana::constants::USDC_MINT;
     use crate::chains::solana::swaps::revenue::{FEE_TOKEN_ACCOUNT_USDC, FEE_TOKEN_ACCOUNT_WSOL};
 

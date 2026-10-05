@@ -209,7 +209,7 @@ pub async fn close_position_direct(
             chain: crate::chains::active_chain(),
             input_mint: token_mint.to_string(),
             output_mint: crate::chains::adapter().native_asset_address().to_string(),
-            input_amount: sell_amount,
+            input_amount: sell_amount.into(),
             wallet_address: wallet_address.clone(),
             slippage_pct: *slippage,
             swap_mode: SwapMode::ExactIn,

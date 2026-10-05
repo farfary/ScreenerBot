@@ -297,7 +297,7 @@ pub(crate) fn validate_quote(
     if quote.wallet_address != request.wallet_address {
         return reject("quote is addressed to a different wallet".to_owned());
     }
-    if quote.input_amount != request.input_amount {
+    if crate::chains::RawAmount::from(quote.input_amount) != request.input_amount {
         return reject(format!(
             "quote spends {} but {} was requested",
             quote.input_amount, request.input_amount
@@ -483,7 +483,7 @@ pub async fn execute_swap_with_fallback(token: &Token, quote: Quote) -> Result<S
                     chain: quote.chain,
                     input_mint: quote.input_mint.clone(),
                     output_mint: quote.output_mint.clone(),
-                    input_amount: quote.input_amount,
+                    input_amount: quote.input_amount.into(),
                     wallet_address: quote.wallet_address.clone(),
                     slippage_pct: (quote.slippage_bps as f64) / 100.0,
                     swap_mode: quote.swap_mode,
@@ -605,7 +605,7 @@ async fn retry_excluding_venue(
         chain: quote.chain,
         input_mint: quote.input_mint.clone(),
         output_mint: quote.output_mint.clone(),
-        input_amount: quote.input_amount,
+        input_amount: quote.input_amount.into(),
         wallet_address: quote.wallet_address.clone(),
         slippage_pct: (quote.slippage_bps as f64) / 100.0,
         swap_mode: quote.swap_mode,
@@ -1163,7 +1163,7 @@ mod tests {
             chain: ChainId::Solana,
             input_mint: "So11111111111111111111111111111111111111112".to_owned(),
             output_mint: "TokenMint111111111111111111111111111111111".to_owned(),
-            input_amount: 1_000_000,
+            input_amount: 1_000_000u64.into(),
             wallet_address: "Wallet1111111111111111111111111111111111111".to_owned(),
             slippage_pct: 1.0,
             swap_mode: SwapMode::ExactIn,
@@ -1178,7 +1178,7 @@ mod tests {
             router_name: "Direct Pool".to_owned(),
             input_mint: request.input_mint.clone(),
             output_mint: request.output_mint.clone(),
-            input_amount: request.input_amount,
+            input_amount: u64::try_from(request.input_amount).expect("test request fits Solana"),
             output_amount: 1_000,
             minimum_output_amount: 950,
             price_impact_pct: 0.5,

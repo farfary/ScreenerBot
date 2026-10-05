@@ -4,7 +4,7 @@
 //! Common swap structures and types used across different swap modules
 //! This module contains shared data structures for swap operations
 
-use crate::chains::ChainId;
+use crate::chains::{ChainId, RawAmount};
 use serde::{Deserialize, Deserializer, Serialize};
 
 // ============================================================================
@@ -19,7 +19,7 @@ pub struct QuoteRequest {
     pub chain: ChainId,
     pub input_mint: String,
     pub output_mint: String,
-    pub input_amount: u64,
+    pub input_amount: RawAmount,
     pub wallet_address: String,
     pub slippage_pct: f64,
     pub swap_mode: SwapMode,

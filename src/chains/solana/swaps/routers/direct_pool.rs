@@ -196,6 +196,11 @@ impl DirectPoolRouter {
 
     /// Build the intent a request describes.
     fn intent_for(request: &QuoteRequest, pool: Pubkey) -> QuoteResult<DirectSwapIntent> {
+        let input_amount =
+            u64::try_from(request.input_amount).map_err(|_| QuoteError::RouterRejected {
+                router: "Direct Pool".to_owned(),
+                detail: "input amount exceeds the Solana u64 limit".to_owned(),
+            })?;
         let owner =
             Pubkey::from_str(&request.wallet_address).map_err(|e| QuoteError::RouterRejected {
                 router: "Direct Pool".to_owned(),
@@ -209,7 +214,7 @@ impl DirectPoolRouter {
             owner,
             input_mint,
             output_mint,
-            amount_in: request.input_amount,
+            amount_in: input_amount,
             slippage_bps: slippage_bps_for(request.slippage_pct),
         })
     }
@@ -366,6 +371,11 @@ impl SwapRouter for DirectPoolRouter {
     }
 
     async fn get_quote(&self, request: &QuoteRequest) -> QuoteResult<Quote> {
+        let input_amount =
+            u64::try_from(request.input_amount).map_err(|_| QuoteError::RouterRejected {
+                router: self.name().to_owned(),
+                detail: "input amount exceeds the Solana u64 limit".to_owned(),
+            })?;
         self.accept_own_chain(request)
             .map_err(|e| QuoteError::RouterRejected {
                 router: self.name().to_owned(),
@@ -528,6 +538,27 @@ fn slippage_bps_for(slippage_pct: f64) -> u16 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn oversized_input_is_rejected_before_router_io() {
+        let request = QuoteRequest {
+            chain: crate::chains::ChainId::Solana,
+            input_mint: crate::chains::solana::constants::SOL_MINT.to_owned(),
+            output_mint: crate::chains::solana::constants::USDC_MINT.to_owned(),
+            input_amount: crate::chains::RawAmount::new(u128::from(u64::MAX) + 1),
+            wallet_address: String::new(),
+            slippage_pct: 1.0,
+            swap_mode: crate::swaps::types::SwapMode::ExactIn,
+            exclude_dexes: None,
+        };
+        let error = DirectPoolRouter::new()
+            .get_quote(&request)
+            .await
+            .unwrap_err();
+        assert!(matches!(error, QuoteError::RouterRejected { .. }));
+        assert!(error.to_string().contains("Solana u64 limit"));
+    }
+
     use crate::chains::solana::swaps::direct::DirectSwapError;
 
     #[test]
