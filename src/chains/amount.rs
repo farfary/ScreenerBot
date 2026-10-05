@@ -5,6 +5,8 @@
 
 use std::{fmt, num::TryFromIntError, str::FromStr};
 
+pub(crate) mod math;
+
 use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, Value, ValueRef};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 
@@ -75,18 +77,11 @@ impl RawAmount {
         }
     }
 
-    /// Multiplies, then divides with a floored quotient when both steps fit.
+    /// Multiplies, then divides with a floored quotient and a full-width product.
     ///
-    /// An overflowing intermediate product returns `None`, even when a wider
-    /// intermediate could produce a representable final quotient.
-    pub const fn checked_mul_div(self, multiplier: Self, divisor: Self) -> Option<Self> {
-        match self.0.checked_mul(multiplier.0) {
-            Some(product) => match product.checked_div(divisor.0) {
-                Some(quotient) => Some(Self(quotient)),
-                None => None,
-            },
-            None => None,
-        }
+    /// Returns `None` for a zero divisor or a quotient outside `u128`.
+    pub fn checked_mul_div(self, multiplier: Self, divisor: Self) -> Option<Self> {
+        math::mul_div_floor(self.0, multiplier.0, divisor.0).map(Self)
     }
 }
 
@@ -320,10 +315,34 @@ mod tests {
     }
 
     #[test]
-    fn checked_mul_div_rejects_intermediate_overflow() {
+    fn checked_mul_div_handles_full_width_products_and_quotient_overflow() {
         assert_eq!(
             RawAmount::MAX.checked_mul_div(RawAmount::new(2), RawAmount::new(2)),
+            Some(RawAmount::MAX)
+        );
+        assert_eq!(
+            RawAmount::MAX.checked_mul_div(RawAmount::MAX, RawAmount::MAX),
+            Some(RawAmount::MAX)
+        );
+        assert_eq!(
+            RawAmount::MAX.checked_mul_div(RawAmount::MAX, RawAmount::new(1)),
             None
+        );
+        assert_eq!(
+            RawAmount::ZERO.checked_mul_div(RawAmount::MAX, RawAmount::new(1)),
+            Some(RawAmount::ZERO)
+        );
+        assert_eq!(
+            RawAmount::MAX.checked_mul_div(RawAmount::ZERO, RawAmount::MAX),
+            Some(RawAmount::ZERO)
+        );
+        assert_eq!(
+            RawAmount::ZERO.checked_mul_div(RawAmount::MAX, RawAmount::ZERO),
+            None
+        );
+        assert_eq!(
+            RawAmount::MAX.checked_mul_div(RawAmount::new(1), RawAmount::MAX),
+            Some(RawAmount::new(1))
         );
     }
 }
