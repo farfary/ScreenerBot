@@ -9,6 +9,7 @@
 //! site.
 
 mod adapter;
+mod amount;
 mod error;
 mod execution;
 mod registry;
@@ -17,6 +18,7 @@ pub mod solana;
 mod types;
 
 pub use adapter::{adapter, adapter_for, ChainAdapter};
+pub use amount::{AmountParseError, RawAmount};
 pub use error::{Error, Result};
 pub use execution::ExecutionFailure;
 pub use registry::{enabled_chains, install_enabled_runtimes, runtime_for, ChainRegistry};
