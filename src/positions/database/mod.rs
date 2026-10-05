@@ -7,6 +7,7 @@ mod global;
 mod operations;
 mod provenance;
 mod queries;
+mod raw_migration;
 mod tracking;
 /// Database module for positions management
 /// Replaces JSON file-based storage with high-performance SQLite database

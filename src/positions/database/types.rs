@@ -62,7 +62,7 @@ CREATE TABLE IF NOT EXISTS positions (
   -- Real swap tracking
   entry_transaction_signature TEXT,
   exit_transaction_signature TEXT,
-  token_amount INTEGER, -- Initial amount of tokens bought (first entry)
+  token_amount TEXT, -- Initial amount of tokens bought (first entry)
   effective_entry_price REAL, -- Initial entry price (deprecated, use average_entry_price)
   effective_exit_price REAL, -- Final exit price (deprecated, use average_exit_price)
   sol_received REAL, -- Total SOL received after all exits
@@ -90,8 +90,8 @@ CREATE TABLE IF NOT EXISTS positions (
   unrealized_pnl REAL, -- Unrealized P&L in SOL (for open positions)
   unrealized_pnl_percent REAL, -- Unrealized P&L percentage (for open positions)
   -- Partial exit tracking
-  remaining_token_amount INTEGER, -- Current holdings after partial exits
-  total_exited_amount INTEGER NOT NULL DEFAULT 0, -- Cumulative tokens sold
+  remaining_token_amount TEXT, -- Current holdings after partial exits
+  total_exited_amount TEXT NOT NULL DEFAULT '0', -- Cumulative tokens sold
   average_exit_price REAL, -- Weighted average exit price
   partial_exit_count INTEGER NOT NULL DEFAULT 0, -- Number of partial exits
   -- DCA tracking
@@ -133,7 +133,7 @@ CREATE TABLE IF NOT EXISTS position_exits (
   position_id INTEGER NOT NULL,
   wallet_address TEXT NOT NULL,
   timestamp TEXT NOT NULL,
-  amount INTEGER NOT NULL, -- Tokens sold
+  amount TEXT NOT NULL, -- Tokens sold
   price REAL NOT NULL, -- Exit price per token
   sol_received REAL NOT NULL, -- SOL received
   transaction_signature TEXT NOT NULL,
@@ -150,7 +150,7 @@ CREATE TABLE IF NOT EXISTS position_entries (
   position_id INTEGER NOT NULL,
   wallet_address TEXT NOT NULL,
   timestamp TEXT NOT NULL,
-  amount INTEGER NOT NULL, -- Tokens bought
+  amount TEXT NOT NULL, -- Tokens bought
   price REAL NOT NULL, -- Entry price per token
   sol_spent REAL NOT NULL, -- SOL spent
   transaction_signature TEXT NOT NULL,

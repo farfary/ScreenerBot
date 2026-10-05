@@ -9,6 +9,7 @@ use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{params, Connection, OptionalExtension};
 use std::sync::atomic::Ordering;
 
+use crate::chains::RawAmount;
 use crate::database;
 use crate::errors::DatabaseError;
 use crate::logger::{self, LogTag};
@@ -16,7 +17,33 @@ use crate::positions::types::{Position, PositionManagement, PositionOrigin};
 use crate::positions::{Error, Result};
 
 use super::provenance::{merge_ledger_duplicates, migrate_position_provenance};
+use super::raw_migration::migrate_position_amounts;
 use super::types::*;
+
+pub(super) fn read_amount(row: &rusqlite::Row<'_>, column: &str) -> rusqlite::Result<u64> {
+    let amount: RawAmount = row.get(column)?;
+    amount.try_into().map_err(|error| {
+        rusqlite::Error::FromSqlConversionFailure(
+            row.as_ref().column_index(column).unwrap_or(0),
+            rusqlite::types::Type::Text,
+            Box::new(error),
+        )
+    })
+}
+
+fn read_optional_amount(row: &rusqlite::Row<'_>, column: &str) -> rusqlite::Result<Option<u64>> {
+    row.get::<_, Option<RawAmount>>(column)?
+        .map(|amount| {
+            amount.try_into().map_err(|error| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    row.as_ref().column_index(column).unwrap_or(0),
+                    rusqlite::types::Type::Text,
+                    Box::new(error),
+                )
+            })
+        })
+        .transpose()
+}
 
 impl PositionsDatabase {
     /// Create new PositionsDatabase with connection pooling
@@ -126,6 +153,8 @@ impl PositionsDatabase {
             .map_err(|e| Error::SchemaMigration {
                 detail: format!("failed to create token_snapshots table: {e}"),
             })?;
+
+        migrate_position_amounts(&conn)?;
 
         // Migrate existing database to add PnL fields if needed
         // Check if migration is needed by attempting to add columns
@@ -462,7 +491,7 @@ impl PositionsDatabase {
                     position.price_lowest,
                     position.entry_transaction_signature,
                     position.exit_transaction_signature,
-                    position.token_amount.map(|t| t as i64),
+                    position.token_amount.map(RawAmount::from),
                     position.effective_entry_price,
                     position.effective_exit_price,
                     position.sol_received,
@@ -483,8 +512,8 @@ impl PositionsDatabase {
                     position.pnl_percent,
                     position.unrealized_pnl,
                     position.unrealized_pnl_percent,
-                    position.remaining_token_amount.map(|t| t as i64),
-                    position.total_exited_amount as i64,
+                    position.remaining_token_amount.map(RawAmount::from),
+                    RawAmount::from(position.total_exited_amount),
                     position.average_exit_price,
                     position.partial_exit_count as i64,
                     position.dca_count as i64,
@@ -594,7 +623,7 @@ impl PositionsDatabase {
                     position.price_lowest,
                     position.entry_transaction_signature,
                     position.exit_transaction_signature,
-                    position.token_amount.map(|t| t as i64),
+                    position.token_amount.map(RawAmount::from),
                     position.effective_entry_price,
                     position.effective_exit_price,
                     position.sol_received,
@@ -615,8 +644,8 @@ impl PositionsDatabase {
                     position.pnl_percent,
                     position.unrealized_pnl,
                     position.unrealized_pnl_percent,
-                    position.remaining_token_amount.map(|t| t as i64),
-                    position.total_exited_amount as i64,
+                    position.remaining_token_amount.map(RawAmount::from),
+                    RawAmount::from(position.total_exited_amount),
                     position.average_exit_price,
                     position.partial_exit_count as i64,
                     position.dca_count as i64,
@@ -896,7 +925,7 @@ impl PositionsDatabase {
             price_lowest: row.get("price_lowest")?,
             entry_transaction_signature: row.get("entry_transaction_signature")?,
             exit_transaction_signature: row.get("exit_transaction_signature")?,
-            token_amount: row.get::<_, Option<i64>>("token_amount")?.map(|t| t as u64),
+            token_amount: read_optional_amount(row, "token_amount")?,
             effective_entry_price: row.get("effective_entry_price")?,
             effective_exit_price: row.get("effective_exit_price")?,
             sol_received: row.get("sol_received")?,
@@ -928,10 +957,8 @@ impl PositionsDatabase {
                 .ok()
                 .flatten(),
             // New fields for partial exit and DCA support
-            remaining_token_amount: row
-                .get::<_, Option<i64>>("remaining_token_amount")?
-                .map(|t| t as u64),
-            total_exited_amount: row.get::<_, i64>("total_exited_amount")? as u64,
+            remaining_token_amount: read_optional_amount(row, "remaining_token_amount")?,
+            total_exited_amount: read_amount(row, "total_exited_amount")?,
             average_exit_price: row.get("average_exit_price")?,
             partial_exit_count: row.get::<_, i64>("partial_exit_count")? as u32,
             dca_count: row.get::<_, i64>("dca_count")? as u32,
@@ -1101,59 +1128,25 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn full_schema_initialization_upgrades_pre_provenance_database_and_is_idempotent() {
+    async fn full_schema_initialization_preserves_released_provenance_and_is_idempotent() {
         let (mut database, _directory) = test_database();
         {
             let legacy = database.get_connection().unwrap();
             legacy
-                .execute_batch(
-                "PRAGMA foreign_keys = ON;
-                 CREATE TABLE positions (
-                    id INTEGER PRIMARY KEY,
-                    wallet_address TEXT NOT NULL,
-                    mint TEXT NOT NULL,
-                    symbol TEXT NOT NULL,
-                    name TEXT NOT NULL,
-                    entry_price REAL NOT NULL,
-                    entry_time TEXT NOT NULL,
-                    exit_time TEXT,
-                    position_type TEXT NOT NULL,
-                    entry_size_sol REAL NOT NULL,
-                    total_size_sol REAL NOT NULL,
-                    price_highest REAL NOT NULL,
-                    price_lowest REAL NOT NULL,
-                    entry_transaction_signature TEXT,
-                    exit_transaction_signature TEXT,
-                    token_amount INTEGER,
-                    effective_entry_price REAL,
-                    remaining_token_amount INTEGER,
-                    average_entry_price REAL NOT NULL DEFAULT 0,
-                    manual_management BOOLEAN NOT NULL DEFAULT 0,
-                    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-                    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-                 );
-                 CREATE TABLE position_states (
-                    id INTEGER PRIMARY KEY,
-                    position_id INTEGER NOT NULL REFERENCES positions(id),
-                    state TEXT NOT NULL,
-                    changed_at TEXT NOT NULL DEFAULT (datetime('now')),
-                    reason TEXT
-                 );
-                 INSERT INTO positions (
-                    id, wallet_address, mint, symbol, name, entry_price, entry_time,
-                    position_type, entry_size_sol, total_size_sol, price_highest,
-                    price_lowest, token_amount, effective_entry_price,
-                    remaining_token_amount, average_entry_price, manual_management
-                 ) VALUES (
-                    41, 'wallet', 'mint', 'SYM', 'Token', 0.5, '2026-01-01',
-                    'buy', 1.0, 1.0, 0.5, 0.5, 2, 0.5, 2, 0.5, 1
-                 );
-                 INSERT INTO position_states (id, position_id, state)
-                 VALUES (7, 41, 'Open');
-                 CREATE INDEX idx_positions_wallet ON positions(wallet_address);
-                 CREATE INDEX idx_positions_mint ON positions(mint);
-                 CREATE INDEX idx_positions_entry_signature ON positions(entry_transaction_signature);
-                 CREATE INDEX idx_positions_exit_signature ON positions(exit_transaction_signature);",
+                .execute_batch(include_str!(
+                    "../../../tests/fixtures/v0.2.13-positions.sql"
+                ))
+                .unwrap();
+            legacy
+                .execute(
+                    "INSERT INTO positions (id, chain_id, wallet_address, mint, symbol, name, entry_price, entry_time, position_type, entry_size_sol, total_size_sol, price_highest, price_lowest, token_amount, remaining_token_amount, origin_kind, management) VALUES (41, 'solana', 'wallet', 'mint', 'SYM', 'Token', 0.5, '2026-01-01', 'buy', 1.0, 1.0, 0.5, 0.5, 2, 2, 'manual', 'user_only')",
+                    [],
+                )
+                .unwrap();
+            legacy
+                .execute(
+                    "INSERT INTO position_states (id, position_id, state) VALUES (7, 41, 'Open')",
+                    [],
                 )
                 .unwrap();
         }
@@ -1166,29 +1159,19 @@ mod tests {
         assert_eq!(
             connection
                 .query_row(
-                    "SELECT chain_id, origin_kind, management FROM positions WHERE id = 41",
+                    "SELECT chain_id, origin_kind, management, token_amount FROM positions WHERE id = 41",
                     [],
-                    |row| {
-                        Ok((
-                            row.get::<_, String>(0)?,
-                            row.get::<_, String>(1)?,
-                            row.get::<_, String>(2)?,
-                        ))
-                    },
+                    |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?, row.get::<_, String>(3)?)),
                 )
                 .unwrap(),
-            (
-                "solana".to_owned(),
-                "manual".to_owned(),
-                "user_only".to_owned()
-            )
+            ("solana".to_owned(), "manual".to_owned(), "user_only".to_owned(), "2".to_owned())
         );
         assert_eq!(
             connection
                 .query_row(
                     "SELECT position_id FROM position_states WHERE id = 7",
                     [],
-                    |row| row.get::<_, i64>(0),
+                    |row| row.get::<_, i64>(0)
                 )
                 .unwrap(),
             41
