@@ -22,6 +22,7 @@ mod common;
 
 use serde_json::json;
 
+use screenerbot::transactions::deltas::{DeltaKind, SubjectAssetDelta};
 use screenerbot::transactions::{Subject, Transaction, TransactionDatabase};
 
 const MINT: &str = "MintA111111111111111111111111111111111111";
@@ -224,4 +225,101 @@ async fn deltas_are_written_live_and_any_gap_is_repaired_on_the_next_boot() {
         "every repaired delta carries the transaction's real block time"
     );
     assert!(undated_legs.iter().all(|delta| delta.slot == Some(400)));
+
+    // The persistence boundary retains signed deltas and unsigned balances beyond
+    // SQLite's native integer range, including both signed extrema.
+    let large_values = [
+        i64::MAX as i128 + 1,
+        -(i64::MAX as i128) - 1,
+        i128::MAX,
+        i128::MIN,
+    ];
+    let mut wide = Vec::new();
+    for (index, amount) in large_values.into_iter().enumerate() {
+        wide.push(SubjectAssetDelta {
+            chain: screenerbot::chains::ChainId::Solana,
+            wallet_address: wallet.clone(),
+            signature: format!("wide-{index}"),
+            mint: format!("mint-{index}"),
+            slot: Some(500 + index as u64),
+            block_time: Some(1_700_000_500 + index as i64),
+            tx_index: index as u32,
+            delta_raw: amount,
+            before_raw: (index % 2 == 0).then_some(u128::MAX),
+            after_raw: (index % 2 == 1).then_some(u128::MAX),
+            decimals: 18,
+            kind: DeltaKind::Trade,
+            venue: Some("router".to_owned()),
+            fee_native_raw: Some(5000),
+            success: true,
+        });
+    }
+    let mut other_wallet = wide[0].clone();
+    other_wallet.wallet_address = "other-wallet".to_owned();
+    db.store_subject_deltas(&wide).await.unwrap();
+    db.store_subject_deltas(&[other_wallet.clone()])
+        .await
+        .unwrap();
+    let retrieved = db.get_subject_deltas(&wallet).await.unwrap();
+    let retrieved_wide: Vec<_> = retrieved
+        .into_iter()
+        .filter(|row| row.signature.starts_with("wide-"))
+        .collect();
+    assert_eq!(retrieved_wide, wide);
+    assert_eq!(db.count_subject_deltas(&wallet).await.unwrap(), 10);
+    assert_eq!(
+        db.get_subject_deltas("other-wallet").await.unwrap(),
+        vec![other_wallet]
+    );
+
+    let path = screenerbot::paths::get_transactions_db_path();
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    let (delta_kind, before_kind, before_value): (String, String, String) = conn.query_row(
+        "SELECT typeof(delta_raw), typeof(before_raw), before_raw FROM subject_asset_deltas WHERE signature = 'wide-0' AND wallet_address = ?1",
+        [&wallet],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    ).unwrap();
+    assert_eq!(
+        (delta_kind.as_str(), before_kind.as_str()),
+        ("text", "text")
+    );
+    assert_eq!(before_value, u128::MAX.to_string());
+
+    for bad in ["+1", "01", "-0", "170141183460469231731687303715884105728"] {
+        conn.execute("UPDATE subject_asset_deltas SET delta_raw = ?1 WHERE signature = 'wide-0' AND wallet_address = ?2", rusqlite::params![bad, wallet]).unwrap();
+        assert!(
+            db.get_subject_deltas(&wallet).await.is_err(),
+            "signed value {bad}"
+        );
+    }
+    conn.execute("UPDATE subject_asset_deltas SET delta_raw = ?1 WHERE signature = 'wide-0' AND wallet_address = ?2", rusqlite::params![wide[0].delta_raw.to_string(), wallet]).unwrap();
+    for bad in ["+1", "01", "-1", "340282366920938463463374607431768211456"] {
+        conn.execute("UPDATE subject_asset_deltas SET before_raw = ?1 WHERE signature = 'wide-0' AND wallet_address = ?2", rusqlite::params![bad, wallet]).unwrap();
+        assert!(
+            db.get_subject_deltas(&wallet).await.is_err(),
+            "unsigned value {bad}"
+        );
+    }
+    conn.execute("UPDATE subject_asset_deltas SET before_raw = X'31' WHERE signature = 'wide-0' AND wallet_address = ?1", [&wallet]).unwrap();
+    assert!(
+        db.get_subject_deltas(&wallet).await.is_err(),
+        "non-text storage is rejected"
+    );
+    conn.execute("UPDATE subject_asset_deltas SET before_raw = ?1 WHERE signature = 'wide-0' AND wallet_address = ?2", rusqlite::params![u128::MAX.to_string(), wallet]).unwrap();
+
+    conn.execute_batch("CREATE TRIGGER reject_second_delta BEFORE INSERT ON subject_asset_deltas WHEN NEW.signature = 'batch-second' BEGIN SELECT RAISE(ABORT, 'rejected row'); END;").unwrap();
+    let mut first = wide[0].clone();
+    first.signature = "batch-first".to_owned();
+    let mut second = first.clone();
+    second.signature = "batch-second".to_owned();
+    assert!(db.store_subject_deltas(&[first, second]).await.is_err());
+    assert_eq!(
+        conn.query_row(
+            "SELECT COUNT(*) FROM subject_asset_deltas WHERE signature LIKE 'batch-%'",
+            [],
+            |row| row.get::<_, i64>(0)
+        )
+        .unwrap(),
+        0
+    );
 }

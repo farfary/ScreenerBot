@@ -14,7 +14,267 @@ use super::schema::*;
 use crate::database::WriteTransaction;
 use crate::transactions::error::Error;
 
+// The released v7 table definition is retained to reject unsupported schema
+// changes before a rebuild can discard them.
+const V7_SUBJECT_DELTAS_DDL: &str = r#"CREATE TABLE IF NOT EXISTS subject_asset_deltas (
+    chain_id TEXT NOT NULL DEFAULT 'solana',
+    wallet_address TEXT NOT NULL,
+    signature TEXT NOT NULL,
+    mint TEXT NOT NULL,          -- SPL mint, or the literal 'native' for native SOL
+    slot INTEGER,
+    block_time INTEGER,
+    tx_index INTEGER NOT NULL DEFAULT 0,
+    delta_raw INTEGER NOT NULL,  -- signed, raw base units
+    before_raw INTEGER,          -- NULL when not knowable
+    after_raw INTEGER,
+    decimals INTEGER NOT NULL,
+    kind TEXT NOT NULL,          -- 'trade' | 'transfer' | 'defi' | 'other'
+    venue TEXT,                  -- router name when a known DEX program is present
+    fee_lamports INTEGER,
+    success BOOLEAN NOT NULL DEFAULT 1,
+    PRIMARY KEY (chain_id, wallet_address, signature, mint)
+);"#;
+
 impl TransactionDatabase {
+    /// Rebuild only the released v7 ledger shape; never discard an unrecognized
+    /// column, constraint, index, or trigger during a table replacement.
+    pub(super) fn migrate_subject_delta_amounts(&self, conn: &mut Connection) -> Result<(), Error> {
+        let mut stmt = conn
+            .prepare("PRAGMA table_xinfo(subject_asset_deltas)")
+            .map_err(|e| Error::SchemaInspect {
+                detail: e.to_string(),
+            })?;
+        let columns = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, i64>(3)?,
+                    row.get::<_, Option<String>>(4)?,
+                    row.get::<_, i64>(5)?,
+                    row.get::<_, i64>(6)?,
+                ))
+            })
+            .map_err(|e| Error::SchemaInspect {
+                detail: e.to_string(),
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(|e| Error::SchemaInspect {
+                detail: e.to_string(),
+            })?;
+        drop(stmt);
+        let types = ["delta_raw", "before_raw", "after_raw"].map(|name| {
+            columns
+                .iter()
+                .find(|(column, ..)| column == name)
+                .map(|(_, ty, ..)| ty.as_str())
+        });
+        if types == [Some("TEXT"), Some("TEXT"), Some("TEXT")] {
+            return Ok(());
+        }
+        if types != [Some("INTEGER"), Some("INTEGER"), Some("INTEGER")] {
+            return Err(Error::Migration {
+                step: "inspect v8 subject delta amounts".to_owned(),
+                detail: format!("unexpected raw amount column types: {types:?}"),
+            });
+        }
+
+        let expected = [
+            ("chain_id", "TEXT", 1, Some("'solana'"), 1),
+            ("wallet_address", "TEXT", 1, None, 2),
+            ("signature", "TEXT", 1, None, 3),
+            ("mint", "TEXT", 1, None, 4),
+            ("slot", "INTEGER", 0, None, 0),
+            ("block_time", "INTEGER", 0, None, 0),
+            ("tx_index", "INTEGER", 1, Some("0"), 0),
+            ("delta_raw", "INTEGER", 1, None, 0),
+            ("before_raw", "INTEGER", 0, None, 0),
+            ("after_raw", "INTEGER", 0, None, 0),
+            ("decimals", "INTEGER", 1, None, 0),
+            ("kind", "TEXT", 1, None, 0),
+            ("venue", "TEXT", 0, None, 0),
+            ("fee_lamports", "INTEGER", 0, None, 0),
+            ("success", "BOOLEAN", 1, Some("1"), 0),
+        ];
+        if columns.len() != expected.len()
+            || expected.iter().any(|&(name, ty, not_null, default, pk)| {
+                !columns.iter().any(
+                    |(
+                        actual_name,
+                        actual_ty,
+                        actual_not_null,
+                        actual_default,
+                        actual_pk,
+                        hidden,
+                    )| {
+                        actual_name == name
+                            && actual_ty == ty
+                            && *actual_not_null == not_null
+                            && actual_default.as_deref() == default
+                            && *actual_pk == pk
+                            && *hidden == 0
+                    },
+                )
+            })
+        {
+            return Err(Error::Migration {
+                step: "inspect v8 subject delta table".to_owned(),
+                detail: "unexpected v7 column, constraint, or primary-key shape".to_owned(),
+            });
+        }
+
+        let stored_ddl: String = conn
+            .query_row("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'subject_asset_deltas'", [], |row| row.get(0))
+            .map_err(|e| Error::SchemaInspect { detail: e.to_string() })?;
+        fn ddl_body(ddl: &str) -> Option<&str> {
+            ddl.find('(')
+                .map(|start| ddl[start..].trim().trim_end_matches(';').trim())
+        }
+        if ddl_body(&stored_ddl) != ddl_body(V7_SUBJECT_DELTAS_DDL) {
+            return Err(Error::Migration {
+                step: "inspect v8 subject delta table".to_owned(),
+                detail: "unrecognized v7 table definition would be lost by rebuild".to_owned(),
+            });
+        }
+
+        let indexes = conn
+            .prepare("SELECT name, origin FROM pragma_index_list('subject_asset_deltas')")
+            .and_then(|mut stmt| {
+                stmt.query_map([], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                })?
+                .collect::<rusqlite::Result<Vec<_>>>()
+            })
+            .map_err(|e| Error::SchemaInspect {
+                detail: e.to_string(),
+            })?;
+        for (name, origin) in indexes {
+            if !((origin == "pk" && name.starts_with("sqlite_autoindex_subject_asset_deltas_"))
+                || (origin == "c"
+                    && (name == "idx_subject_deltas_chain_wallet_mint"
+                        || name == "idx_subject_deltas_chain_wallet_order")))
+            {
+                return Err(Error::Migration {
+                    step: "inspect v8 subject delta indexes".to_owned(),
+                    detail: format!("unrecognized index {name} would be lost by table rebuild"),
+                });
+            }
+        }
+
+        let mut stmt = conn
+            .prepare("SELECT type, name, sql FROM sqlite_master WHERE tbl_name = 'subject_asset_deltas' AND type IN ('index', 'trigger') AND sql IS NOT NULL")
+            .map_err(|e| Error::SchemaInspect { detail: e.to_string() })?;
+        let objects = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            })
+            .map_err(|e| Error::SchemaInspect {
+                detail: e.to_string(),
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(|e| Error::SchemaInspect {
+                detail: e.to_string(),
+            })?;
+        for (kind, name, sql) in objects {
+            let canonical = INDEXES.iter().find(|index| {
+                index.contains(&format!(
+                    "INDEX IF NOT EXISTS {name} ON subject_asset_deltas("
+                ))
+            });
+            if kind != "index"
+                || canonical.is_none_or(|index| {
+                    index.trim_end_matches(';') != sql
+                        && index.replace(" IF NOT EXISTS", "").trim_end_matches(';') != sql
+                })
+            {
+                return Err(Error::Migration {
+                    step: "inspect v8 subject delta indexes".to_owned(),
+                    detail: format!("unrecognized {kind} {name} would be lost by table rebuild"),
+                });
+            }
+        }
+        drop(stmt);
+
+        let tx = conn.write_tx().map_err(|e| Error::Migration {
+            step: "begin v8 subject delta migration".to_owned(),
+            detail: e.to_string(),
+        })?;
+        let invalid: i64 = tx
+            .query_row(
+                "SELECT COUNT(*) FROM subject_asset_deltas WHERE typeof(delta_raw) != 'integer' OR (before_raw IS NOT NULL AND (typeof(before_raw) != 'integer' OR before_raw < 0)) OR (after_raw IS NOT NULL AND (typeof(after_raw) != 'integer' OR after_raw < 0))",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|e| Error::Migration { step: "validate v7 subject delta values".to_owned(), detail: e.to_string() })?;
+        if invalid != 0 {
+            return Err(Error::Migration {
+                step: "validate v7 subject delta values".to_owned(),
+                detail: format!("{invalid} rows have invalid raw amount storage"),
+            });
+        }
+
+        let create = SCHEMA_SUBJECT_ASSET_DELTAS.replacen(
+            "CREATE TABLE IF NOT EXISTS subject_asset_deltas (",
+            "CREATE TABLE subject_asset_deltas__v8 (",
+            1,
+        );
+        tx.execute(&create, []).map_err(|e| Error::Migration {
+            step: "create subject_asset_deltas__v8".to_owned(),
+            detail: e.to_string(),
+        })?;
+        tx.execute(
+            "INSERT INTO subject_asset_deltas__v8 (chain_id, wallet_address, signature, mint, slot, block_time, tx_index, delta_raw, before_raw, after_raw, decimals, kind, venue, fee_lamports, success)
+             SELECT chain_id, wallet_address, signature, mint, slot, block_time, tx_index,
+                    CAST(delta_raw AS TEXT), CAST(before_raw AS TEXT), CAST(after_raw AS TEXT),
+                    decimals, kind, venue, fee_lamports, success FROM subject_asset_deltas",
+            [],
+        )
+        .map_err(|e| Error::Migration { step: "copy v8 subject deltas".to_owned(), detail: e.to_string() })?;
+        let before: i64 = tx
+            .query_row("SELECT COUNT(*) FROM subject_asset_deltas", [], |row| {
+                row.get(0)
+            })
+            .map_err(|e| Error::Migration {
+                step: "count v7 subject deltas".to_owned(),
+                detail: e.to_string(),
+            })?;
+        let after: i64 = tx
+            .query_row("SELECT COUNT(*) FROM subject_asset_deltas__v8", [], |row| {
+                row.get(0)
+            })
+            .map_err(|e| Error::Migration {
+                step: "count v8 subject deltas".to_owned(),
+                detail: e.to_string(),
+            })?;
+        if before != after {
+            return Err(Error::Migration {
+                step: "verify v8 subject deltas".to_owned(),
+                detail: format!("row count mismatch: {before} != {after}"),
+            });
+        }
+        tx.execute("DROP TABLE subject_asset_deltas", [])
+            .map_err(|e| Error::Migration {
+                step: "drop v7 subject deltas".to_owned(),
+                detail: e.to_string(),
+            })?;
+        tx.execute(
+            "ALTER TABLE subject_asset_deltas__v8 RENAME TO subject_asset_deltas",
+            [],
+        )
+        .map_err(|e| Error::Migration {
+            step: "rename v8 subject deltas".to_owned(),
+            detail: e.to_string(),
+        })?;
+        tx.commit().map_err(|e| Error::Migration {
+            step: "commit v8 subject delta migration".to_owned(),
+            detail: e.to_string(),
+        })
+    }
+
     /// Apply schema migrations that are safe before chain identity exists.
     pub(super) fn apply_pre_chain_migrations(&self, conn: &mut Connection) -> Result<bool, Error> {
         // Ensure processed_transactions has fee_sol column for MCP tools compatibility

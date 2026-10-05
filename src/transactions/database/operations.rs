@@ -164,6 +164,7 @@ impl TransactionDatabase {
         // before index creation below (rebuilding a table drops its indexes with it).
         self.migrate_signature_wallet_tables(&mut conn)?;
         self.migrate_chain_identity_tables(&mut conn)?;
+        self.migrate_subject_delta_amounts(&mut conn)?;
 
         // Chain-aware bootstrap state and queries are valid only after every legacy
         // transaction table, including bootstrap_state, has been rebuilt to v7.

@@ -8,9 +8,10 @@
 //! `self.get_connection()`, `String` errors, one `unchecked_transaction()` per batch
 //! write.
 
+use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput, Value, ValueRef};
 use rusqlite::{params, OptionalExtension, Transaction as SqlTransaction};
 
-use crate::chains::ChainId;
+use crate::chains::{ChainId, RawAmount};
 use crate::logger::{self, LogTag};
 use crate::transactions::deltas::{DeltaKind, SubjectAssetDelta, SUBJECT_DELTAS_VERSION};
 use crate::transactions::error::Error;
@@ -28,6 +29,34 @@ const BACKFILL_BATCH_SIZE: i64 = 500;
 /// One cached `raw_transactions` row as both re-extraction passes read it:
 /// `(signature, raw JSON, slot, block_time, success)`.
 type CachedTransactionRow = (String, String, Option<i64>, Option<i64>, bool);
+
+/// Signed raw amounts have a persistence-only codec. The domain retains `i128`.
+struct SqlSignedDelta(i128);
+
+impl ToSql for SqlSignedDelta {
+    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
+        Ok(ToSqlOutput::Owned(Value::Text(self.0.to_string())))
+    }
+}
+
+impl FromSql for SqlSignedDelta {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        let ValueRef::Text(bytes) = value else {
+            return Err(FromSqlError::InvalidType);
+        };
+        let text = std::str::from_utf8(bytes).map_err(|e| FromSqlError::Other(Box::new(e)))?;
+        let value = text
+            .parse::<i128>()
+            .map_err(|e| FromSqlError::Other(Box::new(e)))?;
+        if value.to_string() != text {
+            return Err(FromSqlError::Other(Box::new(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "noncanonical signed decimal amount",
+            ))));
+        }
+        Ok(Self(value))
+    }
+}
 
 /// Rebuild the minimal [`Transaction`](crate::transactions::types::Transaction) that
 /// `extract_subject_deltas` needs from a cached row, returning `None` when the blob is
@@ -52,9 +81,7 @@ fn cached_row_to_transaction(
 
 impl TransactionDatabase {
     /// Persist a batch of deltas in one transaction (`INSERT OR REPLACE`, keyed by
-    /// `(wallet_address, signature, mint)`). A row whose `delta_raw` cannot fit in
-    /// `i64` is logged and skipped rather than corrupting the ledger with a clamped
-    /// value; `before_raw`/`after_raw` are informational and fall back to `NULL`.
+    /// `(wallet_address, signature, mint)`). Any failed insert rolls back the batch.
     pub async fn store_subject_deltas(&self, deltas: &[SubjectAssetDelta]) -> Result<(), Error> {
         if deltas.is_empty() {
             return Ok(());
@@ -66,15 +93,7 @@ impl TransactionDatabase {
             .map_err(crate::errors::DatabaseError::from)?;
 
         for delta in deltas {
-            if let Err(e) = self.insert_subject_delta(&tx, delta) {
-                logger::warning(
-                    LogTag::Transactions,
-                    &format!(
-                        "Skipping subject delta {} / {} / {}: {}",
-                        delta.wallet_address, delta.signature, delta.mint, e
-                    ),
-                );
-            }
+            self.insert_subject_delta(&tx, delta)?;
         }
 
         tx.commit().map_err(crate::errors::DatabaseError::from)?;
@@ -110,12 +129,9 @@ impl TransactionDatabase {
         tx: &SqlTransaction,
         delta: &SubjectAssetDelta,
     ) -> Result<(), Error> {
-        let delta_raw = i64::try_from(delta.delta_raw).map_err(|_| Error::RowDecode {
-            column: "delta_raw",
-            detail: format!("{} does not fit in i64", delta.delta_raw),
-        })?;
-        let before_raw = delta.before_raw.and_then(|v| i64::try_from(v).ok());
-        let after_raw = delta.after_raw.and_then(|v| i64::try_from(v).ok());
+        let delta_raw = SqlSignedDelta(delta.delta_raw);
+        let before_raw = delta.before_raw.map(RawAmount::new);
+        let after_raw = delta.after_raw.map(RawAmount::new);
 
         tx.execute(
             "INSERT OR REPLACE INTO subject_asset_deltas (
@@ -192,13 +208,9 @@ impl TransactionDatabase {
                     slot: row.get::<_, Option<i64>>(4)?.map(|v| v as u64),
                     block_time: row.get(5)?,
                     tx_index: row.get::<_, i64>(6)? as u32,
-                    delta_raw: row.get::<_, i64>(7)? as i128,
-                    before_raw: row
-                        .get::<_, Option<i64>>(8)?
-                        .and_then(|v| u128::try_from(v).ok()),
-                    after_raw: row
-                        .get::<_, Option<i64>>(9)?
-                        .and_then(|v| u128::try_from(v).ok()),
+                    delta_raw: row.get::<_, SqlSignedDelta>(7)?.0,
+                    before_raw: row.get::<_, Option<RawAmount>>(8)?.map(RawAmount::raw),
+                    after_raw: row.get::<_, Option<RawAmount>>(9)?.map(RawAmount::raw),
                     decimals: row.get::<_, i64>(10)? as u8,
                     kind,
                     venue: row.get(12)?,

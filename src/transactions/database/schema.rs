@@ -9,7 +9,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::LazyLock;
 
 /// Database schema version for migration management
-pub(super) const DATABASE_SCHEMA_VERSION: u32 = 7;
+pub(super) const DATABASE_SCHEMA_VERSION: u32 = 8;
 
 /// Static flag to track if database has been initialized (to reduce log noise)
 pub(super) static DATABASE_INITIALIZED: LazyLock<AtomicBool> =
@@ -155,7 +155,7 @@ CREATE TABLE IF NOT EXISTS bootstrap_state (
 
 /// Subject-relative balance deltas — one row per (wallet, signature, mint) movement.
 /// The ledger `positions::ledger::reduce_rounds` derives wallet-history positions from.
-/// `CREATE TABLE IF NOT EXISTS` is the whole migration; no ALTER needed (v6).
+/// v8 stores raw amounts as decimal TEXT to retain their full integer ranges.
 pub(super) const SCHEMA_SUBJECT_ASSET_DELTAS: &str = r#"
 CREATE TABLE IF NOT EXISTS subject_asset_deltas (
     chain_id TEXT NOT NULL DEFAULT 'solana',
@@ -165,9 +165,9 @@ CREATE TABLE IF NOT EXISTS subject_asset_deltas (
     slot INTEGER,
     block_time INTEGER,
     tx_index INTEGER NOT NULL DEFAULT 0,
-    delta_raw INTEGER NOT NULL,  -- signed, raw base units
-    before_raw INTEGER,          -- NULL when not knowable
-    after_raw INTEGER,
+    delta_raw TEXT NOT NULL,     -- canonical signed decimal raw base units
+    before_raw TEXT,             -- canonical unsigned decimal, NULL when not knowable
+    after_raw TEXT,
     decimals INTEGER NOT NULL,
     kind TEXT NOT NULL,          -- 'trade' | 'transfer' | 'defi' | 'other'
     venue TEXT,                  -- router name when a known DEX program is present
