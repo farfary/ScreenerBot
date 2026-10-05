@@ -50,7 +50,7 @@ pub async fn fetch_wallet_token_balances(
         .map(|acc| TokenBalance {
             wallet_id,
             mint: acc.mint.clone(),
-            balance: acc.balance,
+            balance: acc.balance.into(),
             ui_amount: acc.balance as f64 / 10f64.powi(acc.decimals as i32),
             decimals: acc.decimals,
             symbol: None,

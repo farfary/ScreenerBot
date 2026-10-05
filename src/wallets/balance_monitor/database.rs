@@ -25,9 +25,10 @@ mod snapshots;
 
 use crate::database::WriteTransaction;
 use schema::{
-    DASHBOARD_METRICS_INDEXES, FLOW_CACHE_INDEXES, SCHEMA_NFT_BALANCES, SCHEMA_SOL_FLOW_CACHE,
-    SCHEMA_TOKEN_BALANCES, SCHEMA_WALLET_DASHBOARD_METRICS, SCHEMA_WALLET_METADATA,
-    SCHEMA_WALLET_SNAPSHOTS, WALLET_INDEXES, WALLET_SCHEMA_VERSION,
+    DASHBOARD_METRICS_INDEXES, FLOW_CACHE_INDEXES, LEGACY_TOKEN_BALANCES_SCHEMA,
+    SCHEMA_NFT_BALANCES, SCHEMA_SOL_FLOW_CACHE, SCHEMA_TOKEN_BALANCES,
+    SCHEMA_WALLET_DASHBOARD_METRICS, SCHEMA_WALLET_METADATA, SCHEMA_WALLET_SNAPSHOTS,
+    WALLET_INDEXES, WALLET_SCHEMA_VERSION,
 };
 
 // =============================================================================
@@ -151,6 +152,7 @@ impl WalletDatabase {
 
         conn.execute(SCHEMA_TOKEN_BALANCES, [])
             .map_err(DatabaseError::from)?;
+        self.migrate_token_balances(&mut conn)?;
 
         conn.execute(SCHEMA_NFT_BALANCES, [])
             .map_err(DatabaseError::from)?;
@@ -217,6 +219,140 @@ impl WalletDatabase {
             "Wallet database schema initialized with all tables and indexes",
         );
 
+        Ok(())
+    }
+
+    fn migrate_token_balances(&self, conn: &mut Connection) -> Result<(), Error> {
+        let stored: String = conn
+            .query_row(
+                "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'token_balances'",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(DatabaseError::from)?;
+        fn body(ddl: &str) -> Option<&str> {
+            ddl.split_once('(')
+                .map(|(_, rest)| rest.trim().trim_end_matches(';').trim())
+        }
+        let legacy = body(&stored) == body(LEGACY_TOKEN_BALANCES_SCHEMA);
+        if !legacy && body(&stored) != body(SCHEMA_TOKEN_BALANCES) {
+            return Err(Error::Migration {
+                step: "inspect snapshot token balances".to_owned(),
+                detail: "unrecognized table definition".to_owned(),
+            });
+        }
+        if !legacy {
+            return Ok(());
+        }
+
+        let objects = conn.prepare("SELECT type, name, sql FROM sqlite_master WHERE tbl_name = 'token_balances' AND type IN ('index', 'trigger') AND sql IS NOT NULL")
+            .and_then(|mut stmt| stmt.query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?)))?.collect::<rusqlite::Result<Vec<_>>>())
+            .map_err(DatabaseError::from)?;
+        let expected: Vec<String> = WALLET_INDEXES
+            .iter()
+            .filter(|sql| sql.contains(" ON token_balances("))
+            .map(|sql| {
+                sql.replace(" IF NOT EXISTS", "")
+                    .trim_end_matches(';')
+                    .to_owned()
+            })
+            .collect();
+        if objects.len() != expected.len()
+            || objects
+                .iter()
+                .any(|(kind, _, sql)| kind != "index" || !expected.contains(sql))
+        {
+            return Err(Error::Migration {
+                step: "inspect snapshot token balance indexes".to_owned(),
+                detail: "unrecognized index or trigger".to_owned(),
+            });
+        }
+        let indexes: Vec<(String, String)> = conn
+            .prepare("SELECT name, origin FROM pragma_index_list('token_balances')")
+            .and_then(|mut stmt| {
+                stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+                    .collect::<rusqlite::Result<Vec<_>>>()
+            })
+            .map_err(DatabaseError::from)?;
+        if indexes.len() != expected.len()
+            || indexes.iter().any(|(name, origin)| {
+                origin != "c" || !objects.iter().any(|(_, known_name, _)| known_name == name)
+            })
+        {
+            return Err(Error::Migration {
+                step: "inspect snapshot token balance keys".to_owned(),
+                detail: "unrecognized index".to_owned(),
+            });
+        }
+
+        let previous_sequence: Option<i64> = conn
+            .query_row(
+                "SELECT seq FROM sqlite_sequence WHERE name = 'token_balances'",
+                [],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(DatabaseError::from)?;
+        let tx = conn.write_tx().map_err(DatabaseError::from)?;
+        tx.execute_batch(
+            &SCHEMA_TOKEN_BALANCES
+                .replace("CREATE TABLE IF NOT EXISTS", "CREATE TABLE")
+                .replace("token_balances", "token_balances__raw_amount"),
+        )
+        .map_err(DatabaseError::from)?;
+        {
+            let mut stmt = tx.prepare("SELECT id, snapshot_id, mint, balance, balance_ui, decimals, is_token_2022, created_at FROM token_balances")
+                .map_err(DatabaseError::from)?;
+            let rows = stmt
+                .query_map([], |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,
+                        row.get::<_, i64>(1)?,
+                        row.get::<_, String>(2)?,
+                        row.get::<_, i64>(3)?,
+                        row.get::<_, f64>(4)?,
+                        row.get::<_, i64>(5)?,
+                        row.get::<_, i64>(6)?,
+                        row.get::<_, String>(7)?,
+                    ))
+                })
+                .map_err(DatabaseError::from)?;
+            for row in rows {
+                let (id, snapshot_id, mint, bits, balance_ui, decimals, is_token_2022, created_at) =
+                    row.map_err(DatabaseError::from)?;
+                let amount = crate::chains::RawAmount::from(u64::from_ne_bytes(bits.to_ne_bytes()));
+                tx.execute("INSERT INTO token_balances__raw_amount (id, snapshot_id, mint, balance, balance_ui, decimals, is_token_2022, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                    params![id, snapshot_id, mint, amount, balance_ui, decimals, is_token_2022, created_at])
+                    .map_err(DatabaseError::from)?;
+            }
+        }
+        tx.execute_batch("DROP TABLE token_balances; ALTER TABLE token_balances__raw_amount RENAME TO token_balances;")
+            .map_err(DatabaseError::from)?;
+        if let Some(sequence) = previous_sequence {
+            tx.execute(
+                "UPDATE sqlite_sequence SET seq = MAX(seq, ?1) WHERE name = 'token_balances'",
+                [sequence],
+            )
+            .map_err(DatabaseError::from)?;
+        }
+        for index in WALLET_INDEXES
+            .iter()
+            .filter(|sql| sql.contains(" ON token_balances("))
+        {
+            tx.execute(index, []).map_err(DatabaseError::from)?;
+        }
+        let violations: i64 = tx
+            .query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |row| {
+                row.get(0)
+            })
+            .map_err(DatabaseError::from)?;
+        if violations != 0 {
+            return Err(Error::Migration {
+                step: "verify snapshot token balance foreign keys".to_owned(),
+                detail: format!("{violations} violations"),
+            });
+        }
+        tx.commit().map_err(DatabaseError::from)?;
         Ok(())
     }
 
@@ -479,7 +615,7 @@ impl WalletDatabase {
                     id: Some(row.get(0)?),
                     snapshot_id: Some(row.get(1)?),
                     mint: row.get(2)?,
-                    balance: row.get::<_, i64>(3)? as u64,
+                    balance: row.get(3)?,
                     balance_ui: row.get(4)?,
                     decimals: row.get::<_, i64>(5)? as u8,
                     is_token_2022: row.get(6)?,

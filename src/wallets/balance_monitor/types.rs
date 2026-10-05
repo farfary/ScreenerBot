@@ -3,6 +3,7 @@
 
 //! Data types for wallet balance monitoring.
 
+use crate::chains::RawAmount;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -80,8 +81,8 @@ pub struct SnapshotTokenBalance {
     pub id: Option<i64>,
     pub snapshot_id: Option<i64>,
     pub mint: String,
-    pub balance: u64,    // Raw token amount
-    pub balance_ui: f64, // UI amount (adjusted for decimals)
+    pub balance: RawAmount, // Raw token amount
+    pub balance_ui: f64,    // UI amount (adjusted for decimals)
     pub decimals: u8,
     pub is_token_2022: bool,
 }

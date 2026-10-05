@@ -138,7 +138,7 @@ pub async fn get_all_wallet_balances() -> Result<Vec<WalletBalanceSummary>, Erro
         let mut empty_ata_count = 0u32;
 
         for token_balance in token_balances {
-            if token_balance.balance == 0 {
+            if token_balance.balance == crate::chains::RawAmount::ZERO {
                 empty_ata_count += 1;
             } else {
                 tokens.push(SimpleTokenBalance {

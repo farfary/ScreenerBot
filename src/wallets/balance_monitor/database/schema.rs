@@ -32,6 +32,20 @@ CREATE TABLE IF NOT EXISTS token_balances (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     snapshot_id INTEGER NOT NULL,
     mint TEXT NOT NULL,
+    balance TEXT NOT NULL,
+    balance_ui REAL NOT NULL,
+    decimals INTEGER NOT NULL DEFAULT 0,
+    is_token_2022 BOOLEAN NOT NULL DEFAULT false,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (snapshot_id) REFERENCES wallet_snapshots(id) ON DELETE CASCADE
+);
+"#;
+
+pub(super) const LEGACY_TOKEN_BALANCES_SCHEMA: &str = r#"
+CREATE TABLE IF NOT EXISTS token_balances (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    snapshot_id INTEGER NOT NULL,
+    mint TEXT NOT NULL,
     balance INTEGER NOT NULL,
     balance_ui REAL NOT NULL,
     decimals INTEGER NOT NULL DEFAULT 0,

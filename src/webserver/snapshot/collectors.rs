@@ -159,23 +159,39 @@ pub(super) async fn collect_wallet_snapshot() -> Option<WalletStatusSnapshot> {
             if let Some(id) = snapshot.id {
                 match get_snapshot_token_balances(id).await {
                     Ok(tokens) => {
-                        token_balances = tokens
+                        let converted: crate::wallets::Result<Vec<_>> = tokens
                             .into_iter()
                             .take(MAX_WALLET_TOKENS)
-                            .map(|token| WalletTokenBalanceSnapshot {
-                                mint: token.mint,
-                                balance: token.balance,
-                                balance_ui: token.balance_ui,
-                                decimals: token.decimals,
-                                is_token_2022: token.is_token_2022,
+                            .map(|token| {
+                                Ok(WalletTokenBalanceSnapshot {
+                                    balance: crate::wallets::balance_for_numeric_wire(
+                                        &token.mint,
+                                        token.balance,
+                                    )?,
+                                    mint: token.mint,
+                                    balance_ui: token.balance_ui,
+                                    decimals: token.decimals,
+                                    is_token_2022: token.is_token_2022,
+                                })
                             })
                             .collect();
+                        match converted {
+                            Ok(rows) => token_balances = rows,
+                            Err(err) => {
+                                logger::warning(
+                                    LogTag::Webserver,
+                                    &format!("Failed to project wallet token balances: {err}"),
+                                );
+                                return None;
+                            }
+                        }
                     }
                     Err(err) => {
                         logger::warning(
                             LogTag::Webserver,
                             &format!("Failed to load wallet token balances: {err}"),
                         );
+                        return None;
                     }
                 }
             }

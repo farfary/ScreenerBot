@@ -113,6 +113,8 @@ pub enum Error {
     },
     #[error("could not update the balance for {address}: {detail}")]
     BalanceUpdate { address: String, detail: String },
+    #[error("raw token balance for {mint} exceeds the Solana u64 response range")]
+    BalanceOutOfRange { mint: String },
     /// The injected chain-execution runtime (`WalletWatchRuntime`, registered
     /// by the composition root from `crate::chains::solana::wallets::runtime`)
     /// failed (no fitting variant above: this is the chain-execution seam
@@ -142,6 +144,16 @@ pub enum Error {
 
 /// Result alias for the wallets module.
 pub type Result<T> = std::result::Result<T, Error>;
+
+/// Solana wallet responses retain numeric u64 balances until the public wire contract changes.
+pub(crate) fn balance_for_numeric_wire(
+    mint: &str,
+    balance: crate::chains::RawAmount,
+) -> Result<u64> {
+    u64::try_from(balance).map_err(|_| Error::BalanceOutOfRange {
+        mint: mint.to_owned(),
+    })
+}
 
 impl ErrorClass for Error {
     fn is_retryable(&self) -> bool {
@@ -175,6 +187,7 @@ impl ErrorClass for Error {
             Error::SnapshotMaintenance { .. } => true,
             Error::DashboardPayload { .. } => false,
             Error::BalanceUpdate { .. } => true,
+            Error::BalanceOutOfRange { .. } => false,
             Error::ChainRuntime { .. } | Error::ChainExecution(_) => true,
             Error::Dependency { .. } => true,
         }
@@ -230,6 +243,7 @@ impl ErrorClass for Error {
             Error::SnapshotMaintenance { .. } => Severity::Warning,
             Error::DashboardPayload { .. } => Severity::Error,
             Error::BalanceUpdate { .. } => Severity::Warning,
+            Error::BalanceOutOfRange { .. } => Severity::Error,
             Error::ChainRuntime { .. } | Error::ChainExecution(_) => Severity::Warning,
             Error::Dependency { .. } => Severity::Warning,
         }
@@ -265,6 +279,7 @@ impl ErrorClass for Error {
             Error::SnapshotMaintenance { .. } => 500,
             Error::DashboardPayload { .. } => 500,
             Error::BalanceUpdate { .. } => 503,
+            Error::BalanceOutOfRange { .. } => 500,
             Error::ChainRuntime { .. } | Error::ChainExecution(_) => 503,
             Error::Dependency { .. } => 503,
         }

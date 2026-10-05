@@ -176,7 +176,7 @@ pub(super) async fn compute_dashboard_payload_realtime(
     let mut nfts = Vec::new();
     if let Some(snapshot_id) = latest_snapshot.id {
         let balances = get_snapshot_token_balances(snapshot_id).await?;
-        tokens = enrich_token_overview(balances, max_tokens).await;
+        tokens = enrich_token_overview(balances, max_tokens).await?;
 
         // Get NFT balances
         let nft_balances = get_snapshot_nft_balances(snapshot_id)

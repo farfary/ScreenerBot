@@ -50,6 +50,7 @@ mod types;
 pub mod validation;
 pub mod watch;
 
+pub(crate) use error::balance_for_numeric_wire;
 pub use error::{Error, Result};
 
 // Re-export types

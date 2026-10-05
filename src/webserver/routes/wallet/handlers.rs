@@ -61,67 +61,61 @@ pub(super) async fn get_wallet_qr(Path(address): Path<String>) -> Response {
 /// a figure that could disagree with the one on screen, and it cost two locked SQLite
 /// round-trips per call. The database is only consulted when the monitor has not
 /// published a snapshot yet (first boot on an empty database).
-pub(super) async fn get_wallet_current() -> Json<Option<WalletCurrentResponse>> {
+pub(super) async fn get_wallet_current() -> Result<Json<Option<WalletCurrentResponse>>, ApiError> {
     // Return promotional fixtures only for owner-initiated media capture.
     if crate::webserver::promo::are_promo_fixtures_enabled() {
-        return Json(Some(crate::webserver::promo::get_promo_wallet_current()));
+        return Ok(Json(Some(
+            crate::webserver::promo::get_promo_wallet_current(),
+        )));
     }
 
     if let Some(snapshot) = crate::wallet::live_wallet_snapshot() {
         // The live snapshot already carries its token balances — no second query.
-        return Json(Some(WalletCurrentResponse {
+        return Ok(Json(Some(WalletCurrentResponse {
             sol_balance: snapshot.sol_balance,
             sol_balance_lamports: snapshot.sol_balance_lamports,
             total_tokens_count: snapshot.total_tokens_count,
             token_balances: snapshot
                 .token_balances
                 .iter()
-                .map(|tb| TokenBalanceInfo {
-                    mint: tb.mint.clone(),
-                    balance: tb.balance,
-                    balance_ui: tb.balance_ui,
-                    decimals: tb.decimals,
-                    is_token_2022: tb.is_token_2022,
-                })
-                .collect(),
+                .map(token_balance_info)
+                .collect::<crate::wallets::Result<Vec<_>>>()
+                .map_err(balance_response_error)?,
             snapshot_time: snapshot.snapshot_time.to_rfc3339(),
-        }));
+        })));
     }
 
     match get_current_wallet_status().await {
         Ok(Some(snapshot)) => {
             // token_balances is not populated by get_recent_snapshots — load separately
             let raw_balances = if let Some(id) = snapshot.id {
-                get_snapshot_token_balances(id).await.unwrap_or_default()
+                get_snapshot_token_balances(id)
+                    .await
+                    .map_err(balance_response_error)?
             } else {
                 vec![]
             };
 
             let token_balances = raw_balances
                 .iter()
-                .map(|tb| TokenBalanceInfo {
-                    mint: tb.mint.clone(),
-                    balance: tb.balance,
-                    balance_ui: tb.balance_ui,
-                    decimals: tb.decimals,
-                    is_token_2022: tb.is_token_2022,
-                })
-                .collect();
+                .map(token_balance_info)
+                .collect::<crate::wallets::Result<Vec<_>>>()
+                .map_err(balance_response_error)?;
 
-            Json(Some(WalletCurrentResponse {
+            Ok(Json(Some(WalletCurrentResponse {
                 sol_balance: snapshot.sol_balance,
                 sol_balance_lamports: snapshot.sol_balance_lamports,
                 total_tokens_count: snapshot.total_tokens_count,
                 token_balances,
                 snapshot_time: snapshot.snapshot_time.to_rfc3339(),
-            }))
+            })))
         }
-        _ => Json(None),
+        _ => Ok(Json(None)),
     }
 }
 
 /// Get wallet balance (alias for get_wallet_current)
-pub(super) async fn get_wallet_balance() -> Json<Option<WalletCurrentResponse>> {
+pub(super) async fn get_wallet_balance() -> Result<Json<Option<WalletCurrentResponse>>, ApiError> {
     get_wallet_current().await
 }
 
@@ -130,30 +124,32 @@ pub(super) async fn get_wallet_balance() -> Json<Option<WalletCurrentResponse>> 
 /// Reads the live snapshot for the same reason `get_wallet_current` does: the holdings
 /// list and the balance beside it must come from one source. Falls back to the database
 /// only before the monitor has published anything.
-pub(super) async fn get_wallet_tokens() -> Json<WalletTokensResponse> {
+pub(super) async fn get_wallet_tokens() -> Result<Json<WalletTokensResponse>, ApiError> {
     // Return promotional fixtures only for owner-initiated media capture.
     if crate::webserver::promo::are_promo_fixtures_enabled() {
-        return Json(crate::webserver::promo::get_promo_wallet_tokens());
+        return Ok(Json(crate::webserver::promo::get_promo_wallet_tokens()));
     }
 
     let snapshot = match crate::wallet::live_wallet_snapshot() {
         Some(live) => (*live).clone(),
         None => match get_current_wallet_status().await {
             Ok(Some(s)) => s,
-            Ok(None) => return Json(WalletTokensResponse { tokens: vec![] }),
+            Ok(None) => return Ok(Json(WalletTokensResponse { tokens: vec![] })),
             Err(err) => {
                 logger::warning(
                     LogTag::Webserver,
                     &format!("Failed to get wallet status for tokens: {err}"),
                 );
-                return Json(WalletTokensResponse { tokens: vec![] });
+                return Ok(Json(WalletTokensResponse { tokens: vec![] }));
             }
         },
     };
 
-    Json(WalletTokensResponse {
-        tokens: enrich_token_holdings(&snapshot).await,
-    })
+    Ok(Json(WalletTokensResponse {
+        tokens: enrich_token_holdings(&snapshot)
+            .await
+            .map_err(balance_response_error)?,
+    }))
 }
 
 /// Force a fresh on-chain wallet snapshot, then return the enriched holdings.
@@ -161,9 +157,9 @@ pub(super) async fn get_wallet_tokens() -> Json<WalletTokensResponse> {
 /// Drives the dashboard "refresh" button: the SOL balance and token balances are
 /// re-fetched from RPC (always), while token metadata is cache-first — only
 /// never-before-seen mints trigger a metadata fetch (see [`enrich_token_holdings`]).
-pub(super) async fn refresh_wallet_tokens() -> Json<WalletTokensResponse> {
+pub(super) async fn refresh_wallet_tokens() -> Result<Json<WalletTokensResponse>, ApiError> {
     if crate::webserver::promo::are_promo_fixtures_enabled() {
-        return Json(crate::webserver::promo::get_promo_wallet_tokens());
+        return Ok(Json(crate::webserver::promo::get_promo_wallet_tokens()));
     }
 
     let snapshot = match crate::wallet::force_wallet_snapshot().await {
@@ -175,13 +171,31 @@ pub(super) async fn refresh_wallet_tokens() -> Json<WalletTokensResponse> {
             );
             match get_current_wallet_status().await {
                 Ok(Some(s)) => s,
-                _ => return Json(WalletTokensResponse { tokens: vec![] }),
+                _ => return Ok(Json(WalletTokensResponse { tokens: vec![] })),
             }
         }
     };
 
-    Json(WalletTokensResponse {
-        tokens: enrich_token_holdings(&snapshot).await,
+    Ok(Json(WalletTokensResponse {
+        tokens: enrich_token_holdings(&snapshot)
+            .await
+            .map_err(balance_response_error)?,
+    }))
+}
+
+fn balance_response_error(err: crate::wallets::Error) -> ApiError {
+    ApiError::new(ApiErrorCode::Internal, ids::ERRORS_WALLET_UNAVAILABLE).details(err.to_string())
+}
+
+fn token_balance_info(
+    tb: &crate::wallet::SnapshotTokenBalance,
+) -> crate::wallets::Result<TokenBalanceInfo> {
+    Ok(TokenBalanceInfo {
+        mint: tb.mint.clone(),
+        balance: crate::wallets::balance_for_numeric_wire(&tb.mint, tb.balance)?,
+        balance_ui: tb.balance_ui,
+        decimals: tb.decimals,
+        is_token_2022: tb.is_token_2022,
     })
 }
 
@@ -193,10 +207,10 @@ pub(super) async fn refresh_wallet_tokens() -> Json<WalletTokensResponse> {
 /// after that first fetch the row exists and subsequent loads hit cache only.
 async fn enrich_token_holdings(
     snapshot: &crate::wallet::WalletSnapshot,
-) -> Vec<WalletTokenHolding> {
+) -> crate::wallets::Result<Vec<WalletTokenHolding>> {
     // token_balances is not populated by get_recent_snapshots — load separately
     let token_balances = if let Some(id) = snapshot.id {
-        get_snapshot_token_balances(id).await.unwrap_or_default()
+        get_snapshot_token_balances(id).await?
     } else {
         snapshot.token_balances.clone()
     };
@@ -261,18 +275,18 @@ async fn enrich_token_holdings(
             let (symbol, name) = metadata_map.get(&tb.mint).cloned().unwrap_or((None, None));
             let price_sol = price_map.get(&tb.mint).copied().flatten();
             let value_sol = price_sol.map(|p| p * tb.balance_ui);
-            WalletTokenHolding {
+            Ok(WalletTokenHolding {
                 mint: tb.mint.clone(),
                 symbol,
                 name,
                 logo_url: logo_map.get(&tb.mint).cloned(),
-                balance: tb.balance,
+                balance: crate::wallets::balance_for_numeric_wire(&tb.mint, tb.balance)?,
                 ui_amount: tb.balance_ui,
                 decimals: tb.decimals,
                 is_token_2022: tb.is_token_2022,
                 price_sol,
                 value_sol,
-            }
+            })
         })
         .collect()
 }
@@ -295,6 +309,57 @@ pub(super) async fn get_wallet_dashboard(
             data: None,
             error: Some(err.to_string()),
         }),
+    }
+}
+
+#[cfg(test)]
+mod raw_balance_wire_tests {
+    use super::*;
+    use crate::chains::RawAmount;
+
+    #[test]
+    fn current_wallet_balance_remains_numeric_through_u64_max() {
+        for raw in [0, i64::MAX as u64, i64::MAX as u64 + 1, u64::MAX] {
+            let token = crate::wallet::SnapshotTokenBalance {
+                id: None,
+                snapshot_id: None,
+                mint: "mint".to_owned(),
+                balance: RawAmount::from(raw),
+                balance_ui: 1.0,
+                decimals: 0,
+                is_token_2022: false,
+            };
+            let response = WalletCurrentResponse {
+                sol_balance: 1.0,
+                sol_balance_lamports: 1_000_000_000,
+                total_tokens_count: 1,
+                token_balances: vec![token_balance_info(&token).unwrap()],
+                snapshot_time: "2026-10-05T00:00:00Z".to_owned(),
+            };
+            let json = serde_json::to_value(response).unwrap();
+            assert_eq!(json["token_balances"][0]["balance"], serde_json::json!(raw));
+            assert!(json["token_balances"][0]["balance"].is_number());
+        }
+    }
+
+    #[test]
+    fn wide_wallet_balance_fails_with_typed_range_error() {
+        let token = crate::wallet::SnapshotTokenBalance {
+            id: None,
+            snapshot_id: None,
+            mint: "wide".to_owned(),
+            balance: RawAmount::new(u128::from(u64::MAX) + 1),
+            balance_ui: 1.0,
+            decimals: 0,
+            is_token_2022: false,
+        };
+        assert!(
+            matches!(token_balance_info(&token), Err(crate::wallets::Error::BalanceOutOfRange { mint }) if mint == "wide")
+        );
+        assert!(matches!(
+            crate::wallets::balance_for_numeric_wire("wide", RawAmount::MAX),
+            Err(crate::wallets::Error::BalanceOutOfRange { .. })
+        ));
     }
 }
 

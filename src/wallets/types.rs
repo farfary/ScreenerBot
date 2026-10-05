@@ -5,6 +5,7 @@
 //!
 //! Core types for multi-wallet management system.
 
+use crate::chains::RawAmount;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -196,7 +197,7 @@ pub struct TokenBalance {
     /// Token mint address
     pub mint: String,
     /// Raw balance (in smallest units)
-    pub balance: u64,
+    pub balance: RawAmount,
     /// UI-friendly balance (with decimals applied)
     pub ui_amount: f64,
     /// Token decimals

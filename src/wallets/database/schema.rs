@@ -27,6 +27,22 @@ pub(super) const TOKEN_BALANCES_SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS wallet_token_balances (
     wallet_id INTEGER NOT NULL,
     mint TEXT NOT NULL,
+    balance TEXT NOT NULL,
+    ui_amount REAL NOT NULL,
+    decimals INTEGER NOT NULL,
+    symbol TEXT,
+    name TEXT,
+    is_token_2022 INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (wallet_id, mint),
+    FOREIGN KEY (wallet_id) REFERENCES wallets(id) ON DELETE CASCADE
+);
+"#;
+
+pub(super) const LEGACY_TOKEN_BALANCES_SCHEMA: &str = r#"
+CREATE TABLE IF NOT EXISTS wallet_token_balances (
+    wallet_id INTEGER NOT NULL,
+    mint TEXT NOT NULL,
     balance INTEGER NOT NULL,
     ui_amount REAL NOT NULL,
     decimals INTEGER NOT NULL,

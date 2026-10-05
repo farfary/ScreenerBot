@@ -160,7 +160,7 @@ async fn collect_wallet_snapshot() -> Result<WalletSnapshot, Error> {
                 id: None,
                 snapshot_id: None,
                 mint: account_info.mint.clone(),
-                balance: account_info.balance,
+                balance: account_info.balance.into(),
                 balance_ui,
                 decimals,
                 is_token_2022: account_info.is_token_2022,

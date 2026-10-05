@@ -10,6 +10,7 @@ use crate::logger::{self, LogTag};
 
 use super::super::types::{SnapshotTokenBalance, WalletTokenOverview};
 use super::{clamp_token_limit, short_mint_label, TOKEN_METADATA_CONCURRENCY};
+use crate::wallets::{balance_for_numeric_wire, Error};
 
 async fn fetch_token_metadata_batch(
     mints: &[String],
@@ -41,7 +42,7 @@ async fn fetch_token_metadata_batch(
 pub(super) async fn enrich_token_overview(
     balances: Vec<SnapshotTokenBalance>,
     max_tokens: usize,
-) -> Vec<WalletTokenOverview> {
+) -> Result<Vec<WalletTokenOverview>, Error> {
     let mut rows = Vec::with_capacity(balances.len());
 
     let mut unique_mints: Vec<String> = Vec::new();
@@ -123,7 +124,7 @@ pub(super) async fn enrich_token_overview(
             name,
             image_url,
             balance_ui: balance.balance_ui,
-            balance_raw: balance.balance,
+            balance_raw: balance_for_numeric_wire(&balance.mint, balance.balance)?,
             decimals: balance.decimals,
             is_token_2022: balance.is_token_2022,
             price_sol,
@@ -149,5 +150,5 @@ pub(super) async fn enrich_token_overview(
         rows.truncate(max_tokens);
     }
 
-    rows
+    Ok(rows)
 }

@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use super::super::error::Error;
 use super::super::types::TokenBalance;
 use crate::chains::solana::accounts::fetch_wallet_token_balances;
+use crate::chains::RawAmount;
 use crate::logger::{self, LogTag};
 
 /// Update token balances for a wallet by fetching from RPC
@@ -110,7 +111,7 @@ pub async fn clear_token_balances(wallet_id: i64) -> Result<u64, Error> {
 pub async fn upsert_token_balance(
     wallet_id: i64,
     mint: &str,
-    balance: u64,
+    balance: RawAmount,
     ui_amount: f64,
     decimals: u8,
     symbol: Option<&str>,
