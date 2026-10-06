@@ -205,13 +205,11 @@ system-config-sections-count =
 ## Import and export dialogs: section descriptions. Ids are the section names of
 ## src/webserver/routes/config/import_export.rs.
 
-system-config-section-hint-rpc = RPC-ендпоінти та налаштування підключення
+system-config-section-hint-chains = Увімкнення блокчейнів, RPC-ендпоінти та маршрутизація свопів
 system-config-section-hint-trader = Торгові правила й автоматизація
 system-config-section-hint-positions = Налаштування керування позиціями
 system-config-section-hint-filtering = Правила та пороги фільтрації токенів
-system-config-section-hint-swaps = Налаштування виконання свопів
 system-config-section-hint-tokens = Пошук токенів і джерела даних
-system-config-section-hint-sol-price = Конфігурація сервісу ціни { -sol }
 system-config-section-hint-events = Налаштування запису подій
 system-config-section-hint-services = Налаштування фонових сервісів
 system-config-section-hint-monitoring = Конфігурація моніторингу системи

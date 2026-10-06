@@ -100,15 +100,12 @@ export function collapseAllCategories() {
 }
 
 export const SECTION_ICONS = {
-  rpc: "icon-satellite",
   trader: "icon-briefcase",
   positions: "icon-chart-candlestick",
   filtering: "icon-target",
-  swaps: "icon-repeat",
   tokens: "icon-coins",
   pools: "icon-database",
   wallet: "icon-wallet",
-  sol_price: "icon-sun",
   events: "icon-radio",
   webserver: "icon-network",
   services: "icon-wrench",

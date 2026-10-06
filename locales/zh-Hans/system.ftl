@@ -166,13 +166,11 @@ system-config-sections-count =
 ## Import and export dialogs: section descriptions. Ids are the section names of
 ## src/webserver/routes/config/import_export.rs.
 
-system-config-section-hint-rpc = RPC 端点和连接设置
+system-config-section-hint-chains = 区块链启用、RPC 端点和兑换路由
 system-config-section-hint-trader = 交易规则和自动化
 system-config-section-hint-positions = 仓位管理设置
 system-config-section-hint-filtering = 代币过滤规则和阈值
-system-config-section-hint-swaps = 兑换执行设置
 system-config-section-hint-tokens = 代币发现和数据来源
-system-config-section-hint-sol-price = { -sol } 价格服务配置
 system-config-section-hint-events = 事件记录设置
 system-config-section-hint-services = 后台服务设置
 system-config-section-hint-monitoring = 系统监控配置

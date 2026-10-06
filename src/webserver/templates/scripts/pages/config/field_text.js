@@ -47,7 +47,7 @@ export function fieldPlaceholder(key) {
   return fieldAttribute(key, "placeholder");
 }
 
-/** Display name of a top-level config section, from its id (`sol_price`). */
+/** Display name of a top-level config section, from its id (`llm_analysis`). */
 export function sectionLabel(sectionId) {
   return I18n.t("config-section-" + sectionId.toLowerCase().replaceAll("_", "-")); // l10n-dynamic: config-
 }

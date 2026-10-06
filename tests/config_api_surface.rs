@@ -26,6 +26,9 @@ use screenerbot::config::schemas::{Config, GuiConfig};
 use screenerbot::config::updates::update_config_section;
 use screenerbot::config::utils::{load_config_from_path, save_config_to_file, with_config};
 use screenerbot::webserver::routes::config::getters::{get_full_config, patch_any_config};
+use screenerbot::webserver::routes::config::import_export::{
+    export_config, import_config, import_config_preview,
+};
 use serde_json::Value;
 use std::collections::BTreeSet;
 use std::sync::Once;
@@ -48,6 +51,10 @@ const SECTIONS_WITHOUT_METADATA: &[&str] = &[
 ];
 
 static INIT: Once = Once::new();
+
+/// Serializes the tests that write the global config with the tests that
+/// compare two reads of it.
+static CONFIG_WRITES: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 /// One global config per test binary — `load_config_from_path` uses a `OnceLock`.
 /// Seeds the webserver auth secrets so the sanitisation test is not vacuous.
@@ -153,6 +160,7 @@ async fn full_config_carries_every_metadata_section() {
 #[tokio::test]
 async fn full_config_values_match_the_live_config() {
     init_config();
+    let _writes = CONFIG_WRITES.lock().await;
     let payload = full_config_json().await;
     // Compare against the LIVE config, not Config::default(): the live one has
     // been through a TOML round-trip, and f32 fields widen on the way back.
@@ -298,6 +306,7 @@ fn a_config_that_enables_no_chain_is_refused_at_load() {
 #[tokio::test]
 async fn patch_of_one_nested_field_keeps_its_siblings() {
     init_config();
+    let _writes = CONFIG_WRITES.lock().await;
     update_config_section(
         |cfg| {
             cfg.gui.dashboard.interface.show_hints = false;
@@ -332,5 +341,240 @@ async fn patch_of_one_nested_field_keeps_its_siblings() {
         assert_eq!(dashboard.lockscreen.password_hash, "stored-hash");
         assert_eq!(dashboard.lockscreen.password_salt, "stored-salt");
         assert_eq!(dashboard.startup.default_page, "positions");
+    });
+}
+
+/// The config layout written by v0.2.13, as a TOML document.
+const V0_2_13_CONFIG: &str = include_str!("fixtures/v0.2.13-config.toml");
+
+/// The sections a v0.2.13 export carried, taken from the v0.2.13 config file.
+/// That release exported `rpc`, `swaps` and `sol_price` at the top level and
+/// never wrote a `chains` section.
+fn v0_2_13_export(sections: &[&str]) -> Value {
+    let table: toml::Table = toml::from_str(V0_2_13_CONFIG).expect("fixture is valid TOML");
+    let document = serde_json::to_value(table).expect("fixture converts to JSON");
+    let mut export = serde_json::Map::new();
+    for section in sections {
+        let value = document
+            .get(*section)
+            .unwrap_or_else(|| panic!("fixture carries [{section}]"));
+        export.insert((*section).to_owned(), value.clone());
+    }
+    export.insert(
+        "timestamp".to_owned(),
+        Value::String("2026-01-01T00:00:00+00:00".to_owned()),
+    );
+    Value::Object(export)
+}
+
+/// The status and JSON body of a handler response.
+async fn response_json(response: axum::response::Response) -> (axum::http::StatusCode, Value) {
+    let status = response.status();
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("read response body");
+    let body = serde_json::from_slice(&bytes).unwrap_or_else(|_| {
+        panic!(
+            "response body is JSON: {status} {}",
+            String::from_utf8_lossy(&bytes)
+        )
+    });
+    (status, body)
+}
+
+async fn post_import(body: Value) -> Value {
+    let request = serde_json::from_value(body).expect("valid import request");
+    let (status, body) = response_json(import_config(Json(request)).await).await;
+    assert!(status.is_success(), "import rejected: {status} {body}");
+    body
+}
+
+/// The imported value the preview reports for `field` of `section`.
+fn previewed_change<'a>(preview: &'a Value, section: &str, field: &str) -> Option<&'a Value> {
+    preview["sections"]
+        .as_array()
+        .expect("preview lists sections")
+        .iter()
+        .find(|entry| entry["name"] == section)?["changes"]
+        .as_array()?
+        .iter()
+        .find(|change| change["field"] == field)
+        .map(|change| &change["imported"])
+}
+
+#[tokio::test]
+async fn import_preview_of_a_v0_2_13_export_reports_the_relocated_sections() {
+    init_config();
+    let _writes = CONFIG_WRITES.lock().await;
+    // The preview lists only values that differ from the live config.
+    update_config_section(
+        |cfg| {
+            cfg.chains.solana.rpc.urls = vec!["https://stored-rpc.fixture.invalid/".to_owned()];
+            cfg.chains.solana.swaps.raptor.max_hops = 4;
+            cfg.trader.slippage.quote_default_pct = 1.0;
+        },
+        false,
+    )
+    .expect("seed values the export changes");
+    let request = serde_json::from_value(serde_json::json!({
+        "config": v0_2_13_export(&["rpc", "swaps", "sol_price"]),
+    }))
+    .expect("valid preview request");
+    let (status, preview) = response_json(import_config_preview(Json(request)).await).await;
+    assert!(status.is_success(), "preview rejected: {status} {preview}");
+    assert_eq!(preview["valid"], true, "preview: {preview}");
+
+    let present: BTreeSet<&str> = preview["sections"]
+        .as_array()
+        .expect("preview lists sections")
+        .iter()
+        .filter(|entry| entry["present"] == true)
+        .filter_map(|entry| entry["name"].as_str())
+        .collect();
+    assert_eq!(present, BTreeSet::from(["chains", "trader"]));
+
+    assert_eq!(
+        previewed_change(&preview, "chains", "solana.rpc.urls"),
+        Some(&serde_json::json!([
+            "https://rpc-one.fixture.invalid/",
+            "https://rpc-two.fixture.invalid/"
+        ]))
+    );
+    assert_eq!(
+        previewed_change(&preview, "chains", "solana.swaps.raptor.max_hops"),
+        Some(&serde_json::json!(2))
+    );
+    assert_eq!(
+        previewed_change(&preview, "trader", "slippage.quote_default_pct"),
+        Some(&serde_json::json!(2.5))
+    );
+}
+
+#[tokio::test]
+async fn merge_import_of_a_v0_2_13_export_lands_every_moved_value_at_its_new_path() {
+    init_config();
+    let _writes = CONFIG_WRITES.lock().await;
+    post_import(serde_json::json!({
+        "config": v0_2_13_export(&["rpc", "swaps", "sol_price", "trader"]),
+        "merge": true,
+        "save_to_disk": false,
+    }))
+    .await;
+
+    with_config(|cfg| {
+        let solana = &cfg.chains.solana;
+        assert_eq!(
+            solana.rpc.urls,
+            [
+                "https://rpc-one.fixture.invalid/",
+                "https://rpc-two.fixture.invalid/"
+            ]
+        );
+        assert_eq!(solana.rpc.helius_rate_limit, 61);
+        assert!(!solana.rpc.circuit_breaker_enabled);
+        assert_eq!(solana.swaps.jupiter.api_key, "fixture-jupiter-key");
+        assert_eq!(solana.swaps.jupiter.priority_fee_micro_lamports, 75000);
+        assert_eq!(solana.swaps.direct.max_price_impact_pct, 4.5);
+        assert_eq!(solana.swaps.raptor.max_hops, 2);
+        assert_eq!(solana.swaps.cost_guard.always_allow_below_lamports, 250000);
+        assert_eq!(cfg.trader.slippage.quote_default_pct, 2.5);
+        assert_eq!(cfg.trader.slippage.exit_retry_steps_pct, [5.0, 12.0, 30.0]);
+        assert_eq!(cfg.trader.trade_size_sol, 0.02);
+        assert_eq!(cfg.trader.max_open_positions, 4);
+    });
+}
+
+#[tokio::test]
+async fn sanitized_chains_export_round_trips_without_losing_the_jupiter_key() {
+    init_config();
+    let _writes = CONFIG_WRITES.lock().await;
+    update_config_section(
+        |cfg| {
+            cfg.chains.solana.swaps.jupiter.api_key = "stored-jupiter-key".to_owned();
+            cfg.chains.solana.swaps.raptor.max_hops = 3;
+        },
+        false,
+    )
+    .expect("seed chain settings");
+
+    let request = serde_json::from_value(serde_json::json!({
+        "sections": ["chains"],
+        "sanitize_secrets": true,
+    }))
+    .expect("valid export request");
+    let (status, export) = response_json(export_config(Json(request)).await).await;
+    assert!(status.is_success(), "export rejected: {status} {export}");
+    let mut exported = export["config"].clone();
+    let jupiter = &exported["chains"]["solana"]["swaps"]["jupiter"];
+    assert!(
+        jupiter.is_object() && jupiter.get("api_key").is_none(),
+        "a sanitized export must omit the Jupiter key: {jupiter}"
+    );
+
+    exported["chains"]["solana"]["swaps"]["raptor"]["max_hops"] = serde_json::json!(1);
+    post_import(serde_json::json!({
+        "config": exported,
+        "merge": true,
+        "save_to_disk": false,
+    }))
+    .await;
+
+    with_config(|cfg| {
+        assert_eq!(
+            cfg.chains.solana.swaps.jupiter.api_key,
+            "stored-jupiter-key"
+        );
+        assert_eq!(cfg.chains.solana.swaps.raptor.max_hops, 1);
+    });
+}
+
+/// A legacy export holding only `swaps` builds `trader` and `chains` sections
+/// that carry just the moved fields; importing them with merge unchecked must
+/// not reset the rest of either section.
+#[tokio::test]
+async fn replace_import_of_a_partial_legacy_export_keeps_the_sections_it_lacks() {
+    init_config();
+    let _writes = CONFIG_WRITES.lock().await;
+    update_config_section(
+        |cfg| {
+            cfg.trader.trade_size_sol = 0.042;
+            cfg.trader.stop_loss_enabled = true;
+            cfg.trader.max_open_positions = 7;
+            cfg.chains.solana.rpc.urls = vec!["https://stored-rpc.fixture.invalid/".to_owned()];
+            cfg.chains.solana.rpc.helius_rate_limit = 33;
+        },
+        false,
+    )
+    .expect("seed trader and rpc settings");
+
+    let body = post_import(serde_json::json!({
+        "config": v0_2_13_export(&["swaps"]),
+        "merge": false,
+        "save_to_disk": false,
+    }))
+    .await;
+    let imported: BTreeSet<&str> = body["imported_sections"]
+        .as_array()
+        .expect("import lists its sections")
+        .iter()
+        .filter_map(Value::as_str)
+        .collect();
+    assert_eq!(imported, BTreeSet::from(["chains", "trader"]));
+
+    with_config(|cfg| {
+        assert_eq!(cfg.trader.trade_size_sol, 0.042);
+        assert!(cfg.trader.stop_loss_enabled);
+        assert_eq!(cfg.trader.max_open_positions, 7);
+        assert_eq!(
+            cfg.chains.solana.rpc.urls,
+            ["https://stored-rpc.fixture.invalid/"]
+        );
+        assert_eq!(cfg.chains.solana.rpc.helius_rate_limit, 33);
+
+        assert_eq!(cfg.trader.slippage.quote_default_pct, 2.5);
+        assert_eq!(cfg.trader.slippage.exit_loss_shortfall_pct, 7.5);
+        assert_eq!(cfg.chains.solana.swaps.direct.max_price_impact_pct, 4.5);
+        assert_eq!(cfg.chains.solana.swaps.raptor.max_hops, 2);
+        assert!(!cfg.chains.solana.swaps.cost_guard.enabled);
     });
 }

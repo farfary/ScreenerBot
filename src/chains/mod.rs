@@ -10,6 +10,7 @@
 
 mod adapter;
 mod amount;
+mod config;
 mod error;
 mod execution;
 mod registry;
@@ -24,6 +25,8 @@ pub use execution::ExecutionFailure;
 pub use registry::{enabled_chains, install_enabled_runtimes, runtime_for, ChainRegistry};
 pub use runtime::ChainRuntime;
 pub use types::{AccountId, AssetId, ChainId, ChainMetadata, NativeAsset, PoolId, TransactionId};
+
+pub(crate) use config::PRE_CHAINS_LAYOUT_CHAIN;
 
 use crate::paths::{chain_db_path, DbKind};
 use std::path::PathBuf;

@@ -87,9 +87,13 @@ fn a_full_read_never_carries_wallet_key_material() {
 #[test]
 fn any_setting_is_reachable_by_path_including_nested_and_indexed_ones() {
     init_config();
-    assert!(config_access::read(Some("rpc")).unwrap()["urls"].is_array());
-    assert!(config_access::read(Some("rpc.urls")).unwrap().is_array());
-    assert!(config_access::read(Some("rpc.urls.0")).unwrap().is_string());
+    assert!(config_access::read(Some("chains.solana.rpc")).unwrap()["urls"].is_array());
+    assert!(config_access::read(Some("chains.solana.rpc.urls"))
+        .unwrap()
+        .is_array());
+    assert!(config_access::read(Some("chains.solana.rpc.urls.0"))
+        .unwrap()
+        .is_string());
     assert!(config_access::read(Some("trader.trade_size_sol"))
         .unwrap()
         .is_number());
@@ -99,7 +103,7 @@ fn any_setting_is_reachable_by_path_including_nested_and_indexed_ones() {
         .is_string());
 
     // An unknown path names what IS available instead of failing blankly.
-    let err = config_access::read(Some("rpc.not_a_field")).unwrap_err();
+    let err = config_access::read(Some("chains.solana.rpc.not_a_field")).unwrap_err();
     let message = err.to_string();
     assert!(message.contains("unknown config path"), "{message}");
     assert!(message.contains("urls"), "{message}");
@@ -113,12 +117,13 @@ fn an_agent_can_set_the_rpc_endpoints_and_the_change_is_persisted() {
         "https://rpc.example.test/two"
     ]);
 
-    let applied = config_access::set_one("rpc.urls", endpoints.clone()).expect("set rpc.urls");
-    assert_eq!(applied.path, "rpc.urls");
+    let applied = config_access::set_one("chains.solana.rpc.urls", endpoints.clone())
+        .expect("set chains.solana.rpc.urls");
+    assert_eq!(applied.path, "chains.solana.rpc.urls");
     assert_eq!(applied.value, endpoints);
 
     assert_eq!(
-        with_config(|cfg| cfg.rpc.urls.clone()),
+        with_config(|cfg| cfg.chains.solana.rpc.urls.clone()),
         vec![
             "https://rpc.example.test/one".to_owned(),
             "https://rpc.example.test/two".to_owned()
@@ -131,17 +136,25 @@ fn an_agent_can_set_the_rpc_endpoints_and_the_change_is_persisted() {
 #[test]
 fn a_batch_of_changes_is_applied_atomically() {
     init_config();
-    let before = with_config(|cfg| (cfg.trader.max_open_positions, cfg.rpc.max_retries));
+    let before = with_config(|cfg| {
+        (
+            cfg.trader.max_open_positions,
+            cfg.chains.solana.rpc.max_retries,
+        )
+    });
 
     // One good path, one unknown path: nothing may land.
     let err = config_access::apply(&[
         ("trader.max_open_positions".to_owned(), json!(7)),
-        ("rpc.no_such_setting".to_owned(), json!(1)),
+        ("chains.solana.rpc.no_such_setting".to_owned(), json!(1)),
     ])
     .unwrap_err();
     assert!(matches!(err, Error::InvalidParameters { .. }));
     assert_eq!(
-        with_config(|cfg| (cfg.trader.max_open_positions, cfg.rpc.max_retries)),
+        with_config(|cfg| (
+            cfg.trader.max_open_positions,
+            cfg.chains.solana.rpc.max_retries
+        )),
         before,
         "a rejected batch must not apply its earlier entries"
     );
@@ -149,11 +162,14 @@ fn a_batch_of_changes_is_applied_atomically() {
     // All-good batch lands as one change.
     config_access::apply(&[
         ("trader.max_open_positions".to_owned(), json!(7)),
-        ("rpc.max_retries".to_owned(), json!(9)),
+        ("chains.solana.rpc.max_retries".to_owned(), json!(9)),
     ])
     .expect("valid batch");
     assert_eq!(
-        with_config(|cfg| (cfg.trader.max_open_positions, cfg.rpc.max_retries)),
+        with_config(|cfg| (
+            cfg.trader.max_open_positions,
+            cfg.chains.solana.rpc.max_retries
+        )),
         (7, 9)
     );
 }
@@ -217,9 +233,21 @@ fn a_wrong_type_or_invalid_value_is_refused_before_anything_changes() {
 #[test]
 fn the_schema_describes_what_an_agent_may_set() {
     init_config();
-    let rpc = config_access::schema(Some("rpc")).expect("rpc metadata");
-    assert!(rpc["urls"].is_object(), "rpc.urls must be described");
-    assert!(rpc["urls"]["type"].is_string());
+    let rpc = config_access::schema(Some("chains.solana.rpc")).expect("rpc metadata");
+    assert!(
+        rpc["children"]["urls"].is_object(),
+        "chains.solana.rpc.urls must be described"
+    );
+    assert!(rpc["children"]["urls"]["type"].is_string());
+    let urls = config_access::schema(Some("chains.solana.rpc.urls")).expect("urls metadata");
+    assert!(urls["type"].is_string());
+
+    // An unknown nested segment names the prefix it walked and what exists there.
+    let message = config_access::schema(Some("chains.solana.rpc.not_a_field"))
+        .unwrap_err()
+        .to_string();
+    assert!(message.contains("'chains.solana.rpc'"), "{message}");
+    assert!(message.contains("urls"), "{message}");
 
     let all = config_access::schema(None).expect("full metadata");
     assert!(all.as_object().expect("object").len() > 5);
@@ -245,10 +273,13 @@ async fn the_config_tools_expose_reads_and_writes_without_leaking_the_wallet() {
         .get("update_config")
         .expect("update_config is registered");
     let result = update
-        .execute(json!({ "path": "rpc.request_timeout_secs", "value": 42 }))
+        .execute(json!({ "path": "chains.solana.rpc.request_timeout_secs", "value": 42 }))
         .await;
     assert!(result.success, "{:?}", result.error);
-    assert_eq!(with_config(|cfg| cfg.rpc.request_timeout_secs), 42);
+    assert_eq!(
+        with_config(|cfg| cfg.chains.solana.rpc.request_timeout_secs),
+        42
+    );
 
     // The tool refuses key material with a message that names the reason.
     let result = update
@@ -266,24 +297,34 @@ async fn the_config_tools_expose_reads_and_writes_without_leaking_the_wallet() {
     );
 
     // Half-specified arguments are rejected rather than silently ignored.
-    let result = update.execute(json!({ "path": "rpc.max_retries" })).await;
+    let result = update
+        .execute(json!({ "path": "chains.solana.rpc.max_retries" }))
+        .await;
     assert!(!result.success);
 
     // The batch form goes through the same tool.
     let result = update
-        .execute(json!({ "updates": { "rpc.max_retries": 4, "rpc.debug_rpc": true } }))
+        .execute(json!({ "updates": {
+            "chains.solana.rpc.max_retries": 4,
+            "chains.solana.rpc.circuit_breaker_enabled": false
+        } }))
         .await;
     assert!(result.success, "{:?}", result.error);
     assert_eq!(
-        with_config(|cfg| (cfg.rpc.max_retries, cfg.rpc.debug_rpc)),
-        (4, true)
+        with_config(|cfg| (
+            cfg.chains.solana.rpc.max_retries,
+            cfg.chains.solana.rpc.circuit_breaker_enabled
+        )),
+        (4, false)
     );
 
     let describe = registry
         .get("describe_config")
         .expect("describe_config is registered");
-    let result = describe.execute(json!({ "section": "rpc" })).await;
+    let result = describe
+        .execute(json!({ "section": "chains.solana.rpc" }))
+        .await;
     assert!(result.success, "{:?}", result.error);
     let schema: Value = result.data.expect("schema payload");
-    assert!(schema["schema"]["urls"].is_object());
+    assert!(schema["schema"]["children"]["urls"].is_object());
 }

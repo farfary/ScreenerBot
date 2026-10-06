@@ -44,7 +44,7 @@ const JUPITER_API_BASE_FREE: &str = "https://lite-api.jup.ag";
 /// Get the Jupiter API key from config, if set.
 /// Returns None if empty/unset.
 fn get_api_key() -> Option<String> {
-    let key = with_config(|cfg| cfg.swaps.jupiter.api_key.clone());
+    let key = with_config(|cfg| cfg.chains.solana.swaps.jupiter.api_key.clone());
     if key.is_empty() {
         None
     } else {
@@ -55,7 +55,7 @@ fn get_api_key() -> Option<String> {
 /// Get the correct Jupiter API base URL.
 /// Uses api.jup.ag when API key is configured, lite-api.jup.ag as free fallback.
 fn get_api_base() -> &'static str {
-    let key = with_config(|cfg| cfg.swaps.jupiter.api_key.clone());
+    let key = with_config(|cfg| cfg.chains.solana.swaps.jupiter.api_key.clone());
     if key.is_empty() {
         JUPITER_API_BASE_FREE
     } else {
@@ -154,7 +154,7 @@ impl JupiterRouter {
     pub fn estimated_priority_fee_lamports() -> u64 {
         JUPITER_ESTIMATED_COMPUTE_UNITS
             .saturating_mul(with_config(|cfg| {
-                cfg.swaps.jupiter.priority_fee_micro_lamports
+                cfg.chains.solana.swaps.jupiter.priority_fee_micro_lamports
             }))
             .div_ceil(1_000_000)
     }
@@ -331,10 +331,10 @@ pub(crate) async fn execute_with_keypair(
         user_public_key: keypair.pubkey().to_string(),
         quote_response,
         dynamic_compute_unit_limit: Some(with_config(|cfg| {
-            cfg.swaps.jupiter.dynamic_compute_unit_limit
+            cfg.chains.solana.swaps.jupiter.dynamic_compute_unit_limit
         })),
         compute_unit_price_micro_lamports: Some(with_config(|cfg| {
-            cfg.swaps.jupiter.priority_fee_micro_lamports
+            cfg.chains.solana.swaps.jupiter.priority_fee_micro_lamports
         })),
         platform_fee_bps: None, // Already set in quote request
         fee_account,
@@ -463,7 +463,7 @@ impl SwapRouter for JupiterRouter {
     }
 
     fn is_enabled(&self) -> bool {
-        with_config(|cfg| cfg.swaps.jupiter.enabled)
+        with_config(|cfg| cfg.chains.solana.swaps.jupiter.enabled)
     }
 
     fn priority(&self) -> u8 {
@@ -691,10 +691,10 @@ impl SwapRouter for JupiterRouter {
             user_public_key: quote.wallet_address.clone(),
             quote_response,
             dynamic_compute_unit_limit: Some(with_config(|cfg| {
-                cfg.swaps.jupiter.dynamic_compute_unit_limit
+                cfg.chains.solana.swaps.jupiter.dynamic_compute_unit_limit
             })),
             compute_unit_price_micro_lamports: Some(with_config(|cfg| {
-                cfg.swaps.jupiter.priority_fee_micro_lamports
+                cfg.chains.solana.swaps.jupiter.priority_fee_micro_lamports
             })),
             platform_fee_bps: None, // Already set in quote request
             fee_account: fee_account.clone(),

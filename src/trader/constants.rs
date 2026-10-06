@@ -28,7 +28,7 @@ pub const MIN_TRADE_SIZE_NATIVE: f64 = 0.001;
 /// The config's own slippage fields cap at 25-50%, but a manual override is a
 /// deliberate "get me filled" escape hatch and is allowed to go higher. It is still
 /// bounded: above this the trade is not a trade, it is a donation to the MEV bots.
-/// The auto-trader never uses this — it always follows `swaps.slippage.*`.
+/// The auto-trader never uses this — it always follows `trader.slippage.*`.
 pub const MAX_MANUAL_SLIPPAGE_PCT: f64 = 50.0;
 
 // History limits

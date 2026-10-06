@@ -297,7 +297,7 @@ impl RaptorRouter {
             tx_version: "V0",
             wrap_unwrap_sol: true,
             compute_unit_price_micro_lamports: with_config(|cfg| {
-                cfg.swaps.raptor.priority_fee_micro_lamports
+                cfg.chains.solana.swaps.raptor.priority_fee_micro_lamports
             }),
         };
 
@@ -362,7 +362,7 @@ impl SwapRouter for RaptorRouter {
     }
 
     fn is_enabled(&self) -> bool {
-        with_config(|cfg| cfg.swaps.raptor.enabled)
+        with_config(|cfg| cfg.chains.solana.swaps.raptor.enabled)
     }
 
     fn priority(&self) -> u8 {
@@ -418,7 +418,7 @@ impl SwapRouter for RaptorRouter {
 
         let slippage_bps = ((request.slippage_pct * 100.0).round() as u16).max(1);
         let placement = FeePlacement::resolve(&request.input_mint, &request.output_mint);
-        let max_hops = with_config(|cfg| cfg.swaps.raptor.max_hops).clamp(1, 4);
+        let max_hops = with_config(|cfg| cfg.chains.solana.swaps.raptor.max_hops).clamp(1, 4);
 
         let mut query: Vec<(&str, String)> = vec![
             ("inputMint", request.input_mint.clone()),
@@ -514,7 +514,7 @@ impl SwapRouter for RaptorRouter {
                     .saturating_add(
                         RAPTOR_ESTIMATED_COMPUTE_UNITS
                             .saturating_mul(with_config(|cfg| {
-                                cfg.swaps.raptor.priority_fee_micro_lamports
+                                cfg.chains.solana.swaps.raptor.priority_fee_micro_lamports
                             }))
                             .div_ceil(1_000_000),
                     ),

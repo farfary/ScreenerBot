@@ -828,6 +828,104 @@ fn neutral_code_reaches_chains_only_through_runtime() {
     );
 }
 
+/// Neutral code reads chain settings through `ChainsConfig` methods that take
+/// a `ChainId`; a direct `.chains.solana` field read binds the file to one chain.
+/// The list freezes the current exceptions and only shrinks.
+const NEUTRAL_FILES_READING_SOLANA_SETTINGS: &[&str] =
+    &["webserver/routes/initialization/handlers.rs"];
+
+#[test]
+fn neutral_code_reads_chain_settings_by_chain_id() {
+    let field_read = regex::Regex::new(r"\.chains\s*\.\s*solana\b").expect("valid pattern");
+    let mut hits: Vec<String> = Vec::new();
+    let mut new_violations = Vec::new();
+    for (relative, contents) in walk_src() {
+        if is_chain_module(&relative)
+            || relative.starts_with("config")
+            || is_test_support_file(&relative)
+        {
+            continue;
+        }
+        let path = relative.to_string_lossy().into_owned();
+        let production = strip_comment_text(&production_text(&contents));
+        // Whole-text scan: a field chain split across lines by rustfmt is
+        // still one read.
+        for found in field_read.find_iter(&production) {
+            let line = production[..found.start()].matches('\n').count() + 1;
+            hits.push(path.clone());
+            if !NEUTRAL_FILES_READING_SOLANA_SETTINGS.contains(&path.as_str()) {
+                new_violations.push(format!("src/{path}:{line}: {}", found.as_str()));
+            }
+        }
+    }
+    let stale: Vec<&str> = NEUTRAL_FILES_READING_SOLANA_SETTINGS
+        .iter()
+        .copied()
+        .filter(|entry| !hits.iter().any(|hit| hit.as_str() == *entry))
+        .collect();
+    assert!(
+        new_violations.is_empty() && stale.is_empty(),
+        "neutral code must read chain settings through ChainsConfig methods taking a ChainId \
+         (new direct .chains.solana reads outside src/chains and src/config):\n{}\n\
+         remove it from the allowlist (entries that no longer read .chains.solana):\n{}",
+        new_violations.join("\n"),
+        stale.join("\n")
+    );
+}
+
+/// `ChainsConfig` accessors take the chain as an argument; none of them may
+/// pick one, so a missing chain id can never silently fall back to Solana.
+#[test]
+fn chain_settings_accessors_never_choose_a_chain() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/chains/config.rs");
+    let contents = fs::read_to_string(&path).expect("src/chains/config.rs is readable");
+    let production = strip_comment_text(&production_text(&contents));
+    let chosen: Vec<&str> = ["active_chain(", "legacy_row_chain(", "enabled_chains("]
+        .into_iter()
+        .filter(|call| production.contains(call))
+        .collect();
+    assert!(
+        chosen.is_empty(),
+        "src/chains/config.rs must take the chain from its caller, never choose one: {}",
+        chosen.join(", ")
+    );
+}
+
+/// `PRE_CHAINS_LAYOUT_CHAIN` names the chain whose settings files written
+/// before `[chains]` kept in global sections. It is a fact about that layout,
+/// read only by its relocation; anywhere else it is a default chain under
+/// another name. Its owner defines it, `chains/mod.rs` re-exports it to the
+/// crate, and the relocation in `config/migrate.rs` is its one reader.
+const PRE_CHAINS_LAYOUT_CHAIN_FILES: &[&str] = &["chains/config.rs", "config/migrate.rs"];
+const PRE_CHAINS_LAYOUT_CHAIN_REEXPORT: &str = "pub(crate) use config::PRE_CHAINS_LAYOUT_CHAIN;";
+
+#[test]
+fn pre_chains_layout_chain_is_read_only_by_the_legacy_relocation() {
+    let mut violations = Vec::new();
+    for (relative, contents) in walk_src() {
+        let path = relative.to_string_lossy().into_owned();
+        if PRE_CHAINS_LAYOUT_CHAIN_FILES.contains(&path.as_str()) {
+            continue;
+        }
+        let code = strip_comment_text(&contents);
+        for (index, line) in code.lines().enumerate() {
+            if !line.contains("PRE_CHAINS_LAYOUT_CHAIN") {
+                continue;
+            }
+            if path == "chains/mod.rs" && line.trim() == PRE_CHAINS_LAYOUT_CHAIN_REEXPORT {
+                continue;
+            }
+            violations.push(format!("src/{path}:{}: {}", index + 1, line.trim()));
+        }
+    }
+    assert!(
+        violations.is_empty(),
+        "PRE_CHAINS_LAYOUT_CHAIN may be read only by the legacy relocation in \
+         src/config/migrate.rs; take the chain from the caller instead:\n{}",
+        violations.join("\n")
+    );
+}
+
 /// Files outside `src/chains/` whose production code selects the process
 /// chain through `active_chain()` or takes facts straight from
 /// `chains::adapter()` — fully qualified, or the bare `adapter()` reached

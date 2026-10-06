@@ -137,7 +137,8 @@ impl DirectPoolRouter {
             });
         }
 
-        let max_price_impact_pct = with_config(|cfg| cfg.swaps.direct.max_price_impact_pct);
+        let max_price_impact_pct =
+            with_config(|cfg| cfg.chains.solana.swaps.direct.max_price_impact_pct);
         if !quote.price_impact_pct.is_finite()
             || quote.price_impact_pct < 0.0
             || quote.price_impact_pct > max_price_impact_pct
@@ -277,7 +278,7 @@ impl DirectPoolRouter {
         // The ceiling is a property of the CURRENT pool, so it is re-applied to
         // the fresh quote: an accepted quote is not a licence to move the pool
         // by more than the configured limit a block later.
-        let max_impact = with_config(|cfg| cfg.swaps.direct.max_price_impact_pct);
+        let max_impact = with_config(|cfg| cfg.chains.solana.swaps.direct.max_price_impact_pct);
         if !fresh_quote.price_impact_pct.is_finite()
             || fresh_quote.price_impact_pct < 0.0
             || fresh_quote.price_impact_pct > max_impact
@@ -359,7 +360,7 @@ impl SwapRouter for DirectPoolRouter {
     }
 
     fn is_enabled(&self) -> bool {
-        with_config(|cfg| cfg.swaps.direct.enabled)
+        with_config(|cfg| cfg.chains.solana.swaps.direct.enabled)
     }
 
     fn priority(&self) -> u8 {

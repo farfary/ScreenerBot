@@ -42,12 +42,12 @@ impl EndpointMonitor for JupiterMonitor {
 
     fn is_enabled(&self) -> bool {
         let cfg = get_config_clone();
-        cfg.connectivity.enabled && cfg.connectivity.endpoints.jupiter.enabled
+        cfg.connectivity.enabled && cfg.chains.solana.connectivity.jupiter.enabled
     }
 
     async fn check_health(&self) -> HealthCheckResult {
         let cfg = get_config_clone();
-        let timeout_secs = cfg.connectivity.endpoints.jupiter.timeout_secs.max(1);
+        let timeout_secs = cfg.chains.solana.connectivity.jupiter.timeout_secs.max(1);
 
         let client = match crate::net::client_builder()
             .timeout(Duration::from_secs(timeout_secs))

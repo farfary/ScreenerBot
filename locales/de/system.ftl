@@ -166,13 +166,11 @@ system-config-sections-count =
 
 ## Import and export dialogs: section descriptions.
 
-system-config-section-hint-rpc = RPC-Endpunkte und Verbindungseinstellungen
+system-config-section-hint-chains = Blockchain-Aktivierung, RPC-Endpunkte und Swap-Routing
 system-config-section-hint-trader = Trading-Regeln und Automatisierung
 system-config-section-hint-positions = Einstellungen zur Positionsverwaltung
 system-config-section-hint-filtering = Token-Filterregeln und Schwellenwerte
-system-config-section-hint-swaps = Einstellungen zur Swap-Ausführung
 system-config-section-hint-tokens = Token-Erkennung und Datenquellen
-system-config-section-hint-sol-price = Konfiguration des { -sol }-Preisdienstes
 system-config-section-hint-events = Einstellungen zur Ereignisaufzeichnung
 system-config-section-hint-services = Einstellungen für Hintergrunddienste
 system-config-section-hint-monitoring = Konfiguration der Systemüberwachung

@@ -148,13 +148,11 @@ system-config-sections-count =
        *[other] { $count } सेक्शन
     }
 
-system-config-section-hint-rpc = RPC एंडपॉइंट और कनेक्शन सेटिंग्स
+system-config-section-hint-chains = ब्लॉकचेन सक्षम करना, RPC एंडपॉइंट और स्वैप रूटिंग
 system-config-section-hint-trader = ट्रेडिंग नियम और ऑटोमेशन
 system-config-section-hint-positions = पोज़िशन मैनेजमेंट सेटिंग्स
 system-config-section-hint-filtering = टोकन फ़िल्टरिंग नियम और सीमाएं
-system-config-section-hint-swaps = स्वैप निष्पादन सेटिंग्स
 system-config-section-hint-tokens = टोकन डिस्कवरी और डेटा स्रोत
-system-config-section-hint-sol-price = { -sol } प्राइस सर्विस कॉन्फ़िगरेशन
 system-config-section-hint-events = इवेंट रिकॉर्डिंग सेटिंग्स
 system-config-section-hint-services = बैकग्राउंड सर्विस सेटिंग्स
 system-config-section-hint-monitoring = सिस्टम मॉनिटरिंग कॉन्फ़िगरेशन

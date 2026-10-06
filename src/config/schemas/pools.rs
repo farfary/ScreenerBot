@@ -39,14 +39,6 @@ config_struct! {
         })]
         max_watched_tokens: usize = 2000,
         #[metadata(field_metadata! {
-            min: 1,
-            max: 50,
-            step: 1,
-            impact: ConfigImpact::High,
-            category: ConfigCategory::Fetcher,
-        })]
-        account_batch_size: usize = 50,
-        #[metadata(field_metadata! {
             min: 10,
             max: 120,
             step: 5,

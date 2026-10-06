@@ -488,34 +488,39 @@ async function importConfig(event) {
     });
     if (!confirmResult.confirmed) return;
 
-    // Import each section separately to preserve wallet
-    const sections = [
-      "trader",
-      "positions",
-      "filtering",
-      "swaps",
-      "tokens",
-      "rpc",
-      "sol_price",
-      "events",
-      "services",
-      "monitoring",
-      "ohlcv",
-      "gui",
-    ];
+    // One import call: the server relocates sections from older layouts and
+    // validates them before applying. The wallet section is never imported.
+    const response = await fetch("/api/config/import", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        config: imported,
+        sections: [
+          "trader",
+          "positions",
+          "filtering",
+          "tokens",
+          "chains",
+          "events",
+          "services",
+          "monitoring",
+          "ohlcv",
+          "gui",
+        ],
+        merge: true,
+        save_to_disk: true,
+      }),
+    });
 
-    for (const section of sections) {
-      if (imported[section]) {
-        const response = await fetch(`/api/config/${section}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(imported[section]),
-        });
-
-        if (!response.ok) {
-          console.warn(`Failed to import ${section} section`);
-        }
-      }
+    if (!response.ok) {
+      const data = await response.json();
+      Utils.showToast(
+        I18n.t("settings-data-config-import-failed", {
+          message: apiErrorMessage(data, I18n.t("settings-data-unknown-error")),
+        }),
+        "error"
+      );
+      return;
     }
 
     Utils.showToast(I18n.t("settings-data-config-imported"), "success");

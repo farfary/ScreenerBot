@@ -29,18 +29,15 @@ use super::types::*;
 /// GET /api/config - Get full configuration (all sections)
 pub async fn get_full_config() -> Response {
     let data = config::with_config(|cfg| FullConfigResponse {
-        rpc: cfg.rpc.clone(),
         chains: cfg.chains.clone(),
         trader: cfg.trader.clone(),
         copy_trading: cfg.copy_trading.clone(),
         positions: cfg.positions.clone(),
         filtering: cfg.filtering.clone(),
-        swaps: cfg.swaps.clone(),
         tokens: cfg.tokens.clone(),
         pools: cfg.pools.clone(),
         maintenance: cfg.maintenance.clone(),
         updates: cfg.updates.clone(),
-        sol_price: cfg.sol_price.clone(),
         events: cfg.events.clone(),
         services: cfg.services.clone(),
         monitoring: cfg.monitoring.clone(),
@@ -86,16 +83,6 @@ pub async fn get_webserver_config() -> Response {
     success_response(data)
 }
 
-/// GET /api/config/rpc - Get RPC configuration
-pub async fn get_rpc_config() -> Response {
-    let data = config::with_config(|cfg| ConfigResponse {
-        data: cfg.rpc.clone(),
-        timestamp: chrono::Utc::now().to_rfc3339(),
-    });
-
-    success_response(data)
-}
-
 /// GET /api/config/trader - Get trader configuration
 pub async fn get_trader_config() -> Response {
     let data = config::with_config(|cfg| ConfigResponse {
@@ -120,16 +107,6 @@ pub async fn get_positions_config() -> Response {
 pub async fn get_filtering_config() -> Response {
     let data = config::with_config(|cfg| ConfigResponse {
         data: cfg.filtering.clone(),
-        timestamp: chrono::Utc::now().to_rfc3339(),
-    });
-
-    success_response(data)
-}
-
-/// GET /api/config/swaps - Get swaps configuration
-pub async fn get_swaps_config() -> Response {
-    let data = config::with_config(|cfg| ConfigResponse {
-        data: cfg.swaps.clone(),
         timestamp: chrono::Utc::now().to_rfc3339(),
     });
 
@@ -170,16 +147,6 @@ pub async fn get_maintenance_config() -> Response {
 pub async fn get_updates_config() -> Response {
     let data = config::with_config(|cfg| ConfigResponse {
         data: cfg.updates.clone(),
-        timestamp: chrono::Utc::now().to_rfc3339(),
-    });
-
-    success_response(data)
-}
-
-/// GET /api/config/sol_price - Get SOL price service configuration
-pub async fn get_sol_price_config() -> Response {
-    let data = config::with_config(|cfg| ConfigResponse {
-        data: cfg.sol_price.clone(),
         timestamp: chrono::Utc::now().to_rfc3339(),
     });
 
@@ -426,13 +393,10 @@ where
             "TraderConfig" => serde_json::to_value(&cfg.trader).ok(),
             "PositionsConfig" => serde_json::to_value(&cfg.positions).ok(),
             "FilteringConfig" => serde_json::to_value(&cfg.filtering).ok(),
-            "SwapsConfig" => serde_json::to_value(&cfg.swaps).ok(),
             "TokensConfig" => serde_json::to_value(&cfg.tokens).ok(),
             "PoolsConfig" => serde_json::to_value(&cfg.pools).ok(),
             "MaintenanceConfig" => serde_json::to_value(&cfg.maintenance).ok(),
             "UpdatesConfig" => serde_json::to_value(&cfg.updates).ok(),
-            "RpcConfig" => serde_json::to_value(&cfg.rpc).ok(),
-            "SolPriceConfig" => serde_json::to_value(&cfg.sol_price).ok(),
             "EventsConfig" => serde_json::to_value(&cfg.events).ok(),
             "ServicesConfig" => serde_json::to_value(&cfg.services).ok(),
             "MonitoringConfig" => serde_json::to_value(&cfg.monitoring).ok(),
@@ -505,18 +469,6 @@ where
                     true,
                 )?;
             }
-            "SwapsConfig" => {
-                let new_config: config::SwapsConfig = serde_json::from_value(section_json)
-                    .map_err(|e| Error::InvalidImport {
-                        detail: format!("Invalid SwapsConfig: {e}"),
-                    })?;
-                config::update_config_section(
-                    |cfg| {
-                        cfg.swaps = new_config;
-                    },
-                    true,
-                )?;
-            }
             "TokensConfig" => {
                 let new_config: config::TokensConfig = serde_json::from_value(section_json)
                     .map_err(|e| Error::InvalidImport {
@@ -561,30 +513,6 @@ where
                 config::update_config_section(
                     |cfg| {
                         cfg.updates = new_config;
-                    },
-                    true,
-                )?;
-            }
-            "RpcConfig" => {
-                let new_config: config::RpcConfig =
-                    serde_json::from_value(section_json).map_err(|e| Error::InvalidImport {
-                        detail: format!("Invalid RpcConfig: {e}"),
-                    })?;
-                config::update_config_section(
-                    |cfg| {
-                        cfg.rpc = new_config;
-                    },
-                    true,
-                )?;
-            }
-            "SolPriceConfig" => {
-                let new_config: config::SolPriceConfig = serde_json::from_value(section_json)
-                    .map_err(|e| Error::InvalidImport {
-                        detail: format!("Invalid SolPriceConfig: {e}"),
-                    })?;
-                config::update_config_section(
-                    |cfg| {
-                        cfg.sol_price = new_config;
                     },
                     true,
                 )?;

@@ -51,7 +51,7 @@ let multiBuyState = {
 };
 
 /**
- * Offer only the routers that are actually enabled in Settings > Swaps.
+ * Offer only the routers that are actually enabled in Settings > Chains > Solana.
  * A router the user picks here is used verbatim — nothing silently falls back to
  * another one — so a disabled option would just fail the whole session.
  * @param {HTMLElement} container
@@ -59,9 +59,9 @@ let multiBuyState = {
 async function syncRouterChoices(container) {
   let enabled;
   try {
-    const response = await fetch("/api/config/swaps");
+    const response = await fetch("/api/config/chains");
     if (!response.ok) return;
-    const swaps = (await response.json())?.data;
+    const swaps = (await response.json())?.data?.solana?.swaps;
     if (!swaps) return;
     enabled = {
       jupiter: swaps.jupiter?.enabled === true,

@@ -135,13 +135,11 @@ system-config-sections-count =
        *[other] { $count } phần
     }
 
-system-config-section-hint-rpc = Endpoint RPC và cài đặt kết nối
+system-config-section-hint-chains = Bật chuỗi, endpoint RPC và định tuyến swap
 system-config-section-hint-trader = Quy tắc giao dịch và tự động hóa
 system-config-section-hint-positions = Cài đặt quản lý vị thế
 system-config-section-hint-filtering = Quy tắc và ngưỡng lọc token
-system-config-section-hint-swaps = Cài đặt thực thi swap
 system-config-section-hint-tokens = Khám phá token và nguồn dữ liệu
-system-config-section-hint-sol-price = Cấu hình dịch vụ giá { -sol }
 system-config-section-hint-events = Cài đặt ghi sự kiện
 system-config-section-hint-services = Cài đặt dịch vụ nền
 system-config-section-hint-monitoring = Cấu hình giám sát hệ thống

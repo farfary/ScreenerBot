@@ -283,7 +283,7 @@ pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Re
         // the user confirms is the quote they get.
         slippage_pct: match guard::validate_slippage(req.slippage_pct) {
             Ok(Some(pct)) => pct,
-            Ok(None) => with_config(|cfg| cfg.swaps.slippage.quote_default_pct),
+            Ok(None) => with_config(|cfg| cfg.trader.slippage.quote_default_pct),
             Err(error) => return trader_failure(&error),
         },
         swap_mode: SwapMode::ExactIn,

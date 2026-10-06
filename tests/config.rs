@@ -25,7 +25,7 @@ fn config_survives_toml_round_trip() {
 
     let mut cfg = Config::default();
     cfg.trader.max_open_positions = 7;
-    cfg.swaps.slippage.quote_default_pct = 2.5;
+    cfg.trader.slippage.quote_default_pct = 2.5;
 
     save_config_to_file(&cfg, path_str, false).expect("save config to file");
     assert!(path.exists(), "config file should be written");
@@ -38,7 +38,7 @@ fn config_survives_toml_round_trip() {
             "int field survived round-trip"
         );
         assert_eq!(
-            c.swaps.slippage.quote_default_pct, 2.5,
+            c.trader.slippage.quote_default_pct, 2.5,
             "float field survived round-trip"
         );
     });

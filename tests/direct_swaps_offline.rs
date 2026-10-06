@@ -2389,7 +2389,7 @@ fn every_venue_reports_its_pool_fee_in_input_units_on_both_legs() {
 /// PRICE it sets -- both of which this very plan puts in instructions 0 and 1. At
 /// the default 50_000 micro-lamports/CU that was already more than the cushion
 /// for every venue in the engine, before the 5_000-lamport base fee was added,
-/// and `swaps.direct.priority_fee_micro_lamports` may be set 200x higher still.
+/// and `chains.solana.swaps.direct.priority_fee_micro_lamports` may be set 200x higher still.
 /// A wallet sitting just above `amount_in` passed, and the swap then died for
 /// fees -- on an exit, at the worst possible moment.
 ///
@@ -2464,7 +2464,7 @@ fn the_preflight_cushion_covers_the_priority_fee_the_plan_requests() {
 /// essentially nothing else.
 ///
 /// `DirectPoolRouter::get_quote` refuses any quote whose `price_impact_pct`
-/// exceeds `swaps.direct.max_price_impact_pct` (10% by default) and returns
+/// exceeds `chains.solana.swaps.direct.max_price_impact_pct` (10% by default) and returns
 /// `NoRoute` -- which the opening path counts towards retiring the mint. So an
 /// impact figure wrong in the HIGH direction does not merely mislead a log line:
 /// it takes the venue out of service and blames the token for it.

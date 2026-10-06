@@ -3,7 +3,7 @@
 
 //! Configuration helper utilities — validation, default values, and config access functions.
 
-use super::schemas::Config;
+use super::schemas::{Config, SolanaChainConfig};
 use super::{Error, Result};
 use crate::errors::{ConfigurationError, IoError};
 use crate::logger::{self, LogTag};
@@ -15,6 +15,7 @@ use crate::logger::{self, LogTag};
 /// - Hot-reloading configuration at runtime
 /// - Thread-safe access helpers
 /// - File watching for automatic reloads
+use std::sync::Mutex;
 use std::sync::OnceLock;
 use std::sync::RwLock;
 
@@ -70,31 +71,18 @@ pub fn load_config_from_path(path: &str) -> Result<()> {
         None
     };
 
-    let mut config = match &raw {
-        Some(contents) => toml::from_str::<Config>(contents).map_err(|e| Error::ParseFailed {
-            detail: format!("Failed to parse config file '{path}': {e}"),
+    let ParsedConfig { config, migrated } = match &raw {
+        Some(contents) => parse_config_document(contents).map_err(|e| match e {
+            Error::ParseFailed { detail } => Error::ParseFailed {
+                detail: format!("Failed to parse config file '{path}': {detail}"),
+            },
+            other => other,
         })?,
-        None => Config::default(),
+        None => ParsedConfig {
+            config: Config::default(),
+            migrated: false,
+        },
     };
-
-    // One-time migration of the legacy [ai] / [agents] sections. Only runs when
-    // the file exists and still carries a legacy table.
-    let migrated = match &raw {
-        Some(contents) => super::migrate::migrate_legacy_sections(contents, &mut config)?,
-        None => false,
-    };
-
-    // Ensure all navigation tabs are present (handles migrations like wallet -> wallets, adds new tabs like tools)
-    config.gui.dashboard.navigation.tabs =
-        crate::config::schemas::ensure_all_tabs_present(config.gui.dashboard.navigation.tabs);
-
-    if migrated {
-        write_config_atomic(&config, path)?;
-        logger::info(
-            LogTag::System,
-            "Migrated legacy [ai]/[agents] config into llm/llm_analysis/assistant/agent_control",
-        );
-    }
 
     // The initial load does not run validate_config; gate the one condition
     // whose absence would panic later (the process chain must exist) instead
@@ -113,7 +101,94 @@ pub fn load_config_from_path(path: &str) -> Result<()> {
             message: "Config already initialized".to_owned(),
         })?;
 
+    // A migrated layout is written only once startup completes, so a core that
+    // fails before then leaves the file as the previous release wrote it.
+    if migrated {
+        *PENDING_MIGRATION_WRITE
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(path.to_owned());
+        logger::info(
+            LogTag::System,
+            "Config uses a legacy layout; migrated in memory, written once startup completes",
+        );
+    }
+
     Ok(())
+}
+
+/// Config file whose legacy layout was migrated in memory at load and still has
+/// to be written; set by `load_config_from_path`, taken by
+/// `persist_pending_config_migration`.
+static PENDING_MIGRATION_WRITE: Mutex<Option<String>> = Mutex::new(None);
+
+/// Write the config migrated at load back to its file. Called once startup has
+/// completed; a no-op when the load found nothing to migrate. A failed write is
+/// logged and the process keeps running: the next start migrates again.
+pub fn persist_pending_config_migration() {
+    let pending = PENDING_MIGRATION_WRITE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .take();
+    let Some(path) = pending else {
+        return;
+    };
+    match with_config(|cfg| write_config_atomic(cfg, &path)) {
+        Ok(()) => logger::info(
+            LogTag::System,
+            &format!("Migrated legacy config layout written to {path}"),
+        ),
+        Err(e) => logger::error(
+            LogTag::System,
+            &format!("Failed to write migrated config layout to {path}: {e}"),
+        ),
+    }
+}
+
+/// A config document parsed into the canonical shape.
+pub struct ParsedConfig {
+    pub config: Config,
+    /// True when a legacy layout was rewritten in memory; persisting `config`
+    /// makes the migration permanent.
+    pub migrated: bool,
+}
+
+/// Parse `raw` TOML: relocate legacy chain sections, typed parse, backfill
+/// legacy [ai]/[agents], normalize navigation tabs. The single parse used by
+/// load, reload and the disk/memory diff.
+pub fn parse_config_document(raw: &str) -> Result<ParsedConfig> {
+    let table: toml::Table = toml::from_str(raw).map_err(|e| Error::ParseFailed {
+        detail: e.to_string(),
+    })?;
+    let mut document = serde_json::to_value(&table).map_err(|e| Error::ParseFailed {
+        detail: e.to_string(),
+    })?;
+
+    // Documents without a legacy section take the typed TOML parse, which
+    // keeps line numbers in its error messages.
+    let (mut config, relocated) = if super::has_legacy_chain_sections(&document) {
+        let relocated = super::relocate_legacy_chain_sections(&mut document)?;
+        let config =
+            serde_json::from_value::<Config>(document).map_err(|e| Error::ParseFailed {
+                detail: e.to_string(),
+            })?;
+        (config, relocated)
+    } else {
+        let config = toml::from_str::<Config>(raw).map_err(|e| Error::ParseFailed {
+            detail: e.to_string(),
+        })?;
+        (config, false)
+    };
+
+    let legacy_ai = super::migrate::migrate_legacy_sections(raw, &mut config)?;
+
+    // Ensure all navigation tabs are present (handles migrations like wallet -> wallets, adds new tabs like tools)
+    config.gui.dashboard.navigation.tabs =
+        crate::config::schemas::ensure_all_tabs_present(config.gui.dashboard.navigation.tabs);
+
+    Ok(ParsedConfig {
+        config,
+        migrated: relocated || legacy_ai,
+    })
 }
 
 /// Serialize `config` and replace `path` as atomically as the platform allows
@@ -566,42 +641,53 @@ pub fn validate_config(config: &Config) -> Result<()> {
     }
 
     // Slippage validation
-    if config.swaps.slippage.quote_default_pct < 0.0
-        || config.swaps.slippage.quote_default_pct > 100.0
+    if config.trader.slippage.quote_default_pct < 0.0
+        || config.trader.slippage.quote_default_pct > 100.0
     {
         return Err(ConfigurationError::Generic {
-            message: "swaps.slippage.quote_default_pct must be between 0 and 100".to_owned(),
+            message: "trader.slippage.quote_default_pct must be between 0 and 100".to_owned(),
         }
         .into());
     }
-    if config.swaps.slippage.exit_profit_shortfall_pct < 0.0
-        || config.swaps.slippage.exit_profit_shortfall_pct > 100.0
+    if config.trader.slippage.exit_profit_shortfall_pct < 0.0
+        || config.trader.slippage.exit_profit_shortfall_pct > 100.0
     {
         return Err(ConfigurationError::Generic {
-            message: "swaps.slippage.exit_profit_shortfall_pct must be between 0 and 100"
+            message: "trader.slippage.exit_profit_shortfall_pct must be between 0 and 100"
                 .to_owned(),
         }
         .into());
     }
-    if config.swaps.slippage.exit_loss_shortfall_pct < 0.0
-        || config.swaps.slippage.exit_loss_shortfall_pct > 100.0
+    if config.trader.slippage.exit_loss_shortfall_pct < 0.0
+        || config.trader.slippage.exit_loss_shortfall_pct > 100.0
     {
         return Err(ConfigurationError::Generic {
-            message: "swaps.slippage.exit_loss_shortfall_pct must be between 0 and 100".to_owned(),
+            message: "trader.slippage.exit_loss_shortfall_pct must be between 0 and 100".to_owned(),
         }
         .into());
     }
-    if config.swaps.slippage.exit_retry_steps_pct.is_empty() {
+    if config.trader.slippage.exit_retry_steps_pct.is_empty() {
         return Err(ConfigurationError::Generic {
-            message: "swaps.slippage.exit_retry_steps_pct cannot be empty - at least one slippage step is required".to_owned(),
+            message: "trader.slippage.exit_retry_steps_pct cannot be empty - at least one slippage step is required".to_owned(),
         }
         .into());
     }
 
+    if config.chains.solana.enabled {
+        validate_solana_chain(&config.chains.solana)?;
+    }
+
+    Ok(())
+}
+
+/// Solana's own settings: at least one router, the Direct engine's limits and
+/// a non-empty RPC list. Checked only while Solana is enabled; a disabled
+/// chain's settings never refuse the config.
+fn validate_solana_chain(chain: &SolanaChainConfig) -> Result<()> {
     // At least one router must remain available. Direct-only operation is a
     // supported, deliberate configuration; the runtime has the same defense
     // for a stale/externally-mutated config.
-    if !config.swaps.jupiter.enabled && !config.swaps.direct.enabled {
+    if !chain.swaps.jupiter.enabled && !chain.swaps.direct.enabled {
         return Err(ConfigurationError::Generic {
             message: "at least one swap router (Jupiter or Direct Pool) must be enabled".to_owned(),
         }
@@ -611,27 +697,32 @@ pub fn validate_config(config: &Config) -> Result<()> {
     // Matches the field's own declared range. A ceiling of zero would disable
     // the router silently, and one above the slider's maximum would let a
     // hand-edited config trade at a size the UI cannot even express.
-    if !config.swaps.direct.max_price_impact_pct.is_finite()
-        || config.swaps.direct.max_price_impact_pct < 0.1
-        || config.swaps.direct.max_price_impact_pct > 50.0
+    if !chain.swaps.direct.max_price_impact_pct.is_finite()
+        || chain.swaps.direct.max_price_impact_pct < 0.1
+        || chain.swaps.direct.max_price_impact_pct > 50.0
     {
         return Err(ConfigurationError::Generic {
-            message: "swaps.direct.max_price_impact_pct must be between 0.1 and 50".to_owned(),
+            message: "chains.solana.swaps.direct.max_price_impact_pct must be between 0.1 and 50"
+                .to_owned(),
         }
         .into());
     }
 
-    if !(10..=180).contains(&config.swaps.direct.confirmation_timeout_secs) {
+    if !(10..=180).contains(&chain.swaps.direct.confirmation_timeout_secs) {
         return Err(ConfigurationError::Generic {
-            message: "swaps.direct.confirmation_timeout_secs must be between 10 and 180".to_owned(),
+            message:
+                "chains.solana.swaps.direct.confirmation_timeout_secs must be between 10 and 180"
+                    .to_owned(),
         }
         .into());
     }
 
     // RPC validation
-    if config.rpc.urls.is_empty() {
+    if chain.rpc.urls.is_empty() {
         return Err(ConfigurationError::Generic {
-            message: "rpc.urls cannot be empty - at least one RPC endpoint is required".to_owned(),
+            message:
+                "chains.solana.rpc.urls cannot be empty - at least one RPC endpoint is required"
+                    .to_owned(),
         }
         .into());
     }
@@ -652,16 +743,15 @@ pub fn reload_config_from_path(path: &str) -> Result<()> {
         message: format!("Failed to read config file '{path}': {e}"),
     })?;
 
-    let mut new_config = toml::from_str::<Config>(&contents).map_err(|e| Error::ParseFailed {
-        detail: format!("Failed to parse config file '{path}': {e}"),
+    let ParsedConfig {
+        config: new_config,
+        migrated,
+    } = parse_config_document(&contents).map_err(|e| match e {
+        Error::ParseFailed { detail } => Error::ParseFailed {
+            detail: format!("Failed to parse config file '{path}': {detail}"),
+        },
+        other => other,
     })?;
-
-    // One-time migration of the legacy [ai] / [agents] sections on the reload path too.
-    let migrated = super::migrate::migrate_legacy_sections(&contents, &mut new_config)?;
-
-    // Ensure all navigation tabs are present (handles migrations)
-    new_config.gui.dashboard.navigation.tabs =
-        crate::config::schemas::ensure_all_tabs_present(new_config.gui.dashboard.navigation.tabs);
 
     // Validate configuration before applying
     validate_config(&new_config)?;
@@ -670,7 +760,7 @@ pub fn reload_config_from_path(path: &str) -> Result<()> {
         write_config_atomic(&new_config, path)?;
         logger::info(
             LogTag::System,
-            "Migrated legacy [ai]/[agents] config into llm/llm_analysis/assistant/agent_control on reload",
+            &format!("Migrated legacy config layout written to {path} on reload"),
         );
     }
 

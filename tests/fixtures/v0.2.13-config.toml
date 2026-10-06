@@ -1,0 +1,96 @@
+# Config layout written by v0.2.13: Solana settings in the global [rpc],
+# [swaps] and [sol_price] sections and the Jupiter/Raptor endpoint monitors.
+# Every moved field holds a non-default value. Hosts and keys are placeholders.
+
+[trader]
+max_open_positions = 4
+trade_size_sol = 0.02
+entry_sizes = [0.01, 0.03]
+loss_limit_sol = 0.4
+
+[positions]
+profit_extra_needed_sol = 0.0005
+
+[wallet]
+min_balance_sol = 0.03
+
+[telegram]
+trade_alert_min_sol = 0.25
+significant_pnl_threshold = 0.8
+
+[pools]
+account_batch_size = 40
+enable_raydium_discovery = true
+
+[rpc]
+urls = ["https://rpc-one.fixture.invalid/", "https://rpc-two.fixture.invalid/"]
+selection_strategy = "round_robin"
+default_rate_limit = 12
+helius_rate_limit = 61
+quicknode_rate_limit = 27
+triton_rate_limit = 111
+public_rate_limit = 3
+rate_limit_burst_factor = 1.7
+circuit_breaker_enabled = false
+circuit_breaker_failure_threshold = 7
+circuit_breaker_success_threshold = 4
+circuit_breaker_open_duration_secs = 45
+circuit_breaker_half_open_requests = 2
+request_timeout_secs = 25
+connection_timeout_secs = 12
+max_retries = 5
+retry_base_delay_ms = 150
+retry_max_delay_ms = 4000
+pool_connections_per_host = 6
+pool_idle_timeout_secs = 60
+stats_enabled = false
+stats_retention_days = 3
+stats_minute_buckets = false
+debug_rpc = true
+
+[swaps.jupiter]
+enabled = false
+dynamic_compute_unit_limit = false
+priority_fee_micro_lamports = 75000
+default_swap_mode = "ExactOut"
+api_key = "fixture-jupiter-key"
+
+[swaps.direct]
+enabled = true
+priority_fee_micro_lamports = 80000
+confirmation_timeout_secs = 90
+max_price_impact_pct = 4.5
+
+[swaps.raptor]
+enabled = true
+priority_fee_micro_lamports = 65000
+max_hops = 2
+
+[swaps.cost_guard]
+enabled = false
+max_extra_cost_pct = 2.5
+always_allow_below_lamports = 250000
+retry_excluding_venue = false
+
+[swaps.slippage]
+quote_default_pct = 2.5
+exit_profit_shortfall_pct = 4.0
+exit_loss_shortfall_pct = 7.5
+exit_retry_steps_pct = [5.0, 12.0, 30.0]
+
+[sol_price]
+
+[connectivity.endpoints.rpc]
+enabled = false
+timeout_secs = 6
+
+[connectivity.endpoints.rugcheck]
+timeout_secs = 12
+
+[connectivity.endpoints.jupiter]
+enabled = false
+timeout_secs = 7
+
+[connectivity.endpoints.raptor]
+enabled = false
+timeout_secs = 8

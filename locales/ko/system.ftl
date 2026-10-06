@@ -166,13 +166,11 @@ system-config-sections-count =
 ## Import and export dialogs: section descriptions. Ids are the section names of
 ## src/webserver/routes/config/import_export.rs.
 
-system-config-section-hint-rpc = RPC 엔드포인트 및 연결 설정
+system-config-section-hint-chains = 체인 활성화, RPC 엔드포인트 및 스왑 라우팅
 system-config-section-hint-trader = 트레이딩 규칙 및 자동화
 system-config-section-hint-positions = 포지션 관리 설정
 system-config-section-hint-filtering = 토큰 필터링 규칙 및 임계값
-system-config-section-hint-swaps = 스왑 실행 설정
 system-config-section-hint-tokens = 토큰 탐색 및 데이터 소스
-system-config-section-hint-sol-price = { -sol } 가격 서비스 설정
 system-config-section-hint-events = 이벤트 기록 설정
 system-config-section-hint-services = 백그라운드 서비스 설정
 system-config-section-hint-monitoring = 시스템 모니터링 설정

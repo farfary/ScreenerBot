@@ -88,7 +88,12 @@ config_struct! {
             enabled: true,
             timeout_secs: 10,
         },
+    }
+}
 
+config_struct! {
+    /// Health monitors for Solana's swap APIs.
+    pub struct SolanaEndpointMonitorsConfig {
         /// Jupiter API monitoring
         jupiter: EndpointMonitorConfig = EndpointMonitorConfig {
             enabled: true,

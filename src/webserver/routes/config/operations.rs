@@ -78,8 +78,11 @@ pub async fn get_config_diff() -> Response {
 
     match disk_result {
         Ok(contents) => {
-            match toml::from_str::<config::Config>(&contents) {
-                Ok(disk_config) => {
+            match config::utils::parse_config_document(&contents) {
+                Ok(config::utils::ParsedConfig {
+                    config: disk_config,
+                    ..
+                }) => {
                     fn sanitize_config_json(value: &mut serde_json::Value) {
                         if let Some(obj) = value.as_object_mut() {
                             // Remove encrypted wallet fields from comparison output

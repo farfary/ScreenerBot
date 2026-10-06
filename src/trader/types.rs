@@ -32,7 +32,7 @@ pub struct TradeDecision {
     pub exit_percentage: Option<f64>,
     /// Per-trade slippage override, in percent.
     ///
-    /// `None` = follow the configured slippage (`swaps.slippage.*`), which is what the
+    /// `None` = follow the configured slippage (`trader.slippage.*`), which is what the
     /// AUTO-TRADER always does — it must stay config-driven. Manual and explicitly
     /// configured copy tasks may set a bounded override.
     pub slippage_pct: Option<f64>,

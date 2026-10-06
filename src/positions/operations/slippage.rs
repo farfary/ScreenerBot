@@ -3,7 +3,7 @@
 
 //! Slippage resolution for position operations.
 //!
-//! Every swap gets its slippage from the config (`swaps.slippage.*`). A MANUAL trade
+//! Every swap gets its slippage from the config (`trader.slippage.*`). A MANUAL trade
 //! may additionally carry a per-trade override, which the user set in the trade
 //! dialog to force a fill on an illiquid token. The AUTO-TRADER never sets one — it
 //! always passes `None` and stays fully config-driven.
@@ -14,7 +14,7 @@ use crate::config::with_config;
 ///
 /// `None` → the configured quote default.
 pub(super) fn entry_slippage(override_pct: Option<f64>) -> f64 {
-    override_pct.unwrap_or_else(|| with_config(|cfg| cfg.swaps.slippage.quote_default_pct))
+    override_pct.unwrap_or_else(|| with_config(|cfg| cfg.trader.slippage.quote_default_pct))
 }
 
 /// Slippage ladder (in percent) for an EXIT swap (close / partial close).
@@ -29,7 +29,7 @@ pub(super) fn entry_slippage(override_pct: Option<f64>) -> f64 {
 /// at the user's floor and escalating only upward honours the override AND keeps the
 /// safety property that an exit eventually goes through.
 pub(super) fn exit_slippage_ladder(override_pct: Option<f64>) -> Vec<f64> {
-    let configured = with_config(|cfg| cfg.swaps.slippage.exit_retry_steps_pct.clone());
+    let configured = with_config(|cfg| cfg.trader.slippage.exit_retry_steps_pct.clone());
 
     let Some(pct) = override_pct else {
         return configured;

@@ -9,7 +9,7 @@ use crate::{Error, Result};
 
 /// Get every usable WebSocket URL in configured provider order.
 pub fn get_websocket_urls() -> Result<Vec<String>> {
-    let rpc_urls = config::with_config(|cfg| cfg.rpc.urls.clone());
+    let rpc_urls = config::with_config(|cfg| cfg.chains.solana.rpc.urls.clone());
     let urls = rpc_urls
         .iter()
         .filter_map(|url| derive_websocket_url(url))

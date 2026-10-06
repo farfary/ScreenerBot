@@ -148,16 +148,94 @@ fn compare_values(
     changes
 }
 
-/// Helper to apply a section value to a config struct (used for validation before commit)
+/// The serialized value of one importable section; `None` for a section with
+/// no import/export arm.
+fn section_value(cfg: &config::Config, section: &str) -> Option<serde_json::Value> {
+    match section {
+        "chains" => serde_json::to_value(&cfg.chains).ok(),
+        "trader" => serde_json::to_value(&cfg.trader).ok(),
+        "copy_trading" => serde_json::to_value(&cfg.copy_trading).ok(),
+        "positions" => serde_json::to_value(&cfg.positions).ok(),
+        "filtering" => serde_json::to_value(&cfg.filtering).ok(),
+        "tokens" => serde_json::to_value(&cfg.tokens).ok(),
+        "network" => serde_json::to_value(&cfg.network).ok(),
+        "events" => serde_json::to_value(&cfg.events).ok(),
+        "services" => serde_json::to_value(&cfg.services).ok(),
+        "monitoring" => serde_json::to_value(&cfg.monitoring).ok(),
+        "ohlcv" => serde_json::to_value(&cfg.ohlcv).ok(),
+        "gui" => serde_json::to_value(&cfg.gui).ok(),
+        "telegram" => serde_json::to_value(&cfg.telegram).ok(),
+        _ => None,
+    }
+}
+
+/// Move the sections an older export still carries at their legacy paths
+/// (`rpc`, `swaps`, `sol_price`) to their canonical sections before any
+/// section is chosen. A malformed legacy section refuses the whole import.
+///
+/// Returns the top-level sections the relocation created: they hold only the
+/// moved fields, never a whole section, so they always merge into the current
+/// values whatever the requested mode.
+fn relocate_legacy_sections(
+    imported: &mut serde_json::Value,
+) -> std::result::Result<Vec<String>, Response> {
+    if !config::has_legacy_chain_sections(imported) {
+        return Ok(Vec::new());
+    }
+    let sections_before: Vec<String> = imported
+        .as_object()
+        .map(|obj| obj.keys().cloned().collect())
+        .unwrap_or_default();
+    config::relocate_legacy_chain_sections(imported).map_err(|e| {
+        ApiError::new(
+            ApiErrorCode::InvalidInput,
+            ids::ERRORS_CONFIG_IMPORT_VALIDATION_FAILED,
+        )
+        .details(e.to_string())
+        .into_response()
+    })?;
+    Ok(imported
+        .as_object()
+        .map(|obj| {
+            obj.keys()
+                .filter(|key| !sections_before.contains(key))
+                .cloned()
+                .collect()
+        })
+        .unwrap_or_default())
+}
+
+/// The value an import writes for `section`: the imported value over the
+/// current one when merging, the imported value alone when replacing.
+fn section_import_value(
+    cfg: &config::Config,
+    section: &str,
+    imported: serde_json::Value,
+    merge: bool,
+) -> serde_json::Value {
+    if !merge {
+        return imported;
+    }
+    match section_value(cfg, section) {
+        Some(mut current) => {
+            config::merge_document(&mut current, &imported);
+            current
+        }
+        None => imported,
+    }
+}
+
+/// Replace one importable section of `cfg` from a value. The single list of
+/// importable sections a value can be written to; `section_value` is its read side.
 fn apply_section_to_config(
     cfg: &mut config::Config,
     section: &str,
     value: serde_json::Value,
 ) -> Result<()> {
     match section {
-        "rpc" => {
-            cfg.rpc = serde_json::from_value(value).map_err(|e| Error::InvalidImport {
-                detail: format!("Invalid RpcConfig: {e}"),
+        "chains" => {
+            cfg.chains = serde_json::from_value(value).map_err(|e| Error::InvalidImport {
+                detail: format!("Invalid ChainsConfig: {e}"),
             })?;
         }
         "trader" => {
@@ -183,19 +261,9 @@ fn apply_section_to_config(
                 detail: format!("Invalid FilteringConfig: {e}"),
             })?;
         }
-        "swaps" => {
-            cfg.swaps = serde_json::from_value(value).map_err(|e| Error::InvalidImport {
-                detail: format!("Invalid SwapsConfig: {e}"),
-            })?;
-        }
         "tokens" => {
             cfg.tokens = serde_json::from_value(value).map_err(|e| Error::InvalidImport {
                 detail: format!("Invalid TokensConfig: {e}"),
-            })?;
-        }
-        "sol_price" => {
-            cfg.sol_price = serde_json::from_value(value).map_err(|e| Error::InvalidImport {
-                detail: format!("Invalid SolPriceConfig: {e}"),
             })?;
         }
         "network" => {
@@ -274,24 +342,7 @@ pub async fn export_config(Json(request): Json<ExportConfigRequest>) -> Response
 
     config::with_config(|cfg| {
         for section in &sections_to_export {
-            let section_value = match *section {
-                "rpc" => serde_json::to_value(&cfg.rpc).ok(),
-                "trader" => serde_json::to_value(&cfg.trader).ok(),
-                "copy_trading" => serde_json::to_value(&cfg.copy_trading).ok(),
-                "positions" => serde_json::to_value(&cfg.positions).ok(),
-                "filtering" => serde_json::to_value(&cfg.filtering).ok(),
-                "swaps" => serde_json::to_value(&cfg.swaps).ok(),
-                "tokens" => serde_json::to_value(&cfg.tokens).ok(),
-                "sol_price" => serde_json::to_value(&cfg.sol_price).ok(),
-                "network" => serde_json::to_value(&cfg.network).ok(),
-                "events" => serde_json::to_value(&cfg.events).ok(),
-                "services" => serde_json::to_value(&cfg.services).ok(),
-                "monitoring" => serde_json::to_value(&cfg.monitoring).ok(),
-                "ohlcv" => serde_json::to_value(&cfg.ohlcv).ok(),
-                "gui" => serde_json::to_value(&cfg.gui).ok(),
-                "telegram" => serde_json::to_value(&cfg.telegram).ok(),
-                _ => None,
-            };
+            let section_value = section_value(cfg, section);
 
             if let Some(mut value) = section_value {
                 // Sanitize sensitive fields if requested
@@ -325,7 +376,11 @@ pub async fn export_config(Json(request): Json<ExportConfigRequest>) -> Response
 
 /// POST /api/config/import/preview - Preview what would be imported
 pub async fn import_config_preview(Json(request): Json<ImportConfigPreviewRequest>) -> Response {
-    let imported = request.config;
+    let mut imported = request.config;
+    let relocated_sections = match relocate_legacy_sections(&mut imported) {
+        Ok(sections) => sections,
+        Err(response) => return response,
+    };
     let mut sections = Vec::new();
     let mut warnings = Vec::new();
     let mut total_changes = 0;
@@ -366,9 +421,10 @@ pub async fn import_config_preview(Json(request): Json<ImportConfigPreviewReques
     }
 
     // Analyze each known section
+    let scratch = config::get_config_clone();
     for section in CONFIG_SECTIONS {
-        let section_value = imported_obj.get(*section);
-        let present = section_value.is_some();
+        let imported_section = imported_obj.get(*section);
+        let present = imported_section.is_some();
 
         if !present {
             sections.push(SectionPreview {
@@ -382,108 +438,19 @@ pub async fn import_config_preview(Json(request): Json<ImportConfigPreviewReques
             continue;
         }
 
-        let value = section_value.unwrap();
+        let value = imported_section.unwrap();
         let field_count = count_fields(value);
 
-        // Validate by attempting to deserialize
-        let validation_result: Result<()> = match *section {
-            "rpc" => serde_json::from_value::<config::RpcConfig>(value.clone())
-                .map(|_| ())
-                .map_err(|e| Error::InvalidImport {
-                    detail: e.to_string(),
-                }),
-            "trader" => serde_json::from_value::<config::TraderConfig>(value.clone())
-                .map(|_| ())
-                .map_err(|e| Error::InvalidImport {
-                    detail: e.to_string(),
-                }),
-            "copy_trading" => serde_json::from_value::<config::CopyTradingConfig>(value.clone())
-                .map_err(|e| Error::InvalidImport {
-                    detail: e.to_string(),
-                })
-                .and_then(|copy| copy.validate().map_err(Error::from)),
-            "positions" => serde_json::from_value::<config::PositionsConfig>(value.clone())
-                .map(|_| ())
-                .map_err(|e| Error::InvalidImport {
-                    detail: e.to_string(),
-                }),
-            "filtering" => serde_json::from_value::<config::FilteringConfig>(value.clone())
-                .map(|_| ())
-                .map_err(|e| Error::InvalidImport {
-                    detail: e.to_string(),
-                }),
-            "swaps" => serde_json::from_value::<config::SwapsConfig>(value.clone())
-                .map(|_| ())
-                .map_err(|e| Error::InvalidImport {
-                    detail: e.to_string(),
-                }),
-            "tokens" => serde_json::from_value::<config::TokensConfig>(value.clone())
-                .map(|_| ())
-                .map_err(|e| Error::InvalidImport {
-                    detail: e.to_string(),
-                }),
-            "sol_price" => serde_json::from_value::<config::SolPriceConfig>(value.clone())
-                .map(|_| ())
-                .map_err(|e| Error::InvalidImport {
-                    detail: e.to_string(),
-                }),
-            "network" => serde_json::from_value::<config::NetworkConfig>(value.clone())
-                .map(|_| ())
-                .map_err(|e| Error::InvalidImport {
-                    detail: e.to_string(),
-                }),
-            "events" => serde_json::from_value::<config::EventsConfig>(value.clone())
-                .map(|_| ())
-                .map_err(|e| Error::InvalidImport {
-                    detail: e.to_string(),
-                }),
-            "services" => serde_json::from_value::<config::ServicesConfig>(value.clone())
-                .map(|_| ())
-                .map_err(|e| Error::InvalidImport {
-                    detail: e.to_string(),
-                }),
-            "monitoring" => serde_json::from_value::<config::MonitoringConfig>(value.clone())
-                .map(|_| ())
-                .map_err(|e| Error::InvalidImport {
-                    detail: e.to_string(),
-                }),
-            "ohlcv" => serde_json::from_value::<config::OhlcvConfig>(value.clone())
-                .map(|_| ())
-                .map_err(|e| Error::InvalidImport {
-                    detail: e.to_string(),
-                }),
-            "gui" => serde_json::from_value::<config::GuiConfig>(value.clone())
-                .map(|_| ())
-                .map_err(|e| Error::InvalidImport {
-                    detail: e.to_string(),
-                }),
-            "telegram" => serde_json::from_value::<config::TelegramConfig>(value.clone())
-                .map(|_| ())
-                .map_err(|e| Error::InvalidImport {
-                    detail: e.to_string(),
-                }),
-            _ => Ok(()),
+        // Validate by applying the section to a scratch copy of the config;
+        // a section built by legacy relocation is validated merged, as it is imported
+        let current_value = section_value(&scratch, section);
+        let validation_result: Result<()> = if current_value.is_some() {
+            let merge = relocated_sections.iter().any(|s| s == section);
+            let applied = section_import_value(&scratch, section, value.clone(), merge);
+            apply_section_to_config(&mut scratch.clone(), section, applied)
+        } else {
+            Ok(())
         };
-
-        // Get current config for comparison
-        let current_value = config::with_config(|cfg| match *section {
-            "rpc" => serde_json::to_value(&cfg.rpc).ok(),
-            "trader" => serde_json::to_value(&cfg.trader).ok(),
-            "copy_trading" => serde_json::to_value(&cfg.copy_trading).ok(),
-            "positions" => serde_json::to_value(&cfg.positions).ok(),
-            "filtering" => serde_json::to_value(&cfg.filtering).ok(),
-            "swaps" => serde_json::to_value(&cfg.swaps).ok(),
-            "tokens" => serde_json::to_value(&cfg.tokens).ok(),
-            "sol_price" => serde_json::to_value(&cfg.sol_price).ok(),
-            "network" => serde_json::to_value(&cfg.network).ok(),
-            "events" => serde_json::to_value(&cfg.events).ok(),
-            "services" => serde_json::to_value(&cfg.services).ok(),
-            "monitoring" => serde_json::to_value(&cfg.monitoring).ok(),
-            "ohlcv" => serde_json::to_value(&cfg.ohlcv).ok(),
-            "gui" => serde_json::to_value(&cfg.gui).ok(),
-            "telegram" => serde_json::to_value(&cfg.telegram).ok(),
-            _ => None,
-        });
 
         let changes = if let Some(curr) = current_value {
             compare_values(&curr, value, "")
@@ -526,7 +493,11 @@ pub async fn import_config_preview(Json(request): Json<ImportConfigPreviewReques
 
 /// POST /api/config/import - Import configuration
 pub async fn import_config(Json(request): Json<ImportConfigRequest>) -> Response {
-    let imported = request.config;
+    let mut imported = request.config;
+    let relocated_sections = match relocate_legacy_sections(&mut imported) {
+        Ok(sections) => sections,
+        Err(response) => return response,
+    };
 
     let imported_obj = match imported.as_object() {
         Some(obj) => obj,
@@ -575,53 +546,15 @@ pub async fn import_config(Json(request): Json<ImportConfigRequest>) -> Response
             None => continue,
         };
 
-        let result: Result<serde_json::Value> = (|| {
-            // Get current config section for merging if needed
-            let final_value = if request.merge {
-                let current = match section.as_str() {
-                    "rpc" => serde_json::to_value(&candidate_config.rpc).ok(),
-                    "trader" => serde_json::to_value(&candidate_config.trader).ok(),
-                    "copy_trading" => serde_json::to_value(&candidate_config.copy_trading).ok(),
-                    "positions" => serde_json::to_value(&candidate_config.positions).ok(),
-                    "filtering" => serde_json::to_value(&candidate_config.filtering).ok(),
-                    "swaps" => serde_json::to_value(&candidate_config.swaps).ok(),
-                    "tokens" => serde_json::to_value(&candidate_config.tokens).ok(),
-                    "sol_price" => serde_json::to_value(&candidate_config.sol_price).ok(),
-                    "network" => serde_json::to_value(&candidate_config.network).ok(),
-                    "events" => serde_json::to_value(&candidate_config.events).ok(),
-                    "services" => serde_json::to_value(&candidate_config.services).ok(),
-                    "monitoring" => serde_json::to_value(&candidate_config.monitoring).ok(),
-                    "ohlcv" => serde_json::to_value(&candidate_config.ohlcv).ok(),
-                    "gui" => serde_json::to_value(&candidate_config.gui).ok(),
-                    "telegram" => serde_json::to_value(&candidate_config.telegram).ok(),
-                    _ => None,
-                };
+        // Imported values override current ones when merging
+        let merge = request.merge || relocated_sections.contains(section);
+        let final_value = section_import_value(&candidate_config, section, value, merge);
 
-                if let Some(mut curr) = current {
-                    // Merge: imported values override current
-                    config::merge_document(&mut curr, &value);
-                    curr
-                } else {
-                    value
-                }
-            } else {
-                value
-            };
-
-            Ok(final_value)
-        })();
-
-        match result {
-            Ok(final_value) => {
-                // Apply to candidate config
-                if let Err(e) = apply_section_to_config(&mut candidate_config, section, final_value)
-                {
-                    errors.push(format!("{section}: {e}"));
-                } else {
-                    imported_sections.push(section.clone());
-                }
-            }
-            Err(e) => errors.push(format!("{section}: {e}")),
+        // Apply to candidate config
+        if let Err(e) = apply_section_to_config(&mut candidate_config, section, final_value) {
+            errors.push(format!("{section}: {e}"));
+        } else {
+            imported_sections.push(section.clone());
         }
     }
 
@@ -641,32 +574,26 @@ pub async fn import_config(Json(request): Json<ImportConfigRequest>) -> Response
 
     // PHASE 3: Validation passed - commit the changes atomically
     if !imported_sections.is_empty() {
-        if let Err(e) = config::update_config_section(
+        let mut applied: Result<()> = Ok(());
+        let committed = config::update_config_section(
             |cfg| {
-                // Apply all validated sections at once
-                for section in &imported_sections {
-                    match section.as_str() {
-                        "rpc" => cfg.rpc = candidate_config.rpc.clone(),
-                        "trader" => cfg.trader = candidate_config.trader.clone(),
-                        "copy_trading" => cfg.copy_trading = candidate_config.copy_trading.clone(),
-                        "positions" => cfg.positions = candidate_config.positions.clone(),
-                        "filtering" => cfg.filtering = candidate_config.filtering.clone(),
-                        "swaps" => cfg.swaps = candidate_config.swaps.clone(),
-                        "tokens" => cfg.tokens = candidate_config.tokens.clone(),
-                        "sol_price" => cfg.sol_price = candidate_config.sol_price.clone(),
-                        "network" => cfg.network = candidate_config.network.clone(),
-                        "events" => cfg.events = candidate_config.events.clone(),
-                        "services" => cfg.services = candidate_config.services.clone(),
-                        "monitoring" => cfg.monitoring = candidate_config.monitoring.clone(),
-                        "ohlcv" => cfg.ohlcv = candidate_config.ohlcv.clone(),
-                        "gui" => cfg.gui = candidate_config.gui.clone(),
-                        "telegram" => cfg.telegram = candidate_config.telegram.clone(),
-                        _ => {}
+                // Apply all validated sections to a staged copy, then swap it in
+                let mut staged = cfg.clone();
+                applied = imported_sections.iter().try_for_each(|section| {
+                    match section_value(&candidate_config, section) {
+                        Some(value) => apply_section_to_config(&mut staged, section, value),
+                        None => Ok(()),
                     }
+                });
+                if applied.is_ok() {
+                    *cfg = staged;
                 }
             },
             false, // Don't save to disk yet
-        ) {
+        )
+        .map_err(Error::from)
+        .and(applied);
+        if let Err(e) = committed {
             return ApiError::new(
                 ApiErrorCode::ConfigError,
                 ids::ERRORS_CONFIG_IMPORT_COMMIT_FAILED,

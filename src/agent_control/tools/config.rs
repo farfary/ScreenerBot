@@ -36,8 +36,9 @@ impl Tool for GetConfigTool {
             name: "get_config".to_owned(),
             description: format!(
                 "Read bot configuration. With no arguments returns the entire configuration; \
-                 pass a dotted path such as 'rpc', 'rpc.urls', 'rpc.urls.0' or \
-                 'trader.trade_size_sol' to read one section or value. Wallet private-key \
+                 pass a dotted path such as 'chains.solana.rpc', 'chains.solana.rpc.urls', \
+                 'chains.solana.rpc.urls.0' or 'trader.trade_size_sol' to read one section or \
+                 value. Wallet private-key \
                  material is always returned as '{}'.",
                 config_access::REDACTED
             ),
@@ -100,7 +101,7 @@ impl Tool for DescribeConfigTool {
                 "properties": {
                     "section": {
                         "type": "string",
-                        "description": "Config section to describe (omit for every section)"
+                        "description": "Config section or dotted path to describe, e.g. 'trader' or 'chains.solana.rpc' (omit for every section)"
                     }
                 },
                 "required": []
@@ -150,7 +151,7 @@ impl Tool for UpdateConfigTool {
             description: "Change bot configuration. Either pass a single 'path' plus 'value', or \
                           an 'updates' object mapping several dotted paths to values, which are \
                           applied as one atomic, schema-validated change and saved to disk. \
-                          Examples: path 'rpc.urls' value ['https://…'], or path \
+                          Examples: path 'chains.solana.rpc.urls' value ['https://…'], or path \
                           'trader.trade_size_sol' value 0.05. Wallet private-key material cannot \
                           be read or written here. Settings read once at startup (RPC endpoint \
                           list, webserver binding) take effect on the next launch."
@@ -161,7 +162,7 @@ impl Tool for UpdateConfigTool {
                 "properties": {
                     "path": {
                         "type": "string",
-                        "description": "Dotted config path to set, e.g. 'rpc.urls' or 'trader.trade_size_sol'"
+                        "description": "Dotted config path to set, e.g. 'chains.solana.rpc.urls' or 'trader.trade_size_sol'"
                     },
                     "value": {
                         "description": "New value for 'path'; must match the schema type of that field"

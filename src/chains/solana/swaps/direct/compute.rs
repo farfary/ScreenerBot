@@ -34,7 +34,7 @@ const MAX_COMPUTE_UNITS: u32 = 1_400_000;
 /// `venue_units` is the venue's own estimate for its swap instruction.
 pub fn compute_budget_instructions(venue_units: u32) -> Vec<Instruction> {
     let limit = compute_unit_limit(venue_units);
-    let price = with_config(|cfg| cfg.swaps.direct.priority_fee_micro_lamports);
+    let price = with_config(|cfg| cfg.chains.solana.swaps.direct.priority_fee_micro_lamports);
     vec![
         ComputeBudgetInstruction::set_compute_unit_limit(limit),
         ComputeBudgetInstruction::set_compute_unit_price(price),
@@ -91,8 +91,9 @@ pub const BASE_SIGNATURE_FEE_LAMPORTS: u64 = 5_000;
 /// and the config permits a price 200x that.
 pub fn network_fee_lamports(instructions: &[Instruction]) -> u64 {
     let limit = u64::from(requested_compute_unit_limit(instructions).unwrap_or(MAX_COMPUTE_UNITS));
-    let price = requested_compute_unit_price(instructions)
-        .unwrap_or_else(|| with_config(|cfg| cfg.swaps.direct.priority_fee_micro_lamports));
+    let price = requested_compute_unit_price(instructions).unwrap_or_else(|| {
+        with_config(|cfg| cfg.chains.solana.swaps.direct.priority_fee_micro_lamports)
+    });
     limit
         .saturating_mul(price)
         .div_ceil(1_000_000)
@@ -194,7 +195,8 @@ mod tests {
         // Reading nothing must never produce a cheap answer: the preflight built
         // on this figure exists to refuse a wallet that cannot pay.
         let fee = network_fee_lamports(&[]);
-        let default_price = with_config(|cfg| cfg.swaps.direct.priority_fee_micro_lamports);
+        let default_price =
+            with_config(|cfg| cfg.chains.solana.swaps.direct.priority_fee_micro_lamports);
         assert_eq!(
             fee,
             (MAX_COMPUTE_UNITS as u64)

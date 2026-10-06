@@ -36,8 +36,9 @@ pub fn init_rpc_client() -> crate::Result<&'static RpcClient> {
 
     // Use block_in_place for sync-to-async bridge
     // This works correctly in multi-threaded Tokio runtime
+    let rpc = crate::config::with_config(|cfg| cfg.chains.solana.rpc.clone());
     let manager = tokio::task::block_in_place(|| {
-        tokio::runtime::Handle::current().block_on(init_rpc_manager())
+        tokio::runtime::Handle::current().block_on(init_rpc_manager(rpc))
     })?;
 
     Ok(RPC_CLIENT.get_or_init(|| RpcClient::new(manager)))

@@ -36,7 +36,7 @@ pub struct ManualBuyRequest {
     #[serde(default)]
     pub management: Option<PositionManagement>,
     /// Per-trade slippage override in percent. `None` = use the configured slippage
-    /// (`swaps.slippage.*`). Manual trading only — the auto-trader is always config-driven.
+    /// (`trader.slippage.*`). Manual trading only — the auto-trader is always config-driven.
     #[serde(default)]
     pub slippage_pct: Option<f64>,
 }
@@ -47,7 +47,7 @@ pub struct ManualAddRequest {
     #[serde(default)]
     pub size_sol: Option<f64>,
     /// Per-trade slippage override in percent. `None` = use the configured slippage
-    /// (`swaps.slippage.*`). Manual trading only — the auto-trader is always config-driven.
+    /// (`trader.slippage.*`). Manual trading only — the auto-trader is always config-driven.
     #[serde(default)]
     pub slippage_pct: Option<f64>,
 }
@@ -62,7 +62,7 @@ pub struct ManualSellRequest {
     #[serde(default)]
     pub force: Option<bool>,
     /// Per-trade slippage override in percent. `None` = use the configured slippage
-    /// (`swaps.slippage.*`). Manual trading only — the auto-trader is always config-driven.
+    /// (`trader.slippage.*`). Manual trading only — the auto-trader is always config-driven.
     #[serde(default)]
     pub slippage_pct: Option<f64>,
 }

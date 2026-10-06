@@ -10,15 +10,13 @@
 import { categoryLabel, fieldHint, fieldLabel, fieldUnit, sectionLabel } from "./field_text.js";
 
 export const SECTION_DISPLAY_ORDER = [
-  "rpc",
+  "chains",
   "trader",
   "positions",
   "filtering",
-  "swaps",
   "tokens",
   "pools",
   "wallet",
-  "sol_price",
   "telegram",
   "llm",
   "llm_analysis",
@@ -36,7 +34,6 @@ export const SECTION_DISPLAY_ORDER = [
   "network",
   "referral",
   "account",
-  "chains",
   "ohlcv",
   "summary",
 ];

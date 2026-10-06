@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Swap router, slippage, and DEX aggregator configuration.
+//! Solana swap routers and the execution cost guard.
 
 use crate::config::metadata::{ConfigCategory, ConfigImpact};
 use crate::config_struct;
@@ -32,11 +32,6 @@ config_struct! {
             category: ConfigCategory::Fees,
         })]
         priority_fee_micro_lamports: u64 = 50_000,
-        #[metadata(field_metadata! {
-            impact: ConfigImpact::Low,
-            category: ConfigCategory::Routing,
-        })]
-        default_swap_mode: String = "ExactIn".to_owned(),
         #[metadata(field_metadata! {
             impact: ConfigImpact::Low,
             category: ConfigCategory::Api,
@@ -155,41 +150,6 @@ config_struct! {
 }
 
 config_struct! {
-    /// Slippage configuration
-    pub struct SlippageConfig {
-        #[metadata(field_metadata! {
-            min: 0.1,
-            max: 25,
-            step: 0.1,
-            impact: ConfigImpact::High,
-            category: ConfigCategory::Quote,
-        })]
-        quote_default_pct: f64 = 1.0,
-        #[metadata(field_metadata! {
-            min: 0,
-            max: 50,
-            step: 1,
-            impact: ConfigImpact::High,
-            category: ConfigCategory::Exit,
-        })]
-        exit_profit_shortfall_pct: f64 = 3.0,
-        #[metadata(field_metadata! {
-            min: 0,
-            max: 50,
-            step: 1,
-            impact: ConfigImpact::High,
-            category: ConfigCategory::Exit,
-        })]
-        exit_loss_shortfall_pct: f64 = 5.0,
-        #[metadata(field_metadata! {
-            impact: ConfigImpact::Medium,
-            category: ConfigCategory::Exit,
-        })]
-        exit_retry_steps_pct: Vec<f64> = vec![3.0, 10.0, 25.0],
-    }
-}
-
-config_struct! {
     /// Swap router configuration
     pub struct SwapsConfig {
         /// Jupiter router configuration
@@ -219,12 +179,5 @@ config_struct! {
             category: ConfigCategory::Safety,
         })]
         cost_guard: SwapCostGuardConfig = SwapCostGuardConfig::default(),
-
-        /// Slippage configuration
-        #[metadata(field_metadata! {
-            impact: ConfigImpact::Critical,
-            category: ConfigCategory::Slippage,
-        })]
-        slippage: SlippageConfig = SlippageConfig::default(),
     }
 }

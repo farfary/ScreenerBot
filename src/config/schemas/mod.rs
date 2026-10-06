@@ -28,7 +28,6 @@ mod positions;
 mod referral;
 mod rpc;
 mod services;
-mod sol_price;
 mod strategies;
 mod swaps;
 mod telegram;
@@ -60,7 +59,6 @@ pub use positions::*;
 pub use referral::*;
 pub use rpc::*;
 pub use services::*;
-pub use sol_price::*;
 pub use strategies::*;
 pub use swaps::*;
 pub use telegram::*;
@@ -83,12 +81,9 @@ config_struct! {
         /// Nonce for wallet encryption (base64-encoded 12-byte nonce)
         wallet_nonce: String = String::new(),
 
-        /// Per-chain enablement, read once at boot (Solana is the only chain
-        /// this build supports)
+        /// Per-chain settings: enablement, RPC transport and swap routers
+        /// (Solana is the only chain this build supports)
         chains: ChainsConfig = ChainsConfig::default(),
-
-        /// RPC configuration
-        rpc: RpcConfig = RpcConfig::default(),
 
         /// Trader configuration
         trader: TraderConfig = TraderConfig::default(),
@@ -102,17 +97,11 @@ config_struct! {
         /// Filtering configuration
         filtering: FilteringConfig = FilteringConfig::default(),
 
-        /// Swaps configuration
-        swaps: SwapsConfig = SwapsConfig::default(),
-
         /// Tokens configuration
         tokens: TokensConfig = TokensConfig::default(),
 
         /// Pools configuration
         pools: PoolsConfig = PoolsConfig::default(),
-
-        /// SOL price service configuration
-        sol_price: SolPriceConfig = SolPriceConfig::default(),
 
         /// Events system configuration
         events: EventsConfig = EventsConfig::default(),

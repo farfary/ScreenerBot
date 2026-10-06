@@ -57,6 +57,41 @@ impl TimeUnit {
 }
 
 config_struct! {
+    /// Slippage configuration
+    pub struct SlippageConfig {
+        #[metadata(field_metadata! {
+            min: 0.1,
+            max: 25,
+            step: 0.1,
+            impact: ConfigImpact::High,
+            category: ConfigCategory::Quote,
+        })]
+        quote_default_pct: f64 = 1.0,
+        #[metadata(field_metadata! {
+            min: 0,
+            max: 50,
+            step: 1,
+            impact: ConfigImpact::High,
+            category: ConfigCategory::Exit,
+        })]
+        exit_profit_shortfall_pct: f64 = 3.0,
+        #[metadata(field_metadata! {
+            min: 0,
+            max: 50,
+            step: 1,
+            impact: ConfigImpact::High,
+            category: ConfigCategory::Exit,
+        })]
+        exit_loss_shortfall_pct: f64 = 5.0,
+        #[metadata(field_metadata! {
+            impact: ConfigImpact::Medium,
+            category: ConfigCategory::Exit,
+        })]
+        exit_retry_steps_pct: Vec<f64> = vec![3.0, 10.0, 25.0],
+    }
+}
+
+config_struct! {
     /// Trading system configuration
     pub struct TraderConfig {
         // Trader control
@@ -87,6 +122,14 @@ config_struct! {
             category: ConfigCategory::CoreTrading,
         })]
         entry_sizes: Vec<f64> = vec![0.005, 0.01, 0.02, 0.05],
+
+        /// Slippage tolerances for quotes and exit retries. Percent rules,
+        /// identical on every chain.
+        #[metadata(field_metadata! {
+            impact: ConfigImpact::Critical,
+            category: ConfigCategory::Slippage,
+        })]
+        slippage: SlippageConfig = SlippageConfig::default(),
 
         // ==================== ROI EXIT CONFIGURATION ====================
         #[metadata(field_metadata! {

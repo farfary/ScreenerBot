@@ -7,7 +7,7 @@
 //! `#[ignore]` — run with the live command (`./test.sh live`). No wallet, no keys, a
 //! `getSlot` read only. Multi-thread runtime flavour because the lazy RPC init calls
 //! `block_in_place` (panics on a current-thread runtime). The default config ships a
-//! public mainnet RPC URL (`cfg.rpc.urls`), so `isolated_env()` is enough.
+//! public mainnet RPC URL (`cfg.chains.solana.rpc.urls`), so `isolated_env()` is enough.
 
 mod common;
 

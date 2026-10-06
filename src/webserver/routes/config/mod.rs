@@ -15,10 +15,10 @@ use std::sync::Arc;
 use crate::webserver::state::AppState;
 
 // Module declarations
-// `getters` is public so `tests/config_api_surface.rs` can call the real
-// handlers instead of re-deriving what they return.
+// `getters` and `import_export` are public so `tests/config_api_surface.rs`
+// can call the real handlers instead of re-deriving what they return.
 pub mod getters;
-mod import_export;
+pub mod import_export;
 mod operations;
 #[cfg(test)]
 mod section_labels_tests;
@@ -31,10 +31,9 @@ use getters::{
     get_full_config, get_gui_config, get_gui_defaults, get_holder_watch_config,
     get_llm_analysis_config, get_llm_config, get_maintenance_config, get_monitoring_config,
     get_network_config, get_ohlcv_config, get_performance_config, get_pools_config,
-    get_positions_config, get_referral_config, get_rpc_config, get_services_config,
-    get_sol_price_config, get_strategies_config, get_summary_config, get_swaps_config,
-    get_telegram_config, get_tokens_config, get_trader_config, get_updates_config,
-    get_wallet_config, get_webserver_config, patch_any_config,
+    get_positions_config, get_referral_config, get_services_config, get_strategies_config,
+    get_summary_config, get_telegram_config, get_tokens_config, get_trader_config,
+    get_updates_config, get_wallet_config, get_webserver_config, patch_any_config,
 };
 use import_export::{export_config, import_config, import_config_preview};
 use operations::{get_config_diff, reload_config_from_disk, reset_config_to_defaults};
@@ -50,16 +49,13 @@ pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         // GET endpoints - View configuration
         .route("/config", get(get_full_config))
-        .route("/config/rpc", get(get_rpc_config))
         .route("/config/trader", get(get_trader_config))
         .route("/config/positions", get(get_positions_config))
         .route("/config/filtering", get(get_filtering_config))
-        .route("/config/swaps", get(get_swaps_config))
         .route("/config/tokens", get(get_tokens_config))
         .route("/config/pools", get(get_pools_config))
         .route("/config/maintenance", get(get_maintenance_config))
         .route("/config/updates", get(get_updates_config))
-        .route("/config/sol_price", get(get_sol_price_config))
         .route("/config/summary", get(get_summary_config))
         .route("/config/events", get(get_events_config))
         .route("/config/services", get(get_services_config))
@@ -97,10 +93,6 @@ pub fn routes() -> Router<Arc<AppState>> {
             patch(patch_any_config::<config::FilteringConfig>),
         )
         .route(
-            "/config/swaps",
-            patch(patch_any_config::<config::SwapsConfig>),
-        )
-        .route(
             "/config/tokens",
             patch(patch_any_config::<config::TokensConfig>),
         )
@@ -115,11 +107,6 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route(
             "/config/updates",
             patch(patch_any_config::<config::UpdatesConfig>),
-        )
-        .route("/config/rpc", patch(patch_any_config::<config::RpcConfig>))
-        .route(
-            "/config/sol_price",
-            patch(patch_any_config::<config::SolPriceConfig>),
         )
         .route(
             "/config/events",

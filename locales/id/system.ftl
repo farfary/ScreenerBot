@@ -139,13 +139,11 @@ system-config-sections-count =
        *[other] { $count } bagian
     }
 
-system-config-section-hint-rpc = Endpoint RPC dan pengaturan koneksi
+system-config-section-hint-chains = Aktivasi blockchain, endpoint RPC, dan perutean swap
 system-config-section-hint-trader = Aturan trading dan otomatisasi
 system-config-section-hint-positions = Pengaturan pengelolaan posisi
 system-config-section-hint-filtering = Aturan dan ambang pemfilteran token
-system-config-section-hint-swaps = Pengaturan eksekusi swap
 system-config-section-hint-tokens = Penemuan token dan sumber data
-system-config-section-hint-sol-price = Konfigurasi layanan harga { -sol }
 system-config-section-hint-events = Pengaturan perekaman event
 system-config-section-hint-services = Pengaturan layanan latar belakang
 system-config-section-hint-monitoring = Konfigurasi pemantauan sistem

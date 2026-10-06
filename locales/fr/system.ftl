@@ -161,13 +161,11 @@ system-config-sections-count =
        *[other] { $count } sections
     }
 
-system-config-section-hint-rpc = Endpoints RPC et paramètres de connexion
+system-config-section-hint-chains = Activation des chaînes, endpoints RPC et routage des swaps
 system-config-section-hint-trader = Règles de trading et automatisation
 system-config-section-hint-positions = Paramètres de gestion des positions
 system-config-section-hint-filtering = Règles et seuils de filtrage des tokens
-system-config-section-hint-swaps = Paramètres d'exécution des swaps
 system-config-section-hint-tokens = Découverte des tokens et sources de données
-system-config-section-hint-sol-price = Configuration du service de prix du { -sol }
 system-config-section-hint-events = Paramètres d'enregistrement des événements
 system-config-section-hint-services = Paramètres des services en arrière-plan
 system-config-section-hint-monitoring = Configuration de la surveillance du système

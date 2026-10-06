@@ -1565,7 +1565,7 @@ body.trade-action-dialog-open {
 
 /* =============================================================================
    SLIPPAGE (manual override)
-   "Auto" follows swaps.slippage.* — the same value the auto-trader always uses.
+   "Auto" follows trader.slippage.* — the same value the auto-trader always uses.
    Anything else is a per-trade override for forcing a fill on an illiquid token.
    ============================================================================= */
 

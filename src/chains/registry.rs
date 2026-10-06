@@ -66,7 +66,7 @@ pub fn enabled_chains() -> &'static [ChainId] {
             let chains =
                 crate::config::try_with_config(|cfg| cfg.chains.clone()).unwrap_or_default();
             let mut enabled = Vec::new();
-            if chains.solana.enabled {
+            if chains.is_enabled(ChainId::Solana) {
                 enabled.push(ChainId::Solana);
             }
             enabled

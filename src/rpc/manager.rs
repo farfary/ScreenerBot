@@ -18,6 +18,7 @@ use std::time::{Duration, Instant};
 use chrono::Utc;
 use tokio::sync::{Notify, OnceCell, RwLock};
 
+use crate::config::RpcConfig;
 use crate::rpc::{
     circuit_breaker::{CircuitBreakerConfig, CircuitBreakerManager},
     errors::RpcError,
@@ -77,56 +78,34 @@ pub struct RpcManager {
 }
 
 impl RpcManager {
-    /// Create new RpcManager from configuration
-    pub async fn new() -> crate::Result<Self> {
-        // Read RPC URLs from config
-        let urls = crate::config::with_config(|cfg| cfg.rpc.urls.clone());
-
-        if urls.is_empty() {
+    /// Create a manager from the chain's RPC settings. The settings are read
+    /// once here; a changed setting applies on the next start.
+    pub async fn new(rpc: &RpcConfig) -> crate::Result<Self> {
+        if rpc.urls.is_empty() {
             return Err(crate::Error::configuration_error("No RPC URLs configured"));
         }
 
-        Self::from_urls(&urls).await
+        Self::from_urls(&rpc.urls, rpc).await
     }
 
-    /// Create from URL list
-    pub async fn from_urls(urls: &[String]) -> crate::Result<Self> {
+    /// Create from a URL list, tuned by `rpc`
+    pub async fn from_urls(urls: &[String], rpc: &RpcConfig) -> crate::Result<Self> {
         if urls.is_empty() {
             return Err(crate::Error::configuration_error("No RPC URLs provided"));
         }
 
-        // Read config values
-        let (
-            request_timeout_secs,
-            connection_timeout_secs,
-            pool_connections_per_host,
-            pool_idle_timeout_secs,
-            max_retries,
-            retry_base_delay_ms,
-            retry_max_delay_ms,
-            selection_strategy_str,
-            circuit_breaker_enabled,
-            circuit_breaker_failure_threshold,
-            circuit_breaker_success_threshold,
-            circuit_breaker_open_duration_secs,
-            circuit_breaker_half_open_requests,
-        ) = crate::config::with_config(|cfg| {
-            (
-                cfg.rpc.request_timeout_secs,
-                cfg.rpc.connection_timeout_secs,
-                cfg.rpc.pool_connections_per_host,
-                cfg.rpc.pool_idle_timeout_secs,
-                cfg.rpc.max_retries,
-                cfg.rpc.retry_base_delay_ms,
-                cfg.rpc.retry_max_delay_ms,
-                cfg.rpc.selection_strategy.clone(),
-                cfg.rpc.circuit_breaker_enabled,
-                cfg.rpc.circuit_breaker_failure_threshold,
-                cfg.rpc.circuit_breaker_success_threshold,
-                cfg.rpc.circuit_breaker_open_duration_secs,
-                cfg.rpc.circuit_breaker_half_open_requests,
-            )
-        });
+        let request_timeout_secs = rpc.request_timeout_secs;
+        let connection_timeout_secs = rpc.connection_timeout_secs;
+        let pool_connections_per_host = rpc.pool_connections_per_host;
+        let pool_idle_timeout_secs = rpc.pool_idle_timeout_secs;
+        let max_retries = rpc.max_retries;
+        let retry_base_delay_ms = rpc.retry_base_delay_ms;
+        let retry_max_delay_ms = rpc.retry_max_delay_ms;
+        let circuit_breaker_enabled = rpc.circuit_breaker_enabled;
+        let circuit_breaker_failure_threshold = rpc.circuit_breaker_failure_threshold;
+        let circuit_breaker_success_threshold = rpc.circuit_breaker_success_threshold;
+        let circuit_breaker_open_duration_secs = rpc.circuit_breaker_open_duration_secs;
+        let circuit_breaker_half_open_requests = rpc.circuit_breaker_half_open_requests;
 
         // Create shared HTTP client with connection pooling
         let http_client = crate::net::apply_proxy(reqwest::Client::builder())
@@ -153,7 +132,7 @@ impl RpcManager {
         }
 
         // Initialize stats manager
-        let stats = StatsManager::new().await?;
+        let stats = StatsManager::new(rpc.stats_enabled).await?;
 
         // Register providers in stats
         for config in &providers {
@@ -183,12 +162,12 @@ impl RpcManager {
         };
 
         // Parse selection strategy
-        let selection_strategy = SelectionStrategy::from_str(&selection_strategy_str);
+        let selection_strategy = SelectionStrategy::from_str(&rpc.selection_strategy);
 
         let manager = Self {
             providers: RwLock::new(providers),
             provider_states: RwLock::new(provider_states),
-            rate_limiters: Arc::new(RateLimiterManager::from_config()),
+            rate_limiters: Arc::new(RateLimiterManager::from_config(rpc)),
             circuit_breakers: Arc::new(CircuitBreakerManager::with_config(cb_config)),
             stats: Arc::new(RwLock::new(stats)),
             http_client,
@@ -780,11 +759,11 @@ impl std::fmt::Debug for RpcManager {
 
 static RPC_MANAGER: OnceCell<Arc<RpcManager>> = OnceCell::const_new();
 
-/// Initialize global RPC manager
-pub async fn init_rpc_manager() -> crate::Result<Arc<RpcManager>> {
+/// Initialize the global RPC manager from the chain's RPC settings
+pub async fn init_rpc_manager(rpc: RpcConfig) -> crate::Result<Arc<RpcManager>> {
     RPC_MANAGER
         .get_or_try_init(|| async {
-            let manager = RpcManager::new().await?;
+            let manager = RpcManager::new(&rpc).await?;
             manager.start().await;
             Ok(Arc::new(manager))
         })
@@ -795,9 +774,4 @@ pub async fn init_rpc_manager() -> crate::Result<Arc<RpcManager>> {
 /// Get global RPC manager (returns None if not initialized)
 pub fn get_rpc_manager() -> Option<Arc<RpcManager>> {
     RPC_MANAGER.get().cloned()
-}
-
-/// Get or initialize global RPC manager
-pub async fn get_or_init_rpc_manager() -> crate::Result<Arc<RpcManager>> {
-    init_rpc_manager().await
 }

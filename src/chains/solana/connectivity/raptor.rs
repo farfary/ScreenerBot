@@ -45,13 +45,13 @@ impl EndpointMonitor for RaptorMonitor {
         let cfg = get_config_clone();
         // Only worth checking when the router that uses it is actually on.
         cfg.connectivity.enabled
-            && cfg.connectivity.endpoints.raptor.enabled
-            && cfg.swaps.raptor.enabled
+            && cfg.chains.solana.connectivity.raptor.enabled
+            && cfg.chains.solana.swaps.raptor.enabled
     }
 
     async fn check_health(&self) -> HealthCheckResult {
         let cfg = get_config_clone();
-        let timeout_secs = cfg.connectivity.endpoints.raptor.timeout_secs.max(1);
+        let timeout_secs = cfg.chains.solana.connectivity.raptor.timeout_secs.max(1);
 
         let client = match crate::net::client_builder()
             .timeout(Duration::from_secs(timeout_secs))

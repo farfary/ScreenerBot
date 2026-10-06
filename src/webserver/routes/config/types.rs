@@ -23,18 +23,15 @@ pub struct ConfigResponse<T> {
 
 #[derive(Debug, Serialize)]
 pub struct FullConfigResponse {
-    pub rpc: config::RpcConfig,
     pub chains: config::ChainsConfig,
     pub trader: config::TraderConfig,
     pub copy_trading: config::CopyTradingConfig,
     pub positions: config::PositionsConfig,
     pub filtering: config::FilteringConfig,
-    pub swaps: config::SwapsConfig,
     pub tokens: config::TokensConfig,
     pub pools: config::PoolsConfig,
     pub maintenance: config::MaintenanceConfig,
     pub updates: config::UpdatesConfig,
-    pub sol_price: config::SolPriceConfig,
     pub events: config::EventsConfig,
     pub services: config::ServicesConfig,
     pub monitoring: config::MonitoringConfig,
@@ -87,14 +84,12 @@ pub struct UpdateResponse {
 
 /// List of all config sections that can be imported/exported
 pub const CONFIG_SECTIONS: &[&str] = &[
-    "rpc",
+    "chains",
     "trader",
     "copy_trading",
     "positions",
     "filtering",
-    "swaps",
     "tokens",
-    "sol_price",
     "events",
     "services",
     "monitoring",
@@ -110,6 +105,7 @@ pub const CONFIG_SECTIONS: &[&str] = &[
 
 /// Sensitive fields that should be sanitized on export (path format: "section.nested.field")
 pub const SENSITIVE_FIELDS: &[(&str, &[&str])] = &[
+    ("chains", &["solana.swaps.jupiter.api_key"]),
     ("telegram", &["bot_token"]),
     (
         "gui",

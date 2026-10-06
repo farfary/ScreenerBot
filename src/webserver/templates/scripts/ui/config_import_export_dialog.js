@@ -24,13 +24,11 @@ import { hasSectionLabel, sectionLabel } from "../pages/config/field_text.js";
 // ============================================================================
 
 const SECTION_ICONS = Object.freeze({
-  rpc: "icon-satellite",
+  chains: "icon-blocks",
   trader: "icon-briefcase",
   positions: "icon-chart-candlestick",
   filtering: "icon-target",
-  swaps: "icon-repeat",
   tokens: "icon-coins",
-  sol_price: "icon-sun",
   events: "icon-radio",
   services: "icon-wrench",
   monitoring: "icon-trending-up",
@@ -42,13 +40,11 @@ const SECTION_ICONS = Object.freeze({
 // Ids are the configuration section names the export and import routes use
 // (src/webserver/routes/config/import_export.rs).
 const SECTION_HINT_LABELS = Object.freeze({
-  rpc: "system-config-section-hint-rpc",
+  chains: "system-config-section-hint-chains",
   trader: "system-config-section-hint-trader",
   positions: "system-config-section-hint-positions",
   filtering: "system-config-section-hint-filtering",
-  swaps: "system-config-section-hint-swaps",
   tokens: "system-config-section-hint-tokens",
-  sol_price: "system-config-section-hint-sol-price",
   events: "system-config-section-hint-events",
   services: "system-config-section-hint-services",
   monitoring: "system-config-section-hint-monitoring",
@@ -79,13 +75,11 @@ function sectionName(sectionId) {
 }
 
 const SECTION_ORDER = [
-  "rpc",
+  "chains",
   "trader",
   "positions",
   "filtering",
-  "swaps",
   "tokens",
-  "sol_price",
   "events",
   "services",
   "monitoring",

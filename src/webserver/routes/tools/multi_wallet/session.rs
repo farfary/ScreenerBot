@@ -160,7 +160,7 @@ pub fn validate_router_choice(router: Option<&str>) -> Result<(), Response> {
         Some(router) if router.is_enabled() => Ok(()),
         Some(router) => Err(ApiError::new(
             ApiErrorCode::InvalidInput,
-            ids::ERRORS_TOOLS_ROUTER_DISABLED,
+            ids::ERRORS_TOOLS_ROUTER_DISABLED_CHAIN_SETTINGS,
         )
         .text_arg("router", router.name())
         .into_response()),

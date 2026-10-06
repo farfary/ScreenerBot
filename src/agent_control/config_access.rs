@@ -244,9 +244,33 @@ pub fn schema(section: Option<&str>) -> Result<Value> {
         }
     }
     match section.map(str::trim).filter(|s| !s.is_empty()) {
-        Some(section) => resolve(&metadata, section).cloned(),
+        Some(section) => resolve_schema(&metadata, section).cloned(),
         None => Ok(metadata),
     }
+}
+
+/// Walk a dotted path through the metadata map: the first segment names a
+/// section, the second a field of it, and every later segment a child of the
+/// field reached so far (nested fields sit under `"children"`).
+fn resolve_schema<'a>(metadata: &'a Value, path: &str) -> Result<&'a Value> {
+    let mut current = metadata;
+    let mut walked = String::new();
+    for (depth, segment) in path.split('.').enumerate() {
+        let container = if depth < 2 {
+            current
+        } else {
+            current.get("children").unwrap_or(&Value::Null)
+        };
+        current = container
+            .as_object()
+            .and_then(|map| map.get(segment))
+            .ok_or_else(|| unknown_path(path, &walked, container))?;
+        if !walked.is_empty() {
+            walked.push('.');
+        }
+        walked.push_str(segment);
+    }
+    Ok(current)
 }
 
 /// Build the candidate configuration for a batch of changes, from the config

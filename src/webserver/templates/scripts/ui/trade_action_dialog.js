@@ -252,7 +252,7 @@ export class TradeActionDialog {
             </div>
           </div>
           <!--
-            Slippage. "Auto" follows the configured slippage (swaps.slippage.*) —
+            Slippage. "Auto" follows the configured slippage (trader.slippage.*) —
             which is what the auto-trader ALWAYS uses. Everything else is a per-trade
             manual override, for forcing a fill on an illiquid token.
           -->
@@ -841,7 +841,7 @@ export class TradeActionDialog {
   }
 
   /**
-   * The configured slippage (swaps.slippage.quote_default_pct) — what "Auto" means,
+   * The configured slippage (trader.slippage.quote_default_pct) — what "Auto" means,
    * and what the auto-trader always uses. Fetched once and cached; the dialog still
    * works without it (Auto just sends no override and the backend applies the same
    * config value server-side).
@@ -850,7 +850,7 @@ export class TradeActionDialog {
     if (this._configuredSlippage != null) return this._configuredSlippage;
 
     try {
-      const res = await fetch("/api/config/swaps");
+      const res = await fetch("/api/config/trader");
       if (res.ok) {
         const body = await res.json();
         const pct = Number(body?.data?.slippage?.quote_default_pct);

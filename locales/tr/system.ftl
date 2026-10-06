@@ -145,13 +145,11 @@ system-config-sections-count =
        *[other] { $count } bölüm
     }
 
-system-config-section-hint-rpc = RPC uç noktaları ve bağlantı ayarları
+system-config-section-hint-chains = Zincir etkinleştirme, RPC uç noktaları ve takas yönlendirme
 system-config-section-hint-trader = İşlem kuralları ve otomasyon
 system-config-section-hint-positions = Pozisyon yönetimi ayarları
 system-config-section-hint-filtering = Token filtreleme kuralları ve eşikleri
-system-config-section-hint-swaps = Takas yürütme ayarları
 system-config-section-hint-tokens = Token keşfi ve veri kaynakları
-system-config-section-hint-sol-price = { -sol } fiyat hizmeti yapılandırması
 system-config-section-hint-events = Olay kaydı ayarları
 system-config-section-hint-services = Arka plan hizmeti ayarları
 system-config-section-hint-monitoring = Sistem izleme yapılandırması

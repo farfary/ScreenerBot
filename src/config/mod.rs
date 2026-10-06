@@ -96,8 +96,10 @@ pub mod utils;
 mod merge;
 pub(crate) use merge::merge_document;
 
-// One-time migration of legacy [ai] / [agents] TOML into the canonical sections
+// One-time migration of legacy [ai] / [agents] TOML into the canonical sections,
+// and relocation of legacy global Solana sections under [chains.solana]
 mod migrate;
+pub(crate) use migrate::{has_legacy_chain_sections, relocate_legacy_chain_sections};
 
 // Wallet management (keypair loading, pubkey access)
 pub mod wallet;
@@ -111,19 +113,19 @@ pub use metadata::{
 };
 
 pub use schemas::{
-    AccountConfig, AgentControlConfig, AssistantConfig, ChainToggleConfig, ChainsConfig, Config,
-    CopyTradingConfig, DashboardConfig, EventsConfig, FilteringConfig, GuiConfig,
-    HolderWatchConfig, InterfaceConfig, LlmAnalysisConfig, LlmConfig, LlmProviderConfig,
-    LlmProvidersConfig, LockscreenConfig, MaintenanceConfig, MonitoringConfig, NetworkConfig,
-    OhlcvConfig, OllamaConfig, PerformanceConfig, PoolsConfig, PositionsConfig, ReferralConfig,
-    RpcConfig, ServicesConfig, SolPriceConfig, StartupConfig, StrategiesConfig, SwapsConfig,
-    TelegramConfig, TimeUnit, TokensConfig, TraderConfig, UpdatesConfig, WalletConfig,
-    WebserverConfig,
+    AccountConfig, AgentControlConfig, AssistantConfig, ChainsConfig, Config, CopyTradingConfig,
+    DashboardConfig, EventsConfig, FilteringConfig, GuiConfig, HolderWatchConfig, InterfaceConfig,
+    LlmAnalysisConfig, LlmConfig, LlmProviderConfig, LlmProvidersConfig, LockscreenConfig,
+    MaintenanceConfig, MonitoringConfig, NetworkConfig, OhlcvConfig, OllamaConfig,
+    PerformanceConfig, PoolsConfig, PositionsConfig, ReferralConfig, RpcConfig, ServicesConfig,
+    SolanaChainConfig, StartupConfig, StrategiesConfig, SwapsConfig, TelegramConfig, TimeUnit,
+    TokensConfig, TraderConfig, UpdatesConfig, WalletConfig, WebserverConfig,
 };
 
 pub use utils::{
-    get_config_clone, is_config_initialized, load_config, load_config_from_path, reload_config,
-    reload_config_from_path, save_config, try_with_config, validate_config, with_config, CONFIG,
+    get_config_clone, is_config_initialized, load_config, load_config_from_path,
+    persist_pending_config_migration, reload_config, reload_config_from_path, save_config,
+    try_with_config, validate_config, with_config, CONFIG,
 };
 
 pub use wallet::get_wallet_pubkey_string;

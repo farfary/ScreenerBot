@@ -50,7 +50,7 @@ pub async fn execute_tool_swap(
 ) -> Result<ToolSwapResult> {
     let wallet_address = wallet.address.clone();
     let slippage =
-        slippage_pct.unwrap_or_else(|| with_config(|cfg| cfg.swaps.slippage.quote_default_pct));
+        slippage_pct.unwrap_or_else(|| with_config(|cfg| cfg.trader.slippage.quote_default_pct));
 
     // Create quote request
     let quote_request = QuoteRequest {

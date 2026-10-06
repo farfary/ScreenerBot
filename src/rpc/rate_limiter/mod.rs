@@ -20,6 +20,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+use crate::config::RpcConfig;
 use crate::rpc::types::ProviderKind;
 
 /// Manager for all provider rate limiters
@@ -62,23 +63,13 @@ impl RateLimiterManager {
         }
     }
 
-    /// Create from application config
-    pub fn from_config() -> Self {
-        let (
-            default_rate_limit,
-            helius_rate_limit,
-            quicknode_rate_limit,
-            triton_rate_limit,
-            public_rate_limit,
-        ) = crate::config::with_config(|cfg| {
-            (
-                cfg.rpc.default_rate_limit,
-                cfg.rpc.helius_rate_limit,
-                cfg.rpc.quicknode_rate_limit,
-                cfg.rpc.triton_rate_limit,
-                cfg.rpc.public_rate_limit,
-            )
-        });
+    /// Create from the chain's RPC settings
+    pub fn from_config(rpc: &RpcConfig) -> Self {
+        let default_rate_limit = rpc.default_rate_limit;
+        let helius_rate_limit = rpc.helius_rate_limit;
+        let quicknode_rate_limit = rpc.quicknode_rate_limit;
+        let triton_rate_limit = rpc.triton_rate_limit;
+        let public_rate_limit = rpc.public_rate_limit;
 
         let mut default_rates = HashMap::new();
         default_rates.insert(ProviderKind::Helius, helius_rate_limit);

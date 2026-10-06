@@ -79,7 +79,7 @@ impl SwapCostAssessment {
     }
 }
 
-/// The caller's tolerance, read from `swaps.cost_guard`.
+/// The caller's tolerance, read from `chains.solana.swaps.cost_guard`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CostGuardSettings {
     pub enabled: bool,
@@ -92,10 +92,15 @@ impl CostGuardSettings {
     /// The live configuration.
     pub fn current() -> Self {
         with_config(|cfg| Self {
-            enabled: cfg.swaps.cost_guard.enabled,
-            max_extra_cost_pct: cfg.swaps.cost_guard.max_extra_cost_pct,
-            always_allow_below_lamports: cfg.swaps.cost_guard.always_allow_below_lamports,
-            retry_excluding_venue: cfg.swaps.cost_guard.retry_excluding_venue,
+            enabled: cfg.chains.solana.swaps.cost_guard.enabled,
+            max_extra_cost_pct: cfg.chains.solana.swaps.cost_guard.max_extra_cost_pct,
+            always_allow_below_lamports: cfg
+                .chains
+                .solana
+                .swaps
+                .cost_guard
+                .always_allow_below_lamports,
+            retry_excluding_venue: cfg.chains.solana.swaps.cost_guard.retry_excluding_venue,
         })
     }
 }
@@ -316,7 +321,7 @@ pub fn trade_value_lamports(quote: &Quote) -> Result<u64> {
 
 /// Simulate `transaction_base64` and refuse it if it would fail, or if it would
 /// spend more of the wallet's lamports outside the trade than
-/// `swaps.cost_guard` allows.
+/// `chains.solana.swaps.cost_guard` allows.
 ///
 /// Both refusals happen before anything is signed, so neither costs a fee and
 /// both are safe for the caller to answer by trying a different route.

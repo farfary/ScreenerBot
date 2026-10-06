@@ -10,8 +10,17 @@
 //! section it wins; a legacy value only fills a destination the file left unset.
 //! After migration the caller persists the canonical config with the legacy
 //! tables removed, so the migration is one-time.
+//!
+//! The same module relocates the Solana settings that once lived in global
+//! sections (`[rpc]`, `[swaps]`, `[sol_price]` and the Jupiter/Raptor monitors
+//! under `[connectivity.endpoints]`) to `[chains.solana]`, and slippage to
+//! `[trader.slippage]`. That relocation runs on the untyped document before the
+//! typed parse, so keys the schema no longer knows move with their subtree and
+//! are dropped by the first persist. A canonical leaf present in the document
+//! always wins over its legacy counterpart.
 
 use serde::Deserialize;
+use serde_json::{Map, Value};
 
 use super::schemas::Config;
 use super::{Error, Result};
@@ -362,6 +371,151 @@ pub(super) fn migrate_legacy_sections(raw: &str, config: &mut Config) -> Result<
     Ok(true)
 }
 
+/// One relocation of a legacy subtree. `to` names the destination table,
+/// created when absent; `None` drops the subtree.
+struct Relocation {
+    from: &'static [&'static str],
+    to: Option<&'static [&'static str]>,
+}
+
+/// The `[chains.<id>]` table key that receives the legacy global sections.
+const LEGACY_CHAIN_KEY: &str = crate::chains::PRE_CHAINS_LAYOUT_CHAIN.as_str();
+
+/// Order matters: slippage leaves `swaps` before the rest of `swaps` moves.
+const CHAIN_RELOCATIONS: &[Relocation] = &[
+    Relocation {
+        from: &["swaps", "slippage"],
+        to: Some(&["trader", "slippage"]),
+    },
+    Relocation {
+        from: &["swaps"],
+        to: Some(&["chains", LEGACY_CHAIN_KEY, "swaps"]),
+    },
+    Relocation {
+        from: &["rpc"],
+        to: Some(&["chains", LEGACY_CHAIN_KEY, "rpc"]),
+    },
+    Relocation {
+        from: &["connectivity", "endpoints", "jupiter"],
+        to: Some(&["chains", LEGACY_CHAIN_KEY, "connectivity", "jupiter"]),
+    },
+    Relocation {
+        from: &["connectivity", "endpoints", "raptor"],
+        to: Some(&["chains", LEGACY_CHAIN_KEY, "connectivity", "raptor"]),
+    },
+    Relocation {
+        from: &["sol_price"],
+        to: None,
+    },
+];
+
+/// The node at `path`, or `None` when a segment is absent or a parent on the
+/// way is not a table.
+fn node_at<'a>(doc: &'a Value, path: &[&str]) -> Option<&'a Value> {
+    path.iter()
+        .try_fold(doc, |node, segment| node.as_object()?.get(*segment))
+}
+
+/// `path` written the way the config file names a table, e.g. `[chains.solana]`.
+fn table_name(path: &[&str]) -> String {
+    format!("[{}]", path.join("."))
+}
+
+/// True when the document still carries a section that moved under
+/// `[chains.<id>]` or `[trader.slippage]`.
+pub(crate) fn has_legacy_chain_sections(doc: &Value) -> bool {
+    CHAIN_RELOCATIONS
+        .iter()
+        .any(|relocation| node_at(doc, relocation.from).is_some())
+}
+
+/// Move every legacy subtree in `doc` to its canonical path, leaf by leaf.
+/// A leaf already present at the destination wins; a legacy leaf fills only
+/// what the destination lacks. Returns `true` when anything moved or was
+/// dropped. Fails without modifying `doc` when a legacy subtree or a
+/// destination table has the wrong shape.
+pub(crate) fn relocate_legacy_chain_sections(doc: &mut Value) -> Result<bool> {
+    let mut working = doc.clone();
+    let mut changed = false;
+    for relocation in CHAIN_RELOCATIONS {
+        let Some(legacy) = take_node(&mut working, relocation.from) else {
+            continue;
+        };
+        let source = table_name(relocation.from);
+        let Value::Object(legacy) = legacy else {
+            return Err(Error::ParseFailed {
+                detail: format!("legacy {source} must be a table"),
+            });
+        };
+        if let Some(to) = relocation.to {
+            let destination = table_at(&mut working, to, &source)?;
+            merge_missing_leaves(destination, legacy);
+        }
+        changed = true;
+    }
+    if changed {
+        *doc = working;
+    }
+    Ok(changed)
+}
+
+/// Remove and return the node at `path`; `None` when it is absent.
+fn take_node(doc: &mut Value, path: &[&str]) -> Option<Value> {
+    let (last, parents) = path.split_last()?;
+    let mut node = doc;
+    for segment in parents {
+        node = node.as_object_mut()?.get_mut(*segment)?;
+    }
+    node.as_object_mut()?.remove(*last)
+}
+
+/// The table at `path`, creating every missing table on the way. A node on the
+/// way that exists but is not a table refuses the relocation of `source`.
+fn table_at<'a>(
+    doc: &'a mut Value,
+    path: &[&str],
+    source: &str,
+) -> Result<&'a mut Map<String, Value>> {
+    let refused = |depth: usize| Error::ParseFailed {
+        detail: if depth == 0 {
+            format!("the config document must be a table to receive legacy {source}")
+        } else {
+            format!(
+                "{} must be a table to receive legacy {source}",
+                table_name(&path[..depth])
+            )
+        },
+    };
+    let mut node = doc;
+    for (depth, segment) in path.iter().enumerate() {
+        node = node
+            .as_object_mut()
+            .ok_or_else(|| refused(depth))?
+            .entry((*segment).to_owned())
+            .or_insert_with(|| Value::Object(Map::new()));
+    }
+    node.as_object_mut().ok_or_else(|| refused(path.len()))
+}
+
+/// Fill `destination` from `legacy`: tables merge key by key, recursively; a
+/// key the destination already holds keeps the destination's value; any
+/// other key takes the legacy value. Arrays are leaves.
+fn merge_missing_leaves(destination: &mut Map<String, Value>, legacy: Map<String, Value>) {
+    for (key, legacy_value) in legacy {
+        match destination.get_mut(&key) {
+            Some(Value::Object(existing)) => {
+                if let Value::Object(legacy_table) = legacy_value {
+                    merge_missing_leaves(existing, legacy_table);
+                }
+            }
+            Some(_) => {}
+            None => {
+                destination.insert(key, legacy_value);
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -696,5 +850,250 @@ api_key = "sk-ant-secret"
         // The secret survives in the canonical location.
         assert!(serialized.contains("sk-ant-secret"));
         assert_eq!(config.llm.providers.anthropic.api_key, "sk-ant-secret");
+    }
+
+    // ------------------------------------------------------------------
+    // Relocation of the legacy chain sections
+    // ------------------------------------------------------------------
+
+    const V0_2_13_CONFIG: &str = include_str!("../../tests/fixtures/v0.2.13-config.toml");
+
+    fn parse(raw: &str) -> super::super::utils::ParsedConfig {
+        super::super::utils::parse_config_document(raw).expect("parse")
+    }
+
+    fn table(config: &Config) -> toml::Table {
+        toml::from_str(&toml::to_string(config).expect("serialize")).expect("reparse")
+    }
+
+    #[test]
+    fn v0_2_13_layout_relocates_every_moved_value() {
+        let parsed = parse(V0_2_13_CONFIG);
+        assert!(parsed.migrated);
+        let config = &parsed.config;
+
+        let rpc = &config.chains.solana.rpc;
+        assert_eq!(
+            rpc.urls,
+            vec![
+                "https://rpc-one.fixture.invalid/".to_owned(),
+                "https://rpc-two.fixture.invalid/".to_owned()
+            ]
+        );
+        assert_eq!(rpc.selection_strategy, "round_robin");
+        assert_eq!(rpc.default_rate_limit, 12);
+        assert_eq!(rpc.helius_rate_limit, 61);
+        assert_eq!(rpc.quicknode_rate_limit, 27);
+        assert_eq!(rpc.triton_rate_limit, 111);
+        assert_eq!(rpc.public_rate_limit, 3);
+        assert!(!rpc.circuit_breaker_enabled);
+        assert_eq!(rpc.circuit_breaker_failure_threshold, 7);
+        assert_eq!(rpc.circuit_breaker_success_threshold, 4);
+        assert_eq!(rpc.circuit_breaker_open_duration_secs, 45);
+        assert_eq!(rpc.circuit_breaker_half_open_requests, 2);
+        assert_eq!(rpc.request_timeout_secs, 25);
+        assert_eq!(rpc.connection_timeout_secs, 12);
+        assert_eq!(rpc.max_retries, 5);
+        assert_eq!(rpc.retry_base_delay_ms, 150);
+        assert_eq!(rpc.retry_max_delay_ms, 4000);
+        assert_eq!(rpc.pool_connections_per_host, 6);
+        assert_eq!(rpc.pool_idle_timeout_secs, 60);
+        assert!(!rpc.stats_enabled);
+
+        let swaps = &config.chains.solana.swaps;
+        assert!(!swaps.jupiter.enabled);
+        assert!(!swaps.jupiter.dynamic_compute_unit_limit);
+        assert_eq!(swaps.jupiter.priority_fee_micro_lamports, 75_000);
+        assert_eq!(swaps.jupiter.api_key, "fixture-jupiter-key");
+        assert!(swaps.direct.enabled);
+        assert_eq!(swaps.direct.priority_fee_micro_lamports, 80_000);
+        assert_eq!(swaps.direct.confirmation_timeout_secs, 90);
+        assert_eq!(swaps.direct.max_price_impact_pct, 4.5);
+        assert!(swaps.raptor.enabled);
+        assert_eq!(swaps.raptor.priority_fee_micro_lamports, 65_000);
+        assert_eq!(swaps.raptor.max_hops, 2);
+        assert!(!swaps.cost_guard.enabled);
+        assert_eq!(swaps.cost_guard.max_extra_cost_pct, 2.5);
+        assert_eq!(swaps.cost_guard.always_allow_below_lamports, 250_000);
+        assert!(!swaps.cost_guard.retry_excluding_venue);
+
+        let slippage = &config.trader.slippage;
+        assert_eq!(slippage.quote_default_pct, 2.5);
+        assert_eq!(slippage.exit_profit_shortfall_pct, 4.0);
+        assert_eq!(slippage.exit_loss_shortfall_pct, 7.5);
+        assert_eq!(slippage.exit_retry_steps_pct, vec![5.0, 12.0, 30.0]);
+
+        let monitors = &config.chains.solana.connectivity;
+        assert!(!monitors.jupiter.enabled);
+        assert_eq!(monitors.jupiter.timeout_secs, 7);
+        assert!(!monitors.raptor.enabled);
+        assert_eq!(monitors.raptor.timeout_secs, 8);
+        let endpoints = &config.connectivity.endpoints;
+        assert!(!endpoints.rpc.enabled);
+        assert_eq!(endpoints.rpc.timeout_secs, 6);
+        assert_eq!(endpoints.rugcheck.timeout_secs, 12);
+
+        assert!(config.pools.enable_raydium_discovery);
+
+        // Trading amounts keep their sections.
+        assert_eq!(config.trader.max_open_positions, 4);
+        assert_eq!(config.trader.trade_size_sol, 0.02);
+        assert_eq!(config.trader.entry_sizes, vec![0.01, 0.03]);
+        assert_eq!(config.trader.loss_limit_sol, 0.4);
+        assert_eq!(config.positions.profit_extra_needed_sol, 0.0005);
+        assert_eq!(config.wallet.min_balance_sol, 0.03);
+        assert_eq!(config.telegram.trade_alert_min_sol, 0.25);
+        assert_eq!(config.telegram.significant_pnl_threshold, 0.8);
+
+        assert!(config.chains.solana.enabled);
+        assert!(!config.chains.show_preview);
+        assert!(super::super::utils::validate_config(config).is_ok());
+    }
+
+    #[test]
+    fn v0_2_13_layout_serializes_without_legacy_sections_and_is_idempotent() {
+        let first = parse(V0_2_13_CONFIG);
+        let serialized = toml::to_string(&first.config).expect("serialize");
+        let written: toml::Table = toml::from_str(&serialized).expect("reparse");
+
+        for section in ["rpc", "swaps", "sol_price"] {
+            assert!(!written.contains_key(section), "[{section}] persisted");
+        }
+        let endpoints = written["connectivity"]["endpoints"]
+            .as_table()
+            .expect("endpoints table");
+        assert!(!endpoints.contains_key("jupiter"));
+        assert!(!endpoints.contains_key("raptor"));
+        let rpc = written["chains"]["solana"]["rpc"]
+            .as_table()
+            .expect("rpc table");
+        for dead in [
+            "rate_limit_burst_factor",
+            "stats_retention_days",
+            "stats_minute_buckets",
+            "debug_rpc",
+        ] {
+            assert!(!rpc.contains_key(dead), "rpc.{dead} persisted");
+        }
+        let jupiter = written["chains"]["solana"]["swaps"]["jupiter"]
+            .as_table()
+            .expect("jupiter table");
+        assert!(!jupiter.contains_key("default_swap_mode"));
+        let pools = written["pools"].as_table().expect("pools table");
+        assert!(!pools.contains_key("account_batch_size"));
+
+        let second = parse(&serialized);
+        assert!(!second.migrated);
+        assert_eq!(json(&second.config), json(&first.config));
+    }
+
+    #[test]
+    fn canonical_leaf_wins_and_legacy_fills_the_rest() {
+        let parsed = parse(
+            r#"
+[rpc]
+max_retries = 7
+urls = ["https://legacy.fixture.invalid/"]
+
+[chains.solana.rpc]
+max_retries = 9
+"#,
+        );
+        assert!(parsed.migrated);
+        assert_eq!(parsed.config.chains.solana.rpc.max_retries, 9);
+        assert_eq!(
+            parsed.config.chains.solana.rpc.urls,
+            vec!["https://legacy.fixture.invalid/".to_owned()]
+        );
+    }
+
+    #[test]
+    fn partial_legacy_section_moves_only_its_leaves() {
+        let parsed = parse("[swaps.jupiter]\napi_key = \"k\"\n");
+        assert!(parsed.migrated);
+        let swaps = &parsed.config.chains.solana.swaps;
+        assert_eq!(swaps.jupiter.api_key, "k");
+        let mut expected = super::super::schemas::SwapsConfig::default();
+        expected.jupiter.api_key = "k".to_owned();
+        assert_eq!(json(swaps), json(&expected));
+    }
+
+    #[test]
+    fn misshapen_sections_are_refused_without_touching_the_document() {
+        for raw in [
+            "rpc = 5\n",
+            "[chains]\nsolana = 5\n\n[rpc]\nmax_retries = 4\n",
+        ] {
+            let table: toml::Table = toml::from_str(raw).expect("toml");
+            let original = serde_json::to_value(&table).expect("json");
+            let mut document = original.clone();
+            let err = relocate_legacy_chain_sections(&mut document).unwrap_err();
+            assert!(
+                matches!(err, Error::ParseFailed { .. }),
+                "expected ParseFailed for {raw:?}"
+            );
+            assert_eq!(document, original, "document modified for {raw:?}");
+            assert!(matches!(
+                super::super::utils::parse_config_document(raw),
+                Err(Error::ParseFailed { .. })
+            ));
+        }
+    }
+
+    #[test]
+    fn unknown_legacy_key_loads_and_is_dropped() {
+        let parsed = parse("[rpc]\nmax_retries = 4\nretired_setting = true\n");
+        assert!(parsed.migrated);
+        assert_eq!(parsed.config.chains.solana.rpc.max_retries, 4);
+        let written = table(&parsed.config);
+        let rpc = written["chains"]["solana"]["rpc"]
+            .as_table()
+            .expect("rpc table");
+        assert!(!rpc.contains_key("retired_setting"));
+    }
+
+    #[test]
+    fn canonical_document_parses_as_plain_toml() {
+        let raw = r#"
+[trader]
+max_open_positions = 3
+
+[trader.slippage]
+quote_default_pct = 1.5
+
+[chains.solana.rpc]
+urls = ["https://canonical.fixture.invalid/"]
+"#;
+        let parsed = parse(raw);
+        assert!(!parsed.migrated);
+        let mut expected: Config = toml::from_str(raw).expect("typed parse");
+        expected.gui.dashboard.navigation.tabs =
+            crate::config::schemas::ensure_all_tabs_present(expected.gui.dashboard.navigation.tabs);
+        assert_eq!(json(&parsed.config), json(&expected));
+    }
+
+    #[test]
+    fn import_shape_relocates_to_canonical_sections() {
+        let mut document = serde_json::json!({
+            "rpc": { "max_retries": 6 },
+            "swaps": {
+                "slippage": { "quote_default_pct": 3.0 },
+                "jupiter": { "enabled": false }
+            },
+            "sol_price": {}
+        });
+        assert!(relocate_legacy_chain_sections(&mut document).expect("relocate"));
+        assert_eq!(
+            document,
+            serde_json::json!({
+                "chains": {
+                    "solana": {
+                        "rpc": { "max_retries": 6 },
+                        "swaps": { "jupiter": { "enabled": false } }
+                    }
+                },
+                "trader": { "slippage": { "quote_default_pct": 3.0 } }
+            })
+        );
     }
 }

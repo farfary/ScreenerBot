@@ -291,16 +291,13 @@ impl<T> NestedMetadata for std::collections::BTreeMap<String, T> where T: Nested
 pub fn collect_config_metadata() -> ConfigMetadata {
     let mut map = ConfigMetadata::new();
 
-    map.insert("rpc", super::RpcConfig::field_metadata());
     map.insert("trader", super::TraderConfig::field_metadata());
     map.insert("positions", super::PositionsConfig::field_metadata());
     map.insert("filtering", super::FilteringConfig::field_metadata());
-    map.insert("swaps", super::SwapsConfig::field_metadata());
     map.insert("tokens", super::TokensConfig::field_metadata());
     map.insert("pools", super::PoolsConfig::field_metadata());
     map.insert("maintenance", super::MaintenanceConfig::field_metadata());
     map.insert("updates", super::UpdatesConfig::field_metadata());
-    map.insert("sol_price", super::SolPriceConfig::field_metadata());
     map.insert("events", super::EventsConfig::field_metadata());
     map.insert("services", super::ServicesConfig::field_metadata());
     map.insert("monitoring", super::MonitoringConfig::field_metadata());
@@ -325,14 +322,23 @@ pub fn collect_config_metadata() -> ConfigMetadata {
         assign_keys(&catalog_key(&["config", section_id]), section);
     }
 
+    // Fields under a chain node share one catalog entry per concept across
+    // chains (`config-chain-rpc-urls`); the chain node's own key names the
+    // chain (`config-chains-solana`).
+    if let Some(chains) = map.get_mut("chains") {
+        for (name, node) in chains.iter_mut() {
+            if name.parse::<crate::chains::ChainId>().is_ok() {
+                if let Some(children) = node.children.as_mut() {
+                    assign_keys(&catalog_key(&["config", "chain"]), children);
+                }
+            }
+        }
+    }
+
     for section in map.values_mut() {
-        section.retain(|_, field| !field.hidden.unwrap_or_default());
+        retain_visible(section);
 
         for field in section.values_mut() {
-            if let Some(ref mut children) = field.children {
-                children.retain(|_, child| !child.hidden.unwrap_or_default());
-            }
-
             // Keep original category, derive visibility from it
             let category = field.category.unwrap_or(ConfigCategory::General);
             field.category = Some(category);
@@ -341,6 +347,16 @@ pub fn collect_config_metadata() -> ConfigMetadata {
     }
 
     map
+}
+
+/// Drop `hidden` fields at every depth.
+fn retain_visible(fields: &mut SectionMetadata) {
+    fields.retain(|_, field| !field.hidden.unwrap_or_default());
+    for field in fields.values_mut() {
+        if let Some(children) = field.children.as_mut() {
+            retain_visible(children);
+        }
+    }
 }
 
 /// Catalog key for a path: each segment lowercased with `_` replaced by `-`,
@@ -437,14 +453,7 @@ mod tests {
     fn every_section_in_the_map_exposes_its_fields() {
         let metadata = collect_config_metadata();
 
-        for section in [
-            "trader",
-            "filtering",
-            "swaps",
-            "network",
-            "referral",
-            "account",
-        ] {
+        for section in ["trader", "filtering", "network", "referral", "account"] {
             let fields = metadata
                 .get(section)
                 .unwrap_or_else(|| panic!("`{section}` is missing from collect_config_metadata(), so the dashboard cannot show it"));
@@ -523,12 +532,29 @@ mod tests {
                 "chains.{field} is absent from config metadata"
             );
         }
+        let solana = chains
+            .get("solana")
+            .and_then(|field| field.children.as_ref())
+            .expect("chains.solana must expose its settings as children");
+        for field in ["enabled", "rpc"] {
+            assert_eq!(
+                solana.get(field).and_then(|node| node.restart_required),
+                Some(true),
+                "chains.solana.{field} must carry the restart-required flag"
+            );
+        }
+        assert!(
+            !solana.contains_key("connectivity"),
+            "hidden chains.solana.connectivity must not reach the dashboard"
+        );
         assert_eq!(
-            chains
-                .get("solana")
-                .and_then(|field| field.restart_required),
-            Some(true),
-            "chains.solana must carry the restart-required flag"
+            solana
+                .get("rpc")
+                .and_then(|node| node.children.as_ref())
+                .and_then(|children| children.get("urls"))
+                .map(|node| node.key.as_str()),
+            Some("config-chain-rpc-urls"),
+            "fields under a chain node take the shared config-chain- prefix"
         );
 
         let config = crate::config::schemas::Config::default();
@@ -543,7 +569,10 @@ mod tests {
         assert_eq!(round_tripped.show_preview, config.chains.show_preview);
 
         let all_disabled = crate::config::ChainsConfig {
-            solana: crate::config::ChainToggleConfig { enabled: false },
+            solana: crate::config::SolanaChainConfig {
+                enabled: false,
+                ..Default::default()
+            },
             ..config.chains.clone()
         };
         assert!(!all_disabled.has_enabled_chain());

@@ -129,7 +129,7 @@ pub fn reset_config_to_defaults_preserving_credentials() -> Result<()> {
         (
             cfg.wallet_encrypted.clone(),
             cfg.wallet_nonce.clone(),
-            cfg.rpc.urls.clone(),
+            cfg.chains.solana.rpc.urls.clone(),
         )
     });
 
@@ -144,10 +144,13 @@ pub fn reset_config_to_defaults_preserving_credentials() -> Result<()> {
     }
 
     if !rpc_urls.is_empty() {
-        fresh_config.rpc.urls = rpc_urls;
+        fresh_config.chains.solana.rpc.urls = rpc_urls;
         logger::info(
             LogTag::System,
-            &format!("Preserved {} RPC URL(s)", fresh_config.rpc.urls.len()),
+            &format!(
+                "Preserved {} RPC URL(s)",
+                fresh_config.chains.solana.rpc.urls.len()
+            ),
         );
     }
 

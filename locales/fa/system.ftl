@@ -179,13 +179,11 @@ system-config-sections-count =
 ## Import and export dialogs: section descriptions. Ids are the section names of
 ## src/webserver/routes/config/import_export.rs.
 
-system-config-section-hint-rpc = اندپوینت‌های RPC و تنظیمات اتصال
+system-config-section-hint-chains = فعال‌سازی زنجیره‌ها، اندپوینت‌های RPC و مسیریابی سواپ
 system-config-section-hint-trader = قوانین معاملات و خودکارسازی
 system-config-section-hint-positions = تنظیمات مدیریت پوزیشن
 system-config-section-hint-filtering = قوانین و آستانه‌های فیلتر توکن
-system-config-section-hint-swaps = تنظیمات اجرای سواپ
 system-config-section-hint-tokens = کشف توکن و منابع داده
-system-config-section-hint-sol-price = پیکربندی سرویس قیمت { -sol }
 system-config-section-hint-events = تنظیمات ثبت رویدادها
 system-config-section-hint-services = تنظیمات سرویس‌های پس‌زمینه
 system-config-section-hint-monitoring = پیکربندی پایش سیستم

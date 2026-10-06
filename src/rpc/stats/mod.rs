@@ -45,10 +45,8 @@ pub struct StatsManager {
 }
 
 impl StatsManager {
-    /// Create new stats manager
-    pub async fn new() -> crate::Result<Self> {
-        let enabled = crate::config::with_config(|cfg| cfg.rpc.stats_enabled);
-
+    /// Create a stats manager; `enabled` gates collection for its lifetime
+    pub async fn new(enabled: bool) -> crate::Result<Self> {
         let db = Arc::new(RpcStatsDatabase::new()?);
         let session_id = format!(
             "session_{}",
@@ -60,30 +58,6 @@ impl StatsManager {
         );
 
         // Start new session
-        db.start_session(&session_id)?;
-
-        Ok(Self {
-            db,
-            session_id,
-            collector_tx: None,
-            shutdown: Arc::new(Notify::new()),
-            is_running: RwLock::new(false),
-            enabled,
-        })
-    }
-
-    /// Create with existing database
-    pub async fn with_database(db: Arc<RpcStatsDatabase>) -> crate::Result<Self> {
-        let enabled = crate::config::with_config(|cfg| cfg.rpc.stats_enabled);
-
-        let session_id = format!(
-            "session_{}",
-            Uuid::new_v4()
-                .to_string()
-                .split('-')
-                .next()
-                .unwrap_or("unknown")
-        );
         db.start_session(&session_id)?;
 
         Ok(Self {

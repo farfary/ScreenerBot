@@ -139,8 +139,8 @@ pub(super) async fn enter_explore_mode() -> Response {
 
     config.wallet_encrypted = String::new();
     config.wallet_nonce = String::new();
-    if config.rpc.urls.is_empty() {
-        config.rpc = crate::config::schemas::RpcConfig::default();
+    if config.chains.solana.rpc.urls.is_empty() {
+        config.chains.solana.rpc = crate::config::schemas::RpcConfig::default();
     }
     config.gui.dashboard.startup.explore_mode_enabled = true;
     config.gui.dashboard.startup.onboarding_complete = true;
@@ -404,7 +404,7 @@ pub(super) async fn complete_initialization(
 
     config.wallet_encrypted = encrypted.ciphertext;
     config.wallet_nonce = encrypted.nonce;
-    config.rpc.urls = working_rpc_urls;
+    config.chains.solana.rpc.urls = working_rpc_urls;
 
     // Setup is now complete: clear the Explore Mode marker and mark onboarding done.
     config.gui.dashboard.startup.explore_mode_enabled = false;

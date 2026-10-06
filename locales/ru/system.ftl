@@ -174,13 +174,11 @@ system-config-sections-count =
        *[other] { $count } раздела
     }
 
-system-config-section-hint-rpc = RPC-эндпоинты и параметры подключения
+system-config-section-hint-chains = Включение блокчейнов, RPC-эндпоинты и маршрутизация свопов
 system-config-section-hint-trader = Правила торговли и автоматизация
 system-config-section-hint-positions = Настройки управления позициями
 system-config-section-hint-filtering = Правила и пороги фильтрации токенов
-system-config-section-hint-swaps = Настройки выполнения свопов
 system-config-section-hint-tokens = Обнаружение токенов и источники данных
-system-config-section-hint-sol-price = Конфигурация сервиса цены { -sol }
 system-config-section-hint-events = Настройки записи событий
 system-config-section-hint-services = Настройки фоновых сервисов
 system-config-section-hint-monitoring = Конфигурация мониторинга системы

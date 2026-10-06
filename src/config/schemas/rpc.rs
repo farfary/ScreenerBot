@@ -65,14 +65,6 @@ config_struct! {
             category: ConfigCategory::RateLimiting,
         })]
         public_rate_limit: u32 = 4,
-        #[metadata(field_metadata! {
-            min: 1.0,
-            max: 2.0,
-            step: 0.1,
-            impact: ConfigImpact::Low,
-            category: ConfigCategory::RateLimiting,
-        })]
-        rate_limit_burst_factor: f32 = 1.2,
 
         // Circuit Breaker
         #[metadata(field_metadata! {
@@ -181,25 +173,5 @@ config_struct! {
             category: ConfigCategory::Statistics,
         })]
         stats_enabled: bool = true,
-        #[metadata(field_metadata! {
-            min: 1,
-            max: 30,
-            step: 1,
-            impact: ConfigImpact::Low,
-            category: ConfigCategory::Statistics,
-        })]
-        stats_retention_days: u32 = 7,
-        #[metadata(field_metadata! {
-            impact: ConfigImpact::Low,
-            category: ConfigCategory::Statistics,
-        })]
-        stats_minute_buckets: bool = true,
-
-        // Debug
-        #[metadata(field_metadata! {
-            impact: ConfigImpact::Low,
-            category: ConfigCategory::Debug,
-        })]
-        debug_rpc: bool = false,
     }
 }

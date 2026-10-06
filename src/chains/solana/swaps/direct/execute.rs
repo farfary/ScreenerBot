@@ -427,7 +427,7 @@ pub async fn execute_plan(
     let signature_str = signature.to_string();
 
     let timeout = Duration::from_secs(with_config(|cfg| {
-        cfg.swaps.direct.confirmation_timeout_secs
+        cfg.chains.solana.swaps.direct.confirmation_timeout_secs
     }));
 
     settle(
