@@ -5,6 +5,7 @@
 
 use chrono::{Duration, Utc};
 
+use crate::chains::RawAmount;
 use crate::positions::PriceSource;
 use crate::webserver::routes::positions::types::{
     PositionResponse, PositionStatus, PositionsStatsResponse,
@@ -13,6 +14,11 @@ use crate::webserver::routes::positions::types::{
 use super::aggregates::{self, closed_exit_offset_hours, closed_hold_minutes};
 use super::copy_trading::position_owner;
 use super::data::*;
+
+/// Raw token units of a fixture holding; fractional units truncate as the integer cast did.
+fn fixture_token_units(size: f64, entry: f64) -> RawAmount {
+    RawAmount::from_integral_f64((size / entry * 1e9).trunc()).unwrap_or_default()
+}
 
 /// Generate promo positions list (open, closed, archived, or the working set).
 ///
@@ -52,7 +58,7 @@ pub fn get_promo_positions(status: Option<&str>) -> Vec<PositionResponse> {
                 price_lowest: entry * 0.95,
                 entry_transaction_signature: Some(format!("promo_entry_sig_{id_counter}")),
                 exit_transaction_signature: None,
-                token_amount: Some((size / entry * 1e9) as u64),
+                token_amount: Some(fixture_token_units(*size, *entry)),
                 effective_entry_price: Some(*entry),
                 effective_exit_price: None,
                 sol_received: None,
@@ -77,8 +83,8 @@ pub fn get_promo_positions(status: Option<&str>) -> Vec<PositionResponse> {
                 average_entry_price: *entry,
                 partial_exit_count: 0,
                 average_exit_price: None,
-                remaining_token_amount: Some((size / entry * 1e9) as u64),
-                total_exited_amount: 0,
+                remaining_token_amount: Some(fixture_token_units(*size, *entry)),
+                total_exited_amount: RawAmount::ZERO,
                 token_decimals: Some(9),
                 archived: false,
                 archived_at: None,
@@ -124,7 +130,7 @@ pub fn get_promo_positions(status: Option<&str>) -> Vec<PositionResponse> {
                 price_lowest: exit.min(*entry) * 0.97,
                 entry_transaction_signature: Some(format!("promo_entry_sig_{id_counter}")),
                 exit_transaction_signature: Some(format!("promo_exit_sig_{id_counter}")),
-                token_amount: Some((size / entry * 1e9) as u64),
+                token_amount: Some(fixture_token_units(*size, *entry)),
                 effective_entry_price: Some(*entry),
                 effective_exit_price: Some(*exit),
                 sol_received: Some(size + pnl),
@@ -150,7 +156,7 @@ pub fn get_promo_positions(status: Option<&str>) -> Vec<PositionResponse> {
                 partial_exit_count: 0,
                 average_exit_price: Some(*exit),
                 remaining_token_amount: None,
-                total_exited_amount: (size / entry * 1e9) as u64,
+                total_exited_amount: fixture_token_units(*size, *entry),
                 token_decimals: Some(9),
                 archived: false,
                 archived_at: None,
@@ -176,7 +182,7 @@ pub fn get_promo_positions(status: Option<&str>) -> Vec<PositionResponse> {
             let archived_at = exit_time + Duration::hours(6);
             let pnl = (exit - entry) / entry * size;
             let pnl_pct = (exit - entry) / entry * 100.0;
-            let token_amount = (size / entry * 1e9) as u64;
+            let token_amount = fixture_token_units(*size, *entry);
 
             positions.push(PositionResponse {
                 id: Some(id_counter),

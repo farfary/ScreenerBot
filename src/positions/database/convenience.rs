@@ -368,7 +368,7 @@ pub async fn get_all_positions_for_mint(mint: &str) -> Result<Vec<Position>> {
 pub async fn save_exit_record(
     position_id: i64,
     timestamp: DateTime<Utc>,
-    amount: u64,
+    amount: crate::chains::RawAmount,
     price: f64,
     sol_received: f64,
     transaction_signature: &str,
@@ -403,7 +403,7 @@ pub async fn save_exit_record(
       position_id,
       wallet_address,
       timestamp.to_rfc3339(),
-      crate::chains::RawAmount::from(amount),
+      amount,
       price,
       sol_received,
       transaction_signature,
@@ -492,7 +492,7 @@ pub async fn get_exit_history(position_id: i64) -> Result<Vec<ExitRecord>> {
                         )
                     })?
                     .with_timezone(&Utc),
-                amount: super::operations::read_amount(row, "amount")?,
+                amount: row.get("amount")?,
                 price: row.get(4)?,
                 sol_received: row.get(5)?,
                 transaction_signature: row.get(6)?,
@@ -518,7 +518,7 @@ pub async fn get_exit_history(position_id: i64) -> Result<Vec<ExitRecord>> {
 pub async fn save_entry_record(
     position_id: i64,
     timestamp: DateTime<Utc>,
-    amount: u64,
+    amount: crate::chains::RawAmount,
     price: f64,
     sol_spent: f64,
     transaction_signature: &str,
@@ -550,7 +550,7 @@ pub async fn save_entry_record(
       position_id,
       wallet_address,
       timestamp.to_rfc3339(),
-      crate::chains::RawAmount::from(amount),
+      amount,
       price,
       sol_spent,
       transaction_signature,
@@ -610,7 +610,7 @@ pub async fn get_entry_history(position_id: i64) -> Result<Vec<EntryRecord>> {
                         )
                     })?
                     .with_timezone(&Utc),
-                amount: super::operations::read_amount(row, "amount")?,
+                amount: row.get("amount")?,
                 price: row.get(4)?,
                 sol_spent: row.get(5)?,
                 transaction_signature: row.get(6)?,

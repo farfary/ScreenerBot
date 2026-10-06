@@ -4,6 +4,7 @@
 //! Position data types — core Position struct, transitions, and lifecycle events.
 
 use super::transitions::PositionTransition;
+use crate::chains::RawAmount;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -375,7 +376,7 @@ pub struct ExitRecord {
     pub id: Option<i64>,  // Database ID
     pub position_id: i64, // Parent position ID
     pub timestamp: DateTime<Utc>,
-    pub amount: u64,       // Tokens sold
+    pub amount: RawAmount, // Tokens sold
     pub price: f64,        // Exit price per token
     pub sol_received: f64, // SOL received
     pub transaction_signature: String,
@@ -390,9 +391,9 @@ pub struct EntryRecord {
     pub id: Option<i64>,  // Database ID
     pub position_id: i64, // Parent position ID
     pub timestamp: DateTime<Utc>,
-    pub amount: u64,    // Tokens bought
-    pub price: f64,     // Entry price per token
-    pub sol_spent: f64, // SOL spent
+    pub amount: RawAmount, // Tokens bought
+    pub price: f64,        // Entry price per token
+    pub sol_spent: f64,    // SOL spent
     pub transaction_signature: String,
     pub is_dca: bool,               // true if DCA, false if initial entry
     pub fees_lamports: Option<u64>, // Transaction fee

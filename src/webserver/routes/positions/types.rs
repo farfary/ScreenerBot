@@ -3,9 +3,10 @@
 
 //! Position route types — data structures for position API responses.
 
+use crate::chains::RawAmount;
 use crate::positions::state::is_position_open;
 use crate::positions::{Position, PositionManagement, PositionOrigin, PriceSource};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, Serializer};
 
 #[derive(Debug, Deserialize)]
 pub struct PositionsQuery {
@@ -58,7 +59,8 @@ pub struct PositionResponse {
     pub price_lowest: f64,
     pub entry_transaction_signature: Option<String>,
     pub exit_transaction_signature: Option<String>,
-    pub token_amount: Option<u64>,
+    #[serde(serialize_with = "optional_raw_amount_number")]
+    pub token_amount: Option<RawAmount>,
     pub effective_entry_price: Option<f64>,
     pub effective_exit_price: Option<f64>,
     pub sol_received: Option<f64>,
@@ -86,8 +88,10 @@ pub struct PositionResponse {
     pub average_entry_price: f64,
     pub partial_exit_count: u32,
     pub average_exit_price: Option<f64>,
-    pub remaining_token_amount: Option<u64>,
-    pub total_exited_amount: u64,
+    #[serde(serialize_with = "optional_raw_amount_number")]
+    pub remaining_token_amount: Option<RawAmount>,
+    #[serde(serialize_with = "raw_amount_number")]
+    pub total_exited_amount: RawAmount,
     // Token decimals (for converting raw token_amount to whole tokens in the UI)
     pub token_decimals: Option<u8>,
     // Archival
@@ -117,7 +121,8 @@ pub struct PositionsStatsResponse {
 pub struct EntryRecordResponse {
     pub id: Option<i64>,
     pub timestamp: i64,
-    pub amount: u64,
+    #[serde(serialize_with = "raw_amount_number")]
+    pub amount: RawAmount,
     pub price: f64,
     pub sol_spent: f64,
     pub transaction_signature: String,
@@ -129,7 +134,8 @@ pub struct EntryRecordResponse {
 pub struct ExitRecordResponse {
     pub id: Option<i64>,
     pub timestamp: i64,
-    pub amount: u64,
+    #[serde(serialize_with = "raw_amount_number")]
+    pub amount: RawAmount,
     pub price: f64,
     pub sol_received: f64,
     pub transaction_signature: String,
@@ -414,4 +420,54 @@ pub struct ActivityStateChange {
     pub state: String,
     pub changed_at: i64,
     pub reason: Option<String>,
+}
+
+/// Raw token amounts are JSON integers on the dashboard wire; above u64 they stay exact integer literals.
+fn raw_amount_number<S: Serializer>(amount: &RawAmount, serializer: S) -> Result<S::Ok, S::Error> {
+    serializer.serialize_u128(amount.raw())
+}
+
+fn optional_raw_amount_number<S: Serializer>(
+    amount: &Option<RawAmount>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    match amount {
+        Some(amount) => serializer.serialize_some(&amount.raw()),
+        None => serializer.serialize_none(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde::Serialize;
+
+    use crate::chains::RawAmount;
+
+    #[derive(Serialize)]
+    struct Amounts {
+        #[serde(serialize_with = "super::raw_amount_number")]
+        total: RawAmount,
+        #[serde(serialize_with = "super::optional_raw_amount_number")]
+        held: Option<RawAmount>,
+    }
+
+    #[test]
+    fn raw_amounts_serialize_as_json_integers() {
+        let wide = Amounts {
+            total: RawAmount::MAX,
+            held: Some(RawAmount::from(u64::MAX)),
+        };
+        assert_eq!(
+            serde_json::to_string(&wide).unwrap(),
+            r#"{"total":340282366920938463463374607431768211455,"held":18446744073709551615}"#
+        );
+        let empty = Amounts {
+            total: RawAmount::ZERO,
+            held: None,
+        };
+        assert_eq!(
+            serde_json::to_string(&empty).unwrap(),
+            r#"{"total":0,"held":null}"#
+        );
+    }
 }

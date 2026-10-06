@@ -32,6 +32,7 @@ use super::types::{
     EntryRecordResponse, ExitRecordResponse, TokenActivityResponse,
 };
 use crate::chains::adapter;
+use crate::chains::RawAmount;
 use crate::i18n::ids;
 use crate::logger::{self, LogTag};
 use crate::positions::{self, Position};
@@ -76,8 +77,7 @@ pub async fn get_token_activity(Path(key): Path<String>) -> Response {
 async fn build_token_activity(current: &Position) -> TokenActivityResponse {
     let mint = current.mint.clone();
     let decimals = load_decimals(&mint).await;
-    let scale = 10f64.powi(decimals as i32);
-    let to_ui = move |raw: u64| raw as f64 / scale;
+    let to_ui = move |raw: RawAmount| raw.to_whole_units(decimals);
 
     // Every round of trading this token, oldest first. The position the dialog was opened
     // on is in here too — falling back to it alone keeps the tab working if the DB read

@@ -87,7 +87,7 @@ fn closed_externally_round_reports_the_stored_proceeds_and_pnl() {
     let entries = vec![EntryRecordResponse {
         id: Some(1),
         timestamp: position.entry_time.timestamp(),
-        amount: 2_167_137,
+        amount: RawAmount::from(2_167_137u64),
         price: 0.00602,
         sol_spent: 0.01304544,
         transaction_signature: ENTRY_SIG.to_owned(),
@@ -96,7 +96,7 @@ fn closed_externally_round_reports_the_stored_proceeds_and_pnl() {
     }];
 
     let mut events: Vec<ActivityEvent> =
-        drafts::position_drafts(&position, 1, &entries, &[], |raw| raw as f64 / 1e6)
+        drafts::position_drafts(&position, 1, &entries, &[], |raw| raw.to_whole_units(6))
             .into_iter()
             .map(|draft| merge::merge_position_event(MINT, draft, None))
             .collect();

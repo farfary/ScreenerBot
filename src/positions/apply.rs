@@ -20,6 +20,7 @@ use super::{
     },
     transitions::PositionTransition,
 };
+use crate::chains::RawAmount;
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
 use crate::telegram::{queue_notification, Notification};
@@ -99,7 +100,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                                 if let Err(err) = save_entry_record(
                                     position_id,
                                     position.entry_time,
-                                    token_amount_units,
+                                    RawAmount::from(token_amount_units),
                                     effective_entry_price,
                                     sol_size,
                                     entry_sig,
@@ -275,7 +276,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                                     if let Err(err) = save_exit_record(
                                         position_id,
                                         exit_time,
-                                        closed_amount,
+                                        RawAmount::from(closed_amount),
                                         effective_exit_price,
                                         sol_received,
                                         exit_signature,
@@ -731,7 +732,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                             if let Err(err) = save_exit_record(
                                 position_id,
                                 exit_time,
-                                exit_amount,
+                                RawAmount::from(exit_amount),
                                 effective_exit_price,
                                 sol_received,
                                 &exit_signature,
@@ -1063,7 +1064,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                             if let Err(err) = save_entry_record(
                                 position_id,
                                 dca_time,
-                                tokens_bought,
+                                RawAmount::from(tokens_bought),
                                 effective_price,
                                 sol_spent,
                                 &dca_signature,

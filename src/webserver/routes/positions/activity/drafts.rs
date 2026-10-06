@@ -14,6 +14,7 @@
 //!   4. the wallet's TRANSACTIONS — every tx that ever touched the mint, which is how
 //!      transfers, airdrops and swaps made outside the bot get into the timeline.
 
+use crate::chains::RawAmount;
 use crate::positions::Position;
 use crate::transactions::{get_transaction_database, TransactionListFilters, TransactionListRow};
 
@@ -96,7 +97,7 @@ pub(super) fn position_drafts(
     index: u32,
     entries: &[EntryRecordResponse],
     exits: &[ExitRecordResponse],
-    to_ui: impl Fn(u64) -> f64,
+    to_ui: impl Fn(RawAmount) -> f64,
 ) -> Vec<Draft> {
     let mut drafts: Vec<Draft> = Vec::with_capacity(entries.len() + exits.len() + 2);
 
@@ -194,7 +195,7 @@ pub(super) fn position_drafts(
 pub(super) async fn pending_drafts(
     position: &Position,
     index: u32,
-    to_ui: impl Fn(u64) -> f64,
+    to_ui: impl Fn(RawAmount) -> f64,
 ) -> Vec<Draft> {
     let mut drafts = Vec::new();
 
@@ -218,7 +219,7 @@ pub(super) async fn pending_drafts(
             Some(pending.created_at.timestamp()),
         )
         .in_position(position, index);
-        draft.token_amount = Some(to_ui(pending.expected_exit_amount));
+        draft.token_amount = Some(to_ui(RawAmount::from(pending.expected_exit_amount)));
         draft.exit_percentage = Some(pending.requested_exit_percentage);
         drafts.push(draft);
     }

@@ -6,6 +6,7 @@
 use axum::{extract::Query, Json};
 
 use super::types::*;
+use crate::chains::RawAmount;
 use crate::positions;
 use crate::tokens;
 
@@ -110,7 +111,7 @@ fn map_position_to_response_with_logo(
         price_lowest: p.price_lowest,
         entry_transaction_signature: p.entry_transaction_signature.clone(),
         exit_transaction_signature: p.exit_transaction_signature.clone(),
-        token_amount: p.token_amount,
+        token_amount: p.token_amount.map(RawAmount::from),
         effective_entry_price: p.effective_entry_price,
         effective_exit_price: p.effective_exit_price,
         sol_received: p.sol_received,
@@ -135,8 +136,8 @@ fn map_position_to_response_with_logo(
         average_entry_price: p.average_entry_price,
         partial_exit_count: p.partial_exit_count,
         average_exit_price: p.average_exit_price,
-        remaining_token_amount: p.remaining_token_amount,
-        total_exited_amount: p.total_exited_amount,
+        remaining_token_amount: p.remaining_token_amount.map(RawAmount::from),
+        total_exited_amount: RawAmount::from(p.total_exited_amount),
         token_decimals,
         archived: p.archived,
         archived_at: p.archived_at.map(|dt| dt.timestamp()),
