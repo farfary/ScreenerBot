@@ -50,6 +50,9 @@ pub enum Error {
         payload: &'static str,
         detail: String,
     },
+    /// A pool's mint/vault pairing does not qualify as a SOL pair.
+    #[error("pool is not a valid SOL pair: {reason}")]
+    InvalidPool { reason: String },
     /// An instruction could not be constructed.
     #[error("could not build the {instruction} instruction: {detail}")]
     InstructionBuild {
@@ -114,6 +117,7 @@ impl ErrorClass for Error {
             | Error::SecureStorage(_)
             | Error::AccountNotFound { .. }
             | Error::Decode { .. }
+            | Error::InvalidPool { .. }
             | Error::InstructionBuild { .. }
             | Error::SimulationRejected { .. }
             | Error::SwapCostRejected { .. } => false,
@@ -138,6 +142,7 @@ impl ErrorClass for Error {
         match self {
             Error::Execution(e) => e.severity(),
             Error::InvalidAddress { .. } | Error::AccountNotFound { .. } => Severity::Warning,
+            Error::InvalidPool { .. } => Severity::Info,
             Error::InvalidKeypair { .. }
             | Error::KeypairUnavailable { .. }
             | Error::SecureStorage(_) => Severity::Critical,
@@ -162,7 +167,9 @@ impl ErrorClass for Error {
             Error::AccountNotFound { .. } => 404,
             Error::Rpc { .. } | Error::RpcFailure { .. } => 503,
             Error::Decode { .. } | Error::InstructionBuild { .. } => 500,
-            Error::SimulationRejected { .. } | Error::SwapCostRejected { .. } => 422,
+            Error::InvalidPool { .. }
+            | Error::SimulationRejected { .. }
+            | Error::SwapCostRejected { .. } => 422,
             Error::DirectSwap(_) => 502,
         }
     }

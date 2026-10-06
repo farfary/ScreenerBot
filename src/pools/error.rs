@@ -29,9 +29,6 @@ pub enum Error {
     /// The background price-history write queue could not accept a price.
     #[error("price-history queue is unavailable: {detail}")]
     QueueUnavailable { detail: String },
-    /// A pool's mint/vault pairing does not qualify as a SOL pair.
-    #[error("pool is not a valid SOL pair: {reason}")]
-    InvalidPool { reason: String },
     /// The legacy-to-chain-scoped schema migration's own integrity check
     /// failed (row-count mismatch or a foreign-key violation).
     #[error("pools schema migration integrity check failed for {table}: {detail}")]
@@ -72,7 +69,6 @@ impl ErrorClass for Error {
             Error::ComponentInit { .. } => true,
             Error::NotInitialized
             | Error::QueueUnavailable { .. }
-            | Error::InvalidPool { .. }
             | Error::MigrationIntegrity { .. }
             | Error::AlreadyRunning
             | Error::RuntimeUnavailable { .. }
@@ -95,7 +91,6 @@ impl ErrorClass for Error {
             Error::Internal(e) => e.severity(),
             Error::NotInitialized | Error::QueueUnavailable { .. } => Severity::Error,
             Error::MigrationIntegrity { .. } => Severity::Critical,
-            Error::InvalidPool { .. } => Severity::Info,
             Error::AlreadyRunning => Severity::Warning,
             Error::ComponentInit { .. } => Severity::Error,
             Error::RuntimeUnavailable { .. } | Error::StageUnavailable { .. } => Severity::Error,
@@ -108,7 +103,6 @@ impl ErrorClass for Error {
             Error::Internal(e) => e.http_status(),
             Error::NotInitialized | Error::QueueUnavailable { .. } => 503,
             Error::MigrationIntegrity { .. } => 500,
-            Error::InvalidPool { .. } => 422,
             Error::AlreadyRunning => 409,
             Error::ComponentInit { .. } => 503,
             Error::RuntimeUnavailable { .. } | Error::StageUnavailable { .. } => 503,

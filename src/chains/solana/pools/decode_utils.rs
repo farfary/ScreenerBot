@@ -16,7 +16,6 @@ use crate::chains::solana::adapter::ADAPTER;
 use crate::chains::solana::solana_sdk::pubkey::Pubkey;
 use crate::chains::solana::{Error, Result};
 use crate::logger::{self, LogTag};
-use crate::pools::Error as PoolsError;
 
 /// Read a pubkey from data at given offset, advancing the offset
 pub fn read_pubkey_at_offset(data: &[u8], offset: &mut usize) -> Result<String> {
@@ -201,13 +200,11 @@ pub fn get_analyzer_vault_order(pool_info: PoolMintVaultInfo) -> Vec<String> {
 /// Validate that a pool contains SOL and return normalized token pair
 ///
 /// This is the main validation function that both analyzer and decoder should use
-pub fn validate_sol_pool(
-    pool_info: PoolMintVaultInfo,
-) -> std::result::Result<TokenPairInfo, PoolsError> {
+pub fn validate_sol_pool(pool_info: PoolMintVaultInfo) -> Result<TokenPairInfo> {
     let pair_info = analyze_token_pair(pool_info);
 
     if !pair_info.is_native_pair {
-        Err(PoolsError::InvalidPool {
+        Err(Error::InvalidPool {
             reason: "pool does not contain SOL as base or quote".to_owned(),
         })
     } else {
