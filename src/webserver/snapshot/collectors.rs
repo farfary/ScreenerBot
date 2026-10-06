@@ -275,8 +275,12 @@ pub(super) fn collect_pool_service_snapshot() -> Option<PoolServiceStatusSnapsho
     let running = crate::pools::is_pool_service_running();
     let system_ready = POOL_SERVICE_READY.load(Ordering::SeqCst);
 
-    let cache_stats = crate::pools::get_cache_stats();
-    let monitored_tokens_count = crate::pools::get_available_tokens().len();
+    let cache_stats = crate::pools::get_cache_stats(crate::chains::ChainScope::All);
+    let monitored_tokens_count: usize = crate::chains::ChainScope::All
+        .chains()
+        .into_iter()
+        .map(|chain| crate::pools::get_available_tokens(chain).len())
+        .sum();
     let price_subscribers = 0;
 
     let analyzer_snapshot =
@@ -317,12 +321,6 @@ pub(super) fn collect_pool_service_snapshot() -> Option<PoolServiceStatusSnapsho
             }
         });
 
-    let debug_override_tokens = crate::pools::get_debug_token_override();
-    let debug_override_count = debug_override_tokens
-        .as_ref()
-        .map(|tokens| tokens.len())
-        .unwrap_or_default();
-
     let (dexs_enabled, gecko_enabled, raydium_enabled) =
         crate::chains::solana::pools::discovery::PoolDiscovery::get_source_config();
     let mut sources_enabled = Vec::new();
@@ -336,15 +334,7 @@ pub(super) fn collect_pool_service_snapshot() -> Option<PoolServiceStatusSnapsho
         sources_enabled.push("Raydium".to_owned());
     }
 
-    let discovery_snapshot = PoolDiscoverySnapshot {
-        sources_enabled,
-        debug_override_active: debug_override_count > 0,
-        debug_override_count: if debug_override_count > 0 {
-            Some(debug_override_count)
-        } else {
-            None
-        },
-    };
+    let discovery_snapshot = PoolDiscoverySnapshot { sources_enabled };
 
     Some(PoolServiceStatusSnapshot {
         running,

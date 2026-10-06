@@ -2100,8 +2100,14 @@ impl OhlcvMonitor {
                 configured_limit
             };
 
-            // Get all tokens with available prices from Pool Service (same list Trader monitors)
-            let available_mints = crate::pools::get_available_tokens();
+            // Get all tokens with available prices from Pool Service (same list Trader monitors).
+            // The monitor is chainless until candles are tracked per chain, so it takes the
+            // union over every enabled chain.
+            let available_mints: Vec<String> = crate::chains::ChainScope::All
+                .chains()
+                .into_iter()
+                .flat_map(crate::pools::get_available_tokens)
+                .collect();
 
             // Get open positions to determine priority
             let open_positions = match crate::positions::state::get_open_positions().await {

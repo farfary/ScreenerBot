@@ -396,6 +396,7 @@ async fn refresh_token_pools_and_cache(
     }
 
     let (pools_map, success_sources) = match api::fetch_from_sources(
+        chain,
         mint_trimmed,
         rate_budget(chain),
     )
@@ -647,7 +648,9 @@ pub async fn prefetch(chain: ChainId, mints: &[String]) {
         .await
         .into_iter()
         .collect();
-    let priced_tokens: HashSet<String> = crate::pools::get_available_tokens().into_iter().collect();
+    let priced_tokens: HashSet<String> = crate::pools::get_available_tokens(chain)
+        .into_iter()
+        .collect();
 
     let mut schedule: Vec<(String, PrefetchPriority)> = Vec::new();
 

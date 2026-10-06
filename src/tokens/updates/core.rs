@@ -46,7 +46,7 @@ impl PoolPriorityManager {
     pub(super) async fn sync(&self, db: &Arc<TokenDatabase>) {
         let now = Instant::now();
         let chain = db.chain();
-        let pool_tokens = pools::get_available_tokens();
+        let pool_tokens = pools::get_available_tokens(chain);
         let pool_set: HashSet<String> = pool_tokens.iter().cloned().collect();
 
         let lookup = pool_tokens.clone();

@@ -3,9 +3,7 @@
 
 //! Core PoolsDatabase struct and operations.
 
-use super::super::types::{
-    PoolBlacklistPolicy, PoolFailureRecord, PriceResult, PRICE_HISTORY_MAX_ENTRIES,
-};
+use super::super::types::{PoolBlacklistPolicy, PoolFailureRecord, PriceResult};
 use super::types::DbPriceResult;
 use super::writer::run_database_writer;
 use crate::logger::{self, LogTag};
@@ -50,19 +48,6 @@ pub struct PoolsDatabase {
     pub(super) blacklisted_pools: Arc<RwLock<HashMap<String, i64>>>,
 }
 
-impl Clone for PoolsDatabase {
-    fn clone(&self) -> Self {
-        Self {
-            chain_id: self.chain_id,
-            db_path: self.db_path.clone(),
-            pool: self.pool.clone(),
-            write_queue: self.write_queue.clone(),
-            blacklisted_accounts: Arc::clone(&self.blacklisted_accounts),
-            blacklisted_pools: Arc::clone(&self.blacklisted_pools),
-        }
-    }
-}
-
 impl PoolsDatabase {
     /// Create new pools database instance
     pub fn new(chain_id: ChainId) -> Self {
@@ -78,10 +63,9 @@ impl PoolsDatabase {
         }
     }
 
-    /// Create a clone suitable for async operations
-    /// This is the same as clone() but with a more explicit name
-    pub fn clone_for_async(&self) -> Self {
-        self.clone()
+    /// The chain this database stores rows for.
+    pub fn chain(&self) -> ChainId {
+        self.chain_id
     }
 
     /// The shared connection pool for `spawn_blocking` bodies — `Pool` is a
@@ -242,7 +226,7 @@ impl PoolsDatabase {
     }
 
     /// Queue a price result for async storage (non-blocking)
-    pub async fn queue_price_for_storage(&self, price: PriceResult) -> Result<(), Error> {
+    pub fn queue_price_for_storage(&self, price: PriceResult) -> Result<(), Error> {
         if let Some(ref tx) = self.write_queue {
             tx.send(price).map_err(|e| Error::QueueUnavailable {
                 detail: format!("failed to queue price for storage: {e}"),
@@ -290,81 +274,6 @@ impl PoolsDatabase {
             for row in rows {
                 let db_price = row.map_err(|e| DatabaseError::Query { operation: "read row".to_owned(), message: e.to_string() })?;
                 results.push(db_price.to_price_result());
-            }
-
-            // Reverse so oldest comes first
-            results.reverse();
-
-            Ok::<_, Error>(results)
-        })
-        .await
-        .map_err(InternalError::from)?
-    }
-
-    /// Get price history with optional filtering
-    pub async fn get_price_history(
-        &self,
-        mint: &str,
-        limit: Option<usize>,
-        since_timestamp: Option<i64>,
-    ) -> Result<Vec<PriceResult>, Error> {
-        let mint_str = mint.to_string();
-        let pool = self.shared_pool()?;
-        let chain_id = self.chain_id.as_str().to_owned();
-        let limit = limit.unwrap_or(PRICE_HISTORY_MAX_ENTRIES);
-
-        tokio::task::spawn_blocking(move || {
-            let conn = pool.get().map_err(|e| DatabaseError::Query {
-                operation: "get pooled connection".to_owned(),
-                message: e.to_string(),
-            })?;
-
-            let mut results = Vec::new();
-
-            if let Some(ts) = since_timestamp {
-                let query = format!(
-                    "SELECT id, chain_id, mint, pool_address, price_usd, price_sol, confidence, slot,
-               timestamp_unix, native_reserves, token_reserves, source_pool, created_at
-         FROM price_history
-         WHERE chain_id = ? AND mint = ? AND timestamp_unix >= ?
-         ORDER BY timestamp_unix DESC
-         LIMIT {limit}"
-                );
-
-                let mut stmt = conn
-                    .prepare(&query)
-                    .map_err(|e| DatabaseError::Query { operation: "prepare query".to_owned(), message: e.to_string() })?;
-
-                let rows = stmt
-                    .query_map(params![chain_id, mint_str, ts], |row| DbPriceResult::from_row(row))
-                    .map_err(|e| DatabaseError::Query { operation: "query price history".to_owned(), message: e.to_string() })?;
-
-                for row in rows {
-                    let db_price = row.map_err(|e| DatabaseError::Query { operation: "read row".to_owned(), message: e.to_string() })?;
-                    results.push(db_price.to_price_result());
-                }
-            } else {
-                let query = format!(
-                    "SELECT id, chain_id, mint, pool_address, price_usd, price_sol, confidence, slot,
-               timestamp_unix, native_reserves, token_reserves, source_pool, created_at
-         FROM price_history
-         WHERE chain_id = ? AND mint = ?
-         ORDER BY timestamp_unix DESC
-         LIMIT {limit}"
-                );
-
-                let mut stmt = conn
-                    .prepare(&query)
-                    .map_err(|e| DatabaseError::Query { operation: "prepare query".to_owned(), message: e.to_string() })?;
-
-                let rows = stmt
-                    .query_map(params![chain_id, mint_str], |row| DbPriceResult::from_row(row))
-                    .map_err(|e| DatabaseError::Query { operation: "query price history".to_owned(), message: e.to_string() })?;
-
-                for row in rows {
-                    let db_price = row.map_err(|e| DatabaseError::Query { operation: "read row".to_owned(), message: e.to_string() })?;
-                    results.push(db_price.to_price_result());
-                }
             }
 
             // Reverse so oldest comes first
@@ -580,12 +489,9 @@ impl PoolsDatabase {
 /// builds). Pooled checkouts do not share a `:memory:` database, so tests
 /// that read back what earlier awaits wrote need a real file.
 #[cfg(test)]
-pub(super) fn pooled_legacy_database(label: &str) -> PoolsDatabase {
-    let path = std::env::temp_dir().join(format!(
-        "screenerbot-pools-{label}-{}.db",
-        std::process::id()
-    ));
-    let _ = std::fs::remove_file(&path);
+pub(super) fn pooled_legacy_database(label: &str) -> (PoolsDatabase, tempfile::TempDir) {
+    let dir = tempfile::tempdir().expect("create test database directory");
+    let path = dir.path().join(format!("screenerbot-pools-{label}.db"));
     let manager = SqliteConnectionManager::file(&path)
         .with_init(|conn| database::configure_connection(conn, database::POOLS_DB));
     let pool = Pool::builder()
@@ -599,14 +505,15 @@ pub(super) fn pooled_legacy_database(label: &str) -> PoolsDatabase {
         super::migrations::seed_legacy_schema(&conn);
         migrate_schema(&mut conn).expect("migrate test database");
     }
-    PoolsDatabase {
+    let db = PoolsDatabase {
         chain_id: ChainId::Solana,
         db_path: path.to_string_lossy().to_string(),
         pool: Some(pool),
         write_queue: None,
         blacklisted_accounts: Arc::new(RwLock::new(HashSet::new())),
         blacklisted_pools: Arc::new(RwLock::new(HashMap::new())),
-    }
+    };
+    (db, dir)
 }
 
 #[cfg(test)]
@@ -615,7 +522,7 @@ mod tests {
 
     #[tokio::test]
     async fn solana_repository_ignores_raw_rows_from_another_chain() {
-        let db = pooled_legacy_database("foreign-chain");
+        let (db, _dir) = pooled_legacy_database("foreign-chain");
         {
             let conn = db
                 .shared_pool()
@@ -636,7 +543,7 @@ mod tests {
             .expect("insert conceptual foreign-chain blacklist");
         }
         let history = db
-            .get_price_history("mint", None, None)
+            .load_recent_price_history("mint", crate::pools::types::PRICE_HISTORY_MAX_ENTRIES)
             .await
             .expect("read solana history");
         assert_eq!(history.len(), 1);

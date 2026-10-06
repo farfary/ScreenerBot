@@ -4,6 +4,7 @@
 //! API fetching functions - retrieve pool data from external sources.
 
 use crate::apis::manager::get_api_manager;
+use crate::chains::ChainId;
 use crate::events::{record_token_event, Severity};
 use crate::logger::{self, LogTag};
 use crate::native_price::get_native_price;
@@ -24,6 +25,7 @@ const RATE_LIMIT_ACQUIRE_TIMEOUT: Duration = Duration::from_secs(5);
 /// Fetch pools from all enabled sources (DexScreener + GeckoTerminal)
 /// Uses timeouts on rate limit acquisition to prevent indefinite blocking
 pub async fn fetch_from_sources(
+    chain: ChainId,
     mint: &str,
     coordinator: Arc<RateLimitCoordinator>,
 ) -> TokenResult<(HashMap<String, TokenPoolInfo>, usize)> {
@@ -152,7 +154,7 @@ pub async fn fetch_from_sources(
                 success_sources += 1;
             }
             for pool in pools.iter() {
-                if let Some(info) = conversion::from_dexscreener(pool) {
+                if let Some(info) = conversion::from_dexscreener(chain, pool) {
                     ingest_pool_entry(&mut pools_map, info);
                 }
             }
@@ -197,7 +199,7 @@ pub async fn fetch_from_sources(
                 success_sources += 1;
             }
             for pool in pools.iter() {
-                if let Some(info) = conversion::from_geckoterminal(pool, native_price) {
+                if let Some(info) = conversion::from_geckoterminal(chain, pool, native_price) {
                     ingest_pool_entry(&mut pools_map, info);
                 }
             }

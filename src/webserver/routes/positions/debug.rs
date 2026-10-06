@@ -283,21 +283,22 @@ pub async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionD
     });
 
     // 3. Get current price from pool service
-    let price_data = crate::pools::get_pool_price(&mint).map(|price_result| {
-        let age_seconds = price_result.timestamp.elapsed().as_secs();
-        let now_unix = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_secs() as i64;
-        let price_unix_time = now_unix - (age_seconds as i64);
+    let price_data =
+        crate::pools::get_pool_price(crate::chains::active_chain(), &mint).map(|price_result| {
+            let age_seconds = price_result.timestamp.elapsed().as_secs();
+            let now_unix = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs() as i64;
+            let price_unix_time = now_unix - (age_seconds as i64);
 
-        PriceData {
-            pool_price_native: price_result.price_native,
-            pool_price_usd: None,
-            confidence: price_result.confidence,
-            last_updated: price_unix_time,
-        }
-    });
+            PriceData {
+                pool_price_native: price_result.price_native,
+                pool_price_usd: None,
+                confidence: price_result.confidence,
+                last_updated: price_unix_time,
+            }
+        });
 
     // 4. Get market data from token database
     let market_data = api_token.as_ref().map(|token| MarketData {
@@ -309,7 +310,7 @@ pub async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionD
 
     // 5. Get pool info
     let mut pools_vec = Vec::new();
-    if let Some(price_result) = crate::pools::get_pool_price(&mint) {
+    if let Some(price_result) = crate::pools::get_pool_price(crate::chains::active_chain(), &mint) {
         let age_seconds = price_result.timestamp.elapsed().as_secs();
         let now_unix = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)

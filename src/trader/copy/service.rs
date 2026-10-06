@@ -247,7 +247,12 @@ async fn process_activity(
         .cloned()
         .collect::<Vec<_>>();
     if !paper_tasks.is_empty() {
-        let decision_price = decision_price(mint, *price_native);
+        let chain = paper_tasks[0].chain;
+        debug_assert!(
+            paper_tasks.iter().all(|task| task.chain == chain),
+            "tasks of one wallet activity share a chain"
+        );
+        let decision_price = decision_price(chain, mint, *price_native);
         let paper_outcomes = if let Err(block) =
             crate::trader::admission::check_entry_admission(mint, &["rpc"]).await
         {
@@ -367,9 +372,9 @@ async fn process_sell_activity(
         ActivityKind::Swap { price_native, .. } => *price_native,
         _ => None,
     };
-    let market_price = decision_price(mint, target_price);
     let costs = paper_costs();
     for task in tasks.iter().filter(|task| task.mode == CopyMode::Paper) {
+        let market_price = decision_price(task.chain, mint, target_price);
         let target_holding = target_holdings_before
             .get(&task.id)
             .copied()
@@ -434,9 +439,14 @@ async fn process_sell_activity(
 
 /// Pool price first (the trading price system); the target's own swap price when
 /// the pool service does not track the token. NaN means no price at all, which
-/// the paper simulators refuse as `InvalidPrice`.
-fn decision_price(mint: &str, target_price_native: Option<f64>) -> PaperMarket {
-    match crate::pools::get_pool_price(mint) {
+/// the paper simulators refuse as `InvalidPrice`. The pool price is read on
+/// the task's own chain.
+fn decision_price(
+    chain: crate::chains::ChainId,
+    mint: &str,
+    target_price_native: Option<f64>,
+) -> PaperMarket {
+    match crate::pools::get_pool_price(chain, mint) {
         Some(price) => PaperMarket::pool(price.price_native),
         None => PaperMarket::observed(target_price_native.unwrap_or(f64::NAN)),
     }

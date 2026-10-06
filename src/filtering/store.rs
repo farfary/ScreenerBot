@@ -262,7 +262,12 @@ impl FilteringStore {
         apply_filters(&mut tokens, &query, snapshot.as_ref());
 
         // Sort references (using dynamic price lookup if needed)
-        sort_tokens(&mut tokens, query.sort_key, query.sort_direction);
+        sort_tokens(
+            self.chain,
+            &mut tokens,
+            query.sort_key,
+            query.sort_direction,
+        );
 
         let total = tokens.len();
         // Build a quick lookup for derived flags from snapshot entries
@@ -319,7 +324,7 @@ impl FilteringStore {
 
         // Apply pool price overlay only to the returned page
         if matches!(query.view, FilteringView::Pool) {
-            overlay_pool_price_data(&mut items);
+            overlay_pool_price_data(self.chain, &mut items);
         }
 
         let mut rejection_reasons = HashMap::new();

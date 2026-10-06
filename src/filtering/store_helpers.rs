@@ -173,6 +173,7 @@ pub(super) fn apply_filters(
 }
 
 pub(super) fn sort_tokens(
+    chain: ChainId,
     items: &mut Vec<&Token>,
     sort_key: TokenSortKey,
     direction: SortDirection,
@@ -183,10 +184,10 @@ pub(super) fn sort_tokens(
             TokenSortKey::Symbol => a.symbol.cmp(&b.symbol),
             TokenSortKey::PriceSol => {
                 // Use real-time pool price for sorting if available
-                let price_a = pools::get_pool_price(&a.mint)
+                let price_a = pools::get_pool_price(chain, &a.mint)
                     .map(|p| p.price_native)
                     .unwrap_or(a.price_sol);
-                let price_b = pools::get_pool_price(&b.mint)
+                let price_b = pools::get_pool_price(chain, &b.mint)
                     .map(|p| p.price_native)
                     .unwrap_or(b.price_sol);
                 cmp_f64(Some(price_a), Some(price_b))
@@ -255,9 +256,9 @@ fn cmp_f64(lhs: Option<f64>, rhs: Option<f64>) -> Ordering {
     left.partial_cmp(&right).unwrap_or(Ordering::Equal)
 }
 
-pub(super) fn overlay_pool_price_data(tokens: &mut [Token]) {
+pub(super) fn overlay_pool_price_data(chain: ChainId, tokens: &mut [Token]) {
     for token in tokens.iter_mut() {
-        if let Some(price_result) = pools::get_pool_price(&token.mint) {
+        if let Some(price_result) = pools::get_pool_price(chain, &token.mint) {
             let old_price = token.price_sol;
             let new_price = price_result.price_native;
             token.price_sol = new_price;

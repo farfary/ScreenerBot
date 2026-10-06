@@ -210,7 +210,11 @@ pub async fn get_dashboard_overview(State(state): State<Arc<AppState>>) -> Json<
 
     // Get monitoring info (use hardcoded constants from trader module)
     let monitoring_info = MonitoringInfo {
-        tokens_tracked: crate::pools::get_available_tokens().len(),
+        tokens_tracked: crate::chains::ChainScope::All
+            .chains()
+            .into_iter()
+            .map(|chain| crate::pools::get_available_tokens(chain).len())
+            .sum(),
         entry_check_interval_secs: crate::trader::ENTRY_MONITOR_INTERVAL_SECS,
         position_monitor_interval_secs: crate::trader::POSITION_MONITOR_INTERVAL_SECS,
     };

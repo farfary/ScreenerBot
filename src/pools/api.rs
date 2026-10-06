@@ -10,19 +10,21 @@
 use super::cache;
 use super::service;
 use super::types::{CacheStats, PriceResult};
+use crate::chains::{ChainId, ChainScope};
 
-/// Get current price for a token
+/// Get the current pool price for a token on `chain`
 ///
 /// Returns the most recent price calculation for the specified token.
 /// The price includes both USD and SOL values along with confidence metrics.
 ///
 /// # Arguments
+/// * `chain` - The chain the token lives on
 /// * `mint` - Token mint address as string
 ///
 /// # Returns
 /// * `Some(PriceResult)` - Current price data if available and fresh
 /// * `None` - No price available or price is stale
-pub fn get_pool_price(mint: &str) -> Option<PriceResult> {
+pub fn get_pool_price(chain: ChainId, mint: &str) -> Option<PriceResult> {
     if !service::is_pool_service_running() {
         return None;
     }
@@ -32,49 +34,34 @@ pub fn get_pool_price(mint: &str) -> Option<PriceResult> {
     // must NOT be reported as a live pool price (that produced the "header shows
     // Price Pool but the Pool Service list omits the token" mismatch, and would
     // feed stale prices to trading/P&L). Matches `get_available_tokens`.
-    cache::get_fresh_price(mint)
+    cache::get_fresh_price(chain, mint)
 }
 
-/// Get list of tokens with available prices
+/// Tokens on `chain` with available prices
 ///
-/// Returns all tokens that currently have fresh price data available.
-/// Only tokens with prices newer than the configured TTL are included.
-///
-/// # Returns
-/// * `Vec<String>` - List of token mint addresses with available prices
-pub fn get_available_tokens() -> Vec<String> {
+/// Returns every token of that chain whose price is newer than the configured
+/// TTL. There is no cross-chain list: an address without its chain is
+/// ambiguous, so a caller covering several chains asks each one.
+pub fn get_available_tokens(chain: ChainId) -> Vec<String> {
     if !service::is_pool_service_running() {
         return Vec::new();
     }
 
-    cache::get_available_tokens()
+    cache::available_tokens(chain)
 }
 
-/// Get price history for a token
-///
-/// Returns the complete price history for a token, up to the configured
-/// maximum number of entries (typically 1000 most recent prices).
-///
-/// # Arguments
-/// * `mint` - Token mint address as string
-///
-/// # Returns
-/// * `Vec<PriceResult>` - Price history ordered from oldest to newest
-pub fn get_price_history(mint: &str) -> Vec<PriceResult> {
-    if !service::is_pool_service_running() {
-        return Vec::new();
-    }
-
-    cache::get_price_history(mint)
-}
-
-/// Get cache statistics for monitoring
-///
-/// Returns statistics about the current state of the price cache system.
-/// Useful for monitoring and debugging the pool service.
-///
-/// # Returns
-/// * `CacheStats` - Current cache statistics
-pub fn get_cache_stats() -> CacheStats {
-    cache::get_cache_stats()
+/// Cache statistics for monitoring, summed over the chains of `scope`
+pub fn get_cache_stats(scope: ChainScope) -> CacheStats {
+    scope.chains().into_iter().map(cache::stats).fold(
+        CacheStats {
+            total_prices: 0,
+            fresh_prices: 0,
+            history_entries: 0,
+        },
+        |sum, chain_stats| CacheStats {
+            total_prices: sum.total_prices + chain_stats.total_prices,
+            fresh_prices: sum.fresh_prices + chain_stats.fresh_prices,
+            history_entries: sum.history_entries + chain_stats.history_entries,
+        },
+    )
 }

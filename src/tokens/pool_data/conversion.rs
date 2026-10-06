@@ -5,13 +5,13 @@
 
 use crate::apis::dexscreener::types::DexScreenerPool;
 use crate::apis::geckoterminal::types::GeckoTerminalPool;
-use crate::pools::utils::is_sol_mint;
+use crate::chains::{adapter_for, ChainId};
 use crate::tokens::types::{TokenPoolInfo, TokenPoolSources};
 
 use super::utils::{parse_f64, parse_gecko_token_id};
 
-/// Convert DexScreener pool to TokenPoolInfo
-pub fn from_dexscreener(pool: &DexScreenerPool) -> Option<TokenPoolInfo> {
+/// Convert a DexScreener pool on `chain` to TokenPoolInfo
+pub fn from_dexscreener(chain: ChainId, pool: &DexScreenerPool) -> Option<TokenPoolInfo> {
     if pool.pair_address.trim().is_empty() {
         return None;
     }
@@ -31,10 +31,11 @@ pub fn from_dexscreener(pool: &DexScreenerPool) -> Option<TokenPoolInfo> {
         Some(pool.price_native.clone())
     };
 
+    let adapter = adapter_for(chain);
     let liquidity_token = pool.liquidity_base;
-    let liquidity_native = if is_sol_mint(quote_mint) {
+    let liquidity_native = if adapter.is_native_asset(quote_mint) {
         pool.liquidity_quote
-    } else if is_sol_mint(base_mint) {
+    } else if adapter.is_native_asset(base_mint) {
         pool.liquidity_base
     } else {
         None
@@ -54,7 +55,7 @@ pub fn from_dexscreener(pool: &DexScreenerPool) -> Option<TokenPoolInfo> {
         },
         base_mint: base_mint.to_string(),
         quote_mint: quote_mint.to_string(),
-        is_native_pair: is_sol_mint(base_mint) || is_sol_mint(quote_mint),
+        is_native_pair: adapter.is_native_asset(base_mint) || adapter.is_native_asset(quote_mint),
         liquidity_usd: pool.liquidity_usd,
         liquidity_token,
         liquidity_native,
@@ -87,13 +88,14 @@ mod tests {
             ..DexScreenerPool::default()
         };
 
-        let info = from_dexscreener(&pool).expect("valid pool converts");
+        let info = from_dexscreener(ChainId::Solana, &pool).expect("valid pool converts");
         assert_eq!(info.dex.as_deref(), Some("some_future_unlisted_dex"));
     }
 }
 
-/// Convert GeckoTerminal pool to TokenPoolInfo
+/// Convert a GeckoTerminal pool on `chain` to TokenPoolInfo
 pub fn from_geckoterminal(
+    chain: ChainId,
     pool: &GeckoTerminalPool,
     native_price_usd: f64,
 ) -> Option<TokenPoolInfo> {
@@ -110,7 +112,9 @@ pub fn from_geckoterminal(
         return None;
     }
 
-    let is_native_pair = is_sol_mint(&base_mint) || is_sol_mint(&quote_mint);
+    let adapter = adapter_for(chain);
+    let is_native_pair =
+        adapter.is_native_asset(&base_mint) || adapter.is_native_asset(&quote_mint);
 
     let (price_native_str, price_usd) = if pool.mint == base_mint {
         (

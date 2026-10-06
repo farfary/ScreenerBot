@@ -943,8 +943,6 @@ const PROCESS_CHAIN_SEAM_CALLER_FILES: &[&str] = &[
     "ohlcvs/fetcher.rs",
     "ohlcvs/manager.rs",
     "ohlcvs/service.rs",
-    "pools/cache.rs",
-    "pools/service.rs",
     "pools/utils.rs",
     "positions/apply.rs",
     "positions/database/global.rs",
@@ -1260,18 +1258,50 @@ fn implicit_chain_resolution_shrinks() {
     );
 }
 
+/// Domains that take the chain from their caller: no file under these
+/// prefixes may resolve a chain from an address or a scope.
+const CHAIN_THREADED_DOMAINS: &[&str] = &["tokens/", "filtering/", "pools/"];
+
 #[test]
-fn tokens_and_filtering_never_resolve_a_chain_implicitly() {
+fn chain_threaded_domains_never_resolve_a_chain_implicitly() {
     let inside: Vec<&str> = IMPLICIT_CHAIN_RESOLUTION_FILES
         .iter()
         .copied()
-        .filter(|entry| entry.starts_with("tokens/") || entry.starts_with("filtering/"))
+        .filter(|entry| {
+            CHAIN_THREADED_DOMAINS
+                .iter()
+                .any(|prefix| entry.starts_with(prefix))
+        })
         .collect();
     assert!(
         inside.is_empty(),
-        "tokens and filtering take the chain from their caller; these entries resolve it \
-         inside the domain:\n{}",
+        "{} take the chain from their caller; these entries resolve it inside the \
+         domain:\n{}",
+        CHAIN_THREADED_DOMAINS.join(", "),
         inside.join("\n")
+    );
+}
+
+/// Pools never reads candle data: OHLCV drives strategies and indicators
+/// only, and no OHLCV value may reach the pool price that trading and P&L
+/// read.
+#[test]
+fn pools_never_read_ohlcv() {
+    let mut violations = Vec::new();
+    for (relative, contents) in walk_src() {
+        if !relative.starts_with("pools") {
+            continue;
+        }
+        for (idx, line) in code_lines(&contents).lines().enumerate() {
+            if line.contains("crate::ohlcvs") {
+                violations.push(format!("src/{}:{}", relative.display(), idx + 1));
+            }
+        }
+    }
+    assert!(
+        violations.is_empty(),
+        "src/pools must never read OHLCV data:\n{}",
+        violations.join("\n")
     );
 }
 
@@ -1282,10 +1312,6 @@ fn tokens_and_filtering_never_resolve_a_chain_implicitly() {
 /// `file::STATIC` and freeze today's set; each shrinks away as its map is
 /// keyed through the chain runtime with an explicit chain-scoped key.
 const BARE_STRING_KEYED_STATICS: &[&str] = &[
-    "pools/cache.rs::OPEN_MINTS_SNAPSHOT",
-    "pools/cache.rs::PRICE_CACHE",
-    "pools/cache.rs::PRICE_HISTORY",
-    "pools/service.rs::DEBUG_TOKEN_OVERRIDE",
     "positions/price_resolution.rs::FORCE_FETCH_COOLDOWN",
     "positions/state.rs::MINT_TO_POSITION_INDEX",
     "positions/state.rs::PENDING_OPEN_SWAPS",

@@ -151,42 +151,6 @@ pub fn read_u8_at_offset(data: &[u8], offset: &mut usize) -> Result<u8, Error> {
     Ok(value)
 }
 
-/// Read a u16 value from data at given offset, advancing the offset
-pub fn read_u16_at_offset(data: &[u8], offset: &mut usize) -> Result<u16, Error> {
-    if *offset + 2 > data.len() {
-        return Err(Error::Decode {
-            field: "u16",
-            detail: "insufficient data".to_owned(),
-        });
-    }
-
-    let value_bytes = &data[*offset..*offset + 2];
-    *offset += 2;
-    let value = u16::from_le_bytes(value_bytes.try_into().map_err(|_| Error::Decode {
-        field: "u16",
-        detail: "byte slice has the wrong length".to_owned(),
-    })?);
-    Ok(value)
-}
-
-/// Read a u32 value from data at given offset, advancing the offset
-pub fn read_u32_at_offset(data: &[u8], offset: &mut usize) -> Result<u32, Error> {
-    if *offset + 4 > data.len() {
-        return Err(Error::Decode {
-            field: "u32",
-            detail: "insufficient data".to_owned(),
-        });
-    }
-
-    let value_bytes = &data[*offset..*offset + 4];
-    *offset += 4;
-    let value = u32::from_le_bytes(value_bytes.try_into().map_err(|_| Error::Decode {
-        field: "u32",
-        detail: "byte slice has the wrong length".to_owned(),
-    })?);
-    Ok(value)
-}
-
 /// Read a u64 value from data at given offset, advancing the offset
 pub fn read_u64_at_offset(data: &[u8], offset: &mut usize) -> Result<u64, Error> {
     if *offset + 8 > data.len() {
@@ -200,24 +164,6 @@ pub fn read_u64_at_offset(data: &[u8], offset: &mut usize) -> Result<u64, Error>
     *offset += 8;
     let value = u64::from_le_bytes(value_bytes.try_into().map_err(|_| Error::Decode {
         field: "u64",
-        detail: "byte slice has the wrong length".to_owned(),
-    })?);
-    Ok(value)
-}
-
-/// Read a u128 value from data at given offset, advancing the offset
-pub fn read_u128_at_offset(data: &[u8], offset: &mut usize) -> Result<u128, Error> {
-    if *offset + 16 > data.len() {
-        return Err(Error::Decode {
-            field: "u128",
-            detail: "insufficient data".to_owned(),
-        });
-    }
-
-    let value_bytes = &data[*offset..*offset + 16];
-    *offset += 16;
-    let value = u128::from_le_bytes(value_bytes.try_into().map_err(|_| Error::Decode {
-        field: "u128",
         detail: "byte slice has the wrong length".to_owned(),
     })?);
     Ok(value)

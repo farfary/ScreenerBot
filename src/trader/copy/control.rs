@@ -193,8 +193,9 @@ pub(super) async fn all_positions() -> Vec<Position> {
 /// The price a paper holding is marked at: the live pool price only, the same
 /// price its exits trade on. Without one the holding counts as unpriced; the last
 /// observed trade price is usually its own entry and would hide the real move.
-pub(super) fn paper_mark(position: &PaperPosition) -> Option<f64> {
-    crate::pools::get_pool_price(&position.mint).map(|price| price.price_native)
+/// `chain` is the chain of the task that holds the position.
+pub(super) fn paper_mark(chain: crate::chains::ChainId, position: &PaperPosition) -> Option<f64> {
+    crate::pools::get_pool_price(chain, &position.mint).map(|price| price.price_native)
 }
 
 /// A task's stats and the closed rounds of its book, from what was already read.
@@ -236,7 +237,10 @@ pub async fn task_stats_for(
 ) -> Result<CopyTaskStats> {
     let activity = db.list_task_activity(task.id, TASK_ACTIVITY_WINDOW).await?;
     let book = stats_book(db, task).await?;
-    Ok(book_stats(task, &activity, positions, &book, paper_mark).0)
+    Ok(book_stats(task, &activity, positions, &book, |position| {
+        paper_mark(task.chain, position)
+    })
+    .0)
 }
 
 pub async fn task_stats(id: i64) -> Result<CopyTaskStats> {
@@ -331,6 +335,7 @@ pub async fn overview(activity_limit: usize) -> Result<CopyTradingOverview> {
     let mut active_samples = Vec::new();
     let mut summaries = Vec::with_capacity(tasks.len());
     for (task, (task_activity, book, spent_native)) in tasks.into_iter().zip(reads) {
+        let chain = task.chain;
         let (summary, samples) = summarize(
             &status,
             task,
@@ -338,7 +343,7 @@ pub async fn overview(activity_limit: usize) -> Result<CopyTradingOverview> {
             &positions,
             &book,
             spent_native,
-            paper_mark,
+            |position| paper_mark(chain, position),
         );
         if summary.task.enabled {
             active_samples.extend(samples);

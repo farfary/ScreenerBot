@@ -13,10 +13,12 @@
 //! Token reservation and the submission pipeline (execute trade, event recording, action
 //! tracking) live in `trader::entry`, shared with any other entry source.
 
+use crate::chains::{ChainId, ChainScope};
 use crate::i18n::{ids, UiText};
 use crate::logger::{self, LogTag};
 use crate::pools;
 use crate::trader::{config, constants, entry, evaluators};
+use std::collections::{HashMap, HashSet};
 use tokio::time::{sleep, Duration, Instant};
 
 /// Monitor for new entry opportunities
@@ -84,25 +86,42 @@ pub async fn monitor_entries(
         // Start cycle timing
         let cycle_start = Instant::now();
 
-        // Get tokens that passed filtering — only these should be evaluated for entry
-        let passed_mints: std::collections::HashSet<String> =
-            match crate::filtering::get_passed_tokens(crate::chains::ChainScope::All).await {
-                Ok(tokens) => tokens.into_iter().map(|t| t.mint).collect(),
-                Err(e) => {
-                    logger::warning(
-                        LogTag::Trader,
-                        &format!("Failed to get passed tokens for entry: {e}"),
-                    );
-                    std::collections::HashSet::new()
+        // Get tokens that passed filtering — only these should be evaluated for entry,
+        // grouped by the chain whose snapshot they passed
+        let mut passed_by_chain: HashMap<ChainId, HashSet<String>> = HashMap::new();
+        match crate::filtering::get_passed_tokens(ChainScope::All).await {
+            Ok(tokens) => {
+                for token in tokens {
+                    passed_by_chain
+                        .entry(token.chain)
+                        .or_default()
+                        .insert(token.mint);
                 }
-            };
-        // Only consider pool-tracked tokens that also passed filtering
-        let pool_tokens = pools::get_available_tokens();
-        let available_tokens: Vec<String> = pool_tokens
-            .iter()
-            .filter(|mint| passed_mints.contains(*mint))
-            .cloned()
-            .collect();
+            }
+            Err(e) => {
+                logger::warning(
+                    LogTag::Trader,
+                    &format!("Failed to get passed tokens for entry: {e}"),
+                );
+            }
+        }
+        let passed_count: usize = passed_by_chain.values().map(HashSet::len).sum();
+
+        // Only consider pool-tracked tokens that also passed filtering on the same chain
+        let mut pool_count = 0;
+        let mut available_tokens: Vec<(ChainId, String)> = Vec::new();
+        for chain in ChainScope::All.chains() {
+            let pool_tokens = pools::get_available_tokens(chain);
+            pool_count += pool_tokens.len();
+            if let Some(passed) = passed_by_chain.get(&chain) {
+                available_tokens.extend(
+                    pool_tokens
+                        .into_iter()
+                        .filter(|mint| passed.contains(mint))
+                        .map(|mint| (chain, mint)),
+                );
+            }
+        }
 
         // Log periodically (every ~30s = every 10 cycles at 3s interval)
         static CYCLE_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -113,13 +132,13 @@ pub async fn monitor_entries(
                 &format!(
                     "[ENTRY] cycle={} pool={} passed={} intersection={} tokens=[{}]",
                     cycle,
-                    pool_tokens.len(),
-                    passed_mints.len(),
+                    pool_count,
+                    passed_count,
                     available_tokens.len(),
                     available_tokens
                         .iter()
                         .take(5)
-                        .map(|m| &m[..8.min(m.len())])
+                        .map(|(_, m)| &m[..8.min(m.len())])
                         .collect::<Vec<_>>()
                         .join(",")
                 ),
@@ -129,7 +148,7 @@ pub async fn monitor_entries(
         // Process tokens with concurrency control
         let mut futures = Vec::new();
 
-        for token in &available_tokens {
+        for (chain, token) in &available_tokens {
             // Try to reserve token for this cycle - prevents duplicate concurrent entries
             if !entry::try_reserve_entry(token).await {
                 logger::debug(
@@ -145,7 +164,7 @@ pub async fn monitor_entries(
             // Get latest price info
             // Note: If no price info, let reservation expire naturally via timeout
             // instead of clearing immediately to avoid race conditions
-            if let Some(price_info) = pools::get_pool_price(&token) {
+            if let Some(price_info) = pools::get_pool_price(*chain, token) {
                 // Acquire semaphore permit with timeout
                 let sem_clone = semaphore.clone();
                 let token_clone = token.clone();

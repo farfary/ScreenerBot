@@ -18,7 +18,6 @@ use crate::chains::{AssetId, ChainId, PoolId};
 use crate::config::with_config;
 use crate::events::{record_safe, Event, EventCategory};
 use crate::logger::{self, LogTag};
-use crate::pools::service::get_debug_token_override;
 use crate::pools::types::{max_watched_tokens, PoolDescriptor};
 use crate::pools::utils::{is_sol_mint, is_stablecoin_mint};
 use crate::tokens::{get_token_pools_snapshot, prefetch_token_pools};
@@ -238,12 +237,8 @@ impl PoolDiscovery {
             return Ok(0);
         }
 
-        // Build token list (respect debug override and global filtering)
-        let mut tokens: Vec<String> = if let Some(override_tokens) = get_debug_token_override() {
-            override_tokens
-        } else {
-            crate::tokens::get_passed_tokens(ChainId::Solana)
-        };
+        // Build token list from the tokens that passed filtering
+        let mut tokens: Vec<String> = crate::tokens::get_passed_tokens(ChainId::Solana);
 
         // Always include tokens with open positions for price monitoring
         let open_position_mints: Vec<String> = crate::positions::get_open_mints().await;

@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Pools parent service — initializes pool components and runs helper background tasks.
+//! Pools parent service — initializes pool components and runs the pools maintenance task.
 
 use crate::i18n::{ids, UiText};
 use crate::logger::{self, LogTag};
@@ -60,36 +60,28 @@ impl Service for PoolsService {
         shutdown: Arc<Notify>,
         monitor: tokio_metrics::TaskMonitor,
     ) -> crate::Result<Vec<JoinHandle<()>>> {
-        logger::info(LogTag::PoolService, "Starting pool helper tasks...");
+        logger::info(LogTag::PoolService, "Starting pool maintenance task...");
 
-        // Start helper background tasks (health monitor, database cleanup, gap cleanup)
-        // Note: Main pool tasks (discovery, fetcher, calculator, analyzer) are started by separate services
-        let handles = crate::pools::start_helper_tasks(shutdown, monitor).await;
+        // Periodic cache and database upkeep for every chain runs in one task.
+        // The pricing loops (discovery, fetcher, calculator, analyzer) are
+        // started by their own services.
+        let handle = crate::pools::start_maintenance_task(shutdown, monitor);
 
         logger::info(
             LogTag::PoolService,
-            &format!(
-                "Pool helper tasks started ({} instrumented handles)",
-                handles.len()
-            ),
+            "Pool maintenance task started (1 instrumented handle)",
         );
 
-        // Return handles so ServiceManager can wait for graceful shutdown
-        Ok(handles)
+        // Return the handle so ServiceManager can wait for graceful shutdown
+        Ok(vec![handle])
     }
 
     async fn stop(&mut self) -> crate::Result<()> {
         logger::info(LogTag::PoolService, "Stopping pool service...");
 
-        // Stop pool service gracefully, releasing the Solana runtime components.
-        crate::pools::stop_pool_service(5, crate::chains::solana::pools::service::clear_components)
-            .await
-            .map_err(|e| {
-                crate::Error::Service(crate::errors::ServiceError::Stop {
-                    service: "pools".to_owned(),
-                    message: format!("Failed to stop pool service: {:?}", e),
-                })
-            })?;
+        // Stop the pool service, releasing the Solana runtime components.
+        crate::pools::stop_pool_service(crate::chains::solana::pools::service::clear_components)
+            .await;
 
         Ok(())
     }

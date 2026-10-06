@@ -102,15 +102,18 @@ pub async fn get_position_details(Path(key): Path<String>) -> Response {
             });
 
             // Get pool info from pool service
-            let pool_info = pools::get_pool_price(mint).map(|price_result| PositionPoolInfo {
-                pool_address: Some(price_result.pool_address.clone()),
-                pool_program: crate::chains::solana::pools::service::get_pool_program(
-                    mint,
-                    &price_result.pool_address,
-                )
-                .map(str::to_owned),
-                liquidity_native: Some(price_result.native_reserves),
-            });
+            let pool_info =
+                pools::get_pool_price(crate::chains::active_chain(), mint).map(|price_result| {
+                    PositionPoolInfo {
+                        pool_address: Some(price_result.pool_address.clone()),
+                        pool_program: crate::chains::solana::pools::service::get_pool_program(
+                            mint,
+                            &price_result.pool_address,
+                        )
+                        .map(str::to_owned),
+                        liquidity_native: Some(price_result.native_reserves),
+                    }
+                });
 
             // Build external links
             let external_links = ExternalLinks::for_mint(mint);

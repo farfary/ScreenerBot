@@ -99,7 +99,7 @@ impl DirectPoolRouter {
             }
         };
 
-        if let Some(price) = crate::pools::get_pool_price(token) {
+        if let Some(price) = crate::pools::get_pool_price(crate::chains::ChainId::Solana, token) {
             push(&price.pool_address);
         }
 

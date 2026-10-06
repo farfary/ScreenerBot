@@ -203,7 +203,7 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
         price_source_pool,
         pool_reserves_native,
         pool_reserves_token,
-    ) = if let Some(price_result) = pools::get_pool_price(&mint) {
+    ) = if let Some(price_result) = pools::get_pool_price(crate::chains::active_chain(), &mint) {
         let age_secs = price_result.timestamp.elapsed().as_secs();
         let now_unix = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -862,7 +862,7 @@ pub async fn get_token_analysis(
         .map(|p| p.pool_id.address().to_owned());
 
     // Get real-time pool price
-    let pool_price = pools::get_pool_price(&mint);
+    let pool_price = pools::get_pool_price(crate::chains::active_chain(), &mint);
 
     // Get SOL/USD price for conversions (get_native_price returns f64 directly)
     let sol_price_usd = get_native_price();

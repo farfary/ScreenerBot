@@ -9,6 +9,7 @@
 //! 3. Force fetch fresh API price if stale — immediate update and retry
 
 use super::types::PriceSource;
+use crate::chains::chain_for_address;
 use crate::logger::{self, LogTag};
 use crate::pools::{get_pool_price, PriceResult};
 use std::sync::LazyLock;
@@ -32,6 +33,14 @@ static FORCE_FETCH_COOLDOWN: LazyLock<moka::sync::Cache<String, ()>> = LazyLock:
         .build()
 });
 
+/// The live pool price of a position's token, on the chain its address
+/// belongs to. A mint no enabled chain accepts has no pool price.
+pub fn live_pool_price(mint: &str) -> Option<PriceResult> {
+    chain_for_address(mint)
+        .ok()
+        .and_then(|chain| get_pool_price(chain, mint))
+}
+
 /// Get price with fallback to API when pool price unavailable
 ///
 /// Priority:
@@ -41,18 +50,21 @@ static FORCE_FETCH_COOLDOWN: LazyLock<moka::sync::Cache<String, ()>> = LazyLock:
 ///
 /// This enables trading for tokens not yet in the pool service price list
 pub async fn get_price_with_api_fallback(token_mint: &str) -> Option<(PriceResult, PriceSource)> {
+    // The token's chain, resolved once for both the pool and the database read.
+    // A mint no enabled chain accepts has neither a pool price nor a stored token.
+    let chain = chain_for_address(token_mint).ok();
+
     // Priority 1: Try pool price (real-time on-chain data)
-    if let Some(price_result) = get_pool_price(token_mint) {
+    if let Some(price_result) = chain.and_then(|chain| get_pool_price(chain, token_mint)) {
         if price_result.price_native > 0.0 && price_result.price_native.is_finite() {
             return Some((price_result, PriceSource::Pool));
         }
     }
 
     // Priority 2: Try API price from token database (DexScreener/GeckoTerminal).
-    // A mint no enabled chain accepts is a token the database cannot hold.
-    let stored = match crate::chains::chain_for_address(token_mint) {
-        Ok(chain) => crate::tokens::get_full_token_async(chain, token_mint).await,
-        Err(_) => Ok(None),
+    let stored = match chain {
+        Some(chain) => crate::tokens::get_full_token_async(chain, token_mint).await,
+        None => Ok(None),
     };
     match stored {
         Ok(Some(token)) => {
@@ -189,7 +201,7 @@ async fn force_fetch_fresh_price(token_mint: &str) -> Option<crate::tokens::Toke
     FORCE_FETCH_COOLDOWN.insert(token_mint.to_string(), ());
 
     // Request immediate market data update from tokens system
-    let update = match crate::chains::chain_for_address(token_mint) {
+    let update = match chain_for_address(token_mint) {
         Ok(chain) => crate::tokens::request_immediate_update(chain, token_mint)
             .await
             .map(|result| (chain, result)),

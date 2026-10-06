@@ -17,6 +17,7 @@ use super::store_helpers::{apply_filters, collect_entries, is_snapshot_stale, so
 use super::types::{
     FilteringQuery, FilteringSnapshot, FilteringView, SortDirection, TokenEntry, TokenSortKey,
 };
+use crate::chains::ChainId;
 use crate::tokens::types::{DataSource, Token};
 use crate::tokens::Priority;
 
@@ -589,7 +590,7 @@ fn sorted_mints(
     dir: SortDirection,
 ) -> Vec<String> {
     let mut items = token_refs(snapshot, FilteringView::All);
-    sort_tokens(&mut items, key, dir);
+    sort_tokens(ChainId::Solana, &mut items, key, dir);
     items.iter().map(|t| t.mint.clone()).collect()
 }
 
@@ -977,7 +978,12 @@ fn sorting_a_large_view_stays_within_n_log_n() {
         let started = std::time::Instant::now();
         for _ in 0..5 {
             let mut items = token_refs(&snapshot, FilteringView::All);
-            sort_tokens(&mut items, TokenSortKey::LiquidityUsd, SortDirection::Desc);
+            sort_tokens(
+                ChainId::Solana,
+                &mut items,
+                TokenSortKey::LiquidityUsd,
+                SortDirection::Desc,
+            );
         }
         started.elapsed()
     }

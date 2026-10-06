@@ -146,7 +146,8 @@ pub async fn close_paper_holding(id: i64, mint: &str) -> Result<ClosedHolding> {
             mint: mint.to_owned(),
         })?;
     let now = Utc::now();
-    let mark = control::paper_mark(&position).filter(|price| price.is_finite() && *price > 0.0);
+    let mark = control::paper_mark(task.chain, &position)
+        .filter(|price| price.is_finite() && *price > 0.0);
     let outcome = match mark {
         Some(mark) => paper_exit_outcome(
             &task,

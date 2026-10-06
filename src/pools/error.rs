@@ -6,7 +6,6 @@
 
 use std::time::Duration;
 
-use crate::chains::ChainId;
 use crate::errors::{DatabaseError, ErrorClass, InternalError, Severity};
 
 /// Everything that can go wrong maintaining chain-neutral pool prices,
@@ -25,10 +24,6 @@ pub enum Error {
     /// dropped) when an operation needed it.
     #[error("pools database is not initialized")]
     NotInitialized,
-    /// A caller asked the global pools database for a chain other than the
-    /// one it was opened for.
-    #[error("pools database is bound to {bound}, requested for {requested}")]
-    ChainMismatch { bound: ChainId, requested: ChainId },
     /// The background price-history write queue could not accept a price.
     #[error("price-history queue is unavailable: {detail}")]
     QueueUnavailable { detail: String },
@@ -52,9 +47,6 @@ pub enum Error {
     /// chain-neutral and must not name a chain adapter's error type.
     #[error("pool component initialization failed: {detail}")]
     ComponentInit { detail: String },
-    /// The pool service did not finish shutting down within its deadline.
-    #[error("pool service shutdown timed out after {timeout_seconds}s")]
-    ShutdownTimeout { timeout_seconds: u64 },
 }
 
 /// Result alias for the pools module.
@@ -67,13 +59,11 @@ impl ErrorClass for Error {
             Error::Internal(e) => e.is_retryable(),
             Error::ComponentInit { .. } => true,
             Error::NotInitialized
-            | Error::ChainMismatch { .. }
             | Error::QueueUnavailable { .. }
             | Error::Decode { .. }
             | Error::InvalidPool { .. }
             | Error::MigrationIntegrity { .. }
-            | Error::AlreadyRunning
-            | Error::ShutdownTimeout { .. } => false,
+            | Error::AlreadyRunning => false,
         }
     }
 
@@ -91,12 +81,11 @@ impl ErrorClass for Error {
             Error::Database(e) => e.severity(),
             Error::Internal(e) => e.severity(),
             Error::NotInitialized | Error::QueueUnavailable { .. } => Severity::Error,
-            Error::ChainMismatch { .. } | Error::MigrationIntegrity { .. } => Severity::Critical,
+            Error::MigrationIntegrity { .. } => Severity::Critical,
             Error::Decode { .. } => Severity::Warning,
             Error::InvalidPool { .. } => Severity::Info,
             Error::AlreadyRunning => Severity::Warning,
             Error::ComponentInit { .. } => Severity::Error,
-            Error::ShutdownTimeout { .. } => Severity::Warning,
         }
     }
 
@@ -105,11 +94,10 @@ impl ErrorClass for Error {
             Error::Database(e) => e.http_status(),
             Error::Internal(e) => e.http_status(),
             Error::NotInitialized | Error::QueueUnavailable { .. } => 503,
-            Error::ChainMismatch { .. } | Error::MigrationIntegrity { .. } => 500,
+            Error::MigrationIntegrity { .. } => 500,
             Error::Decode { .. } | Error::InvalidPool { .. } => 422,
             Error::AlreadyRunning => 409,
             Error::ComponentInit { .. } => 503,
-            Error::ShutdownTimeout { .. } => 504,
         }
     }
 }

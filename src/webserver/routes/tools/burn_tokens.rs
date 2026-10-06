@@ -110,7 +110,7 @@ pub async fn scan_burnable_tokens() -> Response {
             .unwrap_or((None, None));
 
         // Get price from pools module
-        let price_result = pools::get_pool_price(&account.mint);
+        let price_result = pools::get_pool_price(crate::chains::active_chain(), &account.mint);
         let price_sol = price_result.as_ref().map(|p| p.price_native);
         let has_liquidity = price_result
             .as_ref()

@@ -44,7 +44,7 @@ pub async fn force_close_position(position_id: i64, note: &str) -> Result<ForceC
 
     // The exit price is informational: a live pool price when there is one, else the last
     // known price.
-    let exit_price = crate::pools::get_pool_price(&snapshot.mint)
+    let exit_price = crate::positions::price_resolution::live_pool_price(&snapshot.mint)
         .map(|price| price.price_native)
         .filter(|price| *price > 0.0 && price.is_finite())
         .or(snapshot.current_price)

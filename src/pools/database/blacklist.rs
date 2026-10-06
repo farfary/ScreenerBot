@@ -483,7 +483,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_pool_is_blacklisted_only_once_the_threshold_is_reached() {
-        let db = pooled_legacy_database("blacklist-threshold");
+        let (db, _dir) = pooled_legacy_database("blacklist-threshold");
 
         let first = db
             .add_pool_to_blacklist("PoolA", "analysis_failed", Some("MintA"), None, 1, POLICY)
@@ -513,7 +513,7 @@ mod tests {
 
     #[tokio::test]
     async fn an_expired_entry_stops_blacklisting_and_its_count_restarts() {
-        let db = pooled_legacy_database("blacklist-expiry");
+        let (db, _dir) = pooled_legacy_database("blacklist-expiry");
         let stale = unix_now() - POLICY.ttl_secs - 1;
         {
             let conn = db
@@ -553,7 +553,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_caller_counted_threshold_blacklists_on_its_first_report() {
-        let db = pooled_legacy_database("blacklist-counted");
+        let (db, _dir) = pooled_legacy_database("blacklist-counted");
         let outcome = db
             .add_pool_to_blacklist("PoolC", "missing_accounts", Some("MintC"), None, 2, POLICY)
             .await

@@ -198,7 +198,7 @@ impl PriceCalculator {
                                     prices_calculated.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
                                     // Update cache with calculated price
-                                    cache::update_price(price_result.clone());
+                                    cache::update_price(crate::chains::ChainId::Solana, price_result.clone());
 
                                     if let Some(db) = database(crate::chains::ChainId::Solana) {
                                         if let Err(e) = db.mark_pool_price_calculated(

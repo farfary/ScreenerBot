@@ -4,7 +4,6 @@
 //! Position price updater — refreshes current prices for all active positions.
 
 use crate::logger::{self, LogTag};
-use crate::pools;
 use crate::positions::get_open_positions;
 use crate::positions::{Error, Result};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -111,7 +110,8 @@ async fn update_all_position_prices() {
             }
             None => {
                 // Log at info level to diagnose frozen prices
-                let has_pool = pools::get_pool_price(&position.mint).is_some();
+                let has_pool =
+                    crate::positions::price_resolution::live_pool_price(&position.mint).is_some();
                 logger::info(
                     LogTag::Positions,
                     &format!(

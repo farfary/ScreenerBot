@@ -1,20 +1,19 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! New modular pool system for real-time price calculations
+//! Pool system for real-time price calculations
 //!
-//! This module provides a centralized pool service that watches up to 100+ tokens
-//! and provides real-time prices derived from various DEX pools (Raydium, Orca, etc.).
+//! A centralized pool service that watches tokens and provides real-time
+//! prices derived from DEX pools. Every price, list and history is kept per
+//! chain, and every public function takes the chain (or, for an aggregate,
+//! the `ChainScope`) from its caller:
+//! - get_pool_price(chain, mint) -> current fresh price for a token
+//! - get_available_tokens(chain) -> tokens of that chain with fresh prices
+//! - get_cache_stats(scope) -> cache counts summed over the scope's chains
 //!
-//! PUBLIC API (only these functions are exposed):
-//! - start_pool_service() -> Initialize the pool service
-//! - get_pool_price(mint) -> Get current price for a token
-//! - get_available_tokens() -> Get list of tokens with available prices
-//! - get_price_history(mint) -> Get price history for a token
-//!
-//! Chain-neutral: persistence (`database`), caching (`cache`) and service
-//! lifecycle (`service`) live here, and the `PoolDescriptor` domain model
-//! (`types`) is a chain-neutral value object — no `Pubkey`, no Solana vendor
+//! Chain-neutral: persistence (`database`), caching (`cache`), service
+//! lifecycle (`service`) and periodic upkeep (`maintenance`) live here, and
+//! the `PoolDescriptor` domain model (`types`) is a chain-neutral value object — no `Pubkey`, no Solana vendor
 //! type, anywhere in this module. Solana-specific pool discovery, RPC account
 //! fetching, protocol recognition, DEX byte decoding and price calculation
 //! (which dispatches on the concrete `ProgramKind` and reads `Pubkey`-keyed
@@ -31,6 +30,7 @@
 mod api;
 pub(crate) mod cache;
 mod error;
+mod maintenance;
 
 // Re-export db types for blacklist API
 pub mod database;
@@ -40,10 +40,11 @@ pub mod service;
 pub mod types;
 pub mod utils;
 
-pub use api::{get_available_tokens, get_cache_stats, get_pool_price, get_price_history};
+pub use api::{get_available_tokens, get_cache_stats, get_pool_price};
 pub use error::{Error, Result};
+pub use maintenance::start_maintenance_task;
 pub use service::{
-    get_debug_token_override, initialize_pool_components, is_pool_service_running,
-    is_single_pool_mode_enabled, set_debug_token_override, start_helper_tasks, stop_pool_service,
+    initialize_pool_components, is_pool_service_running, is_single_pool_mode_enabled,
+    stop_pool_service,
 };
 pub use types::{CacheStats, PoolMintVaultInfo, PriceResult, TokenPairInfo};

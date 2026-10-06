@@ -24,11 +24,11 @@ pub use types::{
 // Re-export public functions from global module
 pub use global::{
     add_account_to_blacklist, add_pool_to_blacklist, cleanup_all_gapped_data,
-    cleanup_gapped_data_for_token, cleanup_old_entries, get_blacklist_stats,
-    get_extended_price_history, initialize_database, is_account_blacklisted, is_pool_blacklisted,
-    list_blacklisted_accounts, list_blacklisted_pools, load_historical_data_for_token,
-    queue_price_for_storage,
+    cleanup_gapped_data_for_token, cleanup_old_entries, initialize_database,
+    is_account_blacklisted, is_pool_blacklisted, list_blacklisted_accounts, list_blacklisted_pools,
+    load_historical_data_for_token, queue_price_for_storage,
 };
+pub(crate) use global::{database, install_database};
 
 // Re-export PoolsDatabase for advanced usage
 pub use operations::PoolsDatabase;

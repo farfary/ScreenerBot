@@ -228,6 +228,8 @@ pub async fn task_workspace(id: i64) -> Result<CopyTaskWorkspace> {
     let paper_book = db.paper_positions(id).await?;
     let spent_native = db.task_total_spent(id, task.mode).await?;
     let live_spent_native = db.task_total_spent(id, CopyMode::Live).await?;
+    let chain = task.chain;
+    let mark = |position: &PaperPosition| control::paper_mark(chain, position);
     let (summary, _) = control::summarize(
         &status,
         task,
@@ -235,7 +237,7 @@ pub async fn task_workspace(id: i64) -> Result<CopyTaskWorkspace> {
         &positions,
         &paper_book,
         spent_native,
-        control::paper_mark,
+        mark,
     );
     Ok(build_workspace(
         summary,
@@ -243,7 +245,7 @@ pub async fn task_workspace(id: i64) -> Result<CopyTaskWorkspace> {
         &activity,
         &positions,
         &paper_book,
-        control::paper_mark,
+        mark,
         control::live_block_reason(),
         Utc::now(),
     ))

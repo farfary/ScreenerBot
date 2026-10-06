@@ -841,7 +841,10 @@ impl AccountFetcher {
             update.trigger = calculation_trigger(
                 update.bundle.calculation_requested,
                 update.reserves_changed,
-                crate::pools::cache::cached_price_age(target_token_mint(&update.descriptor)),
+                crate::pools::cache::cached_price_age(
+                    crate::chains::ChainId::Solana,
+                    target_token_mint(&update.descriptor),
+                ),
                 heartbeat,
             );
             if update.trigger.is_some() {

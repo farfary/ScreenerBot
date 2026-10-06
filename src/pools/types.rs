@@ -254,11 +254,6 @@ impl PriceHistory {
         self.prices.back()
     }
 
-    /// Convert the price history to a Vec snapshot
-    pub fn to_vec(&self) -> Vec<PriceResult> {
-        self.prices.iter().cloned().collect()
-    }
-
     /// Detect if there's a gap larger than MAX_PRICE_GAP_SECONDS before the new price
     /// Returns the index where the gap starts (all data before this index should be removed)
     fn detect_gap_before_price(&self, new_price: &PriceResult) -> Option<usize> {

@@ -234,9 +234,6 @@ pub struct PoolFetcherSnapshot {
 #[derive(Clone, Debug, Serialize)]
 pub struct PoolDiscoverySnapshot {
     pub sources_enabled: Vec<String>,
-    pub debug_override_active: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub debug_override_count: Option<usize>,
 }
 
 #[derive(Clone, Debug, Serialize)]

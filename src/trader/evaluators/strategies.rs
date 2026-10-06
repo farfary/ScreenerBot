@@ -261,7 +261,7 @@ impl StrategyEvaluator {
         // the condition errored on every tick, the error aborted the whole strategy, and
         // the rule never fired once in the life of any position.
         let market_data = MarketData {
-            liquidity_sol: crate::pools::get_pool_price(&position.mint)
+            liquidity_sol: crate::positions::price_resolution::live_pool_price(&position.mint)
                 .and_then(|price| usable_liquidity(price.native_reserves)),
             volume_24h: None,
             market_cap: None,
