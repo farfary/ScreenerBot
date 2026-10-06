@@ -297,14 +297,20 @@ pub fn allowance_lamports(trade_value_lamports: u64, settings: &CostGuardSetting
 }
 
 /// The trade's own size in lamports, when one of its legs is the native asset.
-pub fn trade_value_lamports(quote: &Quote) -> u64 {
+pub fn trade_value_lamports(quote: &Quote) -> Result<u64> {
     let adapter = crate::chains::adapter();
     if adapter.is_native_asset(&quote.input_mint) {
-        quote.input_amount
+        u64::try_from(quote.input_amount).map_err(|_| Error::InstructionBuild {
+            instruction: "swap cost guard",
+            detail: "input amount exceeds the Solana u64 limit".to_owned(),
+        })
     } else if adapter.is_native_asset(&quote.output_mint) {
-        quote.output_amount
+        u64::try_from(quote.output_amount).map_err(|_| Error::InstructionBuild {
+            instruction: "swap cost guard",
+            detail: "output amount exceeds the Solana u64 limit".to_owned(),
+        })
     } else {
-        0
+        Ok(0)
     }
 }
 
@@ -382,7 +388,7 @@ pub async fn preflight(
         attribute_unresolved(&mut assessment, &owners);
     }
 
-    let allowance = allowance_lamports(trade_value_lamports(quote), &settings);
+    let allowance = allowance_lamports(trade_value_lamports(quote)?, &settings);
     if assessment.unrecoverable_lamports > allowance {
         let venue_program = assessment.venue_program.clone().unwrap_or_default();
         // Name the venue the way people and the aggregator both know it; fall

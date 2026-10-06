@@ -196,11 +196,13 @@ pub async fn partial_close_position(
                 "Partial exit quote ({}% slippage): {} tokens -> {} SOL",
                 slippage,
                 exit_amount,
-                adapter().raw_to_native(quote.output_amount)
+                quote.output_amount.raw() as f64 / adapter().raw_units_per_native() as f64
             ),
         );
 
-        match execute_swap_with_fallback(&api_token, quote).await {
+        match execute_swap_with_fallback(&api_token, quote, crate::swaps::SwapAmountLimit::U64)
+            .await
+        {
             Ok(res) => {
                 swap_result = Some(res);
                 last_err = None;
@@ -240,7 +242,13 @@ pub async fn partial_close_position(
 
                     match get_best_quote(retry_request).await {
                         Ok(retry_quote) => {
-                            match execute_swap_with_fallback(&api_token, retry_quote).await {
+                            match execute_swap_with_fallback(
+                                &api_token,
+                                retry_quote,
+                                crate::swaps::SwapAmountLimit::U64,
+                            )
+                            .await
+                            {
                                 Ok(res) => {
                                     swap_result = Some(res);
                                     last_err = None;

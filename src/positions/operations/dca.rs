@@ -146,7 +146,7 @@ pub async fn add_to_position(
     let quoted_tokens = match api_token.decimals {
         Some(decimals) => format!(
             "{}",
-            quote.output_amount as f64 / 10_f64.powi(decimals as i32)
+            quote.output_amount.raw() as f64 / 10_f64.powi(decimals as i32)
         ),
         None => format!("{} raw", quote.output_amount),
     };
@@ -162,7 +162,13 @@ pub async fn add_to_position(
     // clean fill. Returning `SwapFailed` here would leave the wallet holding
     // tokens the position never counted -- the same recovery `open.rs` performs on
     // an entry.
-    let transaction_signature = match execute_swap_with_fallback(&api_token, quote).await {
+    let transaction_signature = match execute_swap_with_fallback(
+        &api_token,
+        quote,
+        crate::swaps::SwapAmountLimit::U64,
+    )
+    .await
+    {
         Ok(result) => result.transaction_signature,
         Err(error) => match crate::swaps::unconfirmed_swap_signature(&error) {
             Some(signature) => {

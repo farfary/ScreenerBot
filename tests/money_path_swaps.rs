@@ -167,9 +167,9 @@ impl SwapRouter for ScenarioRouter {
             router_name: self.id.to_owned(),
             input_mint: request.input_mint.clone(),
             output_mint: request.output_mint.clone(),
-            input_amount: u64::try_from(request.input_amount).expect("test request fits Solana"),
-            output_amount: 1,
-            minimum_output_amount: 1,
+            input_amount: request.input_amount,
+            output_amount: 1u64.into(),
+            minimum_output_amount: 1u64.into(),
             price_impact_pct: 0.0,
             platform_fee_lamports: None,
             estimated_network_fee_lamports: None,
@@ -182,7 +182,7 @@ impl SwapRouter for ScenarioRouter {
         };
         match (current_scenario(), self.id) {
             (Scenario::ZeroOutput, "only") => Ok(Quote {
-                output_amount: 0,
+                output_amount: 0u64.into(),
                 ..base
             }),
             (Scenario::InvertedMint, "only") => Ok(Quote {
@@ -190,15 +190,15 @@ impl SwapRouter for ScenarioRouter {
                 // was quoted, and must not be accepted as "the" quote.
                 input_mint: request.output_mint.clone(),
                 output_mint: request.input_mint.clone(),
-                output_amount: 999_999,
+                output_amount: 999_999u64.into(),
                 ..base
             }),
             (Scenario::TwoValidQuotes, "low") => Ok(Quote {
-                output_amount: 100,
+                output_amount: 100u64.into(),
                 ..base
             }),
             (Scenario::TwoValidQuotes, "high") => Ok(Quote {
-                output_amount: 200,
+                output_amount: 200u64.into(),
                 ..base
             }),
             _ => Err(screenerbot::swaps::QuoteError::Unavailable {
@@ -320,7 +320,7 @@ async fn get_best_quote_picks_the_higher_output_among_valid_quotes() {
         .await
         .expect("two valid quotes must produce a winner");
     assert_eq!(quote.router_id, "high");
-    assert_eq!(quote.output_amount, 200);
+    assert_eq!(quote.output_amount, 200u64.into());
 }
 
 // ============================================================================

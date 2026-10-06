@@ -230,7 +230,9 @@ pub async fn close_position_direct(
             }
         };
 
-        match execute_swap_with_fallback(&api_token, quote).await {
+        match execute_swap_with_fallback(&api_token, quote, crate::swaps::SwapAmountLimit::U64)
+            .await
+        {
             Ok(res) => {
                 swap_result = Some(res);
                 last_err = None;
@@ -277,7 +279,13 @@ pub async fn close_position_direct(
                             continue;
                         }
                     };
-                    match execute_swap_with_fallback(&api_token, retry_quote).await {
+                    match execute_swap_with_fallback(
+                        &api_token,
+                        retry_quote,
+                        crate::swaps::SwapAmountLimit::U64,
+                    )
+                    .await
+                    {
                         Ok(res) => {
                             swap_result = Some(res);
                             last_err = None;
@@ -326,8 +334,8 @@ pub async fn close_position_direct(
             let transaction_signature = result.transaction_signature.clone();
 
             // CRITICAL: Log execution vs requested amounts to detect partial execution
-            let executed_amount = result.input_amount;
-            if executed_amount < sell_amount {
+            let executed_amount = result.input_amount.raw();
+            if executed_amount < u128::from(sell_amount) {
                 logger::warning(
                     LogTag::Positions,
                     &format!(
@@ -335,7 +343,7 @@ pub async fn close_position_direct(
         api_token.symbol,
         sell_amount,
         executed_amount,
-        sell_amount - executed_amount
+        u128::from(sell_amount) - executed_amount
       ),
                 );
             } else {

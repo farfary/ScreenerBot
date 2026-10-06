@@ -14,7 +14,7 @@
 
 use crate::swaps::operations::{best_quote_on, validate_quote};
 use crate::swaps::registry::{get_registry, RouterRegistry};
-use crate::swaps::types::{Quote, QuoteRequest, RouterChoice, SwapResult};
+use crate::swaps::types::{Quote, QuoteRequest, RouterChoice, SwapAmountLimit, SwapResult};
 use crate::{Error, Result};
 
 /// Quote for `wallet_id` under `choice` and execute that quote on the router
@@ -25,9 +25,10 @@ pub async fn quote_and_execute_for_wallet(
     request: QuoteRequest,
     wallet_id: i64,
     choice: RouterChoice,
+    amount_limit: SwapAmountLimit,
 ) -> Result<(Quote, SwapResult)> {
     let registry = get_registry()?;
-    quote_and_execute_for_wallet_on(registry, request, wallet_id, choice).await
+    quote_and_execute_for_wallet_on(registry, request, wallet_id, choice, amount_limit).await
 }
 
 /// Same as [`quote_and_execute_for_wallet`], against an explicit registry.
@@ -38,6 +39,7 @@ pub(crate) async fn quote_and_execute_for_wallet_on(
     request: QuoteRequest,
     wallet_id: i64,
     choice: RouterChoice,
+    amount_limit: SwapAmountLimit,
 ) -> Result<(Quote, SwapResult)> {
     let quote = match &choice {
         RouterChoice::Auto => best_quote_on(registry, request)
@@ -76,7 +78,9 @@ pub(crate) async fn quote_and_execute_for_wallet_on(
         )));
     }
 
-    let result = router.execute_swap_for_wallet(&quote, wallet_id).await?;
+    amount_limit.check_quote(&quote).map_err(Error::from)?;
+    let result =
+        amount_limit.check_result(router.execute_swap_for_wallet(&quote, wallet_id).await?)?;
     Ok((quote, result))
 }
 
@@ -109,7 +113,7 @@ mod tests {
         enabled: bool,
         priority: u8,
         supports_wallet: bool,
-        output_amount: u64,
+        output_amount: u128,
         log: Arc<CallLog>,
     }
 
@@ -152,10 +156,9 @@ mod tests {
                 router_name: self.id.to_owned(),
                 input_mint: request.input_mint.clone(),
                 output_mint: request.output_mint.clone(),
-                input_amount: u64::try_from(request.input_amount)
-                    .expect("test request fits Solana"),
-                output_amount: self.output_amount,
-                minimum_output_amount: self.output_amount,
+                input_amount: request.input_amount,
+                output_amount: self.output_amount.into(),
+                minimum_output_amount: self.output_amount.into(),
                 price_impact_pct: 0.1,
                 platform_fee_lamports: None,
                 estimated_network_fee_lamports: None,
@@ -196,7 +199,11 @@ mod tests {
                 router_name: self.id.to_owned(),
                 transaction_signature: format!("sig-{}", self.id),
                 input_amount: quote.input_amount,
-                output_amount: quote.output_amount,
+                output_amount: if self.id == "wide_result" {
+                    crate::chains::RawAmount::from(u64::MAX as u128 + 1)
+                } else {
+                    quote.output_amount
+                },
                 price_impact_pct: quote.price_impact_pct,
                 fee_lamports: 0,
                 execution_time_ms: 1,
@@ -236,10 +243,15 @@ mod tests {
             },
         ]);
 
-        let (quote, result) =
-            quote_and_execute_for_wallet_on(&registry, request(), 7, RouterChoice::Auto)
-                .await
-                .expect("alt_router should quote and execute");
+        let (quote, result) = quote_and_execute_for_wallet_on(
+            &registry,
+            request(),
+            7,
+            RouterChoice::Auto,
+            SwapAmountLimit::Unrestricted,
+        )
+        .await
+        .expect("alt_router should quote and execute");
 
         assert_eq!(quote.router_id, "alt_router");
         assert_eq!(result.router_id, "alt_router");
@@ -275,9 +287,15 @@ mod tests {
             },
         ]);
 
-        quote_and_execute_for_wallet_on(&registry, request(), 3, RouterChoice::Auto)
-            .await
-            .expect("alt_router path");
+        quote_and_execute_for_wallet_on(
+            &registry,
+            request(),
+            3,
+            RouterChoice::Auto,
+            SwapAmountLimit::Unrestricted,
+        )
+        .await
+        .expect("alt_router path");
 
         let execs = log.wallet_execs.lock().expect("execs");
         assert!(
@@ -312,10 +330,15 @@ mod tests {
             },
         ]);
 
-        let (quote, result) =
-            quote_and_execute_for_wallet_on(&registry, request(), 1, RouterChoice::Auto)
-                .await
-                .expect("a tie resolves to jupiter");
+        let (quote, result) = quote_and_execute_for_wallet_on(
+            &registry,
+            request(),
+            1,
+            RouterChoice::Auto,
+            SwapAmountLimit::Unrestricted,
+        )
+        .await
+        .expect("a tie resolves to jupiter");
 
         assert_eq!(quote.router_id, "jupiter");
         assert_eq!(result.router_id, "jupiter");
@@ -348,10 +371,15 @@ mod tests {
             },
         ]);
 
-        let (quote, result) =
-            quote_and_execute_for_wallet_on(&registry, request(), 1, RouterChoice::Auto)
-                .await
-                .expect("direct quotes more");
+        let (quote, result) = quote_and_execute_for_wallet_on(
+            &registry,
+            request(),
+            1,
+            RouterChoice::Auto,
+            SwapAmountLimit::Unrestricted,
+        )
+        .await
+        .expect("direct quotes more");
 
         assert_eq!(quote.router_id, "direct");
         assert_eq!(result.router_id, "direct");
@@ -387,6 +415,7 @@ mod tests {
             request(),
             1,
             RouterChoice::Specific("direct".to_owned()),
+            SwapAmountLimit::Unrestricted,
         )
         .await
         .expect("direct executes its own quote");
@@ -415,6 +444,7 @@ mod tests {
                 request(),
                 1,
                 RouterChoice::Specific(id.to_owned()),
+                SwapAmountLimit::Unrestricted,
             )
             .await
             .expect_err("an unavailable router cannot trade");
@@ -439,9 +469,15 @@ mod tests {
             log: Arc::clone(&log),
         }]);
 
-        let err = quote_and_execute_for_wallet_on(&registry, request(), 9, RouterChoice::Auto)
-            .await
-            .expect_err("raydium cannot execute for a wallet");
+        let err = quote_and_execute_for_wallet_on(
+            &registry,
+            request(),
+            9,
+            RouterChoice::Auto,
+            SwapAmountLimit::Unrestricted,
+        )
+        .await
+        .expect_err("raydium cannot execute for a wallet");
 
         match err {
             Error::Internal(InternalError::UnsupportedCapability { capability, owner }) => {
@@ -482,10 +518,9 @@ mod tests {
                     router_name: self.name().to_owned(),
                     input_mint: request.input_mint.clone(),
                     output_mint: request.output_mint.clone(),
-                    input_amount: u64::try_from(request.input_amount)
-                        .expect("test request fits Solana"),
-                    output_amount: 1,
-                    minimum_output_amount: 1,
+                    input_amount: request.input_amount,
+                    output_amount: 1u64.into(),
+                    minimum_output_amount: 1u64.into(),
                     price_impact_pct: 0.0,
                     platform_fee_lamports: None,
                     estimated_network_fee_lamports: None,
@@ -503,14 +538,113 @@ mod tests {
         }
 
         let registry = RouterRegistry::new(vec![Arc::new(DefaultRouter)]);
-        let err = quote_and_execute_for_wallet_on(&registry, request(), 1, RouterChoice::Auto)
-            .await
-            .expect_err("default wallet execution");
+        let err = quote_and_execute_for_wallet_on(
+            &registry,
+            request(),
+            1,
+            RouterChoice::Auto,
+            SwapAmountLimit::Unrestricted,
+        )
+        .await
+        .expect_err("default wallet execution");
         match err {
             Error::Internal(InternalError::UnsupportedCapability { owner, .. }) => {
                 assert_eq!(owner, "raydium");
             }
             other => panic!("expected UnsupportedCapability, got {other}"),
         }
+    }
+
+    #[tokio::test]
+    async fn wallet_limit_refuses_wide_quote_before_execution() {
+        let log = CallLog::new();
+        let registry = registry(vec![StubRouter {
+            id: "wide_quote",
+            enabled: true,
+            priority: 0,
+            supports_wallet: true,
+            output_amount: u64::MAX as u128 + 1,
+            log: Arc::clone(&log),
+        }]);
+        let err = quote_and_execute_for_wallet_on(
+            &registry,
+            request(),
+            1,
+            RouterChoice::Auto,
+            SwapAmountLimit::U64,
+        )
+        .await
+        .expect_err("wide quote must be refused");
+        assert!(err.to_string().contains("u64 amount range"));
+        assert!(log.wallet_execs.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn completed_wide_wallet_result_preserves_signature_and_amounts() {
+        let log = CallLog::new();
+        let registry = registry(vec![StubRouter {
+            id: "wide_result",
+            enabled: true,
+            priority: 0,
+            supports_wallet: true,
+            output_amount: 42,
+            log: Arc::clone(&log),
+        }]);
+        let err = quote_and_execute_for_wallet_on(
+            &registry,
+            request(),
+            1,
+            RouterChoice::Auto,
+            SwapAmountLimit::U64,
+        )
+        .await
+        .expect_err("completed result exceeds caller range");
+        match &err {
+            Error::Swaps(crate::swaps::SwapExecutionError::CompletedAmountOutOfRange {
+                signature,
+                input_amount,
+                output_amount,
+            }) => {
+                assert_eq!(signature, "sig-wide_result");
+                assert_eq!(*input_amount, 1_000_000u64.into());
+                assert_eq!(
+                    *output_amount,
+                    crate::chains::RawAmount::from(u64::MAX as u128 + 1)
+                );
+            }
+            other => panic!("unexpected error: {other}"),
+        }
+        assert_eq!(
+            crate::swaps::unconfirmed_swap_signature(&err).as_deref(),
+            Some("sig-wide_result")
+        );
+        assert_eq!(log.wallet_execs.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn unrestricted_wallet_preserves_wide_quote_and_result() {
+        let log = CallLog::new();
+        let registry = registry(vec![StubRouter {
+            id: "wide_quote",
+            enabled: true,
+            priority: 0,
+            supports_wallet: true,
+            output_amount: u64::MAX as u128 + 1,
+            log,
+        }]);
+        let (quote, result) = quote_and_execute_for_wallet_on(
+            &registry,
+            request(),
+            1,
+            RouterChoice::Auto,
+            SwapAmountLimit::Unrestricted,
+        )
+        .await
+        .expect("unrestricted amounts are exact");
+        assert_eq!(
+            quote.output_amount,
+            crate::chains::RawAmount::from(u64::MAX as u128 + 1)
+        );
+        assert_eq!(result.output_amount, quote.output_amount);
     }
 }

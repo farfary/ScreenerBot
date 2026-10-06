@@ -498,9 +498,9 @@ impl SwapRouter for RaptorRouter {
             router_name: self.name().to_string(),
             input_mint: request.input_mint.clone(),
             output_mint: request.output_mint.clone(),
-            input_amount: input_amount,
-            output_amount,
-            minimum_output_amount,
+            input_amount: input_amount.into(),
+            output_amount: output_amount.into(),
+            minimum_output_amount: minimum_output_amount.into(),
             price_impact_pct: price_impact,
             platform_fee_lamports: Self::platform_fee_lamports(
                 input_amount,
@@ -530,6 +530,7 @@ impl SwapRouter for RaptorRouter {
 
     async fn execute_swap(&self, _token: &Token, quote: &Quote) -> Result<SwapResult> {
         self.accept_own_quote(quote)?;
+        super::checked_quote_amounts(quote)?;
         let start = Instant::now();
 
         let transaction = self.build_transaction(quote, &quote.wallet_address).await?;
@@ -570,6 +571,7 @@ impl SwapRouter for RaptorRouter {
         use crate::chains::solana::solana_sdk::signer::Signer;
 
         self.accept_own_quote(quote)?;
+        super::checked_quote_amounts(quote)?;
         let start = Instant::now();
 
         let keypair = crate::chains::solana::accounts::keypair_for_wallet(wallet_id).await?;

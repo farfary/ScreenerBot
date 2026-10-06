@@ -9,7 +9,7 @@ use crate::logger::{self, LogTag};
 use crate::swaps::error::{QuoteError, QuoteResult};
 use crate::swaps::registry::{get_registry, try_get_registry, RouterRegistry};
 use crate::swaps::router::SwapRouter;
-use crate::swaps::types::{Quote, QuoteRequest, SwapResult};
+use crate::swaps::types::{Quote, QuoteRequest, SwapAmountLimit, SwapResult};
 use crate::tokens::Token;
 use crate::{Error, Result};
 use futures::future;
@@ -166,7 +166,7 @@ pub(crate) async fn best_quote_on(
 /// units at the quote's own rate. A pair with no native leg, or a quote with no
 /// estimate, compares on its raw output.
 fn output_after_network_fee(quote: &Quote, router: &dyn SwapRouter) -> QuoteResult<RawAmount> {
-    let output = RawAmount::from(quote.output_amount);
+    let output = quote.output_amount;
     let Some(fee) = quote.estimated_network_fee_lamports else {
         return Ok(output);
     };
@@ -184,7 +184,7 @@ fn output_after_network_fee(quote: &Quote, router: &dyn SwapRouter) -> QuoteResu
             .checked_sub(fee)
             .ok_or_else(|| rejected("network fee exceeds output"))
     } else if adapter.is_native_asset(&quote.input_mint) {
-        let input = RawAmount::from(quote.input_amount);
+        let input = quote.input_amount;
         if input == RawAmount::ZERO || fee >= input {
             return Err(rejected("network fee consumes the native input"));
         }
@@ -325,13 +325,13 @@ fn validate_quote_with_net(
     if quote.wallet_address != request.wallet_address {
         return reject("quote is addressed to a different wallet".to_owned());
     }
-    if crate::chains::RawAmount::from(quote.input_amount) != request.input_amount {
+    if quote.input_amount != request.input_amount {
         return reject(format!(
             "quote spends {} but {} was requested",
             quote.input_amount, request.input_amount
         ));
     }
-    if quote.input_amount == 0 {
+    if quote.input_amount == RawAmount::ZERO {
         return reject("zero-input quote".to_owned());
     }
     if quote.swap_mode != request.swap_mode {
@@ -340,7 +340,7 @@ fn validate_quote_with_net(
             quote.swap_mode, request.swap_mode
         ));
     }
-    if quote.output_amount == 0 {
+    if quote.output_amount == RawAmount::ZERO {
         return reject(format!(
             "zero-output quote for {} -> {}",
             quote.input_mint, quote.output_mint
@@ -350,7 +350,7 @@ fn validate_quote_with_net(
     // minimum is what the instruction (or the aggregator's threshold) enforces
     // on chain, and comparing routers on expected output alone would let an
     // unprotected quote win.
-    if quote.minimum_output_amount == 0 {
+    if quote.minimum_output_amount == RawAmount::ZERO {
         return reject("quote guarantees no minimum output".to_owned());
     }
     if quote.minimum_output_amount > quote.output_amount {
@@ -373,15 +373,27 @@ fn validate_quote_with_net(
 
 /// Execute swap with automatic fallback on failure
 /// Tries primary router, falls back to others by priority on retryable errors
-pub async fn execute_swap_with_fallback(token: &Token, quote: Quote) -> Result<SwapResult> {
+pub async fn execute_swap_with_fallback(
+    token: &Token,
+    quote: Quote,
+    amount_limit: SwapAmountLimit,
+) -> Result<SwapResult> {
+    let registry = get_registry()?;
+    execute_swap_with_fallback_on(token, quote, amount_limit, registry).await
+}
+
+async fn execute_swap_with_fallback_on(
+    token: &Token,
+    quote: Quote,
+    amount_limit: SwapAmountLimit,
+    registry: &RouterRegistry,
+) -> Result<SwapResult> {
     // Block swap execution during force stop
     if crate::global::is_force_stopped() {
         return Err(Error::internal_error(
             "Trading halted - Force stop is active",
         ));
     }
-
-    let registry = get_registry()?;
 
     // Get primary router
     let primary = registry
@@ -395,6 +407,8 @@ pub async fn execute_swap_with_fallback(token: &Token, quote: Quote) -> Result<S
             quote.router_name
         )));
     }
+
+    amount_limit.check_quote(&quote).map_err(Error::from)?;
 
     logger::info(
         LogTag::Swap,
@@ -426,7 +440,7 @@ pub async fn execute_swap_with_fallback(token: &Token, quote: Quote) -> Result<S
                     result.transaction_signature
                 ),
             );
-            return Ok(result);
+            return amount_limit.check_result(result);
         }
         Err(primary_error) => {
             // NEVER fall back on a swap that was already SUBMITTED. The confirmation poll
@@ -449,8 +463,15 @@ pub async fn execute_swap_with_fallback(token: &Token, quote: Quote) -> Result<S
             // next router's quote. Bounded to one attempt by the exclusion
             // itself — the retry carries the venue in `exclude_dexes`, so a
             // second refusal for the same venue cannot recur.
-            if let Some(outcome) =
-                retry_excluding_venue(token, &quote, &primary_error, primary.as_ref(), start).await
+            if let Some(outcome) = retry_excluding_venue(
+                token,
+                &quote,
+                &primary_error,
+                primary.as_ref(),
+                start,
+                amount_limit,
+            )
+            .await
             {
                 return outcome;
             }
@@ -515,7 +536,7 @@ pub async fn execute_swap_with_fallback(token: &Token, quote: Quote) -> Result<S
                     chain: quote.chain,
                     input_mint: quote.input_mint.clone(),
                     output_mint: quote.output_mint.clone(),
-                    input_amount: quote.input_amount.into(),
+                    input_amount: quote.input_amount,
                     wallet_address: quote.wallet_address.clone(),
                     slippage_pct: (quote.slippage_bps as f64) / 100.0,
                     swap_mode: quote.swap_mode,
@@ -542,6 +563,14 @@ pub async fn execute_swap_with_fallback(token: &Token, quote: Quote) -> Result<S
                     }
                 };
 
+                if let Err(e) = amount_limit.check_quote(&fallback_quote) {
+                    logger::warning(
+                        LogTag::Swap,
+                        &format!("{} quote rejected: {e}", fallback_router.name()),
+                    );
+                    continue;
+                }
+
                 // Execute fallback swap
                 super::progress::report_swap_stage(super::progress::SwapStage::Submitting {
                     router: fallback_router.name().to_owned(),
@@ -560,7 +589,7 @@ pub async fn execute_swap_with_fallback(token: &Token, quote: Quote) -> Result<S
                                 result.transaction_signature
                             ),
                         );
-                        return Ok(result);
+                        return amount_limit.check_result(result);
                     }
                     Err(e) => {
                         // Same rule as the primary: a submitted-but-unconfirmed swap must not
@@ -610,6 +639,7 @@ async fn retry_excluding_venue(
     error: &Error,
     router: &dyn crate::swaps::router::SwapRouter,
     start: Instant,
+    amount_limit: SwapAmountLimit,
 ) -> Option<Result<SwapResult>> {
     let Error::Solana(crate::chains::solana::Error::SwapCostRejected { venue_program, .. }) = error
     else {
@@ -637,7 +667,7 @@ async fn retry_excluding_venue(
         chain: quote.chain,
         input_mint: quote.input_mint.clone(),
         output_mint: quote.output_mint.clone(),
-        input_amount: quote.input_amount.into(),
+        input_amount: quote.input_amount,
         wallet_address: quote.wallet_address.clone(),
         slippage_pct: (quote.slippage_bps as f64) / 100.0,
         swap_mode: quote.swap_mode,
@@ -667,6 +697,14 @@ async fn retry_excluding_venue(
         }
     };
 
+    if let Err(e) = amount_limit.check_quote(&retry_quote) {
+        logger::warning(
+            LogTag::Swap,
+            &format!("{} quote rejected: {e}", router.name()),
+        );
+        return None;
+    }
+
     super::progress::report_swap_stage(super::progress::SwapStage::Submitting {
         router: router.name().to_owned(),
     })
@@ -684,7 +722,7 @@ async fn retry_excluding_venue(
                     result.transaction_signature
                 ),
             );
-            Some(Ok(result))
+            Some(amount_limit.check_result(result))
         }
         Err(e) => {
             if let Some(signature) = unconfirmed_swap_signature(&e) {
@@ -718,7 +756,7 @@ fn schedule_post_swap_cleanup(quote: &Quote) {
     }
 }
 
-/// The signature of a swap that WAS SUBMITTED but whose confirmation timed out.
+/// The signature of a swap that reached the chain: submitted but unconfirmed, or completed outside its caller's amount range.
 ///
 /// `sign_send_and_confirm_transaction` sends the transaction and then polls for it; on
 /// timeout it returns an error even though the transaction may still land — a Solana
@@ -733,22 +771,32 @@ fn schedule_post_swap_cleanup(quote: &Quote) {
 /// The signature is recovered so a caller can stop retrying and hand it to verification,
 /// which reconciles what really happened on chain.
 ///
-/// Two paths, and the typed one is tried first. The direct pool-swap engine reports every
+/// Three paths, and the typed ones are tried first. A completed swap refused by a caller's
+/// amount range carries its signature in SwapExecutionError::CompletedAmountOutOfRange.
+/// The direct pool-swap engine reports every
 /// outcome that reached the chain as a VARIANT that already carries the signature as data
 /// (see `DirectSwapError::settled_signature`); only the aggregator path, whose timeout is
 /// produced deep inside the RPC client as free text, still needs the marker-sentence scan
 /// below.
 pub fn unconfirmed_swap_signature(error: &Error) -> Option<String> {
-    // The direct engine already knows the answer as DATA, so ask it rather than
-    // pattern-matching prose. `settled_signature` covers both a confirmation that
-    // timed out (it may still land) and a swap that CONFIRMED WITHOUT ERROR whose
-    // receipt could not be measured -- the latter is a trade that provably
-    // happened, and treating it as one that never did leaves the wallet holding
-    // tokens no position was ever created for.
-    if let Error::Solana(crate::chains::solana::Error::DirectSwap(direct)) = error {
-        return direct.settled_signature().map(str::to_owned);
+    match error {
+        // A completed swap whose amounts exceed the caller's range is a trade that
+        // happened: hand it to verification, never send it again.
+        Error::Swaps(crate::swaps::SwapExecutionError::CompletedAmountOutOfRange {
+            signature,
+            ..
+        }) => Some(signature.clone()),
+        // The direct engine already knows the answer as DATA, so ask it rather than
+        // pattern-matching prose. `settled_signature` covers both a confirmation that
+        // timed out (it may still land) and a swap that CONFIRMED WITHOUT ERROR whose
+        // receipt could not be measured -- the latter is a trade that provably
+        // happened, and treating it as one that never did leaves the wallet holding
+        // tokens no position was ever created for.
+        Error::Solana(crate::chains::solana::Error::DirectSwap(direct)) => {
+            direct.settled_signature().map(str::to_owned)
+        }
+        _ => unconfirmed_swap_signature_from_message(&error.to_string()),
     }
-    unconfirmed_swap_signature_from_message(&error.to_string())
 }
 
 pub fn unconfirmed_swap_signature_from_message(message: &str) -> Option<String> {
@@ -1210,9 +1258,9 @@ mod tests {
             router_name: "Direct Pool".to_owned(),
             input_mint: request.input_mint.clone(),
             output_mint: request.output_mint.clone(),
-            input_amount: u64::try_from(request.input_amount).expect("test request fits Solana"),
-            output_amount: 1_000,
-            minimum_output_amount: 950,
+            input_amount: request.input_amount,
+            output_amount: 1_000u64.into(),
+            minimum_output_amount: 950u64.into(),
             price_impact_pct: 0.5,
             platform_fee_lamports: None,
             estimated_network_fee_lamports: None,
@@ -1244,11 +1292,15 @@ mod tests {
             ("wrong wallet", |quote| {
                 quote.wallet_address = "OtherWallet11111111111111111111111111111111".to_owned()
             }),
-            ("wrong size", |quote| quote.input_amount += 1),
-            ("zero output", |quote| quote.output_amount = 0),
-            ("no floor", |quote| quote.minimum_output_amount = 0),
+            ("wrong size", |quote| {
+                quote.input_amount = quote.input_amount.checked_add(1u64.into()).unwrap()
+            }),
+            ("zero output", |quote| quote.output_amount = RawAmount::ZERO),
+            ("no floor", |quote| {
+                quote.minimum_output_amount = RawAmount::ZERO
+            }),
             ("floor above output", |quote| {
-                quote.minimum_output_amount = quote.output_amount + 1
+                quote.minimum_output_amount = quote.output_amount.checked_add(1u64.into()).unwrap()
             }),
             ("unusable impact", |quote| quote.price_impact_pct = f64::NAN),
             ("foreign router", |quote| {
@@ -1275,7 +1327,7 @@ mod tests {
         let mut quote = quote_for(&request);
         quote.input_mint = "TokenMint111111111111111111111111111111111".to_owned();
         quote.output_mint = request.input_mint.clone();
-        quote.output_amount = 1_000;
+        quote.output_amount = 1_000u64.into();
         quote.estimated_network_fee_lamports = Some(999);
         assert_eq!(
             output_after_network_fee(&quote, &StubRouter).unwrap(),
@@ -1290,14 +1342,14 @@ mod tests {
         }
         quote.input_mint = request.input_mint;
         quote.output_mint = request.output_mint;
-        quote.input_amount = 1_000;
-        quote.output_amount = u64::MAX;
+        quote.input_amount = 1_000u64.into();
+        quote.output_amount = u64::MAX.into();
         quote.estimated_network_fee_lamports = Some(1);
         assert_eq!(
             output_after_network_fee(&quote, &StubRouter).unwrap(),
             RawAmount::from(u64::MAX - u64::MAX / 1_000)
         );
-        quote.output_amount = 1_000;
+        quote.output_amount = 1_000u64.into();
         quote.estimated_network_fee_lamports = Some(1);
         assert_eq!(
             output_after_network_fee(&quote, &StubRouter).unwrap(),
@@ -1319,12 +1371,12 @@ mod tests {
             Err(QuoteError::RouterRejected { .. })
         ));
         quote.estimated_network_fee_lamports = Some(1);
-        quote.output_amount = 1;
+        quote.output_amount = 1u64.into();
         assert_eq!(
             output_after_network_fee(&quote, &StubRouter).unwrap(),
             RawAmount::from(1u64)
         );
-        quote.input_amount = 0;
+        quote.input_amount = 0u64.into();
         assert!(matches!(
             output_after_network_fee(&quote, &StubRouter),
             Err(QuoteError::RouterRejected { .. })
@@ -1355,7 +1407,7 @@ mod tests {
 
     struct FeeRouter {
         id: &'static str,
-        output: u64,
+        output: RawAmount,
         fee: u64,
     }
 
@@ -1395,12 +1447,12 @@ mod tests {
         let request = request();
         let invalid = Arc::new(FeeRouter {
             id: "invalid",
-            output: 2_000,
+            output: 2_000u64.into(),
             fee: 1_000_000,
         });
         let valid = Arc::new(FeeRouter {
             id: "valid",
-            output: 1_000,
+            output: 1_000u64.into(),
             fee: 1,
         });
         let registry = RouterRegistry::new(vec![invalid.clone(), valid]);
@@ -1411,5 +1463,52 @@ mod tests {
             validate_quote(invalid.as_ref(), &request, invalid_quote),
             Err(QuoteError::RouterRejected { .. })
         ));
+    }
+
+    #[tokio::test]
+    async fn wide_quotes_rank_by_exact_fee_net_output() {
+        use std::sync::Arc;
+
+        let mut request = request();
+        request.input_amount = RawAmount::new(u128::from(u64::MAX) + 1);
+        request.input_mint = "TokenMint111111111111111111111111111111111".to_owned();
+        request.output_mint = "So11111111111111111111111111111111111111112".to_owned();
+        let max = RawAmount::MAX;
+        let registry = RouterRegistry::new(vec![
+            Arc::new(FeeRouter {
+                id: "gross",
+                output: max,
+                fee: 2,
+            }),
+            Arc::new(FeeRouter {
+                id: "net",
+                output: max.checked_sub(1u64.into()).unwrap(),
+                fee: 0,
+            }),
+        ]);
+        let selected = best_quote_on(&registry, request.clone()).await.unwrap();
+        assert_eq!(selected.router_id, "net");
+        assert_eq!(selected.input_amount, request.input_amount);
+        assert_eq!(
+            selected.output_amount,
+            max.checked_sub(1u64.into()).unwrap()
+        );
+
+        let mut quote = quote_for(&request);
+        quote.input_amount = request.input_amount;
+        quote.output_amount = max;
+        quote.minimum_output_amount = max;
+        quote.estimated_network_fee_lamports = Some(1);
+        assert_eq!(
+            output_after_network_fee(&quote, &StubRouter).unwrap(),
+            max.checked_sub(1u64.into()).unwrap()
+        );
+
+        quote.input_mint = "So11111111111111111111111111111111111111112".to_owned();
+        quote.output_mint = "TokenMint111111111111111111111111111111111".to_owned();
+        assert_eq!(
+            output_after_network_fee(&quote, &StubRouter).unwrap(),
+            max.checked_sub(u64::MAX.into()).unwrap()
+        );
     }
 }

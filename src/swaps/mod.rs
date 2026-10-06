@@ -15,7 +15,7 @@ pub mod router;
 pub mod types;
 
 // Re-export router system
-pub use error::{QuoteError, QuoteResult};
+pub use error::{QuoteError, QuoteResult, SwapExecutionError};
 pub use operations::{
     execute_swap_with_fallback, get_best_quote, get_best_quote_for_opening, try_get_best_quote,
     unconfirmed_swap_signature, unconfirmed_swap_signature_from_message,
@@ -24,7 +24,9 @@ pub use operations_wallet::quote_and_execute_for_wallet;
 pub use progress::{with_swap_stage_listener, SwapStage, SwapStageListener};
 pub use registry::{get_registry, try_get_registry, RouterRegistry};
 pub use router::SwapRouter;
-pub use types::{ExitType, Quote, QuoteRequest, RouterChoice, SwapMode, SwapResult};
+pub use types::{
+    ExitType, Quote, QuoteRequest, RouterChoice, SwapAmountLimit, SwapMode, SwapResult,
+};
 
 /// Calculate the token amount for a partial exit
 /// Returns 0 if total_amount is 0 or percentage is <= 0

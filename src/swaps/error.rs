@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2026 ScreenerBot (screenerbot.io)
 // SPDX-License-Identifier: BUSL-1.1
 
-//! Why a swap could not be quoted.
+//! Why a swap could not be quoted, or why a completed swap could not be handed to its caller.
 //!
 //! Quoting is the one place where an external router's opinion becomes an
 //! internal decision: whether to blacklist a token, whether to back off, and
@@ -17,7 +17,7 @@
 
 use std::time::Duration;
 
-use crate::chains::ChainId;
+use crate::chains::{ChainId, RawAmount};
 use crate::errors::{ErrorClass, NetworkError, ServiceError, Severity};
 use crate::i18n::{ids, UiText};
 use crate::Error;
@@ -197,3 +197,29 @@ impl From<QuoteError> for Error {
 
 /// Result of a quote attempt.
 pub type QuoteResult<T> = std::result::Result<T, QuoteError>;
+
+/// Execution completed, but its exact amounts exceed the caller's range.
+#[derive(Debug, Clone, thiserror::Error)]
+pub enum SwapExecutionError {
+    /// The swap reached the chain, but its exact input or output does not fit the caller's amount range.
+    #[error("swap {signature} completed with amounts outside the caller range (input {input_amount}, output {output_amount})")]
+    CompletedAmountOutOfRange {
+        signature: String,
+        input_amount: RawAmount,
+        output_amount: RawAmount,
+    },
+}
+
+impl ErrorClass for SwapExecutionError {
+    // The trade already happened; re-sending it would be a second swap.
+    fn is_retryable(&self) -> bool {
+        false
+    }
+    // A landed trade its caller cannot record needs an operator's eyes.
+    fn severity(&self) -> Severity {
+        Severity::Critical
+    }
+    fn http_status(&self) -> u16 {
+        500
+    }
+}

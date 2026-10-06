@@ -294,47 +294,48 @@ pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Re
     match try_get_best_quote(quote_request).await {
         Ok(quote) => {
             // Format input/output based on direction
-            let (input_formatted, output_display, output_formatted, price_per_token) = if direction
-                == "buy"
-            {
-                // BUY: input is SOL, output is tokens
-                let input_fmt = format!("{:.4} SOL", input_amount_display);
-                let output_tokens = quote.output_amount as f64 / 10f64.powi(token_decimals as i32);
-                let output_fmt = if output_tokens >= 1_000_000_000.0 {
-                    format!("{:.2}B tokens", output_tokens / 1_000_000_000.0)
-                } else if output_tokens >= 1_000_000.0 {
-                    format!("{:.2}M tokens", output_tokens / 1_000_000.0)
-                } else if output_tokens >= 1_000.0 {
-                    format!("{:.2}K tokens", output_tokens / 1_000.0)
+            let (input_formatted, output_display, output_formatted, price_per_token) =
+                if direction == "buy" {
+                    // BUY: input is SOL, output is tokens
+                    let input_fmt = format!("{:.4} SOL", input_amount_display);
+                    let output_tokens =
+                        quote.output_amount.raw() as f64 / 10f64.powi(token_decimals as i32);
+                    let output_fmt = if output_tokens >= 1_000_000_000.0 {
+                        format!("{:.2}B tokens", output_tokens / 1_000_000_000.0)
+                    } else if output_tokens >= 1_000_000.0 {
+                        format!("{:.2}M tokens", output_tokens / 1_000_000.0)
+                    } else if output_tokens >= 1_000.0 {
+                        format!("{:.2}K tokens", output_tokens / 1_000.0)
+                    } else {
+                        format!("{:.4} tokens", output_tokens)
+                    };
+                    let price = if output_tokens > 0.0 {
+                        input_amount_display / output_tokens
+                    } else {
+                        0.0
+                    };
+                    (input_fmt, output_tokens, output_fmt, price)
                 } else {
-                    format!("{:.4} tokens", output_tokens)
+                    // SELL: input is tokens, output is SOL
+                    let input_fmt = if input_amount_display >= 1_000_000_000.0 {
+                        format!("{:.2}B tokens", input_amount_display / 1_000_000_000.0)
+                    } else if input_amount_display >= 1_000_000.0 {
+                        format!("{:.2}M tokens", input_amount_display / 1_000_000.0)
+                    } else if input_amount_display >= 1_000.0 {
+                        format!("{:.2}K tokens", input_amount_display / 1_000.0)
+                    } else {
+                        format!("{:.4} tokens", input_amount_display)
+                    };
+                    let output_sol = quote.output_amount.raw() as f64
+                        / crate::chains::adapter().raw_units_per_native() as f64;
+                    let output_fmt = format!("{:.6} SOL", output_sol);
+                    let price = if input_amount_display > 0.0 {
+                        output_sol / input_amount_display
+                    } else {
+                        0.0
+                    };
+                    (input_fmt, output_sol, output_fmt, price)
                 };
-                let price = if output_tokens > 0.0 {
-                    input_amount_display / output_tokens
-                } else {
-                    0.0
-                };
-                (input_fmt, output_tokens, output_fmt, price)
-            } else {
-                // SELL: input is tokens, output is SOL
-                let input_fmt = if input_amount_display >= 1_000_000_000.0 {
-                    format!("{:.2}B tokens", input_amount_display / 1_000_000_000.0)
-                } else if input_amount_display >= 1_000_000.0 {
-                    format!("{:.2}M tokens", input_amount_display / 1_000_000.0)
-                } else if input_amount_display >= 1_000.0 {
-                    format!("{:.2}K tokens", input_amount_display / 1_000.0)
-                } else {
-                    format!("{:.4} tokens", input_amount_display)
-                };
-                let output_sol = crate::chains::adapter().raw_to_native(quote.output_amount);
-                let output_fmt = format!("{:.6} SOL", output_sol);
-                let price = if input_amount_display > 0.0 {
-                    output_sol / input_amount_display
-                } else {
-                    0.0
-                };
-                (input_fmt, output_sol, output_fmt, price)
-            };
 
             // The rate is a platform constant; the AMOUNT is only shown when the
             // router that produced this quote could state it in SOL honestly.
@@ -351,9 +352,10 @@ pub async fn quote_preview_handler(Query(req): Query<QuotePreviewRequest>) -> Re
             // reconstructing it from the expected output and slippage ignores
             // the fee leg and overstates a sell.
             let minimum_output_amount = if direction == "buy" {
-                quote.minimum_output_amount as f64 / 10f64.powi(token_decimals as i32)
+                quote.minimum_output_amount.raw() as f64 / 10f64.powi(token_decimals as i32)
             } else {
-                crate::chains::adapter().raw_to_native(quote.minimum_output_amount)
+                quote.minimum_output_amount.raw() as f64
+                    / crate::chains::adapter().raw_units_per_native() as f64
             };
 
             let response = QuotePreviewResponse {

@@ -260,8 +260,8 @@ async fn uninitialized_execution_returns_a_domain_error() {
         input_mint: "So11111111111111111111111111111111111111112".to_owned(),
         output_mint: "TokenMint111111111111111111111111111111111".to_owned(),
         input_amount: 1_000_000u64.into(),
-        output_amount: 1,
-        minimum_output_amount: 1,
+        output_amount: 1u64.into(),
+        minimum_output_amount: 1u64.into(),
         price_impact_pct: 0.0,
         platform_fee_lamports: None,
         estimated_network_fee_lamports: None,
@@ -273,14 +273,23 @@ async fn uninitialized_execution_returns_a_domain_error() {
         execution_data: b"jupiter".to_vec(),
     };
 
-    let err = execute_swap_with_fallback(&common::filter_token("mint"), quote)
-        .await
-        .expect_err("execute without a factory");
+    let err = execute_swap_with_fallback(
+        &common::filter_token("mint"),
+        quote,
+        screenerbot::swaps::SwapAmountLimit::Unrestricted,
+    )
+    .await
+    .expect_err("execute without a factory");
     assert_registry_uninitialized(err);
 
-    let err = quote_and_execute_for_wallet(uninitialized_quote_request(), 1, RouterChoice::Auto)
-        .await
-        .expect_err("wallet execute without a factory");
+    let err = quote_and_execute_for_wallet(
+        uninitialized_quote_request(),
+        1,
+        RouterChoice::Auto,
+        screenerbot::swaps::SwapAmountLimit::Unrestricted,
+    )
+    .await
+    .expect_err("wallet execute without a factory");
     assert_registry_uninitialized(err);
 }
 

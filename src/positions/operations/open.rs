@@ -265,22 +265,21 @@ async fn open_position_impl(
             detail: e.to_string(),
         })?;
 
-    let expected_output_amount = quote.output_amount;
+    let expected_output_amount =
+        u64::try_from(quote.output_amount).map_err(|_| Error::QuoteFailed {
+            mint: api_token.mint.clone(),
+            detail: "quoted output exceeds the position u64 range".to_owned(),
+        })?;
     let (transaction_signature, output_amount, confirmation_pending, effective_entry_price) =
-        match execute_swap_with_fallback(&api_token, quote).await {
-            Ok(result) => {
-                let effective_price = effective_entry_price_sol(
-                    trade_size_sol,
-                    result.output_amount,
-                    api_token.decimals,
-                )
-                .unwrap_or(entry_price);
-                (
-                    result.transaction_signature,
-                    result.output_amount,
-                    false,
-                    effective_price,
-                )
+        match execute_swap_with_fallback(&api_token, quote, crate::swaps::SwapAmountLimit::U64)
+            .await
+            .and_then(narrow_entry_fill)
+        {
+            Ok((signature, received)) => {
+                let effective_price =
+                    effective_entry_price_sol(trade_size_sol, received, api_token.decimals)
+                        .unwrap_or(entry_price);
+                (signature, received, false, effective_price)
             }
             Err(error) => match crate::swaps::unconfirmed_swap_signature(&error) {
                 Some(signature) => {
@@ -485,9 +484,57 @@ fn effective_entry_price_sol(
     (input_sol.is_finite() && input_sol > 0.0 && price.is_finite() && price > 0.0).then_some(price)
 }
 
+/// The executed entry as the position's u64 token amount. A completed swap whose
+/// output does not fit keeps its signature in `CompletedAmountOutOfRange`, so the
+/// caller records it for verification instead of discarding a trade that landed.
+fn narrow_entry_fill(result: crate::swaps::SwapResult) -> crate::Result<(String, u64)> {
+    match u64::try_from(result.output_amount) {
+        Ok(received) => Ok((result.transaction_signature, received)),
+        Err(_) => Err(
+            crate::swaps::SwapExecutionError::CompletedAmountOutOfRange {
+                signature: result.transaction_signature,
+                input_amount: result.input_amount,
+                output_amount: result.output_amount,
+            }
+            .into(),
+        ),
+    }
+}
+
 #[cfg(test)]
 mod submission_price_tests {
-    use super::effective_entry_price_sol;
+    use super::{effective_entry_price_sol, narrow_entry_fill};
+
+    fn fill(output: crate::chains::RawAmount) -> crate::swaps::SwapResult {
+        crate::swaps::SwapResult {
+            success: true,
+            router_id: "stub".to_owned(),
+            router_name: "stub".to_owned(),
+            transaction_signature: "sig-entry".to_owned(),
+            input_amount: 1_000u64.into(),
+            output_amount: output,
+            price_impact_pct: 0.0,
+            fee_lamports: 0,
+            execution_time_ms: 0,
+            effective_price_sol: None,
+        }
+    }
+
+    #[test]
+    fn an_entry_fill_outside_u64_keeps_its_signature_for_verification() {
+        assert_eq!(
+            narrow_entry_fill(fill(u64::MAX.into())).unwrap(),
+            ("sig-entry".to_owned(), u64::MAX)
+        );
+        let error = narrow_entry_fill(fill(crate::chains::RawAmount::new(
+            u128::from(u64::MAX) + 1,
+        )))
+        .unwrap_err();
+        assert_eq!(
+            crate::swaps::unconfirmed_swap_signature(&error).as_deref(),
+            Some("sig-entry")
+        );
+    }
 
     #[test]
     fn entry_submission_price_uses_the_quoted_token_amount() {

@@ -71,8 +71,23 @@ pub async fn execute_tool_swap(
         quote_request,
         wallet.id,
         crate::swaps::RouterChoice::parse(router),
+        crate::swaps::SwapAmountLimit::U64,
     )
     .await?;
+
+    let (Ok(input_amount), Ok(output_amount)) = (
+        u64::try_from(result.input_amount),
+        u64::try_from(result.output_amount),
+    ) else {
+        return Err(
+            crate::swaps::SwapExecutionError::CompletedAmountOutOfRange {
+                signature: result.transaction_signature,
+                input_amount: result.input_amount,
+                output_amount: result.output_amount,
+            }
+            .into(),
+        );
+    };
 
     logger::debug(
         LogTag::Tools,
@@ -89,8 +104,8 @@ pub async fn execute_tool_swap(
 
     Ok(ToolSwapResult {
         signature: result.transaction_signature,
-        input_amount: result.input_amount,
-        output_amount: result.output_amount,
+        input_amount,
+        output_amount,
         price_impact_pct: quote.price_impact_pct,
         router_name: result.router_name,
         route_plan: quote.route_plan,

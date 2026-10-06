@@ -53,12 +53,12 @@ pub struct Quote {
     pub router_name: String,
     pub input_mint: String,
     pub output_mint: String,
-    pub input_amount: u64,
-    pub output_amount: u64,
+    pub input_amount: RawAmount,
+    pub output_amount: RawAmount,
     /// The minimum amount the receiving wallet is guaranteed to keep.  This is
     /// router-authored: it is not derivable from `output_amount` when a fee is
     /// collected on the output leg.
-    pub minimum_output_amount: u64,
+    pub minimum_output_amount: RawAmount,
     pub price_impact_pct: f64,
     /// A platform fee expressed in WSOL lamports, only when the router can
     /// honestly establish both the fee amount and mint.
@@ -72,6 +72,19 @@ pub struct Quote {
     /// Constraints from the request which must survive a fallback/re-quote.
     pub exclude_dexes: Option<Vec<String>>,
     pub execution_data: Vec<u8>,
+}
+
+impl Quote {
+    /// The first amount field that does not fit `u64`, with its name.
+    pub(crate) fn amount_outside_u64(&self) -> Option<(&'static str, RawAmount)> {
+        [
+            ("input_amount", self.input_amount),
+            ("output_amount", self.output_amount),
+            ("minimum_output_amount", self.minimum_output_amount),
+        ]
+        .into_iter()
+        .find(|(_, amount)| u64::try_from(*amount).is_err())
+    }
 }
 
 /// Which router a caller intends to use.
@@ -99,6 +112,46 @@ impl RouterChoice {
     }
 }
 
+/// Amount range supported by the caller consuming a swap result.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SwapAmountLimit {
+    /// The caller holds amounts as RawAmount; no narrowing is applied.
+    Unrestricted,
+    /// The caller stores or reports u64 amounts: an out-of-range quote is refused before execution and an out-of-range completion returns CompletedAmountOutOfRange with its signature.
+    U64,
+}
+
+impl SwapAmountLimit {
+    pub(crate) fn check_quote(self, quote: &Quote) -> crate::swaps::QuoteResult<()> {
+        if self == Self::U64 {
+            if let Some((field, _)) = quote.amount_outside_u64() {
+                return Err(crate::swaps::QuoteError::RouterRejected {
+                    router: quote.router_name.clone(),
+                    detail: format!("{field} exceeds the caller's u64 amount range"),
+                });
+            }
+        }
+        Ok(())
+    }
+
+    pub(crate) fn check_result(self, result: SwapResult) -> crate::Result<SwapResult> {
+        if self == Self::U64
+            && (u64::try_from(result.input_amount).is_err()
+                || u64::try_from(result.output_amount).is_err())
+        {
+            return Err(
+                crate::swaps::SwapExecutionError::CompletedAmountOutOfRange {
+                    signature: result.transaction_signature,
+                    input_amount: result.input_amount,
+                    output_amount: result.output_amount,
+                }
+                .into(),
+            );
+        }
+        Ok(result)
+    }
+}
+
 /// Swap execution result (router-agnostic)
 #[derive(Debug)]
 pub struct SwapResult {
@@ -106,8 +159,8 @@ pub struct SwapResult {
     pub router_id: String,
     pub router_name: String,
     pub transaction_signature: String,
-    pub input_amount: u64,
-    pub output_amount: u64,
+    pub input_amount: RawAmount,
+    pub output_amount: RawAmount,
     pub price_impact_pct: f64,
     pub fee_lamports: u64,
     pub execution_time_ms: u64,
@@ -122,8 +175,8 @@ impl SwapResult {
             router_id,
             router_name,
             transaction_signature: String::new(),
-            input_amount: 0,
-            output_amount: 0,
+            input_amount: RawAmount::ZERO,
+            output_amount: RawAmount::ZERO,
             price_impact_pct: 0.0,
             fee_lamports: 0,
             execution_time_ms: 0,

@@ -57,6 +57,10 @@ pub enum Error {
     #[error(transparent)]
     Solana(#[from] crate::chains::solana::Error),
 
+    /// Shared swap execution completed with an amount outside the caller's range.
+    #[error(transparent)]
+    Swaps(#[from] crate::swaps::SwapExecutionError),
+
     /// External API client errors (HTTP data sources, LLM providers).
     #[error(transparent)]
     Apis(#[from] crate::apis::Error),

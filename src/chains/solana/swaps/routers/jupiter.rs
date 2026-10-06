@@ -321,6 +321,7 @@ pub(crate) async fn execute_with_keypair(
 ) -> Result<String> {
     use crate::chains::solana::solana_sdk::signer::Signer;
 
+    super::checked_quote_amounts(quote)?;
     let quote_response: serde_json::Value = serde_json::from_slice(&quote.execution_data)
         .map_err(|e| Error::parse_error(format!("Quote deserialization failed: {e}")))?;
 
@@ -652,9 +653,9 @@ impl SwapRouter for JupiterRouter {
             router_name: self.name().to_string(),
             input_mint: request.input_mint.clone(),
             output_mint: request.output_mint.clone(),
-            input_amount: input_amount,
-            output_amount,
-            minimum_output_amount,
+            input_amount: input_amount.into(),
+            output_amount: output_amount.into(),
+            minimum_output_amount: minimum_output_amount.into(),
             price_impact_pct: price_impact,
             platform_fee_lamports: Self::platform_fee_lamports(&quote_response),
             // One signature plus the prioritization fee this router asks for at
@@ -671,6 +672,7 @@ impl SwapRouter for JupiterRouter {
 
     async fn execute_swap(&self, _token: &Token, quote: &Quote) -> Result<SwapResult> {
         self.accept_own_quote(quote)?;
+        super::checked_quote_amounts(quote)?;
         // Keep background Jupiter pollers deferred while the swap transaction is
         // being built (see throttle module).
         let _swap_guard = crate::chains::solana::apis::jupiter::throttle::swap_guard();
@@ -792,6 +794,7 @@ impl SwapRouter for JupiterRouter {
 
     async fn execute_swap_for_wallet(&self, quote: &Quote, wallet_id: i64) -> Result<SwapResult> {
         self.accept_own_quote(quote)?;
+        super::checked_quote_amounts(quote)?;
         let start = Instant::now();
         let keypair = crate::chains::solana::accounts::keypair_for_wallet(wallet_id).await?;
         let signature = execute_with_keypair(quote, &keypair).await?;

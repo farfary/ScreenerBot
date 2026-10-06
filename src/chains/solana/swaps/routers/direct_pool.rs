@@ -170,12 +170,12 @@ impl DirectPoolRouter {
             router_name: self.name().to_string(),
             input_mint: request.input_mint.clone(),
             output_mint: request.output_mint.clone(),
-            input_amount: quote.amount_in,
+            input_amount: quote.amount_in.into(),
             // What the WALLET keeps. Reporting the pool's gross output here would
             // overstate every sell by the platform fee and make the comparison
             // against an aggregator quote dishonest.
-            output_amount: quote.expected_net_out,
-            minimum_output_amount: quote.min_net_out,
+            output_amount: quote.expected_net_out.into(),
+            minimum_output_amount: quote.min_net_out.into(),
             price_impact_pct: quote.price_impact_pct,
             platform_fee_lamports: quote
                 .fee
@@ -417,6 +417,7 @@ impl SwapRouter for DirectPoolRouter {
 
     async fn execute_swap(&self, _token: &Token, quote: &Quote) -> Result<SwapResult> {
         self.accept_own_quote(quote)?;
+        super::checked_quote_amounts(quote)?;
         let start = Instant::now();
         let keypair = crate::chains::solana::accounts::configured_keypair()?;
         let outcome = self.execute_with_keypair(quote, &keypair).await?;
@@ -440,8 +441,8 @@ impl SwapRouter for DirectPoolRouter {
             router_name: self.name().to_string(),
             fee_lamports: outcome.platform_fee_lamports(),
             transaction_signature: outcome.signature,
-            input_amount: outcome.amount_in,
-            output_amount: outcome.receipt.received,
+            input_amount: outcome.amount_in.into(),
+            output_amount: outcome.receipt.received.into(),
             price_impact_pct: quote.price_impact_pct,
             execution_time_ms: start.elapsed().as_millis() as u64,
             effective_price_sol: None,
@@ -450,6 +451,7 @@ impl SwapRouter for DirectPoolRouter {
 
     async fn execute_swap_for_wallet(&self, quote: &Quote, wallet_id: i64) -> Result<SwapResult> {
         self.accept_own_quote(quote)?;
+        super::checked_quote_amounts(quote)?;
         let start = Instant::now();
         let keypair = crate::chains::solana::accounts::keypair_for_wallet(wallet_id).await?;
         let outcome = self.execute_with_keypair(quote, &keypair).await?;
@@ -473,8 +475,8 @@ impl SwapRouter for DirectPoolRouter {
             router_name: self.name().to_string(),
             fee_lamports: outcome.platform_fee_lamports(),
             transaction_signature: outcome.signature,
-            input_amount: outcome.amount_in,
-            output_amount: outcome.receipt.received,
+            input_amount: outcome.amount_in.into(),
+            output_amount: outcome.receipt.received.into(),
             price_impact_pct: quote.price_impact_pct,
             execution_time_ms: start.elapsed().as_millis() as u64,
             effective_price_sol: None,
