@@ -44,8 +44,8 @@ fn an_exit_moves_tokens_from_held_to_exited() {
         position.book_exit(RawAmount::from(30u64)).unwrap(),
         RawAmount::from(30u64)
     );
-    assert_eq!(position.remaining_token_amount, Some(raw::<u64>(70)));
-    assert_eq!(position.total_exited_amount, raw::<u64>(30));
+    assert_eq!(position.remaining_token_amount, Some(raw(70)));
+    assert_eq!(position.total_exited_amount, raw(30));
 }
 
 #[test]
@@ -55,8 +55,8 @@ fn an_oversell_floors_the_remaining_amount_at_zero() {
         position.book_exit(RawAmount::from(40u64)).unwrap(),
         RawAmount::from(40u64)
     );
-    assert_eq!(position.remaining_token_amount, Some(raw::<u64>(0)));
-    assert_eq!(position.total_exited_amount, raw::<u64>(40));
+    assert_eq!(position.remaining_token_amount, Some(raw(0)));
+    assert_eq!(position.total_exited_amount, raw(40));
 }
 
 #[test]
@@ -67,7 +67,7 @@ fn an_exit_without_a_remaining_amount_only_books_the_exit() {
         RawAmount::from(15u64)
     );
     assert_eq!(position.remaining_token_amount, None);
-    assert_eq!(position.total_exited_amount, raw::<u64>(15));
+    assert_eq!(position.total_exited_amount, raw(15));
 }
 
 #[test]
@@ -77,16 +77,16 @@ fn an_acquisition_adds_to_the_remaining_amount() {
         position.book_acquisition(RawAmount::from(50u64)).unwrap(),
         RawAmount::from(120u64)
     );
-    assert_eq!(position.remaining_token_amount, Some(raw::<u64>(120)));
-    assert_eq!(position.total_exited_amount, raw::<u64>(30));
+    assert_eq!(position.remaining_token_amount, Some(raw(120)));
+    assert_eq!(position.total_exited_amount, raw(30));
 
     let mut fresh = holding(None, 0);
     assert_eq!(
         fresh.book_acquisition(RawAmount::from(50u64)).unwrap(),
         RawAmount::from(50u64)
     );
-    assert_eq!(fresh.remaining_token_amount, Some(raw::<u64>(50)));
-    assert_eq!(fresh.total_exited_amount, raw::<u64>(0));
+    assert_eq!(fresh.remaining_token_amount, Some(raw(50)));
+    assert_eq!(fresh.total_exited_amount, raw(0));
 }
 
 #[test]
@@ -96,8 +96,8 @@ fn closing_books_what_is_held_as_exited() {
         position.book_remaining_as_exited().unwrap(),
         RawAmount::from(70u64)
     );
-    assert_eq!(position.remaining_token_amount, Some(raw::<u64>(0)));
-    assert_eq!(position.total_exited_amount, raw::<u64>(100));
+    assert_eq!(position.remaining_token_amount, Some(raw(0)));
+    assert_eq!(position.total_exited_amount, raw(100));
 
     let mut unrecorded = holding(None, 30);
     assert_eq!(
@@ -105,31 +105,43 @@ fn closing_books_what_is_held_as_exited() {
         RawAmount::ZERO
     );
     assert_eq!(unrecorded.remaining_token_amount, None);
-    assert_eq!(unrecorded.total_exited_amount, raw::<u64>(30));
+    assert_eq!(unrecorded.total_exited_amount, raw(30));
+}
+
+#[test]
+fn acquired_amount_is_held_plus_exited() {
+    assert_eq!(holding(Some(70), 30).acquired_amount(), Some(raw(100)));
+    assert_eq!(holding(None, 30).acquired_amount(), Some(raw(30)));
+
+    let mut full = holding(Some(0), 1);
+    full.remaining_token_amount = Some(RawAmount::MAX);
+    assert_eq!(full.acquired_amount(), None);
 }
 
 #[test]
 fn an_overflow_changes_nothing() {
-    let mut position = holding(Some(1), u64::MAX);
+    let mut position = holding(Some(1), 0);
+    position.total_exited_amount = RawAmount::MAX;
     assert!(matches!(
         position.book_exit(RawAmount::from(1u64)),
         Err(Error::AmountOverflow { .. })
     ));
-    assert_eq!(position.remaining_token_amount, Some(raw::<u64>(1)));
-    assert_eq!(position.total_exited_amount, raw::<u64>(u64::MAX));
+    assert_eq!(position.remaining_token_amount, Some(raw(1)));
+    assert_eq!(position.total_exited_amount, RawAmount::MAX);
 
     assert!(matches!(
         position.book_remaining_as_exited(),
         Err(Error::AmountOverflow { .. })
     ));
-    assert_eq!(position.remaining_token_amount, Some(raw::<u64>(1)));
-    assert_eq!(position.total_exited_amount, raw::<u64>(u64::MAX));
+    assert_eq!(position.remaining_token_amount, Some(raw(1)));
+    assert_eq!(position.total_exited_amount, RawAmount::MAX);
 
-    let mut full = holding(Some(u64::MAX), 0);
+    let mut full = holding(Some(0), 0);
+    full.remaining_token_amount = Some(RawAmount::MAX);
     assert!(matches!(
         full.book_acquisition(RawAmount::from(1u64)),
         Err(Error::AmountOverflow { .. })
     ));
-    assert_eq!(full.remaining_token_amount, Some(raw::<u64>(u64::MAX)));
-    assert_eq!(full.total_exited_amount, raw::<u64>(0));
+    assert_eq!(full.remaining_token_amount, Some(RawAmount::MAX));
+    assert_eq!(full.total_exited_amount, raw(0));
 }

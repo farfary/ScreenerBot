@@ -4,6 +4,7 @@
 //! Position profit & loss calculations — P&L for open, closed, and partially exited positions.
 
 use crate::chains::adapter;
+use crate::chains::RawAmount;
 use crate::logger::{self, LogTag};
 use crate::positions::types::Position;
 use crate::tokens::get_decimals;
@@ -66,12 +67,11 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
             // Calculate estimated P&L based on current price (closing in progress). Value
             // what is LEFT — after partial exits the original token_amount is no longer in
             // the wallet.
-            if let Some(token_amount) = position.remaining_token_amount.or(position.token_amount) {
+            if let Some(token_amount) = position.held_amount() {
                 let token_decimals_opt =
                     get_decimals(crate::chains::active_chain(), &position.mint).await;
                 if let Some(token_decimals) = token_decimals_opt {
-                    let ui_token_amount =
-                        (token_amount as f64) / (10_f64).powi(token_decimals as i32);
+                    let ui_token_amount = token_amount.to_whole_units(token_decimals);
                     let current_value = ui_token_amount * current;
 
                     // Account for actual fees only — profit_extra_needed is a decision
@@ -173,7 +173,7 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
                 }
             };
 
-            let ui_token_amount = (token_amount as f64) / (10_f64).powi(token_decimals as i32);
+            let ui_token_amount = token_amount.to_whole_units(token_decimals);
             let entry_cost = position.entry_size_sol;
             let exit_value = ui_token_amount * effective_exit;
 
@@ -210,7 +210,7 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
     // For open positions (including those with partial exits), use current price
     if let Some(current) = current_price {
         // Use remaining_token_amount for positions with partial exits, fallback to token_amount
-        let remaining_amount = position.remaining_token_amount.or(position.token_amount);
+        let remaining_amount = position.held_amount();
 
         if let Some(token_amount) = remaining_amount {
             // Get token decimals from cache (async)
@@ -232,7 +232,7 @@ pub async fn calculate_position_pnl(position: &Position, current_price: Option<f
                 }
             };
 
-            let ui_token_amount = (token_amount as f64) / (10_f64).powi(token_decimals as i32);
+            let ui_token_amount = token_amount.to_whole_units(token_decimals);
             let current_value = ui_token_amount * current;
 
             // Use total_size_sol (includes DCA) instead of entry_size_sol
@@ -361,19 +361,18 @@ pub async fn calculate_split_pnl(
     // shrink on a partial exit. Dividing by it made both shares of an averaged-in
     // position exceed 1.0, so each leg was charged MORE basis than the whole position
     // cost and the realized/unrealized split came out badly wrong in both halves.
-    let acquired_units =
-        position.remaining_token_amount.unwrap_or_default() + position.total_exited_amount;
-    let acquired = if acquired_units > 0 {
-        acquired_units as f64
-    } else {
-        position.token_amount.unwrap_or(1) as f64
+    let acquired = match position.acquired_amount() {
+        Some(units) if units > RawAmount::ZERO => units.raw() as f64,
+        _ => position
+            .token_amount
+            .map_or(1.0, |amount| amount.raw() as f64),
     };
 
     // Calculate realized P&L from partial exits
-    let realized_pnl_sol = if position.total_exited_amount > 0 {
+    let realized_pnl_sol = if position.total_exited_amount > RawAmount::ZERO {
         if position.average_exit_price.is_some() {
             let sol_received = position.sol_received.unwrap_or_default();
-            let exit_portion = position.total_exited_amount as f64 / acquired;
+            let exit_portion = position.total_exited_amount.raw() as f64 / acquired;
             let invested_in_exited = position.total_size_sol * exit_portion;
             let exit_fees = adapter().raw_to_native(position.exit_fee_lamports.unwrap_or_default());
             sol_received - invested_in_exited - exit_fees
@@ -390,9 +389,9 @@ pub async fn calculate_split_pnl(
             if let Some(decimals) =
                 get_decimals(crate::chains::active_chain(), &position.mint).await
             {
-                let ui_remaining = (remaining as f64) / (10_f64).powi(decimals as i32);
+                let ui_remaining = remaining.to_whole_units(decimals);
                 let current_value = ui_remaining * current;
-                let remaining_portion = remaining as f64 / acquired;
+                let remaining_portion = remaining.raw() as f64 / acquired;
                 let invested_in_remaining = position.total_size_sol * remaining_portion;
                 let entry_fees_portion = adapter()
                     .raw_to_native(position.entry_fee_lamports.unwrap_or_default())

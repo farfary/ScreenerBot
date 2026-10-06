@@ -63,6 +63,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             fee_lamports,
             sol_size,
         } => {
+            let token_amount_units = RawAmount::from(token_amount_units);
             let updated = update_position_state_by_id(position_id, |pos| {
                 pos.transaction_entry_verified = true;
                 pos.effective_entry_price = Some(effective_entry_price);
@@ -100,7 +101,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                                 if let Err(err) = save_entry_record(
                                     position_id,
                                     position.entry_time,
-                                    RawAmount::from(token_amount_units),
+                                    token_amount_units,
                                     effective_entry_price,
                                     sol_size,
                                     entry_sig,
@@ -834,17 +835,18 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                                 // only the entry buy and does not grow on a DCA, so using it
                                 // reported more than 100% still held for any averaged-in
                                 // position.
-                                let remaining_pct =
-                                    if let Some(remaining) = position.remaining_token_amount {
-                                        let acquired = remaining + position.total_exited_amount;
-                                        if acquired > 0 {
-                                            (remaining as f64 / acquired as f64) * 100.0
-                                        } else {
-                                            0.0
+                                let remaining_pct = if let Some(remaining) =
+                                    position.remaining_token_amount
+                                {
+                                    match position.acquired_amount() {
+                                        Some(acquired) if acquired > RawAmount::ZERO => {
+                                            (remaining.raw() as f64 / acquired.raw() as f64) * 100.0
                                         }
-                                    } else {
-                                        100.0 - exit_percentage
-                                    };
+                                        _ => 0.0,
+                                    }
+                                } else {
+                                    100.0 - exit_percentage
+                                };
                                 queue_notification(Notification::partial_exit(
                                     position.symbol.clone(),
                                     position.mint.clone(),

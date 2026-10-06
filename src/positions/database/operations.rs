@@ -9,7 +9,6 @@ use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{params, Connection, OptionalExtension};
 use std::sync::atomic::Ordering;
 
-use crate::chains::RawAmount;
 use crate::database;
 use crate::errors::DatabaseError;
 use crate::logger::{self, LogTag};
@@ -19,31 +18,6 @@ use crate::positions::{Error, Result};
 use super::provenance::{merge_ledger_duplicates, migrate_position_provenance};
 use super::raw_migration::migrate_position_amounts;
 use super::types::*;
-
-pub(super) fn read_amount(row: &rusqlite::Row<'_>, column: &str) -> rusqlite::Result<u64> {
-    let amount: RawAmount = row.get(column)?;
-    amount.try_into().map_err(|error| {
-        rusqlite::Error::FromSqlConversionFailure(
-            row.as_ref().column_index(column).unwrap_or(0),
-            rusqlite::types::Type::Text,
-            Box::new(error),
-        )
-    })
-}
-
-fn read_optional_amount(row: &rusqlite::Row<'_>, column: &str) -> rusqlite::Result<Option<u64>> {
-    row.get::<_, Option<RawAmount>>(column)?
-        .map(|amount| {
-            amount.try_into().map_err(|error| {
-                rusqlite::Error::FromSqlConversionFailure(
-                    row.as_ref().column_index(column).unwrap_or(0),
-                    rusqlite::types::Type::Text,
-                    Box::new(error),
-                )
-            })
-        })
-        .transpose()
-}
 
 impl PositionsDatabase {
     /// Create new PositionsDatabase with connection pooling
@@ -491,7 +465,7 @@ impl PositionsDatabase {
                     position.price_lowest,
                     position.entry_transaction_signature,
                     position.exit_transaction_signature,
-                    position.token_amount.map(RawAmount::from),
+                    position.token_amount,
                     position.effective_entry_price,
                     position.effective_exit_price,
                     position.sol_received,
@@ -512,8 +486,8 @@ impl PositionsDatabase {
                     position.pnl_percent,
                     position.unrealized_pnl,
                     position.unrealized_pnl_percent,
-                    position.remaining_token_amount.map(RawAmount::from),
-                    RawAmount::from(position.total_exited_amount),
+                    position.remaining_token_amount,
+                    position.total_exited_amount,
                     position.average_exit_price,
                     position.partial_exit_count as i64,
                     position.dca_count as i64,
@@ -623,7 +597,7 @@ impl PositionsDatabase {
                     position.price_lowest,
                     position.entry_transaction_signature,
                     position.exit_transaction_signature,
-                    position.token_amount.map(RawAmount::from),
+                    position.token_amount,
                     position.effective_entry_price,
                     position.effective_exit_price,
                     position.sol_received,
@@ -644,8 +618,8 @@ impl PositionsDatabase {
                     position.pnl_percent,
                     position.unrealized_pnl,
                     position.unrealized_pnl_percent,
-                    position.remaining_token_amount.map(RawAmount::from),
-                    RawAmount::from(position.total_exited_amount),
+                    position.remaining_token_amount,
+                    position.total_exited_amount,
                     position.average_exit_price,
                     position.partial_exit_count as i64,
                     position.dca_count as i64,
@@ -925,7 +899,7 @@ impl PositionsDatabase {
             price_lowest: row.get("price_lowest")?,
             entry_transaction_signature: row.get("entry_transaction_signature")?,
             exit_transaction_signature: row.get("exit_transaction_signature")?,
-            token_amount: read_optional_amount(row, "token_amount")?,
+            token_amount: row.get("token_amount")?,
             effective_entry_price: row.get("effective_entry_price")?,
             effective_exit_price: row.get("effective_exit_price")?,
             sol_received: row.get("sol_received")?,
@@ -957,8 +931,8 @@ impl PositionsDatabase {
                 .ok()
                 .flatten(),
             // New fields for partial exit and DCA support
-            remaining_token_amount: read_optional_amount(row, "remaining_token_amount")?,
-            total_exited_amount: read_amount(row, "total_exited_amount")?,
+            remaining_token_amount: row.get("remaining_token_amount")?,
+            total_exited_amount: row.get("total_exited_amount")?,
             average_exit_price: row.get("average_exit_price")?,
             partial_exit_count: row.get::<_, i64>("partial_exit_count")? as u32,
             dca_count: row.get::<_, i64>("dca_count")? as u32,
@@ -1004,6 +978,8 @@ mod tests {
     use r2d2::Pool;
     use r2d2_sqlite::SqliteConnectionManager;
     use rusqlite::{params, Connection};
+
+    use crate::chains::RawAmount;
 
     use super::{PositionsDatabase, POSITIONS_INDEXES, POSITIONS_SCHEMA_VERSION};
 
@@ -1222,6 +1198,58 @@ mod tests {
                 })
                 .unwrap(),
             0
+        );
+    }
+
+    #[tokio::test]
+    async fn wide_position_amounts_round_trip_through_the_row_codec_and_writer() {
+        let (mut database, _directory) = test_database();
+        database.initialize_schema(false).await.unwrap();
+        database.get_connection().unwrap().execute(
+            "INSERT INTO positions (id, chain_id, wallet_address, mint, symbol, name, entry_price, entry_time, position_type, entry_size_sol, total_size_sol, price_highest, price_lowest, token_amount, remaining_token_amount, total_exited_amount, origin_kind, management) VALUES (41, 'solana', 'wallet', 'mint', 'SYM', 'Token', 0.5, '2026-01-01T00:00:00Z', 'buy', 1.0, 1.0, 0.5, 0.5, '340282366920938463463374607431768211455', '18446744073709551616', '18446744073709551617', 'manual', 'user_only')",
+            [],
+        ).unwrap();
+        let mut position = {
+            let connection = database.get_connection().unwrap();
+            connection
+                .query_row(
+                    &format!(
+                        "SELECT {} FROM positions WHERE id = 41",
+                        super::POSITION_SELECT_COLUMNS
+                    ),
+                    [],
+                    |row| database.row_to_position(row),
+                )
+                .unwrap()
+        };
+        assert_eq!(position.token_amount, Some(RawAmount::MAX));
+        assert_eq!(
+            position.remaining_token_amount,
+            Some(RawAmount::new(1u128 << 64))
+        );
+        assert_eq!(
+            position.total_exited_amount,
+            RawAmount::new((1u128 << 64) + 1)
+        );
+
+        position.remaining_token_amount = Some(RawAmount::new((1u128 << 64) + 5));
+        database.update_position(&position).await.unwrap();
+        let stored: (String, String, String) = database
+            .get_connection()
+            .unwrap()
+            .query_row(
+                "SELECT token_amount, remaining_token_amount, total_exited_amount FROM positions WHERE id = 41",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(
+            stored,
+            (
+                "340282366920938463463374607431768211455".to_owned(),
+                "18446744073709551621".to_owned(),
+                "18446744073709551617".to_owned()
+            )
         );
     }
 }

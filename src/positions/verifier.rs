@@ -79,11 +79,11 @@ async fn residual_balance_requires_retry(position_id: Option<i64>, balance: u64)
             // either it no longer describes the balance this residual is being compared to.
             if let Some(token_amount) = position
                 .remaining_token_amount
-                .filter(|remaining| *remaining > 0)
+                .filter(|remaining| *remaining > RawAmount::ZERO)
                 .or(position.token_amount)
             {
-                let dust_threshold = (token_amount / 1_000).max(10);
-                if balance <= dust_threshold {
+                let dust_threshold = (token_amount.raw() / 1_000).max(10);
+                if u128::from(balance) <= dust_threshold {
                     logger::debug(
                         LogTag::Positions,
                         &format!(

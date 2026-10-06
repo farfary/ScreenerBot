@@ -55,6 +55,7 @@ use super::{
     reconcile_with_wallet, reduce_rounds, LedgerEventKind, LedgerRound, QuoteAsset, WalletHolding,
     DUST,
 };
+use crate::chains::RawAmount;
 use crate::logger::{self, LogTag};
 use crate::positions::types::{Position, PositionManagement, PositionOrigin, HOLDING_STATE_FROZEN};
 
@@ -336,7 +337,7 @@ fn build_position(
         price_lowest: existing.map(|p| p.price_lowest).unwrap_or(entry_price),
         entry_transaction_signature: round.entry_signature.clone(),
         exit_transaction_signature: round.exit_signature.clone(),
-        token_amount: Some(clamp_raw(round.total_acquired_raw)),
+        token_amount: Some(RawAmount::new(round.total_acquired_raw)),
         effective_entry_price: round.average_entry_price_sol,
         effective_exit_price: round.average_exit_price_sol,
         sol_received: (round.exit_count > 0).then_some(round.realized_proceeds_sol),
@@ -362,8 +363,8 @@ fn build_position(
         pnl_percent: realized_pnl_percent,
         unrealized_pnl: existing.and_then(|p| p.unrealized_pnl),
         unrealized_pnl_percent: existing.and_then(|p| p.unrealized_pnl_percent),
-        remaining_token_amount: Some(clamp_raw(round.balance_raw)),
-        total_exited_amount: clamp_raw(round.total_disposed_raw),
+        remaining_token_amount: Some(RawAmount::new(round.balance_raw)),
+        total_exited_amount: RawAmount::new(round.total_disposed_raw),
         average_exit_price: round.average_exit_price_sol,
         // The FIRST traded acquisition is the entry; the rest are adds. Likewise the
         // disposal that closed the round is the exit and the rest are partials.
@@ -421,8 +422,8 @@ fn reconcile_owned_position(
     position.holding_state =
         (meta.frozen && round.is_open).then(|| HOLDING_STATE_FROZEN.to_owned());
 
-    let observed_remaining = clamp_raw(round.balance_raw);
-    let claimed_remaining = existing.remaining_token_amount.unwrap_or(0);
+    let observed_remaining = RawAmount::new(round.balance_raw);
+    let claimed_remaining = existing.remaining_token_amount.unwrap_or_default();
     let grew = observed_remaining > claimed_remaining;
 
     if grew && round.history_complete {
@@ -430,11 +431,21 @@ fn reconcile_owned_position(
     }
 
     if round.is_open {
-        if observed_remaining < claimed_remaining {
-            position.remaining_token_amount = Some(observed_remaining);
-            position.total_exited_amount = existing
-                .total_exited_amount
-                .saturating_add(claimed_remaining - observed_remaining);
+        if let Some(sold) = claimed_remaining
+            .checked_sub(observed_remaining)
+            .filter(|sold| *sold > RawAmount::ZERO)
+        {
+            if let Err(error) = position.book_exit(sold) {
+                position.remaining_token_amount = Some(observed_remaining);
+                position.history_complete = false;
+                logger::warning(
+                    LogTag::Positions,
+                    &format!(
+                        "Ledger reconcile for {}: exited amount not updated: {error}",
+                        short_mint(&existing.mint)
+                    ),
+                );
+            }
         }
         return position;
     }
@@ -445,10 +456,17 @@ fn reconcile_owned_position(
         return position;
     }
 
-    position.remaining_token_amount = Some(0);
-    position.total_exited_amount = existing
-        .total_exited_amount
-        .saturating_add(claimed_remaining);
+    if let Err(error) = position.book_remaining_as_exited() {
+        position.history_complete = false;
+        logger::warning(
+            LogTag::Positions,
+            &format!(
+                "Ledger reconcile for {}: exited amount not updated: {error}",
+                short_mint(&existing.mint)
+            ),
+        );
+    }
+    position.remaining_token_amount = Some(RawAmount::ZERO);
     position.exit_time = Some(
         round
             .closed_at
@@ -519,9 +537,9 @@ fn adopt_external_growth(
     legs: Option<&TraderLegs>,
 ) {
     // Chain truth for the sizes, whoever bought them.
-    position.remaining_token_amount = Some(clamp_raw(round.balance_raw));
-    position.token_amount = Some(clamp_raw(round.total_acquired_raw));
-    position.total_exited_amount = clamp_raw(round.total_disposed_raw);
+    position.remaining_token_amount = Some(RawAmount::new(round.balance_raw));
+    position.token_amount = Some(RawAmount::new(round.total_acquired_raw));
+    position.total_exited_amount = RawAmount::new(round.total_disposed_raw);
     position.dca_count = round.entry_count.saturating_sub(1);
 
     if !round.basis_complete {
@@ -625,13 +643,6 @@ fn same_opt_money(a: Option<f64>, b: Option<f64>) -> bool {
         (Some(a), Some(b)) => same_money(a, b),
         _ => false,
     }
-}
-
-/// Raw base units are `u128` and exact; the position schema stores `u64`. A balance that
-/// genuinely exceeds `u64::MAX` cannot exist for any real SPL mint (supply itself is
-/// `u64`), so saturating is the correct total behaviour rather than a panic.
-fn clamp_raw(raw: u128) -> u64 {
-    u64::try_from(raw).unwrap_or(u64::MAX)
 }
 
 fn short_mint(mint: &str) -> String {

@@ -15,6 +15,7 @@ use std::collections::HashSet;
 use chrono::{DateTime, Duration, Utc};
 
 use crate::chains::active_chain;
+use crate::chains::RawAmount;
 use crate::positions::{Position, PositionManagement, PositionOrigin, PriceSource};
 use crate::trader::copy::{
     management_for_exit_mode, simulate_fill, simulate_sell, CopyActivityRow, CopyMode, CopyOutcome,
@@ -321,7 +322,8 @@ struct LiveRound<'a> {
 /// The position as the positions store holds it; its figures match the Positions
 /// page's row for the same token.
 fn live_position(task: &CopyTask, round: &LiveRound, now: DateTime<Utc>) -> Position {
-    let tokens = (round.size / round.entry * 1e9) as u64;
+    let tokens =
+        RawAmount::from_integral_f64((round.size / round.entry * 1e9).trunc()).unwrap_or_default();
     let exit_price = round.close.map(|(price, ..)| price);
     let exit_time = round.close.map(|(_, at, _)| at);
     let move_pct = |price: f64| (price - round.entry) / round.entry * 100.0;
@@ -370,7 +372,11 @@ fn live_position(task: &CopyTask, round: &LiveRound, now: DateTime<Utc>) -> Posi
         unrealized_pnl: unrealized,
         unrealized_pnl_percent: round.current.map(move_pct),
         remaining_token_amount: round.current.map(|_| tokens),
-        total_exited_amount: if exit_time.is_some() { tokens } else { 0 },
+        total_exited_amount: if exit_time.is_some() {
+            tokens
+        } else {
+            RawAmount::ZERO
+        },
         average_exit_price: exit_price,
         partial_exit_count: 0,
         dca_count: 0,

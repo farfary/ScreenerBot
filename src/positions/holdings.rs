@@ -12,18 +12,21 @@ use super::{Error, Result};
 impl Position {
     /// Raw amount held now: the remaining amount once recorded, otherwise the entry fill.
     pub fn held_amount(&self) -> Option<RawAmount> {
+        self.remaining_token_amount.or(self.token_amount)
+    }
+
+    /// Raw amount ever acquired: what is held plus what has exited. `None` only when the sum
+    /// overflows.
+    pub fn acquired_amount(&self) -> Option<RawAmount> {
         self.remaining_token_amount
-            .or(self.token_amount)
-            .map(RawAmount::from)
+            .unwrap_or_default()
+            .checked_add(self.total_exited_amount)
     }
 
     /// Books `sold` as exited and lowers the remaining amount, floored at zero. Returns the
     /// new exited total.
     pub fn book_exit(&mut self, sold: RawAmount) -> Result<RawAmount> {
-        let booked = u64::try_from(sold)
-            .ok()
-            .and_then(|sold| Some((sold, self.total_exited_amount.checked_add(sold)?)));
-        let Some((sold, exited)) = booked else {
+        let Some(exited) = self.total_exited_amount.checked_add(sold) else {
             return Err(Error::AmountOverflow {
                 mint: self.mint.clone(),
                 operation: "booking an exit",
@@ -31,20 +34,17 @@ impl Position {
         };
         self.remaining_token_amount = self
             .remaining_token_amount
-            .map(|remaining| remaining.saturating_sub(sold));
+            .map(|remaining| remaining.checked_sub(sold).unwrap_or(RawAmount::ZERO));
         self.total_exited_amount = exited;
-        Ok(RawAmount::from(exited))
+        Ok(exited)
     }
 
     /// Adds `bought` to the remaining amount. Returns the new remaining amount.
     pub fn book_acquisition(&mut self, bought: RawAmount) -> Result<RawAmount> {
-        let held =
-            u64::try_from(bought)
-                .ok()
-                .and_then(|bought| match self.remaining_token_amount {
-                    Some(remaining) => remaining.checked_add(bought),
-                    None => Some(bought),
-                });
+        let held = match self.remaining_token_amount {
+            Some(remaining) => remaining.checked_add(bought),
+            None => Some(bought),
+        };
         let Some(held) = held else {
             return Err(Error::AmountOverflow {
                 mint: self.mint.clone(),
@@ -52,7 +52,7 @@ impl Position {
             });
         };
         self.remaining_token_amount = Some(held);
-        Ok(RawAmount::from(held))
+        Ok(held)
     }
 
     /// Moves the whole remaining amount into the exited total, leaving zero held. Returns the
@@ -68,7 +68,7 @@ impl Position {
             });
         };
         self.total_exited_amount = exited;
-        self.remaining_token_amount = Some(0);
-        Ok(RawAmount::from(remaining))
+        self.remaining_token_amount = Some(RawAmount::ZERO);
+        Ok(remaining)
     }
 }

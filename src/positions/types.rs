@@ -250,7 +250,7 @@ pub struct Position {
     // Transaction signatures
     pub entry_transaction_signature: Option<String>,
     pub exit_transaction_signature: Option<String>,
-    pub token_amount: Option<u64>, // Initial amount of tokens bought (first entry)
+    pub token_amount: Option<RawAmount>, // Initial amount of tokens bought (first entry)
     pub effective_entry_price: Option<f64>, // Initial entry price (deprecated, use average_entry_price)
     pub effective_exit_price: Option<f64>,  // Final exit price (deprecated, use average_exit_price)
     pub sol_received: Option<f64>,          // Total SOL received after all exits
@@ -289,10 +289,10 @@ pub struct Position {
 
     // ==================== PARTIAL EXIT & DCA SUPPORT ====================
     // Partial exit tracking
-    pub remaining_token_amount: Option<u64>, // Current holdings after partial exits
-    pub total_exited_amount: u64,            // Cumulative tokens sold
-    pub average_exit_price: Option<f64>,     // Weighted average exit price
-    pub partial_exit_count: u32,             // Number of partial exits executed
+    pub remaining_token_amount: Option<RawAmount>, // Current holdings after partial exits
+    pub total_exited_amount: RawAmount,            // Cumulative tokens sold
+    pub average_exit_price: Option<f64>,           // Weighted average exit price
+    pub partial_exit_count: u32,                   // Number of partial exits executed
 
     // DCA tracking
     pub dca_count: u32,                       // Number of additional entries (DCA)

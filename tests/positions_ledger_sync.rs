@@ -246,7 +246,7 @@ fn an_open_round_is_not_marked_exited() {
     assert!(!position.transaction_exit_verified);
     assert!(position.exit_time.is_none());
     assert!(position.exit_transaction_signature.is_none());
-    assert_eq!(position.remaining_token_amount, Some(raw::<u64>(1_000_000)));
+    assert_eq!(position.remaining_token_amount, Some(raw(1_000_000)));
 }
 
 #[test]
@@ -565,7 +565,7 @@ fn a_bot_position_sold_somewhere_else_is_closed_from_wallet_history() {
         Some(Utc.timestamp_opt(1_600_001_000, 0).unwrap()),
         "closed when the chain says it closed"
     );
-    assert_eq!(reconciled.remaining_token_amount, Some(raw::<u64>(0)));
+    assert_eq!(reconciled.remaining_token_amount, Some(raw(0)));
     assert_eq!(
         reconciled.exit_transaction_signature.as_deref(),
         Some("close-sig")
@@ -637,7 +637,7 @@ fn a_partial_sale_elsewhere_lowers_the_holding_but_leaves_it_open() {
     partly_sold.balance_raw = 400_000;
 
     let mut bot_row = bot_position(&open_round(MINT, "open-sig:MINT"));
-    bot_row.remaining_token_amount = Some(raw::<u64>(1_000_000));
+    bot_row.remaining_token_amount = Some(raw(1_000_000));
     bot_row.total_exited_amount = raw(0);
 
     let plan = plan_position_writes(
@@ -650,8 +650,8 @@ fn a_partial_sale_elsewhere_lowers_the_holding_but_leaves_it_open() {
     );
 
     let reconciled = &plan.updates[0];
-    assert_eq!(reconciled.remaining_token_amount, Some(raw::<u64>(400_000)));
-    assert_eq!(reconciled.total_exited_amount, raw::<u64>(600_000));
+    assert_eq!(reconciled.remaining_token_amount, Some(raw(400_000)));
+    assert_eq!(reconciled.total_exited_amount, raw(600_000));
     assert!(reconciled.exit_time.is_none(), "still holding something");
 }
 
@@ -696,7 +696,7 @@ fn a_buy_made_elsewhere_grows_the_bot_s_own_position() {
     // otherwise the Positions tab shows the pre-buy invested figure forever.
     let mut bot_row = bot_position(&open_round(MINT, "open-sig:MINT"));
     bot_row.id = Some(7);
-    bot_row.remaining_token_amount = Some(raw::<u64>(1_000_000));
+    bot_row.remaining_token_amount = Some(raw(1_000_000));
 
     let legs = HashMap::from([(
         7i64,
@@ -719,8 +719,8 @@ fn a_buy_made_elsewhere_grows_the_bot_s_own_position() {
 
     assert_eq!(plan.updates.len(), 1);
     let grown = &plan.updates[0];
-    assert_eq!(grown.remaining_token_amount, Some(raw::<u64>(5_000_000)));
-    assert_eq!(grown.token_amount, Some(raw::<u64>(5_000_000)));
+    assert_eq!(grown.remaining_token_amount, Some(raw(5_000_000)));
+    assert_eq!(grown.token_amount, Some(raw(5_000_000)));
     assert_eq!(grown.dca_count, 2);
     // The trader's own leg keeps its fee-exact number; the two outside buys come from
     // the chain. Never the round's 8.0, which would discard the fee.
@@ -738,7 +738,7 @@ fn absorbing_an_outside_buy_is_idempotent() {
     // the same number, where accumulating the difference would inflate it every pass.
     let mut bot_row = bot_position(&open_round(MINT, "open-sig:MINT"));
     bot_row.id = Some(7);
-    bot_row.remaining_token_amount = Some(raw::<u64>(1_000_000));
+    bot_row.remaining_token_amount = Some(raw(1_000_000));
 
     let legs = HashMap::from([(
         7i64,
@@ -779,7 +779,7 @@ fn an_unpriced_outside_buy_takes_the_holding_but_not_a_basis() {
 
     let mut bot_row = bot_position(&open_round(MINT, "open-sig:MINT"));
     bot_row.id = Some(7);
-    bot_row.remaining_token_amount = Some(raw::<u64>(1_000_000));
+    bot_row.remaining_token_amount = Some(raw(1_000_000));
 
     let plan = plan_position_writes(
         &[grown],
@@ -791,10 +791,7 @@ fn an_unpriced_outside_buy_takes_the_holding_but_not_a_basis() {
     );
 
     let reconciled = &plan.updates[0];
-    assert_eq!(
-        reconciled.remaining_token_amount,
-        Some(raw::<u64>(5_000_000))
-    );
+    assert_eq!(reconciled.remaining_token_amount, Some(raw(5_000_000)));
     assert!(!reconciled.basis_complete);
     assert!(!reconciled.has_trustworthy_pnl());
     assert!(
@@ -812,7 +809,7 @@ fn a_holding_that_grew_on_broken_history_is_not_claimed() {
 
     let mut bot_row = bot_position(&open_round(MINT, "open-sig:MINT"));
     bot_row.id = Some(7);
-    bot_row.remaining_token_amount = Some(raw::<u64>(1_000_000));
+    bot_row.remaining_token_amount = Some(raw(1_000_000));
 
     let plan = plan_position_writes(
         &[grown],
@@ -824,10 +821,7 @@ fn a_holding_that_grew_on_broken_history_is_not_claimed() {
     );
 
     assert_eq!(plan.updates.len(), 1, "only the round key is stamped");
-    assert_eq!(
-        plan.updates[0].remaining_token_amount,
-        Some(raw::<u64>(1_000_000))
-    );
+    assert_eq!(plan.updates[0].remaining_token_amount, Some(raw(1_000_000)));
     assert!((plan.updates[0].total_size_sol - 2.0).abs() < 1e-9);
 }
 
@@ -839,7 +833,7 @@ fn a_position_that_booked_its_own_exit_is_never_rewritten() {
     bot_row.exit_time = Some(Utc.timestamp_opt(1_600_000_900, 0).unwrap());
     bot_row.exit_transaction_signature = Some("our-own-close".to_owned());
     bot_row.transaction_exit_verified = true;
-    bot_row.remaining_token_amount = Some(raw::<u64>(0));
+    bot_row.remaining_token_amount = Some(raw(0));
     bot_row.sol_received = Some(2.9);
     bot_row.pnl = Some(0.85);
 
@@ -1037,7 +1031,7 @@ fn a_frozen_holding_is_flagged_but_never_archived_or_closed() {
     // open and visible; archiving it is the user's decision alone.
     assert!(!position.archived);
     assert!(!position.transaction_exit_verified);
-    assert_eq!(position.remaining_token_amount, Some(raw::<u64>(1_000_000)));
+    assert_eq!(position.remaining_token_amount, Some(raw(1_000_000)));
 }
 
 #[test]
@@ -1169,7 +1163,7 @@ fn a_bot_buy_then_a_sale_made_elsewhere_closes_exactly_one_position() {
     let mut bot_row = bot_position(&open_round(TRADED_MINT, "bot-buy:MINT"));
     bot_row.entry_transaction_signature = Some("bot-buy".to_owned());
     bot_row.total_size_sol = 1.0;
-    bot_row.remaining_token_amount = Some(raw::<u64>(2_000_000));
+    bot_row.remaining_token_amount = Some(raw(2_000_000));
 
     let plan = plan_position_writes(
         &rounds,
@@ -1190,7 +1184,7 @@ fn a_bot_buy_then_a_sale_made_elsewhere_closes_exactly_one_position() {
     assert_eq!(closed.id, bot_row.id);
     assert_eq!(closed.round_key, Some(format!("bot-buy:{TRADED_MINT}")));
     assert!(closed.exit_time.is_some(), "the position is closed");
-    assert_eq!(closed.remaining_token_amount, Some(raw::<u64>(0)));
+    assert_eq!(closed.remaining_token_amount, Some(raw(0)));
     assert_eq!(
         closed.exit_transaction_signature.as_deref(),
         Some("elsewhere-sell")

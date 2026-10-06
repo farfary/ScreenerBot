@@ -567,19 +567,4 @@ mod tests {
             .unwrap();
         assert_eq!(rows, 0);
     }
-
-    #[test]
-    fn canonical_wide_amount_is_rejected_by_the_u64_domain_reader() {
-        let conn = Connection::open_in_memory().unwrap();
-        conn.execute_batch("CREATE TABLE amounts (amount TEXT NOT NULL); INSERT INTO amounts VALUES ('18446744073709551616')").unwrap();
-        let error = conn
-            .query_row("SELECT amount FROM amounts", [], |row| {
-                super::super::operations::read_amount(row, "amount")
-            })
-            .unwrap_err();
-        assert!(matches!(
-            error,
-            rusqlite::Error::FromSqlConversionFailure(..)
-        ));
-    }
 }
