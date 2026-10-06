@@ -135,9 +135,9 @@ pub fn prepare_live_entry(
     let ActivityKind::Swap {
         mint,
         side: SwapSide::Buy,
-        sol_amount: target_size_native,
+        native_amount: target_size_native,
         token_amount: target_token_amount,
-        price_sol: target_price_native,
+        price_native: target_price_native,
         ..
     } = &activity.kind
     else {

@@ -22,6 +22,6 @@ pub async fn get_wallets_summary() -> Result<WalletsSummary, Error> {
         active_count: active,
         main_wallet: main_wallet.as_ref().map(|w| w.address.clone()),
         main_wallet_name: main_wallet.as_ref().map(|w| w.name.clone()),
-        total_sol: 0.0, // Will be updated by balance fetching
+        total_native: 0.0, // Will be updated by balance fetching
     })
 }

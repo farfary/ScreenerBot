@@ -45,7 +45,7 @@ pub struct TransactionDebugInfo {
     #[tabled(rename = "Success")]
     pub success: String,
     #[tabled(rename = "Fee (SOL)")]
-    pub fee_sol: String,
+    pub fee_native: String,
     #[tabled(rename = "Age")]
     pub age: String,
     #[tabled(rename = "Instructions")]
@@ -64,7 +64,7 @@ pub struct TransactionDebugStats {
     pub transfer_transactions: usize,
     pub unknown_transactions: usize,
     pub average_processing_time_ms: f64,
-    pub total_fees_sol: f64,
+    pub total_fees_native: f64,
     pub date_range: Option<(DateTime<Utc>, DateTime<Utc>)>,
 }
 
@@ -299,9 +299,9 @@ pub async fn generate_debug_statistics(transactions: &[Transaction]) -> Transact
         0.0
     };
 
-    let total_fees_sol = transactions
+    let total_fees_native = transactions
         .iter()
-        .filter_map(|tx| tx.fee_lamports)
+        .filter_map(|tx| tx.fee_raw)
         .map(|fee| adapter().raw_to_native(fee))
         .sum();
 
@@ -322,7 +322,7 @@ pub async fn generate_debug_statistics(transactions: &[Transaction]) -> Transact
         transfer_transactions,
         unknown_transactions,
         average_processing_time_ms,
-        total_fees_sol,
+        total_fees_native,
         date_range,
     }
 }
@@ -348,8 +348,8 @@ fn create_debug_info(transaction: &Transaction) -> TransactionDebugInfo {
         "Unknown".to_owned()
     };
 
-    let fee_sol = transaction
-        .fee_lamports
+    let fee_native = transaction
+        .fee_raw
         .map(|f| format!("{:.6}", adapter().raw_to_native(f)))
         .unwrap_or_else(|| "Unknown".to_owned());
 
@@ -363,7 +363,7 @@ fn create_debug_info(transaction: &Transaction) -> TransactionDebugInfo {
         transaction_type: format!("{:?}", transaction.transaction_type),
         direction: format!("{:?}", transaction.direction),
         success: (if transaction.success { "" } else { "" }).to_string(),
-        fee_sol,
+        fee_native,
         age,
         instructions_count: transaction.instructions_count,
         analysis_duration,

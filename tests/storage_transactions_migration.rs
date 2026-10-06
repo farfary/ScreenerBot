@@ -344,9 +344,9 @@ async fn migration_bumps_version_rebuilds_tables_and_is_idempotent() {
     let mut own_view = Transaction::new("SIG_SUBJECT_READ".to_owned());
     own_view.status = TransactionStatus::Finalized;
     own_view.success = true;
-    own_view.sol_balance_change = -1.0;
+    own_view.native_balance_change = -1.0;
     let mut target_view = own_view.clone();
-    target_view.sol_balance_change = 2.0;
+    target_view.native_balance_change = 2.0;
     db.upsert_full_transaction(own_subject.clone(), &own_view)
         .await
         .expect("store own perspective");
@@ -363,7 +363,7 @@ async fn migration_bumps_version_rebuilds_tables_and_is_idempotent() {
         .await
         .expect("list target subject");
     assert_eq!(target_rows.items.len(), 1);
-    assert_eq!(target_rows.items[0].sol_delta, 2.0);
+    assert_eq!(target_rows.items[0].native_delta, 2.0);
     let own_detail = db
         .get_transaction_for_subject(own_subject.clone(), "SIG_SUBJECT_READ")
         .await
@@ -374,8 +374,8 @@ async fn migration_bumps_version_rebuilds_tables_and_is_idempotent() {
         .await
         .expect("read target detail")
         .expect("target detail exists");
-    assert_eq!(own_detail.sol_balance_change, -1.0);
-    assert_eq!(target_detail.sol_balance_change, 2.0);
+    assert_eq!(own_detail.native_balance_change, -1.0);
+    assert_eq!(target_detail.native_balance_change, 2.0);
 
     // 7. Idempotent: opening the now-migrated database a second time is a clean
     // no-op -- no error, the version is unchanged, and nothing seeded above is lost (a second

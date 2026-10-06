@@ -15,6 +15,7 @@
 // - `global`: Global instance management
 
 mod bootstrap;
+mod column_names;
 mod deltas;
 mod global;
 mod maintenance;

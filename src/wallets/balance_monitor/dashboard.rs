@@ -150,25 +150,25 @@ pub(super) async fn compute_dashboard_payload_realtime(
         .or_else(|| snapshots.first())
         .cloned();
 
-    let previous_sol_balance = baseline_snapshot.as_ref().map(|snap| snap.sol_balance);
-    let sol_change =
-        latest_snapshot.sol_balance - previous_sol_balance.unwrap_or(latest_snapshot.sol_balance);
+    let previous_sol_balance = baseline_snapshot.as_ref().map(|snap| snap.native_balance);
+    let sol_change = latest_snapshot.native_balance
+        - previous_sol_balance.unwrap_or(latest_snapshot.native_balance);
     let sol_change_percent = previous_sol_balance
-        .and_then(|prev| calc_change_percent(latest_snapshot.sol_balance, prev));
+        .and_then(|prev| calc_change_percent(latest_snapshot.native_balance, prev));
 
     let mut trend: Vec<WalletBalancePoint> = snapshots
         .iter()
         .filter(|snap| snap.snapshot_time >= window_start)
         .map(|snap| WalletBalancePoint {
             timestamp: snap.snapshot_time.timestamp(),
-            sol_balance: snap.sol_balance,
+            sol_balance: snap.native_balance,
         })
         .collect();
 
     if trend.is_empty() {
         trend.push(WalletBalancePoint {
             timestamp: latest_snapshot.snapshot_time.timestamp(),
-            sol_balance: latest_snapshot.sol_balance,
+            sol_balance: latest_snapshot.native_balance,
         });
     }
 
@@ -208,7 +208,7 @@ pub(super) async fn compute_dashboard_payload_realtime(
 
     let summary = WalletSummarySnapshot {
         window_hours,
-        current_sol_balance: latest_snapshot.sol_balance,
+        current_sol_balance: latest_snapshot.native_balance,
         previous_sol_balance,
         sol_change,
         sol_change_percent,

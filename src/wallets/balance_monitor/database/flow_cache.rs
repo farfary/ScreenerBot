@@ -23,10 +23,10 @@ impl WalletDatabase {
         let conn = self.get_connection()?;
         let mut query = String::from(
             "SELECT \
-                COALESCE(SUM(CASE WHEN sol_delta > 0 THEN sol_delta ELSE 0 END), 0), \
-                COALESCE(SUM(CASE WHEN sol_delta < 0 THEN -sol_delta ELSE 0 END), 0), \
+                COALESCE(SUM(CASE WHEN native_delta > 0 THEN native_delta ELSE 0 END), 0), \
+                COALESCE(SUM(CASE WHEN native_delta < 0 THEN -native_delta ELSE 0 END), 0), \
                 COUNT(signature) \
-             FROM sol_flow_cache \
+             FROM native_flow_cache \
              WHERE chain_id = ?1 AND wallet_address = ?2 AND timestamp >= ?3",
         );
 
@@ -63,7 +63,7 @@ impl WalletDatabase {
         {
             let mut stmt = tx
                 .prepare(
-                    "INSERT OR REPLACE INTO sol_flow_cache(chain_id, wallet_address, signature, timestamp, sol_delta) VALUES (?1, ?2, ?3, ?4, ?5)",
+                    "INSERT OR REPLACE INTO native_flow_cache(chain_id, wallet_address, signature, timestamp, native_delta) VALUES (?1, ?2, ?3, ?4, ?5)",
                 )
                 .map_err(DatabaseError::from)?;
             for (sig, ts, delta) in rows.iter() {
@@ -85,7 +85,7 @@ impl WalletDatabase {
     pub fn get_flow_cache_max_ts(&self) -> Result<Option<DateTime<Utc>>, Error> {
         let conn = self.get_connection()?;
         let mut stmt = conn
-            .prepare("SELECT MAX(timestamp) FROM sol_flow_cache WHERE chain_id = ?1 AND wallet_address = ?2")
+            .prepare("SELECT MAX(timestamp) FROM native_flow_cache WHERE chain_id = ?1 AND wallet_address = ?2")
             .map_err(DatabaseError::from)?;
         let ts: Option<String> = stmt
             .query_row(params![self.chain.as_str(), self.subject], |row| row.get(0))
@@ -109,7 +109,7 @@ impl WalletDatabase {
     pub fn get_flow_cache_min_ts(&self) -> Result<Option<DateTime<Utc>>, Error> {
         let conn = self.get_connection()?;
         let mut stmt = conn
-            .prepare("SELECT MIN(timestamp) FROM sol_flow_cache WHERE chain_id = ?1 AND wallet_address = ?2")
+            .prepare("SELECT MIN(timestamp) FROM native_flow_cache WHERE chain_id = ?1 AND wallet_address = ?2")
             .map_err(DatabaseError::from)?;
         let ts: Option<String> = stmt
             .query_row(params![self.chain.as_str(), self.subject], |row| row.get(0))
@@ -134,7 +134,7 @@ impl WalletDatabase {
         let conn = self.get_connection()?;
         let rows: i64 = conn
             .query_row(
-                "SELECT COUNT(*) FROM sol_flow_cache WHERE chain_id = ?1 AND wallet_address = ?2",
+                "SELECT COUNT(*) FROM native_flow_cache WHERE chain_id = ?1 AND wallet_address = ?2",
                 params![self.chain.as_str(), self.subject],
                 |row| row.get(0),
             )

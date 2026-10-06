@@ -15,6 +15,7 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 
+use crate::database::WriteTransaction;
 use crate::logger::{self, LogTag};
 use crate::transactions::error::Error;
 use crate::transactions::types::*;
@@ -47,7 +48,7 @@ pub struct TransactionDatabase {
 pub struct WalletFlowExportRow {
     pub signature: String,
     pub timestamp: DateTime<Utc>,
-    pub sol_delta: f64,
+    pub native_delta: f64,
 }
 
 impl TransactionDatabase {
@@ -127,8 +128,38 @@ impl TransactionDatabase {
     }
 
     /// Initialize database schema and indexes
+    ///
+    /// Table creation, every migration, the index pass and the metadata stamps
+    /// commit together: a refused or failed open leaves the stored schema exactly
+    /// as it was. Foreign-key enforcement cannot change inside a transaction, so
+    /// it is disabled before BEGIN (the table rebuilds drop referenced tables) and
+    /// restored on every exit path.
     async fn initialize_schema(&mut self, record_current_wallet: bool) -> Result<(), Error> {
         let mut conn = self.get_connection()?;
+
+        conn.pragma_update(None, "foreign_keys", 0)
+            .map_err(|e| Error::Migration {
+                step: "disable foreign_keys for schema initialization".to_owned(),
+                detail: e.to_string(),
+            })?;
+        let result = self.initialize_schema_in_transaction(&mut conn, record_current_wallet);
+        conn.pragma_update(None, "foreign_keys", 1)
+            .map_err(|e| Error::Migration {
+                step: "re-enable foreign_keys after schema initialization".to_owned(),
+                detail: e.to_string(),
+            })?;
+        result
+    }
+
+    fn initialize_schema_in_transaction(
+        &self,
+        conn: &mut rusqlite::Connection,
+        record_current_wallet: bool,
+    ) -> Result<(), Error> {
+        let tx = conn.write_tx().map_err(|e| Error::Migration {
+            step: "begin schema initialization".to_owned(),
+            detail: e.to_string(),
+        })?;
 
         // Create all tables
         let tables = [
@@ -143,7 +174,7 @@ impl TransactionDatabase {
         ];
 
         for table_sql in &tables {
-            conn.execute(table_sql, []).map_err(|e| Error::Migration {
+            tx.execute(table_sql, []).map_err(|e| Error::Migration {
                 step: "create table".to_owned(),
                 detail: e.to_string(),
             })?;
@@ -151,10 +182,10 @@ impl TransactionDatabase {
 
         // Apply the legacy processed-transaction column migrations before the v5
         // rebuild below: that rebuild copies every column of
-        // `processed_transactions`, and therefore needs fee_sol/sol_delta to exist
-        // on the pre-v5 shape. This deliberately does not query chain-aware state;
-        // legacy bootstrap_state has no chain_id until the v7 rebuild.
-        let needs_sol_delta_backfill = self.apply_pre_chain_migrations(&mut conn)?;
+        // `processed_transactions`, and therefore needs the fee and delta columns to
+        // exist on the pre-v5 shape. This deliberately does not query chain-aware
+        // state; legacy bootstrap_state has no chain_id until the v7 rebuild.
+        let needs_native_delta_backfill = self.apply_pre_chain_migrations(&tx)?;
 
         // §7.1: rebuild the signature-keyed tables onto a composite
         // (signature, wallet_address) primary key so a second subject's perspective
@@ -162,27 +193,31 @@ impl TransactionDatabase {
         // recreates whichever of the five tables is still in the pre-v5 shape, so it
         // must run after table creation above (a table has to exist to migrate) and
         // before index creation below (rebuilding a table drops its indexes with it).
-        self.migrate_signature_wallet_tables(&mut conn)?;
-        self.migrate_chain_identity_tables(&mut conn)?;
-        self.migrate_subject_delta_amounts(&mut conn)?;
+        self.migrate_signature_wallet_tables(&tx)?;
+        self.migrate_chain_identity_tables(&tx)?;
+        self.migrate_subject_delta_amounts(&tx)?;
+
+        // Unit-neutral column names come after every versioned rebuild, so each of
+        // those reads the historical shape it was written for.
+        super::column_names::rename_unit_neutral_columns(&tx)?;
 
         // Chain-aware bootstrap state and queries are valid only after every legacy
         // transaction table, including bootstrap_state, has been rebuilt to v7.
-        self.initialize_chain_bootstrap_state(&mut conn)?;
-        if needs_sol_delta_backfill {
-            self.backfill_processed_sol_delta(&mut conn)?;
+        self.initialize_chain_bootstrap_state(&tx)?;
+        if needs_native_delta_backfill {
+            self.backfill_processed_native_delta(&tx)?;
         }
 
         // Create all indexes (fresh for anything just rebuilt above)
         for index_sql in INDEXES {
-            conn.execute(index_sql, []).map_err(|e| Error::Migration {
+            tx.execute(index_sql, []).map_err(|e| Error::Migration {
                 step: "create index".to_owned(),
                 detail: e.to_string(),
             })?;
         }
 
         // Set or update schema version
-        conn.execute(
+        tx.execute(
             "INSERT OR REPLACE INTO db_metadata (key, value) VALUES (?1, ?2)",
             params!["schema_version", self.schema_version.to_string()],
         )
@@ -197,7 +232,7 @@ impl TransactionDatabase {
                     step: "get wallet address".to_owned(),
                     detail: e.to_string(),
                 })?;
-            conn.execute(
+            tx.execute(
                 "INSERT OR REPLACE INTO db_metadata (key, value) VALUES (?1, ?2)",
                 params!["current_wallet", wallet_address],
             )
@@ -207,7 +242,10 @@ impl TransactionDatabase {
             })?;
         }
 
-        Ok(())
+        tx.commit().map_err(|e| Error::Migration {
+            step: "commit schema initialization".to_owned(),
+            detail: e.to_string(),
+        })
     }
 
     /// Get database connection from pool

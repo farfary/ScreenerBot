@@ -93,13 +93,13 @@ pub(super) async fn get_header_metrics() -> Json<HeaderMetricsResponse> {
     };
 
     let wallet = WalletHeaderInfo {
-        sol_balance: worth.sol_balance,
-        tokens_worth_sol: worth.tokens_worth_sol,
-        total_equity_sol: worth.total_equity_sol,
-        change_today_sol: start_balance_sol.map(|start| worth.total_equity_sol - start),
+        sol_balance: worth.native_balance,
+        tokens_worth_sol: worth.tokens_worth_native,
+        total_equity_sol: worth.total_equity_native,
+        change_today_sol: start_balance_sol.map(|start| worth.total_equity_native - start),
         change_today_percent: start_balance_sol
             .filter(|start| *start > f64::EPSILON)
-            .map(|start| (worth.total_equity_sol - start) / start * 100.0),
+            .map(|start| (worth.total_equity_native - start) / start * 100.0),
         token_count: worth.token_count,
         last_updated: worth.updated_at.to_rfc3339(),
     };

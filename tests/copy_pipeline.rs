@@ -52,10 +52,10 @@ fn observed_buy_matches_sizes_and_produces_costed_paper_fill_with_telemetry() {
         kind: ActivityKind::Swap {
             mint: "mint".to_owned(),
             side: SwapSide::Buy,
-            sol_amount: 0.4,
+            native_amount: 0.4,
             token_amount: 100.0,
             venue: Some("jupiter".to_owned()),
-            price_sol: Some(0.004),
+            price_native: Some(0.004),
         },
         sources: vec![WatchSource::Copy { task_id: 7 }],
         backfill: false,

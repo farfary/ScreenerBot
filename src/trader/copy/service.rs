@@ -131,7 +131,7 @@ async fn process_activity(
     let ActivityKind::Swap {
         mint,
         side,
-        price_sol,
+        price_native,
         ..
     } = &activity.kind
     else {
@@ -238,7 +238,7 @@ async fn process_activity(
         .cloned()
         .collect::<Vec<_>>();
     if !paper_tasks.is_empty() {
-        let decision_price = decision_price(mint, *price_sol);
+        let decision_price = decision_price(mint, *price_native);
         let paper_outcomes = if let Err(block) =
             crate::trader::admission::check_entry_admission(mint, &["rpc"]).await
         {
@@ -355,7 +355,7 @@ async fn process_sell_activity(
 ) -> crate::trader::Result<()> {
     let force_stopped = crate::global::is_force_stopped();
     let target_price = match &activity.kind {
-        ActivityKind::Swap { price_sol, .. } => *price_sol,
+        ActivityKind::Swap { price_native, .. } => *price_native,
         _ => None,
     };
     let market_price = decision_price(mint, target_price);
@@ -451,7 +451,7 @@ pub(super) fn observation_telemetry(activity: &WalletActivity) -> CopyTelemetry 
         submitted_at: None,
         confirmed_at: None,
         target_price_sol: match &activity.kind {
-            ActivityKind::Swap { price_sol, .. } => *price_sol,
+            ActivityKind::Swap { price_native, .. } => *price_native,
             _ => None,
         },
         fill_price_sol: None,

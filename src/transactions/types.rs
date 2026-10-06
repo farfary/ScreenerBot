@@ -51,14 +51,14 @@ pub struct Transaction {
 
     // Financial data - NEVER CACHED - always calculated fresh
     #[serde(skip_serializing, default)]
-    pub fee_sol: f64,
+    pub fee_native: f64,
     // Legacy/raw metrics for compatibility with existing modules
-    pub fee_lamports: Option<u64>,
+    pub fee_raw: Option<u64>,
     pub compute_units_consumed: Option<u64>,
     pub instructions_count: usize,
     pub accounts_count: usize,
     #[serde(skip_serializing, default)]
-    pub sol_balance_change: f64,
+    pub native_balance_change: f64,
     #[serde(skip_serializing, default)]
     pub wallet_lamport_change: i64,
     #[serde(skip_serializing, default)]
@@ -77,7 +77,7 @@ pub struct Transaction {
 
     // Balance changes - NEVER CACHED - always calculated fresh
     #[serde(skip_serializing, default)]
-    pub sol_balance_changes: Vec<SolBalanceChange>,
+    pub native_balance_changes: Vec<SolBalanceChange>,
     #[serde(skip_serializing, default)]
     pub token_balance_changes: Vec<TokenBalanceChange>,
 
@@ -97,7 +97,7 @@ pub struct Transaction {
     // Compatibility alias used by old code
     pub token_swap_info: Option<TokenSwapInfo>,
     #[serde(skip_serializing, default)]
-    pub calculated_token_price_sol: Option<f64>,
+    pub calculated_token_price_native: Option<f64>,
     #[serde(skip_serializing, default)]
     pub token_symbol: Option<String>,
     #[serde(skip_serializing, default)]
@@ -130,12 +130,12 @@ impl Transaction {
             direction: TransactionDirection::default(),
             success: false,
             error_message: None,
-            fee_sol: 0.0,
-            fee_lamports: None,
+            fee_native: 0.0,
+            fee_raw: None,
             compute_units_consumed: None,
             instructions_count: 0,
             accounts_count: 0,
-            sol_balance_change: 0.0,
+            native_balance_change: 0.0,
             wallet_lamport_change: 0,
             wallet_signed: false,
             token_transfers: Vec::new(),
@@ -143,7 +143,7 @@ impl Transaction {
             log_messages: Vec::new(),
             instructions: Vec::new(),
             instruction_info: Vec::new(),
-            sol_balance_changes: Vec::new(),
+            native_balance_changes: Vec::new(),
             token_balance_changes: Vec::new(),
             position_impact: None,
             profit_calculation: None,
@@ -151,7 +151,7 @@ impl Transaction {
             ata_operations: Vec::new(),
             token_info: None,
             token_swap_info: None,
-            calculated_token_price_sol: None,
+            calculated_token_price_native: None,
             token_symbol: None,
             token_decimals: None,
             swap_pnl_info: None,
@@ -317,7 +317,7 @@ pub enum TransactionType {
         token_mint: String,
     },
     /// An unsolicited inbound crumb of SOL: we did not sign, we did not pay, and the
-    /// credit is below `DUST_LAMPORTS`. Address-poisoning blasters send thousands of
+    /// credit is below `DUST_RAW`. Address-poisoning blasters send thousands of
     /// these; they are real ledger entries, not noise to hide, but they are never a
     /// transfer the owner made.
     Dust {
@@ -358,7 +358,7 @@ pub enum TransactionType {
 /// sign, is dust rather than a transfer. One lamport is the address-poisoning
 /// standard; 10_000 lamports (0.00001 SOL) is still an order of magnitude under a
 /// single base fee, so nothing an owner would deliberately send lands here.
-pub const DUST_LAMPORTS: u64 = 10_000;
+pub const DUST_RAW: u64 = 10_000;
 
 impl Default for TransactionType {
     fn default() -> Self {
@@ -654,14 +654,14 @@ impl CachedAnalysis {
             transaction_type: tx.transaction_type.clone(),
             direction: tx.direction.clone(),
             success: tx.success,
-            fee_sol: tx.fee_sol,
-            sol_balance_change: tx.sol_balance_change,
+            fee_sol: tx.fee_native,
+            sol_balance_change: tx.native_balance_change,
             token_transfers: tx.token_transfers.clone(),
-            sol_balance_changes: tx.sol_balance_changes.clone(),
+            sol_balance_changes: tx.native_balance_changes.clone(),
             token_balance_changes: tx.token_balance_changes.clone(),
             ata_analysis: tx.ata_analysis.clone(),
             token_info: tx.token_info.clone(),
-            calculated_token_price_sol: tx.calculated_token_price_sol,
+            calculated_token_price_sol: tx.calculated_token_price_native,
             token_symbol: tx.token_symbol.clone(),
             token_decimals: tx.token_decimals,
             // Include the missing critical fields
@@ -689,8 +689,8 @@ pub enum PositionChange {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProfitCalculation {
-    pub realized_profit_sol: f64,
-    pub unrealized_profit_sol: f64,
+    pub realized_profit_native: f64,
+    pub unrealized_profit_native: f64,
     pub profit_percentage: f64,
     pub hold_duration: Option<Duration>,
 }
@@ -703,9 +703,9 @@ pub struct PositionAnalysis {
     pub total_tokens_bought: f64,
     pub total_tokens_sold: f64,
     pub remaining_tokens: f64,
-    pub total_sol_invested: f64,
-    pub total_sol_received: f64,
-    pub net_sol_flow: f64,
+    pub total_native_invested: f64,
+    pub total_native_received: f64,
+    pub net_native_flow: f64,
     pub average_buy_price: f64,
     pub realized_pnl: f64,
     pub unrealized_pnl: f64,
@@ -733,8 +733,8 @@ pub struct PositionState {
     pub token_mint: String,
     pub token_symbol: String,
     pub total_tokens: f64,
-    pub total_sol_invested: f64,
-    pub total_sol_received: f64,
+    pub total_native_invested: f64,
+    pub total_native_received: f64,
     pub total_fees: f64,
     pub total_ata_rents: f64,
     pub buy_count: u32,
@@ -751,13 +751,13 @@ pub struct PositionState {
 pub struct PositionTransaction {
     pub signature: String,
     pub swap_type: String,
-    pub sol_amount: f64,
+    pub native_amount: f64,
     pub token_amount: f64,
     pub price: f64,
     pub timestamp: DateTime<Utc>,
     pub slot: Option<u64>,
     pub router: String,
-    pub fee_sol: f64,
+    pub fee_native: f64,
     pub ata_rents: f64,
 }
 
@@ -781,13 +781,13 @@ pub struct SwapDisplayRow {
     #[tabled(rename = "Token")]
     pub token: String,
     #[tabled(rename = "SOL Amount")]
-    pub sol_amount: String,
+    pub native_amount: String,
     #[tabled(rename = "Token Amount")]
     pub token_amount: String,
     #[tabled(rename = "Price (SOL)")]
     pub price: String,
     #[tabled(rename = "Effective SOL")]
-    pub effective_sol: String, // Shows effective_sol_spent for buys, effective_sol_received for sells
+    pub effective_native: String, // Shows effective_sol_spent for buys, effective_sol_received for sells
     #[tabled(rename = "Effective Price")]
     pub effective_price: String, // Price calculated using effective SOL amounts
     #[tabled(rename = "ATA Rents")]
@@ -818,9 +818,9 @@ pub struct PositionDisplayRow {
     #[tabled(rename = "Remaining")]
     pub remaining: String,
     #[tabled(rename = "SOL In")]
-    pub sol_in: String,
+    pub native_in: String,
     #[tabled(rename = "SOL Out")]
-    pub sol_out: String,
+    pub native_out: String,
     #[tabled(rename = "Net PnL")]
     pub net_pnl: String,
     #[tabled(rename = "Avg Price")]

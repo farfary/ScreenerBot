@@ -201,11 +201,11 @@ fn sell_activity(activity: &WalletActivity) -> Result<(&str, f64, f64, Option<f6
         ActivityKind::Swap {
             mint,
             side: SwapSide::Sell,
-            sol_amount: native_amount,
+            native_amount,
             token_amount,
-            price_sol,
+            price_native,
             ..
-        } => Ok((mint, *token_amount, *native_amount, *price_sol)),
+        } => Ok((mint, *token_amount, *native_amount, *price_native)),
         _ => Err(CopySkip::NotSellSwap),
     }
 }

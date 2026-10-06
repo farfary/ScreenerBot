@@ -262,7 +262,7 @@ async fn released_subject_deltas_migrate_losslessly_and_reopen_idempotently() {
         "retained"
     );
     let rows: Vec<serde_json::Value> = conn.prepare(
-        "SELECT json_array(chain_id, wallet_address, signature, mint, slot, block_time, tx_index, delta_raw, before_raw, after_raw, decimals, kind, venue, fee_lamports, success, typeof(delta_raw), typeof(before_raw), typeof(after_raw)) FROM subject_asset_deltas ORDER BY wallet_address"
+        "SELECT json_array(chain_id, wallet_address, signature, mint, slot, block_time, tx_index, delta_raw, before_raw, after_raw, decimals, kind, venue, fee_raw, success, typeof(delta_raw), typeof(before_raw), typeof(after_raw)) FROM subject_asset_deltas ORDER BY wallet_address"
     ).unwrap().query_map([], |r| r.get::<_, String>(0)).unwrap()
         .map(|row| serde_json::from_str(&row.unwrap()).unwrap()).collect();
     assert_eq!(

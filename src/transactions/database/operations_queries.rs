@@ -264,7 +264,7 @@ impl TransactionDatabase {
             .execute(
                 r#"INSERT OR REPLACE INTO raw_transactions
                (chain_id, signature, wallet_address, slot, block_time, timestamp, status, success, error_message,
-                fee_lamports, compute_units_consumed, instructions_count, accounts_count, raw_transaction_data, updated_at)
+                fee_raw, compute_units_consumed, instructions_count, accounts_count, raw_transaction_data, updated_at)
                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, datetime('now'))"#,
                 params![
                     chain_id,
@@ -276,7 +276,7 @@ impl TransactionDatabase {
                     status_str,
                     transaction.success,
                     transaction.error_message,
-                    transaction.fee_lamports,
+                    transaction.fee_raw,
                     transaction.compute_units_consumed,
                     transaction.instructions_count,
                     transaction.accounts_count,
@@ -321,7 +321,7 @@ impl TransactionDatabase {
         tx.execute(
             "INSERT INTO raw_transactions \
              (chain_id, signature, wallet_address, slot, block_time, timestamp, status, success, error_message, \
-              fee_lamports, compute_units_consumed, instructions_count, accounts_count, raw_transaction_data) \
+              fee_raw, compute_units_consumed, instructions_count, accounts_count, raw_transaction_data) \
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, NULL) \
              ON CONFLICT(chain_id, signature, wallet_address) DO NOTHING",
             params![
@@ -334,7 +334,7 @@ impl TransactionDatabase {
                 status,
                 transaction.success,
                 transaction.error_message,
-                transaction.fee_lamports,
+                transaction.fee_raw,
                 transaction.compute_units_consumed,
                 transaction.instructions_count,
                 transaction.accounts_count,
@@ -356,7 +356,7 @@ impl TransactionDatabase {
         let chain_id = self.require_subject_chain(&subject)?;
 
         // Serialize complex fields as JSON strings
-        let sol_balance_change_json = serde_json::to_string(&transaction.sol_balance_changes)
+        let native_balance_change_json = serde_json::to_string(&transaction.native_balance_changes)
             .unwrap_or_else(|_| "[]".to_owned());
         let token_balance_changes_json = serde_json::to_string(&transaction.token_balance_changes)
             .unwrap_or_else(|_| "[]".to_owned());
@@ -382,18 +382,18 @@ impl TransactionDatabase {
         let type_kind = transaction.transaction_type.kind();
         let dir = transaction.direction.as_str();
 
-        // The SUBJECT wallet's own change. Summing `sol_balance_changes` sums every
+        // The SUBJECT wallet's own change. Summing `native_balance_changes` sums every
         // account the transaction touched, and lamports are conserved, so that total
         // is always exactly the fee -- which is what the dashboard's delta column
         // showed on 627 of 629 recorded transactions.
-        let sol_delta = transaction.sol_balance_change;
+        let native_delta = transaction.native_balance_change;
 
         conn
             .execute(
                 r#"INSERT OR REPLACE INTO processed_transactions
-                   (chain_id, signature, wallet_address, transaction_type, type_kind, direction, sol_balance_change, token_balance_changes,
+                   (chain_id, signature, wallet_address, transaction_type, type_kind, direction, native_balance_change, token_balance_changes,
                     token_swap_info, swap_pnl_info, ata_operations, token_transfers, instruction_info,
-                    analysis_duration_ms, cached_analysis, analysis_version, fee_sol, sol_delta, updated_at)
+                    analysis_duration_ms, cached_analysis, analysis_version, fee_native, native_delta, updated_at)
                  VALUES
                    (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, datetime('now'))"#,
                 params![
@@ -403,7 +403,7 @@ impl TransactionDatabase {
                     tx_type,
                     type_kind,
                     dir,
-                    sol_balance_change_json,
+                    native_balance_change_json,
                     token_balance_changes_json,
                     token_swap_info_json,
                     swap_pnl_info_json,
@@ -413,8 +413,8 @@ impl TransactionDatabase {
                     transaction.analysis_duration_ms,
                     cached_analysis_json,
                     ANALYSIS_CACHE_VERSION as i64,
-                    transaction.fee_sol,
-                    sol_delta
+                    transaction.fee_native,
+                    native_delta
                 ]
             )
             .map_err(crate::errors::DatabaseError::from)?;
@@ -544,11 +544,11 @@ impl TransactionDatabase {
         let result = conn.query_row(
             r#"SELECT
                 r.signature, r.slot, r.block_time, r.timestamp, r.status, r.success, r.error_message,
-                r.fee_lamports, r.compute_units_consumed, r.instructions_count, r.accounts_count,
+                r.fee_raw, r.compute_units_consumed, r.instructions_count, r.accounts_count,
                 r.raw_transaction_data,
-                p.transaction_type, p.direction, p.sol_balance_change, p.token_balance_changes,
+                p.transaction_type, p.direction, p.native_balance_change, p.token_balance_changes,
                 p.token_swap_info, p.swap_pnl_info, p.ata_operations, p.token_transfers,
-                p.instruction_info, p.analysis_duration_ms, p.cached_analysis, p.fee_sol, p.sol_delta
+                p.instruction_info, p.analysis_duration_ms, p.cached_analysis, p.fee_native, p.native_delta
             FROM raw_transactions r
             LEFT JOIN processed_transactions p ON r.chain_id = p.chain_id AND r.signature = p.signature AND p.wallet_address = ?3
             WHERE r.chain_id = ?1 AND r.signature = ?2 AND r.wallet_address = ?3"#,
@@ -603,14 +603,14 @@ impl TransactionDatabase {
                     _ => TransactionDirection::Unknown,
                 };
 
-                let sol_balance_change_json: Option<String> = row.get(14)?;
-                let sol_balance_changes: Vec<SolBalanceChange> = sol_balance_change_json
+                let native_balance_change_json: Option<String> = row.get(14)?;
+                let native_balance_changes: Vec<SolBalanceChange> = native_balance_change_json
                     .as_ref()
                     .and_then(|json| serde_json::from_str(json).ok())
                     .unwrap_or_default();
 
-                // Use sol_delta from the dedicated column (index 24) for the aggregate change
-                let sol_delta: f64 = row.get::<_, Option<f64>>(24)?.unwrap_or_default();
+                // Use native_delta from the dedicated column (index 24) for the aggregate change
+                let native_delta: f64 = row.get::<_, Option<f64>>(24)?.unwrap_or_default();
 
                 let token_balance_changes_json: Option<String> = row.get(15)?;
                 let token_balance_changes: Vec<TokenBalanceChange> = token_balance_changes_json
@@ -654,7 +654,7 @@ impl TransactionDatabase {
                     .as_ref()
                     .and_then(|json| serde_json::from_str(json).ok());
 
-                let fee_sol: f64 = row.get::<_, Option<f64>>(23)?.unwrap_or_default();
+                let fee_native: f64 = row.get::<_, Option<f64>>(23)?.unwrap_or_default();
 
                 let mut tx = Transaction {
                     signature: row.get(0)?,
@@ -666,13 +666,13 @@ impl TransactionDatabase {
                     direction,
                     success: row.get(5)?,
                     error_message: row.get(6)?,
-                    fee_sol,
-                    fee_lamports: row.get(7)?,
+                    fee_native,
+                    fee_raw: row.get(7)?,
                     compute_units_consumed: row.get(8)?,
                     instructions_count: row.get(9).unwrap_or_default(),
                     accounts_count: row.get(10).unwrap_or_default(),
-                    sol_balance_change: sol_delta,
-                    sol_balance_changes,
+                    native_balance_change: native_delta,
+                    native_balance_changes,
                     token_transfers,
                     token_balance_changes,
                     token_swap_info,
@@ -692,7 +692,7 @@ impl TransactionDatabase {
                     profit_calculation: None,
                     ata_analysis: None,
                     token_info: None,
-                    calculated_token_price_sol: None,
+                    calculated_token_price_native: None,
                     token_symbol: None,
                     token_decimals: None,
                 };

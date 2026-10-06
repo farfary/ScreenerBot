@@ -49,8 +49,10 @@ pub struct TransactionListFilters {
     pub router: Option<String>,
 
     /// SOL delta range
-    pub min_sol: Option<f64>,
-    pub max_sol: Option<f64>,
+    #[serde(rename = "min_sol")]
+    pub min_native: Option<f64>,
+    #[serde(rename = "max_sol")]
+    pub max_native: Option<f64>,
 }
 
 /// Lightweight transaction row for list views
@@ -66,10 +68,13 @@ pub struct TransactionListRow {
     pub token_mint: Option<String>,
     pub token_symbol: Option<String>,
     pub router: Option<String>,
-    pub sol_delta: f64,
+    #[serde(rename = "sol_delta")]
+    pub native_delta: f64,
     pub token_amount: Option<f64>,
-    pub fee_sol: f64,
-    pub fee_lamports: Option<u64>,
+    #[serde(rename = "fee_sol")]
+    pub fee_native: f64,
+    #[serde(rename = "fee_lamports")]
+    pub fee_raw: Option<u64>,
     pub ata_rents: f64,
     pub instructions_count: usize,
 }
@@ -117,5 +122,5 @@ pub struct IntegrityReport {
 pub struct WalletFlowExportRow {
     pub signature: String,
     pub timestamp: DateTime<Utc>,
-    pub sol_delta: f64,
+    pub native_delta: f64,
 }

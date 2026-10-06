@@ -75,7 +75,7 @@ pub(super) fn merge_position_event(
         direction: tx.map(|tx| describe_direction(&tx.direction)),
         transaction_type: tx.map(|tx| tx.transaction_type.ui_text()),
         router: tx.and_then(|tx| tx.token_swap_info.as_ref().map(|info| info.router.clone())),
-        sol_change: tx.map(|tx| tx.sol_balance_change),
+        sol_change: tx.map(|tx| tx.native_balance_change),
         instructions_count: tx.map(|tx| tx.instructions_count),
         compute_units: tx.and_then(|tx| tx.compute_units_consumed),
         accounts_count: tx.map(|tx| tx.accounts_count),
@@ -133,10 +133,10 @@ pub(super) fn wallet_event(draft: Draft) -> ActivityEvent {
         success: Some(row.success),
         slot: row.slot,
         block_time: None,
-        fee_sol: if row.fee_sol > 0.0 {
-            Some(row.fee_sol)
+        fee_sol: if row.fee_native > 0.0 {
+            Some(row.fee_native)
         } else {
-            row.fee_lamports.map(|l| adapter().raw_to_native(l))
+            row.fee_raw.map(|l| adapter().raw_to_native(l))
         },
         direction: row.direction.clone(),
         transaction_type: row
@@ -144,7 +144,7 @@ pub(super) fn wallet_event(draft: Draft) -> ActivityEvent {
             .as_deref()
             .map(crate::transactions::kind_text),
         router: row.router.clone(),
-        sol_change: Some(row.sol_delta),
+        sol_change: Some(row.native_delta),
         instructions_count: Some(row.instructions_count),
         compute_units: None,
         accounts_count: None,
@@ -160,10 +160,10 @@ pub(super) fn wallet_event(draft: Draft) -> ActivityEvent {
 }
 
 fn transaction_fee_sol(tx: &Transaction) -> Option<f64> {
-    if let Some(lamports) = tx.fee_lamports {
+    if let Some(lamports) = tx.fee_raw {
         Some(adapter().raw_to_native(lamports))
-    } else if tx.fee_sol > 0.0 {
-        Some(tx.fee_sol)
+    } else if tx.fee_native > 0.0 {
+        Some(tx.fee_native)
     } else {
         None
     }

@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS raw_transactions (
     status TEXT NOT NULL, -- 'Pending', 'Confirmed', 'Finalized', 'Failed'
     success BOOLEAN NOT NULL DEFAULT false,
     error_message TEXT,
-    fee_lamports INTEGER,
+    fee_raw INTEGER,
     compute_units_consumed INTEGER,
     instructions_count INTEGER NOT NULL DEFAULT 0,
     accounts_count INTEGER NOT NULL DEFAULT 0,
@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS processed_transactions (
     direction TEXT NOT NULL, -- 'Incoming', 'Outgoing', 'Internal', 'Unknown'
 
     -- Balance change data (calculated fresh, not cached)
-    sol_balance_change TEXT, -- JSON blob of SolBalanceChange
+    native_balance_change TEXT, -- JSON blob of SolBalanceChange
     token_balance_changes TEXT, -- JSON array of TokenBalanceChange
 
     -- Swap analysis data (calculated fresh, not cached)
@@ -79,8 +79,8 @@ CREATE TABLE IF NOT EXISTS processed_transactions (
     cached_analysis TEXT, -- JSON blob of CachedAnalysis
     analysis_version INTEGER NOT NULL DEFAULT 2,
     -- Commonly queried scalar fields
-    fee_sol REAL NOT NULL DEFAULT 0,
-    sol_delta REAL,
+    fee_native REAL NOT NULL DEFAULT 0,
+    native_delta REAL,
 
     -- Processing timestamps
     processed_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -171,7 +171,7 @@ CREATE TABLE IF NOT EXISTS subject_asset_deltas (
     decimals INTEGER NOT NULL,
     kind TEXT NOT NULL,          -- 'trade' | 'transfer' | 'defi' | 'other'
     venue TEXT,                  -- router name when a known DEX program is present
-    fee_lamports INTEGER,
+    fee_raw INTEGER,
     success BOOLEAN NOT NULL DEFAULT 1,
     PRIMARY KEY (chain_id, wallet_address, signature, mint)
 );

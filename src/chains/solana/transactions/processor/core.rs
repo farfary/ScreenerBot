@@ -205,7 +205,7 @@ impl TransactionProcessor {
             signature,
             "processed",
             transaction.success,
-            transaction.fee_lamports,
+            transaction.fee_raw,
             transaction.slot,
             None,
         )

@@ -22,7 +22,7 @@ use crate::chains::solana::constants::{
 };
 use crate::chains::solana::rpc::TransactionDetails;
 use crate::chains::solana::transactions::program_ids::detect_router_from_program_id;
-use crate::transactions::types::{TransactionType, DUST_LAMPORTS};
+use crate::transactions::types::{TransactionType, DUST_RAW};
 
 use super::classify::ClassifiedType;
 use super::dex::DexAnalysis;
@@ -251,7 +251,7 @@ fn dust(view: &WalletView, lamports_excluding_fee: i64) -> Option<TransactionTyp
     if view.signed || lamports_excluding_fee <= 0 {
         return None;
     }
-    if lamports_excluding_fee as u64 > DUST_LAMPORTS {
+    if lamports_excluding_fee as u64 > DUST_RAW {
         return None;
     }
     Some(TransactionType::Dust {

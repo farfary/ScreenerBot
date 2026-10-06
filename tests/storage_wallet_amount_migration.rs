@@ -109,7 +109,7 @@ fn v0_2_13_wallet_amount_storage_survives_two_initializers() {
         }
     }
     assert_eq!(wallets.query_row("SELECT name, address, encrypted_key, nonce, role, notes, created_at FROM wallets WHERE id = 17", [], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?, r.get::<_, String>(3)?, r.get::<_, String>(4)?, r.get::<_, String>(5)?, r.get::<_, String>(6)?))).unwrap(), ("main".into(), "address".into(), "ciphertext".into(), "nonce".into(), "main".into(), "kept".into(), "2025-01-01".into()));
-    assert_eq!(monitor.query_row("SELECT wallet_address, sol_balance, total_equity_sol, total_tokens_count, total_nfts_count FROM wallet_snapshots WHERE id = 23", [], |r| Ok((r.get::<_, String>(0)?, r.get::<_, f64>(1)?, r.get::<_, f64>(2)?, r.get::<_, i64>(3)?, r.get::<_, i64>(4)?))).unwrap(), ("address".into(), 1.5, 4.5, 4, 1));
+    assert_eq!(monitor.query_row("SELECT wallet_address, native_balance, total_equity_native, total_tokens_count, total_nfts_count FROM wallet_snapshots WHERE id = 23", [], |r| Ok((r.get::<_, String>(0)?, r.get::<_, f64>(1)?, r.get::<_, f64>(2)?, r.get::<_, i64>(3)?, r.get::<_, i64>(4)?))).unwrap(), ("address".into(), 1.5, 4.5, 4, 1));
     assert_eq!(
         monitor
             .query_row(
@@ -137,9 +137,11 @@ fn v0_2_13_wallet_amount_storage_survives_two_initializers() {
     );
     assert_eq!(
         monitor
-            .query_row("SELECT signature, sol_delta FROM sol_flow_cache", [], |r| {
-                Ok((r.get::<_, String>(0)?, r.get::<_, f64>(1)?))
-            })
+            .query_row(
+                "SELECT signature, native_delta FROM native_flow_cache",
+                [],
+                |r| { Ok((r.get::<_, String>(0)?, r.get::<_, f64>(1)?)) }
+            )
             .unwrap(),
         ("signature".into(), 1.25)
     );

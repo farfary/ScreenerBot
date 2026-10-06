@@ -134,7 +134,8 @@ pub struct WalletsSummary {
     /// Main wallet name (if any)
     pub main_wallet_name: Option<String>,
     /// Total SOL across all active wallets (placeholder, populated by balance fetching)
-    pub total_sol: f64,
+    #[serde(rename = "total_sol")]
+    pub total_native: f64,
 }
 
 /// Request to create a new wallet
@@ -222,13 +223,13 @@ pub struct WalletWithTokenBalance {
     /// The wallet
     pub wallet: Wallet,
     /// SOL balance in SOL (not lamports)
-    pub sol_balance: f64,
+    pub native_balance: f64,
     /// Token balance (UI amount with decimals applied)
     pub token_balance: f64,
     /// Token decimals
     pub token_decimals: u8,
     /// Whether this wallet needs SOL top-up for transaction fees
-    pub needs_sol_topup: bool,
+    pub needs_native_topup: bool,
     /// Amount of SOL needed for top-up (if any)
     pub topup_amount: f64,
 }
@@ -256,7 +257,7 @@ pub struct WalletBalanceSummary {
     /// Wallet address (base58)
     pub address: String,
     /// SOL balance in SOL (not lamports)
-    pub sol_balance: f64,
+    pub native_balance: f64,
     /// Number of tokens held (excluding empty ATAs)
     pub token_count: u32,
     /// Token balances
@@ -264,7 +265,7 @@ pub struct WalletBalanceSummary {
     /// Number of empty ATAs (token accounts with 0 balance)
     pub empty_ata_count: u32,
     /// Reclaimable SOL from closing empty ATAs (~0.00089088 per ATA)
-    pub reclaimable_sol: f64,
+    pub reclaimable_native: f64,
 }
 
 #[cfg(test)]

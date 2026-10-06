@@ -57,10 +57,10 @@ fn sell_activity() -> WalletActivity {
         kind: ActivityKind::Swap {
             mint: common::TEST_MINT.to_owned(),
             side: SwapSide::Sell,
-            sol_amount: 0.3,
+            native_amount: 0.3,
             token_amount: 30.0,
             venue: Some("jupiter".to_owned()),
-            price_sol: Some(0.01),
+            price_native: Some(0.01),
         },
         sources: vec![WatchSource::Copy { task_id: 7 }],
         backfill: false,

@@ -27,16 +27,16 @@ impl WalletDatabase {
             .query_row(
                 r#"
             INSERT INTO wallet_snapshots (
-                chain_id, wallet_address, snapshot_time, sol_balance, sol_balance_lamports, total_equity_sol,
+                chain_id, wallet_address, snapshot_time, native_balance, native_balance_raw, total_equity_native,
                 total_tokens_count, total_nfts_count
             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8) RETURNING id
             "#,
                 params![
                     self.chain.as_str(), self.subject,
                     snapshot.snapshot_time.to_rfc3339(),
-                    snapshot.sol_balance,
-                    snapshot.sol_balance_lamports as i64,
-                    snapshot.total_equity_sol,
+                    snapshot.native_balance,
+                    snapshot.native_balance_raw as i64,
+                    snapshot.total_equity_native,
                     snapshot.total_tokens_count as i64,
                     snapshot.total_nfts_count as i64
                 ],
@@ -106,7 +106,7 @@ impl WalletDatabase {
     /// Wallet WORTH (cash + holdings) at or before a specific time.
     ///
     /// This is the baseline every "change today" figure is measured against, so it has
-    /// to be the same quantity as the headline. Reading `sol_balance` here while the
+    /// to be the same quantity as the headline. Reading `native_balance` here while the
     /// headline showed equity meant a wallet holding tokens reported a phantom gain
     /// equal to its entire holdings value, every day. Rows predating the equity column
     /// fall back to their SOL balance.
@@ -117,7 +117,7 @@ impl WalletDatabase {
         let result = conn
             .query_row(
                 r#"
-            SELECT COALESCE(total_equity_sol, sol_balance)
+            SELECT COALESCE(total_equity_native, native_balance)
             FROM wallet_snapshots
             WHERE chain_id = ?1 AND wallet_address = ?2 AND datetime(snapshot_time) <= datetime(?3)
             ORDER BY snapshot_time DESC
@@ -134,7 +134,7 @@ impl WalletDatabase {
 
     /// Get the end-of-day wallet WORTH for each calendar day (UTC) within a period.
     /// Picks the last snapshot recorded on each day. Used by the home portfolio calendar.
-    /// Returns pairs of (YYYY-MM-DD, total_equity_sol) ordered ascending by day.
+    /// Returns pairs of (YYYY-MM-DD, total_equity_native) ordered ascending by day.
     pub fn get_daily_end_balances(
         &self,
         start: DateTime<Utc>,
@@ -145,7 +145,7 @@ impl WalletDatabase {
         let mut stmt = conn
             .prepare(
                 r#"
-            SELECT strftime('%Y-%m-%d', snapshot_time) AS day, COALESCE(total_equity_sol, sol_balance)
+            SELECT strftime('%Y-%m-%d', snapshot_time) AS day, COALESCE(total_equity_native, native_balance)
             FROM wallet_snapshots
             WHERE chain_id = ?1 AND wallet_address = ?2 AND id IN (
                 SELECT MAX(id)
@@ -259,7 +259,7 @@ mod amount_tests {
         {
             let id = n as i64 + 1;
             let bits = i64::from_ne_bytes(raw.to_ne_bytes());
-            conn.execute("INSERT INTO wallet_snapshots (id, wallet_address, snapshot_time, sol_balance, sol_balance_lamports, total_tokens_count) VALUES (?1, 'wallet000', '2026-10-05T00:00:00+00:00', 1.5, 1500000000, 1)", [id]).unwrap();
+            conn.execute("INSERT INTO wallet_snapshots (id, wallet_address, snapshot_time, native_balance, native_balance_raw, total_tokens_count) VALUES (?1, 'wallet000', '2026-10-05T00:00:00+00:00', 1.5, 1500000000, 1)", [id]).unwrap();
             conn.execute("INSERT INTO token_balances (id, snapshot_id, mint, balance, balance_ui, decimals, is_token_2022, created_at) VALUES (?1, ?2, ?3, ?4, 1.25, 6, 1, '2026-10-05 00:00:00')",
                 params![id + 10, id, format!("mint{n}"), bits]).unwrap();
         }
@@ -274,9 +274,9 @@ mod amount_tests {
             id: None,
             wallet_address: "wallet000".to_owned(),
             snapshot_time: Utc::now(),
-            sol_balance: 1.5,
-            sol_balance_lamports: 1_500_000_000,
-            total_equity_sol: 2.0,
+            native_balance: 1.5,
+            native_balance_raw: 1_500_000_000,
+            total_equity_native: 2.0,
             total_tokens_count: 1,
             total_nfts_count: 1,
             token_balances: vec![SnapshotTokenBalance {

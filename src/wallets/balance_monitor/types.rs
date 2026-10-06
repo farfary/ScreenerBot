@@ -23,12 +23,12 @@ pub struct WalletSnapshot {
     pub id: Option<i64>,
     pub wallet_address: String,
     pub snapshot_time: DateTime<Utc>,
-    pub sol_balance: f64,
-    pub sol_balance_lamports: u64,
+    pub native_balance: f64,
+    pub native_balance_raw: u64,
     /// Cash + token holdings valued at the pool prices in force when the snapshot
     /// was taken. Historical rows written before this column existed read back as
-    /// `sol_balance` (COALESCE), never 0.
-    pub total_equity_sol: f64,
+    /// `native_balance` (COALESCE), never 0.
+    pub total_equity_native: f64,
     pub total_tokens_count: u32,
     pub total_nfts_count: u32,
     pub token_balances: Vec<SnapshotTokenBalance>,
@@ -44,11 +44,11 @@ pub struct WalletSnapshot {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WalletWorth {
     /// Free (uninvested) SOL.
-    pub sol_balance: f64,
+    pub native_balance: f64,
     /// SOL value of every held fungible token we can price.
-    pub tokens_worth_sol: f64,
-    /// sol_balance + tokens_worth_sol. The headline.
-    pub total_equity_sol: f64,
+    pub tokens_worth_native: f64,
+    /// native_balance + tokens_worth_native. The headline.
+    pub total_equity_native: f64,
     /// Distinct fungible tokens held.
     pub token_count: usize,
     /// Held tokens we could not price (no live pool price, no market data). They
@@ -64,9 +64,9 @@ pub struct WalletWorth {
 impl Default for WalletWorth {
     fn default() -> Self {
         Self {
-            sol_balance: 0.0,
-            tokens_worth_sol: 0.0,
-            total_equity_sol: 0.0,
+            native_balance: 0.0,
+            tokens_worth_native: 0.0,
+            total_equity_native: 0.0,
             token_count: 0,
             unpriced_token_count: 0,
             updated_at: Utc::now(),
@@ -106,7 +106,7 @@ pub struct WalletMonitorStats {
     pub total_snapshots: u64,
     pub latest_snapshot_time: Option<DateTime<Utc>>,
     pub wallet_address: String,
-    pub current_sol_balance: Option<f64>,
+    pub current_native_balance: Option<f64>,
     pub current_tokens_count: Option<u32>,
     pub database_size_bytes: u64,
     pub schema_version: u32,

@@ -108,7 +108,7 @@ pub fn get_held_mints() -> Vec<String> {
 /// second. `None` when neither knows it — the caller must count it as unpriced, never
 /// as zero-value-but-priced. Persisted snapshots value holdings with this same rule,
 /// so the trend line plots the quantity the headline shows.
-pub(super) fn price_token_sol(mint: &str) -> Option<f64> {
+pub(super) fn price_token_native(mint: &str) -> Option<f64> {
     if let Some(price) = crate::pools::get_pool_price(mint) {
         if price.price_sol.is_finite() && price.price_sol > 0.0 {
             return Some(price.price_sol);
@@ -126,20 +126,20 @@ pub fn get_wallet_worth() -> WalletWorth {
         return WalletWorth::default();
     };
 
-    let mut tokens_worth_sol = 0.0;
+    let mut tokens_worth_native = 0.0;
     let mut unpriced_token_count = 0;
 
     for balance in &snapshot.token_balances {
-        match price_token_sol(&balance.mint) {
-            Some(price_sol) => tokens_worth_sol += balance.balance_ui * price_sol,
+        match price_token_native(&balance.mint) {
+            Some(price_native) => tokens_worth_native += balance.balance_ui * price_native,
             None => unpriced_token_count += 1,
         }
     }
 
     WalletWorth {
-        sol_balance: snapshot.sol_balance,
-        tokens_worth_sol,
-        total_equity_sol: snapshot.sol_balance + tokens_worth_sol,
+        native_balance: snapshot.native_balance,
+        tokens_worth_native,
+        total_equity_native: snapshot.native_balance + tokens_worth_native,
         token_count: snapshot.token_balances.len(),
         unpriced_token_count,
         updated_at: snapshot.snapshot_time,

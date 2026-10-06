@@ -4,7 +4,7 @@
 //! Balance monitor database schema — table definitions for balance tracking.
 
 // Database schema version
-// 4: total_equity_sol on wallet_snapshots — the baseline/history for every wallet
+// 4: total_equity_native on wallet_snapshots — the baseline/history for every wallet
 //    figure is now full worth (cash + holdings), not cash alone.
 pub(super) const WALLET_SCHEMA_VERSION: u32 = 5;
 
@@ -18,9 +18,9 @@ CREATE TABLE IF NOT EXISTS wallet_snapshots (
     chain_id TEXT NOT NULL DEFAULT 'solana',
     wallet_address TEXT NOT NULL,
     snapshot_time TEXT NOT NULL,
-    sol_balance REAL NOT NULL,
-    sol_balance_lamports INTEGER NOT NULL,
-    total_equity_sol REAL,
+    native_balance REAL NOT NULL,
+    native_balance_raw INTEGER NOT NULL,
+    total_equity_native REAL,
     total_tokens_count INTEGER NOT NULL DEFAULT 0,
     total_nfts_count INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -79,13 +79,13 @@ CREATE TABLE IF NOT EXISTS wallet_metadata (
 "#;
 
 // Cache table for pre-aggregated SOL flows (one row per processed transaction)
-pub(super) const SCHEMA_SOL_FLOW_CACHE: &str = r#"
-CREATE TABLE IF NOT EXISTS sol_flow_cache (
+pub(super) const SCHEMA_NATIVE_FLOW_CACHE: &str = r#"
+CREATE TABLE IF NOT EXISTS native_flow_cache (
     chain_id TEXT NOT NULL DEFAULT 'solana',
     wallet_address TEXT NOT NULL DEFAULT '',
     signature TEXT NOT NULL,
     timestamp TEXT NOT NULL,
-    sol_delta REAL NOT NULL DEFAULT 0,
+    native_delta REAL NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     PRIMARY KEY (chain_id, wallet_address, signature)
 );
@@ -117,7 +117,7 @@ CREATE TABLE IF NOT EXISTS wallet_dashboard_metrics (
 
 // Indexes for fast range aggregation on cache
 pub(super) const FLOW_CACHE_INDEXES: &[&str] =
-    &["CREATE INDEX IF NOT EXISTS idx_flow_cache_chain_wallet_timestamp ON sol_flow_cache(chain_id, wallet_address, timestamp DESC);"];
+    &["CREATE INDEX IF NOT EXISTS idx_flow_cache_chain_wallet_timestamp ON native_flow_cache(chain_id, wallet_address, timestamp DESC);"];
 
 pub(super) const DASHBOARD_METRICS_INDEXES: &[&str] = &["CREATE INDEX IF NOT EXISTS idx_dashboard_metrics_chain_wallet_valid_until ON wallet_dashboard_metrics(chain_id, wallet_address, valid_until DESC);"];
 

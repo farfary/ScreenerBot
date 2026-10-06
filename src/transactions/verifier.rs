@@ -372,7 +372,7 @@ async fn analyze_suspicious_patterns(transaction: &Transaction) -> Result<Vec<St
 
     // Pattern 1: Failed transaction with high fee
     if !transaction.success {
-        if let Some(fee) = transaction.fee_lamports {
+        if let Some(fee) = transaction.fee_raw {
             if fee > 100_000 {
                 // > 0.0001 SOL
                 patterns.push("failed_high_fee".to_owned());
@@ -381,7 +381,7 @@ async fn analyze_suspicious_patterns(transaction: &Transaction) -> Result<Vec<St
     }
 
     // Pattern 2: Very high fee for transaction
-    if let Some(fee) = transaction.fee_lamports {
+    if let Some(fee) = transaction.fee_raw {
         if fee > 1_000_000 {
             // > 0.001 SOL
             patterns.push("unusually_high_fee".to_owned());

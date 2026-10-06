@@ -310,10 +310,10 @@ fn classify_swap(
         ActivityKind::Swap {
             mint: mint.clone(),
             side,
-            sol_amount,
+            native_amount: sol_amount,
             token_amount,
             venue,
-            price_sol,
+            price_native: price_sol,
         },
         None,
     )

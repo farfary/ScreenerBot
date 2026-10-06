@@ -290,7 +290,11 @@ fn classify(row: &TransactionListRow) -> &'static str {
         || kind.contains("sell")
     {
         // SOL left the wallet to acquire the token, or came back for selling it.
-        return if row.sol_delta < 0.0 { "buy" } else { "sell" };
+        return if row.native_delta < 0.0 {
+            "buy"
+        } else {
+            "sell"
+        };
     }
     if kind.contains("transfer") {
         return "transfer";

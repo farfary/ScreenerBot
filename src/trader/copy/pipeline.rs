@@ -35,8 +35,8 @@ pub fn run_paper_pipeline(
             let ActivityKind::Swap {
                 mint,
                 side: SwapSide::Buy,
-                sol_amount: target_size_native,
-                price_sol: target_price_native,
+                native_amount: target_size_native,
+                price_native: target_price_native,
                 ..
             } = &activity.kind
             else {

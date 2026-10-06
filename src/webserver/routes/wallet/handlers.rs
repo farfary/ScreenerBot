@@ -72,8 +72,8 @@ pub(super) async fn get_wallet_current() -> Result<Json<Option<WalletCurrentResp
     if let Some(snapshot) = crate::wallet::live_wallet_snapshot() {
         // The live snapshot already carries its token balances — no second query.
         return Ok(Json(Some(WalletCurrentResponse {
-            sol_balance: snapshot.sol_balance,
-            sol_balance_lamports: snapshot.sol_balance_lamports,
+            sol_balance: snapshot.native_balance,
+            sol_balance_lamports: snapshot.native_balance_raw,
             total_tokens_count: snapshot.total_tokens_count,
             token_balances: snapshot
                 .token_balances
@@ -110,8 +110,8 @@ pub(super) async fn get_wallet_current() -> Result<Json<Option<WalletCurrentResp
                 })?;
 
             Ok(Json(Some(WalletCurrentResponse {
-                sol_balance: snapshot.sol_balance,
-                sol_balance_lamports: snapshot.sol_balance_lamports,
+                sol_balance: snapshot.native_balance,
+                sol_balance_lamports: snapshot.native_balance_raw,
                 total_tokens_count: snapshot.total_tokens_count,
                 token_balances,
                 snapshot_time: snapshot.snapshot_time.to_rfc3339(),

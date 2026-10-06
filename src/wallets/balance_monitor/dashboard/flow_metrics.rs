@@ -51,7 +51,7 @@ pub(super) async fn compute_flow_metrics(window_hours: i64) -> Result<WalletFlow
                 database: "transaction",
             })?;
         let epoch = DateTime::<Utc>::from(std::time::UNIX_EPOCH);
-        let (inflow, outflow, tx_count) = tx_db.aggregate_sol_flows_since(epoch, None).await?;
+        let (inflow, outflow, tx_count) = tx_db.aggregate_native_flows_since(epoch, None).await?;
         logger::debug(
             LogTag::Wallet,
             &format!(
@@ -114,7 +114,9 @@ pub(super) async fn compute_flow_metrics(window_hours: i64) -> Result<WalletFlow
         .ok_or_else(|| Error::NotInitialized {
             database: "transaction",
         })?;
-    let (inflow, outflow, tx_count) = tx_db.aggregate_sol_flows_since(window_start, None).await?;
+    let (inflow, outflow, tx_count) = tx_db
+        .aggregate_native_flows_since(window_start, None)
+        .await?;
 
     logger::debug(
         LogTag::Wallet,

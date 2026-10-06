@@ -48,7 +48,7 @@ pub(crate) async fn perform_debug_validations(
 
     // Validation 3: Fee reasonableness
     let reasonable_fee = transaction
-        .fee_lamports
+        .fee_raw
         .map(|fee| fee < 10_000_000) // Less than 0.01 SOL
         .unwrap_or(true);
     validations.push(DebugValidation {
@@ -126,7 +126,7 @@ pub fn print_debug_analysis(result: &DebugAnalysisResult) {
         println!("Error: {error}");
     }
 
-    if let Some(fee) = result.transaction.fee_lamports {
+    if let Some(fee) = result.transaction.fee_raw {
         println!("Fee: {:.6} SOL", adapter().raw_to_native(fee));
     }
 
@@ -261,7 +261,7 @@ pub fn print_debug_statistics(stats: &TransactionDebugStats) {
         "Average Processing Time: {:.1}ms",
         stats.average_processing_time_ms
     );
-    println!("Total Fees: {:.6} SOL", stats.total_fees_sol);
+    println!("Total Fees: {:.6} SOL", stats.total_fees_native);
 
     if let Some((start, end)) = stats.date_range {
         println!(

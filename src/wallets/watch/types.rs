@@ -109,10 +109,10 @@ pub enum ActivityKind {
     Swap {
         mint: String,
         side: SwapSide,
-        sol_amount: f64,
+        native_amount: f64,
         token_amount: f64,
         venue: Option<String>,
-        price_sol: Option<f64>,
+        price_native: Option<f64>,
     },
     /// A plain SPL/SOL transfer -- no DEX program involved.
     Transfer {

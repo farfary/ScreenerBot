@@ -34,8 +34,8 @@ fn seed_snapshot(wallet_address: &str, sol_balance: f64) {
         .expect("open wallet-monitor db file directly for seeding");
     conn.execute(
         "INSERT INTO wallet_snapshots (
-            chain_id, wallet_address, snapshot_time, sol_balance, sol_balance_lamports,
-            total_equity_sol, total_tokens_count, total_nfts_count
+            chain_id, wallet_address, snapshot_time, native_balance, native_balance_raw,
+            total_equity_native, total_tokens_count, total_nfts_count
         ) VALUES ('solana', ?1, ?2, ?3, ?4, ?3, 0, 0)",
         params![
             wallet_address,
@@ -86,7 +86,7 @@ async fn wallet_monitor_reads_stay_scoped_to_the_active_subject_and_rebind_on_ma
         "must see only the active subject's snapshot, not OTHER's"
     );
     assert_eq!(recent[0].wallet_address, wallet_a.address);
-    assert_eq!(recent[0].sol_balance, 1.0);
+    assert_eq!(recent[0].native_balance, 1.0);
 
     let stats = get_wallet_monitor_stats()
         .await
@@ -132,7 +132,7 @@ async fn wallet_monitor_reads_stay_scoped_to_the_active_subject_and_rebind_on_ma
         "after the subject rebinds, only B's snapshot may surface -- not A's or OTHER's"
     );
     assert_eq!(recent_after_switch[0].wallet_address, wallet_b.address);
-    assert_eq!(recent_after_switch[0].sol_balance, 2.0);
+    assert_eq!(recent_after_switch[0].native_balance, 2.0);
 
     let stats_after_switch = get_wallet_monitor_stats()
         .await

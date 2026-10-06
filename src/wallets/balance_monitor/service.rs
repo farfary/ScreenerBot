@@ -111,7 +111,7 @@ async fn collect_wallet_snapshot() -> Result<WalletSnapshot, Error> {
     // its own rate limiting) and put a full second of latency in front of every
     // refresh — including the ones fired the instant a trade confirms, which is
     // exactly when the number has to be right.
-    let (sol_balance, token_accounts) = tokio::try_join!(
+    let (native_balance, token_accounts) = tokio::try_join!(
         async {
             rpc_client
                 .get_sol_balance(&wallet_address)
@@ -132,7 +132,7 @@ async fn collect_wallet_snapshot() -> Result<WalletSnapshot, Error> {
         }
     )?;
 
-    let sol_balance_lamports = adapter().native_to_raw(sol_balance);
+    let native_balance_raw = adapter().native_to_raw(native_balance);
 
     // Separate fungible tokens and NFTs
     let mut token_balances = Vec::new();
@@ -217,10 +217,10 @@ async fn collect_wallet_snapshot() -> Result<WalletSnapshot, Error> {
     // would be pricing yesterday's holdings at today's price), so it has to happen here.
     // The live-worth pricing rule applies: pool price first, token market price when
     // the pool cache has none, so a missed pool tick does not drop the holding to 0.
-    let tokens_worth_sol: f64 = token_balances
+    let tokens_worth_native: f64 = token_balances
         .iter()
         .filter_map(|balance| {
-            super::worth::price_token_sol(&balance.mint).map(|price| balance.balance_ui * price)
+            super::worth::price_token_native(&balance.mint).map(|price| balance.balance_ui * price)
         })
         .sum();
 
@@ -228,10 +228,10 @@ async fn collect_wallet_snapshot() -> Result<WalletSnapshot, Error> {
         LogTag::Wallet,
         &format!(
             "Collected snapshot: SOL {:.6}, {} tokens, {} NFTs, worth {:.6} SOL",
-            sol_balance,
+            native_balance,
             total_tokens_count,
             total_nfts_count,
-            sol_balance + tokens_worth_sol
+            native_balance + tokens_worth_native
         ),
     );
 
@@ -239,9 +239,9 @@ async fn collect_wallet_snapshot() -> Result<WalletSnapshot, Error> {
         id: None,
         wallet_address,
         snapshot_time,
-        sol_balance,
-        sol_balance_lamports,
-        total_equity_sol: sol_balance + tokens_worth_sol,
+        native_balance,
+        native_balance_raw,
+        total_equity_native: native_balance + tokens_worth_native,
         total_tokens_count,
         total_nfts_count,
         token_balances,
@@ -344,7 +344,7 @@ pub async fn start_wallet_monitoring_service(
                             LogTag::Wallet,
                             &format!(
                                 "Wallet activity refresh - SOL: {:.6}, worth: {:.6} SOL",
-                                snapshot.sol_balance, snapshot.total_equity_sol
+                                snapshot.native_balance, snapshot.total_equity_native
                             ),
                         ),
                         Err(e) => {
@@ -388,9 +388,9 @@ pub async fn start_wallet_monitoring_service(
                                 LogTag::Wallet,
                                 &format!(
                                     "Saved snapshot - SOL: {:.6}, Tokens: {}, worth: {:.6} SOL",
-                                    snapshot.sol_balance,
+                                    snapshot.native_balance,
                                     snapshot.total_tokens_count,
-                                    snapshot.total_equity_sol
+                                    snapshot.total_equity_native
                                 )
                             );
                         }
@@ -458,7 +458,7 @@ pub async fn start_wallet_monitoring_service(
                     // Step 3: upsert into wallet cache under short lock
                     let mapped: Vec<(String, DateTime<Utc>, f64)> = rows
                         .into_iter()
-                        .map(|r| (r.signature, r.timestamp, r.sol_delta))
+                        .map(|r| (r.signature, r.timestamp, r.native_delta))
                         .collect();
                     let db_guard = GLOBAL_WALLET_DB.lock().await;
                     if let Some(wallet_db) = db_guard.as_ref() {

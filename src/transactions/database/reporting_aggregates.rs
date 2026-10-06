@@ -3,7 +3,7 @@
 
 //! Aggregate and export queries for SOL flow reporting.
 //
-// Split from reporting.rs — contains aggregate_sol_flows_since,
+// Split from reporting.rs — contains aggregate_native_flows_since,
 // aggregate_daily_flows, and export_processed_for_wallet_flow.
 
 use chrono::{DateTime, Utc};
@@ -19,7 +19,7 @@ use super::types::WalletFlowExportRow;
 
 impl TransactionDatabase {
     /// Aggregate SOL inflow/outflow metrics within a time window for wallet dashboard usage
-    pub async fn aggregate_sol_flows_since(
+    pub async fn aggregate_native_flows_since(
         &self,
         from: DateTime<Utc>,
         to: Option<DateTime<Utc>>,
@@ -36,8 +36,8 @@ impl TransactionDatabase {
 
         let mut query = String::from(
             "SELECT \
-                COALESCE(SUM(CASE WHEN COALESCE(p.sol_delta, 0) > 0 THEN p.sol_delta ELSE 0 END), 0), \
-                COALESCE(SUM(CASE WHEN COALESCE(p.sol_delta, 0) < 0 THEN -p.sol_delta ELSE 0 END), 0), \
+                COALESCE(SUM(CASE WHEN COALESCE(p.native_delta, 0) > 0 THEN p.native_delta ELSE 0 END), 0), \
+                COALESCE(SUM(CASE WHEN COALESCE(p.native_delta, 0) < 0 THEN -p.native_delta ELSE 0 END), 0), \
                 COUNT(r.signature) \
              FROM raw_transactions r \
              LEFT JOIN processed_transactions p ON r.chain_id = p.chain_id AND r.signature = p.signature AND p.wallet_address = ?2 \
@@ -74,10 +74,10 @@ impl TransactionDatabase {
         // Change query to get all rows so we can parse JSON
         let row_query = query.replace(
             "SELECT \
-                COALESCE(SUM(CASE WHEN COALESCE(p.sol_delta, 0) > 0 THEN p.sol_delta ELSE 0 END), 0), \
-                COALESCE(SUM(CASE WHEN COALESCE(p.sol_delta, 0) < 0 THEN -p.sol_delta ELSE 0 END), 0), \
+                COALESCE(SUM(CASE WHEN COALESCE(p.native_delta, 0) > 0 THEN p.native_delta ELSE 0 END), 0), \
+                COALESCE(SUM(CASE WHEN COALESCE(p.native_delta, 0) < 0 THEN -p.native_delta ELSE 0 END), 0), \
                 COUNT(r.signature)",
-            "SELECT r.signature, r.timestamp, p.sol_balance_change",
+            "SELECT r.signature, r.timestamp, p.native_balance_change",
         );
 
         let mut stmt = conn
@@ -99,9 +99,9 @@ impl TransactionDatabase {
         while let Some(row) = rows.next().map_err(crate::errors::DatabaseError::from)? {
             count += 1;
             let signature: String = row.get(0).unwrap_or_default();
-            let sol_balance_change_json: Option<String> = row.get(2).ok();
+            let native_balance_change_json: Option<String> = row.get(2).ok();
 
-            if let Some(json_str) = sol_balance_change_json {
+            if let Some(json_str) = native_balance_change_json {
                 // Parse JSON array of balance changes
                 match serde_json::from_str::<Vec<serde_json::Value>>(&json_str) {
                     Ok(changes) => {
@@ -205,7 +205,7 @@ impl TransactionDatabase {
             "SELECT \
                 DATE(r.timestamp) as day, \
                 r.signature, \
-                p.sol_balance_change \
+                p.native_balance_change \
              FROM raw_transactions r \
              LEFT JOIN processed_transactions p ON r.chain_id = p.chain_id AND r.signature = p.signature AND p.wallet_address = ?2 \
              WHERE r.chain_id = ?1 AND r.wallet_address = ?2 AND r.status IN ('Confirmed', 'Finalized')",
@@ -243,9 +243,9 @@ impl TransactionDatabase {
 
         while let Some(row) = rows.next().map_err(crate::errors::DatabaseError::from)? {
             let day: String = row.get(0).unwrap_or_default();
-            let sol_balance_change_json: Option<String> = row.get(2).ok();
+            let native_balance_change_json: Option<String> = row.get(2).ok();
 
-            if let Some(json_str) = sol_balance_change_json {
+            if let Some(json_str) = native_balance_change_json {
                 if let Ok(changes) = serde_json::from_str::<Vec<serde_json::Value>>(&json_str) {
                     for change_obj in &changes {
                         if let Some(account) = change_obj.get("account").and_then(|v| v.as_str()) {
@@ -294,7 +294,7 @@ impl TransactionDatabase {
 
         let mut stmt = conn
             .prepare(
-                "SELECT r.signature, r.timestamp, COALESCE(p.sol_delta, 0) as sol_delta \
+                "SELECT r.signature, r.timestamp, COALESCE(p.native_delta, 0) as native_delta \
                  FROM raw_transactions r \
                  LEFT JOIN processed_transactions p ON r.chain_id = p.chain_id AND r.signature = p.signature AND p.wallet_address = ?2 \
                  WHERE r.chain_id = ?1 AND r.wallet_address = ?2 AND r.timestamp >= ?3 AND r.status IN ('Confirmed', 'Finalized') \
@@ -328,14 +328,14 @@ impl TransactionDatabase {
                     column: "timestamp",
                     detail: e.to_string(),
                 })?;
-            let sol_delta: f64 = row
+            let native_delta: f64 = row
                 .get::<_, Option<f64>>(2)
                 .unwrap_or(Some(0.0))
                 .unwrap_or_default();
             results.push(WalletFlowExportRow {
                 signature,
                 timestamp,
-                sol_delta,
+                native_delta,
             });
         }
 

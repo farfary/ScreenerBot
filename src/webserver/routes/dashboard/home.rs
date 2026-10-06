@@ -141,10 +141,10 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
     // No baseline means the change is unknown, not zero: falling back to the
     // current worth reported a flat day the header shows as unknown.
     let start_of_day_balance_sol = start_of_day_balance_result.ok().flatten();
-    let change_sol = start_of_day_balance_sol.map(|start| worth.total_equity_sol - start);
+    let change_sol = start_of_day_balance_sol.map(|start| worth.total_equity_native - start);
     let change_percent = start_of_day_balance_sol
         .filter(|start| *start > 0.0)
-        .map(|start| (worth.total_equity_sol - start) / start * 100.0);
+        .map(|start| (worth.total_equity_native - start) / start * 100.0);
 
     // Oldest-first worth trend for the sparkline (reverse of newest-first). It plots the
     // same quantity as the headline above it — it used to plot cash while the headline
@@ -152,15 +152,15 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
     let balance_history: Vec<f64> = recent_snapshots
         .iter()
         .rev()
-        .map(|s| s.total_equity_sol)
+        .map(|s| s.total_equity_native)
         .collect();
 
     let wallet = WalletAnalytics {
         wallet_address: main_wallet_address_result.unwrap_or_default(),
-        current_balance_sol: worth.sol_balance,
+        current_balance_sol: worth.native_balance,
         token_count: worth.token_count,
-        tokens_worth_sol: worth.tokens_worth_sol,
-        total_equity_sol: worth.total_equity_sol,
+        tokens_worth_sol: worth.tokens_worth_native,
+        total_equity_sol: worth.total_equity_native,
         unpriced_token_count: worth.unpriced_token_count,
         start_of_day_balance_sol,
         change_sol,

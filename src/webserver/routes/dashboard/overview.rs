@@ -34,8 +34,8 @@ pub async fn get_dashboard_overview(State(state): State<Arc<AppState>>) -> Json<
     // hero, and free of a database read on a polled endpoint.
     let worth = get_wallet_worth();
     let wallet_info = WalletInfo {
-        sol_balance: worth.sol_balance,
-        sol_balance_lamports: crate::chains::adapter().native_to_raw(worth.sol_balance),
+        sol_balance: worth.native_balance,
+        sol_balance_lamports: crate::chains::adapter().native_to_raw(worth.native_balance),
         total_tokens_count: worth.token_count,
         last_updated: worth.has_snapshot.then(|| worth.updated_at.to_rfc3339()),
     };

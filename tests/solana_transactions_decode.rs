@@ -133,10 +133,10 @@ fn a_dex_sol_swap_resolves_primary_leg_side_amount_and_venue() {
         ActivityKind::Swap {
             mint,
             side: SwapSide::Buy,
-            sol_amount: 1.0,
+            native_amount: 1.0,
             token_amount: 100.0,
             venue: Some(venue),
-            price_sol: Some(0.01),
+            price_native: Some(0.01),
         } if mint == PRIMARY_MINT && venue == "jupiter"
     ));
 }

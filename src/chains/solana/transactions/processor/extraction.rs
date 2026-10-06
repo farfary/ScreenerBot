@@ -156,7 +156,7 @@ impl TransactionProcessor {
                 if !temp_transaction.success {
                     temp_transaction.error_message = meta.err.as_ref().map(|v| v.to_string());
                 }
-                temp_transaction.fee_lamports = Some(meta.fee);
+                temp_transaction.fee_raw = Some(meta.fee);
             }
             temp_transaction.status = TransactionStatus::Confirmed;
 
@@ -283,8 +283,8 @@ impl TransactionProcessor {
             if !success {
                 transaction.error_message = meta.err.as_ref().map(|v| v.to_string());
             }
-            transaction.fee_lamports = Some(meta.fee);
-            transaction.fee_sol = lamports_to_sol(meta.fee);
+            transaction.fee_raw = Some(meta.fee);
+            transaction.fee_native = lamports_to_sol(meta.fee);
         }
 
         if let Some(block_time) = tx_data.block_time {

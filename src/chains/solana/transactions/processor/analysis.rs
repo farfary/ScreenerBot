@@ -60,7 +60,8 @@ impl TransactionProcessor {
         transaction.wallet_signed = view.signed;
 
         // Map balance changes
-        transaction.sol_balance_changes = analysis.balance.sol_changes.values().cloned().collect();
+        transaction.native_balance_changes =
+            analysis.balance.sol_changes.values().cloned().collect();
         transaction.token_balance_changes = analysis
             .balance
             .token_changes
@@ -68,7 +69,7 @@ impl TransactionProcessor {
             .flatten()
             .cloned()
             .collect();
-        transaction.sol_balance_change = view.sol_delta();
+        transaction.native_balance_change = view.sol_delta();
 
         // Map ATA analysis
         transaction.ata_analysis = Some(crate::transactions::types::AtaAnalysis {

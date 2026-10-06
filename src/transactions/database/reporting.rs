@@ -54,10 +54,10 @@ impl TransactionDatabase {
         let mut query = String::from(
             "SELECT
                 r.signature, r.timestamp, r.slot, r.status, r.success,
-                r.fee_lamports, r.instructions_count,
+                r.fee_raw, r.instructions_count,
                 p.type_kind, p.direction, p.token_swap_info,
                 p.token_transfers, p.ata_operations,
-                p.fee_sol, p.sol_delta
+                p.fee_native, p.native_delta
             FROM raw_transactions r
             LEFT JOIN processed_transactions p ON r.chain_id = p.chain_id AND r.signature = p.signature AND p.wallet_address = ?2
             WHERE r.chain_id = ?1 AND r.wallet_address = ?2",
@@ -166,7 +166,7 @@ impl TransactionDatabase {
                 let status: String = row.get(3)?;
                 let success: bool = row.get(4)?;
 
-                let fee_lamports = row.get::<_, Option<i64>>(5)?.and_then(|raw| {
+                let fee_raw = row.get::<_, Option<i64>>(5)?.and_then(|raw| {
                     if raw >= 0 {
                         Some(raw as u64)
                     } else {
@@ -183,8 +183,8 @@ impl TransactionDatabase {
                 let token_swap_info_json: Option<String> = row.get(9)?;
                 let token_transfers_json: Option<String> = row.get(10)?;
                 let ata_operations_json: Option<String> = row.get(11)?;
-                let fee_sol = row.get::<_, Option<f64>>(12)?.unwrap_or_default();
-                let sol_delta = row.get::<_, Option<f64>>(13)?.unwrap_or_default();
+                let fee_native = row.get::<_, Option<f64>>(12)?.unwrap_or_default();
+                let native_delta = row.get::<_, Option<f64>>(13)?.unwrap_or_default();
 
                 let swap_info: Option<TokenSwapInfo> = token_swap_info_json
                     .as_ref()
@@ -260,10 +260,10 @@ impl TransactionDatabase {
                     token_mint,
                     token_symbol,
                     router,
-                    sol_delta,
+                    native_delta,
                     token_amount,
-                    fee_sol,
-                    fee_lamports,
+                    fee_native,
+                    fee_raw,
                     ata_rents,
                     instructions_count,
                 })
@@ -368,14 +368,14 @@ impl TransactionDatabase {
         }
 
         // SOL delta range filter
-        if let Some(min_sol) = filters.min_sol {
-            if row.sol_delta < min_sol {
+        if let Some(min_native) = filters.min_native {
+            if row.native_delta < min_native {
                 return false;
             }
         }
 
-        if let Some(max_sol) = filters.max_sol {
-            if row.sol_delta > max_sol {
+        if let Some(max_native) = filters.max_native {
+            if row.native_delta > max_native {
                 return false;
             }
         }
@@ -590,7 +590,7 @@ mod tests {
         direction: Option<&str>,
         success: bool,
         router: Option<&str>,
-        sol_delta: f64,
+        native_delta: f64,
     ) -> TransactionListRow {
         TransactionListRow {
             signature: "sig".to_owned(),
@@ -603,10 +603,10 @@ mod tests {
             token_mint: None,
             token_symbol: None,
             router: router.map(|s| s.to_string()),
-            sol_delta,
+            native_delta,
             token_amount: None,
-            fee_sol: 0.0,
-            fee_lamports: None,
+            fee_native: 0.0,
+            fee_raw: None,
             ata_rents: 0.0,
             instructions_count: 0,
         }
@@ -631,7 +631,7 @@ mod tests {
             token_mint: "DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263".to_owned(),
         };
         transaction.direction = TransactionDirection::Incoming;
-        transaction.sol_balance_change = 0.00203428;
+        transaction.native_balance_change = 0.00203428;
         transaction.raw_transaction_data = Some(json!({ "signature": transaction.signature }));
 
         let subject = Subject::from_account(
@@ -657,16 +657,16 @@ mod tests {
         // The list path reads the stable discriminant column, and the delta column
         // holds the wallet's own change rather than the transaction's fee.
         let conn = Connection::open(&db_path).expect("open sqlite connection");
-        let (kind, direction, sol_delta): (String, String, f64) = conn
+        let (kind, direction, native_delta): (String, String, f64) = conn
             .query_row(
-                "SELECT type_kind, direction, sol_delta FROM processed_transactions WHERE signature = ?1",
+                "SELECT type_kind, direction, native_delta FROM processed_transactions WHERE signature = ?1",
                 [transaction.signature.as_str()],
                 |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
             )
             .expect("query processed row");
         assert_eq!(kind, "ata_close");
         assert_eq!(direction, "Incoming");
-        assert!((sol_delta - 0.00203428).abs() < 1e-12);
+        assert!((native_delta - 0.00203428).abs() < 1e-12);
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
@@ -683,14 +683,14 @@ mod tests {
         transaction.timestamp = Utc::now();
         transaction.status = TransactionStatus::Finalized;
         transaction.success = true;
-        transaction.fee_lamports = Some(5_000);
-        transaction.fee_sol = 0.000005;
+        transaction.fee_raw = Some(5_000);
+        transaction.fee_native = 0.000005;
         transaction.instructions_count = 2;
         transaction.accounts_count = 3;
         transaction.transaction_type = TransactionType::Transfer;
         transaction.direction = TransactionDirection::Outgoing;
-        transaction.sol_balance_change = -0.25;
-        transaction.sol_balance_changes = vec![SolBalanceChange {
+        transaction.native_balance_change = -0.25;
+        transaction.native_balance_changes = vec![SolBalanceChange {
             account: "wallet".to_owned(),
             pre_balance: 1.0,
             post_balance: 0.75,
@@ -716,7 +716,7 @@ mod tests {
 
         assert_eq!(fetched.signature, transaction.signature);
         assert!(fetched.success);
-        assert_eq!(fetched.fee_lamports, transaction.fee_lamports);
+        assert_eq!(fetched.fee_raw, transaction.fee_raw);
         assert_eq!(fetched.instructions_count, transaction.instructions_count);
 
         let conn = Connection::open(&db_path).expect("open sqlite connection");
@@ -731,21 +731,21 @@ mod tests {
 
         let stored_fee: f64 = conn
             .query_row(
-                "SELECT fee_sol FROM processed_transactions WHERE signature = ?1",
+                "SELECT fee_native FROM processed_transactions WHERE signature = ?1",
                 [transaction.signature.as_str()],
                 |row| row.get(0),
             )
             .expect("query processed fee");
-        assert!((stored_fee - transaction.fee_sol).abs() < 1e-12);
+        assert!((stored_fee - transaction.fee_native).abs() < 1e-12);
 
         let stored_delta: f64 = conn
             .query_row(
-                "SELECT sol_delta FROM processed_transactions WHERE signature = ?1",
+                "SELECT native_delta FROM processed_transactions WHERE signature = ?1",
                 [transaction.signature.as_str()],
                 |row| Ok(row.get::<_, Option<f64>>(0)?.unwrap_or_default()),
             )
-            .expect("query processed sol_delta");
-        assert!((stored_delta - transaction.sol_balance_change).abs() < 1e-9);
+            .expect("query processed native_delta");
+        assert!((stored_delta - transaction.native_balance_change).abs() < 1e-9);
     }
 
     #[test]

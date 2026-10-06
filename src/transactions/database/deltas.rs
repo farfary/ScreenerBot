@@ -137,7 +137,7 @@ impl TransactionDatabase {
             "INSERT OR REPLACE INTO subject_asset_deltas (
                 chain_id, wallet_address, signature, mint, slot, block_time, tx_index,
                 delta_raw, before_raw, after_raw, decimals, kind, venue,
-                fee_lamports, success
+                fee_raw, success
             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
             params![
                 delta.chain.as_str(),
@@ -174,7 +174,7 @@ impl TransactionDatabase {
             .prepare(
                 "SELECT chain_id, wallet_address, signature, mint, slot, block_time, tx_index,
                     delta_raw, before_raw, after_raw, decimals, kind, venue,
-                    fee_lamports, success
+                    fee_raw, success
                  FROM subject_asset_deltas
                  WHERE chain_id = ?1 AND wallet_address = ?2
                  ORDER BY slot IS NULL, slot ASC, tx_index ASC, signature ASC",

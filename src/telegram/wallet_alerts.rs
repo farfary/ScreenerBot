@@ -27,7 +27,7 @@ pub(super) fn notification_for_activity(activity: &WalletActivity) -> Option<Not
     let ActivityKind::Swap {
         mint,
         side,
-        sol_amount,
+        native_amount,
         ..
     } = &activity.kind
     else {
@@ -47,7 +47,7 @@ pub(super) fn notification_for_activity(activity: &WalletActivity) -> Option<Not
         symbol,
         mint.clone(),
         trade_type,
-        *sol_amount,
+        *native_amount,
         activity.subject.clone(),
     ))
 }
@@ -107,10 +107,10 @@ mod tests {
             ActivityKind::Swap {
                 mint: "Mint111111111111111111111111111111111111111".to_owned(),
                 side: SwapSide::Buy,
-                sol_amount: 0.25,
+                native_amount: 0.25,
                 token_amount: 10.0,
                 venue: None,
-                price_sol: Some(0.025),
+                price_native: Some(0.025),
             },
             vec![WatchSource::Alert { rule_id: 7 }],
         ))
@@ -138,10 +138,10 @@ mod tests {
         let swap = ActivityKind::Swap {
             mint: "Mint222222222222222222222222222222222222222".to_owned(),
             side: SwapSide::Sell,
-            sol_amount: 1.0,
+            native_amount: 1.0,
             token_amount: 5.0,
             venue: None,
-            price_sol: Some(0.2),
+            price_native: Some(0.2),
         };
         assert!(notification_for_activity(&activity(swap, vec![WatchSource::OwnWallet])).is_none());
 

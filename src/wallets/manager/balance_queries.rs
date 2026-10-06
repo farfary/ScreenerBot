@@ -17,11 +17,11 @@ use super::list_active_wallets;
 // =============================================================================
 
 /// Minimum SOL balance to operate a wallet (for transaction fees)
-const MIN_SOL_FOR_OPERATIONS: f64 = 0.005;
+const MIN_NATIVE_FOR_OPERATIONS: f64 = 0.005;
 
-fn sol_topup_needed(sol_balance: f64) -> (bool, f64) {
-    if sol_balance < MIN_SOL_FOR_OPERATIONS {
-        (true, MIN_SOL_FOR_OPERATIONS - sol_balance)
+fn native_topup_needed(native_balance: f64) -> (bool, f64) {
+    if native_balance < MIN_NATIVE_FOR_OPERATIONS {
+        (true, MIN_NATIVE_FOR_OPERATIONS - native_balance)
     } else {
         (false, 0.0)
     }
@@ -59,15 +59,15 @@ pub async fn get_wallets_with_token(
         if let Some(token_balance) = token_balances.iter().find(|b| b.mint == token_mint) {
             // Apply minimum balance filter
             if token_balance.ui_amount >= min_balance {
-                let sol_balance = fetch_wallet_sol_balance(&wallet.address).await;
-                let (needs_sol_topup, topup_amount) = sol_topup_needed(sol_balance);
+                let native_balance = fetch_wallet_sol_balance(&wallet.address).await;
+                let (needs_native_topup, topup_amount) = native_topup_needed(native_balance);
 
                 results.push(WalletWithTokenBalance {
                     wallet: wallet.clone(),
-                    sol_balance,
+                    native_balance,
                     token_balance: token_balance.ui_amount,
                     token_decimals: token_balance.decimals,
-                    needs_sol_topup,
+                    needs_native_topup,
                     topup_amount,
                 });
             }
@@ -106,7 +106,7 @@ pub async fn get_all_wallet_balances() -> Result<Vec<WalletBalanceSummary>, Erro
         }
 
         // Get SOL balance
-        let sol_balance = fetch_wallet_sol_balance(&wallet.address).await;
+        let native_balance = fetch_wallet_sol_balance(&wallet.address).await;
 
         // Get all token balances for this wallet
         let token_balances = match fetch_wallet_token_balances(wallet.id, &wallet.address).await {
@@ -124,11 +124,11 @@ pub async fn get_all_wallet_balances() -> Result<Vec<WalletBalanceSummary>, Erro
                     wallet_id: wallet.id,
                     wallet_name: wallet.name.clone(),
                     address: wallet.address.clone(),
-                    sol_balance,
+                    native_balance,
                     token_count: 0,
                     tokens: Vec::new(),
                     empty_ata_count: 0,
-                    reclaimable_sol: 0.0,
+                    reclaimable_native: 0.0,
                 });
                 continue;
             }
@@ -151,17 +151,17 @@ pub async fn get_all_wallet_balances() -> Result<Vec<WalletBalanceSummary>, Erro
         }
 
         let token_count = tokens.len() as u32;
-        let reclaimable_sol = reclaimable_ata_rent(empty_ata_count);
+        let reclaimable_native = reclaimable_ata_rent(empty_ata_count);
 
         results.push(WalletBalanceSummary {
             wallet_id: wallet.id,
             wallet_name: wallet.name.clone(),
             address: wallet.address.clone(),
-            sol_balance,
+            native_balance,
             token_count,
             tokens,
             empty_ata_count,
-            reclaimable_sol,
+            reclaimable_native,
         });
     }
 
