@@ -315,10 +315,20 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             // sig->mint mapping remains.
             let old_sig = candidate.clear_failed_exit();
 
-            if commit_booking(&candidate, BookingGuard::Unconditional, None).await?
-                == BookingCommit::AlreadyBooked
-            {
-                return Ok(effects);
+            // A failed sell must never reopen a close that is already verified (a force close
+            // or a synthetic exit committed while the sell was still being verified). The
+            // stored verified flag is read inside the clear's own transaction.
+            match commit_booking(&candidate, BookingGuard::ExitNotVerified, None).await? {
+                BookingCommit::AlreadyBooked => {
+                    logger::warning(
+                        LogTag::Positions,
+                        &format!(
+                            "Exit retry clear for position {position_id} refused - the exit is already verified"
+                        ),
+                    );
+                    return Err(Error::AlreadyClosed { position_id });
+                }
+                BookingCommit::Committed => {}
             }
             publish_booking(position_id, &candidate, |live| {
                 live.clear_failed_exit();

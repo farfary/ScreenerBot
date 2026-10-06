@@ -17,8 +17,9 @@ use screenerbot::positions::apply::apply_transition;
 use screenerbot::positions::operations::{force_close_position, mark_exit_submitted};
 use screenerbot::positions::price_updater::update_position_price_and_pnl;
 use screenerbot::positions::{
-    db, state, Error, PendingDcaSwap, PendingPartialExit, Position, PositionTransition,
-    PriceSource, FORCE_CLOSED_PREFIX,
+    db, state, ApplyFailureDisposition, Error, GiveUpReason, PendingDcaSwap, PendingPartialExit,
+    Position, PositionTransition, PriceSource, VerificationItem, VerificationKind,
+    FORCE_CLOSED_PREFIX,
 };
 use screenerbot::trader::safety::loss_limit::{get_loss_limit_status, reset_loss_limit_state};
 
@@ -927,6 +928,117 @@ fn a_force_close_then_a_retried_exit_verification_records_the_loss_once() {
                 "expected already closed, got {error:?}"
             );
             assert_eq!(recorded_loss(), 1.0);
+        },
+    );
+}
+
+#[test]
+fn a_failed_exit_clear_after_a_force_close_leaves_the_close_intact() {
+    run_isolated(
+        "a_failed_exit_clear_after_a_force_close_leaves_the_close_intact",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            enable_loss_limit();
+            let id = open_position(|position| {
+                position.exit_transaction_signature = Some(CLOSE_SIGNATURE.to_owned());
+            })
+            .await;
+            force_close_position(id, "stuck")
+                .await
+                .expect("force close commits");
+            let closed = stored_position(id).await;
+            let booked = in_storage(id).await;
+            assert_eq!(booked, in_memory(id).await, "memory and storage disagree");
+            assert_eq!(recorded_loss(), 1.0);
+
+            let error =
+                apply_transition(PositionTransition::ExitFailedClearForRetry { position_id: id })
+                    .await
+                    .expect_err("a verified close refuses the failed-exit clear");
+            assert!(
+                matches!(error, Error::AlreadyClosed { position_id } if position_id == id),
+                "expected already closed, got {error:?}"
+            );
+
+            for position in [stored_position(id).await, memory_position(id).await] {
+                assert!(position.transaction_exit_verified);
+                assert!(position.exit_time.is_some());
+                assert_eq!(position.closed_reason, closed.closed_reason);
+                assert!(position
+                    .closed_reason
+                    .as_deref()
+                    .is_some_and(|reason| reason.starts_with(FORCE_CLOSED_PREFIX)));
+                assert_eq!(position.exit_price, closed.exit_price);
+                assert_eq!(position.effective_exit_price, closed.effective_exit_price);
+                assert_eq!(
+                    position.exit_transaction_signature.as_deref(),
+                    Some(CLOSE_SIGNATURE)
+                );
+            }
+            assert_unchanged(id, &booked).await;
+
+            let item = VerificationItem::new(
+                CLOSE_SIGNATURE.to_owned(),
+                common::TEST_MINT.to_owned(),
+                Some(id),
+                VerificationKind::Exit,
+                None,
+            );
+            let disposition = item.apply_failure_disposition(&error);
+            assert!(
+                matches!(
+                    disposition,
+                    ApplyFailureDisposition::Drop(GiveUpReason::ApplyRejected { .. })
+                ),
+                "the verification item must be dropped, got {disposition:?}"
+            );
+
+            let error = force_close_position(id, "again")
+                .await
+                .expect_err("the position is still closed");
+            assert!(
+                matches!(error, Error::AlreadyClosed { position_id } if position_id == id),
+                "expected already closed, got {error:?}"
+            );
+            assert_eq!(recorded_loss(), 1.0, "the loss was recorded twice");
+        },
+    );
+}
+
+#[test]
+fn a_failed_exit_clear_on_an_unverified_exit_clears_it_for_retry() {
+    run_isolated(
+        "a_failed_exit_clear_on_an_unverified_exit_clears_it_for_retry",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let id = open_position(|position| {
+                position.exit_transaction_signature = Some(CLOSE_SIGNATURE.to_owned());
+                position.exit_price = Some(1.25);
+                position.closed_reason = Some("stop_loss_pending_verification".to_owned());
+            })
+            .await;
+            let before = in_storage(id).await;
+
+            let effects =
+                apply_transition(PositionTransition::ExitFailedClearForRetry { position_id: id })
+                    .await
+                    .expect("an unverified exit is cleared");
+            assert!(effects.db_updated);
+
+            for position in [stored_position(id).await, memory_position(id).await] {
+                assert!(!position.transaction_exit_verified);
+                assert!(position.exit_time.is_none());
+                assert_eq!(position.exit_transaction_signature, None);
+                assert_eq!(position.exit_price, None);
+                assert_eq!(position.effective_exit_price, None);
+                assert_eq!(
+                    position.closed_reason.as_deref(),
+                    Some("exit_retry_pending")
+                );
+            }
+            assert_unchanged(id, &before).await;
         },
     );
 }
