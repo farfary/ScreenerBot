@@ -6,6 +6,16 @@
 use crate::chains::RawAmount;
 use chrono::{DateTime, Utc};
 
+/// What the chain proved about an entry signature that did not land.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NotLandedEvidence {
+    /// The transaction is confirmed with a failed execution.
+    FailedOnChain,
+    /// Its validity window passed and the chain holds no transaction for it.
+    Expired,
+}
+
 #[derive(Debug, Clone)]
 pub enum PositionTransition {
     EntryVerified {
@@ -35,8 +45,12 @@ pub enum PositionTransition {
         position_id: i64,
         exit_time: DateTime<Utc>,
     },
+    /// An entry whose `signature` provably never moved assets: the row, still carrying that
+    /// unverified entry, is deleted and its slot released.
     RemoveOrphanEntry {
         position_id: i64,
+        signature: String,
+        evidence: NotLandedEvidence,
     },
     UpdatePriceTracking {
         mint: String,
@@ -114,7 +128,7 @@ impl PositionTransition {
             | Self::ExitVerified { position_id, .. }
             | Self::ExitFailedClearForRetry { position_id, .. }
             | Self::ExitPermanentFailureSynthetic { position_id, .. }
-            | Self::RemoveOrphanEntry { position_id }
+            | Self::RemoveOrphanEntry { position_id, .. }
             | Self::PartialExitSubmitted { position_id, .. }
             | Self::PartialExitVerified { position_id, .. }
             | Self::PartialExitFailed { position_id, .. }

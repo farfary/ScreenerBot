@@ -7,10 +7,11 @@ use super::db::initialize_positions_database;
 use super::{
     apply::apply_transition,
     queue::{
-        abandon_verification, enqueue_verification, gc_expired_verifications,
-        poll_verification_batch, queue_has_items_with_expiry, remove_verification,
-        requeue_verification, VerificationItem,
+        abandon_verification, assign_expiry_bound, enqueue_verification, mark_swap_confirmed,
+        poll_verification_batch, queue_awaits_expiry_bound, remove_verification,
+        requeue_verification, settlement_candidates, VerificationItem,
     },
+    settle::{self, Disposition},
     state::{
         reconcile_global_position_semaphore, rehydrate_pending_dca_swaps, MINT_TO_POSITION_INDEX,
         POSITIONS, SIG_TO_MINT_INDEX,
@@ -18,13 +19,13 @@ use super::{
     types::{ApplyFailureDisposition, GiveUpReason, VerificationKind, VerificationOutcome},
     verifier::verify_transaction,
 };
-use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
+use crate::chains::SignatureVerdict;
 use crate::errors::ErrorClass;
 use crate::logger::{self, LogTag};
 use crate::positions::{Error, Result};
+use chrono::{DateTime, Utc};
 use serde_json::json;
 use std::sync::Arc;
-use std::time::Instant;
 use tokio::{
     sync::Notify,
     time::{sleep, Duration},
@@ -251,9 +252,9 @@ pub async fn start_positions_manager_service(
 ///
 /// The nap alone was dead time bolted onto the front of every trade. It is computed BEFORE the
 /// queue is read (5s while the queue is empty), so a swap enqueued a moment after the worker
-/// dozed off simply waited it out — even though the swap is already CONFIRMED on chain by then
-/// (the executors enqueue only after `sign_send_and_confirm_transaction` returns) and a fresh
-/// item is immediately due. Nothing was pending but the worker's alarm clock. On a DCA that is
+/// dozed off simply waited it out — even though a fresh item is immediately due, and the swap,
+/// enqueued right after submission, often confirms within seconds. Nothing was pending but
+/// the worker's alarm clock. On a DCA that is
 /// exactly the gap the user sees: the notification says the buy is done, but the SOL and tokens
 /// only reach the position when `DcaVerified` is applied by this loop.
 async fn wait_for_next_cycle(nap: Duration) {
@@ -328,575 +329,559 @@ async fn verification_worker(shutdown: Arc<Notify>) {
         };
 
         tokio::select! {
-             _ = shutdown.notified() => {
-        logger::info(LogTag::Positions, "Stopping verification worker");
-               break;
-             }
-             _ = wait_for_next_cycle(sleep_duration) => {
-               // GUARD: Re-enqueue any missing verifications that should be queued but aren't
-               let mut requeued_count = 0;
-               let (queue_size_before, signatures_in_queue) = super::queue::get_queue_status().await;
-               {
-                 let positions = POSITIONS.read().await;
-                 for position in positions.iter() {
-                   // Check for missing entry verifications
-                   if !position.transaction_entry_verified {
-                     if let Some(entry_sig) = &position.entry_transaction_signature {
-                       // Check if already in queue
-                       if !signatures_in_queue.contains(entry_sig) {
-                         let item = VerificationItem::new(
-                           entry_sig.clone(),
-                           position.mint.clone(),
-                           position.id,
-                           VerificationKind::Entry,
-                           None,
-                         );
-                         if enqueue_verification(item).await {
-                           requeued_count += 1;
-                         }
-                       }
-                     }
-                   }
-
-                   // Check for missing exit verifications
-                   if !position.transaction_exit_verified {
-                     if let Some(exit_sig) = &position.exit_transaction_signature {
-                       // Check if already in queue
-                       if !signatures_in_queue.contains(exit_sig) {
-                         let item = if let Some(pending) =
-                           super::state::get_pending_partial_exit(exit_sig).await
-                         {
-                           VerificationItem::new_partial_exit(
-                             exit_sig.clone(),
-                             position.mint.clone(),
-                             position.id,
-                             pending.expected_exit_amount,
-                             pending.requested_exit_percentage,
-                             pending.expiry_height,
-                           )
-                         } else {
-                           VerificationItem::new(
-                             exit_sig.clone(),
-                             position.mint.clone(),
-                             position.id,
-                             VerificationKind::Exit,
-                             None,
-                           )
-                         };
-                         if enqueue_verification(item).await {
-                           requeued_count += 1;
-                         }
-                       }
-                     }
-                   }
-                 }
-               }
-
-               if requeued_count > 0 {
-                 logger::info(
-                   LogTag::Positions,
-                   &format!(
-        "Re-enqueued {} missing verifications (queue before: {})",
-                     requeued_count,
-                     queue_size_before
-                   )
-                 );
-               }
-
-               // Emit a periodic summary event every ~30s
-               let now = chrono::Utc::now();
-               if (now - last_summary).num_seconds() >= 30 {
-                 let (q_size_after, _) = super::queue::get_queue_status().await;
-                 crate::events::record_position_event_flexible(
-                   "verification_worker_summary",
-                   crate::events::Severity::Debug,
-                   None,
-                   None,
-                   serde_json::json!({
-                     "queue_size_before": queue_size_before,
-                     "queue_size_after": q_size_after,
-                     "requeued_count": requeued_count,
-                     "batch_size": VERIFICATION_BATCH_SIZE
-                   }),
-                 ).await;
-                 last_summary = now;
-               }
-
-               // Clean up expired items - only fetch block height if needed
-               let current_height = if queue_has_items_with_expiry().await {
-                 get_rpc_client().get_block_height().await.ok()
-               } else {
-                 None
-               };
-               let expired_items = gc_expired_verifications(current_height).await;
-
-               if !expired_items.is_empty() {
-                 logger::info(
-                   LogTag::Positions,
-        &format!("Cleaned up {} expired verifications", expired_items.len())
-                 );
-
-                 // Handle expired entry transactions by removing orphan positions or flagging DCA failures
-                 for item in expired_items {
-                   if item.kind == VerificationKind::Entry {
-                     crate::actions::settle_verification(
-                       &item.signature,
-                       Err(crate::actions::ActionFailure::new(
-                         crate::i18n::ids::ACTIONS_FAILURE_VERIFICATION_EXPIRED,
-                       )),
-                     )
-                     .await;
-                     if item.is_dca {
-                       if let Some(position_id) = item.position_id {
-                         let transition = super::transitions::PositionTransition::DcaFailed {
-                           position_id,
-                           dca_signature: item.signature.clone(),
-                           reason: "Verification expired".to_owned(),
-                         };
-                         if let Err(e) = apply_transition(transition).await {
-                           logger::error(
-                             LogTag::Positions,
-                             &format!(
-                               "Failed to mark expired DCA {} for position {} as failed: {}",
-                               item.signature, position_id, e
-                             ),
-                           );
-                         }
-                       }
-                     } else if let Some(position_id) = item.position_id {
-                       let transition = super::transitions::PositionTransition::RemoveOrphanEntry {
-                         position_id,
-                       };
-                       if let Err(e) = apply_transition(transition).await {
-                         logger::error(
-                           LogTag::Positions,
-                           &format!(
-                             "Failed to remove expired orphan entry {} for position {}: {}",
-                             item.signature, position_id, e
-                           ),
-                         );
-                       }
-                     }
-                   } else if item.kind == VerificationKind::Exit {
-                     // An exit that reached the 24h cap without confirming. Never drop
-                     // it silently — the swap may still be on-chain. Re-enqueue with a
-                     // fresh window so verification keeps trying (and surfaces in the
-                     // position status UI) instead of stranding the position forever.
-                     logger::warning(
-                       LogTag::Positions,
-                       &format!(
-                         "Exit verification for {} (sig {}) hit the retry cap unconfirmed — re-enqueueing to keep verifying",
-                         item.mint, item.signature
-                       ),
-                     );
-                     let mut renewed = VerificationItem::new(
-                       item.signature.clone(),
-                       item.mint.clone(),
-                       item.position_id,
-                       VerificationKind::Exit,
-                       item.expiry_height,
-                     );
-                     renewed.is_partial_exit = item.is_partial_exit;
-                     renewed.expected_exit_amount = item.expected_exit_amount;
-                     renewed.requested_exit_percentage = item.requested_exit_percentage;
-                     enqueue_verification(renewed).await;
-                   }
-                 }
-               }
-
-               // Process verification batch
-               let batch = poll_verification_batch(VERIFICATION_BATCH_SIZE).await;
-
-               if !batch.is_empty() {
-                 logger::debug(
-                   LogTag::Positions,
-        &format!("Processing {} verification items", batch.len())
-                 );
-
-                 for item in batch {
-                   // Emit a verification_started event and take timing baselines
-                   let started_at = chrono::Utc::now();
-                   let timer = Instant::now();
-                   crate::events::record_position_event_flexible(
-                     "verification_started",
-                     crate::events::Severity::Debug,
-                     Some(&item.mint),
-                     Some(&item.signature),
-                     json!({
-                       "kind": format!("{:?}", item.kind),
-                       "attempts": item.attempts,
-                       "created_at": item.created_at.to_rfc3339(),
-                       "last_attempt_at": item.last_attempt_at.map(|t| t.to_rfc3339()),
-                       "next_retry_at": item.next_retry_at.map(|t| t.to_rfc3339()),
-                       "expiry_height": item.expiry_height,
-                       "position_id": item.position_id,
-                     }),
-                   ).await;
-
-                   match verify_transaction(&item).await {
-                     VerificationOutcome::Transition(transition) => {
-                       let verdict = verification_verdict(&transition);
-                       match apply_transition(transition).await {
-                         Ok(effects) => {
-                           remove_verification(&item.signature).await;
-                           if let Some(verdict) = verdict {
-                             crate::actions::settle_verification(&item.signature, verdict).await;
-                           }
-
-                           // Update verification metrics
-                           {
-                             use crate::positions::metrics::VERIFICATION_METRICS;
-                             use std::sync::atomic::Ordering;
-
-                             VERIFICATION_METRICS
-                               .operations
-                               .fetch_add(1, Ordering::Relaxed);
-
-                             // Increment type-specific counter
-                             if item.is_dca {
-                               VERIFICATION_METRICS
-                                 .dca_verified
-                                 .fetch_add(1, Ordering::Relaxed);
-                             } else if item.is_partial_exit {
-                               VERIFICATION_METRICS
-                                 .partial_exit_verified
-                                 .fetch_add(1, Ordering::Relaxed);
-                             } else {
-                               match item.kind {
-                                 VerificationKind::Entry => {
-                                   VERIFICATION_METRICS
-                                     .entry_verified
-                                     .fetch_add(1, Ordering::Relaxed);
-                                 }
-                                 VerificationKind::Exit => {
-                                   VERIFICATION_METRICS
-                                     .exit_verified
-                                     .fetch_add(1, Ordering::Relaxed);
-                                 }
-                               }
-                             }
-                           }
-
-                           // Emit verification_finished (success/transition)
-                           crate::events::record_position_event_flexible(
-                             "verification_finished",
-                             crate::events::Severity::Info,
-                             Some(&item.mint),
-                             Some(&item.signature),
-                             json!({
-                               "kind": format!("{:?}", item.kind),
-                               "attempts": item.attempts,
-                               "duration_ms": timer.elapsed().as_millis() as u64,
-                               "started_at": started_at.to_rfc3339(),
-                               "result": "transition",
-                               "db_updated": effects.db_updated,
-                               "position_closed": effects.position_closed,
-                               "position_id": item.position_id,
-                             }),
-                           ).await;
-
-                           logger::debug(
-                             LogTag::Positions,
-                             &format!(
-        "Applied transition for {} (mint {} kind {:?}): db_updated={}, position_closed={}",
-                               item.signature,
-                               item.mint,
-                               item.kind,
-                               effects.db_updated,
-                               effects.position_closed
-                             )
-                           );
-                         }
-                         Err(e) => {
-                           // Update error metrics
-                           {
-                             use crate::positions::metrics::VERIFICATION_METRICS;
-                             use std::sync::atomic::Ordering;
-
-                             VERIFICATION_METRICS
-                               .errors
-                               .fetch_add(1, Ordering::Relaxed);
-                           }
-
-                           logger::error(
-                             LogTag::Positions,
-                             &format!(
-        "Failed to apply transition for {} (mint {} kind {:?}): {}",
-                               item.signature,
-                               item.mint,
-                               item.kind,
-                               e
-                             )
-                           );
-                           // Emit verification_finished (apply_error)
-                           crate::events::record_position_event_flexible(
-                             "verification_finished",
-                             crate::events::Severity::Warn,
-                             Some(&item.mint),
-                             Some(&item.signature),
-                             json!({
-                               "kind": format!("{:?}", item.kind),
-                               "attempts": item.attempts,
-                               "duration_ms": timer.elapsed().as_millis() as u64,
-                               "started_at": started_at.to_rfc3339(),
-                               "result": "apply_error",
-                               "error": e.to_string(),
-                               "position_id": item.position_id
-                             }),
-                           ).await;
-                           match item.apply_failure_disposition(&e) {
-                             ApplyFailureDisposition::Requeue => {
-                               let mut confirmed = item;
-                               confirmed.swap_confirmed = true;
-                               requeue_verification(confirmed).await;
-                             }
-                             ApplyFailureDisposition::Drop(reason) => {
-                               let details = format!("{reason:?}");
-                               abandon_after_apply_failure(&item, reason, &e).await;
-                               crate::actions::settle_verification(
-                                 &item.signature,
-                                 Err(crate::actions::ActionFailure::with_details(
-                                   crate::i18n::ids::ACTIONS_FAILURE_VERIFICATION_GAVE_UP,
-                                   details,
-                                 )),
-                               )
-                               .await;
-                             }
-                           }
-                         }
-                       }
-                     }
-                         VerificationOutcome::RetryTransient(reason) => {
-                       // Check if we should give up on this verification
-                         if let Some(give_up_reason) = item.should_give_up() {
-                         // Update abandoned + error metrics
-                         {
-                           use crate::positions::metrics::VERIFICATION_METRICS;
-                           use std::sync::atomic::Ordering;
-
-                           VERIFICATION_METRICS
-                             .abandoned
-                             .fetch_add(1, Ordering::Relaxed);
-                           VERIFICATION_METRICS
-                             .errors
-                             .fetch_add(1, Ordering::Relaxed);
-                         }
-
-                         logger::error(
-                           LogTag::Positions,
-                           &format!(
-        "Abandoning verification for {} (mint={}, kind={:?}): {:?} - last error: {}",
-                             item.signature,
-                             item.mint,
-                             item.kind,
-                             give_up_reason,
-                             reason
-                           )
-                         );
-
-                         // Record abandoned verification event with detailed reason
-                         crate::events::record_position_event_flexible(
-                           "verification_abandoned",
-                           crate::events::Severity::Error,
-                           Some(&item.mint),
-                           Some(&item.signature),
-                           serde_json::json!({
-                             "give_up_reason": give_up_reason,
-                             "last_error": reason,
-                             "attempts": item.attempts,
-                             "age_hours": (chrono::Utc::now() - item.created_at).num_hours(),
-                             "kind": format!("{:?}", item.kind),
-                             "position_id": item.position_id,
-                             "created_at": item.created_at.to_rfc3339()
-                           }),
-                         ).await;
-
-                         // Handle abandoned verification based on kind
-                         match item.kind {
-                           VerificationKind::Entry => {
-                             if item.is_dca {
-                               if let Some(position_id) = item.position_id {
-                                 logger::warning(
-                                   LogTag::Positions,
-                                   &format!(
-                                     "Marking DCA for position {} as failed after abandonment",
-                                     position_id
-                                   ),
-                                 );
-
-                                 let transition = super::transitions::PositionTransition::DcaFailed {
-                                   position_id,
-                                   dca_signature: item.signature.clone(),
-                                   reason: format!(
-                                     "Abandoned after {:?}",
-                                     give_up_reason
-                                   ),
-                                 };
-                                 if let Err(e) = super::apply::apply_transition(transition).await {
-                                   logger::error(LogTag::Positions, &format!("Failed to mark abandoned DCA {} for position {position_id} as failed: {e}", item.signature));
-                                 }
-                               }
-                             } else if let Some(position_id) = item.position_id {
-                               logger::warning(LogTag::Positions, &format!("Removing orphan entry position {position_id} after verification abandonment (will release semaphore permit)"));
-                               let transition = super::transitions::PositionTransition::RemoveOrphanEntry { position_id };
-                               if super::apply::apply_transition(transition).await.is_ok() {
-                                 // Permit is released in RemoveOrphanEntry transition handler
-                                 logger::info(LogTag::Positions, &format!("Successfully removed orphan entry {position_id} and released permit"));
-                               } else {
-                                 logger::error(LogTag::Positions, &format!("Failed to remove orphan entry {position_id}, manual reconciliation may be needed"));
-                               }
-                             }
-                           }
-                           VerificationKind::Exit => {
-                             if let Some(position_id) = item.position_id {
-                               if item.is_partial_exit {
-                                 // A PARTIAL exit item also carries kind: Exit. Forcing a
-                                 // synthetic exit for it CLOSED THE WHOLE POSITION — releasing
-                                 // its permit and dropping it from Open — while the user still
-                                 // held everything the partial had not sold. Only the partial
-                                 // failed: mark that, leave the position alone. (This also
-                                 // clears the pending-partial registry, which otherwise stays
-                                 // set forever and blocks every future exit for this mint.)
-                                 logger::warning(LogTag::Positions, &format!("Marking partial exit for position {position_id} as failed after verification abandonment - position stays open"));
-
-                                 let transition = super::transitions::PositionTransition::PartialExitFailed {
-                                   position_id,
-                                   reason: format!("Abandoned after {:?}", give_up_reason),
-                                 };
-                                 if let Err(e) = super::apply::apply_transition(transition).await {
-                                   logger::error(LogTag::Positions, &format!("Failed to mark abandoned partial exit {} for position {position_id} as failed: {e}", item.signature));
-                                 }
-                               } else {
-                                 // Force synthetic exit after timeout
-                                 logger::warning(LogTag::Positions, &format!("Forcing synthetic exit for position {position_id} after verification abandonment - manual wallet check recommended"));
-
-                                 let transition = super::transitions::PositionTransition::ExitPermanentFailureSynthetic {
-                                   position_id,
-                                   exit_time: chrono::Utc::now(),
-                                 };
-                                 if let Err(e) = super::apply::apply_transition(transition).await {
-                                   logger::error(LogTag::Positions, &format!("Failed to apply synthetic exit for position {position_id} after abandoning {}: {e}", item.signature));
-                                 }
-                               }
-                             }
-                           }
-                         }
-
-                         crate::actions::settle_verification(
-                           &item.signature,
-                           Err(crate::actions::ActionFailure::with_details(
-                             crate::i18n::ids::ACTIONS_FAILURE_VERIFICATION_GAVE_UP,
-                             format!("{give_up_reason:?}"),
-                           )),
-                         )
-                         .await;
-
-                         // Don't requeue - abandon this verification
-                         continue;
-                       }
-
-                       // Increment retry metrics
-                       crate::positions::metrics::VERIFICATION_METRICS.retries.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-
-                       logger::debug(
-                         LogTag::Positions,
-                         &format!(
-        "Retrying verification for {} (mint {} kind {:?} attempts {}): {}",
-                           item.signature,
-                           item.mint,
-                           item.kind,
-                           item.attempts,
-                           reason
-                         )
-                       );
-                       // Emit verification_finished (retry)
-                       crate::events::record_position_event_flexible(
-                         "verification_finished",
-                         crate::events::Severity::Warn,
-                         Some(&item.mint),
-                         Some(&item.signature),
-                         json!({
-                           "kind": format!("{:?}", item.kind),
-                           "attempts": item.attempts,
-                           "duration_ms": timer.elapsed().as_millis() as u64,
-                           "started_at": started_at.to_rfc3339(),
-                           "result": "retry",
-                           "reason": reason,
-                           "position_id": item.position_id,
-                           "next_retry_at": item.next_retry_at.map(|t| t.to_rfc3339())
-                         }),
-                       ).await;
-                       requeue_verification(item).await;
-                     }
-                     VerificationOutcome::PermanentFailure(transition) => {
-                       // Increment permanent failure metrics
-                       crate::positions::metrics::VERIFICATION_METRICS.permanent_failures.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                       crate::positions::metrics::VERIFICATION_METRICS.errors.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-
-                       logger::warning(
-                         LogTag::Positions,
-                         &format!(
-        "Permanent failure for {} (mint {} kind {:?}), applying cleanup",
-                           item.signature,
-                           item.mint,
-                           item.kind
-                         )
-                       );
-
-                       let applied = apply_transition(transition).await;
-                       remove_verification(&item.signature).await;
-                       if let Err(e) = applied {
-                         logger::error(
-                           LogTag::Positions,
-                           &format!(
-        "Failed to apply permanent-failure cleanup for {} (mint {} kind {:?}): {}",
-                             item.signature,
-                             item.mint,
-                             item.kind,
-                             e
-                           )
-                         );
-                         match item.apply_failure_disposition(&e) {
-                           ApplyFailureDisposition::Requeue => {
-                             requeue_verification(item.clone()).await;
-                           }
-                           ApplyFailureDisposition::Drop(reason) => {
-                             abandon_after_apply_failure(&item, reason, &e).await;
-                           }
-                         }
-                       }
-                       crate::actions::settle_verification(
-                         &item.signature,
-                         Err(crate::actions::ActionFailure::new(
-                           crate::i18n::ids::ACTIONS_FAILURE_TRANSACTION_FAILED,
-                         )),
-                       )
-                       .await;
-
-                       // Emit verification_finished (permanent_failure)
-                       crate::events::record_position_event_flexible(
-                         "verification_finished",
-                         crate::events::Severity::Warn,
-                         Some(&item.mint),
-                         Some(&item.signature),
-                         json!({
-                           "kind": format!("{:?}", item.kind),
-                           "attempts": item.attempts,
-                           "duration_ms": timer.elapsed().as_millis() as u64,
-                           "started_at": started_at.to_rfc3339(),
-                           "result": "permanent_failure",
-                           "position_id": item.position_id
-                         }),
-                       ).await;
-                     }
-                   }
-                 }
-               } else if is_first_cycle {
-        logger::info(LogTag::Positions, "No pending verifications");
-               }
-             }
-           }
+            _ = shutdown.notified() => {
+                logger::info(LogTag::Positions, "Stopping verification worker");
+                break;
+            }
+            _ = wait_for_next_cycle(sleep_duration) => {
+                run_verification_cycle(is_first_cycle, &mut last_summary).await;
+            }
+        }
     }
+}
+
+/// One pass of the verification worker: restore lost queue items, settle queued signatures
+/// by their verdicts, then verify one batch of due items.
+async fn run_verification_cycle(is_first_cycle: bool, last_summary: &mut DateTime<Utc>) {
+    let (queue_size_before, requeued_count) = reenqueue_missing_verifications().await;
+    if requeued_count > 0 {
+        logger::info(
+            LogTag::Positions,
+            &format!(
+                "Re-enqueued {} missing verifications (queue before: {})",
+                requeued_count, queue_size_before
+            ),
+        );
+    }
+
+    // Emit a periodic summary event every ~30s
+    let now = chrono::Utc::now();
+    if (now - *last_summary).num_seconds() >= 30 {
+        let (q_size_after, _) = super::queue::get_queue_status().await;
+        crate::events::record_position_event_flexible(
+            "verification_worker_summary",
+            crate::events::Severity::Debug,
+            None,
+            None,
+            serde_json::json!({
+                "queue_size_before": queue_size_before,
+                "queue_size_after": q_size_after,
+                "requeued_count": requeued_count,
+                "batch_size": VERIFICATION_BATCH_SIZE
+            }),
+        )
+        .await;
+        *last_summary = now;
+    }
+
+    settle_queued_signatures().await;
+
+    let batch = poll_verification_batch(VERIFICATION_BATCH_SIZE).await;
+    if batch.is_empty() {
+        if is_first_cycle {
+            logger::info(LogTag::Positions, "No pending verifications");
+        }
+        return;
+    }
+
+    logger::debug(
+        LogTag::Positions,
+        &format!("Processing {} verification items", batch.len()),
+    );
+
+    let mut unresolved = Vec::new();
+    for item in batch {
+        let started_at = chrono::Utc::now();
+        crate::events::record_position_event_flexible(
+            "verification_started",
+            crate::events::Severity::Debug,
+            Some(&item.mint),
+            Some(&item.signature),
+            json!({
+                "kind": format!("{:?}", item.kind),
+                "attempts": item.attempts,
+                "created_at": item.created_at.to_rfc3339(),
+                "last_attempt_at": item.last_attempt_at.map(|t| t.to_rfc3339()),
+                "next_retry_at": item.next_retry_at.map(|t| t.to_rfc3339()),
+                "expiry_height": item.expiry_height,
+                "position_id": item.position_id,
+            }),
+        )
+        .await;
+
+        let outcome = verify_transaction(&item).await;
+        if let Some(item) = process_verification_item(item, outcome, started_at).await {
+            unresolved.push(item);
+        }
+    }
+    settle_unresolved(unresolved).await;
+}
+
+/// Re-enqueues the verification of every unverified entry or exit signature of a position
+/// that is missing from the queue. Returns the queue size before and the number re-enqueued.
+/// The items carry no expiry bound; [`settle_queued_signatures`] assigns one.
+async fn reenqueue_missing_verifications() -> (usize, usize) {
+    let (queue_size_before, signatures_in_queue) = super::queue::get_queue_status().await;
+    let mut requeued_count = 0;
+    let positions = POSITIONS.read().await;
+    for position in positions.iter() {
+        if !position.transaction_entry_verified {
+            if let Some(entry_sig) = &position.entry_transaction_signature {
+                if !signatures_in_queue.contains(entry_sig) {
+                    let item = VerificationItem::new(
+                        entry_sig.clone(),
+                        position.mint.clone(),
+                        position.id,
+                        VerificationKind::Entry,
+                        None,
+                    );
+                    if enqueue_verification(item).await {
+                        requeued_count += 1;
+                    }
+                }
+            }
+        }
+
+        if !position.transaction_exit_verified {
+            if let Some(exit_sig) = &position.exit_transaction_signature {
+                if !signatures_in_queue.contains(exit_sig) {
+                    let item = if let Some(pending) =
+                        super::state::get_pending_partial_exit(exit_sig).await
+                    {
+                        VerificationItem::new_partial_exit(
+                            exit_sig.clone(),
+                            position.mint.clone(),
+                            position.id,
+                            pending.expected_exit_amount,
+                            pending.requested_exit_percentage,
+                            pending.expiry_height,
+                        )
+                    } else {
+                        VerificationItem::new(
+                            exit_sig.clone(),
+                            position.mint.clone(),
+                            position.id,
+                            VerificationKind::Exit,
+                            None,
+                        )
+                    };
+                    if enqueue_verification(item).await {
+                        requeued_count += 1;
+                    }
+                }
+            }
+        }
+    }
+    (queue_size_before, requeued_count)
+}
+
+/// Settles the queued signatures the chain has not confirmed yet, from one batched verdict
+/// read. Unconfirmed items without an expiry bound get the current one first: a transaction
+/// submitted before it was read can no longer land after it. A landed swap stays queued as
+/// confirmed; a swap that failed on chain or did not land leaves the queue with its
+/// transition applied.
+async fn settle_queued_signatures() {
+    if queue_awaits_expiry_bound().await {
+        if let Some(bound) = settle::submission_expiry_bound().await {
+            assign_expiry_bound(bound).await;
+        }
+    }
+
+    let candidates = settlement_candidates().await;
+    if candidates.is_empty() {
+        return;
+    }
+    let verdicts = match settle::signature_verdicts(&candidates).await {
+        Ok(verdicts) => verdicts,
+        Err(error) => {
+            logger::debug(
+                LogTag::Positions,
+                &format!(
+                    "Signature verdicts for {} queued items unavailable: {error}",
+                    candidates.len()
+                ),
+            );
+            return;
+        }
+    };
+
+    for (item, verdict) in candidates.into_iter().zip(verdicts) {
+        match settle::disposition(&item, verdict, attributable_dust(&item, verdict).await) {
+            Disposition::Requeue {
+                swap_confirmed: true,
+            } => {
+                mark_swap_confirmed(&item.signature).await;
+            }
+            Disposition::Requeue {
+                swap_confirmed: false,
+            } => {}
+            Disposition::Apply(transition) => {
+                if remove_verification(&item.signature).await.is_some() {
+                    apply_settlement(&item, verdict, transition).await;
+                }
+            }
+        }
+    }
+}
+
+/// Settles items the verifier gave up on, from one batched verdict read. An item the
+/// verdict leaves undecided is renewed rather than dropped: its swap may still land, and
+/// dropping it would strand the position.
+async fn settle_unresolved(items: Vec<VerificationItem>) {
+    if items.is_empty() {
+        return;
+    }
+    let verdicts = settle::signature_verdicts(&items)
+        .await
+        .unwrap_or_else(|error| {
+            logger::warning(
+                LogTag::Positions,
+                &format!(
+                    "Signature verdicts for {} unresolved items unavailable: {error}",
+                    items.len()
+                ),
+            );
+            vec![SignatureVerdict::Pending; items.len()]
+        });
+
+    for (item, verdict) in items.into_iter().zip(verdicts) {
+        match settle::disposition(&item, verdict, attributable_dust(&item, verdict).await) {
+            Disposition::Requeue { swap_confirmed } => {
+                logger::warning(
+                    LogTag::Positions,
+                    &format!(
+                        "Verification of {} (mint {}) is unresolved ({verdict:?}) - renewing it",
+                        item.signature, item.mint
+                    ),
+                );
+                let mut renewed = item.renewed();
+                renewed.swap_confirmed |= swap_confirmed;
+                enqueue_verification(renewed).await;
+            }
+            Disposition::Apply(transition) => apply_settlement(&item, verdict, transition).await,
+        }
+    }
+}
+
+/// The attributable-dust reading an entry needs when its signature did not land; `None` for
+/// every other item and verdict.
+async fn attributable_dust(item: &VerificationItem, verdict: SignatureVerdict) -> Option<bool> {
+    if item.kind == VerificationKind::Entry
+        && !item.is_dca
+        && verdict == SignatureVerdict::NotLanded
+    {
+        settle::entry_attributable_is_dust(item).await
+    } else {
+        None
+    }
+}
+
+/// Applies the transition a signature verdict decided and settles the trade action waiting
+/// on the signature. A refused transition is logged; a position still awaiting
+/// verification is re-enqueued by the next cycle.
+async fn apply_settlement(
+    item: &VerificationItem,
+    verdict: SignatureVerdict,
+    transition: super::transitions::PositionTransition,
+) {
+    let action_verdict = match verdict {
+        SignatureVerdict::NotLanded => Err(crate::actions::ActionFailure::new(
+            crate::i18n::ids::ACTIONS_FAILURE_VERIFICATION_EXPIRED,
+        )),
+        _ => verification_verdict(&transition).unwrap_or_else(|| {
+            Err(crate::actions::ActionFailure::new(
+                crate::i18n::ids::ACTIONS_FAILURE_TRANSACTION_FAILED,
+            ))
+        }),
+    };
+    match apply_transition(transition).await {
+        Ok(_) => {
+            logger::info(
+                LogTag::Positions,
+                &format!(
+                    "Settled {} (mint {} kind {:?}) by its verdict {verdict:?}",
+                    item.signature, item.mint, item.kind
+                ),
+            );
+            crate::actions::settle_verification(&item.signature, action_verdict).await;
+        }
+        Err(error) => {
+            logger::error(
+                LogTag::Positions,
+                &format!(
+                    "Failed to apply the {verdict:?} settlement of {} (mint {} kind {:?}): {error}",
+                    item.signature, item.mint, item.kind
+                ),
+            );
+        }
+    }
+}
+
+/// Books the outcome of one verification attempt: applies its transition, requeues it, or,
+/// when the verifier gives up on it, returns the item for settlement by its signature
+/// verdict. `started_at` is when the attempt began.
+pub(super) async fn process_verification_item(
+    item: VerificationItem,
+    outcome: VerificationOutcome,
+    started_at: DateTime<Utc>,
+) -> Option<VerificationItem> {
+    let duration_ms = || (chrono::Utc::now() - started_at).num_milliseconds().max(0) as u64;
+    match outcome {
+        VerificationOutcome::Transition(transition) => {
+            let verdict = verification_verdict(&transition);
+            match apply_transition(transition).await {
+                Ok(effects) => {
+                    remove_verification(&item.signature).await;
+                    if let Some(verdict) = verdict {
+                        crate::actions::settle_verification(&item.signature, verdict).await;
+                    }
+
+                    {
+                        use crate::positions::metrics::VERIFICATION_METRICS;
+                        use std::sync::atomic::Ordering;
+
+                        VERIFICATION_METRICS
+                            .operations
+                            .fetch_add(1, Ordering::Relaxed);
+
+                        if item.is_dca {
+                            VERIFICATION_METRICS
+                                .dca_verified
+                                .fetch_add(1, Ordering::Relaxed);
+                        } else if item.is_partial_exit {
+                            VERIFICATION_METRICS
+                                .partial_exit_verified
+                                .fetch_add(1, Ordering::Relaxed);
+                        } else {
+                            match item.kind {
+                                VerificationKind::Entry => {
+                                    VERIFICATION_METRICS
+                                        .entry_verified
+                                        .fetch_add(1, Ordering::Relaxed);
+                                }
+                                VerificationKind::Exit => {
+                                    VERIFICATION_METRICS
+                                        .exit_verified
+                                        .fetch_add(1, Ordering::Relaxed);
+                                }
+                            }
+                        }
+                    }
+
+                    crate::events::record_position_event_flexible(
+                        "verification_finished",
+                        crate::events::Severity::Info,
+                        Some(&item.mint),
+                        Some(&item.signature),
+                        json!({
+                            "kind": format!("{:?}", item.kind),
+                            "attempts": item.attempts,
+                            "duration_ms": duration_ms(),
+                            "started_at": started_at.to_rfc3339(),
+                            "result": "transition",
+                            "db_updated": effects.db_updated,
+                            "position_closed": effects.position_closed,
+                            "position_id": item.position_id,
+                        }),
+                    )
+                    .await;
+
+                    logger::debug(
+                        LogTag::Positions,
+                        &format!(
+                            "Applied transition for {} (mint {} kind {:?}): db_updated={}, position_closed={}",
+                            item.signature,
+                            item.mint,
+                            item.kind,
+                            effects.db_updated,
+                            effects.position_closed
+                        ),
+                    );
+                }
+                Err(e) => {
+                    crate::positions::metrics::VERIFICATION_METRICS
+                        .errors
+                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
+                    logger::error(
+                        LogTag::Positions,
+                        &format!(
+                            "Failed to apply transition for {} (mint {} kind {:?}): {}",
+                            item.signature, item.mint, item.kind, e
+                        ),
+                    );
+                    crate::events::record_position_event_flexible(
+                        "verification_finished",
+                        crate::events::Severity::Warn,
+                        Some(&item.mint),
+                        Some(&item.signature),
+                        json!({
+                            "kind": format!("{:?}", item.kind),
+                            "attempts": item.attempts,
+                            "duration_ms": duration_ms(),
+                            "started_at": started_at.to_rfc3339(),
+                            "result": "apply_error",
+                            "error": e.to_string(),
+                            "position_id": item.position_id
+                        }),
+                    )
+                    .await;
+                    match item.apply_failure_disposition(&e) {
+                        ApplyFailureDisposition::Requeue => {
+                            let mut confirmed = item;
+                            confirmed.swap_confirmed = true;
+                            requeue_verification(confirmed).await;
+                        }
+                        ApplyFailureDisposition::Drop(reason) => {
+                            let details = format!("{reason:?}");
+                            abandon_after_apply_failure(&item, reason, &e).await;
+                            crate::actions::settle_verification(
+                                &item.signature,
+                                Err(crate::actions::ActionFailure::with_details(
+                                    crate::i18n::ids::ACTIONS_FAILURE_VERIFICATION_GAVE_UP,
+                                    details,
+                                )),
+                            )
+                            .await;
+                        }
+                    }
+                }
+            }
+        }
+        VerificationOutcome::RetryTransient(reason) => {
+            if let Some(give_up_reason) = item.should_give_up() {
+                {
+                    use crate::positions::metrics::VERIFICATION_METRICS;
+                    use std::sync::atomic::Ordering;
+
+                    VERIFICATION_METRICS
+                        .abandoned
+                        .fetch_add(1, Ordering::Relaxed);
+                    VERIFICATION_METRICS.errors.fetch_add(1, Ordering::Relaxed);
+                }
+
+                logger::warning(
+                    LogTag::Positions,
+                    &format!(
+                        "Verification of {} (mint={}, kind={:?}) gave up: {:?} - last error: {} - settling it by its signature verdict",
+                        item.signature, item.mint, item.kind, give_up_reason, reason
+                    ),
+                );
+
+                crate::events::record_position_event_flexible(
+                    "verification_abandoned",
+                    crate::events::Severity::Error,
+                    Some(&item.mint),
+                    Some(&item.signature),
+                    serde_json::json!({
+                        "give_up_reason": give_up_reason,
+                        "last_error": reason,
+                        "attempts": item.attempts,
+                        "age_hours": (chrono::Utc::now() - item.created_at).num_hours(),
+                        "kind": format!("{:?}", item.kind),
+                        "position_id": item.position_id,
+                        "created_at": item.created_at.to_rfc3339()
+                    }),
+                )
+                .await;
+
+                return Some(item);
+            }
+
+            crate::positions::metrics::VERIFICATION_METRICS
+                .retries
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
+            logger::debug(
+                LogTag::Positions,
+                &format!(
+                    "Retrying verification for {} (mint {} kind {:?} attempts {}): {}",
+                    item.signature, item.mint, item.kind, item.attempts, reason
+                ),
+            );
+            crate::events::record_position_event_flexible(
+                "verification_finished",
+                crate::events::Severity::Warn,
+                Some(&item.mint),
+                Some(&item.signature),
+                json!({
+                    "kind": format!("{:?}", item.kind),
+                    "attempts": item.attempts,
+                    "duration_ms": duration_ms(),
+                    "started_at": started_at.to_rfc3339(),
+                    "result": "retry",
+                    "reason": reason,
+                    "position_id": item.position_id,
+                    "next_retry_at": item.next_retry_at.map(|t| t.to_rfc3339())
+                }),
+            )
+            .await;
+            requeue_verification(item).await;
+        }
+        VerificationOutcome::PermanentFailure(transition) => {
+            {
+                use crate::positions::metrics::VERIFICATION_METRICS;
+                use std::sync::atomic::Ordering;
+
+                VERIFICATION_METRICS
+                    .permanent_failures
+                    .fetch_add(1, Ordering::Relaxed);
+                VERIFICATION_METRICS.errors.fetch_add(1, Ordering::Relaxed);
+            }
+
+            logger::warning(
+                LogTag::Positions,
+                &format!(
+                    "Permanent failure for {} (mint {} kind {:?}), applying cleanup",
+                    item.signature, item.mint, item.kind
+                ),
+            );
+
+            let applied = apply_transition(transition).await;
+            remove_verification(&item.signature).await;
+            if let Err(e) = applied {
+                logger::error(
+                    LogTag::Positions,
+                    &format!(
+                        "Failed to apply permanent-failure cleanup for {} (mint {} kind {:?}): {}",
+                        item.signature, item.mint, item.kind, e
+                    ),
+                );
+                match item.apply_failure_disposition(&e) {
+                    ApplyFailureDisposition::Requeue => {
+                        requeue_verification(item.clone()).await;
+                    }
+                    ApplyFailureDisposition::Drop(reason) => {
+                        abandon_after_apply_failure(&item, reason, &e).await;
+                    }
+                }
+            }
+            crate::actions::settle_verification(
+                &item.signature,
+                Err(crate::actions::ActionFailure::new(
+                    crate::i18n::ids::ACTIONS_FAILURE_TRANSACTION_FAILED,
+                )),
+            )
+            .await;
+
+            crate::events::record_position_event_flexible(
+                "verification_finished",
+                crate::events::Severity::Warn,
+                Some(&item.mint),
+                Some(&item.signature),
+                json!({
+                    "kind": format!("{:?}", item.kind),
+                    "attempts": item.attempts,
+                    "duration_ms": duration_ms(),
+                    "started_at": started_at.to_rfc3339(),
+                    "result": "permanent_failure",
+                    "position_id": item.position_id
+                }),
+            )
+            .await;
+        }
+    }
+    None
 }
 
 /// Stops verifying an item whose transition failed to apply and will not be retried.
@@ -1006,6 +991,11 @@ mod verdict_tests {
             })),
             "DCA verification failed: Verification expired"
         );
-        assert!(verification_verdict(&T::RemoveOrphanEntry { position_id: 1 }).is_none());
+        assert!(verification_verdict(&T::RemoveOrphanEntry {
+            position_id: 1,
+            signature: "sig".to_owned(),
+            evidence: crate::positions::transitions::NotLandedEvidence::Expired,
+        })
+        .is_none());
     }
 }

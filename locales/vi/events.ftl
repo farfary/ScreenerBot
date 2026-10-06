@@ -45,6 +45,7 @@ events-connectivity-monitoring-started = Giám sát kết nối đã bắt đầ
 events-connectivity-service-initialized = Dịch vụ kết nối đã khởi tạo với { $count } bộ giám sát
 events-connectivity-critical-unhealthy = { $count } endpoint quan trọng không ổn định - hệ thống nên tạm dừng hoạt động
 events-connectivity-endpoint-recovered = Endpoint đã phục hồi từ { $from } sang ổn định
+events-position-entry-not-landed = Lệnh mua { $symbol } không được ghi nhận trên chuỗi; vị thế đã bị xóa
 
 events-category-swap = Swap
 events-category-transaction = Giao dịch

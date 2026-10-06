@@ -45,6 +45,7 @@ events-connectivity-monitoring-started = Мониторинг соединени
 events-connectivity-service-initialized = Сервис соединений инициализирован, мониторов: { $count }
 events-connectivity-critical-unhealthy = Неисправных критичных эндпоинтов: { $count } - системе следует приостановить операции
 events-connectivity-endpoint-recovered = Эндпоинт восстановился из состояния «{ $from }» до исправного
+events-position-entry-not-landed = Покупка { $symbol } не попала в блокчейн; позиция удалена
 
 events-category-swap = Своп
 events-category-transaction = Транзакция

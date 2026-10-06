@@ -53,6 +53,7 @@ events-connectivity-monitoring-started = بدأت مراقبة الاتصال (�
 events-connectivity-service-initialized = تمت تهيئة خدمة الاتصال، عدد المراقبين: { $count }
 events-connectivity-critical-unhealthy = نقاط الاتصال الحرجة غير السليمة: { $count } - ينبغي أن يوقف النظام العمليات مؤقتًا
 events-connectivity-endpoint-recovered = تعافت نقطة الاتصال من { $from } إلى سليمة
+events-position-entry-not-landed = لم تصل عملية شراء { $symbol } إلى السلسلة؛ تمت إزالة مركزها
 
 ## Events page (pages/events.js, ui/event_labels.js)
 

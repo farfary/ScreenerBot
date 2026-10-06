@@ -4,7 +4,6 @@
 //! DCA (Dollar Cost Averaging) operations — add to an existing position.
 
 use crate::chains::adapter;
-use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::chains::RawAmount;
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
@@ -191,11 +190,7 @@ pub async fn add_to_position(
     };
 
     // Pre-compute expiry height for verification + persistence
-    let expiry_height = get_rpc_client()
-        .get_block_height()
-        .await
-        .ok()
-        .map(|h| h + super::SOLANA_BLOCKHASH_VALIDITY_SLOTS);
+    let expiry_height = crate::positions::settle::submission_expiry_bound().await;
 
     // Persist pending DCA metadata before queuing verification to survive restarts
     let pending_dca = PendingDcaSwap {

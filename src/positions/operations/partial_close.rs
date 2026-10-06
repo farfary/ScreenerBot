@@ -5,7 +5,6 @@
 
 use crate::chains::adapter;
 use crate::chains::solana::assets::ata::get_total_token_balance;
-use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::chains::RawAmount;
 use crate::logger::{self, LogTag};
 use crate::positions::queue::{enqueue_verification, VerificationItem};
@@ -326,11 +325,7 @@ pub async fn partial_close_position(
         }
     };
 
-    let expiry_height = get_rpc_client()
-        .get_block_height()
-        .await
-        .unwrap_or_default()
-        + super::SOLANA_BLOCKHASH_VALIDITY_SLOTS;
+    let expiry_height = crate::positions::settle::submission_expiry_bound().await;
 
     let pending_partial = PendingPartialExit {
         signature: transaction_signature.clone(),
@@ -338,7 +333,7 @@ pub async fn partial_close_position(
         position_id,
         expected_exit_amount: exit_amount,
         requested_exit_percentage: exit_percentage,
-        expiry_height: Some(expiry_height),
+        expiry_height,
         created_at: Utc::now(),
     };
 
@@ -414,7 +409,7 @@ pub async fn partial_close_position(
         Some(position_id),
         exit_amount,
         exit_percentage,
-        Some(expiry_height),
+        expiry_height,
     );
 
     enqueue_verification(verification_item).await;

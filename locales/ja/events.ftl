@@ -53,6 +53,7 @@ events-connectivity-monitoring-started = 接続監視を開始しました（間
 events-connectivity-service-initialized = 接続サービスを { $count }個のモニターで初期化しました
 events-connectivity-critical-unhealthy = 重要なエンドポイント { $count }件が異常です。システムは処理を一時停止する必要があります
 events-connectivity-endpoint-recovered = エンドポイントが { $from } から正常な状態に復旧しました
+events-position-entry-not-landed = { $symbol } の購入はオンチェーンに反映されなかったため、ポジションを削除しました
 
 ## Events page (pages/events.js, ui/event_labels.js)
 

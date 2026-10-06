@@ -53,6 +53,7 @@ events-connectivity-monitoring-started = 连接监控已启动（间隔 { $secon
 events-connectivity-service-initialized = 连接服务已初始化，共 { $count } 个监控
 events-connectivity-critical-unhealthy = { $count } 个关键端点不健康，系统应暂停操作
 events-connectivity-endpoint-recovered = 端点已从 { $from } 恢复为健康
+events-position-entry-not-landed = { $symbol } 的买入未在链上确认，已移除其仓位
 
 ## Events page (pages/events.js, ui/event_labels.js)
 

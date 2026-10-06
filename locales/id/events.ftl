@@ -48,6 +48,7 @@ events-connectivity-monitoring-started = Pemantauan konektivitas dimulai (interv
 events-connectivity-service-initialized = Layanan konektivitas diinisialisasi dengan { $count } monitor
 events-connectivity-critical-unhealthy = { $count } endpoint kritis tidak sehat - Sistem sebaiknya menjeda operasi
 events-connectivity-endpoint-recovered = Endpoint pulih dari { $from } ke sehat
+events-position-entry-not-landed = Pembelian { $symbol } tidak tercatat on-chain; posisinya dihapus
 
 events-category-swap = Swap
 events-category-transaction = Transaksi

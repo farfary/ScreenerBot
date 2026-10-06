@@ -399,6 +399,11 @@ impl PositionsDatabase {
         Ok(())
     }
 
+    /// The chain whose positions this store holds.
+    pub fn chain(&self) -> crate::chains::ChainId {
+        self.chain
+    }
+
     /// Get database connection from pool
     pub(crate) fn get_connection(&self) -> Result<PooledConnection<SqliteConnectionManager>> {
         self.pool.get().map_err(|e| {

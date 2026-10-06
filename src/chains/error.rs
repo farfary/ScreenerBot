@@ -43,6 +43,9 @@ pub enum Error {
     /// The chain is supported by this build but not enabled in config.
     #[error("chain {chain} is not enabled")]
     ChainNotEnabled { chain: ChainId },
+    /// A settlement fact (signature status, holding, expiry bound) could not be read.
+    #[error("could not read settlement state from {chain}: {detail}")]
+    SettlementRead { chain: ChainId, detail: String },
     /// An on-chain execution attempt failed.
     #[error(transparent)]
     Execution(#[from] ExecutionFailure),
@@ -55,7 +58,7 @@ impl ErrorClass for Error {
     fn is_retryable(&self) -> bool {
         match self {
             Error::Execution(e) => e.is_retryable(),
-            Error::AccountRead { .. } => true,
+            Error::AccountRead { .. } | Error::SettlementRead { .. } => true,
             Error::UnsupportedChain { .. }
             | Error::EmptyIdentifier { .. }
             | Error::WrongChain { .. }
@@ -83,6 +86,7 @@ impl ErrorClass for Error {
             | Error::InvalidAccount { .. }
             | Error::AccountNotFound { .. }
             | Error::AccountRead { .. }
+            | Error::SettlementRead { .. }
             | Error::UnrecognizedAddress { .. }
             | Error::AmbiguousChain { .. }
             | Error::ChainNotEnabled { .. } => Severity::Warning,
@@ -94,6 +98,7 @@ impl ErrorClass for Error {
             Error::Execution(e) => e.http_status(),
             Error::AccountNotFound { .. } => 404,
             Error::AccountRead { .. } => 502,
+            Error::SettlementRead { .. } => 503,
             Error::UnsupportedChain { .. }
             | Error::EmptyIdentifier { .. }
             | Error::WrongChain { .. }

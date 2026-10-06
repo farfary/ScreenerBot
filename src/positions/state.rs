@@ -351,46 +351,6 @@ async fn remove_all_signatures_for_mint(mint: &str) {
     index.retain(|_, indexed_mint| indexed_mint != mint);
 }
 
-/// Remove position from state
-pub async fn remove_position(mint: &str) -> Option<Position> {
-    let mut positions = POSITIONS.write().await;
-
-    if let Some(index) = positions.iter().position(|p| p.mint == mint) {
-        let removed = positions.remove(index);
-
-        // Update indexes
-        remove_all_signatures_for_mint(&removed.mint).await;
-        MINT_TO_POSITION_INDEX.write().await.remove(&removed.mint);
-
-        // Release position lock to prevent unbounded POSITION_LOCKS growth
-        {
-            let mut locks = POSITION_LOCKS.write().await;
-            locks.remove(&removed.mint);
-        }
-
-        // Also clear any pending-open state for this mint (safety)
-        {
-            let mut pending = PENDING_OPEN_SWAPS.write().await;
-            if pending.remove(&removed.mint).is_some() {
-                logger::debug(
-                    LogTag::Positions,
-                    &format!(
-                        "Cleared pending-open on removal for mint: {}",
-                        &removed.mint
-                    ),
-                );
-            }
-        }
-
-        // Rebuild position indexes for remaining positions
-        rebuild_position_indexes(&positions).await;
-
-        Some(removed)
-    } else {
-        None
-    }
-}
-
 /// Set the archived flag (and archived_at) on an in-memory position by ID.
 /// Returns true if a matching position was found and updated.
 pub async fn set_position_archived_in_memory(position_id: i64, archived: bool) -> bool {
@@ -434,32 +394,51 @@ pub async fn set_position_management_in_memory(
 
 /// Remove a position from state by database ID (mint is not unique — a token can
 /// have multiple positions, so deletes must target the exact row).
+///
+/// Only the row's own entry and exit signatures leave the index while another row of the
+/// mint remains; the partial-exit and DCA signatures the index also maps to the mint cannot
+/// be told apart by row, so they leave only with the mint's last row. The mint's lock is
+/// dropped from the map only when no caller holds or awaits it.
 pub async fn remove_position_by_id(position_id: i64) -> Option<Position> {
     let mut positions = POSITIONS.write().await;
 
-    if let Some(index) = positions.iter().position(|p| p.id == Some(position_id)) {
-        let removed = positions.remove(index);
+    let index = positions.iter().position(|p| p.id == Some(position_id))?;
+    let removed = positions.remove(index);
+    let mint_still_held = positions.iter().any(|p| p.mint == removed.mint);
 
-        // Update indexes (mirror remove_position)
-        remove_all_signatures_for_mint(&removed.mint).await;
-        MINT_TO_POSITION_INDEX.write().await.remove(&removed.mint);
-
+    if mint_still_held {
+        let mut signatures = SIG_TO_MINT_INDEX.write().await;
+        for signature in [
+            &removed.entry_transaction_signature,
+            &removed.exit_transaction_signature,
+        ]
+        .into_iter()
+        .flatten()
         {
-            let mut locks = POSITION_LOCKS.write().await;
+            signatures.remove(signature);
+        }
+    } else {
+        remove_all_signatures_for_mint(&removed.mint).await;
+    }
+
+    {
+        let mut locks = POSITION_LOCKS.write().await;
+        if locks
+            .get(&removed.mint)
+            .is_some_and(|lock| Arc::strong_count(lock) == 1)
+        {
             locks.remove(&removed.mint);
         }
-
-        {
-            let mut pending = PENDING_OPEN_SWAPS.write().await;
-            pending.remove(&removed.mint);
-        }
-
-        rebuild_position_indexes(&positions).await;
-
-        Some(removed)
-    } else {
-        None
     }
+
+    {
+        let mut pending = PENDING_OPEN_SWAPS.write().await;
+        pending.remove(&removed.mint);
+    }
+
+    rebuild_position_indexes(&positions).await;
+
+    Some(removed)
 }
 
 /// Rebuild position indexes after removal

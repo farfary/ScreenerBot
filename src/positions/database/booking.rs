@@ -28,6 +28,8 @@ pub(crate) enum Booking<T> {
         record: Option<BookingRecord>,
         outcome: T,
     },
+    /// Delete the row; its history records go with it through the foreign-key cascade.
+    Delete { outcome: T },
     /// Write nothing: the booking is already on the row, or does not apply to it.
     Skip(T),
 }
@@ -36,6 +38,8 @@ pub(crate) enum Booking<T> {
 pub(crate) enum Committed<T> {
     /// The row, as written, and its record were committed.
     Written { row: Position, outcome: T },
+    /// The row, as it was read, was deleted.
+    Deleted { row: Position, outcome: T },
     /// Nothing was written.
     Skipped(T),
 }
@@ -96,7 +100,7 @@ impl PositionsDatabase {
         let mut conn = self.get_connection()?;
         let committed = self.run_booking(&mut conn, position_id, wallet_address, book)?;
 
-        if let Committed::Written { .. } = committed {
+        if let Committed::Written { .. } | Committed::Deleted { .. } = committed {
             if let Ok(mut stmt) = conn.prepare("PRAGMA wal_checkpoint(PASSIVE);") {
                 let _ = stmt.query([]);
             }
@@ -134,6 +138,15 @@ impl PositionsDatabase {
         };
         let (record, outcome) = match book(&mut row, &reads)? {
             Booking::Skip(outcome) => return Ok(Committed::Skipped(outcome)),
+            Booking::Delete { outcome } => {
+                tx.execute(
+                    "DELETE FROM positions WHERE id = ?1 AND chain_id = ?2",
+                    params![position_id, chain],
+                )
+                .map_err(sqlite)?;
+                tx.commit().map_err(sqlite)?;
+                return Ok(Committed::Deleted { row, outcome });
+            }
             Booking::Write { record, outcome } => (record, outcome),
         };
 

@@ -45,6 +45,7 @@ events-connectivity-monitoring-started = Bağlantı izleme başlatıldı (aralı
 events-connectivity-service-initialized = Bağlantı hizmeti başlatıldı, izleyici sayısı: { $count }
 events-connectivity-critical-unhealthy = Sağlıksız kritik uç nokta sayısı: { $count } - Sistem operasyonları duraklatmalı
 events-connectivity-endpoint-recovered = Uç nokta { $from } durumundan sağlıklı duruma döndü
+events-position-entry-not-landed = { $symbol } alımı zincire ulaşmadı; pozisyonu kaldırıldı
 
 events-category-swap = Takas
 events-category-transaction = İşlem

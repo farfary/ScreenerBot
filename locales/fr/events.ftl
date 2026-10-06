@@ -45,6 +45,7 @@ events-connectivity-monitoring-started = Surveillance de la connectivité démar
 events-connectivity-service-initialized = Service de connectivité initialisé avec { $count } moniteurs
 events-connectivity-critical-unhealthy = { $count } endpoint(s) critique(s) défaillant(s) - le système devrait suspendre ses opérations
 events-connectivity-endpoint-recovered = Endpoint rétabli de l'état { $from } à sain
+events-position-entry-not-landed = L'achat de { $symbol } n'a pas abouti on-chain ; sa position a été supprimée
 
 events-category-swap = Swap
 events-category-transaction = Transaction

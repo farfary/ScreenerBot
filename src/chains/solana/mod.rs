@@ -28,6 +28,7 @@ pub mod layout;
 pub mod pools;
 pub mod rpc;
 pub mod runtime;
+pub mod settlement;
 pub mod swaps;
 pub mod transactions;
 pub mod wallets;

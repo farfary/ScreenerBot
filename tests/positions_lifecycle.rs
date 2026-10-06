@@ -22,6 +22,7 @@ use screenerbot::positions::state::{
     init_global_position_semaphore, register_position_slot, release_position_slot,
     try_consume_global_position_permit,
 };
+use screenerbot::positions::transitions::NotLandedEvidence;
 use screenerbot::positions::PositionTransition;
 use screenerbot::swaps::calculate_partial_amount;
 
@@ -151,7 +152,11 @@ fn all_transitions() -> Vec<PositionTransition> {
             position_id: 1,
             exit_time: now,
         },
-        PositionTransition::RemoveOrphanEntry { position_id: 1 },
+        PositionTransition::RemoveOrphanEntry {
+            position_id: 1,
+            signature: "entry-sig".to_owned(),
+            evidence: NotLandedEvidence::Expired,
+        },
         PositionTransition::UpdatePriceTracking {
             mint: "mint".to_owned(),
             current_price: 0.01,
@@ -604,20 +609,68 @@ fn an_abandoned_signature_is_never_enqueued_again() {
 }
 
 #[test]
-fn a_confirmed_swap_never_expires() {
+fn a_confirmed_swap_never_awaits_settlement() {
     let mut confirmed = entry_item("sig-confirmed", Some(100));
     confirmed.swap_confirmed = true;
-    assert!(!confirmed.is_expired(Some(1_000)));
+    assert!(!confirmed.awaits_settlement());
 
     let unconfirmed = entry_item("sig-unconfirmed", Some(100));
-    assert!(unconfirmed.is_expired(Some(1_000)));
+    assert!(unconfirmed.awaits_settlement());
 
     let mut confirmed_without_height = entry_item("sig-confirmed-no-height", None);
     confirmed_without_height.swap_confirmed = true;
     confirmed_without_height.created_at = Utc::now() - chrono::Duration::hours(1);
-    assert!(!confirmed_without_height.is_expired(None));
+    assert!(!confirmed_without_height.awaits_settlement());
 
     let retried = confirmed.with_retry();
     assert!(retried.swap_confirmed, "a retry keeps the confirmation");
-    assert!(!retried.is_expired(Some(1_000)));
+    assert!(!retried.awaits_settlement());
+
+    let renewed = confirmed.renewed();
+    assert!(renewed.swap_confirmed, "a renewal keeps the confirmation");
+    assert_eq!(renewed.attempts, 0);
+    assert_eq!(renewed.expiry_height, Some(100));
+}
+
+#[test]
+fn only_unconfirmed_bounded_items_are_settlement_candidates() {
+    let mut queue = VerificationQueue::new();
+    queue.enqueue(entry_item("sig-bounded", Some(100)));
+    queue.enqueue(entry_item("sig-unbounded", None));
+    let mut confirmed = entry_item("sig-confirmed", Some(100));
+    confirmed.swap_confirmed = true;
+    queue.enqueue(confirmed);
+
+    let candidates: Vec<String> = queue
+        .settlement_candidates()
+        .into_iter()
+        .map(|item| item.signature)
+        .collect();
+    assert_eq!(candidates, ["sig-bounded"]);
+
+    assert!(queue.awaits_expiry_bound());
+    assert_eq!(queue.assign_expiry_bound(250), 1);
+    assert!(!queue.awaits_expiry_bound());
+    let candidates: Vec<(String, Option<u64>)> = queue
+        .settlement_candidates()
+        .into_iter()
+        .map(|item| (item.signature, item.expiry_height))
+        .collect();
+    assert_eq!(
+        candidates,
+        [
+            ("sig-bounded".to_owned(), Some(100)),
+            ("sig-unbounded".to_owned(), Some(250)),
+        ],
+        "an assigned bound never replaces one the item already carries"
+    );
+
+    assert!(queue.mark_swap_confirmed("sig-bounded"));
+    assert!(!queue.mark_swap_confirmed("sig-absent"));
+    let candidates: Vec<String> = queue
+        .settlement_candidates()
+        .into_iter()
+        .map(|item| item.signature)
+        .collect();
+    assert_eq!(candidates, ["sig-unbounded"]);
 }

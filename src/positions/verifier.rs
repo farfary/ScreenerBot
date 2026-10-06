@@ -5,14 +5,16 @@
 
 use super::{
     queue::VerificationItem,
+    round_state::is_dust,
+    settle::signature_verdicts,
     state::get_position_by_id,
-    transitions::PositionTransition,
+    transitions::{NotLandedEvidence, PositionTransition},
     types::{VerificationKind, VerificationOutcome},
 };
 use crate::{
     chains::adapter,
     chains::solana::assets::ata::get_total_token_balance,
-    chains::RawAmount,
+    chains::{RawAmount, SignatureVerdict},
     logger::{self, LogTag},
     tokens::get_decimals,
     transactions::{get_transaction, reprocess_transaction, TransactionStatus},
@@ -74,24 +76,23 @@ async fn residual_balance_requires_retry(position_id: Option<i64>, balance: u64)
 
     if let Some(pid) = position_id {
         if let Some(position) = get_position_by_id(pid).await {
-            // Measure dust against what the position actually HOLDS. `token_amount` is the
-            // entry buy: it excludes DCA adds and is not reduced by partial exits, so after
-            // either it no longer describes the balance this residual is being compared to.
-            if let Some(token_amount) = position
+            // Dust is measured against what the position acquired: what it still holds plus
+            // what it already sold. Partial exits shrink the remainder, so a remainder-based
+            // threshold drops exactly when a leftover is most clearly dust.
+            if let Some(held) = position
                 .remaining_token_amount
                 .filter(|remaining| *remaining > RawAmount::ZERO)
                 .or(position.token_amount)
             {
-                let dust_threshold = (token_amount.raw() / 1_000).max(10);
-                if u128::from(balance) <= dust_threshold {
+                let acquired = held
+                    .checked_add(position.total_exited_amount)
+                    .unwrap_or(RawAmount::new(u128::MAX));
+                if is_dust(RawAmount::from(balance), acquired) {
                     logger::debug(
                         LogTag::Positions,
                         &format!(
-              "Ignoring residual dust balance {} (threshold {} tokens) for position {}",
-              balance,
-              dust_threshold,
-              pid
-            ),
+                            "Ignoring residual dust balance {balance} (acquired {acquired}) for position {pid}"
+                        ),
                     );
                     return false;
                 }
@@ -104,55 +105,68 @@ async fn residual_balance_requires_retry(position_id: Option<i64>, balance: u64)
 
 /// Outcome for an exit verification that FAILED on-chain.
 ///
-/// A failed PARTIAL exit is not a failed close. The position is still open and still
-/// holds its tokens; only that one partial swap failed. Every failure branch here used to
-/// key off `item.kind` alone — and a partial-exit item carries `kind: Exit` — so a failed
-/// partial was processed as a failed FULL exit: it stamped `exit_retry_pending` on a
-/// position that was not closing, and (via the abandonment path in worker.rs) could
-/// SYNTHETICALLY CLOSE a position of which the user still held most of the tokens. It also
-/// never cleared the pending-partial registry, which permanently blocks every later exit
-/// for that mint. `PartialExitFailed` is the correct transition and had no emitter.
-async fn failed_exit_outcome(item: &VerificationItem, reason: String) -> VerificationOutcome {
+/// A failed PARTIAL exit is not a failed close: the position is still open and still holds
+/// its tokens; only that one partial swap failed, so `PartialExitFailed` clears it. A failed
+/// FULL exit moved nothing either, so its exit is cleared for a retry. Neither writes the
+/// position off: tokens that left the wallet by other means are closed by the ledger.
+fn failed_exit_outcome(item: &VerificationItem, reason: String) -> VerificationOutcome {
+    let position_id = item.position_id.unwrap_or_default();
     if item.is_partial_exit {
         return VerificationOutcome::PermanentFailure(PositionTransition::PartialExitFailed {
-            position_id: item.position_id.unwrap_or_default(),
+            position_id,
             reason,
         });
     }
+    VerificationOutcome::Transition(PositionTransition::ExitFailedClearForRetry {
+        position_id,
+        exit_signature: item.signature.clone(),
+    })
+}
 
-    let Some(position_id) = item.position_id else {
-        return VerificationOutcome::PermanentFailure(
-            PositionTransition::ExitPermanentFailureSynthetic {
-                position_id: 0,
-                exit_time: Utc::now(),
-            },
-        );
-    };
+/// Outcome for an entry verification that FAILED on-chain: a failed DCA marks only that
+/// add failed, and a failed opening buy removes its position, which never held anything.
+fn failed_entry_outcome(item: &VerificationItem, reason: String) -> VerificationOutcome {
+    let position_id = item.position_id.unwrap_or_default();
+    if item.is_dca {
+        return VerificationOutcome::PermanentFailure(PositionTransition::DcaFailed {
+            position_id,
+            dca_signature: item.signature.clone(),
+            reason,
+        });
+    }
+    VerificationOutcome::PermanentFailure(PositionTransition::RemoveOrphanEntry {
+        position_id,
+        signature: item.signature.clone(),
+        evidence: NotLandedEvidence::FailedOnChain,
+    })
+}
 
-    // A FULL exit that failed: if real (non-dust) tokens remain, clear the exit signature
-    // so the close can be retried; if nothing is left, the tokens are gone and the
-    // position is closed synthetically.
-    let Ok(wallet_address) = get_wallet_address() else {
-        return VerificationOutcome::PermanentFailure(
-            PositionTransition::ExitPermanentFailureSynthetic {
-                position_id,
-                exit_time: Utc::now(),
-            },
-        );
-    };
-
-    match get_total_token_balance(&wallet_address, &item.mint).await {
-        Ok(balance) if residual_balance_requires_retry(Some(position_id), balance).await => {
-            VerificationOutcome::Transition(PositionTransition::ExitFailedClearForRetry {
-                position_id,
-                exit_signature: item.signature.clone(),
-            })
+/// Outcome for an exit whose transaction is still not found after the timeout: only a
+/// signature verdict that the swap failed on chain or did not land fails it; anything else
+/// is retried.
+async fn exit_timeout_outcome(item: &VerificationItem) -> VerificationOutcome {
+    let verdict = match signature_verdicts(std::slice::from_ref(item)).await {
+        Ok(verdicts) => verdicts.into_iter().next(),
+        Err(error) => {
+            logger::debug(
+                LogTag::Positions,
+                &format!(
+                    "Exit timeout verdict for {} unavailable: {error}",
+                    item.signature
+                ),
+            );
+            None
         }
-        _ => VerificationOutcome::PermanentFailure(
-            PositionTransition::ExitPermanentFailureSynthetic {
-                position_id,
-                exit_time: Utc::now(),
-            },
+    };
+    match verdict {
+        Some(SignatureVerdict::FailedOnChain) => {
+            failed_exit_outcome(item, "Exit transaction failed on chain".to_owned())
+        }
+        Some(SignatureVerdict::NotLanded) => {
+            failed_exit_outcome(item, "Exit transaction expired without landing".to_owned())
+        }
+        _ => VerificationOutcome::RetryTransient(
+            "Exit transaction not found (timeout) - will retry".to_owned(),
         ),
     }
 }
@@ -171,18 +185,14 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                 let error_msg = tx.error_message.unwrap_or("Unknown error".to_owned());
                 if error_msg.contains("[PERMANENT]") {
                     return match item.kind {
-                        VerificationKind::Entry => VerificationOutcome::PermanentFailure(
-                            PositionTransition::RemoveOrphanEntry {
-                                position_id: item.position_id.unwrap_or_default(),
-                            },
+                        VerificationKind::Entry => failed_entry_outcome(
+                            item,
+                            format!("Entry transaction failed permanently: {error_msg}"),
                         ),
-                        VerificationKind::Exit => {
-                            failed_exit_outcome(
-                                item,
-                                format!("Exit transaction failed permanently: {error_msg}"),
-                            )
-                            .await
-                        }
+                        VerificationKind::Exit => failed_exit_outcome(
+                            item,
+                            format!("Exit transaction failed permanently: {error_msg}"),
+                        ),
                     };
                 } else {
                     // Without the `[PERMANENT]` marker we cannot tell a doomed
@@ -254,22 +264,16 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                         );
                     } else if !success && status == "failed" {
                         // Failed by events → map to existing failure handling per kind
-                        match item.kind {
-                            VerificationKind::Entry => {
-                                return VerificationOutcome::PermanentFailure(
-                                    PositionTransition::RemoveOrphanEntry {
-                                        position_id: item.position_id.unwrap_or_default(),
-                                    },
-                                );
-                            }
-                            VerificationKind::Exit => {
-                                return failed_exit_outcome(
-                                    item,
-                                    "Exit transaction reported failed by events".to_owned(),
-                                )
-                                .await;
-                            }
-                        }
+                        return match item.kind {
+                            VerificationKind::Entry => failed_entry_outcome(
+                                item,
+                                "Entry transaction reported failed by events".to_owned(),
+                            ),
+                            VerificationKind::Exit => failed_exit_outcome(
+                                item,
+                                "Exit transaction reported failed by events".to_owned(),
+                            ),
+                        };
                     }
                 }
             }
@@ -283,53 +287,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
             if item.age_seconds() > timeout_threshold {
                 // Handle timeout based on transaction type
                 match item.kind {
-                    VerificationKind::Exit => {
-                        // For exit timeouts, check wallet balance before giving up
-                        if let (Ok(wallet_address), Some(position_id)) =
-                            (get_wallet_address(), item.position_id)
-                        {
-                            match get_total_token_balance(&wallet_address, &item.mint).await {
-                                Ok(balance) => {
-                                    if residual_balance_requires_retry(Some(position_id), balance)
-                                        .await
-                                    {
-                                        logger::debug(
-                                            LogTag::Positions,
-                                            &format!(
- "Exit timeout but significant balance remains ({} tokens), clearing for retry: {}",
-                        balance,
-                        item.signature
-                      ),
-                                        );
-                                        return VerificationOutcome::Transition(
-                                            PositionTransition::ExitFailedClearForRetry {
-                                                position_id,
-                                                exit_signature: item.signature.clone(),
-                                            },
-                                        );
-                                    } else {
-                                        return VerificationOutcome::PermanentFailure(
-                                            PositionTransition::ExitPermanentFailureSynthetic {
-                                                position_id,
-                                                exit_time: Utc::now(),
-                                            },
-                                        );
-                                    }
-                                }
-                                Err(_) => {
-                                    // Balance check failed - be conservative and retry
-                                    return VerificationOutcome::RetryTransient(
-                                        "Exit timeout but balance check failed - will retry"
-                                            .to_string(),
-                                    );
-                                }
-                            }
-                        } else {
-                            return VerificationOutcome::RetryTransient(
-                                "Exit timeout but cannot check balance".to_owned(),
-                            );
-                        }
-                    }
+                    VerificationKind::Exit => return exit_timeout_outcome(item).await,
                     VerificationKind::Entry => {
                         return VerificationOutcome::RetryTransient(
                             "Entry transaction not found (timeout)".to_owned(),
@@ -369,68 +327,16 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                                 );
                             }
                             "failed" => {
-                                // Map failure as above
-                                match item.kind {
-                                    VerificationKind::Entry => {
-                                        return VerificationOutcome::PermanentFailure(
-                                            PositionTransition::RemoveOrphanEntry {
-                                                position_id: item.position_id.unwrap_or_default(),
-                                            },
-                                        );
-                                    }
-                                    VerificationKind::Exit => {
-                                        if let (Ok(wallet_address), Some(position_id)) =
-                                            (get_wallet_address(), item.position_id)
-                                        {
-                                            match get_total_token_balance(
-                                                &wallet_address,
-                                                &item.mint,
-                                            )
-                                            .await
-                                            {
-                                                Ok(balance) => {
-                                                    if residual_balance_requires_retry(
-                                                        Some(position_id),
-                                                        balance,
-                                                    )
-                                                    .await
-                                                    {
-                                                        return VerificationOutcome::Transition(
-                              PositionTransition::ExitFailedClearForRetry {
-                                position_id,
-                                exit_signature: item.signature.clone(),
-                              }
-                            );
-                                                    } else {
-                                                        return VerificationOutcome::PermanentFailure(
-                              PositionTransition::ExitPermanentFailureSynthetic {
-                                position_id,
-                                exit_time: Utc::now(),
-                              }
-                            );
-                                                    }
-                                                }
-                                                Err(_) => {
-                                                    return VerificationOutcome::PermanentFailure(
-                            PositionTransition::ExitPermanentFailureSynthetic {
-                              position_id,
-                              exit_time: Utc::now(),
-                            }
-                          );
-                                                }
-                                            }
-                                        } else {
-                                            return VerificationOutcome::PermanentFailure(
-                                                PositionTransition::ExitPermanentFailureSynthetic {
-                                                    position_id: item
-                                                        .position_id
-                                                        .unwrap_or_default(),
-                                                    exit_time: Utc::now(),
-                                                },
-                                            );
-                                        }
-                                    }
-                                }
+                                return match item.kind {
+                                    VerificationKind::Entry => failed_entry_outcome(
+                                        item,
+                                        "Entry transaction reported failed by events".to_owned(),
+                                    ),
+                                    VerificationKind::Exit => failed_exit_outcome(
+                                        item,
+                                        "Exit transaction reported failed by events".to_owned(),
+                                    ),
+                                };
                             }
                             _ => {}
                         }

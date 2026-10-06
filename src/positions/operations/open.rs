@@ -4,7 +4,6 @@
 //! Open position operations — new position entry with swap execution and verification.
 
 use crate::chains::adapter;
-use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::chains::RawAmount;
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
@@ -429,12 +428,7 @@ async fn open_position_impl(
     )
     .await;
 
-    // Get block height for expiration
-    let expiry_height = get_rpc_client()
-        .get_block_height()
-        .await
-        .map(|h| h + super::SOLANA_BLOCKHASH_VALIDITY_SLOTS)
-        .ok();
+    let expiry_height = crate::positions::settle::submission_expiry_bound().await;
 
     // Enqueue for verification
     let verification_item = VerificationItem::new(

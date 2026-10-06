@@ -19,6 +19,8 @@ pub mod pnl;
 pub mod price_resolution;
 pub mod price_updater;
 pub mod queue;
+pub mod round_state;
+mod settle;
 pub mod state;
 pub mod state_pending;
 pub mod tracking;

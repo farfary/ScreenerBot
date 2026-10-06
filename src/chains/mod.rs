@@ -17,6 +17,7 @@ mod per_chain;
 mod registry;
 mod runtime;
 mod scope;
+mod settlement;
 pub mod solana;
 mod types;
 
@@ -30,6 +31,7 @@ pub use registry::{
 };
 pub use runtime::{ChainRuntime, TokenAccountFacts};
 pub use scope::ChainScope;
+pub use settlement::{Holding, SettlementReader, SignatureCheck, SignatureVerdict};
 pub use types::{AccountId, AssetId, ChainId, ChainMetadata, NativeAsset, PoolId, TransactionId};
 
 pub(crate) use config::PRE_CHAINS_LAYOUT_CHAIN;

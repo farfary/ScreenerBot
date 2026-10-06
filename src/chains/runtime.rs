@@ -6,7 +6,7 @@
 //!
 //! The two injected factories (swap routers, the wallet-watch
 //! runtime), the token-account read, the filter profile, the discovery
-//! feeds and the pool pricing driver behind it. Later units add methods as
+//! feeds, the pool pricing driver and the settlement reader behind it. Later units add methods as
 //! their domains thread the chain through (OHLCV, wallets, trading) — a
 //! method without a caller is forbidden until then. Neutral code resolves an instance through
 //! [`crate::chains::runtime_for`] and never names a concrete chain module.
@@ -45,4 +45,6 @@ pub trait ChainRuntime: Send + Sync + 'static {
     fn discovery_feeds(&self) -> Vec<crate::tokens::DiscoveryFeed>;
     /// The pipeline that discovers, reads and prices this chain's pools.
     fn pricing_driver(&self) -> Arc<dyn crate::pools::PricingDriver>;
+    /// The reader of signature verdicts, holdings and expiry bounds on this chain.
+    fn settlement(&self) -> Arc<dyn crate::chains::SettlementReader>;
 }

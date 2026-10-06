@@ -53,6 +53,7 @@ events-connectivity-monitoring-started = Моніторинг з’єднанн�
 events-connectivity-service-initialized = Сервіс з’єднання ініціалізовано, моніторів: { $count }
 events-connectivity-critical-unhealthy = Несправних критичних ендпоінтів: { $count } - система має призупинити операції
 events-connectivity-endpoint-recovered = Ендпоінт відновився зі стану { $from } до справного
+events-position-entry-not-landed = Купівля { $symbol } не потрапила в мережу; позицію видалено
 
 ## Events page (pages/events.js, ui/event_labels.js)
 

@@ -53,6 +53,7 @@ events-connectivity-monitoring-started = Connectivity monitoring started (interv
 events-connectivity-service-initialized = Connectivity service initialized with { $count } monitors
 events-connectivity-critical-unhealthy = { $count } critical endpoint(s) unhealthy - System should pause operations
 events-connectivity-endpoint-recovered = Endpoint recovered from { $from } to healthy
+events-position-entry-not-landed = The buy of { $symbol } did not land on chain; its position was removed
 
 ## Events page (pages/events.js, ui/event_labels.js)
 

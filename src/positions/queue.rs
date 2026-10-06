@@ -57,8 +57,9 @@ pub struct VerificationItem {
     pub requested_exit_percentage: Option<f64>,
     // DCA support
     pub is_dca: bool,
-    /// The swap is confirmed on-chain and only applying it to the position failed.
-    /// A confirmed swap is never an orphan, so such an item never expires.
+    /// The swap is confirmed on-chain: its verdict read it as landed, or only applying it to
+    /// the position failed. A confirmed swap is never an orphan, so such an item is never
+    /// settled as not landed.
     pub swap_confirmed: bool,
 }
 
@@ -224,26 +225,22 @@ impl VerificationItem {
         }
     }
 
-    pub fn is_expired(&self, current_height: Option<u64>) -> bool {
-        if self.swap_confirmed {
-            return false;
-        }
-        if let (Some(expiry), Some(current)) = (self.expiry_height, current_height) {
-            current > expiry
-        } else {
-            // Time-based fallback by kind. Exits whose swap may already be on-chain
-            // must NOT be dropped after a few minutes (slow/flaky network) — that
-            // strands the position in pending_verification forever. Keep exits alive
-            // for the full retry window so the verifier can confirm and finalize
-            // with real proceeds. Entry orphan detection stays short (10m).
-            let fallback_secs = match self.kind {
-                VerificationKind::Entry => 600,
-                VerificationKind::Exit => MAX_VERIFICATION_AGE_HOURS * 3600,
-            };
-            Utc::now()
-                .signed_duration_since(self.created_at)
-                .num_seconds()
-                > fallback_secs
+    /// True while the chain has not confirmed the swap landed and the item carries the bound
+    /// after which the chain can prove it never will: only such an item is settled by a
+    /// signature verdict.
+    pub fn awaits_settlement(&self) -> bool {
+        !self.swap_confirmed && self.expiry_height.is_some()
+    }
+
+    /// The same verification started afresh: a new age and no attempts, with its kind,
+    /// flags, expiry bound and confirmation kept.
+    pub fn renewed(&self) -> Self {
+        Self {
+            created_at: Utc::now(),
+            last_attempt_at: None,
+            next_retry_at: None,
+            attempts: 0,
+            ..self.clone()
         }
     }
 
@@ -347,21 +344,51 @@ impl VerificationQueue {
         }
     }
 
-    pub fn gc_expired(&mut self, current_height: Option<u64>) -> Vec<VerificationItem> {
-        let mut expired = Vec::new();
-        let mut i = 0;
+    /// Copies of the queued items that await settlement by a signature verdict.
+    pub fn settlement_candidates(&self) -> Vec<VerificationItem> {
+        self.items
+            .iter()
+            .filter(|item| item.awaits_settlement())
+            .cloned()
+            .collect()
+    }
 
-        while i < self.items.len() {
-            if self.items[i].is_expired(current_height) {
-                if let Some(item) = self.items.remove(i) {
-                    expired.push(item);
-                }
-            } else {
-                i += 1;
-            }
+    /// True when an unconfirmed item lacks the bound after which its swap can no longer land.
+    pub fn awaits_expiry_bound(&self) -> bool {
+        self.items
+            .iter()
+            .any(|item| !item.swap_confirmed && item.expiry_height.is_none())
+    }
+
+    /// Gives every unconfirmed item without an expiry bound `bound`, read after each of them
+    /// was submitted. Returns how many items got it.
+    pub fn assign_expiry_bound(&mut self, bound: u64) -> usize {
+        let mut assigned = 0;
+        for item in self
+            .items
+            .iter_mut()
+            .filter(|item| !item.swap_confirmed && item.expiry_height.is_none())
+        {
+            item.expiry_height = Some(bound);
+            assigned += 1;
         }
+        assigned
+    }
 
-        expired
+    /// Marks the queued item of `signature` as a swap the chain confirmed. Returns whether
+    /// the signature is queued.
+    pub fn mark_swap_confirmed(&mut self, signature: &str) -> bool {
+        match self
+            .items
+            .iter_mut()
+            .find(|item| item.signature == signature)
+        {
+            Some(item) => {
+                item.swap_confirmed = true;
+                true
+            }
+            None => false,
+        }
     }
 
     pub fn len(&self) -> usize {
@@ -370,10 +397,6 @@ impl VerificationQueue {
 
     pub fn is_empty(&self) -> bool {
         self.items.is_empty()
-    }
-
-    pub fn has_items_with_expiry(&self) -> bool {
-        self.items.iter().any(|item| item.expiry_height.is_some())
     }
 }
 
@@ -386,9 +409,9 @@ static VERIFICATION_QUEUE: LazyLock<RwLock<VerificationQueue>> =
 /// The worker runs on an adaptive nap (5s while the queue is empty), and it computes that nap
 /// BEFORE it looks at the queue — so a swap enqueued a moment after it dozed off sat there for
 /// the rest of the nap before anyone even tried to verify it. That is dead time bolted onto the
-/// front of every trade: the swap is already CONFIRMED on chain when it is enqueued (the
-/// executors enqueue only after `sign_send_and_confirm_transaction` returns), and a fresh item
-/// is immediately due (`next_retry_at: None`), so there is nothing to wait for. It is why a DCA
+/// front of every trade: the executors enqueue right after submission, the swap often
+/// confirms within seconds, and a fresh item is immediately due (`next_retry_at: None`), so
+/// there is nothing to wait for. It is why a DCA
 /// whose notification already said "done" took another 10-15s to show up on the position: the
 /// tokens and SOL only land on the position when the verification applies `DcaVerified`.
 ///
@@ -439,10 +462,28 @@ pub async fn remove_verification(signature: &str) -> Option<VerificationItem> {
     queue.remove(signature)
 }
 
-/// Clean up expired items
-pub async fn gc_expired_verifications(current_height: Option<u64>) -> Vec<VerificationItem> {
+/// Copies of the queued items that await settlement by a signature verdict.
+pub async fn settlement_candidates() -> Vec<VerificationItem> {
+    let queue = VERIFICATION_QUEUE.read().await;
+    queue.settlement_candidates()
+}
+
+/// True when an unconfirmed queued item lacks an expiry bound.
+pub async fn queue_awaits_expiry_bound() -> bool {
+    let queue = VERIFICATION_QUEUE.read().await;
+    queue.awaits_expiry_bound()
+}
+
+/// Gives every unconfirmed queued item without an expiry bound `bound`.
+pub async fn assign_expiry_bound(bound: u64) -> usize {
     let mut queue = VERIFICATION_QUEUE.write().await;
-    queue.gc_expired(current_height)
+    queue.assign_expiry_bound(bound)
+}
+
+/// Marks the queued item of `signature` as a swap the chain confirmed.
+pub async fn mark_swap_confirmed(signature: &str) -> bool {
+    let mut queue = VERIFICATION_QUEUE.write().await;
+    queue.mark_swap_confirmed(signature)
 }
 
 /// Get queue status
@@ -460,10 +501,4 @@ pub fn get_queue_status_sync() -> Option<(usize, Vec<String>)> {
     let size = queue.len();
     let signatures: Vec<String> = queue.items.iter().map(|i| i.signature.clone()).collect();
     Some((size, signatures))
-}
-
-/// Check if queue has items with expiry height
-pub async fn queue_has_items_with_expiry() -> bool {
-    let queue = VERIFICATION_QUEUE.read().await;
-    queue.has_items_with_expiry()
 }

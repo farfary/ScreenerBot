@@ -64,7 +64,6 @@ const SLIPPAGE_RUNG_BACKOFF: Duration = Duration::from_secs(2);
 /// Pause after a rate-limited attempt when the provider named no `Retry-After`.
 const RATE_LIMIT_BACKOFF: Duration = Duration::from_secs(10);
 
-const SOLANA_BLOCKHASH_VALIDITY_SLOTS: u64 = 150;
 const POSITION_SAVE_MAX_RETRIES: usize = 5;
 const POSITION_SAVE_BASE_BACKOFF_MS: u64 = 200;
 const POSITION_SAVE_MAX_BACKOFF_MS: u64 = 3_000;

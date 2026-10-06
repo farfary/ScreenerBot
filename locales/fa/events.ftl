@@ -53,6 +53,7 @@ events-connectivity-monitoring-started = پایش اتصال شروع شد (فا
 events-connectivity-service-initialized = سرویس اتصال با { $count } پایشگر راه‌اندازی شد
 events-connectivity-critical-unhealthy = { $count } اندپوینت حیاتی ناسالم است - سیستم باید عملیات را متوقف کند
 events-connectivity-endpoint-recovered = اندپوینت از { $from } به حالت سالم بازگشت
+events-position-entry-not-landed = خرید { $symbol } روی زنجیره ثبت نشد؛ پوزیشن آن حذف شد
 
 ## Events page (pages/events.js, ui/event_labels.js)
 

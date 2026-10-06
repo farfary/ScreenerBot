@@ -4,7 +4,6 @@
 //! Close position operations — full position exit with swap execution and verification.
 
 use crate::chains::solana::assets::ata::{get_token_balance, get_total_token_balance};
-use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::chains::RawAmount;
 use crate::errors::ErrorClass;
 use crate::logger::{self, LogTag};
@@ -436,12 +435,7 @@ pub async fn close_position_direct(
     )
     .await;
 
-    // Get block height for expiration
-    let expiry_height = get_rpc_client()
-        .get_block_height()
-        .await
-        .map(|h| h + super::SOLANA_BLOCKHASH_VALIDITY_SLOTS)
-        .ok();
+    let expiry_height = crate::positions::settle::submission_expiry_bound().await;
 
     // Enqueue for verification
     let verification_item = VerificationItem::new(

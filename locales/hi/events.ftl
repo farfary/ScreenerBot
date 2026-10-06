@@ -45,6 +45,7 @@ events-connectivity-monitoring-started = कनेक्टिविटी म�
 events-connectivity-service-initialized = कनेक्टिविटी सर्विस { $count } मॉनिटर के साथ शुरू हुई
 events-connectivity-critical-unhealthy = { $count } क्रिटिकल एंडपॉइंट अस्वस्थ - सिस्टम को ऑपरेशन रोक देने चाहिए
 events-connectivity-endpoint-recovered = एंडपॉइंट { $from } से स्वस्थ स्थिति में लौटा
+events-position-entry-not-landed = { $symbol } की खरीद ऑन-चेन दर्ज नहीं हुई; उसकी पोज़िशन हटा दी गई
 
 events-category-swap = स्वैप
 events-category-transaction = ट्रांज़ैक्शन

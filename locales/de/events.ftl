@@ -46,6 +46,7 @@ events-connectivity-monitoring-started = Konnektivitätsüberwachung gestartet (
 events-connectivity-service-initialized = Konnektivitätsdienst mit { $count } Monitoren initialisiert
 events-connectivity-critical-unhealthy = { $count } kritische(r) Endpunkt(e) fehlerhaft - Das System sollte Vorgänge pausieren
 events-connectivity-endpoint-recovered = Endpunkt von { $from } auf fehlerfrei zurückgekehrt
+events-position-entry-not-landed = Der Kauf von { $symbol } ist nicht on-chain angekommen; die Position wurde entfernt
 
 ## Events page (pages/events.js, ui/event_labels.js)
 

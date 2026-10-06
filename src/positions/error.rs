@@ -50,6 +50,12 @@ pub enum Error {
     /// only through a booking.
     #[error("position {position_id} is already stored")]
     AlreadyStored { position_id: i64 },
+    /// A removal for an entry that never landed was refused: the row shows the entry
+    /// `signature` landed, or the row's entry is a different signature.
+    #[error(
+        "the entry {signature} of position {position_id} landed; the position was not removed"
+    )]
+    EntryLanded { position_id: i64, signature: String },
     #[error("persisted position {field} has unknown value '{value}'")]
     UnknownPersistedValue { field: &'static str, value: String },
 
@@ -122,6 +128,7 @@ impl ErrorClass for Error {
             Error::AlreadyOpen { .. }
             | Error::AlreadyClosed { .. }
             | Error::AlreadyStored { .. }
+            | Error::EntryLanded { .. }
             | Error::UnknownPersistedValue { .. } => false,
             // Validation failures are a property of the input, not the attempt.
             Error::InvalidPrice { .. }
@@ -167,6 +174,7 @@ impl ErrorClass for Error {
             | Error::TokenNotFound { .. } => Severity::Info,
             Error::AlreadyOpen { .. }
             | Error::AlreadyClosed { .. }
+            | Error::EntryLanded { .. }
             | Error::UnknownPersistedValue { .. } => Severity::Warning,
             Error::AlreadyStored { .. } => Severity::Error,
             Error::InvalidPrice { .. }
@@ -197,6 +205,7 @@ impl ErrorClass for Error {
             Error::AlreadyOpen { .. }
             | Error::AlreadyClosed { .. }
             | Error::AlreadyStored { .. }
+            | Error::EntryLanded { .. }
             | Error::ZeroExitAmount { .. } => 409,
             Error::UnknownPersistedValue { .. }
             | Error::InvalidPrice { .. }

@@ -13,6 +13,7 @@ use screenerbot::errors::{DatabaseError, ErrorClass};
 use screenerbot::positions::apply::apply_transition;
 use screenerbot::positions::operations::{force_close_position, mark_exit_submitted};
 use screenerbot::positions::price_updater::update_position_price_and_pnl;
+use screenerbot::positions::transitions::NotLandedEvidence;
 use screenerbot::positions::{
     db, state, ApplyFailureDisposition, Error, GiveUpReason, PendingDcaSwap, PendingPartialExit,
     Position, PositionManagement, PositionTransition, PriceSource, VerificationItem,
@@ -74,7 +75,12 @@ async fn open_position(configure: impl FnOnce(&mut Position)) -> i64 {
     screenerbot::positions::initialize_positions_database()
         .await
         .expect("initialise positions database");
+    store_position(configure).await
+}
 
+/// Persists one more OPEN position holding [`HELD`] in the store [`open_position`] opened,
+/// and loads it into memory.
+async fn store_position(configure: impl FnOnce(&mut Position)) -> i64 {
     let mut position = common::test_position(1.0, 1.0);
     position.id = None;
     position.token_amount = Some(RawAmount::new(HELD));
@@ -1550,4 +1556,248 @@ fn an_exit_submission_waits_for_a_committed_booking_to_be_adopted() {
             assert_eq!(live.dca_count, 1);
         },
     );
+}
+
+// ==================== ENTRY NOT LANDED ====================
+
+const ORPHAN_ENTRY: &str = "orphan-entry-sig";
+
+/// A position whose entry `signature` was submitted and never verified.
+fn unverified_entry(signature: &str) -> impl FnOnce(&mut Position) + '_ {
+    move |position| {
+        position.entry_transaction_signature = Some(signature.to_owned());
+        position.transaction_entry_verified = false;
+    }
+}
+
+fn orphan_removal(id: i64, signature: &str) -> PositionTransition {
+    PositionTransition::RemoveOrphanEntry {
+        position_id: id,
+        signature: signature.to_owned(),
+        evidence: NotLandedEvidence::Expired,
+    }
+}
+
+async fn stored(id: i64) -> bool {
+    db::get_position_by_id(id)
+        .await
+        .expect("read stored position")
+        .is_some()
+}
+
+#[test]
+fn an_orphan_removal_targets_its_own_id_not_the_first_position_of_the_mint() {
+    common::run_isolated(
+        "an_orphan_removal_targets_its_own_id_not_the_first_position_of_the_mint",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let earlier = open_position(|position| {
+                position.entry_transaction_signature = Some("earlier-entry".to_owned());
+                position.exit_transaction_signature = Some("earlier-exit".to_owned());
+                position.transaction_exit_verified = true;
+                position.exit_time = Some(Utc::now());
+            })
+            .await;
+            let orphan = store_position(unverified_entry(ORPHAN_ENTRY)).await;
+
+            let effects = apply_transition(orphan_removal(orphan, ORPHAN_ENTRY))
+                .await
+                .expect("the orphan is removed");
+            assert!(effects.position_removed);
+
+            assert!(state::get_position_by_id(orphan).await.is_none());
+            assert!(!stored(orphan).await, "the orphan row is deleted");
+            assert!(
+                state::get_position_by_id(earlier).await.is_some(),
+                "the earlier round of the mint stays in memory"
+            );
+            assert!(stored(earlier).await, "the earlier round stays stored");
+        },
+    );
+}
+
+#[test]
+fn an_orphan_removal_deletes_the_row_and_releases_the_slot_once() {
+    common::run_isolated(
+        "an_orphan_removal_deletes_the_row_and_releases_the_slot_once",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            enable_loss_limit();
+            state::init_global_position_semaphore(1);
+            let id = open_position(unverified_entry(ORPHAN_ENTRY)).await;
+            assert!(state::try_consume_global_position_permit());
+            state::register_position_slot(id).await;
+            assert!(!state::try_consume_global_position_permit());
+
+            apply_transition(orphan_removal(id, ORPHAN_ENTRY))
+                .await
+                .expect("the orphan is removed");
+            assert!(
+                state::try_consume_global_position_permit(),
+                "the removal frees the slot"
+            );
+            assert!(
+                !state::try_consume_global_position_permit(),
+                "exactly one slot came back"
+            );
+
+            let error = apply_transition(orphan_removal(id, ORPHAN_ENTRY))
+                .await
+                .expect_err("a removed row cannot be removed again");
+            assert!(
+                matches!(error, Error::NotFoundById { position_id } if position_id == id),
+                "expected not found, got {error:?}"
+            );
+            assert!(
+                !state::try_consume_global_position_permit(),
+                "a repeated removal frees no second slot"
+            );
+
+            assert!(state::get_position_by_id(id).await.is_none());
+            assert!(!stored(id).await);
+            assert!(
+                db::load_all_positions()
+                    .await
+                    .expect("reload the store")
+                    .iter()
+                    .all(|position| position.id != Some(id)),
+                "a reload finds no row to verify again"
+            );
+            assert_eq!(recorded_loss(), 0.0, "a removal records no loss");
+        },
+    );
+}
+
+#[test]
+fn an_orphan_removal_refuses_a_position_whose_entry_landed() {
+    common::run_isolated(
+        "an_orphan_removal_refuses_a_position_whose_entry_landed",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let id = open_position(unverified_entry(ORPHAN_ENTRY)).await;
+
+            let refused = |error: Error| {
+                assert!(
+                    matches!(
+                        &error,
+                        Error::EntryLanded { position_id, signature }
+                            if *position_id == id && signature == ORPHAN_ENTRY
+                    ),
+                    "expected entry landed, got {error:?}"
+                );
+                assert!(!error.is_retryable());
+            };
+
+            // The row's entry is a different signature.
+            let error = apply_transition(orphan_removal(id, "another-sig"))
+                .await
+                .expect_err("a removal for another signature is refused");
+            assert!(
+                matches!(error, Error::EntryLanded { position_id, .. } if position_id == id),
+                "expected entry landed, got {error:?}"
+            );
+
+            apply_transition(PositionTransition::EntryVerified {
+                position_id: id,
+                effective_entry_price: 1.0,
+                token_amount_units: RawAmount::new(HELD),
+                fee_raw: 5_000,
+                native_size: 1.0,
+            })
+            .await
+            .expect("the entry is booked");
+            assert_eq!(entry_records(id).await, 1);
+
+            // The row is verified.
+            refused(
+                apply_transition(orphan_removal(id, ORPHAN_ENTRY))
+                    .await
+                    .expect_err("a verified entry is refused"),
+            );
+
+            // Only the entry record proves the entry landed.
+            injector()
+                .execute(
+                    "UPDATE positions SET transaction_entry_verified = 0 WHERE id = ?1",
+                    [id],
+                )
+                .expect("clear the verified flag");
+            refused(
+                apply_transition(orphan_removal(id, ORPHAN_ENTRY))
+                    .await
+                    .expect_err("a recorded entry is refused"),
+            );
+
+            assert!(state::get_position_by_id(id).await.is_some());
+            assert!(stored(id).await);
+            assert_eq!(entry_records(id).await, 1);
+        },
+    );
+}
+
+#[test]
+fn removing_a_row_keeps_the_signatures_of_other_rows_of_the_mint() {
+    common::run_isolated(
+        "removing_a_row_keeps_the_signatures_of_other_rows_of_the_mint",
+        || async {
+            let _dir = common::isolated_env();
+            let _cfg = common::config_guard();
+            let kept = open_position(|position| {
+                position.entry_transaction_signature = Some("kept-entry".to_owned());
+                position.exit_transaction_signature = Some("kept-exit".to_owned());
+            })
+            .await;
+            state::add_signature_to_index(PARTIAL_SIGNATURE, common::TEST_MINT).await;
+            let removed = store_position(unverified_entry(ORPHAN_ENTRY)).await;
+
+            assert!(state::remove_position_by_id(removed).await.is_some());
+            assert_eq!(state::get_mint_by_signature(ORPHAN_ENTRY).await, None);
+            for signature in ["kept-entry", "kept-exit", PARTIAL_SIGNATURE] {
+                assert_eq!(
+                    state::get_mint_by_signature(signature).await.as_deref(),
+                    Some(common::TEST_MINT),
+                    "{signature} stays indexed"
+                );
+            }
+
+            assert!(state::remove_position_by_id(kept).await.is_some());
+            for signature in ["kept-entry", "kept-exit", PARTIAL_SIGNATURE] {
+                assert_eq!(
+                    state::get_mint_by_signature(signature).await,
+                    None,
+                    "{signature} leaves with the mint's last row"
+                );
+            }
+        },
+    );
+}
+
+#[test]
+fn removing_a_row_never_drops_a_held_mint_lock() {
+    common::run_isolated("removing_a_row_never_drops_a_held_mint_lock", || async {
+        let _dir = common::isolated_env();
+        let _cfg = common::config_guard();
+        let id = open_position(|_| {}).await;
+        let held = state::acquire_position_lock(common::TEST_MINT).await;
+
+        assert!(state::remove_position_by_id(id).await.is_some());
+        let wait = std::time::Duration::from_millis(200);
+        assert!(
+            tokio::time::timeout(wait, state::acquire_position_lock(common::TEST_MINT))
+                .await
+                .is_err(),
+            "a second holder acquired the mint lock while the first held it"
+        );
+
+        drop(held);
+        assert!(
+            tokio::time::timeout(wait, state::acquire_position_lock(common::TEST_MINT))
+                .await
+                .is_ok(),
+            "the lock is free once its holder drops it"
+        );
+    });
 }

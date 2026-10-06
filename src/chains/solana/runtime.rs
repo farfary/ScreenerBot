@@ -98,6 +98,10 @@ impl ChainRuntime for SolanaRuntime {
     fn pricing_driver(&self) -> Arc<dyn crate::pools::PricingDriver> {
         Arc::new(crate::chains::solana::pools::driver::SolanaPricingDriver)
     }
+
+    fn settlement(&self) -> Arc<dyn crate::chains::SettlementReader> {
+        Arc::new(crate::chains::solana::settlement::SolanaSettlement)
+    }
 }
 
 /// A runtime instance for the chain registry (called once per boot by

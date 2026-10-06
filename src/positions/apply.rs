@@ -21,13 +21,14 @@ use super::{
     loss_detection::process_position_loss_detection,
     state::{
         clear_pending_dca_swap, get_position_by_id, get_position_by_mint, publish_committed,
-        release_position_slot, remove_position, remove_signature_from_index, update_position_state,
-        with_booking_lock, POSITIONS,
+        release_position_slot, remove_position_by_id, remove_signature_from_index,
+        update_position_state, with_booking_lock,
     },
     transitions::PositionTransition,
 };
 use crate::chains::RawAmount;
 use crate::config::with_config;
+use crate::i18n::{ids, UiArg, UiText};
 use crate::logger::{self, LogTag};
 use crate::telegram::{queue_notification, Notification};
 use chrono::Utc;
@@ -213,6 +214,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                     let pnl_native = row.pnl.unwrap_or_default();
                     (row, pnl_native)
                 }
+                Committed::Deleted { .. } => return Err(Error::NotFoundById { position_id }),
             };
 
             effects.db_updated = true;
@@ -351,6 +353,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                     return Err(Error::AlreadyClosed { position_id });
                 }
                 Committed::Written { outcome, .. } => outcome,
+                Committed::Deleted { .. } => return Err(Error::NotFoundById { position_id }),
             };
             effects.db_updated = true;
 
@@ -412,6 +415,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                     return Ok(effects);
                 }
                 Committed::Written { row, outcome } => (row, outcome),
+                Committed::Deleted { .. } => return Err(Error::NotFoundById { position_id }),
             };
             effects.db_updated = true;
             effects.position_closed = true;
@@ -462,57 +466,66 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
         // =================================================================
         // ORPHAN CLEANUP
         // =================================================================
-        PositionTransition::RemoveOrphanEntry { position_id } => {
-            if let Ok(mint) = find_mint_by_position_id(position_id).await {
-                if remove_position(&mint).await.is_some() {
-                    effects.position_removed = true;
-                    crate::events::record_position_event_flexible(
-                        "orphan_entry_removed",
-                        crate::events::Severity::Warn,
-                        Some(&mint),
-                        None,
-                        serde_json::json!({
-                          "position_id": position_id
-                        }),
-                    )
-                    .await;
-
-                    logger::debug(
-                        LogTag::Positions,
-                        &format!("Removed orphan entry position {position_id}"),
-                    );
-
-                    // Orphan entries also occupied a slot originally; free it now
-                    release_position_slot(position_id).await;
-                    logger::debug(
-                        LogTag::Positions,
-                        &format!(
-                            "Released position slot after orphan removal (ID: {})",
-                            position_id
-                        ),
-                    );
-
-                    // Reset token priority after orphan removal
-                    if let Some(db) =
-                        crate::tokens::database::database(crate::chains::active_chain())
-                    {
-                        let _ = db.update_priority(
-                            &mint,
-                            crate::tokens::priorities::Priority::Standard.to_value(),
-                        );
-                        logger::debug(
-                            LogTag::Positions,
-                            &format!(
-                                "Reset token priority to Standard after orphan removal (ID: {})",
-                                position_id
-                            ),
-                        );
-                    }
-
-                    // NOTE: position removal already purged signature indexes. Optionally we could
-                    // attempt to prune per-mint lock map here if implemented in state.
+        PositionTransition::RemoveOrphanEntry {
+            position_id,
+            signature,
+            evidence,
+        } => {
+            // The row is deleted only while it still describes an entry that never landed:
+            // its entry is `signature`, unverified and unrecorded, and no exit was booked.
+            let committed = book_position(position_id, |row, reads| {
+                let unlanded = row.entry_transaction_signature.as_deref()
+                    == Some(signature.as_str())
+                    && !row.transaction_entry_verified
+                    && !row.transaction_exit_verified
+                    && !reads.entry_record_exists(&signature)?;
+                if !unlanded {
+                    return Err(Error::EntryLanded {
+                        position_id,
+                        signature: signature.clone(),
+                    });
                 }
+                Ok(Booking::Delete { outcome: () })
+            })
+            .await?;
+            let Committed::Deleted { row: removed, .. } = committed else {
+                return Ok(effects);
+            };
+            effects.db_updated = true;
+            effects.position_removed = true;
+
+            release_position_slot(position_id).await;
+
+            if let Some(db) = crate::tokens::database::database(crate::chains::active_chain()) {
+                let _ = db.update_priority(
+                    &removed.mint,
+                    crate::tokens::priorities::Priority::Standard.to_value(),
+                );
             }
+
+            crate::events::record_position_event_flexible(
+                "entry_not_landed",
+                crate::events::Severity::Info,
+                Some(&removed.mint),
+                Some(&signature),
+                crate::events::with_text(
+                    serde_json::json!({
+                        "position_id": position_id,
+                        "signature": signature,
+                        "evidence": evidence,
+                    }),
+                    &UiText::new(ids::EVENTS_POSITION_ENTRY_NOT_LANDED)
+                        .arg("symbol", UiArg::Text(removed.symbol.clone())),
+                ),
+            )
+            .await;
+
+            logger::info(
+                LogTag::Positions,
+                &format!(
+                    "Removed position {position_id}: its entry {signature} did not land ({evidence:?})"
+                ),
+            );
         }
 
         // ==================== PARTIAL EXIT TRANSITIONS ====================
@@ -1083,23 +1096,29 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
 }
 
 /// Books onto the stored row of `position_id` (see [`commit_booking`]) and publishes the
-/// committed row to memory, both under the position's booking lock, so memory adopts the
-/// rows of one position in commit order.
+/// committed row to memory, or drops a deleted one from it, both under the position's
+/// booking lock, so memory adopts the rows of one position in commit order.
 pub(crate) async fn book_position<T>(
     position_id: i64,
     book: impl FnOnce(&mut Position, &BookingReads<'_>) -> Result<Booking<T>>,
 ) -> Result<Committed<T>> {
     with_booking_lock(position_id, async {
         let committed = commit_booking(position_id, book).await?;
-        if let Committed::Written { row, .. } = &committed {
-            if !publish_committed(row).await {
-                logger::debug(
-                    LogTag::Positions,
-                    &format!(
-                        "Position {position_id} is not in memory; its committed row is not published"
-                    ),
-                );
+        match &committed {
+            Committed::Written { row, .. } => {
+                if !publish_committed(row).await {
+                    logger::debug(
+                        LogTag::Positions,
+                        &format!(
+                            "Position {position_id} is not in memory; its committed row is not published"
+                        ),
+                    );
+                }
             }
+            Committed::Deleted { .. } => {
+                remove_position_by_id(position_id).await;
+            }
+            Committed::Skipped(_) => {}
         }
         Ok(committed)
     })
@@ -1111,13 +1130,4 @@ fn log_missing_position(position_id: i64, transition: &str) {
         LogTag::Positions,
         &format!("Position {position_id} is not in memory - {transition} not applied"),
     );
-}
-
-async fn find_mint_by_position_id(position_id: i64) -> Result<String> {
-    let positions = POSITIONS.read().await;
-    positions
-        .iter()
-        .find(|p| p.id == Some(position_id))
-        .map(|p| p.mint.clone())
-        .ok_or(Error::NotFoundById { position_id })
 }

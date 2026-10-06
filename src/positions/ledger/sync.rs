@@ -933,7 +933,7 @@ pub async fn apply_plan(plan: SyncPlan) -> AppliedPlan {
         .await;
         let position = match committed {
             Ok(Committed::Written { row, .. }) => row,
-            Ok(Committed::Skipped(())) => {
+            Ok(Committed::Skipped(()) | Committed::Deleted { .. }) => {
                 applied.skipped += 1;
                 continue;
             }
