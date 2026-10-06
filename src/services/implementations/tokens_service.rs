@@ -33,14 +33,14 @@ impl Service for TokensService {
     }
 
     fn dependencies(&self) -> Vec<&'static str> {
-        vec!["events", "transactions", "pools"]
+        vec!["events", "pools"]
     }
 
     fn is_enabled(&self) -> bool {
         // Explore tier: token discovery is API-driven (no wallet/RPC needed), so it
         // runs in full mode OR Explore Mode (wallet/RPC skipped). The declared
-        // transactions/pools dependencies are ordering hints only and are filtered out
-        // when disabled (see ServiceManager startup-order filter).
+        // pools dependency is an ordering hint only and is filtered out when
+        // disabled (see ServiceManager startup-order filter).
         crate::global::is_explore_or_full()
     }
 

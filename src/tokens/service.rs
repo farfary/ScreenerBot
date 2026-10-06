@@ -207,7 +207,7 @@ impl Service for TokensServiceNew {
     }
 
     fn dependencies(&self) -> Vec<&'static str> {
-        vec!["events", "transactions", "pools"]
+        vec!["events", "pools"]
     }
 
     async fn initialize(&mut self) -> crate::Result<()> {

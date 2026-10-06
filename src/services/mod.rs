@@ -191,7 +191,7 @@ impl ServiceManager {
         );
         log_service_startup_phase("begin", Some(&begin_details));
 
-        // Resolve dependencies and order by priority
+        // Resolve the dependency-first startup order
         let mut ordered = self.resolve_startup_order(&enabled_services)?;
 
         // resolve_startup_order pulls in declared dependencies transitively, even
@@ -365,7 +365,7 @@ impl ServiceManager {
             ),
         );
 
-        // Resolve dependencies and order by priority (includes dependency checking)
+        // Resolve the dependency-first startup order (includes dependency checking)
         let mut ordered = match self.resolve_startup_order(&to_start) {
             Ok(order) => order,
             Err(e) => {
@@ -520,7 +520,7 @@ impl ServiceManager {
         crate::global::is_initialization_complete()
     }
 
-    /// Stop all services in reverse priority order
+    /// Stop all services in reverse startup order
     pub async fn stop_all(&mut self) -> crate::Result<()> {
         let running_services: Vec<&'static str> = self.handles.keys().copied().collect();
         let shutdown_begin = format!("running={} debug_system=on", running_services.len());
@@ -633,65 +633,86 @@ impl ServiceManager {
         Ok(())
     }
 
-    /// Resolve service startup order with dependency validation
+    /// Resolve the startup order of `services` and every registered service they
+    /// depend on, transitively.
+    ///
+    /// The order is topological: a service is placed only after all of its
+    /// registered dependencies. Among the services whose dependencies are all
+    /// placed, the lowest `priority()` goes first and the name breaks ties, so the
+    /// result is deterministic regardless of registration order. A dependency on
+    /// an unregistered name is ignored here (`validate_dependencies` warns about
+    /// it). A cycle is a `ServiceError::Dependency`.
     fn resolve_startup_order(&self, services: &[&'static str]) -> crate::Result<Vec<&'static str>> {
-        use std::collections::HashSet;
+        use std::collections::{BTreeSet, HashSet};
 
-        // First, validate all dependencies exist
         self.validate_dependencies(services)?;
 
-        let mut ordered = Vec::new();
-        let mut visited = HashSet::new();
-        let mut visiting = HashSet::new();
-
-        fn visit<'a>(
-            name: &'static str,
-            services: &'a HashMap<&'static str, Box<dyn Service>>,
-            ordered: &mut Vec<&'static str>,
-            visited: &mut HashSet<&'static str>,
-            visiting: &mut HashSet<&'static str>,
-        ) -> crate::Result<()> {
-            if visited.contains(name) {
-                return Ok(());
+        // Requested services plus their registered dependencies, each with its
+        // distinct registered dependencies.
+        let mut dependencies: HashMap<&'static str, HashSet<&'static str>> = HashMap::new();
+        let mut pending: Vec<&'static str> = services
+            .iter()
+            .copied()
+            .filter(|name| self.services.contains_key(name))
+            .collect();
+        while let Some(name) = pending.pop() {
+            if dependencies.contains_key(name) {
+                continue;
             }
+            let declared: HashSet<&'static str> = self
+                .services
+                .get(name)
+                .map(|service| service.dependencies())
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|dep| self.services.contains_key(dep))
+                .collect();
+            pending.extend(declared.iter().copied());
+            dependencies.insert(name, declared);
+        }
 
-            if visiting.contains(name) {
-                return Err(crate::Error::Service(
-                    crate::errors::ServiceError::Dependency {
-                        service: name.to_string(),
-                        dependency: "circular".to_owned(),
-                        message: format!("Circular dependency detected for service: {name}"),
-                    },
-                ));
+        let priority = |name: &str| self.services.get(name).map_or(100, |s| s.priority());
+        let mut dependents: HashMap<&'static str, Vec<&'static str>> = HashMap::new();
+        let mut unmet: HashMap<&'static str, usize> = HashMap::new();
+        let mut ready: BTreeSet<(i32, &'static str)> = BTreeSet::new();
+        for (&name, declared) in &dependencies {
+            unmet.insert(name, declared.len());
+            if declared.is_empty() {
+                ready.insert((priority(name), name));
             }
+            for &dep in declared {
+                dependents.entry(dep).or_default().push(name);
+            }
+        }
 
-            visiting.insert(name);
-
-            if let Some(service) = services.get(name) {
-                for dep in service.dependencies() {
-                    visit(dep, services, ordered, visited, visiting)?;
+        let mut ordered = Vec::with_capacity(dependencies.len());
+        while let Some((_, name)) = ready.pop_first() {
+            ordered.push(name);
+            for &dependent in dependents.get(name).into_iter().flatten() {
+                if let Some(count) = unmet.get_mut(dependent) {
+                    *count -= 1;
+                    if *count == 0 {
+                        ready.insert((priority(dependent), dependent));
+                    }
                 }
             }
-
-            visiting.remove(name);
-            visited.insert(name);
-            ordered.push(name);
-
-            Ok(())
         }
 
-        for &service_name in services {
-            visit(
-                service_name,
-                &self.services,
-                &mut ordered,
-                &mut visited,
-                &mut visiting,
-            )?;
+        if ordered.len() < dependencies.len() {
+            let mut blocked: Vec<&'static str> = unmet
+                .into_iter()
+                .filter(|(_, count)| *count > 0)
+                .map(|(name, _)| name)
+                .collect();
+            blocked.sort_unstable();
+            return Err(crate::Error::Service(
+                crate::errors::ServiceError::Dependency {
+                    service: blocked.first().copied().unwrap_or_default().to_owned(),
+                    dependency: "circular".to_owned(),
+                    message: format!("Circular dependency among services: {}", blocked.join(", ")),
+                },
+            ));
         }
-
-        // Sort by priority
-        ordered.sort_by_key(|name| self.services.get(name).map(|s| s.priority()).unwrap_or(100));
 
         Ok(ordered)
     }

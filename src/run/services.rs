@@ -31,7 +31,7 @@ pub fn register_all_services(manager: &mut ServiceManager) {
     manager.register(Box::new(CopyTradingService));
     manager.register(Box::new(SolPriceService));
 
-    // Pool services: the price cache and database, then the pricing pipeline
+    // Pool services: the price cache and database, and the pricing pipeline
     manager.register(Box::new(PoolPricingService));
     manager.register(Box::new(PoolsService));
 

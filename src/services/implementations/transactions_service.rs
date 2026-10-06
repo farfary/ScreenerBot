@@ -22,7 +22,10 @@ impl Service for TransactionsService {
     }
 
     fn dependencies(&self) -> Vec<&'static str> {
-        vec![]
+        // The start-time bootstrap rebuilds wallet-history positions, which writes
+        // the positions database and reads token symbols and decimals from the
+        // token database; both are opened by these services.
+        vec!["positions", "tokens"]
     }
 
     fn is_enabled(&self) -> bool {

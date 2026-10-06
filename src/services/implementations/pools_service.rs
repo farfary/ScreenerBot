@@ -20,12 +20,13 @@ impl Service for PoolsService {
     }
 
     fn priority(&self) -> i32 {
-        30 // Before pool sub-services (31-34) - must initialize components first
+        30
     }
 
     fn dependencies(&self) -> Vec<&'static str> {
-        // Only depends on transactions (components need to be initialized before sub-services start)
-        vec!["transactions"]
+        // Initialization loads price history and warms the cache for the mints of
+        // open positions, which the positions service loads.
+        vec!["positions"]
     }
 
     fn is_enabled(&self) -> bool {
