@@ -77,7 +77,7 @@ const MAX_CONSECUTIVE_ERRORS: u32 = 10;
 
 /// Cached SOL price data with metadata
 #[derive(Debug, Clone)]
-pub struct SolPriceData {
+pub struct NativePriceData {
     pub price_usd: f64,
     pub last_updated: Instant,
     pub is_valid: bool,
@@ -86,7 +86,7 @@ pub struct SolPriceData {
     pub error_count: u64,
 }
 
-impl Default for SolPriceData {
+impl Default for NativePriceData {
     fn default() -> Self {
         Self {
             price_usd: 0.0,
@@ -99,7 +99,7 @@ impl Default for SolPriceData {
     }
 }
 
-impl SolPriceData {
+impl NativePriceData {
     /// Check if cached price is still fresh
     pub fn is_fresh(&self) -> bool {
         self.is_valid && self.last_updated.elapsed().as_secs() < CACHE_EXPIRY_SECS
@@ -116,8 +116,8 @@ impl SolPriceData {
 // =============================================================================
 
 /// Global SOL price cache with thread-safe access
-static SOL_PRICE_CACHE: LazyLock<Arc<StdRwLock<SolPriceData>>> =
-    LazyLock::new(|| Arc::new(StdRwLock::new(SolPriceData::default())));
+static NATIVE_PRICE_CACHE: LazyLock<Arc<StdRwLock<NativePriceData>>> =
+    LazyLock::new(|| Arc::new(StdRwLock::new(NativePriceData::default())));
 
 /// Service status tracking
 static SERVICE_RUNNING: LazyLock<Arc<std::sync::atomic::AtomicBool>> =
@@ -150,8 +150,8 @@ async fn fetch_jupiter_fallback() -> Result<f64, Error> {
 
 /// Get current SOL price in USD
 /// Returns cached price if available and fresh, otherwise returns 0.0
-pub fn get_sol_price() -> f64 {
-    match SOL_PRICE_CACHE.read() {
+pub fn get_native_price() -> f64 {
+    match NATIVE_PRICE_CACHE.read() {
         Ok(cache) => {
             if cache.is_fresh() {
                 cache.price_usd
@@ -181,8 +181,8 @@ pub fn get_sol_price() -> f64 {
 }
 
 /// Get detailed SOL price information including metadata
-pub fn get_sol_price_info() -> Option<SolPriceData> {
-    match SOL_PRICE_CACHE.read() {
+pub fn get_native_price_info() -> Option<NativePriceData> {
+    match NATIVE_PRICE_CACHE.read() {
         Ok(cache) => Some(cache.clone()),
         Err(e) => {
             logger::error(
@@ -195,19 +195,19 @@ pub fn get_sol_price_info() -> Option<SolPriceData> {
 }
 
 /// Check if SOL price service is running
-pub fn is_sol_price_service_running() -> bool {
+pub fn is_native_price_service_running() -> bool {
     SERVICE_RUNNING.load(std::sync::atomic::Ordering::SeqCst)
 }
 
 /// Manually fetch and cache SOL price (useful for debug tools)
 /// Returns the fetched price on success
-pub async fn fetch_and_cache_sol_price() -> Result<f64, Error> {
-    let (price, source) = fetch_sol_price().await?;
+pub async fn fetch_and_cache_native_price() -> Result<f64, Error> {
+    let (price, source) = fetch_native_price().await?;
 
     // Update cache
-    match SOL_PRICE_CACHE.write() {
+    match NATIVE_PRICE_CACHE.write() {
         Ok(mut cache) => {
-            *cache = SolPriceData {
+            *cache = NativePriceData {
                 price_usd: price,
                 last_updated: Instant::now(),
                 source: format!("{source} (manual)"),
@@ -231,7 +231,7 @@ pub async fn fetch_and_cache_sol_price() -> Result<f64, Error> {
 /// Start the SOL price service
 ///
 /// Returns JoinHandle so ServiceManager can wait for graceful shutdown.
-pub async fn start_sol_price_service(
+pub async fn start_native_price_service(
     shutdown: Arc<Notify>,
     monitor: tokio_metrics::TaskMonitor,
 ) -> Result<tokio::task::JoinHandle<()>, Error> {
@@ -242,7 +242,7 @@ pub async fn start_sol_price_service(
 
     // Spawn the background task and return handle
     let handle = tokio::spawn(monitor.instrument(async move {
-        sol_price_task(shutdown).await;
+        native_price_task(shutdown).await;
     }));
 
     logger::info(LogTag::SolPrice, "SOL price service started (instrumented)");
@@ -250,7 +250,7 @@ pub async fn start_sol_price_service(
 }
 
 /// Stop the SOL price service
-pub async fn stop_sol_price_service() {
+pub async fn stop_native_price_service() {
     logger::warning(LogTag::SolPrice, "Stopping SOL price service");
 
     // Mark service as stopped
@@ -264,14 +264,14 @@ pub async fn stop_sol_price_service() {
 // =============================================================================
 
 /// Main SOL price monitoring task
-async fn sol_price_task(shutdown: Arc<Notify>) {
+async fn native_price_task(shutdown: Arc<Notify>) {
     logger::info(LogTag::SolPrice, "SOL price monitoring task started");
 
     let mut price_interval = interval(Duration::from_secs(PRICE_REFRESH_INTERVAL_SECS));
     let mut consecutive_errors = 0u32;
 
     // Initial price fetch
-    fetch_and_update_sol_price(&mut consecutive_errors).await;
+    fetch_and_update_native_price(&mut consecutive_errors).await;
 
     loop {
         tokio::select! {
@@ -281,13 +281,13 @@ async fn sol_price_task(shutdown: Arc<Notify>) {
              }
              _ = price_interval.tick() => {
                // Check if service should still be running
-               if !is_sol_price_service_running() {
+               if !is_native_price_service_running() {
         logger::info(LogTag::SolPrice, "SOL price service marked as stopped, exiting task");
                  break;
                }
 
                // Fetch new price data
-               fetch_and_update_sol_price(&mut consecutive_errors).await;
+               fetch_and_update_native_price(&mut consecutive_errors).await;
 
                // If too many consecutive errors, increase interval
                if consecutive_errors >= MAX_CONSECUTIVE_ERRORS {
@@ -314,7 +314,7 @@ async fn sol_price_task(shutdown: Arc<Notify>) {
 // =============================================================================
 
 /// Fetch SOL price from Jupiter API and update cache
-async fn fetch_and_update_sol_price(consecutive_errors: &mut u32) {
+async fn fetch_and_update_native_price(consecutive_errors: &mut u32) {
     // Skip the refresh entirely while the internet is confirmed offline: all
     // three price sources are unreachable, so this would only time out on DNS.
     // The cached price stays (callers already handle staleness); we resume on
@@ -328,7 +328,7 @@ async fn fetch_and_update_sol_price(consecutive_errors: &mut u32) {
         "Fetching SOL price (DexScreener -> GeckoTerminal -> Jupiter)",
     );
 
-    match fetch_sol_price().await {
+    match fetch_native_price().await {
         Ok((price, source)) => {
             if validate_price_change(price) {
                 update_price_cache(price, source.to_owned(), true).await;
@@ -371,7 +371,7 @@ async fn fetch_and_update_sol_price(consecutive_errors: &mut u32) {
 /// Fetch SOL/USD using the source cascade: DexScreener -> GeckoTerminal -> Jupiter.
 /// Returns `(price_usd, source_label)`. Each source is tried in order; on failure
 /// the next is used so a single provider's outage/rate-limit never blocks trading.
-async fn fetch_sol_price() -> Result<(f64, &'static str), Error> {
+async fn fetch_native_price() -> Result<(f64, &'static str), Error> {
     let mut errors: Vec<String> = Vec::new();
 
     match fetch_from_dexscreener().await {
@@ -549,7 +549,7 @@ fn validate_price_change(new_price: f64) -> bool {
     }
 
     // Get current cached price for comparison
-    if let Ok(cache) = SOL_PRICE_CACHE.read() {
+    if let Ok(cache) = NATIVE_PRICE_CACHE.read() {
         if cache.is_valid && cache.price_usd > 0.0 {
             let change_percent = ((new_price - cache.price_usd) / cache.price_usd).abs() * 100.0;
             if change_percent > MAX_PRICE_CHANGE_PERCENT {
@@ -563,7 +563,7 @@ fn validate_price_change(new_price: f64) -> bool {
 
 /// Update the price cache with new data
 async fn update_price_cache(price: f64, source: String, is_valid: bool) {
-    if let Ok(mut cache) = SOL_PRICE_CACHE.write() {
+    if let Ok(mut cache) = NATIVE_PRICE_CACHE.write() {
         cache.price_usd = price;
         cache.last_updated = Instant::now();
         cache.is_valid = is_valid;
@@ -581,14 +581,14 @@ async fn update_price_cache(price: f64, source: String, is_valid: bool) {
 
 /// Increment error count in cache
 async fn update_error_count() {
-    if let Ok(mut cache) = SOL_PRICE_CACHE.write() {
+    if let Ok(mut cache) = NATIVE_PRICE_CACHE.write() {
         cache.error_count += 1;
     }
 }
 
 /// Mark cache as invalid (but preserve last price)
 async fn invalidate_cache() {
-    if let Ok(mut cache) = SOL_PRICE_CACHE.write() {
+    if let Ok(mut cache) = NATIVE_PRICE_CACHE.write() {
         cache.is_valid = false;
         logger::warning(
             LogTag::SolPrice,
@@ -602,8 +602,8 @@ async fn invalidate_cache() {
 // =============================================================================
 
 /// Get SOL price service statistics for debugging
-pub fn get_sol_price_stats() -> String {
-    match SOL_PRICE_CACHE.read() {
+pub fn get_native_price_stats() -> String {
+    match NATIVE_PRICE_CACHE.read() {
         Ok(cache) => {
             format!(
         "SOL Price Stats: ${:.4} | Age: {}s | Valid: {} | Source: {} | Fetches: {} | Errors: {} | Running: {}",
@@ -613,7 +613,7 @@ pub fn get_sol_price_stats() -> String {
         cache.source,
         cache.fetch_count,
         cache.error_count,
-        is_sol_price_service_running()
+        is_native_price_service_running()
       )
         }
         Err(_) => "SOL Price Stats: Cache lock error".to_owned(),
@@ -621,13 +621,13 @@ pub fn get_sol_price_stats() -> String {
 }
 
 /// Force refresh SOL price (for manual testing)
-pub async fn force_refresh_sol_price() -> Result<f64, Error> {
+pub async fn force_refresh_native_price() -> Result<f64, Error> {
     logger::info(LogTag::SolPrice, "Force refreshing SOL price");
 
     let mut consecutive_errors = 0u32;
-    fetch_and_update_sol_price(&mut consecutive_errors).await;
+    fetch_and_update_native_price(&mut consecutive_errors).await;
 
-    let price = get_sol_price();
+    let price = get_native_price();
     if price > 0.0 {
         Ok(price)
     } else {

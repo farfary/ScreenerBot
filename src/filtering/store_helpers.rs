@@ -183,10 +183,10 @@ pub(super) fn sort_tokens(
             TokenSortKey::PriceSol => {
                 // Use real-time pool price for sorting if available
                 let price_a = pools::get_pool_price(&a.mint)
-                    .map(|p| p.price_sol)
+                    .map(|p| p.price_native)
                     .unwrap_or(a.price_sol);
                 let price_b = pools::get_pool_price(&b.mint)
-                    .map(|p| p.price_sol)
+                    .map(|p| p.price_native)
                     .unwrap_or(b.price_sol);
                 cmp_f64(Some(price_a), Some(price_b))
             }
@@ -258,7 +258,7 @@ pub(super) fn overlay_pool_price_data(tokens: &mut [Token]) {
     for token in tokens.iter_mut() {
         if let Some(price_result) = pools::get_pool_price(&token.mint) {
             let old_price = token.price_sol;
-            let new_price = price_result.price_sol;
+            let new_price = price_result.price_native;
             token.price_sol = new_price;
 
             let age_duration = price_result.timestamp.elapsed();

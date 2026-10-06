@@ -295,7 +295,7 @@ pub async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionD
         let price_unix_time = now_unix - (age_seconds as i64);
 
         PriceData {
-            pool_price_sol: price_result.price_sol,
+            pool_price_sol: price_result.price_native,
             pool_price_usd: None,
             confidence: price_result.confidence,
             last_updated: price_unix_time,
@@ -334,9 +334,9 @@ pub async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionD
                 .as_ref()
                 .unwrap_or(&"Unknown".to_owned())
                 .clone(),
-            sol_reserves: price_result.sol_reserves,
+            sol_reserves: price_result.native_reserves,
             token_reserves: price_result.token_reserves,
-            price_sol: price_result.price_sol,
+            price_sol: price_result.price_native,
             confidence: price_result.confidence,
             last_updated: price_unix_time,
         });

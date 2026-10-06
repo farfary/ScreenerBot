@@ -73,7 +73,7 @@ pub(super) async fn force_close_position(
 
     // 3. Try to get current price for the exit_price field (best-effort)
     let exit_price = pools::get_pool_price(&mint)
-        .map(|pr| pr.price_sol)
+        .map(|pr| pr.price_native)
         .filter(|p| *p > 0.0 && p.is_finite())
         .or(position.current_price)
         .unwrap_or(0.0);

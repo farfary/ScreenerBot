@@ -20,7 +20,7 @@ use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 
 /// Convert API pool data to our DexScreenerData type
-fn convert_pool_to_data(pool: &DexScreenerPool, is_sol_pair: bool) -> DexScreenerData {
+fn convert_pool_to_data(pool: &DexScreenerPool, is_native_pair: bool) -> DexScreenerData {
     fn parse_f64(value: &str) -> Option<f64> {
         value.parse::<f64>().ok()
     }
@@ -35,7 +35,7 @@ fn convert_pool_to_data(pool: &DexScreenerPool, is_sol_pair: bool) -> DexScreene
     let price_usd = parse_f64(&pool.price_usd).unwrap_or_default();
 
     // Calculate price_sol based on pool type
-    let price_sol = if is_sol_pair {
+    let price_sol = if is_native_pair {
         // For SOL-paired pools, priceNative IS the SOL price
         parse_f64(&pool.price_native).unwrap_or_default()
     } else {
@@ -43,9 +43,9 @@ fn convert_pool_to_data(pool: &DexScreenerPool, is_sol_pair: bool) -> DexScreene
         // priceNative here is denominated in the quote token (e.g. USDC), NOT SOL — using it as
         // a fallback would emit a USDC value mislabelled as SOL and corrupt P&L/quotes. When the
         // SOL price is unavailable we leave price_sol at 0.0 so downstream treats it as unpriced.
-        let sol_price = crate::sol_price::get_sol_price();
-        if sol_price > 0.0 {
-            price_usd / sol_price
+        let native_price = crate::native_price::get_native_price();
+        if native_price > 0.0 {
+            price_usd / native_price
         } else {
             0.0
         }
@@ -237,8 +237,8 @@ pub async fn fetch_dexscreener_data_batch(
             continue;
         }
 
-        let is_sol_pair = crate::chains::adapter().is_native_asset(&pool.quote_token_address);
-        let data = convert_pool_to_data(&pool, is_sol_pair);
+        let is_native_pair = crate::chains::adapter().is_native_asset(&pool.quote_token_address);
+        let data = convert_pool_to_data(&pool, is_native_pair);
 
         // Store market data in database
         if let Err(e) = db.upsert_dexscreener_data(mint, &data) {

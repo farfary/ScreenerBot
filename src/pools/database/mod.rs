@@ -9,6 +9,7 @@
 
 // Sub-modules
 mod blacklist;
+mod column_names;
 mod global;
 mod migrations;
 mod operations;

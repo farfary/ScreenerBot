@@ -216,8 +216,8 @@ impl PoolDecoder for RaydiumClmmDecoder {
         Some(PriceResult {
             mint: token_mint,
             price_usd: 0.0, // We don't calculate USD prices, only SOL
-            price_sol,
-            sol_reserves,
+            price_native: price_sol,
+            native_reserves: sol_reserves,
             token_reserves,
             confidence: 0.9,
             source_pool: Some("RAYDIUM_CLMM".to_owned()),

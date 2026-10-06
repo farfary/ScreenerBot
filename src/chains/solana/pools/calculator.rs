@@ -234,8 +234,8 @@ impl PriceCalculator {
                                         serde_json::json!({
                                             "pool_id": pool_id.to_string(),
                                             "token_mint": token_mint,
-                                            "price_sol": price_result.price_sol,
-                                            "sol_reserves": price_result.sol_reserves,
+                                            "price_sol": price_result.price_native,
+                                            "sol_reserves": price_result.native_reserves,
                                             "token_reserves": price_result.token_reserves,
                                             "duration_ms": calculation_duration.as_millis(),
                                             "program_kind": pool_descriptor.program_kind.as_str()
@@ -248,7 +248,7 @@ impl PriceCalculator {
                                             "Calculated price for token {} in pool {}: {} SOL",
                                             price_result.mint,
                                             pool_id,
-                                            price_result.price_sol
+                                            price_result.price_native
                                         ),
                                     );
                                 } else if let Some(error) = result.error {
@@ -489,7 +489,7 @@ impl PriceCalculator {
         let mut confidence = 1.0f32;
 
         // Check for invalid reserves first
-        if !price_result.sol_reserves.is_finite() {
+        if !price_result.native_reserves.is_finite() {
             confidence = 0.0;
         }
 
@@ -503,9 +503,9 @@ impl PriceCalculator {
         }
 
         // Reduce confidence for very low liquidity (less than 1 SOL)
-        if price_result.sol_reserves < 1.0 {
+        if price_result.native_reserves < 1.0 {
             confidence *= 0.5;
-        } else if price_result.sol_reserves < 10.0 {
+        } else if price_result.native_reserves < 10.0 {
             confidence *= 0.8;
         }
 

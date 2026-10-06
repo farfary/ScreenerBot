@@ -94,7 +94,7 @@ async fn flush_write_buffer(
                 .prepare(
                     "INSERT OR REPLACE INTO price_history 
            (chain_id, mint, pool_address, price_usd, price_sol, confidence, slot,
-           timestamp_unix, sol_reserves, token_reserves, source_pool, created_at) 
+           timestamp_unix, native_reserves, token_reserves, source_pool, created_at) 
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 )
                 .map_err(|e| format!("Failed to prepare price history insert: {e}"))?;
@@ -112,7 +112,7 @@ async fn flush_write_buffer(
                         db_price.confidence,
                         db_price.slot,
                         db_price.timestamp_unix,
-                        db_price.sol_reserves,
+                        db_price.native_reserves,
                         db_price.token_reserves,
                         db_price.source_pool,
                         db_price.created_at.to_rfc3339()

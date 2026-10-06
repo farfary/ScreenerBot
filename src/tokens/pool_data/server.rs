@@ -43,7 +43,7 @@ pub async fn fetch_pools_from_server(mint: &str) -> Option<Vec<TokenPoolInfo>> {
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();
-        let is_sol_pair = p
+        let is_native_pair = p
             .get("is_sol_pair")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
@@ -53,7 +53,7 @@ pub async fn fetch_pools_from_server(mint: &str) -> Option<Vec<TokenPoolInfo>> {
             dex,
             base_mint: mint.to_string(),
             quote_mint,
-            is_sol_pair,
+            is_native_pair,
             liquidity_usd,
             pool_data_last_fetched_at: now,
             pool_data_first_seen_at: now,

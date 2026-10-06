@@ -10,7 +10,7 @@
 mod common;
 
 use screenerbot::apis::{DexScreenerClient, RugcheckClient};
-use screenerbot::sol_price::fetch_and_cache_sol_price;
+use screenerbot::native_price::fetch_and_cache_native_price;
 
 const WSOL: &str = "So11111111111111111111111111111111111111112";
 const USDC: &str = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
@@ -19,7 +19,7 @@ const USDC: &str = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 #[ignore = "live network"]
 async fn sol_price_fetches_a_plausible_value() {
     let _guard = common::isolated_env();
-    let price = fetch_and_cache_sol_price()
+    let price = fetch_and_cache_native_price()
         .await
         .expect("live SOL price fetch should succeed");
     assert!(

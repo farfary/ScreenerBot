@@ -274,7 +274,7 @@ impl PoolsDatabase {
             let mut stmt = conn
                 .prepare(
                     "SELECT id, chain_id, mint, pool_address, price_usd, price_sol, confidence, slot,
-               timestamp_unix, sol_reserves, token_reserves, source_pool, created_at
+               timestamp_unix, native_reserves, token_reserves, source_pool, created_at
          FROM price_history
          WHERE chain_id = ? AND mint = ?
          ORDER BY timestamp_unix DESC
@@ -324,7 +324,7 @@ impl PoolsDatabase {
             if let Some(ts) = since_timestamp {
                 let query = format!(
                     "SELECT id, chain_id, mint, pool_address, price_usd, price_sol, confidence, slot,
-               timestamp_unix, sol_reserves, token_reserves, source_pool, created_at
+               timestamp_unix, native_reserves, token_reserves, source_pool, created_at
          FROM price_history
          WHERE chain_id = ? AND mint = ? AND timestamp_unix >= ?
          ORDER BY timestamp_unix DESC
@@ -346,7 +346,7 @@ impl PoolsDatabase {
             } else {
                 let query = format!(
                     "SELECT id, chain_id, mint, pool_address, price_usd, price_sol, confidence, slot,
-               timestamp_unix, sol_reserves, token_reserves, source_pool, created_at
+               timestamp_unix, native_reserves, token_reserves, source_pool, created_at
          FROM price_history
          WHERE chain_id = ? AND mint = ?
          ORDER BY timestamp_unix DESC
@@ -623,7 +623,7 @@ mod tests {
                 .get()
                 .expect("checkout test connection");
             conn.execute(
-                "INSERT INTO price_history (chain_id, mint, pool_address, price_usd, price_sol, confidence, slot, timestamp_unix, sol_reserves, token_reserves, created_at)
+                "INSERT INTO price_history (chain_id, mint, pool_address, price_usd, price_sol, confidence, slot, timestamp_unix, native_reserves, token_reserves, created_at)
                  VALUES ('ethereum', 'mint', 'pool', 1.0, 9.0, 1.0, 8, 20, 3.0, 4.0, '2026-01-01T00:00:20Z')",
                 [],
             )
@@ -640,7 +640,7 @@ mod tests {
             .await
             .expect("read solana history");
         assert_eq!(history.len(), 1);
-        assert_eq!(history[0].price_sol, 2.0);
+        assert_eq!(history[0].price_native, 2.0);
         let pools = db
             .list_blacklisted_pools(
                 None,

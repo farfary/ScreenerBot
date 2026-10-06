@@ -400,8 +400,8 @@ impl PoolDecoder for MeteoraDammDecoder {
         Some(PriceResult {
             mint: token_mint,
             price_usd: 0.0, // We don't calculate USD prices, only SOL
-            price_sol: oriented_price_sol,
-            sol_reserves: sol_reserves_display,
+            price_native: oriented_price_sol,
+            native_reserves: sol_reserves_display,
             token_reserves: token_reserves_display,
             confidence: 0.9,
             source_pool: Some("METEORA_DAMM_Q64_CANON".to_owned()),

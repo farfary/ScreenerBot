@@ -331,13 +331,13 @@ impl PumpFunAmmDecoder {
         Some(PriceResult {
             mint: target_mint,
             price_usd: 0.0, // We don't calculate USD price here
-            price_sol,
+            price_native: price_sol,
             confidence: 0.9, // High confidence for PumpFun pools
             source_pool: Some("PumpFun".to_owned()),
             pool_address: pool_account.to_string(),
             slot: 0, // Would need to be passed from the calling context
             timestamp: Instant::now(),
-            sol_reserves: sol_adjusted,
+            native_reserves: sol_adjusted,
             token_reserves: token_adjusted,
         })
     }

@@ -277,7 +277,7 @@ pub struct PoolConfig {
     /// GeckoTerminal `currency=token` (that returns USD candles that poison the
     /// SOL-denominated series); the SOL-forcing sources (data server, SolanaTracker)
     /// are used instead. Defaults to true (legacy rows / unknown = assume SOL).
-    pub is_sol_pair: bool,
+    pub is_native_pair: bool,
     pub last_successful_fetch: Option<DateTime<Utc>>,
     pub failure_count: u32,
 }
@@ -289,7 +289,7 @@ impl PoolConfig {
             dex,
             liquidity,
             is_default: false,
-            is_sol_pair: true,
+            is_native_pair: true,
             last_successful_fetch: None,
             failure_count: 0,
         }

@@ -355,7 +355,7 @@ async fn a_legacy_token_database_opens_instead_of_killing_the_launch() {
         )
         .expect("seed the foreign-key parent");
         conn.execute(
-            "INSERT INTO token_pools (mint, pool_address, base_mint, quote_mint, is_sol_pair, \
+            "INSERT INTO token_pools (mint, pool_address, base_mint, quote_mint, is_native_pair, \
              pool_data_last_fetched_at, pool_data_first_seen_at) \
              VALUES ('LEGACY_MINT', 'POOL', 'LEGACY_MINT', \
              'So11111111111111111111111111111111111111112', 1, 1, 1)",

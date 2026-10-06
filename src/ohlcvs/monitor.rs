@@ -1222,7 +1222,7 @@ impl OhlcvMonitor {
             .series_pool(mint)
             .await?
             .ok_or_else(|| OhlcvError::PoolNotFound(mint.to_string()))?;
-        let (pool_address, pool_is_sol) = (pool.address, pool.is_sol_pair);
+        let (pool_address, pool_is_native) = (pool.address, pool.is_native_pair);
 
         // Fetch 1-minute data (base timeframe) with multi-source fallback, sized to
         // reach back to the newest stored 1m candle.
@@ -1238,7 +1238,7 @@ impl OhlcvMonitor {
                 "minute",
                 1,
                 batch_size,
-                pool_is_sol,
+                pool_is_native,
                 None,
             )
             .await;
@@ -2033,7 +2033,7 @@ impl OhlcvMonitor {
             sleep(inter_fetch_delay(priority)).await;
             match self
                 .gap_manager
-                .fill_span(mint, &pool.address, pool.is_sol_pair, &span)
+                .fill_span(mint, &pool.address, pool.is_native_pair, &span)
                 .await
             {
                 Ok(fill) => {
@@ -2568,7 +2568,7 @@ impl OhlcvMonitor {
             ),
         );
 
-        let pool_is_sol = self.pool_is_sol(mint, pool_address);
+        let pool_is_native = self.pool_is_native(mint, pool_address);
 
         let stored_newest = self
             .db
@@ -2583,7 +2583,7 @@ impl OhlcvMonitor {
                 api_endpoint,
                 aggregate,
                 limit,
-                pool_is_sol,
+                pool_is_native,
                 None,
             )
             .await
@@ -2668,7 +2668,7 @@ impl OhlcvMonitor {
 
     /// The pool's denomination, so a USD-quoted pool skips GeckoTerminal (see
     /// `fetch_multi_source`). Unknown/missing rows default to SOL.
-    fn pool_is_sol(&self, mint: &str, pool_address: &str) -> bool {
+    fn pool_is_native(&self, mint: &str, pool_address: &str) -> bool {
         self.db
             .get_pools(mint)
             .ok()
@@ -2676,7 +2676,7 @@ impl OhlcvMonitor {
                 pools
                     .into_iter()
                     .find(|p| p.address == pool_address)
-                    .map(|p| p.is_sol_pair)
+                    .map(|p| p.is_native_pair)
             })
             .unwrap_or(true)
     }

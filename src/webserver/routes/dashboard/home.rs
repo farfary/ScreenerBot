@@ -165,7 +165,7 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
         start_of_day_balance_sol,
         change_sol,
         change_percent,
-        sol_price_usd: crate::sol_price::get_sol_price(),
+        sol_price_usd: crate::native_price::get_native_price(),
         balance_history,
     };
 

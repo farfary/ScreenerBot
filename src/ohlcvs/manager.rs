@@ -200,15 +200,15 @@ impl PoolManager {
             .collect();
 
         let mut discovered_configs = Vec::new();
-        let mut non_sol_configs = Vec::new();
+        let mut non_native_configs = Vec::new();
 
         for pool in snapshot.pools.iter() {
             let existing = existing_map.remove(&pool.pool_address);
             let config = Self::merge_pool_info(pool, canonical_address.as_deref(), existing);
-            if pool.is_sol_pair {
+            if pool.is_native_pair {
                 discovered_configs.push(config);
             } else {
-                non_sol_configs.push(config);
+                non_native_configs.push(config);
             }
         }
 
@@ -217,11 +217,11 @@ impl PoolManager {
         // and never chart it — but the data server (and SolanaTracker) return
         // SOL-denominated candles for ANY pool by forcing SOL on the paid path, so
         // we CAN chart it. Register the best USD pool as a fallback; the fetcher
-        // then skips GeckoTerminal for it (is_sol_pair=false) to avoid pulling USD
+        // then skips GeckoTerminal for it (is_native_pair=false) to avoid pulling USD
         // candles that would poison the SOL series, and relies on the SOL-forcing
         // sources instead.
         if discovered_configs.is_empty() {
-            if non_sol_configs.is_empty() {
+            if non_native_configs.is_empty() {
                 record_ohlcv_event(
                     "pool_discovery_empty",
                     Severity::Warn,
@@ -243,10 +243,10 @@ impl PoolManager {
                     "No SOL pool for mint={}; registering best USD pool ({} candidates), \
                      OHLCV via SOL-forcing sources (server/SolanaTracker), Gecko skipped",
                     mint,
-                    non_sol_configs.len()
+                    non_native_configs.len()
                 ),
             );
-            discovered_configs = non_sol_configs;
+            discovered_configs = non_native_configs;
         }
 
         if !discovered_configs.iter().any(|cfg| cfg.is_default) {
@@ -314,7 +314,7 @@ impl PoolManager {
             json!({
                 "mint": mint,
                 "pools_found": discovered_configs.len(),
-                "sol_pool": discovered_configs.iter().any(|c| c.is_sol_pair),
+                "sol_pool": discovered_configs.iter().any(|c| c.is_native_pair),
                 "removed_pools": removed_addresses.len(),
                 "canonical_address": canonical_address,
             }),
@@ -353,7 +353,7 @@ impl PoolManager {
 
         // Carry the pool's SOL/USD denomination so the fetcher can avoid running
         // GeckoTerminal (USD) on a USD-quoted pool.
-        config.is_sol_pair = pool.is_sol_pair;
+        config.is_native_pair = pool.is_native_pair;
 
         if let Some(canonical_address) = canonical {
             config.is_default = canonical_address == config.address;

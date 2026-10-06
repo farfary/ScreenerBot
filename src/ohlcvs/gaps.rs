@@ -482,7 +482,7 @@ impl GapManager {
         &self,
         mint: &str,
         pool_address: &str,
-        pool_is_sol: bool,
+        pool_is_native: bool,
         span: &GapSpan,
     ) -> OhlcvResult<GapFill> {
         let request = plan_request(span, Utc::now().timestamp());
@@ -495,7 +495,7 @@ impl GapManager {
                 api_endpoint,
                 aggregate,
                 request.limit,
-                pool_is_sol,
+                pool_is_native,
                 request.before,
             )
             .await

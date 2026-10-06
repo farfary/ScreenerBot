@@ -8,8 +8,8 @@
 use crate::chains::solana::assets::ata::get_sol_balance;
 use crate::config::with_config;
 use crate::i18n::{ids, UiArg, UiText};
+use crate::native_price;
 use crate::positions;
-use crate::sol_price;
 use crate::telegram::formatters::{format_duration, format_mint_display, format_sol};
 use crate::telegram::text::{tg, tg_escape, tg_id, with_icon};
 use crate::version::VERSION;
@@ -137,7 +137,7 @@ pub async fn handle_balance_command() -> String {
         Err(e) => return with_icon("❌", &tg_escape(&e.to_string())),
     };
 
-    let sol_price_usd = sol_price::get_sol_price();
+    let sol_price_usd = native_price::get_native_price();
     let usd_value = sol_balance * sol_price_usd;
 
     format!(

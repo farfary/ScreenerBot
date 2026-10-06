@@ -43,7 +43,7 @@ static FORCE_FETCH_COOLDOWN: LazyLock<moka::sync::Cache<String, ()>> = LazyLock:
 pub async fn get_price_with_api_fallback(token_mint: &str) -> Option<(PriceResult, PriceSource)> {
     // Priority 1: Try pool price (real-time on-chain data)
     if let Some(price_result) = get_pool_price(token_mint) {
-        if price_result.price_sol > 0.0 && price_result.price_sol.is_finite() {
+        if price_result.price_native > 0.0 && price_result.price_native.is_finite() {
             return Some((price_result, PriceSource::Pool));
         }
     }
@@ -72,14 +72,14 @@ pub async fn get_price_with_api_fallback(token_mint: &str) -> Option<(PriceResul
                 // Convert Token API price to PriceResult
                 let price_result = PriceResult {
                     mint: token_mint.to_string(),
-                    price_sol: token.price_sol,
+                    price_native: token.price_sol,
                     price_usd: token.price_usd,
                     confidence: 0.8, // Lower confidence for API price vs on-chain
                     source_pool: Some("api".to_owned()),
                     pool_address: token.pool_price_last_used_pool.clone().unwrap_or_default(),
                     slot: 0,
                     timestamp: Instant::now(),
-                    sol_reserves: 0.0,
+                    native_reserves: 0.0,
                     token_reserves: 0.0,
                 };
 
@@ -98,7 +98,7 @@ pub async fn get_price_with_api_fallback(token_mint: &str) -> Option<(PriceResul
                 if let Some(fresh_token) = force_fetch_fresh_price(token_mint).await {
                     let price_result = PriceResult {
                         mint: token_mint.to_string(),
-                        price_sol: fresh_token.price_sol,
+                        price_native: fresh_token.price_sol,
                         price_usd: fresh_token.price_usd,
                         confidence: 0.8,
                         source_pool: Some("api_fresh".to_owned()),
@@ -108,7 +108,7 @@ pub async fn get_price_with_api_fallback(token_mint: &str) -> Option<(PriceResul
                             .unwrap_or_default(),
                         slot: 0,
                         timestamp: Instant::now(),
-                        sol_reserves: 0.0,
+                        native_reserves: 0.0,
                         token_reserves: 0.0,
                     };
 
@@ -137,7 +137,7 @@ pub async fn get_price_with_api_fallback(token_mint: &str) -> Option<(PriceResul
             if let Some(fresh_token) = force_fetch_fresh_price(token_mint).await {
                 let price_result = PriceResult {
                     mint: token_mint.to_string(),
-                    price_sol: fresh_token.price_sol,
+                    price_native: fresh_token.price_sol,
                     price_usd: fresh_token.price_usd,
                     confidence: 0.8,
                     source_pool: Some("api_fresh".to_owned()),
@@ -147,7 +147,7 @@ pub async fn get_price_with_api_fallback(token_mint: &str) -> Option<(PriceResul
                         .unwrap_or_default(),
                     slot: 0,
                     timestamp: Instant::now(),
-                    sol_reserves: 0.0,
+                    native_reserves: 0.0,
                     token_reserves: 0.0,
                 };
 

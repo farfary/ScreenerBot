@@ -424,13 +424,13 @@ pub struct TokenPoolInfo {
     pub dex: Option<String>,
     pub base_mint: String,
     pub quote_mint: String,
-    pub is_sol_pair: bool,
+    pub is_native_pair: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub liquidity_usd: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub liquidity_token: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub liquidity_sol: Option<f64>,
+    pub liquidity_native: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub volume_h24: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -453,10 +453,10 @@ impl Default for TokenPoolInfo {
             dex: None,
             base_mint: String::new(),
             quote_mint: String::new(),
-            is_sol_pair: false,
+            is_native_pair: false,
             liquidity_usd: None,
             liquidity_token: None,
-            liquidity_sol: None,
+            liquidity_native: None,
             volume_h24: None,
             price_usd: None,
             price_sol: None,

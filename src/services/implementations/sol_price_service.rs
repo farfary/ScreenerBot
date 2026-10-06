@@ -39,19 +39,21 @@ impl Service for SolPriceService {
         shutdown: Arc<Notify>,
         monitor: tokio_metrics::TaskMonitor,
     ) -> crate::Result<Vec<JoinHandle<()>>> {
-        let handle = crate::sol_price::start_sol_price_service(shutdown.clone(), monitor.clone())
-            .await
-            .map_err(|e| {
-                crate::Error::Service(crate::errors::ServiceError::Start {
-                    service: "sol_price".to_owned(),
-                    message: format!("Failed to start SOL price service: {e}"),
-                })
-            })?;
+        let handle =
+            crate::native_price::start_native_price_service(shutdown.clone(), monitor.clone())
+                .await
+                .map_err(|e| {
+                    crate::Error::Service(crate::errors::ServiceError::Start {
+                        service: "sol_price".to_owned(),
+                        message: format!("Failed to start SOL price service: {e}"),
+                    })
+                })?;
 
         // Also mirror the full SOL/USD reference chart from the data server so the
         // bot always has SOL's own price history (all timeframes) ready for display
         // and USDC->SOL conversion, prepared during runtime (never per request).
-        let chart_handle = crate::ohlcvs::sol_usd_chart::start(shutdown.clone(), monitor.clone());
+        let chart_handle =
+            crate::ohlcvs::native_usd_chart::start(shutdown.clone(), monitor.clone());
 
         // Return both handles so ServiceManager can wait for graceful shutdown.
         Ok(vec![handle, chart_handle])
@@ -59,14 +61,14 @@ impl Service for SolPriceService {
 
     async fn health(&self) -> ServiceHealth {
         // Check if service is running
-        if !crate::sol_price::is_sol_price_service_running() {
+        if !crate::native_price::is_native_price_service_running() {
             return ServiceHealth::Unhealthy(UiText::new(
                 ids::SERVICES_HEALTH_SOL_PRICE_NOT_RUNNING,
             ));
         }
 
         // Check if we have valid cached price data
-        match crate::sol_price::get_sol_price_info() {
+        match crate::native_price::get_native_price_info() {
             Some(info) => {
                 if info.is_fresh() {
                     ServiceHealth::Healthy

@@ -73,7 +73,7 @@ fn seed_all_token_tables(conn: &Connection) {
     )
     .expect("seed market_geckoterminal");
     conn.execute(
-        "INSERT INTO token_pools (chain_id, mint, pool_address, base_mint, quote_mint, is_sol_pair, pool_data_last_fetched_at, pool_data_first_seen_at) \
+        "INSERT INTO token_pools (chain_id, mint, pool_address, base_mint, quote_mint, is_native_pair, pool_data_last_fetched_at, pool_data_first_seen_at) \
          VALUES ('solana', 'TOKEN_MINT', 'POOL', 'TOKEN_MINT', 'So11111111111111111111111111111111111111112', 1, 1, 1)",
         [],
     )
@@ -232,13 +232,13 @@ fn token_pools_dex_column_survives_migration_unrewritten() {
         )
         .expect("seed tokens");
         conn.execute(
-            "INSERT INTO token_pools (chain_id, mint, pool_address, dex, base_mint, quote_mint, is_sol_pair, pool_data_last_fetched_at, pool_data_first_seen_at) \
+            "INSERT INTO token_pools (chain_id, mint, pool_address, dex, base_mint, quote_mint, is_native_pair, pool_data_last_fetched_at, pool_data_first_seen_at) \
              VALUES ('solana', 'TOKEN_MINT', 'POOL_A', 'METEORA DAMM v2', 'TOKEN_MINT', 'So11111111111111111111111111111111111111112', 1, 1, 1)",
             [],
         )
         .expect("seed pool with a label matching a historical ProgramKind display name");
         conn.execute(
-            "INSERT INTO token_pools (chain_id, mint, pool_address, dex, base_mint, quote_mint, is_sol_pair, pool_data_last_fetched_at, pool_data_first_seen_at) \
+            "INSERT INTO token_pools (chain_id, mint, pool_address, dex, base_mint, quote_mint, is_native_pair, pool_data_last_fetched_at, pool_data_first_seen_at) \
              VALUES ('solana', 'TOKEN_MINT', 'POOL_B', 'some_future_unlisted_dex', 'TOKEN_MINT', 'So11111111111111111111111111111111111111112', 1, 1, 1)",
             [],
         )

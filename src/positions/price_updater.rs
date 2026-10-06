@@ -277,7 +277,7 @@ async fn get_current_price(mint: &str) -> Option<(f64, PriceSource)> {
     let (price_result, source) =
         crate::positions::price_resolution::get_price_with_api_fallback(mint).await?;
 
-    if !(price_result.price_sol > 0.0 && price_result.price_sol.is_finite()) {
+    if !(price_result.price_native > 0.0 && price_result.price_native.is_finite()) {
         return None;
     }
 
@@ -293,7 +293,7 @@ async fn get_current_price(mint: &str) -> Option<(f64, PriceSource)> {
         }
     };
 
-    Some((price_result.price_sol, classified))
+    Some((price_result.price_native, classified))
 }
 
 #[cfg(test)]

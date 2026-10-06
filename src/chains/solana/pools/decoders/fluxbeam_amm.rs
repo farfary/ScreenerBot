@@ -196,8 +196,8 @@ impl PoolDecoder for FluxbeamAmmDecoder {
         Some(PriceResult {
             mint: token_mint,
             price_usd: 0.0, // We don't calculate USD prices, only SOL
-            price_sol,
-            sol_reserves: sol_adjusted,
+            price_native: price_sol,
+            native_reserves: sol_adjusted,
             token_reserves: token_adjusted,
             confidence: 0.9,
             source_pool: Some("FLUXBEAM_AMM".to_owned()),

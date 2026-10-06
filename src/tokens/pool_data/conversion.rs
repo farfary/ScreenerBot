@@ -32,7 +32,7 @@ pub fn from_dexscreener(pool: &DexScreenerPool) -> Option<TokenPoolInfo> {
     };
 
     let liquidity_token = pool.liquidity_base;
-    let liquidity_sol = if is_sol_mint(quote_mint) {
+    let liquidity_native = if is_sol_mint(quote_mint) {
         pool.liquidity_quote
     } else if is_sol_mint(base_mint) {
         pool.liquidity_base
@@ -54,10 +54,10 @@ pub fn from_dexscreener(pool: &DexScreenerPool) -> Option<TokenPoolInfo> {
         },
         base_mint: base_mint.to_string(),
         quote_mint: quote_mint.to_string(),
-        is_sol_pair: is_sol_mint(base_mint) || is_sol_mint(quote_mint),
+        is_native_pair: is_sol_mint(base_mint) || is_sol_mint(quote_mint),
         liquidity_usd: pool.liquidity_usd,
         liquidity_token,
-        liquidity_sol,
+        liquidity_native,
         volume_h24: pool.volume_h24,
         price_usd,
         price_sol,
@@ -93,7 +93,10 @@ mod tests {
 }
 
 /// Convert GeckoTerminal pool to TokenPoolInfo
-pub fn from_geckoterminal(pool: &GeckoTerminalPool, sol_price_usd: f64) -> Option<TokenPoolInfo> {
+pub fn from_geckoterminal(
+    pool: &GeckoTerminalPool,
+    native_price_usd: f64,
+) -> Option<TokenPoolInfo> {
     if pool.pool_address.trim().is_empty() {
         return None;
     }
@@ -107,7 +110,7 @@ pub fn from_geckoterminal(pool: &GeckoTerminalPool, sol_price_usd: f64) -> Optio
         return None;
     }
 
-    let is_sol_pair = is_sol_mint(&base_mint) || is_sol_mint(&quote_mint);
+    let is_native_pair = is_sol_mint(&base_mint) || is_sol_mint(&quote_mint);
 
     let (price_native_str, price_usd) = if pool.mint == base_mint {
         (
@@ -143,8 +146,8 @@ pub fn from_geckoterminal(pool: &GeckoTerminalPool, sol_price_usd: f64) -> Optio
         .and_then(|value| parse_f64(value))
         .or_else(|| {
             price_usd.and_then(|usd| {
-                if sol_price_usd > 0.0 {
-                    Some(usd / sol_price_usd)
+                if native_price_usd > 0.0 {
+                    Some(usd / native_price_usd)
                 } else {
                     None
                 }
@@ -152,8 +155,8 @@ pub fn from_geckoterminal(pool: &GeckoTerminalPool, sol_price_usd: f64) -> Optio
         });
 
     let liquidity_usd = pool.reserve_usd;
-    let liquidity_sol = if is_sol_pair && sol_price_usd > 0.0 {
-        liquidity_usd.map(|usd| (usd / 2.0) / sol_price_usd)
+    let liquidity_native = if is_native_pair && native_price_usd > 0.0 {
+        liquidity_usd.map(|usd| (usd / 2.0) / native_price_usd)
     } else {
         None
     };
@@ -172,10 +175,10 @@ pub fn from_geckoterminal(pool: &GeckoTerminalPool, sol_price_usd: f64) -> Optio
         },
         base_mint,
         quote_mint,
-        is_sol_pair,
+        is_native_pair,
         liquidity_usd,
         liquidity_token: None,
-        liquidity_sol,
+        liquidity_native,
         volume_h24: pool.volume_h24,
         price_usd,
         price_sol,

@@ -201,11 +201,12 @@ impl Service for WebserverService {
         // so the promo header shows a genuinely LIVE price whenever the network is
         // reachable (it still falls back to a constant when offline).
         if crate::webserver::promo::are_promo_fixtures_enabled() {
-            match crate::sol_price::start_sol_price_service(shutdown.clone(), monitor.clone()).await
+            match crate::native_price::start_native_price_service(shutdown.clone(), monitor.clone())
+                .await
             {
                 Ok(h) => {
                     handles.push(h);
-                    handles.push(crate::ohlcvs::sol_usd_chart::start(
+                    handles.push(crate::ohlcvs::native_usd_chart::start(
                         shutdown.clone(),
                         monitor.clone(),
                     ));

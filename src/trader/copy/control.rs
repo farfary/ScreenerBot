@@ -200,7 +200,7 @@ pub(super) async fn all_positions() -> Vec<Position> {
 /// price its exits trade on. Without one the holding counts as unpriced; the last
 /// observed trade price is usually its own entry and would hide the real move.
 pub(super) fn paper_mark(position: &PaperPosition) -> Option<f64> {
-    crate::pools::get_pool_price(&position.mint).map(|price| price.price_sol)
+    crate::pools::get_pool_price(&position.mint).map(|price| price.price_native)
 }
 
 /// A task's stats and the closed rounds of its book, from what was already read.

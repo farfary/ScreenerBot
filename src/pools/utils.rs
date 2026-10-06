@@ -27,7 +27,7 @@ impl TokenPairInfo {
             token_vault: String::new(),
             sol_vault: String::new(),
             sol_is_first: false,
-            is_sol_pair: false,
+            is_native_pair: false,
         }
     }
 }
@@ -130,7 +130,7 @@ pub fn analyze_token_pair(pool_info: PoolMintVaultInfo) -> TokenPairInfo {
         token_vault,
         sol_vault,
         sol_is_first,
-        is_sol_pair: true,
+        is_native_pair: true,
     }
 }
 
@@ -253,7 +253,7 @@ pub fn read_token_account_amount(data: &[u8]) -> Option<u64> {
 pub fn get_analyzer_vault_order(pool_info: PoolMintVaultInfo) -> Vec<String> {
     let pair_info = analyze_token_pair(pool_info);
 
-    if !pair_info.is_sol_pair {
+    if !pair_info.is_native_pair {
         // Return empty if not a valid SOL pair
         return vec![];
     }
@@ -269,7 +269,7 @@ pub fn get_analyzer_vault_order(pool_info: PoolMintVaultInfo) -> Vec<String> {
 pub fn validate_sol_pool(pool_info: PoolMintVaultInfo) -> Result<TokenPairInfo, Error> {
     let pair_info = analyze_token_pair(pool_info);
 
-    if !pair_info.is_sol_pair {
+    if !pair_info.is_native_pair {
         Err(Error::InvalidPool {
             reason: "pool does not contain SOL as base or quote".to_owned(),
         })

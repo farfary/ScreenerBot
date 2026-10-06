@@ -842,7 +842,7 @@ const PROCESS_CHAIN_SEAM_CALLER_FILES: &[&str] = &[
     "apis/defillama/mod.rs",
     "apis/dexscreener/mod.rs",
     "apis/geckoterminal/mod.rs",
-    "apis/sol_price.rs",
+    "apis/native_price.rs",
     "connectivity/monitors/dexscreener.rs",
     "events/recorders/lifecycle.rs",
     "filtering/engine.rs",
@@ -1145,7 +1145,7 @@ const APIS_NEUTRAL_ENTRIES: &[&str] = &[
     "error.rs",
     "manager.rs",
     "mod.rs",
-    "sol_price.rs",
+    "native_price.rs",
     "stats.rs",
 ];
 

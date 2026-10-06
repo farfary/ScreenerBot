@@ -19,7 +19,7 @@ use std::time::Duration;
 
 /// Pool reserves only count as a liquidity reading when they are a real measurement.
 ///
-/// `0.0` is what an API-derived price result carries for `sol_reserves` — it means
+/// `0.0` is what an API-derived price result carries for `native_reserves` — it means
 /// nobody measured the pool, not that the pool is empty. Passed through as a reading it
 /// would satisfy every "liquidity below X" rule on a token whose liquidity is unknown.
 fn usable_liquidity(native_reserves: f64) -> Option<f64> {
@@ -55,13 +55,13 @@ impl StrategyEvaluator {
             LogTag::Trader,
             &format!(
                 "Checking entry strategies for token {} (price={:.9} SOL, liquidity={:.2} SOL)",
-                token_mint, price_info.price_sol, price_info.sol_reserves
+                token_mint, price_info.price_native, price_info.native_reserves
             ),
         );
 
         // Build market data from price info
         let market_data = MarketData {
-            liquidity_sol: usable_liquidity(price_info.sol_reserves),
+            liquidity_sol: usable_liquidity(price_info.native_reserves),
             volume_24h: None,
             market_cap: None,
             holder_count: None,
@@ -130,7 +130,7 @@ impl StrategyEvaluator {
             strategy_timeout,
             strategies::evaluate_entry_strategies(
                 token_mint,
-                price_info.price_sol,
+                price_info.price_native,
                 Some(market_data),
                 timeframe_bundle,
             ),
@@ -143,7 +143,7 @@ impl StrategyEvaluator {
                     LogTag::Trader,
                     &format!(
                         "Entry strategy signal: token={}, strategy={}, price={:.9} SOL",
-                        token_mint, strategy_id, price_info.price_sol
+                        token_mint, strategy_id, price_info.price_native
                     ),
                 );
 
@@ -155,7 +155,7 @@ impl StrategyEvaluator {
                     strategy_id: Some(strategy_id),
                     timestamp: Utc::now(),
                     priority: TradePriority::Normal,
-                    price_native: Some(price_info.price_sol),
+                    price_native: Some(price_info.price_native),
                     size_native: None, // Will use config default
                     exit_percentage: None,
                     // Auto-trader slippage always follows config.
@@ -262,7 +262,7 @@ impl StrategyEvaluator {
         // the rule never fired once in the life of any position.
         let market_data = MarketData {
             liquidity_sol: crate::pools::get_pool_price(&position.mint)
-                .and_then(|price| usable_liquidity(price.sol_reserves)),
+                .and_then(|price| usable_liquidity(price.native_reserves)),
             volume_24h: None,
             market_cap: None,
             holder_count: None,

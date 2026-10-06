@@ -462,7 +462,7 @@ impl OhlcvFetcher {
         api_endpoint: &str,
         aggregate: u32,
         limit: usize,
-        pool_is_sol: bool,
+        pool_is_native: bool,
         before: Option<i64>,
     ) -> OhlcvResult<FetchResponse> {
         // Try the self-hosted ScreenerBot OHLCV server first: it serves a shared
@@ -523,7 +523,7 @@ impl OhlcvFetcher {
         // (mint,timeframe,ts) with no pool, so one USD candle corrupts the chart).
         // Skip Gecko entirely for non-SOL pools; the SOL-forcing sources above
         // (data server, SolanaTracker) are the only valid path there.
-        if !pool_is_sol {
+        if !pool_is_native {
             record_ohlcv_event(
                 "gecko_skipped_non_sol_pool",
                 Severity::Debug,

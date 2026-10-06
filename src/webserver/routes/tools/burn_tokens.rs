@@ -111,10 +111,10 @@ pub async fn scan_burnable_tokens() -> Response {
 
         // Get price from pools module
         let price_result = pools::get_pool_price(&account.mint);
-        let price_sol = price_result.as_ref().map(|p| p.price_sol);
+        let price_sol = price_result.as_ref().map(|p| p.price_native);
         let has_liquidity = price_result
             .as_ref()
-            .map(|p| p.sol_reserves > 0.0)
+            .map(|p| p.native_reserves > 0.0)
             .unwrap_or_default();
 
         // Calculate UI amount and value

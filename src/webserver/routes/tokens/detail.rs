@@ -13,8 +13,8 @@ use super::source_status::build_source_status;
 use super::types::*;
 use crate::{
     logger::{self, LogTag},
+    native_price::get_native_price,
     pools, positions,
-    sol_price::get_sol_price,
     tokens::database::get_global_database,
 };
 
@@ -209,12 +209,12 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
             .unwrap_or_default()
             .as_secs() as i64;
         (
-            Some(price_result.price_sol),
+            Some(price_result.price_native),
             Some(price_result.confidence.to_string()),
             Some(now_unix - (age_secs as i64)),
             Some(price_result.pool_address),
             price_result.source_pool,
-            Some(price_result.sol_reserves),
+            Some(price_result.native_reserves),
             Some(price_result.token_reserves),
         )
     } else {
@@ -488,7 +488,7 @@ pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailRespo
     // Prefer pool price (real-time on-chain) over the cached API price, but ALWAYS
     // surface a SOL price when one is available so the header never shows "—" while
     // we still hold a valid API quote. `price_source` tells the UI which system won.
-    let sol_price_usd = crate::sol_price::get_sol_price();
+    let sol_price_usd = crate::native_price::get_native_price();
     let (effective_price_sol, price_source) = match price_sol {
         Some(p) if p > 0.0 => (Some(p), Some(positions::PriceSource::Pool)),
         _ if token.price_sol > 0.0 => (Some(token.price_sol), Some(positions::PriceSource::Api)),
@@ -862,13 +862,13 @@ pub async fn get_token_analysis(
     // Get real-time pool price
     let pool_price = pools::get_pool_price(&mint);
 
-    // Get SOL/USD price for conversions (get_sol_price returns f64 directly)
-    let sol_price_usd = get_sol_price();
+    // Get SOL/USD price for conversions (get_native_price returns f64 directly)
+    let sol_price_usd = get_native_price();
 
     // Calculate effective prices (prefer pool price over cached token price)
     let effective_price_sol = pool_price
         .as_ref()
-        .map(|p| p.price_sol)
+        .map(|p| p.price_native)
         .unwrap_or(token.price_sol);
     let effective_price_usd = effective_price_sol * sol_price_usd;
 

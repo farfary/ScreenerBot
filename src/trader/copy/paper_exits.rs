@@ -170,7 +170,7 @@ pub async fn sweep(database: &CopyDatabase, costs: PaperCosts) -> crate::trader:
             });
         for position in holdings.iter().filter(|position| position.is_open()) {
             let Some(mark) = crate::pools::get_pool_price(&position.mint)
-                .map(|price| price.price_sol)
+                .map(|price| price.price_native)
                 .filter(|price| price.is_finite() && *price > 0.0)
             else {
                 continue;

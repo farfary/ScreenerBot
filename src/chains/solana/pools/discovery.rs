@@ -411,7 +411,7 @@ impl PoolDiscovery {
                         let mut sorted_pools: Vec<_> = snapshot
                             .pools
                             .iter()
-                            .filter(|p| p.is_sol_pair && p.pool_address != canonical_address)
+                            .filter(|p| p.is_native_pair && p.pool_address != canonical_address)
                             .collect();
                         sorted_pools.sort_by(|a, b| {
                             let metric_a = crate::tokens::calculate_pool_metric(a);
@@ -611,7 +611,7 @@ impl PoolDiscovery {
         // Convert pools to descriptors
         let mut descriptors = Vec::new();
         for pool in snapshot.pools.iter() {
-            if !pool.is_sol_pair {
+            if !pool.is_native_pair {
                 continue;
             }
 

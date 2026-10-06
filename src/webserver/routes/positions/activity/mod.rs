@@ -35,8 +35,8 @@ use crate::chains::adapter;
 use crate::chains::RawAmount;
 use crate::i18n::ids;
 use crate::logger::{self, LogTag};
+use crate::native_price;
 use crate::positions::{self, Position};
-use crate::sol_price;
 use crate::tokens;
 use crate::transactions::get_transaction;
 use crate::webserver::api_error::{ApiError, ApiErrorCode};
@@ -186,7 +186,7 @@ async fn build_token_activity(current: &Position) -> TokenActivityResponse {
         events,
         totals,
         state_history,
-        sol_price_usd: Some(sol_price::get_sol_price()).filter(|price| *price > 0.0),
+        sol_price_usd: Some(native_price::get_native_price()).filter(|price| *price > 0.0),
         fetched_at: Utc::now().to_rfc3339(),
     }
 }

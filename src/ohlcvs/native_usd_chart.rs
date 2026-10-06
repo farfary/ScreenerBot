@@ -102,7 +102,7 @@ pub fn change_24h_percent() -> Option<f64> {
 /// Convert a token's USD candles (same timeframe grid) into SOL by dividing OHLC
 /// by the SOL/USD close at each timestamp. Candles without SOL/USD coverage are
 /// dropped — never fabricated. Empty until the chart has been fetched.
-pub fn convert_usd_to_sol(tf: Timeframe, usd: &[Candle]) -> Vec<Candle> {
+pub fn convert_usd_to_native(tf: Timeframe, usd: &[Candle]) -> Vec<Candle> {
     let guard = CHART.load();
     let Some(map) = guard.close_maps.get(&tf) else {
         return Vec::new();
@@ -129,13 +129,13 @@ pub fn convert_usd_to_sol(tf: Timeframe, usd: &[Candle]) -> Vec<Candle> {
 
 /// The server response shape for `/v1/sol_usd`.
 #[derive(serde::Deserialize)]
-struct SolUsdResponse {
+struct NativeUsdResponse {
     candles: Vec<Candle>,
 }
 
 /// Fetch one timeframe from the data server. Returns None on any miss/error.
 async fn fetch_tf(tf: Timeframe) -> Option<Vec<Candle>> {
-    let body = crate::data_server::get_json::<SolUsdResponse>(
+    let body = crate::data_server::get_json::<NativeUsdResponse>(
         crate::data_server::Surface::Ohlcv,
         "/v1/sol_usd",
         &[

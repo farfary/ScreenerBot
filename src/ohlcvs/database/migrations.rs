@@ -12,6 +12,8 @@ use super::table_has_column;
 
 const CHAIN_SCOPE_MIGRATION: &str = "20260821_chain_scope";
 
+/// Runs inside the opener's transaction, so a refused or failed rebuild leaves
+/// the stored schema as it was.
 pub(super) fn migrate_chain_scope(conn: &Connection) -> OhlcvResult<()> {
     let applied =
         conn.query_row(
@@ -56,10 +58,7 @@ pub(super) fn migrate_chain_scope(conn: &Connection) -> OhlcvResult<()> {
     .try_into()
     .expect("fixed OHLCV migration table list");
 
-    let tx = conn
-        .unchecked_transaction()
-        .map_err(|e| OhlcvError::DatabaseError(format!("Failed to start OHLCV migration: {e}")))?;
-    tx.execute_batch(r#"
+    conn.execute_batch(r#"
         ALTER TABLE ohlcv_pools RENAME TO ohlcv_pools_legacy;
         ALTER TABLE ohlcv_candles RENAME TO ohlcv_candles_legacy;
         ALTER TABLE ohlcv_gaps RENAME TO ohlcv_gaps_legacy;
@@ -87,7 +86,7 @@ pub(super) fn migrate_chain_scope(conn: &Connection) -> OhlcvResult<()> {
     .into_iter()
     .zip(legacy_counts)
     {
-        let actual: i64 = tx
+        let actual: i64 = conn
             .query_row(
                 &format!("SELECT COUNT(*) FROM {table} WHERE chain_id = 'solana'"),
                 [],
@@ -103,7 +102,7 @@ pub(super) fn migrate_chain_scope(conn: &Connection) -> OhlcvResult<()> {
         }
     }
     {
-        let mut fk = tx.prepare("PRAGMA foreign_key_check").map_err(|e| {
+        let mut fk = conn.prepare("PRAGMA foreign_key_check").map_err(|e| {
             OhlcvError::DatabaseError(format!("Failed to verify OHLCV foreign keys: {e}"))
         })?;
         if fk
@@ -122,13 +121,12 @@ pub(super) fn migrate_chain_scope(conn: &Connection) -> OhlcvResult<()> {
             ));
         }
     }
-    tx.execute(
+    conn.execute(
         "INSERT INTO schema_migrations (migration_id) VALUES (?1)",
         params![CHAIN_SCOPE_MIGRATION],
     )
     .map_err(|e| OhlcvError::DatabaseError(format!("Failed to record OHLCV migration: {e}")))?;
-    tx.commit()
-        .map_err(|e| OhlcvError::DatabaseError(format!("Failed to commit OHLCV migration: {e}")))
+    Ok(())
 }
 
 pub(super) fn create_chain_indexes(conn: &Connection) -> OhlcvResult<()> {

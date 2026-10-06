@@ -56,7 +56,7 @@ pub mod version;
 pub mod wallets;
 pub mod webserver;
 
-pub use apis::sol_price;
+pub use apis::native_price;
 pub use errors::Error;
 pub use wallets::balance_monitor as wallet;
 pub use wallets::validation as wallet_validation;

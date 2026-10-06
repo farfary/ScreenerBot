@@ -82,8 +82,8 @@ impl TokenDatabase {
 
             tx.execute(
                 "INSERT INTO token_pools (
-                    chain_id, mint, pool_address, dex, base_mint, quote_mint, is_sol_pair,
-                    liquidity_usd, liquidity_token, liquidity_sol, volume_h24,
+                    chain_id, mint, pool_address, dex, base_mint, quote_mint, is_native_pair,
+                    liquidity_usd, liquidity_token, liquidity_native, volume_h24,
                     price_usd, price_sol, price_native, sources_json,
                     pool_data_last_fetched_at, pool_data_first_seen_at
                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
@@ -93,10 +93,10 @@ impl TokenDatabase {
                     &pool.dex,
                     &pool.base_mint,
                     &pool.quote_mint,
-                    if pool.is_sol_pair { 1 } else { 0 },
+                    if pool.is_native_pair { 1 } else { 0 },
                     pool.liquidity_usd,
                     pool.liquidity_token,
-                    pool.liquidity_sol,
+                    pool.liquidity_native,
                     pool.volume_h24,
                     pool.price_usd,
                     pool.price_sol,
@@ -125,8 +125,8 @@ impl TokenDatabase {
 
         let mut stmt = conn
             .prepare(
-                "SELECT pool_address, dex, base_mint, quote_mint, is_sol_pair,
-                        liquidity_usd, liquidity_token, liquidity_sol, volume_h24,
+                "SELECT pool_address, dex, base_mint, quote_mint, is_native_pair,
+                        liquidity_usd, liquidity_token, liquidity_native, volume_h24,
                         price_usd, price_sol, price_native, sources_json,
                         pool_data_last_fetched_at, pool_data_first_seen_at
                  FROM token_pools WHERE chain_id = ?1 AND mint = ?2",
@@ -166,10 +166,10 @@ impl TokenDatabase {
             let dex: Option<String> = read_row_value(&row, 1, "dex")?;
             let base_mint: String = read_row_value(&row, 2, "base_mint")?;
             let quote_mint: String = read_row_value(&row, 3, "quote_mint")?;
-            let is_sol_pair_flag: i64 = read_row_value(&row, 4, "is_sol_pair")?;
+            let is_native_pair_flag: i64 = read_row_value(&row, 4, "is_native_pair")?;
             let liquidity_usd: Option<f64> = read_row_value(&row, 5, "liquidity_usd")?;
             let liquidity_token: Option<f64> = read_row_value(&row, 6, "liquidity_token")?;
-            let liquidity_sol: Option<f64> = read_row_value(&row, 7, "liquidity_sol")?;
+            let liquidity_native: Option<f64> = read_row_value(&row, 7, "liquidity_native")?;
             let volume_h24: Option<f64> = read_row_value(&row, 8, "volume_h24")?;
             let price_usd: Option<f64> = read_row_value(&row, 9, "price_usd")?;
             let price_sol: Option<f64> = read_row_value(&row, 10, "price_sol")?;
@@ -180,10 +180,10 @@ impl TokenDatabase {
                 dex,
                 base_mint,
                 quote_mint,
-                is_sol_pair: is_sol_pair_flag != 0,
+                is_native_pair: is_native_pair_flag != 0,
                 liquidity_usd,
                 liquidity_token,
-                liquidity_sol,
+                liquidity_native,
                 volume_h24,
                 price_usd,
                 price_sol,

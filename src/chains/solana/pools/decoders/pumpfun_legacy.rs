@@ -295,13 +295,13 @@ impl PumpFunLegacyDecoder {
         Some(PriceResult {
             mint: token_mint.to_string(),
             price_usd: 0.0, // USD price calculated later
-            price_sol,
+            price_native: price_sol,
             confidence: 1.0,
             source_pool: Some("PumpFun Bonding Curve".to_owned()),
             pool_address: pool_account.to_string(),
             slot: 0,
             timestamp: Instant::now(),
-            sol_reserves: sol_amount,
+            native_reserves: sol_amount,
             token_reserves: token_amount,
         })
     }
@@ -352,9 +352,9 @@ mod tests {
         assert_eq!(result.mint, mint);
         assert_eq!(result.pool_address, "pool");
         assert!(
-            (result.price_sol - 0.000_001).abs() < 1e-12,
+            (result.price_native - 0.000_001).abs() < 1e-12,
             "price_sol = {}",
-            result.price_sol
+            result.price_native
         );
     }
 }

@@ -24,7 +24,7 @@ fn live_sol_price() -> f64 {
     if super::is_promo_frozen() {
         return PROMO_SOL_PRICE_FALLBACK;
     }
-    let live = crate::sol_price::get_sol_price();
+    let live = crate::native_price::get_native_price();
     if live > 0.0 {
         live
     } else {
@@ -94,7 +94,7 @@ pub fn get_promo_header_metrics() -> HeaderMetricsResponse {
             change_24h_percent: if super::is_promo_frozen() {
                 Some(2.3)
             } else {
-                crate::ohlcvs::sol_usd_chart::change_24h_percent().or(Some(2.3))
+                crate::ohlcvs::native_usd_chart::change_24h_percent().or(Some(2.3))
             },
         },
         copy: Some(super::copy_trading::get_promo_copy_header()),

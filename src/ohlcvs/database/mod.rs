@@ -4,6 +4,7 @@
 //! OHLCV database — SQLite persistence for candlestick data and gap tracking.
 
 mod candles;
+mod column_names;
 mod config;
 mod data_version;
 mod gaps;
@@ -16,6 +17,7 @@ pub use types::{
     TimeframeSummary,
 };
 
+use crate::database::WriteTransaction;
 use crate::ohlcvs::types::{OhlcvError, OhlcvResult, PoolConfig};
 use crate::{chains::ChainId, database};
 use chrono::{DateTime, Utc};
@@ -71,10 +73,16 @@ impl OhlcvDatabase {
             .map_err(|e| OhlcvError::DatabaseError(format!("Failed to get connection: {e}")))
     }
 
+    /// Table creation, every migration, the column renames, the index pass and
+    /// the data-version check commit together: a refused or failed open leaves
+    /// the stored schema exactly as it was.
     fn create_tables(&self) -> OhlcvResult<()> {
-        let conn = self.conn()?;
+        let mut conn = self.conn()?;
+        let tx = conn.write_tx().map_err(|e| {
+            OhlcvError::DatabaseError(format!("Failed to begin OHLCV schema initialization: {e}"))
+        })?;
 
-        conn.execute_batch(
+        tx.execute_batch(
             r#"
             CREATE TABLE IF NOT EXISTS schema_migrations (
                 migration_id TEXT PRIMARY KEY,
@@ -90,7 +98,7 @@ impl OhlcvDatabase {
                 dex TEXT NOT NULL,
                 liquidity REAL NOT NULL DEFAULT 0.0,
                 is_default INTEGER NOT NULL DEFAULT 0,
-                is_sol_pair INTEGER NOT NULL DEFAULT 1,
+                is_native_pair INTEGER NOT NULL DEFAULT 1,
                 last_success TEXT,
                 failure_count INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -163,19 +171,32 @@ impl OhlcvDatabase {
         )
         .map_err(|e| OhlcvError::DatabaseError(format!("Failed to create tables: {e}")))?;
 
-        // Migration: add is_sol_pair to pre-existing ohlcv_pools tables (CREATE IF
-        // NOT EXISTS above won't add a column to a table that already exists). Errs
-        // harmlessly (duplicate column) once migrated, so ignore the result.
-        let _ = conn.execute(
-            "ALTER TABLE ohlcv_pools ADD COLUMN is_sol_pair INTEGER NOT NULL DEFAULT 1",
-            [],
-        );
+        // Migration: add the pair column to pre-existing ohlcv_pools tables (CREATE
+        // IF NOT EXISTS above won't add a column to a table that already exists).
+        // Either name counts as present; a table missing both gets the legacy name,
+        // which the chain-scope rebuild below copies and the renames then rename.
+        if !table_has_column(&tx, "ohlcv_pools", "is_sol_pair")?
+            && !table_has_column(&tx, "ohlcv_pools", "is_native_pair")?
+        {
+            tx.execute(
+                "ALTER TABLE ohlcv_pools ADD COLUMN is_sol_pair INTEGER NOT NULL DEFAULT 1",
+                [],
+            )
+            .map_err(|e| {
+                OhlcvError::DatabaseError(format!("Failed to add OHLCV pool pair column: {e}"))
+            })?;
+        }
 
-        migrate_chain_scope(&conn)?;
-        create_chain_indexes(&conn)?;
-        data_version::ensure_data_version(&conn, self.chain_id())?;
+        migrate_chain_scope(&tx)?;
+        // Unit-neutral column names come after the chain-scope rebuild, so that
+        // rebuild reads the historical shape it was written for.
+        column_names::rename_unit_neutral_columns(&tx)?;
+        create_chain_indexes(&tx)?;
+        data_version::ensure_data_version(&tx, self.chain_id())?;
 
-        Ok(())
+        tx.commit().map_err(|e| {
+            OhlcvError::DatabaseError(format!("Failed to commit OHLCV schema initialization: {e}"))
+        })
     }
 
     /// Clear ALL cached OHLCV candles and gaps and reset every token's backfill
@@ -197,12 +218,12 @@ impl OhlcvDatabase {
 
         conn
             .execute(
-                "INSERT INTO ohlcv_pools (chain_id, mint, pool_address, dex, liquidity, is_default, is_sol_pair, last_success, failure_count)
+                "INSERT INTO ohlcv_pools (chain_id, mint, pool_address, dex, liquidity, is_default, is_native_pair, last_success, failure_count)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
              ON CONFLICT(chain_id, mint, pool_address) DO UPDATE SET
                 liquidity = excluded.liquidity,
                 is_default = excluded.is_default,
-                is_sol_pair = excluded.is_sol_pair,
+                is_native_pair = excluded.is_native_pair,
                 last_success = excluded.last_success,
                 failure_count = excluded.failure_count",
                 params![
@@ -211,7 +232,7 @@ impl OhlcvDatabase {
                     &pool.dex,
                     pool.liquidity,
                     pool.is_default as i32,
-                    pool.is_sol_pair as i32,
+                    pool.is_native_pair as i32,
                     last_success,
                     pool.failure_count
                 ]
@@ -238,7 +259,7 @@ impl OhlcvDatabase {
 
         let mut stmt = conn
             .prepare(
-                "SELECT pool_address, dex, liquidity, is_default, last_success, failure_count, is_sol_pair
+                "SELECT pool_address, dex, liquidity, is_default, last_success, failure_count, is_native_pair
                  FROM ohlcv_pools
                  WHERE chain_id = ?1 AND mint = ?2
                  ORDER BY liquidity DESC",
@@ -261,7 +282,7 @@ impl OhlcvDatabase {
                     is_default: row.get::<_, i32>(3)? != 0,
                     last_successful_fetch: last_success,
                     failure_count: row.get(5)?,
-                    is_sol_pair: row.get::<_, i32>(6)? != 0,
+                    is_native_pair: row.get::<_, i32>(6)? != 0,
                 })
             })
             .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {e}")))?

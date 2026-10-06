@@ -19,7 +19,7 @@
 
 use crate::errors::DatabaseError;
 use crate::tokens::Error;
-use rusqlite::{Connection, OptionalExtension, Transaction};
+use rusqlite::{Connection, OptionalExtension};
 
 pub(super) const TOKEN_TABLES: &[&str] = &[
     "tokens",
@@ -73,13 +73,9 @@ pub(super) fn table_needs_chain_rebuild(conn: &Connection) -> Result<bool, Error
         .any(|column| column == "chain_id"))
 }
 
-pub(super) fn migrate_legacy_schema(conn: &Connection) -> Result<(), Error> {
-    let transaction = conn
-        .unchecked_transaction()
-        .map_err(|error| DatabaseError::Query {
-            operation: format!("Failed to begin tokens chain migration"),
-            message: error.to_string(),
-        })?;
+/// Runs inside the opener's transaction, so a refused or failed rebuild leaves
+/// the stored schema as it was.
+pub(super) fn migrate_legacy_schema(transaction: &Connection) -> Result<(), Error> {
     transaction
         .execute_batch("PRAGMA defer_foreign_keys = ON")
         .map_err(|error| DatabaseError::Query {
@@ -195,11 +191,7 @@ pub(super) fn migrate_legacy_schema(conn: &Connection) -> Result<(), Error> {
                 message: error.to_string(),
             })?;
     }
-    transaction.commit().map_err(|error| DatabaseError::Query {
-        operation: format!("Failed to commit tokens chain migration"),
-        message: error.to_string(),
-    })?;
-    if conn
+    if transaction
         .query_row("PRAGMA foreign_key_check", [], |_| Ok(()))
         .optional()
         .map_err(|error| DatabaseError::Query {
@@ -218,15 +210,9 @@ pub(super) fn migrate_legacy_schema(conn: &Connection) -> Result<(), Error> {
 
 /// Apply every missing additive column. Structural presence is the gate: a database
 /// already stamped at `SCHEMA_VERSION` still receives a column the live schema
-/// requires. No-ops commit cleanly so repeated initialization is idempotent.
-pub(super) fn apply_additive_migrations(conn: &Connection) -> Result<(), Error> {
-    let transaction = conn
-        .unchecked_transaction()
-        .map_err(|error| DatabaseError::Query {
-            operation: format!("Failed to begin tokens additive migration"),
-            message: error.to_string(),
-        })?;
-
+/// requires. Runs inside the opener's transaction; a no-op leaves the schema
+/// unchanged, so repeated initialization is idempotent.
+pub(super) fn apply_additive_migrations(transaction: &Connection) -> Result<(), Error> {
     for step in ADDITIVE_COLUMNS {
         if !table_exists(&transaction, step.table)? {
             continue;
@@ -247,16 +233,10 @@ pub(super) fn apply_additive_migrations(conn: &Connection) -> Result<(), Error> 
                 message: error.to_string(),
             })?;
     }
-
-    transaction.commit().map_err(|error| {
-        Error::from(DatabaseError::Query {
-            operation: "commit tokens additive migration".to_owned(),
-            message: error.to_string(),
-        })
-    })
+    Ok(())
 }
 
-fn copy_legacy_rows(transaction: &Transaction<'_>, table: &str) -> Result<(), Error> {
+fn copy_legacy_rows(transaction: &Connection, table: &str) -> Result<(), Error> {
     let legacy = format!("{table}_legacy_chain");
     let columns = |name: &str| -> Result<Vec<String>, Error> {
         let mut statement = transaction

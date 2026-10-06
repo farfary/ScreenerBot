@@ -14,9 +14,9 @@ use super::types::*;
 use crate::chains::adapter;
 use crate::i18n::ids;
 use crate::logger::{self, LogTag};
+use crate::native_price;
 use crate::pools;
 use crate::positions;
-use crate::sol_price;
 use crate::tokens;
 use crate::webserver::api_error::{ApiError, ApiErrorCode};
 use crate::webserver::utils::success_response;
@@ -108,7 +108,7 @@ pub async fn get_position_details(Path(key): Path<String>) -> Response {
                     &price_result.pool_address,
                 )
                 .map(str::to_owned),
-                liquidity_sol: Some(price_result.sol_reserves),
+                liquidity_sol: Some(price_result.native_reserves),
             });
 
             // Build external links
@@ -123,7 +123,7 @@ pub async fn get_position_details(Path(key): Path<String>) -> Response {
 
             // Get SOL price in USD
             let sol_price_usd = {
-                let price = sol_price::get_sol_price();
+                let price = native_price::get_native_price();
                 if price > 0.0 {
                     Some(price)
                 } else {

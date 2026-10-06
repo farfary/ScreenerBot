@@ -52,7 +52,7 @@ pub struct PriceResult {
     /// Price in USD
     pub price_usd: f64,
     /// Price in SOL (primary trading currency)
-    pub price_sol: f64,
+    pub price_native: f64,
     /// Confidence score (0.0 to 1.0)
     pub confidence: f32,
     /// Source pool ID that provided this price
@@ -65,7 +65,7 @@ pub struct PriceResult {
     #[serde(with = "instant_serde")]
     pub timestamp: Instant,
     /// SOL reserves in the pool
-    pub sol_reserves: f64,
+    pub native_reserves: f64,
     /// Token reserves in the pool
     pub token_reserves: f64,
 }
@@ -75,13 +75,13 @@ impl Default for PriceResult {
         Self {
             mint: String::new(),
             price_usd: 0.0,
-            price_sol: 0.0,
+            price_native: 0.0,
             confidence: 0.0,
             source_pool: None,
             pool_address: String::new(),
             slot: 0,
             timestamp: Instant::now(),
-            sol_reserves: 0.0,
+            native_reserves: 0.0,
             token_reserves: 0.0,
         }
     }
@@ -92,21 +92,21 @@ impl PriceResult {
     pub fn new(
         mint: String,
         price_usd: f64,
-        price_sol: f64,
-        sol_reserves: f64,
+        price_native: f64,
+        native_reserves: f64,
         token_reserves: f64,
         pool_address: String,
     ) -> Self {
         Self {
             mint,
             price_usd,
-            price_sol,
+            price_native,
             confidence: 1.0,
             source_pool: None,
             pool_address,
             slot: 0,
             timestamp: Instant::now(),
-            sol_reserves,
+            native_reserves,
             token_reserves,
         }
     }
@@ -500,7 +500,7 @@ pub struct TokenPairInfo {
     /// Whether the original pool has SOL as the first mint (affects price calculation)
     pub sol_is_first: bool,
     /// Whether this is a valid SOL-based pair
-    pub is_sol_pair: bool,
+    pub is_native_pair: bool,
 }
 
 /// Pool mint and vault extraction result

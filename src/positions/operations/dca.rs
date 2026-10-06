@@ -233,7 +233,7 @@ pub async fn add_to_position(
         position_id,
         dca_signature: transaction_signature.clone(),
         dca_amount_native,
-        market_price: price_info.price_sol,
+        market_price: price_info.price_native,
     };
 
     // Apply transition

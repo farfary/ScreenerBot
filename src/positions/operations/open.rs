@@ -92,7 +92,7 @@ async fn open_position_impl(
                 price: 0.0,
             })?;
 
-    let entry_price = match price_info.price_sol {
+    let entry_price = match price_info.price_native {
         price if price > 0.0 && price.is_finite() => price,
         price => {
             return Err(Error::InvalidPrice {

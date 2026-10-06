@@ -42,7 +42,7 @@ pub async fn get_token_ohlcv(
     // price in USD) mirrored from the data server, so the token-details dialog shows
     // a real SOL chart. No monitoring/activity — this series is maintained globally.
     if crate::chains::adapter().is_native_asset(&mint) {
-        let series = crate::ohlcvs::sol_usd_chart::series(timeframe);
+        let series = crate::ohlcvs::native_usd_chart::series(timeframe);
         // `limit == 0` means "all" here (the chart sends CHART_CANDLE_LIMIT = 0 to
         // fetch the full series); otherwise keep the newest `limit` candles.
         let take = if query.limit == 0 {
@@ -155,7 +155,7 @@ pub async fn get_token_ohlcv_status(
     // WSOL/SOL uses the globally-maintained SOL/USD reference chart, so synthesize
     // its status from that in-memory series (it isn't in the per-token monitor).
     if crate::chains::adapter().is_native_asset(&mint) {
-        use crate::ohlcvs::{sol_usd_chart, Timeframe};
+        use crate::ohlcvs::{native_usd_chart, Timeframe};
         let tfs = [
             Timeframe::Minute1,
             Timeframe::Minute5,
@@ -169,7 +169,7 @@ pub async fn get_token_ohlcv_status(
         let mut total = 0i64;
         let mut best: Option<String> = None;
         for tf in tfs {
-            let s = sol_usd_chart::series(tf);
+            let s = native_usd_chart::series(tf);
             let count = s.len() as i64;
             total += count;
             let latest = s.last().map(|c| c.timestamp);
@@ -199,8 +199,8 @@ pub async fn get_token_ohlcv_status(
             total_candles: total,
             best_timeframe: best,
             backfill_complete: total > 0,
-            last_checked_at: sol_usd_chart::last_updated(),
-            last_new_data_at: sol_usd_chart::last_updated(),
+            last_checked_at: native_usd_chart::last_updated(),
+            last_new_data_at: native_usd_chart::last_updated(),
             timeframes,
         }));
     }

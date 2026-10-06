@@ -84,23 +84,15 @@ pub(super) fn ensure_data_version(conn: &Connection, chain_id: &str) -> OhlcvRes
         return Ok(());
     }
 
-    let transaction = conn.unchecked_transaction().map_err(|e| {
-        OhlcvError::DatabaseError(format!("Failed to begin OHLCV data-version update: {e}"))
-    })?;
-    wipe_candle_data(&transaction, chain_id)
+    wipe_candle_data(conn, chain_id)
         .map_err(|e| OhlcvError::DatabaseError(format!("Failed to wipe candle data: {e}")))?;
-    transaction
-        .execute(
-            "INSERT INTO ohlcv_data_versions (chain_id, version) VALUES (?1, ?2)
+    conn.execute(
+        "INSERT INTO ohlcv_data_versions (chain_id, version) VALUES (?1, ?2)
              ON CONFLICT(chain_id) DO UPDATE SET version = excluded.version",
-            params![chain_id, OHLCV_DATA_VERSION],
-        )
-        .map_err(|e| {
-            OhlcvError::DatabaseError(format!("Failed to update OHLCV data version: {e}"))
-        })?;
-    transaction.commit().map_err(|e| {
-        OhlcvError::DatabaseError(format!("Failed to commit OHLCV data-version update: {e}"))
-    })
+        params![chain_id, OHLCV_DATA_VERSION],
+    )
+    .map_err(|e| OhlcvError::DatabaseError(format!("Failed to update OHLCV data version: {e}")))?;
+    Ok(())
 }
 
 fn inherit_solana_user_version(conn: &Connection) -> OhlcvResult<bool> {
@@ -135,14 +127,8 @@ fn migrate_global_data_version_table(conn: &Connection) -> OhlcvResult<()> {
         return Ok(());
     }
 
-    let transaction = conn.unchecked_transaction().map_err(|e| {
-        OhlcvError::DatabaseError(format!(
-            "Failed to begin OHLCV data-version table migration: {e}"
-        ))
-    })?;
-    transaction
-        .execute_batch(
-            "ALTER TABLE ohlcv_data_versions RENAME TO ohlcv_data_versions_legacy_global;
+    conn.execute_batch(
+        "ALTER TABLE ohlcv_data_versions RENAME TO ohlcv_data_versions_legacy_global;
              CREATE TABLE ohlcv_data_versions (
                  chain_id TEXT PRIMARY KEY,
                  version INTEGER NOT NULL
@@ -150,15 +136,11 @@ fn migrate_global_data_version_table(conn: &Connection) -> OhlcvResult<()> {
              INSERT INTO ohlcv_data_versions (chain_id, version)
                  SELECT 'solana', version FROM ohlcv_data_versions_legacy_global WHERE id = 1;
              DROP TABLE ohlcv_data_versions_legacy_global;",
-        )
-        .map_err(|e| {
-            OhlcvError::DatabaseError(format!("Failed to migrate OHLCV data-version table: {e}"))
-        })?;
-    transaction.commit().map_err(|e| {
-        OhlcvError::DatabaseError(format!(
-            "Failed to commit OHLCV data-version table migration: {e}"
-        ))
-    })
+    )
+    .map_err(|e| {
+        OhlcvError::DatabaseError(format!("Failed to migrate OHLCV data-version table: {e}"))
+    })?;
+    Ok(())
 }
 
 #[cfg(test)]

@@ -36,15 +36,15 @@ pub async fn close_position_direct(
     // the actual swap determines SOL received. Fall back to 0.0 if unavailable
     // (pool drained by rug, stale API data) so the close is never blocked by price.
     let exit_price = match get_price_with_api_fallback(token_mint).await {
-        Some((pr, source)) if pr.price_sol > 0.0 && pr.price_sol.is_finite() => {
+        Some((pr, source)) if pr.price_native > 0.0 && pr.price_native.is_finite() => {
             logger::debug(
                 LogTag::Positions,
                 &format!(
                     "Closing position for {} at {} SOL (source: {:?})",
-                    api_token.symbol, pr.price_sol, source
+                    api_token.symbol, pr.price_native, source
                 ),
             );
-            pr.price_sol
+            pr.price_native
         }
         _ => {
             logger::warning(

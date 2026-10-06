@@ -28,24 +28,24 @@ pub fn parse_gecko_token_id(value: &str) -> Option<String> {
 
 /// Liquidity metric for pool selection: the pool's SOL-side reserve, in SOL.
 ///
-/// Every pool must be ranked in ONE unit. This used to fall through `liquidity_sol` →
+/// Every pool must be ranked in ONE unit. This used to fall through `liquidity_native` →
 /// `liquidity_usd` → `volume_h24`, so a server-sourced pool that carries only USD liquidity
 /// ($476 scored 476) outranked a DexScreener pool with a real $61k market (3.2 SOL scored 3.2),
 /// became the canonical pool, and the chart charted a pool with almost no trades.
 pub fn calculate_pool_metric(pool: &TokenPoolInfo) -> f64 {
-    sol_side_liquidity(pool, crate::apis::sol_price::get_sol_price())
+    native_side_liquidity(pool, crate::apis::native_price::get_native_price())
 }
 
-/// SOL-side reserve in SOL: `liquidity_sol` when a source reports it, else total USD liquidity
-/// halved and converted at `sol_price_usd` — the same conversion `from_geckoterminal` applies.
+/// SOL-side reserve in SOL: `liquidity_native` when a source reports it, else total USD liquidity
+/// halved and converted at `native_price_usd` — the same conversion `from_geckoterminal` applies.
 /// Zero when neither is known (including an unknown SOL price); callers break ties by volume.
-pub fn sol_side_liquidity(pool: &TokenPoolInfo, sol_price_usd: f64) -> f64 {
+pub fn native_side_liquidity(pool: &TokenPoolInfo, native_price_usd: f64) -> f64 {
     let usable = |v: &f64| v.is_finite() && *v > 0.0;
-    if let Some(sol) = pool.liquidity_sol.filter(usable) {
+    if let Some(sol) = pool.liquidity_native.filter(usable) {
         return sol;
     }
     match pool.liquidity_usd.filter(usable) {
-        Some(usd) if usable(&sol_price_usd) => (usd / 2.0) / sol_price_usd,
+        Some(usd) if usable(&native_price_usd) => (usd / 2.0) / native_price_usd,
         _ => 0.0,
     }
 }
@@ -54,9 +54,9 @@ pub fn sol_side_liquidity(pool: &TokenPoolInfo, sol_price_usd: f64) -> f64 {
 mod tests {
     use super::*;
 
-    fn pool(liquidity_sol: Option<f64>, liquidity_usd: Option<f64>) -> TokenPoolInfo {
+    fn pool(liquidity_native: Option<f64>, liquidity_usd: Option<f64>) -> TokenPoolInfo {
         TokenPoolInfo {
-            liquidity_sol,
+            liquidity_native,
             liquidity_usd,
             volume_h24: Some(1_000_000.0),
             ..TokenPoolInfo::default()
@@ -64,25 +64,28 @@ mod tests {
     }
 
     #[test]
-    fn usd_only_and_sol_reported_pools_rank_in_the_same_unit() {
+    fn usd_only_and_native_reported_pools_rank_in_the_same_unit() {
         // BUTT: a server pool with only $476 against a DexScreener pool holding 3.23 SOL.
         let usd_only = pool(None, Some(476.0));
         let reported = pool(Some(3.2298), Some(61_364.12));
         let price = 99.65;
-        assert!(sol_side_liquidity(&reported, price) > sol_side_liquidity(&usd_only, price));
-        assert!((sol_side_liquidity(&usd_only, price) - 476.0 / 2.0 / price).abs() < 1e-9);
+        assert!(native_side_liquidity(&reported, price) > native_side_liquidity(&usd_only, price));
+        assert!((native_side_liquidity(&usd_only, price) - 476.0 / 2.0 / price).abs() < 1e-9);
     }
 
     #[test]
     fn volume_and_unusable_values_never_count_as_liquidity() {
-        assert_eq!(sol_side_liquidity(&pool(None, None), 100.0), 0.0);
+        assert_eq!(native_side_liquidity(&pool(None, None), 100.0), 0.0);
         assert_eq!(
-            sol_side_liquidity(&pool(Some(f64::NAN), Some(200.0)), 100.0),
+            native_side_liquidity(&pool(Some(f64::NAN), Some(200.0)), 100.0),
             1.0
         );
-        assert_eq!(sol_side_liquidity(&pool(Some(0.0), Some(-5.0)), 100.0), 0.0);
+        assert_eq!(
+            native_side_liquidity(&pool(Some(0.0), Some(-5.0)), 100.0),
+            0.0
+        );
         // Without a SOL price a USD-only pool cannot be converted, so it does not guess.
-        assert_eq!(sol_side_liquidity(&pool(None, Some(476.0)), 0.0), 0.0);
+        assert_eq!(native_side_liquidity(&pool(None, Some(476.0)), 0.0), 0.0);
     }
 }
 

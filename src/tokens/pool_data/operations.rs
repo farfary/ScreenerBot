@@ -25,8 +25,8 @@ pub fn merge_pool_info(target: &mut TokenPoolInfo, incoming: TokenPoolInfo) {
         target.dex = incoming.dex.clone();
     }
 
-    if !target.is_sol_pair && incoming.is_sol_pair {
-        target.is_sol_pair = true;
+    if !target.is_native_pair && incoming.is_native_pair {
+        target.is_native_pair = true;
     }
 
     if let Some(liquidity_usd) = incoming.liquidity_usd {
@@ -43,10 +43,10 @@ pub fn merge_pool_info(target: &mut TokenPoolInfo, incoming: TokenPoolInfo) {
         });
     }
 
-    if let Some(liquidity_sol) = incoming.liquidity_sol {
-        target.liquidity_sol = Some(match target.liquidity_sol {
-            Some(existing) => existing.max(liquidity_sol),
-            None => liquidity_sol,
+    if let Some(liquidity_native) = incoming.liquidity_native {
+        target.liquidity_native = Some(match target.liquidity_native {
+            Some(existing) => existing.max(liquidity_native),
+            None => liquidity_native,
         });
     }
 
@@ -98,7 +98,7 @@ pub fn ingest_pool_entry(map: &mut HashMap<String, TokenPoolInfo>, info: TokenPo
 pub fn choose_canonical_pool(pools: &[TokenPoolInfo]) -> Option<String> {
     pools
         .iter()
-        .filter(|pool| pool.is_sol_pair)
+        .filter(|pool| pool.is_native_pair)
         .max_by(|a, b| {
             let metric_a = calculate_pool_metric(a);
             let metric_b = calculate_pool_metric(b);
@@ -116,7 +116,7 @@ pub fn choose_canonical_pool(pools: &[TokenPoolInfo]) -> Option<String> {
 
 /// Sort pools for snapshot (SOL pairs first, then by liquidity)
 pub fn sort_pools_for_snapshot(pools: &mut [TokenPoolInfo]) {
-    pools.sort_by(|a, b| match (b.is_sol_pair, a.is_sol_pair) {
+    pools.sort_by(|a, b| match (b.is_native_pair, a.is_native_pair) {
         (true, false) => Ordering::Less,
         (false, true) => Ordering::Greater,
         _ => match calculate_pool_metric(b)

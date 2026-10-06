@@ -41,10 +41,10 @@ async fn resolve_evaluation_input(position: &Position) -> Option<(Position, f64)
     // This matches the price resolution used by position open/close/DCA operations.
     let current_price = match get_price_with_api_fallback(&position.mint).await {
         Some((price_result, source)) => {
-            if price_result.price_sol > 0.0 && price_result.price_sol.is_finite() {
+            if price_result.price_native > 0.0 && price_result.price_native.is_finite() {
                 // Apply pool price bias correction (BUG-31: DAMM pools underestimate ~5-6%)
                 crate::positions::price_resolution::apply_pool_bias_correction(
-                    price_result.price_sol,
+                    price_result.price_native,
                     source,
                     position.entry_price,
                     position.effective_entry_price,

@@ -217,13 +217,13 @@ impl PoolDecoder for MeteoraDlmmDecoder {
         Some(PriceResult {
             mint: token_mint,
             price_usd: 0.0, // USD conversion not implemented yet
-            price_sol,
+            price_native: price_sol,
             confidence: 0.9, // DLMM pools are generally reliable
             source_pool: Some("METEORA DLMM".to_owned()),
             pool_address: pool_account.pubkey.to_string(),
             slot: pool_account.slot,
             timestamp: Instant::now(),
-            sol_reserves: sol_reserves_display,
+            native_reserves: sol_reserves_display,
             token_reserves: token_reserves_display,
         })
     }

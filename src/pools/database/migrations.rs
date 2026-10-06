@@ -4,6 +4,7 @@
 //! Pools database schema migrations — legacy-to-chain-scoped upgrade run by
 //! `operations::PoolsDatabase::initialize`.
 
+use crate::database::WriteTransaction;
 use crate::errors::DatabaseError;
 use crate::pools::Error;
 use rusqlite::{Connection, OptionalExtension};
@@ -58,8 +59,15 @@ fn verify_migrated_row_count(
     Ok(())
 }
 
+/// Table creation, the chain-scope rebuild, the column renames, the index pass
+/// and the version stamp commit together: a refused or failed open leaves the
+/// stored schema exactly as it was.
 pub(super) fn migrate_schema(conn: &mut Connection) -> Result<(), Error> {
-    conn.execute_batch(
+    let tx = conn.write_tx().map_err(|e| DatabaseError::Query {
+        operation: "start pools schema migration".to_owned(),
+        message: e.to_string(),
+    })?;
+    tx.execute_batch(
         "CREATE TABLE IF NOT EXISTS price_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT, mint TEXT NOT NULL, pool_address TEXT NOT NULL,
             price_usd REAL NOT NULL, price_sol REAL NOT NULL, confidence REAL NOT NULL, slot INTEGER NOT NULL,
@@ -84,7 +92,7 @@ pub(super) fn migrate_schema(conn: &mut Connection) -> Result<(), Error> {
     // only a fast-path — the structural check (not the version number alone)
     // is still what decides whether a real migration is needed the first time,
     // so a DB whose version was never bumped is migrated correctly regardless.
-    let schema_version: i64 = conn
+    let schema_version: i64 = tx
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .map_err(|e| DatabaseError::Query {
             operation: "read pools schema version".to_owned(),
@@ -92,18 +100,11 @@ pub(super) fn migrate_schema(conn: &mut Connection) -> Result<(), Error> {
         })?;
 
     if schema_version < POOLS_SCHEMA_VERSION {
-        let price_history_has_chain = table_has_column(conn, "price_history", "chain_id")?;
-        let accounts_has_chain = table_has_column(conn, "blacklist_accounts", "chain_id")?;
-        let pools_has_chain = table_has_column(conn, "blacklist_pools", "chain_id")?;
+        let price_history_has_chain = table_has_column(&tx, "price_history", "chain_id")?;
+        let accounts_has_chain = table_has_column(&tx, "blacklist_accounts", "chain_id")?;
+        let pools_has_chain = table_has_column(&tx, "blacklist_pools", "chain_id")?;
 
         if !price_history_has_chain || !accounts_has_chain || !pools_has_chain {
-            let tx = conn
-                .unchecked_transaction()
-                .map_err(|e| DatabaseError::Query {
-                    operation: "start pools schema migration".to_owned(),
-                    message: e.to_string(),
-                })?;
-
             tx.execute_batch(
                 "CREATE TABLE price_history_new (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -203,14 +204,14 @@ pub(super) fn migrate_schema(conn: &mut Connection) -> Result<(), Error> {
                 operation: "replace legacy pools tables".to_owned(),
                 message: e.to_string(),
             })?;
-            tx.commit().map_err(|e| DatabaseError::Query {
-                operation: "commit pools schema migration".to_owned(),
-                message: e.to_string(),
-            })?;
         }
     }
 
-    conn.execute_batch(
+    // Unit-neutral column names come after the chain-scope rebuild, so that
+    // rebuild reads the historical shape it was written for.
+    super::column_names::rename_unit_neutral_columns(&tx)?;
+
+    tx.execute_batch(
         "CREATE INDEX IF NOT EXISTS idx_price_history_chain_mint_timestamp ON price_history(chain_id, mint, timestamp_unix DESC);
          CREATE INDEX IF NOT EXISTS idx_price_history_chain_pool_timestamp ON price_history(chain_id, pool_address, timestamp_unix DESC);
          CREATE INDEX IF NOT EXISTS idx_price_history_created_at ON price_history(created_at);
@@ -219,7 +220,7 @@ pub(super) fn migrate_schema(conn: &mut Connection) -> Result<(), Error> {
          CREATE INDEX IF NOT EXISTS idx_blacklist_pools_chain_token ON blacklist_pools(chain_id, token_mint);",
     )
     .map_err(|e| DatabaseError::Query { operation: "create chain-aware pools indexes".to_owned(), message: e.to_string() })?;
-    let foreign_key_violation: Option<String> = conn
+    let foreign_key_violation: Option<String> = tx
         .query_row("PRAGMA foreign_key_check", [], |row| row.get(0))
         .optional()
         .map_err(|e| DatabaseError::Query {
@@ -232,11 +233,15 @@ pub(super) fn migrate_schema(conn: &mut Connection) -> Result<(), Error> {
             detail: "foreign-key validation failed".to_owned(),
         });
     }
-    conn.pragma_update(None, "user_version", POOLS_SCHEMA_VERSION)
+    tx.pragma_update(None, "user_version", POOLS_SCHEMA_VERSION)
         .map_err(|e| DatabaseError::Query {
             operation: "record pools schema version".to_owned(),
             message: e.to_string(),
         })?;
+    tx.commit().map_err(|e| DatabaseError::Query {
+        operation: "commit pools schema migration".to_owned(),
+        message: e.to_string(),
+    })?;
     Ok(())
 }
 

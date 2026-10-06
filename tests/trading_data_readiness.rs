@@ -214,7 +214,7 @@ fn every_candle_rule() -> Vec<(&'static str, Box<dyn ConditionEvaluator>, Condit
 // an `EvaluationContext`. The two helpers below mirror what it builds, field for field,
 // so a change there that quietly starves a rule of its input fails here.
 
-/// `check_entry_strategies`: liquidity comes from the pool price result's `sol_reserves`;
+/// `check_entry_strategies`: liquidity comes from the pool price result's `native_reserves`;
 /// every other market field is `None`.
 fn entry_market_data(liquidity_sol: f64) -> MarketData {
     MarketData {

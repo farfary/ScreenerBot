@@ -6,7 +6,7 @@
 use crate::apis::manager::get_api_manager;
 use crate::events::{record_token_event, Severity};
 use crate::logger::{self, LogTag};
-use crate::sol_price::get_sol_price;
+use crate::native_price::get_native_price;
 use crate::tokens::types::{TokenPoolInfo, TokenResult};
 use crate::tokens::updates::RateLimitCoordinator;
 use crate::tokens::Error;
@@ -28,7 +28,7 @@ pub async fn fetch_from_sources(
     coordinator: Arc<RateLimitCoordinator>,
 ) -> TokenResult<(HashMap<String, TokenPoolInfo>, usize)> {
     let api = get_api_manager();
-    let sol_price = get_sol_price();
+    let native_price = get_native_price();
 
     let should_fetch_dex = api.dexscreener.is_enabled();
     let should_fetch_gecko = api.geckoterminal.is_enabled();
@@ -197,7 +197,7 @@ pub async fn fetch_from_sources(
                 success_sources += 1;
             }
             for pool in pools.iter() {
-                if let Some(info) = conversion::from_geckoterminal(pool, sol_price) {
+                if let Some(info) = conversion::from_geckoterminal(pool, native_price) {
                     ingest_pool_entry(&mut pools_map, info);
                 }
             }

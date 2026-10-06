@@ -19,6 +19,7 @@
 
 pub mod authority_cache;
 pub mod cleanup;
+mod column_names;
 pub mod database;
 pub mod decimals;
 pub mod discovery;

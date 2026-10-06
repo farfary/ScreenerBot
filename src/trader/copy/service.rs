@@ -428,7 +428,7 @@ async fn process_sell_activity(
 /// the paper simulators refuse as `InvalidPrice`.
 fn decision_price(mint: &str, target_price_native: Option<f64>) -> PaperMarket {
     match crate::pools::get_pool_price(mint) {
-        Some(price) => PaperMarket::pool(price.price_sol),
+        Some(price) => PaperMarket::pool(price.price_native),
         None => PaperMarket::observed(target_price_native.unwrap_or(f64::NAN)),
     }
 }

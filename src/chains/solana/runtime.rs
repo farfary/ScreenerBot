@@ -57,7 +57,7 @@ pub fn install_process_seams() {
         crate::chains::solana::apis::solana_tracker::sources::enabled,
         crate::chains::solana::apis::solana_tracker::sources::fetch_candles,
     );
-    crate::apis::sol_price::install_jupiter_fallback(
+    crate::apis::native_price::install_jupiter_fallback(
         crate::chains::solana::apis::jupiter::sources::price_fallback,
     );
     crate::connectivity::checker::set_chain_monitors(crate::chains::solana::connectivity::monitors);

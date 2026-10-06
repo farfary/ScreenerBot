@@ -30,8 +30,8 @@ pub mod defillama;
 pub mod dexscreener;
 pub mod geckoterminal;
 pub mod llm;
+pub mod native_price;
 pub mod rugcheck;
-pub mod sol_price;
 
 // Re-exports for convenience
 pub use client::{HttpClient, RateLimiter};
