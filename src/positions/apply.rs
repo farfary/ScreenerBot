@@ -63,7 +63,6 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             fee_lamports,
             sol_size,
         } => {
-            let token_amount_units = RawAmount::from(token_amount_units);
             let updated = update_position_state_by_id(position_id, |pos| {
                 pos.transaction_entry_verified = true;
                 pos.effective_entry_price = Some(effective_entry_price);
@@ -647,8 +646,6 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             exit_signature,
             exit_percentage,
         } => {
-            let exit_amount = RawAmount::from(exit_amount);
-
             // IDEMPOTENCE: everything below ACCUMULATES (remaining -=, total_exited +=,
             // sol_received +=, partial_exit_count += 1). Applying the same partial twice
             // would sell the same tokens twice on paper. The exit record is the token: one
@@ -1006,8 +1003,6 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             dca_time,
             dca_signature,
         } => {
-            let tokens_bought = RawAmount::from(tokens_bought);
-
             // Get mint for decimals lookup
             let mint = find_mint_by_position_id(position_id).await?;
 

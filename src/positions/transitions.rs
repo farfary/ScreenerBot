@@ -11,7 +11,7 @@ pub enum PositionTransition {
     EntryVerified {
         position_id: i64,
         effective_entry_price: f64,
-        token_amount_units: u64,
+        token_amount_units: RawAmount,
         fee_lamports: u64,
         sol_size: f64,
     },
@@ -48,7 +48,7 @@ pub enum PositionTransition {
     },
     PartialExitVerified {
         position_id: i64,
-        exit_amount: u64,          // Actual tokens sold
+        exit_amount: RawAmount,    // Actual tokens sold
         sol_received: f64,         // Actual SOL received
         effective_exit_price: f64, // Actual price
         fee_lamports: u64,         // Transaction fee
@@ -70,7 +70,7 @@ pub enum PositionTransition {
     /// the residual can be closed on the next pass.
     ExitResidualClearForRetry {
         position_id: i64,
-        exit_amount: u64,
+        exit_amount: RawAmount,
         sol_received: f64,
         effective_exit_price: f64,
         fee_lamports: u64,
@@ -87,10 +87,10 @@ pub enum PositionTransition {
     },
     DcaVerified {
         position_id: i64,
-        tokens_bought: u64,   // Additional tokens
-        sol_spent: f64,       // Actual SOL spent
-        effective_price: f64, // Actual price
-        fee_lamports: u64,    // Transaction fee
+        tokens_bought: RawAmount, // Additional tokens
+        sol_spent: f64,           // Actual SOL spent
+        effective_price: f64,     // Actual price
+        fee_lamports: u64,        // Transaction fee
         dca_time: DateTime<Utc>,
         dca_signature: String,
     },

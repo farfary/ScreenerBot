@@ -566,7 +566,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
 
                 return VerificationOutcome::Transition(PositionTransition::DcaVerified {
                     position_id,
-                    tokens_bought: token_amount_units,
+                    tokens_bought: RawAmount::from(token_amount_units),
                     sol_spent,
                     effective_price,
                     fee_lamports: adapter().native_to_raw(swap_info.fee_sol),
@@ -625,7 +625,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
             VerificationOutcome::Transition(PositionTransition::EntryVerified {
                 position_id,
                 effective_entry_price: effective_price,
-                token_amount_units,
+                token_amount_units: RawAmount::from(token_amount_units),
                 fee_lamports: adapter().native_to_raw(swap_info.fee_sol),
                 sol_size: swap_info.sol_amount,
             })
@@ -714,7 +714,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                             return VerificationOutcome::Transition(
                                 PositionTransition::PartialExitVerified {
                                     position_id,
-                                    exit_amount,
+                                    exit_amount: RawAmount::from(exit_amount),
                                     sol_received: swap_info.effective_sol_received.abs(),
                                     effective_exit_price: swap_info.calculated_price_sol,
                                     fee_lamports: adapter().native_to_raw(swap_info.fee_sol),
@@ -787,7 +787,7 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                             return VerificationOutcome::Transition(
                                 PositionTransition::ExitResidualClearForRetry {
                                     position_id,
-                                    exit_amount,
+                                    exit_amount: RawAmount::from(exit_amount),
                                     sol_received: swap_info.effective_sol_received.abs(),
                                     effective_exit_price: swap_info.calculated_price_sol,
                                     fee_lamports: adapter().native_to_raw(swap_info.fee_sol),
