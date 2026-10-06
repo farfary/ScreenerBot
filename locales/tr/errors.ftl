@@ -394,6 +394,7 @@ errors-trade-quote-unavailable = Fiyat teklifi alınamadı
 # Positions
 errors-positions-not-found = Pozisyon bulunamadı
 errors-positions-already-closed = Pozisyon zaten kapalı
+errors-positions-force-close-failed = Pozisyon zorla kapatılamadı
 errors-positions-already-archived = Pozisyon zaten arşivlenmiş
 errors-positions-not-archived = Pozisyon arşivlenmemiş
 errors-positions-archive-failed = Pozisyon arşivlenemedi

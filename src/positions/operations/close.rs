@@ -6,16 +6,21 @@
 use crate::chains::solana::assets::ata::{get_token_balance, get_total_token_balance};
 use crate::chains::solana::rpc::{get_rpc_client, RpcClientMethods};
 use crate::chains::RawAmount;
+use crate::errors::ErrorClass;
 use crate::logger::{self, LogTag};
+use crate::positions::db::record_exit_submission;
 use crate::positions::price_resolution::get_price_with_api_fallback;
 use crate::positions::queue::{enqueue_verification, VerificationItem};
-use crate::positions::state::{acquire_position_lock, add_signature_to_index};
+use crate::positions::state::{
+    acquire_position_lock, add_signature_to_index, set_exit_submission_in_memory,
+};
 use crate::positions::types::VerificationKind;
 use crate::positions::PENDING_VERIFICATION_SUFFIX;
 use crate::positions::{Error, Result};
 use crate::swaps::{execute_swap_with_fallback, get_best_quote, QuoteRequest, SwapMode};
 use crate::utils::get_wallet_address;
 use serde_json::json;
+use tokio::time::{sleep, Duration};
 
 /// Close an existing position
 pub async fn close_position_direct(
@@ -376,22 +381,46 @@ pub async fn close_position_direct(
         }
     };
 
-    // Update position with exit signature and market exit price
-    crate::positions::state::update_position_state(token_mint, |pos| {
-        pos.exit_transaction_signature = Some(transaction_signature.clone());
-        pos.exit_price = Some(exit_price); // Store pool/market price at exit decision time
-        pos.closed_reason = Some(format!("{exit_reason}{PENDING_VERIFICATION_SUFFIX}"));
-    })
-    .await;
-
-    add_signature_to_index(&transaction_signature, token_mint).await;
-
-    // Get position ID (needed for event recording). Keep it an Option: defaulting to 0 on a
-    // lookup race enqueued a verification item pointing at position 0, which resolves to
-    // nothing — the exit would then never be applied to the real position.
+    // Get position ID (needed for the exit record and event recording). Keep it an Option:
+    // defaulting to 0 on a lookup race enqueued a verification item pointing at position 0,
+    // which resolves to nothing — the exit would then never be applied to the real position.
     let position_id = crate::positions::state::get_position_by_mint(token_mint)
         .await
         .and_then(|p| p.id);
+
+    // Record the exit signature and the market exit price on the row, then in memory.
+    let closed_reason = format!("{exit_reason}{PENDING_VERIFICATION_SUFFIX}");
+    match position_id {
+        Some(id) => {
+            match mark_exit_submitted(id, &transaction_signature, exit_price, &closed_reason).await
+            {
+                Ok(()) => {}
+                Err(Error::AlreadyClosed { .. }) => logger::warning(
+                    LogTag::Positions,
+                    &format!(
+                        "Exit {} was submitted after position {} was closed; the closed booking is kept",
+                        transaction_signature, id
+                    ),
+                ),
+                Err(error) => logger::error(
+                    LogTag::Positions,
+                    &format!(
+                        "Exit {} for position {} was not written to the database ({}); memory holds it and verification books the whole row",
+                        transaction_signature, id, error
+                    ),
+                ),
+            }
+        }
+        None => logger::warning(
+            LogTag::Positions,
+            &format!(
+                "No open position for {} when recording exit {}",
+                api_token.symbol, transaction_signature
+            ),
+        ),
+    }
+
+    add_signature_to_index(&transaction_signature, token_mint).await;
 
     // Record a position closing event (pending verification)
     crate::events::record_position_event(
@@ -434,4 +463,45 @@ pub async fn close_position_direct(
     );
 
     Ok(transaction_signature)
+}
+
+/// Records a submitted full-exit swap on its position: the row first, then memory.
+///
+/// A retryable row failure is retried with the position-save backoff, up to
+/// `POSITION_SAVE_MAX_RETRIES` attempts. The swap is already submitted, so memory takes
+/// the exit even when the row write finally fails: without it the exit monitor would sell
+/// again and verification could not match the exit to its position. The verification
+/// booking writes the whole row, so the row catches up there. A position whose exit is
+/// already verified keeps its booking in the row and in memory, and the call returns
+/// [`Error::AlreadyClosed`]. Returns the result of the row write.
+pub async fn mark_exit_submitted(
+    position_id: i64,
+    exit_signature: &str,
+    exit_price: f64,
+    closed_reason: &str,
+) -> Result<()> {
+    let mut attempt = 1;
+    let persisted = loop {
+        match record_exit_submission(position_id, exit_signature, exit_price, closed_reason).await {
+            Err(error) if error.is_retryable() && attempt < super::POSITION_SAVE_MAX_RETRIES => {
+                logger::warning(
+                    LogTag::Positions,
+                    &format!(
+                        "Recording exit {exit_signature} for position {position_id} failed on attempt {attempt}: {error}"
+                    ),
+                );
+                sleep(Duration::from_millis(super::position_save_backoff_ms(
+                    attempt,
+                )))
+                .await;
+                attempt += 1;
+            }
+            result => break result,
+        }
+    };
+    if matches!(persisted, Err(Error::AlreadyClosed { .. })) {
+        return persisted;
+    }
+    set_exit_submission_in_memory(position_id, exit_signature, exit_price, closed_reason).await;
+    persisted
 }

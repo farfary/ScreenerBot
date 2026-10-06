@@ -364,6 +364,7 @@ errors-trade-quote-unavailable = Не вдалося отримати котир
 
 errors-positions-not-found = Позицію не знайдено
 errors-positions-already-closed = Позицію вже закрито
+errors-positions-force-close-failed = Не вдалося примусово закрити позицію
 errors-positions-already-archived = Позицію вже архівовано
 errors-positions-not-archived = Позицію не архівовано
 errors-positions-archive-failed = Не вдалося архівувати позицію

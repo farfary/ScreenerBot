@@ -165,6 +165,51 @@ pub async fn update_position_price_fields(position: &Position) -> Result<()> {
     }
 }
 
+/// Update the price fields and the unrealized P&L of a position from the latest in-memory
+/// state. No booking column is written.
+pub async fn update_position_price_and_pnl_fields(position: &Position) -> Result<()> {
+    let position_id = position.id.ok_or_else(|| Error::TransitionFailed {
+        transition: "update_price_and_pnl_fields",
+        mint: position.mint.clone(),
+        detail: "position has no id".to_owned(),
+    })?;
+
+    let db_guard = GLOBAL_POSITIONS_DB.lock().await;
+    match db_guard.as_ref() {
+        Some(db) => {
+            db.update_position_prices_and_pnl(
+                position_id,
+                position.current_price,
+                position.current_price_updated,
+                position.price_highest,
+                position.price_lowest,
+                position.unrealized_pnl,
+                position.unrealized_pnl_percent,
+            )
+            .await
+        }
+        None => Err(Error::NotInitialised),
+    }
+}
+
+/// Record a submitted full-exit swap on its position row. See
+/// [`PositionsDatabase::record_exit_submission`].
+pub async fn record_exit_submission(
+    position_id: i64,
+    exit_signature: &str,
+    exit_price: f64,
+    closed_reason: &str,
+) -> Result<()> {
+    let db_guard = GLOBAL_POSITIONS_DB.lock().await;
+    match db_guard.as_ref() {
+        Some(db) => {
+            db.record_exit_submission(position_id, exit_signature, exit_price, closed_reason)
+                .await
+        }
+        None => Err(Error::NotInitialised),
+    }
+}
+
 /// Force database synchronization after critical updates
 pub async fn force_database_sync() -> Result<()> {
     logger::debug(LogTag::Positions, "Forcing database synchronization...");

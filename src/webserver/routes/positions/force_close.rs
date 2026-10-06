@@ -8,12 +8,11 @@ use axum::{
     response::{IntoResponse as _, Response},
     Json,
 };
-use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
+use crate::errors::ErrorClass;
 use crate::i18n::ids;
 use crate::logger::{self, LogTag};
-use crate::pools;
 use crate::positions;
 use crate::webserver::api_error::{ApiError, ApiErrorCode};
 use crate::webserver::utils::success_response;
@@ -35,149 +34,39 @@ pub(super) async fn force_close_position(
     Path(position_id): Path<i64>,
     body: Option<Json<ForceCloseRequest>>,
 ) -> Response {
-    let reason_text = body
+    let note = body
         .and_then(|b| b.reason.clone())
         .unwrap_or_else(|| "manual force close".to_owned());
 
-    let closed_reason = format!("{} {reason_text}", positions::FORCE_CLOSED_PREFIX);
-
-    // 1. Look up the position in memory by ID
-    let position = match positions::get_position_by_id(position_id).await {
-        Some(p) => p,
-        None => {
-            // Fall back to database lookup in case it's not in memory
-            match positions::get_db_position_by_id(position_id).await {
-                Ok(Some(p)) => p,
-                _ => {
-                    return ApiError::new(ApiErrorCode::NotFound, ids::ERRORS_POSITIONS_NOT_FOUND)
-                        .details(position_id.to_string())
-                        .into_response();
-                }
-            }
+    match positions::operations::force_close_position(position_id, &note).await {
+        Ok(closed) => success_response(ForceCloseResponse {
+            success: true,
+            position_id: closed.position_id,
+            symbol: closed.symbol,
+            reason: closed.closed_reason,
+        }),
+        Err(positions::Error::NotFoundById { .. }) => {
+            ApiError::new(ApiErrorCode::NotFound, ids::ERRORS_POSITIONS_NOT_FOUND)
+                .details(position_id.to_string())
+                .into_response()
         }
-    };
-
-    // 2. Validate it's actually open
-    if position.exit_time.is_some() && position.transaction_exit_verified {
-        return ApiError::new(
+        Err(positions::Error::AlreadyClosed { .. }) => ApiError::new(
             ApiErrorCode::InvalidInput,
             ids::ERRORS_POSITIONS_ALREADY_CLOSED,
         )
-        .details(format!("{position_id} {}", position.symbol))
-        .into_response();
-    }
-
-    let symbol = position.symbol.clone();
-    let mint = position.mint.clone();
-    let now = Utc::now();
-
-    // 3. Try to get current price for the exit_price field (best-effort)
-    let exit_price = pools::get_pool_price(&mint)
-        .map(|pr| pr.price_native)
-        .filter(|p| *p > 0.0 && p.is_finite())
-        .or(position.current_price)
-        .unwrap_or(0.0);
-
-    // 4. Calculate P&L for the force-closed position.
-    //
-    // A force close writes off only what is STILL HELD — it recovers no SOL for the
-    // remaining tokens. But SOL already realized by partial exits is money in the wallet
-    // and stays on the books. Booking a flat -total_size_native (as this did, while also
-    // zeroing native_received below) reported a position that took 80% profit before the
-    // token died as a TOTAL LOSS of everything invested.
-    let realized_native = position.native_received.unwrap_or_default();
-    let pnl = realized_native - position.total_size_native;
-    let pnl_percent = if position.total_size_native > 0.0 {
-        (pnl / position.total_size_native) * 100.0
-    } else {
-        0.0
-    };
-
-    // 5. Update in-memory state
-    let mut booking_error: Option<positions::Error> = None;
-    let updated_in_memory = positions::state::update_position_state_by_id(position_id, |pos| {
-        pos.exit_time = Some(now);
-        pos.exit_price = Some(exit_price);
-        pos.effective_exit_price = Some(0.0);
-        pos.transaction_exit_verified = true;
-        pos.closed_reason = Some(closed_reason.clone());
-        // Keep the SOL realized by partial exits — the force close recovers nothing for
-        // the REMAINING tokens, it does not undo the exits already taken.
-        pos.native_received = Some(realized_native);
-        if let Err(error) = pos.book_remaining_as_exited() {
-            booking_error = Some(error);
+        .details(position_id.to_string())
+        .into_response(),
+        Err(error) => {
+            logger::error(
+                LogTag::Positions,
+                &format!("Force-close of position {position_id} failed: {error}"),
+            );
+            ApiError::new(
+                ApiErrorCode::for_status(error.http_status()),
+                ids::ERRORS_POSITIONS_FORCE_CLOSE_FAILED,
+            )
+            .details(error.to_string())
+            .into_response()
         }
-        pos.remaining_token_amount = Some(Default::default());
-        pos.synthetic_exit = true;
-        pos.pnl = Some(pnl);
-        pos.pnl_percent = Some(pnl_percent);
-        pos.unrealized_pnl = None;
-        pos.unrealized_pnl_percent = None;
-    })
-    .await;
-    if let Some(error) = booking_error {
-        logger::error(
-            LogTag::Positions,
-            &format!("Force-close: exited amount for position {position_id} not updated: {error}"),
-        );
     }
-
-    // 6. Build updated position for database persistence
-    let mut db_position = position.clone();
-    db_position.exit_time = Some(now);
-    db_position.exit_price = Some(exit_price);
-    db_position.effective_exit_price = Some(0.0);
-    db_position.transaction_exit_verified = true;
-    db_position.closed_reason = Some(closed_reason.clone());
-    db_position.native_received = Some(realized_native);
-    if let Err(error) = db_position.book_remaining_as_exited() {
-        logger::error(
-            LogTag::Positions,
-            &format!("Force-close: exited amount for position {position_id} not updated: {error}"),
-        );
-    }
-    db_position.remaining_token_amount = Some(Default::default());
-    db_position.synthetic_exit = true;
-    db_position.pnl = Some(pnl);
-    db_position.pnl_percent = Some(pnl_percent);
-    db_position.unrealized_pnl = None;
-    db_position.unrealized_pnl_percent = None;
-
-    // 7. Persist to database
-    if let Err(e) = positions::update_position(&db_position).await {
-        logger::error(
-            LogTag::Positions,
-            &format!("Force-close: failed to persist position {position_id} to database: {e}"),
-        );
-        // Continue anyway — in-memory state is already updated and semaphore should be released
-    }
-
-    // 8. Release the semaphore permit (idempotent: a queued exit verification for this same
-    // position must not hand the slot back a second time).
-    positions::state::release_position_slot(position_id).await;
-
-    // 9. A force close realizes the loss on everything still held. It was never fed to the
-    // period loss limit, so writing off position after position could not pause entries.
-    //
-    // A wallet-derived round is excluded: it is the user's own pre-existing holding, so
-    // writing it off is not a loss the bot took, and counting it could pause the trader
-    // over money it never risked.
-    if pnl < 0.0 && !db_position.is_wallet_derived() {
-        crate::trader::safety::loss_limit::record_realized_loss(pnl.abs());
-    }
-
-    logger::info(
-        LogTag::Positions,
-        &format!(
-            "Force-closed position {position_id} ({symbol}) — reason: {closed_reason}, \
-             in_memory_updated: {updated_in_memory}"
-        ),
-    );
-
-    success_response(ForceCloseResponse {
-        success: true,
-        position_id,
-        symbol,
-        reason: closed_reason,
-    })
 }

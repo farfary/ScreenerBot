@@ -1063,7 +1063,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
 
 /// Publishes a committed booking to the in-memory position by replaying the same pure
 /// booking on it. A replay that fails publishes the committed candidate instead.
-async fn publish_booking(
+pub(super) async fn publish_booking(
     position_id: i64,
     candidate: &Position,
     replay: impl FnOnce(&mut Position) -> Result<()>,

@@ -364,6 +364,7 @@ errors-trade-quote-unavailable = कोट प्राप्त नहीं �
 
 errors-positions-not-found = पोज़िशन नहीं मिली
 errors-positions-already-closed = पोज़िशन पहले से बंद है
+errors-positions-force-close-failed = पोज़िशन को ज़बरन बंद करने में विफल
 errors-positions-already-archived = पोज़िशन पहले से आर्काइव है
 errors-positions-not-archived = पोज़िशन आर्काइव नहीं है
 errors-positions-archive-failed = पोज़िशन आर्काइव करने में विफल

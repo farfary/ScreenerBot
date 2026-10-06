@@ -367,6 +367,7 @@ errors-trade-quote-unavailable = Tidak dapat mengambil kuotasi
 
 errors-positions-not-found = Posisi tidak ditemukan
 errors-positions-already-closed = Posisi sudah ditutup
+errors-positions-force-close-failed = Gagal menutup paksa posisi
 errors-positions-already-archived = Posisi sudah diarsipkan
 errors-positions-not-archived = Posisi tidak diarsipkan
 errors-positions-archive-failed = Gagal mengarsipkan posisi

@@ -397,6 +397,7 @@ errors-trade-quote-unavailable = 无法获取报价
 # Positions
 errors-positions-not-found = 未找到仓位
 errors-positions-already-closed = 仓位已平仓
+errors-positions-force-close-failed = 强制平仓失败
 errors-positions-already-archived = 仓位已归档
 errors-positions-not-archived = 仓位未归档
 errors-positions-archive-failed = 归档仓位失败

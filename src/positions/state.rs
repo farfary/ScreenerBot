@@ -345,6 +345,26 @@ pub async fn set_position_archived_in_memory(position_id: i64, archived: bool) -
     .await
 }
 
+/// Mirror a recorded full-exit submission into memory: the exit signature, the market exit
+/// price and the pending closed reason. A position whose exit is already verified keeps
+/// its booked values. Returns true if the position was found.
+pub async fn set_exit_submission_in_memory(
+    position_id: i64,
+    exit_signature: &str,
+    exit_price: f64,
+    closed_reason: &str,
+) -> bool {
+    update_position_state_by_id(position_id, |p| {
+        if p.transaction_exit_verified {
+            return;
+        }
+        p.exit_transaction_signature = Some(exit_signature.to_owned());
+        p.exit_price = Some(exit_price);
+        p.closed_reason = Some(closed_reason.to_owned());
+    })
+    .await
+}
+
 /// Change ownership in memory after persistence so evaluators see it immediately.
 pub async fn set_position_management_in_memory(
     position_id: i64,

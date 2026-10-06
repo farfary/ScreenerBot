@@ -364,6 +364,7 @@ errors-trade-quote-unavailable = Không lấy được báo giá
 
 errors-positions-not-found = Không tìm thấy vị thế
 errors-positions-already-closed = Vị thế đã đóng
+errors-positions-force-close-failed = Không đóng cưỡng chế được vị thế
 errors-positions-already-archived = Vị thế đã được lưu trữ
 errors-positions-not-archived = Vị thế chưa được lưu trữ
 errors-positions-archive-failed = Không lưu trữ được vị thế

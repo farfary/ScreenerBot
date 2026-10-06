@@ -28,6 +28,13 @@ pub(crate) struct CloseFill {
     pub pnl: Option<(f64, f64)>,
 }
 
+/// An operator write-off of a position, with no swap behind it.
+pub(crate) struct ForceCloseFill {
+    pub exit_time: DateTime<Utc>,
+    pub exit_price: f64,
+    pub closed_reason: String,
+}
+
 /// A verified partial-exit swap. `unrealized_pnl` is the (P&L, percent) of what is still
 /// held after it, when a current price was known.
 pub(crate) struct PartialExitFill {
@@ -119,6 +126,33 @@ impl Position {
         self.closed_reason = Some("synthetic_exit_permanent_failure".to_owned());
 
         let realized_pnl = self.native_received.unwrap_or_default() - self.total_size_native;
+        self.pnl = Some(realized_pnl);
+        self.pnl_percent = Some(if self.total_size_native > 0.0 {
+            (realized_pnl / self.total_size_native) * 100.0
+        } else {
+            0.0
+        });
+        self.unrealized_pnl = None;
+        self.unrealized_pnl_percent = None;
+        Ok(realized_pnl)
+    }
+
+    /// Writes the position off by operator action: whatever is still held moves into the
+    /// exited total with no proceeds, while the proceeds of earlier partial exits stand.
+    /// Returns the realized P&L.
+    pub(crate) fn book_force_close(&mut self, fill: &ForceCloseFill) -> Result<f64> {
+        self.book_remaining_as_exited()?;
+        self.remaining_token_amount = Some(RawAmount::ZERO);
+        self.synthetic_exit = true;
+        self.transaction_exit_verified = true;
+        self.exit_time = Some(fill.exit_time);
+        self.exit_price = Some(fill.exit_price);
+        self.effective_exit_price = Some(0.0);
+        self.closed_reason = Some(fill.closed_reason.clone());
+
+        let realized_native = self.native_received.unwrap_or_default();
+        self.native_received = Some(realized_native);
+        let realized_pnl = realized_native - self.total_size_native;
         self.pnl = Some(realized_pnl);
         self.pnl_percent = Some(if self.total_size_native > 0.0 {
             (realized_pnl / self.total_size_native) * 100.0

@@ -364,6 +364,7 @@ errors-trade-quote-unavailable = Kurs konnte nicht abgerufen werden
 
 errors-positions-not-found = Position nicht gefunden
 errors-positions-already-closed = Die Position ist bereits geschlossen
+errors-positions-force-close-failed = Position konnte nicht zwangsgeschlossen werden
 errors-positions-already-archived = Die Position ist bereits archiviert
 errors-positions-not-archived = Die Position ist nicht archiviert
 errors-positions-archive-failed = Position konnte nicht archiviert werden

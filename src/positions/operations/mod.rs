@@ -4,18 +4,21 @@
 //! Position lifecycle operations.
 //!
 //! High-level commands for opening, closing, partial-closing, and DCA-ing into
-//! positions. Each operation acquires the position lock, executes the swap via
-//! the configured router, and enqueues transaction verification. Price fetching
-//! with API fallback and position persistence with retry are also handled here.
+//! positions. Each swap operation acquires the position lock, executes the swap via
+//! the configured router, and enqueues transaction verification. A force close books
+//! an operator write-off without a swap. Price fetching with API fallback and
+//! position persistence with retry are also handled here.
 
 mod close;
 mod dca;
+mod force_close;
 mod open;
 mod partial_close;
 mod slippage;
 
-pub use close::close_position_direct;
+pub use close::{close_position_direct, mark_exit_submitted};
 pub use dca::add_to_position;
+pub use force_close::{force_close_position, ForceClosed};
 pub use open::{open_position_direct, open_position_with_size};
 pub use partial_close::partial_close_position;
 

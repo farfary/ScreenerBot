@@ -41,6 +41,8 @@ pub enum Error {
     // --- state conflicts ---
     #[error("an open position already exists for token {mint}")]
     AlreadyOpen { mint: String },
+    #[error("position {position_id} is already closed")]
+    AlreadyClosed { position_id: i64 },
     #[error("persisted position {field} has unknown value '{value}'")]
     UnknownPersistedValue { field: &'static str, value: String },
 
@@ -109,7 +111,9 @@ impl ErrorClass for Error {
             | Error::NotFoundBySignature { .. }
             | Error::TokenNotFound { .. } => false,
             // State conflicts describe the world as it is right now.
-            Error::AlreadyOpen { .. } | Error::UnknownPersistedValue { .. } => false,
+            Error::AlreadyOpen { .. }
+            | Error::AlreadyClosed { .. }
+            | Error::UnknownPersistedValue { .. } => false,
             // Validation failures are a property of the input, not the attempt.
             Error::InvalidPrice { .. }
             | Error::InvalidTradeSize { .. }
@@ -150,7 +154,9 @@ impl ErrorClass for Error {
             | Error::NotFoundById { .. }
             | Error::NotFoundBySignature { .. }
             | Error::TokenNotFound { .. } => Severity::Info,
-            Error::AlreadyOpen { .. } | Error::UnknownPersistedValue { .. } => Severity::Warning,
+            Error::AlreadyOpen { .. }
+            | Error::AlreadyClosed { .. }
+            | Error::UnknownPersistedValue { .. } => Severity::Warning,
             Error::InvalidPrice { .. }
             | Error::InvalidTradeSize { .. }
             | Error::InvalidExitPercentage { .. }
@@ -175,7 +181,9 @@ impl ErrorClass for Error {
             | Error::NotFoundById { .. }
             | Error::NotFoundBySignature { .. }
             | Error::TokenNotFound { .. } => 404,
-            Error::AlreadyOpen { .. } | Error::ZeroExitAmount { .. } => 409,
+            Error::AlreadyOpen { .. }
+            | Error::AlreadyClosed { .. }
+            | Error::ZeroExitAmount { .. } => 409,
             Error::UnknownPersistedValue { .. }
             | Error::InvalidPrice { .. }
             | Error::InvalidTradeSize { .. }

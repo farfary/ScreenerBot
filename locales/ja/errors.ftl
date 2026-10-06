@@ -367,6 +367,7 @@ errors-trade-quote-unavailable = 見積もりを取得できませんでした
 
 errors-positions-not-found = ポジションが見つかりません
 errors-positions-already-closed = ポジションはすでにクローズされています
+errors-positions-force-close-failed = ポジションを強制クローズできませんでした
 errors-positions-already-archived = ポジションはすでにアーカイブされています
 errors-positions-not-archived = ポジションはアーカイブされていません
 errors-positions-archive-failed = ポジションをアーカイブできませんでした

@@ -44,7 +44,8 @@ pub use convenience::{
     get_closed_positions_since, get_daily_trading_stats, get_entry_history, get_exit_history,
     get_latest_position_by_mint, get_metadata, get_open_positions, get_period_trading_stats,
     get_position_by_id, get_recent_closed_positions_for_mint, get_token_snapshot,
-    get_token_snapshots, get_trader_swap_legs, load_all_positions, save_position,
-    save_token_snapshot, set_metadata, set_position_archived_db, set_position_management_db,
-    update_position, update_position_price_fields,
+    get_token_snapshots, get_trader_swap_legs, load_all_positions, record_exit_submission,
+    save_position, save_token_snapshot, set_metadata, set_position_archived_db,
+    set_position_management_db, update_position, update_position_price_and_pnl_fields,
+    update_position_price_fields,
 };

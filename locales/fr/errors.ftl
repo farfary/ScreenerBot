@@ -394,6 +394,7 @@ errors-trade-quote-unavailable = Impossible d'obtenir une cotation
 # Positions
 errors-positions-not-found = Position introuvable
 errors-positions-already-closed = La position est déjà clôturée
+errors-positions-force-close-failed = Échec de la clôture forcée de la position
 errors-positions-already-archived = La position est déjà archivée
 errors-positions-not-archived = La position n'est pas archivée
 errors-positions-archive-failed = Échec de l'archivage de la position

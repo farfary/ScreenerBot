@@ -367,6 +367,7 @@ errors-trade-quote-unavailable = Não foi possível obter uma cotação
 
 errors-positions-not-found = Posição não encontrada
 errors-positions-already-closed = A posição já está fechada
+errors-positions-force-close-failed = Falha no fechamento forçado da posição
 errors-positions-already-archived = A posição já está arquivada
 errors-positions-not-archived = A posição não está arquivada
 errors-positions-archive-failed = Falha ao arquivar a posição

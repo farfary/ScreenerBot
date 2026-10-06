@@ -633,6 +633,110 @@ impl PositionsDatabase {
         Ok(())
     }
 
+    /// Update the price fields and the unrealized P&L of a position. No booking column is
+    /// written. A row that already carries an exit time keeps its unrealized P&L: the close
+    /// booking cleared it, and a price computed before that booking must not restore it.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn update_position_prices_and_pnl(
+        &self,
+        position_id: i64,
+        current_price: Option<f64>,
+        current_price_updated: Option<DateTime<Utc>>,
+        price_highest: f64,
+        price_lowest: f64,
+        unrealized_pnl: Option<f64>,
+        unrealized_pnl_percent: Option<f64>,
+    ) -> Result<()> {
+        let conn = self.get_connection()?;
+
+        let rows_affected = conn
+            .execute(
+                r#"
+      UPDATE positions SET
+        current_price = ?2,
+        current_price_updated = ?3,
+        price_highest = ?4,
+        price_lowest = ?5,
+        unrealized_pnl = CASE WHEN exit_time IS NULL THEN ?6 ELSE unrealized_pnl END,
+        unrealized_pnl_percent = CASE WHEN exit_time IS NULL THEN ?7 ELSE unrealized_pnl_percent END,
+        updated_at = datetime('now')
+      WHERE id = ?1 AND chain_id = ?8
+      "#,
+                params![
+                    position_id,
+                    current_price,
+                    current_price_updated.map(|t| t.to_rfc3339()),
+                    price_highest,
+                    price_lowest,
+                    unrealized_pnl,
+                    unrealized_pnl_percent,
+                    self.chain.as_str(),
+                ],
+            )
+            .map_err(|e| {
+                DatabaseError::classify_sqlite_failure("update_position_prices_and_pnl", e)
+            })?;
+
+        if rows_affected == 0 {
+            return Err(Error::NotFoundById { position_id });
+        }
+
+        Ok(())
+    }
+
+    /// Record a submitted full-exit swap: its signature, the market price at the exit
+    /// decision and the pending closed reason. No other column is written. A row whose
+    /// exit is already verified is left as booked and the call returns
+    /// [`Error::AlreadyClosed`].
+    pub async fn record_exit_submission(
+        &self,
+        position_id: i64,
+        exit_signature: &str,
+        exit_price: f64,
+        closed_reason: &str,
+    ) -> Result<()> {
+        let conn = self.get_connection()?;
+
+        let rows_affected = conn
+            .execute(
+                r#"
+      UPDATE positions SET
+        exit_transaction_signature = ?2,
+        exit_price = ?3,
+        closed_reason = ?4,
+        updated_at = datetime('now')
+      WHERE id = ?1 AND chain_id = ?5 AND transaction_exit_verified = 0
+      "#,
+                params![
+                    position_id,
+                    exit_signature,
+                    exit_price,
+                    closed_reason,
+                    self.chain.as_str(),
+                ],
+            )
+            .map_err(|e| DatabaseError::classify_sqlite_failure("record_exit_submission", e))?;
+
+        if rows_affected == 0 {
+            let verified: Option<bool> = conn
+                .query_row(
+                    "SELECT transaction_exit_verified FROM positions WHERE id = ?1 AND chain_id = ?2",
+                    params![position_id, self.chain.as_str()],
+                    |row| row.get(0),
+                )
+                .optional()
+                .map_err(|e| {
+                    DatabaseError::classify_sqlite_failure("record_exit_submission", e)
+                })?;
+            return Err(match verified {
+                Some(true) => Error::AlreadyClosed { position_id },
+                _ => Error::NotFoundById { position_id },
+            });
+        }
+
+        Ok(())
+    }
+
     /// Force database synchronization to ensure all connections see recent writes
     /// This should be called after critical updates to prevent race conditions
     pub async fn force_sync(&self) -> Result<()> {

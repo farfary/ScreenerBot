@@ -143,10 +143,12 @@ async fn update_all_position_prices() {
     }
 }
 
-/// Atomically update position price and PnL in a single database operation
+/// Update a position's price and unrealized PnL in memory, then write only those columns.
 /// Uses position_id to target the specific position (critical when multiple
-/// positions share the same token mint — e.g. re-entry after closing)
-async fn update_position_price_and_pnl(
+/// positions share the same token mint — e.g. re-entry after closing). No booking column
+/// is written, except the unrealized P&L of an open position, which the next tick
+/// recomputes.
+pub async fn update_position_price_and_pnl(
     position_id: i64,
     token_mint: &str,
     current_price: f64,
@@ -161,7 +163,7 @@ async fn update_position_price_and_pnl(
 
     let _lock = crate::positions::acquire_position_lock(token_mint).await;
 
-    // Apply pool price bias correction (BUG-31: DAMM pools underestimate by ~5-6%)
+    // Apply pool price bias correction (DAMM pool prices read ~5-6% low)
     // Uses the ratio of actual swap price to pool price at entry time to correct ongoing
     // bias; an API price is passed through unchanged.
     let corrected_price = {
@@ -223,18 +225,21 @@ async fn update_position_price_and_pnl(
     position.unrealized_pnl = pnl_native;
     position.unrealized_pnl_percent = pnl_pct;
 
-    // Store back to in-memory state by position ID
+    // Store back to in-memory state by position ID. A position closed while the P&L was
+    // computed keeps the unrealized P&L its close booking cleared, as the row does.
     crate::positions::state::update_position_state_by_id(position_id, |pos| {
-        pos.unrealized_pnl = pnl_native;
-        pos.unrealized_pnl_percent = pnl_pct;
+        if pos.exit_time.is_none() {
+            pos.unrealized_pnl = pnl_native;
+            pos.unrealized_pnl_percent = pnl_pct;
+        }
     })
     .await;
 
     // Release per-mint lock before database write
     drop(_lock);
 
-    // Single database write with all updated fields
-    crate::positions::update_position(&position)
+    // Price and unrealized PnL columns only
+    crate::positions::db::update_position_price_and_pnl_fields(&position)
         .await
         .map_err(|e| {
             logger::warning(

@@ -397,6 +397,7 @@ errors-trade-quote-unavailable = 견적을 가져올 수 없습니다
 # Positions
 errors-positions-not-found = 포지션을 찾을 수 없습니다
 errors-positions-already-closed = 이미 종료된 포지션입니다
+errors-positions-force-close-failed = 포지션을 강제 종료하지 못했습니다
 errors-positions-already-archived = 이미 보관된 포지션입니다
 errors-positions-not-archived = 보관되지 않은 포지션입니다
 errors-positions-archive-failed = 포지션을 보관하지 못했습니다

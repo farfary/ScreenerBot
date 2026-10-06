@@ -403,6 +403,7 @@ errors-trade-quote-unavailable = تعذّر جلب عرض السعر
 # Positions
 errors-positions-not-found = لم يتم العثور على المركز
 errors-positions-already-closed = المركز مغلق بالفعل
+errors-positions-force-close-failed = تعذّر الإغلاق القسري للمركز
 errors-positions-already-archived = المركز مؤرشف بالفعل
 errors-positions-not-archived = المركز غير مؤرشف
 errors-positions-archive-failed = تعذّرت أرشفة المركز
