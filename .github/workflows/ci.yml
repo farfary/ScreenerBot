@@ -1,0 +1,106 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+# Cancel in-progress runs for the same ref
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  # Every CI build is a clean build of a new commit, so incremental compilation
+  # can never be reused; see build.yml.
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  RUSTUP_MAX_RETRIES: 10
+  # Test builds never need debuginfo; it only inflates the target cache.
+  CARGO_PROFILE_DEV_DEBUG: 0
+  NEXTEST_VERSION: 0.9.146
+  # Compiling the library's test target at codegen-units = 256 peaks near 5 GB
+  # per rustc process; four parallel jobs exhausted the memory of a 4 vCPU /
+  # 16 GB machine, so the build is capped.
+  CARGO_BUILD_JOBS: 2
+
+jobs:
+  # ===========================================================================
+  # Rust tests (debug profile, offline tiers only)
+  # ===========================================================================
+
+  rust-tests:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          toolchain: 1.98.1
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          cache-on-failure: true
+
+      # The suite relies on per-test process isolation (global config, service
+      # manager and database pool singletons collide in a shared process), so it
+      # runs under cargo-nextest as configured in .config/nextest.toml.
+      - name: Install cargo-nextest
+        shell: bash
+        run: |
+          curl -LsSf "https://get.nexte.st/${NEXTEST_VERSION}/linux" | tar xz -C "${CARGO_HOME:-$HOME/.cargo}/bin"
+          cargo nextest --version
+
+      # Default nextest run skips every `#[ignore]` test: the live read-only
+      # network tier, the `mainnet_*` money tier and the `realdata_*` tier that
+      # needs the owner's real databases. Those tiers stay out of CI.
+      - name: Test (debug, all targets)
+        run: cargo nextest run --all-targets --no-tests=fail
+
+  # ===========================================================================
+  # Dashboard checks: eslint, stylelint, html-validate, UI contract audit,
+  # i18n audits, license-header check and the Node tool tests
+  # ===========================================================================
+
+  dashboard-checks:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            electron/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # tools/tests load electron/forge.config.js and its makers, so the shell's
+      # dependencies must resolve. The Electron binary itself is not needed.
+      - name: Install shell dependencies
+        working-directory: electron
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+        run: npm ci --ignore-scripts
+
+      # compact_label_wrapping.test.mjs measures real layout in Chromium.
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Lint and test
+        run: npm run check
