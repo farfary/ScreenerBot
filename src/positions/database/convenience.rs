@@ -11,6 +11,7 @@ use crate::logger::{self, LogTag};
 use crate::positions::types::{EntryRecord, ExitRecord, Position, PositionManagement};
 use crate::positions::{Error, Result};
 
+use super::booking::{BookingCommit, BookingGuard, BookingRecord};
 use super::global::GLOBAL_POSITIONS_DB;
 use super::types::{DailyTradingStats, PeriodTradingStats, TokenSnapshot};
 
@@ -364,93 +365,32 @@ pub async fn get_all_positions_for_mint(mint: &str) -> Result<Vec<Position>> {
 
 // ==================== EXIT/ENTRY HISTORY FUNCTIONS ====================
 
-/// Save an exit record to history
-pub async fn save_exit_record(
-    position_id: i64,
-    timestamp: DateTime<Utc>,
-    amount: crate::chains::RawAmount,
-    price: f64,
-    native_received: f64,
-    transaction_signature: &str,
-    is_partial: bool,
-    percentage: f64,
-    fees_raw: Option<u64>,
-) -> Result<()> {
+/// Commit a booking: the position row, its guard and its history record in one
+/// transaction. See [`PositionsDatabase::commit_booking`].
+pub(crate) async fn commit_booking(
+    position: &Position,
+    guard: BookingGuard<'_>,
+    record: Option<&BookingRecord>,
+) -> Result<BookingCommit> {
+    let wallet_address = match record {
+        Some(_) => {
+            Some(
+                crate::utils::get_wallet_address().map_err(|e| Error::WalletUnavailable {
+                    detail: e.to_string(),
+                })?,
+            )
+        }
+        None => None,
+    };
+
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;
-    let db = db_guard.as_ref().ok_or(Error::NotInitialised)?;
-
-    let conn = db.pool.get().map_err(|e| DatabaseError::Connection {
-        message: e.to_string(),
-    })?;
-
-    let wallet_address =
-        crate::utils::get_wallet_address().map_err(|e| Error::WalletUnavailable {
-            detail: e.to_string(),
-        })?;
-
-    // Idempotent per (position, signature): one on-chain swap = one exit record. The table
-    // has no unique constraint, so a re-applied verification (retry, restart) would
-    // otherwise insert the SAME exit twice and double it everywhere the records are summed
-    // — the History tab, the chart's exit markers, the "% exited" fallback.
-    conn.execute(
-    "INSERT INTO position_exits (position_id, wallet_address, timestamp, amount, price, native_received,
-     transaction_signature, is_partial, percentage, fees_raw)
-     SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10
-     WHERE NOT EXISTS (
-       SELECT 1 FROM position_exits WHERE position_id = ?1 AND transaction_signature = ?7
-     )",
-    params![
-      position_id,
-      wallet_address,
-      timestamp.to_rfc3339(),
-      amount,
-      price,
-      native_received,
-      transaction_signature,
-      is_partial,
-      percentage,
-      fees_raw.map(|f| f as i64),
-    ],
-  )
-  .map_err(|e| DatabaseError::Query { operation: "save exit record".to_owned(), message: e.to_string() })?;
-
-    logger::info(
-        LogTag::Positions,
-        &format!(
-            "Saved exit record: position={} amount={} partial={} tx={}",
-            position_id, amount, is_partial, transaction_signature
-        ),
-    );
-
-    Ok(())
+    match db_guard.as_ref() {
+        Some(db) => db.commit_booking(position, guard, record, wallet_address.as_deref()),
+        None => Err(Error::NotInitialised),
+    }
 }
 
 /// Get exit history for a position
-/// Has this exact swap already been recorded as an exit for this position?
-///
-/// The idempotency token for applying an exit transition. `PartialExitVerified` ACCUMULATES
-/// (`native_received +=`, `total_exited_amount +=`, `partial_exit_count += 1`), so applying it
-/// twice for the same signature would double the proceeds and the tokens sold. The queue
-/// dedupes by signature only while an item is IN it — once polled it is gone, so a
-/// re-enqueue (startup rehydrate, a manual re-verification) can hand the same swap back.
-pub async fn exit_record_exists(position_id: i64, transaction_signature: &str) -> bool {
-    let db_guard = GLOBAL_POSITIONS_DB.lock().await;
-    let Some(db) = db_guard.as_ref() else {
-        return false;
-    };
-
-    let Ok(conn) = db.pool.get() else {
-        return false;
-    };
-
-    conn.query_row(
-        "SELECT 1 FROM position_exits WHERE position_id = ?1 AND transaction_signature = ?2 LIMIT 1",
-        params![position_id, transaction_signature],
-        |_| Ok(()),
-    )
-    .is_ok()
-}
-
 /// Exits in CHRONOLOGICAL order, matching `get_entry_history`. Callers number
 /// them by index ("Exit 1", "Exit 2"), so a DESC order silently labelled the
 /// newest partial exit as the first one on the position chart.
@@ -512,63 +452,6 @@ pub async fn get_exit_history(position_id: i64) -> Result<Vec<ExitRecord>> {
         })?;
 
     Ok(records)
-}
-
-/// Save an entry record to history
-pub async fn save_entry_record(
-    position_id: i64,
-    timestamp: DateTime<Utc>,
-    amount: crate::chains::RawAmount,
-    price: f64,
-    native_spent: f64,
-    transaction_signature: &str,
-    is_dca: bool,
-    fees_raw: Option<u64>,
-) -> Result<()> {
-    let db_guard = GLOBAL_POSITIONS_DB.lock().await;
-    let db = db_guard.as_ref().ok_or(Error::NotInitialised)?;
-
-    let conn = db.pool.get().map_err(|e| DatabaseError::Connection {
-        message: e.to_string(),
-    })?;
-
-    let wallet_address =
-        crate::utils::get_wallet_address().map_err(|e| Error::WalletUnavailable {
-            detail: e.to_string(),
-        })?;
-
-    // Idempotent per (position, signature) — see save_exit_record. A DCA add re-verified
-    // after a restart must not be recorded (and averaged in) twice.
-    conn.execute(
-    "INSERT INTO position_entries (position_id, wallet_address, timestamp, amount, price, native_spent,
-     transaction_signature, is_dca, fees_raw)
-     SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9
-     WHERE NOT EXISTS (
-       SELECT 1 FROM position_entries WHERE position_id = ?1 AND transaction_signature = ?7
-     )",
-    params![
-      position_id,
-      wallet_address,
-      timestamp.to_rfc3339(),
-      amount,
-      price,
-      native_spent,
-      transaction_signature,
-      is_dca,
-      fees_raw.map(|f| f as i64),
-    ],
-  )
-  .map_err(|e| DatabaseError::Query { operation: "save entry record".to_owned(), message: e.to_string() })?;
-
-    logger::info(
-        LogTag::Positions,
-        &format!(
-            "Saved entry record: position={} amount={} dca={} tx={}",
-            position_id, amount, is_dca, transaction_signature
-        ),
-    );
-
-    Ok(())
 }
 
 /// Get entry history for a position

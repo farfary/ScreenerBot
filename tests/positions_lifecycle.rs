@@ -253,21 +253,6 @@ fn only_a_real_ending_is_terminal() {
 }
 
 #[test]
-fn price_tracking_is_the_only_transition_that_skips_the_database() {
-    // Price ticks are in-memory only; persisting every one of them would write to
-    // SQLite several times a second per open position.
-    for transition in all_transitions() {
-        let expected = !matches!(transition, PositionTransition::UpdatePriceTracking { .. });
-        assert_eq!(
-            transition.requires_db_update(),
-            expected,
-            "{} requires_db_update",
-            label(&transition)
-        );
-    }
-}
-
-#[test]
 fn only_verified_swaps_move_the_wallet_balance() {
     // This flag fires a wallet refresh, so it must mean "SOL or tokens actually moved".
     // A SUBMITTED swap has not settled and a FAILED one moved nothing — refreshing on

@@ -3,6 +3,7 @@
 
 //! Position lifecycle management — opening, tracking, closing, and DCA operations.
 pub mod apply;
+mod booking;
 pub mod database;
 pub use database as db;
 mod error;
@@ -72,12 +73,11 @@ pub use db::{
     get_open_positions as get_db_open_positions, get_period_trading_stats,
     get_position_by_id as get_db_position_by_id, get_positions_database,
     get_recent_closed_positions_for_mint, get_token_snapshot, get_token_snapshots,
-    initialize_positions_database, load_all_positions, save_entry_record, save_exit_record,
-    save_position, save_token_snapshot, set_position_archived_db, set_position_management_db,
-    update_position, update_position_price_fields, with_positions_database,
-    with_positions_database_async, DailyTradingStats, PeriodTradingStats, PositionState,
-    PositionStateHistory, PositionTracking, PositionsDatabase, PositionsDatabaseStats,
-    TokenSnapshot,
+    initialize_positions_database, load_all_positions, save_position, save_token_snapshot,
+    set_position_archived_db, set_position_management_db, update_position,
+    update_position_price_fields, with_positions_database, with_positions_database_async,
+    DailyTradingStats, PeriodTradingStats, PositionState, PositionStateHistory, PositionTracking,
+    PositionsDatabase, PositionsDatabaseStats, TokenSnapshot,
 };
 
 pub use helpers::{

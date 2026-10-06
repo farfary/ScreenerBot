@@ -129,10 +129,6 @@ impl PositionTransition {
         )
     }
 
-    pub fn requires_db_update(&self) -> bool {
-        !matches!(self, Self::UpdatePriceTracking { .. })
-    }
-
     /// True for the transitions that mean SOL or tokens actually moved in the wallet.
     ///
     /// These fire a wallet balance refresh so the displayed worth catches up within a

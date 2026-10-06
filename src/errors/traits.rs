@@ -133,12 +133,18 @@ impl ErrorClass for DatabaseError {
         // A connection/pool error is a transient contention problem; a
         // query or a raw SQLite error is either a bad statement or a
         // corruption/constraint issue, neither of which changes on retry.
-        matches!(self, DatabaseError::Connection { .. })
+        // Busy is lock contention that outlasted `busy_timeout`; the lock is released when
+        // the other writer finishes.
+        matches!(
+            self,
+            DatabaseError::Connection { .. } | DatabaseError::Busy { .. }
+        )
     }
 
     fn retry_after(&self) -> Option<Duration> {
         match self {
             DatabaseError::Connection { .. } => Some(Duration::from_millis(250)),
+            DatabaseError::Busy { .. } => Some(Duration::from_secs(1)),
             _ => None,
         }
     }
@@ -148,12 +154,13 @@ impl ErrorClass for DatabaseError {
             DatabaseError::Connection { .. } => Severity::Error,
             DatabaseError::Sqlite { .. } => Severity::Critical,
             DatabaseError::Query { .. } => Severity::Error,
+            DatabaseError::Busy { .. } => Severity::Warning,
         }
     }
 
     fn http_status(&self) -> u16 {
         match self {
-            DatabaseError::Connection { .. } => 503,
+            DatabaseError::Connection { .. } | DatabaseError::Busy { .. } => 503,
             DatabaseError::Sqlite { .. } | DatabaseError::Query { .. } => 500,
         }
     }

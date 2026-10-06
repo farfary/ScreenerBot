@@ -560,82 +560,9 @@ impl PositionsDatabase {
 
         let conn = self.get_connection()?;
 
-        let rows_affected = conn
-            .execute(
-                r#"
-      UPDATE positions SET
-        mint = ?2, symbol = ?3, name = ?4, entry_price = ?5, entry_time = ?6,
-        exit_price = ?7, exit_time = ?8, position_type = ?9, entry_size_native = ?10,
-        total_size_native = ?11, price_highest = ?12, price_lowest = ?13,
-        entry_transaction_signature = ?14, exit_transaction_signature = ?15,
-        token_amount = ?16, effective_entry_price = ?17, effective_exit_price = ?18,
-        native_received = ?19, profit_target_min = ?20, profit_target_max = ?21,
-        liquidity_tier = ?22, transaction_entry_verified = ?23, transaction_exit_verified = ?24,
-        entry_fee_raw = ?25, exit_fee_raw = ?26, current_price = ?27,
-        current_price_updated = ?28, phantom_confirmations = ?29, phantom_first_seen = ?30,
-        synthetic_exit = ?31, closed_reason = ?32,
-        pnl = ?33, pnl_percent = ?34, unrealized_pnl = ?35, unrealized_pnl_percent = ?36,
-        remaining_token_amount = ?37, total_exited_amount = ?38, average_exit_price = ?39,
-        partial_exit_count = ?40, dca_count = ?41, average_entry_price = ?42, last_dca_time = ?43,
-        round_key = ?44, basis_complete = ?45, history_complete = ?46, holding_state = ?47,
-        updated_at = datetime('now')
-      WHERE id = ?1 AND chain_id = ?48
-      "#,
-                params![
-                    position_id,
-                    position.mint,
-                    position.symbol,
-                    position.name,
-                    position.entry_price,
-                    position.entry_time.to_rfc3339(),
-                    position.exit_price,
-                    position.exit_time.map(|t| t.to_rfc3339()),
-                    position.position_type,
-                    position.entry_size_native,
-                    position.total_size_native,
-                    position.price_highest,
-                    position.price_lowest,
-                    position.entry_transaction_signature,
-                    position.exit_transaction_signature,
-                    position.token_amount,
-                    position.effective_entry_price,
-                    position.effective_exit_price,
-                    position.native_received,
-                    position.profit_target_min,
-                    position.profit_target_max,
-                    position.liquidity_tier,
-                    position.transaction_entry_verified,
-                    position.transaction_exit_verified,
-                    position.entry_fee_raw.map(|f| f as i64),
-                    position.exit_fee_raw.map(|f| f as i64),
-                    position.current_price,
-                    position.current_price_updated.map(|t| t.to_rfc3339()),
-                    position.phantom_confirmations as i64,
-                    position.phantom_first_seen.map(|t| t.to_rfc3339()),
-                    position.synthetic_exit,
-                    position.closed_reason,
-                    position.pnl,
-                    position.pnl_percent,
-                    position.unrealized_pnl,
-                    position.unrealized_pnl_percent,
-                    position.remaining_token_amount,
-                    position.total_exited_amount,
-                    position.average_exit_price,
-                    position.partial_exit_count as i64,
-                    position.dca_count as i64,
-                    position.average_entry_price,
-                    position.last_dca_time.map(|t| t.to_rfc3339()),
-                    position.round_key,
-                    position.basis_complete,
-                    position.history_complete,
-                    position.holding_state,
-                    self.chain.as_str(),
-                ],
-            )
-            .map_err(|e| DatabaseError::Query {
-                operation: "update_position".to_owned(),
-                message: e.to_string(),
-            })?;
+        let rows_affected =
+            write_position_row(&conn, self.chain.as_str(), position_id, position)
+                .map_err(|e| DatabaseError::classify_sqlite_failure("update_position", e))?;
 
         if rows_affected == 0 {
             return Err(Error::NotFoundById { position_id });
@@ -697,10 +624,7 @@ impl PositionsDatabase {
                     self.chain.as_str(),
                 ],
             )
-            .map_err(|e| DatabaseError::Query {
-                operation: "update_position_prices".to_owned(),
-                message: e.to_string(),
-            })?;
+            .map_err(|e| DatabaseError::classify_sqlite_failure("update_position_prices", e))?;
 
         if rows_affected == 0 {
             return Err(Error::NotFoundById { position_id });
@@ -739,10 +663,7 @@ impl PositionsDatabase {
       "INSERT OR REPLACE INTO position_metadata (key, value, updated_at) VALUES (?1, ?2, datetime('now'))",
       params![key, value],
     )
-    .map_err(|e| DatabaseError::Query {
-        operation: format!("set_metadata_value({key})"),
-        message: e.to_string(),
-    })?;
+    .map_err(|e| DatabaseError::classify_sqlite_failure(&format!("set_metadata_value({key})"), e))?;
 
         Ok(())
     }
@@ -969,6 +890,87 @@ impl PositionsDatabase {
             holding_state: row.get("holding_state")?,
         })
     }
+}
+
+/// Writes every persisted column of `position` to its row. Returns the number of rows
+/// written: zero when no row has this id on this chain.
+pub(super) fn write_position_row(
+    conn: &Connection,
+    chain: &str,
+    position_id: i64,
+    position: &Position,
+) -> rusqlite::Result<usize> {
+    conn.execute(
+        r#"
+      UPDATE positions SET
+        mint = ?2, symbol = ?3, name = ?4, entry_price = ?5, entry_time = ?6,
+        exit_price = ?7, exit_time = ?8, position_type = ?9, entry_size_native = ?10,
+        total_size_native = ?11, price_highest = ?12, price_lowest = ?13,
+        entry_transaction_signature = ?14, exit_transaction_signature = ?15,
+        token_amount = ?16, effective_entry_price = ?17, effective_exit_price = ?18,
+        native_received = ?19, profit_target_min = ?20, profit_target_max = ?21,
+        liquidity_tier = ?22, transaction_entry_verified = ?23, transaction_exit_verified = ?24,
+        entry_fee_raw = ?25, exit_fee_raw = ?26, current_price = ?27,
+        current_price_updated = ?28, phantom_confirmations = ?29, phantom_first_seen = ?30,
+        synthetic_exit = ?31, closed_reason = ?32,
+        pnl = ?33, pnl_percent = ?34, unrealized_pnl = ?35, unrealized_pnl_percent = ?36,
+        remaining_token_amount = ?37, total_exited_amount = ?38, average_exit_price = ?39,
+        partial_exit_count = ?40, dca_count = ?41, average_entry_price = ?42, last_dca_time = ?43,
+        round_key = ?44, basis_complete = ?45, history_complete = ?46, holding_state = ?47,
+        updated_at = datetime('now')
+      WHERE id = ?1 AND chain_id = ?48
+      "#,
+        params![
+            position_id,
+            position.mint,
+            position.symbol,
+            position.name,
+            position.entry_price,
+            position.entry_time.to_rfc3339(),
+            position.exit_price,
+            position.exit_time.map(|t| t.to_rfc3339()),
+            position.position_type,
+            position.entry_size_native,
+            position.total_size_native,
+            position.price_highest,
+            position.price_lowest,
+            position.entry_transaction_signature,
+            position.exit_transaction_signature,
+            position.token_amount,
+            position.effective_entry_price,
+            position.effective_exit_price,
+            position.native_received,
+            position.profit_target_min,
+            position.profit_target_max,
+            position.liquidity_tier,
+            position.transaction_entry_verified,
+            position.transaction_exit_verified,
+            position.entry_fee_raw.map(|f| f as i64),
+            position.exit_fee_raw.map(|f| f as i64),
+            position.current_price,
+            position.current_price_updated.map(|t| t.to_rfc3339()),
+            position.phantom_confirmations as i64,
+            position.phantom_first_seen.map(|t| t.to_rfc3339()),
+            position.synthetic_exit,
+            position.closed_reason,
+            position.pnl,
+            position.pnl_percent,
+            position.unrealized_pnl,
+            position.unrealized_pnl_percent,
+            position.remaining_token_amount,
+            position.total_exited_amount,
+            position.average_exit_price,
+            position.partial_exit_count as i64,
+            position.dca_count as i64,
+            position.average_entry_price,
+            position.last_dca_time.map(|t| t.to_rfc3339()),
+            position.round_key,
+            position.basis_complete,
+            position.history_complete,
+            position.holding_state,
+            chain,
+        ],
+    )
 }
 
 #[cfg(test)]

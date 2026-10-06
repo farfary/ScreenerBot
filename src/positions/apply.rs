@@ -3,14 +3,19 @@
 
 //! Position transition effects.
 //!
-//! Applies verified or failed position transitions (entry, exit, DCA, partial-exit)
-//! to in-memory state and persists them to the database. Each transition variant
-//! updates balances, sends notifications, and logs the event.
+//! Applies verified or failed position transitions (entry, exit, DCA, partial-exit).
+//! A transition that writes the position row books a candidate copy, commits the row, its
+//! idempotence guard and its history record in one transaction, and only then replays the
+//! same booking on the in-memory position. Side effects (slot release, loss accounting,
+//! events, notifications, pending clears) run after the commit. A failed commit leaves
+//! memory, the row and the records unchanged.
 
+use super::booking::{CloseFill, DcaAverage, DcaFill, EntryFill, PartialExitFill};
 use super::db::{
-    force_database_sync, save_entry_record, save_exit_record, update_position,
-    update_position_price_fields,
+    commit_booking, force_database_sync, update_position_price_fields, BookingCommit, BookingGuard,
+    BookingRecord,
 };
+use super::types::{EntryRecord, ExitRecord, Position};
 use super::{
     loss_detection::process_position_loss_detection,
     state::{
@@ -43,8 +48,6 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
         position_closed: false,
     };
 
-    let requires_db_update = transition.requires_db_update();
-
     // A verified swap means SOL and tokens have actually moved. Tell the wallet monitor
     // to re-read the balance now, so the header/hero worth reflects the trade within a
     // second or two instead of at the next snapshot interval.
@@ -63,83 +66,69 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             fee_raw,
             native_size,
         } => {
-            let updated = update_position_state_by_id(position_id, |pos| {
-                pos.transaction_entry_verified = true;
-                pos.effective_entry_price = Some(effective_entry_price);
-                pos.total_size_native = native_size;
-                pos.token_amount = Some(token_amount_units);
-                pos.entry_fee_raw = Some(fee_raw);
-                pos.entry_size_native = native_size;
-                pos.remaining_token_amount = Some(token_amount_units);
-                pos.average_entry_price = effective_entry_price;
+            let Some(snapshot) = get_position_by_id(position_id).await else {
+                log_missing_position(position_id, "entry verification");
+                return Ok(effects);
+            };
+            let fill = EntryFill {
+                effective_entry_price,
+                token_amount: token_amount_units,
+                fee_raw,
+                native_size,
+            };
+            let mut candidate = snapshot;
+            candidate.apply_entry_fill(&fill);
+            let record = candidate
+                .entry_transaction_signature
+                .clone()
+                .map(|signature| {
+                    BookingRecord::Entry(EntryRecord {
+                        id: None,
+                        position_id,
+                        timestamp: candidate.entry_time,
+                        amount: token_amount_units,
+                        price: effective_entry_price,
+                        native_spent: native_size,
+                        transaction_signature: signature,
+                        is_dca: false,
+                        fees_raw: Some(fee_raw),
+                    })
+                });
+
+            if commit_booking(&candidate, BookingGuard::Unconditional, record.as_ref()).await?
+                == BookingCommit::AlreadyBooked
+            {
+                return Ok(effects);
+            }
+            publish_booking(position_id, &candidate, |live| {
+                live.apply_entry_fill(&fill);
+                Ok(())
             })
             .await;
 
-            if updated && requires_db_update {
-                if let Some(position) = get_position_by_id(position_id).await {
-                    match update_position(&position).await {
-                        Ok(_) => {
-                            effects.db_updated = true;
-                            let _ = force_database_sync().await;
-                            // Record an entry verified event
-                            crate::events::record_position_event(
-                                &position_id.to_string(),
-                                &position.mint,
-                                "entry_verified",
-                                position.entry_transaction_signature.as_deref(),
-                                None,
-                                native_size,
-                                token_amount_units,
-                                None,
-                                None,
-                            )
-                            .await;
+            effects.db_updated = true;
+            let _ = force_database_sync().await;
+            crate::events::record_position_event(
+                &position_id.to_string(),
+                &candidate.mint,
+                "entry_verified",
+                candidate.entry_transaction_signature.as_deref(),
+                None,
+                native_size,
+                token_amount_units,
+                None,
+                None,
+            )
+            .await;
 
-                            if let Some(entry_sig) = position.entry_transaction_signature.as_deref()
-                            {
-                                if let Err(err) = save_entry_record(
-                                    position_id,
-                                    position.entry_time,
-                                    token_amount_units,
-                                    effective_entry_price,
-                                    native_size,
-                                    entry_sig,
-                                    false,
-                                    Some(fee_raw),
-                                )
-                                .await
-                                {
-                                    logger::error(
-                                        LogTag::Positions,
-                                        &format!(
-                                            "Failed to persist entry history for position {}: {}",
-                                            position_id, err
-                                        ),
-                                    );
-                                }
-                            }
-
-                            // Queue Telegram notification for position opened
-                            if with_config(|c| {
-                                c.telegram.enabled && c.telegram.notify_position_opened
-                            }) {
-                                queue_notification(Notification::position_opened(
-                                    position.symbol.clone(),
-                                    position.mint.clone(),
-                                    native_size,
-                                    effective_entry_price,
-                                ));
-                            }
-                        }
-                        Err(e) => {
-                            return Err(Error::TransitionFailed {
-                                transition: "apply",
-                                mint: position.mint.clone(),
-                                detail: e.to_string(),
-                            });
-                        }
-                    }
-                }
+            // Queue Telegram notification for position opened
+            if with_config(|c| c.telegram.enabled && c.telegram.notify_position_opened) {
+                queue_notification(Notification::position_opened(
+                    candidate.symbol.clone(),
+                    candidate.mint.clone(),
+                    native_size,
+                    effective_entry_price,
+                ));
             }
         }
 
@@ -154,244 +143,162 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             exit_time,
         } => {
             // IDEMPOTENCE: this transition ACCUMULATES (`native_received +=`,
-            // `total_exited_amount +=`), so applying it twice for the same close would double
-            // the proceeds and corrupt P&L. The queue dedupes by signature only while an item
-            // is IN it — once polled it is gone, so a re-enqueue can hand the same exit back.
-            // `transaction_exit_verified` is exactly the "this close is already booked" flag.
-            if let Some(position) = get_position_by_id(position_id).await {
-                if position.transaction_exit_verified {
+            // `total_exited_amount +=`), so the same close must be booked at most once. The
+            // queue dedupes by signature only while an item is IN it, so a re-enqueue can hand
+            // the same exit back. The stored `transaction_exit_verified` flag, read inside the
+            // booking transaction, decides whether this close is already booked.
+            let Some(snapshot) = get_position_by_id(position_id).await else {
+                log_missing_position(position_id, "exit verification");
+                return Ok(effects);
+            };
+
+            // Closed P&L is computed from the position as booked, before anything is written.
+            let mut fill = CloseFill {
+                effective_exit_price,
+                native_received,
+                fee_raw,
+                exit_time,
+                pnl: None,
+            };
+            let mut probe = snapshot.clone();
+            probe.book_close(&fill)?;
+            let (pnl_native, pnl_pct) =
+                crate::positions::calculate_position_pnl(&probe, None).await;
+            fill.pnl = Some((pnl_native, pnl_pct));
+
+            // A full close sells whatever is left: the amount moved is what THIS close sold.
+            let mut candidate = snapshot;
+            let closed_amount = candidate.book_close(&fill)?;
+            // The exit record for the FULL close: the position-details History tab and the
+            // chart's exit markers are built from these records.
+            let record = candidate
+                .exit_transaction_signature
+                .clone()
+                .map(|signature| {
+                    BookingRecord::Exit(ExitRecord {
+                        id: None,
+                        position_id,
+                        timestamp: exit_time,
+                        amount: closed_amount,
+                        price: effective_exit_price,
+                        native_received,
+                        transaction_signature: signature,
+                        is_partial: false,
+                        percentage: 100.0,
+                        fees_raw: Some(fee_raw),
+                    })
+                });
+
+            match commit_booking(&candidate, BookingGuard::ExitNotVerified, record.as_ref()).await?
+            {
+                BookingCommit::AlreadyBooked => {
                     logger::debug(
                         LogTag::Positions,
                         &format!("Exit for position {position_id} already verified - skipping"),
                     );
+                    release_position_slot(position_id).await;
                     return Ok(effects);
                 }
+                BookingCommit::Committed => {}
             }
-
-            // A full close sells whatever is left: the remaining amount moves into the exited
-            // total, and the amount moved is what THIS close sold, for the exit record below.
-            let mut booking: Result<RawAmount> = Ok(RawAmount::ZERO);
-
-            let updated = update_position_state_by_id(position_id, |pos| {
-                booking = pos.book_remaining_as_exited();
-                if booking.is_err() {
-                    return;
-                }
-                pos.transaction_exit_verified = true;
-                pos.effective_exit_price = Some(effective_exit_price);
-                // ACCUMULATE: `native_received` is the position's total proceeds, and partial
-                // exits have already added theirs. Overwriting it here (as this did) threw
-                // away every SOL taken off the table earlier, so a position that took 50%
-                // profit and then closed reported only the final close's proceeds — closed
-                // P&L, which is computed straight off this field, understated the profit by
-                // the whole partial exit.
-                pos.native_received =
-                    Some(pos.native_received.unwrap_or_default() + native_received);
-                pos.exit_fee_raw = Some(fee_raw);
-                pos.exit_time = Some(exit_time);
-
-                // CRITICAL FIX: Update closed_reason to remove pending verification suffix
-                // This ensures database state matches verification status
-                if let Some(reason) = &pos.closed_reason {
-                    if reason.ends_with(super::PENDING_VERIFICATION_SUFFIX) {
-                        pos.closed_reason = Some(
-                            reason
-                                .trim_end_matches(super::PENDING_VERIFICATION_SUFFIX)
-                                .to_string(),
-                        );
-                    }
-                }
-
-                // Note: exit_price is already set by close_position_direct to market price
+            publish_booking(position_id, &candidate, |live| {
+                live.book_close(&fill).map(|_| ())
             })
             .await;
-            let closed_amount = booking?;
 
-            if updated && requires_db_update {
-                if let Some(position) = get_position_by_id(position_id).await {
-                    // Calculate final P&L for closed position BEFORE any database operations
-                    let (pnl_native, pnl_pct) =
-                        crate::positions::calculate_position_pnl(&position, None).await;
+            effects.db_updated = true;
+            effects.position_closed = true;
+            let _ = force_database_sync().await;
 
-                    // Atomically update position with PnL in a single operation
-                    let pnl_updated = update_position_state_by_id(position_id, |pos| {
-                        pos.pnl = Some(pnl_native);
-                        pos.pnl_percent = Some(pnl_pct);
-                        // Clear unrealized PnL (position is now closed)
-                        pos.unrealized_pnl = None;
-                        pos.unrealized_pnl_percent = None;
-                    })
-                    .await;
+            // Release the global position permit now the close is booked, so new positions
+            // can be opened within max_open_positions.
+            release_position_slot(position_id).await;
 
-                    if !pnl_updated {
-                        logger::error(
-                            LogTag::Positions,
-                            &format!(
-                                "Failed to update PnL for closed position {}",
-                                position.symbol
-                            ),
-                        );
-                        // Continue anyway - position is closed, PnL is secondary
+            if let Err(e) = process_position_loss_detection(&candidate).await {
+                logger::error(
+                    LogTag::Positions,
+                    &format!(
+                        "Failed to process loss detection for {}: {}",
+                        candidate.symbol, e
+                    ),
+                );
+            }
+
+            // Record realized loss for loss limit tracking (full exit only). A wallet-derived
+            // round is excluded: it is the user's own pre-existing holding, not risk the bot
+            // took, and a loss on it must not pause the trader.
+            if pnl_native < 0.0 && !candidate.is_wallet_derived() {
+                crate::trader::safety::loss_limit::record_realized_loss(pnl_native.abs());
+            }
+
+            // Record an exit verified event with basic P&L if computable
+            let event_pnl_native = candidate
+                .native_received
+                .map(|s| s - candidate.total_size_native);
+            let event_pnl_pct = candidate.effective_entry_price.and_then(|ep| {
+                candidate.effective_exit_price.map(|xp| {
+                    if ep > 0.0 {
+                        ((xp - ep) / ep) * 100.0
+                    } else {
+                        0.0
                     }
+                })
+            });
+            crate::events::record_position_event(
+                &position_id.to_string(),
+                &candidate.mint,
+                "exit_verified",
+                candidate.entry_transaction_signature.as_deref(),
+                candidate.exit_transaction_signature.as_deref(),
+                candidate.total_size_native,
+                candidate.token_amount.unwrap_or_default(),
+                event_pnl_native,
+                event_pnl_pct,
+            )
+            .await;
 
-                    // Refresh position after PnL update for loss detection
-                    if let Some(position) = get_position_by_id(position_id).await {
-                        // Process loss detection and potential blacklisting
-                        if let Err(e) = process_position_loss_detection(&position).await {
-                            logger::error(
-                                LogTag::Positions,
-                                &format!(
-                                    "Failed to process loss detection for {}: {}",
-                                    position.symbol, e
-                                ),
-                            );
-                        }
+            logger::info(
+                LogTag::Positions,
+                &format!(
+                    "Released position slot for verified exit (ID: {})",
+                    position_id
+                ),
+            );
 
-                        // Record realized loss for loss limit tracking (full exit only)
-                        // pnl_sol was calculated above via calculate_position_pnl.
-                        // A wallet-derived round is excluded: it is the user's own
-                        // pre-existing holding, not risk the bot took, and a loss on it
-                        // must not pause the trader.
-                        if pnl_native < 0.0 && !position.is_wallet_derived() {
-                            crate::trader::safety::loss_limit::record_realized_loss(
-                                pnl_native.abs(),
-                            );
-                        }
+            // Reset token priority to Standard after the close, so a stale OpenPosition
+            // priority does not outlive the position.
+            if let Some(db) = crate::tokens::database::get_global_database() {
+                let _ = db.update_priority(
+                    &candidate.mint,
+                    crate::tokens::priorities::Priority::Standard.to_value(),
+                );
+                logger::debug(
+                    LogTag::Positions,
+                    &format!(
+                        "Reset token {} to Standard priority after close",
+                        candidate.symbol
+                    ),
+                );
+            }
 
-                        match update_position(&position).await {
-                            Ok(_) => {
-                                effects.db_updated = true;
-                                effects.position_closed = true;
-                                let _ = force_database_sync().await;
-
-                                // Persist the exit record for the FULL close. Only the PARTIAL
-                                // path used to write one, so a position's final — and largest —
-                                // exit was missing from its own history: the position-details
-                                // History tab and the chart's exit markers are built from these
-                                // records, and showed every partial exit but never the close.
-                                if let Some(exit_signature) =
-                                    position.exit_transaction_signature.as_deref()
-                                {
-                                    if let Err(err) = save_exit_record(
-                                        position_id,
-                                        exit_time,
-                                        closed_amount,
-                                        effective_exit_price,
-                                        native_received,
-                                        exit_signature,
-                                        false,
-                                        100.0,
-                                        Some(fee_raw),
-                                    )
-                                    .await
-                                    {
-                                        logger::error(
-                                            LogTag::Positions,
-                                            &format!(
-                                                "Failed to persist exit record for position {}: {}",
-                                                position_id, err
-                                            ),
-                                        );
-                                    }
-                                }
-
-                                // CRITICAL: Release global position permit when position is verified closed
-                                // This allows new positions to be opened, fixing the MAX_OPEN_POSITIONS limit
-                                release_position_slot(position_id).await;
-
-                                // Record an exit verified event with basic P&L if computable
-                                let pnl_native = position
-                                    .native_received
-                                    .map(|s| s - position.total_size_native);
-                                let pnl_pct = position.effective_entry_price.and_then(|ep| {
-                                    position.effective_exit_price.map(|xp| {
-                                        if ep > 0.0 {
-                                            ((xp - ep) / ep) * 100.0
-                                        } else {
-                                            0.0
-                                        }
-                                    })
-                                });
-                                crate::events::record_position_event(
-                                    &position_id.to_string(),
-                                    &position.mint,
-                                    "exit_verified",
-                                    position.entry_transaction_signature.as_deref(),
-                                    position.exit_transaction_signature.as_deref(),
-                                    position.total_size_native,
-                                    position.token_amount.unwrap_or_default(),
-                                    pnl_native,
-                                    pnl_pct,
-                                )
-                                .await;
-
-                                logger::info(
-                                    LogTag::Positions,
-                                    &format!(
-                                        "Released position slot for verified exit (ID: {})",
-                                        position_id
-                                    ),
-                                );
-
-                                // Bug #25 fix: Reset token priority to Standard (25) after position close
-                                // This prevents stale OpenPosition priority after trading ends
-                                if let Some(db) = crate::tokens::database::get_global_database() {
-                                    let _ = db.update_priority(
-                                        &position.mint,
-                                        crate::tokens::priorities::Priority::Standard.to_value(),
-                                    );
-                                    logger::debug(
-                                        LogTag::Positions,
-                                        &format!(
-                                            "Reset token {} to Standard priority after close",
-                                            position.symbol
-                                        ),
-                                    );
-                                }
-
-                                // Queue Telegram notification for position closed
-                                if with_config(|c| {
-                                    c.telegram.enabled && c.telegram.notify_position_closed
-                                }) {
-                                    let exit_reason = position.closed_reason.clone();
-                                    // Use position.pnl and position.pnl_percent which were set in the state update above
-                                    let final_pnl_native = position.pnl.unwrap_or_default();
-                                    let final_pnl_pct = position.pnl_percent.unwrap_or_default();
-                                    let entry_price = position.average_entry_price;
-                                    let exit_price =
-                                        position.effective_exit_price.unwrap_or_default();
-                                    let invested = position.total_size_native;
-                                    let received = position.native_received.unwrap_or_default();
-                                    let duration_secs = position
-                                        .exit_time
-                                        .map(|exit| {
-                                            (exit - position.entry_time).num_seconds().max(0) as u64
-                                        })
-                                        .unwrap_or_default();
-                                    queue_notification(Notification::position_closed(
-                                        position.symbol.clone(),
-                                        position.mint.clone(),
-                                        final_pnl_native,
-                                        final_pnl_pct,
-                                        exit_reason,
-                                        entry_price,
-                                        exit_price,
-                                        invested,
-                                        received,
-                                        duration_secs,
-                                    ));
-                                }
-                            }
-                            Err(e) => {
-                                return Err(Error::TransitionFailed {
-                                    transition: "apply",
-                                    mint: position.mint.clone(),
-                                    detail: e.to_string(),
-                                });
-                            }
-                        }
-                    }
-                }
+            // Queue Telegram notification for position closed
+            if with_config(|c| c.telegram.enabled && c.telegram.notify_position_closed) {
+                let duration_secs = candidate
+                    .exit_time
+                    .map(|exit| (exit - candidate.entry_time).num_seconds().max(0) as u64)
+                    .unwrap_or_default();
+                queue_notification(Notification::position_closed(
+                    candidate.symbol.clone(),
+                    candidate.mint.clone(),
+                    candidate.pnl.unwrap_or_default(),
+                    candidate.pnl_percent.unwrap_or_default(),
+                    candidate.closed_reason.clone(),
+                    candidate.average_entry_price,
+                    candidate.effective_exit_price.unwrap_or_default(),
+                    candidate.total_size_native,
+                    candidate.native_received.unwrap_or_default(),
+                    duration_secs,
+                ));
             }
         }
 
@@ -399,22 +306,26 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
         // EXIT FAILURE / RETRY
         // =================================================================
         PositionTransition::ExitFailedClearForRetry { position_id } => {
-            // Capture old signature to purge index entry (prevent stale sig->mint mapping)
-            let mut old_sig: Option<String> = None;
-            let updated = update_position_state_by_id(position_id, |pos| {
-                if let Some(sig) = pos.exit_transaction_signature.clone() {
-                    old_sig = Some(sig);
-                }
-                pos.exit_transaction_signature = None;
-                pos.transaction_exit_verified = false;
-                pos.closed_reason = Some("exit_retry_pending".to_owned());
-                // The close did not happen: drop the exit price it stamped on the way in.
-                // Leaving it set marks a still-OPEN position with exit data, which every
-                // "is this closed?" check that looks at exit_price gets wrong.
-                pos.exit_price = None;
-                pos.effective_exit_price = None;
+            let Some(snapshot) = get_position_by_id(position_id).await else {
+                log_missing_position(position_id, "exit retry clear");
+                return Ok(effects);
+            };
+            let mut candidate = snapshot;
+            // The old signature is purged from the index once the clear is stored, so no stale
+            // sig->mint mapping remains.
+            let old_sig = candidate.clear_failed_exit();
+
+            if commit_booking(&candidate, BookingGuard::Unconditional, None).await?
+                == BookingCommit::AlreadyBooked
+            {
+                return Ok(effects);
+            }
+            publish_booking(position_id, &candidate, |live| {
+                live.clear_failed_exit();
+                Ok(())
             })
             .await;
+            effects.db_updated = true;
 
             if let Some(sig) = old_sig {
                 remove_signature_from_index(&sig).await;
@@ -429,23 +340,6 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 )
                 .await;
             }
-
-            if updated && requires_db_update {
-                if let Some(position) = get_position_by_id(position_id).await {
-                    match update_position(&position).await {
-                        Ok(_) => {
-                            effects.db_updated = true;
-                        }
-                        Err(e) => {
-                            return Err(Error::TransitionFailed {
-                                transition: "apply",
-                                mint: position.mint.clone(),
-                                detail: e.to_string(),
-                            });
-                        }
-                    }
-                }
-            }
         }
 
         PositionTransition::ExitPermanentFailureSynthetic {
@@ -453,102 +347,87 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             exit_time,
         } => {
             // A synthetic exit writes the position off: the tokens are gone (or the exit can
-            // no longer be verified), and no SOL comes back for whatever was still held. It
-            // recorded NO P&L at all — pnl stayed None — so these positions were invisible to
-            // the period trading stats AND to the loss limiter: a rugged position closed this
-            // way never counted as a loss anywhere. Realized proceeds from earlier partial
-            // exits still stand; only the remainder is written off.
-            let mut realized_pnl = 0.0;
-            // Nothing is held any more: the remainder moves into the exited total.
-            let mut booking: Result<RawAmount> = Ok(RawAmount::ZERO);
-
-            let updated = update_position_state_by_id(position_id, |pos| {
-                booking = pos.book_remaining_as_exited();
-                if booking.is_err() {
-                    return;
+            // no longer be verified), and no SOL comes back for whatever was still held. The
+            // realized P&L makes it visible to the period trading stats and the loss limiter.
+            // Realized proceeds from earlier partial exits still stand; only the remainder is
+            // written off. The stored `transaction_exit_verified` flag guards against booking
+            // (and counting the loss) twice.
+            let Some(snapshot) = get_position_by_id(position_id).await else {
+                log_missing_position(position_id, "synthetic exit");
+                return Ok(effects);
+            };
+            let mut candidate = snapshot;
+            let realized_pnl = match candidate.book_synthetic_close(exit_time) {
+                Ok(realized_pnl) => realized_pnl,
+                Err(error) => {
+                    logger::error(
+                        LogTag::Positions,
+                        &format!("Synthetic exit for position {position_id} not applied: {error}"),
+                    );
+                    return Err(error);
                 }
-                pos.synthetic_exit = true;
-                pos.transaction_exit_verified = true;
-                pos.exit_time = Some(exit_time);
-                pos.closed_reason = Some("synthetic_exit_permanent_failure".to_owned());
+            };
 
-                realized_pnl = pos.native_received.unwrap_or_default() - pos.total_size_native;
-                pos.pnl = Some(realized_pnl);
-                pos.pnl_percent = Some(if pos.total_size_native > 0.0 {
-                    (realized_pnl / pos.total_size_native) * 100.0
-                } else {
-                    0.0
-                });
-                pos.unrealized_pnl = None;
-                pos.unrealized_pnl_percent = None;
+            match commit_booking(&candidate, BookingGuard::ExitNotVerified, None).await? {
+                BookingCommit::AlreadyBooked => {
+                    logger::debug(
+                        LogTag::Positions,
+                        &format!(
+                            "Exit for position {position_id} already verified - synthetic exit skipped"
+                        ),
+                    );
+                    release_position_slot(position_id).await;
+                    return Ok(effects);
+                }
+                BookingCommit::Committed => {}
+            }
+            publish_booking(position_id, &candidate, |live| {
+                live.book_synthetic_close(exit_time).map(|_| ())
             })
             .await;
-            if let Err(error) = &booking {
-                logger::error(
-                    LogTag::Positions,
-                    &format!("Synthetic exit for position {position_id} not applied: {error}"),
-                );
-            }
-            booking?;
+            effects.db_updated = true;
+            effects.position_closed = true;
 
-            if updated && realized_pnl < 0.0 {
+            if realized_pnl < 0.0 {
                 crate::trader::safety::loss_limit::record_realized_loss(realized_pnl.abs());
             }
 
-            if updated && requires_db_update {
-                if let Some(position) = get_position_by_id(position_id).await {
-                    // Record synthetic exit event
-                    crate::events::record_position_event(
-                        &position_id.to_string(),
-                        &position.mint,
-                        "exit_synthetic",
-                        position.entry_transaction_signature.as_deref(),
-                        position.exit_transaction_signature.as_deref(),
-                        position.total_size_native,
-                        position.remaining_token_amount.unwrap_or_default(),
-                        None,
-                        None,
-                    )
-                    .await;
+            crate::events::record_position_event(
+                &position_id.to_string(),
+                &candidate.mint,
+                "exit_synthetic",
+                candidate.entry_transaction_signature.as_deref(),
+                candidate.exit_transaction_signature.as_deref(),
+                candidate.total_size_native,
+                candidate.remaining_token_amount.unwrap_or_default(),
+                None,
+                None,
+            )
+            .await;
 
-                    match update_position(&position).await {
-                        Ok(_) => {
-                            effects.db_updated = true;
-                            effects.position_closed = true;
-                            // Release global slot for synthetic exits as well
-                            release_position_slot(position_id).await;
-                            logger::debug(
-                                LogTag::Positions,
-                                &format!(
-                                    "Released position slot for synthetic exit (ID: {})",
-                                    position_id
-                                ),
-                            );
+            // Release global slot for synthetic exits as well
+            release_position_slot(position_id).await;
+            logger::debug(
+                LogTag::Positions,
+                &format!(
+                    "Released position slot for synthetic exit (ID: {})",
+                    position_id
+                ),
+            );
 
-                            // Bug #25 fix: Reset token priority after synthetic exit
-                            if let Some(db) = crate::tokens::database::get_global_database() {
-                                let _ = db.update_priority(
-                                    &position.mint,
-                                    crate::tokens::priorities::Priority::Standard.to_value(),
-                                );
-                                logger::debug(
-                                    LogTag::Positions,
-                                    &format!(
-                                        "Reset token {} to Standard priority after synthetic exit",
-                                        position.symbol
-                                    ),
-                                );
-                            }
-                        }
-                        Err(e) => {
-                            return Err(Error::TransitionFailed {
-                                transition: "apply",
-                                mint: position.mint.clone(),
-                                detail: e.to_string(),
-                            });
-                        }
-                    }
-                }
+            // Reset token priority after synthetic exit
+            if let Some(db) = crate::tokens::database::get_global_database() {
+                let _ = db.update_priority(
+                    &candidate.mint,
+                    crate::tokens::priorities::Priority::Standard.to_value(),
+                );
+                logger::debug(
+                    LogTag::Positions,
+                    &format!(
+                        "Reset token {} to Standard priority after synthetic exit",
+                        candidate.symbol
+                    ),
+                );
             }
         }
 
@@ -585,7 +464,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                         ),
                     );
 
-                    // Bug #25 fix: Reset token priority after orphan removal
+                    // Reset token priority after orphan removal
                     if let Some(db) = crate::tokens::database::get_global_database() {
                         let _ = db.update_priority(
                             &mint,
@@ -650,226 +529,181 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             exit_signature,
             exit_percentage,
         } => {
-            // IDEMPOTENCE: everything below ACCUMULATES (remaining -=, total_exited +=,
+            // IDEMPOTENCE: the booking ACCUMULATES (remaining -=, total_exited +=,
             // native_received +=, partial_exit_count += 1). Applying the same partial twice
             // would sell the same tokens twice on paper. The exit record is the token: one
-            // swap = one record (its insert is INSERT ... WHERE NOT EXISTS on the signature).
-            if super::db::exit_record_exists(position_id, &exit_signature).await {
+            // swap = one record, checked and written in the same transaction as the row.
+            let Some(snapshot) = get_position_by_id(position_id).await else {
+                log_missing_position(position_id, "partial exit verification");
+                return Ok(effects);
+            };
+
+            // Unrealized P&L after the partial is computed from the position as booked, so it
+            // is current at once instead of on the next price tick.
+            let mut fill = PartialExitFill {
+                exit_amount,
+                native_received,
+                effective_exit_price,
+                unrealized_pnl: None,
+            };
+            let mut probe = snapshot.clone();
+            probe.book_partial_exit(&fill)?;
+            if let Some(current_price) = probe.current_price {
+                fill.unrealized_pnl = Some(
+                    crate::positions::calculate_position_pnl(&probe, Some(current_price)).await,
+                );
+            } else {
                 logger::debug(
                     LogTag::Positions,
                     &format!(
-                        "Partial exit {exit_signature} already recorded for position {position_id} - skipping"
+                        "No current price available for {} after partial exit, PnL will update on next price tick",
+                        probe.symbol
                     ),
                 );
-                // Still drop the pending marks, or the mint stays flagged as "a partial exit
-                // is confirming" and every later exit for it is refused.
-                if let Some(position) = get_position_by_id(position_id).await {
-                    let _ = super::state::clear_pending_partial_exit(&exit_signature).await;
-                    super::state::clear_partial_exit_pending(&position.mint).await;
-                }
-                return Ok(effects);
             }
 
-            let mut booking: Result<RawAmount> = Ok(RawAmount::ZERO);
-            let updated = update_position_state_by_id(position_id, |pos| {
-                // Lower the remaining amount and add to the exited total
-                booking = pos.book_exit(exit_amount);
-                let Ok(total_exited) = booking.as_ref().copied() else {
-                    return;
-                };
+            // CRITICAL: the booking sets neither exit_time nor the exit signature - the
+            // position is still open.
+            let mut candidate = snapshot;
+            candidate.book_partial_exit(&fill)?;
+            let record = BookingRecord::Exit(ExitRecord {
+                id: None,
+                position_id,
+                timestamp: exit_time,
+                amount: exit_amount,
+                price: effective_exit_price,
+                native_received,
+                transaction_signature: exit_signature.clone(),
+                is_partial: true,
+                percentage: exit_percentage,
+                fees_raw: Some(fee_raw),
+            });
 
-                // Calculate new average exit price (weighted average). The exited total
-                // includes this exit, so the subtraction cannot underflow.
-                if total_exited > RawAmount::ZERO {
-                    if let Some(prev_avg) = pos.average_exit_price {
-                        let prev_weight = (total_exited.raw() - exit_amount.raw()) as f64
-                            / total_exited.raw() as f64;
-                        let new_weight = exit_amount.raw() as f64 / total_exited.raw() as f64;
-                        pos.average_exit_price =
-                            Some((prev_avg * prev_weight) + (effective_exit_price * new_weight));
-                    } else {
-                        pos.average_exit_price = Some(effective_exit_price);
-                    }
+            match commit_booking(
+                &candidate,
+                BookingGuard::ExitRecordAbsent(&exit_signature),
+                Some(&record),
+            )
+            .await?
+            {
+                BookingCommit::AlreadyBooked => {
+                    logger::debug(
+                        LogTag::Positions,
+                        &format!(
+                            "Partial exit {exit_signature} already recorded for position {position_id} - skipping"
+                        ),
+                    );
+                    // Still drop the pending marks, or the mint stays flagged as "a partial
+                    // exit is confirming" and every later exit for it is refused. The per-mint
+                    // counter drops only once the detail is gone: it must fall exactly once per
+                    // signature, or a later in-flight partial loses its serialization.
+                    super::state::clear_pending_partial_exit(&exit_signature).await?;
+                    super::state::clear_partial_exit_pending(&candidate.mint).await;
+                    return Ok(effects);
                 }
-
-                // Increment partial exit count
-                pos.partial_exit_count += 1;
-
-                // Update SOL received (cumulative)
-                pos.native_received =
-                    Some(pos.native_received.unwrap_or_default() + native_received);
-
-                // CRITICAL: Do NOT set exit_time or exit_signature - position still open!
+                BookingCommit::Committed => {}
+            }
+            publish_booking(position_id, &candidate, |live| {
+                live.book_partial_exit(&fill).map(|_| ())
             })
             .await;
-            booking?;
 
-            if updated && requires_db_update {
-                if let Some(mut position) = get_position_by_id(position_id).await {
-                    // Calculate unrealized PnL immediately after partial exit
-                    // Don't wait for price updater (eliminates up to 1 second delay)
-                    if let Some(current_price) = position.current_price {
-                        let (pnl_native, pnl_pct) = crate::positions::calculate_position_pnl(
-                            &position,
-                            Some(current_price),
-                        )
-                        .await;
+            effects.db_updated = true;
+            let _ = force_database_sync().await;
 
-                        // Update unrealized PnL in memory
-                        update_position_state_by_id(position_id, |pos| {
-                            pos.unrealized_pnl = Some(pnl_native);
-                            pos.unrealized_pnl_percent = Some(pnl_pct);
-                        })
-                        .await;
-
-                        // Refresh position to get updated PnL
-                        if let Some(updated_pos) = get_position_by_id(position_id).await {
-                            position = updated_pos;
-                        }
-                    } else {
-                        logger::debug(
-              LogTag::Positions,
-              &format!("No current price available for {} after partial exit, PnL will update on next price tick", position.symbol),
-            );
-                    }
-
-                    match update_position(&position).await {
-                        Ok(_) => {
-                            effects.db_updated = true;
-                            let _ = force_database_sync().await;
-
-                            if let Err(err) = save_exit_record(
-                                position_id,
-                                exit_time,
-                                exit_amount,
-                                effective_exit_price,
-                                native_received,
-                                &exit_signature,
-                                true,
-                                exit_percentage,
-                                Some(fee_raw),
-                            )
-                            .await
-                            {
-                                logger::error(
-                                    LogTag::Positions,
-                                    &format!(
-                                        "Failed to persist partial exit record for position {}: {}",
-                                        position_id, err
-                                    ),
-                                );
-                            }
-
-                            if let Err(err) =
-                                super::state::clear_pending_partial_exit(&exit_signature).await
-                            {
-                                return Err(Error::TransitionFailed {
-                                    transition: "partial_exit",
-                                    mint: position.mint.clone(),
-                                    detail: format!(
-                                        "failed to clear pending partial exit {exit_signature} for position {position_id}: {err}"
-                                    ),
-                                });
-                            }
-
-                            // Realized P&L for THIS partial: proceeds minus the cost basis of
-                            // the tokens sold. Scale by the token's REAL decimals — this was
-                            // hardcoded to 10^9 (SOL's), so for any token that is not 9-decimal
-                            // the cost basis was off by orders of magnitude, and the number went
-                            // to the events log AND the Telegram notification.
-                            let sold_tokens = match crate::tokens::get_decimals(
-                                crate::chains::active_chain(),
-                                &position.mint,
-                            )
-                            .await
-                            {
-                                Some(decimals) => exit_amount.to_whole_units(decimals),
-                                None => 0.0,
-                            };
-                            let partial_pnl = if sold_tokens > 0.0 {
-                                Some(native_received - (sold_tokens * position.average_entry_price))
-                            } else {
-                                None
-                            };
-
-                            // NOTE: a partial exit must NOT be fed to the loss limiter.
-                            //
-                            // The limiter's unit of account is the CLOSED POSITION: its baseline
-                            // is rebuilt by `initialize_from_history` from
-                            // `get_period_trading_stats`, which sums `pnl` over positions with
-                            // `transaction_exit_verified = 1 AND exit_time IS NOT NULL`. Feeding
-                            // it a partial would (a) double-count, because the close then records
-                            // the position's TOTAL pnl — which already includes this partial's
-                            // proceeds — and (b) not survive a restart, since the rebuilt
-                            // baseline only sees closed positions. The loss lands, in full and
-                            // exactly once, when the position closes.
-
-                            crate::events::record_position_event(
-                                &position_id.to_string(),
-                                &position.mint,
-                                "partial_exit_verified",
-                                position.entry_transaction_signature.as_deref(),
-                                None,
-                                native_received,
-                                exit_amount,
-                                partial_pnl,
-                                None,
-                            )
-                            .await;
-
-                            logger::info(
-                                LogTag::Positions,
-                                &format!(
- "Partial exit verified for position {}: {} tokens sold, {} remaining",
-                  position_id,
-                  exit_amount,
-                  position.remaining_token_amount.unwrap_or_default()
-                ),
-                            );
-                            // Clear pending mark
-                            super::state::clear_partial_exit_pending(&position.mint).await;
-
-                            // Queue Telegram notification for partial exit
-                            if with_config(|c| c.telegram.enabled && c.telegram.notify_partial_exit)
-                            {
-                                // Calculate remaining percentage against tokens ever
-                                // ACQUIRED (still held + already exited). `token_amount` is
-                                // only the entry buy and does not grow on a DCA, so using it
-                                // reported more than 100% still held for any averaged-in
-                                // position.
-                                let remaining_pct = if let Some(remaining) =
-                                    position.remaining_token_amount
-                                {
-                                    match position.acquired_amount() {
-                                        Some(acquired) if acquired > RawAmount::ZERO => {
-                                            (remaining.raw() as f64 / acquired.raw() as f64) * 100.0
-                                        }
-                                        _ => 0.0,
-                                    }
-                                } else {
-                                    100.0 - exit_percentage
-                                };
-                                queue_notification(Notification::partial_exit(
-                                    position.symbol.clone(),
-                                    position.mint.clone(),
-                                    exit_percentage,
-                                    partial_pnl.unwrap_or_default(),
-                                    remaining_pct,
-                                ));
-                            }
-
-                            // IMPORTANT: Do NOT release semaphore permit - position still open!
-                        }
-                        Err(e) => {
-                            return Err(Error::TransitionFailed {
-                                transition: "apply",
-                                mint: position.mint.clone(),
-                                detail: e.to_string(),
-                            });
-                        }
-                    }
-                }
+            // A failed pending clear must not skip the remaining effects of a booking that is
+            // already stored; it is returned last, and a retry clears it on the
+            // already-booked path.
+            let pending_cleared = super::state::clear_pending_partial_exit(&exit_signature).await;
+            if let Err(err) = &pending_cleared {
+                logger::error(
+                    LogTag::Positions,
+                    &format!(
+                        "Failed to clear pending partial exit {exit_signature} for position {position_id}: {err}"
+                    ),
+                );
             }
+
+            // Realized P&L for THIS partial: proceeds minus the cost basis of the tokens
+            // sold, scaled by the token's real decimals.
+            let sold_tokens =
+                match crate::tokens::get_decimals(crate::chains::active_chain(), &candidate.mint)
+                    .await
+                {
+                    Some(decimals) => exit_amount.to_whole_units(decimals),
+                    None => 0.0,
+                };
+            let partial_pnl = if sold_tokens > 0.0 {
+                Some(native_received - (sold_tokens * candidate.average_entry_price))
+            } else {
+                None
+            };
+
+            // NOTE: a partial exit must NOT be fed to the loss limiter.
+            //
+            // The limiter's unit of account is the CLOSED POSITION: its baseline
+            // is rebuilt by `initialize_from_history` from
+            // `get_period_trading_stats`, which sums `pnl` over positions with
+            // `transaction_exit_verified = 1 AND exit_time IS NOT NULL`. Feeding
+            // it a partial would (a) double-count, because the close then records
+            // the position's TOTAL pnl — which already includes this partial's
+            // proceeds — and (b) not survive a restart, since the rebuilt
+            // baseline only sees closed positions. The loss lands, in full and
+            // exactly once, when the position closes.
+
+            crate::events::record_position_event(
+                &position_id.to_string(),
+                &candidate.mint,
+                "partial_exit_verified",
+                candidate.entry_transaction_signature.as_deref(),
+                None,
+                native_received,
+                exit_amount,
+                partial_pnl,
+                None,
+            )
+            .await;
+
+            logger::info(
+                LogTag::Positions,
+                &format!(
+                    "Partial exit verified for position {}: {} tokens sold, {} remaining",
+                    position_id,
+                    exit_amount,
+                    candidate.remaining_token_amount.unwrap_or_default()
+                ),
+            );
+            // The per-mint counter drops only with the detail it counts; after a failed
+            // detail clear the retry's already-booked path performs the single decrement.
+            if pending_cleared.is_ok() {
+                super::state::clear_partial_exit_pending(&candidate.mint).await;
+            }
+
+            // Queue Telegram notification for partial exit
+            if with_config(|c| c.telegram.enabled && c.telegram.notify_partial_exit) {
+                // Remaining percentage against tokens ever ACQUIRED (still held + already
+                // exited). `token_amount` is only the entry buy and does not grow on a DCA.
+                let remaining_pct = if let Some(remaining) = candidate.remaining_token_amount {
+                    match candidate.acquired_amount() {
+                        Some(acquired) if acquired > RawAmount::ZERO => {
+                            (remaining.raw() as f64 / acquired.raw() as f64) * 100.0
+                        }
+                        _ => 0.0,
+                    }
+                } else {
+                    100.0 - exit_percentage
+                };
+                queue_notification(Notification::partial_exit(
+                    candidate.symbol.clone(),
+                    candidate.mint.clone(),
+                    exit_percentage,
+                    partial_pnl.unwrap_or_default(),
+                    remaining_pct,
+                ));
+            }
+
+            // IMPORTANT: Do NOT release semaphore permit - position still open!
+            pending_cleared?;
         }
 
         PositionTransition::ExitResidualClearForRetry {
@@ -1008,146 +842,130 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             dca_time,
             dca_signature,
         } => {
-            // Get mint for decimals lookup
-            let mint = find_mint_by_position_id(position_id).await?;
+            // IDEMPOTENCE: the booking ACCUMULATES (tokens, invested SOL, dca_count). The
+            // entry record is the token: one swap = one record, checked and written in the
+            // same transaction as the row.
+            let snapshot = get_position_by_id(position_id)
+                .await
+                .ok_or(Error::NotFoundById { position_id })?;
 
             // Get token decimals for accurate price calculation
-            let decimals = crate::tokens::get_decimals(crate::chains::active_chain(), &mint)
-                .await
-                .unwrap_or(9); // Default to 9 if not found
+            let decimals =
+                crate::tokens::get_decimals(crate::chains::active_chain(), &snapshot.mint)
+                    .await
+                    .unwrap_or(9); // Default to 9 if not found
 
-            let mut booking: Result<RawAmount> = Ok(RawAmount::ZERO);
-            let updated =
-        update_position_state_by_id(position_id, |pos| {
-          // Update remaining token amount (add new tokens)
-          booking = pos.book_acquisition(tokens_bought);
-          let Ok(remaining_tokens) = booking.as_ref().copied() else {
-            return;
-          };
+            let fill = DcaFill {
+                tokens_bought,
+                native_spent,
+                dca_time,
+                decimals,
+            };
+            let mut candidate = snapshot;
+            let booking = candidate.book_dca(&fill)?;
+            match booking.average {
+                DcaAverage::Recomputed => {}
+                DcaAverage::InvalidNormalization => logger::error(
+                    LogTag::Positions,
+                    &format!(
+                        "DCA: Invalid token normalization for position {} (remaining={}, decimals={})",
+                        position_id, booking.remaining, decimals
+                    ),
+                ),
+                DcaAverage::InvalidState => logger::error(
+                    LogTag::Positions,
+                    &format!(
+                        "DCA: Invalid position state for average price calculation - position_id={}, remaining_tokens={}, total_size_native={}",
+                        position_id, booking.remaining, candidate.total_size_native
+                    ),
+                ),
+            }
+            let record = BookingRecord::Entry(EntryRecord {
+                id: None,
+                position_id,
+                timestamp: dca_time,
+                amount: tokens_bought,
+                price: effective_price,
+                native_spent,
+                transaction_signature: dca_signature.clone(),
+                is_dca: true,
+                fees_raw: Some(fee_raw),
+            });
 
-          // Update total SOL invested
-          pos.total_size_native += native_spent;
+            match commit_booking(
+                &candidate,
+                BookingGuard::EntryRecordAbsent(&dca_signature),
+                Some(&record),
+            )
+            .await?
+            {
+                BookingCommit::AlreadyBooked => {
+                    logger::debug(
+                        LogTag::Positions,
+                        &format!(
+                            "DCA {dca_signature} already recorded for position {position_id} - skipping"
+                        ),
+                    );
+                    clear_pending_dca_swap(&dca_signature).await?;
+                    return Ok(effects);
+                }
+                BookingCommit::Committed => {}
+            }
+            publish_booking(position_id, &candidate, |live| {
+                live.book_dca(&fill).map(|_| ())
+            })
+            .await;
 
-          // Recalculate average entry price (weighted average) with actual decimals
-          // CRITICAL: Validate all inputs to prevent division by zero or invalid calculations
-          if remaining_tokens > RawAmount::ZERO && pos.total_size_native > 0.0 && pos.total_size_native.is_finite() {
-            let total_tokens_normalized = remaining_tokens.to_whole_units(decimals);
-            if total_tokens_normalized > 0.0 && total_tokens_normalized.is_finite() {
-              pos.average_entry_price = pos.total_size_native / total_tokens_normalized;
-            } else {
-              logger::error(
+            effects.db_updated = true;
+            let _ = force_database_sync().await;
+
+            // A failed pending clear must not skip the remaining effects of a booking that is
+            // already stored; it is returned last, and a retry clears it on the
+            // already-booked path.
+            let pending_cleared = clear_pending_dca_swap(&dca_signature).await;
+            if let Err(err) = &pending_cleared {
+                logger::error(
+                    LogTag::Positions,
+                    &format!(
+                        "Failed to clear pending DCA {dca_signature} for position {position_id}: {err}"
+                    ),
+                );
+            }
+
+            crate::events::record_position_event(
+                &position_id.to_string(),
+                &candidate.mint,
+                "dca_verified",
+                candidate.entry_transaction_signature.as_deref(),
+                None,
+                native_spent,
+                tokens_bought,
+                None,
+                None,
+            )
+            .await;
+
+            logger::info(
                 LogTag::Positions,
                 &format!(
- "DCA: Invalid token normalization for position {} (remaining={}, decimals={})",
-                  position_id, remaining_tokens, decimals
+                    "DCA verified for position {}: {} tokens bought, new average entry: {:.11}",
+                    position_id, tokens_bought, candidate.average_entry_price
                 ),
-              );
-            }
-          } else {
-            // Edge case: Invalid state for average price calculation
-            logger::error(
-              LogTag::Positions,
-              &format!(
- "DCA: Invalid position state for average price calculation - position_id={}, remaining_tokens={}, total_size_native={}",
-                position_id, remaining_tokens, pos.total_size_native
-              ),
             );
-          }
 
-          // Increment DCA count
-          pos.dca_count += 1;
-
-          // Update last DCA time
-          pos.last_dca_time = Some(dca_time);
-        })
-        .await;
-            booking?;
-
-            if updated && requires_db_update {
-                if let Some(position) = get_position_by_id(position_id).await {
-                    match update_position(&position).await {
-                        Ok(_) => {
-                            effects.db_updated = true;
-                            let _ = force_database_sync().await;
-
-                            if let Err(err) = save_entry_record(
-                                position_id,
-                                dca_time,
-                                tokens_bought,
-                                effective_price,
-                                native_spent,
-                                &dca_signature,
-                                true,
-                                Some(fee_raw),
-                            )
-                            .await
-                            {
-                                logger::error(
-                                    LogTag::Positions,
-                                    &format!(
-                                        "Failed to persist DCA entry history for position {}: {}",
-                                        position_id, err
-                                    ),
-                                );
-                            }
-
-                            if let Err(err) = clear_pending_dca_swap(&dca_signature).await {
-                                return Err(Error::TransitionFailed {
-                                    transition: "dca",
-                                    mint: position.mint.clone(),
-                                    detail: format!(
-                                        "failed to clear pending DCA {dca_signature} for position {position_id}: {err}"
-                                    ),
-                                });
-                            }
-
-                            crate::events::record_position_event(
-                                &position_id.to_string(),
-                                &position.mint,
-                                "dca_verified",
-                                position.entry_transaction_signature.as_deref(),
-                                None,
-                                native_spent,
-                                tokens_bought,
-                                None,
-                                None,
-                            )
-                            .await;
-
-                            logger::info(
-                                LogTag::Positions,
-                                &format!(
- "DCA verified for position {}: {} tokens bought, new average entry: {:.11}",
-                  position_id,
-                  tokens_bought,
-                  position.average_entry_price
-                ),
-                            );
-
-                            // Queue Telegram notification for DCA executed
-                            if with_config(|c| c.telegram.enabled && c.telegram.notify_dca_executed)
-                            {
-                                queue_notification(Notification::dca_executed(
-                                    position.symbol.clone(),
-                                    position.mint.clone(),
-                                    native_spent,
-                                    position.total_size_native,
-                                    position.dca_count,
-                                ));
-                            }
-
-                            // IMPORTANT: Do NOT consume another semaphore permit - same position!
-                        }
-                        Err(e) => {
-                            return Err(Error::TransitionFailed {
-                                transition: "apply",
-                                mint: position.mint.clone(),
-                                detail: e.to_string(),
-                            });
-                        }
-                    }
-                }
+            // Queue Telegram notification for DCA executed
+            if with_config(|c| c.telegram.enabled && c.telegram.notify_dca_executed) {
+                queue_notification(Notification::dca_executed(
+                    candidate.symbol.clone(),
+                    candidate.mint.clone(),
+                    native_spent,
+                    candidate.total_size_native,
+                    candidate.dca_count,
+                ));
             }
+
+            // IMPORTANT: Do NOT consume another semaphore permit - same position!
+            pending_cleared?;
         }
 
         PositionTransition::DcaFailed {
@@ -1177,16 +995,13 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             );
 
             if let Err(err) = clear_pending_dca_swap(&dca_signature).await {
-                let mint = find_mint_by_position_id(position_id)
-                    .await
-                    .unwrap_or_default();
-                return Err(Error::TransitionFailed {
-                    transition: "dca",
-                    mint,
-                    detail: format!(
-                        "failed to clear pending DCA {dca_signature} after failure: {err}"
+                logger::error(
+                    LogTag::Positions,
+                    &format!(
+                        "Failed to clear pending DCA {dca_signature} after failure of position {position_id}: {err}"
                     ),
-                });
+                );
+                return Err(err);
             }
             // TODO: Implement retry logic if needed
         }
@@ -1244,6 +1059,47 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
     }
 
     Ok(effects)
+}
+
+/// Publishes a committed booking to the in-memory position by replaying the same pure
+/// booking on it. A replay that fails publishes the committed candidate instead.
+async fn publish_booking(
+    position_id: i64,
+    candidate: &Position,
+    replay: impl FnOnce(&mut Position) -> Result<()>,
+) {
+    let mut replay_error = None;
+    let published = update_position_state_by_id(position_id, |live| {
+        if let Err(error) = replay(live) {
+            *live = candidate.clone();
+            replay_error = Some(error);
+        }
+    })
+    .await;
+
+    if let Some(error) = replay_error {
+        logger::error(
+            LogTag::Positions,
+            &format!(
+                "Replaying the committed booking on position {position_id} failed ({error}); published the committed state"
+            ),
+        );
+    }
+    if !published {
+        logger::warning(
+            LogTag::Positions,
+            &format!(
+                "Position {position_id} left memory before its committed booking was published"
+            ),
+        );
+    }
+}
+
+fn log_missing_position(position_id: i64, transition: &str) {
+    logger::warning(
+        LogTag::Positions,
+        &format!("Position {position_id} is not in memory - {transition} not applied"),
+    );
 }
 
 async fn find_mint_by_position_id(position_id: i64) -> Result<String> {
